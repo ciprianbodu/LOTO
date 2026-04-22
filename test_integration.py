@@ -10,27 +10,17 @@ import pandas as pd
 
 print("=== TEST INTEGRARE METODE AVANSATE ===")
 
-# Test 1: Import module
+# Test 1: Import module (ML modules removed - using mathematical approach only)
 try:
-    from loto_meta_learner import LotoMetaLearner, ADVANCED_METHODS_AVAILABLE
-    from loto_advanced_methods import LotoAdvancedMethods, check_library_availability
-
-    print("[OK] Import reusit")
-    print(f"     Module avansate disponibile: {ADVANCED_METHODS_AVAILABLE}")
+    from loto_engine import LotoEngine
+    print("[OK] Import LotoEngine reusit (approach matematic)")
+    print("     Module ML au fost eliminate - folosire abordare combinatorială")
 except Exception as e:
-    print(f"[FAIL] Eroare import: {e}")
+    print(f"[FAIL] Eroare import LotoEngine: {e}")
     raise SystemExit(1) from e
 
-# Test 2: Verificare librării
-if ADVANCED_METHODS_AVAILABLE:
-    status = check_library_availability()
-    print(f"\nLibrarii disponibile: {sum(status.values())}/{len(status)}")
-    for lib, avail in status.items():
-        icon = "Y" if avail else "N"
-        print(f"   [{icon}] {lib}")
-
-# Test 3: CSV minimal + LotoMetaLearner
-print("\nTest LotoMetaLearner...")
+# Test 2: CSV minimal + LotoEngine
+print("\nTest LotoEngine...")
 rng = np.random.default_rng(7)
 rows = []
 for _ in range(80):
@@ -42,22 +32,30 @@ with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding
     tmp_path = tmp.name
 
 try:
-    learner = LotoMetaLearner(tmp_path, game_type="6/49")
-    learner.pas_2_meta_learner()
-    learner.pas_3_index_ensemble()
-    assert learner.ensemble_index is not None
-    assert float(np.min(learner.ensemble_index)) >= 0.0
-    print(f"   [OK] Meta-learner (ensemble len={len(learner.ensemble_index)})")
+    engine = LotoEngine(game_type="6/49")
+    engine.load_data(tmp_path)
+    
+    # Test frequency analysis
+    freq = engine.analyze_frequency()
+    assert len(freq) == 49
+    print(f"   [OK] Frequency analysis (non-zero numbers: {np.count_nonzero(freq)})")
+    
+    # Test smart reduction system
+    timesfm_blacklist = engine._get_timesfm_blacklist()
+    regressive_blacklist = engine._get_dynamic_regressive_blacklist(100)
+    print(f"   [OK] Smart reduction: TimesFM={len(timesfm_blacklist)}, Regressive={len(regressive_blacklist)}")
+    
+    # Test pipeline
+    lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
+        pool_size=9, guarantee=4, max_variants=5, smart_reduction=True, sim_depth_pct=100
+    )
+    assert len(lines) > 0
+    print(f"   [OK] Pipeline completat: {len(lines)} variante generate")
+    
 finally:
     Path(tmp_path).unlink(missing_ok=True)
 
-# Test 4: LotoAdvancedMethods (enterprise via shim)
-print("\nTest LotoAdvancedMethods...")
-advanced = LotoAdvancedMethods(max_n=49, draw_count=6)
-scores, desc = advanced.neural_network_predictor(demo, [f"n{i}" for i in range(1, 7)])
-assert scores.shape == (49,)
-print(f"   [OK] neural_network_predictor: {desc} (min={scores.min():.3f}, max={scores.max():.3f})")
-
 print("\n" + "=" * 50)
 print("TEST INTEGRARE COMPLETAT CU SUCCES!")
+print("Abordare matematică + Sistem Inteligent de Reducție")
 print("=" * 50)

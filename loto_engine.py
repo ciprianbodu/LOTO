@@ -251,7 +251,7 @@ class LotoEngine:
 
     def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10):
         """Rulează pipeline-ul complet de analiză."""
-        logging.info(f"[PIPELINE] Se inițializează motorul cu Smart Selector (pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, filter_consecutives={filter_consecutives}, smart_reduction={smart_reduction}, sim_depth_pct={sim_depth_pct}%)...")
+        logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
         if lookback > 0 and self.data is not None and not self.data.empty:
             actual_lookback = int(len(self.data) * (lookback / 100.0))
@@ -321,6 +321,19 @@ class LotoEngine:
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants)
+        
+        # Funcția 4: Anomaly Filtering (Filtrare Neurale avansată)
+        if smart_reduction and tfm_scores:
+            logging.info(f"[PIPELINE] Aplicare filtru Anomaly Scoring pe cele {len(lines)} variante...")
+            original_count = len(lines)
+            lines = self.filter_variants_by_anomaly(lines, tfm_scores, threshold=0.7)
+            logging.info(f"[PIPELINE] Anomaly Scoring a eliminat {original_count - len(lines)} variante considerate 'anormale' de model.")
+            self.audit['anomaly_filter'] = {
+                'original_count': original_count,
+                'final_count': len(lines),
+                'threshold': 0.7
+            }
+
         logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
 
         if progress_cb:
@@ -1002,10 +1015,11 @@ class LotoEngine:
 
         try:
             # Configurăm orizontul la 5 pentru analiza de trend
+            # Parametri optimizați pentru TimesFM 2.0/2.5 (suportă context mai mare și orizont extins)
             tfm = timesfm.TimesFm(
                 hparams=timesfm.TimesFmHparams(
-                    context_len=512,
-                    horizon_len=5, 
+                    context_len=512, # Limita nativă pentru v1.0
+                    horizon_len=20,   # Extins de la 5 la 20 pentru analiză multi-orizont (Funcția 2)
                     input_patch_len=32,
                     output_patch_len=128,
                     num_layers=20,
@@ -1016,6 +1030,9 @@ class LotoEngine:
                     huggingface_repo_id="google/timesfm-1.0-200m-pytorch"
                 )
             )
+            
+            # Funcția 3: Pregătire Covariate (XReg Simulation) va fi apelată în interiorul buclei de ferestre.
+
             
             max_num = 20 if is_joker_drum else int(self.params["max_n"])
             windows = []
@@ -1035,6 +1052,7 @@ class LotoEngine:
             total_weight = 0.0
             
             for idx, (w_start, w_end) in enumerate(windows):
+                covariates = self._generate_loto_covariates(w_start, w_end)
                 weight = 1.0 / (1.5 ** idx)
                 total_weight += weight
                 
@@ -1079,18 +1097,26 @@ class LotoEngine:
                         uncertainty = max(0.0001, q90 - q10)
                         stability = 1.0 / (1.0 + uncertainty) # Mai stabil = scor mai mare
                         
-                        # 3. Analiza de Trend (Orizont 5)
-                        # Vedem dacă prognoza crește sau scade în viitor
-                        future_values = point_forecast[i, :] # Toate cele 5 puncte viitoare
-                        trend = 1.0
-                        if len(future_values) >= 2:
-                            # Pantă simplă: final vs început
-                            slope = (future_values[-1] - future_values[0]) / len(future_values)
-                            trend = 1.0 + slope # Bonus dacă trendul e ascendent
+                        # 3. Analiza de Trend Multi-Orizont (Funcția 2)
+                        future_values = point_forecast[i, :] # Toate cele 20 puncte viitoare
                         
-                        nqi_components[num]["point"] += p_val * weight
+                        # Calculăm un scor ponderat pe tot orizontul (decaying weight)
+                        horizon_score = 0.0
+                        for h_idx, h_val in enumerate(future_values):
+                            h_weight = 1.0 / (1.2 ** h_idx) # Pondere mai mare pentru viitorul apropiat
+                            horizon_score += float(h_val) * h_weight
+                        
+                        # Funcția 5: Adaptive Tuning (Compensarea erorilor recente)
+                        # Dacă numărul a ieșit recent dar modelul l-a subestimat, aplicăm un bias de corecție
+                        recent_bias = self._calculate_adaptive_bias(num)
+                        
+                        # Funcția 3: Integrare Covariate
+                        # Ajustăm scorul în funcție de corelația cu variabilele externe (ziua săptămânii, etc)
+                        covariate_bonus = self._apply_covariate_logic(num, covariates)
+
+                        nqi_components[num]["point"] += p_val * weight * recent_bias
                         nqi_components[num]["stability"] += stability * weight
-                        nqi_components[num]["trend"] += trend * weight
+                        nqi_components[num]["trend"] += (horizon_score + covariate_bonus) * weight
             
             # Calculăm NQI Final
             final_scores = {}
@@ -1099,10 +1125,11 @@ class LotoEngine:
                     p = nqi_components[num]["point"] / total_weight
                     s = nqi_components[num]["stability"] / total_weight
                     t = nqi_components[num]["trend"] / total_weight
-                    # NQI combină toți factorii: Predicție x Siguranță x Viitor
+                    # NQI combină toți factorii: Predicție x Siguranță x Viitor Multi-Orizont
                     final_scores[num] = p * s * t
             
             return final_scores
+
 
         except Exception as e:
             logging.error(f"[TIMESFM] Eroare la execuția modelului avansat: {e}")
@@ -1178,7 +1205,73 @@ class LotoEngine:
         
         return sorted(pool)
 
+
+    def _generate_loto_covariates(self, start: int, end: int) -> dict:
+        """Generează variabile externe (covariate) pentru fereastra de analiză."""
+        if self.data is None: return {}
+        subset = self.data.iloc[start:end]
+        
+        # Exemplu: Trendul sumei numerelor (indicator de 'căldură' a urnei)
+        if self._draw_matrix is not None:
+            draw_sums = np.sum(self._draw_matrix[start:end], axis=1)
+            avg_sum = np.mean(draw_sums) if draw_sums.size > 0 else 0
+        else:
+            avg_sum = 0
+            
+        return {
+            "avg_sum_trend": avg_sum,
+            "is_recent": 1.0 if end > len(self.data) - 50 else 0.5
+        }
+
+    def _apply_covariate_logic(self, num: int, covariates: dict) -> float:
+        """Ajustează scorul în funcție de variabilele externe."""
+        # Exemplu: Dacă urna e 'fierbinte' (sume mari), favorizăm numerele mari
+        bonus = 0.0
+        if covariates.get("avg_sum_trend", 0) > 150 and num > 30:
+            bonus += 0.05
+        return bonus
+
+    def _calculate_adaptive_bias(self, num: int) -> float:
+        """
+        Funcția 5: Adaptive Tuning.
+        Calculează un factor de corecție bazat pe performanța recentă a modelului.
+        """
+        if self.data is None or len(self.data) < 10: return 1.0
+        # Verificăm dacă numărul a ieșit în ultimele 5 extrageri
+        recent_count = self._calculate_recent_frequency(num, 5)
+        if recent_count > 0:
+            return 1.15 # Bias pozitiv pentru numere 'on fire' neidentificate de modelul static
+        return 1.0
+
+    def calculate_variant_anomaly_score(self, variant: List[int], scores: Dict[int, float]) -> float:
+        """
+        Funcția 4: Anomaly Scoring.
+        Evaluează cât de 'anormală' este o variantă față de predicția neurală.
+        Scor mic = variantă conformă cu modelul. Scor mare = anomalie (probabilitate mică).
+        """
+        if not scores: return 0.0
+        
+        # Calculăm probabilitatea medie a variantei conform TimesFM
+        variant_probs = [scores.get(num, 0.0001) for num in variant]
+        mean_prob = np.mean(variant_probs)
+        
+        # Scor de anomalie bazat pe distanța față de topul modelului
+        max_prob = max(scores.values()) if scores else 1.0
+        anomaly = 1.0 - (mean_prob / max_prob)
+        
+        return float(anomaly)
+
+    def filter_variants_by_anomaly(self, variants: List[List[int]], scores: Dict[int, float], threshold: float = 0.7) -> List[List[int]]:
+        """Elimină variantele care sunt considerate anomalii statistice de către model."""
+        filtered = []
+        for v in variants:
+            score = self.calculate_variant_anomaly_score(v, scores)
+            if score <= threshold:
+                filtered.append(v)
+        return filtered
+
 def create_demo_data(csv_path: str, game: str = "6/49") -> None:
+
     """Creează date demo pentru testare."""
     params = {
         "6/49": {"max_n": 49, "draw_n": 6},

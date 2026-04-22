@@ -16,12 +16,9 @@ __pycache__/
 .coverage
 htmlcov/
 *.log
-loto_optuna.db
-loto_optuna.db-shm
-loto_optuna.db-wal
-loto_jobs.db
-loto_jobs.db-shm
-loto_jobs.db-wal
+*.db
+*.db-shm
+*.db-wal
 jurnal_data.sqlite
 email_config.json
 jurnal_*.json
@@ -29,3 +26,4 @@ jurnal_*.json
 *.nbc
 .numba_cache/
 .loto_cache/
+venv_timesfm/

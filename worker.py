@@ -13,6 +13,9 @@ import traceback
 import tempfile
 import os
 
+print(f"DEBUG WORKER: CWD={os.getcwd()}")
+print(f"DEBUG WORKER: sys.path={sys.path}")
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
@@ -90,7 +93,10 @@ def _run_pipeline_job(job: dict) -> str:
             max_var = int(task.get("max_variants", 0))
             lookback = int(task.get("lookback", 0))
             filter_cons = bool(task.get("filter_consecutives", True))
-            cold_pct = int(task.get("cold_percent", 0))
+            smart_red = bool(task.get("smart_reduction", True))
+            sim_depth = int(task.get("sim_depth_pct", 10))
+            cold_pct = 20  # Default 20% Cold/Hot balance
+            # Neural Engine (TimesFM) este acum metoda principală.
             
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
@@ -112,7 +118,8 @@ def _run_pipeline_job(job: dict) -> str:
                     max_variants=max_var, 
                     lookback=lookback,
                     filter_consecutives=filter_cons,
-                    cold_percent=cold_pct
+                    smart_reduction=smart_red,
+                    sim_depth_pct=sim_depth
                 )
                 
                 outputs[game_label] = {

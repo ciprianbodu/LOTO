@@ -54,7 +54,7 @@ def main():
     def progress_cb(msg, pct):
         print(f"[{pct}%] {msg}")
 
-    lines, p10, p90, g_range = engine.run_institutional_pipeline(progress_cb=progress_cb)
+    lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(progress_cb=progress_cb)
 
     print("\n" + "=" * 60)
     print("           REZULTATE FINALE - SISTEM COMBINATORIAL")

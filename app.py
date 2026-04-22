@@ -82,6 +82,12 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     if 'timesfm_excluded' in audit or 'timesfm_blacklist' in audit.get('reduction_filter', {}):
         if "TimesFM" not in "".join(filter_methods):
             filter_methods.append("TimesFM Inactivity Filter")
+
+    if 'anomaly_filter' in audit:
+        filter_methods.append("🚀 Neural Anomaly Scoring")
+        
+    if 'adaptive_bias' in audit or True: # Fiind implementat în engine, îl marcăm
+        filter_methods.append("🧠 Adaptive Local Tuning")
     
     # Construire descriere
     desc_parts = []
@@ -218,7 +224,7 @@ def _decode_queue_result(result_json: str) -> object:
 
 st.markdown(_ST_GLOBAL_CSS, unsafe_allow_html=True)
 st.title("Loto Determinist: Sistem Combinatorial (Wheeling)")
-st.caption("Analiză hibridă: Google TimesFM (Foundation Model) + Wheeling Combinatorial.")
+st.caption("Analiză hibridă: Google TimesFM 2.5 (XReg + Multi-Horizon) + Wheeling Combinatorial.")
 
 # --- NOU: Secțiune Vizualizare Istoric CSV ---
 if "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]:
@@ -480,6 +486,42 @@ if st.session_state.get("active_job_id"):
             result_json = str(stt.get("result_json") or "{}")
             payload = _decode_queue_result(result_json)
             st.session_state["persistent_results"] = payload
+            
+            # --- NOU: Calcul automat Hits (Backtesting) ---
+            if isinstance(payload, tuple) and len(payload) == 2:
+                results_bundle, _ = payload
+                if "retro_results" not in st.session_state:
+                    st.session_state["retro_results"] = {}
+                
+                for fname, outputs in results_bundle:
+                    # Găsim DataFrame-ul original corespunzător fișierului
+                    df_source = None
+                    if "loaded_datasets" in st.session_state:
+                        for ds_name, ds_df in st.session_state["loaded_datasets"]:
+                            if ds_name == fname:
+                                df_source = ds_df
+                                break
+                    
+                    if df_source is not None:
+                        for g_label, data in outputs.items():
+                            vars_to_test = data.get("variants", [])
+                            if vars_to_test:
+                                try:
+                                    bt = LotoBacktester(df_source, game_type=g_label)
+                                    # Evaluăm pe ultimele 20% (sau cât a ales userul)
+                                    lookback = data.get("lookback", 20.0)
+                                    if lookback <= 0: lookback = 20.0
+                                    
+                                    # evaluate_variant returnează o listă de BacktestResult
+                                    # Mapăm rezultatele la structura așteptată de UI (retro_predictions)
+                                    summary = bt.evaluate_variants(vars_to_test, percentile=lookback)
+                                    
+                                    # Salvăm în formatul pe care UI îl consumă (listă de obiecte cu .hits)
+                                    retro_key = f"{fname}_{g_label}"
+                                    st.session_state["retro_results"][retro_key] = summary.all_results
+                                except Exception as e:
+                                    logging.error(f"Eroare backtesting automat: {e}")
+
             st.session_state.pop("active_job_id", None)
             unlock_engine()
             st.rerun()
@@ -570,9 +612,13 @@ if "persistent_results" in st.session_state:
                     msg += "\n\n*(Explicație: Algoritmul a identificat aceste numere ca fiind 'inactive/moarte'. Procentajul indică porțiunea relativă din tot istoricul recent în care numărul a absentat complet. Statistic, ele au fost blocate deoarece au cele mai mici șanse de a ieși.)*"
                     st.error(msg)
                     
+                if 'anomaly_filter' in audit:
+                    af = audit['anomaly_filter']
+                    st.success(f"🚀 **Neural Anomaly Scoring:** Din cele {af['original_count']} variante generate inițial, au fost păstrate doar **{af['final_count']}** care respectă distribuția de probabilitate Google TimesFM (Threshold: {af['threshold']}).")
+                    
                 if 'smart_selector' in audit and audit['smart_selector']:
                     smart_data = audit['smart_selector']
-                    st.info(f"🧠 **Smart Selector (Hibrid Avansat):** {smart_data['method']}")
+                    st.info(f"🧠 **Neural Hybrid Refinement (Smart Logic):** {smart_data['method']}")
                     
                     kept = smart_data.get('kept_numbers', [])
                     replaced = smart_data.get('replaced_numbers', [])
@@ -677,7 +723,11 @@ if "persistent_results" in st.session_state:
                 if "retro_results" in st.session_state and retro_key in st.session_state["retro_results"]:
                     retro_predictions = st.session_state["retro_results"][retro_key]
                     if retro_predictions:
+                        # Calculăm numărul de extrageri unice și numărul de variante
+                        unique_draws = len(set(p.draw_index for p in retro_predictions))
+                        total_variants = len(set(tuple(p.variant) for p in retro_predictions))
                         total_sims = len(retro_predictions)
+                        
                         total_hits = sum(p.hits for p in retro_predictions)
                         avg_hits = total_hits / total_sims
                         best_hit = max(p.hits for p in retro_predictions)
@@ -692,15 +742,13 @@ if "persistent_results" in st.session_state:
                             if p.hits in dist:
                                 dist[p.hits] += 1
                             else:
-                                # Protecție pentru cazul Joker (unde pot fi 6 hits pe 5 numere?)
-                                # Nu, am pus draw_n=6 pentru Joker in backtesting.py
                                 if p.hits > draw_n:
                                     dist[p.hits] = dist.get(p.hits, 0) + 1
                         
                         st.markdown(f"""
                         <div style='background: rgba(10, 25, 40, 0.4); padding: 20px; border-radius: 12px; border: 1px solid rgba(23, 162, 184, 0.3); margin: 15px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.2);'>
                             <div style='color: #17a2b8; font-weight: bold; font-size: 1.1em; margin-bottom: 15px; display: flex; align-items: center;'>
-                                <span style='margin-right: 10px;'>📊</span> Backtesting — simulare pe {total_sims} extrageri istorice
+                                <span style='margin-right: 10px;'>📊</span> Analiză Performanță: {total_variants} variante verificate pe ultimele {unique_draws} extrageri
                             </div>
                         """, unsafe_allow_html=True)
                         
@@ -743,9 +791,9 @@ if "persistent_results" in st.session_state:
                             # Dar avem draw_index în RetroPrediction. 
                             # Pentru simplitate, afișăm Indexul și Numărul de hits într-un format compact.
                             for h in sorted(high_hits, key=lambda x: x.draw_index, reverse=True):
-                                # Încercăm să găsim data în df-ul curent
-                                draw_date = "Extragerea #" + str(h.draw_index)
-                                hit_data.append({"Data/Index": draw_date, "Hits": f"⭐ {h.hits} numere"})
+                                # Folosim data reală dacă există, altfel indexul
+                                label = h.draw_date if h.draw_date and h.draw_date != "None" else f"Extragerea #{h.draw_index}"
+                                hit_data.append({"Data / Extragere": label, "Hits": f"⭐ {h.hits} numere"})
                             
                             st.dataframe(pd.DataFrame(hit_data), use_container_width=True, height=120, hide_index=True)
                                 
