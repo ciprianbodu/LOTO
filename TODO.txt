@@ -1,0 +1,34 @@
+# STATUS PROIECT LOTO ENTERPRISE (21 APRILIE 2026)
+
+## 1. NUCLEU DE PREDICȚIE (AI & DEEP LEARNING)
+- **Model Foundation**: Integrare Google TimesFM (200M parametri) pentru prognoză bazată pe serii temporale.
+- **Deep Lookback (Multi-Window)**: Analiză peste limitele native de 512 extrageri folosind ferestre glisante cu agregare ponderată.
+- **Neural Quality Index (NQI)**: Sistem de scor hibrid bazat pe:
+    *   **Point Forecast**: Probabilitatea brută de apariție.
+    *   **Neural Stability**: Analiză de incertitudine prin cuante (p10-p90 spread).
+    *   **Trend Momentum**: Analiză pe orizont de 5 pași în viitor (panta trendului).
+- **Accelerare Hardware**: Detecție și utilizare automată a GPU (CUDA) pentru inferență rapidă.
+
+## 2. FILTRARE ȘI SIGURANȚĂ (SMART REDUCTION)
+- **Neural Regressive 10/10**: Filtru multi-pass care re-analizează istoricul din 10 în 10 la sută.
+- **Intersection Logic**: Eliminarea numerelor "moarte" doar dacă modelul Google confirmă trendul prost în TOATE cele 10 analize.
+- **Aggressive Blacklist (25%)**: Eliminarea automată a sfertului inferior de probabilitate pentru a curăța nucleul de joc.
+- **Filtru Anti-Secvență**: Detecție și înlocuire a secvențelor de 3+ numere consecutive care nu au istoric comun.
+
+## 3. MOTOR COMBINATORIAL (WHEELING ENGINE)
+- **Sistem Set Cover**: Generare de variante optimizate matematic pentru acoperire maximă.
+- **Garanții Matematice**: Suport pentru scheme de tip "Garantat 3/5", "Garantat 4/5", "Garantat 5/5".
+- **Sistem cu Cheie (Key Numbers)**: Posibilitatea forțării unor numere "bază" în toate variantele pentru reducerea costului.
+- **Suport Multi-Game**: Configurații dedicate pentru 6/49, 5/40 și Joker (Urna 1 + Urna 2).
+
+## 4. INTERFAȚĂ ȘI MONITORIZARE (UI/UX)
+- **Dashboard Streamlit**: Interfață modernă cu mod întunecat și badges colorate.
+- **Tabel Istoric Compact**: Vizualizare scrollabilă a datelor brute CSV (Date + Numere).
+- **Audit Detaliat**: Explicații textuale pentru fiecare decizie a modelului AI.
+- **Backtesting Pro**: Simulări istorice cu grafice de distribuție și listă detaliată a câștigurilor (Data + Hits >= 3).
+
+## 5. INFRASTRUCTURĂ TEHNICĂ
+- **Worker Asincron**: Execuție în proces separat (worker.py) pentru a nu bloca interfața.
+- **Sistem de Coadă (Job Queue)**: Gestionare job-uri cu progres live și loguri în timp real.
+- **Environment**: Configurat pe Python 3.11 cu dependințe optimizate pentru JAX/Torch.
+- **Git Sync**: Sincronizare automată cu repository-ul GitHub.
