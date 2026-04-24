@@ -2,11 +2,18 @@
 Test de integrare pentru metodele avansate și meta-learner.
 """
 
+import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 print("=== TEST INTEGRARE METODE AVANSATE ===")
 
@@ -41,9 +48,9 @@ try:
     print(f"   [OK] Frequency analysis (non-zero numbers: {np.count_nonzero(freq)})")
     
     # Test smart reduction system
-    timesfm_blacklist = engine._get_timesfm_blacklist()
-    regressive_blacklist = engine._get_dynamic_regressive_blacklist(100)
-    print(f"   [OK] Smart reduction: TimesFM={len(timesfm_blacklist)}, Regressive={len(regressive_blacklist)}")
+    timesfm_scores = engine._get_timesfm_scores()
+    regressive_blacklist = engine._get_timesfm_regressive_blacklist(100)
+    print(f"   [OK] Smart reduction: Scores={len(timesfm_scores)}, Regressive={len(regressive_blacklist)}")
     
     # Test pipeline
     lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(

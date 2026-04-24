@@ -102,6 +102,9 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
             (pct_i, merged, int(job_id)),
         )
         conn.commit()
+        
+    # Verificăm statusul după update pentru a semnaliza oprirea dacă e cazul
+    return is_job_cancelled(job_id, db_path=db_path)
 
 
 def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:
@@ -213,7 +216,10 @@ def is_job_cancelled(job_id: int, db_path: str = DB_PATH) -> bool:
             "SELECT status FROM jobs WHERE id = ?",
             (int(job_id),),
         ).fetchone()
-    return row is not None and row["status"] == JOB_CANCELLED
+    # Dacă job-ul nu mai există (a fost șters prin reset) sau are status CANCELLED, returnăm True (STOP)
+    if row is None:
+        return True
+    return row["status"] == JOB_CANCELLED
 
 
 def reset_job_queue(db_path: str = DB_PATH) -> None:
@@ -273,7 +279,7 @@ def requeue_running_jobs(db_path: str = DB_PATH) -> int:
         return int(getattr(cur, "rowcount", 0) or 0)
 
 
-def fail_running_jobs(reason: str, db_path: str = DB_PATH) -> int:
+def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: str = DB_PATH) -> int:
     """Mark all RUNNING jobs as FAILED (startup safety cleanup)."""
     try:
         init_job_queue(db_path)

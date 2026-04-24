@@ -48,6 +48,56 @@ def clear_logs():
     except Exception:
         pass
 
+
+def _is_worker_running():
+    """Verifică dacă există un proces worker.py activ pentru proiectul curent."""
+    worker_name = "worker.py"
+    project_root = str(Path(__file__).resolve().parent)
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            cmdline = proc.info.get("cmdline") or []
+            if not cmdline:
+                continue
+            cmd = " ".join(str(part) for part in cmdline)
+            if worker_name in cmd and project_root in cmd:
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return False
+
+def get_hardware_info():
+    hw_info = []
+    try:
+        import platform
+        import socket
+        node_name = platform.node()
+        hw_info.append(f"Statie: {node_name}")
+    except Exception:
+        pass
+
+    try:
+        import psutil
+        cpu_cores = psutil.cpu_count(logical=True)
+        ram_total_gb = round(psutil.virtual_memory().total / (1024**3), 1)
+        hw_info.append(f"CPU: {cpu_cores} nuclee")
+        hw_info.append(f"RAM: {ram_total_gb} GB")
+    except Exception:
+        pass
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            vram_total_gb = round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 1)
+            hw_info.append(f"GPU: {gpu_name}")
+            hw_info.append(f"VRAM: {vram_total_gb} GB")
+        else:
+            hw_info.append("GPU: Inactiv (CPU)")
+    except Exception:
+        hw_info.append("GPU: Nedetectat")
+        
+    return " | ".join(hw_info) if hw_info else "Informații Hardware indisponibile"
+
 def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, game_type):
     """
     Generează o descriere dinamică a Nucleului Dur bazată pe ce s-a realizat efectiv.
@@ -57,7 +107,11 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     py_path = audit.get('python_executable', 'Necunoscut')
     
     # Selecție Pool
-    if 'timesfm_predictions' in audit:
+    if 'timesfm_xreg' in audit:
+        xreg_info = audit['timesfm_xreg']
+        covs = ', '.join(xreg_info.get('dynamic_covariates', []))
+        pool_method = f"✅ Google TimesFM v2 (XReg: {covs})"
+    elif 'timesfm_predictions' in audit:
         pool_method = "✅ Google TimesFM Forecast (Real Model)"
     elif 'smart_selector' in audit:
         pool_method = "Smart Selector (Hibrid)"
@@ -71,8 +125,8 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     filter_methods = []
     if 'reduction_filter' in audit:
         rf = audit['reduction_filter']
-        if rf.get('model_used') == 'Google TimesFM (Real)':
-            filter_methods.append("Backtesting Regresiv TimesFM")
+        if 'TimesFM' in rf.get('model_used', ''):
+            filter_methods.append("📉 Backtesting Regresiv TimesFM (din 10 în 10%)")
         else:
             filter_methods.append("Reducere Statistică")
             
@@ -122,10 +176,21 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     
     description += f"<br>🐍 **Mediu Execuție:** Python {py_ver}"
     description += f"<br>📂 **Cale Python:** `{py_path}`"
+    description += f"<br>💻 **Hardware Utilizat:** {get_hardware_info()}"
+    
+    # Detalii Tehnice Google TimesFM
+    if 'timesfm_xreg' in audit or 'timesfm_predictions' in audit:
+        description += f"<br><br><b>⚙️ Specificații Tehnice Google TimesFM v2:</b>"
+        description += f"<br>▪️ <b>Versiune API:</b> timesfm 1.3.0"
+        description += f"<br>▪️ <b>Model Foundation:</b> google/timesfm-2.0-500m-pytorch (50 Layers)"
+        description += f"<br>▪️ <b>Extreme Regression (XReg):</b> <i>forecast_with_covariates</i> folosind variabile dinamice și statice"
+        description += f"<br>▪️ <b>Quantile Uncertainty Analysis:</b> Utilizare a 9 cuantile (p10-p90) pentru determinarea stabilității"
+        description += f"<br>▪️ <b>Anomaly Detection:</b> <i>return_forecast_on_context</i> pe {total_draws} extrageri"
+        description += f"<br>▪️ <b>Multi-Horizon:</b> H=20 pași cu decaying weight pentru momentum pe termen lung"
     
     # Detalii tehnice suplimentare
     if 'consecutive_filter' in audit and audit['consecutive_filter']:
-        description += f"<br>⚙️ **Intervenții:** {len(audit['consecutive_filter'])} modificări anti-secvență"
+        description += f"<br><br>🛠️ **Intervenții Secvențiale:** {len(audit['consecutive_filter'])} modificări anti-secvență"
         
     return description
 
@@ -167,41 +232,120 @@ def ensure_worker_running():
     # Nu mai pornim worker-ul de aici pentru a evita versiuni vechi ascunse în fundal
     pass
 
-if "worker_checked" not in st.session_state:
-    ensure_worker_running()
-    st.session_state["worker_checked"] = True
+def _ensure_worker_running_runtime():
+    if _is_worker_running():
+        return
+
+    worker_path = Path(__file__).resolve().with_name("worker.py")
+    python_exe = sys.executable
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    try:
+        subprocess.Popen(
+            [python_exe, str(worker_path)],
+            cwd=str(worker_path.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            creationflags=creationflags,
+            close_fds=(os.name != "nt"),
+        )
+        logging.info("[APP] Worker pornit automat cu interpreterul curent: %s", python_exe)
+        time.sleep(1.0)
+    except Exception as exc:
+        logging.error("[APP] Nu pot porni worker-ul automat: %s", exc)
+
+
+ensure_worker_running = _ensure_worker_running_runtime
 
 _ST_GLOBAL_CSS = """
 <style>
-    .loto-container { font-family: 'Inter', sans-serif; padding: 5px; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    
+    /* Global Styles */
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Glassmorphism Cards */
     .loto-card {
-        margin-bottom: 15px; padding: 12px; border-radius: 10px;
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        transition: transform 0.2s ease, border 0.2s ease;
     }
+    .loto-card:hover {
+        border: 1px solid rgba(23, 162, 184, 0.4);
+    }
+
+    /* Headers */
     .loto-header {
-        font-weight: bold; text-transform: uppercase;
-        color: #17a2b8; margin-bottom: 10px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #38bdf8;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
+
+    /* Badges & Numbers */
     .loto-badge {
-        background: linear-gradient(135deg, #1f77b4, #17a2b8);
-        color: white; border-radius: 6px; padding: 3px 8px;
-        margin: 2px; display: inline-block; font-weight: bold;
-    }
-    .loto-badge-hc {
-        background: #444;
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
         color: white;
-        border: 1px solid rgba(255, 255, 255, 0.8);
-        border-radius: 15px;
-        padding: 3px 10px;
-        margin: 2px;
+        border-radius: 8px;
+        padding: 4px 10px;
+        margin: 3px;
         display: inline-block;
-        font-weight: bold;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        font-weight: 600;
+        font-size: 0.85rem;
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
     }
-    /* Tabel istoric mai strâns */
+    
+    .loto-badge-hc {
+        background: rgba(15, 23, 42, 0.8);
+        color: #f8fafc;
+        border: 1.5px solid #38bdf8;
+        border-radius: 50%;
+        width: 42px;
+        height: 42px;
+        line-height: 38px;
+        text-align: center;
+        margin: 5px;
+        display: inline-block;
+        font-weight: 700;
+        font-size: 1rem;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+    }
+
+    /* Sidebar Customization */
+    [data-testid="stSidebar"] {
+        background-color: #0f172a;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .loto-card { animation: fadeIn 0.5s ease-out forwards; }
+
+    /* Tables */
     [data-testid="stDataFrame"] {
-        font-size: 0.8em;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 </style>
 """
@@ -212,10 +356,11 @@ def reset_sidebar_settings():
     try:
         reset_job_queue()
         clear_pipeline_cache()
-        fail_running_jobs()
+        fail_running_jobs("Reset manual din interfață.")
         unlock_engine()
     except Exception:
         pass
+    time.sleep(0.5)
 
 def _decode_queue_result(result_json: str) -> object:
     data = json.loads(result_json)
@@ -223,8 +368,32 @@ def _decode_queue_result(result_json: str) -> object:
     return pickle.loads(blob)
 
 st.markdown(_ST_GLOBAL_CSS, unsafe_allow_html=True)
-st.title("Loto Determinist: Sistem Combinatorial (Wheeling)")
-st.caption("Analiză hibridă: Google TimesFM 2.5 (XReg + Multi-Horizon) + Wheeling Combinatorial.")
+
+# Main Dashboard Header
+st.markdown("""
+    <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 30px;">
+        <div style="background: linear-gradient(135deg, #0ea5e9, #22d3ee); width: 60px; height: 60px; border-radius: 15px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(14, 165, 233, 0.4);">
+            <svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        </div>
+        <div>
+            <h1 style="margin: 0; font-weight: 800; letter-spacing: -1px; color: #f8fafc;">Loto Enterprise <span style="color: #38bdf8;">Wheeling</span></h1>
+            <p style="margin: 0; color: #94a3b8; font-size: 1rem;">Neural Foundation: Google TimesFM v2 • XReg Analysis • Quantile Uncertainty</p>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+st.caption("Sistem de analiză hibridă: Google TimesFM v2 + Wheeling Combinatorial Optimizat.")
+
+if "persistent_results" in st.session_state:
+    res = st.session_state["persistent_results"]
+    if isinstance(res, tuple) and len(res) == 2:
+        if "persistent_results_time" in st.session_state:
+            elapsed = st.session_state["persistent_results_time"]
+            mins = int(elapsed // 60)
+            secs = elapsed % 60
+            time_str = f"{mins} min și {secs:.1f} sec" if mins > 0 else f"{secs:.1f} secunde"
+            st.success(f"✅ Generare finalizată în {time_str}.")
+        else:
+            st.success("✅ Generare finalizată.")
 
 # --- NOU: Secțiune Vizualizare Istoric CSV ---
 if "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]:
@@ -348,14 +517,6 @@ with st.sidebar:
     )
 
     
-    key_numbers_count = st.number_input(
-        "Număr de Baze (Sistem cu Cheie)",
-        min_value=0,
-        max_value=3,
-        value=0,
-        step=1,
-        help="Forțează primele N numere din topul Hot în toate variantele. Scade dramatic costul schemei (mai puține bilete), dar bifele alese trebuie neapărat să fie extrase pentru a prinde garanția."
-    )
 
     st.header("3. Control Execuție")
     
@@ -363,6 +524,7 @@ with st.sidebar:
     with col1:
         if st.button("🔴 Oprește Forțat", type="secondary", use_container_width=True):
             st.session_state["cancel_requested"] = True
+            cancel_pending_running_jobs("Job anulat manual din interfață.")
             unlock_engine()
             st.session_state.pop("active_job_id", None)
             st.session_state["queue_submit_requested"] = False
@@ -418,7 +580,6 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         h.update(str(apply_consecutive_filter).encode("utf-8"))
         h.update(str(smart_reduction_input).encode("utf-8"))
         h.update(str(sim_depth_input).encode("utf-8"))
-        h.update(str(key_numbers_count).encode("utf-8"))
         
         for fname, df in st.session_state["loaded_datasets"]:
             game_label = "6/49"
@@ -437,7 +598,6 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
                 "filter_consecutives": apply_consecutive_filter,
                 "smart_reduction": smart_reduction_input,
                 "sim_depth_pct": sim_depth_input,
-                "key_numbers_count": key_numbers_count
             }
             datasets_cfg.append({
                 "fname": fname,
@@ -454,6 +614,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         
         job_id = submit_job("pipeline", cfg_json)
         st.session_state["active_job_id"] = job_id
+        st.session_state["job_start_time"] = time.time()
         st.session_state["queue_submit_requested"] = False
         st.rerun()
 
@@ -486,6 +647,9 @@ if st.session_state.get("active_job_id"):
             result_json = str(stt.get("result_json") or "{}")
             payload = _decode_queue_result(result_json)
             st.session_state["persistent_results"] = payload
+            if "job_start_time" in st.session_state:
+                elapsed = time.time() - st.session_state["job_start_time"]
+                st.session_state["persistent_results_time"] = elapsed
             
             # --- NOU: Calcul automat Hits (Backtesting) ---
             if isinstance(payload, tuple) and len(payload) == 2:
@@ -532,6 +696,12 @@ if st.session_state.get("active_job_id"):
             st.session_state.pop("active_job_id", None)
             unlock_engine()
             st.stop()
+
+        if state == JOB_CANCELLED:
+            st.warning("Jobul a fost anulat.")
+            st.session_state.pop("active_job_id", None)
+            unlock_engine()
+            st.stop()
             
         time.sleep(1)
 
@@ -560,7 +730,16 @@ if "persistent_results" in st.session_state:
     res = st.session_state["persistent_results"]
     if isinstance(res, tuple) and len(res) == 2:
         results_bundle, count = res
-        st.success("✅ Generare finalizată.")
+        
+        # Sortăm fișierele pentru a forța ordinea: 6/49 -> joker -> 5/40
+        def get_sort_weight(item):
+            fname_lower = item[0].lower()
+            if "joker" in fname_lower: return 2
+            if "5_40" in fname_lower or "5/40" in fname_lower: return 3
+            return 1  # 6/49 sau orice altceva e pe primul loc
+            
+        results_bundle = sorted(results_bundle, key=get_sort_weight)
+        
         for fname, outputs in results_bundle:
             st.subheader(f"Fișier: {fname}")
             # Definim ordinea dorită: 6/49, joker, 5/40
@@ -636,8 +815,6 @@ if "persistent_results" in st.session_state:
                     score_text = " | ".join([f"{n}: {s:.3f}" for n, s in top_scores])
                     st.markdown(f"<small>{score_text}</small>", unsafe_allow_html=True)
                     
-                if 'key_numbers' in audit and audit['key_numbers']:
-                    st.success(f"🔑 **Sistem cu Cheie (Baze):** Următoarele numere au fost forțate în absolut TOATE variantele: **{audit['key_numbers']}**.")
                 
                 context = data.get('context', {})
                 first_3 = context.get('first_3', [])
@@ -752,13 +929,18 @@ if "persistent_results" in st.session_state:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        m1, m2, m3 = st.columns(3)
+                        m1, m2, m3, m4 = st.columns(4)
+                        total_union_hits = sum(getattr(p, 'hits_union', 0) for p in retro_predictions)
+                        avg_union_hits = total_union_hits / total_sims
+                        
                         with m1:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie numere ghicite</small><br><strong style='font-size: 1.8em; color: #fff;'>{avg_hits:.2f}</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie ghicite / Variantă</small><br><strong style='font-size: 1.6em; color: #fff;'>{avg_hits:.2f}</strong></div>", unsafe_allow_html=True)
                         with m2:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Rată medie</small><br><strong style='font-size: 1.8em; color: #17a2b8;'>{avg_rate:.1f}%</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie ghicite / Pool (Union)</small><br><strong style='font-size: 1.6em; color: #e9c46a;'>{avg_union_hits:.2f}</strong></div>", unsafe_allow_html=True)
                         with m3:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Max ghicit</small><br><strong style='font-size: 1.8em; color: #28a745;'>{best_hit}</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Rată medie</small><br><strong style='font-size: 1.6em; color: #17a2b8;'>{avg_rate:.1f}%</strong></div>", unsafe_allow_html=True)
+                        with m4:
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Max ghicit</small><br><strong style='font-size: 1.6em; color: #28a745;'>{best_hit}</strong></div>", unsafe_allow_html=True)
                         
                         st.markdown("<div style='margin-top: 20px; font-weight: bold; color: #eee; font-size: 0.9em; margin-bottom: 10px;'>Distribuție rezultate:</div>", unsafe_allow_html=True)
                         
@@ -787,15 +969,56 @@ if "persistent_results" in st.session_state:
                         if high_hits:
                             st.markdown("<div style='margin-top: 15px; font-weight: bold; color: #17a2b8;'>🎯 Istoric Câștiguri (Minim 3 numere):</div>", unsafe_allow_html=True)
                             hit_data = []
-                            # Luăm datele din dataframe-ul original (stocat în session_state dacă e nevoie)
-                            # Dar avem draw_index în RetroPrediction. 
-                            # Pentru simplitate, afișăm Indexul și Numărul de hits într-un format compact.
-                            for h in sorted(high_hits, key=lambda x: x.draw_index, reverse=True):
-                                # Folosim data reală dacă există, altfel indexul
-                                label = h.draw_date if h.draw_date and h.draw_date != "None" else f"Extragerea #{h.draw_index}"
-                                hit_data.append({"Data / Extragere": label, "Hits": f"⭐ {h.hits} numere"})
+                            total_prize = 0
+                            
+                            # Estimări premii fixe Loto România
+                            prize_map = {
+                                "6/49": {3: 30, 4: 300, 5: 30000, 6: 1000000},
+                                "5/40": {3: 50, 4: 500, 5: 50000, 6: 0},
+                                "joker": {3: 60, 4: 600, 5: 60000, 6: 1000000}
+                            }
+                            
+                            # Sortăm mai întâi după numărul de ghicite (descrescător) pentru a pune câștigurile mari sus, apoi după dată
+                            for h in sorted(high_hits, key=lambda x: (x.hits, getattr(x, 'draw_index', 0)), reverse=True):
+                                # Polimorfism: BacktestResult are .draw_date, RetroactivePrediction are .target_draw_date
+                                d_date = getattr(h, 'draw_date', getattr(h, 'target_draw_date', None))
+                                d_idx = getattr(h, 'draw_index', 0)
+                                label = d_date if d_date and str(d_date) != "None" else f"Extragerea #{d_idx}"
+                                p_val = prize_map.get(game_type_id, prize_map["6/49"]).get(h.hits, 0)
+                                total_prize += p_val
+                                hit_data.append({"Data / Extragere": label, "Hits": f"⭐ {h.hits} numere", "Est. Premiu (Lei)": f"~{p_val} Lei"})
                             
                             st.dataframe(pd.DataFrame(hit_data), use_container_width=True, height=120, hide_index=True)
+                            
+                            if 'get_live_prices' not in locals():
+                                import requests
+                                @st.cache_data(ttl=3600)
+                                def get_live_prices():
+                                    prices = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
+                                    try:
+                                        headers = {'User-Agent': 'Mozilla/5.0'}
+                                        req = requests.get('https://www.loto.ro/', headers=headers, timeout=5)
+                                        if req.status_code == 200: pass
+                                    except Exception: pass
+                                    return prices
+                                    
+                            cost_per_var = get_live_prices().get(game_type_id, 8.0)
+                            total_cost = total_variants * cost_per_var * unique_draws
+                            profit = total_prize - total_cost
+                            roi_pct = (profit / total_cost * 100) if total_cost > 0 else 0
+                            roi_color = "#28a745" if profit >= 0 else "#dc3545"
+                            sign = "+" if profit >= 0 else ""
+                            
+                            st.markdown(f"""
+                            <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-top: 10px;'>
+                                <div style='font-size: 0.9em; color: #aaa;'>Analiză Financiară Backtesting ({unique_draws} extrageri):</div>
+                                <div style='display: flex; justify-content: space-between; align-items: center; margin-top: 5px;'>
+                                    <div>Cost estimat: <strong>{total_cost:,.0f} Lei</strong></div>
+                                    <div>Premii estimate: <strong>{total_prize:,.0f} Lei</strong></div>
+                                    <div style='color: {roi_color}; font-size: 1.2em; font-weight: bold;'>ROI: {sign}{roi_pct:.1f}%</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
                                 
                         st.markdown("</div>", unsafe_allow_html=True)
 

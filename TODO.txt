@@ -1,37 +1,50 @@
-# STATUS PROIECT LOTO ENTERPRISE (21 APRILIE 2026)
+# STATUS PROIECT LOTO ENTERPRISE (22 APRILIE 2026)
 
-## 1. NUCLEU DE PREDICȚIE (SOTA AI)
-- **Model Foundation**: Integrare completă **Google TimesFM (200M parametri)** pentru prognoză bazată pe serii temporale.
-- **Neural Quality Index (NQI)**: Sistem de scor hibrid implementat în `loto_engine.py` care combină:
-    *   **Point Forecast**: Probabilitatea brută calculată de modelul Google.
-    *   **Neural Stability**: Analiză de incertitudine prin cuante (p10-p90 spread).
-    *   **Trend Momentum (Multi-Horizon)**: Analiză pe orizont extins de **20 de pași** în viitor (H=20).
-    *   **Adaptive Local Tuning**: Corecție dinamică bazată pe performanța recentă a modelului.
-    *   **Neural Anomaly Scoring**: Evaluarea conformității variantelor cu distribuția neurală globală.
-- **Deep Lookback (512)**: Analiză a istoricului optimizată pentru limita de 512 extrageri a modelului v1.0.
-- **XReg Simulation (Covariates)**: Integrarea factorilor externi (context temporal, trend global) în motorul NQI.
-- **Accelerare Hardware**: Utilizare automată a GPU (CUDA) pentru inferență dacă este disponibil, cu fallback pe CPU.
+## 1. NUCLEU DE PREDICȚIE — Google TimesFM v2 (MAXIM)
+- **Model Foundation**: Google TimesFM 200M parametri (checkpoint: google/timesfm-1.0-200m-pytorch).
+- **Neural Quality Index (NQI)**: Scor hibrid calculat din 5 semnale distincte:
+    *   **Point Forecast (20%)**: Predicția brută a modelului Google.
+    *   **Multi-Horizon Trend (25%)**: Analiza pe H=20 pași viitor cu weighted decay exponențial.
+    *   **Quantile Stability (20%)**: Analiza incertitudinii prin 9 cuantile (p10→p90 spread).
+    *   **Covariate Boost (20%)**: Semnalul din forecast_with_covariates() cu XReg real.
+    *   **Adaptive Local Tuning (15%)**: Bias correction bazat pe frecvența recentă (5 vs 10 extrageri).
 
-## 2. FILTRARE ȘI OPTIMIZARE (SMART REDUCTION)
-- **Neural Regressive 10/10**: Filtru multi-pass care re-analizează istoricul în trepte de 10% pentru a depista momentum-ul real.
-- **Intersection Logic**: Eliminarea numerelor "moarte" doar dacă modelul Google confirmă trendul negativ în TOATE etapele analizei regresive.
-- **Aggressive Blacklist**: Eliminarea automată a sfertului inferior (bottom 25%) de probabilitate identificat de TimesFM.
-- **Filtru Anti-Secvență**: Detecție și înlocuire a secvențelor de 3+ numere consecutive care nu au validare istorică (threshold 1%).
+## 2. COVARIATE REALE — forecast_with_covariates() cu XReg
+- **Dynamic Numerical Covariates** (per serie, per timestep):
+    *   `rolling_freq_10`: Frecvența mobilă pe ultimele 10 extrageri.
+    *   `rolling_freq_30`: Frecvența mobilă pe ultimele 30 extrageri.
+    *   `gap_counter`: Câte extrageri de la ultima apariție (normalizat).
+    *   `draw_sum`: Suma numerelor extrase per extragere (normalizată).
+- **Static Numerical Covariates** (per serie):
+    *   `number_norm`: Valoarea numărului normalizată [0,1].
+    *   `hist_frequency`: Frecvența globală pe tot contextul.
+- **XReg Mode**: `xreg + timesfm` (combină OLS pe covariate cu predicția neurală).
 
-## 3. MOTOR COMBINATORIAL (WHEELING ENGINE)
-- **Sistem Set Cover**: Generare de variante optimizate matematic pentru acoperire maximă cu număr minim de bilete.
-- **Garanții Matematice**: Suport nativ pentru scheme de tip "Garantat 3/5", "Garantat 4/5", "Garantat 5/5".
-- **Sistem cu Cheie (Key Numbers)**: Interfață pregătită pentru forțarea numerelor "bază" în toate variantele.
-- **Suport Multi-Game**: Configurații optimizate pentru 6/49, 5/40 și Joker (cu predicție separată pentru Urna 2).
+## 3. ANOMALY DETECTION — return_forecast_on_context
+- **Context Anomaly Scoring**: Rulare forecast cu `return_forecast_on_context=True`.
+- Compară predicțiile modelului pe date istorice cu valorile reale.
+- Numerele mai „predictibile" (MAE mic) primesc bonus în NQI.
+- Numerele cu comportament haotic primesc penalizare.
 
-## 4. INTERFAȚĂ ȘI MONITORIZARE (UI/UX)
-- **Dashboard Streamlit Modern**: Interfață reactivă cu temă dark și vizualizare live a procesului de analiză.
-- **Audit Detaliat**: Fiecare decizie a modelului AI este explicată în UI (numere excluse, scoruri NQI, trenduri).
-- **Tabel Istoric CSV**: Vizualizare directă a datelor brute din fișierele de intrare (Date + Numere).
-- **Backtesting Integrat**: Evaluare automată a performanței pe ultimele extrageri cu grafice de distribuție a câștigurilor.
+## 4. FILTRARE ȘI OPTIMIZARE
+- **Neural Regressive Multi-Pass**: Re-analiză pe ferestre de 100%, 90%, 80%... cu intersecție.
+- **Aggressive Blacklist**: Bottom 25% eliminat doar dacă confirmat în TOATE pașii.
+- **Variant Anomaly Scoring**: Eliminarea variantelor cu distribuție anormală față de model.
+- **Filtru Anti-Secvență**: Detecție 3+ numere consecutive fără validare istorică.
 
-## 5. INFRASTRUCTURĂ TEHNICĂ
-- **Worker Asincron**: Execuție în proces separat (`worker.py`) pentru a menține interfața fluidă.
-- **Job Queue (SQLite)**: Gestionare robustă a joburilor cu suport pentru anulare și reluare automată.
-- **Sistem de Cache**: Reutilizarea rezultatelor pentru setări identice (economisire timp/resurse).
-- **Environment**: Configurat pentru Python 3.11+, optimizat pentru JAX/Torch (dependențe TimesFM).
+## 5. MOTOR COMBINATORIAL (WHEELING ENGINE)
+- **Sistem Set Cover**: Acoperire maximă cu număr minim de bilete.
+- **Garanții Matematice**: Scheme 3/5, 4/5, 5/5.
+- ~~**Sistem cu Cheie**: Forțarea numerelor „bază" în toate variantele.~~ (Eliminat - Redundant în era Neural Forecasting)
+- **Suport Multi-Game**: 6/49, 5/40 și Joker (Urna 2 separată).
+
+## 6. INTERFAȚĂ ȘI MONITORIZARE
+- **Dashboard Streamlit**: Temă dark, vizualizare live, audit detaliat.
+- **Backtesting Integrat**: Evaluare automată cu grafice distribuție câștiguri.
+- **Transparență XReg**: Afișare covariate folosite în UI (rolling_freq, gap, etc.).
+
+## 7. INFRASTRUCTURĂ
+- **Worker Asincron**: Execuție separată (worker.py).
+- **Job Queue SQLite**: Suport anulare/reluare.
+- **Cache**: Reutilizare rezultate pentru setări identice.
+- **Mediu**: Python 3.11+, PyTorch, timesfm 1.3.0.

@@ -13,9 +13,6 @@ import traceback
 import tempfile
 import os
 
-print(f"DEBUG WORKER: CWD={os.getcwd()}")
-print(f"DEBUG WORKER: sys.path={sys.path}")
-
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
@@ -100,9 +97,17 @@ def _run_pipeline_job(job: dict) -> str:
             
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
-                update_job_progress(job_id, overall_pct, f"[{fname}][{game_label}] {msg}")
+                # Dacă update_job_progress returnează True, înseamnă că job-ul a fost anulat sau șters
+                if update_job_progress(job_id, overall_pct, f"[{fname}][{game_label}] {msg}"):
+                    # Aruncăm o eroare pentru a opri engine-ul imediat
+                    raise Exception("STOP_REQUESTED")
 
             try:
+                # Verificăm dacă job-ul a fost anulat între timp
+                if is_job_cancelled(job_id):
+                    logging.info(f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire.")
+                    return "{}"
+
                 game_mapped = "6/49"
                 if "5/40" in game_label.lower():
                     game_mapped = "5/40"
@@ -139,12 +144,19 @@ def _run_pipeline_job(job: dict) -> str:
                     "context": context
                 }
             except Exception as e:
+                if "STOP_REQUESTED" in str(e):
+                    logging.info(f"[worker] Job {job_id} oprit la cerere (Stop Requested).")
+                    return "{}"
                 logging.error(f"Eroare la procesarea task-ului {game_label}: {e}")
+                raise
             finally:
                 step_idx += 1
 
         if os.path.exists(temp_csv_path):
-            os.remove(temp_csv_path)
+            try:
+                os.remove(temp_csv_path)
+            except OSError as exc:
+                logging.warning("Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc)
             
         results_bundle.append((fname, outputs))
 

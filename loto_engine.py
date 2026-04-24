@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import warnings
+import functools
 from datetime import datetime
 
 import itertools
@@ -33,6 +34,21 @@ except Exception as e:
     TIMESFM_ERROR = str(e)
     logging.error(f"[TIMESFM] Eroare neașteptată la încărcarea modelului: {e}")
 
+# Cache global pentru modelul legacy
+_GLOBAL_LEGACY_TFM = None
+
+# TimesFM v2 engine (forecast_with_covariates, quantile, anomaly)
+try:
+    from loto_enterprise.core.timesfm_engine import (
+        get_timesfm_scores_v2,
+        get_regressive_blacklist_v2,
+        select_pool_from_scores,
+        filter_variants_by_anomaly_v2,
+    )
+    _HAS_TFM_V2 = True
+except ImportError:
+    _HAS_TFM_V2 = False
+
 # Configurăm logging cu timestamp pentru debug detaliat
 logging.basicConfig(
     level=logging.INFO,
@@ -44,56 +60,79 @@ warnings.filterwarnings("ignore")
 
 def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0):
     """
-    Sistem de Wheeling (Set Cover)
-    Generează numărul minim de variante dintr-un 'pool' ales care 
-    garantează o potrivire de 'guarantee' (ex. 4) dacă toate cele 'pick' (6) 
-    numere extrase se află în pool.
+    Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
+    Evită lista uriașă de `all_combinations` folosind un generator și 
+    un algoritm greedy mai adaptiv care caută rapid acoperirea necesară.
     """
     start_time = time.time()
-    logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {len(pool)} numere. Pick={pick}, Guarantee={guarantee}.")
-    if len(pool) < pick:
+    pool_len = len(pool)
+    logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
+    if pool_len < pick:
         return [list(pool)], 100.0
         
-    all_combinations = list(itertools.combinations(pool, pick))
-    wheel = []
-    covered_targets = set()
     targets = set(itertools.combinations(pool, guarantee))
-    
     total_targets = len(targets)
-    logging.info(f"[WHEEL] Combinații totale posibile: {len(all_combinations)}. Ținte (targets) de acoperit: {total_targets}.")
+    covered_targets = set()
+    wheel = []
+    
+    # Prevenim blocajele la pool-uri prea mari (ex. > 20) prin eșantionare inteligentă
+    # Nu generăm milioane de variante în memorie deodată.
+    import random
+    rng = random.Random()
     
     iteration = 0
-    while covered_targets != targets:
+    max_search_per_iter = 10000 if pool_len <= 15 else 50000
+    
+    while len(covered_targets) < total_targets:
         if max_variants > 0 and len(wheel) >= max_variants:
             logging.info(f"[WHEEL] S-a atins limita maxima cerută de variante: {max_variants}.")
             break
             
         iteration += 1
         best_ticket = None
-        best_coverage = 0
+        best_coverage = -1
         best_targets_covered = set()
         
-        for ticket in all_combinations:
-            ticket_targets = set(itertools.combinations(ticket, guarantee))
-            new_coverage = ticket_targets - covered_targets
+        # Abordare hibridă: dacă mai avem puține de acoperit, targetăm direct lipsurile
+        missing = list(targets - covered_targets)
+        if not missing:
+            break
             
-            if len(new_coverage) > best_coverage:
-                best_coverage = len(new_coverage)
-                best_ticket = ticket
-                best_targets_covered = ticket_targets
+        # Strategie: Încercăm să acoperim primul 'missing' target
+        target_to_cover = missing[0]
+        base_ticket = set(target_to_cover)
+        remaining_pool = list(set(pool) - base_ticket)
+        
+        # Generăm N combinații care includ target_to_cover
+        search_count = 0
+        if len(remaining_pool) >= (pick - guarantee):
+            for extra_nums in itertools.combinations(remaining_pool, pick - guarantee):
+                ticket = tuple(sorted(list(base_ticket) + list(extra_nums)))
                 
+                # Evaluăm rapid
+                ticket_targets = set(itertools.combinations(ticket, guarantee))
+                new_coverage = ticket_targets - covered_targets
+                
+                if len(new_coverage) > best_coverage:
+                    best_coverage = len(new_coverage)
+                    best_ticket = ticket
+                    best_targets_covered = ticket_targets
+                
+                search_count += 1
+                if search_count > max_search_per_iter:
+                    break
+        
         if best_ticket:
             wheel.append(list(best_ticket))
             covered_targets.update(best_targets_covered)
-            
             if iteration % 10 == 0 or len(covered_targets) == total_targets:
-                logging.info(f"[WHEEL] Iteratia {iteration}: Acoperite {len(covered_targets)}/{total_targets} ținte. Bilete alese: {len(wheel)}")
+                logging.info(f"[WHEEL] Iteratia {iteration}: Acoperite {len(covered_targets)}/{total_targets} ținte. Bilete: {len(wheel)}")
         else:
-            logging.error(f"[WHEEL] EROARE CRITICĂ: Nu s-a mai găsit nicio combinație care să acopere țintele rămase! (posibilă buclă infinită).")
+            logging.warning("[WHEEL] Nu am găsit acoperire suplimentară.")
             break
             
-        if iteration > 500:  # Safety fallback
-            logging.warning(f"[WHEEL] FALLBACK: S-a atins numărul maxim de iterații (500). Se oprește generarea pentru a preveni blocarea aplicației.")
+        if iteration > 1000:  # Timeout extins pt pool-uri mari, dar mult mai rapid
+            logging.warning(f"[WHEEL] TIMEOUT: 1000 iterații.")
             break
             
     coverage_pct = 100.0 if total_targets == 0 else round((len(covered_targets) / total_targets) * 100, 2)
@@ -116,6 +155,7 @@ class LotoEngine:
         self.data: pd.DataFrame | None = None
         self.arena2_index = None
         self._draw_matrix: np.ndarray | None = None
+        self.error_correction_map: Dict[int, float] = {}  # num -> bias_multiplier
 
     def _get_game_params(self, game_type: str):
         params = {
@@ -191,7 +231,7 @@ class LotoEngine:
             if vals.size == 0:
                 return np.zeros(max_n, dtype=np.int64)
             freq = np.bincount(vals.astype(np.int64), minlength=max_n + 1)
-            return freq
+            return freq[1 : max_n + 1]
 
         # Fallback (dacă lipsește _draw_matrix)
         all_numbers = []
@@ -208,27 +248,29 @@ class LotoEngine:
                     except: continue
         
         if not all_numbers:
-            return np.zeros(max_n + 1, dtype=np.int64)
+            return np.zeros(max_n, dtype=np.int64)
             
         arr = np.asarray(all_numbers, dtype=np.int64)
         arr = arr[(arr >= 1) & (arr <= max_n)]
-        return np.bincount(arr, minlength=max_n + 1)
+        freq = np.bincount(arr, minlength=max_n + 1)
+        return freq[1 : max_n + 1]
 
     def analyze_joker_frequency(self) -> np.ndarray:
         """Analiză frecvență pentru Urna 2 la Joker (1-20)."""
         if self.data is None or "joker" not in self.data.columns:
-            return np.zeros(21, dtype=np.int64)
+            return np.zeros(20, dtype=np.int64)
             
         joker_vals = pd.to_numeric(self.data["joker"], errors="coerce").dropna().astype(np.int64)
         joker_vals = joker_vals[(joker_vals >= 1) & (joker_vals <= 20)]
         if joker_vals.empty:
-            return np.zeros(21, dtype=np.int64)
-        return np.bincount(joker_vals, minlength=21)
+            return np.zeros(20, dtype=np.int64)
+        freq = np.bincount(joker_vals, minlength=21)
+        return freq[1:21]
 
     def generate_predictions(self, guarantee=4, max_variants=0):
         """Generează predicții bazate pe analiză."""
         if not hasattr(self, 'hard_core') or not self.hard_core:
-            return []
+            return [], 0.0
 
         # Înlocuim logica veche (Random Pick) cu Wheeling logic matematic sigură pentru Urna 1
         variants, coverage_pct = generate_combinatorial_wheel(
@@ -254,11 +296,13 @@ class LotoEngine:
         logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
         if lookback > 0 and self.data is not None and not self.data.empty:
-            actual_lookback = int(len(self.data) * (lookback / 100.0))
-            if actual_lookback == 0:
+            effective_rows = int(len(self.data) * (lookback / 100.0))
+            effective_rows = max(effective_rows, 1)
+            actual_lookback = effective_rows
+            if effective_rows == 0:
                 actual_lookback = 1 # Măcar o extragere
             logging.info(f"[PIPELINE] Aplic limită de istoric: Ultimele {lookback}% ({actual_lookback} extrageri).")
-            self.data = self.data.tail(actual_lookback).copy()
+            self.data = self.data.tail(effective_rows).copy()
             self._build_draw_matrix()
             
         if progress_cb:
@@ -270,51 +314,74 @@ class LotoEngine:
         if progress_cb:
             progress_cb("Analiza frecvenței...", 30)
 
-        # 4. Filtru Regresiv Multi-Timeframe (Smart Reduction / Google TimesFM)
+        # 4. Filtru Regresiv Multi-Timeframe (Smart Reduction / Google TimesFM v2)
         blacklist = set()
         tfm_scores = {}
         if smart_reduction:
-            logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală 10/10...")
+            logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală v2 (XReg + Quantile)...")
             blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
             
-            # Salvăm în audit
             self.audit['reduction_filter'] = {
                 'combined_blacklist': list(blacklist),
                 'total_blocked': len(blacklist),
-                'model_used': 'Google TimesFM (Neural Regressive 10/10)'
+                'model_used': 'Google TimesFM v2 (XReg + Quantile + Anomaly)'
             }
         else:
             logging.info("[PIPELINE] Reducție Smart dezactivată. Se continuă fără blacklist.")
 
-        # 5. Calcul Scoruri Finale pentru Selecție Pool
-        # Calculăm contextul real bazat pe lookback
+        # 5. Calcul Scoruri NQI (Neural Quality Index) prin TimesFM v2
         total_draws = len(self.data) if self.data is not None else 0
         actual_lookback = total_draws
-        if lookback > 0:
-            actual_lookback = min(total_draws, lookback)
+        self.audit["effective_rows_used"] = total_draws
+        self.audit["lookback_pct"] = lookback
             
         if progress_cb:
-            progress_cb(f"Optimizare TimesFM (Context: {min(actual_lookback, 512)} extrageri)...", 50)
+            progress_cb(f"TimesFM v2: forecast + XReg covariates + anomaly (ctx={actual_lookback})...", 50)
         
         if not tfm_scores:
+            start_gpu = time.perf_counter()
             tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+            gpu_time = (time.perf_counter() - start_gpu) * 1000
+            
+            if 'performance' not in self.audit:
+                self.audit['performance'] = {}
+            self.audit['performance']['gpu_time_ms'] = round(gpu_time, 2)
+            logging.info(f"[PIPELINE] TimesFM GPU Time: {gpu_time:.2f}ms")
+
+        # Aplicăm corecția de eroare (Adaptive Local Tuning - Metoda 1)
+        # Aplicăm corecția de feedback (Adaptive Local Tuning) ANTERIOR rulării TimesFM
+        if self.error_correction_map:
+            logging.info(f"[PIPELINE] Aplicare feedback BEFORE TimesFM pe {len(self.error_correction_map)} numere...")
+            for num, multiplier in self.error_correction_map.items():
+                if num in tfm_scores:
+                    tfm_scores[num] *= multiplier
+            self.audit['feedback_correction'] = {str(k): round(v, 3) for k, v in self.error_correction_map.items()}
+        # Restul pipeline continuă cu TimesFM și alte etape
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
-        logging.info(f"[PIPELINE] Nucleu (Pool) generat prin Google TimesFM: {self.hard_core}")
         
-                
+        # Aplicăm filtrul anti-secvență pe nucleul generat de TimesFM
+        if filter_consecutives:
+            logging.info("[PIPELINE] Aplicare Filtru Anti-Secvență pe nucleul TimesFM...")
+            self.hard_core = self._apply_consecutive_filter(self.hard_core, freq)
+            self._consecutive_filter_applied = True
+        else:
+            self._consecutive_filter_applied = False
+            
+        logging.info(f"[PIPELINE] Nucleu (Pool) generat prin TimesFM v2 NQI: {self.hard_core}")
+        
         if self.game_type == "joker":
-            logging.info(f"[PIPELINE] Analiză Google TimesFm pentru Urna 2 (Context: {min(actual_lookback, 512)})...")
+            logging.info(f"[PIPELINE] TimesFM v2 pentru Urna 2 (Joker)...")
             j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
             if j_scores:
                 sorted_j = sorted(j_scores.items(), key=lambda x: x[1], reverse=True)
                 self.hard_core_joker = [int(num) for num, _ in sorted_j[:2]]
-                logging.info(f"[PIPELINE] Nucleu dur Joker (TimesFm Forecast): {self.hard_core_joker}")
+                logging.info(f"[PIPELINE] Nucleu Joker (TimesFM v2): {self.hard_core_joker}")
                 self.audit['joker_predictions'] = {num: round(score, 4) for num, score in sorted_j[:5]}
             else:
                 freq_joker = self.analyze_joker_frequency()
                 self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=2)
-                logging.info(f"[PIPELINE] Nucleu dur Joker (Fallback Frecvență): {self.hard_core_joker}")
+                logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
 
         if progress_cb:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
@@ -322,12 +389,12 @@ class LotoEngine:
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants)
         
-        # Funcția 4: Anomaly Filtering (Filtrare Neurale avansată)
+        # Funcția 4: Anomaly Filtering via TimesFM v2
         if smart_reduction and tfm_scores:
-            logging.info(f"[PIPELINE] Aplicare filtru Anomaly Scoring pe cele {len(lines)} variante...")
+            logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring v2 pe {len(lines)} variante...")
             original_count = len(lines)
             lines = self.filter_variants_by_anomaly(lines, tfm_scores, threshold=0.7)
-            logging.info(f"[PIPELINE] Anomaly Scoring a eliminat {original_count - len(lines)} variante considerate 'anormale' de model.")
+            logging.info(f"[PIPELINE] Anomaly v2: eliminat {original_count - len(lines)} variante.")
             self.audit['anomaly_filter'] = {
                 'original_count': original_count,
                 'final_count': len(lines),
@@ -388,7 +455,7 @@ class LotoEngine:
         
         # Luăm top cele mai frecvente numere ca punct de plecare
         sorted_indices = np.argsort(freq)[::-1]  # Descrescător
-        valid_indices = [int(i) for i in sorted_indices if i > 0 and i < len(freq) and freq[i] > 0 and i not in blacklist]
+        valid_indices = [int(i) + 1 for i in sorted_indices if i < len(freq) and freq[i] > 0 and (int(i) + 1) not in blacklist]
         
         # Luăm primele N numere cele mai frecvente care nu sunt în blacklist
         pool = valid_indices[:pool_size]
@@ -400,7 +467,7 @@ class LotoEngine:
             self._consecutive_filter_applied = False
             
         # Salvăm statisticile inițiale
-        self.hard_core_stats = {int(num): int(freq[num]) for num in pool}
+        self.hard_core_stats = {int(num): int(freq[num - 1]) for num in pool if num - 1 < len(freq)}
         logging.info(f"[INIT] Nucleu inițial: {pool}")
         return pool
 
@@ -567,12 +634,13 @@ class LotoEngine:
                                  reverse=True)
         
         # Determinăm câte numere să excludem (max 20% din nucleu, doar din Hot)
-        max_exclusions = max(1, min(len(hot_numbers), int(len(self.hard_core) * 0.2)))
+        # Limităm excluderile la 10% din nucleu (numere Hot) pentru a păstra diversitatea
+        max_exclusions = max(1, min(len(hot_numbers), int(len(self.hard_core) * 0.1)))
         numbers_to_exclude = []
         
         for num, metrics in sorted_candidates[:max_exclusions]:
-            # Excludem doar dacă scorul de inactivitate e > 0.6 (mai permisiv pentru Hot)
-            if metrics['inactivity_score'] > 0.6:
+            # Excludem doar dacă scorul de inactivitate e > 0.5 (mai permisiv pentru Hot)
+            if metrics['inactivity_score'] > 0.5:
                 numbers_to_exclude.append(num)
                 logging.info(f"[TIMESFM] Candidat pentru excludere: {num} (scor: {metrics['inactivity_score']:.2f})")
         
@@ -658,7 +726,8 @@ class LotoEngine:
         sorted_by_score = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)
         
         # Alegem top 70% din nucleu bazat pe scoruri
-        keep_count = max(6, int(len(self.hard_core) * 0.7))
+        # Păstrăm 80% din nucleu pentru a evita pierderea numerelor potențial câștigătoare
+        keep_count = max(6, int(len(self.hard_core) * 0.8))
         best_numbers = [num for num, score in sorted_by_score[:keep_count]]
         
         # Găsim alternative pentru numerele excluse
@@ -748,8 +817,9 @@ class LotoEngine:
         if freq.size == 0:
             return {num: 0.5 for num in self.hard_core}
         
-        max_freq = np.max(freq)
-        min_freq = np.min(freq[freq > 0]) if np.any(freq > 0) else 1
+        non_zero = freq[freq > 0]
+        max_freq = np.max(non_zero) if non_zero.size else 1
+        min_freq = np.min(non_zero) if non_zero.size else 1
         
         frequency_scores = {}
         for num in self.hard_core:
@@ -818,8 +888,8 @@ class LotoEngine:
         if self.data is None or recent_draws <= 0:
             return 0.0
         
-        start_idx = offset
-        end_idx = min(offset + recent_draws, len(self.data))
+        end_idx = max(0, len(self.data) - offset)
+        start_idx = max(0, end_idx - recent_draws)
         
         if start_idx >= end_idx:
             return 0.0
@@ -993,7 +1063,33 @@ class LotoEngine:
         # Reactualizăm statisticile Joker
         self.hard_core_joker_stats = {int(num): int(freq_joker[num-1]) for num in self.hard_core_joker}
 
-    def _get_timesfm_scores(self, is_joker_drum: bool = False, context_len: int = 512) -> Dict[int, float]:
+    @functools.lru_cache(maxsize=256)
+    def _get_timesfm_scores(self, is_joker_drum: bool = False, context_len: int = 4096) -> Dict[int, float]:
+        """
+        TimesFM v2 Engine — folosește TOATE capabilitățile:
+          1. forecast() cu normalize=True → point + 9 quantile (p10-p90)
+          2. forecast_with_covariates() cu XReg real:
+             - rolling_freq_10, rolling_freq_30 (dynamic numerical)
+             - gap_counter, draw_sum (dynamic numerical)
+             - number_norm, hist_frequency (static numerical)
+          3. Context Anomaly Detection (return_forecast_on_context)
+          4. Multi-Horizon Forecasting (H=20, weighted decay)
+          5. Adaptive Local Tuning (bias correction)
+        Rezultat: Neural Quality Index (NQI) per număr.
+        """
+        if _HAS_TFM_V2:
+            return get_timesfm_scores_v2(
+                data=self.data,
+                draw_matrix=self._draw_matrix,
+                params=self.params,
+                is_joker_drum=is_joker_drum,
+                context_len=context_len,
+                audit=self.audit,
+            )
+        # Fallback la implementarea veche dacă modulul v2 nu e disponibil
+        return self._get_timesfm_scores_legacy(is_joker_drum, context_len)
+
+    def _get_timesfm_scores_legacy(self, is_joker_drum: bool = False, context_len: int = 4096) -> Dict[int, float]:
         """
         Interfața ULTRA cu Google TimesFM: Analiză multi-orizont, stabilitate (cuantile) și trend.
         """
@@ -1014,35 +1110,42 @@ class LotoEngine:
             return {}
 
         try:
-            # Configurăm orizontul la 5 pentru analiza de trend
-            # Parametri optimizați pentru TimesFM 2.0/2.5 (suportă context mai mare și orizont extins)
-            tfm = timesfm.TimesFm(
-                hparams=timesfm.TimesFmHparams(
-                    context_len=512, # Limita nativă pentru v1.0
-                    horizon_len=20,   # Extins de la 5 la 20 pentru analiză multi-orizont (Funcția 2)
-                    input_patch_len=32,
-                    output_patch_len=128,
-                    num_layers=20,
-                    model_dims=1280,
-                    backend=device
-                ),
-                checkpoint=timesfm.TimesFmCheckpoint(
-                    huggingface_repo_id="google/timesfm-1.0-200m-pytorch"
+            global _GLOBAL_LEGACY_TFM
+            if _GLOBAL_LEGACY_TFM is not None:
+                tfm = _GLOBAL_LEGACY_TFM
+                logging.info("[TIMESFM] Folosim modelul legacy din memorie (HOT START).")
+            else:
+                logging.info("[TIMESFM] Încărcăm modelul legacy în memorie (COLD START)...")
+                # Configurăm orizontul la 5 pentru analiza de trend
+                # Parametri optimizați pentru TimesFM 2.0/2.5 (suportă context mai mare și orizont extins)
+                tfm = timesfm.TimesFm(
+                    hparams=timesfm.TimesFmHparams(
+                        context_len=4096, # Extins la 4096 pentru a suporta istoric complet
+                        horizon_len=20,   # Capacitate maximă pentru predicții pe termen lung
+                        input_patch_len=32,
+                        output_patch_len=128,
+                        num_layers=50,
+                        use_positional_embedding=False,
+                        backend=device
+                    ),
+                    checkpoint=timesfm.TimesFmCheckpoint(
+                        huggingface_repo_id="google/timesfm-2.0-500m-pytorch"
+                    )
                 )
-            )
+                _GLOBAL_LEGACY_TFM = tfm
             
             # Funcția 3: Pregătire Covariate (XReg Simulation) va fi apelată în interiorul buclei de ferestre.
 
             
             max_num = 20 if is_joker_drum else int(self.params["max_n"])
             windows = []
-            stride = 256
+            stride = 512
             current_end = total_available
             current_start = max(0, current_end - limit)
             
             pos = total_available
             while pos > current_start + 32:
-                w_start = max(current_start, pos - 512)
+                w_start = max(current_start, pos - 4096)
                 windows.append((w_start, pos))
                 if pos <= 512 or (pos - stride) < current_start + 32: break
                 pos -= stride
@@ -1137,48 +1240,43 @@ class LotoEngine:
 
     def _get_timesfm_regressive_blacklist(self, sim_depth_pct: int) -> Set[int]:
         """
-        Analiză Regresivă 10/10 folosind Google TimesFM.
-        Execută multiple runde de inferență pe intervale diferite și elimină doar confirmările multiple.
+        Analiză Regresivă multi-pass folosind Google TimesFM v2.
+        Rulează scoring pe ferestre de 100%, 90%, 80%... și elimină doar intersecția.
         """
+        if _HAS_TFM_V2 and self.data is not None:
+            return get_regressive_blacklist_v2(
+                data_full=self.data,
+                draw_matrix_full=self._draw_matrix,
+                params=self.params,
+                sim_depth_pct=sim_depth_pct,
+                rebuild_matrix_fn=self._build_draw_matrix,
+                audit=self.audit,
+            )
+        # Fallback legacy
         if not HAS_TIMESFM: return set()
-        
         logging.info(f"[TIMESFM] Începe Analiza Regresivă Neurală (Prag: {sim_depth_pct}%)...")
-        
         steps = list(range(100, sim_depth_pct - 1, -10))
         all_blacklists = []
-        
         original_data = self.data.copy() if self.data is not None else None
-        
         for step in steps:
-            # Trunchiem istoricul pentru acest pas
             num_rows = int(len(original_data) * (step / 100))
             if num_rows < 32: continue
-            
             self.data = original_data.tail(num_rows).copy()
             self._build_draw_matrix()
-            
             logging.info(f"[TIMESFM] Pas Regresiv: {step}% din istoric ({num_rows} extrageri)...")
-            scores = self._get_timesfm_scores(context_len=num_rows)
-            
+            scores = self._get_timesfm_scores_legacy(context_len=num_rows)
             if scores:
-                # Bottom 25% pentru acest pas
                 all_values = list(scores.values())
                 threshold = np.percentile(all_values, 25)
                 current_blacklist = {num for num, score in scores.items() if score <= threshold}
                 all_blacklists.append(current_blacklist)
-        
-        # Restaurăm datele originale
         self.data = original_data
         self._build_draw_matrix()
-        
         if not all_blacklists: return set()
-        
-        # INTERSECȚIE: Trebuie să fie pe blacklist în TOATE pașii pentru a fi eliminat
         final_blacklist = all_blacklists[0]
         for bl in all_blacklists[1:]:
             final_blacklist = final_blacklist.intersection(bl)
-            
-        logging.info(f"[TIMESFM] Analiză Regresivă finalizată. Confirmări multiple pentru {len(final_blacklist)} numere.")
+        logging.info(f"[TIMESFM] Analiză Regresivă finalizată. {len(final_blacklist)} numere.")
         return final_blacklist
 
     def _get_timesfm_pool(self, scores: Dict[int, float], pool_size: int, blacklist: Set[int]) -> List[int]:
@@ -1262,13 +1360,15 @@ class LotoEngine:
         return float(anomaly)
 
     def filter_variants_by_anomaly(self, variants: List[List[int]], scores: Dict[int, float], threshold: float = 0.7) -> List[List[int]]:
-        """Elimină variantele care sunt considerate anomalii statistice de către model."""
+        """Elimină variantele considerate anomalii statistice de model (v2 cu safe fallback)."""
+        if _HAS_TFM_V2:
+            return filter_variants_by_anomaly_v2(variants, scores, threshold)
         filtered = []
         for v in variants:
             score = self.calculate_variant_anomaly_score(v, scores)
             if score <= threshold:
                 filtered.append(v)
-        return filtered
+        return filtered if filtered else variants
 
 def create_demo_data(csv_path: str, game: str = "6/49") -> None:
 

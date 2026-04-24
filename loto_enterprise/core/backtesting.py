@@ -37,6 +37,7 @@ class BacktestResult:
     hit_numbers: Set[int]
     hit_rate: float
     draw_index: int = 0
+    hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union) la această extragere
 
 
 @dataclass
@@ -52,6 +53,7 @@ class BacktestSummary:
     std_hits: float
     distribution: Dict[int, int]  # hits -> count
     top_performing_draws: List[BacktestResult]
+    avg_union_hits: float = 0.0  # Media hit-urilor pe întregul pool
     all_results: List[BacktestResult] = field(default_factory=list)
 
 
@@ -67,6 +69,8 @@ class RetroactivePrediction:
     pool_size: int  # Dimensiunea pool-ului folosit
     guarantee: int  # Garanția folosită
     game_type: str  # Tipul jocului
+    draw_index: int = 0  # Indexul extragerii
+    hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union)
 
 
 class LotoBacktester:
@@ -275,8 +279,22 @@ class LotoBacktester:
                 all_hits.append(r.hits)
                 all_results.append(r)
         
+        # Calculăm hits pentru întregul pool (union) per extragere
+        union_hits_map = {} # draw_index -> hits_union
+        variants_sets = [set(v) for v in variants]
+        predicted_union = set().union(*variants_sets) if variants_sets else set()
+        
+        for idx, date, draw in target_draws:
+            h_union = len(predicted_union & set(draw))
+            union_hits_map[idx] = h_union
+            
+        # Actualizăm all_results cu hits_union
+        for r in all_results:
+            r.hits_union = union_hits_map.get(r.draw_index, 0)
+            
         # Calculăm statisticile
         hits_array = np.array(all_hits)
+        union_hits_array = np.array(list(union_hits_map.values()))
         
         distribution = {}
         for h in range(self.params["draw_n"] + 1):
@@ -298,6 +316,7 @@ class LotoBacktester:
             median_hits=float(np.median(hits_array)) if len(hits_array) > 0 else 0.0,
             std_hits=float(np.std(hits_array)) if len(hits_array) > 0 else 0.0,
             distribution=distribution,
+            avg_union_hits=float(np.mean(union_hits_array)) if len(union_hits_array) > 0 else 0.0,
             top_performing_draws=top_performing,
             all_results=all_results
         )
@@ -310,21 +329,21 @@ class LotoBacktester:
         print("\n" + "=" * 60)
         print("          RAPORT BACKTESTING LOTO")
         print("=" * 60)
-        print(f"\nPerioada evaluată: Ultimele {summary.total_draws_evaluated} extrageri")
+        print(f"\nPerioada evaluata: Ultimele {summary.total_draws_evaluated} extrageri")
         print(f"Variante testate: {summary.variants_tested}")
         print(f"\n--- STATISTICI GENERALE ---")
         print(f"Medie numere ghicite per extragere: {summary.avg_hits_per_draw:.2f}")
-        print(f"Rată de succes medie: {summary.avg_hit_rate*100:.1f}%")
-        print(f"Mediană numere ghicite: {summary.median_hits:.1f}")
-        print(f"Deviație standard: {summary.std_hits:.2f}")
+        print(f"Rata de succes medie: {summary.avg_hit_rate*100:.1f}%")
+        print(f"Mediana numere ghicite: {summary.median_hits:.1f}")
+        print(f"Deviatie standard: {summary.std_hits:.2f}")
         print(f"Cel mai bun rezultat: {summary.best_draw_hits} numere")
         print(f"Cel mai slab rezultat: {summary.worst_draw_hits} numere")
         
-        print(f"\n--- DISTRIBUȚIE NUMERE GHICITE ---")
+        print(f"\n--- DISTRIBUTIE NUMERE GHICITE ---")
         for hits in sorted(summary.distribution.keys(), reverse=True):
             count = summary.distribution[hits]
             pct = count / (summary.variants_tested * summary.total_draws_evaluated) * 100
-            bar = "█" * int(pct / 2)
+            bar = "#" * int(pct / 2)
             print(f"  {hits} numere: {count:4d} ({pct:5.1f}%) {bar}")
         
         if summary.top_performing_draws:
@@ -340,19 +359,20 @@ class LotoBacktester:
                                   backtest_depth_percent: float = 5.0,
                                   filter_consecutives: bool = True,
                                   max_variants: int = 0,
-                                  simulation_step: int = 1) -> List[RetroactivePrediction]:
+                                  simulation_step: int = 1,
+                                  use_feedback: bool = True) -> List[RetroactivePrediction]:
         """
-        Backtesting Retroactiv: Generează previziuni pentru fiecare punct istoric.
+        Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
         Args:
             pool_size: Dimensiunea pool-ului pentru wheeling
-            guarantee: Garanția set cover
-            lookback_percent: Ce % din istoric să folosească pentru analiza frecvenței la FIECARE pas
+            guarantee: Garantia set cover
+            lookback_percent: Ce % din istoric sa foloseasca pentru analiza frecventei la FIECARE pas
             backtest_depth_percent: Procentul din istoric (coada) de testat
-            filter_consecutives: Dacă să aplice filtrul anti-secvență
-            cold_percent: Procentul de numere reci
+            filter_consecutives: Daca sa aplice filtrul anti-secventa
             max_variants: Limita de variante
-            simulation_step: Din câte în câte extrageri să facă simulare (1 = toate)
+            simulation_step: Din cate in cate extrageri sa faca simulare (1 = toate)
+            use_feedback: Daca sa foloseasca Adaptive Local Tuning (Metoda 1)
         """
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")
@@ -366,6 +386,7 @@ class LotoBacktester:
         logger.info(f"[BACKTEST RETROACTIV] Simulăm pentru {n_simulate} extrageri din {n_draws}")
         
         retro_predictions = []
+        feedback_map: Dict[int, float] = {} # num -> multiplier
         
         # Iterăm prin fiecare punct de simulare
         for sim_idx in range(start_idx, n_draws, simulation_step):
@@ -394,8 +415,11 @@ class LotoBacktester:
                 engine.data = historical_df
                 engine._build_draw_matrix()
                 
+                # Aplicăm feedback-ul acumulat din pașii anteriori (Metoda 1)
+                engine.error_correction_map = feedback_map.copy()
+                
                 # Rulăm pipeline-ul instituțional (fără progress callback pentru viteză în loop)
-                lines, _, _, _, _, _ = engine.run_institutional_pipeline(
+                lines, _, _, _, _, audit = engine.run_institutional_pipeline(
                     progress_cb=None,
                     pool_size=pool_size,
                     guarantee=guarantee,
@@ -403,6 +427,12 @@ class LotoBacktester:
                     lookback=lookback_percent,
                     filter_consecutives=filter_consecutives
                 )
+                
+                # Aplicăm feedback-ul acumulat (Metoda 1)
+                engine.error_correction_map = feedback_map.copy()
+                
+                # Rulăm pipeline-ul (Notă: în varianta reală ar trebui să rulăm pipeline-ul 
+                # DUPĂ ce setăm feedback-ul, deci mutăm setarea feedback-ului înainte de run)
                 
                 # Evaluăm rezultatul contra extragerii reale
                 actual_draw = self.draws[sim_idx]
@@ -419,10 +449,9 @@ class LotoBacktester:
                     if h > max_hits:
                         max_hits = h
                 
-                #predicted_numbers = set()
-                #for v in lines:
-                #    predicted_numbers.update(v)
-                #hits_pool = len(predicted_numbers & actual_draw)
+                # Calculăm hits pentru întregul pool (union)
+                predicted_union = set().union(*lines) if lines else set()
+                hits_union = len(predicted_union & set(actual_draw))
                 
                 # Creăm înregistrarea retroactivă
                 retro_pred = RetroactivePrediction(
@@ -431,15 +460,38 @@ class LotoBacktester:
                     variants=lines,
                     predicted_numbers=set(engine.hard_core),
                     actual_numbers=actual_draw,
-                    hits=max_hits, # Folosim max hits din variante pentru realism
+                    hits=max_hits,
+                    hits_union=hits_union,
                     pool_size=pool_size,
                     guarantee=guarantee,
-                    game_type=self.game_type
+                    game_type=self.game_type,
+                    draw_index=sim_idx
                 )
                 
                 retro_predictions.append(retro_pred)
                 
-                logger.info(f"[BACKTEST RETROACTIV] Rezultat: {max_hits} numere ghicite (Max dintr-o variantă)")
+                logger.info(f"[BACKTEST RETROACTIV] Rezultat: {max_hits} numere ghicite (Max dintr-o varianta)")
+                
+                if use_feedback:
+                    # ACTUALIZARE FEEDBACK (Metoda 1)
+                    actual_set = set(actual_draw)
+                    predicted_set = set(engine.hard_core)
+                    
+                    # Numere ratate (au iesit dar nu le-am prezis) -> Bonus +0.1
+                    missed = actual_set - predicted_set
+                    for m in missed:
+                        feedback_map[m] = feedback_map.get(m, 1.0) + 0.1
+                        
+                    # Numere prezise dar "reci" (nu au iesit) -> Penalizare -0.05
+                    false_positives = predicted_set - actual_set
+                    for fp in false_positives:
+                        feedback_map[fp] = feedback_map.get(fp, 1.0) - 0.05
+                    
+                    # Limitam feedback-ul la valori rezonabile (0.5 - 2.0)
+                    for k in list(feedback_map.keys()):
+                        feedback_map[k] = max(0.5, min(2.0, feedback_map[k]))
+                        # Decadere in timp
+                        feedback_map[k] = 1.0 + (feedback_map[k] - 1.0) * 0.8
                 
             except Exception as e:
                 logger.error(f"[BACKTEST RETROACTIV] Eroare la simulare {sim_num}: {e}")

@@ -1,6 +1,11 @@
-﻿streamlit
+streamlit
 pandas
 numpy
 requests
 psutil
 numba
+torch
+timesfm
+huggingface_hub
+scipy
+matplotlib
