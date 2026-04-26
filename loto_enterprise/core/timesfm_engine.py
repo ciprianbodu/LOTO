@@ -62,15 +62,22 @@ def _init_model(ctx_len: int, horizon: int, device: str):
     """Inițializează modelul TimesFM și îl păstrează în memorie (Singleton)."""
     global _GLOBAL_TFM_MODEL, _GLOBAL_TFM_CTX, _GLOBAL_TFM_HORIZON
     
+    # FORȚĂM dimensiunea maximă a contextului pentru a nu mai reîncărca modelul
+    # de fiecare dată când se schimbă dimensiunea ferestrei de analiză.
     context_cap = _get_context_cap()
-    aligned_ctx = _align_context(min(ctx_len, context_cap))
+    aligned_ctx = _align_context(context_cap)
     
     # Returnăm din cache dacă modelul există deja și se potrivesc parametrii
     if _GLOBAL_TFM_MODEL is not None and _GLOBAL_TFM_CTX == aligned_ctx and _GLOBAL_TFM_HORIZON == horizon:
-        logging.info("[TIMESFM-V2] Folosim modelul deja încărcat în memorie (HOT START).")
+        # Nu logăm HOT START pentru a nu spama
         return _GLOBAL_TFM_MODEL, aligned_ctx
         
-    logging.info("[TIMESFM-V2] Încărcare model complet nou în memorie (COLD START)...")
+    logging.info(f"[TIMESFM-V2] Încărcare model complet nou în memorie (COLD START) - Size: {aligned_ctx}...")
+    
+    # Prevenim hang-urile cauzate de verificarea online a modelului pe Windows
+    import os
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    
     tfm = timesfm.TimesFm(
         hparams=timesfm.TimesFmHparams(
             context_len=aligned_ctx,
@@ -87,6 +94,8 @@ def _init_model(ctx_len: int, horizon: int, device: str):
             huggingface_repo_id="google/timesfm-2.0-500m-pytorch"
         ),
     )
+    
+    logging.info("[TIMESFM-V2] Modelul a fost încărcat și inițializat cu succes.")
     
     _GLOBAL_TFM_MODEL = tfm
     _GLOBAL_TFM_CTX = aligned_ctx
@@ -498,24 +507,16 @@ def get_timesfm_scores_v2(
     is_joker_drum: bool = False,
     context_len: int = 4096,
     audit: dict | None = None,
+    is_regressive_step: bool = False,
 ) -> Dict[int, float]:
     """
     Motor principal TimesFM v2 — folosește TOATE capabilitățile API-ului.
-
-    Pași:
-      1. Construiește seriile binare per număr
-      2. Rulează forecast() cu normalize=True → point + quantile
-      3. Construiește covariate reale (rolling freq, gap, draw sum, etc.)
-      4. Rulează forecast_with_covariates() cu xreg_mode="xreg + timesfm"
-      5. Rulează context anomaly detection
-      6. Combină totul în NQI (Neural Quality Index)
     """
     if not HAS_TIMESFM:
         logging.error(f"[TIMESFM-V2] Librăria lipsește: {_TFM_ERROR}")
         return {}
 
     total_available = len(data) if data is not None else 0
-    # Modificat: Luăm MAXIMUL posibil (tot istoricul), tăiat doar dacă depășește pragul imens de 4096
     ctx_len = min(context_len, total_available, _get_context_cap())
     if ctx_len < 32:
         return {}
@@ -524,22 +525,17 @@ def get_timesfm_scores_v2(
     max_num = 20 if is_joker_drum else int(params.get("max_n", 49))
     device = _detect_device()
 
-    # --- Multi-Context Ensemble Scoring ---
-    # Rulem TimesFM pe ferestre diferite pentru a capta atât stabilitatea pe termen lung, cât și trendurile recente.
-    # Ferestre: 100% (Full), 1000 draws (Long-mid), 500 draws, 200 draws, 50 draws (Short-term)
-    # Ferestre: Full (capituit), 500 draws, 200 draws, 50 draws
-    # Pe CPU reducem numarul de ferestre pentru viteza
     context_windows = [ctx_len]
-    is_cpu = (_detect_device() == "cpu")
-    
-    if not is_cpu and ctx_len > 1500:
-        context_windows.append(1000)
-    if ctx_len > 600:
-        context_windows.append(500)
-    if ctx_len > 250:
-        context_windows.append(200)
-    if ctx_len > 80:
-        context_windows.append(50)
+    if not is_regressive_step:
+        is_cpu = (_detect_device() == "cpu")
+        if not is_cpu and ctx_len > 1500:
+            context_windows.append(1000)
+        if ctx_len > 600:
+            context_windows.append(500)
+        if ctx_len > 250:
+            context_windows.append(200)
+        if ctx_len > 80:
+            context_windows.append(50)
         
     ensemble_scores: List[Dict[int, float]] = []
     
@@ -566,27 +562,32 @@ def get_timesfm_scores_v2(
             point_forecast, full_forecast = tfm.forecast(inputs=all_series, freq=[0]*len(all_series), normalize=True)
             
             cov_forecast = None
-            try:
-                dyn_num, static_num = build_covariates(all_series, num_map, draw_matrix, max_num, horizon)
-                cov_result = tfm.forecast_with_covariates(
-                    inputs=[s.tolist() for s in all_series],
-                    dynamic_numerical_covariates=dyn_num,
-                    static_numerical_covariates=static_num,
-                    freq=[0]*len(all_series),
-                    xreg_mode="xreg + timesfm",
-                    normalize_xreg_target_per_input=True,
-                    force_on_cpu=(device == "cpu"),
-                )
-                cov_forecast = np.array(cov_result[0]) if isinstance(cov_result, tuple) else np.array(cov_result)
-            except Exception: pass
+            if not is_regressive_step:
+                try:
+                    dyn_num, static_num = build_covariates(all_series, num_map, draw_matrix, max_num, horizon)
+                    cov_result = tfm.forecast_with_covariates(
+                        inputs=[s.tolist() for s in all_series],
+                        dynamic_numerical_covariates=dyn_num,
+                        static_numerical_covariates=static_num,
+                        freq=[0]*len(all_series),
+                        xreg_mode="xreg + timesfm",
+                        normalize_xreg_target_per_input=True,
+                        force_on_cpu=(device == "cpu"),
+                    )
+                    cov_forecast = np.array(cov_result[0]) if isinstance(cov_result, tuple) else np.array(cov_result)
+                except Exception: pass
             
-            anomaly_scores = compute_context_anomaly(tfm, all_series, num_map)
-            opt_weights = optimize_nqi_weights(all_series, num_map, point_forecast, full_forecast, cov_forecast)
-            nqi = compute_nqi_scores(all_series, num_map, point_forecast, full_forecast, cov_forecast, horizon, opt_weights)
-            
-            # Apply Anomaly
-            for n in num_map:
-                nqi[n] = nqi.get(n, 0.0) * (0.8 + 0.4 * anomaly_scores.get(n, 0.5))
+            if is_regressive_step:
+                # Mod ultra-rapid pentru calibrare: folosim doar point forecast-ul de baza
+                nqi = {num: float(point_forecast[i, 0]) for i, num in enumerate(num_map)}
+            else:
+                anomaly_scores = compute_context_anomaly(tfm, all_series, num_map)
+                opt_weights = optimize_nqi_weights(all_series, num_map, point_forecast, full_forecast, cov_forecast)
+                nqi = compute_nqi_scores(all_series, num_map, point_forecast, full_forecast, cov_forecast, horizon, opt_weights)
+                
+                # Apply Anomaly
+                for n in num_map:
+                    nqi[n] = nqi.get(n, 0.0) * (0.8 + 0.4 * anomaly_scores.get(n, 0.5))
             
             ensemble_scores.append(nqi)
 
@@ -677,6 +678,7 @@ def get_regressive_blacklist_v2(
         scores = get_timesfm_scores_v2(
             data_slice, dm_slice, params,
             is_joker_drum=is_joker, context_len=num_rows,
+            is_regressive_step=True
         )
 
         if scores:

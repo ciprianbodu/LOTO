@@ -384,6 +384,48 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.caption("Sistem de analiză hibridă: Google TimesFM v2 + Wheeling Combinatorial Optimizat.")
 
+# Container pentru Mesaje de Calibrare / Status
+status_container = st.empty()
+
+if "calib_reason_msg" in st.session_state:
+    with status_container.container():
+        st.info(f"💡 **Raport Calibrare Auto-Tuning ({st.session_state.get('sim_depth_val', 40)}%)**\n\n{st.session_state['calib_reason_msg']}")
+
+# Verificam daca utilizatorul a pornit calibrarea din sidebar
+if st.session_state.get("start_calib_now", False):
+    with status_container.container():
+        st.markdown("### 🚀 Calibrare în curs...")
+        p_bar = st.progress(0, text="⏳ Pas 0: Pregătire motor AI... (Așteaptă ~20 sec)")
+        
+        import time
+        time.sleep(0.5) # Mic delay pentru a forța randarea UI-ului
+        
+        def update_p(val, msg):
+            p_bar.progress(val, text=msg)
+
+        from calibreaza import run_calibration
+        from loto_engine import LotoEngine
+        fname, df = st.session_state["loaded_datasets"][0]
+        g_label = "6/49"
+        if "5_40" in fname.lower() or "5/40" in fname.lower(): g_label = "5/40"
+        elif "joker" in fname.lower(): g_label = "joker"
+        
+        calib_engine = LotoEngine(game_type=g_label)
+        calib_engine.data = df.copy()
+        calib_engine._build_draw_matrix()
+        
+        best_depth, calib_res = run_calibration(calib_engine, test_draws=2, progress_cb=update_p)
+        st.session_state["sim_depth_val"] = best_depth
+        st.session_state["sim_depth_suffix"] += 1
+        
+        best_stats = calib_res[best_depth]
+        reason = f"Acest procent a eliminat **cele mai multe numere moarte ({best_stats['total_excluded']} numere excluse)** pe cele 2 teste regresive, FĂRĂ să taie vreun număr câștigător (**Fatalități: {best_stats['total_fatalities']}**).\nMedie eliminată per extragere: {best_stats['avg_excluded']:.1f} numere."
+        st.session_state["calib_reason_msg"] = reason
+        st.session_state["start_calib_now"] = False # Oprim flag-ul
+        st.rerun()
+
+
+
 if "persistent_results" in st.session_state:
     res = st.session_state["persistent_results"]
     if isinstance(res, tuple) and len(res) == 2:
@@ -546,47 +588,30 @@ with st.sidebar:
     # --- SECȚIUNE FILTRE INTELIGENTE ---
     st.markdown("---")
     
-    # Sistem integrat de reducere (bazat pe Google TimesFM)
-    smart_reduction_input = st.checkbox(
-        "Sistem de Analiză Google TimesFM (Backtest + Predicție)", 
-        value=True, 
-        help="Utilizează modelul Google TimesFM pentru a prognoza tendințele și a optimiza nucleul dur de numere."
-    )
+    st.markdown("---")
     
-    if "sim_depth_key" not in st.session_state:
-        st.session_state["sim_depth_key"] = 40
+    if "sim_depth_val" not in st.session_state:
+        st.session_state["sim_depth_val"] = 40
+    if "sim_depth_suffix" not in st.session_state:
+        st.session_state["sim_depth_suffix"] = 0
+
+    if st.button("⚙️ Calibrează Adâncimea", help="Află automat cel mai bun procent testând pe istoricul recent (2-3 min).", use_container_width=True):
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier CSV!")
+        else:
+            st.session_state["start_calib_now"] = True
+            st.rerun()
 
     sim_depth_input = st.slider(
         "Adâncime Simulare Backtesting (%)", 
         min_value=10, 
         max_value=100, 
+        value=st.session_state["sim_depth_val"],
         step=10,
         help="Procentul minim din istoric analizat de filtrul regresiv multi-timeframe pentru a depista momentum-ul fals.",
-        key="sim_depth_key"
+        key=f"sim_depth_key_{st.session_state['sim_depth_suffix']}"
     )
-    
-    if st.button("⚙️ Calibrează Adâncimea (Auto)", help="Rulează teste pe ultimele extrageri pentru a găsi procentul optim. Durează 1-2 minute.", use_container_width=True):
-        if not st.session_state.get("loaded_datasets"):
-            st.error("Încărcați întâi un fișier de date CSV (Pasul 1)!")
-        else:
-            with st.spinner("Calibrare neurală în progres... te rog așteaptă (1-2 min)."):
-                from calibreaza import run_calibration
-                from loto_engine import LotoEngine
-                fname, df = st.session_state["loaded_datasets"][0]
-                g_label = "6/49"
-                if "5_40" in fname.lower() or "5/40" in fname.lower(): g_label = "5/40"
-                elif "joker" in fname.lower(): g_label = "joker"
-                
-                calib_engine = LotoEngine(game_type=g_label)
-                calib_engine.data = df.copy()
-                calib_engine._build_draw_matrix()
-                
-                best_depth, calib_res = run_calibration(calib_engine, test_draws=3, depths_to_test=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
-                st.session_state["sim_depth_key"] = best_depth
-                
-            st.success(f"✅ Calibrare reușită! Adâncimea a fost setată la {best_depth}%.")
-            time.sleep(2)
-            st.rerun()
+    st.session_state["sim_depth_val"] = sim_depth_input
 
 if st.session_state.get("queue_submit_requested") and not st.session_state.get("active_job_id"):
     datasets_ok = "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]
@@ -605,7 +630,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         h.update(str(max_variants_input).encode("utf-8"))
         h.update(str(lookback_input).encode("utf-8"))
         h.update(str(apply_consecutive_filter).encode("utf-8"))
-        h.update(str(smart_reduction_input).encode("utf-8"))
+        h.update(str(True).encode("utf-8"))
         h.update(str(sim_depth_input).encode("utf-8"))
         
         for fname, df in st.session_state["loaded_datasets"]:
@@ -623,7 +648,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
                 "max_variants": max_variants_input,
                 "lookback": lookback_input,
                 "filter_consecutives": apply_consecutive_filter,
-                "smart_reduction": smart_reduction_input,
+                "smart_reduction": True,
                 "sim_depth_pct": sim_depth_input,
             }
             datasets_cfg.append({
