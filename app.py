@@ -422,6 +422,14 @@ if st.session_state.get("start_calib_now", False):
         reason = f"Acest procent a eliminat **cele mai multe numere moarte ({best_stats['total_excluded']} numere excluse)** pe cele 2 teste regresive, FĂRĂ să taie vreun număr câștigător (**Fatalități: {best_stats['total_fatalities']}**).\nMedie eliminată per extragere: {best_stats['avg_excluded']:.1f} numere."
         st.session_state["calib_reason_msg"] = reason
         st.session_state["start_calib_now"] = False # Oprim flag-ul
+        
+        if st.session_state.get("trigger_gen_after_calib"):
+            st.session_state["trigger_gen_after_calib"] = False
+            # Pregătim pentru generare imediată
+            reset_sidebar_settings()
+            ensure_worker_running()
+            st.session_state["queue_submit_requested"] = True
+            
         st.rerun()
 
 
@@ -563,6 +571,46 @@ with st.sidebar:
 
     st.header("3. Control Execuție")
     
+    if "sim_depth_val" not in st.session_state:
+        st.session_state["sim_depth_val"] = 40
+    if "sim_depth_suffix" not in st.session_state:
+        st.session_state["sim_depth_suffix"] = 0
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("⚙️ Calibrează Adâncimea", help="Află automat cel mai bun procent testând pe istoricul recent.", use_container_width=True):
+            if not st.session_state.get("loaded_datasets"):
+                st.error("Încărcați întâi un fișier CSV!")
+            else:
+                st.session_state["start_calib_now"] = True
+                st.rerun()
+
+    with c2:
+        if st.button("🚀 Generează Variante", type="primary", use_container_width=True, help="Pornește generarea folosind setările curente."):
+            reset_sidebar_settings()
+            ensure_worker_running()
+            st.session_state["queue_submit_requested"] = True
+
+    sim_depth_input = st.slider(
+        "Adâncime Simulare Backtesting (%)", 
+        min_value=10, 
+        max_value=100, 
+        value=st.session_state["sim_depth_val"],
+        step=10,
+        help="Procentul minim din istoric analizat de filtrul regresiv multi-timeframe pentru a depista momentum-ul fals.",
+        key=f"sim_depth_key_{st.session_state['sim_depth_suffix']}"
+    )
+    st.session_state["sim_depth_val"] = sim_depth_input
+
+    if st.button("⚡ Calibrează + Generează", help="Execută calibrarea automată și apoi pornește imediat generarea variantelor.", use_container_width=True):
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier CSV!")
+        else:
+            st.session_state["start_calib_now"] = True
+            st.session_state["trigger_gen_after_calib"] = True
+            st.rerun()
+
+    st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🔴 Oprește Forțat", type="secondary", use_container_width=True):
@@ -578,40 +626,10 @@ with st.sidebar:
             clear_logs()
             st.rerun()
 
-    if st.button("🚀 Generează Variante (Wheeling)", type="primary", use_container_width=True):
-        reset_sidebar_settings()
-        ensure_worker_running()
-        st.session_state["queue_submit_requested"] = True
 
 
 
-    # --- SECȚIUNE FILTRE INTELIGENTE ---
-    st.markdown("---")
-    
-    st.markdown("---")
-    
-    if "sim_depth_val" not in st.session_state:
-        st.session_state["sim_depth_val"] = 40
-    if "sim_depth_suffix" not in st.session_state:
-        st.session_state["sim_depth_suffix"] = 0
 
-    if st.button("⚙️ Calibrează Adâncimea", help="Află automat cel mai bun procent testând pe istoricul recent (2-3 min).", use_container_width=True):
-        if not st.session_state.get("loaded_datasets"):
-            st.error("Încărcați întâi un fișier CSV!")
-        else:
-            st.session_state["start_calib_now"] = True
-            st.rerun()
-
-    sim_depth_input = st.slider(
-        "Adâncime Simulare Backtesting (%)", 
-        min_value=10, 
-        max_value=100, 
-        value=st.session_state["sim_depth_val"],
-        step=10,
-        help="Procentul minim din istoric analizat de filtrul regresiv multi-timeframe pentru a depista momentum-ul fals.",
-        key=f"sim_depth_key_{st.session_state['sim_depth_suffix']}"
-    )
-    st.session_state["sim_depth_val"] = sim_depth_input
 
 if st.session_state.get("queue_submit_requested") and not st.session_state.get("active_job_id"):
     datasets_ok = "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]
@@ -1033,10 +1051,30 @@ if "persistent_results" in st.session_state:
                             with cols[2]:
                                 st.markdown(f"<div style='font-size: 0.85em; text-align: right; color: #fff;'>{count} extrageri ({pct:.0f}%)</div>", unsafe_allow_html=True)
                         
-                        # --- NOU: Detalii câștiguri (Minim 3 numere) ---
+                        # --- NOU: Detalii Performanță Pool (AI Hard Core) ---
+                        pool_hits = []
+                        # Folosim un set de indecși pentru a raporta o singură dată per extragere
+                        seen_draws = set()
+                        
+                        # Sortăm descrescător după hits_union (cele mai bune pool-uri sus)
+                        for h in sorted(retro_predictions, key=lambda x: (getattr(x, 'hits_union', 0), getattr(x, 'draw_index', 0)), reverse=True):
+                            u_hits = getattr(h, 'hits_union', 0)
+                            d_idx = getattr(h, 'draw_index', 0)
+                            
+                            if u_hits >= 4 and d_idx not in seen_draws:
+                                d_date = getattr(h, 'draw_date', getattr(h, 'target_draw_date', None))
+                                label = d_date if d_date and str(d_date) != "None" else f"Extragerea #{d_idx}"
+                                pool_hits.append({"Data / Extragere": label, "Numere în Nucleu": f"🔥 {u_hits} numere"})
+                                seen_draws.add(d_idx)
+                        
+                        if pool_hits:
+                            st.markdown("<div style='margin-top: 15px; font-weight: bold; color: #f4a261;'>🎯 Istoric Performanță Pool (Nucleu Dur - Minim 4 nr):</div>", unsafe_allow_html=True)
+                            st.dataframe(pd.DataFrame(pool_hits), use_container_width=True, height=110, hide_index=True)
+
+                        # --- Detalii câștiguri Variante (Minim 3 numere) ---
                         high_hits = [p for p in retro_predictions if p.hits >= 3]
                         if high_hits:
-                            st.markdown("<div style='margin-top: 15px; font-weight: bold; color: #17a2b8;'>🎯 Istoric Câștiguri (Minim 3 numere):</div>", unsafe_allow_html=True)
+                            st.markdown("<div style='margin-top: 15px; font-weight: bold; color: #17a2b8;'>🎯 Istoric Câștiguri Variante (Bilete - Minim 3 nr):</div>", unsafe_allow_html=True)
                             hit_data = []
                             total_prize = 0
                             

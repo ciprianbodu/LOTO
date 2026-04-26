@@ -637,31 +637,9 @@ def get_regressive_blacklist_v2(
     if not HAS_TIMESFM:
         return set()
 
-    # Optimizare masivă: Refolosim cache-ul Ensemble în loc să rulăm zeci de ori
-    if audit and "raw_ensemble_scores" in audit:
-        ensemble_scores = audit["raw_ensemble_scores"]
-        logging.info(f"[TIMESFM-V2] Regressive Blacklist folosind Ensemble Cache ({len(ensemble_scores)} ferestre)...")
-        
-        all_blacklists: List[Set[int]] = []
-        for scores in ensemble_scores:
-            if scores:
-                vals = list(scores.values())
-                threshold = np.percentile(vals, 25)
-                bl = {n for n, s in scores.items() if s <= threshold}
-                all_blacklists.append(bl)
-                
-        if not all_blacklists:
-            return set()
-            
-        result = all_blacklists[0]
-        for bl in all_blacklists[1:]:
-            result = result.intersection(bl)
-            
-        logging.info(f"[TIMESFM-V2] Regressive blacklist final din Cache: {len(result)} numere ({sorted(result)})")
-        return result
-
-    # Fallback dacă nu există cache
-    logging.info(f"[TIMESFM-V2] Regressive Blacklist Fallback (depth: {sim_depth_pct}%)...")
+    # Fallback / True Regressive Logic (depth: sim_depth_pct%)
+    # Dezactivam cache-ul Ensemble pentru a asigura consistenta 100% cu Auto-Tuning-ul
+    logging.info(f"[TIMESFM-V2] Regressive Blacklist Analysis (depth: {sim_depth_pct}%)...")
     steps = list(range(100, max(sim_depth_pct - 1, 9), -10))
     all_blacklists: List[Set[int]] = []
     total_rows = len(data_full)

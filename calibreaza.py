@@ -21,7 +21,7 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
     total_iters = test_draws * 10 # 10 pasi de regresie per extragere
     current_iter = 0
     
-    for i in range(total_draws - test_draws, total_draws):
+    for idx, i in enumerate(range(total_draws - test_draws, total_draws), 1):
         # Pregatim engine-ul pentru extragerea de test curenta
         train_df = df.iloc[:i].copy()
         engine.data = train_df
@@ -39,7 +39,7 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
             current_iter += 1
             if progress_cb:
                 p_val = min(current_iter / total_iters, 0.99)
-                progress_cb(p_val, f"🚀 Analiză neurală: Pas {step}% (Extragere {total_draws-i}/{test_draws})")
+                progress_cb(p_val, f"🚀 Analiză neurală: Pas {step}% (Extragere {idx}/{test_draws})")
             
             try:
                 num_rows = int(len(train_df) * (step / 100))
