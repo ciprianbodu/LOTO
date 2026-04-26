@@ -1,4 +1,4 @@
-# STATUS PROIECT LOTO ENTERPRISE (22 APRILIE 2026)
+# ARHITECTURĂ ȘI FUNCȚIONALITĂȚI LOTO ENTERPRISE (APRILIE 2026)
 
 ## 1. NUCLEU DE PREDICȚIE — Google TimesFM v2 (MAXIM)
 - **Model Foundation**: Google TimesFM 200M parametri (checkpoint: google/timesfm-1.0-200m-pytorch).
@@ -7,44 +7,58 @@
     *   **Multi-Horizon Trend (25%)**: Analiza pe H=20 pași viitor cu weighted decay exponențial.
     *   **Quantile Stability (20%)**: Analiza incertitudinii prin 9 cuantile (p10→p90 spread).
     *   **Covariate Boost (20%)**: Semnalul din forecast_with_covariates() cu XReg real.
-    *   **Adaptive Local Tuning (15%)**: Bias correction bazat pe frecvența recentă (5 vs 10 extrageri).
+    *   **Adaptive Local Tuning (15%)**: Bias correction bazat pe frecvența recentă.
 
-## 2. COVARIATE REALE — forecast_with_covariates() cu XReg
-- **Dynamic Numerical Covariates** (per serie, per timestep):
-    *   `rolling_freq_10`: Frecvența mobilă pe ultimele 10 extrageri.
-    *   `rolling_freq_30`: Frecvența mobilă pe ultimele 30 extrageri.
-    *   `gap_counter`: Câte extrageri de la ultima apariție (normalizat).
-    *   `draw_sum`: Suma numerelor extrase per extragere (normalizată).
-- **Static Numerical Covariates** (per serie):
-    *   `number_norm`: Valoarea numărului normalizată [0,1].
-    *   `hist_frequency`: Frecvența globală pe tot contextul.
-- **XReg Mode**: `xreg + timesfm` (combină OLS pe covariate cu predicția neurală).
+## 2. COVARIATE REALE ȘI FILTRARE AVANSATĂ
+- **Dynamic & Static Covariates**: rolling_freq, gap_counter, draw_sum, number_norm, hist_frequency via XReg.
+- **Neural Regressive Multi-Pass (Smart Reduction)**: Analiză pe ferestre de istoric regresive (100%, 90%, 80%...) pentru a identifica intersecția numerelor inactive ("dead numbers").
+- **Filtru Anti-Secvență**: Detecție 3+ numere consecutive; dacă secvența nu are validare istorică (sub 1% apariții), numărul cel mai slab e înlocuit cu o rezervă din top frecvență.
+- **Variant Anomaly Scoring**: Eliminarea variantelor cu distribuție anormală față de previziunile modelului.
 
-## 3. ANOMALY DETECTION — return_forecast_on_context
-- **Context Anomaly Scoring**: Rulare forecast cu `return_forecast_on_context=True`.
-- Compară predicțiile modelului pe date istorice cu valorile reale.
-- Numerele mai „predictibile" (MAE mic) primesc bonus în NQI.
-- Numerele cu comportament haotic primesc penalizare.
+## 3. MOTOR COMBINATORIAL (WHEELING ENGINE)
+- **Sistem Set Cover (Greedy Hibrid)**: Optimizare memorie și viteză, caută rapid acoperirea necesară cu număr minim de bilete.
+- **Garanții Matematice**: Parametrizabil (ex: 3, 4, 5 numere garantate).
+- **Suport Multi-Game**: Loto 6/49, Loto 5/40, Joker (cu predicție separată și fallback pentru Urna 2).
+- **Analiză Scheme Oficiale Loteria Română**: Calculează și sugerează scheme reduse predefinite (Cod 48, Cod 49 etc.) pentru agenții.
 
-## 4. FILTRARE ȘI OPTIMIZARE
-- **Neural Regressive Multi-Pass**: Re-analiză pe ferestre de 100%, 90%, 80%... cu intersecție.
-- **Aggressive Blacklist**: Bottom 25% eliminat doar dacă confirmat în TOATE pașii.
-- **Variant Anomaly Scoring**: Eliminarea variantelor cu distribuție anormală față de model.
-- **Filtru Anti-Secvență**: Detecție 3+ numere consecutive fără validare istorică.
+## 4. AUTO-CALIBRARE (CALIBREAZA.PY)
+- **Auto-Tuning Dinamic**: Rulează teste empirice (backtesting walk-forward) pentru a găsi cea mai bună "Adâncime de Simulare Regresivă".
+- **Scoring Calibrare**: Maximizează excluderea numerelor "moarte" minimizând "fatalitățile" (numere tăiate care ar fi ieșit). Folosește automat dimensiunea pool-ului aleasă de utilizator.
 
-## 5. MOTOR COMBINATORIAL (WHEELING ENGINE)
-- **Sistem Set Cover**: Acoperire maximă cu număr minim de bilete.
-- **Garanții Matematice**: Scheme 3/5, 4/5, 5/5.
-- ~~**Sistem cu Cheie**: Forțarea numerelor „bază" în toate variantele.~~ (Eliminat - Redundant în era Neural Forecasting)
-- **Suport Multi-Game**: 6/49, 5/40 și Joker (Urna 2 separată).
+## 5. INTERFAȚĂ UTILIZATOR (DASHBOARD STREAMLIT)
+### Setări și Controale (Sidebar & Main):
+- **1. Încărcare Date CSV**: Multi-upload, auto-load la pornire, tabel istoric CSV expandabil.
+- **2. Setări Algoritm Wheeling**:
+    *   `Dimensiune Pool (Nucleu Dur)`: Input numeric (ex: 12) cu key persistenta.
+    *   `Garanție minimă`: Input numeric (3, 4 sau 5).
+    *   `Limită maxime variante`: Oprire din generare pentru a reduce costurile.
+    *   `Analizează doar ultimele X% extrageri`: Limitarea contextului istoric analizat.
+    *   `Filtru Anti-Secvență`: Checkbox activare/dezactivare.
+- **3. Control Execuție**:
+    *   `Adâncime Simulare Backtesting (%)`: Slider procent pentru analiză regresivă.
+    *   `⚙️ Calibrează Adâncimea`: Buton pentru auto-tuning parametrii regresivi.
+    *   `🚀 Generează Variante` (Roșu/Primary): Pornește pipeline-ul cu setările actuale.
+    *   `⚡ Calibrează + Generează` (Roșu/Primary): Rulează calibrarea, apoi lansează generarea automat.
+    *   `🔴 Oprește Forțat`: Anulează execuția (Job Queue).
+    *   `🗑️ Curăță Log` / `Reset Console`: Curăță fișierele loto.log, worker_stdout/stderr și consola live din UI.
 
-## 6. INTERFAȚĂ ȘI MONITORIZARE
-- **Dashboard Streamlit**: Temă dark, vizualizare live, audit detaliat.
-- **Backtesting Integrat**: Evaluare automată cu grafice distribuție câștiguri.
-- **Transparență XReg**: Afișare covariate folosite în UI (rolling_freq, gap, etc.).
+### Afișare Rezultate și Audit:
+- **Consola DEBUG**: Expander live pentru log-uri în timp real și posibilitate de resetare.
+- **Secțiunea Nucleu Dur (Pool)**:
+    *   Dinamica Nucleului (afișează vizual numerele adăugate/eliminate față de rularea anterioară).
+    *   Statistici detaliate pentru prezență și audit complet pentru excluderi (TimesFM Blacklist, Anomalii, Smart Logic).
+    *   `📊 Distribuție Nucleu Dur`: Tabel grafic de distribuție arătând de câte ori întreg Pool-ul a conținut 3, 4, 5, 6 numere din extragere (calculat per extrageri unice).
+    *   `🎯 Istoric Performanță Pool`: Tabel cu datele calendaristice ale celor mai bune performanțe (4+ numere).
+- **Secțiunea Performanță și Analiză Financiară**:
+    *   Carduri KPI: Medie / Variantă, Medie / Pool, Rată medie, Max Variantă, Max Pool.
+    *   Costuri reale estimate la agenție (comparativ cu schemele oficiale ale Loteriei Române).
+    *   Calcul ROI (Return on Investment) bazat pe estimări reale de premii și cost bilet live prin request loto.ro.
+- **Secțiunea Variante Generate**:
+    *   Expander toggle (`🔽`) pentru afișarea variantelor finale optimizate.
+    *   `📊 Distribuție Performanță Variante`: Tabel grafic cu eficiența strict per bilet simplu (integrat în planul final).
+    *   `🎯 Istoric Câștiguri Variante`: Listă detaliată a profiturilor istorice retro-calculate pe bilete.
 
-## 7. INFRASTRUCTURĂ
-- **Worker Asincron**: Execuție separată (worker.py).
-- **Job Queue SQLite**: Suport anulare/reluare.
-- **Cache**: Reutilizare rezultate pentru setări identice.
-- **Mediu**: Python 3.11+, PyTorch, timesfm 1.3.0.
+## 6. INFRASTRUCTURĂ BACKEND
+- **Worker Asincron (worker.py)**: Execuție izolată și sigură a sarcinilor grele, procesează job-uri prin SQLite (loto_jobs.db).
+- **LotoBacktester**: Motor de backtesting walk-forward (`evaluate_variants`) rulat automat imediat după terminarea generării pentru a returna hits și hits_union pe un percentile stabilit.
+- **Session State Persistent**: Valori de interfață menținute cu chei unice (`pool_size_val`, `guarantee_val`, etc.) pentru consistență totală și supraviețuire la multiple re-randări (reruns) în fluxurile auto (calibrare -> generare).

@@ -414,7 +414,9 @@ if st.session_state.get("start_calib_now", False):
         calib_engine.data = df.copy()
         calib_engine._build_draw_matrix()
         
-        best_depth, calib_res = run_calibration(calib_engine, test_draws=2, progress_cb=update_p)
+        # Citim pool_size din session_state pentru a fi consistenți
+        p_size_calib = st.session_state.get("pool_size_val", 12)
+        best_depth, calib_res = run_calibration(calib_engine, test_draws=2, pool_size=p_size_calib, progress_cb=update_p)
         st.session_state["sim_depth_val"] = best_depth
         st.session_state["sim_depth_suffix"] += 1
         
@@ -527,9 +529,10 @@ with st.sidebar:
         "Dimensiune Pool (Nucleu Dur)",
         min_value=7,
         max_value=24,
-        value=9,
+        value=st.session_state.get("pool_size_val", 12),
         step=1,
-        help="Câte numere din topul frecvenței să fie folosite."
+        help="Câte numere din topul frecvenței să fie folosite.",
+        key="pool_size_val"
     )
     
         
@@ -537,25 +540,27 @@ with st.sidebar:
         "Garanție minimă (Set Cover)", 
         min_value=3, 
         max_value=5, 
-        value=4, 
+        value=st.session_state.get("guarantee_val", 4), 
         step=1,
-        help="Garanția matematică: 3, 4 sau 5 numere garantate."
+        help="Garanția matematică: 3, 4 sau 5 numere garantate.",
+        key="guarantee_val"
     )
     
     max_variants_input = st.number_input(
         "Limită maxime variante (0 = fără limită)", 
         min_value=0, 
         max_value=10000, 
-        value=0, 
+        value=st.session_state.get("max_variants_val", 0), 
         step=10,
-        help="Oprește generarea la acest număr de variante (scade din acoperirea Set Cover, dar te încadrează în buget)."
+        help="Oprește generarea la acest număr de variante (scade din acoperirea Set Cover, dar te încadrează în buget).",
+        key="max_variants_val"
     )
     
     lookback_input = st.number_input(
         "Analizează doar ultimele X% extrageri din istoric (0 = 100% Tot istoricul)", 
         min_value=0, 
         max_value=100, 
-        value=0, 
+        value=st.session_state.get("lookback_val", 0), 
         step=5,
         help="Dacă e 0, analizează toată arhiva (100%). Dacă e N, calculează frecvența doar pe ultimele N% din extrageri.",
         key="lookback_val"
@@ -563,8 +568,9 @@ with st.sidebar:
 
     apply_consecutive_filter = st.checkbox(
         "Filtru Anti-Secvență (Înlocuiește 3+ numere consecutive fără istoric)", 
-        value=True, 
-        help="Dacă nucleul dur conține 3 numere consecutive care nu au ieșit niciodată împreună, cel mai slab e înlocuit."
+        value=st.session_state.get("consecutive_filter_val", True), 
+        help="Dacă nucleul dur conține 3 numere consecutive care nu au ieșit niciodată împreună, cel mai slab e înlocuit.",
+        key="consecutive_filter_val"
     )
 
     
@@ -602,7 +608,7 @@ with st.sidebar:
     )
     st.session_state["sim_depth_val"] = sim_depth_input
 
-    if st.button("⚡ Calibrează + Generează", help="Execută calibrarea automată și apoi pornește imediat generarea variantelor.", use_container_width=True):
+    if st.button("⚡ Calibrează + Generează", type="primary", help="Execută calibrarea automată și apoi pornește imediat generarea variantelor.", use_container_width=True):
         if not st.session_state.get("loaded_datasets"):
             st.error("Încărcați întâi un fișier CSV!")
         else:
@@ -998,14 +1004,30 @@ if "persistent_results" in st.session_state:
                         draw_n = 5 if game_type_id in ["5/40", "joker"] else 6
                         avg_rate = (avg_hits / draw_n) * 100
                         
-                        # Calcul distribuție
-                        dist = {i: 0 for i in range(draw_n + 1)}
+                        # Calcul distribuție Variante (succes individual per bilet)
+                        variant_dist = {i: 0 for i in range(draw_n + 1)}
                         for p in retro_predictions:
-                            if p.hits in dist:
-                                dist[p.hits] += 1
+                            h = p.hits
+                            if h in variant_dist:
+                                variant_dist[h] += 1
                             else:
-                                if p.hits > draw_n:
-                                    dist[p.hits] = dist.get(p.hits, 0) + 1
+                                if h > draw_n:
+                                    variant_dist[h] = variant_dist.get(h, 0) + 1
+                                    
+                        # Calcul distribuție Pool (succes colectiv Nucleu Dur)
+                        # Luăm doar un rezultat per extragere pentru Pool
+                        pool_dist = {i: 0 for i in range(draw_n + 1)}
+                        seen_draws_dist = set()
+                        for p in retro_predictions:
+                            if p.draw_index not in seen_draws_dist:
+                                seen_draws_dist.add(p.draw_index)
+                                h_u = getattr(p, 'hits_union', 0)
+                                if h_u in pool_dist:
+                                    pool_dist[h_u] += 1
+                                else:
+                                    if h_u > draw_n:
+                                        pool_dist[h_u] = pool_dist.get(h_u, 0) + 1
+                        total_draws_eval = len(seen_draws_dist)
                         
                         st.markdown(f"""
                         <div style='background: rgba(10, 25, 40, 0.4); padding: 20px; border-radius: 12px; border: 1px solid rgba(23, 162, 184, 0.3); margin: 15px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.2);'>
@@ -1029,19 +1051,19 @@ if "persistent_results" in st.session_state:
                         with m5:
                             st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Max Pool</small><br><strong style='font-size: 1.4em; color: #f4a261;'>{best_pool_hit}</strong></div>", unsafe_allow_html=True)
                         
-                        st.markdown("<div style='margin-top: 20px; font-weight: bold; color: #eee; font-size: 0.9em; margin-bottom: 10px;'>Distribuție rezultate:</div>", unsafe_allow_html=True)
+                        st.markdown("<div style='margin-top: 20px; font-weight: bold; color: #f4a261; font-size: 0.9em; margin-bottom: 10px;'>📊 Distribuție Nucleu Dur (Câte numere au fost în pool):</div>", unsafe_allow_html=True)
                         
-                        # Afișăm distribuția cu bare orizontale
-                        for h_count in sorted(dist.keys(), reverse=True):
-                            count = dist[h_count]
+                        # Afișăm distribuția Pool cu bare orizontale
+                        for h_count in sorted(pool_dist.keys(), reverse=True):
+                            count = pool_dist[h_count]
                             if count == 0 and h_count > 3: continue 
                             
-                            pct = (count / total_sims) * 100
-                            bar_color = "#28a745" if h_count >= 3 else ("#17a2b8" if h_count >= 1 else "#444")
+                            pct = (count / total_draws_eval) * 100 if total_draws_eval > 0 else 0
+                            bar_color = "#f4a261" if h_count >= 4 else ("#e9c46a" if h_count >= 3 else "#444")
                             
                             cols = st.columns([2, 8, 2])
                             with cols[0]:
-                                st.markdown(f"<div style='font-size: 0.85em; color: #ccc;'>{h_count} numere ghicite</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size: 0.85em; color: #ccc;'>{h_count} numere în Pool</div>", unsafe_allow_html=True)
                             with cols[1]:
                                 st.markdown(f"""
                                 <div style='background: rgba(255,255,255,0.05); border-radius: 4px; height: 12px; margin-top: 4px; width: 100%;'>
@@ -1233,6 +1255,33 @@ if "persistent_results" in st.session_state:
                     if st.button(button_label, key=f'toggle_variants_{game}', help="Afișează/Ascunde variantele"):
                         st.session_state[f'show_variants_{game}'] = not st.session_state[f'show_variants_{game}']
                         st.rerun()
+
+                # --- NOU: Distribuție variante integrată în plan ---
+                if "retro_results" in st.session_state and retro_key in st.session_state["retro_results"]:
+                    st.markdown("<div style='margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;'>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size: 0.85em; font-weight: bold; color: #17a2b8; margin-bottom: 8px;'>📊 Distribuție Performanță Variante (Bilete):</div>", unsafe_allow_html=True)
+                    
+                    # Calculăm total_evaluations pentru procente corecte (variante x extrageri)
+                    total_evals = len(retro_predictions)
+                    for h_count in sorted(variant_dist.keys(), reverse=True):
+                        count = variant_dist[h_count]
+                        if count == 0 and h_count > 3: continue 
+                        
+                        pct = (count / total_evals) * 100 if total_evals > 0 else 0
+                        bar_color = "#28a745" if h_count >= 3 else ("#17a2b8" if h_count >= 1 else "#444")
+                        
+                        vcols = st.columns([3, 7, 2])
+                        with vcols[0]:
+                            st.markdown(f"<div style='font-size: 0.8em; color: #ccc;'>{h_count} numere ghicite</div>", unsafe_allow_html=True)
+                        with vcols[1]:
+                            st.markdown(f"""
+                            <div style='background: rgba(255,255,255,0.05); border-radius: 3px; height: 8px; margin-top: 5px; width: 100%;'>
+                                <div style='background: {bar_color}; width: {pct}%; height: 100%; border-radius: 3px;'></div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with vcols[2]:
+                            st.markdown(f"<div style='font-size: 0.8em; text-align: right; color: #fff;'>{pct:.1f}%</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
                 
                 # Afișăm variantele doar dacă sunt vizibile
                 if st.session_state[f'show_variants_{game}']:
