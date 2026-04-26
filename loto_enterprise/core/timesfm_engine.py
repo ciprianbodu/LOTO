@@ -321,7 +321,7 @@ def compute_nqi_scores(
         + 0.15 * AdaptiveBias
     """
     weights_dict = optimized_weights if optimized_weights else {
-        "p_val": 0.35, "h_score": 0.15, "stability": 0.15, "cov_boost": 0.20, "adaptive": 0.15
+        "p_val": 0.40, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.15, "adaptive": 0.25
     }
     scores: Dict[int, float] = {}
 
@@ -361,7 +361,7 @@ def compute_nqi_scores(
             except (IndexError, TypeError):
                 cov_boost = 0.0
 
-        # --- E. Adaptive Bias (recent momentum) ---
+        # --- E. Adaptive Bias (recent momentum & GAP TRIGGER) ---
         series = all_series[i]
         recent_5 = series[-5:] if len(series) >= 5 else series
         recent_15 = series[-15:] if len(series) >= 15 else series
@@ -369,14 +369,26 @@ def compute_nqi_scores(
         recent_freq_15 = float(np.mean(recent_15))
         global_freq = float(np.mean(series))
         
-        # Adaptive tuning bazat pe regresia la medie (Loto feature)
+        # Calculăm distanța față de ultima apariție (Gap)
+        total_draws_ctx = len(series)
+        total_appearances = np.sum(series)
+        avg_gap = total_draws_ctx / max(total_appearances, 1.0)
+        
+        current_gap = 0.0
+        for val in reversed(series):
+            if val > 0.5: break
+            current_gap += 1.0
+        
         adaptive = 1.0
-        if recent_freq_5 > recent_freq_15 + 0.1:
-            # Overdue for a cooling off (too hot) - slightly penalize to avoid trap
+        if current_gap >= avg_gap and avg_gap > 0 and total_appearances > 3:
+            # Gap Trigger: e întârziat peste media lui obișnuită
+            adaptive = 1.25
+        elif recent_freq_5 > recent_freq_15 + 0.1:
+            # Prea cald, overdue for a cooling off
             adaptive = 0.90
         elif recent_freq_5 < recent_freq_15 - 0.1 and global_freq > 0:
-            # Due for a hit (cold but historically good)
-            adaptive = 1.20
+            # Due for a hit pe termen scurt
+            adaptive = 1.15
         elif recent_freq_5 > 0 and recent_freq_15 > 0:
             # Consistent momentum
             adaptive = 1.05
@@ -409,10 +421,9 @@ def optimize_nqi_weights(
     
     # Variante de ponderi (Ensemble Candidates)
     candidates = [
-        {"p_val": 0.35, "h_score": 0.15, "stability": 0.15, "cov_boost": 0.20, "adaptive": 0.15}, # Default
-        {"p_val": 0.60, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.10}, # Point Heavy
-        {"p_val": 0.20, "h_score": 0.40, "stability": 0.10, "cov_boost": 0.20, "adaptive": 0.10}, # Trend Heavy
-        {"p_val": 0.20, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.50, "adaptive": 0.10}, # Covariate Heavy
+        {"p_val": 0.40, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.15, "adaptive": 0.25}, # Precision & Gap Trigger Heavy
+        {"p_val": 0.50, "h_score": 0.05, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.25}, # Point Heavy
+        {"p_val": 0.30, "h_score": 0.15, "stability": 0.15, "cov_boost": 0.20, "adaptive": 0.20}, # Balanced
     ]
     
     best_w = candidates[0]
@@ -594,6 +605,7 @@ def get_timesfm_scores_v2(
             audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_scores[:25]}
             audit["ensemble_windows"] = context_windows
             audit["timesfm_version"] = "v2 Ensemble (Full + Mid + Short)"
+            audit["raw_ensemble_scores"] = ensemble_scores # Optimizare Cache pentru Regressive Blacklist
 
         logging.info(f"[TIMESFM-V2] Ensemble complete ({len(context_windows)} windows). Top 5: {sorted(final_nqi.items(), key=lambda x: -x[1])[:5]}")
         return final_nqi
@@ -624,7 +636,31 @@ def get_regressive_blacklist_v2(
     if not HAS_TIMESFM:
         return set()
 
-    logging.info(f"[TIMESFM-V2] Regressive Blacklist (depth: {sim_depth_pct}%)...")
+    # Optimizare masivă: Refolosim cache-ul Ensemble în loc să rulăm zeci de ori
+    if audit and "raw_ensemble_scores" in audit:
+        ensemble_scores = audit["raw_ensemble_scores"]
+        logging.info(f"[TIMESFM-V2] Regressive Blacklist folosind Ensemble Cache ({len(ensemble_scores)} ferestre)...")
+        
+        all_blacklists: List[Set[int]] = []
+        for scores in ensemble_scores:
+            if scores:
+                vals = list(scores.values())
+                threshold = np.percentile(vals, 25)
+                bl = {n for n, s in scores.items() if s <= threshold}
+                all_blacklists.append(bl)
+                
+        if not all_blacklists:
+            return set()
+            
+        result = all_blacklists[0]
+        for bl in all_blacklists[1:]:
+            result = result.intersection(bl)
+            
+        logging.info(f"[TIMESFM-V2] Regressive blacklist final din Cache: {len(result)} numere ({sorted(result)})")
+        return result
+
+    # Fallback dacă nu există cache
+    logging.info(f"[TIMESFM-V2] Regressive Blacklist Fallback (depth: {sim_depth_pct}%)...")
     steps = list(range(100, max(sim_depth_pct - 1, 9), -10))
     all_blacklists: List[Set[int]] = []
     total_rows = len(data_full)
@@ -634,14 +670,10 @@ def get_regressive_blacklist_v2(
         if num_rows < 32:
             continue
 
-        # Trunchiem datele
         data_slice = data_full.tail(num_rows).copy()
-        if draw_matrix_full is not None:
-            dm_slice = draw_matrix_full[-num_rows:]
-        else:
-            dm_slice = None
+        dm_slice = draw_matrix_full[-num_rows:] if draw_matrix_full is not None else None
 
-        logging.info(f"[TIMESFM-V2] Pas regresiv: {step}% ({num_rows} extrageri)...")
+        logging.info(f"[TIMESFM-V2] Pas regresiv fallback: {step}% ({num_rows} extrageri)...")
         scores = get_timesfm_scores_v2(
             data_slice, dm_slice, params,
             is_joker_drum=is_joker, context_len=num_rows,

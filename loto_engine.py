@@ -314,41 +314,25 @@ class LotoEngine:
         if progress_cb:
             progress_cb("Analiza frecvenței...", 30)
 
-        # 4. Filtru Regresiv Multi-Timeframe (Smart Reduction / Google TimesFM v2)
-        blacklist = set()
+        # 4. Calcul Scoruri NQI (Neural Quality Index) prin TimesFM v2 - MUTAT AICI PENTRU OPTIMIZARE CACHE
         tfm_scores = {}
-        if smart_reduction:
-            logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală v2 (XReg + Quantile)...")
-            blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
-            
-            self.audit['reduction_filter'] = {
-                'combined_blacklist': list(blacklist),
-                'total_blocked': len(blacklist),
-                'model_used': 'Google TimesFM v2 (XReg + Quantile + Anomaly)'
-            }
-        else:
-            logging.info("[PIPELINE] Reducție Smart dezactivată. Se continuă fără blacklist.")
-
-        # 5. Calcul Scoruri NQI (Neural Quality Index) prin TimesFM v2
         total_draws = len(self.data) if self.data is not None else 0
         actual_lookback = total_draws
         self.audit["effective_rows_used"] = total_draws
         self.audit["lookback_pct"] = lookback
             
         if progress_cb:
-            progress_cb(f"TimesFM v2: forecast + XReg covariates + anomaly (ctx={actual_lookback})...", 50)
+            progress_cb(f"TimesFM v2: forecast + XReg covariates + anomaly (ctx={actual_lookback})...", 40)
         
-        if not tfm_scores:
-            start_gpu = time.perf_counter()
-            tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
-            gpu_time = (time.perf_counter() - start_gpu) * 1000
-            
-            if 'performance' not in self.audit:
-                self.audit['performance'] = {}
-            self.audit['performance']['gpu_time_ms'] = round(gpu_time, 2)
-            logging.info(f"[PIPELINE] TimesFM GPU Time: {gpu_time:.2f}ms")
+        start_gpu = time.perf_counter()
+        tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+        gpu_time = (time.perf_counter() - start_gpu) * 1000
+        
+        if 'performance' not in self.audit:
+            self.audit['performance'] = {}
+        self.audit['performance']['gpu_time_ms'] = round(gpu_time, 2)
+        logging.info(f"[PIPELINE] TimesFM GPU Time: {gpu_time:.2f}ms")
 
-        # Aplicăm corecția de eroare (Adaptive Local Tuning - Metoda 1)
         # Aplicăm corecția de feedback (Adaptive Local Tuning) ANTERIOR rulării TimesFM
         if self.error_correction_map:
             logging.info(f"[PIPELINE] Aplicare feedback BEFORE TimesFM pe {len(self.error_correction_map)} numere...")
@@ -356,7 +340,22 @@ class LotoEngine:
                 if num in tfm_scores:
                     tfm_scores[num] *= multiplier
             self.audit['feedback_correction'] = {str(k): round(v, 3) for k, v in self.error_correction_map.items()}
-        # Restul pipeline continuă cu TimesFM și alte etape
+
+        # 5. Filtru Regresiv Multi-Timeframe (Smart Reduction / Folosește Ensemble Cache din tfm_scores)
+        blacklist = set()
+        self.audit["sim_depth_pct"] = sim_depth_pct
+        if smart_reduction:
+            logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală v2 (XReg + Quantile)...")
+            blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
+            
+            self.audit['reduction_filter'] = {
+                'combined_blacklist': list(blacklist),
+                'total_blocked': len(blacklist),
+                'model_used': 'Google TimesFM v2 (Ensemble Intersect)',
+                'sim_depth_pct': sim_depth_pct
+            }
+        else:
+            logging.info("[PIPELINE] Reducție Smart dezactivată. Se continuă fără blacklist.")
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
         
@@ -441,6 +440,42 @@ class LotoEngine:
             
         if progress_cb:
             progress_cb("Pipeline complet!", 100)
+
+        # --- TRACK POOL VARIATION ---
+        try:
+            import json
+            from pathlib import Path
+            from datetime import datetime
+            
+            history_file = Path("pool_history.json")
+            history = {}
+            if history_file.exists():
+                with open(history_file, "r") as f:
+                    history = json.load(f)
+            
+            hist_key = f"{self.game_type}_{pool_size}"
+            last_pool = history.get(hist_key, {}).get("pool", [])
+            
+            pool_variation = {}
+            if last_pool:
+                added = sorted(list(set(self.hard_core) - set(last_pool)))
+                removed = sorted(list(set(last_pool) - set(self.hard_core)))
+                pool_variation = {
+                    "added": added,
+                    "removed": removed,
+                    "changed": bool(added or removed)
+                }
+            
+            history[hist_key] = {
+                "pool": self.hard_core,
+                "date": datetime.now().isoformat()
+            }
+            with open(history_file, "w") as f:
+                json.dump(history, f)
+                
+            self.audit["pool_variation"] = pool_variation
+        except Exception as e:
+            logging.error(f"[PIPELINE] Eroare la tracker-ul de variație: {e}")
 
         logging.info("[PIPELINE] Pipeline completat cu succes.")
         return lines, p10, p90, g_range, context, self.audit

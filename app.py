@@ -125,8 +125,9 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     filter_methods = []
     if 'reduction_filter' in audit:
         rf = audit['reduction_filter']
+        sim_depth = audit.get('sim_depth_pct', rf.get('sim_depth_pct', 40))
         if 'TimesFM' in rf.get('model_used', ''):
-            filter_methods.append("📉 Backtesting Regresiv TimesFM (din 10 în 10%)")
+            filter_methods.append(f"📉 Backtesting Regresiv TimesFM (Adâncime: {sim_depth}%)")
         else:
             filter_methods.append("Reducere Statistică")
             
@@ -552,14 +553,40 @@ with st.sidebar:
         help="Utilizează modelul Google TimesFM pentru a prognoza tendințele și a optimiza nucleul dur de numere."
     )
     
+    if "sim_depth_key" not in st.session_state:
+        st.session_state["sim_depth_key"] = 40
+
     sim_depth_input = st.slider(
         "Adâncime Simulare Backtesting (%)", 
         min_value=10, 
         max_value=100, 
-        value=100, 
         step=10,
-        help="Procentul minim din istoric analizat de filtrul regresiv multi-timeframe pentru a depista momentum-ul fals."
+        help="Procentul minim din istoric analizat de filtrul regresiv multi-timeframe pentru a depista momentum-ul fals.",
+        key="sim_depth_key"
     )
+    
+    if st.button("⚙️ Calibrează Adâncimea (Auto)", help="Rulează teste pe ultimele extrageri pentru a găsi procentul optim. Durează 1-2 minute.", use_container_width=True):
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier de date CSV (Pasul 1)!")
+        else:
+            with st.spinner("Calibrare neurală în progres... te rog așteaptă (1-2 min)."):
+                from calibreaza import run_calibration
+                from loto_engine import LotoEngine
+                fname, df = st.session_state["loaded_datasets"][0]
+                g_label = "6/49"
+                if "5_40" in fname.lower() or "5/40" in fname.lower(): g_label = "5/40"
+                elif "joker" in fname.lower(): g_label = "joker"
+                
+                calib_engine = LotoEngine(game_type=g_label)
+                calib_engine.data = df.copy()
+                calib_engine._build_draw_matrix()
+                
+                best_depth, calib_res = run_calibration(calib_engine, test_draws=3, depths_to_test=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+                st.session_state["sim_depth_key"] = best_depth
+                
+            st.success(f"✅ Calibrare reușită! Adâncimea a fost setată la {best_depth}%.")
+            time.sleep(2)
+            st.rerun()
 
 if st.session_state.get("queue_submit_requested") and not st.session_state.get("active_job_id"):
     datasets_ok = "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]
@@ -888,6 +915,20 @@ if "persistent_results" in st.session_state:
                     game_type=game
                 )
                 
+                pool_var = audit.get("pool_variation", {})
+                if pool_var:
+                    if pool_var.get("changed"):
+                        added = pool_var.get("added", [])
+                        removed = pool_var.get("removed", [])
+                        var_html = "<div style='margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 0.9em;'>"
+                        var_html += "<strong>🔄 Dinamica Nucleului (față de ultima rulare):</strong><br>"
+                        if added: var_html += f"<span style='color: #28a745;'>➕ Au intrat în top: {', '.join(map(str, added))}</span><br>"
+                        if removed: var_html += f"<span style='color: #dc3545;'>➖ Au ieșit din top: {', '.join(map(str, removed))}</span>"
+                        var_html += "</div>"
+                        hc_html += var_html
+                    else:
+                        hc_html += "<div style='margin-top: 10px; font-size: 0.85em; color: #6c757d;'>🔄 Nucleul a rămas neschimbat față de ultima rulare pe acest joc.</div>"
+                
                 st.markdown(f"**Nucleu Dur:**<br>{hc_html}", unsafe_allow_html=True)
                 st.markdown(f"**{dynamic_desc}**", unsafe_allow_html=True)
                 
@@ -908,6 +949,7 @@ if "persistent_results" in st.session_state:
                         total_hits = sum(p.hits for p in retro_predictions)
                         avg_hits = total_hits / total_sims
                         best_hit = max(p.hits for p in retro_predictions)
+                        best_pool_hit = max(getattr(p, 'hits_union', 0) for p in retro_predictions)
                         
                         # Parametrii joc pentru rată (6/49 are 6 nr, 5/40 are 5 nr)
                         draw_n = 5 if game_type_id in ["5/40", "joker"] else 6
@@ -929,18 +971,20 @@ if "persistent_results" in st.session_state:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        m1, m2, m3, m4 = st.columns(4)
+                        m1, m2, m3, m4, m5 = st.columns(5)
                         total_union_hits = sum(getattr(p, 'hits_union', 0) for p in retro_predictions)
                         avg_union_hits = total_union_hits / total_sims
                         
                         with m1:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie ghicite / Variantă</small><br><strong style='font-size: 1.6em; color: #fff;'>{avg_hits:.2f}</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie / Variantă</small><br><strong style='font-size: 1.4em; color: #fff;'>{avg_hits:.2f}</strong></div>", unsafe_allow_html=True)
                         with m2:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie ghicite / Pool (Union)</small><br><strong style='font-size: 1.6em; color: #e9c46a;'>{avg_union_hits:.2f}</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Medie / Pool</small><br><strong style='font-size: 1.4em; color: #e9c46a;'>{avg_union_hits:.2f}</strong></div>", unsafe_allow_html=True)
                         with m3:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Rată medie</small><br><strong style='font-size: 1.6em; color: #17a2b8;'>{avg_rate:.1f}%</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Rată medie</small><br><strong style='font-size: 1.4em; color: #17a2b8;'>{avg_rate:.1f}%</strong></div>", unsafe_allow_html=True)
                         with m4:
-                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Max ghicit</small><br><strong style='font-size: 1.6em; color: #28a745;'>{best_hit}</strong></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Max Variantă</small><br><strong style='font-size: 1.4em; color: #28a745;'>{best_hit}</strong></div>", unsafe_allow_html=True)
+                        with m5:
+                            st.markdown(f"<div style='text-align: center;'><small style='color: #aaa;'>Max Pool</small><br><strong style='font-size: 1.4em; color: #f4a261;'>{best_pool_hit}</strong></div>", unsafe_allow_html=True)
                         
                         st.markdown("<div style='margin-top: 20px; font-weight: bold; color: #eee; font-size: 0.9em; margin-bottom: 10px;'>Distribuție rezultate:</div>", unsafe_allow_html=True)
                         
