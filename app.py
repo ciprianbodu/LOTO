@@ -185,8 +185,8 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
         ram = resource_stats.get('max_ram', 0)
         gpu = resource_stats.get('max_gpu', 0)
         vram = resource_stats.get('max_vram_gb', 0)
-        res_info = f" | Max CPU: {cpu}% | Max RAM: {ram}% | Max GPU: {gpu}% | Max VRAM: {vram} GB"
-        description += f" <span style='color: #94a3b8; font-size: 0.85em;'>({res_info})</span>"
+        res_info = f"Max CPU: {cpu}% | Max RAM: {ram}% | Max GPU: {gpu}% | Max VRAM: {vram} GB"
+        description += f"<br><span style='color: #94a3b8; font-size: 0.85em;'>📊 **Utilizare Vârf:** {res_info}</span>"
     
     # Detalii Tehnice Google TimesFM
     if 'timesfm_xreg' in audit or 'timesfm_predictions' in audit:
