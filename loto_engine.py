@@ -58,27 +58,36 @@ logging.basicConfig(
 VERSION = "1.1.2"
 warnings.filterwarnings("ignore")
 
-def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0):
+def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scores=None):
     """
     Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
-    Evită lista uriașă de `all_combinations` folosind un generator și 
-    un algoritm greedy mai adaptiv care caută rapid acoperirea necesară.
+    Optimizat pentru hit-uri de 4 și 5 numere prin prioritizarea scorurilor NQI/Frecvență.
     """
     start_time = time.time()
     pool_len = len(pool)
     logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
+
     if pool_len < pick:
         return [list(pool)], 100.0
+
+    # Sortăm pool-ul după scoruri pentru a favoriza numerele puternice
+    if scores:
+        pool = sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
+    else:
+        pool = sorted(list(pool))
+
+    # Generăm toate combinațiile de garanție ca ținte, dar le sortăm numeric
+    # pentru a fi consistente cu rezultatul numeric al wheeling-ului.
+    # Folosim o listă pentru ordinea greedy și un set pentru lookup rapid.
+    all_targets_list = [tuple(sorted(t)) for t in itertools.combinations(pool, guarantee)]
+
+    # Dacă avem scoruri, sortăm țintele pentru a le acoperi întâi pe cele mai probabile
+    if scores:
+        all_targets_list.sort(key=lambda t: sum(scores.get(n, 0) for n in t), reverse=True)
         
-    targets = set(itertools.combinations(pool, guarantee))
-    total_targets = len(targets)
+    total_targets = len(all_targets_list)
     covered_targets = set()
     wheel = []
-    
-    # Prevenim blocajele la pool-uri prea mari (ex. > 20) prin eșantionare inteligentă
-    # Nu generăm milioane de variante în memorie deodată.
-    import random
-    rng = random.Random()
     
     iteration = 0
     max_search_per_iter = 10000 if pool_len <= 15 else 50000
@@ -93,19 +102,25 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0):
         best_coverage = -1
         best_targets_covered = set()
         
-        # Abordare hibridă: dacă mai avem puține de acoperit, targetăm direct lipsurile
-        missing = list(targets - covered_targets)
-        if not missing:
+        # Găsim prima țintă neacoperită (cea mai valoroasă datorită sortării)
+        target_to_cover = None
+        for t in all_targets_list:
+            if t not in covered_targets:
+                target_to_cover = t
+                break
+
+        if not target_to_cover:
             break
             
-        # Strategie: Încercăm să acoperim primul 'missing' target
-        target_to_cover = missing[0]
         base_ticket = set(target_to_cover)
-        remaining_pool = list(set(pool) - base_ticket)
+        # remaining_pool păstrează ordinea sortată după scor
+        remaining_pool = [n for n in pool if n not in base_ticket]
         
         # Generăm N combinații care includ target_to_cover
         search_count = 0
         if len(remaining_pool) >= (pick - guarantee):
+            # itertools.combinations pe un pool sortat va genera combinații
+            # începând cu cele mai bune numere (scor maxim).
             for extra_nums in itertools.combinations(remaining_pool, pick - guarantee):
                 ticket = tuple(sorted(list(base_ticket) + list(extra_nums)))
                 
@@ -267,7 +282,7 @@ class LotoEngine:
         freq = np.bincount(joker_vals, minlength=21)
         return freq[1:21]
 
-    def generate_predictions(self, guarantee=4, max_variants=0):
+    def generate_predictions(self, guarantee=4, max_variants=0, scores=None):
         """Generează predicții bazate pe analiză."""
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return [], 0.0
@@ -277,7 +292,8 @@ class LotoEngine:
             pool=self.hard_core, 
             pick=self.params["draw_n"], 
             guarantee=guarantee,
-            max_variants=max_variants
+            max_variants=max_variants,
+            scores=scores
         )
         
         # Atașăm Joker din nucleul dur de Joker dacă e cazul
@@ -359,6 +375,12 @@ class LotoEngine:
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
         
+        # [NEW] Optimizare suplimentară prin Smart Selector (Gap/Trend/Positional)
+        # Rafinează pool-ul pentru a maximiza hit-urile de 4 și 5 numere.
+        if hasattr(self, '_apply_smart_selector'):
+            logging.info("[PIPELINE] Rafinare nucleu prin Smart Selector (Hybrid Optimization)...")
+            self._apply_smart_selector(freq)
+
         # Aplicăm filtrul anti-secvență pe nucleul generat de TimesFM
         if filter_consecutives:
             logging.info("[PIPELINE] Aplicare Filtru Anti-Secvență pe nucleul TimesFM...")
@@ -393,7 +415,9 @@ class LotoEngine:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
-        lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants)
+        # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
+        wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
+        lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
         # Funcția 4: Anomaly Filtering via TimesFM v2
         if smart_reduction and tfm_scores:

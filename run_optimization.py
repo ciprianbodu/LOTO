@@ -11,12 +11,12 @@ def test_params(pool_size, sim_depth_pct, lookback, test_draws=5):
     engine = LotoEngine(game_type="6/49")
     success = engine.load_data("input.csv")
     if not success:
-        return -1
+        return None
         
     df = engine.data.copy()
     total_draws = len(df)
     
-    total_hits = 0
+    hit_counts = {3: 0, 4: 0, 5: 0, 6: 0}
     total_variants = 0
     
     # We will test on the last `test_draws`
@@ -36,7 +36,7 @@ def test_params(pool_size, sim_depth_pct, lookback, test_draws=5):
             lines, _, _, _, _, _ = engine.run_institutional_pipeline(
                 pool_size=pool_size,
                 guarantee=4,
-                max_variants=10,
+                max_variants=20, # increased variants
                 lookback=lookback,
                 filter_consecutives=True,
                 smart_reduction=True,
@@ -45,35 +45,43 @@ def test_params(pool_size, sim_depth_pct, lookback, test_draws=5):
             
             for line in lines:
                 hits = evaluate_variant(line, true_draw)
-                total_hits += hits
+                if hits >= 3:
+                    hit_counts[min(hits, 6)] += 1
                 total_variants += 1
         except Exception as e:
-            # Maybe TimesFM is not installed, fallback used
+            # print(f"Error: {e}")
             pass
             
     if total_variants == 0:
-        return 0
-    return total_hits / total_variants
+        return hit_counts, 0
+
+    return hit_counts, total_variants
 
 def main():
-    pool_sizes = [9, 12, 15]
-    sim_depths = [20, 50, 100]
-    lookbacks = [0, 20, 50]
+    pool_sizes = [15, 18, 21]
+    sim_depths = [50]
+    lookbacks = [0, 20]
     
+    test_draws = 10
     results = []
     
-    print("Testing combinations...")
+    print(f"Testing combinations on last {test_draws} draws...")
     for p in pool_sizes:
         for s in sim_depths:
             for l in lookbacks:
-                avg_hits = test_params(pool_size=p, sim_depth_pct=s, lookback=l, test_draws=3)
-                print(f"Pool: {p}, SimDepth: {s}, Lookback: {l} => Avg Hits: {avg_hits:.2f}")
-                results.append((avg_hits, p, s, l))
+                res = test_params(pool_size=p, sim_depth_pct=s, lookback=l, test_draws=test_draws)
+                if res:
+                    hit_counts, total_v = res
+                    h4 = hit_counts[4]
+                    h5 = hit_counts[5]
+                    score = h4 * 10 + h5 * 100 + hit_counts[3]
+                    print(f"Pool: {p}, SimDepth: {s}, Lookback: {l} => Hits: {hit_counts}, Variants: {total_v}")
+                    results.append((score, hit_counts, p, s, l))
                 
     results.sort(reverse=True, key=lambda x: x[0])
-    print("\nBest Parameters:")
+    print("\nBest Parameters (weighted score 3*1 + 4*10 + 5*100):")
     for res in results[:3]:
-        print(f"Avg Hits: {res[0]:.2f} (Pool: {res[1]}, SimDepth: {res[2]}, Lookback: {res[3]})")
+        print(f"Score: {res[0]} (Hits: {res[1]}) (Pool: {res[2]}, SimDepth: {res[3]}, Lookback: {res[4]})")
 
 if __name__ == "__main__":
     main()

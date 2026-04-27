@@ -796,17 +796,20 @@ def select_pool_from_scores(
         else:
             zones["high"].append((n, s))
 
-    # Garantăm minim 2 numere din fiecare zonă (dacă pool_size >= 6)
-    min_per_zone = max(1, pool_size // 5) if pool_size >= 6 else 0
+    # Garantăm minim de numere din fiecare zonă pentru acoperire optimă
+    min_per_zone = max(1, pool_size // 4) if pool_size >= 4 else 0
     pool = []
     used = set()
+
+    # Mai întâi luăm cele mai bune numere din fiecare zonă pentru a asigura distribuția
     for zone_name in ["low", "mid", "high"]:
         for n, s in zones[zone_name][:min_per_zone]:
-            if n not in used:
+            if n not in used and len(pool) < pool_size:
                 pool.append(n)
                 used.add(n)
 
-    # Completăm restul cu cele mai bune scoruri globale
+    # Completăm restul strict cu cele mai bune scoruri globale (High-NQI)
+    # Acest lucru favorizează hit-urile de 4 și 5 prin concentrarea pe calitate
     for n, s in sorted_nums:
         if len(pool) >= pool_size:
             break
