@@ -7,7 +7,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-DB_PATH = "loto_jobs.db"
+import platform
+_machine_suffix = f"-{platform.node()}" if platform.node() else ""
+DB_PATH = f"loto_jobs{_machine_suffix}.db"
 JOB_PENDING = "PENDING"
 JOB_RUNNING = "RUNNING"
 JOB_COMPLETED = "COMPLETED"
@@ -20,12 +22,38 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     if not p.is_absolute():
         p = Path.cwd() / p
     p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(p), timeout=30, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=30000;")
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
-    return conn
+    
+    last_exc = None
+    for attempt in range(5):
+        try:
+            conn = sqlite3.connect(str(p), timeout=30, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=30000;")
+            # WAL mode is sometimes problematic on networked/cloud drives during sync
+            try:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                conn.execute("PRAGMA synchronous=NORMAL;")
+            except sqlite3.OperationalError as e:
+                if "disk I/O error" in str(e):
+                    # If WAL fails, try to continue with default if possible, or just log it
+                    import logging
+                    logging.warning(f"Failed to set WAL mode (attempt {attempt+1}): {e}. Retrying...")
+                    conn.close()
+                    time.sleep(0.5 * (attempt + 1))
+                    last_exc = e
+                    continue
+                raise
+            return conn
+        except sqlite3.OperationalError as e:
+            last_exc = e
+            if "disk I/O error" in str(e) or "database is locked" in str(e):
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise
+    
+    if last_exc:
+        raise last_exc
+    raise sqlite3.OperationalError("Could not connect to database after multiple retries")
 
 
 def init_job_queue(db_path: str = DB_PATH) -> None:
@@ -284,7 +312,15 @@ def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: st
     try:
         init_job_queue(db_path)
         msg = str(reason or "Job oprit automat la startup.")
-        with _connect(db_path) as conn:
+        # Wrap connection in a way that handles initial connection failures
+        try:
+            conn_context = _connect(db_path)
+        except Exception as e:
+            import logging
+            logging.warning(f"fail_running_jobs: nu se poate conecta la baza de date {db_path}: {e}")
+            return 0
+            
+        with conn_context as conn:
             cur = conn.execute(
                 """
                 UPDATE jobs
@@ -307,7 +343,7 @@ def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: st
     except Exception as e:
         # Protecție pentru disk I/O error și alte erori de startup
         import logging
-        logging.warning(f"fail_running_jobs: nu se poate accesa baza de date {db_path}: {e}")
+        logging.warning(f"fail_running_jobs: eroare în timpul procesării {db_path}: {e}")
         return 0
 
 

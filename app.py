@@ -31,11 +31,15 @@ import streamlit.components.v1 as components
 
 # ensure_worker_running() va fi apelat mai jos, dupa configurarea paginii
 
+import platform
+_node = platform.node()
+LOG_FILE = f"loto-{_node}.log" if _node else "loto.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("loto.log", encoding="utf-8", mode="a"),
+        logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a"),
         logging.StreamHandler()
     ]
 )
@@ -44,7 +48,7 @@ import re
 
 def clear_logs():
     try:
-        with open("loto.log", "w", encoding="utf-8") as f:
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [INFO] --- Log curățat manual ---\n")
     except Exception:
         pass
@@ -205,10 +209,10 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     return description
 
 def read_logs_filtered(n_lines=50):
-    if not os.path.exists("loto.log"):
+    if not os.path.exists(LOG_FILE):
         return "Nu există log-uri încă."
     try:
-        with open("loto.log", "r", encoding="utf-8") as f:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
             lines = f.readlines()
             
         # Extragem ultimele linii

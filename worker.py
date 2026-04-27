@@ -13,11 +13,15 @@ import traceback
 import tempfile
 import os
 
+import platform
+_node = platform.node()
+LOG_FILE = f"loto-{_node}.log" if _node else "loto.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("loto.log", encoding="utf-8", mode="a"),
+        logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a"),
         logging.StreamHandler(sys.stdout)
     ]
 )
