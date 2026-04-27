@@ -40,10 +40,10 @@ def check_pytorch():
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "NVIDIA GPU"
             print(f"-> [EXCELENT] Suport GPU ACTIVAT pe placa video: {gpu_name}!")
-            print("   (Am blocat actualizarea automata la PyTorch tocmai pentru a pastra aceasta super-viteză!)")
+            print("   (Am blocat actualizarea automata la PyTorch tocmai pentru a pastra aceasta viteza!)")
         else:
             print("-> [ATENTIE] PyTorch functioneaza, dar foloseste doar CPU (procesorul normal).")
-            print("   Daca ai placa video NVIDIA si vrei sa mearga foarte rapid predicțiile, instaleaza manual:")
+            print("   Daca ai placa video NVIDIA si vrei sa mearga foarte rapid predictiile, instaleaza manual:")
             print("   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124")
     except ImportError:
         print("-> [EROARE CRITICA] PyTorch NU este instalat! Pentru a-l instala cu suport de GPU, ruleaza comanda:")

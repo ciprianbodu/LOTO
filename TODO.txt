@@ -23,7 +23,7 @@
 
 ## 4. AUTO-CALIBRARE (CALIBREAZA.PY)
 - **Auto-Tuning Dinamic**: Rulează teste empirice (backtesting walk-forward) pentru a găsi cea mai bună "Adâncime de Simulare Regresivă".
-- **Scoring Calibrare**: Maximizează excluderea numerelor "moarte" minimizând "fatalitățile" (numere tăiate care ar fi ieșit). Folosește automat dimensiunea pool-ului aleasă de utilizator.
+- **Scoring Calibrare**: Maximizează excluderea numerelor "moarte" (Blacklist) penalizând dur "fatalitățile" (-50 puncte/număr câștigător tăiat) pentru a proteja șansele la Jackpot.
 
 ## 5. INTERFAȚĂ UTILIZATOR (DASHBOARD STREAMLIT)
 ### Setări și Controale (Sidebar & Main):
@@ -36,14 +36,15 @@
     *   `Filtru Anti-Secvență`: Checkbox activare/dezactivare.
 - **3. Control Execuție**:
     *   `Adâncime Simulare Backtesting (%)`: Slider procent pentru analiză regresivă.
-    *   `⚙️ Calibrează Adâncimea`: Buton pentru auto-tuning parametrii regresivi.
-    *   `🚀 Generează Variante` (Roșu/Primary): Pornește pipeline-ul cu setările actuale.
-    *   `⚡ Calibrează + Generează` (Roșu/Primary): Rulează calibrarea, apoi lansează generarea automat.
+    *   `⚙️ Calibrează Adâncimea`: Buton (Vertical) pentru auto-tuning parametrii regresivi.
+    *   `🚀 Generează Variante` (Roșu/Primary): Buton (Vertical) de lansare pipeline.
+    *   `⚡ Calibrează + Generează` (Roșu/Primary): Buton subțire sub slider pentru flux automat.
     *   `🔴 Oprește Forțat`: Anulează execuția (Job Queue).
     *   `🗑️ Curăță Log` / `Reset Console`: Curăță fișierele loto.log, worker_stdout/stderr și consola live din UI.
 
 ### Afișare Rezultate și Audit:
 - **Consola DEBUG**: Expander live pentru log-uri în timp real și posibilitate de resetare.
+- **Raport Calibrare Auto-Tuning**: Afișat detaliat sub Consola DEBUG (breakdown 10-100%, fatalități, eficiență, explicarea intersecției).
 - **Secțiunea Nucleu Dur (Pool)**:
     *   Dinamica Nucleului (afișează vizual numerele adăugate/eliminate față de rularea anterioară).
     *   Statistici detaliate pentru prezență și audit complet pentru excluderi (TimesFM Blacklist, Anomalii, Smart Logic).

@@ -363,6 +363,13 @@ class LotoEngine:
         if filter_consecutives:
             logging.info("[PIPELINE] Aplicare Filtru Anti-Secvență pe nucleul TimesFM...")
             self.hard_core = self._apply_consecutive_filter(self.hard_core, freq)
+
+        # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere
+        if len(self.hard_core) > pool_size:
+            logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size}.")
+            self.hard_core = self.hard_core[:pool_size]
+        elif len(self.hard_core) < pool_size:
+            logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
             self._consecutive_filter_applied = True
         else:
             self._consecutive_filter_applied = False
@@ -1333,10 +1340,38 @@ class LotoEngine:
         # Luăm top N numere
         pool = [num for num, score in sorted_nums[:pool_size]]
         
+        # Garanție pool complet: Dacă filtrele/blacklist-ul au fost prea agresive, completăm
+        if len(pool) < pool_size:
+            logging.warning(f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). Se completează cu cele mai bune numere din blacklist.")
+            
+            # Luăm numerele din blacklist, sortate după scor (cele mai bune dintre cele "rele")
+            blacklisted_nums = [(num, score) for num, score in scores.items() if num in blacklist and num not in pool]
+            sorted_blacklisted = sorted(blacklisted_nums, key=lambda x: x[1], reverse=True)
+            
+            needed = pool_size - len(pool)
+            for num, _ in sorted_blacklisted[:needed]:
+                pool.append(num)
+                
+            # Dacă tot nu avem destule (e.g. scores e incomplet), fallback final pe frecvență globală
+            if len(pool) < pool_size:
+                logging.warning(f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). Fallback final pe frecvență globală.")
+                # Luăm frecvența (fără a recalcula dacă avem deja self.freq)
+                freq = getattr(self, 'freq', None)
+                if freq is None:
+                    freq = self.analyze_frequency()
+                
+                sorted_freq_indices = np.argsort(freq)[::-1]
+                for idx in sorted_freq_indices:
+                    num = int(idx) + 1
+                    if num not in pool:
+                        pool.append(num)
+                        if len(pool) >= pool_size:
+                            break
+                            
         # Salvăm în audit pentru transparență
         self.audit['timesfm_predictions'] = {num: round(score, 4) for num, score in sorted_nums[:20]}
         
-        return sorted(pool)
+        return sorted(pool[:pool_size])
 
 
     def _generate_loto_covariates(self, start: int, end: int) -> dict:

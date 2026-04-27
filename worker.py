@@ -50,12 +50,86 @@ except Exception:
     logging.debug("UTF-8 console reconfigure eșuat; continuu cu encoding implicit.", exc_info=True)
 
 
+import psutil
+import threading
+
+class ResourceMonitor:
+    def __init__(self, interval=0.5):
+        self.interval = interval
+        self.max_cpu = 0.0
+        self.max_ram = 0.0
+        self.max_gpu = 0.0
+        self.max_vram_gb = 0.0
+        self.running = False
+        self._thread = None
+        
+    def start(self):
+        self.running = True
+        self._thread = threading.Thread(target=self._monitor, daemon=True)
+        self._thread.start()
+        
+    def stop(self):
+        self.running = False
+        if self._thread:
+            self._thread.join()
+            
+    def _monitor(self):
+        import subprocess
+        while self.running:
+            try:
+                # CPU & RAM
+                cpu = psutil.cpu_percent(interval=None)  # FIX: era cpu_percentage (typo)
+                ram = psutil.virtual_memory().percent
+                self.max_cpu = max(self.max_cpu, cpu)
+                self.max_ram = max(self.max_ram, ram)
+            except Exception as e:
+                logging.warning(f"[MONITOR] Eroare CPU/RAM: {e}")
+
+            try:
+                # GPU & VRAM (via torch & nvidia-smi)
+                import torch
+                if torch.cuda.is_available():
+                    # VRAM
+                    vram_bytes = torch.cuda.max_memory_reserved(0)
+                    self.max_vram_gb = max(self.max_vram_gb, vram_bytes / (1024**3))
+
+                    # GPU Utilization (%)
+                    try:
+                        gpu_output = subprocess.check_output(
+                            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                            encoding="utf-8", timeout=2
+                        )
+                        gpu_load = float(gpu_output.strip().split("\n")[0])
+                        self.max_gpu = max(self.max_gpu, gpu_load)
+                    except Exception as e:
+                        logging.debug(f"[MONITOR] nvidia-smi indisponibil: {e}")
+            except Exception as e:
+                logging.debug(f"[MONITOR] Eroare GPU/VRAM: {e}")
+
+            time.sleep(self.interval)
+
+    def get_stats(self):
+        return {
+            "max_cpu": round(self.max_cpu, 1),
+            "max_ram": round(self.max_ram, 1),
+            "max_gpu": round(self.max_gpu, 1),
+            "max_vram_gb": round(self.max_vram_gb, 2)
+        }
+
 def _pack_result_payload(payload: object) -> str:
     blob = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
     return json.dumps({"encoding": "pickle+b64", "payload": base64.b64encode(blob).decode("ascii")})
 
 
 def _run_pipeline_job(job: dict) -> str:
+    monitor = ResourceMonitor()
+    monitor.start()
+    try:
+        return _run_pipeline_job_inner(job, monitor)
+    finally:
+        monitor.stop()
+
+def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     cfg = json.loads(job["config_json"])
     input_hash = str(cfg.get("input_hash", "") or "").strip()
     use_cache = bool(cfg.get("use_cache", True))
@@ -93,7 +167,8 @@ def _run_pipeline_job(job: dict) -> str:
             smart_red = bool(task.get("smart_reduction", True))
             sim_depth = int(task.get("sim_depth_pct", 10))
             cold_pct = 20  # Default 20% Cold/Hot balance
-            # Neural Engine (TimesFM) este acum metoda principală.
+            logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
+            logging.debug(f"[worker] Full task: {task}")
             
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
@@ -138,6 +213,7 @@ def _run_pipeline_job(job: dict) -> str:
                     "guarantee": guar,
                     "lookback": lookback,
                     "audit": audit,
+                    "resource_stats": monitor.get_stats(),
                     "p10": p10,
                     "p90": p90,
                     "g_range": g_range,

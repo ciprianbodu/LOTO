@@ -27,6 +27,7 @@ from loto_enterprise.core.backtesting import LotoBacktester
 import subprocess
 import psutil
 import sys
+import streamlit.components.v1 as components
 
 # ensure_worker_running() va fi apelat mai jos, dupa configurarea paginii
 
@@ -98,7 +99,7 @@ def get_hardware_info():
         
     return " | ".join(hw_info) if hw_info else "Informații Hardware indisponibile"
 
-def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, game_type):
+def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, game_type, resource_stats=None):
     """
     Generează o descriere dinamică a Nucleului Dur bazată pe ce s-a realizat efectiv.
     """
@@ -179,6 +180,14 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     description += f"<br>📂 **Cale Python:** `{py_path}`"
     description += f"<br>💻 **Hardware Utilizat:** {get_hardware_info()}"
     
+    if resource_stats:
+        cpu = resource_stats.get('max_cpu', 0)
+        ram = resource_stats.get('max_ram', 0)
+        gpu = resource_stats.get('max_gpu', 0)
+        vram = resource_stats.get('max_vram_gb', 0)
+        res_info = f" | Max CPU: {cpu}% | Max RAM: {ram}% | Max GPU: {gpu}% | Max VRAM: {vram} GB"
+        description += f" <span style='color: #94a3b8; font-size: 0.85em;'>({res_info})</span>"
+    
     # Detalii Tehnice Google TimesFM
     if 'timesfm_xreg' in audit or 'timesfm_predictions' in audit:
         description += f"<br><br><b>⚙️ Specificații Tehnice Google TimesFM v2:</b>"
@@ -226,6 +235,20 @@ def read_logs_filtered(n_lines=50):
         return f"Eroare citire log: {e}"
 
 st.set_page_config(page_title="Loto Wheeling Determinist", layout="wide")
+
+# --- INITIALIZARE STATE ---
+if "pool_size_val" not in st.session_state:
+    st.session_state["pool_size_val"] = 12
+if "guarantee_val" not in st.session_state:
+    st.session_state["guarantee_val"] = 4
+if "lookback_val" not in st.session_state:
+    st.session_state["lookback_val"] = 0
+if "sim_depth_val" not in st.session_state:
+    st.session_state["sim_depth_val"] = 40
+if "sim_depth_suffix" not in st.session_state:
+    st.session_state["sim_depth_suffix"] = 0
+if "consecutive_filter_val" not in st.session_state:
+    st.session_state["consecutive_filter_val"] = True
 
 # Mutat aici pentru a permite paginii sa se randeze partial inainte de blocaje
 def ensure_worker_running():
@@ -387,9 +410,7 @@ st.caption("Sistem de analiză hibridă: Google TimesFM v2 + Wheeling Combinator
 # Container pentru Mesaje de Calibrare / Status
 status_container = st.empty()
 
-if "calib_reason_msg" in st.session_state:
-    with status_container.container():
-        st.info(f"💡 **Raport Calibrare Auto-Tuning ({st.session_state.get('sim_depth_val', 40)}%)**\n\n{st.session_state['calib_reason_msg']}")
+# Raportul de calibrare va fi afișat mai jos, sub consolă.
 
 # Verificam daca utilizatorul a pornit calibrarea din sidebar
 if st.session_state.get("start_calib_now", False):
@@ -415,14 +436,13 @@ if st.session_state.get("start_calib_now", False):
         calib_engine._build_draw_matrix()
         
         # Citim pool_size din session_state pentru a fi consistenți
-        p_size_calib = st.session_state.get("pool_size_val", 12)
+        p_size_calib = st.session_state["pool_size_val"]
         best_depth, calib_res = run_calibration(calib_engine, test_draws=2, pool_size=p_size_calib, progress_cb=update_p)
         st.session_state["sim_depth_val"] = best_depth
         st.session_state["sim_depth_suffix"] += 1
         
-        best_stats = calib_res[best_depth]
-        reason = f"Acest procent a eliminat **cele mai multe numere moarte ({best_stats['total_excluded']} numere excluse)** pe cele 2 teste regresive, FĂRĂ să taie vreun număr câștigător (**Fatalități: {best_stats['total_fatalities']}**).\nMedie eliminată per extragere: {best_stats['avg_excluded']:.1f} numere."
-        st.session_state["calib_reason_msg"] = reason
+        st.session_state["calib_res"] = calib_res
+        st.session_state["calib_best_depth"] = best_depth
         st.session_state["start_calib_now"] = False # Oprim flag-ul
         
         if st.session_state.get("trigger_gen_after_calib"):
@@ -501,9 +521,7 @@ with st.sidebar:
                     pass
             if auto_ds:
                 st.session_state["loaded_datasets"] = auto_ds
-                max_h = max(len(df) for _, df in auto_ds)
-                if "lookback_val" not in st.session_state:
-                    st.session_state["lookback_val"] = max_h
+                st.session_state["loaded_datasets"] = auto_ds
 
     if uploaded_files:
         datasets = []
@@ -515,11 +533,10 @@ with st.sidebar:
                 st.error(f"Nu pot citi {f.name}: {e}")
         if datasets:
             st.session_state["loaded_datasets"] = datasets
-            # Set default lookback to the maximum history found ONLY if files changed
-            max_h = max(len(df) for _, df in datasets)
+            # Set default lookback to 0 (100% history) ONLY if files changed
             current_files = [f.name for f in uploaded_files]
             if st.session_state.get("prev_uploaded_files") != current_files:
-                st.session_state["lookback_val"] = max_h
+                st.session_state["lookback_val"] = 0
                 st.session_state["prev_uploaded_files"] = current_files
             st.success(f"Încărcat {len(datasets)} fișiere.")
 
@@ -582,20 +599,19 @@ with st.sidebar:
     if "sim_depth_suffix" not in st.session_state:
         st.session_state["sim_depth_suffix"] = 0
 
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("⚙️ Calibrează Adâncimea", help="Află automat cel mai bun procent testând pe istoricul recent.", use_container_width=True):
-            if not st.session_state.get("loaded_datasets"):
-                st.error("Încărcați întâi un fișier CSV!")
-            else:
-                st.session_state["start_calib_now"] = True
-                st.rerun()
+    if st.button("⚙️ Calibrează și filtrează", help="Află automat cel mai bun procent testând pe istoricul recent.", use_container_width=True):
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier CSV!")
+        else:
+            st.session_state["start_calib_now"] = True
+            st.rerun()
 
-    with c2:
-        if st.button("🚀 Generează Variante", type="primary", use_container_width=True, help="Pornește generarea folosind setările curente."):
-            reset_sidebar_settings()
-            ensure_worker_running()
-            st.session_state["queue_submit_requested"] = True
+    if st.button("🚀 Generează Variante", type="primary", use_container_width=True, help="Pornește generarea folosind setările curente."):
+        reset_sidebar_settings()
+        ensure_worker_running()
+        st.session_state.pop("calib_res", None)
+        st.session_state.pop("calib_best_depth", None)
+        st.session_state["queue_submit_requested"] = True
 
     sim_depth_input = st.slider(
         "Adâncime Simulare Backtesting (%)", 
@@ -649,32 +665,34 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         datasets_cfg = []
         import hashlib
         h = hashlib.sha256()
-        h.update(str(pool_size_input).encode("utf-8"))
-        h.update(str(guarantee_input).encode("utf-8"))
-        h.update(str(max_variants_input).encode("utf-8"))
-        h.update(str(lookback_input).encode("utf-8"))
-        h.update(str(apply_consecutive_filter).encode("utf-8"))
+        h.update(str(st.session_state["pool_size_val"]).encode("utf-8"))
+        h.update(str(st.session_state["guarantee_val"]).encode("utf-8"))
+        h.update(str(st.session_state["max_variants_val"]).encode("utf-8"))
+        h.update(str(st.session_state["lookback_val"]).encode("utf-8"))
+        h.update(str(st.session_state["consecutive_filter_val"]).encode("utf-8"))
         h.update(str(True).encode("utf-8"))
-        h.update(str(sim_depth_input).encode("utf-8"))
+        h.update(str(st.session_state["sim_depth_val"]).encode("utf-8"))
         
         for fname, df in st.session_state["loaded_datasets"]:
-            game_label = "6/49"
+            logging.info(f"[UI] Pregătire task pentru {fname}. Pool size în State: {st.session_state['pool_size_val']}")
+            g_label = "6/49"
             if "5_40" in fname.lower() or "5/40" in fname.lower():
-                game_label = "5/40"
+                g_label = "5/40"
             elif "joker" in fname.lower():
-                game_label = "joker"
+                g_label = "joker"
                 
             task_dict = {
-                "cfg_key": "LOTO_649", 
-                "game_label": game_label,
-                "pool_size": pool_size_input,
-                "guarantee": guarantee_input,
-                "max_variants": max_variants_input,
-                "lookback": lookback_input,
-                "filter_consecutives": apply_consecutive_filter,
+                "game_label": g_label,
+                "pool_size": st.session_state["pool_size_val"],
+                "guarantee": st.session_state["guarantee_val"],
+                "max_variants": st.session_state["max_variants_val"],
+                "lookback": st.session_state["lookback_val"],
+                "filter_consecutives": st.session_state["consecutive_filter_val"],
                 "smart_reduction": True,
-                "sim_depth_pct": sim_depth_input,
+                "sim_depth_pct": st.session_state["sim_depth_val"],
             }
+            
+            logging.info(f"[APP] Submitere job pentru {g_label}: {task_dict}")
             datasets_cfg.append({
                 "fname": fname,
                 "df_json": df.to_json(orient="split"),
@@ -763,6 +781,7 @@ if st.session_state.get("active_job_id"):
                                     logging.error(f"Eroare backtesting automat: {e}")
 
             st.session_state.pop("active_job_id", None)
+            st.session_state["play_completion_sound"] = True
             unlock_engine()
             st.rerun()
             break
@@ -801,6 +820,95 @@ if not st.session_state.get("active_job_id"):
                     st.rerun()
                 except Exception as e:
                     st.error(f"Eroare la resetarea consolei: {e}")
+
+# Afișăm raportul de calibrare sub consolă
+if "calib_res" in st.session_state and "calib_best_depth" in st.session_state:
+    calib_res = st.session_state["calib_res"]
+    best_depth = st.session_state["calib_best_depth"]
+    current_depth = st.session_state.get("sim_depth_val", best_depth)
+    
+    best_stats = calib_res[best_depth]
+    
+    # Construim un raport detaliat sub formă de tabel/listă
+    report_lines = [
+        f"Adâncimea optimă recomandată de AI: **{best_depth}%** (Selectat curent: **{current_depth}%**)" if current_depth != best_depth else f"Adâncimea optimă identificată: **{best_depth}%**",
+        f"Eficiență (la {best_depth}%): **{best_stats['total_excluded']} numere moarte eliminate** în total.",
+        f"Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (Fatalități).",
+        "",
+        "**📊 Analiză comparativă pe ferestre de timp (Intersecție Regresivă):**"
+    ]
+    
+    # Sortăm descrescător pentru a vedea de la cel mai permisiv la cel mai restrictiv
+    for d in sorted(calib_res.keys(), reverse=True):
+        s = calib_res[d]
+        status_icon = "✅" if s['total_fatalities'] == 0 else "❌"
+        line = f"- **{d}%** adâncime: {s['total_excluded']} excluse | {s['total_fatalities']} fatalități {status_icon}"
+        
+        # Adăugăm marcajele de UI pentru claritate
+        if d == current_depth and d == best_depth:
+            line += " ⭐ (Recomandat & Selectat)"
+        elif d == current_depth:
+            line += " 👈 (Selectat Manual)"
+        elif d == best_depth:
+            line += " 🏆 (Recomandat)"
+            
+        report_lines.append(line)
+        
+    report_lines.append("\n*Notă: O adâncime mai mică (ex: 10%) înseamnă o intersecție mai strictă (numărul trebuie să fie 'mort' în toate ferestrele simultan pentru a fi eliminat).*")
+    
+    msg = "\n".join(report_lines)
+    st.info(f"💡 **Raport Calibrare Auto-Tuning**\n\n{msg}")
+
+# ─── MUZICĂ AMBIENTALĂ + FINALIZARE ──────────────────────────────────────────
+_play_completion = st.session_state.pop("play_completion_sound", False)
+_fan_js = ""
+if _play_completion:
+    _fan_js = """
+    setTimeout(function() {
+        function fanNote(freq, start, dur, vol) {
+            vol = vol||0.22;
+            var osc=ctx.createOscillator(), g=ctx.createGain();
+            osc.type='triangle'; osc.frequency.value=freq;
+            g.gain.setValueAtTime(0, ctx.currentTime+start);
+            g.gain.linearRampToValueAtTime(vol, ctx.currentTime+start+0.05);
+            g.gain.linearRampToValueAtTime(0, ctx.currentTime+start+dur);
+            osc.connect(g); g.connect(masterGain); g.connect(reverb);
+            osc.start(ctx.currentTime+start); osc.stop(ctx.currentTime+start+dur+0.2);
+        }
+        [261.6,329.6,392.0,523.3,659.3,783.99].forEach(function(f,i){fanNote(f,i*0.18,0.5);});
+        [261.6,329.6,392.0,523.3].forEach(function(f){fanNote(f,6*0.18+0.1,1.8,0.15);});
+    }, 900);"""
+components.html(f"""<script>
+(function(){{
+    if(window._lotoAudio) return; window._lotoAudio=true;
+    var ctx=new(window.AudioContext||window.webkitAudioContext)();
+    var masterGain=ctx.createGain();
+    masterGain.gain.setValueAtTime(0,ctx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(0.18,ctx.currentTime+3);
+    masterGain.connect(ctx.destination);
+    var len=ctx.sampleRate*2, buf=ctx.createBuffer(2,len,ctx.sampleRate);
+    for(var c=0;c<2;c++){{var d=buf.getChannelData(c);for(var i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3);}}
+    var reverb=ctx.createConvolver(); reverb.buffer=buf;
+    var rvG=ctx.createGain(); rvG.gain.value=0.35; reverb.connect(rvG); rvG.connect(masterGain);
+    function pad(f,s,dur,v){{
+        v=v||0.04;
+        var o=ctx.createOscillator(),g=ctx.createGain();
+        o.type='sine'; o.frequency.value=f;
+        g.gain.setValueAtTime(0,ctx.currentTime+s);
+        g.gain.linearRampToValueAtTime(v,ctx.currentTime+s+2);
+        g.gain.linearRampToValueAtTime(0,ctx.currentTime+s+dur);
+        o.connect(g); g.connect(masterGain); g.connect(reverb);
+        o.start(ctx.currentTime+s); o.stop(ctx.currentTime+s+dur+0.5);
+    }}
+    var chords=[[220,261.6,329.6,440],[174.6,220,261.6,349.2],[130.8,164.8,196,261.6],[196,246.9,293.7,392]];
+    function loop(off){{chords.forEach(function(ch,ci){{ch.forEach(function(f){{pad(f,off+ci*4,5.5,0.04);pad(f*2,off+ci*4+0.5,4,0.015);}});}});}}
+    loop(0.5); loop(17); loop(34);
+    masterGain.gain.setValueAtTime(0.18,ctx.currentTime+46);
+    masterGain.gain.linearRampToValueAtTime(0,ctx.currentTime+51);
+    {_fan_js}
+}})();
+</script>""", height=0)
+# ─────────────────────────────────────────────────────────────────────────────
 
 if "persistent_results" in st.session_state:
     res = st.session_state["persistent_results"]
@@ -937,7 +1045,7 @@ if "persistent_results" in st.session_state:
                 for n in hc:
                     hits = hc_stats.get(str(n), hc_stats.get(n, 0))
                     pct = f"{int((hits / total_draws) * 100)}%" if isinstance(hits, int) else "?"
-                    hc_html += f'<span class="loto-badge-hc" title="A apărut de {hits} ori">{n} <small style="font-size:0.7em; color: white; opacity: 0.9; font-weight: bold;">({pct})</small></span>'
+                    hc_html += f'<span class="loto-badge-hc" title="A apărut de {hits} ori">{n} <small style="font-size:0.7em; color: white; opacity: 0.9; font-weight: bold;">({pct})</small></span> '
                 
                 hc_joker = data.get('hard_core_joker', [])
                 hc_joker_stats = data.get('hard_core_joker_stats', {})
@@ -961,7 +1069,8 @@ if "persistent_results" in st.session_state:
                     total_draws=total_draws,
                     lookback_pct=used_lookback,
                     pool_size=pool_size,
-                    game_type=game
+                    game_type=game,
+                    resource_stats=data.get('resource_stats')
                 )
                 
                 pool_var = audit.get("pool_variation", {})
@@ -978,7 +1087,7 @@ if "persistent_results" in st.session_state:
                     else:
                         hc_html += "<div style='margin-top: 10px; font-size: 0.85em; color: #6c757d;'>🔄 Nucleul a rămas neschimbat față de ultima rulare pe acest joc.</div>"
                 
-                st.markdown(f"**Nucleu Dur:**<br>{hc_html}", unsafe_allow_html=True)
+                st.markdown(f"**Nucleu Dur ({len(hc)} numere):**<br>{hc_html}", unsafe_allow_html=True)
                 st.markdown(f"**{dynamic_desc}**", unsafe_allow_html=True)
                 
                 # --- AFISARE REZULTATE BACKTESTING SUB NUCLEUL DUR ---

@@ -30,8 +30,10 @@ except Exception as e:
 
 
 def _detect_device() -> str:
+    """Detectează dispozitivul optim pentru TimesFM."""
     try:
         if HAS_TIMESFM and torch.cuda.is_available():
+            # Logăm o singură dată prezența GPU-ului la nivel de modul dacă e nevoie
             return "gpu"
     except Exception:
         pass
@@ -606,6 +608,9 @@ def get_timesfm_scores_v2(
             audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_scores[:25]}
             audit["ensemble_windows"] = context_windows
             audit["timesfm_version"] = "v2 Ensemble (Full + Mid + Short)"
+            audit["timesfm_device"] = device.upper()
+            if device == "gpu":
+                audit["timesfm_gpu_name"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Unknown"
             audit["raw_ensemble_scores"] = ensemble_scores # Optimizare Cache pentru Regressive Blacklist
 
         logging.info(f"[TIMESFM-V2] Ensemble complete ({len(context_windows)} windows). Top 5: {sorted(final_nqi.items(), key=lambda x: -x[1])[:5]}")
