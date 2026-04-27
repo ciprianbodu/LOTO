@@ -1323,22 +1323,24 @@ class LotoEngine:
 
     def _get_timesfm_pool(self, scores: Dict[int, float], pool_size: int, blacklist: Set[int]) -> List[int]:
         """
-        Metoda principală de selecție a numerelor (Pool) bazată pe TimesFM.
-        Alege numerele cu cele mai mari scoruri de prognoză care nu sunt în blacklist.
+        Metoda principală de selecție a numerelor (Pool) bazată pe TimesFM v3.
+        Folosește selecție diversificată pe zone (low/mid/high) pentru maximizarea hit-urilor.
         """
         if not scores:
             # Fallback pe frecvență dacă TimesFM e indisponibil
             freq = self.analyze_frequency()
             return self._get_initial_hard_core(freq, pool_size=pool_size, blacklist=blacklist)
 
-        # Filtrăm blacklist-ul
-        valid_scores = {num: score for num, score in scores.items() if num not in blacklist}
+        max_num = int(self.params.get("max_n", 49))
         
-        # Sortăm descrescător după scor
-        sorted_nums = sorted(valid_scores.items(), key=lambda x: x[1], reverse=True)
-        
-        # Luăm top N numere
-        pool = [num for num, score in sorted_nums[:pool_size]]
+        # Folosim selectorul diversificat din v3 engine
+        if _HAS_TFM_V2:
+            pool = select_pool_from_scores(scores, pool_size, blacklist, self.audit, max_num=max_num)
+        else:
+            # Fallback legacy
+            valid_scores = {num: score for num, score in scores.items() if num not in blacklist}
+            sorted_nums = sorted(valid_scores.items(), key=lambda x: x[1], reverse=True)
+            pool = [num for num, score in sorted_nums[:pool_size]]
         
         # Garanție pool complet: Dacă filtrele/blacklist-ul au fost prea agresive, completăm
         if len(pool) < pool_size:
@@ -1355,7 +1357,6 @@ class LotoEngine:
             # Dacă tot nu avem destule (e.g. scores e incomplet), fallback final pe frecvență globală
             if len(pool) < pool_size:
                 logging.warning(f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). Fallback final pe frecvență globală.")
-                # Luăm frecvența (fără a recalcula dacă avem deja self.freq)
                 freq = getattr(self, 'freq', None)
                 if freq is None:
                     freq = self.analyze_frequency()
@@ -1367,9 +1368,6 @@ class LotoEngine:
                         pool.append(num)
                         if len(pool) >= pool_size:
                             break
-                            
-        # Salvăm în audit pentru transparență
-        self.audit['timesfm_predictions'] = {num: round(score, 4) for num, score in sorted_nums[:20]}
         
         return sorted(pool[:pool_size])
 

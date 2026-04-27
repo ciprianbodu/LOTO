@@ -310,6 +310,77 @@ def _get_last_position(num: int, draw_matrix: np.ndarray | None) -> float:
     return 0.0
 
 
+def _rank_fusion(ensemble_scores: List[Dict[int, float]], window_weights: Optional[List[float]] = None) -> Dict[int, float]:
+    """Rank-based ensemble fusion (Weighted Borda Count) — mai robust decât media aritmetică."""
+    if not ensemble_scores:
+        return {}
+    all_nums = set().union(*(s.keys() for s in ensemble_scores))
+    rank_scores: Dict[int, float] = {n: 0.0 for n in all_nums}
+    if window_weights is None:
+        window_weights = [1.0 / (1.0 + 0.25 * i) for i in range(len(ensemble_scores))]
+    total_weight = sum(window_weights[:len(ensemble_scores)])
+    for w_idx, window_scores in enumerate(ensemble_scores):
+        sorted_nums = sorted(window_scores.items(), key=lambda x: x[1], reverse=True)
+        total = max(len(sorted_nums), 1)
+        weight = window_weights[w_idx] if w_idx < len(window_weights) else 0.5
+        max_raw = sorted_nums[0][1] if sorted_nums else 1.0
+        min_raw = sorted_nums[-1][1] if sorted_nums else 0.0
+        range_raw = max(max_raw - min_raw, 0.0001)
+        for rank, (num, raw_score) in enumerate(sorted_nums):
+            borda = (total - rank) / total
+            norm_raw = (raw_score - min_raw) / range_raw
+            combined = borda * 0.6 + norm_raw * 0.4
+            rank_scores[num] += combined * weight
+    for num in rank_scores:
+        rank_scores[num] /= max(total_weight, 0.001)
+    return rank_scores
+
+
+def compute_pair_cooccurrence(draw_matrix: np.ndarray | None, num_map: List[int],
+                              lookback: int = 150) -> Dict[int, float]:
+    """Pair co-occurrence: numere care apar frecvent împreună cu alte numere puternice."""
+    if draw_matrix is None or draw_matrix.size == 0:
+        return {n: 0.0 for n in num_map}
+    n_draws = min(lookback, draw_matrix.shape[0])
+    recent = draw_matrix[-n_draws:]
+    pair_boost: Dict[int, float] = {}
+    for num in num_map:
+        total_co = 0.0
+        for other in num_map:
+            if num == other:
+                continue
+            count = sum(1 for row in recent if num in row and other in row)
+            total_co += count
+        pair_boost[num] = total_co / max(n_draws * len(num_map), 1.0)
+    # Normalize to [0, 1]
+    max_pb = max(pair_boost.values()) if pair_boost else 1.0
+    if max_pb > 0:
+        for n in pair_boost:
+            pair_boost[n] /= max_pb
+    return pair_boost
+
+
+def _compute_momentum_score(series: np.ndarray) -> float:
+    """Scor de momentum multi-fereastră (3, 7, 15, 30 extrageri)."""
+    if len(series) < 3:
+        return 0.5
+    windows = [3, 7, 15, 30]
+    weights = [0.35, 0.30, 0.20, 0.15]
+    global_freq = float(np.mean(series))
+    if global_freq < 0.001:
+        return 0.3
+    momentum = 0.0
+    for w, wt in zip(windows, weights):
+        if len(series) >= w:
+            recent = float(np.mean(series[-w:]))
+            ratio = recent / max(global_freq, 0.001)
+            momentum += min(ratio, 3.0) * wt
+        else:
+            momentum += 0.5 * wt
+    return min(momentum, 1.5)
+
+
+
 # ---------------------------------------------------------------------------
 #  3. Scoring NQI (Neural Quality Index) — combină toate semnalele
 # ---------------------------------------------------------------------------
@@ -323,24 +394,26 @@ def compute_nqi_scores(
     optimized_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[int, float]:
     """
-    Calculează Neural Quality Index pentru fiecare număr.
-
-    NQI = 0.20 * PointScore
-        + 0.25 * HorizonTrend
-        + 0.20 * Stability (quantile spread)
-        + 0.20 * CovariateBoost
-        + 0.15 * AdaptiveBias
+    NQI v3 — Neural Quality Index cu normalizare pe componente.
+    Toate componentele sunt normalizate la [0,1] înainte de combinare.
     """
     weights_dict = optimized_weights if optimized_weights else {
-        "p_val": 0.40, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.15, "adaptive": 0.25
+        "p_val": 0.30, "h_score": 0.15, "stability": 0.10,
+        "cov_boost": 0.10, "adaptive": 0.20, "momentum": 0.15
     }
-    scores: Dict[int, float] = {}
+
+    # --- Colectăm toate componentele raw ---
+    raw_components: Dict[str, List[float]] = {
+        "p_val": [], "h_score": [], "stability": [],
+        "cov_boost": [], "adaptive": [], "momentum": []
+    }
 
     for i, num in enumerate(num_map):
-        # --- A. Point forecast (predicția imediată) ---
+        # A. Point forecast
         p_val = float(point_forecast[i, 0]) if point_forecast.ndim >= 2 else float(point_forecast[i])
+        raw_components["p_val"].append(p_val)
 
-        # --- B. Multi-Horizon Trend (weighted decay) ---
+        # B. Multi-Horizon Trend (weighted decay)
         h_len = min(horizon, point_forecast.shape[1] if point_forecast.ndim >= 2 else 1)
         h_score = 0.0
         h_weight_total = 0.0
@@ -350,20 +423,21 @@ def compute_nqi_scores(
             h_score += val * decay_w
             h_weight_total += decay_w
         h_score = h_score / max(h_weight_total, 0.001)
+        raw_components["h_score"].append(h_score)
 
-        # --- C. Quantile Stability (spread p10-p90) ---
+        # C. Quantile Stability
         stability = 0.5
         if full_forecast.ndim >= 3 and full_forecast.shape[2] >= 9:
             q10 = float(full_forecast[i, 0, 0])
             q50 = float(full_forecast[i, 0, 4])
             q90 = float(full_forecast[i, 0, 8])
             spread = max(0.0001, q90 - q10)
-            stability = 1.0 / (1.0 + spread * 5.0)
-            # Bonus dacă mediana e pozitivă
+            stability = 1.0 / (1.0 + spread * 3.0)
             if q50 > 0:
-                stability += 0.1
+                stability += 0.15
+        raw_components["stability"].append(stability)
 
-        # --- D. Covariate Boost ---
+        # D. Covariate Boost
         cov_boost = 0.0
         if cov_forecast is not None:
             try:
@@ -371,47 +445,51 @@ def compute_nqi_scores(
                 cov_boost = cov_val
             except (IndexError, TypeError):
                 cov_boost = 0.0
+        raw_components["cov_boost"].append(cov_boost)
 
-        # --- E. Adaptive Bias (recent momentum & GAP TRIGGER) ---
+        # E. Adaptive Bias (Gap Trigger îmbunătățit)
         series = all_series[i]
-        recent_5 = series[-5:] if len(series) >= 5 else series
-        recent_15 = series[-15:] if len(series) >= 15 else series
-        recent_freq_5 = float(np.mean(recent_5))
-        recent_freq_15 = float(np.mean(recent_15))
-        global_freq = float(np.mean(series))
-        
-        # Calculăm distanța față de ultima apariție (Gap)
         total_draws_ctx = len(series)
-        total_appearances = np.sum(series)
+        total_appearances = float(np.sum(series))
         avg_gap = total_draws_ctx / max(total_appearances, 1.0)
-        
         current_gap = 0.0
         for val in reversed(series):
-            if val > 0.5: break
+            if val > 0.5:
+                break
             current_gap += 1.0
-        
-        adaptive = 1.0
-        if current_gap >= avg_gap and avg_gap > 0 and total_appearances > 3:
-            # Gap Trigger: e întârziat peste media lui obișnuită
-            adaptive = 1.25
-        elif recent_freq_5 > recent_freq_15 + 0.1:
-            # Prea cald, overdue for a cooling off
-            adaptive = 0.90
-        elif recent_freq_5 < recent_freq_15 - 0.1 and global_freq > 0:
-            # Due for a hit pe termen scurt
-            adaptive = 1.15
-        elif recent_freq_5 > 0 and recent_freq_15 > 0:
-            # Consistent momentum
-            adaptive = 1.05
 
-        # --- NQI Final (Ponderi optimizate pt Loto) ---
-        nqi = (
-            p_val * weights_dict["p_val"]
-            + h_score * weights_dict["h_score"]
-            + stability * weights_dict["stability"]
-            + cov_boost * weights_dict["cov_boost"]
-            + (p_val * adaptive) * weights_dict["adaptive"]
-        )
+        adaptive = 1.0
+        if total_appearances > 3 and avg_gap > 0:
+            gap_ratio = current_gap / avg_gap
+            if gap_ratio >= 1.5:
+                adaptive = 1.40  # Foarte întârziat
+            elif gap_ratio >= 1.0:
+                adaptive = 1.20 + 0.20 * (gap_ratio - 1.0)  # Gradual boost
+            elif gap_ratio >= 0.7:
+                adaptive = 1.05  # Normal
+            else:
+                adaptive = 0.85  # A ieșit recent, s-ar putea să se răcească
+        raw_components["adaptive"].append(adaptive)
+
+        # F. Momentum multi-fereastră (NOU)
+        momentum = _compute_momentum_score(series)
+        raw_components["momentum"].append(momentum)
+
+    # --- Normalizare MinMax pe fiecare componentă ---
+    normalized: Dict[str, List[float]] = {}
+    for key, vals in raw_components.items():
+        arr = np.array(vals, dtype=np.float64)
+        vmin, vmax = arr.min(), arr.max()
+        rng = max(vmax - vmin, 0.0001)
+        normalized[key] = ((arr - vmin) / rng).tolist()
+
+    # --- Combinare finală ---
+    scores: Dict[int, float] = {}
+    for i, num in enumerate(num_map):
+        nqi = 0.0
+        for key, w in weights_dict.items():
+            if key in normalized:
+                nqi += normalized[key][i] * w
         scores[num] = nqi
 
     return scores
@@ -432,9 +510,11 @@ def optimize_nqi_weights(
     
     # Variante de ponderi (Ensemble Candidates)
     candidates = [
-        {"p_val": 0.40, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.15, "adaptive": 0.25}, # Precision & Gap Trigger Heavy
-        {"p_val": 0.50, "h_score": 0.05, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.25}, # Point Heavy
-        {"p_val": 0.30, "h_score": 0.15, "stability": 0.15, "cov_boost": 0.20, "adaptive": 0.20}, # Balanced
+        {"p_val": 0.30, "h_score": 0.15, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.20, "momentum": 0.15},  # Balanced v3
+        {"p_val": 0.25, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.25, "momentum": 0.20},  # Gap+Momentum Heavy
+        {"p_val": 0.35, "h_score": 0.15, "stability": 0.05, "cov_boost": 0.15, "adaptive": 0.15, "momentum": 0.15},  # Point+Cov Heavy
+        {"p_val": 0.20, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.30, "momentum": 0.20},  # Adaptive Heavy
+        {"p_val": 0.25, "h_score": 0.20, "stability": 0.10, "cov_boost": 0.05, "adaptive": 0.20, "momentum": 0.20},  # Trend Heavy
     ]
     
     best_w = candidates[0]
@@ -534,8 +614,12 @@ def get_timesfm_scores_v2(
             context_windows.append(1000)
         if ctx_len > 600:
             context_windows.append(500)
+        if ctx_len > 350:
+            context_windows.append(300)
         if ctx_len > 250:
             context_windows.append(200)
+        if ctx_len > 150:
+            context_windows.append(100)
         if ctx_len > 80:
             context_windows.append(50)
         
@@ -593,27 +677,29 @@ def get_timesfm_scores_v2(
             
             ensemble_scores.append(nqi)
 
-        # Average ensemble scores
+        # Rank-based fusion (mai robust decât media aritmetică)
         if not ensemble_scores: return {}
         
-        final_nqi: Dict[int, float] = {}
-        all_nums = set().union(*(s.keys() for s in ensemble_scores))
-        for num in all_nums:
-            vals = [s[num] for s in ensemble_scores if num in s]
-            final_nqi[num] = float(np.mean(vals)) if vals else 0.0
+        final_nqi = _rank_fusion(ensemble_scores)
+        
+        # Pair co-occurrence boost (numere care apar frecvent împreună)
+        if not is_regressive_step and draw_matrix is not None:
+            pair_boost = compute_pair_cooccurrence(draw_matrix, list(final_nqi.keys()), lookback=150)
+            for num in final_nqi:
+                final_nqi[num] = final_nqi.get(num, 0.0) * (0.85 + 0.30 * pair_boost.get(num, 0.0))
             
         # Audit
         if audit is not None:
             sorted_scores = sorted(final_nqi.items(), key=lambda x: x[1], reverse=True)
             audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_scores[:25]}
             audit["ensemble_windows"] = context_windows
-            audit["timesfm_version"] = "v2 Ensemble (Full + Mid + Short)"
+            audit["timesfm_version"] = "v3 Rank Fusion + Pair Boost"
             audit["timesfm_device"] = device.upper()
             if device == "gpu":
                 audit["timesfm_gpu_name"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Unknown"
-            audit["raw_ensemble_scores"] = ensemble_scores # Optimizare Cache pentru Regressive Blacklist
+            audit["raw_ensemble_scores"] = ensemble_scores
 
-        logging.info(f"[TIMESFM-V2] Ensemble complete ({len(context_windows)} windows). Top 5: {sorted(final_nqi.items(), key=lambda x: -x[1])[:5]}")
+        logging.info(f"[TIMESFM-V3] Rank Fusion complete ({len(context_windows)} windows). Top 5: {sorted(final_nqi.items(), key=lambda x: -x[1])[:5]}")
         return final_nqi
 
     except Exception as e:
@@ -666,7 +752,7 @@ def get_regressive_blacklist_v2(
 
         if scores:
             vals = list(scores.values())
-            threshold = np.percentile(vals, 25)
+            threshold = np.percentile(vals, 15)
             bl = {n for n, s in scores.items() if s <= threshold}
             all_blacklists.append(bl)
 
@@ -690,16 +776,49 @@ def select_pool_from_scores(
     pool_size: int,
     blacklist: Set[int],
     audit: dict | None = None,
+    max_num: int = 49,
 ) -> List[int]:
-    """Selectează top N numere din scoruri, excluzând blacklist-ul."""
+    """
+    Selectează top N numere cu diversificare pe range-uri.
+    Asigură acoperire pe low/mid/high pentru a maximiza hit-urile.
+    """
     valid = {n: s for n, s in scores.items() if n not in blacklist}
     sorted_nums = sorted(valid.items(), key=lambda x: x[1], reverse=True)
-    pool = [n for n, _ in sorted_nums[:pool_size]]
+
+    # Diversificare: împărțim în 3 zone (low, mid, high)
+    third = max_num / 3.0
+    zones = {"low": [], "mid": [], "high": []}
+    for n, s in sorted_nums:
+        if n <= third:
+            zones["low"].append((n, s))
+        elif n <= 2 * third:
+            zones["mid"].append((n, s))
+        else:
+            zones["high"].append((n, s))
+
+    # Garantăm minim 2 numere din fiecare zonă (dacă pool_size >= 6)
+    min_per_zone = max(1, pool_size // 5) if pool_size >= 6 else 0
+    pool = []
+    used = set()
+    for zone_name in ["low", "mid", "high"]:
+        for n, s in zones[zone_name][:min_per_zone]:
+            if n not in used:
+                pool.append(n)
+                used.add(n)
+
+    # Completăm restul cu cele mai bune scoruri globale
+    for n, s in sorted_nums:
+        if len(pool) >= pool_size:
+            break
+        if n not in used:
+            pool.append(n)
+            used.add(n)
 
     if audit is not None:
         audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_nums[:25]}
+        audit["pool_diversification"] = {z: len(v) for z, v in zones.items()}
 
-    return sorted(pool)
+    return sorted(pool[:pool_size])
 
 
 # ---------------------------------------------------------------------------
