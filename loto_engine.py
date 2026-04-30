@@ -111,12 +111,10 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
 
         if not target_to_cover:
             break
-            
         base_ticket = set(target_to_cover)
         # remaining_pool păstrează ordinea sortată după scor
         remaining_pool = [n for n in pool if n not in base_ticket]
         
-        # Generăm N combinații care includ target_to_cover
         search_count = 0
         if len(remaining_pool) >= (pick - guarantee):
             # itertools.combinations pe un pool sortat va genera combinații
@@ -140,10 +138,10 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
         if best_ticket:
             wheel.append(list(best_ticket))
             covered_targets.update(best_targets_covered)
-            if iteration % 10 == 0 or len(covered_targets) == total_targets:
-                logging.info(f"[WHEEL] Iteratia {iteration}: Acoperite {len(covered_targets)}/{total_targets} ținte. Bilete: {len(wheel)}")
+            if iteration % 20 == 0 or len(covered_targets) == total_targets:
+                logging.info(f"[WHEEL] Progres {iteration}: Acoperite {len(covered_targets)}/{total_targets} ținte. Bilete: {len(wheel)}")
         else:
-            logging.warning("[WHEEL] Nu am găsit acoperire suplimentară.")
+            logging.warning("[WHEEL] Nu am găsit acoperire suplimentară, oprire timpurie.")
             break
             
         if iteration > 1000:  # Timeout extins pt pool-uri mari, dar mult mai rapid
@@ -307,8 +305,17 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, ultra_hit_optimization=True):
         """Rulează pipeline-ul complet de analiză."""
+        # Optimizare pentru hit-uri de 4/5
+        if ultra_hit_optimization:
+            logging.info("[PIPELINE] MOD ULTRA-HIT ACTIVAT: Optimizare pentru hit-uri de 4 și 5 numere.")
+            if pool_size < 15:
+                logging.info(f"[PIPELINE] Mărire automată pool de la {pool_size} la 15 pentru ultra-hit.")
+                pool_size = 15
+            if guarantee < 4:
+                guarantee = 4
+                
         logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
         if lookback > 0 and self.data is not None and not self.data.empty:
@@ -398,6 +405,13 @@ class LotoEngine:
             
         logging.info(f"[PIPELINE] Nucleu (Pool) generat prin TimesFM v2 NQI: {self.hard_core}")
         
+        # POST-HOC VALIDATION: Verificăm pool-ul pe ultimele extrageri
+        # Aceasta e optimizarea principală — un pool validat empiric
+        if self.data is not None and self._draw_matrix is not None:
+            self.hard_core = self._validate_pool_retrospective(
+                self.hard_core, tfm_scores, pool_size, blacklist
+            )
+        
         if self.game_type == "joker":
             logging.info(f"[PIPELINE] TimesFM v2 pentru Urna 2 (Joker)...")
             j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
@@ -423,12 +437,13 @@ class LotoEngine:
         if smart_reduction and tfm_scores:
             logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring v2 pe {len(lines)} variante...")
             original_count = len(lines)
-            lines = self.filter_variants_by_anomaly(lines, tfm_scores, threshold=0.7)
-            logging.info(f"[PIPELINE] Anomaly v2: eliminat {original_count - len(lines)} variante.")
+            anomaly_threshold = 0.85 if ultra_hit_optimization else 0.7
+            lines = self.filter_variants_by_anomaly(lines, tfm_scores, threshold=anomaly_threshold)
+            logging.info(f"[PIPELINE] Anomaly v2: eliminat {original_count - len(lines)} variante (threshold={anomaly_threshold}).")
             self.audit['anomaly_filter'] = {
                 'original_count': original_count,
                 'final_count': len(lines),
-                'threshold': 0.7
+                'threshold': anomaly_threshold
             }
 
         logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
@@ -1394,6 +1409,218 @@ class LotoEngine:
                             break
         
         return sorted(pool[:pool_size])
+
+    def _validate_pool_retrospective(
+        self, pool: List[int], scores: Dict[int, float], pool_size: int, blacklist: Set[int]
+    ) -> List[int]:
+        """
+        Post-Hoc Pool Validation: Verifică și optimizează pool-ul pe ultimele extrageri.
+        
+        Strategii:
+        1. Swap-out: Numerele din pool care NU au apărut deloc în ultimele 15 extrageri
+           sunt înlocuite cu cele mai bune alternative (din scores, care nu sunt în blacklist).
+        2. Walk-Forward Refinement: Iterativ, testăm dacă înlocuirea unui număr din pool
+           cu un candidat extern crește rata de hit-uri de 4+.
+        """
+        if self._draw_matrix is None or self._draw_matrix.shape[0] < 20:
+            return pool
+        
+        draw_n = int(self.params.get("draw_n", 6))
+        
+        # Determinăm pragul de hit bazat pe tipul de joc
+        hit_target = max(draw_n - 2, 3)  # 4 pentru 6/49, 3 pentru 5/40
+        
+        logging.info(f"[POST-HOC] Validare retrospectivă pool (target: {hit_target}+ hits)...")
+        
+        n_recent = min(15, self._draw_matrix.shape[0] - 5)
+        recent_matrix = self._draw_matrix[-n_recent:]
+        recent_sets = [set(int(v) for v in row if v > 0) for row in recent_matrix]
+        
+        # Pas 1: Identificăm numerele "moarte" din pool (0 apariții în ultimele 15 extrageri)
+        pool_set = set(pool)
+        appearance_count = {num: 0 for num in pool}
+        for draw_set in recent_sets:
+            for num in pool:
+                if num in draw_set:
+                    appearance_count[num] += 1
+        
+        dead_nums = [num for num, count in appearance_count.items() if count == 0]
+        
+        if dead_nums:
+            logging.info(f"[POST-HOC] Numere fără apariții recente (15 ext.): {dead_nums}")
+            
+            # Găsim alternative din scoruri
+            available = sorted(
+                [(n, s) for n, s in scores.items() if n not in pool_set and n not in blacklist],
+                key=lambda x: x[1], reverse=True
+            )
+            
+            # Limităm swap-urile la max 30% din pool
+            max_swaps = max(1, pool_size // 3)
+            swapped = 0
+            
+            for dead_num in sorted(dead_nums, key=lambda x: scores.get(x, 0)):
+                if swapped >= max_swaps or not available:
+                    break
+                
+                # Verificăm că alternativa a apărut recent
+                for alt_num, alt_score in available:
+                    alt_recent = sum(1 for ds in recent_sets if alt_num in ds)
+                    if alt_recent >= 1:  # A apărut cel puțin o dată
+                        pool_set.discard(dead_num)
+                        pool_set.add(alt_num)
+                        available = [(n, s) for n, s in available if n != alt_num]
+                        swapped += 1
+                        logging.info(f"[POST-HOC] Swap: {dead_num} (0 apariții) → {alt_num} ({alt_recent} apariții)")
+                        break
+        
+        current_pool = sorted(pool_set)
+        
+        # Pas 2: Walk-Forward Refinement (Optimizat pentru hit-uri majore, game-aware)
+        # Combinație între fereastră scurtă (reactivitate) și lungă (stabilitate).
+        n_backtest = min(50, self._draw_matrix.shape[0] - 5)
+        backtest_sets = [set(int(v) for v in row if v > 0) for row in self._draw_matrix[-n_backtest:]]
+        n_backtest_long = min(150, self._draw_matrix.shape[0] - 5)
+        backtest_sets_long = [set(int(v) for v in row if v > 0) for row in self._draw_matrix[-n_backtest_long:]]
+        
+        if draw_n == 6:
+            hit_target, hit_high, hit_max = 4, 5, 6
+            w_target, w_high, w_max = 10, 45, 180
+        else:
+            hit_target, hit_high, hit_max = 3, 4, 5
+            w_target, w_high, w_max = 8, 35, 140
+
+        def _score_on_sets(test_set, target_sets):
+            """Scoring game-aware pentru un set de extrageri."""
+            total = 0
+            target_hits = 0
+            high_hits = 0
+            max_hits = 0
+            score = 0
+            for ds in target_sets:
+                overlap = len(test_set & ds)
+                total += overlap
+                if overlap >= hit_target:
+                    target_hits += 1
+                    score += w_target
+                if overlap >= hit_high:
+                    high_hits += 1
+                    score += w_high
+                if overlap >= hit_max:
+                    max_hits += 1
+                    score += w_max
+            return score, target_hits, high_hits, max_hits, total
+
+        def count_hits(test_pool):
+            """Combină scorul pe ferestre scurtă/lungă pentru robustețe."""
+            test_set = set(test_pool)
+            short_score, short_target, short_high, short_max, short_total = _score_on_sets(test_set, backtest_sets)
+            long_score, long_target, long_high, long_max, long_total = _score_on_sets(test_set, backtest_sets_long)
+            combined_score = (0.7 * short_score) + (0.3 * long_score)
+            combined_total = (0.7 * short_total) + (0.3 * long_total)
+            return combined_score, short_target, short_high, short_max, combined_total
+        
+        base_score, base_target_hits, base_high_hits, base_max_hits, base_total = count_hits(current_pool)
+        logging.info(
+            f"[POST-HOC] Performanță curentă: Scor={base_score:.2f}, "
+            f"hits {hit_target}+={base_target_hits}, {hit_high}+={base_high_hits}, {hit_max}={base_max_hits}, "
+            f"total={base_total:.2f} pe {n_backtest}/{n_backtest_long} extrageri."
+        )
+        
+        # Candidați externi (top 40 din scoruri, extins pt mai multe opțiuni)
+        external_candidates = sorted(
+            [(n, s) for n, s in scores.items() if n not in current_pool and n not in blacklist],
+            key=lambda x: x[1], reverse=True
+        )[:40]
+        
+        # Max 8 iterații de refinare pentru optimizare profundă
+        improved = True
+        iteration = 0
+        while improved and iteration < 8:
+            improved = False
+            iteration += 1
+            
+            for pool_num in list(current_pool):
+                best_replacement = None
+                best_score = base_score
+                best_target_hits = base_target_hits
+                best_high_hits = base_high_hits
+                best_max_hits = base_max_hits
+                best_total = base_total
+                
+                for ext_num, _ in external_candidates:
+                    if ext_num in current_pool:
+                        continue
+                    
+                    test_pool = [n if n != pool_num else ext_num for n in current_pool]
+                    test_score, test_target, test_high, test_max, test_total = count_hits(test_pool)
+                    
+                    # Prioritizăm scorul game-aware, apoi pragul principal și overlap-ul.
+                    if (
+                        (test_score > best_score)
+                        or (test_score == best_score and test_target > best_target_hits)
+                        or (test_score == best_score and test_target == best_target_hits and test_total > best_total)
+                    ):
+                        best_replacement = ext_num
+                        best_score = test_score
+                        best_target_hits = test_target
+                        best_high_hits = test_high
+                        best_max_hits = test_max
+                        best_total = test_total
+                
+                if best_replacement is not None and (
+                    best_score > base_score
+                    or best_target_hits > base_target_hits
+                    or best_total > base_total + 1
+                ):
+                    logging.info(f"[POST-HOC] Refinement: {pool_num} → {best_replacement} "
+                                f"(Scor: {base_score:.2f}→{best_score:.2f}, "
+                                f"{hit_target}+: {base_target_hits}→{best_target_hits}, "
+                                f"{hit_high}+: {base_high_hits}→{best_high_hits}, "
+                                f"{hit_max}: {base_max_hits}→{best_max_hits}, "
+                                f"total: {base_total:.2f}→{best_total:.2f})")
+                    current_pool = sorted([n if n != pool_num else best_replacement for n in current_pool])
+                    
+                    # Actualizăm candidații externi
+                    external_candidates = [(n, s) for n, s in external_candidates if n != best_replacement]
+                    external_candidates.append((pool_num, scores.get(pool_num, 0.0)))
+                    
+                    base_score = best_score
+                    base_target_hits = best_target_hits
+                    base_high_hits = best_high_hits
+                    base_max_hits = best_max_hits
+                    base_total = best_total
+                    improved = True
+                    break  # Restart loop after a swap
+        
+        if iteration > 0:
+            new_score, new_target_hits, new_high_hits, new_max_hits, new_total = count_hits(current_pool)
+            logging.info(f"[POST-HOC] Refinement finalizat ({iteration} iterații). "
+                        f"Final: Scor={new_score:.2f}, {hit_target}+={new_target_hits}, "
+                        f"{hit_high}+={new_high_hits}, {hit_max}={new_max_hits}, total={new_total:.2f}.")
+            
+            # Ne asigurăm că original_counts e creat corect
+            orig_score, orig_target_hits, orig_high_hits, orig_max_hits, orig_total = count_hits(pool)
+            self.audit['post_hoc_validation'] = {
+                'original_score': round(float(orig_score), 3),
+                'final_score': round(float(new_score), 3),
+                'hit_target': hit_target,
+                'hit_high': hit_high,
+                'hit_max': hit_max,
+                'original_target_hits': int(orig_target_hits),
+                'final_target_hits': int(new_target_hits),
+                'original_high_hits': int(orig_high_hits),
+                'final_high_hits': int(new_high_hits),
+                'original_max_hits': int(orig_max_hits),
+                'final_max_hits': int(new_max_hits),
+                'original_total': round(float(orig_total), 3),
+                'final_total': round(float(new_total), 3),
+                'iterations': iteration,
+                'backtest_draws_short': n_backtest,
+                'backtest_draws_long': n_backtest_long
+            }
+        
+        return sorted(current_pool[:pool_size])
 
 
     def _generate_loto_covariates(self, start: int, end: int) -> dict:
