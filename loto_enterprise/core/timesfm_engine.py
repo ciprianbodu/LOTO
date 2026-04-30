@@ -661,17 +661,35 @@ def optimize_nqi_weights(
 # ---------------------------------------------------------------------------
 #  4. Anomaly Scoring pe context (return_forecast_on_context)
 # ---------------------------------------------------------------------------
+def compute_anomaly_from_context_pred(
+    ctx_pred: np.ndarray,
+    all_series: List[np.ndarray],
+    num_map: List[int],
+) -> Dict[int, float]:
+    """Calculează scor de predictibilitate per număr din predicția pe context deja obținută."""
+    anomaly_scores: Dict[int, float] = {}
+    try:
+        for i, num in enumerate(num_map):
+            actual = all_series[i]
+            predicted = ctx_pred[i, : len(actual)] if ctx_pred.ndim >= 2 else ctx_pred[: len(actual)]
+            if len(predicted) == len(actual):
+                mae = float(np.mean(np.abs(predicted - actual)))
+                anomaly_scores[num] = 1.0 / (1.0 + mae * 3.0)
+            else:
+                anomaly_scores[num] = 0.5
+    except Exception as e:
+        logging.warning(f"[TIMESFM] Anomaly post-process failed: {e}")
+        for num in num_map:
+            anomaly_scores[num] = 0.5
+    return anomaly_scores
+
+
 def compute_context_anomaly(
     tfm,
     all_series: List[np.ndarray],
     num_map: List[int],
 ) -> Dict[int, float]:
-    """
-    Rulează forecast cu return_forecast_on_context=True.
-    Compară predicțiile modelului pe context cu valorile reale.
-    Returnează un scor de „predictibilitate" per număr (mai mare = mai predictibil).
-    """
-    anomaly_scores: Dict[int, float] = {}
+    """Backward-compat: rulează un forecast separat cu return_forecast_on_context=True."""
     try:
         ctx_pred, _ = tfm.forecast(
             inputs=all_series,
@@ -679,25 +697,52 @@ def compute_context_anomaly(
             return_forecast_on_context=True,
             normalize=True,
         )
-        for i, num in enumerate(num_map):
-            actual = all_series[i]
-            predicted = ctx_pred[i, : len(actual)]
-            if len(predicted) == len(actual):
-                mae = float(np.mean(np.abs(predicted - actual)))
-                anomaly_scores[num] = 1.0 / (1.0 + mae * 3.0)
-            else:
-                anomaly_scores[num] = 0.5
+        return compute_anomaly_from_context_pred(np.asarray(ctx_pred), all_series, num_map)
     except Exception as e:
         logging.warning(f"[TIMESFM] Context anomaly detection failed: {e}")
-        for num in num_map:
-            anomaly_scores[num] = 0.5
-
-    return anomaly_scores
+        return {num: 0.5 for num in num_map}
 
 
 # ---------------------------------------------------------------------------
 #  5. Entry point principal: get_timesfm_scores_v2()
 # ---------------------------------------------------------------------------
+def _fallback_scores_no_tfm(
+    draw_matrix: np.ndarray | None,
+    params: dict,
+    is_joker_drum: bool,
+) -> Dict[int, float]:
+    """Fallback determinist când TimesFM/torch lipsesc.
+
+    Construiește un scor compozit (frecvență istorică + momentum recent +
+    gap inversat) ca să păstreze pipeline-ul funcțional fără modelul neural.
+    """
+    max_num = 20 if is_joker_drum else int(params.get("max_n", 49))
+    if draw_matrix is None or draw_matrix.size == 0:
+        return {n: 0.0 for n in range(1, max_num + 1)}
+
+    total_rows = draw_matrix.shape[0]
+    recent = draw_matrix[-min(50, total_rows):]
+    very_recent = draw_matrix[-min(15, total_rows):]
+
+    scores: Dict[int, float] = {}
+    for n in range(1, max_num + 1):
+        hist_freq = float(np.mean([1.0 if n in row else 0.0 for row in draw_matrix]))
+        recent_freq = float(np.mean([1.0 if n in row else 0.0 for row in recent])) if len(recent) else 0.0
+        very_recent_freq = float(np.mean([1.0 if n in row else 0.0 for row in very_recent])) if len(very_recent) else 0.0
+        last_seen = total_rows
+        for i in range(total_rows - 1, -1, -1):
+            if n in draw_matrix[i]:
+                last_seen = total_rows - 1 - i
+                break
+        gap_signal = 1.0 / (1.0 + last_seen / 10.0)
+        scores[n] = 0.40 * recent_freq + 0.25 * very_recent_freq + 0.20 * hist_freq + 0.15 * gap_signal
+
+    vmin = min(scores.values()) if scores else 0.0
+    vmax = max(scores.values()) if scores else 1.0
+    rng = max(vmax - vmin, 1e-6)
+    return {n: (s - vmin) / rng for n, s in scores.items()}
+
+
 def get_timesfm_scores_v2(
     data,
     draw_matrix: np.ndarray | None,
@@ -709,35 +754,55 @@ def get_timesfm_scores_v2(
 ) -> Dict[int, float]:
     """
     Motor principal TimesFM v2 — folosește TOATE capabilitățile API-ului.
+
+    Optimizări de comunicare cu TimesFM:
+      • Un singur `forecast()` per fereastră (cu return_forecast_on_context=True)
+        pentru a obține point/full/anomaly într-un singur apel GPU/CPU.
+      • Horizon adaptiv (mai mic pe CPU, full pe GPU).
+      • Ferestre de ensemble prunate pe CPU pentru viteză.
+      • Fallback determinist când librăria lipsește (nu mai întoarce {}).
     """
     if not HAS_TIMESFM:
-        logging.error(f"[TIMESFM-V2] Librăria lipsește: {_TFM_ERROR}")
-        return {}
+        logging.warning(
+            f"[TIMESFM-V2] Librăria lipsește ({_TFM_ERROR}). Folosesc fallback determinist."
+        )
+        fb = _fallback_scores_no_tfm(draw_matrix, params, is_joker_drum)
+        if audit is not None:
+            audit["timesfm_version"] = "fallback (no-tfm)"
+            audit["timesfm_device"] = "CPU"
+            audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted(fb.items(), key=lambda x: -x[1])[:25]}
+        return fb
 
     total_available = len(data) if data is not None else 0
     ctx_len = min(context_len, total_available, _get_context_cap())
     if ctx_len < 32:
-        return {}
+        return _fallback_scores_no_tfm(draw_matrix, params, is_joker_drum)
 
-    horizon = 20 # Capacitate maximă pentru analiza de trend pe termen lung
-    max_num = 20 if is_joker_drum else int(params.get("max_n", 49))
     device = _detect_device()
+    is_cpu = (device == "cpu")
+    horizon = 8 if is_cpu else 20
+    max_num = 20 if is_joker_drum else int(params.get("max_n", 49))
 
     context_windows = [ctx_len]
     if not is_regressive_step:
-        is_cpu = (_detect_device() == "cpu")
-        if not is_cpu and ctx_len > 1500:
-            context_windows.append(1000)
-        if ctx_len > 600:
-            context_windows.append(500)
-        if ctx_len > 350:
-            context_windows.append(300)
-        if ctx_len > 250:
-            context_windows.append(200)
-        if ctx_len > 150:
-            context_windows.append(100)
-        if ctx_len > 80:
-            context_windows.append(50)
+        if is_cpu:
+            if ctx_len > 250:
+                context_windows.append(200)
+            if ctx_len > 120:
+                context_windows.append(100)
+        else:
+            if ctx_len > 1500:
+                context_windows.append(1000)
+            if ctx_len > 600:
+                context_windows.append(500)
+            if ctx_len > 350:
+                context_windows.append(300)
+            if ctx_len > 250:
+                context_windows.append(200)
+            if ctx_len > 150:
+                context_windows.append(100)
+            if ctx_len > 80:
+                context_windows.append(50)
         
     ensemble_scores: List[Dict[int, float]] = []
     
@@ -760,9 +825,24 @@ def get_timesfm_scores_v2(
                 pad_len = aligned_ctx - raw_len
                 all_series = [np.concatenate([np.zeros(pad_len, dtype=np.float32), s]) for s in all_series]
             
-            # Forecast & Scores
-            point_forecast, full_forecast = tfm.forecast(inputs=all_series, freq=[0]*len(all_series), normalize=True)
-            
+            # Forecast unificat: într-un singur apel GPU/CPU obținem point+quantile,
+            # iar pentru pașii non-regresivi cerem și predicția pe context (anomaly)
+            # ca să eliminăm un al doilea forecast() redundant.
+            forecast_kwargs = {
+                "inputs": all_series,
+                "freq": [0] * len(all_series),
+                "normalize": True,
+            }
+            if not is_regressive_step:
+                forecast_kwargs["return_forecast_on_context"] = True
+
+            try:
+                point_forecast, full_forecast = tfm.forecast(**forecast_kwargs)
+            except TypeError:
+                # Versiuni mai vechi de timesfm care nu suportă return_forecast_on_context
+                forecast_kwargs.pop("return_forecast_on_context", None)
+                point_forecast, full_forecast = tfm.forecast(**forecast_kwargs)
+
             cov_forecast = None
             if not is_regressive_step:
                 try:
@@ -774,16 +854,35 @@ def get_timesfm_scores_v2(
                         freq=[0]*len(all_series),
                         xreg_mode="xreg + timesfm",
                         normalize_xreg_target_per_input=True,
-                        force_on_cpu=(device == "cpu"),
+                        force_on_cpu=is_cpu,
                     )
                     cov_forecast = np.array(cov_result[0]) if isinstance(cov_result, tuple) else np.array(cov_result)
                 except Exception: pass
             
+            # Decuplăm context-prefix vs horizon (când API-ul îl returnează concatenat)
+            pf_arr = np.asarray(point_forecast)
+            ff_arr = np.asarray(full_forecast)
+            ctx_pred = None
+            if pf_arr.ndim >= 2 and pf_arr.shape[1] > horizon:
+                ctx_len_in_pred = pf_arr.shape[1] - horizon
+                ctx_pred = pf_arr[:, :ctx_len_in_pred]
+                pf_future = pf_arr[:, ctx_len_in_pred:]
+                ff_future = ff_arr[:, ctx_len_in_pred:, ...] if ff_arr.ndim >= 3 and ff_arr.shape[1] >= horizon else ff_arr
+            else:
+                pf_future = pf_arr
+                ff_future = ff_arr
+
             if is_regressive_step:
                 # Mod ultra-rapid pentru calibrare: folosim doar point forecast-ul de baza
-                nqi = {num: float(point_forecast[i, 0]) for i, num in enumerate(num_map)}
+                nqi = {num: float(pf_future[i, 0]) for i, num in enumerate(num_map)}
             else:
-                anomaly_scores = compute_context_anomaly(tfm, all_series, num_map)
+                # Anomaly scoring: preferăm predicția pe context din același apel.
+                anomaly_scores: Dict[int, float] = {}
+                if ctx_pred is not None:
+                    anomaly_scores = compute_anomaly_from_context_pred(ctx_pred, all_series, num_map)
+                if not anomaly_scores:
+                    # Fallback la apelul separat (compatibilitate)
+                    anomaly_scores = compute_context_anomaly(tfm, all_series, num_map)
                 # Determinăm game_type din params
                 _game_type = "6/49"  # default
                 draw_n = params.get("draw_n", 6)
@@ -794,10 +893,10 @@ def get_timesfm_scores_v2(
                     _game_type = "joker"
                 
                 opt_weights = optimize_nqi_weights(
-                    all_series, num_map, point_forecast, full_forecast, cov_forecast,
+                    all_series, num_map, pf_future, ff_future, cov_forecast,
                     game_type=_game_type, draw_matrix=draw_matrix, pool_size=15
                 )
-                nqi = compute_nqi_scores(all_series, num_map, point_forecast, full_forecast, cov_forecast, horizon, opt_weights)
+                nqi = compute_nqi_scores(all_series, num_map, pf_future, ff_future, cov_forecast, horizon, opt_weights)
                 
                 # Apply Anomaly
                 for n in num_map:
@@ -806,8 +905,10 @@ def get_timesfm_scores_v2(
             ensemble_scores.append(nqi)
 
         # Rank-based fusion (mai robust decât media aritmetică)
-        if not ensemble_scores: return {}
-        
+        if not ensemble_scores:
+            logging.warning("[TIMESFM-V2] Ensemble gol — folosesc fallback determinist.")
+            return _fallback_scores_no_tfm(draw_matrix, params, is_joker_drum)
+
         final_nqi = _rank_fusion(ensemble_scores)
         
         # Pair + Triplet co-occurrence boost (numere care apar frecvent împreună)
@@ -830,8 +931,9 @@ def get_timesfm_scores_v2(
             sorted_scores = sorted(final_nqi.items(), key=lambda x: x[1], reverse=True)
             audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_scores[:25]}
             audit["ensemble_windows"] = context_windows
-            audit["timesfm_version"] = "v3 Rank Fusion + Pair Boost"
+            audit["timesfm_version"] = "v3.1 Unified Forecast + CPU/GPU adaptive"
             audit["timesfm_device"] = device.upper()
+            audit["timesfm_horizon"] = horizon
             if device == "gpu":
                 audit["timesfm_gpu_name"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Unknown"
             audit["raw_ensemble_scores"] = ensemble_scores
@@ -843,7 +945,7 @@ def get_timesfm_scores_v2(
         logging.error(f"[TIMESFM-V2] Eroare critică în ensemble: {e}")
         import traceback
         logging.error(traceback.format_exc())
-        return {}
+        return _fallback_scores_no_tfm(draw_matrix, params, is_joker_drum)
 
 
 # ---------------------------------------------------------------------------
