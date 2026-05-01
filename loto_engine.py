@@ -1371,10 +1371,13 @@ class LotoEngine:
             return self._get_initial_hard_core(freq, pool_size=pool_size, blacklist=blacklist)
 
         max_num = int(self.params.get("max_n", 49))
-        
+
         # Folosim selectorul diversificat din v3 engine
         if _HAS_TFM_V2:
-            pool = select_pool_from_scores(scores, pool_size, blacklist, self.audit, max_num=max_num)
+            pool = select_pool_from_scores(
+                scores, pool_size, blacklist, self.audit,
+                max_num=max_num, draw_matrix=self._draw_matrix,
+            )
         else:
             # Fallback legacy
             valid_scores = {num: score for num, score in scores.items() if num not in blacklist}

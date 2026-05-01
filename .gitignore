@@ -27,3 +27,6 @@ jurnal_*.json
 .numba_cache/
 .loto_cache/
 venv_timesfm/
+.claude/
+backtest_results.json
+scratch/overnight_log.txt

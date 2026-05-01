@@ -99,6 +99,14 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
     engine.data = df
     engine._build_draw_matrix()
     
+    try:
+        # Get actual eliminated numbers for the FULL (current) dataset at the best depth
+        eliminated_set = engine._get_timesfm_regressive_blacklist(best_depth)
+        results[best_depth]["eliminated_now"] = sorted(list(eliminated_set))
+    except Exception as e:
+        results[best_depth]["eliminated_now"] = []
+        logging.error(f"[CALIBRARE] Eroare la obtinerea numerelor eliminate curente: {e}")
+    
     # Restauram log-urile
     logging.getLogger().setLevel(old_level)
     

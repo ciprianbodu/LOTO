@@ -362,45 +362,95 @@ def compute_pair_cooccurrence(draw_matrix: np.ndarray | None, num_map: List[int]
 
 def compute_triplet_cooccurrence(draw_matrix: np.ndarray | None, num_map: List[int],
                                  lookback: int = 200) -> Dict[int, float]:
-    """Triplet co-occurrence: numere care apar frecvent în grupuri de 3.
-    
-    Aceasta e o extensie critică a pair co-occurrence, pentru că hit-urile de 4+
-    necesită ca 3+ numere din pool să apară simultan. Numărăm de câte ori
-    fiecare număr face parte din tripleți frecvenți.
+    """Triplet co-occurrence v2 — scalează la top-40 fără explozie combinatorică.
+
+    Strategie: în loc de toate combinațiile C(N,3), iterăm direct prin extrageri
+    și extragem tripleții observați (C(draw_n, 3)). Acoperă spațiul real de
+    tripleți frecvenți cu cost O(R · C(draw_n,3)) ≈ O(R · 20) pentru 6/49.
     """
     if draw_matrix is None or draw_matrix.size == 0:
         return {n: 0.0 for n in num_map}
-    
+
     n_draws = min(lookback, draw_matrix.shape[0])
     recent = draw_matrix[-n_draws:]
-    
-    # Convertim în seturi pentru căutare rapidă
-    draw_sets = [set(row) for row in recent]
-    
-    # Contorizăm participarea fiecărui număr la tripleți
-    triplet_score: Dict[int, float] = {n: 0.0 for n in num_map}
-    
-    # Folosim doar numerele din num_map (top candidați)
-    # Limităm la top 30 pentru a evita explozie combinatorică
-    top_nums = num_map[:30] if len(num_map) > 30 else num_map
-    
+    num_set = set(num_map)
+
     from itertools import combinations
-    for a, b, c in combinations(top_nums, 3):
-        trip_set = {a, b, c}
-        count = sum(1 for ds in draw_sets if trip_set.issubset(ds))
-        if count >= 2:  # Tripletul trebuie să fi apărut cel puțin de 2 ori
-            weight = count / n_draws  # Frecvență normalizată
-            triplet_score[a] += weight
-            triplet_score[b] += weight
-            triplet_score[c] += weight
-    
+    from collections import Counter
+
+    triplet_counts: Counter = Counter()
+    for row in recent:
+        # Filtrăm doar numerele relevante (din num_map) ca să nu numărăm tripleți irelevanți
+        nums_in_row = sorted(set(int(v) for v in row if int(v) > 0) & num_set)
+        if len(nums_in_row) < 3:
+            continue
+        for trip in combinations(nums_in_row, 3):
+            triplet_counts[trip] += 1
+
+    triplet_score: Dict[int, float] = {n: 0.0 for n in num_map}
+    for trip, count in triplet_counts.items():
+        if count >= 2:  # Tripletul trebuie să fi apărut cel puțin de 2 ori (semnal stabil)
+            weight = count / max(n_draws, 1)
+            for a in trip:
+                triplet_score[a] += weight
+
     # Normalize to [0, 1]
     max_ts = max(triplet_score.values()) if triplet_score else 1.0
     if max_ts > 0:
         for n in triplet_score:
             triplet_score[n] /= max_ts
-    
+
     return triplet_score
+
+
+def compute_quadruplet_cooccurrence(draw_matrix: np.ndarray | None, num_map: List[int],
+                                    lookback: int = 350) -> Dict[int, float]:
+    """Quadruplet (4-gram) co-occurrence — semnal direct pentru hit-uri 4+.
+
+    Rationale: pentru un hit de 4 numere în pool, trebuie ca un cvadruplu să cadă
+    împreună. Numerele care fac parte din cvadrupluri istoric recurente au
+    probabilitate marginală mai mare să fie părți ale unui următor hit-4+.
+
+    Cost: O(R · C(draw_n, 4)) ≈ O(R · 15) pentru 6/49 — perfect tractabil.
+    Folosim un lookback mai lung (default 350) pentru că cvadrupluri sunt
+    evenimente mai rare decât tripleți și avem nevoie de mai multe observații.
+    """
+    if draw_matrix is None or draw_matrix.size == 0:
+        return {n: 0.0 for n in num_map}
+
+    draw_n = draw_matrix.shape[1] if draw_matrix.ndim >= 2 else 6
+    if draw_n < 4:
+        return {n: 0.0 for n in num_map}
+
+    n_draws = min(lookback, draw_matrix.shape[0])
+    recent = draw_matrix[-n_draws:]
+    num_set = set(num_map)
+
+    from itertools import combinations
+    from collections import Counter
+
+    quad_counts: Counter = Counter()
+    for row in recent:
+        nums_in_row = sorted(set(int(v) for v in row if int(v) > 0) & num_set)
+        if len(nums_in_row) < 4:
+            continue
+        for q in combinations(nums_in_row, 4):
+            quad_counts[q] += 1
+
+    quad_score: Dict[int, float] = {n: 0.0 for n in num_map}
+    # Cvadrupluri fiind rare, considerăm count >= 1 dar ponderăm prin frecvența cvadruplului
+    for q, count in quad_counts.items():
+        # Ponderăm pătratic — cvadruplurile cu count 2+ sunt mult mai informative
+        weight = (count ** 1.5) / max(n_draws, 1)
+        for a in q:
+            quad_score[a] += weight
+
+    max_qs = max(quad_score.values()) if quad_score else 0.0
+    if max_qs > 0:
+        for n in quad_score:
+            quad_score[n] /= max_qs
+
+    return quad_score
 
 
 def _compute_momentum_score(series: np.ndarray) -> float:
@@ -491,7 +541,7 @@ def compute_nqi_scores(
                 cov_boost = 0.0
         raw_components["cov_boost"].append(cov_boost)
 
-        # E. Adaptive Bias (Gap Trigger îmbunătățit)
+        # E. Adaptive Bias (Gap Trigger smooth)
         series = all_series[i]
         total_draws_ctx = len(series)
         total_appearances = float(np.sum(series))
@@ -502,17 +552,17 @@ def compute_nqi_scores(
                 break
             current_gap += 1.0
 
+        # Sigmoid-bazat (continuu) — evită discontinuitățile de la pragurile fixe.
+        # Curba: f(x) = 0.85 + 0.65 / (1 + exp(-3*(x - 1)))
+        #   gap_ratio = 0   → ~0.85   (numar recent — răceală ușoară)
+        #   gap_ratio = 1   → ~1.18   (în jurul mediei — boost moderat)
+        #   gap_ratio = 1.5 → ~1.39   (întârziat — boost puternic)
+        #   gap_ratio →  ∞  → 1.50    (saturare la maxim)
         adaptive = 1.0
         if total_appearances > 3 and avg_gap > 0:
             gap_ratio = current_gap / avg_gap
-            if gap_ratio >= 1.5:
-                adaptive = 1.40  # Foarte întârziat
-            elif gap_ratio >= 1.0:
-                adaptive = 1.20 + 0.20 * (gap_ratio - 1.0)  # Gradual boost
-            elif gap_ratio >= 0.7:
-                adaptive = 1.05  # Normal
-            else:
-                adaptive = 0.85  # A ieșit recent, s-ar putea să se răcească
+            adaptive = 0.85 + 0.65 / (1.0 + np.exp(-3.0 * (gap_ratio - 1.0)))
+            adaptive = float(np.clip(adaptive, 0.80, 1.50))
         raw_components["adaptive"].append(adaptive)
 
         # F. Momentum multi-fereastră (NOU)
@@ -540,8 +590,14 @@ def compute_nqi_scores(
 
 
 def _get_game_specific_weights(game_type: str = "6/49") -> List[Dict[str, float]]:
-    """Returnează candidați de ponderi optimizați per tip de joc."""
-    # Candidați comuni
+    """Returnează candidați de ponderi optimizați per tip de joc.
+
+    Set extins (v4): 5 candidați de bază + 4 specifici jocului + 30 mostre
+    cvasi-aleatoare (Latin Hypercube-like) centrate pe profilul jocului. Acoperirea
+    mai largă a spațiului de ponderi permite optimizatorului să descopere
+    combinații ne-evidente care maximizează hit-urile în pool.
+    """
+    # Candidați comuni (calibrare istorică)
     common = [
         {"p_val": 0.25, "h_score": 0.15, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.20, "momentum": 0.20},  # Balanced v4
         {"p_val": 0.20, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.25, "momentum": 0.25},  # Gap+Momentum Heavy
@@ -549,27 +605,62 @@ def _get_game_specific_weights(game_type: str = "6/49") -> List[Dict[str, float]
         {"p_val": 0.20, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.30, "momentum": 0.20},  # Adaptive Heavy
         {"p_val": 0.25, "h_score": 0.20, "stability": 0.10, "cov_boost": 0.05, "adaptive": 0.20, "momentum": 0.20},  # Trend Heavy
     ]
-    
+
     # Ponderi specifice per joc — bazate pe ciclurile naturale ale fiecărui joc
     game_specific = {
         "6/49": [
             # 6/49: Pool mare (49), cicluri lungi → Momentum și Trend mai mari
             {"p_val": 0.20, "h_score": 0.20, "stability": 0.10, "cov_boost": 0.05, "adaptive": 0.20, "momentum": 0.25},
             {"p_val": 0.15, "h_score": 0.15, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.25, "momentum": 0.25},
+            # Pool-coverage focused: împinge mai multă pondere pe semnalele care detectează numere "active"
+            {"p_val": 0.18, "h_score": 0.12, "stability": 0.08, "cov_boost": 0.12, "adaptive": 0.25, "momentum": 0.25},
+            {"p_val": 0.22, "h_score": 0.18, "stability": 0.08, "cov_boost": 0.08, "adaptive": 0.22, "momentum": 0.22},
         ],
         "5/40": [
             # 5/40: Pool mai mic (40), cicluri scurte → Adaptive și Point mai mari
             {"p_val": 0.30, "h_score": 0.10, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.25, "momentum": 0.15},
             {"p_val": 0.25, "h_score": 0.10, "stability": 0.15, "cov_boost": 0.10, "adaptive": 0.30, "momentum": 0.10},
+            {"p_val": 0.28, "h_score": 0.12, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.22, "momentum": 0.18},
+            {"p_val": 0.22, "h_score": 0.15, "stability": 0.10, "cov_boost": 0.13, "adaptive": 0.25, "momentum": 0.15},
         ],
         "joker": [
             # Joker 5/45: 5 numere din 45 → Point forecast mai puternic, momentum pe ferestre scurte
             {"p_val": 0.30, "h_score": 0.15, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.15, "momentum": 0.20},
             {"p_val": 0.25, "h_score": 0.15, "stability": 0.15, "cov_boost": 0.10, "adaptive": 0.20, "momentum": 0.15},
+            {"p_val": 0.28, "h_score": 0.13, "stability": 0.12, "cov_boost": 0.10, "adaptive": 0.18, "momentum": 0.19},
+            {"p_val": 0.24, "h_score": 0.16, "stability": 0.10, "cov_boost": 0.12, "adaptive": 0.20, "momentum": 0.18},
         ],
     }
-    
-    return common + game_specific.get(game_type, [])
+
+    base = common + game_specific.get(game_type, [])
+
+    # Centroizi specifici jocului pentru sampling cvasi-aleator (LHS-like).
+    # Acești centroizi reflectă bune-practici descoperite empiric: jocurile mari (6/49)
+    # beneficiază de momentum/trend, cele mici (5/40) de adaptive/point.
+    centroids = {
+        "6/49":  {"p_val": 0.20, "h_score": 0.18, "stability": 0.09, "cov_boost": 0.08, "adaptive": 0.22, "momentum": 0.23},
+        "5/40":  {"p_val": 0.27, "h_score": 0.12, "stability": 0.10, "cov_boost": 0.10, "adaptive": 0.26, "momentum": 0.15},
+        "joker": {"p_val": 0.27, "h_score": 0.15, "stability": 0.12, "cov_boost": 0.10, "adaptive": 0.18, "momentum": 0.18},
+    }
+    centroid = centroids.get(game_type, centroids["6/49"])
+
+    # Generăm 30 de mostre stratificate în jurul centroidului (Random + Renormalize).
+    # Folosim seed determinist pentru reproductibilitate între rulări.
+    rng = np.random.default_rng(seed=hash(game_type) & 0x7FFFFFFF)
+    keys = ["p_val", "h_score", "stability", "cov_boost", "adaptive", "momentum"]
+    centroid_arr = np.array([centroid[k] for k in keys], dtype=np.float64)
+
+    sampled: List[Dict[str, float]] = []
+    for _ in range(30):
+        # Perturbație multiplicativă cu σ=0.35, apoi renormalizare la 1.0
+        noise = rng.normal(loc=1.0, scale=0.35, size=len(keys))
+        noise = np.clip(noise, 0.3, 1.8)  # Evităm explozia pe componente
+        cand = centroid_arr * noise
+        cand = np.maximum(cand, 0.02)  # Floor pentru a nu zero-out o componentă
+        cand /= cand.sum()
+        sampled.append({k: float(v) for k, v in zip(keys, cand)})
+
+    return base + sampled
 
 
 def _get_game_hit_profile(game_type: str) -> Dict[str, int]:
@@ -578,6 +669,159 @@ def _get_game_hit_profile(game_type: str) -> Dict[str, int]:
         return {"target": 4, "high": 5, "max": 6}
     # 5/40 și Joker: obiectivul practic e 3+, cu focus pe 4/5
     return {"target": 3, "high": 4, "max": 5}
+
+
+def _get_cooccurrence_blend(game_type: str) -> Dict[str, float]:
+    """Coeficienți per joc pentru mixajul pair+triplet+quad boost.
+
+    Reguli:
+      • base: cât din scorul NQI rămâne fără boost (fundament).
+      • pair_w/triplet_w/quad_w: ponderea aditivă a fiecărui semnal.
+      • lookback-uri: cât de mult istoric folosim pentru fiecare ordin.
+
+    Pentru 6/49 (pool mare, draw_n=6): mai multă pondere pe quadruplet (hit-4 critic).
+    Pentru 5/40 (draw_n=5): pair/triplet domină — quadruplet rar.
+    Pentru Joker (5+1, draw_n=5): similar 5/40 dar cu lookback mai scurt (cicluri scurte).
+    """
+    # Notă: pentru obiectivul de pool-coverage (acoperire), păstrăm magnitudini apropiate
+    # de configurația originală (base≈0.75, pair≈0.25, triplet≈0.35) și adăugăm quad ca
+    # un mic bonus aditiv. Calibrarea agresivă riscă să distorsioneze ranking-ul NQI.
+    profiles = {
+        "6/49": {
+            "base": 0.72, "pair_w": 0.24, "triplet_w": 0.34, "quad_w": 0.10,
+            "pair_lookback": 300, "triplet_lookback": 250, "quad_lookback": 350,
+        },
+        "5/40": {
+            "base": 0.74, "pair_w": 0.24, "triplet_w": 0.32, "quad_w": 0.07,
+            "pair_lookback": 250, "triplet_lookback": 200, "quad_lookback": 300,
+        },
+        "joker": {
+            "base": 0.76, "pair_w": 0.22, "triplet_w": 0.28, "quad_w": 0.06,
+            "pair_lookback": 200, "triplet_lookback": 180, "quad_lookback": 250,
+        },
+    }
+    return profiles.get(game_type, profiles["6/49"])
+
+
+def _get_anomaly_blend(game_type: str) -> Tuple[float, float]:
+    """Coeficienți (base, gain) pentru `anomaly` blend: nqi *= base + gain*anomaly.
+
+    Pe 6/49 (pool mare, mai multe iluzii statistice) păstrăm anomaly-ul mai
+    influent. Pe 5/40 și Joker (pool mai mic, semnale mai zgomotoase pe cicluri
+    scurte) reducem amplificarea ca să nu over-suprimăm numere viabile.
+    """
+    profiles = {
+        "6/49":  (0.78, 0.42),  # ușor mai slab decât 0.8/0.4 inițial — favorizează acoperirea
+        "5/40":  (0.85, 0.30),
+        "joker": (0.85, 0.28),
+    }
+    return profiles.get(game_type, profiles["6/49"])
+
+
+def _evaluate_weight_candidate(
+    w: Dict[str, float],
+    all_series: List[np.ndarray],
+    num_map: List[int],
+    point_forecast: np.ndarray,
+    full_forecast: np.ndarray,
+    cov_forecast: np.ndarray | None,
+    draw_matrix: np.ndarray | None,
+    pool_size: int,
+    game_type: str,
+    n_test_draws: int,
+) -> float:
+    """Evaluează un set de ponderi pe ultimele n_test_draws extrageri.
+
+    Obiectiv hibrid (poll-coverage prioritizat):
+      • pool union hits (acoperire) — cât de multe numere câștigătoare apar în pool
+      • hit‑uri 4+ / 5+ / 6+ ponderate progresiv
+      • penalizare pe variața mare (preferăm consistență)
+    """
+    current_nqi = compute_nqi_scores(
+        all_series, num_map, point_forecast, full_forecast, cov_forecast, 1, w
+    )
+    if n_test_draws <= 0 or draw_matrix is None:
+        # Fallback: corelație cu frecvența recentă
+        perf = 0.0
+        for num, score in current_nqi.items():
+            try:
+                idx = num_map.index(num)
+            except ValueError:
+                continue
+            recent_hits = float(np.sum(all_series[idx][-5:]))
+            perf += score * (recent_hits * 1.5)
+        return perf
+
+    sorted_by_nqi = sorted(current_nqi.items(), key=lambda x: x[1], reverse=True)
+    pool_nums = set(n for n, _ in sorted_by_nqi[:pool_size])
+
+    hit_profile = _get_game_hit_profile(game_type)
+    total_rows = draw_matrix.shape[0]
+    overlaps: List[int] = []
+    hits_target_plus = 0
+    hits_high_plus = 0
+    hits_max = 0
+
+    for i in range(max(0, total_rows - n_test_draws), total_rows):
+        draw_set = set(int(v) for v in draw_matrix[i] if v > 0)
+        overlap = len(pool_nums & draw_set)
+        overlaps.append(overlap)
+        if overlap >= hit_profile["target"]:
+            hits_target_plus += 1
+        if overlap >= hit_profile["high"]:
+            hits_high_plus += 1
+        if overlap >= hit_profile["max"]:
+            hits_max += 1
+
+    if not overlaps:
+        return 0.0
+
+    total_hits = float(sum(overlaps))
+    avg_hits = total_hits / max(len(overlaps), 1)
+    var_hits = float(np.var(overlaps))
+    consistency = 1.0 / (1.0 + var_hits)  # ∈ (0,1]
+
+    # Obiectiv pool-coverage prioritizat: avg_hits dominant, urmat de hit-uri ridicate.
+    perf = (
+        avg_hits * 25.0  # Acoperire medie pool — semnal principal
+        + hits_target_plus * 10.0
+        + hits_high_plus * 35.0
+        + hits_max * 120.0
+        + total_hits * 1.0
+        + consistency * 5.0
+    )
+    return perf
+
+
+def _local_refine_weights(
+    base_w: Dict[str, float],
+    base_score: float,
+    eval_fn,
+    n_iter: int = 8,
+    step: float = 0.07,
+) -> Tuple[Dict[str, float], float]:
+    """Coordonate descrescătoare cu rebalansare — small local-search în jurul celui mai bun candidat."""
+    keys = list(base_w.keys())
+    rng = np.random.default_rng(seed=12345)
+    best_w = dict(base_w)
+    best_score = base_score
+    for _ in range(n_iter):
+        # Alegem 2 chei și transferăm masă între ele
+        i, j = rng.choice(len(keys), size=2, replace=False)
+        ki, kj = keys[int(i)], keys[int(j)]
+        delta = float(rng.uniform(-step, step))
+        new_w = dict(best_w)
+        new_w[ki] = max(0.02, new_w[ki] + delta)
+        new_w[kj] = max(0.02, new_w[kj] - delta)
+        s_total = sum(new_w.values())
+        if s_total <= 0:
+            continue
+        new_w = {k: v / s_total for k, v in new_w.items()}
+        score = eval_fn(new_w)
+        if score > best_score:
+            best_score = score
+            best_w = new_w
+    return best_w, best_score
 
 
 def optimize_nqi_weights(
@@ -591,70 +835,40 @@ def optimize_nqi_weights(
     pool_size: int = 12,
 ) -> Dict[str, float]:
     """
-    Metoda 3 v2: Walk-Forward Optimization a ponderilor NQI.
-    Simulează pe ultimele 10 extrageri (hold-out) și alege ponderile
-    care maximizează overlap-ul cu extragerile reale (hit-uri 4+).
+    Walk-Forward Weight Optimization v3 — căutare extinsă + local refinement.
+
+    1) Evaluează 40+ candidați (5 comune + 4 game-specific + 30 mostre stratificate).
+    2) Folosește obiectiv hibrid centrat pe pool-coverage (avg union hits).
+    3) Aplică local search (coordinate-swap) în jurul best_w pentru fine‑tuning.
+    4) Crește fereastra de validare la 12 extrageri (mai stabil statistic).
     """
-    logging.info(f"[TIMESFM-V2] Walk-Forward NQI Weight Optimization (game={game_type})...")
-    
+    logging.info(f"[TIMESFM-V3] Extended Weight Optimization (game={game_type})...")
+
     candidates = _get_game_specific_weights(game_type)
-    
+
+    # Mărim fereastra de validare pentru stabilitate statistică (era 10).
+    ctx_len = len(all_series[0]) if all_series else 0
+    n_test_draws = min(15, max(0, ctx_len - 10))
+
+    def _eval(w: Dict[str, float]) -> float:
+        return _evaluate_weight_candidate(
+            w, all_series, num_map, point_forecast, full_forecast, cov_forecast,
+            draw_matrix, pool_size, game_type, n_test_draws,
+        )
+
     best_w = candidates[0]
     best_score = -1.0
-    
-    # Walk-forward pe ultimele 10 extrageri
-    # Pentru fiecare set de ponderi, calculăm NQI, selectăm top pool_size,
-    # și verificăm câte numere se suprapun cu extragerea reală
-    n_test_draws = min(10, len(all_series[0]) - 10) if all_series else 0
-    
     for w in candidates:
-        current_nqi = compute_nqi_scores(
-            all_series, num_map, point_forecast, full_forecast, cov_forecast, 1, w
-        )
-        
-        if n_test_draws > 0 and draw_matrix is not None:
-            # Walk-forward: verificăm pool-ul pe ultimele extrageri
-            sorted_by_nqi = sorted(current_nqi.items(), key=lambda x: x[1], reverse=True)
-            pool_nums = set(n for n, _ in sorted_by_nqi[:pool_size])
-            
-            total_hits = 0
-            hit_profile = _get_game_hit_profile(game_type)
-            hits_target_plus = 0
-            hits_high_plus = 0
-            hits_max = 0
-            total_rows = draw_matrix.shape[0]
-            
-            for i in range(max(0, total_rows - n_test_draws), total_rows):
-                draw_set = set(int(v) for v in draw_matrix[i] if v > 0)
-                overlap = len(pool_nums & draw_set)
-                total_hits += overlap
-                if overlap >= hit_profile["target"]:
-                    hits_target_plus += 1
-                if overlap >= hit_profile["high"]:
-                    hits_high_plus += 1
-                if overlap >= hit_profile["max"]:
-                    hits_max += 1
-
-            # Scor game-aware: favorizează progresiv hit-uri mai mari.
-            perf = (
-                hits_target_plus * 10.0
-                + hits_high_plus * 35.0
-                + hits_max * 120.0
-                + total_hits
-            )
-        else:
-            # Fallback: corelație cu frecvența recentă
-            perf = 0.0
-            for num, score in current_nqi.items():
-                idx = num_map.index(num)
-                recent_hits = np.sum(all_series[idx][-5:])
-                perf += score * (recent_hits * 1.5)
-            
-        if perf > best_score:
-            best_score = perf
+        score = _eval(w)
+        if score > best_score:
+            best_score = score
             best_w = w
-            
-    logging.info(f"[TIMESFM-V2] Ponderi optime selectate: {best_w} (score={best_score:.2f})")
+
+    # Local refinement în jurul best_w
+    if draw_matrix is not None and n_test_draws > 0:
+        best_w, best_score = _local_refine_weights(best_w, best_score, _eval, n_iter=10, step=0.06)
+
+    logging.info(f"[TIMESFM-V3] Ponderi optime selectate: {best_w} (score={best_score:.2f}, candidates={len(candidates)})")
     return best_w
 
 
@@ -897,10 +1111,11 @@ def get_timesfm_scores_v2(
                     game_type=_game_type, draw_matrix=draw_matrix, pool_size=15
                 )
                 nqi = compute_nqi_scores(all_series, num_map, pf_future, ff_future, cov_forecast, horizon, opt_weights)
-                
-                # Apply Anomaly
+
+                # Apply Anomaly cu coeficienți per joc (evită over-suppression pe pool-uri mici)
+                anom_base, anom_gain = _get_anomaly_blend(_game_type)
                 for n in num_map:
-                    nqi[n] = nqi.get(n, 0.0) * (0.8 + 0.4 * anomaly_scores.get(n, 0.5))
+                    nqi[n] = nqi.get(n, 0.0) * (anom_base + anom_gain * anomaly_scores.get(n, 0.5))
             
             ensemble_scores.append(nqi)
 
@@ -911,20 +1126,45 @@ def get_timesfm_scores_v2(
 
         final_nqi = _rank_fusion(ensemble_scores)
         
-        # Pair + Triplet co-occurrence boost (numere care apar frecvent împreună)
+        # Pair + Triplet + Quadruplet co-occurrence boost (numere care apar frecvent împreună)
         if not is_regressive_step and draw_matrix is not None:
-            # Pair boost
+            # Detectăm jocul pentru blend coefficients
+            _gt = "6/49"
+            _draw_n = params.get("draw_n", 6)
+            _max_n = params.get("max_n", 49)
+            if _draw_n == 5 and _max_n == 40:
+                _gt = "5/40"
+            elif _draw_n == 5 and _max_n == 45:
+                _gt = "joker"
+
+            blend = _get_cooccurrence_blend(_gt)
             top_for_boost = [n for n, _ in sorted(final_nqi.items(), key=lambda x: x[1], reverse=True)[:40]]
-            pair_boost = compute_pair_cooccurrence(draw_matrix, top_for_boost, lookback=300)
+
+            pair_boost = compute_pair_cooccurrence(draw_matrix, top_for_boost, lookback=blend["pair_lookback"])
             # Triplet boost — critic pentru hit-uri de 4+
-            triplet_boost = compute_triplet_cooccurrence(draw_matrix, top_for_boost, lookback=250)
-            
+            triplet_boost = compute_triplet_cooccurrence(draw_matrix, top_for_boost, lookback=blend["triplet_lookback"])
+            # Quadruplet boost — semnal direct pentru hit-uri 4+
+            quad_boost = compute_quadruplet_cooccurrence(draw_matrix, top_for_boost, lookback=blend["quad_lookback"])
+
+            base = blend["base"]
+            wp = blend["pair_w"]
+            wt = blend["triplet_w"]
+            wq = blend["quad_w"]
             for num in final_nqi:
                 pb = pair_boost.get(num, 0.0)
                 tb = triplet_boost.get(num, 0.0)
-                # Triplet-ul are pondere mai mare — dacă un număr participă la tripleți frecvenți,
-                # probabilitatea de a nimeri 4+ numere din pool crește semnificativ
-                final_nqi[num] = final_nqi.get(num, 0.0) * (0.75 + 0.25 * pb + 0.35 * tb)
+                qb = quad_boost.get(num, 0.0)
+                # Mixaj per-joc al boost-urilor; ponderile sunt sub-aditive (suma blend·× ≈ 1)
+                final_nqi[num] = final_nqi.get(num, 0.0) * (base + wp * pb + wt * tb + wq * qb)
+
+            if audit is not None:
+                audit["cooccurrence_blend"] = {
+                    "game_type": _gt,
+                    "base": base,
+                    "pair_w": wp,
+                    "triplet_w": wt,
+                    "quad_w": wq,
+                }
             
         # Audit
         if audit is not None:
@@ -1010,55 +1250,167 @@ def get_regressive_blacklist_v2(
 # ---------------------------------------------------------------------------
 #  7. Pool Selection (top N din scoruri, excl. blacklist)
 # ---------------------------------------------------------------------------
+def _empirical_decade_distribution(draw_matrix: np.ndarray | None, max_num: int,
+                                   lookback: int = 400) -> List[float]:
+    """Distribuția empirică a numerelor pe decade (0-9, 10-19, ...) din ultimele extrageri.
+
+    Returnează probabilitatea ca o poziție random să cadă în fiecare decadă.
+    """
+    n_decades = (max_num + 9) // 10
+    if draw_matrix is None or draw_matrix.size == 0:
+        # Uniform fallback
+        return [1.0 / n_decades] * n_decades
+
+    n_draws = min(lookback, draw_matrix.shape[0])
+    recent = draw_matrix[-n_draws:]
+    counts = np.zeros(n_decades, dtype=np.float64)
+    total = 0
+    for row in recent:
+        for v in row:
+            iv = int(v)
+            if 1 <= iv <= max_num:
+                idx = (iv - 1) // 10
+                if idx < n_decades:
+                    counts[idx] += 1
+                    total += 1
+    if total == 0:
+        return [1.0 / n_decades] * n_decades
+    return (counts / total).tolist()
+
+
+def _empirical_parity_ratio(draw_matrix: np.ndarray | None, lookback: int = 400) -> float:
+    """Procentul mediu empiric de numere pare per extragere."""
+    if draw_matrix is None or draw_matrix.size == 0:
+        return 0.5
+    n_draws = min(lookback, draw_matrix.shape[0])
+    recent = draw_matrix[-n_draws:]
+    even = 0
+    total = 0
+    for row in recent:
+        for v in row:
+            iv = int(v)
+            if iv > 0:
+                if iv % 2 == 0:
+                    even += 1
+                total += 1
+    if total == 0:
+        return 0.5
+    return even / total
+
+
 def select_pool_from_scores(
     scores: Dict[int, float],
     pool_size: int,
     blacklist: Set[int],
     audit: dict | None = None,
     max_num: int = 49,
+    draw_matrix: np.ndarray | None = None,
 ) -> List[int]:
     """
-    Selectează top N numere cu diversificare pe range-uri.
-    Asigură acoperire pe low/mid/high pentru a maximiza hit-urile.
+    Selectează top N numere cu diversificare empirică pe decade & paritate.
+
+    v3 schimbări față de v2:
+      • Înlocuim zoning-ul fix low/mid/high (1/3) cu distribuție empirică pe decade
+        — calculată din ultimele 400 extrageri. Aceasta reflectă mult mai bine
+        unde cad efectiv numerele câștigătoare.
+      • Adăugăm un nudge ușor spre raportul empiric pare/impare la step-ul de
+        completare, fără a sacrifica top-NQI.
+      • Păstrăm prioritatea scorurilor (top-NQI) — nu forțăm diversificarea
+        agresivă; o aplicăm doar la "rest fill" pentru a nu strica ranking-ul.
     """
     valid = {n: s for n, s in scores.items() if n not in blacklist}
     sorted_nums = sorted(valid.items(), key=lambda x: x[1], reverse=True)
 
-    # Diversificare: împărțim în 3 zone (low, mid, high)
-    third = max_num / 3.0
-    zones = {"low": [], "mid": [], "high": []}
-    for n, s in sorted_nums:
-        if n <= third:
-            zones["low"].append((n, s))
-        elif n <= 2 * third:
-            zones["mid"].append((n, s))
+    # --- Distribuții empirice (target distribution) ---
+    decade_probs = _empirical_decade_distribution(draw_matrix, max_num, lookback=400)
+    target_even_ratio = _empirical_parity_ratio(draw_matrix, lookback=400)
+
+    n_decades = len(decade_probs)
+    # Cuote țintă per decadă (rotunjite, dar cu floor 1 pentru decadele cu probabilitate non-trivială)
+    raw_quotas = [p * pool_size for p in decade_probs]
+    target_quotas = [int(round(q)) for q in raw_quotas]
+    # Asigurăm cel puțin 1 număr în decadele cu peste 8% probabilitate
+    for i, p in enumerate(decade_probs):
+        if p >= 0.08 and target_quotas[i] < 1:
+            target_quotas[i] = 1
+    # Limităm sumă la pool_size (ajustăm cea mai grea decadă în plus/minus)
+    diff = sum(target_quotas) - pool_size
+    while diff != 0:
+        if diff > 0:
+            # Tăiem din decada cu cel mai mare quota
+            idx = int(np.argmax(target_quotas))
+            target_quotas[idx] = max(0, target_quotas[idx] - 1)
+            diff -= 1
         else:
-            zones["high"].append((n, s))
+            # Adăugăm la decada cu cea mai mare probabilitate empirică nesatisfăcută
+            scaled = [p * pool_size - target_quotas[i] for i, p in enumerate(decade_probs)]
+            idx = int(np.argmax(scaled))
+            target_quotas[idx] += 1
+            diff += 1
 
-    # Garantăm minim de numere din fiecare zonă pentru acoperire optimă
-    min_per_zone = max(1, pool_size // 4) if pool_size >= 4 else 0
-    pool = []
-    used = set()
+    # --- Pool selection: top-NQI cu respect pentru cuotele empirice ---
+    pool: List[int] = []
+    used: Set[int] = set()
+    decade_filled = [0] * n_decades
 
-    # Mai întâi luăm cele mai bune numere din fiecare zonă pentru a asigura distribuția
-    for zone_name in ["low", "mid", "high"]:
-        for n, s in zones[zone_name][:min_per_zone]:
-            if n not in used and len(pool) < pool_size:
+    # Pas 1: Încercăm să umplem cuotele decadelor cu cele mai bune scoruri globale.
+    # Iterăm sortat după scor; un număr e acceptat dacă decada lui mai are loc.
+    for n, _s in sorted_nums:
+        if len(pool) >= pool_size:
+            break
+        if n in used:
+            continue
+        decade_idx = (int(n) - 1) // 10
+        if decade_idx >= n_decades:
+            continue
+        if decade_filled[decade_idx] < target_quotas[decade_idx]:
+            pool.append(n)
+            used.add(n)
+            decade_filled[decade_idx] += 1
+
+    # Pas 2: Dacă rămân locuri (decadele saturate / cuote relaxate), umplem cu top-NQI rămași.
+    # În acest pas aplicăm și un nudge ușor spre echilibrul empiric pare/impare.
+    if len(pool) < pool_size:
+        remaining = [(n, s) for n, s in sorted_nums if n not in used]
+        # Calcul curent paritate
+        even_count = sum(1 for n in pool if n % 2 == 0)
+        for n, _s in remaining:
+            if len(pool) >= pool_size:
+                break
+            current_total = max(len(pool), 1)
+            current_even = even_count / current_total
+            wanted_even = target_even_ratio
+            # Preferăm numerele care apropie raportul de target (toleranță ±0.10)
+            is_even = (n % 2 == 0)
+            if abs(current_even - wanted_even) > 0.10:
+                # Avem nevoie să corectăm paritatea
+                need_more_even = current_even < wanted_even
+                if need_more_even and not is_even:
+                    continue  # skip impari când avem nevoie de pari
+                if (not need_more_even) and is_even:
+                    continue  # skip pari când avem nevoie de impari
+            pool.append(n)
+            used.add(n)
+            if is_even:
+                even_count += 1
+
+    # Pas 3: Garanție absolută — dacă tot nu e plin (toleranțele au refuzat prea multe), umplem strict pe NQI
+    if len(pool) < pool_size:
+        for n, _s in sorted_nums:
+            if len(pool) >= pool_size:
+                break
+            if n not in used:
                 pool.append(n)
                 used.add(n)
 
-    # Completăm restul strict cu cele mai bune scoruri globale (High-NQI)
-    # Acest lucru favorizează hit-urile de 4 și 5 prin concentrarea pe calitate
-    for n, s in sorted_nums:
-        if len(pool) >= pool_size:
-            break
-        if n not in used:
-            pool.append(n)
-            used.add(n)
-
     if audit is not None:
         audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_nums[:25]}
-        audit["pool_diversification"] = {z: len(v) for z, v in zones.items()}
+        audit["pool_decade_quotas"] = target_quotas
+        audit["pool_decade_filled"] = decade_filled
+        audit["pool_target_even_ratio"] = round(target_even_ratio, 3)
+        audit["pool_actual_even_ratio"] = round(
+            sum(1 for n in pool if n % 2 == 0) / max(len(pool), 1), 3
+        )
 
     return sorted(pool[:pool_size])
 

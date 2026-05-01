@@ -430,23 +430,42 @@ if st.session_state.get("start_calib_now", False):
 
         from calibreaza import run_calibration
         from loto_engine import LotoEngine
-        fname, df = st.session_state["loaded_datasets"][0]
-        g_label = "6/49"
-        if "5_40" in fname.lower() or "5/40" in fname.lower(): g_label = "5/40"
-        elif "joker" in fname.lower(): g_label = "joker"
         
-        calib_engine = LotoEngine(game_type=g_label)
-        calib_engine.data = df.copy()
-        calib_engine._build_draw_matrix()
-        
-        # Citim pool_size din session_state pentru a fi consistenți
+        if "calib_res_dict" not in st.session_state:
+            st.session_state["calib_res_dict"] = {}
+        if "calib_best_depth_dict" not in st.session_state:
+            st.session_state["calib_best_depth_dict"] = {}
+            
         p_size_calib = st.session_state["pool_size_val"]
-        best_depth, calib_res = run_calibration(calib_engine, test_draws=2, pool_size=p_size_calib, progress_cb=update_p)
-        st.session_state["sim_depth_val"] = best_depth
-        st.session_state["sim_depth_suffix"] += 1
+        total_datasets = len(st.session_state["loaded_datasets"])
         
-        st.session_state["calib_res"] = calib_res
-        st.session_state["calib_best_depth"] = best_depth
+        for idx, (fname, df) in enumerate(st.session_state["loaded_datasets"]):
+            g_label = "6/49"
+            if "5_40" in fname.lower() or "5/40" in fname.lower(): g_label = "5/40"
+            elif "joker" in fname.lower(): g_label = "joker"
+            
+            def make_update_p(idx, total, g_label):
+                def _update(val, msg):
+                    overall_progress = (idx / total) + (val / total)
+                    p_bar.progress(overall_progress, text=f"Calibrare {g_label}: {msg}")
+                return _update
+            
+            cb = make_update_p(idx, total_datasets, g_label)
+            
+            calib_engine = LotoEngine(game_type=g_label)
+            calib_engine.data = df.copy()
+            calib_engine._build_draw_matrix()
+            
+            best_depth, calib_res = run_calibration(calib_engine, test_draws=2, pool_size=p_size_calib, progress_cb=cb)
+            
+            st.session_state["calib_res_dict"][g_label] = calib_res
+            st.session_state["calib_best_depth_dict"][g_label] = best_depth
+            
+            # Păstrăm fallback pentru valoarea generală pe prima calibrare
+            if idx == 0:
+                st.session_state["sim_depth_val"] = best_depth
+                
+        st.session_state["sim_depth_suffix"] += 1
         st.session_state["start_calib_now"] = False # Oprim flag-ul
         
         if st.session_state.get("trigger_gen_after_calib"):
@@ -603,32 +622,8 @@ with st.sidebar:
     if "sim_depth_suffix" not in st.session_state:
         st.session_state["sim_depth_suffix"] = 0
 
-    if st.button("⚙️ Calibrează și filtrează", help="Află automat cel mai bun procent testând pe istoricul recent.", use_container_width=True):
-        if not st.session_state.get("loaded_datasets"):
-            st.error("Încărcați întâi un fișier CSV!")
-        else:
-            st.session_state["start_calib_now"] = True
-            st.rerun()
-
-    if st.button("🚀 Generează Variante", type="primary", use_container_width=True, help="Pornește generarea folosind setările curente."):
-        reset_sidebar_settings()
-        ensure_worker_running()
-        st.session_state.pop("calib_res", None)
-        st.session_state.pop("calib_best_depth", None)
-        st.session_state["queue_submit_requested"] = True
-
-    sim_depth_input = st.slider(
-        "Adâncime Simulare Backtesting (%)", 
-        min_value=10, 
-        max_value=100, 
-        value=st.session_state["sim_depth_val"],
-        step=10,
-        help="Procentul minim din istoric analizat de filtrul regresiv multi-timeframe pentru a depista momentum-ul fals.",
-        key=f"sim_depth_key_{st.session_state['sim_depth_suffix']}"
-    )
-    st.session_state["sim_depth_val"] = sim_depth_input
-
-    if st.button("⚡ Calibrează + Generează", type="primary", help="Execută calibrarea automată și apoi pornește imediat generarea variantelor.", use_container_width=True):
+    st.markdown("✨ **Mod Automat (Recomandat)**")
+    if st.button("⚡ Auto-Pilot: Calibrează + Generează", type="primary", help="Găsește automat setarea optimă (calibrare) și generează imediat variantele finale. Este cea mai sigură și rapidă opțiune.", use_container_width=True):
         if not st.session_state.get("loaded_datasets"):
             st.error("Încărcați întâi un fișier CSV!")
         else:
@@ -637,9 +632,52 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
+    st.markdown("🛠️ **Mod Manual (Avansați)**")
+
+    if st.button("⚙️ Pasul 1: Calibrează AI-ul", help="Rulează simulări pe extragerile recente pentru a-ți recomanda cea mai bună valoare pentru adâncimea de mai jos.", use_container_width=True):
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier CSV!")
+        else:
+            st.session_state["start_calib_now"] = True
+            st.rerun()
+
+    if "calib_best_depth_dict" not in st.session_state:
+        st.session_state["calib_best_depth_dict"] = {}
+
+    selected_game_depth = st.selectbox(
+        "Selectează jocul pentru care setezi adâncimea:",
+        ["6/49", "5/40", "joker"],
+        index=0,
+        help="Alege jocul pentru care dorești să modifici adâncimea de simulare."
+    )
+
+    current_val_for_game = st.session_state["calib_best_depth_dict"].get(selected_game_depth, st.session_state.get("sim_depth_val", 40))
+
+    sim_depth_input = st.slider(
+        "Adâncime Simulare Backtesting (%)", 
+        min_value=10, 
+        max_value=100, 
+        value=current_val_for_game,
+        step=10,
+        help="Stabilește cât din istoric analizează AI-ul pentru jocul selectat. (Valoare setată automat dacă folosiți Calibrarea)",
+        key=f"sim_depth_key_{st.session_state['sim_depth_suffix']}_{selected_game_depth}"
+    )
+    st.session_state["calib_best_depth_dict"][selected_game_depth] = sim_depth_input
+    st.session_state["sim_depth_val"] = sim_depth_input
+
+    if st.button("🚀 Pasul 2: Generează Variante", use_container_width=True, help="Generează variantele finale folosind valoarea setată manual pe sliderul de mai sus."):
+        reset_sidebar_settings()
+        ensure_worker_running()
+        st.session_state.pop("calib_res", None)
+        st.session_state.pop("calib_best_depth", None)
+        st.session_state.pop("calib_res_dict", None)
+        st.session_state.pop("calib_best_depth_dict", None)
+        st.session_state["queue_submit_requested"] = True
+
+    st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔴 Oprește Forțat", type="secondary", use_container_width=True):
+        if st.button("🔴 Anulează Proces", type="secondary", help="Oprește forțat orice generare sau calibrare în curs de desfășurare.", use_container_width=True):
             st.session_state["cancel_requested"] = True
             cancel_pending_running_jobs("Job anulat manual din interfață.")
             unlock_engine()
@@ -648,7 +686,7 @@ with st.sidebar:
             st.rerun()
             
     with col2:
-        if st.button("🗑️ Curăță Log", type="secondary", use_container_width=True):
+        if st.button("🗑️ Șterge Log", type="secondary", help="Curăță fișierul de jurnal (log) salvat pe disc.", use_container_width=True):
             clear_logs()
             st.rerun()
 
@@ -685,6 +723,11 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
             elif "joker" in fname.lower():
                 g_label = "joker"
                 
+            # Căutăm adâncimea specifică per joc, sau folosim slider-ul manual
+            game_sim_depth = st.session_state["sim_depth_val"]
+            if "calib_best_depth_dict" in st.session_state and g_label in st.session_state["calib_best_depth_dict"]:
+                game_sim_depth = st.session_state["calib_best_depth_dict"][g_label]
+                
             task_dict = {
                 "game_label": g_label,
                 "pool_size": st.session_state["pool_size_val"],
@@ -693,7 +736,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
                 "lookback": st.session_state["lookback_val"],
                 "filter_consecutives": st.session_state["consecutive_filter_val"],
                 "smart_reduction": True,
-                "sim_depth_pct": st.session_state["sim_depth_val"],
+                "sim_depth_pct": game_sim_depth,
             }
             
             logging.info(f"[APP] Submitere job pentru {g_label}: {task_dict}")
@@ -826,43 +869,48 @@ if not st.session_state.get("active_job_id"):
                     st.error(f"Eroare la resetarea consolei: {e}")
 
 # Afișăm raportul de calibrare sub consolă
-if "calib_res" in st.session_state and "calib_best_depth" in st.session_state:
-    calib_res = st.session_state["calib_res"]
-    best_depth = st.session_state["calib_best_depth"]
-    current_depth = st.session_state.get("sim_depth_val", best_depth)
-    
-    best_stats = calib_res[best_depth]
-    
-    # Construim un raport detaliat sub formă de tabel/listă
-    report_lines = [
-        f"Adâncimea optimă recomandată de AI: **{best_depth}%** (Selectat curent: **{current_depth}%**)" if current_depth != best_depth else f"Adâncimea optimă identificată: **{best_depth}%**",
-        f"Eficiență (la {best_depth}%): **{best_stats['total_excluded']} numere moarte eliminate** în total.",
-        f"Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (Fatalități).",
-        "",
-        "**📊 Analiză comparativă pe ferestre de timp (Intersecție Regresivă):**"
-    ]
-    
-    # Sortăm descrescător pentru a vedea de la cel mai permisiv la cel mai restrictiv
-    for d in sorted(calib_res.keys(), reverse=True):
-        s = calib_res[d]
-        status_icon = "✅" if s['total_fatalities'] == 0 else "❌"
-        line = f"- **{d}%** adâncime: {s['total_excluded']} excluse | {s['total_fatalities']} fatalități {status_icon}"
-        
-        # Adăugăm marcajele de UI pentru claritate
-        if d == current_depth and d == best_depth:
-            line += " ⭐ (Recomandat & Selectat)"
-        elif d == current_depth:
-            line += " 👈 (Selectat Manual)"
-        elif d == best_depth:
-            line += " 🏆 (Recomandat)"
+if "calib_res_dict" in st.session_state and st.session_state["calib_res_dict"]:
+    for g_label, calib_res in st.session_state["calib_res_dict"].items():
+        if g_label in st.session_state["calib_best_depth_dict"]:
+            best_depth = st.session_state["calib_best_depth_dict"][g_label]
+            current_depth = best_depth
             
-        report_lines.append(line)
-        
-    report_lines.append("\n*Notă: O adâncime mai mică (ex: 10%) înseamnă o intersecție mai strictă (numărul trebuie să fie 'mort' în toate ferestrele simultan pentru a fi eliminat).*")
-    
-    msg = "\n".join(report_lines)
-    st.info(f"💡 **Raport Calibrare Auto-Tuning**\n\n{msg}")
-
+            best_stats = calib_res[best_depth]
+            
+            # Construim un raport detaliat sub formă de tabel/listă
+            report_lines = [
+                f"Adâncimea optimă identificată pentru {g_label.upper()}: **{best_depth}%**",
+                f"Eficiență istorică (la {best_depth}%): **{best_stats['total_excluded']} numere moarte eliminate** în total.",
+                f"Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (Fatalități)."
+            ]
+            
+            if "eliminated_now" in best_stats and best_stats["eliminated_now"]:
+                el_now = best_stats["eliminated_now"]
+                report_lines.append(f"🚫 **Numere ce vor fi eliminate ACUM la generare:** {', '.join(map(str, el_now))}")
+            elif "eliminated_now" in best_stats:
+                report_lines.append(f"🚫 **Numere ce vor fi eliminate ACUM la generare:** *Niciun număr (condiții stricte neîndeplinite).*")
+                
+            report_lines.extend([
+                "",
+                "**📊 Analiză comparativă pe ferestre de timp (Intersecție Regresivă):**"
+            ])
+            
+            # Sortăm descrescător pentru a vedea de la cel mai permisiv la cel mai restrictiv
+            for d in sorted(calib_res.keys(), reverse=True):
+                s = calib_res[d]
+                status_icon = "✅" if s['total_fatalities'] == 0 else "❌"
+                line = f"- **{d}%** adâncime: {s['total_excluded']} excluse | {s['total_fatalities']} fatalități {status_icon}"
+                
+                # Adăugăm marcajele de UI pentru claritate
+                if d == best_depth:
+                    line += " ⭐ (Recomandat & Selectat Automat)"
+                    
+                report_lines.append(line)
+                
+            report_lines.append("\n*Notă: O adâncime mai mică (ex: 10%) înseamnă o intersecție mai strictă (numărul trebuie să fie 'mort' în toate ferestrele simultan pentru a fi eliminat).*")
+            
+            msg = "\n".join(report_lines)
+            st.info(f"💡 **Raport Calibrare Auto-Tuning: {g_label.upper()}**\n\n{msg}")
 # ─── MUZICĂ AMBIENTALĂ + FINALIZARE ──────────────────────────────────────────
 _play_completion = st.session_state.pop("play_completion_sound", False)
 _fan_js = ""
