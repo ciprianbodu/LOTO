@@ -386,74 +386,99 @@ class LotoBacktester:
         logger.info(f"[BACKTEST RETROACTIV] Simulăm pentru {n_simulate} extrageri din {n_draws}")
         
         retro_predictions = []
-        feedback_map: Dict[int, float] = {} # num -> multiplier
-        
+        feedback_map: Dict[int, float] = {}  # num -> multiplier
+        # State adaptiv in-memory pentru backtest (NU atinge adaptive_state.json)
+        adaptive_history: List[Dict] = []
+        streak_zero = 0
+        active_mode = "normal"
+        reset_duration = 0
+        # Hard inversion temporară între iterații: pool-ul de la pasul anterior
+        # care a produs catastrofă (excludere o singură extragere).
+        prev_pool_for_inversion: List[int] = []
+        prev_event_for_inversion: Optional[str] = None
+
+        # Importăm noul modul; fallback la logica veche dacă lipsește
+        try:
+            from loto_enterprise.core.adaptive_feedback import (
+                compute_post_draw_feedback,
+                compute_temp_blacklist,
+            )
+            _has_adaptive = True
+        except ImportError:
+            _has_adaptive = False
+            logger.warning("[BACKTEST] adaptive_feedback indisponibil — folosesc legacy feedback.")
+
         # Iterăm prin fiecare punct de simulare
         for sim_idx in range(start_idx, n_draws, simulation_step):
             sim_num = sim_idx - start_idx + 1
-            
+
             # Data extragerii vizate (următoarea după punctul de simulare)
             target_date = self.dates[sim_idx] if sim_idx < len(self.dates) else f"Draw_{sim_idx}"
-            
+
             # Data la care facem simularea (extragerea curentă)
             sim_date = self.dates[sim_idx - 1] if sim_idx > 0 else "Start"
-            
+
             logger.info(f"[BACKTEST RETROACTIV] Simulare {sim_num}/{n_simulate} pentru {target_date}")
-            
+
             try:
                 # Creăm un subset al datelor până la acest moment (walk-forward)
-                # Folosim toate extragerile de la început până la sim_idx
-                # Slicing DataFrame-ul original este mai eficient
                 historical_df = self.df.iloc[:sim_idx].copy()
-                
+
                 if len(historical_df) < 5:
                     logger.warning(f"[BACKTEST] Prea puține date istorice la simulare {sim_num}")
                     continue
-                
+
                 # Inițializăm motorul
                 engine = LotoEngine(self.game_type)
                 engine.data = historical_df
                 engine._build_draw_matrix()
-                
-                # Aplicăm feedback-ul acumulat din pașii anteriori (Metoda 1)
+
+                # Aplicăm feedback-ul acumulat din pașii anteriori (BEFORE pipeline)
                 engine.error_correction_map = feedback_map.copy()
-                
-                # Rulăm pipeline-ul instituțional (fără progress callback pentru viteză în loop)
+                # Inject regime mode pentru ca TimesFM să folosească ponderi reactive
+                # dacă suntem în reset (catastrofe consecutive în istoric)
+                engine._adaptive_mode = active_mode
+                engine._adaptive_event = adaptive_history[-1].get("event") if adaptive_history else None
+                # Hard inversion temporară: dacă pasul anterior a fost catastrofă,
+                # pasăm pool-ul ratat ca temp_blacklist pentru această iterație.
+                if _has_adaptive and prev_event_for_inversion == "catastrophe" and prev_pool_for_inversion:
+                    try:
+                        engine._temp_blacklist = compute_temp_blacklist(
+                            last_pool=list(prev_pool_for_inversion),
+                            last_event=prev_event_for_inversion,
+                            universe_size=int(engine.params.get("max_n", 49)),
+                            pool_size=int(pool_size),
+                            enable_full_inversion=True,
+                        )
+                    except Exception as _e_inv:
+                        logger.warning(f"[BACKTEST] Eroare temp_blacklist: {_e_inv}")
+                        engine._temp_blacklist = set()
+                else:
+                    engine._temp_blacklist = set()
+
+                # Rulăm pipeline-ul instituțional (fără persistență — backtest in-memory)
                 lines, _, _, _, _, audit = engine.run_institutional_pipeline(
                     progress_cb=None,
                     pool_size=pool_size,
                     guarantee=guarantee,
                     max_variants=max_variants,
                     lookback=lookback_percent,
-                    filter_consecutives=filter_consecutives
+                    filter_consecutives=filter_consecutives,
+                    enable_adaptive_persistence=False,
                 )
-                
-                # Aplicăm feedback-ul acumulat (Metoda 1)
-                engine.error_correction_map = feedback_map.copy()
-                
-                # Rulăm pipeline-ul (Notă: în varianta reală ar trebui să rulăm pipeline-ul 
-                # DUPĂ ce setăm feedback-ul, deci mutăm setarea feedback-ului înainte de run)
-                
+
                 # Evaluăm rezultatul contra extragerii reale
                 actual_draw = self.draws[sim_idx]
-                
-                # Calculăm hits pentru fiecare variantă și luăm maximul (sau union?)
-                # Userul vrea "ce hits ar fi fost". De obicei se raportează maximul per extragere dacă joci toate variantele.
-                # Sau hits pe întreaga mulțime de numere prezise (pool). 
-                # Să calculăm hits pentru cea mai bună variantă din setul generat.
-                
+
                 max_hits = 0
                 for v in lines:
-                    # actual_draw este listă acum (pentru a suporta duplicate Joker)
                     h = len(set(v) & set(actual_draw))
                     if h > max_hits:
                         max_hits = h
-                
-                # Calculăm hits pentru întregul pool (union)
+
                 predicted_union = set().union(*lines) if lines else set()
                 hits_union = len(predicted_union & set(actual_draw))
-                
-                # Creăm înregistrarea retroactivă
+
                 retro_pred = RetroactivePrediction(
                     simulation_date=str(sim_date),
                     target_draw_date=str(target_date),
@@ -467,32 +492,51 @@ class LotoBacktester:
                     game_type=self.game_type,
                     draw_index=sim_idx
                 )
-                
+
                 retro_predictions.append(retro_pred)
-                
-                logger.info(f"[BACKTEST RETROACTIV] Rezultat: {max_hits} numere ghicite (Max dintr-o varianta)")
-                
+
+                logger.info(f"[BACKTEST RETROACTIV] Rezultat: {max_hits} numere ghicite (Max dintr-o varianta), pool_hits={hits_union}")
+
                 if use_feedback:
-                    # ACTUALIZARE FEEDBACK (Metoda 1)
-                    actual_set = set(actual_draw)
-                    predicted_set = set(engine.hard_core)
-                    
-                    # Numere ratate (au iesit dar nu le-am prezis) -> Bonus +0.1
-                    missed = actual_set - predicted_set
-                    for m in missed:
-                        feedback_map[m] = feedback_map.get(m, 1.0) + 0.1
-                        
-                    # Numere prezise dar "reci" (nu au iesit) -> Penalizare -0.05
-                    false_positives = predicted_set - actual_set
-                    for fp in false_positives:
-                        feedback_map[fp] = feedback_map.get(fp, 1.0) - 0.05
-                    
-                    # Limitam feedback-ul la valori rezonabile (0.5 - 2.0)
-                    for k in list(feedback_map.keys()):
-                        feedback_map[k] = max(0.5, min(2.0, feedback_map[k]))
-                        # Decadere in timp
-                        feedback_map[k] = 1.0 + (feedback_map[k] - 1.0) * 0.8
-                
+                    if _has_adaptive:
+                        # Folosim feedback-ul diferențiat (catastrophe-aware) din modulul nou
+                        new_map, event, info = compute_post_draw_feedback(
+                            last_pool=list(engine.hard_core),
+                            actual_draw=list(actual_draw),
+                            current_map=feedback_map,
+                            history=adaptive_history,
+                            game_type=self.game_type,
+                            pool_size=pool_size,
+                            streak_zero=streak_zero,
+                            prev_mode=active_mode,
+                            reset_duration=reset_duration,
+                        )
+                        feedback_map = new_map
+                        streak_zero = int(info["streak_zero"])
+                        active_mode = info["active_mode"]
+                        reset_duration = int(info.get("reset_duration", 0))
+                        adaptive_history.append({
+                            "date": str(target_date),
+                            "pool_hits": int(info["pool_hits"]),
+                            "event": event,
+                        })
+                        # Limităm istoricul (backtest poate fi lung)
+                        adaptive_history = adaptive_history[-50:]
+                        # Setăm starea pentru hard inversion la următoarea iterație
+                        prev_event_for_inversion = event
+                        prev_pool_for_inversion = list(engine.hard_core)
+                    else:
+                        # Fallback legacy (status quo dinaintea adaptive_feedback)
+                        actual_set = set(actual_draw)
+                        predicted_set = set(engine.hard_core)
+                        for m in actual_set - predicted_set:
+                            feedback_map[m] = feedback_map.get(m, 1.0) + 0.1
+                        for fp in predicted_set - actual_set:
+                            feedback_map[fp] = feedback_map.get(fp, 1.0) - 0.05
+                        for k in list(feedback_map.keys()):
+                            feedback_map[k] = max(0.5, min(2.0, feedback_map[k]))
+                            feedback_map[k] = 1.0 + (feedback_map[k] - 1.0) * 0.8
+
             except Exception as e:
                 logger.error(f"[BACKTEST RETROACTIV] Eroare la simulare {sim_num}: {e}")
                 import traceback

@@ -877,11 +877,15 @@ if "calib_res_dict" in st.session_state and st.session_state["calib_res_dict"]:
             
             best_stats = calib_res[best_depth]
             
+            # Calculăm media per extragere pentru claritate
+            test_draws = 2  # Numărul de extrageri de test folosit în calibrare
+            avg_excluded = best_stats['total_excluded'] // test_draws if test_draws > 0 else 0
+            
             # Construim un raport detaliat sub formă de tabel/listă
             report_lines = [
                 f"Adâncimea optimă identificată pentru {g_label.upper()}: **{best_depth}%**",
-                f"Eficiență istorică (la {best_depth}%): **{best_stats['total_excluded']} numere moarte eliminate** în total.",
-                f"Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (Fatalități)."
+                f"📊 Eficiență istorică (la {best_depth}%): **{best_stats['total_excluded']} numere moarte eliminate** (total cumulat pe {test_draws} extrageri de test = ~{avg_excluded} numere/extragere).",
+                f"🛡️ Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (total cumulat pe {test_draws} extrageri)."
             ]
             
             if "eliminated_now" in best_stats and best_stats["eliminated_now"]:
@@ -899,18 +903,29 @@ if "calib_res_dict" in st.session_state and st.session_state["calib_res_dict"]:
             for d in sorted(calib_res.keys(), reverse=True):
                 s = calib_res[d]
                 status_icon = "✅" if s['total_fatalities'] == 0 else "❌"
-                line = f"- **{d}%** adâncime: {s['total_excluded']} excluse | {s['total_fatalities']} fatalități {status_icon}"
-                
+
+                # Construim tooltip cu datele fatalităților
+                fatality_dates = s.get('fatality_dates', [])
+                if fatality_dates:
+                    tooltip_text = "Fatalități la datele: " + ", ".join(fatality_dates)
+                    fatality_html = f"<span title='{tooltip_text}' style='cursor: help; text-decoration: underline dotted; color: #ff6b6b; font-weight: bold;'>{s['total_fatalities']}</span>"
+                else:
+                    fatality_html = str(s['total_fatalities'])
+
+                # Calculăm media per extragere pentru afișare
+                avg_excl = s['total_excluded'] // test_draws if test_draws > 0 else 0
+                line = f"- **{d}%** adâncime: {s['total_excluded']} excluse (~{avg_excl}/extragere) | {fatality_html} fatalități {status_icon}"
+
                 # Adăugăm marcajele de UI pentru claritate
                 if d == best_depth:
                     line += " ⭐ (Recomandat & Selectat Automat)"
-                    
+
                 report_lines.append(line)
                 
-            report_lines.append("\n*Notă: O adâncime mai mică (ex: 10%) înseamnă o intersecție mai strictă (numărul trebuie să fie 'mort' în toate ferestrele simultan pentru a fi eliminat).*")
+            report_lines.append("\n*💡 Notă: Valorile 'excluse' și 'fatalități' sunt **totale cumulate** pe extragerile de test. 'O adâncime mai mică (ex: 10%)' înseamnă o intersecție mai strictă (numărul trebuie să fie 'mort' în toate ferestrele simultan pentru a fi eliminat).")
             
             msg = "\n".join(report_lines)
-            st.info(f"💡 **Raport Calibrare Auto-Tuning: {g_label.upper()}**\n\n{msg}")
+            st.markdown(f"💡 **Raport Calibrare Auto-Tuning: {g_label.upper()}**\n\n{msg}", unsafe_allow_html=True)
 # ─── MUZICĂ AMBIENTALĂ + FINALIZARE ──────────────────────────────────────────
 _play_completion = st.session_state.pop("play_completion_sound", False)
 _fan_js = ""
@@ -1138,7 +1153,88 @@ if "persistent_results" in st.session_state:
                         hc_html += var_html
                     else:
                         hc_html += "<div style='margin-top: 10px; font-size: 0.85em; color: #6c757d;'>🔄 Nucleul a rămas neschimbat față de ultima rulare pe acest joc.</div>"
-                
+
+                # === Card Învățare Adaptivă (post-extragere feedback) ===
+                adaptive_state = audit.get("adaptive_state")
+                if adaptive_state:
+                    event = adaptive_state.get("event")
+                    last_hits = adaptive_state.get("last_hits")
+                    streak = adaptive_state.get("streak_zero", 0)
+                    mode = adaptive_state.get("active_mode", "normal")
+                    rolling = adaptive_state.get("rolling_avg")
+                    baseline = adaptive_state.get("baseline", 0.0)
+                    boosts = adaptive_state.get("boosts", []) or []
+                    penalties = adaptive_state.get("penalties", []) or []
+                    missed = adaptive_state.get("missed", []) or []
+                    fps = adaptive_state.get("false_positives", []) or []
+
+                    event_meta = {
+                        "normal":        ("✅", "#28a745", "Performanță peste baseline"),
+                        "underperf":     ("⚠️",  "#ffc107", "Sub baseline (1 hit) — corecție moderată"),
+                        "catastrophe":   ("🔥", "#dc3545", "CATASTROFĂ (0 hituri) — corecție amplificată + diversificare"),
+                        "regime_reset":  ("🚨", "#a020f0", "REGIM RESETAT — ponderi NQI rebalansate"),
+                    }
+                    icon, color, msg = event_meta.get(event, ("ℹ️", "#17a2b8", "Fără date pentru comparație"))
+
+                    mode_badge = (
+                        f"<span style='background: #a020f0; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-left: 8px;'>RESET</span>"
+                        if mode == "reset" else
+                        f"<span style='background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-left: 8px;'>NORMAL</span>"
+                    )
+
+                    adapt_html = (
+                        f"<div style='margin-top: 12px; padding: 14px; background: rgba(20, 30, 50, 0.5); "
+                        f"border-left: 4px solid {color}; border-radius: 8px; font-size: 0.9em;'>"
+                        f"<div style='font-weight: bold; margin-bottom: 8px;'>{icon} Învățare Adaptivă: {msg} {mode_badge}</div>"
+                    )
+                    if event is not None:
+                        adapt_html += f"<div>Ultima extragere: <strong>{last_hits}</strong> hituri în pool"
+                        if baseline:
+                            adapt_html += f" <small style='color:#888;'>(baseline aleator: {baseline})</small>"
+                        adapt_html += "</div>"
+                    if streak >= 1:
+                        adapt_html += f"<div>Streak catastrofe consecutive: <strong>{streak}</strong></div>"
+                    if rolling is not None:
+                        rolling_color = "#dc3545" if rolling < baseline else "#28a745"
+                        adapt_html += f"<div>Media rolling (5 extrageri): <strong style='color:{rolling_color};'>{rolling:.2f}</strong></div>"
+                    if missed:
+                        adapt_html += f"<div style='margin-top:6px; color:#dc3545;'>Numere ratate: {', '.join(map(str, missed))} → boost +X la următoarea predicție</div>"
+                    if fps:
+                        adapt_html += f"<div style='color:#6c757d;'>Numere prezise dar absente: {', '.join(map(str, fps[:10]))} → penalizare</div>"
+                    if boosts:
+                        b_str = ", ".join(f"<strong>{n}</strong>×{m:.2f}" for n, m in boosts[:6])
+                        adapt_html += f"<div style='margin-top:6px;'><span style='color:#28a745;'>↑ Boost activ:</span> {b_str}</div>"
+                    if penalties:
+                        p_str = ", ".join(f"<strong>{n}</strong>×{m:.2f}" for n, m in penalties[:6])
+                        adapt_html += f"<div><span style='color:#dc3545;'>↓ Penalizare activă:</span> {p_str}</div>"
+
+                    cat_div = audit.get("catastrophe_diversification")
+                    if cat_div:
+                        inj = cat_div.get("injected", [])
+                        ev = cat_div.get("evicted", [])
+                        if inj:
+                            inj_str = ", ".join(f"{n}<small>(gap×{gr})</small>" for n, gr in inj)
+                            ev_str = ", ".join(str(n) for n, _ in ev)
+                            adapt_html += (
+                                f"<div style='margin-top:6px; color:#f4a261;'>"
+                                f"💉 Diversificare forțată: injectate <strong>{inj_str}</strong> "
+                                f"în locul lui <strong>{ev_str}</strong></div>"
+                            )
+
+                    hard_inv = audit.get("hard_inversion")
+                    if hard_inv:
+                        excl = hard_inv.get("excluded", [])
+                        n_excl = hard_inv.get("n_excluded", len(excl))
+                        excl_str = ", ".join(str(n) for n in excl[:20])
+                        adapt_html += (
+                            f"<div style='margin-top:6px; color:#e63946;'>"
+                            f"🚫 Hard Inversion (catastrofă anterioară): "
+                            f"<strong>{n_excl}</strong> numere excluse temporar (1 extragere) "
+                            f"→ {excl_str}</div>"
+                        )
+                    adapt_html += "</div>"
+                    hc_html += adapt_html
+
                 st.markdown(f"**Nucleu Dur ({len(hc)} numere):**<br>{hc_html}", unsafe_allow_html=True)
                 st.markdown(f"**{dynamic_desc}**", unsafe_allow_html=True)
                 

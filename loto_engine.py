@@ -49,6 +49,19 @@ try:
 except ImportError:
     _HAS_TFM_V2 = False
 
+# Adaptive feedback (învățare persistentă post-extragere)
+try:
+    from loto_enterprise.core.adaptive_feedback import (
+        load_adaptive_state,
+        save_adaptive_state,
+        compute_post_draw_feedback,
+        record_predicted_pool,
+        get_state_summary,
+    )
+    _HAS_ADAPTIVE = True
+except ImportError:
+    _HAS_ADAPTIVE = False
+
 # Configurăm logging cu timestamp pentru debug detaliat
 logging.basicConfig(
     level=logging.INFO,
@@ -211,6 +224,49 @@ class LotoEngine:
             print(f"Eroare la încărcare date: {e}")
             return False
 
+    def _extract_draw_at_index(self, idx: int) -> Optional[List[int]]:
+        """Returnează numerele extrase la index-ul `idx` (0-based) din self.data
+        sau None dacă nu există / nu sunt valide.
+        """
+        if self.data is None or idx < 0 or idx >= len(self.data):
+            return None
+        if self._draw_matrix is not None and idx < len(self._draw_matrix):
+            row = self._draw_matrix[idx]
+            nums = [int(v) for v in row if int(v) > 0]
+            if nums:
+                return nums
+        # Fallback prin coloane n*
+        try:
+            row = self.data.iloc[idx]
+            n_cols = sorted(
+                [c for c in self.data.columns
+                 if str(c).lower().startswith("n") and str(c).lower() != "numbers"],
+                key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
+            )
+            nums = []
+            for c in n_cols:
+                if c in row and pd.notna(row[c]):
+                    try:
+                        nums.append(int(row[c]))
+                    except (ValueError, TypeError):
+                        continue
+            return nums if nums else None
+        except Exception:
+            return None
+
+    def _extract_date_at_index(self, idx: int) -> Optional[str]:
+        """Returnează data extragerii la index-ul `idx` ca string sau None."""
+        if self.data is None or idx < 0 or idx >= len(self.data):
+            return None
+        try:
+            row = self.data.iloc[idx]
+            for col in ("date", "data", "draw_date", "Data"):
+                if col in row and pd.notna(row[col]):
+                    return str(row[col])
+        except Exception:
+            pass
+        return None
+
     def _build_draw_matrix(self) -> None:
         """Construiește o dată matrice (rows x draw_n) de numere întregi — fără split pe string în buclă."""
         if self.data is None:
@@ -305,8 +361,13 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, ultra_hit_optimization=True):
-        """Rulează pipeline-ul complet de analiză."""
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, ultra_hit_optimization=True, enable_adaptive_persistence=False):
+        """Rulează pipeline-ul complet de analiză.
+
+        enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
+            adaptive_state.json — învățare persistentă din extrageri reale.
+            Backtester-ul îl lasă False (își gestionează propriul state in-memory).
+        """
         # Optimizare pentru hit-uri de 4/5
         if ultra_hit_optimization:
             logging.info("[PIPELINE] MOD ULTRA-HIT ACTIVAT: Optimizare pentru hit-uri de 4 și 5 numere.")
@@ -315,7 +376,107 @@ class LotoEngine:
                 pool_size = 15
             if guarantee < 4:
                 guarantee = 4
-                
+
+        # === ADAPTIVE FEEDBACK PRE-RUN: detectăm extrageri reale apărute de la
+        # ultima predicție și ajustăm error_correction_map ÎNAINTE de TimesFM. ===
+        adaptive_event = None
+        adaptive_info = None
+        if enable_adaptive_persistence and _HAS_ADAPTIVE and self.data is not None:
+            try:
+                state = load_adaptive_state(self.game_type, pool_size)
+                last_rows = int(state.get("last_data_rows", 0))
+                current_rows = int(len(self.data))
+                last_pool = state.get("last_pool", [])
+
+                if last_pool and current_rows > last_rows:
+                    new_actual = self._extract_draw_at_index(last_rows)
+                    if new_actual:
+                        rs = state.get("regime_state", {})
+                        new_map, adaptive_event, adaptive_info = compute_post_draw_feedback(
+                            last_pool=last_pool,
+                            actual_draw=new_actual,
+                            current_map=state.get("error_correction_map", {}),
+                            history=state.get("history", []),
+                            game_type=self.game_type,
+                            pool_size=pool_size,
+                            streak_zero=int(rs.get("streak_zero", 0)),
+                            prev_mode=rs.get("active_mode", "normal"),
+                            reset_duration=int(rs.get("reset_duration", 0)),
+                        )
+                        self.error_correction_map = new_map
+                        # Persistăm istoricul + map-ul actualizat
+                        history = list(state.get("history", []))
+                        history.append({
+                            "date": self._extract_date_at_index(last_rows),
+                            "pool_hits": int(adaptive_info["pool_hits"]),
+                            "actual": [int(n) for n in new_actual],
+                            "event": adaptive_event,
+                        })
+                        state["error_correction_map"] = new_map
+                        state["history"] = history[-50:]
+                        state["regime_state"] = {
+                            "streak_zero": int(adaptive_info["streak_zero"]),
+                            "rolling_avg": (float(adaptive_info["rolling_avg"])
+                                            if adaptive_info.get("rolling_avg") is not None else None),
+                            "last_reset": (self._extract_date_at_index(last_rows)
+                                           if adaptive_info["active_mode"] == "reset"
+                                           else state.get("regime_state", {}).get("last_reset")),
+                            "active_mode": adaptive_info["active_mode"],
+                            "reset_duration": int(adaptive_info.get("reset_duration", 0)),
+                        }
+                        save_adaptive_state(self.game_type, pool_size, state)
+                        logging.info(
+                            f"[ADAPTIVE] Eveniment={adaptive_event} | hits={adaptive_info['pool_hits']} | "
+                            f"streak_zero={adaptive_info['streak_zero']} | mode={adaptive_info['active_mode']} | "
+                            f"missed={adaptive_info['missed']} | fp={adaptive_info['false_positives']}"
+                        )
+                # Stocăm evenimentul pentru consum în pipeline (diversificare/regime mode)
+                self._adaptive_event = adaptive_event
+                self._adaptive_info = adaptive_info
+                self._adaptive_mode = (
+                    adaptive_info["active_mode"] if adaptive_info else
+                    state.get("regime_state", {}).get("active_mode", "normal")
+                )
+                # Hard Inversion Temporară: dacă tocmai am avut catastrofă,
+                # excludem pool-ul ratat la următoarea selecție (1 extragere).
+                try:
+                    from loto_enterprise.core.adaptive_feedback import compute_temp_blacklist as _compute_temp_bl
+                    evaluated = (adaptive_info or {}).get("evaluated_pool") if adaptive_info else None
+                    if evaluated is None:
+                        evaluated = state.get("last_pool", [])
+                    self._temp_blacklist = _compute_temp_bl(
+                        last_pool=list(evaluated or []),
+                        last_event=adaptive_event,
+                        universe_size=int(self.params.get("max_n", 49)),
+                        pool_size=int(pool_size),
+                        enable_full_inversion=True,
+                    )
+                    if self._temp_blacklist:
+                        logging.warning(
+                            f"[HARD-INVERSION] Catastrofă detectată — excludem temporar "
+                            f"{sorted(self._temp_blacklist)} din pool-ul următor."
+                        )
+                except Exception as _e_inv:
+                    logging.error(f"[HARD-INVERSION] Eroare la calcul temp_blacklist: {_e_inv}")
+                    self._temp_blacklist = set()
+            except Exception as e:
+                logging.error(f"[ADAPTIVE] Eroare la procesarea feedback-ului: {e}")
+                self._adaptive_event = None
+                self._adaptive_info = None
+                self._adaptive_mode = "normal"
+                self._temp_blacklist = set()
+        else:
+            # NU suprascriem dacă au fost setate extern (e.g. de backtester
+            # care îi pasează regime_mode în mod manual).
+            if not hasattr(self, "_adaptive_event"):
+                self._adaptive_event = None
+            if not hasattr(self, "_adaptive_info"):
+                self._adaptive_info = None
+            if not hasattr(self, "_adaptive_mode"):
+                self._adaptive_mode = "normal"
+            if not hasattr(self, "_temp_blacklist"):
+                self._temp_blacklist = set()
+
         logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
         if lookback > 0 and self.data is not None and not self.data.empty:
@@ -379,6 +540,28 @@ class LotoEngine:
             }
         else:
             logging.info("[PIPELINE] Reducție Smart dezactivată. Se continuă fără blacklist.")
+
+        # === Hard Inversion Temporară (post-catastrofă) ===
+        # Adăugăm pool-ul ratat anterior în blacklist DOAR pentru această extragere.
+        # Nu se persistă, nu se acumulează — efemeră.
+        temp_bl = getattr(self, "_temp_blacklist", set()) or set()
+        if temp_bl:
+            # Verificare safety: nu permitem ca union să elimine mai mult de 50% din univers.
+            max_n_safe = int(self.params.get("max_n", 49))
+            combined = blacklist | set(temp_bl)
+            if len(combined) >= max_n_safe - pool_size:
+                logging.warning(
+                    f"[HARD-INVERSION] Temp blacklist ({len(temp_bl)}) + regular ({len(blacklist)}) "
+                    f"= {len(combined)} blochează prea mult din univers ({max_n_safe}). Skip."
+                )
+            else:
+                blacklist = combined
+                self.audit["hard_inversion"] = {
+                    "trigger": "previous_catastrophe",
+                    "excluded": sorted(int(x) for x in temp_bl),
+                    "n_excluded": len(temp_bl),
+                    "scope": "single_draw",
+                }
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
         
@@ -522,6 +705,31 @@ class LotoEngine:
             self.audit["pool_variation"] = pool_variation
         except Exception as e:
             logging.error(f"[PIPELINE] Eroare la tracker-ul de variație: {e}")
+
+        # --- ADAPTIVE FEEDBACK POST-RUN: persistăm pool-ul nou + state ---
+        if enable_adaptive_persistence and _HAS_ADAPTIVE:
+            try:
+                record_predicted_pool(
+                    game_type=self.game_type,
+                    pool_size=pool_size,
+                    pool=self.hard_core,
+                    data_rows=int(len(self.data)) if self.data is not None else 0,
+                )
+                summary = get_state_summary(self.game_type, pool_size)
+                self.audit["adaptive_state"] = {
+                    "event": adaptive_event,
+                    "active_mode": self._adaptive_mode,
+                    "last_hits": summary.get("last_hits"),
+                    "streak_zero": summary.get("streak_zero"),
+                    "rolling_avg": summary.get("rolling_avg"),
+                    "baseline": round(summary.get("baseline", 0.0), 3),
+                    "boosts": summary.get("boosts", []),
+                    "penalties": summary.get("penalties", []),
+                    "missed": (adaptive_info.get("missed") if adaptive_info else []),
+                    "false_positives": (adaptive_info.get("false_positives") if adaptive_info else []),
+                }
+            except Exception as e:
+                logging.error(f"[ADAPTIVE] Eroare la persistarea pool-ului: {e}")
 
         logging.info("[PIPELINE] Pipeline completat cu succes.")
         return lines, p10, p90, g_range, context, self.audit
@@ -1166,6 +1374,7 @@ class LotoEngine:
                 is_joker_drum=is_joker_drum,
                 context_len=context_len,
                 audit=self.audit,
+                regime_mode=getattr(self, "_adaptive_mode", "normal"),
             )
         # Fallback la implementarea veche dacă modulul v2 nu e disponibil
         return self._get_timesfm_scores_legacy(is_joker_drum, context_len)
@@ -1410,8 +1619,96 @@ class LotoEngine:
                         pool.append(num)
                         if len(pool) >= pool_size:
                             break
-        
+
+        # === Catastrophe Diversification ===
+        # Dacă ultima extragere a fost o catastrofă (0 hituri), forțăm includerea
+        # a 2-3 numere "due" (cu cel mai mare gap_ratio) care nu sunt deja în pool.
+        # Înlocuim numerele cu cel mai mic scor TimesFM. Acest lucru sparge bias-ul
+        # care a dus la pierderea totală.
+        if getattr(self, "_adaptive_event", None) == "catastrophe" and self._draw_matrix is not None:
+            try:
+                pool = self._inject_due_numbers(pool, scores, blacklist, pool_size, max_inject=3)
+            except Exception as e:
+                logging.error(f"[CATASTROPHE] Eroare la injectare numere 'due': {e}")
+
         return sorted(pool[:pool_size])
+
+    def _inject_due_numbers(
+        self,
+        pool: List[int],
+        scores: Dict[int, float],
+        blacklist: Set[int],
+        pool_size: int,
+        max_inject: int = 3,
+    ) -> List[int]:
+        """Forțează includerea celor mai 'due' numere (gap_ratio mare) în pool,
+        înlocuind numerele cu cel mai mic scor TimesFM. Apelat după catastrofă."""
+        if self._draw_matrix is None or self._draw_matrix.shape[0] < 20:
+            return pool
+
+        max_n = int(self.params.get("max_n", 49))
+        total_draws = self._draw_matrix.shape[0]
+
+        # Calculăm gap_ratio pentru toate numerele 1..max_n
+        gap_ratios: Dict[int, float] = {}
+        for num in range(1, max_n + 1):
+            if num in blacklist:
+                continue
+            appearances = [i for i, row in enumerate(self._draw_matrix) if num in row]
+            if len(appearances) < 2:
+                continue
+            gaps = [appearances[i + 1] - appearances[i] for i in range(len(appearances) - 1)]
+            avg_gap = sum(gaps) / len(gaps)
+            current_gap = total_draws - appearances[-1]
+            if avg_gap > 0:
+                gap_ratios[num] = current_gap / avg_gap
+
+        if not gap_ratios:
+            return pool
+
+        # Candidații de injectat: cei cu gap_ratio cel mai mare, NU deja în pool
+        pool_set = set(pool)
+        candidates = sorted(
+            [(n, gr) for n, gr in gap_ratios.items() if n not in pool_set],
+            key=lambda x: -x[1],
+        )[:max_inject * 2]
+        # Filtrăm doar candidați cu gap semnificativ (gap_ratio >= 1.3)
+        strong_candidates = [(n, gr) for n, gr in candidates if gr >= 1.3][:max_inject]
+
+        if not strong_candidates:
+            logging.info("[CATASTROPHE] Niciun număr 'due' suficient de puternic pentru injectare.")
+            return pool
+
+        # Numerele care vor ieși din pool: cele cu cel mai mic scor TimesFM
+        pool_with_scores = sorted(
+            [(n, scores.get(n, 0.0)) for n in pool],
+            key=lambda x: x[1],
+        )
+
+        new_pool = list(pool)
+        injected = []
+        evicted = []
+        for (cand, gr), (weak, weak_score) in zip(strong_candidates, pool_with_scores):
+            if cand in new_pool:
+                continue
+            if weak in new_pool:
+                new_pool.remove(weak)
+                new_pool.append(cand)
+                injected.append((int(cand), round(gr, 2)))
+                evicted.append((int(weak), round(weak_score, 4)))
+
+        if injected:
+            logging.warning(
+                f"[CATASTROPHE] Diversificare forțată: injectate {injected}, "
+                f"evacuate {evicted} din pool."
+            )
+            self.audit["catastrophe_diversification"] = {
+                "injected": injected,
+                "evicted": evicted,
+                "trigger": "0_hits_previous_draw",
+            }
+
+        return new_pool
 
     def _validate_pool_retrospective(
         self, pool: List[int], scores: Dict[int, float], pool_size: int, blacklist: Set[int]

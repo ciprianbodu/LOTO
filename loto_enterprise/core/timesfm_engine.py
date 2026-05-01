@@ -957,6 +957,29 @@ def _fallback_scores_no_tfm(
     return {n: (s - vmin) / rng for n, s in scores.items()}
 
 
+def _get_regime_reset_weights() -> Dict[str, float]:
+    """Ponderi NQI pentru modul `regime_reset`.
+
+    Filozofie revizuită (după backtest empiric care a arătat că reset extrem
+    performa MAI PROST decât normal): tilt MODERAT spre semnale reactive, nu
+    extrem. Păstrăm încredere parțială în predicția modelului (`p_val`,
+    `h_score`) dar dăm mai multă greutate semnalelor de exploatare (`adaptive`
+    = gap trigger pentru numere "due", `momentum` = activitate recentă).
+
+    Comparație cu profilul "balanced" normal:
+        balanced:  p_val=0.25, h_score=0.15, stability=0.10, cov=0.10, adaptive=0.20, momentum=0.20
+        reset:     p_val=0.18, h_score=0.13, stability=0.10, cov=0.07, adaptive=0.27, momentum=0.25
+    """
+    return {
+        "p_val":     0.18,
+        "h_score":   0.13,
+        "stability": 0.10,
+        "cov_boost": 0.07,
+        "adaptive":  0.27,
+        "momentum":  0.25,
+    }
+
+
 def get_timesfm_scores_v2(
     data,
     draw_matrix: np.ndarray | None,
@@ -965,6 +988,7 @@ def get_timesfm_scores_v2(
     context_len: int = 4096,
     audit: dict | None = None,
     is_regressive_step: bool = False,
+    regime_mode: str = "normal",
 ) -> Dict[int, float]:
     """
     Motor principal TimesFM v2 — folosește TOATE capabilitățile API-ului.
@@ -975,6 +999,11 @@ def get_timesfm_scores_v2(
       • Horizon adaptiv (mai mic pe CPU, full pe GPU).
       • Ferestre de ensemble prunate pe CPU pentru viteză.
       • Fallback determinist când librăria lipsește (nu mai întoarce {}).
+
+    regime_mode: "normal" (default) sau "reset". În "reset" folosim ponderi NQI
+        rebalansate care scad încrederea în predicția directă a modelului și
+        cresc semnalele reactive (adaptive bias + momentum). Folosit după
+        catastrofe consecutive sau underperformance susținută.
     """
     if not HAS_TIMESFM:
         logging.warning(
@@ -1106,10 +1135,17 @@ def get_timesfm_scores_v2(
                 elif draw_n == 5 and max_n == 45:
                     _game_type = "joker"
                 
-                opt_weights = optimize_nqi_weights(
-                    all_series, num_map, pf_future, ff_future, cov_forecast,
-                    game_type=_game_type, draw_matrix=draw_matrix, pool_size=15
-                )
+                if regime_mode == "reset":
+                    # Skipăm optimizarea costisitoare — folosim ponderi reactive fixe.
+                    opt_weights = _get_regime_reset_weights()
+                    if audit is not None:
+                        audit["regime_mode"] = "reset"
+                        audit["nqi_weights_override"] = opt_weights
+                else:
+                    opt_weights = optimize_nqi_weights(
+                        all_series, num_map, pf_future, ff_future, cov_forecast,
+                        game_type=_game_type, draw_matrix=draw_matrix, pool_size=15
+                    )
                 nqi = compute_nqi_scores(all_series, num_map, pf_future, ff_future, cov_forecast, horizon, opt_weights)
 
                 # Apply Anomaly cu coeficienți per joc (evită over-suppression pe pool-uri mici)

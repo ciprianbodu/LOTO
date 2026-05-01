@@ -203,7 +203,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     lookback=lookback,
                     filter_consecutives=filter_cons,
                     smart_reduction=smart_red,
-                    sim_depth_pct=sim_depth
+                    sim_depth_pct=sim_depth,
+                    enable_adaptive_persistence=True,
                 )
                 
                 outputs[game_label] = {

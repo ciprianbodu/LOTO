@@ -16,7 +16,7 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
     df = engine.data.copy()
     total_draws = len(df)
     
-    results = {d: {"score": 0, "total_excluded": 0, "total_fatalities": 0} for d in depths_to_test}
+    results = {d: {"score": 0, "total_excluded": 0, "total_fatalities": 0, "fatality_dates": []} for d in depths_to_test}
     
     total_iters = test_draws * 10 # 10 pasi de regresie per extragere
     current_iter = 0
@@ -76,10 +76,17 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
                 current_blacklist = current_blacklist.intersection(slice_blacklists[s])
             
             excluded_count = len(current_blacklist)
-            fatalities = len(current_blacklist.intersection(true_draw))
-            
+            fatality_nums = current_blacklist.intersection(true_draw)
+            fatalities = len(fatality_nums)
+
             results[depth]["total_excluded"] += excluded_count
             results[depth]["total_fatalities"] += fatalities
+
+            # Salvăm data extragerii dacă există fatalități
+            if fatalities > 0:
+                draw_date = row.get("date", "N/A")
+                if pd.notna(draw_date):
+                    results[depth]["fatality_dates"].append(str(draw_date).split()[0])
 
     # 3. Calculam scorurile finale
     for depth in depths_to_test:
