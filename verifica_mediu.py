@@ -59,13 +59,32 @@ def check_pytorch():
     except ImportError:
         print("-> [EROARE] Libraria timesfm lipseste! O poti instala cu comanda: pip install timesfm")
 
+def _is_in_venv() -> bool:
+    """Detecteaza daca Python-ul curent ruleaza intr-un virtualenv."""
+    return (
+        hasattr(sys, "real_prefix")
+        or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
+        or "venv" in sys.executable.lower()
+    )
+
+
 def main():
-    print(f"Versiune Python activa pe acest sistem: {sys.version.split()[0]}\n")
-    
+    import os
+    print(f"Versiune Python activa: {sys.version.split()[0]}")
+    print(f"Executabil:             {sys.executable}")
+    print(f"In virtualenv:          {'DA' if _is_in_venv() else 'NU (Python global)'}\n")
+
+    if not _is_in_venv():
+        print("[ATENTIE] Acest script ruleaza in Python-ul GLOBAL al sistemului,")
+        print("          nu in venv-ul proiectului. Rezultatele de mai jos pot fi")
+        print(f"          IRELEVANTE pentru aplicatie!")
+        print(f"          Foloseste ACTUALIZARI.bat (nu 'python verifica_mediu.py'")
+        print(f"          direct) ca sa verifici venv-ul corect: .venv_{os.environ.get('COMPUTERNAME', '<MASINA>')}.\n")
+
     # Executam logic verificarile
     check_pytorch()
     check_and_upgrade(SAFE_UPGRADE_PACKAGES)
-    
+
     print("===================================================================")
     print("                      VERIFICARE FINALIZATA                        ")
     print("   Daca nu au aparut [ERORI] mai sus, aplicatia este gata de start.")
