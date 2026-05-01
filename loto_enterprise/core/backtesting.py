@@ -360,7 +360,8 @@ class LotoBacktester:
                                   filter_consecutives: bool = True,
                                   max_variants: int = 0,
                                   simulation_step: int = 1,
-                                  use_feedback: bool = True) -> List[RetroactivePrediction]:
+                                  use_feedback: bool = True,
+                                  enable_hard_inversion: bool = True) -> List[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
@@ -373,6 +374,9 @@ class LotoBacktester:
             max_variants: Limita de variante
             simulation_step: Din cate in cate extrageri sa faca simulare (1 = toate)
             use_feedback: Daca sa foloseasca Adaptive Local Tuning (Metoda 1)
+            enable_hard_inversion: Daca sa aplice Hard Inversion partiala (temp_blacklist)
+                dupa catastrofe. Setati False pentru ablation studies care masoara
+                contributia exclusiva a regime_reset.
         """
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")
@@ -441,7 +445,10 @@ class LotoBacktester:
                 engine._adaptive_event = adaptive_history[-1].get("event") if adaptive_history else None
                 # Hard inversion temporară: dacă pasul anterior a fost catastrofă,
                 # pasăm pool-ul ratat ca temp_blacklist pentru această iterație.
-                if _has_adaptive and prev_event_for_inversion == "catastrophe" and prev_pool_for_inversion:
+                # Skip complet dacă enable_hard_inversion=False (ablation mode).
+                if (enable_hard_inversion and _has_adaptive
+                        and prev_event_for_inversion == "catastrophe"
+                        and prev_pool_for_inversion):
                     try:
                         engine._temp_blacklist = compute_temp_blacklist(
                             last_pool=list(prev_pool_for_inversion),

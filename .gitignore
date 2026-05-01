@@ -29,4 +29,5 @@ jurnal_*.json
 venv_timesfm/
 .claude/
 backtest_results.json
-scratch/overnight_log.txt
+scratch/*_log.txt
+*.backup_overnight

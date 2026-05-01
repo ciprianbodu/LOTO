@@ -523,6 +523,113 @@ if "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]
                 st.dataframe(display_df, use_container_width=True, height=150, hide_index=True)
         st.info("💡 Tabelul de mai sus arată datele brute folosite de Google TimesFM pentru analiză.")
 
+# === Dashboard Istoric Adaptive Feedback ===
+_ADAPTIVE_STATE_FILE = Path(__file__).parent / "adaptive_state.json"
+if _ADAPTIVE_STATE_FILE.exists():
+    try:
+        with _ADAPTIVE_STATE_FILE.open("r", encoding="utf-8") as _f:
+            _adaptive_raw = json.load(_f)
+    except Exception:
+        _adaptive_raw = {}
+
+    if _adaptive_raw:
+        with st.expander(f"🧠 Istoric Învățare Adaptivă ({len(_adaptive_raw)} configurări)", expanded=False):
+            st.caption(
+                "Stare persistentă a sistemului Adaptive Feedback v2 — telemetrie a "
+                "evenimentelor (catastrofă/underperf/normal), regime resets și hard inversions "
+                "aplicate de-a lungul timpului. Fișier: `adaptive_state.json`."
+            )
+
+            for _key in sorted(_adaptive_raw.keys()):
+                _entry = _adaptive_raw[_key] or {}
+                _hist = _entry.get("history", []) or []
+                _rs = _entry.get("regime_state", {}) or {}
+                _ecmap = _entry.get("error_correction_map", {}) or {}
+
+                _mode = _rs.get("active_mode", "normal")
+                _streak = int(_rs.get("streak_zero", 0) or 0)
+                _rdur = int(_rs.get("reset_duration", 0) or 0)
+                _last_reset = _rs.get("last_reset")
+                _last_pool_date = _entry.get("last_pool_date")
+
+                _events = [str(h.get("event", "?")) for h in _hist]
+                _hits = [int(h.get("pool_hits", 0) or 0) for h in _hist]
+                _n_cat = sum(1 for e in _events if e == "catastrophe")
+                _n_under = sum(1 for e in _events if e == "underperf")
+                _n_normal = sum(1 for e in _events if e == "normal")
+                _n_hist = len(_events)
+                _mean_hits = (sum(_hits) / _n_hist) if _n_hist else 0.0
+                _max_h = max(_hits) if _hits else 0
+
+                _mode_color = "#a020f0" if _mode == "reset" else "#28a745"
+                _mode_badge = (
+                    f"<span style='background:{_mode_color}; color:white; "
+                    f"padding:2px 10px; border-radius:6px; font-size:0.8em; "
+                    f"margin-left:8px;'>{_mode.upper()}</span>"
+                )
+
+                st.markdown(
+                    f"#### `{_key}` {_mode_badge}",
+                    unsafe_allow_html=True,
+                )
+
+                _col1, _col2, _col3, _col4, _col5 = st.columns(5)
+                _col1.metric("Total extrageri", _n_hist)
+                _col2.metric("Mean hits", f"{_mean_hits:.2f}")
+                _col3.metric("Best", _max_h)
+                _col4.metric("Catastrofe", _n_cat, delta=f"{(_n_cat/_n_hist*100):.1f}%" if _n_hist else None,
+                             delta_color="inverse")
+                _col5.metric("Streak zero", _streak,
+                             delta=f"{_rdur} reset" if _rdur > 0 else None,
+                             delta_color="off")
+
+                _info_bits = []
+                if _last_pool_date:
+                    _info_bits.append(f"Ultima predicție: **{_last_pool_date}**")
+                if _last_reset:
+                    _info_bits.append(f"Ultimul regime_reset: **{_last_reset}**")
+                if _ecmap:
+                    _boosts = sorted(((int(k), float(v)) for k, v in _ecmap.items()),
+                                     key=lambda x: x[1], reverse=True)
+                    _top_boosts = [f"{n}×{m:.2f}" for n, m in _boosts[:5] if m > 1.0]
+                    _top_pen = [f"{n}×{m:.2f}" for n, m in _boosts[-5:] if m < 1.0]
+                    if _top_boosts:
+                        _info_bits.append(f"↑ Top boost: {', '.join(_top_boosts)}")
+                    if _top_pen:
+                        _info_bits.append(f"↓ Top penalizare: {', '.join(_top_pen)}")
+                if _info_bits:
+                    st.markdown(" · ".join(_info_bits))
+
+                if _hits:
+                    _chart_df = pd.DataFrame({
+                        "draw_index": list(range(1, len(_hits) + 1)),
+                        "pool_hits": _hits,
+                    }).set_index("draw_index")
+                    st.line_chart(_chart_df, height=140)
+
+                    _last_n = min(15, len(_hist))
+                    _recent = _hist[-_last_n:]
+                    _icons = {
+                        "catastrophe": "🔥", "underperf": "⚠️",
+                        "normal": "✅", "regime_reset": "🚨",
+                    }
+                    _seq = " ".join(
+                        f"{_icons.get(str(h.get('event','?')), '•')}<sub>{int(h.get('pool_hits',0) or 0)}</sub>"
+                        for h in _recent
+                    )
+                    st.markdown(
+                        f"<small>Ultimele {_last_n}: {_seq}</small>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("---")
+
+            st.caption(
+                f"📈 Sumar global: **{sum(len(e.get('history', []) or []) for e in _adaptive_raw.values())} extrageri** "
+                f"învățate, **{sum(1 for e in _adaptive_raw.values() if (e.get('regime_state') or {}).get('active_mode') == 'reset')}** "
+                f"configurări curent în mod RESET."
+            )
+
 with st.sidebar:
     st.header("1. Încărcare Date CSV")
     uploaded_files = st.file_uploader(
