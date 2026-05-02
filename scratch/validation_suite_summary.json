@@ -1,0 +1,65 @@
+{
+  "timestamp": "2026-05-02T00:47:25",
+  "scenarios": [
+    {
+      "label": "Joker 100-iter PRODUCTION",
+      "prefix": "overnight_100j_full",
+      "status": "ok",
+      "returncode": 0,
+      "elapsed_seconds": 11883.051799,
+      "started": "2026-05-01T20:05:52",
+      "finished": "2026-05-01T23:23:55",
+      "summary": {
+        "mean_pool_hits": 2.03,
+        "mean_variant_hits": 2.02,
+        "std_pool_hits": 1.2508986668581412,
+        "best_pool_hits": 5,
+        "best_variant_hits": 5,
+        "catastrophe_rate_pct": 11.0,
+        "underperf_rate_pct": 24.0,
+        "max_streak_zero": 2,
+        "avg_recovery_hits": 2.1,
+        "random_baseline": 1.3333333333333333,
+        "diff_vs_baseline_pct": 52.25,
+        "ci95_low": 1.784823861295804,
+        "ci95_high": 2.2751761387041953
+      }
+    },
+    {
+      "label": "Joker 50-iter ABLATION (no hard_inv)",
+      "prefix": "overnight_50j_ablation",
+      "status": "ok",
+      "returncode": 0,
+      "elapsed_seconds": 5009.961447,
+      "started": "2026-05-01T23:23:55",
+      "finished": "2026-05-02T00:47:25",
+      "summary": {
+        "mean_pool_hits": 1.98,
+        "mean_variant_hits": 1.96,
+        "std_pool_hits": 1.2370141800451009,
+        "best_pool_hits": 5,
+        "best_variant_hits": 4,
+        "catastrophe_rate_pct": 12.0,
+        "underperf_rate_pct": 26.0,
+        "max_streak_zero": 2,
+        "avg_recovery_hits": 2.2,
+        "random_baseline": 1.3333333333333333,
+        "diff_vs_baseline_pct": 48.50000000000001,
+        "ci95_low": 1.6371171628675474,
+        "ci95_high": 2.3228828371324526
+      }
+    },
+    {
+      "label": "6/49 50-iter PRODUCTION (optional)",
+      "prefix": "overnight_649",
+      "status": "skipped",
+      "reason": "missing_csv:input_649.csv"
+    },
+    {
+      "label": "5/40 50-iter PRODUCTION (optional)",
+      "prefix": "overnight_540",
+      "status": "skipped",
+      "reason": "missing_csv:input_540.csv"
+    }
+  ]
+}
