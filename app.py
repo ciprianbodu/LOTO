@@ -212,7 +212,11 @@ def read_logs_filtered(n_lines=50):
     if not os.path.exists(LOG_FILE):
         return "Nu există log-uri încă."
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
+        # errors="replace" pentru robustețe: log-ul poate conține linii vechi
+        # scrise cu alt encoding (CP1252 din Windows console) pe lângă noile
+        # scrieri utf-8. Fără asta, un singur byte 0x9B corupt (de ex. din mojibake
+        # "ținte"→"E>inte") oprește complet citirea logului în UI.
+        with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
             
         # Extragem ultimele linii
