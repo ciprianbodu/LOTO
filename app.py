@@ -160,14 +160,26 @@ def generate_hard_core_description(
     # Construire descriere
     desc_parts = []
     
-    # Pool size (efectiv vs cerut în UI — Ultra-Hit ridică automat la minim 15)
+    # Pool size (efectiv vs cerut în UI — Ultra-Hit opțional ridică la minim 15)
     desc_parts.append(f"Pool: <strong>{pool_size}</strong> numere (efectiv)")
+    uh_audit = audit.get("ultra_hit_optimization")
     if pool_size_requested is not None and int(pool_size_requested) != int(pool_size):
-        desc_parts.append(
-            f"<small style='color:#94a3b8;'>În UI ai selectat <strong>{pool_size_requested}</strong> — motorul "
-            f"a folosit <strong>{pool_size}</strong> pentru că modul <strong>Ultra-Hit</strong> "
-            f"(implicit activ) cere minim <strong>15</strong> numere la nucleu pentru optimizare 4+/5+.</small>"
-        )
+        if uh_audit is True:
+            desc_parts.append(
+                f"<small style='color:#94a3b8;'>În UI ai selectat <strong>{pool_size_requested}</strong> — motorul "
+                f"a folosit <strong>{pool_size}</strong> pentru că <strong>Ultra-Hit</strong> este "
+                f"<strong>activ</strong> și cere minim <strong>15</strong> numere la nucleu pentru optimizare 4+/5+.</small>"
+            )
+        elif uh_audit is False:
+            desc_parts.append(
+                f"<small style='color:#f59e0b;'>În UI ai selectat <strong>{pool_size_requested}</strong>, dar nucleul "
+                f"efectiv are <strong>{pool_size}</strong> numere (Ultra-Hit oprit — verifică log-ul sau etapele pipeline).</small>"
+            )
+        else:
+            desc_parts.append(
+                f"<small style='color:#94a3b8;'>În UI ai selectat <strong>{pool_size_requested}</strong> — "
+                f"nucleu efectiv <strong>{pool_size}</strong> (rulare veche fără flag Ultra-Hit în audit).</small>"
+            )
     
     # Lookback
     if lookback_pct > 0:
@@ -271,6 +283,8 @@ if "sim_depth_suffix" not in st.session_state:
     st.session_state["sim_depth_suffix"] = 0
 if "consecutive_filter_val" not in st.session_state:
     st.session_state["consecutive_filter_val"] = True
+if "ultra_hit_val" not in st.session_state:
+    st.session_state["ultra_hit_val"] = False
 
 # Mutat aici pentru a permite paginii sa se randeze partial inainte de blocaje
 def ensure_worker_running():
@@ -463,9 +477,17 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
 
             # Parametri
             hist_txt = f"ultimele {lookback_pct}%" if lookback_pct > 0 else "tot istoricul"
+            uh_flag = data.get("ultra_hit_optimization")
             pool_line = f"pool efectiv={pool_size}"
             if pool_req is not None and int(pool_req) != int(pool_size):
-                pool_line += f" (cerut în UI={pool_req}; Ultra-Hit → minim 15)"
+                if uh_flag is True:
+                    pool_line += f" (cerut în UI={pool_req}; Ultra-Hit ridică la minim 15)"
+                elif uh_flag is False:
+                    pool_line += f" (cerut în UI={pool_req}; diferență cu efectiv — verifică pipeline/log)"
+                else:
+                    pool_line += f" (cerut în UI={pool_req}; rulare veche fără flag Ultra-Hit)"
+            if uh_flag is not None:
+                pool_line += f" | Ultra-Hit={'DA' if uh_flag else 'NU'}"
             lines.append(f"Parametri: {pool_line} | garanție={guarantee} | istoric={hist_txt} ({total_draws} extrageri)")
 
             # Nucleu dur
@@ -1079,7 +1101,12 @@ with st.sidebar:
         key="consecutive_filter_val"
     )
 
-    
+    st.checkbox(
+        "Mod Ultra-Hit (ridică nucleul la min. 15 nr. dacă ai ales mai puțin; garanție min. 4)",
+        value=st.session_state.get("ultra_hit_val", False),
+        help="Implicit oprit: nucleul are exact dimensiunea din „Dimensiune Pool”. Dacă îl pornești, motorul poate crește pool-ul la 15 și garanția la 4 pentru optimizare 4+/5+.",
+        key="ultra_hit_val",
+    )
 
     st.header("3. Control Execuție")
     
@@ -1178,6 +1205,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         h.update(str(st.session_state["max_variants_val"]).encode("utf-8"))
         h.update(str(st.session_state["lookback_val"]).encode("utf-8"))
         h.update(str(st.session_state["consecutive_filter_val"]).encode("utf-8"))
+        h.update(str(st.session_state.get("ultra_hit_val", False)).encode("utf-8"))
         h.update(str(True).encode("utf-8"))
         h.update(str(st.session_state["sim_depth_val"]).encode("utf-8"))
         
@@ -1203,6 +1231,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
                 "filter_consecutives": st.session_state["consecutive_filter_val"],
                 "smart_reduction": True,
                 "sim_depth_pct": game_sim_depth,
+                "ultra_hit_optimization": bool(st.session_state.get("ultra_hit_val", False)),
             }
             
             logging.info(f"[APP] Submitere job pentru {g_label}: {task_dict}")

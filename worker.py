@@ -170,6 +170,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             filter_cons = bool(task.get("filter_consecutives", True))
             smart_red = bool(task.get("smart_reduction", True))
             sim_depth = int(task.get("sim_depth_pct", 10))
+            ultra_hit = bool(task.get("ultra_hit_optimization", False))
             cold_pct = 20  # Default 20% Cold/Hot balance
             logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
             logging.debug(f"[worker] Full task: {task}")
@@ -204,6 +205,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     filter_consecutives=filter_cons,
                     smart_reduction=smart_red,
                     sim_depth_pct=sim_depth,
+                    ultra_hit_optimization=ultra_hit,
                     enable_adaptive_persistence=True,
                 )
                 
@@ -220,6 +222,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "pool_size_requested": p_size,
                     "guarantee": guar,
                     "lookback": lookback,
+                    "ultra_hit_optimization": ultra_hit,
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),
                     "p10": p10,

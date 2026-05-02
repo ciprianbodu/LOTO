@@ -361,14 +361,15 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, ultra_hit_optimization=True, enable_adaptive_persistence=False):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, ultra_hit_optimization=False, enable_adaptive_persistence=False):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
             Backtester-ul îl lasă False (își gestionează propriul state in-memory).
         """
-        # Optimizare pentru hit-uri de 4/5
+        # Optimizare pentru hit-uri de 4/5 (opțional din UI; implicit oprit)
+        self.audit["ultra_hit_optimization"] = bool(ultra_hit_optimization)
         if ultra_hit_optimization:
             logging.info("[PIPELINE] MOD ULTRA-HIT ACTIVAT: Optimizare pentru hit-uri de 4 și 5 numere.")
             if pool_size < 15:
