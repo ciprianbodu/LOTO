@@ -1348,7 +1348,54 @@ if "persistent_results" in st.session_state:
 
                 st.markdown(f"**Nucleu Dur ({len(hc)} numere):**<br>{hc_html}", unsafe_allow_html=True)
                 st.markdown(f"**{dynamic_desc}**", unsafe_allow_html=True)
-                
+
+                # --- EVOLUTIA POOL-ULUI PE ETAPE (transparenta pipeline) ---
+                stages = audit.get("pipeline_stages") or {}
+                if stages:
+                    stage_meta = [
+                        ("1_nqi_raw",         "1. TimesFM NQI (raw)",       "#60a5fa", "Pool inițial din scorurile NQI v2 (după blacklist + Hard Inversion)."),
+                        ("2_smart_selector",  "2. Smart Selector",          "#a78bfa", "Rafinare hibridă: 40% Gap + 25% Trend + 20% Frequency + 15% Positional. Înlocuiește numerele cu scor slab."),
+                        ("3_anti_sequence",   "3. Anti-Sequence Filter",    "#f59e0b", "Elimină secvențe de 3+ numere consecutive dacă nu au ieșit în >=1% din extrageri. Înlocuiește cu rezerve de top-frecvență."),
+                        ("4_post_hoc_final",  "4. POST-HOC Final",          "#10b981", "Validare retrospectivă pe ultimele extrageri: substituții iterative care maximizează hit-urile 4+/5+/6."),
+                    ]
+                    with st.expander("🔍 Evoluția Pool-ului — Pipeline Stage-by-Stage", expanded=False):
+                        st.caption("Urmărește cum pool-ul e modificat la fiecare etapă a pipeline-ului. Numerele roșii sunt scoase față de etapa precedentă, cele verzi sunt adăugate.")
+                        prev_pool: set[int] | None = None
+                        for key, title, color, desc in stage_meta:
+                            pool_list = stages.get(key)
+                            if not pool_list:
+                                continue
+                            pool_set = set(int(x) for x in pool_list)
+                            added_here: set[int] = set()
+                            removed_here: set[int] = set()
+                            if prev_pool is not None:
+                                added_here = pool_set - prev_pool
+                                removed_here = prev_pool - pool_set
+                            # Pool actual cu highlight pe adăugate
+                            chips = []
+                            for n in sorted(pool_set):
+                                if n in added_here:
+                                    chips.append(f"<span style='background:#064e3b;color:#6ee7b7;padding:2px 8px;border-radius:10px;margin:2px;font-weight:bold;'>+{n}</span>")
+                                else:
+                                    chips.append(f"<span style='background:rgba(255,255,255,0.07);color:#e5e7eb;padding:2px 8px;border-radius:10px;margin:2px;'>{n}</span>")
+                            # Numere scoase (arătate inline ca "fantome")
+                            removed_chips = [
+                                f"<span style='background:#7f1d1d;color:#fecaca;padding:2px 8px;border-radius:10px;margin:2px;text-decoration:line-through;'>−{n}</span>"
+                                for n in sorted(removed_here)
+                            ]
+                            delta_summary = ""
+                            if prev_pool is not None:
+                                delta_summary = f"<span style='color:#94a3b8;font-size:0.85em;'> (Δ: +{len(added_here)}, −{len(removed_here)})</span>"
+                            st.markdown(
+                                f"<div style='margin-top:10px;padding:10px;background:rgba(255,255,255,0.03);border-left:3px solid {color};border-radius:4px;'>"
+                                f"<div style='font-weight:700;color:{color};'>{title}{delta_summary}</div>"
+                                f"<div style='font-size:0.85em;color:#94a3b8;margin:4px 0 8px 0;'>{desc}</div>"
+                                f"<div>{' '.join(chips)} {' '.join(removed_chips)}</div>"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+                            prev_pool = pool_set
+
                 # --- AFISARE REZULTATE BACKTESTING SUB NUCLEUL DUR ---
                 game_type_id = "6/49"
                 if "5/40" in game.lower() or "5_40" in game.lower(): game_type_id = "5/40"

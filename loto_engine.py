@@ -565,16 +565,24 @@ class LotoEngine:
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
         
+        # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
+        # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
+        self.audit['pipeline_stages'] = {
+            "1_nqi_raw": sorted(self.hard_core.copy()),
+        }
+        
         # [NEW] Optimizare suplimentară prin Smart Selector (Gap/Trend/Positional)
         # Rafinează pool-ul pentru a maximiza hit-urile de 4 și 5 numere.
         if hasattr(self, '_apply_smart_selector'):
             logging.info("[PIPELINE] Rafinare nucleu prin Smart Selector (Hybrid Optimization)...")
             self._apply_smart_selector(freq)
+        self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
 
         # Aplicăm filtrul anti-secvență pe nucleul generat de TimesFM
         if filter_consecutives:
             logging.info("[PIPELINE] Aplicare Filtru Anti-Secvență pe nucleul TimesFM...")
             self.hard_core = self._apply_consecutive_filter(self.hard_core, freq)
+        self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
 
         # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere
         if len(self.hard_core) > pool_size:
@@ -594,6 +602,7 @@ class LotoEngine:
             self.hard_core = self._validate_pool_retrospective(
                 self.hard_core, tfm_scores, pool_size, blacklist
             )
+        self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
         
         if self.game_type == "joker":
             logging.info(f"[PIPELINE] TimesFM v2 pentru Urna 2 (Joker)...")
@@ -789,6 +798,13 @@ class LotoEngine:
         # Prevenim bucla infinită memorând secvențele validate (care rămân în pool)
         validated_sequences = set()
         
+        # Trackăm numerele scoase pentru a nu le re-adăuga: reserve_idx avansează
+        # prin all_sorted_indices și, dacă pool-ul inițial e NQI-based (nu pur
+        # frequency-based), reserve-ul putea ajunge la slot-ul de freq al unui
+        # număr tocmai eliminat ("not in current_pool" → re-adăugat ca noop).
+        # Bug observat 2026-05-02: "Scos 18 (freq 316), adăugat 18 (freq 316)".
+        removed_nums: set[int] = set()
+        
         while True:
             found_sequence = None
             # Căutăm orice secvență de 3+ numere consecutive care nu a fost încă validată
@@ -829,13 +845,15 @@ class LotoEngine:
             # Nu au ieșit. Găsim cel mai slab număr din secvență.
             weakest_num = min(found_sequence, key=lambda x: freq[x-1])
             current_pool.remove(weakest_num)
+            removed_nums.add(weakest_num)
             
-            # Adăugăm rezerva
+            # Adăugăm rezerva (sărim peste numerele deja scoase în această rulare
+            # ca să nu apară modificări tip "Scos X → adăugat X").
             added = False
             while reserve_idx < len(all_sorted_indices):
                 next_num = int(all_sorted_indices[reserve_idx]) + 1
                 reserve_idx += 1
-                if next_num not in current_pool:
+                if next_num not in current_pool and next_num not in removed_nums:
                     current_pool.append(next_num)
                     modifications.append(f"Scos {weakest_num} (frecvență {int(freq[weakest_num-1])}), adăugat {next_num} (frecvență {int(freq[next_num-1])})")
                     added = True
