@@ -644,6 +644,76 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
                 lines.append("")
                 lines.append(f"Hardware folosit: CPU max {resource_stats.get('max_cpu', '?')}% | RAM max {resource_stats.get('max_ram', '?')}% | GPU max {resource_stats.get('max_gpu', '?')}% | VRAM max {resource_stats.get('max_vram_gb', '?')} GB")
 
+    # ──────────────────────────────────────────────────────────────────────
+    # CROSS-POOL OVERLAP: ce numere preferă TimesFM universal?
+    # ──────────────────────────────────────────────────────────────────────
+    pools_by_game: dict[str, set[int]] = {}
+    pools_by_game_pretty: dict[str, list[int]] = {}
+    stages_by_game: dict[str, dict] = {}
+    for fname, outputs in results_bundle:
+        for game, data in (outputs or {}).items():
+            if not isinstance(data, dict):
+                continue
+            hc = data.get("hard_core") or []
+            if not hc:
+                continue
+            label = f"{game.upper()} ({fname})"
+            pools_by_game[label] = set(int(x) for x in hc)
+            pools_by_game_pretty[label] = sorted(int(x) for x in hc)
+            stages_by_game[label] = data.get("audit", {}).get("pipeline_stages") or {}
+
+    if len(pools_by_game) >= 2:
+        lines.append("")
+        lines.append(sep)
+        lines.append("ANALIZĂ CROSS-POOL (convergență TimesFM între jocuri)")
+        lines.append(sep)
+
+        # 1. Intersecția TOTALĂ (numere în toate pool-urile disponibile)
+        sets_list = list(pools_by_game.values())
+        intersect_all = set.intersection(*sets_list) if sets_list else set()
+        if intersect_all:
+            lines.append(f"Consens {len(sets_list)}/{len(sets_list)} jocuri ({len(intersect_all)} numere): {', '.join(str(n) for n in sorted(intersect_all))}")
+            lines.append("  → TimesFM consideră aceste numere puternice UNIVERSAL, indiferent de joc.")
+        else:
+            lines.append(f"Consens {len(sets_list)}/{len(sets_list)}: niciun număr nu apare în toate pool-urile.")
+
+        # 2. Frecvență per număr pe toate pool-urile (cât de des "votează" TimesFM pentru fiecare)
+        from collections import Counter
+        all_nums: Counter = Counter()
+        for s in sets_list:
+            for n in s:
+                all_nums[n] += 1
+        # Limita superioară max între toate jocurile
+        max_count = max(all_nums.values()) if all_nums else 0
+        if max_count >= 2:
+            lines.append("")
+            lines.append("Numere votate în 2+ pool-uri (top TimesFM favorites):")
+            for votes in range(max_count, 1, -1):
+                nums_at = sorted(n for n, c in all_nums.items() if c == votes)
+                if nums_at:
+                    lines.append(f"  {votes}/{len(sets_list)} voturi ({len(nums_at)} nr): {', '.join(str(n) for n in nums_at)}")
+
+        # 3. Stage-stability: numere care SUPRAVIEȚUIESC prin toate cele 4 pipeline stages la fiecare joc
+        lines.append("")
+        lines.append("Numere \"bulletproof\" (prezente la toate 4 stages ale pipeline-ului):")
+        for label, stages in stages_by_game.items():
+            stage_keys = ["1_nqi_raw", "2_smart_selector", "3_anti_sequence", "4_post_hoc_final"]
+            stage_sets = []
+            for k in stage_keys:
+                p = stages.get(k)
+                if p:
+                    stage_sets.append(set(int(x) for x in p))
+            if len(stage_sets) >= 2:
+                survivors = set.intersection(*stage_sets)
+                survivors_sorted = sorted(survivors)
+                lines.append(f"  {label}: {len(survivors_sorted)} din {len(stage_sets[0])} ({', '.join(str(n) for n in survivors_sorted) or '—'})")
+
+        # 4. Per-pool listing for reference
+        lines.append("")
+        lines.append("Pool-uri finale per joc (pentru referință):")
+        for label, pool in pools_by_game_pretty.items():
+            lines.append(f"  {label} [{len(pool)}]: {', '.join(str(n) for n in pool)}")
+
     lines.append("")
     lines.append(sep)
     lines.append("END RAPORT")

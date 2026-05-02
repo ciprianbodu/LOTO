@@ -1001,59 +1001,64 @@ class LotoEngine:
 
     def _apply_smart_selector(self, freq: np.ndarray) -> None:
         """
-        Smart Selector - sistem hibrid avansat care combină:
-        1. Gap Analysis (40%) - Analiza intervalelor
-        2. Trend Analysis (25%) - Analiza trend-urilor
-        3. Hot/Cold Analysis (20%) - Frecvență istorică
-        4. Positional Analysis (15%) - Analiza pozițională
+        Smart Selector v2 - sistem hibrid care aliniază rafinarea cu semnalul
+        empiric folosit de POST-HOC Final, pentru a elimina overhead-ul unde
+        POST-HOC rescria 40–47% din pool (observat 2026-05-02 pe loto_6_49,
+        loto_5_40 și joker: Δ post-hoc +6/−6 până la +7/−7 din 15).
+
+        Factori:
+        1. Gap Analysis       (30%) - Analiza intervalelor (a fost 40%)
+        2. Trend Analysis     (15%) - Analiza trend-urilor (a fost 25%)
+        3. Hot/Cold Analysis  (15%) - Frecvență istorică  (a fost 20%)
+        4. Positional         (10%) - Analiza pozițională (a fost 15%)
+        5. Recent Empirical   (30%) - Apariții în ultimele 50 extrageri,
+           weighted mai mult pe ultimele 15 (reactivitate). Acesta e același
+           semnal pe care POST-HOC îl folosește pentru optimizarea hit-urilor
+           4+/5+/6 — injectat aici, Smart Selector produce deja un pool
+           "apropiat" de optimul POST-HOC, iar POST-HOC devine touch-up.
         """
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return
-            
-        logging.info("[SMART] Inițiere Smart Selector - analiză multi-factorială...")
-        
-        # Calculăm scoruri pentru fiecare metodă
+
+        logging.info("[SMART] Inițiere Smart Selector v2 - analiză multi-factorială...")
+
         gap_scores = self._calculate_gap_scores()
         trend_scores = self._calculate_trend_scores()
         frequency_scores = self._calculate_frequency_scores(freq)
         positional_scores = self._calculate_positional_scores()
-        
-        # Combinăm scorurile cu ponderile specificate
+        recent_hit_scores = self._calculate_recent_hit_scores()
+
         final_scores = {}
         for num in self.hard_core:
             final_score = (
-                gap_scores.get(num, 0) * 0.40 +      # Gap Analysis
-                trend_scores.get(num, 0) * 0.25 +    # Trend Analysis
-                frequency_scores.get(num, 0) * 0.20 + # Hot/Cold
-                positional_scores.get(num, 0) * 0.15  # Positional
+                gap_scores.get(num, 0) * 0.30 +
+                trend_scores.get(num, 0) * 0.15 +
+                frequency_scores.get(num, 0) * 0.15 +
+                positional_scores.get(num, 0) * 0.10 +
+                recent_hit_scores.get(num, 0) * 0.30
             )
             final_scores[num] = final_score
-        
-        # Sortăm după scor final (descrescător)
+
         sorted_by_score = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)
-        
-        # Alegem top 70% din nucleu bazat pe scoruri
+
         # Păstrăm 80% din nucleu pentru a evita pierderea numerelor potențial câștigătoare
         keep_count = max(6, int(len(self.hard_core) * 0.8))
         best_numbers = [num for num, score in sorted_by_score[:keep_count]]
-        
-        # Găsim alternative pentru numerele excluse
         excluded_numbers = [num for num in self.hard_core if num not in best_numbers]
-        
+
         if excluded_numbers:
             self._replace_with_smart_alternatives(excluded_numbers, best_numbers, freq)
-            
-            # Salvăm în audit
+
             if 'smart_selector' not in self.audit:
                 self.audit['smart_selector'] = {}
-            
+
             self.audit['smart_selector'] = {
-                'method': 'Hybrid Analysis (40% Gap + 25% Trend + 20% Frequency + 15% Positional)',
+                'method': 'Hybrid Analysis v2 (30% Gap + 15% Trend + 15% Freq + 10% Positional + 30% Recent-Hits)',
                 'kept_numbers': best_numbers,
                 'replaced_numbers': excluded_numbers,
                 'final_scores': {num: round(score, 3) for num, score in sorted_by_score}
             }
-            
+
             logging.info(f"[SMART] Optimizat nucleul: păstrate {len(best_numbers)}, înlocuite {len(excluded_numbers)}")
     
     def _calculate_gap_scores(self) -> dict:
@@ -1144,6 +1149,50 @@ class LotoEngine:
         logging.info(f"[SMART] Frequency scores calculated: {frequency_scores}")
         return frequency_scores
     
+    def _calculate_recent_hit_scores(self) -> dict:
+        """
+        Recent Empirical Validity (REV) (30% weight) — aliniere cu POST-HOC.
+
+        Calculează un scor [0,1] per număr bazat pe aparițiile în ultimele
+        50 extrageri, cu o pondere mai mare pe ultimele 15 (reactivitate la
+        regim recent). Un număr care a ieșit recent primește scor apropiat
+        de 1.0; unul care nu a mai ieșit în >=50 extrageri primește ~0.
+
+        Formula:
+            short = hits în ultimele 15 / 15
+            long  = hits în ultimele 50 / 50
+            score = 0.65 * short + 0.35 * long
+
+        Scale-ul e calibrat ca numerele cu frecvență tipică (baseline 15-20%
+        pe ultima fereastră) să ajungă în [0.3, 0.6], iar cele cu burst
+        recent să urce peste 0.7.
+        """
+        if self._draw_matrix is None or self._draw_matrix.shape[0] == 0:
+            return {num: 0.5 for num in self.hard_core}
+
+        n_short = min(15, self._draw_matrix.shape[0])
+        n_long = min(50, self._draw_matrix.shape[0])
+
+        short_matrix = self._draw_matrix[-n_short:]
+        long_matrix = self._draw_matrix[-n_long:]
+
+        short_sets = [set(int(v) for v in row if v > 0) for row in short_matrix]
+        long_sets = [set(int(v) for v in row if v > 0) for row in long_matrix]
+
+        recent_scores = {}
+        for num in self.hard_core:
+            short_hits = sum(1 for s in short_sets if num in s)
+            long_hits = sum(1 for s in long_sets if num in s)
+            short_rate = short_hits / n_short if n_short else 0.0
+            long_rate = long_hits / n_long if n_long else 0.0
+            # Boost ușor pe rate-ul scurt: un număr care iese în 3/15 (20%) recente
+            # primește scor ~0.45, mult peste un număr care iese 0/15 recente → ~0.07.
+            score = 0.65 * min(1.0, short_rate * 2.5) + 0.35 * min(1.0, long_rate * 3.0)
+            recent_scores[num] = float(score)
+
+        logging.info(f"[SMART] Recent-hit scores (short={n_short}, long={n_long}): {recent_scores}")
+        return recent_scores
+
     def _calculate_positional_scores(self) -> dict:
         """
         Positional Analysis (15% weight) - Analiza preferințelor poziționale
