@@ -31,3 +31,4 @@ venv_timesfm/
 backtest_results.json
 scratch/*_log.txt
 *.backup_overnight
+adaptive_state.json
