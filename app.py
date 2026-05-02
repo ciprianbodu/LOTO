@@ -103,7 +103,15 @@ def get_hardware_info():
         
     return " | ".join(hw_info) if hw_info else "Informații Hardware indisponibile"
 
-def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, game_type, resource_stats=None):
+def generate_hard_core_description(
+    audit,
+    total_draws,
+    lookback_pct,
+    pool_size,
+    game_type,
+    resource_stats=None,
+    pool_size_requested=None,
+):
     """
     Generează o descriere dinamică a Nucleului Dur bazată pe ce s-a realizat efectiv.
     """
@@ -152,8 +160,14 @@ def generate_hard_core_description(audit, total_draws, lookback_pct, pool_size, 
     # Construire descriere
     desc_parts = []
     
-    # Pool size
-    desc_parts.append(f"Pool: {pool_size} numere")
+    # Pool size (efectiv vs cerut în UI — Ultra-Hit ridică automat la minim 15)
+    desc_parts.append(f"Pool: <strong>{pool_size}</strong> numere (efectiv)")
+    if pool_size_requested is not None and int(pool_size_requested) != int(pool_size):
+        desc_parts.append(
+            f"<small style='color:#94a3b8;'>În UI ai selectat <strong>{pool_size_requested}</strong> — motorul "
+            f"a folosit <strong>{pool_size}</strong> pentru că modul <strong>Ultra-Hit</strong> "
+            f"(implicit activ) cere minim <strong>15</strong> numere la nucleu pentru optimizare 4+/5+.</small>"
+        )
     
     # Lookback
     if lookback_pct > 0:
@@ -436,6 +450,7 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
             hc_joker_stats = data.get("hard_core_joker_stats", {}) or {}
             variants = data.get("variants", []) or []
             pool_size = data.get("pool_size", len(hc))
+            pool_req = data.get("pool_size_requested")
             guarantee = data.get("guarantee", 4)
             lookback_pct = data.get("lookback", 0)
             total_draws = data.get("total_draws", 0)
@@ -448,7 +463,10 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
 
             # Parametri
             hist_txt = f"ultimele {lookback_pct}%" if lookback_pct > 0 else "tot istoricul"
-            lines.append(f"Parametri: pool={pool_size} | garanție={guarantee} | istoric={hist_txt} ({total_draws} extrageri)")
+            pool_line = f"pool efectiv={pool_size}"
+            if pool_req is not None and int(pool_req) != int(pool_size):
+                pool_line += f" (cerut în UI={pool_req}; Ultra-Hit → minim 15)"
+            lines.append(f"Parametri: {pool_line} | garanție={guarantee} | istoric={hist_txt} ({total_draws} extrageri)")
 
             # Nucleu dur
             hc_str_parts = []
@@ -1579,13 +1597,15 @@ if "persistent_results" in st.session_state:
                 
                 # Generăm descrierea dinamică
                 pool_size = data.get('pool_size', len(hc))
+                pool_req = data.get('pool_size_requested')
                 dynamic_desc = generate_hard_core_description(
                     audit=audit,
                     total_draws=total_draws,
                     lookback_pct=used_lookback,
                     pool_size=pool_size,
                     game_type=game,
-                    resource_stats=data.get('resource_stats')
+                    resource_stats=data.get('resource_stats'),
+                    pool_size_requested=pool_req,
                 )
                 
                 pool_var = audit.get("pool_variation", {})

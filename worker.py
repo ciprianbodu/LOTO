@@ -207,6 +207,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     enable_adaptive_persistence=True,
                 )
                 
+                effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {
                     "total_draws": len(engine.data) if engine.data is not None else 0,
                     "hard_core": engine.hard_core,
@@ -214,7 +215,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "hard_core_joker": getattr(engine, 'hard_core_joker', []),
                     "hard_core_joker_stats": getattr(engine, 'hard_core_joker_stats', {}),
                     "variants": lines,
-                    "pool_size": p_size,
+                    # pool_size = ce folosește efectiv motorul (Ultra-Hit poate ridica 12→15)
+                    "pool_size": effective_pool,
+                    "pool_size_requested": p_size,
                     "guarantee": guar,
                     "lookback": lookback,
                     "audit": audit,
