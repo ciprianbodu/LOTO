@@ -585,10 +585,12 @@ class LotoEngine:
             self.hard_core = self._apply_consecutive_filter(self.hard_core, freq)
         self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
 
-        # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere
+        # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere.
+        # Trunchiere după scor TimesFM (nu după ordinea numerică — altfel pierzi bile tari).
         if len(self.hard_core) > pool_size:
-            logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size}.")
-            self.hard_core = self.hard_core[:pool_size]
+            logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor NQI.")
+            ranked = sorted(self.hard_core, key=lambda n: tfm_scores.get(n, 0.0), reverse=True)
+            self.hard_core = sorted(ranked[:pool_size])
         elif len(self.hard_core) < pool_size:
             logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
             self._consecutive_filter_applied = True
@@ -1791,8 +1793,11 @@ class LotoEngine:
            cu un candidat extern crește rata de hit-uri de 4+.
         """
         if self._draw_matrix is None or self._draw_matrix.shape[0] < 20:
-            return pool
-        
+            if len(pool) > pool_size:
+                ranked = sorted(pool, key=lambda n: scores.get(n, 0.0), reverse=True)
+                pool = ranked[:pool_size]
+            return sorted(pool)
+
         draw_n = int(self.params.get("draw_n", 6))
         
         # Determinăm pragul de hit bazat pe tipul de joc

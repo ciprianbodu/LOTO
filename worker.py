@@ -164,6 +164,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
         for task in ds.get("tasks", []):
             game_label = str(task["game_label"])
             p_size = int(task.get("pool_size", 12))
+            p_size = max(7, min(24, p_size))
             guar = int(task.get("guarantee", 4))
             max_var = int(task.get("max_variants", 0))
             lookback = int(task.get("lookback", 0))

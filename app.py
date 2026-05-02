@@ -1053,14 +1053,15 @@ with st.sidebar:
 
     st.header("2. Setări Algoritm Wheeling")
     
-    pool_size_input = st.number_input(
+    # NU folosi value= împreună cu key= pentru același nume — Streamlit poate reseta
+    # widget-ul la valoarea inițială (12) la rerun, ignorând +/- utilizatorului.
+    st.number_input(
         "Dimensiune Pool (Nucleu Dur)",
         min_value=7,
         max_value=24,
-        value=st.session_state.get("pool_size_val", 12),
         step=1,
         help="Câte numere din topul frecvenței să fie folosite.",
-        key="pool_size_val"
+        key="pool_size_val",
     )
     
         
