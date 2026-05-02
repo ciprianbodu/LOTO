@@ -399,6 +399,258 @@ def _decode_queue_result(result_json: str) -> object:
     blob = base64.b64decode(str(data.get("payload", "")))
     return pickle.loads(blob)
 
+
+def _fmt_pool_inline(pool: list) -> str:
+    return ", ".join(str(int(n)) for n in sorted(pool)) if pool else "—"
+
+
+def _build_full_report(results_bundle, retro_results: dict | None = None) -> str:
+    """Construiește un raport text integral cu tot conținutul analizei, pentru
+    copy-paste. Include parametri, pipeline stages, blacklist, Smart Selector,
+    anti-sequence, pool, variante, backtest, financiar, hardware."""
+    from datetime import datetime
+    retro_results = retro_results or {}
+    lines: list[str] = []
+    sep = "=" * 80
+    sub = "-" * 80
+    lines.append(sep)
+    lines.append("LOTO ENTERPRISE WHEELING — RAPORT COMPLET")
+    lines.append(f"Generat: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append("Neural Foundation: Google TimesFM v2 (XReg + Quantile + Multi-Horizon)")
+    lines.append(sep)
+
+    game_order = ["6/49", "joker", "5/40"]
+    for fname, outputs in results_bundle:
+        lines.append("")
+        lines.append(sep)
+        lines.append(f"FIȘIER: {fname}")
+        lines.append(sep)
+        for game in game_order:
+            if game not in outputs:
+                continue
+            data = outputs[game]
+            audit = data.get("audit", {}) or {}
+            hc = data.get("hard_core", []) or []
+            hc_stats = data.get("hard_core_stats", {}) or {}
+            hc_joker = data.get("hard_core_joker", []) or []
+            hc_joker_stats = data.get("hard_core_joker_stats", {}) or {}
+            variants = data.get("variants", []) or []
+            pool_size = data.get("pool_size", len(hc))
+            guarantee = data.get("guarantee", 4)
+            lookback_pct = data.get("lookback", 0)
+            total_draws = data.get("total_draws", 0)
+            resource_stats = data.get("resource_stats", {}) or {}
+            context = data.get("context", {}) or {}
+
+            lines.append("")
+            lines.append(f">>> JOC: {game.upper()}")
+            lines.append(sub)
+
+            # Parametri
+            hist_txt = f"ultimele {lookback_pct}%" if lookback_pct > 0 else "tot istoricul"
+            lines.append(f"Parametri: pool={pool_size} | garanție={guarantee} | istoric={hist_txt} ({total_draws} extrageri)")
+
+            # Nucleu dur
+            hc_str_parts = []
+            total = max(1, int(total_draws))
+            for n in hc:
+                hits = hc_stats.get(str(n), hc_stats.get(n, 0))
+                pct = int((hits / total) * 100) if isinstance(hits, int) else 0
+                hc_str_parts.append(f"{n}({pct}%)")
+            lines.append(f"Nucleu Dur ({len(hc)} numere): {', '.join(hc_str_parts)}")
+            if hc_joker:
+                hj_parts = []
+                for n in hc_joker:
+                    hits = hc_joker_stats.get(str(n), hc_joker_stats.get(n, 0))
+                    pct = int((hits / total) * 100) if isinstance(hits, int) else 0
+                    hj_parts.append(f"{n}({pct}%)")
+                lines.append(f"Nucleu Joker ({len(hc_joker)} numere): {', '.join(hj_parts)}")
+
+            # Pipeline stages
+            stages = audit.get("pipeline_stages") or {}
+            if stages:
+                lines.append("")
+                lines.append("Evoluția pool-ului (pipeline stages):")
+                stage_titles = [
+                    ("1_nqi_raw", "1. TimesFM NQI raw"),
+                    ("2_smart_selector", "2. Smart Selector"),
+                    ("3_anti_sequence", "3. Anti-Sequence Filter"),
+                    ("4_post_hoc_final", "4. POST-HOC Final"),
+                ]
+                prev: set[int] | None = None
+                for key, title in stage_titles:
+                    p = stages.get(key)
+                    if not p:
+                        continue
+                    p_set = set(int(x) for x in p)
+                    delta = ""
+                    if prev is not None:
+                        added = sorted(p_set - prev)
+                        removed = sorted(prev - p_set)
+                        delta = f"  (Δ: +{len(added)} −{len(removed)}"
+                        if added:
+                            delta += f" | +{','.join(map(str, added))}"
+                        if removed:
+                            delta += f" | -{','.join(map(str, removed))}"
+                        delta += ")"
+                    lines.append(f"  {title}: [{_fmt_pool_inline(sorted(p_set))}]{delta}")
+                    prev = p_set
+
+            # Blacklist TimesFM
+            rf = audit.get("reduction_filter") or {}
+            bl = rf.get("combined_blacklist") or []
+            if bl:
+                lines.append("")
+                lines.append(f"Blacklist TimesFM ({len(bl)} numere blocate): {', '.join(str(int(n)) for n in sorted(bl))}")
+
+            # Smart Selector
+            sm = audit.get("smart_selector") or {}
+            if sm:
+                kept = sm.get("kept_numbers", [])
+                repl = sm.get("replaced_numbers", [])
+                final_scores = sm.get("final_scores", {}) or {}
+                lines.append("")
+                lines.append(f"Smart Selector — {sm.get('method', 'Hybrid')}")
+                if kept:
+                    kept_with_score = [f"{n}({final_scores.get(n, final_scores.get(str(n), 0)):.3f})" for n in kept]
+                    lines.append(f"  Păstrate (top 70%): {', '.join(kept_with_score)}")
+                if repl:
+                    lines.append(f"  Înlocuite: {', '.join(str(int(n)) for n in repl)}")
+
+            # Anti-sequence
+            cf = audit.get("consecutive_filter") or []
+            if cf:
+                lines.append("")
+                lines.append(f"Anti-Sequence Filter ({len(cf)} modificări):")
+                for m in cf:
+                    lines.append(f"  • {m}")
+
+            # Anomaly
+            af = audit.get("anomaly_filter") or {}
+            if af:
+                lines.append("")
+                lines.append(f"Neural Anomaly Scoring: {af.get('final_count', '?')}/{af.get('original_count', '?')} păstrate (threshold={af.get('threshold', '?')})")
+
+            # Adaptive
+            adapt = audit.get("adaptive_state") or {}
+            if adapt:
+                event = adapt.get("event", "—")
+                mode = adapt.get("active_mode", "—")
+                last = adapt.get("last_hits")
+                base = adapt.get("baseline", 0)
+                rolling = adapt.get("rolling_avg")
+                lines.append("")
+                lines.append(f"Adaptive Feedback: event={event} | mode={mode} | last_hits={last} | baseline={base} | rolling={rolling}")
+                for key in ("boosts", "penalties", "missed", "false_positives"):
+                    vals = adapt.get(key) or []
+                    if vals:
+                        lines.append(f"  {key}: {vals}")
+
+            # Dinamica Nucleului
+            pv = audit.get("pool_variation") or {}
+            if pv and pv.get("changed"):
+                added = pv.get("added", [])
+                removed = pv.get("removed", [])
+                lines.append("")
+                lines.append("Dinamica Nucleului (vs ultima rulare):")
+                if added:
+                    lines.append(f"  Intrat: {', '.join(str(int(n)) for n in added)}")
+                if removed:
+                    lines.append(f"  Ieșit: {', '.join(str(int(n)) for n in removed)}")
+
+            # Context CSV
+            first_3 = context.get("first_3") or []
+            last_3 = context.get("last_3") or []
+            coverage_pct = context.get("coverage_pct", 0)
+            if first_3 or last_3:
+                lines.append("")
+                lines.append("Verificare CSV:")
+                if first_3:
+                    lines.append("  Primele 3 extrageri:")
+                    for d in first_3:
+                        nums_str = " ".join(f"{n:02d}" for n in d.get("numbers", []))
+                        joker = f" + J{d.get('joker')}" if d.get("joker") else ""
+                        lines.append(f"    {d.get('date','—')}  {nums_str}{joker}")
+                if last_3:
+                    lines.append("  Ultimele 3 extrageri:")
+                    for d in last_3:
+                        nums_str = " ".join(f"{n:02d}" for n in d.get("numbers", []))
+                        joker = f" + J{d.get('joker')}" if d.get("joker") else ""
+                        lines.append(f"    {d.get('date','—')}  {nums_str}{joker}")
+
+            # Variante
+            lines.append("")
+            lines.append(f"Variante generate: {len(variants)} | Acoperire garanție: {coverage_pct:.1f}%")
+            # Nu includem toate variantele default (pot fi sute). Le includem compact.
+            if variants:
+                lines.append("Lista variante (linie per bilet):")
+                for idx, v in enumerate(variants, 1):
+                    nums_str = " ".join(f"{n:02d}" for n in v)
+                    lines.append(f"  {idx:>3}. {nums_str}")
+
+            # Backtesting
+            game_id = "6/49"
+            if "5/40" in game.lower() or "5_40" in game.lower():
+                game_id = "5/40"
+            elif "joker" in game.lower():
+                game_id = "joker"
+            retro_key = f"{fname}_{game_id}"
+            retro_predictions = retro_results.get(retro_key) or []
+            if retro_predictions:
+                draw_n = 5 if game_id in ("5/40", "joker") else 6
+                total_sims = len(retro_predictions)
+                unique_draws = len(set(p.draw_index for p in retro_predictions))
+                total_hits = sum(p.hits for p in retro_predictions)
+                avg_hits = total_hits / total_sims
+                best_hit = max(p.hits for p in retro_predictions)
+                best_pool_hit = max(getattr(p, "hits_union", 0) for p in retro_predictions)
+                union_by_draw: dict[int, int] = {}
+                for p in retro_predictions:
+                    di = p.draw_index
+                    if di not in union_by_draw or getattr(p, "hits_union", 0) > union_by_draw[di]:
+                        union_by_draw[di] = getattr(p, "hits_union", 0)
+                avg_union = sum(union_by_draw.values()) / max(1, len(union_by_draw))
+                avg_rate = (avg_hits / draw_n) * 100 if draw_n else 0
+
+                lines.append("")
+                lines.append(f"Backtesting ({unique_draws} extrageri analizate)")
+                lines.append(sub)
+                lines.append(f"  Medie / Variantă: {avg_hits:.2f} | Medie / Pool: {avg_union:.2f} | Rată medie: {avg_rate:.1f}%")
+                lines.append(f"  Max Variantă: {best_hit} | Max Pool: {best_pool_hit}")
+
+                # Distribuție pool union
+                pool_dist: dict[int, int] = {}
+                for di, h in union_by_draw.items():
+                    pool_dist[h] = pool_dist.get(h, 0) + 1
+                total_p = max(1, sum(pool_dist.values()))
+                lines.append("  Distribuție Nucleu Dur (câte numere ale pool-ului au ieșit):")
+                for k in sorted(pool_dist.keys(), reverse=True):
+                    c = pool_dist[k]
+                    lines.append(f"    {k} numere: {c} extrageri ({100*c/total_p:.0f}%)")
+
+                # Distribuție hits per variantă
+                var_dist = {i: 0 for i in range(draw_n + 1)}
+                for p in retro_predictions:
+                    if p.hits in var_dist:
+                        var_dist[p.hits] += 1
+                total_v = max(1, sum(var_dist.values()))
+                lines.append("  Distribuție Performanță Variante (bilete):")
+                for k in sorted(var_dist.keys(), reverse=True):
+                    c = var_dist[k]
+                    lines.append(f"    {k} ghicite: {100*c/total_v:.1f}%")
+
+            # Hardware
+            if resource_stats:
+                lines.append("")
+                lines.append(f"Hardware folosit: CPU max {resource_stats.get('max_cpu', '?')}% | RAM max {resource_stats.get('max_ram', '?')}% | GPU max {resource_stats.get('max_gpu', '?')}% | VRAM max {resource_stats.get('max_vram_gb', '?')} GB")
+
+    lines.append("")
+    lines.append(sep)
+    lines.append("END RAPORT")
+    lines.append(sep)
+    return "\n".join(lines)
+
+
 st.markdown(_ST_GLOBAL_CSS, unsafe_allow_html=True)
 
 # Main Dashboard Header
@@ -414,6 +666,21 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 st.caption("Sistem de analiză hibridă: Google TimesFM v2 + Wheeling Combinatorial Optimizat.")
+
+# Buton Copiază raport complet (apare doar dacă există rezultate generate)
+_pr = st.session_state.get("persistent_results")
+if isinstance(_pr, tuple) and len(_pr) == 2 and _pr[0]:
+    _col_btn, _col_spacer = st.columns([1, 4])
+    with _col_btn:
+        if st.button("📋 Copiază raport complet", use_container_width=True, help="Afișează întregul rezultat (pipeline, pool, variante, backtest, ROI, hardware) într-un bloc de cod. Folosește butonul de copy din colțul blocului pentru a lua tot textul în clipboard."):
+            st.session_state["_show_full_report"] = not st.session_state.get("_show_full_report", False)
+    if st.session_state.get("_show_full_report", False):
+        try:
+            _report_text = _build_full_report(_pr[0], st.session_state.get("retro_results") or {})
+            st.caption(f"Raport complet ({len(_report_text.splitlines())} linii, {len(_report_text)} caractere). Apasă butonul din colțul dreapta-sus al blocului pentru a copia în clipboard.")
+            st.code(_report_text, language="markdown")
+        except Exception as _rep_err:
+            st.error(f"Nu am putut construi raportul: {_rep_err}")
 
 # Container pentru Mesaje de Calibrare / Status
 status_container = st.empty()
