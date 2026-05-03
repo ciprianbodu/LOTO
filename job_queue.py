@@ -57,7 +57,14 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     raise sqlite3.OperationalError("Could not connect to database after multiple retries")
 
 
+# Cache pentru DB-urile deja inițializate în acest proces — evităm CREATE TABLE
+# redundant la fiecare apel get_job_status/update_job_progress/etc.
+_INITIALIZED_DBS: set[str] = set()
+
+
 def init_job_queue(db_path: str = DB_PATH) -> None:
+    if db_path in _INITIALIZED_DBS:
+        return
     with _connect(db_path) as conn:
         conn.execute(
             """
@@ -84,6 +91,7 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
             """
         )
         conn.commit()
+    _INITIALIZED_DBS.add(db_path)
 
 
 def submit_job(task_type: str, config_json: str, db_path: str = DB_PATH) -> int:
@@ -165,56 +173,52 @@ def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> None:
         conn.commit()
 
 
-def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+def _claim_job(
+    db_path: str,
+    where_sql: str,
+    where_params: tuple,
+    update_sql: str,
+    update_extra_params: tuple = (),
+) -> dict[str, Any] | None:
+    """Pattern unificat de claim: BEGIN IMMEDIATE → SELECT cel mai vechi → UPDATE → COMMIT.
+
+    BEGIN IMMEDIATE acordă RESERVED lock; combinat cu PRAGMA busy_timeout=30000
+    setat în _connect, asigură serializare corectă între workeri concurenți.
+    """
     init_job_queue(db_path)
     with _connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            """
-            SELECT * FROM jobs
-            WHERE status = ?
-            ORDER BY id ASC
-            LIMIT 1
-            """,
-            (JOB_PENDING,),
+            f"SELECT * FROM jobs WHERE {where_sql} ORDER BY id ASC LIMIT 1",
+            where_params,
         ).fetchone()
         if row is None:
             conn.commit()
             return None
         job_id = int(row["id"])
-        conn.execute(
-            "UPDATE jobs SET status = ?, progress_pct = 1 WHERE id = ?",
-            (JOB_RUNNING, job_id),
-        )
+        conn.execute(update_sql, update_extra_params + (job_id,))
         conn.commit()
     return get_job_status(job_id, db_path=db_path)
+
+
+def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+    return _claim_job(
+        db_path,
+        where_sql="status = ?",
+        where_params=(JOB_PENDING,),
+        update_sql="UPDATE jobs SET status = ?, progress_pct = 1 WHERE id = ?",
+        update_extra_params=(JOB_RUNNING,),
+    )
 
 
 def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
-    """Preluăm job-uri RUNNING care nu au fost procesate încă."""
-    init_job_queue(db_path)
-    with _connect(db_path) as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            """
-            SELECT * FROM jobs
-            WHERE status = ? AND progress_pct <= 5
-            ORDER BY id ASC
-            LIMIT 1
-            """,
-            (JOB_RUNNING,),
-        ).fetchone()
-        if row is None:
-            conn.commit()
-            return None
-        job_id = int(row["id"])
-        # Actualizăm progresul pentru a marca că job-ul este preluat
-        conn.execute(
-            "UPDATE jobs SET progress_pct = 2 WHERE id = ?",
-            (job_id,),
-        )
-        conn.commit()
-    return get_job_status(job_id, db_path=db_path)
+    """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker)."""
+    return _claim_job(
+        db_path,
+        where_sql="status = ? AND progress_pct <= 5",
+        where_params=(JOB_RUNNING,),
+        update_sql="UPDATE jobs SET progress_pct = 2 WHERE id = ?",
+    )
 
 
 def cancel_pending_running_jobs(reason: str = "Oprit de utilizator", db_path: str = DB_PATH) -> int:

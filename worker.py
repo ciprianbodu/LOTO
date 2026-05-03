@@ -296,7 +296,7 @@ def main() -> None:
                 continue
 
             complete_job(job_id, result_json)
-            logging.info(f"[worker] Job {job.get('id')} completat cu succes, continuă loop...")
+            logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
             
         except Exception as exc:
             tb = traceback.format_exc()

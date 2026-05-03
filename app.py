@@ -296,8 +296,6 @@ if "lookback_val" not in st.session_state:
     st.session_state["lookback_val"] = 0
 if "sim_depth_val" not in st.session_state:
     st.session_state["sim_depth_val"] = 40
-if "sim_depth_suffix" not in st.session_state:
-    st.session_state["sim_depth_suffix"] = 0
 if "consecutive_filter_val" not in st.session_state:
     st.session_state["consecutive_filter_val"] = True
 if "ultra_hit_val" not in st.session_state:
@@ -862,9 +860,13 @@ if st.session_state.get("start_calib_now", False):
             # Păstrăm fallback pentru valoarea generală pe prima calibrare
             if idx == 0:
                 st.session_state["sim_depth_val"] = best_depth
-                
-        st.session_state["sim_depth_suffix"] += 1
-        st.session_state["start_calib_now"] = False # Oprim flag-ul
+
+        # Scriem direct în cheia stabilă a slider-ului ca să "pick-up"-uie noua valoare
+        # la următorul rerun. Înainte foloseam un suffix counter ca să forțăm re-crearea
+        # widget-ului — pattern fragil care rupea binding-ul Streamlit.
+        for g_label_to_set, best_d in st.session_state["calib_best_depth_dict"].items():
+            st.session_state[f"sim_depth_key_{g_label_to_set}"] = int(best_d)
+        st.session_state["start_calib_now"] = False  # Oprim flag-ul
         
         if st.session_state.get("trigger_gen_after_calib"):
             st.session_state["trigger_gen_after_calib"] = False
@@ -1129,8 +1131,6 @@ with st.sidebar:
     
     if "sim_depth_val" not in st.session_state:
         st.session_state["sim_depth_val"] = 40
-    if "sim_depth_suffix" not in st.session_state:
-        st.session_state["sim_depth_suffix"] = 0
 
     st.markdown("✨ **Mod Automat (Recomandat)**")
     if st.button("⚡ Auto-Pilot: Calibrează + Generează", type="primary", help="Găsește automat setarea optimă (calibrare) și generează imediat variantele finale. Este cea mai sigură și rapidă opțiune.", use_container_width=True):
@@ -1161,16 +1161,24 @@ with st.sidebar:
         help="Alege jocul pentru care dorești să modifici adâncimea de simulare."
     )
 
-    current_val_for_game = st.session_state["calib_best_depth_dict"].get(selected_game_depth, st.session_state.get("sim_depth_val", 40))
+    # Cheia stabilă per joc + inițializare lazy (la prima accesare a unui joc nou).
+    # Calibrarea scrie direct în această cheie, deci sliderul "pick-up"-uiește valoarea
+    # nouă la rerun fără hack-uri cu suffix counter.
+    sim_depth_key = f"sim_depth_key_{selected_game_depth}"
+    if sim_depth_key not in st.session_state:
+        st.session_state[sim_depth_key] = int(
+            st.session_state["calib_best_depth_dict"].get(
+                selected_game_depth, st.session_state.get("sim_depth_val", 40)
+            )
+        )
 
     sim_depth_input = st.slider(
-        "Adâncime Simulare Backtesting (%)", 
-        min_value=10, 
-        max_value=100, 
-        value=current_val_for_game,
+        "Adâncime Simulare Backtesting (%)",
+        min_value=10,
+        max_value=100,
         step=10,
         help="Stabilește cât din istoric analizează AI-ul pentru jocul selectat. (Valoare setată automat dacă folosiți Calibrarea)",
-        key=f"sim_depth_key_{st.session_state['sim_depth_suffix']}_{selected_game_depth}"
+        key=sim_depth_key,
     )
     st.session_state["calib_best_depth_dict"][selected_game_depth] = sim_depth_input
     st.session_state["sim_depth_val"] = sim_depth_input
@@ -1274,90 +1282,95 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
 if st.session_state.get("active_job_id"):
     job_id = int(st.session_state["active_job_id"])
     st.info(f"⏳ Job în rulare (#{job_id})...")
-    prog_bar = st.progress(0)
-    status_text = st.empty()
-    log_placeholder = st.empty()
-    
-    for _ in range(600):
-        stt = get_job_status(job_id)
-        if not stt:
-            st.error("Eroare job!")
-            break
-        
-        pct = int(stt.get("progress_pct") or 0)
-        state = str(stt.get("status") or "")
-        
-        prog_bar.progress(max(0, min(100, pct)))
-        status_text.text(f"Progres: {pct}%")
-        
-        # Update live logs during progress
-        with log_placeholder.container():
-            with st.expander("🛠 Consola DEBUG / Loguri (Live)", expanded=True):
-                logs_text = read_logs_filtered(50)
-                st.code(logs_text, language="text")
-        
-        if state == "COMPLETED":
-            result_json = str(stt.get("result_json") or "{}")
-            payload = _decode_queue_result(result_json)
-            st.session_state["persistent_results"] = payload
-            if "job_start_time" in st.session_state:
-                elapsed = time.time() - st.session_state["job_start_time"]
-                st.session_state["persistent_results_time"] = elapsed
-            
-            # --- NOU: Calcul automat Hits (Backtesting) ---
-            if isinstance(payload, tuple) and len(payload) == 2:
-                results_bundle, _ = payload
-                if "retro_results" not in st.session_state:
-                    st.session_state["retro_results"] = {}
-                
-                for fname, outputs in results_bundle:
-                    # Găsim DataFrame-ul original corespunzător fișierului
-                    df_source = None
-                    if "loaded_datasets" in st.session_state:
-                        for ds_name, ds_df in st.session_state["loaded_datasets"]:
-                            if ds_name == fname:
-                                df_source = ds_df
-                                break
-                    
-                    if df_source is not None:
-                        for g_label, data in outputs.items():
-                            vars_to_test = data.get("variants", [])
-                            if vars_to_test:
-                                try:
-                                    bt = LotoBacktester(df_source, game_type=g_label)
-                                    # Evaluăm pe ultimele 20% (sau cât a ales userul)
-                                    lookback = data.get("lookback", 20.0)
-                                    if lookback <= 0: lookback = 20.0
-                                    
-                                    # evaluate_variant returnează o listă de BacktestResult
-                                    # Mapăm rezultatele la structura așteptată de UI (retro_predictions)
-                                    summary = bt.evaluate_variants(vars_to_test, percentile=lookback)
-                                    
-                                    # Salvăm în formatul pe care UI îl consumă (listă de obiecte cu .hits)
-                                    retro_key = f"{fname}_{g_label}"
-                                    st.session_state["retro_results"][retro_key] = summary.all_results
-                                except Exception as e:
-                                    logging.error(f"Eroare backtesting automat: {e}")
 
-            st.session_state.pop("active_job_id", None)
-            st.session_state["play_completion_sound"] = True
-            unlock_engine()
-            st.rerun()
-            break
-            
-        if state == "FAILED":
-            st.error(f"Eroare: {stt.get('result_json')}")
-            st.session_state.pop("active_job_id", None)
-            unlock_engine()
-            st.stop()
+    # Pattern non-blocant: o singură verificare de status per render. Dacă jobul încă
+    # rulează, dormim scurt și cerem rerun — UI-ul răspunde la "Oprește Forțat" între
+    # cicluri (vechiul `for _ in range(600): time.sleep(1)` ținea thread-ul ocupat 10 min
+    # și avea limită superioară arbitrară care abandona job-urile lungi).
+    stt = get_job_status(job_id)
+    if not stt:
+        st.error("Eroare job!")
+        st.session_state.pop("active_job_id", None)
+        unlock_engine()
+        st.stop()
 
-        if state == JOB_CANCELLED:
-            st.warning("Jobul a fost anulat.")
-            st.session_state.pop("active_job_id", None)
-            unlock_engine()
-            st.stop()
-            
-        time.sleep(1)
+    pct = int(stt.get("progress_pct") or 0)
+    state = str(stt.get("status") or "")
+
+    st.progress(max(0, min(100, pct)))
+    st.text(f"Progres: {pct}%")
+
+    # Live logs (același conținut ca în vechiul loop, dar fără placeholder-ul mutativ)
+    with st.expander("🛠 Consola DEBUG / Loguri (Live)", expanded=True):
+        logs_text = read_logs_filtered(50)
+        st.code(logs_text, language="text")
+
+    if state == "COMPLETED":
+        result_json = str(stt.get("result_json") or "{}")
+        payload = _decode_queue_result(result_json)
+        st.session_state["persistent_results"] = payload
+        if "job_start_time" in st.session_state:
+            elapsed = time.time() - st.session_state["job_start_time"]
+            st.session_state["persistent_results_time"] = elapsed
+
+        # --- NOU: Calcul automat Hits (Backtesting) ---
+        if isinstance(payload, tuple) and len(payload) == 2:
+            results_bundle, _ = payload
+            if "retro_results" not in st.session_state:
+                st.session_state["retro_results"] = {}
+
+            for fname, outputs in results_bundle:
+                # Găsim DataFrame-ul original corespunzător fișierului
+                df_source = None
+                if "loaded_datasets" in st.session_state:
+                    for ds_name, ds_df in st.session_state["loaded_datasets"]:
+                        if ds_name == fname:
+                            df_source = ds_df
+                            break
+
+                if df_source is not None:
+                    for g_label, data in outputs.items():
+                        vars_to_test = data.get("variants", [])
+                        if vars_to_test:
+                            try:
+                                bt = LotoBacktester(df_source, game_type=g_label)
+                                # Evaluăm pe ultimele 20% (sau cât a ales userul)
+                                lookback = data.get("lookback", 20.0)
+                                if lookback <= 0:
+                                    lookback = 20.0
+
+                                # evaluate_variant returnează o listă de BacktestResult
+                                # Mapăm rezultatele la structura așteptată de UI (retro_predictions)
+                                summary = bt.evaluate_variants(vars_to_test, percentile=lookback)
+
+                                # Salvăm în formatul pe care UI îl consumă (listă de obiecte cu .hits)
+                                retro_key = f"{fname}_{g_label}"
+                                st.session_state["retro_results"][retro_key] = summary.all_results
+                            except Exception as e:
+                                logging.error(f"Eroare backtesting automat: {e}")
+
+        st.session_state.pop("active_job_id", None)
+        st.session_state["play_completion_sound"] = True
+        unlock_engine()
+        st.rerun()
+
+    elif state == "FAILED":
+        st.error(f"Eroare: {stt.get('result_json')}")
+        st.session_state.pop("active_job_id", None)
+        unlock_engine()
+        st.stop()
+
+    elif state == JOB_CANCELLED:
+        st.warning("Jobul a fost anulat.")
+        st.session_state.pop("active_job_id", None)
+        unlock_engine()
+        st.stop()
+
+    else:
+        # Job încă rulează: dormim scurt, apoi cerem rerun ca să verificăm din nou.
+        # Între reruns, UI-ul rămâne reactiv (cancel button, scroll, etc.).
+        time.sleep(1.5)
+        st.rerun()
 
 # Loguri statice dupã ce se terminã rularea
 if not st.session_state.get("active_job_id"):
