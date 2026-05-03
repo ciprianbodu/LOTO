@@ -888,7 +888,7 @@ class LotoEngine:
                 weakest_num = min(found_sequence, key=lambda x: freq[x - 1])
             current_pool.remove(weakest_num)
             removed_nums.add(weakest_num)
-            
+
             # Adăugăm rezerva (sărim peste numerele deja scoase în această rulare
             # ca să nu apară modificări tip "Scos X → adăugat X").
             added = False
@@ -897,7 +897,21 @@ class LotoEngine:
                 reserve_idx += 1
                 if next_num not in current_pool and next_num not in removed_nums:
                     current_pool.append(next_num)
-                    modifications.append(f"Scos {weakest_num} (frecvență {int(freq[weakest_num-1])}), adăugat {next_num} (frecvență {int(freq[next_num-1])})")
+                    # H4 (2026-05-03): logăm și NQI score-ul ales/scos ca să putem
+                    # diagnostica direct dacă swap-ul a îmbunătățit semnalul sau l-a
+                    # degradat în post-mortem (ex: pool 10 regresia din exp1).
+                    if scores:
+                        out_score = scores.get(weakest_num, 0.0)
+                        in_score = scores.get(next_num, 0.0)
+                        modifications.append(
+                            f"Scos {weakest_num} (NQI={out_score:.3f}, freq={int(freq[weakest_num-1])}), "
+                            f"adăugat {next_num} (NQI={in_score:.3f}, freq={int(freq[next_num-1])})"
+                        )
+                    else:
+                        modifications.append(
+                            f"Scos {weakest_num} (frecvență {int(freq[weakest_num-1])}), "
+                            f"adăugat {next_num} (frecvență {int(freq[next_num-1])})"
+                        )
                     added = True
                     break
             
@@ -1083,8 +1097,16 @@ class LotoEngine:
 
         sorted_by_score = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)
 
-        # Păstrăm 80% din nucleu pentru a evita pierderea numerelor potențial câștigătoare
-        keep_count = max(6, int(len(self.hard_core) * 0.8))
+        # H2 (2026-05-03): pe pool mic (≤ 11), 20% swap = 2+ numere mutate, ceea
+        # ce poate reprezenta 22% churn. Folosim 90% keep (≈1 swap) pe pool mic
+        # ca să nu sacrificăm numere top-NQI pentru semnale empirice care au CI
+        # mai mare decât diferența pe care le-o oferă.
+        pool_len = len(self.hard_core)
+        if pool_len <= 11:
+            keep_ratio = 0.90  # max 1 swap pe pool 9-11
+        else:
+            keep_ratio = 0.80  # comportament legacy pe pool ≥ 12
+        keep_count = max(6, int(pool_len * keep_ratio))
         best_numbers = [num for num, score in sorted_by_score[:keep_count]]
         excluded_numbers = [num for num in self.hard_core if num not in best_numbers]
 
