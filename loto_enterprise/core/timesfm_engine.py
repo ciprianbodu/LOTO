@@ -1397,20 +1397,28 @@ def select_pool_from_scores(
     used: Set[int] = set()
     decade_filled = [0] * n_decades
 
+    # H3 (2026-05-03): pe pool mic (≤ 11), cuotele de decadă sacrifică numere
+    # top-NQI pentru a forța diversificare. Slot-urile fiind puține, fiecare
+    # număr "diversificat" în loc de top-NQI e cost relativ mare. Aplicăm
+    # cuote relaxate (skip Pas 1) pe pool ≤ 11 — mergem direct pe top-NQI
+    # și păstrăm doar parity nudge-ul din Pas 2.
+    skip_decade_quotas = pool_size <= 11
+
     # Pas 1: Încercăm să umplem cuotele decadelor cu cele mai bune scoruri globale.
     # Iterăm sortat după scor; un număr e acceptat dacă decada lui mai are loc.
-    for n, _s in sorted_nums:
-        if len(pool) >= pool_size:
-            break
-        if n in used:
-            continue
-        decade_idx = (int(n) - 1) // 10
-        if decade_idx >= n_decades:
-            continue
-        if decade_filled[decade_idx] < target_quotas[decade_idx]:
-            pool.append(n)
-            used.add(n)
-            decade_filled[decade_idx] += 1
+    if not skip_decade_quotas:
+        for n, _s in sorted_nums:
+            if len(pool) >= pool_size:
+                break
+            if n in used:
+                continue
+            decade_idx = (int(n) - 1) // 10
+            if decade_idx >= n_decades:
+                continue
+            if decade_filled[decade_idx] < target_quotas[decade_idx]:
+                pool.append(n)
+                used.add(n)
+                decade_filled[decade_idx] += 1
 
     # Pas 2: Dacă rămân locuri (decadele saturate / cuote relaxate), umplem cu top-NQI rămași.
     # În acest pas aplicăm și un nudge ușor spre echilibrul empiric pare/impare.
