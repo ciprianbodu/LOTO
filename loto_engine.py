@@ -513,6 +513,10 @@ class LotoEngine:
         
         start_gpu = time.perf_counter()
         tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+        # Stocăm scorurile pe self ca să le poată consuma transparent funcții ulterioare
+        # (ex: _apply_consecutive_filter apelat din _replace_with_smart_alternatives)
+        # fără să propagăm prin toate semnăturile.
+        self._last_tfm_scores = tfm_scores
         gpu_time = (time.perf_counter() - start_gpu) * 1000
         
         if 'performance' not in self.audit:
@@ -584,7 +588,7 @@ class LotoEngine:
         # Aplicăm filtrul anti-secvență pe nucleul generat de TimesFM
         if filter_consecutives:
             logging.info("[PIPELINE] Aplicare Filtru Anti-Secvență pe nucleul TimesFM...")
-            self.hard_core = self._apply_consecutive_filter(self.hard_core, freq)
+            self.hard_core = self._apply_consecutive_filter(self.hard_core, freq, scores=tfm_scores)
         self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
 
         # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere.
@@ -774,11 +778,25 @@ class LotoEngine:
         logging.info(f"[INIT] Nucleu inițial: {pool}")
         return pool
 
-    def _apply_consecutive_filter(self, pool: list, freq: np.ndarray) -> list:
-        """Caută secvențe de 3+ și le înlocuiește dacă nu au istoric."""
+    def _apply_consecutive_filter(self, pool: list, freq: np.ndarray, scores: dict | None = None) -> list:
+        """Caută secvențe de 3+ și le înlocuiește dacă nu au istoric.
+
+        Args:
+            pool: nucleul curent (1-based numbers)
+            freq: frecvența istorică globală (folosită ca fallback)
+            scores: opțional, dict {num → NQI score}. Dacă e furnizat, folosim
+                NQI atât pentru a alege "weakest" din secvență cât și pentru a
+                ranca rezerva — consistent cu logica de selecție inițială a
+                pool-ului. Fără scores, comportament legacy bazat pe freq.
+        """
         if self.data is None or len(pool) < 3:
             return pool
-            
+
+        # Fallback transparent: dacă apelantul nu a transmis scoruri, încearcă
+        # să le iei din self (stocate de pipeline după calculul TimesFM).
+        if scores is None:
+            scores = getattr(self, "_last_tfm_scores", None)
+
         draw_sets = []
         if self._draw_matrix is not None and self._draw_matrix.size:
             draw_sets = [set(row) for row in self._draw_matrix]
@@ -798,7 +816,20 @@ class LotoEngine:
                         continue
 
         current_pool = sorted(pool.copy())
-        all_sorted_indices = np.argsort(freq)[::-1]
+        # H1 (2026-05-03): rancăm rezerva după NQI dacă scoruri disponibile.
+        # Pool-ul e selectat din top-NQI; folosirea freq pentru rezervă
+        # introducea inconsistență — un număr scos pentru "secvență suspectă"
+        # era înlocuit cu un freq-top global, care e semnal mai slab decât NQI.
+        if scores:
+            # Sortare descrescătoare după NQI score; numerele cu scor 0/lipsă
+            # rămân la coadă (echivalent cu fallback-ul freq pentru ele).
+            ranked = sorted(
+                range(len(freq)),
+                key=lambda i: (-(scores.get(i + 1, 0.0) or 0.0), -int(freq[i])),
+            )
+            all_sorted_indices = np.array(ranked, dtype=np.int64)
+        else:
+            all_sorted_indices = np.argsort(freq)[::-1]
         reserve_idx = len(pool)
         modifications = []
         
@@ -849,8 +880,12 @@ class LotoEngine:
                 self.audit['kept_sequences'].append(f"Secvența {found_sequence} a fost păstrată (a ieșit de {occurrences} ori, adică >= 1% din cele {total_draws} extrageri).")
                 continue # Trecem la următoarea secvență posibilă
                 
-            # Nu au ieșit. Găsim cel mai slab număr din secvență.
-            weakest_num = min(found_sequence, key=lambda x: freq[x-1])
+            # Nu au ieșit. Găsim cel mai slab număr din secvență — preferăm
+            # NQI score dacă e disponibil (consistent cu selecția inițială).
+            if scores:
+                weakest_num = min(found_sequence, key=lambda x: scores.get(x, 0.0))
+            else:
+                weakest_num = min(found_sequence, key=lambda x: freq[x - 1])
             current_pool.remove(weakest_num)
             removed_nums.add(weakest_num)
             
