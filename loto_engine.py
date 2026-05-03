@@ -314,7 +314,9 @@ class LotoEngine:
                     try:
                         nums = [int(x) for x in str(row["numbers"]).split(",") if str(x).strip().isdigit()]
                         all_numbers.extend(nums)
-                    except: continue
+                    except (ValueError, TypeError) as exc:
+                        logging.debug("analyze_frequency: skip row (parse): %s", exc)
+                        continue
         
         if not all_numbers:
             return np.zeros(max_n, dtype=np.int64)
@@ -791,7 +793,9 @@ class LotoEngine:
                 for _, row in df.iterrows():
                     try:
                         draw_sets.append(set(int(x) for x in str(row["numbers"]).split(",") if str(x).strip().isdigit()))
-                    except: continue
+                    except (ValueError, TypeError) as exc:
+                        logging.debug("anti-sequence: skip row (parse): %s", exc)
+                        continue
 
         current_pool = sorted(pool.copy())
         all_sorted_indices = np.argsort(freq)[::-1]
@@ -1336,7 +1340,8 @@ class LotoEngine:
                         nums = [int(row[c]) for c in n_cols if pd.notna(row.get(c))]
                     if num in nums:
                         appearances.append(i)
-                except:
+                except (ValueError, TypeError) as exc:
+                    logging.debug("avg_gap: skip row (parse): %s", exc)
                     continue
         
         if len(appearances) < 2:
@@ -1461,7 +1466,8 @@ class LotoEngine:
         try:
             if torch.cuda.is_available():
                 device = "gpu"
-        except: pass
+        except (RuntimeError, AttributeError) as exc:
+            logging.debug("[TIMESFM] cuda probe failed, fallback la CPU: %s", exc)
 
         total_available = len(self.data) if self.data is not None else 0
         limit = min(context_len, total_available)
@@ -2043,12 +2049,18 @@ class LotoEngine:
         
         # Calculăm probabilitatea medie a variantei conform TimesFM
         variant_probs = [scores.get(num, 0.0001) for num in variant]
-        mean_prob = np.mean(variant_probs)
-        
+        mean_prob = float(np.mean(variant_probs))
+
         # Scor de anomalie bazat pe distanța față de topul modelului
         max_prob = max(scores.values()) if scores else 1.0
-        anomaly = 1.0 - (mean_prob / max_prob)
-        
+        # Gardă numerică: evităm 0/0 și valorile negative (clamp la 1e-9 pe numitor)
+        denom = max(float(max_prob), 1e-9)
+        anomaly = 1.0 - (mean_prob / denom)
+        # Clamp final în [0, 1] pentru stabilitate downstream
+        if anomaly < 0.0:
+            anomaly = 0.0
+        elif anomaly > 1.0:
+            anomaly = 1.0
         return float(anomaly)
 
     def filter_variants_by_anomaly(self, variants: List[List[int]], scores: Dict[int, float], threshold: float = 0.7) -> List[List[int]]:

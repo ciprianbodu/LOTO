@@ -1,10 +1,10 @@
-import os
-import sys
+import logging
+
 import numpy as np
 import pandas as pd
-from loto_engine import LotoEngine
 
-import logging
+from loto_engine import LotoEngine
+from loto_enterprise.core.timesfm_engine import get_timesfm_scores_v2
 
 def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100], pool_size=12, progress_cb=None):
     # Oprim temporar log-urile INFO, dar lasam un avertisment sa se stie ca incepe
@@ -48,8 +48,7 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
                 data_slice = train_df.tail(num_rows).copy()
                 # dm_slice logic similar to get_regressive_blacklist_v2
                 dm_slice = engine._draw_matrix[-num_rows:] if engine._draw_matrix is not None else None
-                
-                from loto_enterprise.core.timesfm_engine import get_timesfm_scores_v2
+
                 scores = get_timesfm_scores_v2(
                     data_slice, dm_slice, engine.params, 
                     is_joker_drum=(engine.game_type == "joker"),
@@ -61,8 +60,8 @@ def run_calibration(engine, test_draws=2, depths_to_test=[10, 20, 30, 40, 50, 60
                     vals = list(scores.values())
                     threshold = np.percentile(vals, 25)
                     slice_blacklists[step] = {n for n, s in scores.items() if s <= threshold}
-            except Exception as e:
-                print(f"Eroare la calcul slice {step}%: {e}")
+            except Exception as exc:
+                logging.error("[CALIBRARE] Eroare la calcul slice %d%%: %s", step, exc)
 
         # 2. Acum evaluam fiecare adancime rapid prin intersectia feliilor pre-calculate
         for depth in depths_to_test:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -106,13 +107,13 @@ def get_job_status(job_id: int, db_path: str = DB_PATH) -> dict[str, Any] | None
     return dict(row) if row else None
 
 
-def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> None:
+def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
+    """Actualizează progresul unui job și întoarce True dacă jobul a fost anulat între timp."""
     init_job_queue(db_path)
     pct_i = max(0, min(100, int(pct)))
     line = str(log_msg or "").strip()
     if not line:
-        return
-    from datetime import datetime
+        return False
     ts = datetime.now().strftime("%H:%M:%S")
     stamped = f"[{ts}] {line}"
     with _connect(db_path) as conn:
@@ -130,9 +131,9 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
             (pct_i, merged, int(job_id)),
         )
         conn.commit()
-        
+
     # Verificăm statusul după update pentru a semnaliza oprirea dacă e cazul
-    return is_job_cancelled(job_id, db_path=db_path)
+    return bool(is_job_cancelled(job_id, db_path=db_path))
 
 
 def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:

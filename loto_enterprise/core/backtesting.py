@@ -11,6 +11,7 @@ folosind doar datele disponibile până la acel moment (walk-forward simulation)
 from __future__ import annotations
 
 import logging
+from collections import Counter, deque
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional, Set
 from pathlib import Path
@@ -217,15 +218,15 @@ class LotoBacktester:
         results = []
         
         for idx, date, draw_nums in target_draws:
-            # Calculăm hits ținând cont de posibile duplicate la Joker
-            # (dacă un număr din variantă apare în draw_nums)
+            # Multiset hit count: păstrăm semantica originală (duplicate consumă o singură
+            # apariție din extragere), dar înlocuim list.remove() O(n) cu Counter O(1).
+            draw_counts = Counter(draw_nums)
             hit_numbers = []
-            temp_draw = list(draw_nums)
             for n in variant:
-                if n in temp_draw:
+                if draw_counts[n] > 0:
                     hit_numbers.append(n)
-                    temp_draw.remove(n) # Eliminăm pentru a nu număra de două ori dacă varianta are duplicate
-            
+                    draw_counts[n] -= 1
+
             hit_count = len(hit_numbers)
             hit_rate = hit_count / self.params["draw_n"] if self.params["draw_n"] > 0 else 0
             

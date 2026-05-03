@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import re
 
 from job_queue import (
     JOB_CANCELLED,
@@ -27,6 +26,7 @@ from loto_enterprise.core.backtesting import LotoBacktester
 import subprocess
 import psutil
 import sys
+import requests
 import streamlit.components.v1 as components
 
 # ensure_worker_running() va fi apelat mai jos, dupa configurarea paginii
@@ -46,12 +46,31 @@ logging.basicConfig(
 
 import re
 
+logger = logging.getLogger(__name__)
+
+
+@st.cache_data(ttl=3600)
+def get_live_prices():
+    """Returnează prețurile per variantă (Lei) per joc.
+
+    Notă: în prezent contactul cu loto.ro doar validează disponibilitatea;
+    parsing-ul real ar trebui adăugat aici. Pe eroare, întoarcem fallback-ul.
+    """
+    prices = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        requests.get('https://www.loto.ro/', headers=headers, timeout=5)
+    except requests.RequestException as exc:
+        logger.debug("get_live_prices: probe loto.ro a eșuat, folosim fallback: %s", exc)
+    return prices
+
+
 def clear_logs():
     try:
         with open(LOG_FILE, "w", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [INFO] --- Log curățat manual ---\n")
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.warning("clear_logs: nu am putut rescrie %s: %s", LOG_FILE, exc)
 
 
 def _is_worker_running():
@@ -73,21 +92,18 @@ def _is_worker_running():
 def get_hardware_info():
     hw_info = []
     try:
-        import platform
-        import socket
         node_name = platform.node()
         hw_info.append(f"Statie: {node_name}")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("get_hardware_info: platform.node() failed: %s", exc)
 
     try:
-        import psutil
         cpu_cores = psutil.cpu_count(logical=True)
         ram_total_gb = round(psutil.virtual_memory().total / (1024**3), 1)
         hw_info.append(f"CPU: {cpu_cores} nuclee")
         hw_info.append(f"RAM: {ram_total_gb} GB")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("get_hardware_info: psutil failed: %s", exc)
 
     try:
         import torch
@@ -98,9 +114,10 @@ def get_hardware_info():
             hw_info.append(f"VRAM: {vram_total_gb} GB")
         else:
             hw_info.append("GPU: Inactiv (CPU)")
-    except Exception:
+    except Exception as exc:
+        logger.debug("get_hardware_info: torch/cuda probe failed: %s", exc)
         hw_info.append("GPU: Nedetectat")
-        
+
     return " | ".join(hw_info) if hw_info else "Informații Hardware indisponibile"
 
 def generate_hard_core_description(
@@ -1028,10 +1045,9 @@ with st.sidebar:
                 try:
                     df = pd.read_csv(fpath)
                     auto_ds.append((fpath, df))
-                except:
-                    pass
+                except Exception as exc:
+                    logger.warning("auto-load: nu am putut citi %s: %s", fpath, exc)
             if auto_ds:
-                st.session_state["loaded_datasets"] = auto_ds
                 st.session_state["loaded_datasets"] = auto_ds
 
     if uploaded_files:
@@ -1920,19 +1936,7 @@ if "persistent_results" in st.session_state:
                                 hit_data.append({"Data / Extragere": label, "Hits": f"⭐ {h.hits} numere", "Est. Premiu (Lei)": f"~{p_val} Lei"})
                             
                             st.dataframe(pd.DataFrame(hit_data), use_container_width=True, height=120, hide_index=True)
-                            
-                            if 'get_live_prices' not in locals():
-                                import requests
-                                @st.cache_data(ttl=3600)
-                                def get_live_prices():
-                                    prices = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
-                                    try:
-                                        headers = {'User-Agent': 'Mozilla/5.0'}
-                                        req = requests.get('https://www.loto.ro/', headers=headers, timeout=5)
-                                        if req.status_code == 200: pass
-                                    except Exception: pass
-                                    return prices
-                                    
+
                             cost_per_var = get_live_prices().get(game_type_id, 8.0)
                             total_cost = total_variants * cost_per_var * unique_draws
                             profit = total_prize - total_cost
@@ -1955,20 +1959,6 @@ if "persistent_results" in st.session_state:
 
                 
                 import math
-                import requests
-                import re
-                
-                @st.cache_data(ttl=3600)
-                def get_live_prices():
-                    prices = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
-                    try:
-                        headers = {'User-Agent': 'Mozilla/5.0'}
-                        req = requests.get('https://www.loto.ro/', headers=headers, timeout=5)
-                        if req.status_code == 200:
-                            pass
-                    except Exception:
-                        pass
-                    return prices
 
                 prices = get_live_prices()
                 game_key = "6/49"

@@ -35,8 +35,8 @@ def _detect_device() -> str:
         if HAS_TIMESFM and torch.cuda.is_available():
             # Logăm o singură dată prezența GPU-ului la nivel de modul dacă e nevoie
             return "gpu"
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("[TIMESFM] cuda probe failed, fallback la CPU: %s", exc)
     return "cpu"
 
 
@@ -525,10 +525,12 @@ def compute_nqi_scores(
             q10 = float(full_forecast[i, 0, 0])
             q50 = float(full_forecast[i, 0, 4])
             q90 = float(full_forecast[i, 0, 8])
-            spread = max(0.0001, q90 - q10)
-            stability = 1.0 / (1.0 + spread * 3.0)
-            if q50 > 0:
-                stability += 0.15
+            # NaN guard: dacă oricare cuantilă e invalidă, păstrăm fallback 0.5
+            if not (np.isnan(q10) or np.isnan(q50) or np.isnan(q90)):
+                spread = max(0.0001, q90 - q10)
+                stability = 1.0 / (1.0 + spread * 3.0)
+                if q50 > 0:
+                    stability += 0.15
         raw_components["stability"].append(stability)
 
         # D. Covariate Boost
@@ -561,7 +563,10 @@ def compute_nqi_scores(
         adaptive = 1.0
         if total_appearances > 3 and avg_gap > 0:
             gap_ratio = current_gap / avg_gap
-            adaptive = 0.85 + 0.65 / (1.0 + np.exp(-3.0 * (gap_ratio - 1.0)))
+            # Overflow guard pentru sigmoid: arg-ul e clampat la [-50, 50]
+            # (np.exp(50) e ~5e21, sub limita float64; -50 dă termen ~0)
+            arg = float(np.clip(-3.0 * (gap_ratio - 1.0), -50.0, 50.0))
+            adaptive = 0.85 + 0.65 / (1.0 + np.exp(arg))
             adaptive = float(np.clip(adaptive, 0.80, 1.50))
         raw_components["adaptive"].append(adaptive)
 
@@ -1090,17 +1095,20 @@ def get_timesfm_scores_v2(
             if not is_regressive_step:
                 try:
                     dyn_num, static_num = build_covariates(all_series, num_map, draw_matrix, max_num, horizon)
+                    # Pre-materializăm conversia np→list o singură dată (era refăcută per cov call)
+                    inputs_list = [s.tolist() for s in all_series]
                     cov_result = tfm.forecast_with_covariates(
-                        inputs=[s.tolist() for s in all_series],
+                        inputs=inputs_list,
                         dynamic_numerical_covariates=dyn_num,
                         static_numerical_covariates=static_num,
-                        freq=[0]*len(all_series),
+                        freq=[0] * len(all_series),
                         xreg_mode="xreg + timesfm",
                         normalize_xreg_target_per_input=True,
                         force_on_cpu=is_cpu,
                     )
                     cov_forecast = np.array(cov_result[0]) if isinstance(cov_result, tuple) else np.array(cov_result)
-                except Exception: pass
+                except Exception as exc:
+                    logging.debug("[TIMESFM] forecast_with_covariates a eșuat: %s", exc)
             
             # Decuplăm context-prefix vs horizon (când API-ul îl returnează concatenat)
             pf_arr = np.asarray(point_forecast)

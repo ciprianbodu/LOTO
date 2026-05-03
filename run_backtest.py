@@ -8,6 +8,7 @@ Utilizare:
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -42,8 +43,9 @@ def load_variants_from_file(path: str) -> list:
             for key in ["variants", "variante", "lines", "linii", "alpha_lines", "results"]:
                 if key in data and isinstance(data[key], list):
                     return data[key]
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as exc:
+        # Comportament intenționat: cad pe parser-ul text de mai jos.
+        logging.debug("run_backtest: JSON parsing failed, fallback la text: %s", exc)
     
     # Fallback: parsează ca text (câte o variantă pe linie)
     variants = []
