@@ -1397,12 +1397,12 @@ def select_pool_from_scores(
     used: Set[int] = set()
     decade_filled = [0] * n_decades
 
-    # H3 (2026-05-03): pe pool mic (≤ 11), cuotele de decadă sacrifică numere
-    # top-NQI pentru a forța diversificare. Slot-urile fiind puține, fiecare
-    # număr "diversificat" în loc de top-NQI e cost relativ mare. Aplicăm
-    # cuote relaxate (skip Pas 1) pe pool ≤ 11 — mergem direct pe top-NQI
-    # și păstrăm doar parity nudge-ul din Pas 2.
-    skip_decade_quotas = pool_size <= 11
+    # H3 v2 (2026-05-04): skip decade quotas DOAR pe pool 10-11. Confirmarea
+    # n=64 a arătat regresie -17% pe pool 9 cu skip — pool 9 prea mic ca să
+    # tolereze pierderea diversificării empirice (top-9 NQI tinde să se
+    # concentreze într-1-2 decade când quotele sunt off). Pool 12+ păstrează
+    # quote-le legacy (au destule slot-uri pentru ambele).
+    skip_decade_quotas = pool_size in (10, 11)
 
     # Pas 1: Încercăm să umplem cuotele decadelor cu cele mai bune scoruri globale.
     # Iterăm sortat după scor; un număr e acceptat dacă decada lui mai are loc.

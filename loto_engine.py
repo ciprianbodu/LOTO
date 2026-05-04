@@ -1062,15 +1062,16 @@ class LotoEngine:
 
         sorted_by_score = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)
 
-        # H2 (2026-05-03): pe pool mic (≤ 11), 20% swap = 2+ numere mutate, ceea
-        # ce poate reprezenta 22% churn. Folosim 90% keep (≈1 swap) pe pool mic
-        # ca să nu sacrificăm numere top-NQI pentru semnale empirice care au CI
-        # mai mare decât diferența pe care le-o oferă.
+        # H2 v2 (2026-05-04): keep 90% (≈1 swap) doar pe pool 10-11. În
+        # confirmarea statistică n=64, pool 9 cu H2+H3 a regresat -17% — prea
+        # mic ca să tolereze simultan suprimarea quota-urilor de decadă (H3)
+        # și reducerea swap-ului empiric (H2). Pool 9 și pool ≥ 12 rămân pe
+        # 80% legacy.
         pool_len = len(self.hard_core)
-        if pool_len <= 11:
-            keep_ratio = 0.90  # max 1 swap pe pool 9-11
+        if pool_len in (10, 11):
+            keep_ratio = 0.90  # ≈1 swap pe pool 10-11
         else:
-            keep_ratio = 0.80  # comportament legacy pe pool ≥ 12
+            keep_ratio = 0.80  # legacy pe pool 9 și pool ≥ 12
         keep_count = max(6, int(pool_len * keep_ratio))
         best_numbers = [num for num, score in sorted_by_score[:keep_count]]
         excluded_numbers = [num for num in self.hard_core if num not in best_numbers]
