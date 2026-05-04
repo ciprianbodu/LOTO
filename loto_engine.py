@@ -862,21 +862,10 @@ class LotoEngine:
                 reserve_idx += 1
                 if next_num not in current_pool and next_num not in removed_nums:
                     current_pool.append(next_num)
-                    # H4 (2026-05-03): logăm și NQI score-ul ales/scos ca să putem
-                    # diagnostica direct dacă swap-ul a îmbunătățit semnalul sau l-a
-                    # degradat în post-mortem (ex: pool 10 regresia din exp1).
-                    if scores:
-                        out_score = scores.get(weakest_num, 0.0)
-                        in_score = scores.get(next_num, 0.0)
-                        modifications.append(
-                            f"Scos {weakest_num} (NQI={out_score:.3f}, freq={int(freq[weakest_num-1])}), "
-                            f"adăugat {next_num} (NQI={in_score:.3f}, freq={int(freq[next_num-1])})"
-                        )
-                    else:
-                        modifications.append(
-                            f"Scos {weakest_num} (frecvență {int(freq[weakest_num-1])}), "
-                            f"adăugat {next_num} (frecvență {int(freq[next_num-1])})"
-                        )
+                    modifications.append(
+                        f"Scos {weakest_num} (frecvență {int(freq[weakest_num-1])}), "
+                        f"adăugat {next_num} (frecvență {int(freq[next_num-1])})"
+                    )
                     added = True
                     break
             
