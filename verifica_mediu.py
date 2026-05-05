@@ -1,10 +1,11 @@
 import sys
 import subprocess
 import importlib.util
+from importlib.metadata import PackageNotFoundError, version as dist_version
 
-    # Aceste librarii standard pot fi actualizate automat in siguranta.
-    # Am exclus intentionat "torch", "torchvision", "torchaudio" si "timesfm" 
-    # pentru a preveni riscul de a se suprascrie versiunea de GPU (cu124/cu128) cu versiunea standard de CPU.
+# Aceste librarii standard pot fi actualizate automat in siguranta.
+# Am exclus intentionat "torch", "torchvision", "torchaudio" si "timesfm"
+# pentru a preveni riscul de a se suprascrie versiunea de GPU (cu124/cu128) cu versiunea standard de CPU.
 SAFE_UPGRADE_PACKAGES = [
     "streamlit",
     "pandas",
@@ -13,6 +14,22 @@ SAFE_UPGRADE_PACKAGES = [
     "psutil",
     "requests",
 ]
+
+
+def upgrade_pip():
+    """Actualizeaza pip in acelasi interpreter; elimina mesajul 'new release of pip'."""
+    print("\n--- Actualizare pip ---")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+        print("-> [OK] pip actualizat (sau deja la zi).\n")
+    except subprocess.CalledProcessError as e:
+        print(f"-> [ATENTIE] Actualizarea pip a esuat ({e}). Manual:\n")
+        print(f"    {sys.executable} -m pip install --upgrade pip\n")
+
 
 def check_and_upgrade(packages):
     print("\n--- Verificare si Actualizare Librarii Standard ---")
@@ -54,7 +71,14 @@ def check_pytorch():
     # 3. Verificare TimesFM
     try:
         import timesfm
-        version = getattr(timesfm, '__version__', 'Necunoscuta')
+
+        # timesfm nu expune mereu __version__ pe modul; versiunea e in metadata-ul pachetului (PyPI).
+        version = getattr(timesfm, "__version__", None)
+        if not (isinstance(version, str) and version.strip()):
+            try:
+                version = dist_version("timesfm")
+            except PackageNotFoundError:
+                version = "Necunoscuta"
         print(f"-> [OK] Motorul Google TimesFM este instalat (Versiune: {version})")
     except ImportError:
         print("-> [EROARE] Libraria timesfm lipseste! O poti instala cu comanda: pip install timesfm")
@@ -83,6 +107,7 @@ def main():
 
     # Executam logic verificarile
     check_pytorch()
+    upgrade_pip()
     check_and_upgrade(SAFE_UPGRADE_PACKAGES)
 
     print("===================================================================")

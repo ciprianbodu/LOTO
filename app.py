@@ -289,7 +289,7 @@ st.set_page_config(page_title="Loto Wheeling Determinist", layout="wide")
 
 # --- INITIALIZARE STATE ---
 if "pool_size_val" not in st.session_state:
-    st.session_state["pool_size_val"] = 12
+    st.session_state["pool_size_val"] = 10
 if "guarantee_val" not in st.session_state:
     st.session_state["guarantee_val"] = 4
 if "lookback_val" not in st.session_state:
@@ -811,73 +811,8 @@ if isinstance(_pr, tuple) and len(_pr) == 2 and _pr[0]:
 status_container = st.empty()
 
 # Raportul de calibrare va fi afișat mai jos, sub consolă.
-
-# Verificam daca utilizatorul a pornit calibrarea din sidebar
-if st.session_state.get("start_calib_now", False):
-    with status_container.container():
-        st.markdown("### 🚀 Calibrare în curs...")
-        p_bar = st.progress(0, text="⏳ Pas 0: Pregătire motor AI... (Așteaptă ~20 sec)")
-        
-        import time
-        time.sleep(0.5) # Mic delay pentru a forța randarea UI-ului
-        
-        def update_p(val, msg):
-            p_bar.progress(val, text=msg)
-
-        from calibreaza import run_calibration
-        from loto_engine import LotoEngine
-        
-        if "calib_res_dict" not in st.session_state:
-            st.session_state["calib_res_dict"] = {}
-        if "calib_best_depth_dict" not in st.session_state:
-            st.session_state["calib_best_depth_dict"] = {}
-            
-        p_size_calib = st.session_state["pool_size_val"]
-        total_datasets = len(st.session_state["loaded_datasets"])
-        
-        for idx, (fname, df) in enumerate(st.session_state["loaded_datasets"]):
-            g_label = "6/49"
-            if "5_40" in fname.lower() or "5/40" in fname.lower(): g_label = "5/40"
-            elif "joker" in fname.lower(): g_label = "joker"
-            
-            def make_update_p(idx, total, g_label):
-                def _update(val, msg):
-                    overall_progress = (idx / total) + (val / total)
-                    p_bar.progress(overall_progress, text=f"Calibrare {g_label}: {msg}")
-                return _update
-            
-            cb = make_update_p(idx, total_datasets, g_label)
-            
-            calib_engine = LotoEngine(game_type=g_label)
-            calib_engine.data = df.copy()
-            calib_engine._build_draw_matrix()
-            
-            best_depth, calib_res = run_calibration(calib_engine, test_draws=2, pool_size=p_size_calib, progress_cb=cb)
-            
-            st.session_state["calib_res_dict"][g_label] = calib_res
-            st.session_state["calib_best_depth_dict"][g_label] = best_depth
-            
-            # Păstrăm fallback pentru valoarea generală pe prima calibrare
-            if idx == 0:
-                st.session_state["sim_depth_val"] = best_depth
-
-        # Scriem direct în cheia stabilă a slider-ului ca să "pick-up"-uie noua valoare
-        # la următorul rerun. Înainte foloseam un suffix counter ca să forțăm re-crearea
-        # widget-ului — pattern fragil care rupea binding-ul Streamlit.
-        for g_label_to_set, best_d in st.session_state["calib_best_depth_dict"].items():
-            st.session_state[f"sim_depth_key_{g_label_to_set}"] = int(best_d)
-        st.session_state["start_calib_now"] = False  # Oprim flag-ul
-        
-        if st.session_state.get("trigger_gen_after_calib"):
-            st.session_state["trigger_gen_after_calib"] = False
-            # Pregătim pentru generare imediată
-            reset_sidebar_settings()
-            ensure_worker_running()
-            st.session_state["queue_submit_requested"] = True
-            
-        st.rerun()
-
-
+# Calibrarea rulează după blocul sidebar (vezi mai jos), după ce pool_size_val
+# este actualizat de widget-uri; la nevoie se folosește _pool_for_pending_calib.
 
 if "persistent_results" in st.session_state:
     res = st.session_state["persistent_results"]
@@ -1072,7 +1007,7 @@ with st.sidebar:
     st.header("2. Setări Algoritm Wheeling")
     
     # NU folosi value= împreună cu key= pentru același nume — Streamlit poate reseta
-    # widget-ul la valoarea inițială (12) la rerun, ignorând +/- utilizatorului.
+    # widget-ul la valoarea inițială (10) la rerun, ignorând +/- utilizatorului.
     st.number_input(
         "Dimensiune Pool (Nucleu Dur)",
         min_value=7,
@@ -1137,6 +1072,7 @@ with st.sidebar:
         if not st.session_state.get("loaded_datasets"):
             st.error("Încărcați întâi un fișier CSV!")
         else:
+            st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
             st.session_state["start_calib_now"] = True
             st.session_state["trigger_gen_after_calib"] = True
             st.rerun()
@@ -1148,6 +1084,7 @@ with st.sidebar:
         if not st.session_state.get("loaded_datasets"):
             st.error("Încărcați întâi un fișier CSV!")
         else:
+            st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
             st.session_state["start_calib_now"] = True
             st.rerun()
 
@@ -1209,7 +1146,72 @@ with st.sidebar:
             st.rerun()
 
 
+# După sidebar: widget-urile (inclusiv Dimensiune Pool) au actualizat session_state.
+if st.session_state.get("start_calib_now", False):
+    with status_container.container():
+        st.markdown("### 🚀 Calibrare în curs...")
+        p_bar = st.progress(0, text="⏳ Pas 0: Pregătire motor AI... (Așteaptă ~20 sec)")
 
+        time.sleep(0.5)  # Mic delay pentru a forța randarea UI-ului
+
+        from calibreaza import run_calibration
+        from loto_engine import LotoEngine
+
+        if "calib_res_dict" not in st.session_state:
+            st.session_state["calib_res_dict"] = {}
+        if "calib_best_depth_dict" not in st.session_state:
+            st.session_state["calib_best_depth_dict"] = {}
+
+        pending_pool = st.session_state.pop("_pool_for_pending_calib", None)
+        # Nu modifica pool_size_val după ce st.number_input(key="pool_size_val") a rulat — Streamlit interzice.
+        if pending_pool is not None:
+            p_size_calib = int(pending_pool)
+        else:
+            p_size_calib = int(st.session_state["pool_size_val"])
+
+        total_datasets = len(st.session_state["loaded_datasets"])
+
+        for idx, (fname, df) in enumerate(st.session_state["loaded_datasets"]):
+            g_label = "6/49"
+            if "5_40" in fname.lower() or "5/40" in fname.lower():
+                g_label = "5/40"
+            elif "joker" in fname.lower():
+                g_label = "joker"
+
+            def make_update_p(idx, total, g_label):
+                def _update(val, msg):
+                    overall_progress = (idx / total) + (val / total)
+                    p_bar.progress(overall_progress, text=f"Calibrare {g_label}: {msg}")
+
+                return _update
+
+            cb = make_update_p(idx, total_datasets, g_label)
+
+            calib_engine = LotoEngine(game_type=g_label)
+            calib_engine.data = df.copy()
+            calib_engine._build_draw_matrix()
+
+            best_depth, calib_res = run_calibration(
+                calib_engine, test_draws=2, pool_size=p_size_calib, progress_cb=cb
+            )
+
+            st.session_state["calib_res_dict"][g_label] = calib_res
+            st.session_state["calib_best_depth_dict"][g_label] = best_depth
+
+            if idx == 0:
+                st.session_state["sim_depth_val"] = best_depth
+
+        for g_label_to_set, best_d in st.session_state["calib_best_depth_dict"].items():
+            st.session_state[f"sim_depth_key_{g_label_to_set}"] = int(best_d)
+        st.session_state["start_calib_now"] = False
+
+        if st.session_state.get("trigger_gen_after_calib"):
+            st.session_state["trigger_gen_after_calib"] = False
+            reset_sidebar_settings()
+            ensure_worker_running()
+            st.session_state["queue_submit_requested"] = True
+
+        st.rerun()
 
 
 
@@ -1407,10 +1409,12 @@ if "calib_res_dict" in st.session_state and st.session_state["calib_res_dict"]:
             avg_excluded = best_stats['total_excluded'] // test_draws if test_draws > 0 else 0
             
             # Construim un raport detaliat sub formă de tabel/listă
+            avg_pool_hits = float(best_stats.get("avg_pool_hits", 0.0))
             report_lines = [
                 f"Adâncimea optimă identificată pentru {g_label.upper()}: **{best_depth}%**",
                 f"📊 Eficiență istorică (la {best_depth}%): **{best_stats['total_excluded']} numere moarte eliminate** (total cumulat pe {test_draws} extrageri de test = ~{avg_excluded} numere/extragere).",
-                f"🛡️ Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (total cumulat pe {test_draws} extrageri)."
+                f"🛡️ Siguranță (la {best_depth}%): **{best_stats['total_fatalities']} numere câștigătoare pierdute** (total cumulat pe {test_draws} extrageri).",
+                f"🎯 Nucleu simulat (dimensiunea din sidebar): **~{avg_pool_hits:.2f} hit-uri/extragere** din bilele reale în nucleul construit ca la generare.",
             ]
             
             if "eliminated_now" in best_stats and best_stats["eliminated_now"]:
@@ -1439,7 +1443,11 @@ if "calib_res_dict" in st.session_state and st.session_state["calib_res_dict"]:
 
                 # Calculăm media per extragere pentru afișare
                 avg_excl = s['total_excluded'] // test_draws if test_draws > 0 else 0
-                line = f"- **{d}%** adâncime: {s['total_excluded']} excluse (~{avg_excl}/extragere) | {fatality_html} fatalități {status_icon}"
+                ph = float(s.get("avg_pool_hits", 0.0))
+                line = (
+                    f"- **{d}%** adâncime: {s['total_excluded']} excluse (~{avg_excl}/extragere) | "
+                    f"{fatality_html} fatalități | nucleu ~{ph:.2f} hit/extragere {status_icon}"
+                )
 
                 # Adăugăm marcajele de UI pentru claritate
                 if d == best_depth:
@@ -1447,7 +1455,11 @@ if "calib_res_dict" in st.session_state and st.session_state["calib_res_dict"]:
 
                 report_lines.append(line)
                 
-            report_lines.append("\n*💡 Notă: Valorile 'excluse' și 'fatalități' sunt **totale cumulate** pe extragerile de test. 'O adâncime mai mică (ex: 10%)' înseamnă o intersecție mai strictă (numărul trebuie să fie 'mort' în toate ferestrele simultan pentru a fi eliminat).")
+            report_lines.append(
+                "\n*💡 Notă: „Excluse” și „fatalități” sunt **cumulate** pe extragerile de test; „hit nucleu” = "
+                "câte numere din extragerea reală ar fi fost în nucleul de dimensiunea aleasă (ca în pipeline). "
+                "Adâncime optimă combină blacklist-ul și această acoperire.*"
+            )
             
             msg = "\n".join(report_lines)
             st.markdown(f"💡 **Raport Calibrare Auto-Tuning: {g_label.upper()}**\n\n{msg}", unsafe_allow_html=True)
