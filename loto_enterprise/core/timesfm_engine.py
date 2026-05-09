@@ -368,13 +368,35 @@ def _get_last_position(num: int, draw_matrix: np.ndarray | None) -> float:
 
 
 def _rank_fusion(ensemble_scores: List[Dict[int, float]], window_weights: Optional[List[float]] = None) -> Dict[int, float]:
-    """Rank-based ensemble fusion (Weighted Borda Count) — mai robust decât media aritmetică."""
+    """Rank-based ensemble fusion (Weighted Borda Count) — mai robust decât media aritmetică.
+
+    H6 (2026-05-07): default-ul vechi `[1.0 / (1.0 + 0.25*i)]` favoriza ferestrele
+    LUNGI (poziția 0 = ctx_len, weight 1.0) în defavoarea celor scurte (poziția 6
+    = window=50, weight 0.4). Pentru predicția extragerii URMĂTOARE, momentum-ul
+    recent (50-300 extrageri) e mai informativ decât trendul de 2000+ extrageri.
+    Distribuim ponderi cu vârful pe poziția mid-recent (300-100 extrageri):
+    coadă lungă suficientă pentru stabilitate, vârf pe semnal proaspăt.
+
+    Ordinea context_windows e: [ctx_len, 1000, 500, 300, 200, 100, 50]
+    Ponderi noi:                [0.55,    0.75, 0.95, 1.10, 1.10, 0.95, 0.75]
+    """
     if not ensemble_scores:
         return {}
     all_nums = set().union(*(s.keys() for s in ensemble_scores))
     rank_scores: Dict[int, float] = {n: 0.0 for n in all_nums}
     if window_weights is None:
-        window_weights = [1.0 / (1.0 + 0.25 * i) for i in range(len(ensemble_scores))]
+        # Bell curve cu vârful pe pozițiile 3-4 (ferestre 300-200, mid-recent)
+        n = len(ensemble_scores)
+        if n <= 1:
+            window_weights = [1.0]
+        else:
+            # Distribuție bell-shape: peak la mid, lower la extreme
+            peak = (n - 1) / 2.0
+            sigma = max(n / 3.0, 1.0)
+            window_weights = [
+                0.55 + 0.55 * np.exp(-((i - peak) ** 2) / (2.0 * sigma ** 2))
+                for i in range(n)
+            ]
     total_weight = sum(window_weights[:len(ensemble_scores)])
     for w_idx, window_scores in enumerate(ensemble_scores):
         sorted_nums = sorted(window_scores.items(), key=lambda x: x[1], reverse=True)
