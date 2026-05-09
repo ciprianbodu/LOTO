@@ -866,7 +866,11 @@ def _evaluate_weight_candidate(
     var_hits = float(np.var(overlaps))
     consistency = 1.0 / (1.0 + var_hits)  # ∈ (0,1]
 
-    # Obiectiv pool-coverage prioritizat: avg_hits dominant, urmat de hit-uri ridicate.
+    # L1 (tested 2026-05-09): tried target_plus=60, high_plus=150 to push toward
+    # 4+/5+ events. Result: regresie -5% to -14% pe TOATE 3 jocuri (joker, 5/40,
+    # 6/49). Cauza: 4+/5+ events sunt prea rare în training window pentru a fi
+    # optimizate fără overfitting. avg_hits e mai robust (mai multe data points).
+    # Reverted la valorile originale.
     perf = (
         avg_hits * 25.0  # Acoperire medie pool — semnal principal
         + hits_target_plus * 10.0

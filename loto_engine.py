@@ -380,6 +380,23 @@ class LotoEngine:
             if guarantee < 4:
                 guarantee = 4
 
+        # H13 (2026-05-07): Pe pool=10 fără Ultra-Hit, escalăm la guarantee=draw_n
+        # (full wheel) — C(10,5)=252 variante. Asta maximizează numărul de bilete
+        # cu 4+/5 hits când pool union e mare, fără a crește pool-ul. Cost ~5×
+        # mai multe bilete (1500 lei vs 300 lei pentru joker), DAR garantăm
+        # toate combinațiile posibile. Variantele sunt sortate după NQI sum
+        # descendent → primele bilete sunt cele mai "concentrate" (top-NQI-5),
+        # deci dacă cumperi doar primele K bilete, primești cele mai probabile.
+        draw_n_for_game = int(self.params.get("draw_n", 6))
+        if not ultra_hit_optimization and pool_size == 10 and guarantee < draw_n_for_game:
+            logging.info(
+                "[PIPELINE] Pool=10 detectat: escalez guarantee de la %d la %d "
+                "(full wheel C(10,%d) pentru maximizare hit-uri 4+/5).",
+                guarantee, draw_n_for_game, draw_n_for_game,
+            )
+            guarantee = draw_n_for_game
+            self.audit["full_wheel_pool10"] = True
+
         # === ADAPTIVE FEEDBACK PRE-RUN: detectăm extrageri reale apărute de la
         # ultima predicție și ajustăm error_correction_map ÎNAINTE de TimesFM. ===
         adaptive_event = None
