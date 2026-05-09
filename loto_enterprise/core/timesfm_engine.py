@@ -1289,7 +1289,13 @@ def get_timesfm_scores_v2(
                     "triplet_w": wt,
                     "quad_w": wq,
                 }
-            
+
+        # H12 (2026-05-07): tested Chronos-Bolt ensemble blend.
+        # Both alpha=0.7 (-9.1%) and alpha=0.85 (-5.5%) regressed vs pure TimesFM
+        # H6. Chronos's signal on lottery sparse-binary series is weaker than
+        # TimesFM's, so any blend ratio drags the prediction down. The chronos_engine
+        # module is kept for future experiments but the blend is disabled here.
+
         # Audit
         if audit is not None:
             sorted_scores = sorted(final_nqi.items(), key=lambda x: x[1], reverse=True)
