@@ -385,12 +385,13 @@ def _rank_fusion(ensemble_scores: List[Dict[int, float]], window_weights: Option
     all_nums = set().union(*(s.keys() for s in ensemble_scores))
     rank_scores: Dict[int, float] = {n: 0.0 for n in all_nums}
     if window_weights is None:
-        # Bell curve cu vârful pe pozițiile 3-4 (ferestre 300-200, mid-recent)
+        # H6 (2026-05-07): bell curve cu vârful pe pozițiile 3-4 (ferestre 300-200).
+        # H7 attempted a sharper curve shifted toward shorter windows (peak=1.47 at
+        # position 4) but regressed -17% — over-fits noise. Reverted to gentler H6.
         n = len(ensemble_scores)
         if n <= 1:
             window_weights = [1.0]
         else:
-            # Distribuție bell-shape: peak la mid, lower la extreme
             peak = (n - 1) / 2.0
             sigma = max(n / 3.0, 1.0)
             window_weights = [
