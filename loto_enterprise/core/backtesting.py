@@ -355,14 +355,15 @@ class LotoBacktester:
         
         print("=" * 60 + "\n")
     
-    def run_retroactive_backtest(self, pool_size: int = 12, guarantee: int = 4, 
+    def run_retroactive_backtest(self, pool_size: int = 12, guarantee: int = 4,
                                   lookback_percent: float = 20.0,
                                   backtest_depth_percent: float = 5.0,
                                   filter_consecutives: bool = True,
                                   max_variants: int = 0,
                                   simulation_step: int = 1,
                                   use_feedback: bool = True,
-                                  enable_hard_inversion: bool = True) -> List[RetroactivePrediction]:
+                                  enable_hard_inversion: bool = True,
+                                  smart_reduction: bool = True) -> List[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
@@ -472,6 +473,7 @@ class LotoBacktester:
                     max_variants=max_variants,
                     lookback=lookback_percent,
                     filter_consecutives=filter_consecutives,
+                    smart_reduction=smart_reduction,
                     enable_adaptive_persistence=False,
                 )
 

@@ -1160,6 +1160,8 @@ def get_timesfm_scores_v2(
             # Forecast unificat: într-un singur apel GPU/CPU obținem point+quantile,
             # iar pentru pașii non-regresivi cerem și predicția pe context (anomaly)
             # ca să eliminăm un al doilea forecast() redundant.
+            # O1 (tested 2026-05-09): tried freq=[1] (weekly/daily cadence). Result
+            # on 6/49: avg_max -8.8%, 4+ events unchanged. Reverted to freq=[0].
             forecast_kwargs = {
                 "inputs": all_series,
                 "freq": [0] * len(all_series),
@@ -1294,11 +1296,32 @@ def get_timesfm_scores_v2(
                     "quad_w": wq,
                 }
 
-        # H12 (2026-05-07): tested Chronos-Bolt ensemble blend.
-        # Both alpha=0.7 (-9.1%) and alpha=0.85 (-5.5%) regressed vs pure TimesFM
-        # H6. Chronos's signal on lottery sparse-binary series is weaker than
-        # TimesFM's, so any blend ratio drags the prediction down. The chronos_engine
-        # module is kept for future experiments but the blend is disabled here.
+        # H12-RETEST-3 (2026-05-10): Chronos blend ENABLED DOAR PE JOKER.
+        # Findings ISTORIC sweep:
+        #   joker: +4.8% avg, 4+ events 0%→6.2%, 5+ events 0%→1.6% (1 sim cu max=5!)
+        #   5/40:  -18% (REJECTED)
+        #   6/49:  neutru (-1%)
+        # Pentru joker, Chronos aduce signal complementar care produce
+        # max_hits = 5 (jackpot pe pool=10) — eveniment imposibil cu TimesFM-only.
+        is_joker_game = is_joker_drum or (params.get("max_n", 49) == 45 and "joker" in str(data.columns).lower())
+        if not is_regressive_step and is_joker_game:
+            try:
+                from loto_enterprise.core.chronos_engine import get_chronos_scores, blend_with_timesfm
+                joker_vals_for_chronos = data["joker"].values if "joker" in data.columns else None
+                chronos_scores = get_chronos_scores(
+                    draw_matrix=draw_matrix,
+                    joker_vals=joker_vals_for_chronos,
+                    max_num=max_num,
+                    is_joker_drum=is_joker_drum,
+                    context_window=300,
+                    prediction_length=5,
+                )
+                if chronos_scores:
+                    final_nqi = blend_with_timesfm(final_nqi, chronos_scores, alpha=0.85)
+                    if audit is not None:
+                        audit["chronos_blend_joker"] = "alpha=0.85"
+            except Exception as exc:
+                logging.debug("[CHRONOS] Joker blend skipped (err=%s).", exc)
 
         # Audit
         if audit is not None:
