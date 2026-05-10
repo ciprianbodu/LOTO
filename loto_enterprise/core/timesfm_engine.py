@@ -1296,14 +1296,14 @@ def get_timesfm_scores_v2(
                     "quad_w": wq,
                 }
 
-        # H12-RETEST-3 (2026-05-10): Chronos blend ENABLED DOAR PE JOKER.
-        # Findings ISTORIC sweep:
-        #   joker: +4.8% avg, 4+ events 0%→6.2%, 5+ events 0%→1.6% (1 sim cu max=5!)
-        #   5/40:  -18% (REJECTED)
-        #   6/49:  neutru (-1%)
-        # Pentru joker, Chronos aduce signal complementar care produce
-        # max_hits = 5 (jackpot pe pool=10) — eveniment imposibil cu TimesFM-only.
+        # Game-conditional foundation model blend:
+        #   - JOKER: Chronos-Bolt (+4.8% avg, 4+ events 0%→6.2%, 5+ events apar)
+        #   - 6/49:  PatchTST (+11% avg pe ISTORIC, 0% 4+ events — blend cu α=0.85
+        #            vs TimesFM-only ar putea capta atât avg cât și 4+ events)
+        #   - 5/40:  TimesFM-only (toate alternativele regresie)
         is_joker_game = is_joker_drum or (params.get("max_n", 49) == 45 and "joker" in str(data.columns).lower())
+        is_649_game = (params.get("max_n", 0) == 49 and params.get("draw_n", 0) == 6)
+
         if not is_regressive_step and is_joker_game:
             try:
                 from loto_enterprise.core.chronos_engine import get_chronos_scores, blend_with_timesfm
@@ -1322,6 +1322,15 @@ def get_timesfm_scores_v2(
                         audit["chronos_blend_joker"] = "alpha=0.85"
             except Exception as exc:
                 logging.debug("[CHRONOS] Joker blend skipped (err=%s).", exc)
+
+        # PatchTST blend pe 6/49 testat și REJECTED (2026-05-10):
+        #   TimesFM-only: avg=1.197, 4+ events 2.63% (30 var), max ever=4
+        #   PT+TimesFM blend α=0.85: avg=1.184, 4+ events 0%, max ever=3
+        # Blend-ul DISTRUGE capacitatea TimesFM de a captura extreme events.
+        # PatchTST standalone are avg mai mare dar 0% 4+ events — blend-ul
+        # contaminează signal-ul TimesFM cu zgomot care diluează tail.
+        # Pentru 6/49, TimesFM-only rămâne optim (păstrăm modulul patchtst_engine.py
+        # pentru viitor dar nu îl folosim activ).
 
         # Audit
         if audit is not None:
