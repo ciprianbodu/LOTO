@@ -105,11 +105,18 @@ class LotoBacktester:
         self._load_data()
     
     def _get_game_params(self, game_type: str) -> Dict:
-        """Parametrii pentru fiecare tip de joc."""
+        """Parametrii pentru fiecare tip de joc.
+
+        Pentru Joker, draw_n = 5 (urna 1, numere 1-45). Coloana `joker` (1-20,
+        urna 2) NU intră în hit-counting pe pool — e drum separat scorat de
+        pipeline-ul `hard_core_joker`. Tratarea anterioară (draw_n=6 cu joker
+        ca al 6-lea număr) amesteca două universuri disjuncte și distorsiona
+        metricile.
+        """
         params = {
             "6/49": {"max_n": 49, "draw_n": 6, "num_cols": ["n1", "n2", "n3", "n4", "n5", "n6"]},
             "5/40": {"max_n": 40, "draw_n": 5, "num_cols": ["n1", "n2", "n3", "n4", "n5"]},
-            "joker": {"max_n": 45, "draw_n": 6, "num_cols": ["n1", "n2", "n3", "n4", "n5", "joker"]},
+            "joker": {"max_n": 45, "draw_n": 5, "num_cols": ["n1", "n2", "n3", "n4", "n5"]},
         }
         return params.get(game_type, params["6/49"])
     

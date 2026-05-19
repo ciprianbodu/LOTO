@@ -1294,37 +1294,39 @@ class LotoEngine:
         return count / (end_idx - start_idx) if end_idx > start_idx else 0.0
     
     def _replace_with_smart_alternatives(self, excluded_numbers: list, kept_numbers: list, freq: np.ndarray) -> None:
-        """Înlocuiește numerele excluse cu cele mai bune alternative bazate pe Smart Selector"""
+        """Înlocuiește numerele excluse cu cele mai bune alternative bazate pe Smart Selector v2."""
         all_numbers = set(range(1, self.params["max_n"] + 1))
         current_pool = set(kept_numbers)
         available_numbers = all_numbers - current_pool
-        
-        # Calculăm scoruri pentru toate numerele disponibile
-        alternative_scores = {}
-        
-        # Extindem calculul de scoruri pentru toate numerele disponibile
+
+        # Mutăm temporar hard_core pe lista de candidați ca să refolosim calculatoarele
+        # de scoruri (care se uită la self.hard_core). try/finally garantează că
+        # restaurăm starea chiar dacă apare excepție în calcul.
+        alternative_scores: dict = {}
         temp_hard_core = list(available_numbers)
         original_hard_core = self.hard_core.copy()
-        
-        self.hard_core = temp_hard_core
-        
-        # Recalculăm scorurile pentru alternative
-        gap_scores = self._calculate_gap_scores()
-        trend_scores = self._calculate_trend_scores()
-        frequency_scores = self._calculate_frequency_scores(freq)
-        positional_scores = self._calculate_positional_scores()
-        
-        for num in available_numbers:
-            final_score = (
-                gap_scores.get(num, 0) * 0.40 +
-                trend_scores.get(num, 0) * 0.25 +
-                frequency_scores.get(num, 0) * 0.20 +
-                positional_scores.get(num, 0) * 0.15
-            )
-            alternative_scores[num] = final_score
-        
-        # Restaurăm nucleul original
-        self.hard_core = original_hard_core
+        try:
+            self.hard_core = temp_hard_core
+
+            gap_scores = self._calculate_gap_scores()
+            trend_scores = self._calculate_trend_scores()
+            frequency_scores = self._calculate_frequency_scores(freq)
+            positional_scores = self._calculate_positional_scores()
+            recent_hit_scores = self._calculate_recent_hit_scores()
+
+            # Aceleași ponderi cu _apply_smart_selector v2 (30/15/15/10/30) — alternativele
+            # trebuie scorate cu aceleași reguli ca numerele păstrate; altfel pool-ul
+            # final amestecă două criterii de selecție diferite.
+            for num in available_numbers:
+                alternative_scores[num] = (
+                    gap_scores.get(num, 0) * 0.30 +
+                    trend_scores.get(num, 0) * 0.15 +
+                    frequency_scores.get(num, 0) * 0.15 +
+                    positional_scores.get(num, 0) * 0.10 +
+                    recent_hit_scores.get(num, 0) * 0.30
+                )
+        finally:
+            self.hard_core = original_hard_core
         
         # Sortăm alternative după scor
         sorted_alternatives = sorted(alternative_scores.items(), key=lambda x: x[1], reverse=True)
@@ -2107,9 +2109,9 @@ def create_demo_data(csv_path: str, game: str = "6/49") -> None:
 
     """Creează date demo pentru testare."""
     params = {
-        "6/49": {"max_n": 49, "draw_n": 6},
-        "5/40": {"max_n": 40, "draw_n": 5},
-        "joker": {"max_n": 45, "draw_n": 6},
+        "6/49": {"max_n": 49, "draw_n": 6, "joker_max": None},
+        "5/40": {"max_n": 40, "draw_n": 5, "joker_max": None},
+        "joker": {"max_n": 45, "draw_n": 5, "joker_max": 20},
     }
 
     game_params = params.get(game, params["6/49"])
@@ -2120,7 +2122,10 @@ def create_demo_data(csv_path: str, game: str = "6/49") -> None:
         numbers = sorted(
             rng.choice(np.arange(1, game_params["max_n"] + 1), size=game_params["draw_n"], replace=False).tolist()
         )
-        rows.append({f"n{k+1}": int(numbers[k]) for k in range(game_params["draw_n"])})
+        row = {f"n{k+1}": int(numbers[k]) for k in range(game_params["draw_n"])}
+        if game_params.get("joker_max"):
+            row["joker"] = int(rng.integers(1, game_params["joker_max"] + 1))
+        rows.append(row)
 
     df = pd.DataFrame(rows)
     df.to_csv(csv_path, index=False)
