@@ -1078,6 +1078,7 @@ def get_timesfm_scores_v2(
     audit: dict | None = None,
     is_regressive_step: bool = False,
     regime_mode: str = "normal",
+    window_progress_cb=None,
 ) -> Dict[int, float]:
     """
     Motor principal TimesFM v2 — folosește TOATE capabilitățile API-ului.
@@ -1093,6 +1094,11 @@ def get_timesfm_scores_v2(
         rebalansate care scad încrederea în predicția directă a modelului și
         cresc semnalele reactive (adaptive bias + momentum). Folosit după
         catastrofe consecutive sau underperformance susținută.
+
+    window_progress_cb: callable(done_windows, total_windows, current_ctx) opțional,
+        apelat după fiecare fereastră de ensemble finalizată. Permite UI-ului să
+        afișeze progres intermediar (TimesFM rulează 7-8 ferestre pe GPU, 3 pe CPU
+        — fără acest hook, bara pare blocată ~3-5s între callbacks de pipeline).
     """
     if not HAS_TIMESFM:
         logging.warning(
@@ -1246,8 +1252,17 @@ def get_timesfm_scores_v2(
                 anom_base, anom_gain = _get_anomaly_blend(_game_type)
                 for n in num_map:
                     nqi[n] = nqi.get(n, 0.0) * (anom_base + anom_gain * anomaly_scores.get(n, 0.5))
-            
+
             ensemble_scores.append(nqi)
+
+            # Heartbeat pentru bara de progres UI — ferestrele ensemble durează 1-3s
+            # fiecare pe GPU, iar fără acest update bara pare blocată câteva secunde
+            # bune la fiecare apel TimesFM.
+            if window_progress_cb is not None:
+                try:
+                    window_progress_cb(len(ensemble_scores), len(context_windows), current_ctx)
+                except Exception as _exc_cb:
+                    logging.debug("[TIMESFM-V2] window_progress_cb a eșuat: %s", _exc_cb)
 
         # Rank-based fusion (mai robust decât media aritmetică)
         if not ensemble_scores:
@@ -1365,10 +1380,14 @@ def get_regressive_blacklist_v2(
     rebuild_matrix_fn,
     is_joker: bool = False,
     audit: dict | None = None,
+    step_progress_cb=None,
 ) -> Set[int]:
     """
     Analiză regresivă multi-pass: rulează TimesFM pe ferestre de 100%, 90%, 80% etc.
     Doar numerele confirmate ca slabe în TOATE pașii sunt eliminate.
+
+    step_progress_cb: callable(done_steps, total_steps, step_pct) opțional —
+        apelat după fiecare pas regresiv finalizat (pentru bara de progres UI).
     """
     if not HAS_TIMESFM:
         return set()
@@ -1379,6 +1398,8 @@ def get_regressive_blacklist_v2(
     steps = list(range(100, max(sim_depth_pct - 1, 9), -10))
     all_blacklists: List[Set[int]] = []
     total_rows = len(data_full)
+    total_steps = len(steps)
+    done_steps = 0
 
     for step in steps:
         num_rows = int(total_rows * (step / 100))
@@ -1400,6 +1421,13 @@ def get_regressive_blacklist_v2(
             threshold = np.percentile(vals, 25)
             bl = {n for n, s in scores.items() if s <= threshold}
             all_blacklists.append(bl)
+
+        done_steps += 1
+        if step_progress_cb is not None:
+            try:
+                step_progress_cb(done_steps, total_steps, step)
+            except Exception as _exc_cb:
+                logging.debug("[TIMESFM-V2] step_progress_cb a eșuat: %s", _exc_cb)
 
     if not all_blacklists:
         return set()

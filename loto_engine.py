@@ -510,13 +510,13 @@ class LotoEngine:
             self._build_draw_matrix()
             
         if progress_cb:
-            progress_cb("Inițializare motor...", 10)
+            progress_cb("Inițializare motor...", 3)
 
         logging.info("[PIPELINE] Începe analiza frecvenței...")
         freq = self.analyze_frequency()
 
         if progress_cb:
-            progress_cb("Analiza frecvenței...", 30)
+            progress_cb("Analiza frecvenței finalizată.", 8)
 
         # 4. Calcul Scoruri NQI (Neural Quality Index) prin TimesFM v2 - MUTAT AICI PENTRU OPTIMIZARE CACHE
         tfm_scores = {}
@@ -524,13 +524,32 @@ class LotoEngine:
         actual_lookback = total_draws
         self.audit["effective_rows_used"] = total_draws
         self.audit["lookback_pct"] = lookback
-            
+
+        # Calibrare bară progres: TimesFM e cea mai lungă etapă (~3-5s pe GPU,
+        # 15-30s pe CPU). Înaintea apelului anunțăm START (15%) și pasăm un
+        # callback intern care raportează progres la fiecare fereastră de
+        # ensemble (interval 15→45%). Asta elimină percepția de "bară blocată".
         if progress_cb:
-            progress_cb(f"TimesFM v2: forecast + XReg covariates + anomaly (ctx={actual_lookback})...", 40)
-        
+            progress_cb(f"TimesFM v2: forecast neural foundation (ctx={actual_lookback}, ~3-5s)...", 15)
+
+            def _tfm_window_progress(done, total, current_ctx):
+                # Map [done/total] în intervalul [15, 45] = 30 puncte.
+                pct = 15 + int((done / max(total, 1)) * 30)
+                progress_cb(f"TimesFM v2: fereastră {done}/{total} (ctx={current_ctx})", pct)
+
+            self._tfm_window_cb = _tfm_window_progress
+        else:
+            self._tfm_window_cb = None
+
         start_gpu = time.perf_counter()
-        tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+        try:
+            tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+        finally:
+            self._tfm_window_cb = None  # Cleanup ca să nu polueze apeluri ulterioare
         gpu_time = (time.perf_counter() - start_gpu) * 1000
+
+        if progress_cb:
+            progress_cb(f"TimesFM v2 complet ({gpu_time/1000:.1f}s). Procesez feedback adaptive...", 45)
         
         if 'performance' not in self.audit:
             self.audit['performance'] = {}
@@ -549,8 +568,23 @@ class LotoEngine:
         blacklist = set()
         self.audit["sim_depth_pct"] = sim_depth_pct
         if smart_reduction:
+            if progress_cb:
+                progress_cb(f"Analiză regresivă multi-pass (depth={sim_depth_pct}%, ~3-8s)...", 50)
+
+                def _regressive_step_progress(done, total, step_pct):
+                    # Map [done/total] în intervalul [50, 65] = 15 puncte
+                    pct = 50 + int((done / max(total, 1)) * 15)
+                    progress_cb(f"Regresiv: pas {done}/{total} (fereastră {step_pct}%)", pct)
+
+                self._regressive_step_cb = _regressive_step_progress
+            else:
+                self._regressive_step_cb = None
+
             logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală v2 (XReg + Quantile)...")
-            blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
+            try:
+                blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
+            finally:
+                self._regressive_step_cb = None
             
             self.audit['reduction_filter'] = {
                 'combined_blacklist': list(blacklist),
@@ -583,17 +617,21 @@ class LotoEngine:
                     "scope": "single_draw",
                 }
 
+        if progress_cb:
+            progress_cb("Selecție pool inițial (top-NQI + diversificare empirică)...", 65)
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
-        
+
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
         self.audit['pipeline_stages'] = {
             "1_nqi_raw": sorted(self.hard_core.copy()),
         }
-        
+
         # [NEW] Optimizare suplimentară prin Smart Selector (Gap/Trend/Positional)
         # Rafinează pool-ul pentru a maximiza hit-urile de 4 și 5 numere.
         if hasattr(self, '_apply_smart_selector'):
+            if progress_cb:
+                progress_cb("Smart Selector v2 (Gap + Trend + Recent-Hits)...", 70)
             logging.info("[PIPELINE] Rafinare nucleu prin Smart Selector (Hybrid Optimization)...")
             self._apply_smart_selector(freq)
         self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
@@ -621,14 +659,30 @@ class LotoEngine:
         # POST-HOC VALIDATION: Verificăm pool-ul pe ultimele extrageri
         # Aceasta e optimizarea principală — un pool validat empiric
         if self.data is not None and self._draw_matrix is not None:
+            if progress_cb:
+                progress_cb("POST-HOC Validation (walk-forward refinement, ~1-2s)...", 78)
             self.hard_core = self._validate_pool_retrospective(
                 self.hard_core, tfm_scores, pool_size, blacklist
             )
         self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
-        
+
         if self.game_type == "joker":
+            if progress_cb:
+                progress_cb("TimesFM v2 pentru Urna 2 Joker (1-20, ~1-2s)...", 85)
+
+                def _joker_window_progress(done, total, current_ctx):
+                    pct = 85 + int((done / max(total, 1)) * 4)
+                    progress_cb(f"Joker TimesFM: fereastră {done}/{total}", pct)
+
+                self._tfm_window_cb = _joker_window_progress
+            else:
+                self._tfm_window_cb = None
+
             logging.info(f"[PIPELINE] TimesFM v2 pentru Urna 2 (Joker)...")
-            j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
+            try:
+                j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
+            finally:
+                self._tfm_window_cb = None
             if j_scores:
                 sorted_j = sorted(j_scores.items(), key=lambda x: x[1], reverse=True)
                 self.hard_core_joker = [int(num) for num, _ in sorted_j[:2]]
@@ -640,15 +694,17 @@ class LotoEngine:
                 logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
 
         if progress_cb:
-            progress_cb("Generare predicții finale (Wheeling)...", 70)
+            progress_cb("Generare bilete prin Wheeling Set Cover...", 90)
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
         wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
-        
+
         # Funcția 4: Anomaly Filtering via TimesFM v2
         if smart_reduction and tfm_scores:
+            if progress_cb:
+                progress_cb(f"Filtru Neural Anomaly Scoring pe {len(lines)} variante...", 95)
             logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring v2 pe {len(lines)} variante...")
             original_count = len(lines)
             anomaly_threshold = 0.85 if ultra_hit_optimization else 0.7
@@ -663,7 +719,7 @@ class LotoEngine:
         logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
 
         if progress_cb:
-            progress_cb("Validare rezultate...", 90)
+            progress_cb("Finalizare rezultate și audit...", 98)
 
         # Recalculăm statisticile pentru afișare corectă în UI (procente)
         final_freq = self.analyze_frequency()
@@ -1471,6 +1527,10 @@ class LotoEngine:
           4. Multi-Horizon Forecasting (H=20, weighted decay)
           5. Adaptive Local Tuning (bias correction)
         Rezultat: Neural Quality Index (NQI) per număr.
+
+        Pentru progress bar intra-TimesFM, setează `self._tfm_window_cb` înainte de
+        apel — va fi citit aici și pasat în v2. (Nu îl primim ca argument ca să
+        nu spargem lru_cache.)
         """
         if _HAS_TFM_V2:
             return get_timesfm_scores_v2(
@@ -1481,6 +1541,7 @@ class LotoEngine:
                 context_len=context_len,
                 audit=self.audit,
                 regime_mode=getattr(self, "_adaptive_mode", "normal"),
+                window_progress_cb=getattr(self, "_tfm_window_cb", None),
             )
         # Fallback la implementarea veche dacă modulul v2 nu e disponibil
         return self._get_timesfm_scores_legacy(is_joker_drum, context_len)
@@ -1639,6 +1700,9 @@ class LotoEngine:
         """
         Analiză Regresivă multi-pass folosind Google TimesFM v2.
         Rulează scoring pe ferestre de 100%, 90%, 80%... și elimină doar intersecția.
+
+        Pentru progress bar setează `self._regressive_step_cb` (instance attr,
+        similar cu `_tfm_window_cb`).
         """
         if _HAS_TFM_V2 and self.data is not None:
             return get_regressive_blacklist_v2(
@@ -1648,6 +1712,7 @@ class LotoEngine:
                 sim_depth_pct=sim_depth_pct,
                 rebuild_matrix_fn=self._build_draw_matrix,
                 audit=self.audit,
+                step_progress_cb=getattr(self, "_regressive_step_cb", None),
             )
         # Fallback legacy
         if not HAS_TIMESFM: return set()
