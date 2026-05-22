@@ -1256,27 +1256,39 @@ with st.sidebar:
                     logging.error(f"[AUTO-PILOT] auto-rebench FAILED: {e}", exc_info=True)
                     st.error(f"❌ Rebench eșuat: {e}")
 
-            # === GENERARE IMEDIATĂ cu cache-ul curent ===
-            # Chiar și la force_full_rebench, generăm imediat cu cache-ul actual
-            # (bench-ul rulează paralel în fundal); la următoarea rulare după ce
-            # termină bench-ul, vei avea decizia proaspătă din matricea nouă.
+            # === LOGICA GENERARE ===
+            # force_full_rebench=True → NU generăm acum cu cache vechi.
+            #   Setăm flag `_regenerate_after_bench` în session_state — UI-ul
+            #   poll-uiește .bench_pid și, când bench-ul termină, auto-trigger
+            #   Auto-Pilot din nou (de data asta cu cache PROASPĂT din bench).
+            # force_full_rebench=False → comportament normal (generăm imediat).
             st.session_state["start_calib_now"] = False
             st.session_state["trigger_gen_after_calib"] = False
-            ensure_worker_running()
-            reset_sidebar_settings()
-            st.session_state["queue_submit_requested"] = True
             st.session_state["auto_pilot_applied"] = pending
+
             if force_full_rebench:
+                # NU generăm acum — așteptăm bench-ul. Salvăm intent ca să se
+                # auto-declanșeze generare când bench-ul termină.
+                st.session_state["_regenerate_after_bench"] = True
+                st.session_state["_regenerate_pool_size"] = pool_now
                 st.toast(
-                    "🔴 FULL Re-Bench LANSAT în fundal (toate metodele × toate ferestrele × "
-                    "toate jocurile, ~50 min)! Generarea curentă continuă cu cache-ul actual.",
+                    "🔴 FULL Re-Bench LANSAT în fundal (~50 min). Generarea va porni "
+                    "AUTOMAT când bench-ul termină — cu cache PROASPĂT, nu cu cel vechi.",
                     icon="⚡",
                 )
                 st.balloons()
-            logging.info(
-                f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}, "
-                f"force_full_rebench={force_full_rebench}): {pending} → generare directă"
-            )
+                logging.info(
+                    f"[AUTO-PILOT] FULL rebench lansat (pool={pool_now}). "
+                    f"Generarea suspendată — auto-trigger când bench termină."
+                )
+            else:
+                ensure_worker_running()
+                reset_sidebar_settings()
+                st.session_state["queue_submit_requested"] = True
+                logging.info(
+                    f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}): "
+                    f"{pending} → generare directă cu cache curent"
+                )
         except Exception as exc:
             st.error(f"Auto-Pilot a eșuat ({exc}); fallback la calibrare clasică.")
             st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
@@ -1369,19 +1381,54 @@ with st.sidebar:
             else:
                 # Procesul s-a terminat — sterge marker-ul
                 _bench_pid_file.unlink(missing_ok=True)
+                # === AUTO-TRIGGER GENERARE după ce bench-ul termină ===
+                # Dacă userul a apăsat "FORȚEAZĂ FULL Re-Bench", lansăm acum
+                # automat generarea cu cache-ul PROASPĂT din bench-ul tocmai
+                # terminat. Asta înlocuiește comportamentul vechi care genera
+                # imediat cu cache vechi (contraproductiv pentru intent-ul user).
+                if st.session_state.pop("_regenerate_after_bench", False):
+                    st.session_state.pop("_regenerate_pool_size", None)
+                    ensure_worker_running()
+                    reset_sidebar_settings()
+                    st.session_state["queue_submit_requested"] = True
+                    st.toast(
+                        "✅ FULL Re-Bench TERMINAT! Lansez generarea cu cache-ul PROASPĂT.",
+                        icon="🎉",
+                    )
+                    logging.info(
+                        "[AUTO-PILOT] Bench terminat → auto-trigger generation cu cache PROASPĂT."
+                    )
         except Exception:
             _bench_pid_file.unlink(missing_ok=True)
 
     if _bench_active:
+        # Mesaj diferit dacă userul a forțat rebench cu intent de auto-regenerate
+        _waiting_for_regen = st.session_state.get("_regenerate_after_bench", False)
+        _suffix = (
+            "  \n⏳ **Generarea va porni AUTOMAT cu cache proaspăt când bench-ul termină.**"
+            if _waiting_for_regen
+            else "  \nAuto-Pilot este DEZACTIVAT până se termină."
+        )
         st.warning(
             f"🔬 **Bench in progres** (PID {_bench_pid}) — "
             f"{int(_bench_progress*100)}% complet  "
             f"({int(_bench_progress * _bench_total_folds)}/{_bench_total_folds} folds) "
-            f"— ETA ~{_bench_eta_min} min rămas.  \n"
-            f"Auto-Pilot este DEZACTIVAT până se termină. "
+            f"— ETA ~{_bench_eta_min} min rămas." + _suffix + "  \n"
             f"Vezi fereastra CMD numită 'FULL REBENCH' / 'QUICK REBENCH'."
         )
-        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — refresh manual pagina pentru update")
+        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — auto-refresh la 30s")
+        # === AUTO-REFRESH ÎN BROWSER ===
+        # Streamlit nu are auto-refresh nativ. Injectăm un <meta http-equiv="refresh">
+        # ascuns care reload-uiește pagina la 30s — astfel polling-ul .bench_pid
+        # detectează imediat când bench-ul termină și auto-trigger generation.
+        # session_state persistă în cookie-ul Streamlit prin refresh.
+        # Refresh activ DOAR în timpul bench-ului (eliminăm overhead la idle).
+        st.markdown(
+            '<meta http-equiv="refresh" content="30">',
+            unsafe_allow_html=True,
+        )
+        if _waiting_for_regen:
+            st.caption("⚙️ Pagina se auto-reîmprospătează la 30s. Generarea va porni AUTOMAT când bench-ul termină — nu trebuie să faci nimic.")
 
     # Re-Bench buttons mutate in expander-ul Power-User de mai jos.
 
