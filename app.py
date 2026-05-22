@@ -1174,6 +1174,22 @@ with st.sidebar:
     except Exception:
         pass
 
+    # === DOUBLE-CLICK DETECTOR PENTRU FORCE-REBENCH ===
+    # Streamlit nu are eveniment nativ "dublu-click" pe button. Folosim
+    # timestamp în session_state: două click-uri în < 1.5s = dublu-click =
+    # forțează re-bench Quick (~5 min) pe TOATE jocurile, indiferent de
+    # cache freshness. Util când userul vrea decizii proaspete imediat.
+    import time as _time_dc
+    _DBL_CLICK_WINDOW = 1.5  # secunde
+    _last_click_ts = float(st.session_state.get("_autopilot_last_click_ts", 0))
+    _now_ts = _time_dc.time()
+    _is_double_click = (_now_ts - _last_click_ts) < _DBL_CLICK_WINDOW
+
+    st.caption(
+        "💡 *Tip: dublu-click pe Auto-Pilot (în < 1.5s) = forțează re-bench Quick "
+        "pe TOATE jocurile, ignorând cache-ul.*"
+    )
+
     if st.button(
         "⚡ Auto-Pilot: Aplică Decizia Benchmark + Generează" + _ap_disabled_reason,
         type="primary",
@@ -1181,11 +1197,15 @@ with st.sidebar:
             "Citește din `best_methods.json` (matrice 1280-folds) modelul + "
             "sim_depth + flag-ul blacklist optim pentru jocul curent și "
             "pool-ul selectat, le aplică și generează imediat. Verifică automat "
-            "freshness-ul CSV-urilor."
+            "freshness-ul CSV-urilor.\n\n"
+            "💡 Dublu-click (< 1.5s) = forțează re-bench Quick pe toate jocurile."
         ),
         use_container_width=True,
         disabled=_ap_disabled,
     ):
+        # Persistăm timestamp pentru detectarea dublu-click la următorul click
+        st.session_state["_autopilot_last_click_ts"] = _now_ts
+
         if not st.session_state.get("loaded_datasets"):
             st.error("Încărcați întâi un fișier CSV!")
         else:
@@ -1204,14 +1224,28 @@ with st.sidebar:
                 for _ui_game, _depth in pending.items():
                     st.session_state[f"sim_depth_key_{_ui_game}"] = int(_depth)
 
-                # === AUTO-REBENCH IN FUNDAL DACA DRIFT DETECTAT ===
-                # User nu trebuie sa apese butoane separate — Auto-Pilot decide singur.
-                # Bench-ul ruleaza paralel cu generarea; foloseste cache-ul actual acum,
-                # iar la urmatorul Auto-Pilot va avea decizia rafinata din noul bench.
-                if _global_rec in ("quick_rebench", "full_rebench") and not _Pp(".bench_pid").exists():
+                # === AUTO-REBENCH IN FUNDAL ===
+                # Cu single click: doar dacă freshness recomandă (quick/full).
+                # Cu DUBLU-CLICK: forțează quick_rebench pe TOATE jocurile,
+                # indiferent de cache freshness. User intent = "vreau decizii
+                # proaspete imediat, nu îmi pasă de cache."
+                _force_rebench_dc = _is_double_click
+                _should_rebench = (
+                    _force_rebench_dc
+                    or _global_rec in ("quick_rebench", "full_rebench")
+                )
+
+                if _should_rebench and not _Pp(".bench_pid").exists():
                     try:
                         py = _sys.executable.replace("/", "\\")
-                        if _global_rec == "quick_rebench":
+                        # Dublu-click → Quick rebench forțat. Single click cu drift
+                        # full → full rebench. Altfel quick.
+                        if _force_rebench_dc:
+                            from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
+                            bench_args = [py, "bench_all_methods.py"] + quick_rebench_cli_args()
+                            _label = "Quick FORȚAT (dublu-click, ~5 min, toate jocurile)"
+                            logging.info("[AUTO-PILOT] DOUBLE-CLICK detectat → force-rebench Quick pe toate jocurile.")
+                        elif _global_rec == "quick_rebench":
                             from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
                             bench_args = [py, "bench_all_methods.py"] + quick_rebench_cli_args()
                             _label = "Quick (~5 min)"
@@ -1233,14 +1267,20 @@ with st.sidebar:
                         logging.warning(f"[AUTO-PILOT] auto-rebench failed: {e}")
 
                 # === GENERARE IMEDIATA cu cache-ul curent ===
+                # NOTE: chiar și la dublu-click, generăm imediat cu cache-ul
+                # actual (bench-ul rulează în fundal); la următoarea rulare vei
+                # avea decizia proaspătă.
                 st.session_state["start_calib_now"] = False
                 st.session_state["trigger_gen_after_calib"] = False
                 ensure_worker_running()
                 reset_sidebar_settings()
                 st.session_state["queue_submit_requested"] = True
                 st.session_state["auto_pilot_applied"] = pending
+                if _force_rebench_dc:
+                    st.toast("🔄 Dublu-click detectat — Re-Bench Quick FORȚAT lansat în fundal!", icon="⚡")
                 logging.info(
-                    f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}): {pending} → generare directă"
+                    f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}, "
+                    f"double_click={_force_rebench_dc}): {pending} → generare directă"
                 )
             except Exception as exc:
                 st.error(f"Auto-Pilot a eșuat ({exc}); fallback la calibrare clasică.")

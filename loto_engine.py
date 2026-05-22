@@ -2313,9 +2313,9 @@ def create_demo_data(csv_path: str, game: str = "6/49") -> None:
 
     """Creează date demo pentru testare."""
     params = {
-        "6/49": {"max_n": 49, "draw_n": 6},
-        "5/40": {"max_n": 40, "draw_n": 5},
-        "joker": {"max_n": 45, "draw_n": 6},
+        "6/49": {"max_n": 49, "draw_n": 6, "joker_max": None},
+        "5/40": {"max_n": 40, "draw_n": 5, "joker_max": None},
+        "joker": {"max_n": 45, "draw_n": 5, "joker_max": 20},
     }
 
     game_params = params.get(game, params["6/49"])
@@ -2326,7 +2326,10 @@ def create_demo_data(csv_path: str, game: str = "6/49") -> None:
         numbers = sorted(
             rng.choice(np.arange(1, game_params["max_n"] + 1), size=game_params["draw_n"], replace=False).tolist()
         )
-        rows.append({f"n{k+1}": int(numbers[k]) for k in range(game_params["draw_n"])})
+        row = {f"n{k+1}": int(numbers[k]) for k in range(game_params["draw_n"])}
+        if game_params.get("joker_max"):
+            row["joker"] = int(rng.integers(1, game_params["joker_max"] + 1))
+        rows.append(row)
 
     df = pd.DataFrame(rows)
     df.to_csv(csv_path, index=False)
