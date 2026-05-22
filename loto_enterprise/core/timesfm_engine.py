@@ -1620,6 +1620,124 @@ def select_pool_from_scores(
 # ---------------------------------------------------------------------------
 #  8. Variant Anomaly Filter
 # ---------------------------------------------------------------------------
+def rank_variants_by_quadruplet_propensity(
+    variants: List[List[int]],
+    draw_matrix: np.ndarray | None,
+    lookback: int = 500,
+    top_k: int = 0,
+) -> List[Tuple[List[int], float]]:
+    """
+    EXPERIMENTAL — rankează variantele după propensiunea la 4+ hits folosind
+    strategie "due quadruplets" (mean reversion).
+
+    ⚠️ NOT INTEGRATED IN PIPELINE: validarea empirică pe 642 extrageri 6/49
+    a arătat că nici TOP (due) nici BOTTOM (hot) nu bat random pe 4+ events
+    (18 vs 27 vs 22 evenimente respectiv). Asta confirmă matematic că loto
+    e iid pe orizontul unei extrageri și NICIO re-ordonare a variantelor pe
+    baza istoricului nu îmbunătățește 4+ hits semnificativ.
+
+    Boost-ul măsurat e doar pe avg_hits per variantă (+4.4% TOP vs BOTTOM),
+    nu pe evenimente 4+. Funcția rămâne disponibilă pentru cei care vor să
+    experimenteze ranking pe avg hits (poate fi utilă pentru "consistency
+    play"), dar pipeline-ul nu o aplică automat ca să nu inducă în eroare.
+
+    Algoritm:
+      1. Construiește toate n-tuple (4, 3, 2) observate istoric și calculează
+         pentru fiecare: avg_gap și current_gap.
+      2. Per variantă: scor = densitate medie de tuple "due" (gap_ratio > 1).
+      3. Combinat: 0.55×quad + 0.30×triplet + 0.15×pair.
+
+    Pentru 4+ hits STABILE matematic, singura cale validată e creșterea
+    pool-size: vezi hypergeometric_hit_forecast() în loto_engine.py.
+
+    Args:
+        variants: lista de variante
+        draw_matrix: extragerile istorice (n_draws × draw_n)
+        lookback: fereastră de analiză
+        top_k: dacă > 0, returnează doar top K
+
+    Returns:
+        Lista (variant, score) sortată descrescător — scor mare = mai "due".
+    """
+    if not variants or draw_matrix is None or draw_matrix.size == 0:
+        return [(v, 0.0) for v in variants]
+
+    from itertools import combinations
+
+    n_draws = min(lookback, draw_matrix.shape[0])
+    recent = draw_matrix[-n_draws:]
+    total_recent = len(recent)
+
+    # 1) Pentru fiecare tuple (4, 3, 2), găsim aparițiile (indices in recent)
+    def compute_appearances(k):
+        apps: dict = {}
+        for i, row in enumerate(recent):
+            nums_in_row = sorted(int(v) for v in row if int(v) > 0)
+            if len(nums_in_row) < k:
+                continue
+            for tup in combinations(nums_in_row, k):
+                apps.setdefault(tup, []).append(i)
+        return apps
+
+    quad_apps = compute_appearances(4)
+    triplet_apps = compute_appearances(3)
+    pair_apps = compute_appearances(2)
+
+    def gap_ratio(apps_list, total_n):
+        """Returnează gap_ratio = current_gap / avg_gap. >1.0 = 'due'."""
+        if not apps_list:
+            # Niciodată observat istoric — "very due" (high prior)
+            return 1.5
+        if len(apps_list) < 2:
+            return total_n / max(len(apps_list), 1)
+        gaps = [apps_list[i+1] - apps_list[i] for i in range(len(apps_list)-1)]
+        avg_gap = sum(gaps) / len(gaps)
+        current_gap = total_n - 1 - apps_list[-1]
+        if avg_gap <= 0:
+            return 0.0
+        return current_gap / avg_gap
+
+    scored: List[Tuple[List[int], float]] = []
+    for v in variants:
+        v_sorted = sorted(int(n) for n in v)
+        if len(v_sorted) < 2:
+            scored.append((v, 0.0))
+            continue
+
+        # Quad score: media gap_ratios pentru toate cvadruplurile din variantă
+        # (clamped la [0, 3] să evităm explozia pe cvadrupluri rare)
+        q_ratios = []
+        if len(v_sorted) >= 4:
+            for q in combinations(v_sorted, 4):
+                q_ratios.append(min(gap_ratio(quad_apps.get(q, []), total_recent), 3.0))
+        q_score = sum(q_ratios) / max(len(q_ratios), 1)
+
+        # Triplet score (mai dens, ajută discriminarea)
+        t_ratios = []
+        if len(v_sorted) >= 3:
+            for t in combinations(v_sorted, 3):
+                t_ratios.append(min(gap_ratio(triplet_apps.get(t, []), total_recent), 3.0))
+        t_score = sum(t_ratios) / max(len(t_ratios), 1)
+
+        # Pair score (fine-grain)
+        p_ratios = []
+        for p in combinations(v_sorted, 2):
+            p_ratios.append(min(gap_ratio(pair_apps.get(p, []), total_recent), 3.0))
+        p_score = sum(p_ratios) / max(len(p_ratios), 1)
+
+        # Combinat — cvadruplurile domină semnalul direct pentru 4+, dar
+        # triplets+pairs adaugă stabilitate când quad-urile sunt sparse.
+        combined = 0.55 * q_score + 0.30 * t_score + 0.15 * p_score
+        scored.append((v, float(combined)))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    if top_k > 0:
+        scored = scored[:top_k]
+
+    return scored
+
+
 def filter_variants_by_anomaly_v2(
     variants: List[List[int]],
     scores: Dict[int, float],

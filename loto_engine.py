@@ -773,6 +773,16 @@ class LotoEngine:
 
         logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
 
+        # === Notă: ranker-ul de variante quadruplet a fost EVALUAT și nu se
+        # integrează automat în pipeline. Validarea empirică pe 642 extrageri
+        # 6/49 a arătat că NICIUN re-ranker (hot quads, due quads) nu bate
+        # random pe 4+ hits — confirmare matematică a iid-ului loto. Funcția
+        # `rank_variants_by_quadruplet_propensity` rămâne disponibilă ca
+        # utility pentru cei care vor să experimenteze, dar audit-ul nu mai
+        # expune un "top_4plus_variants" care ar sugera fals o îmbunătățire.
+        # Pentru 4+ hits stabile, singura cale validată e creșterea pool-size
+        # (vezi audit["hit_forecast"]["recommendations"]).
+
         if progress_cb:
             progress_cb("Finalizare rezultate și audit...", 98)
 
