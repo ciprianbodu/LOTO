@@ -1,65 +1,31 @@
-# ARHITECTURĂ ȘI FUNCȚIONALITĂȚI LOTO ENTERPRISE (APRILIE 2026)
+Această listă acoperă atât modelele pre-antrenate (gata de utilizare), cât și arhitecturile avansate care necesită antrenare, perfecte pentru a testa la maximum performanțele nucleelor CUDA pe hardware-ul tău în mediul Python 3.11.
 
-## 1. NUCLEU DE PREDICȚIE — Google TimesFM v2 (MAXIM)
-- **Model Foundation**: Google TimesFM 200M parametri (checkpoint: google/timesfm-1.0-200m-pytorch).
-- **Neural Quality Index (NQI)**: Scor hibrid calculat din 5 semnale distincte:
-    *   **Point Forecast (20%)**: Predicția brută a modelului Google.
-    *   **Multi-Horizon Trend (25%)**: Analiza pe H=20 pași viitor cu weighted decay exponențial.
-    *   **Quantile Stability (20%)**: Analiza incertitudinii prin 9 cuantile (p10→p90 spread).
-    *   **Covariate Boost (20%)**: Semnalul din forecast_with_covariates() cu XReg real.
-    *   **Adaptive Local Tuning (15%)**: Bias correction bazat pe frecvența recentă.
-
-## 2. COVARIATE REALE ȘI FILTRARE AVANSATĂ
-- **Dynamic & Static Covariates**: rolling_freq, gap_counter, draw_sum, number_norm, hist_frequency via XReg.
-- **Neural Regressive Multi-Pass (Smart Reduction)**: Analiză pe ferestre de istoric regresive (100%, 90%, 80%...) pentru a identifica intersecția numerelor inactive ("dead numbers").
-- **Filtru Anti-Secvență**: Detecție 3+ numere consecutive; dacă secvența nu are validare istorică (sub 1% apariții), numărul cel mai slab e înlocuit cu o rezervă din top frecvență.
-- **Variant Anomaly Scoring**: Eliminarea variantelor cu distribuție anormală față de previziunile modelului.
-
-## 3. MOTOR COMBINATORIAL (WHEELING ENGINE)
-- **Sistem Set Cover (Greedy Hibrid)**: Optimizare memorie și viteză, caută rapid acoperirea necesară cu număr minim de bilete.
-- **Garanții Matematice**: Parametrizabil (ex: 3, 4, 5 numere garantate).
-- **Suport Multi-Game**: Loto 6/49, Loto 5/40, Joker (cu predicție separată și fallback pentru Urna 2).
-- **Analiză Scheme Oficiale Loteria Română**: Calculează și sugerează scheme reduse predefinite (Cod 48, Cod 49 etc.) pentru agenții.
-
-## 4. AUTO-CALIBRARE (CALIBREAZA.PY)
-- **Auto-Tuning Dinamic**: Rulează teste empirice (backtesting walk-forward) pentru a găsi cea mai bună "Adâncime de Simulare Regresivă".
-- **Scoring Calibrare**: Maximizează excluderea numerelor "moarte" (Blacklist) penalizând dur "fatalitățile" (-50 puncte/număr câștigător tăiat) pentru a proteja șansele la Jackpot.
-
-## 5. INTERFAȚĂ UTILIZATOR (DASHBOARD STREAMLIT)
-### Setări și Controale (Sidebar & Main):
-- **1. Încărcare Date CSV**: Multi-upload, auto-load la pornire, tabel istoric CSV expandabil.
-- **2. Setări Algoritm Wheeling**:
-    *   `Dimensiune Pool (Nucleu Dur)`: Input numeric (ex: 12) cu key persistenta.
-    *   `Garanție minimă`: Input numeric (3, 4 sau 5).
-    *   `Limită maxime variante`: Oprire din generare pentru a reduce costurile.
-    *   `Analizează doar ultimele X% extrageri`: Limitarea contextului istoric analizat.
-    *   `Filtru Anti-Secvență`: Checkbox activare/dezactivare.
-- **3. Control Execuție**:
-    *   `Adâncime Simulare Backtesting (%)`: Slider procent pentru analiză regresivă.
-    *   `⚙️ Calibrează Adâncimea`: Buton (Vertical) pentru auto-tuning parametrii regresivi.
-    *   `🚀 Generează Variante` (Roșu/Primary): Buton (Vertical) de lansare pipeline.
-    *   `⚡ Calibrează + Generează` (Roșu/Primary): Buton subțire sub slider pentru flux automat.
-    *   `🔴 Oprește Forțat`: Anulează execuția (Job Queue).
-    *   `🗑️ Curăță Log` / `Reset Console`: Curăță fișierele loto.log, worker_stdout/stderr și consola live din UI.
-
-### Afișare Rezultate și Audit:
-- **Consola DEBUG**: Expander live pentru log-uri în timp real și posibilitate de resetare.
-- **Raport Calibrare Auto-Tuning**: Afișat detaliat sub Consola DEBUG (breakdown 10-100%, fatalități, eficiență, explicarea intersecției).
-- **Secțiunea Nucleu Dur (Pool)**:
-    *   Dinamica Nucleului (afișează vizual numerele adăugate/eliminate față de rularea anterioară).
-    *   Statistici detaliate pentru prezență și audit complet pentru excluderi (TimesFM Blacklist, Anomalii, Smart Logic).
-    *   `📊 Distribuție Nucleu Dur`: Tabel grafic de distribuție arătând de câte ori întreg Pool-ul a conținut 3, 4, 5, 6 numere din extragere (calculat per extrageri unice).
-    *   `🎯 Istoric Performanță Pool`: Tabel cu datele calendaristice ale celor mai bune performanțe (4+ numere).
-- **Secțiunea Performanță și Analiză Financiară**:
-    *   Carduri KPI: Medie / Variantă, Medie / Pool, Rată medie, Max Variantă, Max Pool.
-    *   Costuri reale estimate la agenție (comparativ cu schemele oficiale ale Loteriei Române).
-    *   Calcul ROI (Return on Investment) bazat pe estimări reale de premii și cost bilet live prin request loto.ro.
-- **Secțiunea Variante Generate**:
-    *   Expander toggle (`🔽`) pentru afișarea variantelor finale optimizate.
-    *   `📊 Distribuție Performanță Variante`: Tabel grafic cu eficiența strict per bilet simplu (integrat în planul final).
-    *   `🎯 Istoric Câștiguri Variante`: Listă detaliată a profiturilor istorice retro-calculate pe bilete.
-
-## 6. INFRASTRUCTURĂ BACKEND
-- **Worker Asincron (worker.py)**: Execuție izolată și sigură a sarcinilor grele, procesează job-uri prin SQLite (loto_jobs.db).
-- **LotoBacktester**: Motor de backtesting walk-forward (`evaluate_variants`) rulat automat imediat după terminarea generării pentru a returna hits și hits_union pe un percentile stabilit.
-- **Session State Persistent**: Valori de interfață menținute cu chei unice (`pool_size_val`, `guarantee_val`, etc.) pentru consistență totală și supraviețuire la multiple re-randări (reruns) în fluxurile auto (calibrare -> generare).
+1. Modele Fundaționale (Zero-Shot / Pre-antrenate)
+Aceste modele se comportă ca niște LLM-uri pentru numere. Au fost antrenate deja pe miliarde de rânduri de date și pot face predicții instantanee pe date noi, fără antrenare locală.
+Google TimesFM: Optimizează inferența rapidă pe seturi de date complet necunoscute, folosind o arhitectură bazată pe patch-uri.
+Amazon Chronos: Tokenizează seriile de timp transformându-le în "limbaj" și folosește o arhitectură transformer standard pentru a deduce viitorul.
+Salesforce MOIRAI: Model universal conceput să funcționeze indiferent de frecvența datelor (secunde, zile, luni) fără a necesita ajustări manuale.
+Lag-Llama: Construit pe fundația modelelor Llama (Meta), specializat în predicții probabilistice (oferă intervale de încredere, nu doar numere fixe).
+MOMENT: O familie de modele open-source dezvoltată de CMU, capabilă nu doar de predicție, ci și de clasificare și detectarea anomaliilor.
+IBM TinyTimeMixer (TTM): Un model mult mai compact și rapid, excelent pentru a fi rulat local cu un consum extrem de mic de memorie VRAM.
+Nixtla TimeGPT: Unul dintre primele modele de bază pentru serii de timp, deși axat puternic pe acces prin API, arhitectura sa este un etalon în industrie.
+UniTS (Harvard/MIT): Unifică nativ toate sarcinile (forecasting, clasificare, imputare de date lipsă) într-o singură rețea, fără module specifice pentru fiecare sarcină.
+Timer: Un model autoregresiv pe scară largă, optimizat pentru analiza și predicția seriilor single-variate.
+2. Modele de Deep Learning (Arhitecturi pentru antrenare locală)
+Acestea sunt "motoarele" brute. Trebuie alimentate cu datele tale istorice și antrenate de la zero. Sunt de obicei incluse în librării precum NeuralForecast sau Darts și oferă adesea o precizie superioară pe seturi de date specifice.
+Arhitecturi bazate pe MLP (Multi-Layer Perceptron) / Liniare:
+Acestea au demonstrat recent că pot bate modele mult mai complexe (precum Transformers) la o fracțiune din costul computațional.
+N-BEATS: Standardul actual în predicții deep learning. Descompune datele în "trend" și "sezonalitate" folosind doar rețele complet conectate.
+NHiTS: O evoluție a N-BEATS, mult mai rapidă și mai eficientă pentru predicții pe termen foarte lung.
+TiDE (Google): Time-series Dense Encoder. Folosește o arhitectură densă (fără mecanisme complexe de atenție) extrem de eficientă și rapidă la execuție.
+DLinear: Un model șocant de simplu (un singur strat liniar) care în multe benchmark-uri depășește rețelele neuronale uriașe, fiind perfect pentru baseline-uri (teste de referință).
+Arhitecturi bazate pe Transformers (Mecanisme de Atenție):
+Extrem de puternice pentru extragerea corelațiilor pe distanțe lungi în date.
+PatchTST: Împarte datele în "patch-uri" (grupuri de numere), reducând masiv consumul de memorie și crescând viteza pe placa video.
+Informer: Primul transformer cu adevărat eficient pentru serii de timp, conceput pentru predicții foarte lungi folosind atenția rară (ProbSparse).
+Autoformer: Introduce un mecanism nou numit "Auto-Correlation" (în loc de Self-Attention standard) pentru a găsi tipare repetitive la nivel de sub-serie.
+FEDformer: Optimizează analiza folosind transformate Fourier în spațiul frecvențelor, făcându-l foarte rapid la captarea trendurilor pe termen lung.
+Arhitecturi Probabilistice și Clasice Recurente:
+DeepAR (Amazon): Bazează pe rețele recurente (RNN/LSTM) și este etalonul absolut când vrei nu doar predicția, ci o distribuție exactă a probabilităților pentru acea predicție.
+TCN (Temporal Convolutional Networks): Folosește convoluții (precum cele din analiza imaginilor) adaptate pentru numere. Sunt adesea mult mai rapide la antrenare pe un GPU modern comparativ cu rețelele recurente clasice.
+State Space Models (ex: TimeMachine / S-Mamba): Cea mai nouă generație de arhitecturi de deep learning care adaptează framework-ul "Mamba" pentru serii de timp, ocolind limitele de memorie ale transformerelor clasice.

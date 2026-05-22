@@ -21,30 +21,46 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
     )
 )
 
-:: Verificam daca mediul este complet
+:: Verificam mediul. START_8000.bat doar verifica + porneste; install in ACTUALIZARI.bat.
 set "ENV_COMPLETE=1"
-if not exist "%VENV_DIR%\Scripts\streamlit.exe" set "ENV_COMPLETE=0"
-"%VENV_DIR%\Scripts\python" -c "import torch" >nul 2>&1
-if !ERRORLEVEL! NEQ 0 set "ENV_COMPLETE=0"
+set "MISSING="
+
+REM Core app
+if not exist "%VENV_DIR%\Scripts\streamlit.exe" set "ENV_COMPLETE=0" & set "MISSING=!MISSING! streamlit"
+for %%M in (torch timesfm pandas numpy scipy) do (
+    "%VENV_DIR%\Scripts\python" -c "import %%M" >nul 2>&1
+    if !ERRORLEVEL! NEQ 0 (
+        set "ENV_COMPLETE=0"
+        set "MISSING=!MISSING! %%M"
+    )
+)
+
+REM Benchmark stack (auto-pilot are nevoie de ele)
+for %%M in (chronos momentfm neuralforecast rich pynvml transformers) do (
+    "%VENV_DIR%\Scripts\python" -c "import %%M" >nul 2>&1
+    if !ERRORLEVEL! NEQ 0 (
+        set "ENV_COMPLETE=0"
+        set "MISSING=!MISSING! %%M"
+    )
+)
 
 if "%ENV_COMPLETE%"=="0" (
-    echo [INFO] Mediul este incomplet. Incep instalarea locala...
-    echo [PAS 1/3] Actualizare Pip...
-    "%VENV_DIR%\Scripts\python" -m pip install --upgrade pip
-    
-    echo [PAS 2/3] Instalare dependinte din requirements.txt...
-    echo (Aceasta etapa descarca PyTorch si poate dura 2-5 minute)
-    "%VENV_DIR%\Scripts\python" -m pip install -r requirements.txt
-    
-    echo [PAS 3/3] Verificare finala...
-    "%VENV_DIR%\Scripts\python" -c "import torch; import streamlit; print('Verificare REUSITA')"
-    
-    if !ERRORLEVEL! NEQ 0 (
-        echo [EROARE] Instalarea a esuat la verificarea finala.
-        goto :error_exit
-    )
-    echo [OK] Dependinte instalate local cu succes.
+    echo.
+    echo ============================================================
+    echo  [EROARE] Mediul Python e incomplet - lipsesc:!MISSING!
+    echo ============================================================
+    echo.
+    echo  START_8000.bat doar verifica + porneste; nu face install.
+    echo  Pentru install, ruleaza:
+    echo.
+    echo     ACTUALIZARI.bat
+    echo.
+    echo  Apoi ruleaza din nou START_8000.bat.
+    echo ============================================================
+    goto :error_exit
 )
+echo [OK] Mediul complet: streamlit + torch + timesfm + chronos + momentfm
+echo      + neuralforecast + rich + pynvml + transformers.
 
 echo [2/4] Eliberare resurse (Port 8000 + workeri vechi)...
 :: Kill orice proces pe portul 8000 (streamlit vechi)

@@ -1,11 +1,46 @@
+# NOTA: acest fisier e DOAR documentatie, NU folosit direct de niciun .bat.
+# Install-ul real e in ACTUALIZARI.bat care:
+#   1. Verifica fiecare pachet cu `pip show`
+#   2. Instaleaza doar lipsurile cu `--no-deps` (evita backtracking transformers)
+# START_8000.bat nu mai face install — daca env incomplet, redirect la ACTUALIZARI.bat.
+#
+# Constrangeri stricte (NU le upgrada manual!):
+#   - momentfm 0.1.4 cere transformers==4.33.3 ȘI huggingface-hub==0.24.0 (==)
+#   - chronos-forecasting cere transformers>=4.30,<4.48 (compatibil cu 4.33.3)
+#   - timesfm 1.3.0 cere huggingface_hub>=0.23.0 (compatibil cu 0.24.0)
+# Versiunile actuale sunt SINGURUL set care satisface toate constrangerile simultan.
+
+# Core app
 streamlit
 pandas
 numpy
 requests
 psutil
 numba
-torch
-timesfm
-huggingface_hub
 scipy
 matplotlib
+
+# Deep learning (GPU build — NU upgrada peste pip; foloseste install CUDA-aware)
+torch
+huggingface_hub==0.24.0     # pin strict (cerut de momentfm)
+transformers==4.33.3        # pin strict (cerut de momentfm)
+
+# Time-series foundation models (zero-shot)
+timesfm
+chronos-forecasting
+momentfm
+
+# Time-series deep learning architectures (NeuralForecast: NBEATS, NHITS,
+# TiDE, DLinear, PatchTST, Informer, Autoformer, FEDformer, DeepAR, TCN)
+neuralforecast
+utilsforecast
+
+# Benchmark / lab dependencies
+rich
+pynvml          # nvidia-ml-py for GPU% telemetry (HwSampler)
+
+# Optional foundation models (commented out — install on demand):
+#   uni2ts                # Salesforce MOIRAI (incompatible with omegaconf>=2.4)
+#   lag-llama             # Lag-Llama (manual git install)
+#   granite-tsfm          # IBM TinyTimeMixer
+#   mamba-ssm             # S-Mamba (requires CUDA toolkit + causal-conv1d)

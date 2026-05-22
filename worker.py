@@ -164,15 +164,13 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
         for task in ds.get("tasks", []):
             game_label = str(task["game_label"])
             p_size = int(task.get("pool_size", 12))
-            p_size = max(7, min(24, p_size))
+            p_size = max(6, min(24, p_size))
             guar = int(task.get("guarantee", 4))
             max_var = int(task.get("max_variants", 0))
             lookback = int(task.get("lookback", 0))
             filter_cons = bool(task.get("filter_consecutives", True))
             smart_red = bool(task.get("smart_reduction", True))
             sim_depth = int(task.get("sim_depth_pct", 10))
-            ultra_hit = bool(task.get("ultra_hit_optimization", False))
-            cold_pct = 20  # Default 20% Cold/Hot balance
             logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
             logging.debug(f"[worker] Full task: {task}")
             
@@ -198,18 +196,17 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                 engine = LotoEngine(game_type=game_mapped)
                 engine.load_data(temp_csv_path)
                 lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
-                    progress_cb=progress_cb, 
-                    pool_size=p_size, 
-                    guarantee=guar, 
-                    max_variants=max_var, 
+                    progress_cb=progress_cb,
+                    pool_size=p_size,
+                    guarantee=guar,
+                    max_variants=max_var,
                     lookback=lookback,
                     filter_consecutives=filter_cons,
                     smart_reduction=smart_red,
                     sim_depth_pct=sim_depth,
-                    ultra_hit_optimization=ultra_hit,
                     enable_adaptive_persistence=True,
                 )
-                
+
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {
                     "total_draws": len(engine.data) if engine.data is not None else 0,
@@ -218,12 +215,10 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "hard_core_joker": getattr(engine, 'hard_core_joker', []),
                     "hard_core_joker_stats": getattr(engine, 'hard_core_joker_stats', {}),
                     "variants": lines,
-                    # pool_size = ce folosește efectiv motorul (Ultra-Hit poate ridica 12→15)
                     "pool_size": effective_pool,
                     "pool_size_requested": p_size,
                     "guarantee": guar,
                     "lookback": lookback,
-                    "ultra_hit_optimization": ultra_hit,
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),
                     "p10": p10,

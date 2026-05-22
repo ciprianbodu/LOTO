@@ -1355,7 +1355,79 @@ def get_timesfm_scores_v2(
 
 
 # ---------------------------------------------------------------------------
-#  6. Regressive Blacklist (multi-pass cu TimesFM)
+#  6.0. Regressive Blacklist GENERIC — folosește ORICE scorer (bench winner)
+# ---------------------------------------------------------------------------
+def get_regressive_blacklist_generic(
+    draw_matrix_full: np.ndarray | None,
+    max_num: int,
+    sim_depth_pct: int,
+    scorer_fn,
+    scorer_label: str = "scorer",
+) -> Set[int]:
+    """Versiune generică a blacklist-ului regresiv — primește ORICE scorer.
+
+    Folosit de loto_engine.py când `use_bench_winner=True` ca să mențină
+    coerența: blacklistul e calculat tot cu modelul câștigător din benchmark,
+    nu cu TimesFM hardcodat.
+
+    Args:
+        draw_matrix_full: shape (n_draws, draw_n) cu istoricul complet
+        max_num: 49 / 40 / 45 / 20 după joc
+        sim_depth_pct: limita inferioară a ferestrelor regresive (ex: 10)
+        scorer_fn: callable (draws_2d, max_num) → dict[int, float]
+        scorer_label: doar pentru logging
+
+    Returns:
+        Set de numere identificate ca "moarte" în TOATE ferestrele.
+    """
+    if draw_matrix_full is None or draw_matrix_full.shape[0] < 32:
+        return set()
+
+    logging.info(
+        f"[BLACKLIST-REGRESIV] Start analiză multi-window cu scorer={scorer_label} "
+        f"(adâncime: {sim_depth_pct}%)"
+    )
+    steps = list(range(100, max(sim_depth_pct - 1, 9), -10))
+    all_blacklists: List[Set[int]] = []
+    total_rows = int(draw_matrix_full.shape[0])
+
+    for step in steps:
+        num_rows = int(total_rows * (step / 100))
+        if num_rows < 32:
+            continue
+        dm_slice = draw_matrix_full[-num_rows:]
+        logging.info(
+            f"[BLACKLIST-REGRESIV] Pas {step}% ({num_rows} extrageri) — "
+            f"{scorer_label} caută numere inactive..."
+        )
+        try:
+            scores = scorer_fn(dm_slice, max_num)
+        except Exception as exc:
+            logging.warning(f"[BLACKLIST-REGRESIV] {scorer_label} a eșuat la {step}%: {exc}")
+            continue
+        if not scores:
+            continue
+        vals = list(scores.values())
+        threshold = float(np.percentile(vals, 25))
+        bl = {int(n) for n, s in scores.items() if float(s) <= threshold}
+        all_blacklists.append(bl)
+
+    if not all_blacklists:
+        return set()
+
+    result = all_blacklists[0]
+    for bl in all_blacklists[1:]:
+        result = result.intersection(bl)
+
+    logging.info(
+        f"[BLACKLIST-REGRESIV] Lista finală: {len(result)} numere moarte "
+        f"(intersecție {len(all_blacklists)} ferestre) = {sorted(result)}"
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+#  6. Regressive Blacklist (multi-pass cu TimesFM) — păstrat pentru fallback
 # ---------------------------------------------------------------------------
 def get_regressive_blacklist_v2(
     data_full,
@@ -1388,7 +1460,11 @@ def get_regressive_blacklist_v2(
         data_slice = data_full.tail(num_rows).copy()
         dm_slice = draw_matrix_full[-num_rows:] if draw_matrix_full is not None else None
 
-        logging.info(f"[TIMESFM-V2] Pas regresiv fallback: {step}% ({num_rows} extrageri)...")
+        # NOTĂ: această analiză regresivă rulează ÎNTOTDEAUNA TimesFM ca semnal
+        # complementar pentru a identifica "numerele moarte" (blacklist), chiar
+        # dacă scorerul principal e bench-winner. Nu e fallback — e un pas
+        # independent al pipeline-ului care reduce universul înainte de scoring.
+        logging.info(f"[BLACKLIST-REGRESIV] Pas {step}% ({num_rows} extrageri) — TimesFM identifică numerele inactive...")
         scores = get_timesfm_scores_v2(
             data_slice, dm_slice, params,
             is_joker_drum=is_joker, context_len=num_rows,
@@ -1409,7 +1485,7 @@ def get_regressive_blacklist_v2(
     for bl in all_blacklists[1:]:
         result = result.intersection(bl)
 
-    logging.info(f"[TIMESFM-V2] Regressive blacklist final: {len(result)} numere ({sorted(result)})")
+    logging.info(f"[BLACKLIST-REGRESIV] Lista finală: {len(result)} numere moarte (intersecție ferestre) = {sorted(result)}")
     return result
 
 

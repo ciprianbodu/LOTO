@@ -32,3 +32,9 @@ backtest_results.json
 scratch/*_log.txt
 *.backup_overnight
 adaptive_state.json
+
+# Runtime artefacts (heavy, regenerated on demand)
+lightning_logs/
+ISTORIC/
+bench_results/
+*.pre_autopilot

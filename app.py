@@ -137,7 +137,21 @@ def generate_hard_core_description(
     py_path = audit.get('python_executable', 'Necunoscut')
     
     # Selecție Pool
-    if 'timesfm_xreg' in audit:
+    # PRIO 1: dacă rularea a folosit modelul câștigător din benchmark
+    # (use_bench_winner=True, default) afișăm TOATE intrările (Urna 1 + Urna 2 la joker).
+    bench_winner_audit = audit.get('bench_winner') or {}
+    if bench_winner_audit:
+        _entries = []
+        for gk, info in bench_winner_audit.items():
+            model_name = info.get('method', '?')
+            pool_hint = info.get('pool_hint', '?')
+            family = info.get('family', '')
+            family_lbl = f" — {family}" if family else ""
+            _entries.append(
+                f"<code>{gk}</code>: <b>{model_name}</b>{family_lbl} (pool K={pool_hint})"
+            )
+        pool_method = "🏆 <b>Bench Winner</b>: " + "; ".join(_entries)
+    elif 'timesfm_xreg' in audit:
         xreg_info = audit['timesfm_xreg']
         covs = ', '.join(xreg_info.get('dynamic_covariates', []))
         pool_method = f"✅ Google TimesFM v2 (XReg: {covs})"
@@ -156,10 +170,17 @@ def generate_hard_core_description(
     if 'reduction_filter' in audit:
         rf = audit['reduction_filter']
         sim_depth = audit.get('sim_depth_pct', rf.get('sim_depth_pct', 40))
-        if 'TimesFM' in rf.get('model_used', ''):
-            filter_methods.append(f"📉 Backtesting Regresiv TimesFM (Adâncime: {sim_depth}%)")
+        model_used = rf.get('model_used', '')
+        n_blocked = rf.get('total_blocked', 0)
+        disabled_by_bench = rf.get('disabled_by_bench', False)
+        if disabled_by_bench or model_used == 'DISABLED_BY_BENCH':
+            filter_methods.append("⚪ Blacklist DEZACTIVAT (bench-winner pentru acest pool nu beneficiază)")
+        elif n_blocked == 0:
+            filter_methods.append("⚪ Blacklist activ dar nu a blocat niciun număr")
+        elif 'TimesFM' in model_used:
+            filter_methods.append(f"📉 Backtesting Regresiv TimesFM (Adâncime: {sim_depth}%, blocat {n_blocked})")
         else:
-            filter_methods.append("Reducere Statistică")
+            filter_methods.append(f"📉 Backtesting Regresiv {model_used} (Adâncime: {sim_depth}%, blocat {n_blocked})")
             
     if 'consecutive_filter' in audit:
         filter_methods.append("Filtru Anti-Secvență")
@@ -177,26 +198,14 @@ def generate_hard_core_description(
     # Construire descriere
     desc_parts = []
     
-    # Pool size (efectiv vs cerut în UI — Ultra-Hit opțional ridică la minim 15)
+    # Pool size (efectiv vs cerut în UI)
     desc_parts.append(f"Pool: <strong>{pool_size}</strong> numere (efectiv)")
-    uh_audit = audit.get("ultra_hit_optimization")
     if pool_size_requested is not None and int(pool_size_requested) != int(pool_size):
-        if uh_audit is True:
-            desc_parts.append(
-                f"<small style='color:#94a3b8;'>În UI ai selectat <strong>{pool_size_requested}</strong> — motorul "
-                f"a folosit <strong>{pool_size}</strong> pentru că <strong>Ultra-Hit</strong> este "
-                f"<strong>activ</strong> și cere minim <strong>15</strong> numere la nucleu pentru optimizare 4+/5+.</small>"
-            )
-        elif uh_audit is False:
-            desc_parts.append(
-                f"<small style='color:#f59e0b;'>În UI ai selectat <strong>{pool_size_requested}</strong>, dar nucleul "
-                f"efectiv are <strong>{pool_size}</strong> numere (Ultra-Hit oprit — verifică log-ul sau etapele pipeline).</small>"
-            )
-        else:
-            desc_parts.append(
-                f"<small style='color:#94a3b8;'>În UI ai selectat <strong>{pool_size_requested}</strong> — "
-                f"nucleu efectiv <strong>{pool_size}</strong> (rulare veche fără flag Ultra-Hit în audit).</small>"
-            )
+        desc_parts.append(
+            f"<small style='color:#f59e0b;'>În UI ai selectat <strong>{pool_size_requested}</strong>, "
+            f"dar nucleul efectiv are <strong>{pool_size}</strong> numere "
+            f"(verifică log-ul sau etapele pipeline).</small>"
+        )
     
     # Lookback
     if lookback_pct > 0:
@@ -207,12 +216,7 @@ def generate_hard_core_description(
     # Garanție
     guarantee = audit.get('guarantee', 4)
     desc_parts.append(f"Garanție: {guarantee} numere")
-    
-    # Variante generate
-    variants = audit.get('variants_count', 0)
-    if variants > 0:
-        desc_parts.append(f"Variante: {variants}")
-    
+
     # Acoperire
     coverage = audit.get('coverage_pct', 100.0)
     desc_parts.append(f"Acoperire: {coverage:.1f}%")
@@ -235,8 +239,22 @@ def generate_hard_core_description(
         res_info = f"Max CPU: {cpu}% | Max RAM: {ram}% | Max GPU: {gpu}% | Max VRAM: {vram} GB"
         description += f"<br><span style='color: #94a3b8; font-size: 0.85em;'>📊 **Utilizare Vârf:** {res_info}</span>"
     
-    # Detalii Tehnice Google TimesFM
-    if 'timesfm_xreg' in audit or 'timesfm_predictions' in audit:
+    # Detalii Tehnice: bench winner are precedență (rulează în locul TimesFM
+    # când use_bench_winner=True). Itereaza prin TOATE intrarile (joker are 2).
+    bw = audit.get('bench_winner') or {}
+    if bw:
+        description += f"<br><br><b>⚙️ Specificații Tehnice Model Câștigător (Benchmark Regresiv):</b>"
+        for gk, info in bw.items():
+            model_name = info.get('method', '?')
+            family = info.get('family', 'unknown')
+            pool_hint = info.get('pool_hint', '?')
+            description += (
+                f"<br>▪️ <b>{gk}</b>: <code>{model_name}</code> ({family}), pool K={pool_hint}"
+            )
+        description += f"<br>▪️ <b>Sursa deciziei:</b> <code>best_methods.json</code> (1280 folds × 10 ferestre regresive 10-100% × real+random)"
+        description += f"<br>▪️ <b>Selector runtime:</b> <code>loto_enterprise.core.method_selector.get_scorer_for_game()</code>"
+        description += f"<br>▪️ <b>Override:</b> setează <code>LOTO_USE_BENCH_WINNER=0</code> pentru a forța TimesFM legacy"
+    elif 'timesfm_xreg' in audit or 'timesfm_predictions' in audit:
         description += f"<br><br><b>⚙️ Specificații Tehnice Google TimesFM v2:</b>"
         description += f"<br>▪️ <b>Versiune API:</b> timesfm 1.3.0"
         description += f"<br>▪️ <b>Model Foundation:</b> google/timesfm-2.0-500m-pytorch (50 Layers)"
@@ -298,8 +316,6 @@ if "sim_depth_val" not in st.session_state:
     st.session_state["sim_depth_val"] = 40
 if "consecutive_filter_val" not in st.session_state:
     st.session_state["consecutive_filter_val"] = True
-if "ultra_hit_val" not in st.session_state:
-    st.session_state["ultra_hit_val"] = False
 
 # Mutat aici pentru a permite paginii sa se randeze partial inainte de blocaje
 def ensure_worker_running():
@@ -459,7 +475,8 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
     lines.append(sep)
     lines.append("LOTO ENTERPRISE WHEELING — RAPORT COMPLET")
     lines.append(f"Generat: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append("Neural Foundation: Google TimesFM v2 (XReg + Quantile + Multi-Horizon)")
+    lines.append("Multi-Model Foundation: scorer câștigător per joc × pool, ales din best_methods.json")
+    lines.append("(benchmark regresiv 1280 folds × 10 ferestre 10-100% × {real, shuffled})")
     lines.append(sep)
 
     game_order = ["6/49", "joker", "5/40"]
@@ -492,17 +509,9 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
 
             # Parametri
             hist_txt = f"ultimele {lookback_pct}%" if lookback_pct > 0 else "tot istoricul"
-            uh_flag = data.get("ultra_hit_optimization")
             pool_line = f"pool efectiv={pool_size}"
             if pool_req is not None and int(pool_req) != int(pool_size):
-                if uh_flag is True:
-                    pool_line += f" (cerut în UI={pool_req}; Ultra-Hit ridică la minim 15)"
-                elif uh_flag is False:
-                    pool_line += f" (cerut în UI={pool_req}; diferență cu efectiv — verifică pipeline/log)"
-                else:
-                    pool_line += f" (cerut în UI={pool_req}; rulare veche fără flag Ultra-Hit)"
-            if uh_flag is not None:
-                pool_line += f" | Ultra-Hit={'DA' if uh_flag else 'NU'}"
+                pool_line += f" (cerut în UI={pool_req}; diferență cu efectiv — verifică pipeline/log)"
             lines.append(f"Parametri: {pool_line} | garanție={guarantee} | istoric={hist_txt} ({total_draws} extrageri)")
 
             # Nucleu dur
@@ -521,13 +530,20 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
                     hj_parts.append(f"{n}({pct}%)")
                 lines.append(f"Nucleu Joker ({len(hc_joker)} numere): {', '.join(hj_parts)}")
 
-            # Pipeline stages
+            # Pipeline stages — stage 1 reflecta scorerul efectiv (bench winner / TimesFM)
             stages = audit.get("pipeline_stages") or {}
             if stages:
                 lines.append("")
                 lines.append("Evoluția pool-ului (pipeline stages):")
+                _bw = (audit.get("bench_winner") or {})
+                if _bw:
+                    _gk, _info = next(iter(_bw.items()))
+                    _scorer_lbl = _info.get("method", "?").upper()
+                    stage1_title_txt = f"1. {_scorer_lbl} NQI raw"
+                else:
+                    stage1_title_txt = "1. TimesFM NQI raw"
                 stage_titles = [
-                    ("1_nqi_raw", "1. TimesFM NQI raw"),
+                    ("1_nqi_raw", stage1_title_txt),
                     ("2_smart_selector", "2. Smart Selector"),
                     ("3_anti_sequence", "3. Anti-Sequence Filter"),
                     ("4_post_hoc_final", "4. POST-HOC Final"),
@@ -633,10 +649,19 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
                         joker = f" + J{d.get('joker')}" if d.get("joker") else ""
                         lines.append(f"    {d.get('date','—')}  {nums_str}{joker}")
 
-            # Variante
+            # Top 10 Variante Simple (bilete individuale recomandate)
+            if variants:
+                top_simple = variants[:10]
+                lines.append("")
+                lines.append(f"=== Top {len(top_simple)} Variante Simple (bilete individuale, fara garantie) ===")
+                lines.append(f"Cost ~{len(top_simple) * 4.95:,.0f} Lei | Cele mai concentrate pe top-bench-winner scores")
+                for idx, v in enumerate(top_simple, 1):
+                    nums_str = " ".join(f"{n:02d}" for n in v)
+                    lines.append(f"  V{idx:>2}. {nums_str}")
+
+            # Wheel complet (sistem cu garantie matematica)
             lines.append("")
-            lines.append(f"Variante generate: {len(variants)} | Acoperire garanție: {coverage_pct:.1f}%")
-            # Nu includem toate variantele default (pot fi sute). Le includem compact.
+            lines.append(f"Wheel complet (sistem cu garantie): {len(variants)} variante | Acoperire: {coverage_pct:.1f}%")
             if variants:
                 lines.append("Lista variante (linie per bilet):")
                 for idx, v in enumerate(variants, 1):
@@ -786,11 +811,14 @@ st.markdown("""
         </div>
         <div>
             <h1 style="margin: 0; font-weight: 800; letter-spacing: -1px; color: #f8fafc;">Loto Enterprise <span style="color: #38bdf8;">Wheeling</span></h1>
-            <p style="margin: 0; color: #94a3b8; font-size: 1rem;">Neural Foundation: Google TimesFM v2 • XReg Analysis • Quantile Uncertainty</p>
+            <p style="margin: 0; color: #94a3b8; font-size: 1rem;">Multi-Model Foundation: model câștigător per joc × pool (benchmark regresiv 1280 folds) • Wheeling Combinatorial</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
-st.caption("Sistem de analiză hibridă: Google TimesFM v2 + Wheeling Combinatorial Optimizat.")
+st.caption(
+    "Sistem hibrid auto-adaptiv: scorer-ul (TimesFM • Chronos • MOMENT • PatchTST • FEDformer • Informer • Autoformer • "
+    "NHITS • NBEATS • TiDE • DLinear • DeepAR • TCN • baselines) este ales automat per joc și pool size din `best_methods.json`."
+)
 
 # Buton Copiază raport complet (apare doar dacă există rezultate generate)
 _pr = st.session_state.get("persistent_results")
@@ -856,7 +884,7 @@ if "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]
                 )
             else:
                 st.dataframe(display_df, use_container_width=True, height=150, hide_index=True)
-        st.info("💡 Tabelul de mai sus arată datele brute folosite de Google TimesFM pentru analiză.")
+        st.info("💡 Tabelul de mai sus arată datele brute folosite de scorerul ales (bench winner per joc × pool) pentru analiză.")
 
 # === Dashboard Istoric Adaptive Feedback ===
 _ADAPTIVE_STATE_FILE = Path(__file__).parent / "adaptive_state.json"
@@ -868,12 +896,50 @@ if _ADAPTIVE_STATE_FILE.exists():
         _adaptive_raw = {}
 
     if _adaptive_raw:
-        with st.expander(f"🧠 Istoric Învățare Adaptivă ({len(_adaptive_raw)} configurări)", expanded=False):
+        # Identificam entries STALE (pool inaccesibil din UI: 15 din vechi Ultra-Hit,
+        # sau orice pool out of range 6-12). Acestea raman in JSON dar n-au cum sa
+        # mai invete — istoric inghetat.
+        SUPPORTED_POOLS = set(range(6, 13))  # 6..12 din UI slider
+        _stale_keys = []
+        for _k in _adaptive_raw.keys():
+            try:
+                _p = int(_k.split("_")[-1])
+                if _p not in SUPPORTED_POOLS:
+                    _stale_keys.append(_k)
+            except (ValueError, IndexError):
+                pass
+
+        with st.expander(
+            f"🧠 Istoric Învățare Adaptivă ({len(_adaptive_raw)} configurări"
+            + (f", din care {len(_stale_keys)} stale" if _stale_keys else "")
+            + ")",
+            expanded=False,
+        ):
             st.caption(
-                "Stare persistentă a sistemului Adaptive Feedback v2 — telemetrie a "
-                "evenimentelor (catastrofă/underperf/normal), regime resets și hard inversions "
-                "aplicate de-a lungul timpului. Fișier: `adaptive_state.json`."
+                "Stare persistentă Adaptive Feedback v2 — telemetrie evenimentelor "
+                "(catastrofă/underperf/normal), regime resets și hard inversions. "
+                "Fișier: `adaptive_state.json`."
             )
+
+            if _stale_keys:
+                _col_stale, _col_clean = st.columns([3, 1])
+                with _col_stale:
+                    st.warning(
+                        f"⚠️ {len(_stale_keys)} configurări STALE (pool inaccesibil "
+                        f"din UI 6-12): `{', '.join(_stale_keys)}` — nu vor mai învăța."
+                    )
+                with _col_clean:
+                    if st.button("🗑️ Curăță stale", use_container_width=True,
+                                 help="Șterge entries pentru pool-uri inaccesibile (15 din vechi Ultra-Hit, 7 etc.)"):
+                        for _sk in _stale_keys:
+                            _adaptive_raw.pop(_sk, None)
+                        try:
+                            with _ADAPTIVE_STATE_FILE.open("w", encoding="utf-8") as _f:
+                                json.dump(_adaptive_raw, _f, indent=2, ensure_ascii=False)
+                            st.success(f"✅ Șters {len(_stale_keys)} configurări stale.")
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Eroare la salvare: {_e}")
 
             for _key in sorted(_adaptive_raw.keys()):
                 _entry = _adaptive_raw[_key] or {}
@@ -902,9 +968,18 @@ if _ADAPTIVE_STATE_FILE.exists():
                     f"padding:2px 10px; border-radius:6px; font-size:0.8em; "
                     f"margin-left:8px;'>{_mode.upper()}</span>"
                 )
+                # Badge STALE daca pool out of range UI
+                _stale_badge = ""
+                if _key in _stale_keys:
+                    _stale_badge = (
+                        " <span style='background:#dc3545; color:white; "
+                        "padding:2px 10px; border-radius:6px; font-size:0.8em; "
+                        "margin-left:6px;' title='Pool inaccesibil din UI — entry nu mai învață'>"
+                        "STALE</span>"
+                    )
 
                 st.markdown(
-                    f"#### `{_key}` {_mode_badge}",
+                    f"#### `{_key}` {_mode_badge}{_stale_badge}",
                     unsafe_allow_html=True,
                 )
 
@@ -1010,7 +1085,7 @@ with st.sidebar:
     # widget-ul la valoarea inițială (10) la rerun, ignorând +/- utilizatorului.
     st.number_input(
         "Dimensiune Pool (Nucleu Dur)",
-        min_value=7,
+        min_value=6,
         max_value=24,
         step=1,
         help="Câte numere din topul frecvenței să fie folosite.",
@@ -1055,89 +1130,488 @@ with st.sidebar:
         key="consecutive_filter_val"
     )
 
-    st.checkbox(
-        "Mod Ultra-Hit (ridică nucleul la min. 15 nr. dacă ai ales mai puțin; garanție min. 4)",
-        value=st.session_state.get("ultra_hit_val", False),
-        help="Implicit oprit: nucleul are exact dimensiunea din „Dimensiune Pool”. Dacă îl pornești, motorul poate crește pool-ul la 15 și garanția la 4 pentru optimizare 4+/5+.",
-        key="ultra_hit_val",
-    )
-
     st.header("3. Control Execuție")
     
     if "sim_depth_val" not in st.session_state:
         st.session_state["sim_depth_val"] = 40
 
     st.markdown("✨ **Mod Automat (Recomandat)**")
-    if st.button("⚡ Auto-Pilot: Calibrează + Generează", type="primary", help="Găsește automat setarea optimă (calibrare) și generează imediat variantele finale. Este cea mai sigură și rapidă opțiune.", use_container_width=True):
-        if not st.session_state.get("loaded_datasets"):
-            st.error("Încărcați întâi un fișier CSV!")
-        else:
-            st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
-            st.session_state["start_calib_now"] = True
-            st.session_state["trigger_gen_after_calib"] = True
-            st.rerun()
 
-    st.markdown("---")
-    st.markdown("🛠️ **Mod Manual (Avansați)**")
+    # --- Freshness check (silent — Auto-Pilot va decide singur ce sa faca) ---
+    try:
+        from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation
+        _fresh_reports = check_freshness()
+        _global_rec = aggregate_recommendation(_fresh_reports)
+    except Exception as _exc:
+        logging.warning(f"[freshness] check failed: {_exc}")
+        _fresh_reports = {}
+        _global_rec = "use_cache"
 
-    if st.button("⚙️ Pasul 1: Calibrează AI-ul", help="Rulează simulări pe extragerile recente pentru a-ți recomanda cea mai bună valoare pentru adâncimea de mai jos.", use_container_width=True):
-        if not st.session_state.get("loaded_datasets"):
-            st.error("Încărcați întâi un fișier CSV!")
-        else:
-            st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
-            st.session_state["start_calib_now"] = True
-            st.rerun()
-
-    if "calib_best_depth_dict" not in st.session_state:
-        st.session_state["calib_best_depth_dict"] = {}
-
-    selected_game_depth = st.selectbox(
-        "Selectează jocul pentru care setezi adâncimea:",
-        ["6/49", "5/40", "joker"],
-        index=0,
-        help="Alege jocul pentru care dorești să modifici adâncimea de simulare."
-    )
-
-    # Cheia stabilă per joc + inițializare lazy (la prima accesare a unui joc nou).
-    # Calibrarea scrie direct în această cheie, deci sliderul "pick-up"-uiește valoarea
-    # nouă la rerun fără hack-uri cu suffix counter.
-    sim_depth_key = f"sim_depth_key_{selected_game_depth}"
-    if sim_depth_key not in st.session_state:
-        st.session_state[sim_depth_key] = int(
-            st.session_state["calib_best_depth_dict"].get(
-                selected_game_depth, st.session_state.get("sim_depth_val", 40)
-            )
+    # Mic info verde/galben/rosu (fara butoane separate — Auto-Pilot decide singur)
+    if _global_rec == "use_cache":
+        st.caption("🟢 Cache OK — Auto-Pilot va genera direct, fără re-bench.")
+    elif _global_rec == "quick_rebench":
+        st.caption(
+            "🟡 CSV s-a modificat puțin — Auto-Pilot va lansa un Re-Bench Quick "
+            "(~5 min) ÎN FUNDAL și va genera imediat cu cache-ul curent. "
+            "La rularea următoare vei avea decizia împrospătată."
+        )
+    elif _global_rec == "full_rebench":
+        st.caption(
+            "🔴 CSV s-a modificat semnificativ — Auto-Pilot va lansa un Re-Bench Full "
+            "(~50 min) ÎN FUNDAL și va genera imediat cu cache-ul curent. "
+            "Rularea de mâine va avea decizii bazate pe noul bench."
         )
 
-    sim_depth_input = st.slider(
-        "Adâncime Simulare Backtesting (%)",
-        min_value=10,
-        max_value=100,
-        step=10,
-        help="Stabilește cât din istoric analizează AI-ul pentru jocul selectat. (Valoare setată automat dacă folosiți Calibrarea)",
-        key=sim_depth_key,
-    )
-    st.session_state["calib_best_depth_dict"][selected_game_depth] = sim_depth_input
-    st.session_state["sim_depth_val"] = sim_depth_input
+    # Auto-Pilot dezactivat daca bench-ul ruleaza (best_methods.json e in
+    # curs de rescriere — Auto-Pilot ar citi date partiale/inconsistente).
+    _ap_disabled = False
+    _ap_disabled_reason = ""
+    try:
+        if Path(".bench_pid").exists():
+            _ap_disabled = True
+            _ap_disabled_reason = " ⚠️ DEZACTIVAT — bench in progres (vezi banner-ul de mai jos)"
+    except Exception:
+        pass
 
-    if st.button("🚀 Pasul 2: Generează Variante", use_container_width=True, help="Generează variantele finale folosind valoarea setată manual pe sliderul de mai sus."):
-        reset_sidebar_settings()
-        ensure_worker_running()
-        st.session_state.pop("calib_res", None)
-        st.session_state.pop("calib_best_depth", None)
-        st.session_state.pop("calib_res_dict", None)
-        st.session_state.pop("calib_best_depth_dict", None)
-        st.session_state["queue_submit_requested"] = True
+    if st.button(
+        "⚡ Auto-Pilot: Aplică Decizia Benchmark + Generează" + _ap_disabled_reason,
+        type="primary",
+        help=(
+            "Citește din `best_methods.json` (matrice 1280-folds) modelul + "
+            "sim_depth + flag-ul blacklist optim pentru jocul curent și "
+            "pool-ul selectat, le aplică și generează imediat. Verifică automat "
+            "freshness-ul CSV-urilor."
+        ),
+        use_container_width=True,
+        disabled=_ap_disabled,
+    ):
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier CSV!")
+        else:
+            try:
+                from loto_enterprise.core.method_selector import recommend_optimal_config
+                import subprocess as _sp, sys as _sys
+                from pathlib import Path as _Pp
+
+                pool_now = int(st.session_state["pool_size_val"])
+                gk_for_app = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}
+                pending = {}
+                for ui_game, gk in gk_for_app.items():
+                    cfg = recommend_optimal_config(gk, pool_now)
+                    pending[ui_game] = int(cfg["sim_depth_pct"])
+                st.session_state["_pending_sim_depth_updates"] = pending
+                for _ui_game, _depth in pending.items():
+                    st.session_state[f"sim_depth_key_{_ui_game}"] = int(_depth)
+
+                # === AUTO-REBENCH IN FUNDAL DACA DRIFT DETECTAT ===
+                # User nu trebuie sa apese butoane separate — Auto-Pilot decide singur.
+                # Bench-ul ruleaza paralel cu generarea; foloseste cache-ul actual acum,
+                # iar la urmatorul Auto-Pilot va avea decizia rafinata din noul bench.
+                if _global_rec in ("quick_rebench", "full_rebench") and not _Pp(".bench_pid").exists():
+                    try:
+                        py = _sys.executable.replace("/", "\\")
+                        if _global_rec == "quick_rebench":
+                            from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
+                            bench_args = [py, "bench_all_methods.py"] + quick_rebench_cli_args()
+                            _label = "Quick (~5 min)"
+                        else:
+                            bench_args = [py, "bench_all_methods.py", "--no-rich",
+                                          "--percentiles", "10,20,30,40,50,60,70,80,90,100"]
+                            _label = "Full (~50 min)"
+                        _Pp("bench_full.log").unlink(missing_ok=True)
+                        proc = _sp.Popen(
+                            bench_args,
+                            stdout=open("bench_full.log", "w", encoding="utf-8"),
+                            stderr=_sp.STDOUT,
+                            creationflags=_sp.CREATE_NEW_CONSOLE,
+                        )
+                        _Pp(".bench_pid").write_text(str(proc.pid))
+                        st.session_state["auto_rebench_started"] = _label
+                        logging.info(f"[AUTO-PILOT] Auto-rebench {_label} lansat (PID {proc.pid})")
+                    except Exception as e:
+                        logging.warning(f"[AUTO-PILOT] auto-rebench failed: {e}")
+
+                # === GENERARE IMEDIATA cu cache-ul curent ===
+                st.session_state["start_calib_now"] = False
+                st.session_state["trigger_gen_after_calib"] = False
+                ensure_worker_running()
+                reset_sidebar_settings()
+                st.session_state["queue_submit_requested"] = True
+                st.session_state["auto_pilot_applied"] = pending
+                logging.info(
+                    f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}): {pending} → generare directă"
+                )
+            except Exception as exc:
+                st.error(f"Auto-Pilot a eșuat ({exc}); fallback la calibrare clasică.")
+                st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
+                st.session_state["start_calib_now"] = True
+                st.session_state["trigger_gen_after_calib"] = True
+            st.rerun()
+
+    # --- Re-Bench Quick / Full ---
+    # Detectie status: scanam log-ul pentru a vedea daca bench-ul ruleaza in
+    # alta fereastra CMD. Daca da, afisam progres si DEZACTIVAM Auto-Pilot.
+    import subprocess, sys, os, time, re
+    from pathlib import Path as _P
+    _bench_log = _P("bench_full.log")
+    _bench_pid_file = _P(".bench_pid")
+    _bench_active = False
+    _bench_eta_min = 0
+    _bench_progress = 0.0
+    _bench_pid = None
+    _bench_total_folds = 1280
+
+    if _bench_pid_file.exists():
+        try:
+            _bench_pid = int(_bench_pid_file.read_text().strip())
+            # Verificam daca procesul mai exista (Windows)
+            _check = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {_bench_pid}"],
+                capture_output=True, text=True
+            )
+            if str(_bench_pid) in _check.stdout:
+                _bench_active = True
+                # Citim progresul din log: numara cate fold-uri s-au scris
+                if _bench_log.exists():
+                    try:
+                        txt = _bench_log.read_text(encoding="utf-8", errors="ignore")
+                        # Cauta liniile gen: "[NNN/1280]"
+                        matches = re.findall(r"\[(\d+)/(\d+)\]", txt)
+                        if matches:
+                            done, total = int(matches[-1][0]), int(matches[-1][1])
+                            _bench_total_folds = total
+                            _bench_progress = done / total if total > 0 else 0
+                            # ETA estimat: timpul scurs * folds_ramase / folds_facute
+                            mtime = _bench_log.stat().st_mtime
+                            ctime = _bench_log.stat().st_ctime
+                            elapsed_min = (mtime - ctime) / 60
+                            if done > 0:
+                                _bench_eta_min = int(elapsed_min * (total - done) / done)
+                    except Exception:
+                        pass
+            else:
+                # Procesul s-a terminat — sterge marker-ul
+                _bench_pid_file.unlink(missing_ok=True)
+        except Exception:
+            _bench_pid_file.unlink(missing_ok=True)
+
+    if _bench_active:
+        st.warning(
+            f"🔬 **Bench in progres** (PID {_bench_pid}) — "
+            f"{int(_bench_progress*100)}% complet  "
+            f"({int(_bench_progress * _bench_total_folds)}/{_bench_total_folds} folds) "
+            f"— ETA ~{_bench_eta_min} min rămas.  \n"
+            f"Auto-Pilot este DEZACTIVAT până se termină. "
+            f"Vezi fereastra CMD numită 'FULL REBENCH' / 'QUICK REBENCH'."
+        )
+        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — refresh manual pagina pentru update")
+
+    # Re-Bench buttons mutate in expander-ul Power-User de mai jos.
+
+    # Notificare daca Auto-Pilot a lansat un auto-rebench in background
+    if st.session_state.get("auto_rebench_started"):
+        _label_ar = st.session_state.pop("auto_rebench_started")
+        st.toast(
+            f"🔄 Auto-rebench {_label_ar} lansat ÎN FUNDAL — generarea continuă "
+            f"cu cache-ul curent. Următoarea rulare va folosi decizia împrospătată.",
+            icon="ℹ️",
+        )
+
+    # Afișăm matricea auto-pilot pentru pool-ul curent (cu refresh la fiecare rerun)
+    try:
+        from loto_enterprise.core.method_selector import recommend_optimal_config
+        _pool_now = int(st.session_state.get("pool_size_val", 10))
+        with st.expander(f"🎯 Decizie Benchmark per joc (pool K={_pool_now})", expanded=False):
+            _gk_map = {
+                "Loto 6/49": "loto_6_49",
+                "Loto 5/40": "loto_5_40",
+                "Joker Urna 1": "joker_urna1",
+                "Joker Urna 2 (K=1)": "joker_urna2",
+            }
+            for _label, _gk in _gk_map.items():
+                _ps = 1 if _gk == "joker_urna2" else _pool_now
+                _cfg = recommend_optimal_config(_gk, _ps)
+                _bl = "🛡️ DA" if _cfg.get("use_blacklist") else "❌ NU"
+                _flag = "⚠️ fallback" if _cfg.get("fallback") else "✅"
+                st.markdown(
+                    f"**{_label}** {_flag}  →  scorer = `{_cfg['scorer']}`  •  "
+                    f"sim_depth = `{_cfg['sim_depth_pct']}%`  •  blacklist = {_bl}  •  "
+                    f"avg_hits bench = `{_cfg.get('avg_hits', 0):.3f}`"
+                )
+                if _cfg.get("rationale"):
+                    st.caption(f"&nbsp;&nbsp;&nbsp;_{_cfg['rationale']}_", unsafe_allow_html=True)
+            _applied = st.session_state.get("auto_pilot_applied")
+            if _applied:
+                st.success(f"Ultima rulare Auto-Pilot a aplicat sim_depth per joc: {_applied}")
+    except Exception as _exc:
+        st.info(f"Decizie Benchmark indisponibilă: {_exc}")
+
+    # === MATRICEA WALK-FORWARD ONESTĂ (joc × fereastră × model) ===
+    # Citită direct din bench_results/folds.csv — instant, fără re-compute.
+    # Garanție: fără data leakage (fold-level walk-forward din bench).
+    try:
+        from loto_enterprise.benchmark.matrix_reader import load_folds, summary_per_game
+        _folds_df = load_folds()
+        if _folds_df is not None and not _folds_df.empty:
+            with st.expander(
+                f"🔬 Matrice Walk-Forward Onestă (joc × fereastră × model) — pool K={_pool_now}",
+                expanded=False,
+            ):
+                st.caption(
+                    "📊 Performanța tuturor modelelor testate pe ferestre regresive 10-100% (din bench, fără data leak). "
+                    "Celulele = avg hits per extragere pentru pool K curent. Verde = peste random baseline."
+                )
+                _gk_map_matrix = {
+                    "Loto 6/49": "loto_6_49",
+                    "Loto 5/40": "loto_5_40",
+                    "Joker Urna 1": "joker_urna1",
+                    "Joker Urna 2 (K=1)": "joker_urna2",
+                }
+                import pandas as _pd
+                for _label, _gk in _gk_map_matrix.items():
+                    _ps_m = 1 if _gk == "joker_urna2" else _pool_now
+                    _summary = summary_per_game(_folds_df, _gk, _ps_m)
+                    if not _summary.get("available"):
+                        st.markdown(f"**{_label}** — date indisponibile pentru K={_ps_m}")
+                        continue
+                    st.markdown(
+                        f"**{_label}** (K={_ps_m}) — top model: "
+                        f"`{_summary['best_method']}` cu avg={_summary['best_mean']:.3f}"
+                    )
+                    _matrix = _summary["matrix"]
+                    # Format coloane percentile cu sufix %
+                    _matrix_disp = _matrix.copy()
+                    _matrix_disp.columns = [f"{c}%" for c in _matrix_disp.columns]
+                    # Adaugam coloana "Mean" (media pe ferestre)
+                    _matrix_disp.insert(0, "Mean", _matrix.mean(axis=1).round(3))
+                    # Style: highlight cea mai bună metodă (top row, deja sortat)
+                    st.dataframe(
+                        _matrix_disp.round(3).style.background_gradient(
+                            cmap="RdYlGn", axis=None,
+                            vmin=_matrix.values.min(), vmax=_matrix.values.max(),
+                        ),
+                        use_container_width=True,
+                    )
+        else:
+            st.caption(
+                "🔬 Matrice Walk-Forward indisponibilă — rulează benchmark-ul "
+                "(Mod Manual → Re-Bench Full sau ACTUALIZARI.bat)."
+            )
+    except Exception as _exc_matrix:
+        logging.warning(f"[UI] matrix walk-forward failed: {_exc_matrix}")
+
+    st.markdown("---")
+
+    # === MOD MANUAL CONSOLIDAT pentru POWER-USERS ===
+    # Tot ce era in "Mod Manual (Avansati)" + butoanele Re-Bench sunt aici,
+    # intr-un singur expander. User-ul tipic NU il deschide — Auto-Pilot le face.
+    with st.expander(
+        "🛠️ Mod Manual / Power-User (override + force re-bench)",
+        expanded=False,
+    ):
+        st.caption(
+            "💡 De obicei nu ai nevoie de astea — Auto-Pilot face automat tot. "
+            "Foloseste aici DOAR daca vrei: (a) sa overriduiesti sim_depth manual, "
+            "(b) sa rulezi calibrare per-CSV in afara bench-ului global, "
+            "(c) sa fortezi re-bench cand vrei tu, nu cand decide Auto-Pilot."
+        )
+
+        # --- A. Calibrare per-CSV (manual) ---
+        st.markdown("**A. Calibrare manuala per-CSV**")
+        if st.button(
+            "⚙️ Pasul 1: Calibrează AI-ul (pe ultimele extrageri)",
+            help=(
+                "Ruleaza calibrare interna a engine-ului pe ultimele extrageri "
+                "ale CSV-ului curent. Diferit de bench-ul global — folosit cand "
+                "vrei sim_depth optimizat pentru acest CSV specific."
+            ),
+            use_container_width=True,
+        ):
+            if not st.session_state.get("loaded_datasets"):
+                st.error("Încărcați întâi un fișier CSV!")
+            else:
+                st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
+                st.session_state["start_calib_now"] = True
+                st.rerun()
+
+        if "calib_best_depth_dict" not in st.session_state:
+            st.session_state["calib_best_depth_dict"] = {}
+
+        # Aplicăm update-urile venite din calibrare înainte de instanțierea widget-urilor.
+        pending_depth_updates = st.session_state.pop("_pending_sim_depth_updates", None)
+        if pending_depth_updates:
+            for g_label_to_set, best_d in pending_depth_updates.items():
+                st.session_state[f"sim_depth_key_{g_label_to_set}"] = int(best_d)
+
+        # --- B. Override sim_depth per joc (manual) ---
+        st.markdown("**B. Override sim_depth per joc**")
+        selected_game_depth = st.selectbox(
+            "Joc pentru override sim_depth:",
+            ["6/49", "5/40", "joker"],
+            index=0,
+            help="Alege jocul pentru care vrei sa setezi manual adancimea de simulare."
+        )
+        sim_depth_key = f"sim_depth_key_{selected_game_depth}"
+        if sim_depth_key not in st.session_state:
+            st.session_state[sim_depth_key] = int(
+                st.session_state["calib_best_depth_dict"].get(
+                    selected_game_depth, st.session_state.get("sim_depth_val", 40)
+                )
+            )
+        sim_depth_input = st.slider(
+            "Adâncime Simulare Backtesting (%)",
+            min_value=10, max_value=100, step=10,
+            help="Cat din istoric analizeaza AI-ul pentru jocul selectat.",
+            key=sim_depth_key,
+        )
+        st.session_state["calib_best_depth_dict"][selected_game_depth] = sim_depth_input
+        st.session_state["sim_depth_val"] = sim_depth_input
+
+        if st.button(
+            "🚀 Pasul 2: Generează cu setarile manuale",
+            use_container_width=True,
+            help="Genereaza variante cu sim_depth setat manual mai sus (NU foloseste Auto-Pilot decision).",
+        ):
+            reset_sidebar_settings()
+            ensure_worker_running()
+            st.session_state.pop("calib_res", None)
+            st.session_state.pop("calib_best_depth", None)
+            st.session_state.pop("calib_res_dict", None)
+            st.session_state["queue_submit_requested"] = True
+
+        st.markdown("---")
+
+        # --- C. Force Re-Bench (manual) ---
+        st.markdown("**C. Force Re-Bench (in afara Auto-Pilot)**")
+        st.caption(
+            "Auto-Pilot lanseaza auto-rebench cand detecteaza drift. Foloseste astea "
+            "DOAR daca vrei sa fortezi re-bench acum, fara Auto-Pilot."
+        )
+        _col_q, _col_f = st.columns(2)
+        with _col_q:
+            if st.button(
+                "🧪 Re-Bench Quick (~5 min)",
+                help="Bench rapid: top-13 metode × 3 ferestre × 4 jocuri.",
+                use_container_width=True,
+                disabled=_bench_active,
+            ):
+                try:
+                    from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
+                    args = quick_rebench_cli_args()
+                    py = sys.executable.replace("/", "\\")
+                    _bench_log.unlink(missing_ok=True)
+                    proc = subprocess.Popen(
+                        [py, "bench_all_methods.py"] + args,
+                        stdout=open("bench_full.log", "w", encoding="utf-8"),
+                        stderr=subprocess.STDOUT,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    )
+                    _bench_pid_file.write_text(str(proc.pid))
+                    st.success(f"✅ Quick re-bench pornit (PID {proc.pid}).")
+                    st.session_state["rebench_in_progress"] = "quick"
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Quick re-bench a eșuat: {exc}")
+        with _col_f:
+            if st.button(
+                "🔬 Re-Bench Full (~50 min)",
+                help="Bench complet: 17 metode × 10 ferestre × 4 jocuri × WITH/WITHOUT BL = 1280 folds.",
+                use_container_width=True,
+                disabled=_bench_active,
+            ):
+                try:
+                    py = sys.executable.replace("/", "\\")
+                    _bench_log.unlink(missing_ok=True)
+                    proc = subprocess.Popen(
+                        [py, "bench_all_methods.py", "--no-rich",
+                         "--percentiles", "10,20,30,40,50,60,70,80,90,100"],
+                        stdout=open("bench_full.log", "w", encoding="utf-8"),
+                        stderr=subprocess.STDOUT,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    )
+                    _bench_pid_file.write_text(str(proc.pid))
+                    st.success(f"✅ Full re-bench pornit (PID {proc.pid}).")
+                    st.session_state["rebench_in_progress"] = "full"
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Full re-bench a eșuat: {exc}")
 
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔴 Anulează Proces", type="secondary", help="Oprește forțat orice generare sau calibrare în curs de desfășurare.", use_container_width=True):
+        if st.button(
+            "🔴 Anulează TOT Procesul",
+            type="secondary",
+            help=(
+                "FORCE-KILL: (1) marchează jobs DB cancelled, (2) omoară worker.py "
+                "+ benchmark + orice python.exe din venv care e blocat în training, "
+                "(3) curăță .bench_pid, (4) re-pornește worker-ul curat."
+            ),
+            use_container_width=True,
+        ):
+            import subprocess as _sp
+            killed = []
+
+            # (1) Soft cancel: marchează în DB
             st.session_state["cancel_requested"] = True
             cancel_pending_running_jobs("Job anulat manual din interfață.")
             unlock_engine()
             st.session_state.pop("active_job_id", None)
             st.session_state["queue_submit_requested"] = False
+
+            # (2) Hard kill: bench process daca exista PID
+            try:
+                pid_file = Path(".bench_pid")
+                if pid_file.exists():
+                    try:
+                        bpid = int(pid_file.read_text().strip())
+                        _sp.run(["taskkill", "/F", "/T", "/PID", str(bpid)],
+                                capture_output=True, timeout=5)
+                        killed.append(f"bench PID {bpid}")
+                    except Exception as e:
+                        logging.warning(f"[cancel] kill bench failed: {e}")
+                    pid_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            # (3) Hard kill: worker.py + orice python din venv (training blocat)
+            try:
+                venv_marker = ".venv_" + os.environ.get("COMPUTERNAME", "")
+                # Folosim PowerShell ca sa filtram precis dupa CommandLine + ExecutablePath
+                ps_cmd = (
+                    f"Get-CimInstance Win32_Process "
+                    f"-Filter \"Name='python.exe' or Name='pythonw.exe'\" | "
+                    f"Where-Object {{ $_.ExecutablePath -and "
+                    f"$_.ExecutablePath -like '*{venv_marker}*' -and "
+                    f"$_.ProcessId -ne {os.getpid()} }} | "
+                    f"ForEach-Object {{ "
+                    f"Write-Host ('KILLED PID ' + $_.ProcessId + ' ' + $_.CommandLine); "
+                    f"Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
+                )
+                result = _sp.run(
+                    ["powershell", "-NoProfile", "-Command", ps_cmd],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.stdout.strip():
+                    for line in result.stdout.strip().splitlines():
+                        if line.startswith("KILLED"):
+                            killed.append(line.replace("KILLED ", ""))
+            except Exception as e:
+                logging.warning(f"[cancel] PowerShell kill failed: {e}")
+
+            # (4) Re-spawn worker proaspat (sa nu raman fara worker)
+            try:
+                time.sleep(1)  # lasa OS sa elibereze resursele
+                ensure_worker_running()
+                killed.append("worker re-spawnat")
+            except Exception as e:
+                logging.warning(f"[cancel] worker respawn failed: {e}")
+
+            if killed:
+                st.success(f"✅ Anulat + killed: {', '.join(killed[:6])}")
+            else:
+                st.info("Niciun proces activ de oprit. Job-uri DB marcate cancelled.")
             st.rerun()
             
     with col2:
@@ -1201,8 +1675,10 @@ if st.session_state.get("start_calib_now", False):
             if idx == 0:
                 st.session_state["sim_depth_val"] = best_depth
 
-        for g_label_to_set, best_d in st.session_state["calib_best_depth_dict"].items():
-            st.session_state[f"sim_depth_key_{g_label_to_set}"] = int(best_d)
+        st.session_state["_pending_sim_depth_updates"] = {
+            g_label_to_set: int(best_d)
+            for g_label_to_set, best_d in st.session_state["calib_best_depth_dict"].items()
+        }
         st.session_state["start_calib_now"] = False
 
         if st.session_state.get("trigger_gen_after_calib"):
@@ -1232,7 +1708,6 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         h.update(str(st.session_state["max_variants_val"]).encode("utf-8"))
         h.update(str(st.session_state["lookback_val"]).encode("utf-8"))
         h.update(str(st.session_state["consecutive_filter_val"]).encode("utf-8"))
-        h.update(str(st.session_state.get("ultra_hit_val", False)).encode("utf-8"))
         h.update(str(True).encode("utf-8"))
         h.update(str(st.session_state["sim_depth_val"]).encode("utf-8"))
         
@@ -1258,7 +1733,6 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
                 "filter_consecutives": st.session_state["consecutive_filter_val"],
                 "smart_reduction": True,
                 "sim_depth_pct": game_sim_depth,
-                "ultra_hit_optimization": bool(st.session_state.get("ultra_hit_val", False)),
             }
             
             logging.info(f"[APP] Submitere job pentru {g_label}: {task_dict}")
@@ -1321,8 +1795,12 @@ if st.session_state.get("active_job_id"):
             if "retro_results" not in st.session_state:
                 st.session_state["retro_results"] = {}
 
+            # Backtest WALK-FORWARD ONEST (fara data leakage): pentru fiecare
+            # extragere t din ultimele backtest_depth%, regeneram pool-ul cu
+            # date <= t-1 si comparam predictia cu extragerea reala la t.
+            # Cache pe disc per (CSV_hash, pool, depth) ca sa nu re-rulam.
+            from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
             for fname, outputs in results_bundle:
-                # Găsim DataFrame-ul original corespunzător fișierului
                 df_source = None
                 if "loaded_datasets" in st.session_state:
                     for ds_name, ds_df in st.session_state["loaded_datasets"]:
@@ -1330,26 +1808,44 @@ if st.session_state.get("active_job_id"):
                             df_source = ds_df
                             break
 
-                if df_source is not None:
-                    for g_label, data in outputs.items():
-                        vars_to_test = data.get("variants", [])
-                        if vars_to_test:
-                            try:
+                if df_source is None:
+                    continue
+
+                for g_label, data in outputs.items():
+                    pool_size_used = int(data.get("pool_size") or 10)
+                    try:
+                        flat, meta = run_honest_walk_forward(
+                            df_source=df_source,
+                            game_type=g_label,
+                            pool_size=pool_size_used,
+                            backtest_depth_percent=5.0,  # ~5% din istoric = ~125 extrageri
+                            lookback_percent=100.0,
+                            use_cache=True,
+                        )
+                        retro_key = f"{fname}_{g_label}"
+                        st.session_state["retro_results"][retro_key] = flat
+                        cache_tag = "cache" if meta.get("from_cache") else "fresh"
+                        logging.info(
+                            f"[BACKTEST] {g_label} pool={pool_size_used}: "
+                            f"{len(flat)} entries ({cache_tag}, "
+                            f"{meta.get('n_test_draws')} extrageri test)"
+                        )
+                    except Exception as e:
+                        logging.error(f"Eroare walk-forward backtest pentru {g_label}: {e}")
+                        # Fallback la evaluate_variants (contaminat dar functional)
+                        try:
+                            vars_to_test = data.get("variants", [])
+                            if vars_to_test:
                                 bt = LotoBacktester(df_source, game_type=g_label)
-                                # Evaluăm pe ultimele 20% (sau cât a ales userul)
                                 lookback = data.get("lookback", 20.0)
                                 if lookback <= 0:
                                     lookback = 20.0
-
-                                # evaluate_variant returnează o listă de BacktestResult
-                                # Mapăm rezultatele la structura așteptată de UI (retro_predictions)
                                 summary = bt.evaluate_variants(vars_to_test, percentile=lookback)
-
-                                # Salvăm în formatul pe care UI îl consumă (listă de obiecte cu .hits)
                                 retro_key = f"{fname}_{g_label}"
                                 st.session_state["retro_results"][retro_key] = summary.all_results
-                            except Exception as e:
-                                logging.error(f"Eroare backtesting automat: {e}")
+                                logging.warning(f"[BACKTEST] Folosit fallback evaluate_variants (CONTAMINAT) pentru {g_label}")
+                        except Exception as e2:
+                            logging.error(f"Si fallback a esuat: {e2}")
 
         st.session_state.pop("active_job_id", None)
         st.session_state["play_completion_sound"] = True
@@ -1546,18 +2042,28 @@ if "persistent_results" in st.session_state:
                     reduction_data = audit['reduction_filter']
                     total_blocked = reduction_data.get('total_blocked', 0)
                     combined_blacklist = reduction_data.get('combined_blacklist', [])
-                    
+
                     if total_blocked > 0 and combined_blacklist:
                         timesfm_count = len(reduction_data.get('timesfm_blacklist', []))
                         regressive_count = len(reduction_data.get('regressive_blacklist', []))
-                        
-                        msg = f"🚫 **Google TimesFM** a optimizat nucleul și a eliminat {total_blocked} numere capcană:\n> "
+
+                        # Numele scorerului efectiv (bench winner dacă activ, altfel TimesFM)
+                        bw_info = (audit.get('bench_winner') or {})
+                        if bw_info:
+                            _gk, _info = next(iter(bw_info.items()))
+                            scorer_name = f"{_info.get('method','?').upper()} (bench winner pentru {_gk}, pool K={_info.get('pool_hint','?')})"
+                        else:
+                            scorer_name = "Google TimesFM"
+
+                        msg = f"🚫 **{scorer_name}** a optimizat nucleul și a eliminat {total_blocked} numere capcană:\n> "
                         msg += f"Numere blocate: {', '.join([f'**{num}**' for num in sorted(combined_blacklist)])}"
-                        
+
                         if timesfm_count > 0:
-                            msg += f"\n\n• TimesFM Forecast (inactive): {timesfm_count} numere"
-                        
-                        msg += "\n\n*(Explicație: Modelul Google TimesFM a identificat aceste numere ca având un trend descendent sau fiind 'moarte' statistic. Au fost excluse pentru a maximiza șansele nucleului dur.)*"
+                            msg += f"\n\n• Foundation forecast (inactive): {timesfm_count} numere"
+                        if regressive_count > 0:
+                            msg += f"\n• Backtesting regresiv: {regressive_count} numere"
+
+                        msg += "\n\n*(Explicație: scorer-ul a identificat aceste numere ca având trend descendent sau fiind 'moarte' statistic. Au fost excluse pentru a maximiza șansele nucleului dur.)*"
                         st.warning(msg)
                 
                 if 'consecutive_filter' in audit and audit['consecutive_filter']:
@@ -1567,21 +2073,37 @@ if "persistent_results" in st.session_state:
                     st.info("ℹ️ **Verificare Filtru Anti-Secvență:**\n" + "\n".join([f"- {m}" for m in audit['kept_sequences']]))
                 
                 if 'timesfm_excluded' in audit and audit['timesfm_excluded']:
+                    bw_info = (audit.get('bench_winner') or {})
+                    if bw_info:
+                        _gk, _info = next(iter(bw_info.items()))
+                        scorer_lbl = f"{_info.get('method','?').upper()} (bench winner)"
+                    else:
+                        scorer_lbl = "Google TimesFM"
                     excluded_u1 = audit['timesfm_excluded']
                     str_u1 = ", ".join([f"**{num}** (inactiv {delay}%)" for num, delay in excluded_u1.items()])
-                    msg = f"🚫 **Google TimesFM** a exclus {len(excluded_u1)} numere din Urna 1:\n> {str_u1}"
-                    
+                    msg = f"🚫 **{scorer_lbl}** a exclus {len(excluded_u1)} numere din Urna 1:\n> {str_u1}"
+
                     if 'timesfm_excluded_joker' in audit and audit['timesfm_excluded_joker']:
                         excluded_u2 = audit['timesfm_excluded_joker']
                         str_u2 = ", ".join([f"**{num}** (inactiv {delay}%)" for num, delay in excluded_u2.items()])
-                        msg += f"\n\n🚫 **Google TimesFM** a exclus și {len(excluded_u2)} numere din Urna 2 (Joker):\n> {str_u2}"
-                    
-                    msg += "\n\n*(Explicație: Algoritmul a identificat aceste numere ca fiind 'inactive/moarte'. Procentajul indică porțiunea relativă din tot istoricul recent în care numărul a absentat complet. Statistic, ele au fost blocate deoarece au cele mai mici șanse de a ieși.)*"
+                        msg += f"\n\n🚫 **{scorer_lbl}** a exclus și {len(excluded_u2)} numere din Urna 2 (Joker):\n> {str_u2}"
+
+                    msg += "\n\n*(Explicație: scorer-ul a identificat aceste numere ca fiind 'inactive/moarte'. Procentajul indică porțiunea relativă din tot istoricul recent în care numărul a absentat complet. Statistic, ele au fost blocate deoarece au cele mai mici șanse de a ieși.)*"
                     st.error(msg)
-                    
+
                 if 'anomaly_filter' in audit:
                     af = audit['anomaly_filter']
-                    st.success(f"🚀 **Neural Anomaly Scoring:** Din cele {af['original_count']} variante generate inițial, au fost păstrate doar **{af['final_count']}** care respectă distribuția de probabilitate Google TimesFM (Threshold: {af['threshold']}).")
+                    bw_info = (audit.get('bench_winner') or {})
+                    if bw_info:
+                        _gk, _info = next(iter(bw_info.items()))
+                        scorer_lbl = f"{_info.get('method','?').upper()} (bench winner)"
+                    else:
+                        scorer_lbl = "Google TimesFM"
+                    st.success(
+                        f"🚀 **Neural Anomaly Scoring:** Din cele {af['original_count']} variante generate inițial, "
+                        f"au fost păstrate doar **{af['final_count']}** care respectă distribuția de probabilitate "
+                        f"{scorer_lbl} (Threshold: {af['threshold']})."
+                    )
                     
                 if 'smart_selector' in audit and audit['smart_selector']:
                     smart_data = audit['smart_selector']
@@ -1780,11 +2302,27 @@ if "persistent_results" in st.session_state:
                 # --- EVOLUTIA POOL-ULUI PE ETAPE (transparenta pipeline) ---
                 stages = audit.get("pipeline_stages") or {}
                 if stages:
+                    # Label-ul stage 1 reflecta scorerul efectiv folosit (bench winner
+                    # daca activ, altfel TimesFM legacy)
+                    bw = (audit.get("bench_winner") or {})
+                    if bw:
+                        _gk, _info = next(iter(bw.items()))
+                        _scorer_lbl = _info.get("method", "?").upper()
+                        _scorer_fam = _info.get("family", "")
+                        stage1_title = f"1. {_scorer_lbl} NQI (raw)"
+                        stage1_desc = (
+                            f"Pool inițial din scorurile {_scorer_lbl} ({_scorer_fam}) — "
+                            f"câștigătorul benchmark pentru {_gk} pool K={_info.get('pool_hint','?')}."
+                        )
+                    else:
+                        stage1_title = "1. TimesFM NQI (raw)"
+                        stage1_desc = "Pool inițial din scorurile NQI v2 (după blacklist + Hard Inversion)."
+
                     stage_meta = [
-                        ("1_nqi_raw",         "1. TimesFM NQI (raw)",       "#60a5fa", "Pool inițial din scorurile NQI v2 (după blacklist + Hard Inversion)."),
+                        ("1_nqi_raw",         stage1_title,                  "#60a5fa", stage1_desc),
                         ("2_smart_selector",  "2. Smart Selector",          "#a78bfa", "Rafinare hibridă: 40% Gap + 25% Trend + 20% Frequency + 15% Positional. Înlocuiește numerele cu scor slab."),
                         ("3_anti_sequence",   "3. Anti-Sequence Filter",    "#f59e0b", "Elimină secvențe de 3+ numere consecutive dacă nu au ieșit în >=1% din extrageri. Înlocuiește cu rezerve de top-frecvență."),
-                        ("4_post_hoc_final",  "4. POST-HOC Final",          "#10b981", "Validare retrospectivă pe ultimele extrageri: substituții iterative care maximizează hit-urile 4+/5+/6."),
+                        ("4_post_hoc_final",  "4. POST-HOC Final",          "#10b981", "Validare retrospectivă pe ultimele extrageri: substituții iterative care maximizează hit-urile 4+/5+/6. ⚠️ ACEASTĂ ETAPĂ REWRITE 40-70% din pool — modelul de la stage 1 contează RELATIV PUȚIN."),
                     ]
                     with st.expander("🔍 Evoluția Pool-ului — Pipeline Stage-by-Stage", expanded=False):
                         st.caption("Urmărește cum pool-ul e modificat la fiecare etapă a pipeline-ului. Numerele roșii sunt scoase față de etapa precedentă, cele verzi sunt adăugate.")
@@ -2057,19 +2595,57 @@ if "persistent_results" in st.session_state:
                 my_vars = len(variants)
                 my_cost = my_vars * price_per_var
                 
+                # === TOP-10 VARIANTE SIMPLE (bilete individuale recomandate) ===
+                # Wheel-ul e sortat de engine descrescator dupa suma scorurilor
+                # bench-winner per variant => primele variante = cele mai concentrate
+                # pe top-scoruri. Le aratam ca "bilete simple pentru joc clasic"
+                # (jucate individual, nu ca sistem cu garantie).
+                N_SIMPLE = 10
+                if variants:
+                    top_simple = variants[:N_SIMPLE]
+                    is_joker_game = 'joker' in game.lower()
+                    # Cost ca bilete simple individuale la agentie (~5 Lei/bilet 6/49),
+                    # NU pretul de wheel (price_per_var, ~8 Lei) — bilete simple sunt mai ieftine.
+                    PRICE_PER_SIMPLE_TICKET = 5.0  # Lei (pret oficial agentie loto.ro)
+                    cost_simple = len(top_simple) * PRICE_PER_SIMPLE_TICKET
+                    st.markdown(
+                        f"<div style='background: rgba(40, 167, 69, 0.08); padding: 12px; "
+                        f"border-radius: 8px; border-left: 4px solid #28a745; margin: 10px 0;'>"
+                        f"<div style='color: #28a745; font-weight: bold; margin-bottom: 8px;'>"
+                        f"🎲 Top {len(top_simple)} Variante Simple (bilete individuale)</div>"
+                        f"<div style='font-size: 0.85em; color: #aaa; margin-bottom: 10px;'>"
+                        f"Cele mai concentrate {len(top_simple)} bilete (sortate descendent dupa suma scor bench-winner). "
+                        f"Cost: <strong>~{cost_simple:,.0f} Lei</strong> ({len(top_simple)} bilete × 5 Lei/bilet la agentie). "
+                        f"NU au garantie matematica de acoperire — alternativa ieftina la wheel-ul complet (~{my_cost:,.0f} Lei).</div>",
+                        unsafe_allow_html=True,
+                    )
+                    for i, v in enumerate(top_simple, 1):
+                        if is_joker_game and len(v) == 6:
+                            # Spatiu intre badge-uri ca text-copy sa fie separat
+                            v_html = " ".join([f'<span class="loto-badge">{n}</span>' for n in v[:5]])
+                            v_html += f" &nbsp; <span style='font-weight: bold;'>+</span> &nbsp; <span class='loto-badge' style='background: #d62728;'>{v[-1]}</span>"
+                        else:
+                            v_html = " ".join([f'<span class="loto-badge">{n}</span>' for n in v])
+                        st.markdown(
+                            f"<div style='margin: 4px 0;'><strong style='color: #28a745;'>V{i}:</strong> {v_html}</div>",
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                # === WHEEL COMPLET (sistem cu garantie matematica) ===
                 # Buton de toggle pentru variante (stil V rotit)
                 col1, col2 = st.columns([3, 1])
                 with col1:
-                    st.markdown(f"**Variante generate de noi ({my_vars})** &nbsp; | &nbsp; **Cost estimat:** ~{my_cost:,.0f} Lei")
+                    st.markdown(f"**Wheel complet (Sistem cu garanție): {my_vars} variante** &nbsp; | &nbsp; **Cost estimat:** ~{my_cost:,.0f} Lei")
                     st.caption(f"Acoperire matematică Garanție: {cov_html}", unsafe_allow_html=True)
                 with col2:
                     # Inițializăm starea în session_state dacă nu există
                     if f'show_variants_{game}' not in st.session_state:
                         st.session_state[f'show_variants_{game}'] = False
-                    
+
                     # Buton V rotit pentru toggle
                     button_label = "🔽" if not st.session_state[f'show_variants_{game}'] else "🔼"
-                    if st.button(button_label, key=f'toggle_variants_{game}', help="Afișează/Ascunde variantele"):
+                    if st.button(button_label, key=f'toggle_variants_{game}', help="Afișează/Ascunde wheel-ul complet"):
                         st.session_state[f'show_variants_{game}'] = not st.session_state[f'show_variants_{game}']
                         st.rerun()
 
@@ -2105,9 +2681,9 @@ if "persistent_results" in st.session_state:
                     for i, v in enumerate(variants, 1):
                         if len(v) == 6 and 'joker' in game.lower():
                             # Primele 5 sunt urna 1, ultimul este urna 2
-                            v_html = "".join([f'<span class="loto-badge">{n}</span>' for n in v[:5]])
+                            v_html = " ".join([f'<span class="loto-badge">{n}</span>' for n in v[:5]])
                             v_html += f" &nbsp; <span style='font-weight: bold;'>+</span> &nbsp; <span class='loto-badge' style='background: #d62728;'>{v[-1]}</span>"
                         else:
-                            v_html = "".join([f'<span class="loto-badge">{n}</span>' for n in v])
+                            v_html = " ".join([f'<span class="loto-badge">{n}</span>' for n in v])
                         st.markdown(f"**V{i}:** {v_html}", unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)

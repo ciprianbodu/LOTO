@@ -1,90 +1,206 @@
-import sys
-import subprocess
+"""Verifică + actualizează mediul aplicației LOTO.
+
+Acoperă:
+    • Librării standard sigure (streamlit, pandas, numpy, numba, ...)
+    • PyTorch + CUDA (GPU detection)
+    • Foundation models pentru benchmark: timesfm, chronos, momentfm
+    • NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
+      Autoformer / FEDformer / DeepAR / TCN)
+    • Telemetrie hardware: rich, pynvml (nvidia-ml-py)
+    • Verificare freshness a `best_methods.json` și a istoricului CSV
+"""
+
+from __future__ import annotations
+
+import importlib
 import importlib.util
+import os
+import subprocess
+import sys
 from importlib.metadata import PackageNotFoundError, version as dist_version
 
-# Aceste librarii standard pot fi actualizate automat in siguranta.
-# Am exclus intentionat "torch", "torchvision", "torchaudio" si "timesfm"
-# pentru a preveni riscul de a se suprascrie versiunea de GPU (cu124/cu128) cu versiunea standard de CPU.
+# Librarii standard care pot fi actualizate automat in siguranta.
+# Am exclus intentionat:
+#   - torch / torchvision / torchaudio (GPU build cu128 — risc CPU override)
+#   - pandas / numpy / numba (Python C-extensions; wheel-uri specifice per versiune
+#     de Python — upgrade nesigur poate cere build din sursa)
+#   - timesfm / chronos / momentfm / neuralforecast (modele AI cu deps stricte)
+# Acestea ramin pe versiunea curenta din venv.
 SAFE_UPGRADE_PACKAGES = [
     "streamlit",
-    "pandas",
-    "numpy",
-    "numba",
     "psutil",
     "requests",
+    "rich",       # bench reporting tables
+    "pynvml",     # GPU telemetry for HwSampler
 ]
+
+# Foundation models pentru benchmark — vrem să știm DACĂ sunt instalate, dar
+# NU le upgradăm automat (pot avea constraints de versiune pe torch / transformers).
+FOUNDATION_MODELS = {
+    "timesfm": "Google TimesFM",
+    "chronos": "Amazon Chronos (chronos-forecasting)",
+    "momentfm": "CMU MOMENT",
+}
+
+# NeuralForecast — un singur pachet, multiple arhitecturi
+NEURALFORECAST_MODELS = ["NBEATS", "NHITS", "TiDE", "DLinear", "PatchTST",
+                         "Informer", "Autoformer", "FEDformer", "DeepAR", "TCN"]
+
+# Modele opționale (NU sunt instalate by default — vezi requirements.txt)
+OPTIONAL_FOUNDATION_MODELS = {
+    "uni2ts": "Salesforce MOIRAI (necesită omegaconf<2.4)",
+    "lag_llama": "Lag-Llama (git install)",
+    "tinytimemixer": "IBM TinyTimeMixer (granite-tsfm)",
+    "mamba_ssm": "S-Mamba (CUDA kernel)",
+}
+
+
+def _print_section(title: str) -> None:
+    print()
+    print("=" * 72)
+    print(f"  {title}")
+    print("=" * 72)
 
 
 def upgrade_pip():
-    """Actualizeaza pip in acelasi interpreter; elimina mesajul 'new release of pip'."""
     print("\n--- Actualizare pip ---")
     try:
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
         )
-        print("-> [OK] pip actualizat (sau deja la zi).\n")
+        print("-> [OK] pip actualizat (sau deja la zi).")
     except subprocess.CalledProcessError as e:
-        print(f"-> [ATENTIE] Actualizarea pip a esuat ({e}). Manual:\n")
-        print(f"    {sys.executable} -m pip install --upgrade pip\n")
+        print(f"-> [ATENTIE] Actualizarea pip a esuat ({e}).")
+        print(f"   Manual: {sys.executable} -m pip install --upgrade pip")
 
 
 def check_and_upgrade(packages):
-    print("\n--- Verificare si Actualizare Librarii Standard ---")
+    print("\n--- Verificare + Actualizare Librarii Standard ---")
     try:
-        # Apelam pip pentru a verifica si actualiza la ultima versiune stabila
-        cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + packages
-        print(f"Rulam comanda de actualizare in fundal...")
+        # --prefer-binary: NU build din sursa (evita FAIL pe pandas/numpy fara wheel)
+        # --upgrade-strategy only-if-needed: nu cascadeaza upgrade-uri pe deps
+        cmd = [
+            sys.executable, "-m", "pip", "install",
+            "--upgrade", "--prefer-binary",
+            "--upgrade-strategy", "only-if-needed",
+        ] + packages
+        print(f"Comanda: pip install --upgrade --prefer-binary {' '.join(packages)}")
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        print("-> [OK] Librariile standard sunt actualizate si perfect compatibile!\n")
+        print("-> [OK] Librariile standard sunt actualizate si compatibile.")
     except subprocess.CalledProcessError as e:
-        print(f"-> [EROARE] Nu s-au putut actualiza librariile standard. Asigura-te ca ai internet: {e}\n")
+        print(f"-> [ATENTIE] Update partial esuat ({e}). Pachetele existente raman OK.")
     except Exception as e:
-        print(f"-> [EROARE] A aparut o problema: {e}\n")
+        print(f"-> [ATENTIE] Problema neasteptata: {e}")
+
+
+def _safe_version(modname: str) -> str:
+    try:
+        v = dist_version(modname.replace("_", "-"))
+    except PackageNotFoundError:
+        try:
+            v = dist_version(modname)
+        except PackageNotFoundError:
+            v = "?"
+    return v
+
 
 def check_pytorch():
-    print("--- Verificare Mediu de Inteligenta Artificiala (PyTorch & TimesFM) ---")
-    
-    # 1. Verificare PyTorch
+    _print_section("PYTORCH + CUDA")
     try:
         import torch
-        version = getattr(torch, '__version__', 'Necunoscuta')
-        print(f"-> [OK] PyTorch este instalat (Versiune: {version})")
-        
-        # 2. Verificare Suport GPU (CUDA)
+        version = getattr(torch, "__version__", "Necunoscuta")
+        print(f"-> [OK] PyTorch v{version}")
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "NVIDIA GPU"
-            print(f"-> [EXCELENT] Suport GPU ACTIVAT pe placa video: {gpu_name}!")
-            print("   (Am blocat actualizarea automata la PyTorch tocmai pentru a pastra aceasta viteza!)")
+            cuda_ver = getattr(torch.version, "cuda", "?")
+            print(f"-> [EXCELENT] CUDA {cuda_ver} ACTIV pe: {gpu_name}")
+            print(f"   (Update-ul PyTorch e BLOCAT — protejam build-ul cu CUDA)")
         else:
-            print("-> [ATENTIE] PyTorch functioneaza, dar foloseste doar CPU (procesorul normal).")
-            print("   Daca ai placa video NVIDIA si vrei sa mearga foarte rapid predictiile, instaleaza manual:")
-            print("   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124")
+            print("-> [ATENTIE] PyTorch ruleaza pe CPU. Pentru NVIDIA GPU:")
+            print("   pip install torch --index-url https://download.pytorch.org/whl/cu128")
     except ImportError:
-        print("-> [EROARE CRITICA] PyTorch NU este instalat! Pentru a-l instala cu suport de GPU, ruleaza comanda:")
-        print("   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124")
-        
-    print("")
+        print("-> [EROARE CRITICA] PyTorch lipseste! Instalare cu CUDA 12.8:")
+        print("   pip install torch --index-url https://download.pytorch.org/whl/cu128")
 
-    # 3. Verificare TimesFM
+
+def check_foundation_models():
+    _print_section("FOUNDATION MODELS (Zero-Shot)")
+    for mod, label in FOUNDATION_MODELS.items():
+        try:
+            importlib.import_module(mod)
+            v = _safe_version(mod)
+            print(f"-> [OK] {label}: v{v}")
+        except ImportError:
+            print(f"-> [LIPSA] {label} — pip install {mod}")
+        except Exception as e:
+            print(f"-> [EROARE] {label}: {type(e).__name__}: {e}")
+
+
+def check_neuralforecast():
+    _print_section("NEURALFORECAST (DL Architectures)")
     try:
-        import timesfm
-
-        # timesfm nu expune mereu __version__ pe modul; versiunea e in metadata-ul pachetului (PyPI).
-        version = getattr(timesfm, "__version__", None)
-        if not (isinstance(version, str) and version.strip()):
-            try:
-                version = dist_version("timesfm")
-            except PackageNotFoundError:
-                version = "Necunoscuta"
-        print(f"-> [OK] Motorul Google TimesFM este instalat (Versiune: {version})")
+        import neuralforecast
+        v = _safe_version("neuralforecast")
+        print(f"-> [OK] neuralforecast v{v}")
+        import neuralforecast.models as M
+        available = [m for m in NEURALFORECAST_MODELS if hasattr(M, m)]
+        missing = [m for m in NEURALFORECAST_MODELS if not hasattr(M, m)]
+        print(f"   Modele disponibile ({len(available)}/{len(NEURALFORECAST_MODELS)}): {', '.join(available)}")
+        if missing:
+            print(f"   [LIPSA] {', '.join(missing)} — verifica versiunea pachetului")
     except ImportError:
-        print("-> [EROARE] Libraria timesfm lipseste! O poti instala cu comanda: pip install timesfm")
+        print("-> [LIPSA] neuralforecast — `pip install neuralforecast`")
+    except Exception as e:
+        print(f"-> [EROARE] {type(e).__name__}: {e}")
+
+
+def check_optional_models():
+    _print_section("MODELE OPTIONALE (in afara default install)")
+    for mod, label in OPTIONAL_FOUNDATION_MODELS.items():
+        try:
+            importlib.import_module(mod)
+            v = _safe_version(mod)
+            print(f"-> [OK] {label}: v{v}")
+        except Exception:
+            print(f"-> [skip] {label} — install manual daca-l vrei in benchmark")
+
+
+def check_bench_assets():
+    _print_section("ASSETS BENCHMARK")
+    from pathlib import Path
+    bm = Path("best_methods.json")
+    if bm.exists():
+        size_kb = bm.stat().st_size / 1024
+        print(f"-> [OK] best_methods.json prezent ({size_kb:.1f} KB)")
+        try:
+            from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation
+            reports = check_freshness("best_methods.json")
+            rec = aggregate_recommendation(reports)
+            print(f"   Freshness overall: {rec}")
+            for gk, r in reports.items():
+                tag = {"fresh": "[FRESH]", "slight_drift": "[+]", "moderate_drift": "[!!]",
+                       "stale": "[STALE]", "missing": "[?]"}.get(r.status, "[?]")
+                print(f"   {tag:>10s} {gk}: cached {r.cached_rows} vs curent {r.current_rows} "
+                      f"({r.row_delta_pct:+.1f}%)")
+            if rec in ("quick_rebench", "full_rebench"):
+                print(f"   Recomandat: ruleaza 'python bench_all_methods.py' "
+                      f"(quick: --methods top13 --percentiles 30,60,90 sau full)")
+        except Exception as e:
+            print(f"   [WARN] Freshness check failed: {e}")
+    else:
+        print("-> [LIPSA] best_methods.json — ruleaza `python bench_all_methods.py` macar o data")
+
+    istoric = Path("ISTORIC")
+    if istoric.exists():
+        csvs = list(istoric.glob("*.csv"))
+        print(f"-> [OK] folderul ISTORIC contine {len(csvs)} CSV-uri: "
+              f"{[p.name for p in csvs]}")
+    else:
+        print("-> [LIPSA] folderul ISTORIC — benchmark-ul nu poate rula fara el")
+
 
 def _is_in_venv() -> bool:
-    """Detecteaza daca Python-ul curent ruleaza intr-un virtualenv."""
     return (
         hasattr(sys, "real_prefix")
         or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
@@ -93,27 +209,34 @@ def _is_in_venv() -> bool:
 
 
 def main():
-    import os
-    print(f"Versiune Python activa: {sys.version.split()[0]}")
-    print(f"Executabil:             {sys.executable}")
-    print(f"In virtualenv:          {'DA' if _is_in_venv() else 'NU (Python global)'}\n")
+    print(f"Python: {sys.version.split()[0]}")
+    print(f"Exec:   {sys.executable}")
+    print(f"Venv:   {'DA' if _is_in_venv() else 'NU (GLOBAL — gresit!)'}")
 
     if not _is_in_venv():
-        print("[ATENTIE] Acest script ruleaza in Python-ul GLOBAL al sistemului,")
-        print("          nu in venv-ul proiectului. Rezultatele de mai jos pot fi")
-        print(f"          IRELEVANTE pentru aplicatie!")
-        print(f"          Foloseste ACTUALIZARI.bat (nu 'python verifica_mediu.py'")
-        print(f"          direct) ca sa verifici venv-ul corect: .venv_{os.environ.get('COMPUTERNAME', '<MASINA>')}.\n")
+        print("\n[ATENTIE] Ruleaza ACTUALIZARI.bat, nu direct verifica_mediu.py!")
+        print(f"          Cauta venv-ul: .venv_{os.environ.get('COMPUTERNAME', '<HOST>')}\n")
 
-    # Executam logic verificarile
     check_pytorch()
+    check_foundation_models()
+    check_neuralforecast()
+    check_optional_models()
+    check_bench_assets()
+
     upgrade_pip()
     check_and_upgrade(SAFE_UPGRADE_PACKAGES)
 
-    print("===================================================================")
-    print("                      VERIFICARE FINALIZATA                        ")
-    print("   Daca nu au aparut [ERORI] mai sus, aplicatia este gata de start.")
-    print("===================================================================")
+    print()
+    print("=" * 72)
+    print("  VERIFICARE FINALIZATA")
+    print("=" * 72)
+    print("  Daca toate sectiunile au [OK] si freshness e 'fresh' / 'use_cache',")
+    print("  poti porni aplicatia cu START_8000.bat fara nicio actiune.")
+    print("  Daca freshness e 'quick_rebench' / 'full_rebench':")
+    print("    python bench_all_methods.py --quick           (~5 min, top-13 metode)")
+    print("    python bench_all_methods.py                   (~50 min, complet)")
+    print("=" * 72)
+
 
 if __name__ == "__main__":
     main()

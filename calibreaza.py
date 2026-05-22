@@ -31,7 +31,7 @@ def run_calibration(
         depths_to_test = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
     pool_size = int(pool_size)
-    pool_size = max(7, min(24, pool_size))
+    pool_size = max(6, min(24, pool_size))
 
     # Oprim temporar log-urile INFO, dar lasam un avertisment sa se stie ca incepe
     logging.warning(

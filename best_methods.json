@@ -1,0 +1,3060 @@
+{
+  "_meta": {
+    "hardware": {
+      "cpu": {
+        "platform": "Windows-10-10.0.26200-SP0",
+        "machine": "AMD64",
+        "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+        "python": "3.11.9",
+        "physical_cores": 24,
+        "logical_cores": 32,
+        "max_freq_mhz": 2000.0,
+        "cur_freq_mhz": 2000.0,
+        "cpu_percent_now": 10.7
+      },
+      "ram": {
+        "total_gb": 63.84,
+        "available_gb": 43.94,
+        "used_gb": 19.89,
+        "percent": 31.2
+      },
+      "gpu": {
+        "cuda_available": true,
+        "devices": [
+          {
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 5060 Ti",
+            "total_vram_gb": 15.93,
+            "compute_capability": "12.0",
+            "multi_processor_count": 36,
+            "free_vram_gb": 14.82,
+            "used_vram_gb": 1.11
+          }
+        ],
+        "torch_version": "2.12.0.dev20260408+cu128",
+        "cuda_version": "12.8",
+        "device_count": 1
+      }
+    },
+    "block_size": 99999,
+    "percentiles": [
+      30,
+      60,
+      90
+    ],
+    "methods_tested": [
+      "autoformer",
+      "chronos",
+      "deepar",
+      "fedformer",
+      "frequency",
+      "nhits",
+      "patchtst",
+      "random",
+      "recency",
+      "timesfm"
+    ],
+    "n_folds_total": 240,
+    "blacklist_rule": "numere absente din ultimele 50-200 extrageri (semnal independent de scorer)",
+    "csv_signatures": {
+      "loto_6_49": {
+        "csv_path": "ISTORIC\\loto_6_49.csv",
+        "hash": "04529238b7ce9d85",
+        "rows": 2549
+      },
+      "loto_5_40": {
+        "csv_path": "ISTORIC\\loto_5_40.csv",
+        "hash": "41e57e4de3122fb6",
+        "rows": 1700
+      },
+      "joker_urna1": {
+        "csv_path": "ISTORIC\\joker.csv",
+        "hash": "5c7c78bbd384fae3",
+        "rows": 2152
+      },
+      "joker_urna2": {
+        "csv_path": "ISTORIC\\joker.csv",
+        "hash": "a9390863fe697a36",
+        "rows": 2152
+      }
+    }
+  },
+  "games": {
+    "loto_6_49": {
+      "label": "Loto 6/49",
+      "draw_n": 6,
+      "overall_winner": "frequency",
+      "winners_per_pool": {
+        "k6": "frequency",
+        "k7": "frequency",
+        "k8": "frequency",
+        "k9": "frequency",
+        "k10": "frequency",
+        "k11": "frequency",
+        "k12": "frequency"
+      },
+      "winner_details": {
+        "k6": {
+          "winner": "frequency",
+          "avg_hits": 0.7534495279593317,
+          "lift_vs_shuffle": -0.001670297748729288,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 0.7534495279593317,
+              "lift": -0.001670297748729288
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.7397966594045026,
+              "lift": 0.010820624546114654
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.737109658678286,
+              "lift": -7.262164124921533e-05
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.7356572258533043,
+              "lift": 0.010675381263616557
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.7318082788671024,
+              "lift": 0.006608569353667382
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.7260711692084242,
+              "lift": -0.004284676833696377
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.7254175744371824,
+              "lift": -0.0037037037037036535
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.7167029774872912,
+              "lift": -0.011183732752360287
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.7161946259985476,
+              "lift": -0.033478576615831535
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k7": {
+          "winner": "frequency",
+          "avg_hits": 0.8775599128540305,
+          "lift_vs_shuffle": -0.006172839506172867,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 0.8775599128540305,
+              "lift": -0.006172839506172867
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.8630355846042121,
+              "lift": 0.009368191721133012
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.8602759622367465,
+              "lift": 0.014960058097313045
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.8546840958605665,
+              "lift": -0.0007262164124910431
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.8546114742193174,
+              "lift": -0.01263616557734204
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.8503994190268701,
+              "lift": 0.003340595497458354
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.8456063907044299,
+              "lift": 0.004575163398692794
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.844880174291939,
+              "lift": -0.007552650689905627
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.8358750907770515,
+              "lift": -0.02004357298474957
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k8": {
+          "winner": "frequency",
+          "avg_hits": 1.0011619462599854,
+          "lift_vs_shuffle": -0.008351488743645552,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.0011619462599854,
+              "lift": -0.008351488743645552
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.9889615105301379,
+              "lift": 0.009803921568627416
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.9870007262164124,
+              "lift": 0.021205519244734905
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.9816993464052288,
+              "lift": 0.009222948438634693
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.9766158315177923,
+              "lift": -0.020697167755991286
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.9724037763253449,
+              "lift": -0.005737109658678352
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.9632534495279593,
+              "lift": -0.004284676833696377
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.9628903413217138,
+              "lift": -0.02062454611474218
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.959767610748003,
+              "lift": -0.025054466230936656
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k9": {
+          "winner": "frequency",
+          "avg_hits": 1.1325344952795933,
+          "lift_vs_shuffle": 0.0031953522149601454,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.1325344952795933,
+              "lift": 0.0031953522149601454
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.1137254901960785,
+              "lift": 0.0023238925199708937
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.1114015976761076,
+              "lift": 0.02316630355846061
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.1084967320261438,
+              "lift": 0.0039215686274509665
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.0901234567901235,
+              "lift": -0.018445896877269607
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.0900508351488742,
+              "lift": -0.02004357298474968
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.0870733478576615,
+              "lift": -0.011982570806100323
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.0856209150326797,
+              "lift": -0.014524328249818641
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.0841684822076978,
+              "lift": -0.018445896877269385
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k10": {
+          "winner": "frequency",
+          "avg_hits": 1.2493100944081335,
+          "lift_vs_shuffle": -0.007480029048656522,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.2493100944081335,
+              "lift": -0.007480029048656522
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.2364560639070443,
+              "lift": 0.0015976761074800727
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.2348583877995642,
+              "lift": 0.007334785766158314
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.2253449527959333,
+              "lift": 0.009368191721133012
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.2139433551198258,
+              "lift": 0.005519244734931039
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.2138707334785765,
+              "lift": -0.012345679012345734
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.2122730573710967,
+              "lift": -0.009658678286129208
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.2108932461873636,
+              "lift": -0.022149600580973372
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.1978939724037765,
+              "lift": -0.020842411038489495
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k11": {
+          "winner": "frequency",
+          "avg_hits": 1.366085693536674,
+          "lift_vs_shuffle": -0.019172113289760206,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.366085693536674,
+              "lift": -0.019172113289760206
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.3618736383442265,
+              "lift": 0.007697893972403724
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.3539578794480756,
+              "lift": -0.006681190994916486
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.3460421205519244,
+              "lift": 0.006899055918663688
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.3385620915032679,
+              "lift": -0.008133623819898572
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.3358024691358024,
+              "lift": -0.010239651416122264
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.3354393609295567,
+              "lift": -0.006245461147422304
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.3336964415395787,
+              "lift": -0.029121278140886275
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.3216412490922294,
+              "lift": -0.021350762527233336
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k12": {
+          "winner": "frequency",
+          "avg_hits": 1.4830791575889615,
+          "lift_vs_shuffle": -0.03631082062454616,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.4830791575889615,
+              "lift": -0.03631082062454616
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.4749455337690633,
+              "lift": -0.01525054466230924
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.4737109658678287,
+              "lift": -0.002178649237472685
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.465286855482934,
+              "lift": 0.008424110384894767
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.4610748002904865,
+              "lift": -0.011982570806100323
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.455265068990559,
+              "lift": -0.020842411038489495
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.45439360929557,
+              "lift": -0.010239651416122042
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.454320987654321,
+              "lift": -0.02541757443718229
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.4397240377632532,
+              "lift": -0.02694262890341359
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "overall_winner_bl": "recency",
+      "winners_per_pool_bl": {
+        "k6": "frequency",
+        "k7": "frequency",
+        "k8": "frequency",
+        "k9": "frequency",
+        "k10": "recency",
+        "k11": "recency",
+        "k12": "recency"
+      },
+      "winner_details_bl": {
+        "k6": {
+          "winner": "frequency",
+          "avg_hits": 0.7554829339143064,
+          "lift_vs_shuffle": 0.0003631082062454105,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 0.7554829339143064,
+              "lift": 0.0003631082062454105
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.7542483660130719,
+              "lift": -0.01488743645606394
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.737109658678286,
+              "lift": -7.262164124921533e-05
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.7356572258533043,
+              "lift": 0.006172839506172867
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.7290486564996369,
+              "lift": -0.0005083514887436191
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.7279593318809005,
+              "lift": -0.002396514161220109
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.7277414669571532,
+              "lift": -0.0020334059549745875
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.7222948438634713,
+              "lift": -0.025490196078431282
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.7167029774872912,
+              "lift": -0.011183732752360287
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k7": {
+          "winner": "frequency",
+          "avg_hits": 0.8769063180827886,
+          "lift_vs_shuffle": -0.006826434277414695,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 0.8769063180827886,
+              "lift": -0.006826434277414695
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.8704429920116196,
+              "lift": -0.020334059549745653
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.8602759622367465,
+              "lift": 0.010748002904865661
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.8588235294117648,
+              "lift": 0.004575163398692905
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.8564996368917938,
+              "lift": -0.020043572984749458
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.8530864197530864,
+              "lift": -0.002323892519971116
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.8515613652868556,
+              "lift": -0.0008714596949890296
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.8497458242556282,
+              "lift": 0.0005083514887437302
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.8358750907770515,
+              "lift": -0.018736383442265914
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k8": {
+          "winner": "frequency",
+          "avg_hits": 1.0004357298474946,
+          "lift_vs_shuffle": -0.009077705156136373,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.0004357298474946,
+              "lift": -0.009077705156136373
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.9895424836601308,
+              "lift": 0.0029774872912127215
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.9870007262164124,
+              "lift": 0.019172113289760317
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.9869281045751634,
+              "lift": -0.032461873638344185
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.9750181554103122,
+              "lift": -0.009949164851125736
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.9697167755991285,
+              "lift": -0.013798111837327487
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.9683369644153957,
+              "lift": -0.008932461873638387
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.9642701525054466,
+              "lift": -0.01089324618736398
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.959767610748003,
+              "lift": -0.019825708061002034
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k9": {
+          "winner": "frequency",
+          "avg_hits": 1.1311546840958606,
+          "lift_vs_shuffle": 0.0018155410312274967,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.1311546840958606,
+              "lift": 0.0018155410312274967
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.1230210602759623,
+              "lift": -0.02113289760348569
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.1176470588235294,
+              "lift": 0.004212055192447384
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.1114015976761076,
+              "lift": 0.0160493827160495
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.0952795933188089,
+              "lift": -0.014814814814815058
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.0888162672476398,
+              "lift": -0.02716049382716057
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.0870733478576615,
+              "lift": 0.0002178649237472019
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.0809731299927379,
+              "lift": -0.02367465504720423
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.0778503994190267,
+              "lift": -0.016630355846042333
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k10": {
+          "winner": "recency",
+          "avg_hits": 1.2564270152505446,
+          "lift_vs_shuffle": -0.014742193173565843,
+          "ranking": [
+            {
+              "method": "recency",
+              "avg_hits": 1.2564270152505446,
+              "lift": -0.014742193173565843
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.2444444444444445,
+              "lift": -0.012345679012345512
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.237763253449528,
+              "lift": 0.0037037037037037646
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.2253449527959333,
+              "lift": -0.002106027596223692
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.2137981118373276,
+              "lift": 0.00014524328249820861
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.212490922294844,
+              "lift": -0.024328249818445835
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.2114015976761074,
+              "lift": -0.014814814814814836
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.208641975308642,
+              "lift": -0.014451706608569426
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.1989832970225125,
+              "lift": -0.016485112563544346
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k11": {
+          "winner": "recency",
+          "avg_hits": 1.378867102396514,
+          "lift_vs_shuffle": -0.014451706608569426,
+          "ranking": [
+            {
+              "method": "recency",
+              "avg_hits": 1.378867102396514,
+              "lift": -0.014451706608569426
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.3679738562091501,
+              "lift": -0.01728395061728416
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.3521423384168483,
+              "lift": 0.010893246187363648
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.3460421205519244,
+              "lift": 0.008787218591140178
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.3364560639070442,
+              "lift": -0.020842411038489495
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.334785766158315,
+              "lift": -0.014960058097313489
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.3343500363108205,
+              "lift": -0.010094408133623833
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.3312273057371096,
+              "lift": -0.007407407407407751
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.3146695715323167,
+              "lift": -0.029629629629629672
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k12": {
+          "winner": "recency",
+          "avg_hits": 1.5112563543936093,
+          "lift_vs_shuffle": -0.0013798111837326488,
+          "ranking": [
+            {
+              "method": "recency",
+              "avg_hits": 1.5112563543936093,
+              "lift": -0.0013798111837326488
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.4899782135076254,
+              "lift": -0.02941176470588225
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.465286855482934,
+              "lift": 0.0017429193899782813
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.4625272331154686,
+              "lift": 0.00377632534495298
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.4625272331154682,
+              "lift": -0.012563543936093158
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.4561365286855483,
+              "lift": -0.026942628903413146
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.45599128540305,
+              "lift": -0.011256354393609502
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.4515613652868555,
+              "lift": -0.017719680464778564
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.4332607116920844,
+              "lift": -0.03166303558460415
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "winners_per_pool_best": {
+        "k6": {
+          "winner": "frequency",
+          "avg_hits": 0.7554829339143064,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.0020334059549746986
+        },
+        "k7": {
+          "winner": "frequency",
+          "avg_hits": 0.8775599128540305,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0006535947712418277
+        },
+        "k8": {
+          "winner": "frequency",
+          "avg_hits": 1.0011619462599854,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.000726216412490821
+        },
+        "k9": {
+          "winner": "frequency",
+          "avg_hits": 1.1325344952795933,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0013798111837326488
+        },
+        "k10": {
+          "winner": "recency",
+          "avg_hits": 1.2564270152505446,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.007116920842411112
+        },
+        "k11": {
+          "winner": "recency",
+          "avg_hits": 1.378867102396514,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.012781408859839916
+        },
+        "k12": {
+          "winner": "recency",
+          "avg_hits": 1.5112563543936093,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.02817719680464781
+        }
+      },
+      "auto_pilot_per_pool": {
+        "k6": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 0.7830065359477124,
+          "avg_hits_with_blacklist": 0.7830065359477124,
+          "rationale": "frequency beat random in 2/3 windows (weighted lift = +0.0105); selected from 5 qualifying methods",
+          "qualifying_methods": 5,
+          "consistency_threshold": 0.6
+        },
+        "k7": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 0.9058823529411764,
+          "avg_hits_with_blacklist": 0.9058823529411764,
+          "rationale": "frequency beat random in 3/3 windows (weighted lift = +0.0148); selected from 5 qualifying methods",
+          "qualifying_methods": 5,
+          "consistency_threshold": 0.6
+        },
+        "k8": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 1.035294117647059,
+          "avg_hits_with_blacklist": 1.035294117647059,
+          "rationale": "frequency beat random in 3/3 windows (weighted lift = +0.0211); selected from 8 qualifying methods",
+          "qualifying_methods": 8,
+          "consistency_threshold": 0.6
+        },
+        "k9": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 1.188235294117647,
+          "avg_hits_with_blacklist": 1.188235294117647,
+          "rationale": "frequency beat random in 3/3 windows (weighted lift = +0.0277); selected from 7 qualifying methods",
+          "qualifying_methods": 7,
+          "consistency_threshold": 0.6
+        },
+        "k10": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 1.2993464052287582,
+          "avg_hits_with_blacklist": 1.2993464052287582,
+          "rationale": "frequency beat random in 3/3 windows (weighted lift = +0.0320); selected from 8 qualifying methods",
+          "qualifying_methods": 8,
+          "consistency_threshold": 0.6
+        },
+        "k11": {
+          "scorer": "deepar",
+          "sim_depth_pct": 60,
+          "use_blacklist": false,
+          "avg_hits": 1.3745098039215686,
+          "avg_hits_with_blacklist": 1.3745098039215686,
+          "rationale": "deepar beat random in 3/3 windows (weighted lift = +0.0288); selected from 6 qualifying methods",
+          "qualifying_methods": 6,
+          "consistency_threshold": 0.6
+        },
+        "k12": {
+          "scorer": "recency",
+          "sim_depth_pct": 60,
+          "use_blacklist": true,
+          "avg_hits": 1.50718954248366,
+          "avg_hits_with_blacklist": 1.5098039215686274,
+          "rationale": "recency beat random in 3/3 windows (weighted lift = +0.0322); selected from 7 qualifying methods",
+          "qualifying_methods": 7,
+          "consistency_threshold": 0.6
+        }
+      }
+    },
+    "loto_5_40": {
+      "label": "Loto 5/40",
+      "draw_n": 5,
+      "overall_winner": "frequency",
+      "winners_per_pool": {
+        "k5": "recency",
+        "k6": "frequency",
+        "k7": "autoformer",
+        "k8": "frequency",
+        "k9": "frequency",
+        "k10": "frequency",
+        "k11": "frequency"
+      },
+      "winner_details": {
+        "k5": {
+          "winner": "recency",
+          "avg_hits": 0.6416122004357299,
+          "lift_vs_shuffle": 0.031590413943355045,
+          "ranking": [
+            {
+              "method": "recency",
+              "avg_hits": 0.6416122004357299,
+              "lift": 0.031590413943355045
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.6379084967320261,
+              "lift": 0.017429193899782036
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.6376906318082788,
+              "lift": 0.021459694989106604
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.634640522875817,
+              "lift": 0.030065359477124076
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.6338779956427015,
+              "lift": 0.025490196078431282
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.6242919389978213,
+              "lift": -0.00838779956427016
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.6176470588235294,
+              "lift": 0.011111111111111183
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.6100217864923747,
+              "lift": -0.01427015250544661
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.5886710239651416,
+              "lift": -0.029738562091503273
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k6": {
+          "winner": "frequency",
+          "avg_hits": 0.7723311546840957,
+          "lift_vs_shuffle": 0.023202614379084885,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 0.7723311546840957,
+              "lift": 0.023202614379084885
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.7610021786492375,
+              "lift": 0.02429193899782134
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.7605664488017428,
+              "lift": 0.0330065359477123
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.7586056644880174,
+              "lift": 0.035185185185184986
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.7556644880174291,
+              "lift": 0.022549019607843057
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.7525054466230937,
+              "lift": -0.0016339869281045694
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.7367102396514161,
+              "lift": 0.002069716775599084
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.7296296296296295,
+              "lift": 0.013180827886710156
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.7001089324618737,
+              "lift": -0.056753812636165524
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k7": {
+          "winner": "autoformer",
+          "avg_hits": 0.8985838779956428,
+          "lift_vs_shuffle": 0.055991285403050206,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 0.8985838779956428,
+              "lift": 0.055991285403050206
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.8940087145969499,
+              "lift": 0.022222222222222143
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.8881263616557734,
+              "lift": 0.03474945533769058
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.886165577342048,
+              "lift": 0.038888888888889084
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.8811546840958605,
+              "lift": -0.005555555555555536
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.8808278867102396,
+              "lift": 0.03300653594771241
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.8748366013071895,
+              "lift": 0.02614379084967322
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.8688453159041395,
+              "lift": 0.010566448801742956
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.8293028322440087,
+              "lift": -0.06339869281045751
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k8": {
+          "winner": "frequency",
+          "avg_hits": 1.023747276688453,
+          "lift_vs_shuffle": 0.02298474945533746,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.023747276688453,
+              "lift": 0.02298474945533746
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.0230936819172112,
+              "lift": 0.05795206971677547
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.019281045751634,
+              "lift": 0.04030501089324601
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.011111111111111,
+              "lift": 0.028104575163398593
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.0057734204793027,
+              "lift": -0.02331154684095882
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.9874727668845317,
+              "lift": -0.0019607843137254832
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.9824618736383443,
+              "lift": 0.01350762527233107
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.9778867102396513,
+              "lift": 0.01263616557734204
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.9565359477124183,
+              "lift": -0.05697167755991284
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k9": {
+          "winner": "frequency",
+          "avg_hits": 1.1618736383442265,
+          "lift_vs_shuffle": 0.02690631808278865,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.1618736383442265,
+              "lift": 0.02690631808278865
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.1546840958605664,
+              "lift": 0.0588235294117645
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.1300653594771244,
+              "lift": 0.018191721132897687
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.122875816993464,
+              "lift": 0.01612200435729849
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.122004357298475,
+              "lift": -0.039978213507625204
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.114705882352941,
+              "lift": 0.025272331154683858
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.1068627450980393,
+              "lift": -0.009912854030500906
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.0909586056644882,
+              "lift": -0.04989106753812633
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.0860566448801743,
+              "lift": -0.006971677559912903
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k10": {
+          "winner": "frequency",
+          "avg_hits": 1.2904139433551196,
+          "lift_vs_shuffle": 0.023202614379084885,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.2904139433551196,
+              "lift": 0.023202614379084885
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.2736383442265795,
+              "lift": 0.05457516339869262
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.2618736383442266,
+              "lift": 0.02287581699346397
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.2537037037037038,
+              "lift": 0.014814814814814836
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.2481481481481482,
+              "lift": -0.02799564270152488
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.2380174291939,
+              "lift": 0.027342047930283275
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.2344226579520698,
+              "lift": 0.005119825708061132
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.2221132897603486,
+              "lift": -0.012636165577342151
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.2215686274509805,
+              "lift": -0.03823529411764692
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k11": {
+          "winner": "frequency",
+          "avg_hits": 1.4035947712418302,
+          "lift_vs_shuffle": 0.01753812636165608,
+          "ranking": [
+            {
+              "method": "frequency",
+              "avg_hits": 1.4035947712418302,
+              "lift": 0.01753812636165608
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.398474945533769,
+              "lift": 0.061873638344226656
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.397930283224401,
+              "lift": 0.033877995642701775
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.3859477124183008,
+              "lift": 0.022766884531590703
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.3846405228758172,
+              "lift": -0.01938997821350741
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.3572984749455337,
+              "lift": 0.020806100217864776
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.3566448801742919,
+              "lift": 0.005337690631808334
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.352941176470588,
+              "lift": -0.01699346405228752
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.352069716775599,
+              "lift": -0.0064270152505450096
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "overall_winner_bl": "autoformer",
+      "winners_per_pool_bl": {
+        "k5": "autoformer",
+        "k6": "autoformer",
+        "k7": "autoformer",
+        "k8": "autoformer",
+        "k9": "autoformer",
+        "k10": "autoformer",
+        "k11": "autoformer"
+      },
+      "winner_details_bl": {
+        "k5": {
+          "winner": "autoformer",
+          "avg_hits": 0.6422657952069716,
+          "lift_vs_shuffle": 0.037690631808278696,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 0.6422657952069716,
+              "lift": 0.037690631808278696
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.6398692810457516,
+              "lift": 0.010239651416121931
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.6376906318082788,
+              "lift": 0.021459694989106604
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.6316993464052287,
+              "lift": -0.0009803921568627416
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.6247276688453159,
+              "lift": 0.00032679738562091387
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.6240740740740741,
+              "lift": 0.01753812636165586
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.6145969498910676,
+              "lift": -0.002941176470588225
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.6011982570806099,
+              "lift": -0.02178649237472774
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.5893246187363834,
+              "lift": -0.029084967320261446
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k6": {
+          "winner": "autoformer",
+          "avg_hits": 0.7685185185185185,
+          "lift_vs_shuffle": 0.040958605664487946,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 0.7685185185185185,
+              "lift": 0.040958605664487946
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.7655773420479303,
+              "lift": 0.011437908496731986
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.7648148148148147,
+              "lift": 0.008278867102396448
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.7631808278867102,
+              "lift": 0.012745098039215641
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.7610021786492375,
+              "lift": 0.02429193899782134
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.7550108932461873,
+              "lift": 0.008823529411764675
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.74640522875817,
+              "lift": 0.029956427015250586
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.7200435729847494,
+              "lift": -0.02178649237472774
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.6978213507625273,
+              "lift": -0.05904139433551192
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k7": {
+          "winner": "autoformer",
+          "avg_hits": 0.8949891067538126,
+          "lift_vs_shuffle": 0.05239651416122004,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 0.8949891067538126,
+              "lift": 0.05239651416122004
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.893355119825708,
+              "lift": 0.009150326797385588
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.8920479302832244,
+              "lift": 0.005337690631808334
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.886165577342048,
+              "lift": 0.038888888888889084
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.8786492374727669,
+              "lift": -0.002178649237472685
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.8710239651416122,
+              "lift": 0.0065359477124183885
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.8610021786492376,
+              "lift": -0.004466230936819082
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.8520697167755991,
+              "lift": 0.0033769063180827397
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.8328976034858387,
+              "lift": -0.05980392156862746
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k8": {
+          "winner": "autoformer",
+          "avg_hits": 1.0233115468409586,
+          "lift_vs_shuffle": 0.0535947712418301,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 1.0233115468409586,
+              "lift": 0.0535947712418301
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.0204793028322439,
+              "lift": 0.007298474945533595
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.0171023965141612,
+              "lift": -0.011982570806100323
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.012636165577342,
+              "lift": -0.0037037037037037646
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.9996732026143791,
+              "lift": 0.020697167755991175
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.9801742919389979,
+              "lift": 0.004030501089324567
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.9794117647058823,
+              "lift": -0.005446623093682046
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.9713507625272332,
+              "lift": 0.0008714596949892517
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.9709150326797386,
+              "lift": -0.043246187363834454
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k9": {
+          "winner": "autoformer",
+          "avg_hits": 1.1592592592592592,
+          "lift_vs_shuffle": 0.06470588235294095,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 1.1592592592592592,
+              "lift": 0.06470588235294095
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.1455337690631808,
+              "lift": -0.0005446623093681158
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.1350762527233116,
+              "lift": -0.02690631808278865
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.1308278867102397,
+              "lift": -0.019063180827886494
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.1307189542483662,
+              "lift": 0.018845315904139515
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.1074074074074074,
+              "lift": -0.004575163398692794
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.1038126361655773,
+              "lift": -0.03834422657952086
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.0969498910675382,
+              "lift": -0.009150326797385588
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.093137254901961,
+              "lift": -0.019716775599128322
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k10": {
+          "winner": "autoformer",
+          "avg_hits": 1.2749455337690632,
+          "lift_vs_shuffle": 0.05457516339869262,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 1.2749455337690632,
+              "lift": 0.05457516339869262
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.2721132897603484,
+              "lift": -0.009150326797385588
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.2671023965141612,
+              "lift": 0.028104575163398593
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.2620915032679738,
+              "lift": -0.014052287581699296
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.24520697167756,
+              "lift": -0.016666666666666607
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.235838779956427,
+              "lift": -0.011220043572984784
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.2318082788671025,
+              "lift": -0.004030501089324456
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.2295206971677561,
+              "lift": -0.00424836601307188
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.2201525054466231,
+              "lift": -0.03137254901960773
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k11": {
+          "winner": "autoformer",
+          "avg_hits": 1.4021786492374728,
+          "lift_vs_shuffle": 0.058387799564270315,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 1.4021786492374728,
+              "lift": 0.058387799564270315
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.39880174291939,
+              "lift": -0.004575163398692794
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.397058823529412,
+              "lift": 0.011328976034858496
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.3894335511982572,
+              "lift": 0.025381263616558014
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.3617647058823532,
+              "lift": -0.00457516339869235
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.3601307189542486,
+              "lift": -0.015141612200435528
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.3592592592592592,
+              "lift": -0.010348583877995976
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 1.3506535947712421,
+              "lift": -0.0062091503267969195
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.3388888888888888,
+              "lift": -0.03714596949891069
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "winners_per_pool_best": {
+        "k5": {
+          "winner": "autoformer",
+          "avg_hits": 0.6422657952069716,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.0006535947712417167
+        },
+        "k6": {
+          "winner": "frequency",
+          "avg_hits": 0.7723311546840957,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0038126361655772545
+        },
+        "k7": {
+          "winner": "autoformer",
+          "avg_hits": 0.8985838779956428,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0035947712418301636
+        },
+        "k8": {
+          "winner": "frequency",
+          "avg_hits": 1.023747276688453,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0004357298474944038
+        },
+        "k9": {
+          "winner": "frequency",
+          "avg_hits": 1.1618736383442265,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.002614379084967311
+        },
+        "k10": {
+          "winner": "frequency",
+          "avg_hits": 1.2904139433551196,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.015468409586056442
+        },
+        "k11": {
+          "winner": "frequency",
+          "avg_hits": 1.4035947712418302,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0014161220043573675
+        }
+      },
+      "auto_pilot_per_pool": {
+        "k5": {
+          "scorer": "patchtst",
+          "sim_depth_pct": 90,
+          "use_blacklist": false,
+          "avg_hits": 0.6562091503267974,
+          "avg_hits_with_blacklist": 0.6562091503267974,
+          "rationale": "patchtst beat random in 2/3 windows (weighted lift = +0.0173); selected from 4 qualifying methods",
+          "qualifying_methods": 4,
+          "consistency_threshold": 0.6
+        },
+        "k6": {
+          "scorer": "patchtst",
+          "sim_depth_pct": 90,
+          "use_blacklist": false,
+          "avg_hits": 0.7928104575163398,
+          "avg_hits_with_blacklist": 0.7928104575163398,
+          "rationale": "patchtst beat random in 2/3 windows (weighted lift = +0.0248); selected from 4 qualifying methods",
+          "qualifying_methods": 4,
+          "consistency_threshold": 0.6
+        },
+        "k7": {
+          "scorer": "patchtst",
+          "sim_depth_pct": 90,
+          "use_blacklist": false,
+          "avg_hits": 0.9320261437908496,
+          "avg_hits_with_blacklist": 0.9320261437908496,
+          "rationale": "patchtst beat random in 2/3 windows (weighted lift = +0.0304); selected from 3 qualifying methods",
+          "qualifying_methods": 3,
+          "consistency_threshold": 0.6
+        },
+        "k8": {
+          "scorer": "patchtst",
+          "sim_depth_pct": 60,
+          "use_blacklist": false,
+          "avg_hits": 1.0558823529411765,
+          "avg_hits_with_blacklist": 1.0558823529411765,
+          "rationale": "patchtst beat random in 2/3 windows (weighted lift = +0.0585); selected from 6 qualifying methods",
+          "qualifying_methods": 6,
+          "consistency_threshold": 0.6
+        },
+        "k9": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 1.184313725490196,
+          "avg_hits_with_blacklist": 1.1352941176470588,
+          "rationale": "frequency beat random in 3/3 windows (weighted lift = +0.0510); selected from 6 qualifying methods",
+          "qualifying_methods": 6,
+          "consistency_threshold": 0.6
+        },
+        "k10": {
+          "scorer": "frequency",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 1.3098039215686277,
+          "avg_hits_with_blacklist": 1.2549019607843137,
+          "rationale": "frequency beat random in 3/3 windows (weighted lift = +0.0569); selected from 5 qualifying methods",
+          "qualifying_methods": 5,
+          "consistency_threshold": 0.6
+        },
+        "k11": {
+          "scorer": "patchtst",
+          "sim_depth_pct": 60,
+          "use_blacklist": false,
+          "avg_hits": 1.434313725490196,
+          "avg_hits_with_blacklist": 1.434313725490196,
+          "rationale": "patchtst beat random in 2/3 windows (weighted lift = +0.0641); selected from 6 qualifying methods",
+          "qualifying_methods": 6,
+          "consistency_threshold": 0.6
+        }
+      }
+    },
+    "joker_urna1": {
+      "label": "Joker — Urna 1 (5/45)",
+      "draw_n": 5,
+      "overall_winner": "deepar",
+      "winners_per_pool": {
+        "k5": "random",
+        "k6": "random",
+        "k7": "random",
+        "k8": "deepar",
+        "k9": "deepar",
+        "k10": "deepar",
+        "k11": "deepar"
+      },
+      "winner_details": {
+        "k5": {
+          "winner": "random",
+          "avg_hits": 0.5760358677068632,
+          "lift_vs_shuffle": 0.0001731529771923368,
+          "ranking": [
+            {
+              "method": "random",
+              "avg_hits": 0.5760358677068632,
+              "lift": 0.0001731529771923368
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.5720775906482475,
+              "lift": 0.008513665499349288
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.5675166080344047,
+              "lift": 0.009714547993476708
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.5590053400378165,
+              "lift": 0.01358851287165952
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.5575480579428468,
+              "lift": -0.007476612360565182
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.5556503013128192,
+              "lift": 0.017373903342278618
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.5518683739017439,
+              "lift": -0.009202547959378915
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.5494628794647495,
+              "lift": -0.015907830403851353
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.5485984465247665,
+              "lift": -0.004558052332690243
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k6": {
+          "winner": "random",
+          "avg_hits": 0.6922400294519896,
+          "lift_vs_shuffle": 0.014105041522084028,
+          "ranking": [
+            {
+              "method": "random",
+              "avg_hits": 0.6922400294519896,
+              "lift": 0.014105041522084028
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.680541281534487,
+              "lift": 0.01195354918317082
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.6805402159777043,
+              "lift": 0.011518935210418135
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.6762468213109226,
+              "lift": 0.0018107805576379477
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.6633399983910092,
+              "lift": 0.009548321135372073
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.6617055674809119,
+              "lift": -0.004043921185026944
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.6609371678459717,
+              "lift": -0.015131971871431893
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.6592125641931365,
+              "lift": -0.013935351604435375
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.6505276104409646,
+              "lift": -0.004814185544337102
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k7": {
+          "winner": "random",
+          "avg_hits": 0.8015662885538424,
+          "lift_vs_shuffle": 0.01376353057322166,
+          "ranking": [
+            {
+              "method": "random",
+              "avg_hits": 0.8015662885538424,
+              "lift": 0.01376353057322166
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.7951979884419056,
+              "lift": 0.008686019308954518
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.7871984540902196,
+              "lift": 0.007563055654563389
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.781693787750679,
+              "lift": 0.0018038544385502453
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.7810982747037353,
+              "lift": 9.150468871632622e-05
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.7690513561074784,
+              "lift": 0.0049038255086835125
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.7684481177738601,
+              "lift": -0.01393854827478358
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.768284022029321,
+              "lift": -0.02338897138074303
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.7613981277101772,
+              "lift": -0.004472674595474513
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k8": {
+          "winner": "deepar",
+          "avg_hits": 0.9362601247873549,
+          "lift_vs_shuffle": 0.0274350236793357,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 0.9362601247873549,
+              "lift": 0.0274350236793357
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.9104611303532906,
+              "lift": 0.014021262120042288
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.901000051679504,
+              "lift": 0.000264657665908552
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.8939410043831678,
+              "lift": 0.007389902677371274
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.8892994390376318,
+              "lift": 0.006019063876399722
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.8771769991043995,
+              "lift": -0.020550994084561514
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.875621818980017,
+              "lift": -0.024002598892993166
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.8727835752946399,
+              "lift": -0.008945349190949248
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.8648723489613218,
+              "lift": -0.016946215488613747
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k9": {
+          "winner": "deepar",
+          "avg_hits": 1.0635605952839524,
+          "lift_vs_shuffle": 0.03586384421986066,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 1.0635605952839524,
+              "lift": 0.03586384421986066
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.0180633185806995,
+              "lift": 0.01006245228303504
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.0158195223854831,
+              "lift": 0.024158170183270267
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.0126421652540047,
+              "lift": 0.014705615963745533
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.0082591306228765,
+              "lift": -0.010488009023134737
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.000169157139257,
+              "lift": -0.006455276184326397
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.9860643820063689,
+              "lift": -0.01711617179545788
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.9801352244835112,
+              "lift": -0.03130286160601792
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.9676611508119809,
+              "lift": -0.02270887976417091
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k10": {
+          "winner": "deepar",
+          "avg_hits": 1.169960835460451,
+          "lift_vs_shuffle": 0.03629339679789512,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 1.169960835460451,
+              "lift": 0.03629339679789512
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.125574268508588,
+              "lift": 0.03061024969724868
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.1233435253839603,
+              "lift": -0.0021533570632825683
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.1199055064245083,
+              "lift": -0.021412763132587553
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.1147407526986557,
+              "lift": 0.0010285286845219677
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.108030675248661,
+              "lift": -0.010671817568154385
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.1020105458154785,
+              "lift": -0.004559117889473052
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.0868788403332423,
+              "lift": -0.04713037566737133
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.0793931707400237,
+              "lift": -0.014106906246453832
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k11": {
+          "winner": "deepar",
+          "avg_hits": 1.2816939209452767,
+          "lift_vs_shuffle": 0.030100647165911765,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 1.2816939209452767,
+              "lift": 0.030100647165911765
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.24677216211594,
+              "lift": 0.017281599485975185
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.2342956909416485,
+              "lift": 0.02372994955121399
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.2315470872206176,
+              "lift": 0.005157827606764753
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.227852135881932,
+              "lift": -0.032765205095705685
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.2159794358196503,
+              "lift": 0.0008588387668737596
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.2140867405843407,
+              "lift": -0.02236843437209135
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.2058348024697476,
+              "lift": -0.04790570142139927
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.187943837698653,
+              "lift": -0.019871435246380686
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "overall_winner_bl": "deepar",
+      "winners_per_pool_bl": {
+        "k5": "random",
+        "k6": "random",
+        "k7": "deepar",
+        "k8": "deepar",
+        "k9": "deepar",
+        "k10": "deepar",
+        "k11": "deepar"
+      },
+      "winner_details_bl": {
+        "k5": {
+          "winner": "random",
+          "avg_hits": 0.5806822280579215,
+          "lift_vs_shuffle": 0.008603571852891179,
+          "ranking": [
+            {
+              "method": "random",
+              "avg_hits": 0.5806822280579215,
+              "lift": 0.008603571852891179
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.5707006248957752,
+              "lift": 0.007136699746877029
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.5682038921592603,
+              "lift": 0.01754385964912286
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.5639054360977606,
+              "lift": 0.006103376056832532
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.5600373317818826,
+              "lift": 0.014620504615725616
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.5556503013128192,
+              "lift": 0.017373903342278618
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.5518683739017439,
+              "lift": -0.009202547959378915
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.5496349668851591,
+              "lift": -0.005070851534375143
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.5485984465247665,
+              "lift": -0.004558052332690243
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k6": {
+          "winner": "random",
+          "avg_hits": 0.6980910017459149,
+          "lift_vs_shuffle": 0.0209885383384667,
+          "ranking": [
+            {
+              "method": "random",
+              "avg_hits": 0.6980910017459149,
+              "lift": 0.0209885383384667
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.6918072802036065,
+              "lift": 0.0232195478522903
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.6754624383242414,
+              "lift": 0.0034366870134733274
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.6721116618263748,
+              "lift": 0.003090381059088654
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.6660915323931925,
+              "lift": 0.0003420437272536603
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.6633399983910092,
+              "lift": 0.009548321135372073
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.6592125641931365,
+              "lift": -0.013935351604435375
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.6585279439602377,
+              "lift": -0.0068768370864905615
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.6505276104409646,
+              "lift": -0.004814185544337102
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k7": {
+          "winner": "deepar",
+          "avg_hits": 0.8123998043637748,
+          "lift_vs_shuffle": 0.020208950357307853,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 0.8123998043637748,
+              "lift": 0.020208950357307853
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.7995012395089276,
+              "lift": 0.01427766172088496
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.7904641192400662,
+              "lift": 0.010828720804409997
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.781693787750679,
+              "lift": 0.0018038544385502453
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.777732314021715,
+              "lift": -0.020218540368352245
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.7710280971340252,
+              "lift": -0.011358568914618505
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.7690513561074784,
+              "lift": 0.0049038255086835125
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.7613981277101772,
+              "lift": -0.0060214613791607086
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.7607121755312999,
+              "lift": -0.015822719055831436
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k8": {
+          "winner": "deepar",
+          "avg_hits": 0.9337639248292312,
+          "lift_vs_shuffle": 0.02218542499465881,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 0.9337639248292312,
+              "lift": 0.02218542499465881
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.9047814463121879,
+              "lift": 0.011092845691927256
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 0.9030547115457872,
+              "lift": 0.016503609839990663
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.8921336868850739,
+              "lift": -0.007490730987936289
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.8890414411016153,
+              "lift": 0.005761065940383281
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.8889494036345077,
+              "lift": -0.02133457790365534
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.8727835752946399,
+              "lift": -0.013589312039246515
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.8716702016512933,
+              "lift": -0.027435822846922697
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.8648723489613218,
+              "lift": -0.01780665259066161
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k9": {
+          "winner": "deepar",
+          "avg_hits": 1.0542689401386183,
+          "lift_vs_shuffle": 0.03310778160135053,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 1.0542689401386183,
+              "lift": 0.03310778160135053
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.0344020335085642,
+              "lift": 0.023217416738725127
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.019259406069305,
+              "lift": 0.02759805386709213
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.0116101735099388,
+              "lift": 0.010490140136700354
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.0024911385634057,
+              "lift": -0.004133294760177764
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.9993903683256854,
+              "lift": -0.026409425275965792
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.9860643820063689,
+              "lift": -0.01040822545902853
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.9751446892916338,
+              "lift": -0.04885258181744567
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.9676611508119809,
+              "lift": -0.016857907470245737
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k10": {
+          "winner": "deepar",
+          "avg_hits": 1.1621325893615875,
+          "lift_vs_shuffle": 0.02691556474775858,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 1.1621325893615875,
+              "lift": 0.02691556474775858
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.1463920513726238,
+              "lift": 0.031213754420063022
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.1202408904218701,
+              "lift": 0.025276871610530716
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.1201587093550023,
+              "lift": 0.009973611486275624
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.1181737102633897,
+              "lift": -0.024690948574631166
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.1025265416875116,
+              "lift": -0.0009471467852417703
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.1013227289122316,
+              "lift": -0.017379763904583845
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.0865346654924233,
+              "lift": -0.049881909669554636
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.0793931707400237,
+              "lift": -0.01840909175669303
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        },
+        "k11": {
+          "winner": "deepar",
+          "avg_hits": 1.2675000386264335,
+          "lift_vs_shuffle": 0.01005685810992607,
+          "ranking": [
+            {
+              "method": "deepar",
+              "avg_hits": 1.2675000386264335,
+              "lift": 0.01005685810992607
+            },
+            {
+              "method": "random",
+              "avg_hits": 1.2491795212773043,
+              "lift": 0.017107380952000373
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 1.2369650438769642,
+              "lift": 0.011779863427586967
+            },
+            {
+              "method": "recency",
+              "avg_hits": 1.230078883168625,
+              "lift": -0.026067647937907834
+            },
+            {
+              "method": "autoformer",
+              "avg_hits": 1.2211351323128496,
+              "lift": 0.010569390922415156
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 1.2185594151798156,
+              "lift": 0.009114772719402309
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 1.2084107859919773,
+              "lift": -0.028044388964454825
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 1.207211501833024,
+              "lift": -0.03981892460812819
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 1.1889763622211105,
+              "lift": -0.015225074895322432
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "winners_per_pool_best": {
+        "k5": {
+          "winner": "random",
+          "avg_hits": 0.5806822280579215,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.004646360351058254
+        },
+        "k6": {
+          "winner": "random",
+          "avg_hits": 0.6980910017459149,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.005850972293925283
+        },
+        "k7": {
+          "winner": "deepar",
+          "avg_hits": 0.8123998043637748,
+          "use_blacklist": true,
+          "delta_vs_no_bl": 0.010833515809932415
+        },
+        "k8": {
+          "winner": "deepar",
+          "avg_hits": 0.9362601247873549,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0024961999581236682
+        },
+        "k9": {
+          "winner": "deepar",
+          "avg_hits": 1.0635605952839524,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.009291655145334143
+        },
+        "k10": {
+          "winner": "deepar",
+          "avg_hits": 1.169960835460451,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.007828246098863456
+        },
+        "k11": {
+          "winner": "deepar",
+          "avg_hits": 1.2816939209452767,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.01419388231884322
+        }
+      },
+      "auto_pilot_per_pool": {
+        "k5": {
+          "scorer": "random",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 0.586687306501548,
+          "avg_hits_with_blacklist": 0.586687306501548,
+          "rationale": "FALLBACK: no method consistently beat random (≥60% of windows); picked highest absolute avg_hits",
+          "qualifying_methods": 0,
+          "consistency_threshold": 0.6
+        },
+        "k6": {
+          "scorer": "random",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 0.7089783281733746,
+          "avg_hits_with_blacklist": 0.7089783281733746,
+          "rationale": "FALLBACK: no method consistently beat random (≥60% of windows); picked highest absolute avg_hits",
+          "qualifying_methods": 0,
+          "consistency_threshold": 0.6
+        },
+        "k7": {
+          "scorer": "random",
+          "sim_depth_pct": 30,
+          "use_blacklist": false,
+          "avg_hits": 0.8065015479876161,
+          "avg_hits_with_blacklist": 0.8065015479876161,
+          "rationale": "FALLBACK: no method consistently beat random (≥60% of windows); picked highest absolute avg_hits",
+          "qualifying_methods": 0,
+          "consistency_threshold": 0.6
+        },
+        "k8": {
+          "scorer": "deepar",
+          "sim_depth_pct": 60,
+          "use_blacklist": true,
+          "avg_hits": 0.9512383900928792,
+          "avg_hits_with_blacklist": 0.956656346749226,
+          "rationale": "deepar beat random in 2/3 windows (weighted lift = +0.0181); selected from 1 qualifying methods",
+          "qualifying_methods": 1,
+          "consistency_threshold": 0.6
+        },
+        "k9": {
+          "scorer": "deepar",
+          "sim_depth_pct": 60,
+          "use_blacklist": false,
+          "avg_hits": 1.076625386996904,
+          "avg_hits_with_blacklist": 1.0704334365325077,
+          "rationale": "deepar beat random in 3/3 windows (weighted lift = +0.0364); selected from 1 qualifying methods",
+          "qualifying_methods": 1,
+          "consistency_threshold": 0.6
+        },
+        "k10": {
+          "scorer": "deepar",
+          "sim_depth_pct": 60,
+          "use_blacklist": false,
+          "avg_hits": 1.1811145510835914,
+          "avg_hits_with_blacklist": 1.1710526315789471,
+          "rationale": "deepar beat random in 3/3 windows (weighted lift = +0.0415); selected from 3 qualifying methods",
+          "qualifying_methods": 3,
+          "consistency_threshold": 0.6
+        },
+        "k11": {
+          "scorer": "deepar",
+          "sim_depth_pct": 60,
+          "use_blacklist": false,
+          "avg_hits": 1.2948916408668731,
+          "avg_hits_with_blacklist": 1.2755417956656347,
+          "rationale": "deepar beat random in 3/3 windows (weighted lift = +0.0374); selected from 1 qualifying methods",
+          "qualifying_methods": 1,
+          "consistency_threshold": 0.6
+        }
+      }
+    },
+    "joker_urna2": {
+      "label": "Joker — Urna 2 (1/20)",
+      "draw_n": 1,
+      "overall_winner": "autoformer",
+      "winners_per_pool": {
+        "k1": "autoformer"
+      },
+      "winner_details": {
+        "k1": {
+          "winner": "autoformer",
+          "avg_hits": 0.05418755823933791,
+          "lift_vs_shuffle": 0.005330980583957083,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 0.05418755823933791,
+              "lift": 0.005330980583957083
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.05264090256921724,
+              "lift": 0.0030981063457635946
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.0518669087611677,
+              "lift": -0.009631301369826518
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.051608910825151184,
+              "lift": -0.005847775623577148
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.050833585071123254,
+              "lift": -0.0006891488492253087
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.049544927337019096,
+              "lift": 0.010064050618209412
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.04773760983892511,
+              "lift": 0.0012897232908868836
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.04567362635079301,
+              "lift": -0.006622302210018048
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.04412563873469394,
+              "lift": -0.007310918280852001
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "overall_winner_bl": "autoformer",
+      "winners_per_pool_bl": {
+        "k1": "autoformer"
+      },
+      "winner_details_bl": {
+        "k1": {
+          "winner": "autoformer",
+          "avg_hits": 0.05418755823933791,
+          "lift_vs_shuffle": 0.005330980583957083,
+          "ranking": [
+            {
+              "method": "autoformer",
+              "avg_hits": 0.05418755823933791,
+              "lift": 0.005330980583957083
+            },
+            {
+              "method": "fedformer",
+              "avg_hits": 0.05117855907952943,
+              "lift": -0.009631301369826525
+            },
+            {
+              "method": "nhits",
+              "avg_hits": 0.050833585071123254,
+              "lift": -0.0006891488492253087
+            },
+            {
+              "method": "deepar",
+              "avg_hits": 0.05057638630269378,
+              "lift": 0.0008596379344608038
+            },
+            {
+              "method": "random",
+              "avg_hits": 0.04834031539415212,
+              "lift": 0.0073106518916563265
+            },
+            {
+              "method": "timesfm",
+              "avg_hits": 0.04773760983892511,
+              "lift": 0.0012897232908868836
+            },
+            {
+              "method": "patchtst",
+              "avg_hits": 0.04567362635079301,
+              "lift": -0.006622302210018048
+            },
+            {
+              "method": "frequency",
+              "avg_hits": 0.04412563873469394,
+              "lift": -0.004730938920686885
+            },
+            {
+              "method": "recency",
+              "avg_hits": 0.04059931175687404,
+              "lift": -0.014878236162546424
+            },
+            {
+              "method": "chronos",
+              "avg_hits": 0.0,
+              "lift": 0.0
+            }
+          ]
+        }
+      },
+      "winners_per_pool_best": {
+        "k1": {
+          "winner": "autoformer",
+          "avg_hits": 0.05418755823933791,
+          "use_blacklist": false,
+          "delta_vs_with_bl": 0.0
+        }
+      },
+      "auto_pilot_per_pool": {
+        "k1": {
+          "scorer": "recency",
+          "sim_depth_pct": 90,
+          "use_blacklist": false,
+          "avg_hits": 0.0542075374290139,
+          "avg_hits_with_blacklist": 0.0443985544656685,
+          "rationale": "recency beat random in 2/3 windows (weighted lift = +0.0023); selected from 5 qualifying methods",
+          "qualifying_methods": 5,
+          "consistency_threshold": 0.6
+        }
+      }
+    }
+  }
+}
