@@ -1174,31 +1174,117 @@ with st.sidebar:
     except Exception:
         pass
 
-    # === DOUBLE-CLICK DETECTOR PENTRU FORCE FULL REBENCH ===
-    # Streamlit nu are eveniment nativ "dublu-click" pe button. Folosim
-    # timestamp în session_state: două click-uri în < 1.5s = dublu-click =
-    # forțează **FULL re-bench** pe TOATE jocurile (matrice completă):
-    #   • toate metodele (14 scorere: TimesFM, Chronos, PatchTST, DeepAR, etc.)
-    #   • toate ferestrele regresive (100%, 90%, 80%, ..., 10%)
-    #   • toate cele 3 jocuri (6/49, 5/40, joker)
-    # → durează ~50 min, alege winner per (joc × pool × fereastră).
-    # Util când userul vrea matricea recalibrată complet, fără shortcut-uri.
-    import time as _time_dc
-    _DBL_CLICK_WINDOW = 1.5  # secunde
-    _last_click_ts = float(st.session_state.get("_autopilot_last_click_ts", 0))
-    _now_ts = _time_dc.time()
-    _is_double_click = (_now_ts - _last_click_ts) < _DBL_CLICK_WINDOW
+    # === AUTO-PILOT: două butoane separate (UX clar, fără ambiguitate) ===
+    # Buton 1: comportament normal (cache OK → cache, drift → auto-rebench după freshness)
+    # Buton 2: FORȚEAZĂ FULL rebench (toate metodele × toate ferestrele × toate jocurile, ~50 min)
+    #
+    # Notă: am încercat anterior un detector de "dublu-click" pe un singur buton,
+    # dar Streamlit dezactivează butoanele pe durata rerun-ului între click-uri,
+    # iar UX-ul era confuz. Două butoane separate = intenție explicită, fără timing.
+    def _run_autopilot(force_full_rebench: bool):
+        """Lansează Auto-Pilot. Cu force_full_rebench=True: lansează FULL rebench imediat
+        (matrice 14 metode × 10 ferestre × 3 jocuri, ~50 min, în fundal) pe lângă generare."""
+        if not st.session_state.get("loaded_datasets"):
+            st.error("Încărcați întâi un fișier CSV!")
+            return
+        try:
+            from loto_enterprise.core.method_selector import recommend_optimal_config
+            import subprocess as _sp, sys as _sys
+            from pathlib import Path as _Pp
 
-    st.caption(
-        "💡 *Tip: dublu-click pe Auto-Pilot (în < 1.5s) = forțează **FULL re-bench** "
-        "(toate metodele × toate ferestrele 10-100% × toate jocurile, ~50 min, "
-        "rulează în fundal). Single-click = comportament normal cu cache.*"
-    )
+            pool_now = int(st.session_state["pool_size_val"])
+            gk_for_app = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}
+            pending = {}
+            for ui_game, gk in gk_for_app.items():
+                cfg = recommend_optimal_config(gk, pool_now)
+                pending[ui_game] = int(cfg["sim_depth_pct"])
+            st.session_state["_pending_sim_depth_updates"] = pending
+            for _ui_game, _depth in pending.items():
+                st.session_state[f"sim_depth_key_{_ui_game}"] = int(_depth)
 
-    # Debug visibil: arătăm session_state pentru a confirma că detectorul funcționează
-    if _is_double_click:
-        st.warning(f"⚡ DUBLU-CLICK DETECTAT (diff={_now_ts - _last_click_ts:.2f}s) — vei lansa FULL rebench la următorul click!")
+            # === AUTO-REBENCH IN FUNDAL ===
+            # force_full_rebench=True → FULL rebench (matrice completă, ~50 min)
+            # force_full_rebench=False → după freshness check (cache/quick/full)
+            _should_rebench = (
+                force_full_rebench
+                or _global_rec in ("quick_rebench", "full_rebench")
+            )
 
+            logging.info(
+                f"[AUTO-PILOT] force_full_rebench={force_full_rebench}, "
+                f"should_rebench={_should_rebench}, global_rec={_global_rec}, "
+                f"pool={pool_now}"
+            )
+
+            if _should_rebench and not _Pp(".bench_pid").exists():
+                try:
+                    py = _sys.executable.replace("/", "\\")
+                    if force_full_rebench or _global_rec == "full_rebench":
+                        # FULL: toate metodele × toate ferestrele × toate jocurile
+                        bench_args = [
+                            py, "bench_all_methods.py", "--no-rich",
+                            "--percentiles", "10,20,30,40,50,60,70,80,90,100",
+                        ]
+                        if force_full_rebench:
+                            _label = "🔴 FULL FORȚAT (buton dedicat — matrice completă, ~50 min)"
+                            logging.warning(
+                                "═" * 60 + "\n"
+                                "[AUTO-PILOT] 🔴 FULL REBENCH FORȚAT DE USER 🔴\n"
+                                "  → Matrice completă:\n"
+                                "    • 14 metode × 10 ferestre regresive × 3 jocuri\n"
+                                "    • Durată estimată: ~50 minute\n"
+                                "    • Rulează în fundal (CMD nou); generarea curentă continuă\n"
+                                "═" * 60
+                            )
+                        else:
+                            _label = "Full (~50 min) — drift major detectat"
+                    else:
+                        from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
+                        bench_args = [py, "bench_all_methods.py"] + quick_rebench_cli_args()
+                        _label = "Quick (~5 min) — drift minor"
+                    _Pp("bench_full.log").unlink(missing_ok=True)
+                    proc = _sp.Popen(
+                        bench_args,
+                        stdout=open("bench_full.log", "w", encoding="utf-8"),
+                        stderr=_sp.STDOUT,
+                        creationflags=_sp.CREATE_NEW_CONSOLE,
+                    )
+                    _Pp(".bench_pid").write_text(str(proc.pid))
+                    st.session_state["auto_rebench_started"] = _label
+                    logging.info(f"[AUTO-PILOT] Auto-rebench {_label} lansat (PID {proc.pid})")
+                except Exception as e:
+                    logging.error(f"[AUTO-PILOT] auto-rebench FAILED: {e}", exc_info=True)
+                    st.error(f"❌ Rebench eșuat: {e}")
+
+            # === GENERARE IMEDIATĂ cu cache-ul curent ===
+            # Chiar și la force_full_rebench, generăm imediat cu cache-ul actual
+            # (bench-ul rulează paralel în fundal); la următoarea rulare după ce
+            # termină bench-ul, vei avea decizia proaspătă din matricea nouă.
+            st.session_state["start_calib_now"] = False
+            st.session_state["trigger_gen_after_calib"] = False
+            ensure_worker_running()
+            reset_sidebar_settings()
+            st.session_state["queue_submit_requested"] = True
+            st.session_state["auto_pilot_applied"] = pending
+            if force_full_rebench:
+                st.toast(
+                    "🔴 FULL Re-Bench LANSAT în fundal (toate metodele × toate ferestrele × "
+                    "toate jocurile, ~50 min)! Generarea curentă continuă cu cache-ul actual.",
+                    icon="⚡",
+                )
+                st.balloons()
+            logging.info(
+                f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}, "
+                f"force_full_rebench={force_full_rebench}): {pending} → generare directă"
+            )
+        except Exception as exc:
+            st.error(f"Auto-Pilot a eșuat ({exc}); fallback la calibrare clasică.")
+            st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
+            st.session_state["start_calib_now"] = True
+            st.session_state["trigger_gen_after_calib"] = True
+        st.rerun()
+
+    # Buton 1: Auto-Pilot normal (cu cache / auto-rebench după freshness)
     if st.button(
         "⚡ Auto-Pilot: Aplică Decizia Benchmark + Generează" + _ap_disabled_reason,
         type="primary",
@@ -1206,123 +1292,38 @@ with st.sidebar:
             "Citește din `best_methods.json` (matrice 1280-folds) modelul + "
             "sim_depth + flag-ul blacklist optim pentru jocul curent și "
             "pool-ul selectat, le aplică și generează imediat. Verifică automat "
-            "freshness-ul CSV-urilor.\n\n"
-            "💡 Dublu-click (< 1.5s) = forțează re-bench Quick pe toate jocurile."
+            "freshness-ul CSV-urilor și lansează rebench automat dacă detectează drift."
         ),
         use_container_width=True,
         disabled=_ap_disabled,
     ):
-        # Persistăm timestamp pentru detectarea dublu-click la următorul click
-        st.session_state["_autopilot_last_click_ts"] = _now_ts
+        _run_autopilot(force_full_rebench=False)
 
-        if not st.session_state.get("loaded_datasets"):
-            st.error("Încărcați întâi un fișier CSV!")
-        else:
-            try:
-                from loto_enterprise.core.method_selector import recommend_optimal_config
-                import subprocess as _sp, sys as _sys
-                from pathlib import Path as _Pp
+    # Buton 2: FORȚEAZĂ FULL Re-Bench (separat, vizibil distinct)
+    _bench_running = Path(".bench_pid").exists()
+    _force_btn_disabled = _ap_disabled or _bench_running
+    _force_btn_reason = ""
+    if _bench_running:
+        _force_btn_reason = " ⚠️ DEZACTIVAT — bench deja in progres"
 
-                pool_now = int(st.session_state["pool_size_val"])
-                gk_for_app = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}
-                pending = {}
-                for ui_game, gk in gk_for_app.items():
-                    cfg = recommend_optimal_config(gk, pool_now)
-                    pending[ui_game] = int(cfg["sim_depth_pct"])
-                st.session_state["_pending_sim_depth_updates"] = pending
-                for _ui_game, _depth in pending.items():
-                    st.session_state[f"sim_depth_key_{_ui_game}"] = int(_depth)
-
-                # === AUTO-REBENCH IN FUNDAL ===
-                # Cu DUBLU-CLICK: forțează **FULL rebench** (matrice completă):
-                #   toate metodele × toate ferestrele 10-100% × toate jocurile
-                #   ⇒ ~50 minute, alege winner per (joc × pool × fereastră).
-                # Cu single click: comportament normal (cache OK → cache,
-                # drift → quick/full după freshness check).
-                _force_rebench_dc = _is_double_click
-                _should_rebench = (
-                    _force_rebench_dc
-                    or _global_rec in ("quick_rebench", "full_rebench")
-                )
-
-                # Logging EXTREM de vizibil — userul a raportat că nu vede
-                # că dublu-click se activează. Acum lăsăm urme clare.
-                logging.info(
-                    f"[AUTO-PILOT] Click @ ts={_now_ts:.2f}, last={_last_click_ts:.2f}, "
-                    f"diff={_now_ts - _last_click_ts:.2f}s, is_double_click={_is_double_click}, "
-                    f"should_rebench={_should_rebench}, global_rec={_global_rec}"
-                )
-
-                if _should_rebench and not _Pp(".bench_pid").exists():
-                    try:
-                        py = _sys.executable.replace("/", "\\")
-                        # DUBLU-CLICK → FULL rebench (matrice completă, ~50 min)
-                        # Single click cu drift major → FULL rebench
-                        # Single click cu drift minor → QUICK rebench (~5 min)
-                        if _force_rebench_dc or _global_rec == "full_rebench":
-                            # FULL: toate metodele × toate ferestrele × toate jocurile
-                            bench_args = [
-                                py, "bench_all_methods.py", "--no-rich",
-                                "--percentiles", "10,20,30,40,50,60,70,80,90,100",
-                            ]
-                            if _force_rebench_dc:
-                                _label = "🔴 FULL FORȚAT (DUBLU-CLICK — matrice completă, ~50 min)"
-                                logging.warning(
-                                    "═" * 60 + "\n"
-                                    "[AUTO-PILOT] ⚡⚡⚡ DOUBLE-CLICK DETECTAT ⚡⚡⚡\n"
-                                    "  → Lansez FULL REBENCH pe toate jocurile:\n"
-                                    "    • 14 metode × 10 ferestre regresive × 3 jocuri\n"
-                                    "    • Durată estimată: ~50 minute\n"
-                                    "    • Va rula în fundal (CMD nou); generarea curentă continuă\n"
-                                    "═" * 60
-                                )
-                            else:
-                                _label = "Full (~50 min) — drift major detectat"
-                        else:
-                            from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
-                            bench_args = [py, "bench_all_methods.py"] + quick_rebench_cli_args()
-                            _label = "Quick (~5 min) — drift minor"
-                        _Pp("bench_full.log").unlink(missing_ok=True)
-                        proc = _sp.Popen(
-                            bench_args,
-                            stdout=open("bench_full.log", "w", encoding="utf-8"),
-                            stderr=_sp.STDOUT,
-                            creationflags=_sp.CREATE_NEW_CONSOLE,
-                        )
-                        _Pp(".bench_pid").write_text(str(proc.pid))
-                        st.session_state["auto_rebench_started"] = _label
-                        logging.info(f"[AUTO-PILOT] Auto-rebench {_label} lansat (PID {proc.pid})")
-                    except Exception as e:
-                        logging.error(f"[AUTO-PILOT] auto-rebench FAILED: {e}", exc_info=True)
-                        st.error(f"❌ Rebench eșuat: {e}")
-
-                # === GENERARE IMEDIATA cu cache-ul curent ===
-                # NOTE: chiar și la dublu-click, generăm imediat cu cache-ul
-                # actual (bench-ul rulează în fundal); la următoarea rulare vei
-                # avea decizia proaspătă.
-                st.session_state["start_calib_now"] = False
-                st.session_state["trigger_gen_after_calib"] = False
-                ensure_worker_running()
-                reset_sidebar_settings()
-                st.session_state["queue_submit_requested"] = True
-                st.session_state["auto_pilot_applied"] = pending
-                if _force_rebench_dc:
-                    st.toast(
-                        "🔴 DUBLU-CLICK detectat — FULL Re-Bench lansat în fundal "
-                        "(toate metodele × toate ferestrele × toate jocurile, ~50 min)!",
-                        icon="⚡",
-                    )
-                    st.balloons()  # Confirmare vizuală suplimentară
-                logging.info(
-                    f"[AUTO-PILOT] Decizie aplicată (pool={pool_now}, "
-                    f"double_click={_force_rebench_dc}): {pending} → generare directă"
-                )
-            except Exception as exc:
-                st.error(f"Auto-Pilot a eșuat ({exc}); fallback la calibrare clasică.")
-                st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
-                st.session_state["start_calib_now"] = True
-                st.session_state["trigger_gen_after_calib"] = True
-            st.rerun()
+    if st.button(
+        "🔴 FORȚEAZĂ FULL Re-Bench (matrice completă, ~50 min în fundal)" + _force_btn_reason,
+        type="secondary",
+        help=(
+            "Lansează RE-BENCH COMPLET imediat, ignorând cache-ul:\n"
+            "  • 14 metode (TimesFM, Chronos, PatchTST, DeepAR, MOMENT, FEDformer, "
+            "Informer, Autoformer, NHITS, NBEATS, TiDE, DLinear, TCN, baselines)\n"
+            "  • 10 ferestre regresive (100%, 90%, 80%, ..., 10%)\n"
+            "  • Toate jocurile (6/49, 5/40, joker)\n"
+            "  ⇒ Matrice completă: alege winner per (joc × pool × fereastră).\n\n"
+            "Durată estimată: ~50 minute pe RTX 5060 Ti.\n"
+            "Rulează în fundal (CMD nou); generarea CURENTĂ pornește imediat cu "
+            "cache-ul actual, iar rularea URMĂTOARE va avea decizia proaspătă."
+        ),
+        use_container_width=True,
+        disabled=_force_btn_disabled,
+    ):
+        _run_autopilot(force_full_rebench=True)
 
     # --- Re-Bench Quick / Full ---
     # Detectie status: scanam log-ul pentru a vedea daca bench-ul ruleaza in
