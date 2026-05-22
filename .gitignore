@@ -38,3 +38,6 @@ lightning_logs/
 ISTORIC/
 bench_results/
 *.pre_autopilot
+
+# Per-machine runtime state (regenerated each pipeline run)
+pool_history.json
