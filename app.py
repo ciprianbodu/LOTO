@@ -1350,6 +1350,23 @@ with st.sidebar:
     _bench_pid = None
     _bench_total_folds = 1280
 
+    def _auto_trigger_post_bench():
+        """Consumă flag-ul _regenerate_after_bench și lansează generation cu cache PROASPĂT."""
+        if st.session_state.pop("_regenerate_after_bench", False):
+            st.session_state.pop("_regenerate_pool_size", None)
+            ensure_worker_running()
+            reset_sidebar_settings()
+            st.session_state["queue_submit_requested"] = True
+            st.toast(
+                "✅ FULL Re-Bench TERMINAT! Lansez generarea cu cache-ul PROASPĂT.",
+                icon="🎉",
+            )
+            logging.info(
+                "[AUTO-PILOT] Bench terminat → auto-trigger generation cu cache PROASPĂT."
+            )
+            return True
+        return False
+
     if _bench_pid_file.exists():
         try:
             _bench_pid = int(_bench_pid_file.read_text().strip())
@@ -1379,27 +1396,21 @@ with st.sidebar:
                     except Exception:
                         pass
             else:
-                # Procesul s-a terminat — sterge marker-ul
+                # Procesul s-a terminat — sterge marker-ul + auto-trigger generation
                 _bench_pid_file.unlink(missing_ok=True)
-                # === AUTO-TRIGGER GENERARE după ce bench-ul termină ===
-                # Dacă userul a apăsat "FORȚEAZĂ FULL Re-Bench", lansăm acum
-                # automat generarea cu cache-ul PROASPĂT din bench-ul tocmai
-                # terminat. Asta înlocuiește comportamentul vechi care genera
-                # imediat cu cache vechi (contraproductiv pentru intent-ul user).
-                if st.session_state.pop("_regenerate_after_bench", False):
-                    st.session_state.pop("_regenerate_pool_size", None)
-                    ensure_worker_running()
-                    reset_sidebar_settings()
-                    st.session_state["queue_submit_requested"] = True
-                    st.toast(
-                        "✅ FULL Re-Bench TERMINAT! Lansez generarea cu cache-ul PROASPĂT.",
-                        icon="🎉",
-                    )
-                    logging.info(
-                        "[AUTO-PILOT] Bench terminat → auto-trigger generation cu cache PROASPĂT."
-                    )
+                _auto_trigger_post_bench()
         except Exception:
             _bench_pid_file.unlink(missing_ok=True)
+
+    # === AUTO-TRIGGER post-bench și când .bench_pid lipsește deja ===
+    # Caz: userul a forțat rebench → bench-ul a terminat și a șters singur .bench_pid
+    # (sau previous polling l-a șters) ÎNAINTE ca polling-ul curent să-l vadă.
+    # Trebuie să detectăm asta și să declanșăm generation oricum. Flag-ul
+    # _regenerate_after_bench rămâne în session_state până e consumat.
+    if not _bench_active and not _bench_pid_file.exists():
+        if st.session_state.get("_regenerate_after_bench"):
+            _auto_trigger_post_bench()
+            st.rerun()  # Force UI update ca să apară progresul job-ului nou
 
     if _bench_active:
         # Mesaj diferit dacă userul a forțat rebench cu intent de auto-regenerate
@@ -1416,19 +1427,29 @@ with st.sidebar:
             f"— ETA ~{_bench_eta_min} min rămas." + _suffix + "  \n"
             f"Vezi fereastra CMD numită 'FULL REBENCH' / 'QUICK REBENCH'."
         )
-        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — auto-refresh la 30s")
-        # === AUTO-REFRESH ÎN BROWSER ===
-        # Streamlit nu are auto-refresh nativ. Injectăm un <meta http-equiv="refresh">
-        # ascuns care reload-uiește pagina la 30s — astfel polling-ul .bench_pid
-        # detectează imediat când bench-ul termină și auto-trigger generation.
-        # session_state persistă în cookie-ul Streamlit prin refresh.
-        # Refresh activ DOAR în timpul bench-ului (eliminăm overhead la idle).
-        st.markdown(
-            '<meta http-equiv="refresh" content="30">',
-            unsafe_allow_html=True,
+        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — auto-refresh la 15s")
+        # === AUTO-REFRESH ÎN BROWSER (JavaScript injection) ===
+        # `st.markdown(<meta http-equiv="refresh">)` NU funcționează în Streamlit
+        # pentru că meta tag-urile sunt injectate în <body>, nu <head>, și browser-ele
+        # le ignoră acolo. Folosim JavaScript via components.html — sigur funcționează.
+        # Refresh la 15s (mai des decât bench-ul scrie progres, ca să prindem
+        # rapid când .bench_pid e șters).
+        import streamlit.components.v1 as _components
+        _components.html(
+            """
+            <script>
+                setTimeout(function() {
+                    window.parent.location.reload();
+                }, 15000);
+            </script>
+            """,
+            height=0,
         )
         if _waiting_for_regen:
-            st.caption("⚙️ Pagina se auto-reîmprospătează la 30s. Generarea va porni AUTOMAT când bench-ul termină — nu trebuie să faci nimic.")
+            st.caption("⚙️ Pagina se auto-reîmprospătează la 15s. Generarea va porni AUTOMAT când bench-ul termină — nu trebuie să faci nimic.")
+            # Buton manual de backup pentru cazul când JavaScript e blocat de browser
+            if st.button("▶️ Verifică acum dacă bench-ul a terminat", help="Apasă dacă auto-refresh nu funcționează."):
+                st.rerun()
 
     # Re-Bench buttons mutate in expander-ul Power-User de mai jos.
 
