@@ -1249,7 +1249,11 @@ with st.sidebar:
                         stderr=_sp.STDOUT,
                         creationflags=_sp.CREATE_NEW_CONSOLE,
                     )
-                    _Pp(".bench_pid").write_text(str(proc.pid))
+                    # Scriem `PID|start_timestamp` pentru ETA fiabil (vechi: doar PID
+                    # → formula ETA folosea ctime/mtime al log-ului care e nesigur
+                    # pe Windows și producea ETA absurde de tip "92 zile rămase").
+                    import time as _time_bench
+                    _Pp(".bench_pid").write_text(f"{proc.pid}|{_time_bench.time()}")
                     st.session_state["auto_rebench_started"] = _label
                     logging.info(f"[AUTO-PILOT] Auto-rebench {_label} lansat (PID {proc.pid})")
                 except Exception as e:
@@ -1367,9 +1371,19 @@ with st.sidebar:
             return True
         return False
 
+    _bench_start_ts = None  # Timestamp lansare (citit din .bench_pid)
     if _bench_pid_file.exists():
         try:
-            _bench_pid = int(_bench_pid_file.read_text().strip())
+            _raw = _bench_pid_file.read_text().strip()
+            # Format nou: "PID|timestamp", format vechi: "PID"
+            if "|" in _raw:
+                _pid_str, _ts_str = _raw.split("|", 1)
+                _bench_pid = int(_pid_str)
+                _bench_start_ts = float(_ts_str)
+            else:
+                _bench_pid = int(_raw)
+                # Format vechi — folosim file mtime ca fallback (mai sigur decât ctime)
+                _bench_start_ts = _bench_pid_file.stat().st_mtime
             # Verificam daca procesul mai exista (Windows)
             _check = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {_bench_pid}"],
@@ -1387,12 +1401,15 @@ with st.sidebar:
                             done, total = int(matches[-1][0]), int(matches[-1][1])
                             _bench_total_folds = total
                             _bench_progress = done / total if total > 0 else 0
-                            # ETA estimat: timpul scurs * folds_ramase / folds_facute
-                            mtime = _bench_log.stat().st_mtime
-                            ctime = _bench_log.stat().st_ctime
-                            elapsed_min = (mtime - ctime) / 60
-                            if done > 0:
-                                _bench_eta_min = int(elapsed_min * (total - done) / done)
+                            # ETA FIABIL: time.time() - start_ts → secunde de când a
+                            # început bench-ul curent. Înainte foloseam ctime/mtime
+                            # care pe Windows + log append produceau ETA absurde
+                            # ("92 zile rămase" la 60 folds completate).
+                            if done > 0 and _bench_start_ts:
+                                elapsed_sec = max(time.time() - _bench_start_ts, 1)
+                                rate = done / elapsed_sec  # folds/sec
+                                eta_sec = (total - done) / rate if rate > 0 else 0
+                                _bench_eta_min = int(eta_sec / 60)
                     except Exception:
                         pass
             else:
@@ -1420,11 +1437,23 @@ with st.sidebar:
             if _waiting_for_regen
             else "  \nAuto-Pilot este DEZACTIVAT până se termină."
         )
+        # ETA "smoothing": pe primele 5% (~64 folds din 1280) rata e foarte zgomotoasă
+        # (model loading, GPU warmup), iar extrapolare liniară produce ETA absurde.
+        # Arătăm "calculating..." până avem date stabile.
+        _done = int(_bench_progress * _bench_total_folds)
+        if _done < max(64, _bench_total_folds * 0.05):
+            _eta_str = "calculating... (primele folds = model loading + GPU warmup)"
+        elif _bench_eta_min > 10000:
+            _eta_str = "calculating... (rate instabilă, aștept mai multe folds)"
+        elif _bench_eta_min < 1:
+            _eta_str = "<1 min"
+        else:
+            _eta_str = f"~{_bench_eta_min} min"
         st.warning(
             f"🔬 **Bench in progres** (PID {_bench_pid}) — "
             f"{int(_bench_progress*100)}% complet  "
-            f"({int(_bench_progress * _bench_total_folds)}/{_bench_total_folds} folds) "
-            f"— ETA ~{_bench_eta_min} min rămas." + _suffix + "  \n"
+            f"({_done}/{_bench_total_folds} folds) "
+            f"— ETA {_eta_str}." + _suffix + "  \n"
             f"Vezi fereastra CMD numită 'FULL REBENCH' / 'QUICK REBENCH'."
         )
         st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — auto-refresh la 15s")
