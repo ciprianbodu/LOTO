@@ -1271,9 +1271,15 @@ with st.sidebar:
             st.session_state["auto_pilot_applied"] = pending
 
             if force_full_rebench:
-                # NU generăm acum — așteptăm bench-ul. Salvăm intent ca să se
-                # auto-declanșeze generare când bench-ul termină.
-                st.session_state["_regenerate_after_bench"] = True
+                # NU generăm acum — așteptăm bench-ul. Salvăm intent în FIȘIER pe disk
+                # (nu session_state), pentru că JS auto-refresh face page reload care
+                # ȘTERGE session_state. Fișierul supraviețuiește orice refresh — polling-ul
+                # îl detectează indiferent de starea Streamlit.
+                from pathlib import Path as _Pp2
+                _regen_flag = _Pp2(".regenerate_after_bench")
+                import time as _t_regen
+                _regen_flag.write_text(f"{pool_now}|{_t_regen.time()}")
+                st.session_state["_regenerate_after_bench"] = True  # păstrăm și în session pentru UI
                 st.session_state["_regenerate_pool_size"] = pool_now
                 st.toast(
                     "🔴 FULL Re-Bench LANSAT în fundal (~50 min). Generarea va porni "
@@ -1283,7 +1289,7 @@ with st.sidebar:
                 st.balloons()
                 logging.info(
                     f"[AUTO-PILOT] FULL rebench lansat (pool={pool_now}). "
-                    f"Generarea suspendată — auto-trigger când bench termină."
+                    f"Flag persistat în .regenerate_after_bench. Auto-trigger când bench termină."
                 )
             else:
                 ensure_worker_running()
@@ -1355,21 +1361,34 @@ with st.sidebar:
     _bench_total_folds = 1280
 
     def _auto_trigger_post_bench():
-        """Consumă flag-ul _regenerate_after_bench și lansează generation cu cache PROASPĂT."""
-        if st.session_state.pop("_regenerate_after_bench", False):
-            st.session_state.pop("_regenerate_pool_size", None)
-            ensure_worker_running()
-            reset_sidebar_settings()
-            st.session_state["queue_submit_requested"] = True
-            st.toast(
-                "✅ FULL Re-Bench TERMINAT! Lansez generarea cu cache-ul PROASPĂT.",
-                icon="🎉",
-            )
-            logging.info(
-                "[AUTO-PILOT] Bench terminat → auto-trigger generation cu cache PROASPĂT."
-            )
-            return True
-        return False
+        """Consumă flag-ul .regenerate_after_bench (DISK, supraviețuiește page reload)
+        și lansează generation cu cache PROASPĂT din bench-ul tocmai terminat.
+
+        Verifică DOAR fișierul pe disk (nu session_state) — JS auto-refresh face
+        full page reload care șterge session_state, dar fișierul rămâne intact.
+        """
+        from pathlib import Path as _Pp_at
+        _regen_flag = _Pp_at(".regenerate_after_bench")
+        # Curățăm session_state oricum (pentru consistență UI)
+        st.session_state.pop("_regenerate_after_bench", None)
+        st.session_state.pop("_regenerate_pool_size", None)
+        if not _regen_flag.exists():
+            return False
+        try:
+            _regen_flag.unlink()  # Consum flag-ul
+        except Exception:
+            pass
+        ensure_worker_running()
+        reset_sidebar_settings()
+        st.session_state["queue_submit_requested"] = True
+        st.toast(
+            "✅ FULL Re-Bench TERMINAT! Lansez generarea cu cache-ul PROASPĂT.",
+            icon="🎉",
+        )
+        logging.info(
+            "[AUTO-PILOT] Bench terminat → auto-trigger generation cu cache PROASPĂT (din .regenerate_after_bench)."
+        )
+        return True
 
     _bench_start_ts = None  # Timestamp lansare (citit din .bench_pid)
     if _bench_pid_file.exists():
@@ -1419,19 +1438,22 @@ with st.sidebar:
         except Exception:
             _bench_pid_file.unlink(missing_ok=True)
 
-    # === AUTO-TRIGGER post-bench și când .bench_pid lipsește deja ===
-    # Caz: userul a forțat rebench → bench-ul a terminat și a șters singur .bench_pid
-    # (sau previous polling l-a șters) ÎNAINTE ca polling-ul curent să-l vadă.
-    # Trebuie să detectăm asta și să declanșăm generation oricum. Flag-ul
-    # _regenerate_after_bench rămâne în session_state până e consumat.
+    # === AUTO-TRIGGER post-bench când fișierul flag există ===
+    # Caz: userul a forțat rebench → bench-ul a terminat → fișierul
+    # .regenerate_after_bench rămâne pe disk. Polling-ul verifică acum
+    # FIȘIERUL (nu session_state, care e șters la page reload).
+    # Asta funcționează indiferent de starea Streamlit / page reload.
+    from pathlib import Path as _Pp_check
     if not _bench_active and not _bench_pid_file.exists():
-        if st.session_state.get("_regenerate_after_bench"):
+        if _Pp_check(".regenerate_after_bench").exists():
             _auto_trigger_post_bench()
             st.rerun()  # Force UI update ca să apară progresul job-ului nou
 
     if _bench_active:
         # Mesaj diferit dacă userul a forțat rebench cu intent de auto-regenerate
-        _waiting_for_regen = st.session_state.get("_regenerate_after_bench", False)
+        # Verificăm FIȘIERUL pe disk (nu session_state — care e șters la page reload)
+        from pathlib import Path as _Pp_ui
+        _waiting_for_regen = _Pp_ui(".regenerate_after_bench").exists()
         _suffix = (
             "  \n⏳ **Generarea va porni AUTOMAT cu cache proaspăt când bench-ul termină.**"
             if _waiting_for_regen
