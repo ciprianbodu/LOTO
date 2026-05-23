@@ -2845,16 +2845,30 @@ if "persistent_results" in st.session_state:
                         st.rerun()
 
                 # --- NOU: Distribuție variante integrată în plan ---
-                if "retro_results" in st.session_state and retro_key in st.session_state["retro_results"]:
+                # Re-calculez variant_dist LOCAL aici (în loc să depind de scope-ul de la
+                # linia 2584 — care nu se execută dacă retro_predictions e gol/None).
+                # Fix bug: NameError: 'variant_dist' is not defined când POST-HOC sau
+                # walk-forward returnează listă goală.
+                _retro_for_dist = st.session_state.get("retro_results", {}).get(retro_key, [])
+                if _retro_for_dist:
+                    _local_draw_n = 5 if game_type_id in ["5/40", "joker"] else 6
+                    _local_variant_dist = {i: 0 for i in range(_local_draw_n + 1)}
+                    for _p in _retro_for_dist:
+                        _h = _p.hits
+                        if _h in _local_variant_dist:
+                            _local_variant_dist[_h] += 1
+                        elif _h > _local_draw_n:
+                            _local_variant_dist[_h] = _local_variant_dist.get(_h, 0) + 1
+
                     st.markdown("<div style='margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;'>", unsafe_allow_html=True)
                     st.markdown("<div style='font-size: 0.85em; font-weight: bold; color: #17a2b8; margin-bottom: 8px;'>📊 Distribuție Performanță Variante (Bilete):</div>", unsafe_allow_html=True)
-                    
+
                     # Calculăm total_evaluations pentru procente corecte (variante x extrageri)
-                    total_evals = len(retro_predictions)
-                    for h_count in sorted(variant_dist.keys(), reverse=True):
-                        count = variant_dist[h_count]
-                        if count == 0 and h_count > 3: continue 
-                        
+                    total_evals = len(_retro_for_dist)
+                    for h_count in sorted(_local_variant_dist.keys(), reverse=True):
+                        count = _local_variant_dist[h_count]
+                        if count == 0 and h_count > 3: continue
+
                         pct = (count / total_evals) * 100 if total_evals > 0 else 0
                         bar_color = "#28a745" if h_count >= 3 else ("#17a2b8" if h_count >= 1 else "#444")
                         
