@@ -292,16 +292,35 @@ try:
     import torch  # noqa: F401
     from neuralforecast import NeuralForecast
     from neuralforecast.models import (
+        # Existing (10 models)
         NBEATS, NHITS, TiDE, DLinear, PatchTST,
         Informer, Autoformer, FEDformer, DeepAR, TCN,
+        # NEW DL univariate (12 models, h=1 compatible with defaults)
+        BiTCN, DeepNPTS, DilatedRNN, GRU, KAN, LSTM,
+        MLP, NLinear, RNN, TFT, TimesNet, VanillaTransformer,
+        # NEW DL multivariate (6 models, require n_series=max_num)
+        RMoK, SOFTS, TSMixer, TimeMixer, TimeXer, iTransformer,
+        # NEW DL with special config (1 model — needs identity stacks for h=1)
+        NBEATSx,
     )
     _NF_AVAILABLE = True
 except Exception as _e:
     _NF_ERR = f"{type(_e).__name__}: {_e}"
 
 
-def _make_nf_score(model_cls, name: str, max_steps: int = 200, extra_kwargs: Optional[dict] = None) -> Callable:
-    """Factory for a NeuralForecast-based scorer."""
+def _make_nf_score(
+    model_cls,
+    name: str,
+    max_steps: int = 200,
+    extra_kwargs: Optional[dict] = None,
+    multivariate: bool = False,
+) -> Callable:
+    """Factory for a NeuralForecast-based scorer.
+
+    multivariate=True: adds n_series=max_num at call-time (modelele
+    multivariate procesează toate seriile simultan cu corelații cross-series:
+    RMoK, SOFTS, TSMixer, TimeMixer, TimeXer, iTransformer).
+    """
 
     def _score(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
         if not _NF_AVAILABLE:
@@ -335,6 +354,9 @@ def _make_nf_score(model_cls, name: str, max_steps: int = 200, extra_kwargs: Opt
                 enable_progress_bar=False,
                 random_seed=42,
             )
+            if multivariate:
+                # n_series e numărul de serii corelate (max_num pentru loto)
+                kwargs["n_series"] = max_num
             if extra_kwargs:
                 kwargs.update(extra_kwargs)
 
@@ -370,6 +392,7 @@ def _make_nf_score(model_cls, name: str, max_steps: int = 200, extra_kwargs: Opt
 # 100 steps converges well for next-step binary forecasting and keeps the
 # 16-method × 4-game × 10-pct sweep under ~90 min on RTX 5060 Ti.
 if _NF_AVAILABLE:
+    # === EXISTING (10 models, calibrated) ===
     # N-BEATS default stacks (trend, seasonality) require horizon >= 2 because
     # they fit polynomial/Fourier bases per stack. We use all-identity stacks
     # which work with h=1 and still capture the residual signal we need.
@@ -386,12 +409,54 @@ if _NF_AVAILABLE:
     score_fedformer = _make_nf_score(FEDformer, "fedformer", max_steps=80)
     score_deepar = _make_nf_score(DeepAR, "deepar", max_steps=80)
     score_tcn = _make_nf_score(TCN, "tcn", max_steps=80)
+
+    # === NEW DL — Univariate (12 models, h=1 compatible) ===
+    # max_steps mai mici pentru modelele recurente (RNN/LSTM/GRU/DilatedRNN)
+    # ca să nu explodăm timpul de bench. Pentru transformere și mixere folosim
+    # 80 (echivalent cu existing transformer-ele).
+    score_bitcn = _make_nf_score(BiTCN, "bitcn", max_steps=80)
+    score_deepnpts = _make_nf_score(DeepNPTS, "deepnpts", max_steps=80)
+    score_dilatedrnn = _make_nf_score(DilatedRNN, "dilatedrnn", max_steps=60)
+    score_gru = _make_nf_score(GRU, "gru", max_steps=60)
+    score_kan = _make_nf_score(KAN, "kan", max_steps=100)
+    score_lstm = _make_nf_score(LSTM, "lstm", max_steps=60)
+    score_mlp = _make_nf_score(MLP, "mlp", max_steps=100)
+    score_nlinear = _make_nf_score(NLinear, "nlinear", max_steps=100)
+    score_rnn = _make_nf_score(RNN, "rnn", max_steps=60)
+    score_tft = _make_nf_score(TFT, "tft", max_steps=80)
+    score_timesnet = _make_nf_score(TimesNet, "timesnet", max_steps=80)
+    score_vanilla_transformer = _make_nf_score(VanillaTransformer, "vanilla_transformer", max_steps=80)
+
+    # === NEW DL — Multivariate (6 models, need n_series) ===
+    score_rmok = _make_nf_score(RMoK, "rmok", max_steps=80, multivariate=True)
+    score_softs = _make_nf_score(SOFTS, "softs", max_steps=80, multivariate=True)
+    score_tsmixer = _make_nf_score(TSMixer, "tsmixer", max_steps=100, multivariate=True)
+    score_timemixer = _make_nf_score(TimeMixer, "timemixer", max_steps=80, multivariate=True)
+    score_timexer = _make_nf_score(TimeXer, "timexer", max_steps=80, multivariate=True)
+    score_itransformer = _make_nf_score(iTransformer, "itransformer", max_steps=80, multivariate=True)
+
+    # === NEW DL — Special config (1 model) ===
+    # NBEATSx same constraint as NBEATS: identity stacks for h=1
+    score_nbeatsx = _make_nf_score(
+        NBEATSx, "nbeatsx", max_steps=100,
+        extra_kwargs={"stack_types": ["identity", "identity"]},
+    )
 else:
     def _unavailable_nf(draws_2d, max_num):
         return {}
+    # Existing
     score_nbeats = score_nhits = score_tide = score_dlinear = _unavailable_nf
     score_patchtst = score_informer = score_autoformer = _unavailable_nf
     score_fedformer = score_deepar = score_tcn = _unavailable_nf
+    # New DL univariate
+    score_bitcn = score_deepnpts = score_dilatedrnn = score_gru = _unavailable_nf
+    score_kan = score_lstm = score_mlp = score_nlinear = _unavailable_nf
+    score_rnn = score_tft = score_timesnet = score_vanilla_transformer = _unavailable_nf
+    # New DL multivariate
+    score_rmok = score_softs = score_tsmixer = score_timemixer = _unavailable_nf
+    score_timexer = score_itransformer = _unavailable_nf
+    # Special config
+    score_nbeatsx = _unavailable_nf
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +478,8 @@ score_tinytimemixer = _unavailable_factory("IBM TinyTimeMixer not installed (gra
 score_units = _unavailable_factory("UniTS (Harvard/MIT) not installed")
 score_timer = _unavailable_factory("Timer (THUML) not installed")
 score_mamba = _unavailable_factory("mamba_ssm not installed; S-Mamba/TimeMachine require CUDA mamba kernel")
+score_xlstm = _unavailable_factory("xLSTM package not installed (`pip install xlstm mlstm_kernels`)")
+score_time_llm = _unavailable_factory("TimeLLM requires LLM backbone (llama/qwen) — heavy dependency, deferred")
 
 
 # ---------------------------------------------------------------------------
@@ -448,8 +515,35 @@ METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
     # NeuralForecast — Recurrent / Conv
     "deepar":      (score_deepar,      "nf-recurrent",    True,  "DeepAR (probabilistic RNN)"),
     "tcn":         (score_tcn,         "nf-conv",         True,  "Temporal Convolutional Network"),
-    # State Space
+    # === NEW DL (univariate, 12 models) ===
+    # Convolutional / Recurrent / Mixer DL family
+    "bitcn":       (score_bitcn,       "nf-conv",         True,  "Bidirectional TCN (forward+backward causality)"),
+    "deepnpts":    (score_deepnpts,    "nf-recurrent",    True,  "Deep Non-Parametric Time Series"),
+    "dilatedrnn":  (score_dilatedrnn,  "nf-recurrent",    True,  "Dilated RNN (multi-scale temporal)"),
+    "gru":         (score_gru,         "nf-recurrent",    True,  "Gated Recurrent Unit (lighter LSTM)"),
+    "lstm":        (score_lstm,        "nf-recurrent",    True,  "Long Short-Term Memory"),
+    "rnn":         (score_rnn,         "nf-recurrent",    True,  "Vanilla RNN (baseline DL)"),
+    # MLP / linear DL family
+    "mlp":         (score_mlp,         "nf-mlp",          True,  "Simple MLP baseline DL"),
+    "nlinear":     (score_nlinear,     "nf-mlp",          True,  "NLinear (normalized DLinear variant)"),
+    "nbeatsx":     (score_nbeatsx,     "nf-mlp",          True,  "N-BEATSx (extended N-BEATS w/ exog)"),
+    "kan":         (score_kan,         "nf-mlp",          True,  "Kolmogorov-Arnold Network (NEW 2024)"),
+    # Transformer DL family
+    "tft":         (score_tft,         "nf-transformer",  True,  "Temporal Fusion Transformer (Google, industry std)"),
+    "vanilla_transformer": (score_vanilla_transformer, "nf-transformer", True, "Vanilla Transformer (baseline DL)"),
+    "timesnet":    (score_timesnet,    "nf-conv",         True,  "TimesNet (multi-scale TCN, SoTA 2023)"),
+    # === NEW DL (multivariate, 6 models — n_series cross-correlation) ===
+    "rmok":        (score_rmok,        "nf-mlp-multi",    True,  "Recurrent Mixture of KAN (multivariate)"),
+    "softs":       (score_softs,       "nf-mlp-multi",    True,  "Series-cOre Fused Time Series (multivariate)"),
+    "tsmixer":     (score_tsmixer,     "nf-mlp-multi",    True,  "Google TSMixer (MLP-Mixer for TS, multivariate)"),
+    "timemixer":   (score_timemixer,   "nf-mlp-multi",    True,  "TimeMixer (multivariate decomposition)"),
+    "timexer":     (score_timexer,     "nf-transformer-multi", True, "TimeXer (cross-attention multivariate)"),
+    "itransformer": (score_itransformer, "nf-transformer-multi", True, "iTransformer (Inverted Transformer 2024)"),
+    # State Space (unavailable)
     "mamba":       (score_mamba,       "ssm",             True,  "S-Mamba / TimeMachine (UNAVAILABLE)"),
+    "xlstm":       (score_xlstm,       "ssm",             True,  "xLSTM Extended LSTM 2024 (UNAVAILABLE — needs pip xlstm)"),
+    # LLM-based (unavailable)
+    "time_llm":    (score_time_llm,    "llm-ts",          True,  "TimeLLM (UNAVAILABLE — needs LLM backbone)"),
 }
 
 
