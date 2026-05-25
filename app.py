@@ -197,7 +197,7 @@ def generate_hard_core_description(
     
     # Construire descriere
     desc_parts = []
-    
+
     # Pool size (efectiv vs cerut în UI)
     desc_parts.append(f"Pool: <strong>{pool_size}</strong> numere (efectiv)")
     if pool_size_requested is not None and int(pool_size_requested) != int(pool_size):
@@ -206,6 +206,26 @@ def generate_hard_core_description(
             f"dar nucleul efectiv are <strong>{pool_size}</strong> numere "
             f"(verifică log-ul sau etapele pipeline).</small>"
         )
+
+    # === Hit Forecast Recommendation — matematic + transparent ===
+    # Citim audit.hit_forecast (calculat de engine la finalul pipeline) și
+    # afișăm recomandarea pentru pool size optim dacă userul vrea 4+ stabil.
+    _hf = audit.get("hit_forecast", {})
+    if _hf:
+        _rec = _hf.get("recommendations", {})
+        _baseline = _hf.get("random_baseline", {})
+        _e4 = _baseline.get("E(4+)/n", 0)
+        _e5 = _baseline.get("E(5+)/n", 0)
+        _n_draws = _hf.get("n_draws", 100)
+        _rec_4 = _rec.get("pool_for_3_events_4+")
+        _rec_5 = _rec.get("pool_for_3_events_5+")
+        if _rec_4 and int(_rec_4) > int(pool_size):
+            desc_parts.append(
+                f"<small style='color:#17a2b8;'>🎯 <strong>Matematic:</strong> pe pool={pool_size}, "
+                f"E({_n_draws} extrageri)=<strong>{_e4:.1f}</strong> evenimente 4+ random. "
+                f"Pentru ≥3 evenimente 4+ stabile, mărește pool la <strong>{_rec_4}</strong>. "
+                f"Pentru ≥3 evenimente 5+, pool ≥<strong>{_rec_5 or 'N/A'}</strong>.</small>"
+            )
     
     # Lookback
     if lookback_pct > 0:

@@ -166,6 +166,64 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     return wheel, coverage_pct
 
 
+def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws: int = 127) -> dict:
+    """
+    Calculează probabilitatea teoretică P(k+ hits) pentru un pool RANDOM și
+    recomandă pool-ul minim necesar pentru a vedea ≥3 evenimente 4+ și 5+
+    pe `n_draws` extrageri.
+
+    Asta e baseline-ul matematic ABSOLUT — orice engine trebuie să bată
+    cel puțin aceste valori pe 3+ ca să fie util. Pe 4+ și 5+ pe pool=10
+    evenimentele așteptate sunt deja <2/127, deci varianța observațională
+    e enormă (un engine bun poate părea "blocat la 0%" doar prin noroc rău).
+
+    Folosit de UI pentru a recomanda automat pool-uri mai mari când userul
+    vrea 4+ hits stabile statistic.
+
+    Returns dict cu:
+        - random_baseline.P(k+)% per k=1..draw_n
+        - random_baseline.E(k+)/n (evenimente așteptate)
+        - recommendations.pool_for_3_events_4+ (minim pool pentru ≥3 evt 4+)
+        - recommendations.pool_for_3_events_5+ (minim pool pentru ≥3 evt 5+)
+    """
+    try:
+        from math import comb
+    except ImportError:
+        return {}
+    if pool_size > max_n or draw_n > max_n or draw_n <= 0:
+        return {}
+    total_combos = comb(max_n, draw_n)
+    if total_combos == 0:
+        return {}
+
+    def p_exactly_k(k, pool):
+        if k < 0 or k > draw_n or k > pool:
+            return 0.0
+        return comb(pool, k) * comb(max_n - pool, draw_n - k) / total_combos
+
+    forecast: dict = {"pool_size": pool_size, "n_draws": n_draws, "random_baseline": {}}
+    for k in range(1, draw_n + 1):
+        p_geq_k = sum(p_exactly_k(j, pool_size) for j in range(k, draw_n + 1))
+        forecast["random_baseline"][f"P({k}+)%"] = round(p_geq_k * 100, 4)
+        forecast["random_baseline"][f"E({k}+)/n"] = round(p_geq_k * n_draws, 2)
+
+    target_events = 3
+    recommendations: dict = {}
+    for target_k in (4, 5):
+        rec_pool = None
+        for trial_pool in range(pool_size, min(max_n, pool_size + 20) + 1):
+            p_k = sum(
+                comb(trial_pool, j) * comb(max_n - trial_pool, draw_n - j) / total_combos
+                for j in range(target_k, draw_n + 1)
+            )
+            if p_k * n_draws >= target_events:
+                rec_pool = trial_pool
+                break
+        recommendations[f"pool_for_3_events_{target_k}+"] = rec_pool
+    forecast["recommendations"] = recommendations
+    return forecast
+
+
 class LotoEngine:
     # Routes _get_timesfm_scores through loto_enterprise.core.method_selector
     # — uses the model that WON the benchmark for this game/pool instead of
@@ -779,6 +837,24 @@ class LotoEngine:
                 }
             except Exception as e:
                 logging.error(f"[ADAPTIVE] Eroare la persistarea pool-ului: {e}")
+
+        # === Hit Forecast Diagnostic — baseline matematic + recomandare pool size ===
+        # Reaplicat din PR #2 (a fost pierdut la wipe-ul main din 2026-05-22).
+        # Calculează P(k+ hits) pentru pool RANDOM și recomandă pool minim
+        # pentru ≥3 evenimente 4+ și 5+. UI-ul citește audit.hit_forecast
+        # și afișează banner "pentru 4+ stabil, mărește pool la N".
+        try:
+            n_recent_for_forecast = max(int(len(self.data) * 0.05), 1) if self.data is not None else 100
+            forecast = hypergeometric_hit_forecast(
+                pool_size=len(self.hard_core) if self.hard_core else int(pool_size),
+                draw_n=int(self.params["draw_n"]),
+                max_n=int(self.params["max_n"]),
+                n_draws=max(n_recent_for_forecast, 100),
+            )
+            if forecast:
+                self.audit["hit_forecast"] = forecast
+        except Exception as _exc_fc:
+            logging.debug(f"[PIPELINE] hit_forecast a eșuat: {_exc_fc}")
 
         logging.info("[PIPELINE] Pipeline completat cu succes.")
         return lines, p10, p90, g_range, context, self.audit
