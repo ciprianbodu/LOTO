@@ -587,12 +587,30 @@ class LotoEngine:
         self.audit["effective_rows_used"] = total_draws
         self.audit["lookback_pct"] = lookback
             
+        # Calibrare bară progres: TimesFM e cea mai lungă etapă (~3-15s pe GPU,
+        # 15-30s pe CPU). Înainte: salt 15→45% cu 14s tăcere — UI părea blocat.
+        # Acum: callback per fereastră de ensemble → progres aproape continuu.
         if progress_cb:
-            progress_cb(f"TimesFM v2: forecast + XReg covariates + anomaly (ctx={actual_lookback})...", 40)
-        
+            progress_cb(f"TimesFM v2: forecast neural (ctx={actual_lookback}, ~3-15s)...", 15)
+
+            def _tfm_window_progress(done, total, current_ctx):
+                # Map [done/total] în intervalul [15, 45] = 30 puncte
+                pct = 15 + int((done / max(total, 1)) * 30)
+                progress_cb(f"TimesFM v2: fereastră {done}/{total} (ctx={current_ctx})", pct)
+
+            self._tfm_window_cb = _tfm_window_progress
+        else:
+            self._tfm_window_cb = None
+
         start_gpu = time.perf_counter()
-        tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+        try:
+            tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+        finally:
+            self._tfm_window_cb = None  # Cleanup ca să nu polueze apeluri viitoare
         gpu_time = (time.perf_counter() - start_gpu) * 1000
+
+        if progress_cb:
+            progress_cb(f"TimesFM v2 complet ({gpu_time/1000:.1f}s). Procesez feedback adaptive...", 45)
         
         if 'performance' not in self.audit:
             self.audit['performance'] = {}
@@ -615,8 +633,23 @@ class LotoEngine:
         blacklist = set()
         self.audit["sim_depth_pct"] = sim_depth_pct
         if smart_reduction:
+            if progress_cb:
+                progress_cb(f"Analiză regresivă multi-pass (depth={sim_depth_pct}%, ~3-10s)...", 50)
+
+                def _regressive_step_progress(done, total, step_pct):
+                    # Map [done/total] în intervalul [50, 65] = 15 puncte
+                    pct = 50 + int((done / max(total, 1)) * 15)
+                    progress_cb(f"Regresiv: pas {done}/{total} (fereastră {step_pct}%)", pct)
+
+                self._regressive_step_cb = _regressive_step_progress
+            else:
+                self._regressive_step_cb = None
+
             logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală (depth: {sim_depth_pct}%)...")
-            blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
+            try:
+                blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
+            finally:
+                self._regressive_step_cb = None
             # Modelul efectiv folosit pentru blacklist (poate fi diferit de scorerul principal
             # dacă bench dezactivează blacklist-ul pentru acest pool)
             bl_audit = self.audit.get("blacklist", {})
@@ -1682,6 +1715,7 @@ class LotoEngine:
                 context_len=context_len,
                 audit=self.audit,
                 regime_mode=getattr(self, "_adaptive_mode", "normal"),
+                window_progress_cb=getattr(self, "_tfm_window_cb", None),
             )
         # Fallback la implementarea veche dacă modulul v2 nu e disponibil
         return self._get_timesfm_scores_legacy(is_joker_drum, context_len)
@@ -1904,6 +1938,7 @@ class LotoEngine:
                 sim_depth_pct=sim_depth_pct,
                 rebuild_matrix_fn=self._build_draw_matrix,
                 audit=self.audit,
+                step_progress_cb=getattr(self, "_regressive_step_cb", None),
             )
         # Fallback legacy
         if not HAS_TIMESFM: return set()
