@@ -97,6 +97,28 @@
         "hash": "f13a89577cbf6d2e",
         "rows": 2153
       }
+    },
+    "pool_recommendation_6_49": {
+      "source": "pool_sweep_advanced 2026-05-25, walk-forward N=50",
+      "optimal_for_4plus": {
+        "pool": 20,
+        "scorer": "autoformer",
+        "rate": "28%",
+        "expected_per_50_draws": 14
+      },
+      "optimal_for_5plus": {
+        "pool": 20,
+        "scorer": "autoformer",
+        "rate": "4%",
+        "expected_per_50_draws": 2
+      },
+      "optimal_for_avg": {
+        "pool": 20,
+        "scorer": "autoformer",
+        "avg": 2.64
+      },
+      "cost_warning": "pool=20 wheel garanție 4 = C(20,4) = 4845 targets → ~400-600 bilete",
+      "reduced_wheel_alternative": "pool=20 cu Cod 50 oficial = 30 var. = ~240 lei"
     }
   },
   "games": {
@@ -1467,6 +1489,37 @@
           "avg_hits_with_blacklist": 1.5196078431372548,
           "rationale": "dlinear beat random in 6/10 windows (weighted lift = +0.0062); selected from 4 qualifying methods",
           "qualifying_methods": 4,
+          "consistency_threshold": 0.6
+        },
+        "k15": {
+          "scorer": "kan",
+          "sim_depth_pct": 50,
+          "use_blacklist": false,
+          "avg_hits": 1.86,
+          "p4_pct": 6.0,
+          "rationale": "kan (Kolmogorov-Arnold 2024) best at pool=15: avg=1.86, 4+%=6.0% (3 evt/50), max=4. Beats autoformer 1.72 marginal. From pool_sweep_advanced 2026-05-25.",
+          "qualifying_methods": 3,
+          "consistency_threshold": 0.6
+        },
+        "k18": {
+          "scorer": "autoformer",
+          "sim_depth_pct": 50,
+          "use_blacklist": false,
+          "avg_hits": 2.22,
+          "p4_pct": 16.0,
+          "rationale": "autoformer best at pool=18: avg=2.22, 4+%=16% (8 evt/50), max=5, 5+%=2%. From pool_sweep_advanced 2026-05-25.",
+          "qualifying_methods": 3,
+          "consistency_threshold": 0.6
+        },
+        "k20": {
+          "scorer": "autoformer",
+          "sim_depth_pct": 50,
+          "use_blacklist": false,
+          "avg_hits": 2.64,
+          "p4_pct": 28.0,
+          "p5_pct": 4.0,
+          "rationale": "autoformer WINNER pe pool=20: avg=2.64, **4+%=28%** (14 evt/50!), 5+%=4%, **max=6 (jackpot prins istoric!)**. Best 4+ rate in entire bench. From pool_sweep_advanced 2026-05-25.",
+          "qualifying_methods": 3,
           "consistency_threshold": 0.6
         }
       }
