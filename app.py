@@ -1570,13 +1570,29 @@ with st.sidebar:
         _folds_df = load_folds()
         if _folds_df is not None and not _folds_df.empty:
             with st.expander(
-                f"🔬 Matrice Walk-Forward Onestă (joc × fereastră × model) — pool K={_pool_now}",
+                f"🔬 Matrice Walk-Forward Onestă (joc × fereastră × model) — pool K curent + sweep K=12..20",
                 expanded=False,
             ):
                 st.caption(
-                    "📊 Performanța tuturor modelelor testate pe ferestre regresive 10-100% (din bench, fără data leak). "
-                    "Celulele = avg hits per extragere pentru pool K curent. Verde = peste random baseline."
+                    "📊 Performanța modelelor pe ferestre regresive 10-100% (din bench, fără data leak). "
+                    "Celulele = avg hits per extragere. Verde = peste random baseline."
                 )
+
+                # Selector pool size: user poate vedea matricea pentru pool curent SAU
+                # pentru orice K disponibil în bench (10/12/15/18/20)
+                _available_pools = sorted(_folds_df["pool_size"].unique().tolist()) if "pool_size" in _folds_df.columns else [_pool_now]
+                _default_pools = [_pool_now]
+                # Adăugăm și 15/18/20 dacă nu sunt deja
+                for _ps_extra in [15, 18, 20]:
+                    if _ps_extra in _available_pools and _ps_extra not in _default_pools:
+                        _default_pools.append(_ps_extra)
+                _selected_pools = st.multiselect(
+                    "Pool sizes de afișat (multi-selectie):",
+                    options=_available_pools,
+                    default=_default_pools,
+                    help="Implicit afișăm pool-ul curent + 15/18/20 (descoperit empiric: pool=20 + autoformer = 28% rate 4+ hits)",
+                )
+
                 _gk_map_matrix = {
                     "Loto 6/49": "loto_6_49",
                     "Loto 5/40": "loto_5_40",
@@ -1584,30 +1600,32 @@ with st.sidebar:
                     "Joker Urna 2 (K=1)": "joker_urna2",
                 }
                 import pandas as _pd
-                for _label, _gk in _gk_map_matrix.items():
-                    _ps_m = 1 if _gk == "joker_urna2" else _pool_now
-                    _summary = summary_per_game(_folds_df, _gk, _ps_m)
-                    if not _summary.get("available"):
-                        st.markdown(f"**{_label}** — date indisponibile pentru K={_ps_m}")
-                        continue
-                    st.markdown(
-                        f"**{_label}** (K={_ps_m}) — top model: "
-                        f"`{_summary['best_method']}` cu avg={_summary['best_mean']:.3f}"
-                    )
-                    _matrix = _summary["matrix"]
-                    # Format coloane percentile cu sufix %
-                    _matrix_disp = _matrix.copy()
-                    _matrix_disp.columns = [f"{c}%" for c in _matrix_disp.columns]
-                    # Adaugam coloana "Mean" (media pe ferestre)
-                    _matrix_disp.insert(0, "Mean", _matrix.mean(axis=1).round(3))
-                    # Style: highlight cea mai bună metodă (top row, deja sortat)
-                    st.dataframe(
-                        _matrix_disp.round(3).style.background_gradient(
-                            cmap="RdYlGn", axis=None,
-                            vmin=_matrix.values.min(), vmax=_matrix.values.max(),
-                        ),
-                        use_container_width=True,
-                    )
+                for _ps_iter in _selected_pools:
+                    if _ps_iter != _selected_pools[0]:
+                        st.markdown("---")
+                    st.markdown(f"### 🎯 Pool K = {_ps_iter}")
+                    for _label, _gk in _gk_map_matrix.items():
+                        # Pentru Joker Urna 2, pool e mereu 1 (single-pick)
+                        _ps_m = 1 if _gk == "joker_urna2" else _ps_iter
+                        _summary = summary_per_game(_folds_df, _gk, _ps_m)
+                        if not _summary.get("available"):
+                            st.markdown(f"**{_label}** — date indisponibile pentru K={_ps_m}")
+                            continue
+                        st.markdown(
+                            f"**{_label}** (K={_ps_m}) — top model: "
+                            f"`{_summary['best_method']}` cu avg={_summary['best_mean']:.3f}"
+                        )
+                        _matrix = _summary["matrix"]
+                        _matrix_disp = _matrix.copy()
+                        _matrix_disp.columns = [f"{c}%" for c in _matrix_disp.columns]
+                        _matrix_disp.insert(0, "Mean", _matrix.mean(axis=1).round(3))
+                        st.dataframe(
+                            _matrix_disp.round(3).style.background_gradient(
+                                cmap="RdYlGn", axis=None,
+                                vmin=_matrix.values.min(), vmax=_matrix.values.max(),
+                            ),
+                            use_container_width=True,
+                        )
         else:
             st.caption(
                 "🔬 Matrice Walk-Forward indisponibilă — rulează benchmark-ul "
