@@ -1453,37 +1453,44 @@ class LotoEngine:
         return count / (end_idx - start_idx) if end_idx > start_idx else 0.0
     
     def _replace_with_smart_alternatives(self, excluded_numbers: list, kept_numbers: list, freq: np.ndarray) -> None:
-        """Înlocuiește numerele excluse cu cele mai bune alternative bazate pe Smart Selector"""
+        """Înlocuiește numerele excluse cu cele mai bune alternative bazate pe Smart Selector v2.
+
+        FIX (reapplied from PR #2):
+        - Weights aligned cu _apply_smart_selector v2 (30/15/15/10/30, inclusiv
+          Recent-Hits) — înainte foloseam vechi 40/25/20/15 fără Recent-Hits,
+          ceea ce însemna că numerele înlocuite erau scorate cu reguli diferite
+          decât cele păstrate. Pool-ul final amesteca două criterii.
+        - try/finally garantează restaurarea self.hard_core la excepție —
+          înainte, dacă apărea exception în vreun calculator, hard_core rămânea
+          setat la lista de candidați (corupere de stare).
+        """
         all_numbers = set(range(1, self.params["max_n"] + 1))
         current_pool = set(kept_numbers)
         available_numbers = all_numbers - current_pool
-        
-        # Calculăm scoruri pentru toate numerele disponibile
-        alternative_scores = {}
-        
-        # Extindem calculul de scoruri pentru toate numerele disponibile
+
+        alternative_scores: dict = {}
         temp_hard_core = list(available_numbers)
         original_hard_core = self.hard_core.copy()
-        
-        self.hard_core = temp_hard_core
-        
-        # Recalculăm scorurile pentru alternative
-        gap_scores = self._calculate_gap_scores()
-        trend_scores = self._calculate_trend_scores()
-        frequency_scores = self._calculate_frequency_scores(freq)
-        positional_scores = self._calculate_positional_scores()
-        
-        for num in available_numbers:
-            final_score = (
-                gap_scores.get(num, 0) * 0.40 +
-                trend_scores.get(num, 0) * 0.25 +
-                frequency_scores.get(num, 0) * 0.20 +
-                positional_scores.get(num, 0) * 0.15
-            )
-            alternative_scores[num] = final_score
-        
-        # Restaurăm nucleul original
-        self.hard_core = original_hard_core
+        try:
+            self.hard_core = temp_hard_core
+
+            gap_scores = self._calculate_gap_scores()
+            trend_scores = self._calculate_trend_scores()
+            frequency_scores = self._calculate_frequency_scores(freq)
+            positional_scores = self._calculate_positional_scores()
+            recent_hit_scores = self._calculate_recent_hit_scores()
+
+            # Aceleași weights ca _apply_smart_selector v2
+            for num in available_numbers:
+                alternative_scores[num] = (
+                    gap_scores.get(num, 0) * 0.30 +
+                    trend_scores.get(num, 0) * 0.15 +
+                    frequency_scores.get(num, 0) * 0.15 +
+                    positional_scores.get(num, 0) * 0.10 +
+                    recent_hit_scores.get(num, 0) * 0.30
+                )
+        finally:
+            self.hard_core = original_hard_core
         
         # Sortăm alternative după scor
         sorted_alternatives = sorted(alternative_scores.items(), key=lambda x: x[1], reverse=True)
