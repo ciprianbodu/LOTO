@@ -98,7 +98,7 @@ def discover_games(istoric_dir: Optional[str] = None) -> List[GameDef]:
                 games.append(GameDef(
                     key=key, label="Loto 6/49", csv_path=str(p),
                     cols=["n1", "n2", "n3", "n4", "n5", "n6"],
-                    max_num=49, draw_n=6, pool_extra=6,
+                    max_num=49, draw_n=6, pool_extra=14,  # K=6..20 (extins 2026-05-25)
                 ))
                 seen_keys.add(key)
             elif "5_40" in name or "540" in name:
@@ -108,7 +108,7 @@ def discover_games(istoric_dir: Optional[str] = None) -> List[GameDef]:
                 games.append(GameDef(
                     key=key, label="Loto 5/40", csv_path=str(p),
                     cols=["n1", "n2", "n3", "n4", "n5"],
-                    max_num=40, draw_n=5, pool_extra=6,
+                    max_num=40, draw_n=5, pool_extra=14,  # K=5..19 (extins 2026-05-25)
                 ))
                 seen_keys.add(key)
             elif "joker" in name:
@@ -117,7 +117,7 @@ def discover_games(istoric_dir: Optional[str] = None) -> List[GameDef]:
                         key="joker_urna1", label="Joker — Urna 1 (5/45)",
                         csv_path=str(p),
                         cols=["n1", "n2", "n3", "n4", "n5"],
-                        max_num=45, draw_n=5, pool_extra=6,
+                        max_num=45, draw_n=5, pool_extra=14,  # K=5..19 (extins 2026-05-25)
                     ))
                     seen_keys.add("joker_urna1")
                 if "joker_urna2" not in seen_keys:
