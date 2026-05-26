@@ -1339,7 +1339,34 @@ with st.sidebar:
         use_container_width=True,
         disabled=_ap_disabled,
     ):
+        st.session_state["_pure_bench_mode_requested"] = False
         _run_autopilot(force_full_rebench=False)
+
+    # Buton 1b: 🎯 Auto-Pilot PURE — DOAR bench winner + Top N + Wheel
+    # User request: "flow minimal — încredere completă în scorerul câștigător,
+    # fără Smart Selector / POST-HOC / Anti-Sequence care pot adăuga noise"
+    if st.button(
+        "🎯 Auto-Pilot Pure (DOAR bench winner + Top N + Wheel, fără rafinări)" + _ap_disabled_reason,
+        type="secondary",
+        help=(
+            "FLOW MINIMAL: scoring bench-winner → top N după NQI (cu diversificare "
+            "empirică decade/parity) → wheeling combinatorial. STOP.\n\n"
+            "Skip:\n"
+            "  • Smart Selector (5-factor heuristic)\n"
+            "  • POST-HOC walk-forward refinement (poate overfit pe ultimele 50)\n"
+            "  • Anti-Sequence filter\n"
+            "  • Neural Anomaly Scoring\n\n"
+            "Idea: bench-winner-ul deja e validat pe 1280 folds × 10 ferestre "
+            "regresive. Rafinările pot REDUCE performanța prin introducere noise. "
+            "Pure mode = încredere completă în matrice bench."
+        ),
+        use_container_width=True,
+        disabled=_ap_disabled,
+    ):
+        st.session_state["_pure_bench_mode_requested"] = True
+        _run_autopilot(force_full_rebench=False)
+        # Reset flag DUPĂ execuție ca să nu polueze rulări viitoare normale
+        st.session_state["_pure_bench_mode_requested"] = False
 
     # Buton 2: FORȚEAZĂ FULL Re-Bench (separat, vizibil distinct)
     _bench_running = Path(".bench_pid").exists()
@@ -1957,15 +1984,20 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
             if "calib_best_depth_dict" in st.session_state and g_label in st.session_state["calib_best_depth_dict"]:
                 game_sim_depth = st.session_state["calib_best_depth_dict"][g_label]
                 
+            # Pure mode = doar bench winner scoring → top N → wheel.
+            # Skip Smart Selector, POST-HOC, Anti-Sequence, Anomaly filter.
+            # Activat când userul apasă "🎯 Auto-Pilot Pure" în UI.
+            _is_pure = bool(st.session_state.get("_pure_bench_mode_requested", False))
             task_dict = {
                 "game_label": g_label,
                 "pool_size": st.session_state["pool_size_val"],
                 "guarantee": st.session_state["guarantee_val"],
                 "max_variants": st.session_state["max_variants_val"],
                 "lookback": st.session_state["lookback_val"],
-                "filter_consecutives": st.session_state["consecutive_filter_val"],
-                "smart_reduction": True,
+                "filter_consecutives": False if _is_pure else st.session_state["consecutive_filter_val"],
+                "smart_reduction": False if _is_pure else True,
                 "sim_depth_pct": game_sim_depth,
+                "pure_bench_mode": _is_pure,
             }
             
             logging.info(f"[APP] Submitere job pentru {g_label}: {task_dict}")

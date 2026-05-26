@@ -171,6 +171,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             filter_cons = bool(task.get("filter_consecutives", True))
             smart_red = bool(task.get("smart_reduction", True))
             sim_depth = int(task.get("sim_depth_pct", 10))
+            pure_bench = bool(task.get("pure_bench_mode", False))
             logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
             logging.debug(f"[worker] Full task: {task}")
             
@@ -205,6 +206,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     smart_reduction=smart_red,
                     sim_depth_pct=sim_depth,
                     enable_adaptive_persistence=True,
+                    pure_bench_mode=pure_bench,
                 )
 
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size

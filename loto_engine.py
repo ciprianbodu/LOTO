@@ -430,7 +430,7 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
@@ -693,47 +693,63 @@ class LotoEngine:
         self.audit['pipeline_stages'] = {
             "1_nqi_raw": sorted(self.hard_core.copy()),
         }
-        
-        # [NEW] Optimizare suplimentară prin Smart Selector (Gap/Trend/Positional)
-        # Rafinează pool-ul pentru a maximiza hit-urile de 4 și 5 numere.
-        if hasattr(self, '_apply_smart_selector'):
-            logging.info("[PIPELINE] Rafinare nucleu prin Smart Selector (Hybrid Optimization)...")
-            self._apply_smart_selector(freq)
-        self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
 
-        # NOTA: anti-sequence filter NU se mai aplica aici. POST-HOC poate
-        # reintroduce orice secventa, deci e mai eficient sa-l rulam DOAR
-        # la final (linia 656). Snapshot stage 3 pastrat pentru UI continuity.
-        self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
-
-        # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere.
-        # Trunchiere după scor TimesFM (nu după ordinea numerică — altfel pierzi bile tari).
-        if len(self.hard_core) > pool_size:
-            logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor NQI.")
-            ranked = sorted(self.hard_core, key=lambda n: tfm_scores.get(n, 0.0), reverse=True)
-            self.hard_core = sorted(ranked[:pool_size])
-        elif len(self.hard_core) < pool_size:
-            logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
-            self._consecutive_filter_applied = True
-        else:
+        # === PURE BENCH MODE — user request 2026-05-26 ===
+        # Skip Smart Selector + POST-HOC + Anti-Sequence cand pure_bench_mode=True.
+        # Flow minimal: scoring → pool top-N (deja făcut în _get_timesfm_pool cu
+        # diversificare empirică decade/parity) → wheel direct.
+        # Idea: bench-winner-ul DEJA e validat pe 1280 folds × 10 ferestre regresive.
+        # Adăugarea de rafinări (Smart Selector heuristic, POST-HOC overfit pe ultimele
+        # 50 extrageri, Anti-Sequence cu pragul 1%) poate INTRODUCE noise în loc să
+        # îmbunătățească. Pure mode = încredere completă în bench winner.
+        self.audit["pure_bench_mode"] = bool(pure_bench_mode)
+        if pure_bench_mode:
+            logging.info("[PIPELINE] 🎯 PURE BENCH MODE activ — skip Smart Selector + POST-HOC + Anti-Sequence")
+            self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
+            self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
+            self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
             self._consecutive_filter_applied = False
-            
-        logging.info(f"[PIPELINE] Nucleu (Pool) generat prin TimesFM v2 NQI: {self.hard_core}")
-        
-        # POST-HOC VALIDATION: Verificăm pool-ul pe ultimele extrageri
-        # Aceasta e optimizarea principală — un pool validat empiric
-        if self.data is not None and self._draw_matrix is not None:
-            self.hard_core = self._validate_pool_retrospective(
-                self.hard_core, tfm_scores, pool_size, blacklist
-            )
+        else:
+            # [NEW] Optimizare suplimentară prin Smart Selector (Gap/Trend/Positional)
+            # Rafinează pool-ul pentru a maximiza hit-urile de 4 și 5 numere.
+            if hasattr(self, '_apply_smart_selector'):
+                logging.info("[PIPELINE] Rafinare nucleu prin Smart Selector (Hybrid Optimization)...")
+                self._apply_smart_selector(freq)
+            self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
 
-        # Anti-secventa final — UNICUL apel din pipeline. Foloseste
-        # tfm_scores (bench-winner) pentru picking inlocuiri, consistent cu
-        # restul pipeline-ului.
-        if filter_consecutives:
-            logging.info("[PIPELINE] Aplicare Filtru Anti-Secventa pe nucleul final (cu bench-winner scoring)...")
-            self.hard_core = self._apply_consecutive_filter(self.hard_core, freq, scores=tfm_scores)
-        self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
+            # NOTA: anti-sequence filter NU se mai aplica aici. POST-HOC poate
+            # reintroduce orice secventa, deci e mai eficient sa-l rulam DOAR
+            # la final (linia 656). Snapshot stage 3 pastrat pentru UI continuity.
+            self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
+
+            # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere.
+            # Trunchiere după scor TimesFM (nu după ordinea numerică — altfel pierzi bile tari).
+            if len(self.hard_core) > pool_size:
+                logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor NQI.")
+                ranked = sorted(self.hard_core, key=lambda n: tfm_scores.get(n, 0.0), reverse=True)
+                self.hard_core = sorted(ranked[:pool_size])
+            elif len(self.hard_core) < pool_size:
+                logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
+                self._consecutive_filter_applied = True
+            else:
+                self._consecutive_filter_applied = False
+
+            logging.info(f"[PIPELINE] Nucleu (Pool) generat prin TimesFM v2 NQI: {self.hard_core}")
+
+            # POST-HOC VALIDATION: Verificăm pool-ul pe ultimele extrageri
+            # Aceasta e optimizarea principală — un pool validat empiric
+            if self.data is not None and self._draw_matrix is not None:
+                self.hard_core = self._validate_pool_retrospective(
+                    self.hard_core, tfm_scores, pool_size, blacklist
+                )
+
+            # Anti-secventa final — UNICUL apel din pipeline. Foloseste
+            # tfm_scores (bench-winner) pentru picking inlocuiri, consistent cu
+            # restul pipeline-ului.
+            if filter_consecutives:
+                logging.info("[PIPELINE] Aplicare Filtru Anti-Secventa pe nucleul final (cu bench-winner scoring)...")
+                self.hard_core = self._apply_consecutive_filter(self.hard_core, freq, scores=tfm_scores)
+            self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
         
         if self.game_type == "joker":
             logging.info(f"[PIPELINE] TimesFM v2 pentru Urna 2 (Joker)...")
@@ -756,8 +772,8 @@ class LotoEngine:
         wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
-        # Funcția 4: Anomaly Filtering via TimesFM v2
-        if smart_reduction and tfm_scores:
+        # Funcția 4: Anomaly Filtering via TimesFM v2 (skip pe Pure Mode)
+        if smart_reduction and tfm_scores and not pure_bench_mode:
             logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring v2 pe {len(lines)} variante...")
             original_count = len(lines)
             anomaly_threshold = 0.7
@@ -768,6 +784,8 @@ class LotoEngine:
                 'final_count': len(lines),
                 'threshold': anomaly_threshold
             }
+        elif pure_bench_mode:
+            logging.info(f"[PIPELINE] 🎯 PURE MODE: skip Anomaly filter — păstrăm toate {len(lines)} variante")
 
         logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
 
