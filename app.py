@@ -874,6 +874,35 @@ if "persistent_results" in st.session_state:
         else:
             st.success("✅ Generare finalizată.")
 
+# === SHUTDOWN WARNING + ANULARE ===
+# Dacă shutdown a fost lansat la job complete, afișăm warning cu countdown +
+# buton de anulare imediat sub success-ul de finalizare.
+if st.session_state.get("_shutdown_initiated"):
+    _sd_scheduled = float(st.session_state.get("_shutdown_scheduled_at", time.time()))
+    _sd_elapsed = time.time() - _sd_scheduled
+    _sd_remaining = max(0, 60 - int(_sd_elapsed))
+    if _sd_remaining > 0:
+        col_warn, col_cancel = st.columns([3, 1])
+        with col_warn:
+            st.warning(
+                f"🔌 **OPRIRE AUTOMATĂ în {_sd_remaining}s!** "
+                f"Computer-ul va fi oprit forțat. Anulează ACUM dacă vrei să continui."
+            )
+        with col_cancel:
+            if st.button("❌ ANULEAZĂ OPRIREA", type="primary", use_container_width=True):
+                try:
+                    import subprocess as _sd_cancel
+                    _sd_cancel.run(["shutdown", "/a"], check=True, capture_output=True)
+                    st.session_state.pop("_shutdown_initiated", None)
+                    st.session_state.pop("_shutdown_scheduled_at", None)
+                    st.toast("✅ Oprirea PC-ului a fost anulată cu succes!", icon="🛡️")
+                    logging.info("[SHUTDOWN] Anulat manual de user (shutdown /a).")
+                    st.rerun()
+                except Exception as _sd_cancel_exc:
+                    st.error(f"Anulare eșuată: {_sd_cancel_exc}. Încearcă manual în CMD: `shutdown /a`")
+    else:
+        st.error("🔌 Oprire PC executată. Sistemul se închide acum.")
+
 # --- NOU: Secțiune Vizualizare Istoric CSV ---
 if "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]:
     with st.expander("📅 Sursă Date: Istoric Complet Extrageri (CSV)", expanded=False):
@@ -1193,6 +1222,22 @@ with st.sidebar:
             _ap_disabled_reason = " ⚠️ DEZACTIVAT — bench in progres (vezi banner-ul de mai jos)"
     except Exception:
         pass
+
+    # === Checkbox: shutdown automat PC după job complete ===
+    # Util pentru rulări lungi (FULL Re-Bench ~50min, bench extins ~110min).
+    # Userul poate apăsa butonul, închide UI-ul, pleacă — PC-ul se închide singur
+    # după ce job-ul + bench-ul în fundal termină. Default OFF (safety).
+    st.checkbox(
+        "🔌 Oprește PC-ul automat după ce job-ul termină (delay 60s — anulabil)",
+        value=st.session_state.get("shutdown_on_complete", False),
+        key="shutdown_on_complete",
+        help=(
+            "Bifează ÎNAINTE să apeși Auto-Pilot. Când job-ul se termină cu succes, "
+            "Windows va primi comanda `shutdown /s /t 60` (oprire în 60 secunde). "
+            "Notă vizuală + buton de anulare apare în pagina cu rezultate; ai 60 "
+            "secunde să te răzgândești cu `shutdown /a` sau click pe buton."
+        ),
+    )
 
     # === AUTO-PILOT: două butoane separate (UX clar, fără ambiguitate) ===
     # Buton 1: comportament normal (cache OK → cache, drift → auto-rebench după freshness)
@@ -2114,6 +2159,23 @@ if st.session_state.get("active_job_id"):
 
         st.session_state.pop("active_job_id", None)
         st.session_state["play_completion_sound"] = True
+
+        # === Shutdown automat după job complete (dacă flag bifat) ===
+        # Folosim Windows `shutdown /s /t 60` cu delay 60s — userul are timp să
+        # anuleze prin buton sau prin `shutdown /a` în CMD.
+        # Setăm un flag în session_state ca să afișăm warning + buton anulare.
+        if st.session_state.get("shutdown_on_complete") and not st.session_state.get("_shutdown_initiated"):
+            try:
+                import subprocess as _sd_sp
+                # /s = shutdown, /t 60 = delay 60s, /f = force (close apps)
+                _sd_sp.Popen(["shutdown", "/s", "/t", "60", "/f", "/c", "Loto Enterprise: shutdown automat după job complete"])
+                st.session_state["_shutdown_initiated"] = True
+                st.session_state["_shutdown_scheduled_at"] = time.time()
+                logging.warning("[SHUTDOWN] Lansat shutdown /s /t 60. Anulabil cu `shutdown /a` sau buton UI.")
+            except Exception as _sd_exc:
+                logging.error(f"[SHUTDOWN] Comandă eșuată: {_sd_exc}")
+                st.session_state["_shutdown_error"] = str(_sd_exc)
+
         unlock_engine()
         st.rerun()
 
