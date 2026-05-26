@@ -234,7 +234,10 @@ def update_best_methods_with_auto_pilot(
         if gk == "joker_urna2":
             pool_range = [draw_n]
         else:
-            pool_range = list(range(draw_n, draw_n + 7))  # draw_n .. draw_n+6
+            # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14
+            # (2026-05-26: extins de la +6 → +14 ca să acopere pool size sweep
+            # K=15/18/20 cerut de user pentru testare 4+ hits stable).
+            pool_range = list(range(draw_n, draw_n + 15))  # draw_n .. draw_n+14
         games_meta[gk] = {"draw_n": draw_n, "pool_range": pool_range}
 
     matrix = build_auto_pilot_matrix(folds_csv_path, games_meta)
