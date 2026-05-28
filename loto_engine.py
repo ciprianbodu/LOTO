@@ -435,13 +435,18 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, force_exclude=None):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
             Backtester-ul îl lasă False (își gestionează propriul state in-memory).
+        force_exclude: set de numere excluse FORȚAT din univers pe toată durata
+            rulării (folosit de Inversarea automată: rularea B exclude pool-ul A).
         """
+        # Numere excluse forțat (Inversare automată). Aplicate în blacklist-ul de
+        # selecție + în candidații Smart Selector ca să nu poată reintra.
+        self._force_exclude = set(int(x) for x in (force_exclude or []))
         # Memoram pool_size-ul cerut pentru ca _scores_via_bench_winner să poată
         # selecta câștigătorul corect din best_methods.json (per pool size).
         self._winner_pool_hint = int(pool_size)
@@ -695,8 +700,22 @@ class LotoEngine:
                     "scope": "single_draw",
                 }
 
+        # === Inversare automată: excludem forțat pool-ul A din univers ===
+        if self._force_exclude:
+            max_n_safe = int(self.params.get("max_n", 49))
+            combined = blacklist | self._force_exclude
+            if len(combined) >= max_n_safe - pool_size:
+                logging.warning(
+                    f"[AUTO-INVERT] force_exclude ({len(self._force_exclude)}) + blacklist "
+                    f"({len(blacklist)}) blochează prea mult din univers ({max_n_safe}). Skip."
+                )
+            else:
+                blacklist = combined
+            self.audit["auto_invert"] = True
+            self.audit["auto_invert_excluded"] = sorted(int(x) for x in self._force_exclude)
+
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
-        
+
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
         self.audit['pipeline_stages'] = {
@@ -1432,6 +1451,10 @@ class LotoEngine:
         all_numbers = set(range(1, self.params["max_n"] + 1))
         current_pool = set(kept_numbers)
         available_numbers = all_numbers - current_pool
+        # Inversare automată: nu permitem reintroducerea numerelor excluse forțat.
+        _force_excl = getattr(self, "_force_exclude", None)
+        if _force_excl:
+            available_numbers -= _force_excl
 
         alternative_scores: dict = {}
         # Bundle de scoruri memoizat pe tot universul (perf #1) — nu mai

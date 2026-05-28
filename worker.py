@@ -172,6 +172,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             smart_red = bool(task.get("smart_reduction", True))
             sim_depth = int(task.get("sim_depth_pct", 10))
             pure_bench = bool(task.get("pure_bench_mode", False))
+            auto_inv = bool(task.get("auto_invert", False))
             logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
             logging.debug(f"[worker] Full task: {task}")
             
@@ -196,7 +197,10 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     
                 engine = LotoEngine(game_type=game_mapped)
                 engine.load_data(temp_csv_path)
-                lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
+                # La inversare automată dezactivăm persistența adaptivă (ar învăța
+                # de două ori / din pool-ul contrarian — nu vrem).
+                _persist = not auto_inv
+                _kw = dict(
                     progress_cb=progress_cb,
                     pool_size=p_size,
                     guarantee=guar,
@@ -205,9 +209,19 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     filter_consecutives=filter_cons,
                     smart_reduction=smart_red,
                     sim_depth_pct=sim_depth,
-                    enable_adaptive_persistence=True,
+                    enable_adaptive_persistence=_persist,
                     pure_bench_mode=pure_bench,
                 )
+                lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(**_kw)
+
+                if auto_inv:
+                    # Strategie contrarian: rularea A (de mai sus) dă pool-ul A;
+                    # rularea B exclude A din univers și e cea afișată.
+                    pool_a = set(int(x) for x in (engine.hard_core or []))
+                    logging.info(f"[worker] Inversare automată: rulare B, exclud pool A = {sorted(pool_a)}")
+                    lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
+                        **_kw, force_exclude=pool_a
+                    )
 
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {
@@ -221,6 +235,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "pool_size_requested": p_size,
                     "guarantee": guar,
                     "lookback": lookback,
+                    "auto_invert": auto_inv,
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),
                     "p10": p10,

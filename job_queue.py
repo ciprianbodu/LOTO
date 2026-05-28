@@ -124,6 +124,21 @@ def get_job_status(job_id: int, db_path: str = DB_PATH) -> dict[str, Any] | None
     return dict(row) if row else None
 
 
+def get_active_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+    """Read-only: cel mai recent job PENDING/RUNNING (FĂRĂ a-l revendica).
+
+    Folosit de UI ca să se re-ataşeze la un job în curs după un reload de pagină
+    sau tab nou — altfel `active_job_id` (doar în session_state) se pierde și
+    rezultatul rămâne orfan în DB, fără să fie vreodată afișat."""
+    init_job_queue(db_path)
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM jobs WHERE status IN (?, ?) ORDER BY id DESC LIMIT 1",
+            (JOB_PENDING, JOB_RUNNING),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
     """Actualizează progresul unui job și întoarce True dacă jobul a fost anulat între timp."""
     init_job_queue(db_path)

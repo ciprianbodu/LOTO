@@ -16,6 +16,7 @@ from job_queue import (
     cancel_pending_running_jobs,
     clear_pipeline_cache,
     fail_running_jobs,
+    get_active_job,
     get_job_status,
     reset_job_queue,
     submit_job,
@@ -2181,6 +2182,14 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         st.session_state["job_start_time"] = time.time()
         st.session_state["queue_submit_requested"] = False
         st.rerun()
+
+# Re-ataşare după reload/tab nou: active_job_id trăiește doar în session_state
+# (se pierde la refresh — iar app-ul se auto-reîncarcă la 5 min în timpul bench-ului).
+# Dacă există un job PENDING/RUNNING în DB dar nu avem unul în sesiune, ne re-legăm.
+if not st.session_state.get("active_job_id"):
+    _active = get_active_job()
+    if _active:
+        st.session_state["active_job_id"] = int(_active["id"])
 
 if st.session_state.get("active_job_id"):
     job_id = int(st.session_state["active_job_id"])
