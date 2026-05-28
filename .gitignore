@@ -45,4 +45,7 @@ pool_history.json
 # Auto-Pilot runtime flags
 .bench_pid
 .regenerate_after_bench
+.shutdown_pending.flag
+.auto_invert.flag
+.ui_state.json
 bench_full.log

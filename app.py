@@ -1129,7 +1129,45 @@ with st.sidebar:
             st.success(f"Încărcat {len(datasets)} fișiere.")
 
     st.header("2. Setări Algoritm Wheeling")
-    
+
+    # === PERSIST UI STATE PE DISK (bifele supraviețuiesc page reload) ===
+    # Problema rezolvată: JS auto-refresh face full page reload → șterge session_state.
+    # Soluție: scriem/citim bifele dintr-un fișier .ui_state.json care persistă pe disk.
+    # La load: restaurăm session_state din fișier.
+    # La schimbare bifă: salvăm fișierul (via on_change callback).
+    import json as _json_ui
+    from pathlib import Path as _Path_ui
+    _UI_STATE_FILE = _Path_ui(".ui_state.json")
+    _UI_PERSIST_KEYS = [
+        "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
+        "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
+    ]
+
+    def _load_ui_state():
+        """Citește bifele din .ui_state.json și le pune în session_state DOAR
+        dacă cheia nu există deja (nu suprascrie modificările curente)."""
+        if not _UI_STATE_FILE.exists():
+            return
+        try:
+            data = _json_ui.loads(_UI_STATE_FILE.read_text(encoding="utf-8"))
+            for k in _UI_PERSIST_KEYS:
+                if k in data and k not in st.session_state:
+                    st.session_state[k] = data[k]
+        except Exception as _exc_ui_load:
+            logging.debug(f"[UI_STATE] load failed: {_exc_ui_load}")
+
+    def _save_ui_state():
+        """Scrie toate bifele persistente din session_state în .ui_state.json."""
+        try:
+            data = {k: st.session_state.get(k) for k in _UI_PERSIST_KEYS if k in st.session_state}
+            _UI_STATE_FILE.write_text(_json_ui.dumps(data, indent=2), encoding="utf-8")
+        except Exception as _exc_ui_save:
+            logging.debug(f"[UI_STATE] save failed: {_exc_ui_save}")
+
+    # Restaurăm bifele DE PE DISK la fiecare render (după page reload de la JS,
+    # session_state e gol — _load_ui_state îl re-populează din .ui_state.json)
+    _load_ui_state()
+
     # NU folosi value= împreună cu key= pentru același nume — Streamlit poate reseta
     # widget-ul la valoarea inițială (10) la rerun, ignorând +/- utilizatorului.
     st.number_input(
@@ -1139,45 +1177,89 @@ with st.sidebar:
         step=1,
         help="Câte numere din topul frecvenței să fie folosite.",
         key="pool_size_val",
+        on_change=_save_ui_state,
     )
     
         
     guarantee_input = st.number_input(
-        "Garanție minimă (Set Cover)", 
-        min_value=3, 
-        max_value=5, 
-        value=st.session_state.get("guarantee_val", 4), 
+        "Garanție minimă (Set Cover)",
+        min_value=3,
+        max_value=5,
+        value=st.session_state.get("guarantee_val", 4),
         step=1,
         help="Garanția matematică: 3, 4 sau 5 numere garantate.",
-        key="guarantee_val"
+        key="guarantee_val",
+        on_change=_save_ui_state,
     )
     
     max_variants_input = st.number_input(
-        "Limită maxime variante (0 = fără limită)", 
-        min_value=0, 
-        max_value=10000, 
-        value=st.session_state.get("max_variants_val", 0), 
+        "Limită maxime variante (0 = fără limită)",
+        min_value=0,
+        max_value=10000,
+        value=st.session_state.get("max_variants_val", 0),
         step=10,
         help="Oprește generarea la acest număr de variante (scade din acoperirea Set Cover, dar te încadrează în buget).",
-        key="max_variants_val"
-    )
-    
-    lookback_input = st.number_input(
-        "Analizează doar ultimele X% extrageri din istoric (0 = 100% Tot istoricul)", 
-        min_value=0, 
-        max_value=100, 
-        value=st.session_state.get("lookback_val", 0), 
-        step=5,
-        help="Dacă e 0, analizează toată arhiva (100%). Dacă e N, calculează frecvența doar pe ultimele N% din extrageri.",
-        key="lookback_val"
+        key="max_variants_val",
+        on_change=_save_ui_state,
     )
 
-    apply_consecutive_filter = st.checkbox(
-        "Filtru Anti-Secvență (Înlocuiește 3+ numere consecutive fără istoric)", 
-        value=st.session_state.get("consecutive_filter_val", True), 
-        help="Dacă nucleul dur conține 3 numere consecutive care nu au ieșit niciodată împreună, cel mai slab e înlocuit.",
-        key="consecutive_filter_val"
+    lookback_input = st.number_input(
+        "Analizează doar ultimele X% extrageri din istoric (0 = 100% Tot istoricul)",
+        min_value=0,
+        max_value=100,
+        value=st.session_state.get("lookback_val", 0),
+        step=5,
+        help="Dacă e 0, analizează toată arhiva (100%). Dacă e N, calculează frecvența doar pe ultimele N% din extrageri.",
+        key="lookback_val",
+        on_change=_save_ui_state,
     )
+
+    # BUG-FIX Streamlit: nu folosim `value=` cu `key=` (reseteaza la rerun).
+    if "consecutive_filter_val" not in st.session_state:
+        st.session_state["consecutive_filter_val"] = True
+    apply_consecutive_filter = st.checkbox(
+        "Filtru Anti-Secvență (Înlocuiește 3+ numere consecutive fără istoric)",
+        help="Dacă nucleul dur conține 3 numere consecutive care nu au ieșit niciodată împreună, cel mai slab e înlocuit.",
+        key="consecutive_filter_val",
+        on_change=_save_ui_state,
+    )
+
+    # CHANGED 2026-05-26: bifa PERSISTĂ pe disk prin _save_ui_state (user
+    # feedback: "la fiecare refresh imi dispar bifele"). Vechiul comportament
+    # "reset la session start" a fost înlocuit cu persistare normală — userul
+    # debifează manual când nu mai vrea inversare.
+    AUTO_INVERT_FLAG = ".auto_invert.flag"
+    # _load_ui_state() de mai sus a populat deja session_state din .ui_state.json.
+    # Fallback default False doar dacă nu există nici în session, nici pe disk.
+    if "auto_invert_val" not in st.session_state:
+        st.session_state["auto_invert_val"] = False
+    st.checkbox(
+        "🔄 Inversare automată (joacă opusul: exclude pool-ul inițial, generează altul)",
+        key="auto_invert_val",
+        on_change=_save_ui_state,
+        help=(
+            "Strategie contrarian: motorul rulează de DOUĂ ori. Prima rulare "
+            "generează pool-ul A normal. A doua rulare îl exclude pe A din "
+            "univers și generează pool-ul B. Rezultatul afișat e B. "
+            "Util când pool-ul A n-a ieșit în ultimele extrageri și vrei să "
+            "joci pe ipoteza că-l urmează altceva. "
+            "Bifa PERSISTĂ între sesiuni (debifează manual când nu mai vrei)."
+        ),
+    )
+    # Sincronizam fisierul de pe disc cu bifa curenta. Flag-ul e folosit DOAR
+    # pentru supravietuirea în timpul Full Re-Bench (~50min) — nu se mai hidrateaza
+    # la session start, ca sa nu pacaleasca user-ul.
+    try:
+        from pathlib import Path as _Pinv2
+        _inv_path = _Pinv2(AUTO_INVERT_FLAG)
+        if st.session_state.get("auto_invert_val"):
+            if not _inv_path.exists():
+                _inv_path.write_text("1", encoding="utf-8")
+        else:
+            if _inv_path.exists():
+                _inv_path.unlink()
+    except Exception as _e_inv_flag:
+        logging.warning(f"[auto-invert-flag] sync esuat: {_e_inv_flag}")
 
     st.header("3. Control Execuție")
     
@@ -1227,17 +1309,42 @@ with st.sidebar:
     # Util pentru rulări lungi (FULL Re-Bench ~50min, bench extins ~110min).
     # Userul poate apăsa butonul, închide UI-ul, pleacă — PC-ul se închide singur
     # după ce job-ul + bench-ul în fundal termină. Default OFF (safety).
+    # BUG-FIX: NU folosim `value=` cu `key=` (Streamlit reseteaza la rerun);
+    # initializam session_state separat + persistam pe disc pentru a supravietui
+    # eventualului reload total al paginii.
+    SHUTDOWN_FLAG_FILE = ".shutdown_pending.flag"
+    if "shutdown_on_complete" not in st.session_state:
+        # Hidratam din fisier daca exista (supravietuieste reload de pagina)
+        try:
+            from pathlib import Path as _P
+            st.session_state["shutdown_on_complete"] = _P(SHUTDOWN_FLAG_FILE).exists()
+        except Exception:
+            st.session_state["shutdown_on_complete"] = False
     st.checkbox(
         "🔌 Oprește PC-ul automat după ce job-ul termină (delay 60s — anulabil)",
-        value=st.session_state.get("shutdown_on_complete", False),
         key="shutdown_on_complete",
+        on_change=_save_ui_state,
         help=(
             "Bifează ÎNAINTE să apeși Auto-Pilot. Când job-ul se termină cu succes, "
             "Windows va primi comanda `shutdown /s /t 60` (oprire în 60 secunde). "
             "Notă vizuală + buton de anulare apare în pagina cu rezultate; ai 60 "
-            "secunde să te răzgândești cu `shutdown /a` sau click pe buton."
+            "secunde să te răzgândești cu `shutdown /a` sau click pe buton. "
+            "Persistă pe disc (.shutdown_pending.flag + .ui_state.json) — "
+            "supravietuieste reload."
         ),
     )
+    # Sincronizam fisierul de pe disc cu bifa curenta
+    try:
+        from pathlib import Path as _Pflag
+        _flag_path = _Pflag(SHUTDOWN_FLAG_FILE)
+        if st.session_state.get("shutdown_on_complete"):
+            if not _flag_path.exists():
+                _flag_path.write_text("1", encoding="utf-8")
+        else:
+            if _flag_path.exists():
+                _flag_path.unlink()
+    except Exception as _e_flag:
+        logging.warning(f"[shutdown-flag] sync esuat: {_e_flag}")
 
     # === AUTO-PILOT: două butoane separate (UX clar, fără ambiguitate) ===
     # Buton 1: comportament normal (cache OK → cache, drift → auto-rebench după freshness)
@@ -1570,26 +1677,26 @@ with st.sidebar:
             f"— ETA {_eta_str}." + _suffix + "  \n"
             f"Vezi fereastra CMD numită 'FULL REBENCH' / 'QUICK REBENCH'."
         )
-        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — auto-refresh la 15s")
+        st.progress(_bench_progress, text=f"Bench: {int(_bench_progress*100)}% — auto-refresh la 5 min")
         # === AUTO-REFRESH ÎN BROWSER (JavaScript injection) ===
-        # `st.markdown(<meta http-equiv="refresh">)` NU funcționează în Streamlit
-        # pentru că meta tag-urile sunt injectate în <body>, nu <head>, și browser-ele
-        # le ignoră acolo. Folosim JavaScript via components.html — sigur funcționează.
-        # Refresh la 15s (mai des decât bench-ul scrie progres, ca să prindem
-        # rapid când .bench_pid e șters).
+        # CHANGED 2026-05-26: 15s → 300s (5 min). User feedback: 15s era prea
+        # agresiv — orice bifă (shutdown, anti-secvență, etc.) se pierdea la
+        # fiecare refresh fiindcă reload-ul șterge session_state. Persistăm acum
+        # bifele pe disk (.ui_state.json), iar refresh la 5 min e suficient
+        # pentru a detecta când bench-ul de ~110 min se termină.
         import streamlit.components.v1 as _components
         _components.html(
             """
             <script>
                 setTimeout(function() {
                     window.parent.location.reload();
-                }, 15000);
+                }, 300000);
             </script>
             """,
             height=0,
         )
         if _waiting_for_regen:
-            st.caption("⚙️ Pagina se auto-reîmprospătează la 15s. Generarea va porni AUTOMAT când bench-ul termină — nu trebuie să faci nimic.")
+            st.caption("⚙️ Pagina se auto-reîmprospătează la 5 min. Generarea va porni AUTOMAT când bench-ul termină — nu trebuie să faci nimic.")
             # Buton manual de backup pentru cazul când JavaScript e blocat de browser
             if st.button("▶️ Verifică acum dacă bench-ul a terminat", help="Apasă dacă auto-refresh nu funcționează."):
                 st.rerun()
@@ -2033,6 +2140,10 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
             # Skip Smart Selector, POST-HOC, Anti-Sequence, Anomaly filter.
             # Activat când userul apasă "🎯 Auto-Pilot Pure" în UI.
             _is_pure = bool(st.session_state.get("_pure_bench_mode_requested", False))
+            # auto_invert: citim DOAR din session_state (bifa curenta din UI).
+            # NU mai citim din .auto_invert.flag — userul vrea control explicit
+            # la fiecare rulare, fara surprize de la sesiuni anterioare.
+            _ai = bool(st.session_state.get("auto_invert_val", False))
             task_dict = {
                 "game_label": g_label,
                 "pool_size": st.session_state["pool_size_val"],
@@ -2043,6 +2154,7 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
                 "smart_reduction": False if _is_pure else True,
                 "sim_depth_pct": game_sim_depth,
                 "pure_bench_mode": _is_pure,
+                "auto_invert": _ai,
             }
             
             logging.info(f"[APP] Submitere job pentru {g_label}: {task_dict}")
@@ -2105,11 +2217,44 @@ if st.session_state.get("active_job_id"):
             if "retro_results" not in st.session_state:
                 st.session_state["retro_results"] = {}
 
+            # Detectam daca inversarea a fost activa la generare — daca da,
+            # walk-forward-ul devine misleading (statisticile sunt pentru pool-ul
+            # NORMAL, nu inversat). Sarim peste in acest caz cu un mesaj clar.
+            _any_inverted = False
+            for _fn, _outs in results_bundle:
+                for _gl, _d in _outs.items():
+                    if _d.get("auto_invert"):
+                        _any_inverted = True
+                        break
+                if _any_inverted:
+                    break
+
+            if _any_inverted:
+                st.warning(
+                    "⚠️ **Walk-forward backtest SĂRIT** — Inversarea automată a fost "
+                    "activă la generare. Statisticile istorice de performanță s-ar "
+                    "calcula pe pool-ul NORMAL (nu inversat), deci ar fi înșelătoare. "
+                    "Pentru a vedea statistici relevante, rulează încă o dată FĂRĂ "
+                    "bifa de inversare."
+                )
+                logging.info(
+                    "[BACKTEST] Skip walk-forward — auto_invert ON (statistici "
+                    "ar fi pentru pool normal, nu reflecta strategia contrarian)."
+                )
+                results_bundle = []  # Skip loop-ul de mai jos
+
             # Backtest WALK-FORWARD ONEST (fara data leakage): pentru fiecare
             # extragere t din ultimele backtest_depth%, regeneram pool-ul cu
             # date <= t-1 si comparam predictia cu extragerea reala la t.
             # Cache pe disc per (CSV_hash, pool, depth) ca sa nu re-rulam.
             from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
+
+            # Status vizibil cat ruleaza walk-forward (poate dura 3-5 min pe CPU).
+            _wf_status_box = st.empty()
+            _wf_total_jobs = sum(len(o) for _, o in results_bundle)
+            _wf_done = 0
+            _wf_start_time = time.time()
+
             for fname, outputs in results_bundle:
                 df_source = None
                 if "loaded_datasets" in st.session_state:
@@ -2123,6 +2268,14 @@ if st.session_state.get("active_job_id"):
 
                 for g_label, data in outputs.items():
                     pool_size_used = int(data.get("pool_size") or 10)
+                    _wf_done += 1
+                    _wf_status_box.info(
+                        f"📊 **Walk-forward backtest** ({_wf_done}/{_wf_total_jobs}): "
+                        f"{g_label} pool={pool_size_used}\n\n"
+                        f"Engine s-a terminat. Acum calculez statistici de performanță "
+                        f"istorică pe ultimele ~127 extrageri (~3-5 min pe CPU prima "
+                        f"oară, instant la rulări ulterioare cu același CSV)."
+                    )
                     try:
                         flat, meta = run_honest_walk_forward(
                             df_source=df_source,
@@ -2135,10 +2288,12 @@ if st.session_state.get("active_job_id"):
                         retro_key = f"{fname}_{g_label}"
                         st.session_state["retro_results"][retro_key] = flat
                         cache_tag = "cache" if meta.get("from_cache") else "fresh"
+                        _wf_elapsed = time.time() - _wf_start_time
                         logging.info(
                             f"[BACKTEST] {g_label} pool={pool_size_used}: "
                             f"{len(flat)} entries ({cache_tag}, "
-                            f"{meta.get('n_test_draws')} extrageri test)"
+                            f"{meta.get('n_test_draws')} extrageri test, "
+                            f"elapsed={_wf_elapsed:.1f}s)"
                         )
                     except Exception as e:
                         logging.error(f"Eroare walk-forward backtest pentru {g_label}: {e}")
@@ -2164,7 +2319,18 @@ if st.session_state.get("active_job_id"):
         # Folosim Windows `shutdown /s /t 60` cu delay 60s — userul are timp să
         # anuleze prin buton sau prin `shutdown /a` în CMD.
         # Setăm un flag în session_state ca să afișăm warning + buton anulare.
-        if st.session_state.get("shutdown_on_complete") and not st.session_state.get("_shutdown_initiated"):
+        # Verificam ATAT session_state CAT SI fisierul .shutdown_pending.flag —
+        # asa supravietuieste reload-ului total al paginii (browser refresh etc).
+        _shutdown_wanted = bool(st.session_state.get("shutdown_on_complete", False))
+        if not _shutdown_wanted:
+            try:
+                from pathlib import Path as _Pchk
+                _shutdown_wanted = _Pchk(".shutdown_pending.flag").exists()
+                if _shutdown_wanted:
+                    logging.info("[SHUTDOWN] session_state era gol dar fisierul flag exista — onor cerintei.")
+            except Exception:
+                pass
+        if _shutdown_wanted and not st.session_state.get("_shutdown_initiated"):
             try:
                 import subprocess as _sd_sp
                 # /s = shutdown, /t 60 = delay 60s, /f = force (close apps)
@@ -2172,6 +2338,12 @@ if st.session_state.get("active_job_id"):
                 st.session_state["_shutdown_initiated"] = True
                 st.session_state["_shutdown_scheduled_at"] = time.time()
                 logging.warning("[SHUTDOWN] Lansat shutdown /s /t 60. Anulabil cu `shutdown /a` sau buton UI.")
+                # Stergem flag-ul de pe disc dupa lansare ca sa nu se relanseze la urmatoarea rulare.
+                try:
+                    from pathlib import Path as _Pclr
+                    _Pclr(".shutdown_pending.flag").unlink(missing_ok=True)
+                except Exception:
+                    pass
             except Exception as _sd_exc:
                 logging.error(f"[SHUTDOWN] Comandă eșuată: {_sd_exc}")
                 st.session_state["_shutdown_error"] = str(_sd_exc)
@@ -2393,9 +2565,51 @@ if "persistent_results" in st.session_state:
                         msg += "\n\n*(Explicație: scorer-ul a identificat aceste numere ca având trend descendent sau fiind 'moarte' statistic. Au fost excluse pentru a maximiza șansele nucleului dur.)*"
                         st.warning(msg)
                 
+                # Helper: cross-check audit messages against FINAL pool (hard_core).
+                # Daca hard enforcement (manual_inversion) a anulat o modificare a
+                # filtrului, mesajul devine misleading — il ascundem.
+                _final_pool_set = set(hc) if hc else set()
+                _enforcement_info = (audit.get("manual_inversion") or {}).get("enforced_violations_fixed")
+                _has_enforcement = bool(_enforcement_info)
+
+                # Daca hard enforcement a corectat violari ale blacklist-ului, afisam un
+                # mic banner inainte de mesajele intermediare ca user-ul sa stie.
+                if _has_enforcement:
+                    _removed = _enforcement_info.get("removed", [])
+                    _added = _enforcement_info.get("added_replacements", [])
+                    _rm_str = ", ".join(str(n) for n in _removed) if _removed else "(none)"
+                    _ad_str = ", ".join(str(n) for n in _added) if _added else "(none)"
+                    st.info(
+                        f"🛡️ **Hard Enforcement Inversare:** Pipeline-ul a reintrodus "
+                        f"{len(_removed)} numere care erau în pool-ul exclus. Le-am scos "
+                        f"forțat și le-am înlocuit cu top-NQI valide.\n\n"
+                        f"  • Scoase (erau în blacklist): **{_rm_str}**\n"
+                        f"  • Înlocuite cu: **{_ad_str}**"
+                    )
+
                 if 'consecutive_filter' in audit and audit['consecutive_filter']:
-                    st.warning("⚠️ **Intervenție Filtru Anti-Secvență:**\n" + "\n".join([f"- {m}" for m in audit['consecutive_filter']]))
-                
+                    import re as _re_cf
+                    def _cf_msg_survived(msg: str) -> bool:
+                        """Parseaza 'Scos X..., adaugat Y...' si verifica daca Y e in pool final."""
+                        m = _re_cf.search(r'ad[aă]ugat\s+(\d+)', str(msg))
+                        if not m:
+                            return True  # Nu putem parsa, afisam din precautie
+                        try:
+                            added = int(m.group(1))
+                        except ValueError:
+                            return True
+                        return added in _final_pool_set
+                    _cf_filtered = [m for m in audit['consecutive_filter'] if _cf_msg_survived(m)]
+                    if _cf_filtered:
+                        st.warning("⚠️ **Intervenție Filtru Anti-Secvență:**\n" + "\n".join([f"- {m}" for m in _cf_filtered]))
+                    elif _has_enforcement:
+                        # Toate modificarile filtrului au fost anulate de hard enforcement
+                        st.info(
+                            "ℹ️ Filtru Anti-Secvență a propus modificări, dar **toate au fost "
+                            "anulate** de Hard Enforcement (numere care erau în pool-ul exclus). "
+                            "Pool-ul final reflectă deciziile NQI după excludere."
+                        )
+
                 if 'kept_sequences' in audit and audit['kept_sequences']:
                     st.info("ℹ️ **Verificare Filtru Anti-Secvență:**\n" + "\n".join([f"- {m}" for m in audit['kept_sequences']]))
                 
@@ -2435,22 +2649,43 @@ if "persistent_results" in st.session_state:
                 if 'smart_selector' in audit and audit['smart_selector']:
                     smart_data = audit['smart_selector']
                     st.info(f"🧠 **Neural Hybrid Refinement (Smart Logic):** {smart_data['method']}")
-                    
+
                     kept = smart_data.get('kept_numbers', [])
                     replaced = smart_data.get('replaced_numbers', [])
                     scores = smart_data.get('final_scores', {})
-                    
-                    if kept:
-                        st.markdown(f"✅ **Numere păstrate (top 70%):** {', '.join([f'**{n}** ({scores.get(n, 0):.3f})' for n in kept])}")
-                    
-                    if replaced:
-                        st.markdown(f"🔄 **Numere înlocuite:** {', '.join([f'**{n}**' for n in replaced])}")
-                    
-                    # Afișăm top scoruri
-                    top_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:10]
-                    st.markdown("**Top scoruri Smart Selector:**")
-                    score_text = " | ".join([f"{n}: {s:.3f}" for n, s in top_scores])
-                    st.markdown(f"<small>{score_text}</small>", unsafe_allow_html=True)
+
+                    # Cross-check vs pool final: keep doar ce e in final, replaced
+                    # doar ce e EFECTIV in afara final pool-ului (Hard enforcement
+                    # poate fi re-adaugat numere "replaced" daca cele inlocuitoare
+                    # au fost in manual_blacklist).
+                    kept_actual = [n for n in kept if n in _final_pool_set]
+                    replaced_actual = [n for n in replaced if n not in _final_pool_set]
+                    re_added_by_enforcement = [n for n in replaced if n in _final_pool_set]
+
+                    if kept_actual:
+                        st.markdown(f"✅ **Numere păstrate (top 70%):** {', '.join([f'**{n}** ({scores.get(n, 0):.3f})' for n in kept_actual])}")
+
+                    if replaced_actual:
+                        st.markdown(f"🔄 **Numere înlocuite:** {', '.join([f'**{n}**' for n in replaced_actual])}")
+
+                    if re_added_by_enforcement:
+                        st.markdown(
+                            f"♻️ **Re-introduse de Hard Enforcement** "
+                            f"(Smart Selector le-a scos dar înlocuitorii erau în pool-ul exclus): "
+                            f"{', '.join([f'**{n}**' for n in re_added_by_enforcement])}"
+                        )
+
+                    # Afișăm top scoruri (filtrate sa NU includa numere din pool-ul exclus,
+                    # pentru a nu deruta utilizatorul)
+                    _mb_excl = set((audit.get("manual_inversion") or {}).get("excluded") or [])
+                    top_scores_filtered = sorted(
+                        ((n, s) for n, s in scores.items() if n not in _mb_excl),
+                        key=lambda x: x[1], reverse=True,
+                    )[:10]
+                    if top_scores_filtered:
+                        st.markdown("**Top scoruri Smart Selector:**")
+                        score_text = " | ".join([f"{n}: {s:.3f}" for n, s in top_scores_filtered])
+                        st.markdown(f"<small>{score_text}</small>", unsafe_allow_html=True)
                     
                 
                 context = data.get('context', {})
@@ -2493,6 +2728,30 @@ if "persistent_results" in st.session_state:
                 hc_stats = data.get('hard_core_stats', {})
                 total_draws = data.get('total_draws', 1)
                 if total_draws == 0: total_draws = 1
+
+                # === Banner Auto-Invert (daca a fost activat la rulare) ===
+                if data.get("auto_invert"):
+                    excluded = data.get("first_pool_excluded", [])
+                    if excluded:
+                        excl_badges = " ".join(
+                            f"<span style='background: #6c757d; color: white; padding: 2px 8px; "
+                            f"border-radius: 4px; margin: 2px; display: inline-block;'>{int(n)}</span>"
+                            for n in excluded
+                        )
+                        st.markdown(
+                            f"<div style='background: rgba(255, 193, 7, 0.10); padding: 12px; "
+                            f"border-radius: 8px; border-left: 4px solid #ffc107; margin: 10px 0;'>"
+                            f"<div style='color: #ffc107; font-weight: bold; margin-bottom: 6px;'>"
+                            f"🔄 Inversare automată ACTIVĂ</div>"
+                            f"<div style='font-size: 0.9em; color: #ccc; margin-bottom: 8px;'>"
+                            f"Pool-ul inițial (pasul 1, EXCLUS din runda 2):</div>"
+                            f"<div>{excl_badges}</div>"
+                            f"<div style='font-size: 0.85em; color: #aaa; margin-top: 8px;'>"
+                            f"Pool-ul afișat mai jos este rezultatul rulării a doua, "
+                            f"<strong>fără</strong> aceste {len(excluded)} numere.</div>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
 
                 hc_html = ""
                 for n in hc:
