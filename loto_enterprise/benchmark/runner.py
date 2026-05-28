@@ -447,20 +447,25 @@ def _aggregate(
                 if k not in real.columns:
                     continue
                 real_mean = float(real[k].mean())
-                rnd_mean = float(rnd[k].mean()) if (not rnd.empty and k in rnd.columns) else 0.0
+                # Dacă baseline-ul random lipsește (fold-ul shuffled a eșuat
+                # asimetric, în timp ce cel real a reușit), NU inflăm lift-ul
+                # tratând rnd ca 0.0 — îl considerăm neconcludent (lift = 0).
+                _rnd_present = (not rnd.empty and k in rnd.columns)
+                rnd_mean = float(rnd[k].mean()) if _rnd_present else 0.0
                 # WITH blacklist column has _bl suffix
                 bl_col = f"{k}_bl"
+                _rnd_bl_present = (not rnd.empty and bl_col in rnd.columns)
                 real_mean_bl = float(real[bl_col].mean()) if bl_col in real.columns else 0.0
-                rnd_mean_bl = float(rnd[bl_col].mean()) if (not rnd.empty and bl_col in rnd.columns) else 0.0
+                rnd_mean_bl = float(rnd[bl_col].mean()) if _rnd_bl_present else 0.0
                 entry["per_pool"][k] = {
                     "avg_hits_real": real_mean,
                     "avg_hits_shuffled": rnd_mean,
-                    "lift_vs_shuffle": real_mean - rnd_mean,
+                    "lift_vs_shuffle": (real_mean - rnd_mean) if _rnd_present else 0.0,
                     "hit_rate_real": real_mean / game.draw_n,
                     # WITH blacklist
                     "avg_hits_real_bl": real_mean_bl,
                     "avg_hits_shuffled_bl": rnd_mean_bl,
-                    "lift_vs_shuffle_bl": real_mean_bl - rnd_mean_bl,
+                    "lift_vs_shuffle_bl": (real_mean_bl - rnd_mean_bl) if _rnd_bl_present else 0.0,
                     "blacklist_helps": real_mean_bl - real_mean,  # positive = blacklist improves
                 }
             per_method[method] = entry

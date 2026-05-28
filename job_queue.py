@@ -211,9 +211,14 @@ def _claim_job(
 
 
 # Câte secunde fără heartbeat (updated_at) până considerăm un job RUNNING drept
-# orfan (worker mort). Trebuie să fie comod mai mare decât intervalul tipic de
-# update de progres, ca să nu fure job-ul unui worker viu care abia a pornit.
-STALE_RUNNING_SEC = 180
+# orfan (worker mort). Trebuie să fie comod mai mare decât cea mai lungă pauză
+# TĂCUTĂ din pipeline (fără update de progres) — ex. cold-load TimesFM + prima
+# inferență pe CPU, sau pasele regresive grele — altfel un worker VIU lent ar fi
+# considerat orfan și job-ul i-ar fi re-revendicat (dublă execuție). Un worker
+# MORT rămâne mort, deci recuperarea funcționează la orice prag; mărim pragul ca
+# să eliminăm fals-pozitivele. (Soluția pe deplin robustă ar fi un thread
+# watchdog care bate heartbeat independent de granularitatea progresului.)
+STALE_RUNNING_SEC = 600
 
 
 def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
