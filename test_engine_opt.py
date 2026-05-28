@@ -14,13 +14,12 @@ def test_engine():
     
     # We use pool_size 12, max_variants 0 to see what it generates
     lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
-        pool_size=12, 
-        guarantee=3, 
-        max_variants=50, 
-        lookback=0, 
-        filter_consecutives=True, 
-        smart_reduction=True, 
-        ultra_hit_optimization=True
+        pool_size=12,
+        guarantee=3,
+        max_variants=50,
+        lookback=0,
+        filter_consecutives=True,
+        smart_reduction=True,
     )
     
     print(f"Elapsed time: {time.time() - start_time:.2f}s")

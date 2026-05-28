@@ -107,7 +107,7 @@ def main() -> None:
         # Activăm `enable_adaptive_persistence=False` ca să NU se scrie state
         lines, _, _, _, _, audit = eng.run_institutional_pipeline(
             pool_size=12, guarantee=4, max_variants=5,
-            smart_reduction=False, ultra_hit_optimization=False,
+            smart_reduction=False,
             enable_adaptive_persistence=False,
         )
         assert len(lines) >= 1
