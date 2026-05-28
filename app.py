@@ -17,11 +17,10 @@ from job_queue import (
     clear_pipeline_cache,
     fail_running_jobs,
     get_job_status,
-    is_job_cancelled,
     reset_job_queue,
     submit_job,
 )
-from cancel import is_engine_busy, lock_engine, unlock_engine
+from cancel import lock_engine, unlock_engine
 from loto_enterprise.core.backtesting import LotoBacktester
 import subprocess
 import psutil
@@ -192,8 +191,8 @@ def generate_hard_core_description(
     if 'anomaly_filter' in audit:
         filter_methods.append("🚀 Neural Anomaly Scoring")
         
-    if 'adaptive_bias' in audit or True: # Fiind implementat în engine, îl marcăm
-        filter_methods.append("🧠 Adaptive Local Tuning")
+    # Adaptive Local Tuning e mereu activ în engine — îl marcăm necondiționat.
+    filter_methods.append("🧠 Adaptive Local Tuning")
     
     # Construire descriere
     desc_parts = []
@@ -338,11 +337,6 @@ if "consecutive_filter_val" not in st.session_state:
     st.session_state["consecutive_filter_val"] = True
 
 # Mutat aici pentru a permite paginii sa se randeze partial inainte de blocaje
-def ensure_worker_running():
-    """Verifică dacă worker.py este activ (pornit acum de scriptul .bat)."""
-    # Nu mai pornim worker-ul de aici pentru a evita versiuni vechi ascunse în fundal
-    pass
-
 def _ensure_worker_running_runtime():
     if _is_worker_running():
         return

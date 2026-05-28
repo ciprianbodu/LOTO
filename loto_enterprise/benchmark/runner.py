@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -35,11 +34,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from .methods import METHODS, call_method, method_meta
-from .hardware import (
-    snapshot as hw_snapshot,
-    format_snapshot,
-)
+from .methods import call_method, method_meta
 from .hw_sampler import HwSampler, HwSnapshot
 
 logger = logging.getLogger(__name__)

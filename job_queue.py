@@ -129,24 +129,30 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
     init_job_queue(db_path)
     pct_i = max(0, min(100, int(pct)))
     line = str(log_msg or "").strip()
-    if not line:
-        return False
-    ts = datetime.now().strftime("%H:%M:%S")
-    stamped = f"[{ts}] {line}"
     with _connect(db_path) as conn:
-        current = conn.execute(
-            "SELECT log_tail FROM jobs WHERE id = ?",
-            (int(job_id),),
-        ).fetchone()
-        prev_tail = (current["log_tail"] if current else "") if current else ""
-        merged = (prev_tail + ("\n" if prev_tail else "") + stamped).strip()
-        # keep tail compact to avoid unbounded growth
-        if len(merged) > 6000:
-            merged = merged[-6000:]
-        conn.execute(
-            "UPDATE jobs SET progress_pct = ?, log_tail = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (pct_i, merged, int(job_id)),
-        )
+        if line:
+            ts = datetime.now().strftime("%H:%M:%S")
+            stamped = f"[{ts}] {line}"
+            current = conn.execute(
+                "SELECT log_tail FROM jobs WHERE id = ?",
+                (int(job_id),),
+            ).fetchone()
+            prev_tail = (current["log_tail"] if current else "") if current else ""
+            merged = (prev_tail + ("\n" if prev_tail else "") + stamped).strip()
+            # keep tail compact to avoid unbounded growth
+            if len(merged) > 6000:
+                merged = merged[-6000:]
+            conn.execute(
+                "UPDATE jobs SET progress_pct = ?, log_tail = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (pct_i, merged, int(job_id)),
+            )
+        else:
+            # Mesaj gol: tot actualizăm progresul + heartbeat (fără a adăuga în
+            # log_tail) — altfel cancel-ul nu era detectat și heartbeat-ul lipsea.
+            conn.execute(
+                "UPDATE jobs SET progress_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (pct_i, int(job_id)),
+            )
         conn.commit()
 
     # Verificăm statusul după update pentru a semnaliza oprirea dacă e cazul

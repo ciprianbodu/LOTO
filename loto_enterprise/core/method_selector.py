@@ -31,13 +31,36 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
 _CACHE: Dict[str, Callable] = {}
 _CONFIG: Optional[Dict] = None
+_CONFIG_MTIME: Optional[float] = None
 
 
 def _load_config(path: Optional[str] = None) -> Dict:
-    global _CONFIG
-    if _CONFIG is not None and path is None:
+    global _CONFIG, _CONFIG_MTIME
+    # Cale explicită: încarcă proaspăt, fără a atinge cache-ul global (altfel un
+    # apel cu path explicit ar polua configul default citit ulterior).
+    if path is not None:
+        p = Path(path)
+        if not p.exists():
+            logger.warning("[method_selector] %s missing — using frequency baseline", p)
+            return {"games": {}}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.error("[method_selector] failed to parse %s: %s", p, exc)
+            return {"games": {}}
+
+    # Cale default: cache cu invalidare pe mtime. După un re-bench fișierul se
+    # schimbă → reîncărcăm și golim cache-ul de scorere, altfel un proces lung
+    # (Streamlit) ar servi winneri stale până la restart.
+    cfg_path = _DEFAULT_CONFIG_PATH
+    try:
+        mtime = cfg_path.stat().st_mtime if cfg_path.exists() else None
+    except Exception:
+        mtime = None
+    if _CONFIG is not None and mtime == _CONFIG_MTIME:
         return _CONFIG
-    cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
+    _CONFIG_MTIME = mtime
+    _CACHE.clear()
     if not cfg_path.exists():
         logger.warning("[method_selector] %s missing — using frequency baseline", cfg_path)
         _CONFIG = {"games": {}}

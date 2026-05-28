@@ -3,7 +3,7 @@
 Specul:
     • auto-detect ISTORIC/ (sau _LOTO/istoric/) cu CSV-uri per joc
     • teste pe FIECARE joc: 6/49, 5/40, Joker (Urna 1 = 5/45, Urna 2 = 1/20)
-    • toate cele 21 modele din lista (cele instalate rulează; restul sunt
+    • toate cele ~44 modele din registry (cele instalate rulează; restul sunt
       raportate ca N/A cu motiv)
     • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
     • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 6 (Urna 1)
@@ -93,7 +93,7 @@ def main() -> int:
     parser.add_argument("--out", default="bench_results")
     parser.add_argument(
         "--methods", default=None,
-        help="Comma-sep list; default = toate 21 metode din spec",
+        help="Comma-sep list; default = setul ALL_SPEC_METHODS (vezi codul)",
     )
     parser.add_argument(
         "--percentiles", default="10,20,30,40,50,60,70,80,90,100",

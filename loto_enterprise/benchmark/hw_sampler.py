@@ -103,10 +103,12 @@ class HwSampler:
                     if cpu > self._cpu_peak:
                         self._cpu_peak = cpu
                     self._cpu_total += cpu
-                    vm = self._psutil.virtual_memory()
-                    ram_gb = (vm.total - vm.available) / (1024**3)
-                    if ram_gb > self._ram_peak:
-                        self._ram_peak = ram_gb
+                    # RSS al PROCESULUI curent (cât consumă efectiv bench-ul),
+                    # conform docstring-ului — nu RAM-ul system-wide.
+                    if self._proc is not None:
+                        ram_gb = self._proc.memory_info().rss / (1024**3)
+                        if ram_gb > self._ram_peak:
+                            self._ram_peak = ram_gb
                 if self._have_nvml and self._nvml_handle is not None:
                     util = self._pynvml.nvmlDeviceGetUtilizationRates(self._nvml_handle)
                     if util.gpu > self._gpu_peak:
