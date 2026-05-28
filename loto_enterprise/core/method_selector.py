@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
@@ -32,6 +33,12 @@ _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
 _CACHE: Dict[str, Callable] = {}
 _CONFIG: Optional[Dict] = None
 _CONFIG_MTIME: Optional[float] = None
+
+# Blacklist-ul ("numere moarte") e DEZACTIVAT global by default: bench-ul arată
+# câștig net ≈0 (uneori negativ) — Loto e iid, excluderea numerelor absente
+# recent nu poate ajuta predicția. Mecanismul e păstrat ca opțiune: setează
+# LOTO_USE_BLACKLIST=1 ca să revii la decizia per-pool din best_methods.json.
+_BLACKLIST_ENABLED = os.environ.get("LOTO_USE_BLACKLIST", "0") == "1"
 
 
 def _load_config(path: Optional[str] = None) -> Dict:
@@ -121,10 +128,14 @@ def should_use_blacklist(
     """Return True if the benchmark says blacklist helps for this (game, pool).
 
     Priority (consistent with get_winner_name):
+      0. DEZACTIVAT global dacă LOTO_USE_BLACKLIST != 1 (default) — vezi
+         _BLACKLIST_ENABLED. Bench-ul arată câștig ≈0/negativ pe proces iid.
       1. auto_pilot_per_pool[kN].use_blacklist  (v4 — preferat)
       2. winners_per_pool_best[kN].use_blacklist  (v3 fallback)
       3. default True (safe — production rulează blacklist-ul oricum)
     """
+    if not _BLACKLIST_ENABLED:
+        return False
     if pool_size is None:
         return True
     cfg = _load_config(config_path)
