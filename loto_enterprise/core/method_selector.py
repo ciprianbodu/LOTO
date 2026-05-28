@@ -133,7 +133,7 @@ def get_scorer_for_game(
     if cache_key in _CACHE:
         return _CACHE[cache_key]
     try:
-        from loto_enterprise.benchmark.methods import METHODS
+        from loto_enterprise.benchmark.methods import METHODS, method_meta
     except Exception as exc:
         logger.error("[method_selector] benchmark.methods import failed: %s", exc)
         raise
@@ -142,10 +142,14 @@ def get_scorer_for_game(
         logger.warning("[method_selector] unknown winner %r, falling back to frequency", name)
         name = "frequency"
     fn, _family, _train, _notes = METHODS[name]
-    if getattr(fn, "_unavailable_reason", None):
+    # Capability-based: prinde și scorerele NeuralForecast/foundation care nu pot
+    # rula în mediul curent (fără torch/CUDA) — altfel am rula tăcut un no-op care
+    # returnează {} și ar degrada selecția top-K.
+    _meta = method_meta(name)
+    if not _meta["available"]:
         logger.warning(
             "[method_selector] winner %r unavailable (%s) — falling back to frequency",
-            name, fn._unavailable_reason,
+            name, _meta.get("unavailable_reason", "?"),
         )
         fn = METHODS["frequency"][0]
         name = "frequency"

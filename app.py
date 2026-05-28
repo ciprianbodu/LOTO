@@ -2533,8 +2533,12 @@ if "persistent_results" in st.session_state:
                 data = outputs[game]
                 st.markdown(f'<div class="loto-card">', unsafe_allow_html=True)
                 st.markdown(f'<div class="loto-header">{game.upper()}</div>', unsafe_allow_html=True)
-                
+
                 audit = data.get('audit', {})
+                # Hard-core pool (pool final) — citit aici sus pentru ca este folosit
+                # mai jos la cross-check-ul mesajelor de audit (_final_pool_set).
+                hc = data.get('hard_core', [])
+                hc_stats = data.get('hard_core_stats', {})
                 
                 # Afișăm mesaj pentru sistemul inteligent de reducere
                 if 'reduction_filter' in audit and audit['reduction_filter']:
@@ -2724,8 +2728,6 @@ if "persistent_results" in st.session_state:
                             st.markdown(html, unsafe_allow_html=True)
                     st.markdown("<hr style='margin: 10px 0; border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
 
-                hc = data.get('hard_core', [])
-                hc_stats = data.get('hard_core_stats', {})
                 total_draws = data.get('total_draws', 1)
                 if total_draws == 0: total_draws = 1
 

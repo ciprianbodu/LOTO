@@ -80,6 +80,15 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
             )
             """
         )
+        # Migrare: coloană de heartbeat folosită pentru a distinge un job VIU
+        # (worker activ, heartbeat recent) de unul ORFAN (worker mort). Necesară
+        # pentru fetch_running_job — vezi mai jos.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "updated_at" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN updated_at TIMESTAMP")
+            # Backfill: pentru rândurile existente folosim created_at ca punct de
+            # plecare, ca să nu fie considerate instant orfane.
+            conn.execute("UPDATE jobs SET updated_at = created_at WHERE updated_at IS NULL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS pipeline_cache (
@@ -135,7 +144,7 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
         if len(merged) > 6000:
             merged = merged[-6000:]
         conn.execute(
-            "UPDATE jobs SET progress_pct = ?, log_tail = ? WHERE id = ?",
+            "UPDATE jobs SET progress_pct = ?, log_tail = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (pct_i, merged, int(job_id)),
         )
         conn.commit()
@@ -201,23 +210,38 @@ def _claim_job(
     return get_job_status(job_id, db_path=db_path)
 
 
+# Câte secunde fără heartbeat (updated_at) până considerăm un job RUNNING drept
+# orfan (worker mort). Trebuie să fie comod mai mare decât intervalul tipic de
+# update de progres, ca să nu fure job-ul unui worker viu care abia a pornit.
+STALE_RUNNING_SEC = 180
+
+
 def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return _claim_job(
         db_path,
         where_sql="status = ?",
         where_params=(JOB_PENDING,),
-        update_sql="UPDATE jobs SET status = ?, progress_pct = 1 WHERE id = ?",
+        update_sql="UPDATE jobs SET status = ?, progress_pct = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         update_extra_params=(JOB_RUNNING,),
     )
 
 
 def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
-    """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker)."""
+    """Re-revendicăm DOAR job-uri RUNNING orfane (worker mort), recunoscute prin
+    heartbeat stale (`updated_at` mai vechi de STALE_RUNNING_SEC).
+
+    Vechea condiție (`progress_pct <= 5`) nu putea distinge un job proaspăt pornit
+    de un worker VIU de unul orfan, deci doi workeri concurenți puteau revendica
+    și rula același job. Heartbeat-ul rezolvă asta: un worker viu actualizează
+    `updated_at` la fiecare update de progres."""
     return _claim_job(
         db_path,
-        where_sql="status = ? AND progress_pct <= 5",
+        where_sql=(
+            "status = ? AND (updated_at IS NULL "
+            f"OR updated_at <= datetime('now', '-{int(STALE_RUNNING_SEC)} seconds'))"
+        ),
         where_params=(JOB_RUNNING,),
-        update_sql="UPDATE jobs SET progress_pct = 2 WHERE id = ?",
+        update_sql="UPDATE jobs SET progress_pct = 2, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
 
 
