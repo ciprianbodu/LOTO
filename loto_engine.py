@@ -13,7 +13,6 @@ from datetime import datetime
 import itertools
 import numpy as np
 import pandas as pd
-from numba import jit
 import time
 import logging
 import os
@@ -78,6 +77,9 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     """
     start_time = time.time()
     pool_len = len(pool)
+    # Guard: guarantee nu poate depăși pick (altfel itertools.combinations cu
+    # r = pick-guarantee negativ → ValueError). Clamp în [1, pick].
+    guarantee = max(1, min(int(guarantee), int(pick)))
     logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
 
     if pool_len < pick:
@@ -336,6 +338,9 @@ class LotoEngine:
 
     def _build_draw_matrix(self) -> None:
         """Construiește o dată matrice (rows x draw_n) de numere întregi — fără split pe string în buclă."""
+        # Matricea se schimbă → invalidăm structurile memoizate (perf #1).
+        self._score_bundle_cache = None
+        self._appear_idx_cache = None
         if self.data is None:
             self._draw_matrix = None
             return
@@ -561,6 +566,9 @@ class LotoEngine:
 
         logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
+        # Backup pentru a NU muta permanent self.data (footgun: un engine reutilizat
+        # ar acumula trunchierile 2140→214→21). Restaurat înainte de return.
+        _lookback_backup = None
         if lookback > 0 and self.data is not None and not self.data.empty:
             effective_rows = int(len(self.data) * (lookback / 100.0))
             effective_rows = max(effective_rows, 1)
@@ -568,6 +576,7 @@ class LotoEngine:
             if effective_rows == 0:
                 actual_lookback = 1 # Măcar o extragere
             logging.info(f"[PIPELINE] Aplic limită de istoric: Ultimele {lookback}% ({actual_lookback} extrageri).")
+            _lookback_backup = self.data
             self.data = self.data.tail(effective_rows).copy()
             self._build_draw_matrix()
             
@@ -908,6 +917,10 @@ class LotoEngine:
             logging.debug(f"[PIPELINE] hit_forecast a eșuat: {_exc_fc}")
 
         logging.info("[PIPELINE] Pipeline completat cu succes.")
+        # Restaurăm istoricul complet dacă lookback l-a trunchiat (vezi backup sus).
+        if _lookback_backup is not None:
+            self.data = _lookback_backup
+            self._build_draw_matrix()
         return lines, p10, p90, g_range, context, self.audit
 
     def _get_initial_hard_core(self, freq: np.ndarray, pool_size=12, filter_consecutives=False, blacklist=None) -> list:
@@ -1079,6 +1092,37 @@ class LotoEngine:
         return [int(i) + 1 for i in top_indices]
 
     
+    def _get_score_bundle(self, freq: np.ndarray) -> dict:
+        """Calculează (o singură dată per matrice) cele 5 dict-uri de scor pentru
+        ÎNTREG universul 1..max_n, memoizat.
+
+        Perf #1: înainte, `_apply_smart_selector` calcula scorurile pe pool, iar
+        `_replace_with_smart_alternatives` le RE-calcula pe universul rămas —
+        dublând cele mai scumpe scanări (gap/positional, O(numere×extrageri)).
+        Scorurile per-număr sunt globale (depind doar de istoric), deci le
+        calculăm o dată pe univers și ambii apelanți indexează subseturi.
+        Cache-ul e invalidat în `_build_draw_matrix` când matricea se schimbă;
+        ambii apelanți pasează același `freq` (pipeline-ul → 717 → 1139)."""
+        cache = getattr(self, "_score_bundle_cache", None)
+        if cache is not None:
+            return cache
+        max_n = int(self.params["max_n"])
+        saved_hc = self.hard_core
+        try:
+            # Funcțiile de scor iterează self.hard_core → îl punem pe tot universul.
+            self.hard_core = list(range(1, max_n + 1))
+            bundle = {
+                "gap": self._calculate_gap_scores(),
+                "trend": self._calculate_trend_scores(),
+                "frequency": self._calculate_frequency_scores(freq),
+                "positional": self._calculate_positional_scores(),
+                "recent": self._calculate_recent_hit_scores(),
+            }
+        finally:
+            self.hard_core = saved_hc
+        self._score_bundle_cache = bundle
+        return bundle
+
     def _apply_smart_selector(self, freq: np.ndarray) -> None:
         """
         Smart Selector v2 - sistem hibrid care aliniază rafinarea cu semnalul
@@ -1102,11 +1146,12 @@ class LotoEngine:
 
         logging.info("[SMART] Inițiere Smart Selector v2 - analiză multi-factorială...")
 
-        gap_scores = self._calculate_gap_scores()
-        trend_scores = self._calculate_trend_scores()
-        frequency_scores = self._calculate_frequency_scores(freq)
-        positional_scores = self._calculate_positional_scores()
-        recent_hit_scores = self._calculate_recent_hit_scores()
+        _bundle = self._get_score_bundle(freq)
+        gap_scores = _bundle["gap"]
+        trend_scores = _bundle["trend"]
+        frequency_scores = _bundle["frequency"]
+        positional_scores = _bundle["positional"]
+        recent_hit_scores = _bundle["recent"]
 
         final_scores = {}
         for num in self.hard_core:
@@ -1291,17 +1336,26 @@ class LotoEngine:
             return {num: 0.5 for num in self.hard_core}
         
         positional_scores = {}
-        draw_n = self.params["draw_n"]
-        
+        draw_n = int(self.params["draw_n"])
+        max_n = int(self.params["max_n"])
+
+        # Perf #1: numărăm aparițiile per (număr, poziție) VECTORIZAT, o singură
+        # dată, în loc de o buclă triplă (rând × poziție) per fiecare număr.
+        # counts[v, pos] = câte extrageri au pe coloana `pos` valoarea `v`.
+        m = self._draw_matrix
+        # Matricea poate avea mai puține coloane decât draw_n (CSV cu mai puține
+        # coloane de numere) — originalul itera enumerate(row), deci pozițiile
+        # lipsă rămân 0. Replicăm exact: umplem doar coloanele existente.
+        actual_cols = m.shape[1]
+        counts = np.zeros((max_n + 1, draw_n), dtype=np.float64)
+        for pos in range(min(draw_n, actual_cols)):
+            col = m[:, pos]
+            valid = col[(col >= 1) & (col <= max_n)]
+            counts[:, pos] = np.bincount(valid, minlength=max_n + 1)[: max_n + 1]
+
         for num in self.hard_core:
-            position_counts = np.zeros(draw_n)
-            
-            # Numărăm aparițiile pe fiecare poziție
-            for row in self._draw_matrix:
-                for pos, val in enumerate(row):
-                    if val == num:
-                        position_counts[pos] += 1
-            
+            position_counts = counts[num] if 1 <= num <= max_n else np.zeros(draw_n)
+
             # Scor bazat pe consistența pozițională
             total_appearances = np.sum(position_counts)
             if total_appearances == 0:
@@ -1320,12 +1374,29 @@ class LotoEngine:
         logging.info(f"[SMART] Positional scores calculated: {positional_scores}")
         return positional_scores
     
+    def _appearance_index(self) -> dict:
+        """Map memoizat num -> np.ndarray cu indecșii (sortați) extragerilor în
+        care apare num. Construit O(numere×extrageri) o singură dată per matrice,
+        înlocuind scanările per-număr din _calculate_average_gap/_get_last_appearance
+        (perf #1). Invalidat în _build_draw_matrix."""
+        idx = getattr(self, "_appear_idx_cache", None)
+        if idx is not None:
+            return idx
+        idx = {}
+        m = self._draw_matrix
+        if m is not None and m.size:
+            max_n = int(self.params["max_n"])
+            for num in range(1, max_n + 1):
+                idx[num] = np.where((m == num).any(axis=1))[0]
+        self._appear_idx_cache = idx
+        return idx
+
     def _get_last_appearance(self, num: int) -> int:
         """Returnează indexul ultimei apariții a unui număr"""
         if self._draw_matrix is not None:
-            for i in range(len(self._draw_matrix) - 1, -1, -1):
-                if num in self._draw_matrix[i]:
-                    return i
+            appearances = self._appearance_index().get(num)
+            if appearances is not None and len(appearances):
+                return int(appearances[-1])
         return -1
     
     def _calculate_recent_frequency(self, num: int, recent_draws: int, offset: int = 0) -> float:
@@ -1363,29 +1434,27 @@ class LotoEngine:
         available_numbers = all_numbers - current_pool
 
         alternative_scores: dict = {}
-        temp_hard_core = list(available_numbers)
-        original_hard_core = self.hard_core.copy()
-        try:
-            self.hard_core = temp_hard_core
+        # Bundle de scoruri memoizat pe tot universul (perf #1) — nu mai
+        # re-calculăm cele 5 dict-uri (gap/positional sunt scumpe). Subsetul
+        # `available_numbers` ⊂ univers, deci .get(num) e identic cu varianta
+        # care punea temporar self.hard_core = available_numbers.
+        _bundle = self._get_score_bundle(freq)
+        gap_scores = _bundle["gap"]
+        trend_scores = _bundle["trend"]
+        frequency_scores = _bundle["frequency"]
+        positional_scores = _bundle["positional"]
+        recent_hit_scores = _bundle["recent"]
 
-            gap_scores = self._calculate_gap_scores()
-            trend_scores = self._calculate_trend_scores()
-            frequency_scores = self._calculate_frequency_scores(freq)
-            positional_scores = self._calculate_positional_scores()
-            recent_hit_scores = self._calculate_recent_hit_scores()
+        # Aceleași weights ca _apply_smart_selector v2
+        for num in available_numbers:
+            alternative_scores[num] = (
+                gap_scores.get(num, 0) * 0.30 +
+                trend_scores.get(num, 0) * 0.15 +
+                frequency_scores.get(num, 0) * 0.15 +
+                positional_scores.get(num, 0) * 0.10 +
+                recent_hit_scores.get(num, 0) * 0.30
+            )
 
-            # Aceleași weights ca _apply_smart_selector v2
-            for num in available_numbers:
-                alternative_scores[num] = (
-                    gap_scores.get(num, 0) * 0.30 +
-                    trend_scores.get(num, 0) * 0.15 +
-                    frequency_scores.get(num, 0) * 0.15 +
-                    positional_scores.get(num, 0) * 0.10 +
-                    recent_hit_scores.get(num, 0) * 0.30
-                )
-        finally:
-            self.hard_core = original_hard_core
-        
         # Sortăm alternative după scor
         sorted_alternatives = sorted(alternative_scores.items(), key=lambda x: x[1], reverse=True)
         
@@ -1413,11 +1482,10 @@ class LotoEngine:
             return 0.0
             
         appearances = []
-        
+
         if self._draw_matrix is not None and self._draw_matrix.size:
-            for i, row in enumerate(self._draw_matrix):
-                if num in row:
-                    appearances.append(i)
+            # Index precalculat (perf #1) — fără re-scanarea matricei per număr.
+            appearances = self._appearance_index().get(num, [])
         else:
             # Fallback
             for i, row in self.data.iterrows():
@@ -1432,10 +1500,10 @@ class LotoEngine:
                 except (ValueError, TypeError) as exc:
                     logging.debug("avg_gap: skip row (parse): %s", exc)
                     continue
-        
+
         if len(appearances) < 2:
             return float(len(self.data))  # Dacă a apărut o dată sau niciodată
-            
+
         gaps = [appearances[i+1] - appearances[i] for i in range(len(appearances)-1)]
         return sum(gaps) / len(gaps) if gaps else float(len(self.data))
     

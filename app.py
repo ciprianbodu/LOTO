@@ -468,9 +468,20 @@ def reset_sidebar_settings():
     time.sleep(0.5)
 
 def _decode_queue_result(result_json: str) -> object:
-    data = json.loads(result_json)
-    blob = base64.b64decode(str(data.get("payload", "")))
-    return pickle.loads(blob)
+    # Defensiv: la cancel-race worker-ul poate scrie payload gol ("{}"); fără
+    # acest guard, base64/pickle pe "" aruncă EOFError → pagină roșie Streamlit.
+    # Întoarcem None, iar apelantul tratează deja non-tuple ca rezultat invalid.
+    try:
+        data = json.loads(result_json)
+    except Exception:
+        return None
+    payload = str((data or {}).get("payload", "")) if isinstance(data, dict) else ""
+    if not payload:
+        return None
+    try:
+        return pickle.loads(base64.b64decode(payload))
+    except Exception:
+        return None
 
 
 def _fmt_pool_inline(pool: list) -> str:
