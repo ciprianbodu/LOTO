@@ -65,3 +65,4 @@ uploaded_data/
 *.tmp
 .bench_cache/
 raport_complet.txt
+best_methods.json

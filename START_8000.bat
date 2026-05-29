@@ -14,6 +14,24 @@ REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 >> "%LOGFILE%" echo Computer: %COMPUTERNAME%
 >> "%LOGFILE%" echo.
 
+REM ===== Auto-update din GitHub (best-effort; NU blocheaza daca esueaza) =====
+REM Aduce ultimele fix-uri automat la fiecare pornire. best_methods.json /
+REM _ISTORIC / venv sunt gitignore-uite -> fara divergenta -> fast-forward curat.
+where git >nul 2>&1
+if not errorlevel 1 (
+    echo [GIT] Verific actualizari de pe GitHub...
+    git fetch origin main --quiet 2>nul
+    git merge --ff-only origin/main >nul 2>&1
+    if errorlevel 1 (
+        echo [GIT] Sar update-ul ^(divergenta/conflict/offline^) - pornesc cu codul curent.
+    ) else (
+        echo [GIT] Cod la zi cu GitHub.
+    )
+) else (
+    echo [GIT] git negasit - sar peste auto-update.
+)
+echo.
+
 REM ===== Verify phase (silent, logat in fundal) =====
 call :verify_phase >> "%LOGFILE%" 2>&1
 set "VERIFY_RC=%ERRORLEVEL%"
