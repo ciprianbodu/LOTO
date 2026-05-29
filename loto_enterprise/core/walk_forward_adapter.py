@@ -138,9 +138,6 @@ def run_honest_walk_forward(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
     )
-    if progress_cb:
-        progress_cb(f"Walk-forward {game_type} pool={pool_size}... (~3-5 min)", 0)
-
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
@@ -153,6 +150,7 @@ def run_honest_walk_forward(
         use_feedback=False,           # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem
         smart_reduction=True,
+        progress_cb=progress_cb,      # frac 0..1 per simulare → bară de progres în UI
     )
 
     flat = expand_predictions_to_flat(predictions, game_type)

@@ -407,7 +407,8 @@ class LotoBacktester:
                                   simulation_step: int = 1,
                                   use_feedback: bool = True,
                                   enable_hard_inversion: bool = True,
-                                  smart_reduction: bool = True) -> List[RetroactivePrediction]:
+                                  smart_reduction: bool = True,
+                                  progress_cb=None) -> List[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
@@ -461,6 +462,12 @@ class LotoBacktester:
         # Iterăm prin fiecare punct de simulare
         for sim_idx in range(start_idx, n_draws, simulation_step):
             sim_num = sim_idx - start_idx + 1
+
+            if progress_cb is not None:
+                try:
+                    progress_cb(sim_num / max(1, n_simulate))
+                except Exception:  # noqa: BLE001
+                    pass
 
             # Data extragerii vizate (următoarea după punctul de simulare)
             target_date = self.dates[sim_idx] if sim_idx < len(self.dates) else f"Draw_{sim_idx}"

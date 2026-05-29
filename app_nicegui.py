@@ -82,6 +82,7 @@ STATE: dict = {
     "results": None,         # (results_bundle, count)
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
     "wf_status": "",         # text status walk-forward
+    "wf_progress": 0.0,      # fracție 0..1 progres walk-forward (bară)
     "pure_bench": False,
     "calib": {},             # {game_label: {"best": int, "detail": dict}}
     "calib_status": "",
@@ -391,18 +392,28 @@ def _start_walk_forward() -> None:
                     continue
                 for g_label, data in outs.items():
                     done += 1
+                    base = (done - 1) / max(1, total)
                     STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
+                    STATE["wf_progress"] = base
+
+                    def _wf_cb(frac, _b=base, _t=total):
+                        # progres global = jocuri terminate + fracția jocului curent
+                        STATE["wf_progress"] = min(1.0, _b + max(0.0, min(1.0, frac)) / _t)
+
                     try:
                         flat, meta = run_honest_walk_forward(
                             df_source=df_source, game_type=g_label,
                             pool_size=int(data.get("pool_size") or 10),
                             backtest_depth_percent=5.0, lookback_percent=100.0, use_cache=True,
+                            progress_cb=_wf_cb,
                         )
                         with STATE_LOCK:
                             STATE["retro"][f"{fname}_{g_label}"] = flat
                     except Exception as exc:  # noqa: BLE001
                         logger.error("walk-forward %s: %s", g_label, exc)
+                    STATE["wf_progress"] = done / max(1, total)
             STATE["wf_status"] = ""
+            STATE["wf_progress"] = 1.0
         except Exception as exc:  # noqa: BLE001
             STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
         finally:
@@ -412,6 +423,7 @@ def _start_walk_forward() -> None:
             except Exception:  # noqa: BLE001
                 pass
 
+    STATE["wf_progress"] = 0.0
     STATE["wf_status"] = ("📊 Pornesc walk-forward backtest (poate dura câteva minute)..."
                           + (" — validare FAZA 1 (pool normal), fiindcă auto-invert e ON" if _has_invert else ""))
     threading.Thread(target=_worker_wf, daemon=True).start()
@@ -1047,6 +1059,9 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 def results_panel() -> None:
     if STATE.get("wf_status"):
         ui.label(STATE["wf_status"]).classes("text-info")
+        _wfp = float(STATE.get("wf_progress") or 0.0)
+        ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
+        ui.label(f"{int(_wfp * 100)}%").classes("text-caption text-info")
 
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -1415,6 +1430,8 @@ def main_page() -> None:
         logs_panel.refresh()
         if STATE.get("active_job_id") or _bench_running() or STATE.get("wf_status"):
             status_panel.refresh()
+        if STATE.get("wf_status"):
+            results_panel.refresh()  # bara walk-forward se umple live
     ui.timer(2.0, _tick)
 
 
