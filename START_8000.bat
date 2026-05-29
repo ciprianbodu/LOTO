@@ -169,12 +169,16 @@ REM Modelele TimesFM sunt deja cached local; nu vrem network calls la runtime.
 set HF_HUB_OFFLINE=1
 set TRANSFORMERS_OFFLINE=1
 
-echo [2/4] Eliberare resurse (port 8000, workeri vechi)
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 2^>nul') do (
+echo [2/4] Eliberare resurse (port 8000, UI + worker vechi)
+REM Omoara procesele python ale ACESTUI proiect: si app_nicegui.py (UI care tine
+REM portul 8000), si worker.py. Inainte se omora DOAR worker-ul -> UI vechi ramanea
+REM pe 8000 si noua pornire pica cu 'address already in use'.
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*app_nicegui.py*' -or $_.CommandLine -like '*worker.py*') -and $_.CommandLine -like '*%~dp0*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host ('[CLEANUP] Oprit PID ' + $_.ProcessId) }"
+REM Fallback: orice mai asculta pe 8000 (LISTENING)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr ":8000" 2^>nul') do (
     if NOT "%%a"=="0" taskkill /f /pid %%a >nul 2>&1
 )
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -like '*worker.py*' -and $_.CommandLine -like '*%~dp0*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host ('[CLEANUP] Worker vechi oprit: PID ' + $_.ProcessId) }"
-timeout /t 1 /nobreak >nul 2>&1
+timeout /t 3 /nobreak >nul 2>&1
 
 echo [3/4] Pornire Worker
 start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
