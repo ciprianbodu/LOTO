@@ -132,16 +132,8 @@ def load_adaptive_state(game_type: str, pool_size: int) -> dict:
 
 
 def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
-    """Salvează starea adaptivă pe disc (read-modify-write atomic-ish)."""
-    raw: dict = {}
-    if _STATE_FILE.exists():
-        try:
-            with open(_STATE_FILE, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-        except Exception as e:
-            logger.warning(f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie.")
-            raw = {}
-
+    """Salvează starea adaptivă pe disc. Read-modify-write atomic + lock advisory
+    cross-proces (worker vs UI) ca să nu se piardă update-uri pe alte chei."""
     serializable = {
         "last_pool": [int(n) for n in entry.get("last_pool", [])],
         "last_pool_date": entry.get("last_pool_date"),
@@ -153,11 +145,19 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
         },
         "regime_state": entry.get("regime_state", {}),
     }
-    raw[_state_key(game_type, pool_size)] = serializable
-
     try:
-        from ui_shared import atomic_write_json
-        atomic_write_json(_STATE_FILE, raw)  # atomic: tmp+fsync+os.replace
+        from ui_shared import atomic_write_json, file_lock
+        with file_lock(_STATE_FILE):
+            raw: dict = {}
+            if _STATE_FILE.exists():
+                try:
+                    with open(_STATE_FILE, "r", encoding="utf-8") as f:
+                        raw = json.load(f)
+                except Exception as e:
+                    logger.warning(f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie.")
+                    raw = {}
+            raw[_state_key(game_type, pool_size)] = serializable
+            atomic_write_json(_STATE_FILE, raw)  # atomic: tmp+fsync+os.replace
     except Exception as e:
         logger.error(f"[ADAPTIVE] Nu pot scrie {_STATE_FILE}: {e}")
 

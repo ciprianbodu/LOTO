@@ -89,6 +89,11 @@ STATE: dict = {
     "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
 }
 
+# R3: lock pentru mutații compuse pe STATE din thread-uri (walk-forward, calibrare)
+# vs thread-ul principal UI. (Operațiile simple pe dict sunt atomice prin GIL;
+# lock-ul protejează secvențele multi-pas / iterările.)
+STATE_LOCK = threading.RLock()
+
 GK_MATRIX = {  # etichetă afișată → cheia jocului din bench (best_methods.json / folds.csv)
     "Loto 6/49": "loto_6_49",
     "Loto 5/40": "loto_5_40",
@@ -402,7 +407,8 @@ def _start_walk_forward() -> None:
     def _worker_wf() -> None:
         try:
             from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
-            ds_by_name = {fn: df for fn, df in STATE["datasets"]}
+            with STATE_LOCK:
+                ds_by_name = {fn: df for fn, df in STATE["datasets"]}
             total = sum(len(o) for _, o in results_bundle)
             done = 0
             for fname, outs in results_bundle:
@@ -418,7 +424,8 @@ def _start_walk_forward() -> None:
                             pool_size=int(data.get("pool_size") or 10),
                             backtest_depth_percent=5.0, lookback_percent=100.0, use_cache=True,
                         )
-                        STATE["retro"][f"{fname}_{g_label}"] = flat
+                        with STATE_LOCK:
+                            STATE["retro"][f"{fname}_{g_label}"] = flat
                     except Exception as exc:  # noqa: BLE001
                         logger.error("walk-forward %s: %s", g_label, exc)
             STATE["wf_status"] = ""
@@ -453,8 +460,9 @@ def status_panel() -> None:
         state = str(stt.get("status") or "")
         if state == "COMPLETED":
             payload = decode_queue_result(str(stt.get("result_json") or "{}"))
-            STATE["results"] = payload
-            STATE["active_job_id"] = None
+            with STATE_LOCK:
+                STATE["results"] = payload
+                STATE["active_job_id"] = None
             unlock_engine()
             _start_walk_forward()
             results_panel.refresh()
@@ -997,7 +1005,9 @@ def run_calibration_bg() -> None:
             from loto_engine import LotoEngine
             res = {}
             pool = int(SETTINGS["pool_size_val"])
-            for fname, df in STATE["datasets"]:
+            with STATE_LOCK:
+                _datasets = list(STATE["datasets"])  # snapshot sub lock
+            for fname, df in _datasets:
                 gl = _game_label_for(fname)
                 STATE["calib_status"] = f"⚙️ Calibrare {gl}..."
                 eng = LotoEngine(game_type=gl)
@@ -1006,7 +1016,8 @@ def run_calibration_bg() -> None:
                 best, detail = run_calibration(eng, test_draws=2, pool_size=pool)
                 res[gl] = {"best": int(best), "detail": detail}
                 SETTINGS["sim_depth_val"] = int(best)
-            STATE["calib"] = res
+            with STATE_LOCK:
+                STATE["calib"] = res
             _save_settings()
             STATE["calib_status"] = ""
         except Exception as exc:  # noqa: BLE001
@@ -1115,10 +1126,12 @@ SUPPORTED_POOLS = set(range(6, 13))  # 6..12 (range slider UI)
 
 def _clean_stale_adaptive(stale_keys) -> None:
     try:
-        raw = json.loads(ADAPTIVE_STATE_FILE.read_text(encoding="utf-8"))
-        for k in stale_keys:
-            raw.pop(k, None)
-        atomic_write_json(ADAPTIVE_STATE_FILE, raw)
+        from ui_shared import file_lock
+        with file_lock(ADAPTIVE_STATE_FILE):  # nu ne batem cu worker-ul pe RMW
+            raw = json.loads(ADAPTIVE_STATE_FILE.read_text(encoding="utf-8"))
+            for k in stale_keys:
+                raw.pop(k, None)
+            atomic_write_json(ADAPTIVE_STATE_FILE, raw)
         ui.notify(f"Șters {len(stale_keys)} configurări stale.", type="positive")
     except Exception as exc:  # noqa: BLE001
         ui.notify(f"Eroare la curățare: {exc}", type="negative")

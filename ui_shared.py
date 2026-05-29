@@ -106,6 +106,42 @@ def atomic_write_json(path, obj, *, indent: int = 2, ensure_ascii: bool = False)
     atomic_write_text(path, json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii))
 
 
+class file_lock:
+    """Lock advisory cross-proces (Win+POSIX) prin lock-file O_EXCL, cu timeout.
+    Previne lost-updates când worker-ul și UI-ul fac read-modify-write pe același
+    fișier (ex. adaptive_state.json). La timeout continuă fără lock (anti-deadlock
+    pe lock-uri stale), pentru că scrierea în sine e oricum atomică."""
+
+    def __init__(self, target, timeout: float = 10.0):
+        self.lockpath = str(target) + ".lock"
+        self.timeout = timeout
+        self._fd = None
+
+    def __enter__(self):
+        start = time.time()
+        while True:
+            try:
+                self._fd = os.open(self.lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                return self
+            except FileExistsError:
+                if time.time() - start > self.timeout:
+                    logger.debug("[file_lock] timeout pe %s — continui fără lock", self.lockpath)
+                    return self
+                time.sleep(0.05)
+
+    def __exit__(self, *exc):
+        if self._fd is not None:
+            try:
+                os.close(self._fd)
+            except OSError:
+                pass
+        try:
+            os.unlink(self.lockpath)
+        except OSError:
+            pass
+        return False
+
+
 # --------------------------------------------------------------------------- #
 # Worker
 # --------------------------------------------------------------------------- #
