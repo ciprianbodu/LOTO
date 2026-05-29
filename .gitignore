@@ -63,3 +63,4 @@ uploaded_data/
 .nicegui/
 *.bak
 *.tmp
+.bench_cache/

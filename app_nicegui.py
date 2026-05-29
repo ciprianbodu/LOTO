@@ -518,8 +518,28 @@ def _read_bench_log_tail(n: int = 50) -> str:
         return f"(eroare citire bench_full.log: {exc})"
 
 
+def _clear_all_logs() -> None:
+    """Curăță atât loto.log (engine/worker) cât și bench_full.log (benchmark)."""
+    clear_logs()  # rescrie loto.log cu un header
+    try:
+        if BENCH_LOG_FILE.exists():
+            BENCH_LOG_FILE.write_text("", encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("clear bench log: %s", exc)
+    logs_panel.refresh()
+    ui.notify("Loguri curățate (loto.log + bench_full.log).", type="positive")
+
+
 @ui.refreshable
 def logs_panel() -> None:
+    # Toolbar: curăță AMBELE loguri (loto.log + bench_full.log) + refresh manual.
+    with ui.row().classes("w-full items-center gap-2 mb-1"):
+        ui.button("🗑️ Curăță logurile", on_click=_clear_all_logs).props(
+            "outline dense no-caps color=negative"
+        ).classes("text-xs")
+        ui.button("🔄 Reîmprospătează", on_click=logs_panel.refresh).props(
+            "outline dense no-caps"
+        ).classes("text-xs")
     # ── Engine / Worker (loto.log) ── include faza POST-BENCH: selectia metodei
     # castigatoare din best_methods.json, scoringul, POST-HOC si walk-forward.
     ui.label("⚙️ Engine / Worker — loto.log (include ce se întâmplă DUPĂ bench)").classes(
