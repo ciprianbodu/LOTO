@@ -1,8 +1,15 @@
-# NOTA: acest fisier e DOAR documentatie, NU folosit direct de niciun .bat.
-# Install-ul real e in ACTUALIZARI.bat care:
-#   1. Verifica fiecare pachet cu `pip show`
-#   2. Instaleaza doar lipsurile cu `--no-deps` (evita backtracking transformers)
-# START_8000.bat nu mai face install — daca env incomplet, redirect la ACTUALIZARI.bat.
+# NOTA: SPLIT in 3 fisiere (din 2026-05) pentru profile per-hardware:
+#
+#   requirements_base.txt          — comun la TOATE masinile (CPU + GPU)
+#   requirements_gpu_extras.txt    — extras pentru masini cu GPU NVIDIA
+#   requirements_cpu_extras.txt    — extras pentru masini CPU-only (gol acum)
+#
+# ACTUALIZARI.bat citeste .machine_profile (scris de START_8000.bat :DetectGpu)
+# si instaleaza base + extras potrivit. Torch e instalat SEPARAT cu index URL
+# corect (cu128 pentru NVIDIA, cpu pentru fara GPU).
+#
+# Acest fisier (requirements.txt) ramane DOAR DOCUMENTATIE — un snapshot legacy
+# al setului unificat. NU mai e folosit direct de niciun bat.
 #
 # Constrangeri stricte (NU le upgrada manual!):
 #   - momentfm 0.1.4 cere transformers==4.33.3 ȘI huggingface-hub==0.24.0 (==)

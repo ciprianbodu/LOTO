@@ -27,7 +27,6 @@ import subprocess
 import psutil
 import sys
 import requests
-import streamlit.components.v1 as components
 
 # ensure_worker_running() va fi apelat mai jos, dupa configurarea paginii
 
@@ -653,6 +652,7 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
             first_3 = context.get("first_3") or []
             last_3 = context.get("last_3") or []
             coverage_pct = context.get("coverage_pct", 0)
+            _show_joker_txt = (str(game).lower() == "joker")
             if first_3 or last_3:
                 lines.append("")
                 lines.append("Verificare CSV:")
@@ -660,13 +660,13 @@ def _build_full_report(results_bundle, retro_results: dict | None = None) -> str
                     lines.append("  Primele 3 extrageri:")
                     for d in first_3:
                         nums_str = " ".join(f"{n:02d}" for n in d.get("numbers", []))
-                        joker = f" + J{d.get('joker')}" if d.get("joker") else ""
+                        joker = f" + J{d.get('joker')}" if (_show_joker_txt and d.get("joker")) else ""
                         lines.append(f"    {d.get('date','—')}  {nums_str}{joker}")
                 if last_3:
                     lines.append("  Ultimele 3 extrageri:")
                     for d in last_3:
                         nums_str = " ".join(f"{n:02d}" for n in d.get("numbers", []))
-                        joker = f" + J{d.get('joker')}" if d.get("joker") else ""
+                        joker = f" + J{d.get('joker')}" if (_show_joker_txt and d.get("joker")) else ""
                         lines.append(f"    {d.get('date','—')}  {nums_str}{joker}")
 
             # Top 10 Variante Simple (bilete individuale recomandate)
@@ -845,7 +845,7 @@ _pr = st.session_state.get("persistent_results")
 if isinstance(_pr, tuple) and len(_pr) == 2 and _pr[0]:
     _col_btn, _col_spacer = st.columns([1, 4])
     with _col_btn:
-        if st.button("📋 Copiază raport complet", use_container_width=True, help="Afișează întregul rezultat (pipeline, pool, variante, backtest, ROI, hardware) într-un bloc de cod. Folosește butonul de copy din colțul blocului pentru a lua tot textul în clipboard."):
+        if st.button("📋 Copiază raport complet", width='stretch', help="Afișează întregul rezultat (pipeline, pool, variante, backtest, ROI, hardware) într-un bloc de cod. Folosește butonul de copy din colțul blocului pentru a lua tot textul în clipboard."):
             st.session_state["_show_full_report"] = not st.session_state.get("_show_full_report", False)
     if st.session_state.get("_show_full_report", False):
         try:
@@ -865,12 +865,18 @@ status_container = st.empty()
 if "persistent_results" in st.session_state:
     res = st.session_state["persistent_results"]
     if isinstance(res, tuple) and len(res) == 2:
+        def _fmt_dur(seconds: float) -> str:
+            """Format secunde ca 'X min Y.Z sec' sau 'X.Y secunde'."""
+            mins = int(seconds // 60)
+            secs = seconds % 60
+            return f"{mins} min și {secs:.1f} sec" if mins > 0 else f"{secs:.1f} secunde"
+
         if "persistent_results_time" in st.session_state:
             elapsed = st.session_state["persistent_results_time"]
-            mins = int(elapsed // 60)
-            secs = elapsed % 60
-            time_str = f"{mins} min și {secs:.1f} sec" if mins > 0 else f"{secs:.1f} secunde"
-            st.success(f"✅ Generare finalizată în {time_str}.")
+            st.success(
+                f"✅ Generare finalizată în **{_fmt_dur(elapsed)}** "
+                f"(de la apăsarea butonului)."
+            )
         else:
             st.success("✅ Generare finalizată.")
 
@@ -889,7 +895,7 @@ if st.session_state.get("_shutdown_initiated"):
                 f"Computer-ul va fi oprit forțat. Anulează ACUM dacă vrei să continui."
             )
         with col_cancel:
-            if st.button("❌ ANULEAZĂ OPRIREA", type="primary", use_container_width=True):
+            if st.button("❌ ANULEAZĂ OPRIREA", type="primary", width='stretch'):
                 try:
                     import subprocess as _sd_cancel
                     _sd_cancel.run(["shutdown", "/a"], check=True, capture_output=True)
@@ -927,12 +933,12 @@ if "loaded_datasets" in st.session_state and st.session_state["loaded_datasets"]
             if cols_to_show:
                 st.dataframe(
                     display_df[cols_to_show].sort_index(ascending=False),
-                    use_container_width=True,
+                    width='stretch',
                     height=150, # Mai strâns
                     hide_index=True
                 )
             else:
-                st.dataframe(display_df, use_container_width=True, height=150, hide_index=True)
+                st.dataframe(display_df, width='stretch', height=150, hide_index=True)
         st.info("💡 Tabelul de mai sus arată datele brute folosite de scorerul ales (bench winner per joc × pool) pentru analiză.")
 
 # === Dashboard Istoric Adaptive Feedback ===
@@ -978,7 +984,7 @@ if _ADAPTIVE_STATE_FILE.exists():
                         f"din UI 6-12): `{', '.join(_stale_keys)}` — nu vor mai învăța."
                     )
                 with _col_clean:
-                    if st.button("🗑️ Curăță stale", use_container_width=True,
+                    if st.button("🗑️ Curăță stale", width='stretch',
                                  help="Șterge entries pentru pool-uri inaccesibile (15 din vechi Ultra-Hit, 7 etc.)"):
                         for _sk in _stale_keys:
                             _adaptive_raw.pop(_sk, None)
@@ -1089,6 +1095,47 @@ if _ADAPTIVE_STATE_FILE.exists():
                 f"configurări curent în mod RESET."
             )
 
+def _estimate_bench_eta_full(target_folds: int = 1280, overhead: float = 1.25) -> tuple[str, str]:
+    """Calculeaza ETA pentru un bench pe baza ultimului bench salvat.
+
+    Strategie: citeste bench_results/folds.csv, ia avg runtime_sec per fold
+    de la metodele care AU RULAT efectiv (failed=False si runtime > 0.05s
+    ca sa excludem fallback-urile instant). Multiplica cu numarul de folds
+    asteptat + overhead pentru loading/GPU warmup.
+
+    Returneaza (label_scurt, detaliu). Daca nu exista date → fallback
+    50 min (estimare empirica originala pe RTX 5060 Ti).
+
+    Folosit pentru:
+      • Caption-uri freshness (Quick/Full re-bench previzionat)
+      • Tooltip-uri butoane Re-Bench
+      • ETA live in timpul bench-ului (lower bound)
+    """
+    from pathlib import Path as _Pe
+    fp = _Pe("bench_results/folds.csv")
+    if not fp.exists():
+        return ("~50 min", "estimare implicita (nu exista bench anterior)")
+    try:
+        import pandas as _pd
+        df = _pd.read_csv(fp)
+        if df.empty or "runtime_sec" not in df.columns:
+            return ("~50 min", "folds.csv gol/invalid")
+        # Filtram folds reale (cele cu failed=True sau runtime ~0 nu reflecta runtime real)
+        mask = (df.get("failed", False) == False) & (df["runtime_sec"] > 0.05)
+        real = df[mask] if mask.any() else df
+        avg = float(real["runtime_sec"].mean())
+        total_sec = avg * target_folds * overhead
+        if total_sec < 60:
+            label = f"~{int(total_sec)} sec"
+        elif total_sec < 3600:
+            label = f"~{int(total_sec/60)} min"
+        else:
+            label = f"~{total_sec/3600:.1f} h"
+        return (label, f"calibrat: {len(real)} folds reale × avg {avg:.2f}s + {int((overhead-1)*100)}% overhead")
+    except Exception as exc:
+        return ("~50 min", f"eroare calcul ({exc})")
+
+
 with st.sidebar:
     st.header("1. Încărcare Date CSV")
     uploaded_files = st.file_uploader(
@@ -1097,15 +1144,26 @@ with st.sidebar:
         accept_multiple_files=True
     )
     
-    # Auto-load logic for persistence / refresh on start
+    # Auto-load logic for persistence / refresh on start.
+    # IMPORTANT: sursa oficiala = subfolderul `istoric/` (joker.csv, loto_6_49.csv,
+    # loto_5_40.csv — toate cu DD-MM-YYYY si actualizate). NU mai incarcam input.csv
+    # din radacina — era leftover de dev cu format inconsistent (Joker mislabeled
+    # ca 6/49) si dadea date corupte in motor.
     if "loaded_datasets" not in st.session_state:
-        local_csvs = [f for f in ["joker.csv", "loto_6_49.csv", "loto_5_40.csv", "input.csv"] if os.path.exists(f)]
+        _istoric_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "istoric")
+        _candidate_csvs = ["joker.csv", "loto_6_49.csv", "loto_5_40.csv"]
+        local_csvs = [
+            os.path.join(_istoric_dir, name)
+            for name in _candidate_csvs
+            if os.path.exists(os.path.join(_istoric_dir, name))
+        ]
         if local_csvs:
             auto_ds = []
             for fpath in local_csvs:
                 try:
                     df = pd.read_csv(fpath)
-                    auto_ds.append((fpath, df))
+                    # Folosim doar numele fisierului in UI (nu calea completa)
+                    auto_ds.append((os.path.basename(fpath), df))
                 except Exception as exc:
                     logger.warning("auto-load: nu am putut citi %s: %s", fpath, exc)
             if auto_ds:
@@ -1181,33 +1239,42 @@ with st.sidebar:
     )
     
         
+    # BUG-FIX Streamlit (vezi comentariul de la pool_size_val mai sus): NU se
+    # foloseste `value=` cu `key=` cand session_state-ul cu acea cheie e deja
+    # setat (Streamlit emite "widget was created with a default value but also
+    # had its value set via the Session State API" warning si poate reseta
+    # widget-ul la rerun). Initializam session_state cu default-ul DACA nu
+    # exista deja, apoi widget-ul foloseste DOAR `key=`.
+    if "guarantee_val" not in st.session_state:
+        st.session_state["guarantee_val"] = 4
     guarantee_input = st.number_input(
         "Garanție minimă (Set Cover)",
         min_value=3,
         max_value=5,
-        value=st.session_state.get("guarantee_val", 4),
         step=1,
         help="Garanția matematică: 3, 4 sau 5 numere garantate.",
         key="guarantee_val",
         on_change=_save_ui_state,
     )
-    
+
+    if "max_variants_val" not in st.session_state:
+        st.session_state["max_variants_val"] = 0
     max_variants_input = st.number_input(
         "Limită maxime variante (0 = fără limită)",
         min_value=0,
         max_value=10000,
-        value=st.session_state.get("max_variants_val", 0),
         step=10,
         help="Oprește generarea la acest număr de variante (scade din acoperirea Set Cover, dar te încadrează în buget).",
         key="max_variants_val",
         on_change=_save_ui_state,
     )
 
+    if "lookback_val" not in st.session_state:
+        st.session_state["lookback_val"] = 0
     lookback_input = st.number_input(
         "Analizează doar ultimele X% extrageri din istoric (0 = 100% Tot istoricul)",
         min_value=0,
         max_value=100,
-        value=st.session_state.get("lookback_val", 0),
         step=5,
         help="Dacă e 0, analizează toată arhiva (100%). Dacă e N, calculează frecvența doar pe ultimele N% din extrageri.",
         key="lookback_val",
@@ -1279,18 +1346,21 @@ with st.sidebar:
         _global_rec = "use_cache"
 
     # Mic info verde/galben/rosu (fara butoane separate — Auto-Pilot decide singur)
+    # ETA calibrat din ultimul bench (bench_results/folds.csv).
+    _quick_eta_lbl, _ = _estimate_bench_eta_full(target_folds=150)
+    _full_eta_lbl, _ = _estimate_bench_eta_full(target_folds=1280)
     if _global_rec == "use_cache":
         st.caption("🟢 Cache OK — Auto-Pilot va genera direct, fără re-bench.")
     elif _global_rec == "quick_rebench":
         st.caption(
-            "🟡 CSV s-a modificat puțin — Auto-Pilot va lansa un Re-Bench Quick "
-            "(~5 min) ÎN FUNDAL și va genera imediat cu cache-ul curent. "
+            f"🟡 CSV s-a modificat puțin — Auto-Pilot va lansa un Re-Bench Quick "
+            f"({_quick_eta_lbl}) ÎN FUNDAL și va genera imediat cu cache-ul curent. "
             "La rularea următoare vei avea decizia împrospătată."
         )
     elif _global_rec == "full_rebench":
         st.caption(
-            "🔴 CSV s-a modificat semnificativ — Auto-Pilot va lansa un Re-Bench Full "
-            "(~50 min) ÎN FUNDAL și va genera imediat cu cache-ul curent. "
+            f"🔴 CSV s-a modificat semnificativ — Auto-Pilot va lansa un Re-Bench Full "
+            f"({_full_eta_lbl}) ÎN FUNDAL și va genera imediat cu cache-ul curent. "
             "Rularea de mâine va avea decizii bazate pe noul bench."
         )
 
@@ -1353,12 +1423,58 @@ with st.sidebar:
     # Notă: am încercat anterior un detector de "dublu-click" pe un singur buton,
     # dar Streamlit dezactivează butoanele pe durata rerun-ului între click-uri,
     # iar UX-ul era confuz. Două butoane separate = intenție explicită, fără timing.
+    # _estimate_bench_eta_full e definit la nivel modul (vezi mai sus, inainte
+    # de `with st.sidebar:`) ca sa fie accesibil si in caption-urile de freshness.
+
+    # === Persistarea timpului de apasare a butonului pe DISK ===
+    # session_state NU supravietuieste auto-refresh-ului JS la 5 min in timpul
+    # bench-ului (~30-50 min). Daca am stoca doar in session_state, la COMPLETED
+    # (final job dupa bench + auto-trigger generation), cheia ar fi sters → am
+    # calcula gresit timpul (doar pipeline-ul de la auto-trigger, nu si bench-ul).
+    # Solutia: fisier .button_press_ts pe disk, ca .regenerate_after_bench.
+    _BUTTON_TS_FILE = Path(".button_press_ts")
+
+    def _mark_button_press():
+        """Captureaza momentul apasarii butonului. Persistat pe DISK ca sa
+        supravietuiasca page reload-urilor JS. NU suprascrie daca exista deja
+        (Force Re-Bench → bench in fundal → auto-trigger generation:
+        pastram timpul ORIGINAL al apasarii)."""
+        try:
+            if not _BUTTON_TS_FILE.exists():
+                _BUTTON_TS_FILE.write_text(f"{time.time()}")
+        except Exception:
+            pass
+        # Si in session_state ca backup pentru cazul cand fisierul nu se poate scrie
+        if "button_press_time" not in st.session_state:
+            st.session_state["button_press_time"] = time.time()
+
+    def _get_button_press_time() -> "float | None":
+        """Returneaza timpul apasarii butonului. Prefera disk (sursa de adevar
+        dupa page reload), fallback la session_state."""
+        try:
+            if _BUTTON_TS_FILE.exists():
+                return float(_BUTTON_TS_FILE.read_text().strip())
+        except Exception:
+            pass
+        return st.session_state.get("button_press_time")
+
+    def _clear_button_press():
+        """Consum (sterge) fisierul + cheia session_state dupa folosire."""
+        try:
+            _BUTTON_TS_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+        st.session_state.pop("button_press_time", None)
+
     def _run_autopilot(force_full_rebench: bool):
         """Lansează Auto-Pilot. Cu force_full_rebench=True: lansează FULL rebench imediat
-        (matrice 14 metode × 10 ferestre × 3 jocuri, ~50 min, în fundal) pe lângă generare."""
+        (matrice 14 metode × 10 ferestre × 3 jocuri, ETA dinamic, în fundal) pe lângă generare."""
         if not st.session_state.get("loaded_datasets"):
             st.error("Încărcați întâi un fișier CSV!")
             return
+        # Captureaza momentul apasarii butonului — persistat pe disk ca sa
+        # supravietuiasca auto-refresh-urilor JS in timpul bench-ului (~30-50 min).
+        _mark_button_press()
         try:
             from loto_enterprise.core.method_selector import recommend_optimal_config
             import subprocess as _sp, sys as _sys
@@ -1397,19 +1513,25 @@ with st.sidebar:
                             py, "bench_all_methods.py", "--no-rich",
                             "--percentiles", "10,20,30,40,50,60,70,80,90,100",
                         ]
+                        # FORTAT/DRIFT MAJOR: ignoram cache-ul ca sa luam masuratori
+                        # proaspete. Cache-ul nu include hardware/torch in key, deci
+                        # rezultate CPU vechi sunt refolosite pe GPU (silent fails).
+                        bench_args.append("--no-cache")
                         if force_full_rebench:
-                            _label = "🔴 FULL FORȚAT (buton dedicat — matrice completă, ~50 min)"
+                            _eta_lbl, _eta_det = _estimate_bench_eta_full()
+                            _label = f"🔴 FULL FORȚAT (buton dedicat — matrice completă, {_eta_lbl})"
                             logging.warning(
                                 "═" * 60 + "\n"
                                 "[AUTO-PILOT] 🔴 FULL REBENCH FORȚAT DE USER 🔴\n"
                                 "  → Matrice completă:\n"
                                 "    • 14 metode × 10 ferestre regresive × 3 jocuri\n"
-                                "    • Durată estimată: ~50 minute\n"
+                                f"    • Durată estimată: {_eta_lbl}  ({_eta_det})\n"
                                 "    • Rulează în fundal (CMD nou); generarea curentă continuă\n"
                                 "═" * 60
                             )
                         else:
-                            _label = "Full (~50 min) — drift major detectat"
+                            _eta_lbl, _eta_det = _estimate_bench_eta_full()
+                            _label = f"Full ({_eta_lbl}) — drift major detectat"
                     else:
                         from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
                         bench_args = [py, "bench_all_methods.py"] + quick_rebench_cli_args()
@@ -1453,8 +1575,9 @@ with st.sidebar:
                 _regen_flag.write_text(f"{pool_now}|{_t_regen.time()}")
                 st.session_state["_regenerate_after_bench"] = True  # păstrăm și în session pentru UI
                 st.session_state["_regenerate_pool_size"] = pool_now
+                _full_eta_lbl_toast, _ = _estimate_bench_eta_full(target_folds=1280)
                 st.toast(
-                    "🔴 FULL Re-Bench LANSAT în fundal (~50 min). Generarea va porni "
+                    f"🔴 FULL Re-Bench LANSAT în fundal ({_full_eta_lbl_toast}). Generarea va porni "
                     "AUTOMAT când bench-ul termină — cu cache PROASPĂT, nu cu cel vechi.",
                     icon="⚡",
                 )
@@ -1488,7 +1611,7 @@ with st.sidebar:
             "pool-ul selectat, le aplică și generează imediat. Verifică automat "
             "freshness-ul CSV-urilor și lansează rebench automat dacă detectează drift."
         ),
-        use_container_width=True,
+        width='stretch',
         disabled=_ap_disabled,
     ):
         st.session_state["_pure_bench_mode_requested"] = False
@@ -1512,7 +1635,7 @@ with st.sidebar:
             "regresive. Rafinările pot REDUCE performanța prin introducere noise. "
             "Pure mode = încredere completă în matrice bench."
         ),
-        use_container_width=True,
+        width='stretch',
         disabled=_ap_disabled,
     ):
         st.session_state["_pure_bench_mode_requested"] = True
@@ -1527,8 +1650,13 @@ with st.sidebar:
     if _bench_running:
         _force_btn_reason = " ⚠️ DEZACTIVAT — bench deja in progres"
 
+    # ETA real calculat din ultimul bench (folds.csv) — vezi _estimate_bench_eta_full
+    # definit mai sus, inainte de _run_autopilot, ca sa fie disponibil si in
+    # logging-ul din interiorul lui _run_autopilot.
+    _eta_label, _eta_detail = _estimate_bench_eta_full()
+
     if st.button(
-        "🔴 FORȚEAZĂ FULL Re-Bench (matrice completă, ~50 min în fundal)" + _force_btn_reason,
+        f"🔴 FORȚEAZĂ FULL Re-Bench (matrice completă, {_eta_label} în fundal)" + _force_btn_reason,
         type="secondary",
         help=(
             "Lansează RE-BENCH COMPLET imediat, ignorând cache-ul:\n"
@@ -1537,11 +1665,11 @@ with st.sidebar:
             "  • 10 ferestre regresive (100%, 90%, 80%, ..., 10%)\n"
             "  • Toate jocurile (6/49, 5/40, joker)\n"
             "  ⇒ Matrice completă: alege winner per (joc × pool × fereastră).\n\n"
-            "Durată estimată: ~50 minute pe RTX 5060 Ti.\n"
+            f"Durată estimată: {_eta_label} ({_eta_detail}).\n"
             "Rulează în fundal (CMD nou); generarea CURENTĂ pornește imediat cu "
             "cache-ul actual, iar rularea URMĂTOARE va avea decizia proaspătă."
         ),
-        use_container_width=True,
+        width='stretch',
         disabled=_force_btn_disabled,
     ):
         _run_autopilot(force_full_rebench=True)
@@ -1619,14 +1747,41 @@ with st.sidebar:
                             done, total = int(matches[-1][0]), int(matches[-1][1])
                             _bench_total_folds = total
                             _bench_progress = done / total if total > 0 else 0
-                            # ETA FIABIL: time.time() - start_ts → secunde de când a
-                            # început bench-ul curent. Înainte foloseam ctime/mtime
-                            # care pe Windows + log append produceau ETA absurde
-                            # ("92 zile rămase" la 60 folds completate).
+                            # ETA hibrid: extrapolare liniara din rata observata
+                            # E nesigura la inceput (primele folds sunt baseline-uri
+                            # rapide: random, frequency, recency, timesfm cache hits).
+                            # Daca extrapolam de la 100 folds REAL/RND × 16 metode in
+                            # primele 30 sec ETA pare ~6 min, dar transformer-ele
+                            # (autoformer, fedformer ~12s/fold) vin DUPA si bench-ul
+                            # real dureaza 30-50 min.
+                            #
+                            # Solutia: ETA observat e capat INFERIOR de estimarea
+                            # statica din folds.csv ultim (_estimate_bench_eta_full).
+                            # Helper-ul stie avg-ul real per metoda din rularea
+                            # anterioara → estimarea e calibrata.
                             if done > 0 and _bench_start_ts:
                                 elapsed_sec = max(time.time() - _bench_start_ts, 1)
                                 rate = done / elapsed_sec  # folds/sec
-                                eta_sec = (total - done) / rate if rate > 0 else 0
+                                eta_sec_observed = (total - done) / rate if rate > 0 else 0
+                                # Estimam total ETA din helper-ul calibrat din folds.csv
+                                # anterior. Scadem timpul deja petrecut ca sa ramana DOAR
+                                # ce mai e de facut.
+                                _eta_helper_label, _ = _estimate_bench_eta_full(target_folds=total)
+                                helper_total_sec = 0
+                                try:
+                                    # Parse "~X min" / "~X.X h" / "~X sec" -> seconds
+                                    s = _eta_helper_label.lstrip("~").strip()
+                                    if s.endswith(" sec"):
+                                        helper_total_sec = float(s.replace(" sec", "").strip())
+                                    elif s.endswith(" min"):
+                                        helper_total_sec = float(s.replace(" min", "").strip()) * 60
+                                    elif s.endswith(" h"):
+                                        helper_total_sec = float(s.replace(" h", "").strip()) * 3600
+                                except Exception:
+                                    helper_total_sec = 0
+                                eta_sec_static = max(helper_total_sec - elapsed_sec, 0)
+                                # Luam MAX dintre cele doua (conservativ).
+                                eta_sec = max(eta_sec_observed, eta_sec_static)
                                 _bench_eta_min = int(eta_sec / 60)
                     except Exception:
                         pass
@@ -1684,16 +1839,18 @@ with st.sidebar:
         # fiecare refresh fiindcă reload-ul șterge session_state. Persistăm acum
         # bifele pe disk (.ui_state.json), iar refresh la 5 min e suficient
         # pentru a detecta când bench-ul de ~110 min se termină.
-        import streamlit.components.v1 as _components
-        _components.html(
+        # st.html renderează în DOM-ul parent (nu iframe), deci `window.location`
+        # e top-level — nu mai e nevoie de `window.parent`. unsafe_allow_javascript
+        # = True dezactivează DOMPurify pentru scriptul nostru de auto-refresh.
+        st.html(
             """
             <script>
                 setTimeout(function() {
-                    window.parent.location.reload();
+                    window.location.reload();
                 }, 300000);
             </script>
             """,
-            height=0,
+            unsafe_allow_javascript=True,
         )
         if _waiting_for_regen:
             st.caption("⚙️ Pagina se auto-reîmprospătează la 5 min. Generarea va porni AUTOMAT când bench-ul termină — nu trebuie să faci nimic.")
@@ -1803,7 +1960,7 @@ with st.sidebar:
                                 cmap="RdYlGn", axis=None,
                                 vmin=_matrix.values.min(), vmax=_matrix.values.max(),
                             ),
-                            use_container_width=True,
+                            width='stretch',
                         )
         else:
             st.caption(
@@ -1838,11 +1995,13 @@ with st.sidebar:
                 "ale CSV-ului curent. Diferit de bench-ul global — folosit cand "
                 "vrei sim_depth optimizat pentru acest CSV specific."
             ),
-            use_container_width=True,
+            width='stretch',
         ):
             if not st.session_state.get("loaded_datasets"):
                 st.error("Încărcați întâi un fișier CSV!")
             else:
+                # Persistam timpul apasarii pe disk — vezi _mark_button_press.
+                _mark_button_press()
                 st.session_state["_pool_for_pending_calib"] = int(st.session_state["pool_size_val"])
                 st.session_state["start_calib_now"] = True
                 st.rerun()
@@ -1882,9 +2041,11 @@ with st.sidebar:
 
         if st.button(
             "🚀 Pasul 2: Generează cu setarile manuale",
-            use_container_width=True,
+            width='stretch',
             help="Genereaza variante cu sim_depth setat manual mai sus (NU foloseste Auto-Pilot decision).",
         ):
+            # Persistam timpul apasarii pe disk — vezi _mark_button_press.
+            _mark_button_press()
             reset_sidebar_settings()
             ensure_worker_running()
             st.session_state.pop("calib_res", None)
@@ -1900,12 +2061,16 @@ with st.sidebar:
             "Auto-Pilot lanseaza auto-rebench cand detecteaza drift. Foloseste astea "
             "DOAR daca vrei sa fortezi re-bench acum, fara Auto-Pilot."
         )
+        # ETA dinamic pentru butoanele de re-bench, calibrat din folds.csv anterior.
+        # Quick: ~150 folds (top finalists × 3 percentile × 4 games × 2). Full: 1280.
+        _quick_eta_lbl, _ = _estimate_bench_eta_full(target_folds=150)
+        _full_eta_lbl, _ = _estimate_bench_eta_full(target_folds=1280)
         _col_q, _col_f = st.columns(2)
         with _col_q:
             if st.button(
-                "🧪 Re-Bench Quick (~5 min)",
-                help="Bench rapid: top-13 metode × 3 ferestre × 4 jocuri.",
-                use_container_width=True,
+                f"🧪 Re-Bench Quick ({_quick_eta_lbl})",
+                help=f"Bench rapid: top-13 metode × 3 ferestre × 4 jocuri. ETA: {_quick_eta_lbl} (calibrat din folds.csv anterior).",
+                width='stretch',
                 disabled=_bench_active,
             ):
                 try:
@@ -1927,16 +2092,18 @@ with st.sidebar:
                     st.error(f"Quick re-bench a eșuat: {exc}")
         with _col_f:
             if st.button(
-                "🔬 Re-Bench Full (~50 min)",
-                help="Bench complet: 17 metode × 10 ferestre × 4 jocuri × WITH/WITHOUT BL = 1280 folds.",
-                use_container_width=True,
+                f"🔬 Re-Bench Full ({_full_eta_lbl})",
+                help=f"Bench complet: 16 metode × 10 ferestre × 4 jocuri × WITH/WITHOUT BL = 1280 folds. Ignora cache-ul (masuratori proaspete). ETA: {_full_eta_lbl} (calibrat din folds.csv anterior).",
+                width='stretch',
                 disabled=_bench_active,
             ):
                 try:
                     py = sys.executable.replace("/", "\\")
                     _bench_log.unlink(missing_ok=True)
+                    # --no-cache: la apasarea manuala a Full Re-Bench, utilizatorul
+                    # vrea masuratori reale (nu refolosire de fold-uri vechi).
                     proc = subprocess.Popen(
-                        [py, "bench_all_methods.py", "--no-rich",
+                        [py, "bench_all_methods.py", "--no-rich", "--no-cache",
                          "--percentiles", "10,20,30,40,50,60,70,80,90,100"],
                         stdout=open("bench_full.log", "w", encoding="utf-8"),
                         stderr=subprocess.STDOUT,
@@ -1960,7 +2127,7 @@ with st.sidebar:
                 "+ benchmark + orice python.exe din venv care e blocat în training, "
                 "(3) curăță .bench_pid, (4) re-pornește worker-ul curat."
             ),
-            use_container_width=True,
+            width='stretch',
         ):
             import subprocess as _sp
             killed = []
@@ -2027,7 +2194,7 @@ with st.sidebar:
             st.rerun()
             
     with col2:
-        if st.button("🗑️ Șterge Log", type="secondary", help="Curăță fișierul de jurnal (log) salvat pe disc.", use_container_width=True):
+        if st.button("🗑️ Șterge Log", type="secondary", help="Curăță fișierul de jurnal (log) salvat pe disc.", width='stretch'):
             clear_logs()
             st.rerun()
 
@@ -2207,7 +2374,20 @@ if st.session_state.get("active_job_id"):
         result_json = str(stt.get("result_json") or "{}")
         payload = _decode_queue_result(result_json)
         st.session_state["persistent_results"] = payload
-        if "job_start_time" in st.session_state:
+        # Timpul perceput de utilizator: de la apasarea butonului (Autopilot /
+        # Calibrare / Generare manuala) pana ACUM (state==COMPLETED). Include
+        # tot ce e intre: queue submit, freshness check, eventual bench in
+        # fundal cu auto-trigger, pipeline efectiv, post-processing.
+        # IMPORTANT: citim din DISK (_get_button_press_time) — session_state
+        # e sters de auto-refresh-urile JS din timpul bench-urilor lungi.
+        _btp = _get_button_press_time()
+        if _btp is not None:
+            elapsed = time.time() - _btp
+            st.session_state["persistent_results_time"] = elapsed
+            _clear_button_press()
+        elif "job_start_time" in st.session_state:
+            # Fallback (n-ar trebui sa se intample): folosim job_start_time
+            # care e setat la submit (deja dupa o parte din munca).
             elapsed = time.time() - st.session_state["job_start_time"]
             st.session_state["persistent_results_time"] = elapsed
 
@@ -2477,7 +2657,7 @@ if _play_completion:
         [261.6,329.6,392.0,523.3,659.3,783.99].forEach(function(f,i){fanNote(f,i*0.18,0.5);});
         [261.6,329.6,392.0,523.3].forEach(function(f){fanNote(f,6*0.18+0.1,1.8,0.15);});
     }, 900);"""
-components.html(f"""<script>
+st.html(f"""<script>
 (function(){{
     if(window._lotoAudio) return; window._lotoAudio=true;
     var ctx=new(window.AudioContext||window.webkitAudioContext)();
@@ -2506,7 +2686,7 @@ components.html(f"""<script>
     masterGain.gain.linearRampToValueAtTime(0,ctx.currentTime+51);
     {_fan_js}
 }})();
-</script>""", height=0)
+</script>""", unsafe_allow_javascript=True)
 # ─────────────────────────────────────────────────────────────────────────────
 
 if "persistent_results" in st.session_state:
@@ -2568,7 +2748,8 @@ if "persistent_results" in st.session_state:
                 # Helper: cross-check audit messages against FINAL pool (hard_core).
                 # Daca hard enforcement (manual_inversion) a anulat o modificare a
                 # filtrului, mesajul devine misleading — il ascundem.
-                _final_pool_set = set(hc) if hc else set()
+                _hc_for_check = data.get('hard_core', []) or []
+                _final_pool_set = set(_hc_for_check) if _hc_for_check else set()
                 _enforcement_info = (audit.get("manual_inversion") or {}).get("enforced_violations_fixed")
                 _has_enforcement = bool(_enforcement_info)
 
@@ -2695,30 +2876,31 @@ if "persistent_results" in st.session_state:
                 if first_3 or last_3:
                     st.markdown("**Verificare CSV (Primele și ultimele 3 extrageri încărcate):**")
                     cols_d = st.columns(2)
+                    _show_joker = (str(game).lower() == "joker")
                     with cols_d[0]:
                         st.caption("Primele 3 (cele mai vechi / top CSV)")
                         for d in first_3:
                             dt = d.get('date', '')
                             nums = d.get('numbers', [])
                             joker = d.get('joker')
-                            
+
                             html = f"<div style='margin-bottom: 5px;'><small style='color: #aaa; margin-right: 10px;'>{dt}</small>"
                             html += "".join([f'<span class="loto-badge" style="background: #444; font-size: 0.8em; margin-right: 4px;">{int(n)}</span>' for n in nums])
-                            if joker is not None:
+                            if _show_joker and joker is not None:
                                 html += f"<span style='margin: 0 5px; font-weight: bold;'>+</span><span class='loto-badge' style='background: #d62728; font-size: 0.8em;'>{int(joker)}</span>"
                             html += "</div>"
                             st.markdown(html, unsafe_allow_html=True)
-                            
+
                     with cols_d[1]:
                         st.caption("Ultimele 3 (cele mai noi / bottom CSV)")
                         for d in last_3:
                             dt = d.get('date', '')
                             nums = d.get('numbers', [])
                             joker = d.get('joker')
-                            
+
                             html = f"<div style='margin-bottom: 5px;'><small style='color: #aaa; margin-right: 10px;'>{dt}</small>"
                             html += "".join([f'<span class="loto-badge" style="background: #444; font-size: 0.8em; margin-right: 4px;">{int(n)}</span>' for n in nums])
-                            if joker is not None:
+                            if _show_joker and joker is not None:
                                 html += f"<span style='margin: 0 5px; font-weight: bold;'>+</span><span class='loto-badge' style='background: #d62728; font-size: 0.8em;'>{int(joker)}</span>"
                             html += "</div>"
                             st.markdown(html, unsafe_allow_html=True)
@@ -3058,7 +3240,7 @@ if "persistent_results" in st.session_state:
                         
                         if pool_hits:
                             st.markdown("<div style='margin-top: 15px; font-weight: bold; color: #f4a261;'>🎯 Istoric Performanță Pool (Nucleu Dur - Minim 4 nr):</div>", unsafe_allow_html=True)
-                            st.dataframe(pd.DataFrame(pool_hits), use_container_width=True, height=110, hide_index=True)
+                            st.dataframe(pd.DataFrame(pool_hits), width='stretch', height=110, hide_index=True)
 
                         # --- Detalii câștiguri Variante (Minim 3 numere) ---
                         high_hits = [p for p in retro_predictions if p.hits >= 3]
@@ -3084,7 +3266,7 @@ if "persistent_results" in st.session_state:
                                 total_prize += p_val
                                 hit_data.append({"Data / Extragere": label, "Hits": f"⭐ {h.hits} numere", "Est. Premiu (Lei)": f"~{p_val} Lei"})
                             
-                            st.dataframe(pd.DataFrame(hit_data), use_container_width=True, height=120, hide_index=True)
+                            st.dataframe(pd.DataFrame(hit_data), width='stretch', height=120, hide_index=True)
 
                             cost_per_var = get_live_prices().get(game_type_id, 8.0)
                             total_cost = total_variants * cost_per_var * unique_draws

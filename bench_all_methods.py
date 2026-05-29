@@ -107,6 +107,10 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--no-rich", action="store_true",
                         help="Plain-text output în loc de rich tables")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Ignora cache-ul disk (.bench_cache/). Folosit cand: "
+                             "(a) utilizatorul forteaza rebench, (b) hardware s-a "
+                             "schimbat (CPU->GPU) si rezultatele cache-uite sunt stale.")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -167,6 +171,11 @@ def main() -> int:
         transient=False,
     )
     task_id = None
+    # Counter independent (rich Progress overwrite-uieste in-place pe TTY, dar
+    # nu emite linii utile la --no-rich pe stream redirected → app.py UI nu poate
+    # extrage progresul din log. Emitem aici o linie distinctiva "[done/total]"
+    # per fold pentru ca polling-ul din app.py:1629 sa o poata parsa.)
+    _folds_done = {"n": 0}
 
     def _cb(idx, total, fr, game):
         nonlocal task_id
@@ -178,6 +187,19 @@ def main() -> int:
             description=f"[{game.label}] {fr.method} pct={fr.percentile}% "
                         f"{'RND' if fr.is_random else 'REAL'}  hits@k{game.draw_n}={fr.avg_hits_topk:.3f}",
         )
+        # Linie de progres parsabila de UI (app.py cauta regex r"\[(\d+)/(\d+)\]").
+        # Scriem direct la stdout (flush imediat) ca sa apara in bench_full.log
+        # in timp real, nu doar la finalul rularii.
+        _folds_done["n"] += 1
+        try:
+            sys.stdout.write(
+                f"[{_folds_done['n']}/{total}] {game.label} | {fr.method} "
+                f"| pct={fr.percentile}% | {'RND' if fr.is_random else 'REAL'} "
+                f"| hits@k{game.draw_n}={fr.avg_hits_topk:.3f}\n"
+            )
+            sys.stdout.flush()
+        except Exception:
+            pass
 
     with progress:
         report = run_benchmark(
@@ -188,6 +210,7 @@ def main() -> int:
             random_seed=args.seed,
             out_dir=args.out,
             progress_cb=_cb,
+            use_cache=not args.no_cache,
         )
 
     # ─── Console reports ────────────────────────────────────────────────────

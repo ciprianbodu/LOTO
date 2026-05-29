@@ -1,0 +1,94 @@
+RESETEAZA MEMORIA CONTEXTUALA
+STRATEGIE PROPRIE DE PREDICTII LOTO
+UITA TOTAL STRATEGIILE ANTERIOARE
+RASPUNDE IN LIMBA ROMANA.
+RULEAZA STRATEGIA PRIN TOTI AGENTII, MODELELE, MODULELE, BOTII de care dispui, dintre cei mai avansati.
+
+RULEAZA PE MODULE, PRIMA OARA MODULUL A) de la punctul 1) la 8)
+Apoi, numai dupa ce ai finalizat MODULUL A), ruleaza MODULUL B) de la punctul 9) la 15)
+Apoi, numai dupa ce ai fnalizat MODULUL B, ruleaza modulul C) punctul 16)
+
+MODULUL A)
+
+1) Iti pun la dispozitie 3 fisiere de tip CSV cu istoricul extragerilor la jocurile de loto romanesc 6/49 (se extrag 6 numere de la 1 la 49); joker (se extrag 5 numere de la 1 la 45 si un numar bonus de la 1 la 20, notat cu J in istoricul CSV); 5/40 (se joaca DOAR 5 numere, dar se extrag 6 numere de la 1 la 40, la cat I se castiga cu primele 5 numere si la categoria II se castiga cu oricare 5 numere dintre cele 6 extrase, deci istoricul contine cate 6 numere extrase)
+Regulile jocului le gasesti pe pagina oficiala www.loto.ro
+
+
+2) Vreau sa generezi 3 variante simple pentru jocul 6/49; 2 variante simple pe bilet pentru jocul joker; 4 variante simple pe bilet pentru jocul 5/40
+Vreau 1 bilet pentru fiecare joc, cu scopul de a prevedea cat mai multe numere castigatoare.
+Toate numerele generate trebuie sa aiba la analiza istoricului real al extragerilor si sa nu fie simulari.
+
+
+3) La Joker, analiza se face separat pentru lotul 5/45 si numărul Joker (1/20) se analizează separat, prin aceleași metode și validat separat în walk‑forward.
+
+4) Daca nu ti-am incarcat fisierele CSV pentru un joc, nu il cauta manual pe Internet deoarece inseamna ca vreau sa imi faci analiza numai pentru jocul pentru care ti-am dat fisierul CSV.
+
+5) Pentru o ipoteză corectă, verifică numărul de extrageri utilizand cod Python care să numere numărul total de rânduri valide din fișierul CSV furnizat (excluzând header-ul), confirmă numărul extragerilor și afișează-l explicit, afișează perioada extragerilor și primele și ultimele 3 extrageri și afirmă expres câte metode au fost aplicate. Verifica ultima extragere sa corespunda cu data din regulament a ultimei extrageri, adica in fiecare joi si duminica, daca nu corespunde, semnaleaza. Exista trageri speciale care nu au fost joi si duminica.
+
+6) Pentru generarea seturilor de variante simple vreau sa folosesti urmatoarele metode obligatorii, combinate si optimizate pentru mai multe numere castigatoare:
+a) Analiza Frecvenței (Hot/Cold Numbers) 
+b) Teoria Întârzierilor (Gap Analysis) 
+c) Analiza Co-ocurențelor (Perechi și Triplete) 
+d) Distribuția Normală a Sumelor (Clopotul lui Gauss) 
+e) Paritatea (Raportul Par/Impar) 
+f) Raportul Mare/Mic (Low/High) 
+g) Metoda Delta 
+h) Analiza Cifrei Finale (Last Digit) 
+i) Numere Consecutive 
+j) Analiza Pozițională 
+k) Cicluri și Periodicitate 
+l) Analiza Cadranelor 
+m) Linii și Coloane 
+n) Numere Oglindă și Inversate 
+o) Lanțuri Markov 
+p) Legea Numerelor Mari (LLN) 
+q) Analiza Bayesiană 
+r) Entropia Shannon 
+s) Distribuția Poisson 
+t) Rețele Neurale (Deep Learning) - optimizata
+u) Algoritmi Genetici 
+v) Clustering (K-Means) 
+w) Simulări Monte Carlo - omite aceasta metoda
+x) Scheme Reduse (Combinatorială) 
+y) Meta-Strategia (Ensemble)
+
+
+7) Metodologie de lucru, optimizata pentru predictii loto:
+
+- Fereastra Principală (Window): toate extragerile, exclude ultima extragere din analiza. 
+Nu folosi sistem de scoring (Y). Foloseste Metoda castigatoare.
+
+8) Verifica sa fi aplicat cel putin metodele obligatorii, complet, enumera metodele folosite la fiecare joc, genereaza si afiseaza numele jocului si numerele din schema (reale, nu simulate), pe baza celei mai performante metode
+
+Dupa finalizarea modulului A), asteapta modulul B)
+
+MODULUL B)
+CONTINUARE A STRATEGIEI ANTERIOARE
+
+9) Daca este necesar script python, ruleaza tu scriptul, nu te rezuma doar la a genera scriptul. Doar daca nu poti rula, atunci genereaza scriptul pentru Google colab
+
+10) Varianta de 6/49 costa 9 lei, varianta joker costa 8 lei, respectiv varianta 5/40 costa 6 lei, arata costurile totale.
+
+
+11) La finalul analizei, înainte de a afișa schema câștigătoare, efectuează o verificare de plauzibilitate care include:
+- Evitarea repetabilității si numerelor identice în extragerile recente sau in cadrul acelorasi variante simple. 
+- Evitarea distributiei geometrice pe aceeasi linie sau pe aceeasi coloana a numerelor de pe tichet. 
+Daca se intampla una dintre cele doua, repeta strategia de la zero.
+
+
+12) Dacă oricare metodă testată produce o rată de succes care pare nerealist de mare, semnalează acest fapt ca pe o anomalie și re-verifică manual calculul pe 2–3 extrageri din setul de test, prezentând atât rezultatul inițial, cât și cel verificat.
+
+
+13) „Walk-Forward validation pe un procent de 10 la suta din ultimele extrageri din fereastra analizata, cu pas de 1.
+
+14) La final, afiseaza procentul de succes pentru fiecare joc si fiecare metoda folosita, pe rand, indicand numarul de castiguri si cu cate numere s-a castigat. 
+Afiseaza pe ce fereastra din istoric s-a lucrat si care a fost plaja de test. 
+
+15) De asemenea, afiseaza variantele finale.
+
+Dupa finalizarea modulului B), asteapta modulul C)
+
+MODULUL C)
+CONTINUARE A STRATEGIEI ANTERIOARE
+
+16) Ruleaza din nou modulul A) si apoi modulul B), cate 200 cicluri, fara a folosi random seed, alege si afisaza rezultatele cele mai performante (intr-un mini tabel), conform validarii, indicand si a cata rulare a avut ceea mai buna performanta

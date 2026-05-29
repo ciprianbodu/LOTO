@@ -21,18 +21,30 @@ import sys
 from typing import List, Tuple, Dict, Set, Optional
 
 # Google TimesFM integration
+# Pe CPU-only (CUDA_VISIBLE_DEVICES=-1 setat de START_8000.bat) sau cand
+# LOTO_SKIP_TIMESFM=1, SAREM importul ca sa nu pierdem 30-60s la cold start.
 HAS_TIMESFM = False
 TIMESFM_ERROR = None
-try:
-    import torch
-    import timesfm
-    HAS_TIMESFM = True
-except ImportError as e:
-    TIMESFM_ERROR = str(e)
-    logging.warning(f"[TIMESFM] Librăria 'timesfm' sau 'torch' nu a fost găsită: {e}")
-except Exception as e:
-    TIMESFM_ERROR = str(e)
-    logging.error(f"[TIMESFM] Eroare neașteptată la încărcarea modelului: {e}")
+torch = None
+timesfm = None
+_SKIP_TIMESFM = (
+    os.environ.get("LOTO_SKIP_TIMESFM") == "1"
+    or os.environ.get("CUDA_VISIBLE_DEVICES") == "-1"
+)
+if _SKIP_TIMESFM:
+    TIMESFM_ERROR = "Skip torch+timesfm (CPU-only sau LOTO_SKIP_TIMESFM=1)"
+    logging.info(f"[TIMESFM] {TIMESFM_ERROR} - folosesc fallback determinist.")
+else:
+    try:
+        import torch
+        import timesfm
+        HAS_TIMESFM = True
+    except ImportError as e:
+        TIMESFM_ERROR = str(e)
+        logging.warning(f"[TIMESFM] Librăria 'timesfm' sau 'torch' nu a fost găsită: {e}")
+    except Exception as e:
+        TIMESFM_ERROR = str(e)
+        logging.error(f"[TIMESFM] Eroare neașteptată la încărcarea modelului: {e}")
 
 # Cache global pentru modelul legacy
 _GLOBAL_LEGACY_TFM = None
@@ -430,12 +442,17 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
             Backtester-ul îl lasă False (își gestionează propriul state in-memory).
+
+        manual_blacklist: Set/listă de numere pe care utilizatorul vrea să le
+            excludă din selecție (ex: butonul "Inverseaza Pool" din UI care
+            tratează pool-ul anterior ca blacklist). Se combină cu blacklist-ul
+            calculat automat de motor, cu safety check anti-saturare.
         """
         # Memoram pool_size-ul cerut pentru ca _scores_via_bench_winner să poată
         # selecta câștigătorul corect din best_methods.json (per pool size).
@@ -686,6 +703,41 @@ class LotoEngine:
                     "scope": "single_draw",
                 }
 
+        # === Manual Inversion (utilizator: butonul "Inverseaza Pool") ===
+        # Userul a apăsat butonul de inversare după ce pool-ul anterior n-a ieșit
+        # bine în extragerile reale. Tratăm pool-ul anterior ca blacklist explicit.
+        # Stocam pe instanta ca atribut pentru a fi RESPECTAT STRICT pana la final
+        # (Smart Selector + pool-complete fallback pot altfel sa-l incalce).
+        self._manual_blacklist_set: Set[int] = set()
+        if manual_blacklist:
+            try:
+                manual_set = set(int(n) for n in manual_blacklist if int(n) > 0)
+            except (TypeError, ValueError):
+                manual_set = set()
+                logging.warning("[MANUAL-INVERSION] manual_blacklist invalid, ignor.")
+            if manual_set:
+                max_n_safe = int(self.params.get("max_n", 49))
+                combined = blacklist | manual_set
+                if len(combined) >= max_n_safe - pool_size:
+                    logging.warning(
+                        f"[MANUAL-INVERSION] Manual ({len(manual_set)}) + auto ({len(blacklist)}) "
+                        f"= {len(combined)} blocheaza prea mult din univers ({max_n_safe}). "
+                        f"Pool_size cerut: {pool_size}. Skip pentru a evita pool gol."
+                    )
+                else:
+                    blacklist = combined
+                    self._manual_blacklist_set = set(manual_set)  # STRICT
+                    self.audit["manual_inversion"] = {
+                        "trigger": "user_invert_button",
+                        "excluded": sorted(manual_set),
+                        "n_excluded": len(manual_set),
+                        "scope": "single_run",
+                    }
+                    logging.info(
+                        f"[MANUAL-INVERSION] User a cerut excluderea a {len(manual_set)} numere "
+                        f"(pool anterior). Blacklist total: {len(blacklist)} din {max_n_safe}."
+                    )
+
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
         
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
@@ -766,6 +818,45 @@ class LotoEngine:
 
         if progress_cb:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
+
+        # === STRICT MANUAL BLACKLIST ENFORCEMENT ===
+        # Smart Selector / consecutive filter / pool-complete fallback pot
+        # reintroduce numere din manual_blacklist. Aplicam un filtru HARD aici,
+        # imediat inainte de wheeling, ca sa garantam ca pool-ul final NU
+        # contine niciun numar exclus de user.
+        if getattr(self, "_manual_blacklist_set", None):
+            mb = set(self._manual_blacklist_set)
+            violated = [n for n in self.hard_core if n in mb]
+            if violated:
+                logging.warning(
+                    f"[MANUAL-BLACKLIST] {len(violated)} numere din pool-ul exclus au fost "
+                    f"reintroduse de pipeline ({sorted(violated)}). Le elimin si completez."
+                )
+                # Elimin violarile
+                self.hard_core = [n for n in self.hard_core if n not in mb]
+                # Completez cu top-scoring numere care NU sunt in manual_blacklist
+                if tfm_scores:
+                    sorted_clean = sorted(
+                        ((n, s) for n, s in tfm_scores.items() if n not in mb and n not in self.hard_core),
+                        key=lambda x: x[1], reverse=True,
+                    )
+                else:
+                    freq_score = {i+1: float(f) for i, f in enumerate(freq)}
+                    sorted_clean = sorted(
+                        ((n, s) for n, s in freq_score.items() if n not in mb and n not in self.hard_core),
+                        key=lambda x: x[1], reverse=True,
+                    )
+                needed = pool_size - len(self.hard_core)
+                for n, _ in sorted_clean[:needed]:
+                    self.hard_core.append(int(n))
+                self.hard_core = sorted(self.hard_core)
+                self.audit.setdefault("manual_inversion", {})["enforced_violations_fixed"] = {
+                    "removed": sorted(violated),
+                    "added_replacements": [n for n in self.hard_core if n not in violated][-needed:] if needed > 0 else [],
+                }
+                logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
+            else:
+                logging.info(f"[MANUAL-BLACKLIST] Pool curat ({len(self.hard_core)} numere, niciun violator).")
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling

@@ -13,49 +13,60 @@ Funcționalități exploatate:
 from __future__ import annotations
 
 import logging
+import os
 import numpy as np
 from typing import Dict, List, Set, Tuple, Optional
 
-# Modul importat condițional din loto_engine
+# Modul importat condițional din loto_engine.
+# Pe sisteme CPU-only sau cu CUDA_VISIBLE_DEVICES=-1 (setat de START_8000.bat),
+# SAREM complet importul torch+timesfm — economisim 5-60s la cold start și evităm
+# riscul de hang pe timesfm (HF Hub probe). Engine-ul are fallback determinist.
 HAS_TIMESFM = False
 _TFM_ERROR = None
-try:
-    import torch
-    import timesfm
-    HAS_TIMESFM = True
-    # GPU PERF: TensorCore + cudnn autotune. Free 1.5-2× pe Ampere/Ada/Hopper/Blackwell.
-    # Setate o singură dată la load. Afectează inferenţa torch (TimesFM ascunde
-    # detaliile sub backend="gpu", dar torch.matmul-urile interne primesc TF32).
-    # NOTĂ: aceste flag-uri necesită kernel-uri pre-compilate pentru arhitectura GPU
-    # (ex: SM_120 pe RTX 5060 Ti). Pe PyTorch fără kernel-urile potrivite ele cad cu
-    # "no kernel image is available" — verificați torch.cuda.get_arch_list().
-    if torch.cuda.is_available():
-        try:
-            arch_list = torch.cuda.get_arch_list()
-            cap = torch.cuda.get_device_capability(0)
-            cap_sm = f"sm_{cap[0]}{cap[1]}"
-            if cap_sm in arch_list or any(int(a.replace("sm_", "")) >= int(cap_sm.replace("sm_", "")) for a in arch_list):
-                torch.backends.cudnn.benchmark = True
-                torch.backends.cuda.matmul.allow_tf32 = True
-                torch.backends.cudnn.allow_tf32 = True
-                if hasattr(torch, "set_float32_matmul_precision"):
-                    torch.set_float32_matmul_precision("high")
-                logging.info(
-                    "[TIMESFM] GPU perf flags active: cudnn.benchmark + TF32 (device=%s, archs=%s)",
-                    cap_sm, arch_list,
-                )
-            else:
-                logging.warning(
-                    "[TIMESFM] GPU %s nu e in lista de archs torch %s — flag-urile perf "
-                    "raman dezactivate. Update torch ca sa activezi GPU full speed.",
-                    cap_sm, arch_list,
-                )
-        except Exception as _exc:
-            logging.debug("[TIMESFM] GPU perf flags init failed: %s", _exc)
-except ImportError as e:
-    _TFM_ERROR = str(e)
-except Exception as e:
-    _TFM_ERROR = str(e)
+torch = None  # type: ignore[assignment]
+timesfm = None  # type: ignore[assignment]
+_SKIP_TIMESFM = (
+    os.environ.get("LOTO_SKIP_TIMESFM") == "1"
+    or os.environ.get("CUDA_VISIBLE_DEVICES") == "-1"
+)
+if _SKIP_TIMESFM:
+    _TFM_ERROR = "Sari import torch+timesfm (CPU-only sau LOTO_SKIP_TIMESFM=1)"
+    logging.info(f"[TIMESFM-V2] {_TFM_ERROR} - folosesc fallback determinist.")
+else:
+    try:
+        import torch
+        import timesfm
+        HAS_TIMESFM = True
+        # GPU PERF: TensorCore + cudnn autotune. Free 1.5-2× pe Ampere/Ada/Hopper/Blackwell.
+        # Setate o singură dată la load. Afectează inferenţa torch (TimesFM ascunde
+        # detaliile sub backend="gpu", dar torch.matmul-urile interne primesc TF32).
+        if torch.cuda.is_available():
+            try:
+                arch_list = torch.cuda.get_arch_list()
+                cap = torch.cuda.get_device_capability(0)
+                cap_sm = f"sm_{cap[0]}{cap[1]}"
+                if cap_sm in arch_list or any(int(a.replace("sm_", "")) >= int(cap_sm.replace("sm_", "")) for a in arch_list):
+                    torch.backends.cudnn.benchmark = True
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                    torch.backends.cudnn.allow_tf32 = True
+                    if hasattr(torch, "set_float32_matmul_precision"):
+                        torch.set_float32_matmul_precision("high")
+                    logging.info(
+                        "[TIMESFM] GPU perf flags active: cudnn.benchmark + TF32 (device=%s, archs=%s)",
+                        cap_sm, arch_list,
+                    )
+                else:
+                    logging.warning(
+                        "[TIMESFM] GPU %s nu e in lista de archs torch %s — flag-urile perf "
+                        "raman dezactivate. Update torch ca sa activezi GPU full speed.",
+                        cap_sm, arch_list,
+                    )
+            except Exception as _exc:
+                logging.debug("[TIMESFM] GPU perf flags init failed: %s", _exc)
+    except ImportError as e:
+        _TFM_ERROR = str(e)
+    except Exception as e:
+        _TFM_ERROR = str(e)
 
 
 def _detect_device() -> str:

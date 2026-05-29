@@ -471,6 +471,64 @@ def _unavailable_factory(reason: str):
     return _score
 
 
+# ---------------------------------------------------------------------------
+# ENSEMBLE METHODS — combine top-K methods via averaged normalized scores
+# Discovered empirically (scratch/mini_bench_4plus.py, 2026-05-25):
+#   frequency, autoformer, kan = best 4+ hits on 30 walk-forward draws.
+#   Ensemble averages them, hoping borrowed strengths offset individual weaknesses.
+# ---------------------------------------------------------------------------
+
+def _make_ensemble(method_names: List[str], name: str) -> Callable:
+    """Build an ensemble scorer that averages normalized scores of N methods."""
+    def _ensemble_score(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+        all_scores: List[Dict[int, float]] = []
+        for m in method_names:
+            try:
+                if m not in METHODS:
+                    continue
+                fn, _f, _t, _n = METHODS[m]
+                if getattr(fn, "_unavailable_reason", None):
+                    continue
+                sc = fn(draws_2d, max_num)
+                if sc:
+                    # Re-normalize each member to [0, 1] before averaging
+                    all_scores.append(_normalize(sc, max_num))
+            except Exception as exc:
+                logger.warning("[ENSEMBLE %s] member %s failed: %s", name, m, exc)
+        if not all_scores:
+            return {}
+        # Average
+        combined: Dict[int, float] = {n: 0.0 for n in range(1, max_num + 1)}
+        for sc in all_scores:
+            for n, v in sc.items():
+                combined[n] = combined.get(n, 0.0) + v
+        for n in combined:
+            combined[n] /= len(all_scores)
+        return _normalize(combined, max_num)
+
+    _ensemble_score.__name__ = f"score_{name}"
+    return _ensemble_score
+
+
+# Top-3 empiric (frequency + autoformer + kan) — best 4+ hits on N=30 bench
+score_ensemble_top3 = _make_ensemble(
+    ["frequency", "autoformer", "kan"],
+    "ensemble_top3",
+)
+
+# Top-5 empiric (top-3 + tide + rnn) — wider coverage
+score_ensemble_top5 = _make_ensemble(
+    ["frequency", "autoformer", "kan", "tide", "rnn"],
+    "ensemble_top5",
+)
+
+# Diversified: 3 families (baseline + transformer + recurrent)
+score_ensemble_diverse = _make_ensemble(
+    ["frequency", "fedformer", "deepar"],
+    "ensemble_diverse",
+)
+
+
 score_moirai = _unavailable_factory("uni2ts requires omegaconf<2.4; current env has 2.4.0.dev — Config symbol removed")
 score_lag_llama = _unavailable_factory("lag-llama package not installed")
 score_timegpt = _unavailable_factory("Nixtla TimeGPT requires paid API key (NIXTLA_API_KEY)")
@@ -544,7 +602,58 @@ METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
     "xlstm":       (score_xlstm,       "ssm",             True,  "xLSTM Extended LSTM 2024 (UNAVAILABLE — needs pip xlstm)"),
     # LLM-based (unavailable)
     "time_llm":    (score_time_llm,    "llm-ts",          True,  "TimeLLM (UNAVAILABLE — needs LLM backbone)"),
+    # === ENSEMBLE — combine top-K methods, discovered empirically 2026-05-25 ===
+    "ensemble_top3":    (score_ensemble_top3,    "ensemble", False, "Average of top-3 (frequency + autoformer + kan)"),
+    "ensemble_top5":    (score_ensemble_top5,    "ensemble", False, "Average of top-5 (top-3 + tide + rnn)"),
+    "ensemble_diverse": (score_ensemble_diverse, "ensemble", False, "Diversified ensemble (frequency + fedformer + deepar)"),
 }
+
+
+# ============================================================================
+# EXTENSIONS — extra ~50 methods loaded from methods_classical.py,
+# methods_ml.py, methods_torch_extra.py. Loaded lazily; if any module is
+# missing or import fails, the loader logs and continues with what is available.
+# ============================================================================
+def _load_extra_methods() -> None:
+    """Merge METHODS dicts from extension modules into the global METHODS."""
+    global METHODS
+    extensions = []
+    try:
+        from . import methods_classical
+        extensions.append(("methods_classical", methods_classical.CLASSICAL_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_classical not loaded: {exc}")
+    try:
+        from . import methods_ml
+        extensions.append(("methods_ml", methods_ml.ML_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_ml not loaded: {exc}")
+    try:
+        from . import methods_torch_extra
+        extensions.append(("methods_torch_extra", methods_torch_extra.TORCH_EXTRA_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_torch_extra not loaded: {exc}")
+    try:
+        from . import methods_torch_advanced
+        extensions.append(("methods_torch_advanced", methods_torch_advanced.TORCH_ADVANCED_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_torch_advanced not loaded: {exc}")
+
+    added = 0
+    for modname, extra_dict in extensions:
+        for name, tup in extra_dict.items():
+            if name not in METHODS:
+                METHODS[name] = tup
+                added += 1
+    if added > 0:
+        logger.info(f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules).")
+
+
+# Load extensions at module import time.
+try:
+    _load_extra_methods()
+except Exception as _ext_exc:
+    logger.warning(f"[methods] Extra methods load failed: {_ext_exc}")
 
 
 def list_methods() -> List[str]:

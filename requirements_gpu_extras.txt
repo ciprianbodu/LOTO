@@ -1,0 +1,40 @@
+# =============================================================================
+# requirements_gpu_extras.txt — pachete pentru masini CU GPU NVIDIA dedicat
+# (ex: ALF-LUPTATORI cu RTX 5060 Ti). Instalate de ACTUALIZARI.bat DOAR daca
+# .machine_profile zice GPU_TYPE=NVIDIA.
+#
+# TORCH cu CUDA NU e aici — se instaleaza separat din index PyTorch cu cu128:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# Asta evita capcana ca pip sa downgradeze la wheel CPU sau sa puna torch in
+# alt python-side.
+#
+# Constrangeri STRICTE de versiuni (NU le upgrada manual):
+#   - momentfm 0.1.4 cere transformers==4.33.3 SI huggingface-hub==0.24.0
+#   - chronos-forecasting cere transformers>=4.30,<4.48 (compatibil 4.33.3)
+#   - timesfm 1.3.0 cere huggingface_hub>=0.23.0 (compatibil 0.24.0)
+# =============================================================================
+
+# HuggingFace stack — pinned strict pentru momentfm
+huggingface_hub==0.24.0
+transformers==4.33.3
+
+# Time-series foundation models (zero-shot, GPU-accelerated)
+timesfm
+chronos-forecasting
+momentfm
+
+# NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
+# Autoformer / FEDformer / DeepAR / TCN)
+neuralforecast
+utilsforecast
+
+# GPU-accelerated boosting (CatBoost are wheel cu suport CUDA inclus by default;
+# pentru XGBoost/LightGBM GPU sunt wheels separate, dar pe Windows merg si din
+# pip standard cu device="cuda"/device_type="gpu" la runtime).
+catboost
+
+# Optional foundation models (NU se instaleaza by default — install manual):
+#   uni2ts          # Salesforce MOIRAI (incompatible cu omegaconf>=2.4)
+#   lag-llama       # manual git install
+#   granite-tsfm    # IBM TinyTimeMixer
+#   mamba-ssm       # S-Mamba (requires CUDA toolkit + causal-conv1d)

@@ -49,3 +49,9 @@ pool_history.json
 .auto_invert.flag
 .ui_state.json
 bench_full.log
+
+# Runtime / machine-specific (nu se versioneaza)
+.button_press_ts
+.machine_profile
+best_methods.json.pre_*
+predictie_*.json

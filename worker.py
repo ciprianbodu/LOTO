@@ -152,7 +152,13 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
 
     for ds in datasets_cfg:
         fname = str(ds.get("fname", "dataset.csv"))
-        df = pd.read_json(io.StringIO(str(ds["df_json"])), orient="split")
+        # IMPORTANT: convert_dates=False — pandas altfel auto-detectează coloana
+        # "date" și o parsează cu inferență month-first (default), ceea ce strică
+        # formatul DD-MM-YYYY din CSV: "02-04-2026" devine 2026-02-04 (4 feb) în
+        # loc de 2026-04-02 (2 apr). Păstrăm string-ul original.
+        df = pd.read_json(
+            io.StringIO(str(ds["df_json"])), orient="split", convert_dates=False
+        )
         outputs = {}
         
         # Salvăm un fișier temporar pentru a-l încărca cu engine-ul
@@ -172,6 +178,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             smart_red = bool(task.get("smart_reduction", True))
             sim_depth = int(task.get("sim_depth_pct", 10))
             pure_bench = bool(task.get("pure_bench_mode", False))
+            # Auto-Invert: ruleaza pipeline-ul de DOUA ori — primul pool e
+            # considerat "excluded" si reluam cu el ca blacklist, returnam pool B.
+            auto_invert = bool(task.get("auto_invert", False))
             logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
             logging.debug(f"[worker] Full task: {task}")
             
@@ -193,7 +202,30 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     game_mapped = "5/40"
                 elif "joker" in game_label.lower():
                     game_mapped = "joker"
-                    
+
+                # Auto-clamp pool_size cand auto_invert e ON.
+                # Reguli matematice: cu inversare, dupa primul pool excludem P numere
+                # si trebuie sa umplem inca P din ce ramane. Deci P <= (max_n - buffer) / 2.
+                # Buffer=1 lasa margine pentru auto-blacklist intern (sim_depth).
+                _max_num_per_game = {"6/49": 49, "5/40": 40, "joker": 45}
+                _max_num = _max_num_per_game.get(game_mapped, 49)
+                pool_clamp_info = None
+                if auto_invert:
+                    pool_max_safe = _max_num // 2 - 1   # 6/49→23, joker→21, 5/40→19
+                    if p_size > pool_max_safe:
+                        original_p = p_size
+                        p_size = pool_max_safe
+                        pool_clamp_info = {
+                            "requested": original_p,
+                            "clamped_to": p_size,
+                            "max_num": _max_num,
+                            "reason": "auto_invert requires max_num >= 2*pool_size",
+                        }
+                        logging.warning(
+                            f"[worker] Auto-Invert {game_label}: pool_size {original_p} "
+                            f"prea mare pentru max_num={_max_num}. Clamp la {p_size}."
+                        )
+
                 engine = LotoEngine(game_type=game_mapped)
                 engine.load_data(temp_csv_path)
                 lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
@@ -208,6 +240,40 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     enable_adaptive_persistence=True,
                     pure_bench_mode=pure_bench,
                 )
+                if pool_clamp_info is not None:
+                    audit["pool_clamp_for_invert"] = pool_clamp_info
+
+                # Salvam pool-ul initial (pass 1) pentru auditare/afisare
+                first_pool = list(engine.hard_core or [])
+                first_variants = list(lines or [])
+
+                if auto_invert and first_pool:
+                    # === Pass 2: rerulam excluzand pool-ul initial ===
+                    logging.info(
+                        f"[worker] Auto-Invert ACTIV pentru {game_label}: rerulez "
+                        f"pipeline-ul excluzand pool-ul initial {sorted(first_pool)}"
+                    )
+                    # Re-load data (pipeline-ul tail-uieste la lookback, deci reincarcam curat)
+                    engine = LotoEngine(game_type=game_mapped)
+                    engine.load_data(temp_csv_path)
+                    lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
+                        progress_cb=progress_cb,
+                        pool_size=p_size,
+                        guarantee=guar,
+                        max_variants=max_var,
+                        lookback=lookback,
+                        filter_consecutives=filter_cons,
+                        smart_reduction=smart_red,
+                        sim_depth_pct=sim_depth,
+                        enable_adaptive_persistence=False,  # pe pass 2 nu mai persistam state
+                        pure_bench_mode=pure_bench,
+                        manual_blacklist=first_pool,
+                    )
+                    audit["auto_invert_applied"] = {
+                        "excluded_pool": sorted(int(n) for n in first_pool),
+                        "n_excluded": len(first_pool),
+                        "first_pass_variants_count": len(first_variants),
+                    }
 
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {
@@ -226,7 +292,11 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "p10": p10,
                     "p90": p90,
                     "g_range": g_range,
-                    "context": context
+                    "context": context,
+                    # Doar pentru auto_invert: pool-ul initial (pre-inversare) pentru
+                    # afisare ca "ce-am exclus" in UI.
+                    "auto_invert": auto_invert,
+                    "first_pool_excluded": sorted(int(n) for n in first_pool) if auto_invert else [],
                 }
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):

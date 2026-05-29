@@ -209,6 +209,7 @@ def _evaluate_fold(
         per_pool_bl_totals = {k: 0 for k in pool_sizes}
         per_pool_max = {k: 0 for k in pool_sizes}
         blocks = 0
+        empty_blocks = 0  # Count blocks where call_method returned {} (silent failure)
         bl_sizes_seen: List[int] = []
         history = train_draws
         pos = 0
@@ -218,7 +219,13 @@ def _evaluate_fold(
             blocks += 1
 
             if not scores:
-                # Method failed/unavailable → 0 hits across all pool sizes
+                # Method returned empty scores — track but continue.
+                # Daca TOATE block-urile returneaza {} (metoda complet broken
+                # pe configuratia curenta, ex. NF model fara CUDA), o sa marcam
+                # fold-ul ca failed la finalul loop-ului prin raise. Asta scoate
+                # fold-ul din mediile calculate de _aggregate si previne ca
+                # baseline-urile sa "castige" doar pentru ca rivalii au 0.000.
+                empty_blocks += 1
                 history = np.concatenate([history, test_draws[pos:end]], axis=0)
                 pos = end
                 continue
@@ -253,6 +260,16 @@ def _evaluate_fold(
                         per_pool_max[k] = h
             history = np.concatenate([history, test_draws[pos:end]], axis=0)
             pos = end
+
+        # Daca TOATE block-urile au returnat {} -> metoda nu a produs niciun
+        # scor real pe fold-ul asta. Marcam ca failed cu un mesaj clar.
+        # Cel mai frecvent caz: model neural fara CUDA, dep lipsa, sau exceptie
+        # interna in scorer prinsa de wrapper-ul lui call_method().
+        if blocks > 0 and empty_blocks == blocks:
+            raise RuntimeError(
+                f"method '{method_name}' returned empty scores on all "
+                f"{blocks} blocks (likely missing CUDA/dep or scorer error)"
+            )
 
         # Aggregate per-pool average (both conditions)
         for k in pool_sizes:
@@ -291,7 +308,12 @@ def run_benchmark(
     random_seed: int = 1234,
     out_dir: str = "bench_results",
     progress_cb=None,
+    use_cache: bool = True,
 ) -> Dict:
+    """`use_cache=False` -> skip disk cache lookup/store. Folosit cand:
+       - utilizatorul forteaza rebench (vrea masuratori proaspete)
+       - schimbarea de hardware (CPU->GPU) invalideaza datele cache-uite
+         (cache-ul nu include hardware/torch version in key)."""
     out_path = Path(out_dir)
     out_path.mkdir(exist_ok=True, parents=True)
 
@@ -347,19 +369,50 @@ def run_benchmark(
                     test = src[n_train:n_train + n_test]
 
                     fold_idx += 1
-                    fr, _snap = _evaluate_fold(method, train, test, game, block_size)
-                    fr.percentile = pct
-                    fr.is_random = is_random
+
+                    # === Cache lookup: skip if cached (CSV unchanged) ===
+                    # use_cache=False -> ignoram cache complet (utilizator a fortat
+                    # rebench, sau hardware s-a schimbat de la CPU la GPU).
+                    cached_fr = None
+                    csv_hash_for_fold = None
+                    if use_cache:
+                        try:
+                            from .bench_cache import compute_csv_hash, get_cached_fold, store_cached_fold
+                            # Hash pe DRAWS-ul complet pentru consistenta intre fold-uri
+                            # cu acelasi CSV, dar percentile/method/game distinct.
+                            csv_hash_for_fold = compute_csv_hash(draws)
+                            cached_fr = get_cached_fold(csv_hash_for_fold, method, pct, game.key, is_random)
+                        except Exception as _cache_exc:
+                            logger.debug(f"[bench_cache] lookup failed: {_cache_exc}")
+
+                    if cached_fr is not None:
+                        fr = cached_fr
+                        logger.info(
+                            "[%d/%d] [%s/%s/%d%%/%s] CACHE HIT — skip compute",
+                            fold_idx, total_folds_est,
+                            game.key, method, pct, "RND" if is_random else "REAL",
+                        )
+                    else:
+                        fr, _snap = _evaluate_fold(method, train, test, game, block_size)
+                        fr.percentile = pct
+                        fr.is_random = is_random
+                        # Store rezultatul pentru rulari viitoare
+                        if csv_hash_for_fold is not None:
+                            try:
+                                store_cached_fold(csv_hash_for_fold, method, pct, game.key, is_random, fr)
+                            except Exception as _store_exc:
+                                logger.debug(f"[bench_cache] store failed: {_store_exc}")
+                        logger.info(
+                            "[%d/%d] [%s/%s/%d%%/%s] hits@k%d=%.3f t=%.1fs cpu_peak=%.0f%% gpu_peak=%.0f%% vram=%.0fMB ram=%.1fGB",
+                            fold_idx, total_folds_est,
+                            game.key, method, pct, "RND" if is_random else "REAL",
+                            game.draw_n, fr.avg_hits_topk, fr.runtime_sec,
+                            fr.cpu_pct_peak, fr.gpu_pct_peak, fr.vram_mb_peak, fr.ram_gb_peak,
+                        )
+
                     fold_rows.append(fr)
                     if progress_cb:
                         progress_cb(fold_idx, total_folds_est, fr, game)
-                    logger.info(
-                        "[%d/%d] [%s/%s/%d%%/%s] hits@k%d=%.3f t=%.1fs cpu_peak=%.0f%% gpu_peak=%.0f%% vram=%.0fMB ram=%.1fGB",
-                        fold_idx, total_folds_est,
-                        game.key, method, pct, "RND" if is_random else "REAL",
-                        game.draw_n, fr.avg_hits_topk, fr.runtime_sec,
-                        fr.cpu_pct_peak, fr.gpu_pct_peak, fr.vram_mb_peak, fr.ram_gb_peak,
-                    )
 
     # ----- Save per-fold CSV -----
     rows = []
@@ -402,7 +455,14 @@ def _aggregate(
         "n_folds_total": int(len(df)),
     }
     for game in games:
-        sub = df[df["game"] == game.key] if not df.empty else df
+        # IMPORTANT: excludem fold-urile failed=True (metode care au returnat
+        # empty scores pe tot fold-ul, ex. NF fara CUDA) ca sa nu polueze
+        # mediile cu 0.000. Altfel un baseline cu hit_rate=0.77 ar "castiga"
+        # fata de transformer-ele care n-au rulat deloc dar apar cu mean=0.
+        if not df.empty and "failed" in df.columns:
+            sub = df[(df["game"] == game.key) & (df["failed"] == False)]  # noqa: E712
+        else:
+            sub = df[df["game"] == game.key] if not df.empty else df
         pool_keys = pool_keys_per_game[game.key]
         per_method = {}
         for method in methods:

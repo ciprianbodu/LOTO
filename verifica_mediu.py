@@ -6,7 +6,7 @@ Acoperă:
     • Foundation models pentru benchmark: timesfm, chronos, momentfm
     • NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
       Autoformer / FEDformer / DeepAR / TCN)
-    • Telemetrie hardware: rich, pynvml (nvidia-ml-py)
+    • Telemetrie hardware: rich, nvidia-ml-py (oficial; pynvml e deprecat)
     • Verificare freshness a `best_methods.json` și a istoricului CSV
 """
 
@@ -30,8 +30,8 @@ SAFE_UPGRADE_PACKAGES = [
     "streamlit",
     "psutil",
     "requests",
-    "rich",       # bench reporting tables
-    "pynvml",     # GPU telemetry for HwSampler
+    "rich",            # bench reporting tables
+    "nvidia-ml-py",    # GPU telemetry (oficial NVIDIA; expune modul `pynvml`)
 ]
 
 # Foundation models pentru benchmark — vrem să știm DACĂ sunt instalate, dar
