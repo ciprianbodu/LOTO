@@ -1165,4 +1165,4 @@ app.on_startup(_startup)
 
 if __name__ in {"__main__", "__mp_main__"}:
     _port = int(os.environ.get("LOTO_UI_PORT", "8080"))
-    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=False, dark=True)
+    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=True, dark=True)
