@@ -1149,6 +1149,20 @@ def results_panel() -> None:
                         _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=True)
 
                         ui.separator().classes("my-3")
+                        # Inversare neaplicată? (pool prea mare → Pool 2 = Pool 1)
+                        _p1 = set(int(x) for x in (data["phase1"].get("hard_core") or []))
+                        _p2 = set(int(x) for x in (data.get("hard_core") or []))
+                        _mi = (data.get("audit") or {}).get("manual_inversion") or {}
+                        if _p2 == _p1 or _mi.get("skipped"):
+                            pmax = _mi.get("pool_max_pentru_inversare")
+                            ui.label("⚠️ INVERSARE NEAPLICATĂ — Pool 2 e identic cu Pool 1!").classes(
+                                "text-bold text-negative text-lg")
+                            ui.label(
+                                f"Pool-ul ({len(_p2)}) e prea mare pentru inversare la acest joc — după "
+                                f"excluderea Pool 1 + numerele moarte nu mai rămân destule numere."
+                                + (f" Reduceți pool-ul la ≤{pmax} pentru acest joc ca să meargă inversarea." if pmax else "")
+                                + " Momentan Pool 2 NU e o alternativă reală."
+                            ).classes("text-caption text-negative")
                         ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
                             "text-bold text-warning text-lg")
                         ui.label("Plasă de siguranță, pe șansă — dacă Pool 1 nu nimerește nimic. "

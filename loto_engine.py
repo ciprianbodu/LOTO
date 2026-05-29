@@ -731,6 +731,17 @@ class LotoEngine:
                         f"= {len(combined)} blocheaza prea mult din univers ({max_n_safe}). "
                         f"Pool_size cerut: {pool_size}. Skip pentru a evita pool gol."
                     )
+                    # Marcam in audit ca inversarea NU s-a aplicat (pool prea mare pt joc)
+                    # -> UI poate avertiza in loc sa arate Pool 2 identic cu Pool 1.
+                    self.audit["manual_inversion"] = {
+                        "skipped": True,
+                        "reason": "pool prea mare pentru inversare",
+                        "n_requested_exclude": len(manual_set),
+                        "n_auto_blacklist": len(blacklist),
+                        "max_num": max_n_safe,
+                        "pool_size": pool_size,
+                        "pool_max_pentru_inversare": max(1, (max_n_safe - len(blacklist)) // 2),
+                    }
                 else:
                     blacklist = combined
                     self._manual_blacklist_set = set(manual_set)  # STRICT
