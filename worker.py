@@ -214,10 +214,18 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                 )
                 lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(**_kw)
 
+                pool_a_snapshot = None
                 if auto_inv:
                     # Strategie contrarian: rularea A (de mai sus) dă pool-ul A;
                     # rularea B exclude A din univers și e cea afișată.
                     pool_a = set(int(x) for x in (engine.hard_core or []))
+                    # Snapshot COMPLET al pool-ului A (numere + frecvențe) ca să-l
+                    # putem afișa ca al doilea rând în UI, nu doar lista exclusă.
+                    pool_a_snapshot = {
+                        "hard_core": sorted(pool_a),
+                        "hard_core_stats": dict(getattr(engine, "hard_core_stats", {}) or {}),
+                        "n_variants": len(lines),
+                    }
                     logging.info(f"[worker] Inversare automată: rulare B, exclud pool A = {sorted(pool_a)}")
                     lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
                         **_kw, force_exclude=pool_a
@@ -235,6 +243,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "pool_size_requested": p_size,
                     "guarantee": guar,
                     "lookback": lookback,
+                    # Auto-invert: numerele excluse (pt. banner) + snapshot pool A (pt. al 2-lea rând)
+                    "first_pool_excluded": (pool_a_snapshot or {}).get("hard_core", []) if auto_inv else [],
+                    "auto_invert_pool_a": pool_a_snapshot,
                     "auto_invert": auto_inv,
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),

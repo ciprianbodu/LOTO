@@ -2746,25 +2746,33 @@ if "persistent_results" in st.session_state:
                 if total_draws == 0: total_draws = 1
 
                 # === Banner Auto-Invert (daca a fost activat la rulare) ===
+                # Afișăm AMBELE pool-uri ca rânduri: 🅰️ Pool A (runda 1, exclus) cu
+                # badge-uri + frecvențe, și 🅱️ Pool B = nucleul dur de mai jos.
                 if data.get("auto_invert"):
-                    excluded = data.get("first_pool_excluded", [])
-                    if excluded:
-                        excl_badges = " ".join(
-                            f"<span style='background: #6c757d; color: white; padding: 2px 8px; "
-                            f"border-radius: 4px; margin: 2px; display: inline-block;'>{int(n)}</span>"
-                            for n in excluded
-                        )
+                    _pa = data.get("auto_invert_pool_a") or {}
+                    pa_pool = _pa.get("hard_core") or data.get("first_pool_excluded", [])
+                    pa_stats = _pa.get("hard_core_stats", {})
+                    if pa_pool:
+                        pa_badges = ""
+                        for n in pa_pool:
+                            _h = pa_stats.get(str(n), pa_stats.get(n, 0))
+                            _pct = f"{int((_h / total_draws) * 100)}%" if isinstance(_h, int) and total_draws else "?"
+                            pa_badges += (
+                                f"<span class='loto-badge-hc' style='background:#6c757d;' "
+                                f"title='A apărut de {_h} ori'>{int(n)} "
+                                f"<small style='font-size:0.7em; opacity:0.9; font-weight:bold;'>({_pct})</small></span> "
+                            )
                         st.markdown(
                             f"<div style='background: rgba(255, 193, 7, 0.10); padding: 12px; "
                             f"border-radius: 8px; border-left: 4px solid #ffc107; margin: 10px 0;'>"
-                            f"<div style='color: #ffc107; font-weight: bold; margin-bottom: 6px;'>"
-                            f"🔄 Inversare automată ACTIVĂ</div>"
-                            f"<div style='font-size: 0.9em; color: #ccc; margin-bottom: 8px;'>"
-                            f"Pool-ul inițial (pasul 1, EXCLUS din runda 2):</div>"
-                            f"<div>{excl_badges}</div>"
-                            f"<div style='font-size: 0.85em; color: #aaa; margin-top: 8px;'>"
-                            f"Pool-ul afișat mai jos este rezultatul rulării a doua, "
-                            f"<strong>fără</strong> aceste {len(excluded)} numere.</div>"
+                            f"<div style='color: #ffc107; font-weight: bold; margin-bottom: 8px;'>"
+                            f"🔄 Inversare automată ACTIVĂ — 2 pool-uri</div>"
+                            f"<div style='font-size: 0.9em; color: #ccc; margin-bottom: 6px;'>"
+                            f"🅰️ <strong>Pool A</strong> (runda 1 — EXCLUS din runda 2):</div>"
+                            f"<div style='margin-bottom: 8px;'>{pa_badges}</div>"
+                            f"<div style='font-size: 0.85em; color: #aaa;'>"
+                            f"🅱️ <strong>Pool B</strong> (afișat mai jos) e generat <strong>fără</strong> "
+                            f"cele {len(pa_pool)} numere din A.</div>"
                             f"</div>",
                             unsafe_allow_html=True,
                         )
