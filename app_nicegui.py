@@ -18,6 +18,7 @@ Rulare:  python app_nicegui.py   (sau: python -m app_nicegui)
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import os
@@ -310,21 +311,48 @@ def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
         return default
 
 
+def _fmt_dur(sec: float) -> str:
+    if sec < 60:
+        return f"{int(sec)}s"
+    if sec < 3600:
+        return f"{int(sec/60)}min"
+    return f"{sec/3600:.1f}h"
+
+
 def _bench_progress() -> tuple[float, str]:
-    """(fracție 0..1, text) din bench_full.log — caută [N/TOTAL]."""
+    """(fracție 0..1, text + ETA live) din bench_full.log [N/TOTAL] + timestamp .bench_pid.
+
+    ETA = timp scurs (de la start, din .bench_pid) ÷ folds făcute × folds rămase.
+    Se auto-calibrează pe rularea curentă — nu depinde de un bench anterior."""
+    start_ts = None
+    if BENCH_PID_FILE.exists():
+        try:
+            parts = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
+            if len(parts) > 1:
+                start_ts = float(parts[1])
+        except Exception:  # noqa: BLE001
+            pass
     if not BENCH_LOG_FILE.exists():
         return 0.0, "Bench pornește..."
+    cur = tot = 0
     try:
         import re
         txt = BENCH_LOG_FILE.read_text(encoding="utf-8", errors="replace")
         matches = re.findall(r"\[(\d+)/(\d+)\]", txt)
         if matches:
-            cur, tot = matches[-1]
-            frac = max(0.0, min(1.0, int(cur) / max(1, int(tot))))
-            return frac, f"Bench: {cur}/{tot} ({int(frac*100)}%)"
+            cur, tot = int(matches[-1][0]), int(matches[-1][1])
     except Exception:  # noqa: BLE001
         pass
-    return 0.05, "Bench în curs..."
+    if tot <= 0:
+        return 0.05, "Bench în curs... (estimez ETA după primele folds)"
+    frac = max(0.0, min(1.0, cur / tot))
+    text = f"Bench: {cur}/{tot} ({int(frac*100)}%)"
+    if start_ts and cur > 0:
+        elapsed = max(0.0, time.time() - start_ts)
+        per_fold = elapsed / cur
+        remaining = (tot - cur) * per_fold
+        text += f" · rămas ~{_fmt_dur(remaining)} (total ~{_fmt_dur(tot * per_fold)})"
+    return frac, text
 
 
 # --------------------------------------------------------------------------- #
@@ -1195,11 +1223,18 @@ def main_page() -> None:
     with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3"):
         ui.label("1. Încărcare Date CSV").classes("text-bold")
 
-        def _on_upload(e) -> None:
-            content = e.content.read()
-            _persist_uploaded(e.name, content)
-            _load_datasets_from_disk()
-            ui.notify(f"Încărcat {e.name}.", type="positive")
+        async def _on_upload(e) -> None:
+            # NiceGUI 3.12: e.file.read() e async. Încărcare DOAR manuală — nu
+            # persistăm/auto-restaurăm nimic; ce alegi tu intră în sesiune.
+            try:
+                content = await e.file.read()
+                name = e.file.name
+                df = pd.read_csv(io.BytesIO(content))
+            except Exception as exc:  # noqa: BLE001
+                ui.notify(f"Nu pot citi fișierul: {exc}", type="negative")
+                return
+            STATE["datasets"] = [(f, d) for f, d in STATE["datasets"] if f != name] + [(name, df)]
+            ui.notify(f"Încărcat {name} ({len(df)} extrageri).", type="positive")
             datasets_label.refresh()
 
         ui.upload(on_upload=_on_upload, multiple=True, auto_upload=True).props('accept=.csv').classes("w-full")
@@ -1234,20 +1269,25 @@ def main_page() -> None:
 
         ui.separator()
         ui.label("3. Control Execuție").classes("text-bold")
-        ui.button("⚡ Auto-Pilot: Decizie Bench + Generează", on_click=apply_autopilot_and_generate).props("color=primary").classes("w-full")
-        ui.button("🎯 Auto-Pilot Pure (bench winner + Top N)", on_click=lambda: submit_generation(pure=True)).props("color=secondary outline").classes("w-full")
-        ui.button("🚀 Generează cu setările manuale", on_click=lambda: submit_generation(pure=False)).classes("w-full")
+        _BTN = "w-full"
+        _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
+        ui.button("⚡ Auto-Pilot (decizie bench + generează)", on_click=apply_autopilot_and_generate
+                  ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.button("🎯 Auto-Pilot Pure", on_click=lambda: submit_generation(pure=True)
+                  ).props("color=secondary outline no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.button("🚀 Generează (setări manuale)", on_click=lambda: submit_generation(pure=False)
+                  ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
 
         with ui.expansion("🛠️ Re-Bench / Power-User", value=False).classes("w-full"):
             _quick_eta = _estimate_bench_eta(150)
             _full_eta = _estimate_bench_eta(1280)
-            ui.button(f"🧪 Re-Bench Quick ({_quick_eta})", on_click=run_quick_rebench).classes("w-full")
-            ui.button(f"🔬 Re-Bench Full ({_full_eta})", on_click=run_full_rebench).classes("w-full")
+            ui.button(f"🧪 Re-Bench Quick ({_quick_eta})", on_click=run_quick_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
+            ui.button(f"🔬 Re-Bench Full ({_full_eta})", on_click=run_full_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
             ui.label("ETA calibrat după ultima rulare (bench_results/folds.csv).").classes("text-caption")
 
         ui.separator()
-        ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props("color=negative outline").classes("w-full")
-        ui.button("🗑️ Șterge Log", on_click=lambda: (clear_logs(), logs_panel.refresh())).props("outline").classes("w-full")
+        ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props("color=negative outline no-caps").classes("w-full").style(_BTN_STYLE)
+        ui.button("🗑️ Șterge Log", on_click=lambda: (clear_logs(), logs_panel.refresh())).props("outline no-caps").classes("w-full").style(_BTN_STYLE)
 
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2"):
@@ -1276,7 +1316,7 @@ def _startup() -> None:
     # NU marcăm joburile RUNNING ca eșuate: worker.py e proces separat care
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
-    _load_datasets_from_disk()
+    # NU auto-încărcăm CSV-uri: utilizatorul încarcă manual de fiecare dată.
     # Re-atașare la un job activ (dacă UI-ul a fost repornit cât rula worker-ul)
     try:
         active = get_active_job()
