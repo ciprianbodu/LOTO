@@ -1055,6 +1055,101 @@ def analysis_panel() -> None:
         ui.label(f"  • {gl}: sim_depth optim = {c['best']}%").classes("text-caption text-positive")
 
 
+ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
+SUPPORTED_POOLS = set(range(6, 13))  # 6..12 (range slider UI)
+
+
+def _clean_stale_adaptive(stale_keys) -> None:
+    try:
+        raw = json.loads(ADAPTIVE_STATE_FILE.read_text(encoding="utf-8"))
+        for k in stale_keys:
+            raw.pop(k, None)
+        ADAPTIVE_STATE_FILE.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+        ui.notify(f"Șters {len(stale_keys)} configurări stale.", type="positive")
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(f"Eroare la curățare: {exc}", type="negative")
+    adaptive_history_panel.refresh()
+
+
+@ui.refreshable
+def adaptive_history_panel() -> None:
+    if not ADAPTIVE_STATE_FILE.exists():
+        ui.label("Fără istoric adaptiv încă (se creează după prima generare cu feedback).").classes("text-caption")
+        return
+    try:
+        raw = json.loads(ADAPTIVE_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        raw = {}
+    if not raw:
+        ui.label("Fără istoric adaptiv încă.").classes("text-caption")
+        return
+
+    stale = []
+    for k in raw:
+        try:
+            if int(str(k).split("_")[-1]) not in SUPPORTED_POOLS:
+                stale.append(k)
+        except (ValueError, IndexError):
+            pass
+
+    ui.label("Stare persistentă Adaptive Feedback v2 — telemetrie evenimente "
+             "(catastrofă/underperf/normal), regime resets, hard inversions.").classes("text-caption")
+    if stale:
+        with ui.row().classes("items-center gap-3"):
+            ui.label(f"⚠️ {len(stale)} configurări STALE (pool inaccesibil 6-12): {', '.join(stale)}").classes("text-warning text-caption")
+            ui.button("🗑️ Curăță stale", on_click=lambda s=stale: _clean_stale_adaptive(s)).props("flat dense color=negative")
+
+    icons = {"catastrophe": "🔥", "underperf": "⚠️", "normal": "✅", "regime_reset": "🚨"}
+    for key in sorted(raw):
+        entry = raw[key] or {}
+        hist = entry.get("history", []) or []
+        rs = entry.get("regime_state", {}) or {}
+        ecmap = entry.get("error_correction_map", {}) or {}
+        mode = rs.get("active_mode", "normal")
+        streak = int(rs.get("streak_zero", 0) or 0)
+        events = [str(h.get("event", "?")) for h in hist]
+        hits = [int(h.get("pool_hits", 0) or 0) for h in hist]
+        n = len(events)
+        n_cat = events.count("catastrophe")
+        mean_h = (sum(hits) / n) if n else 0.0
+        max_h = max(hits) if hits else 0
+        badge = "RESET" if mode == "reset" else "NORMAL"
+        title = f"{key}  [{badge}]" + ("  [STALE]" if key in stale else "")
+        with ui.expansion(title, value=False).classes("w-full"):
+            with ui.row().classes("gap-6"):
+                cat_txt = f"{n_cat} ({n_cat/n*100:.0f}%)" if n else "0"
+                for lbl, val in [("Total extrageri", n), ("Mean hits", f"{mean_h:.2f}"),
+                                 ("Best", max_h), ("Catastrofe", cat_txt), ("Streak zero", streak)]:
+                    with ui.column().classes("items-center gap-0"):
+                        ui.label(lbl).classes("text-caption")
+                        ui.label(str(val)).classes("text-subtitle1")
+            if entry.get("last_pool_date"):
+                ui.label(f"Ultima predicție: {entry['last_pool_date']}").classes("text-caption")
+            if ecmap:
+                boosts = sorted(((int(k2), float(v)) for k2, v in ecmap.items()), key=lambda x: x[1], reverse=True)
+                tb = [f"{nn}×{m:.2f}" for nn, m in boosts[:5] if m > 1.0]
+                tp = [f"{nn}×{m:.2f}" for nn, m in boosts[-5:] if m < 1.0]
+                if tb:
+                    ui.label("↑ Top boost: " + ", ".join(tb)).classes("text-caption text-positive")
+                if tp:
+                    ui.label("↓ Top penalizare: " + ", ".join(tp)).classes("text-caption text-negative")
+            if hits:
+                ui.echart({
+                    "tooltip": {"trigger": "axis"},
+                    "xAxis": {"type": "category", "data": list(range(1, len(hits) + 1))},
+                    "yAxis": {"type": "value"},
+                    "series": [{"type": "line", "data": hits, "smooth": True, "areaStyle": {}}],
+                    "grid": {"left": 30, "right": 10, "top": 10, "bottom": 20},
+                }).classes("w-full").style("height:140px")
+                recent = hist[-min(15, len(hist)):]
+                seq = " ".join(f"{icons.get(str(h.get('event','?')), '•')}{int(h.get('pool_hits',0) or 0)}" for h in recent)
+                ui.label(f"Ultimele {len(recent)}: {seq}").classes("text-caption")
+
+    total_learned = sum(len(e.get("history", []) or []) for e in raw.values())
+    n_reset = sum(1 for e in raw.values() if (e.get("regime_state") or {}).get("active_mode") == "reset")
+    ui.label(f"📈 Global: {total_learned} extrageri învățate · {n_reset} configurări în mod RESET.").classes("text-caption text-bold")
+
+
 def _refresh_status() -> None:
     status_panel.refresh()
     logs_panel.refresh()
@@ -1131,6 +1226,8 @@ def main_page() -> None:
         status_panel()
         with ui.expansion("📈 Analiză & Calibrare (Power-User)", value=False).classes("w-full"):
             analysis_panel()
+        with ui.expansion("🧠 Istoric Învățare Adaptivă", value=False).classes("w-full"):
+            adaptive_history_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=True).classes("w-full"):
             logs_panel()
         results_panel()
