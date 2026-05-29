@@ -108,6 +108,12 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
+    # Pool max 20 (bench acoperă doar k6..k20) — clamp valori vechi salvate (ex. 24).
+    try:
+        if int(SETTINGS.get("pool_size_val", 10)) > 20:
+            SETTINGS["pool_size_val"] = 20
+    except (TypeError, ValueError):
+        SETTINGS["pool_size_val"] = 10
 
 
 def _save_settings() -> None:
@@ -276,12 +282,21 @@ def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
         return default
 
 
-def _fmt_dur(sec: float) -> str:
-    if sec < 60:
-        return f"{int(sec)}s"
-    if sec < 3600:
-        return f"{int(sec/60)}min"
-    return f"{sec/3600:.1f}h"
+def _fmt_dur(sec) -> str:
+    """Durată granulară în h/m/s: '1h 23m 4s' / '3m 12s' / '45s'."""
+    try:
+        s = int(round(float(sec)))
+    except (TypeError, ValueError):
+        return "?"
+    if s < 0:
+        s = 0
+    h, rem = divmod(s, 3600)
+    m, sec_ = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m {sec_}s"
+    if m:
+        return f"{m}m {sec_}s"
+    return f"{sec_}s"
 
 
 def _bench_progress() -> tuple[float, str]:
@@ -316,7 +331,8 @@ def _bench_progress() -> tuple[float, str]:
         elapsed = max(0.0, time.time() - start_ts)
         per_fold = elapsed / cur
         remaining = (tot - cur) * per_fold
-        text += f" · rămas ~{_fmt_dur(remaining)} (total ~{_fmt_dur(tot * per_fold)})"
+        text += (f" · scurs {_fmt_dur(elapsed)} · rămas ~{_fmt_dur(remaining)} "
+                 f"(total ~{_fmt_dur(tot * per_fold)})")
     return frac, text
 
 
@@ -897,6 +913,74 @@ def _show_report() -> None:
     dlg.open()
 
 
+def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "",
+                      with_wf: bool = True) -> None:
+    """Randează un pool complet (badges, p10/p90, audit, cost, WF, variante, stages).
+    Folosit o dată normal, sau de DOUĂ ori la auto-invert (Faza 1 + Faza 2)."""
+    pool = data.get("hard_core") or []
+    stats = data.get("hard_core_stats") or {}
+    eff = data.get("pool_size")
+    req = data.get("pool_size_requested")
+    variants = data.get("variants") or []
+
+    with ui.row().classes("gap-6 items-center"):
+        ui.label(f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else ""))
+        ui.label(f"Garanție: {data.get('guarantee')}")
+        ui.label(f"Variante: {len(variants)}")
+        ui.label(f"Extrageri: {data.get('total_draws')}")
+
+    ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
+    _badges(pool, stats)
+    if data.get("hard_core_joker"):
+        ui.label("Joker:").classes("text-bold mt-1")
+        _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
+
+    if data.get("p10") is not None:
+        ui.label(f"Interval p10–p90: {data.get('p10')} – {data.get('p90')} "
+                 f"(g_range={data.get('g_range')})").classes("text-caption")
+
+    audit = data.get("audit") or {}
+    final_pool = set(int(x) for x in pool)
+    if audit:
+        _render_audit(audit, final_pool)
+        _render_adaptive(audit)
+
+    _render_cost(game, data)
+
+    if with_wf:
+        flat = STATE["retro"].get(f"{fname}_{game}")
+        if flat:
+            _render_walk_forward(flat, game, is_invert=False)
+
+    if variants:
+        is_jk = "joker" in game.lower()
+        skey = f"{fname}_{game}{skey_suffix}"
+        show_all = STATE["show_all"].get(skey, False)
+        with ui.expansion(f"Variante ({len(variants)})", value=False).classes("w-full"):
+            shown = variants if show_all else variants[:10]
+            for i, v in enumerate(shown, 1):
+                if is_jk and len(v) == 6:
+                    nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
+                else:
+                    nums = ", ".join(str(int(x)) for x in v)
+                ui.label(f"V{i:>3}: {nums}").classes("font-mono text-sm")
+            if len(variants) > 10:
+                def _toggle(k=skey):
+                    STATE["show_all"][k] = not STATE["show_all"].get(k, False)
+                    results_panel.refresh()
+                ui.button(
+                    "🔼 Ascunde" if show_all else f"🔽 Arată toate ({len(variants)})",
+                    on_click=_toggle,
+                ).props("flat dense")
+
+    if audit:
+        _render_stages(audit)
+        with ui.expansion(f"🔍 Audit brut (JSON){(' — ' + skey_suffix.strip('_')) if skey_suffix else ''}",
+                          value=False).classes("w-full"):
+            ui.code(json.dumps(audit, indent=2, ensure_ascii=False, default=str),
+                    language="json").classes("w-full max-h-80 overflow-auto text-xs")
+
+
 @ui.refreshable
 def results_panel() -> None:
     if STATE.get("wf_status"):
@@ -908,7 +992,7 @@ def results_panel() -> None:
     results_bundle, _ = results
     elapsed = ""
     if STATE.get("job_start_time"):
-        elapsed = f" (în {time.time() - STATE['job_start_time']:.0f}s)"
+        elapsed = f" (în {_fmt_dur(time.time() - STATE['job_start_time'])})"
 
     with ui.row().classes("items-center gap-3 mt-2"):
         ui.label(f"Rezultate{elapsed}").classes("text-h6")
@@ -919,75 +1003,21 @@ def results_panel() -> None:
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, data in outs.items():
                 with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
-                    pool = data.get("hard_core") or []
-                    stats = data.get("hard_core_stats") or {}
-                    eff = data.get("pool_size")
-                    req = data.get("pool_size_requested")
-                    variants = data.get("variants") or []
+                    if data.get("auto_invert") and data.get("phase1"):
+                        # AUTO-INVERT → DOUĂ pool-uri de jucat:
+                        ui.label("🟢 POOL 1 — normal (pe date, cu validare walk-forward)").classes(
+                            "text-bold text-positive text-lg mt-1")
+                        ui.label("Pariul principal: pool-ul validat istoric.").classes("text-caption")
+                        _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=True)
 
-                    with ui.row().classes("gap-6 items-center"):
-                        ui.label(f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else ""))
-                        ui.label(f"Garanție: {data.get('guarantee')}")
-                        ui.label(f"Variante: {len(variants)}")
-                        ui.label(f"Extrageri: {data.get('total_draws')}")
-
-                    if data.get("auto_invert") and data.get("auto_invert_pool_a"):
-                        pa = data["auto_invert_pool_a"]
-                        ui.label("🔄 Inversare automată — Pool A (exclus):").classes("text-warning")
-                        _badges(pa.get("hard_core", []), pa.get("hard_core_stats"))
-
-                    ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
-                    _badges(pool, stats)
-                    if data.get("hard_core_joker"):
-                        ui.label("Joker:").classes("text-bold mt-1")
-                        _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
-
-                    if data.get("p10") is not None:
-                        ui.label(f"Interval p10–p90: {data.get('p10')} – {data.get('p90')} "
-                                 f"(g_range={data.get('g_range')})").classes("text-caption")
-
-                    audit = data.get("audit") or {}
-                    final_pool = set(int(x) for x in pool)
-                    if audit:
-                        _render_audit(audit, final_pool)
-                        _render_adaptive(audit)
-
-                    # Cost financiar (scheme reduse oficiale sau sistem complet)
-                    _render_cost(game, data)
-
-                    # Walk-forward backtest (detaliat)
-                    flat = STATE["retro"].get(f"{fname}_{game}")
-                    if flat:
-                        _render_walk_forward(flat, game, is_invert=bool(data.get("auto_invert")))
-
-                    # Variante: top 10 + toggle wheel complet
-                    if variants:
-                        is_jk = "joker" in game.lower()
-                        skey = f"{fname}_{game}"
-                        show_all = STATE["show_all"].get(skey, False)
-                        with ui.expansion(f"Variante ({len(variants)})", value=False).classes("w-full"):
-                            shown = variants if show_all else variants[:10]
-                            for i, v in enumerate(shown, 1):
-                                if is_jk and len(v) == 6:
-                                    nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
-                                else:
-                                    nums = ", ".join(str(int(x)) for x in v)
-                                ui.label(f"V{i:>3}: {nums}").classes("font-mono text-sm")
-                            if len(variants) > 10:
-                                def _toggle(k=skey):
-                                    STATE["show_all"][k] = not STATE["show_all"].get(k, False)
-                                    results_panel.refresh()
-                                ui.button(
-                                    f"🔼 Ascunde" if show_all else f"🔽 Arată toate ({len(variants)})",
-                                    on_click=_toggle,
-                                ).props("flat dense")
-
-                    # Pipeline stage-by-stage (evoluția pool-ului)
-                    if audit:
-                        _render_stages(audit)
-                        with ui.expansion("🔍 Audit brut (JSON)", value=False).classes("w-full"):
-                            ui.code(json.dumps(audit, indent=2, ensure_ascii=False, default=str),
-                                    language="json").classes("w-full max-h-80 overflow-auto text-xs")
+                        ui.separator().classes("my-3")
+                        ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
+                            "text-bold text-warning text-lg")
+                        ui.label("Plasă de siguranță, pe șansă — dacă Pool 1 nu nimerește nimic. "
+                                 "Fără backtest/validare, intenționat.").classes("text-caption")
+                        _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False)
+                    else:
+                        _render_pool_body(fname, game, data, with_wf=True)
 
 
 def run_calibration_bg() -> None:
@@ -1274,7 +1304,7 @@ def main_page() -> None:
             widget.on_value_change(lambda: _save_settings())
             return widget
 
-        _bind_save(ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=24, step=1).classes("w-full"), "pool_size_val")
+        _bind_save(ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=20, step=1).classes("w-full"), "pool_size_val")
         _bind_save(ui.number("Garanție minimă (Set Cover)", min=3, max=5, step=1).classes("w-full"), "guarantee_val")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")

@@ -251,7 +251,27 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                 first_pool = list(engine.hard_core or [])
                 first_variants = list(lines or [])
 
+                phase1_data = None
                 if auto_invert and first_pool:
+                    # Capturam Faza 1 COMPLET inainte ca Pass 2 sa suprascrie
+                    # variabilele (altfel pool-ul normal + variantele lui se pierd).
+                    phase1_data = {
+                        "total_draws": len(engine.data) if engine.data is not None else 0,
+                        "hard_core": list(engine.hard_core or []),
+                        "hard_core_stats": dict(getattr(engine, 'hard_core_stats', {}) or {}),
+                        "hard_core_joker": list(getattr(engine, 'hard_core_joker', []) or []),
+                        "hard_core_joker_stats": dict(getattr(engine, 'hard_core_joker_stats', {}) or {}),
+                        "variants": list(first_variants),
+                        "pool_size": len(first_pool),
+                        "pool_size_requested": p_size,
+                        "guarantee": guar,
+                        "lookback": lookback,
+                        "audit": audit,
+                        "p10": p10,
+                        "p90": p90,
+                        "g_range": g_range,
+                        "context": context,
+                    }
                     # === Pass 2: rerulam excluzand pool-ul initial ===
                     logging.info(
                         f"[worker] Auto-Invert ACTIV pentru {game_label}: rerulez "
@@ -301,6 +321,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     # afisare ca "ce-am exclus" in UI.
                     "auto_invert": auto_invert,
                     "first_pool_excluded": sorted(int(n) for n in first_pool) if auto_invert else [],
+                    # Faza 1 COMPLETA (pool normal + variante) cand auto_invert e ON,
+                    # ca UI-ul sa afiseze AMBELE pool-uri (Faza 1 normal + Faza 2 inversat).
+                    "phase1": phase1_data,
                 }
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):
