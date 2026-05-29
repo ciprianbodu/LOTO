@@ -507,9 +507,37 @@ def _shutdown_banner() -> None:
         ui.button("❌ ANULEAZĂ OPRIREA", on_click=_cancel_shutdown).props("color=negative")
 
 
+def _read_bench_log_tail(n: int = 50) -> str:
+    """Ultimele n linii din bench_full.log (procesul de bench, separat de worker)."""
+    if not BENCH_LOG_FILE.exists():
+        return ""
+    try:
+        lines = BENCH_LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+        return "\n".join(lines[-n:]).strip()
+    except Exception as exc:  # noqa: BLE001
+        return f"(eroare citire bench_full.log: {exc})"
+
+
 @ui.refreshable
 def logs_panel() -> None:
-    ui.code(read_logs_filtered(50), language="text").classes("w-full max-h-60 overflow-auto text-xs")
+    # ── Engine / Worker (loto.log) ── include faza POST-BENCH: selectia metodei
+    # castigatoare din best_methods.json, scoringul, POST-HOC si walk-forward.
+    ui.label("⚙️ Engine / Worker — loto.log (include ce se întâmplă DUPĂ bench)").classes(
+        "text-xs text-bold text-cyan-400"
+    )
+    ui.code(read_logs_filtered(120), language="text").classes(
+        "w-full max-h-72 overflow-auto text-xs"
+    )
+
+    # ── Bench (bench_full.log) ── proces separat; afisat doar daca exista log.
+    bench_tail = _read_bench_log_tail(50)
+    if bench_tail:
+        ui.label("📊 Bench — bench_full.log (benchmark metode + best_methods.json)").classes(
+            "text-xs text-bold text-amber-400 mt-2"
+        )
+        ui.code(bench_tail, language="text").classes(
+            "w-full max-h-56 overflow-auto text-xs"
+        )
 
 
 def _badges(numbers, stats: dict | None = None):

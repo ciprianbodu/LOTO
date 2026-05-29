@@ -17,8 +17,12 @@ import os
 
 LOG_FILE = "loto.log"
 
+# LOTO_DEBUG=1 → loguri DEBUG (mai mult detaliu despre ce face engine-ul DUPA
+# bench: selectie metoda, scoring, POST-HOC, walk-forward). Vizibile in consola UI.
+_LEVEL = logging.DEBUG if os.environ.get("LOTO_DEBUG") else logging.INFO
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=_LEVEL,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a"),
