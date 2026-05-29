@@ -114,10 +114,18 @@ def main() -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
+    # Logăm SIMULTAN la consolă ȘI în bench_full.log (mode='w' = fresh la fiecare
+    # rulare). Astfel logul există indiferent cum e pornit bench-ul (manual sau din
+    # UI, pe orice OS) — esențial ca să vedem unde/de ce se oprește un full rebench
+    # (ex. ultima linie 'START compute' înainte de un crash GPU/OOM necapturabil).
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="[%(asctime)s] %(levelname)s %(name)s | %(message)s",
         datefmt="%H:%M:%S",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("bench_full.log", encoding="utf-8", mode="w"),
+        ],
     )
 
     methods = (

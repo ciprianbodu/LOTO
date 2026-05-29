@@ -223,11 +223,10 @@ def _launch_bench(args: list[str], label: str) -> None:
     cmd = [py, "bench_all_methods.py"] + args
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
     try:
-        if os.name == "nt":
-            proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=flags)
-        else:
-            logf = open(BENCH_LOG_FILE, "w", encoding="utf-8")
-            proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), stdout=logf, stderr=subprocess.STDOUT)
+        # bench_all_methods.py își scrie SINGUR bench_full.log (FileHandler) → nu
+        # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
+        # există acum și pe Windows, vizibil în consola DEBUG.
+        proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=flags)
         BENCH_PID_FILE.write_text(f"{proc.pid}|{int(time.time())}", encoding="utf-8")
         ui.notify(f"{label} pornit (PID {proc.pid}).", type="positive")
     except Exception as exc:  # noqa: BLE001
@@ -1314,9 +1313,11 @@ def main_page() -> None:
 
     # ---- Polling fără reload (înlocuiește hack-ul JS window.location.reload) ----
     def _tick() -> None:
+        # Consola e mereu LIVE (citire ieftină a 2 loguri la 2s) — așa vezi bench-ul
+        # chiar dacă rulează manual din CMD, nu doar când UI-ul îl pornește.
+        logs_panel.refresh()
         if STATE.get("active_job_id") or _bench_running() or STATE.get("wf_status"):
             status_panel.refresh()
-            logs_panel.refresh()
     ui.timer(2.0, _tick)
 
 
