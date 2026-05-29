@@ -1058,9 +1058,8 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             meta = ", ".join(x for x in [fam, (f"pool {ph}" if ph else "")] if x)
             if meta:
                 tail += f" <span style='opacity:.45'>[{meta}]</span>"
-            parts.append(f"{gkey} → <b>{m}</b>{tail}")
-        ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes(
-            "text-caption text-positive")
+            parts.append(f"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>{tail}")
+        ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes("text-caption")
     else:
         ui.label("🏆 Metodă scorer: TimesFM — model foundation (fallback, fără decizie bench)").classes(
             "text-caption text-grey")
