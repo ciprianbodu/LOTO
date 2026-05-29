@@ -87,6 +87,26 @@ def decode_queue_result(result_json: str) -> object:
 
 
 # --------------------------------------------------------------------------- #
+# Scriere atomică (anti-corupere: crash/sleep/sync OneDrive la mijlocul scrierii)
+# --------------------------------------------------------------------------- #
+def atomic_write_text(path, text: str, encoding: str = "utf-8") -> None:
+    """Scrie în <file>.tmp (flush+fsync) apoi os.replace — atomic pe Win+POSIX.
+    Cititorii văd fie versiunea veche completă, fie cea nouă completă."""
+    p = Path(path)
+    tmp = p.with_name(p.name + ".tmp")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(tmp, "w", encoding=encoding) as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
+
+
+def atomic_write_json(path, obj, *, indent: int = 2, ensure_ascii: bool = False) -> None:
+    atomic_write_text(path, json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii))
+
+
+# --------------------------------------------------------------------------- #
 # Worker
 # --------------------------------------------------------------------------- #
 def is_worker_running() -> bool:

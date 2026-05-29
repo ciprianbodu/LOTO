@@ -948,8 +948,8 @@ class LotoEngine:
                 "pool": self.hard_core,
                 "date": datetime.now().isoformat()
             }
-            with open(history_file, "w") as f:
-                json.dump(history, f)
+            from ui_shared import atomic_write_json
+            atomic_write_json(history_file, history)  # atomic: tmp+fsync+os.replace
                 
             self.audit["pool_variation"] = pool_variation
         except Exception as e:
@@ -1790,8 +1790,8 @@ class LotoEngine:
                 meta = _METHODS.get(winner)
                 if meta:
                     family = meta[1]
-            except Exception:
-                pass
+            except Exception as _exc_fam:
+                logging.debug("[ENGINE] family lookup pt %s eșuat: %s", winner, _exc_fam)
             self.audit.setdefault("bench_winner", {})[game_key] = {
                 "method": winner,
                 "pool_hint": _pool_hint,

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import atexit
 import base64
 import io
 import json
 import logging
 import pickle
+import signal
 import sys
 import time
 import traceback
@@ -323,7 +325,23 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     return packed
 
 
+def _requeue_on_terminate(*_args) -> None:
+    """La oprire bruscă (SIGTERM/SIGINT) re-punem jobul RUNNING pe PENDING ca să
+    NU rămână blocat 'în curs' pe veci — la următoarea pornire worker-ul îl reia.
+    Consistent cu requeue_running_jobs() de la startup."""
+    try:
+        requeue_running_jobs()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def main() -> None:
+    atexit.register(_requeue_on_terminate)
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(_sig, lambda s, f: (_requeue_on_terminate(), sys.exit(1)))
+        except (ValueError, OSError):
+            pass  # signal disponibil doar pe thread-ul principal
     try:
         recovered = requeue_running_jobs()
         if recovered > 0:

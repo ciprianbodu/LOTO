@@ -41,6 +41,7 @@ from job_queue import (
 from cancel import lock_engine, unlock_engine
 from ui_shared import (
     PROJECT_ROOT,
+    atomic_write_json,
     clear_logs,
     decode_queue_result,
     ensure_worker_running,
@@ -109,7 +110,7 @@ def _load_settings() -> None:
 
 def _save_settings() -> None:
     try:
-        UI_STATE_FILE.write_text(json.dumps(SETTINGS, indent=2), encoding="utf-8")
+        atomic_write_json(UI_STATE_FILE, SETTINGS)
     except Exception as exc:  # noqa: BLE001
         logger.warning("save settings: %s", exc)
 
@@ -1117,7 +1118,7 @@ def _clean_stale_adaptive(stale_keys) -> None:
         raw = json.loads(ADAPTIVE_STATE_FILE.read_text(encoding="utf-8"))
         for k in stale_keys:
             raw.pop(k, None)
-        ADAPTIVE_STATE_FILE.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(ADAPTIVE_STATE_FILE, raw)
         ui.notify(f"Șters {len(stale_keys)} configurări stale.", type="positive")
     except Exception as exc:  # noqa: BLE001
         ui.notify(f"Eroare la curățare: {exc}", type="negative")
@@ -1322,6 +1323,9 @@ def _startup() -> None:
         active = get_active_job()
         if active:
             STATE["active_job_id"] = int(active["id"])
+            # Job orfan (worker poate fi mort) → pornim worker-ul ca să-l reia
+            # (requeue_running_jobs la startup worker repune RUNNING→PENDING).
+            ensure_worker_running()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
 

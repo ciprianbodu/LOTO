@@ -263,9 +263,8 @@ def main() -> int:
     }
     out_path = Path(args.out)
     out_path.mkdir(exist_ok=True, parents=True)
-    Path("best_methods.json").write_text(
-        json.dumps(best, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    from ui_shared import atomic_write_json
+    atomic_write_json("best_methods.json", best)  # atomic: tmp+fsync+os.replace
 
     # Stamp CSV signatures so freshness detection knows when cache is stale
     try:

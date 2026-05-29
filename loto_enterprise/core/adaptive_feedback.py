@@ -156,8 +156,8 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
     raw[_state_key(game_type, pool_size)] = serializable
 
     try:
-        with open(_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(raw, f, indent=2, ensure_ascii=False)
+        from ui_shared import atomic_write_json
+        atomic_write_json(_STATE_FILE, raw)  # atomic: tmp+fsync+os.replace
     except Exception as e:
         logger.error(f"[ADAPTIVE] Nu pot scrie {_STATE_FILE}: {e}")
 
