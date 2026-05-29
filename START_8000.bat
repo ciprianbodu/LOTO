@@ -1,104 +1,231 @@
 @echo off
-setlocal enabledelayedexpansion
+REM ============================================================
+REM START_8000.bat — Launcher rapid + log silent in fundal.
+REM Pe success: nu mai vezi nimic despre log, pornesti direct UI-ul.
+REM Pe eroare: afisez log-ul automat si las fereastra deschisa.
+REM UI = NiceGUI (app_nicegui.py); app.py (Streamlit) ramane legacy.
+REM ============================================================
 cd /d "%~dp0"
+set "LOGFILE=%~dp0startup_8000.log"
 
-:: Resetam log-ul de eroare la startup
-echo STARTUP LOG - %DATE% %TIME% > startup_error.log
+REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
+> "%LOGFILE%" echo === START_8000 LOG ===
+>> "%LOGFILE%" echo Time:     %DATE% %TIME%
+>> "%LOGFILE%" echo CWD:      %CD%
+>> "%LOGFILE%" echo Computer: %COMPUTERNAME%
+>> "%LOGFILE%" echo.
 
-:: Folosim un folder specific pentru fiecare masina, DAR in interiorul proiectului
-set VENV_DIR=.venv_%COMPUTERNAME%
+REM ===== Verify phase (silent, logat in fundal) =====
+call :verify_phase >> "%LOGFILE%" 2>&1
+set "VERIFY_RC=%ERRORLEVEL%"
 
-echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)...
-
-:: Asiguram existenta folderului venv in radacina proiectului
-if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo [INFO] Creare mediu nou in proiect: %VENV_DIR%...
-    py -3.11 -m venv %VENV_DIR%
-    if !ERRORLEVEL! NEQ 0 (
-        echo [EROARE] Nu am putut crea mediul in folderul proiectului. 
-        echo Verificati permisiunile sau daca Python 3.11 este instalat.
-        goto :error_exit
-    )
-)
-
-:: Verificam mediul. START_8000.bat doar verifica + porneste; install in ACTUALIZARI.bat.
-set "ENV_COMPLETE=1"
-set "MISSING="
-
-REM Core app (UI = NiceGUI; Streamlit ramane optional pentru app.py legacy)
-"%VENV_DIR%\Scripts\python" -c "import nicegui" >nul 2>&1
-if !ERRORLEVEL! NEQ 0 set "ENV_COMPLETE=0" & set "MISSING=!MISSING! nicegui"
-for %%M in (torch timesfm pandas numpy scipy) do (
-    "%VENV_DIR%\Scripts\python" -c "import %%M" >nul 2>&1
-    if !ERRORLEVEL! NEQ 0 (
-        set "ENV_COMPLETE=0"
-        set "MISSING=!MISSING! %%M"
-    )
-)
-
-REM Benchmark stack (auto-pilot are nevoie de ele)
-for %%M in (chronos momentfm neuralforecast rich pynvml transformers) do (
-    "%VENV_DIR%\Scripts\python" -c "import %%M" >nul 2>&1
-    if !ERRORLEVEL! NEQ 0 (
-        set "ENV_COMPLETE=0"
-        set "MISSING=!MISSING! %%M"
-    )
-)
-
-if "%ENV_COMPLETE%"=="0" (
+if not "%VERIFY_RC%"=="0" (
     echo.
     echo ============================================================
-    echo  [EROARE] Mediul Python e incomplet - lipsesc:!MISSING!
+    echo  [EROARE] Verificare mediu esuata. Log:
     echo ============================================================
-    echo.
-    echo  START_8000.bat doar verifica + porneste; nu face install.
-    echo  Pentru install, ruleaza:
-    echo.
-    echo     ACTUALIZARI.bat
-    echo.
-    echo  Apoi ruleaza din nou START_8000.bat.
+    type "%LOGFILE%"
     echo ============================================================
-    goto :error_exit
-)
-echo [OK] Mediul complet: nicegui + torch + timesfm + chronos + momentfm
-echo      + neuralforecast + rich + pynvml + transformers.
-
-echo [2/4] Eliberare resurse (Port 8000 + workeri vechi)...
-:: Kill orice proces pe portul 8000 (streamlit vechi)
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000') do (
-    if NOT "%%a"=="0" taskkill /f /pid %%a >nul 2>&1
+    echo  RC = %VERIFY_RC%
+    echo ============================================================
+    pause
+    cmd /k
+    exit /b %VERIFY_RC%
 )
 
-:: Kill workeri vechi via PowerShell (wmic e deprecat pe Win11 si nu mai functioneaza).
-:: Match strict: doar python.exe care ruleaza 'worker.py' din proiectul asta (via %~dp0).
-:: Backslash-urile din %~dp0 sunt tratate literal in -like (nu regex), deci nu necesita escape.
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -like '*worker.py*' -and $_.CommandLine -like '*%~dp0*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host ('[CLEANUP] Worker vechi oprit: PID ' + $_.ProcessId) }"
+REM ===== Launch phase (live, fara redirectare) =====
+call :launch_phase
+set "LAUNCH_RC=%ERRORLEVEL%"
 
-:: Asteapta 1 secunda pentru ca procesele sa se inchida curat inainte sa pornim altele noi
-timeout /t 1 /nobreak >nul 2>&1
+if not "%LAUNCH_RC%"=="0" (
+    echo.
+    echo [EROARE] Launch esuat ^(RC=%LAUNCH_RC%^).
+    pause
+    cmd /k
+    exit /b %LAUNCH_RC%
+)
 
-echo [3/4] Pornire Worker...
-:: Folosim cai absolute pentru ca app.py:_is_worker_running() sa detecteze corect
-:: worker-ul (altfel, cu cale relativa, cmdline nu contine project_root si app.py
-:: spawn-eaza un al doilea worker paralel - race condition confirmata 2026-05-02).
-start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
-
-echo [4/4] Pornire UI NiceGUI (port 8000)...
-:: NiceGUI tine starea pe server si face update prin websocket (fara reload de
-:: pagina) -> bifele/CSV-ul NU se mai pierd. UI vechi Streamlit: app.py (legacy).
-set LOTO_UI_PORT=8000
-"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
-if !ERRORLEVEL! NEQ 0 goto :error_exit
-
-echo.
-echo Script finalizat cu succes.
-pause
 exit /b 0
 
-:error_exit
+
+REM ============================================================
+REM :verify_phase — verifica venv, detecteaza GPU, importa core/benchmark
+REM ============================================================
+:verify_phase
+setlocal enabledelayedexpansion
+set "VENV_DIR=.venv_%COMPUTERNAME%"
+echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)
+
+if not exist "%VENV_DIR%\Scripts\python.exe" (
+    echo [INFO] Creare mediu nou: %VENV_DIR%
+    py -3.11 -m venv "%VENV_DIR%"
+    if not !ERRORLEVEL!==0 (
+        echo [EROARE] Creare venv esuata. Verifica Python 3.11 si permisiunile.
+        endlocal & exit /b 10
+    )
+)
+
 echo.
-echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-echo [CRITIC] Eroare detectata. Fereastra ramane deschisa.
-echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-pause
-cmd /k
+echo --- Detectare GPU ---
+set "GPU_TYPE=UNKNOWN"
+set "GPU_NAME="
+set "CACHED_MACHINE="
+set "NEED_DETECT=1"
+REM IMPORTANT: profil-ul e SINCRONIZAT prin OneDrive intre statii.
+REM Daca cache-ul e dintr-un .machine_profile salvat pe ALTA masina (alt
+REM COMPUTERNAME), refacem detectia — altfel o statie cu GPU pierde GPU-ul
+REM doar pentru ca laptop-ul fara GPU a scris ultimul in OneDrive.
+REM
+REM Folosim un FLAG (NEED_DETECT) in loc de `goto` din interiorul blocurilor
+REM imbricate — `goto` din `(...)` strica parser-ul cmd.exe si produce erori
+REM gen `'"CPU_ONLY"' is not recognized as an internal or external command`.
+if exist ".machine_profile" (
+    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
+        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
+        if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
+        if "%%A"=="MACHINE" set "CACHED_MACHINE=%%B"
+    )
+    if /i "!CACHED_MACHINE!"=="%COMPUTERNAME%" (
+        set "NEED_DETECT=0"
+        echo Profil hardware cached ^(local^): GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
+    ) else (
+        echo Profil cached e de pe alta statie ^(!CACHED_MACHINE! vs %COMPUTERNAME%^) - redetectez...
+        del /f /q .machine_profile >nul 2>&1
+        set "GPU_TYPE=UNKNOWN"
+        set "GPU_NAME="
+    )
+)
+
+if "!NEED_DETECT!"=="1" (
+    if not exist ".machine_profile" echo Profil hardware lipsa, detectez acum...
+    call :DetectGpu
+    if exist ".machine_profile" (
+        for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
+            if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
+            if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
+        )
+    )
+    echo Detectie: GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
+)
+
+if /i "!GPU_TYPE!"=="NVIDIA" (
+    echo Mod: GPU
+) else (
+    echo Mod: CPU-ONLY ^(setez CUDA_VISIBLE_DEVICES=-1 ca torch sa nu probleze CUDA^)
+)
+
+echo.
+echo --- Verificare UI NiceGUI ---
+"%VENV_DIR%\Scripts\python.exe" -c "import nicegui" >nul 2>&1
+if not "!ERRORLEVEL!"=="0" (
+    echo [LIPSA] nicegui nu e instalat in venv.
+    echo Solutie: ruleaza ACTUALIZARI.bat apoi reincearca.
+    endlocal & exit /b 20
+)
+echo [OK] nicegui prezent.
+
+REM Pe CPU-only, setam env vars ca import-urile sa fie rapide si offline.
+if /i not "!GPU_TYPE!"=="NVIDIA" (
+    set CUDA_VISIBLE_DEVICES=-1
+    set HF_HUB_OFFLINE=1
+    set TRANSFORMERS_OFFLINE=1
+    set PYTHONUNBUFFERED=1
+) else (
+    set HF_HUB_OFFLINE=1
+    set TRANSFORMERS_OFFLINE=1
+    set PYTHONUNBUFFERED=1
+)
+
+echo.
+echo --- Verificare imports prin verify_imports.py ---
+echo ^(timesfm OPTIONAL pe CPU, REQUIRED pe GPU; progress real-time^)
+"%VENV_DIR%\Scripts\python.exe" -u "%~dp0verify_imports.py"
+set "VERIFY_PY_RC=!ERRORLEVEL!"
+
+if not "!VERIFY_PY_RC!"=="0" (
+    echo.
+    echo [EROARE] verify_imports.py a returnat RC=!VERIFY_PY_RC!
+    echo Vezi mai sus pentru pachetele REQUIRED lipsa.
+    endlocal & exit /b !VERIFY_PY_RC!
+)
+
+echo.
+echo [OK] Mediu verificat complet.
+endlocal & exit /b 0
+
+
+REM ============================================================
+REM :launch_phase — porneste worker + UI NiceGUI
+REM ============================================================
+:launch_phase
+setlocal enabledelayedexpansion
+set "VENV_DIR=.venv_%COMPUTERNAME%"
+
+REM Re-aplica env vars din profil (sunt propagate in subprocese UI + worker)
+set "GPU_TYPE=NVIDIA"
+if exist ".machine_profile" (
+    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
+        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
+    )
+)
+if /i not "!GPU_TYPE!"=="NVIDIA" set CUDA_VISIBLE_DEVICES=-1
+REM Modelele TimesFM sunt deja cached local; nu vrem network calls la runtime.
+set HF_HUB_OFFLINE=1
+set TRANSFORMERS_OFFLINE=1
+
+echo [2/4] Eliberare resurse (port 8000, workeri vechi)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 2^>nul') do (
+    if NOT "%%a"=="0" taskkill /f /pid %%a >nul 2>&1
+)
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -like '*worker.py*' -and $_.CommandLine -like '*%~dp0*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host ('[CLEANUP] Worker vechi oprit: PID ' + $_.ProcessId) }"
+timeout /t 1 /nobreak >nul 2>&1
+
+echo [3/4] Pornire Worker
+start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
+
+echo [4/4] Pornire UI NiceGUI (port 8000)
+REM NiceGUI tine starea pe server si face update prin websocket (fara reload de
+REM pagina) -^> bifele/CSV-ul NU se mai pierd. UI vechi Streamlit: app.py (legacy).
+set "LOTO_UI_PORT=8000"
+"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
+set "RC=!ERRORLEVEL!"
+endlocal & exit /b %RC%
+
+
+REM ============================================================
+REM :DetectGpu — detecteaza GPU NVIDIA si scrie .machine_profile
+REM ============================================================
+:DetectGpu
+setlocal enabledelayedexpansion
+set "DETECTED_TYPE=CPU_ONLY"
+set "DETECTED_NAME="
+
+REM Test 1: nvidia-smi (rapid)
+where nvidia-smi >nul 2>&1
+if !ERRORLEVEL!==0 (
+    nvidia-smi -L >nul 2>&1
+    if !ERRORLEVEL!==0 (
+        set "DETECTED_TYPE=NVIDIA"
+        for /f "tokens=*" %%G in ('nvidia-smi --query-gpu^=name --format^=csv^,noheader 2^>nul') do (
+            if "!DETECTED_NAME!"=="" set "DETECTED_NAME=%%G"
+        )
+        goto :DG_Write
+    )
+)
+
+REM Test 2: PowerShell fallback (Win32_VideoController) — caut NVIDIA
+for /f "tokens=*" %%G in ('powershell -NoProfile -Command "(Get-CimInstance Win32_VideoController | Where-Object { $_.Name -like '*NVIDIA*' } | Select-Object -First 1).Name" 2^>nul') do (
+    if not "%%G"=="" (
+        set "DETECTED_TYPE=NVIDIA"
+        set "DETECTED_NAME=%%G"
+    )
+)
+
+:DG_Write
+(
+    echo GPU_TYPE=!DETECTED_TYPE!
+    echo GPU_NAME=!DETECTED_NAME!
+    echo DETECTED_AT=%DATE% %TIME%
+    echo MACHINE=%COMPUTERNAME%
+) > .machine_profile
+endlocal & exit /b 0
