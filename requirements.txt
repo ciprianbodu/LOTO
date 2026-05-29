@@ -12,6 +12,7 @@
 
 # Core app
 streamlit
+nicegui
 pandas
 numpy
 requests
