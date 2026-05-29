@@ -79,6 +79,7 @@ STATE: dict = {
     "datasets": [],          # list[(fname, DataFrame)]
     "active_job_id": None,
     "job_start_time": None,
+    "job_elapsed": None,     # durata FIXĂ a ultimei generări (sec); setată la COMPLETED
     "results": None,         # (results_bundle, count)
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
     "wf_status": "",         # text status walk-forward
@@ -185,6 +186,7 @@ def submit_generation(pure: bool = False) -> None:
     job_id = submit_job("pipeline", cfg)
     STATE["active_job_id"] = int(job_id)
     STATE["job_start_time"] = time.time()
+    STATE["job_elapsed"] = None  # reset; se fixează la COMPLETED
     ui.notify(f"Job #{job_id} trimis.", type="positive")
     _refresh_status()
 
@@ -448,6 +450,10 @@ def status_panel() -> None:
         state = str(stt.get("status") or "")
         if state == "COMPLETED":
             payload = decode_queue_result(str(stt.get("result_json") or "{}"))
+            # Capturăm durata generării O SINGURĂ DATĂ (fixă) — altfel 'Rezultate (în X)'
+            # creștea live cât rula walk-forward-ul (acum − start_job recalculat mereu).
+            if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
+                STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
             with STATE_LOCK:
                 STATE["results"] = payload
                 STATE["active_job_id"] = None
@@ -1079,8 +1085,8 @@ def results_panel() -> None:
         return
     results_bundle, _ = results
     elapsed = ""
-    if STATE.get("job_start_time"):
-        elapsed = f" (în {_fmt_dur(time.time() - STATE['job_start_time'])})"
+    if STATE.get("job_elapsed") is not None:
+        elapsed = f" (în {_fmt_dur(STATE['job_elapsed'])})"
 
     with ui.row().classes("items-center gap-3 mt-2"):
         ui.label(f"Rezultate{elapsed}").classes("text-h6")
