@@ -1312,7 +1312,7 @@ def main_page() -> None:
             analysis_panel()
         with ui.expansion("🧠 Istoric Învățare Adaptivă", value=False).classes("w-full"):
             adaptive_history_panel()
-        with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=True).classes("w-full"):
+        with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes("w-full"):
             logs_panel()
         results_panel()
 
