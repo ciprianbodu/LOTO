@@ -285,6 +285,31 @@ def run_quick_rebench() -> None:
     _launch_bench(args, "QUICK Re-Bench")
 
 
+def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
+    """ETA bench pe baza ULTIMEI rulări (bench_results/folds.csv): avg runtime_sec
+    al folds-urilor reale × nr. folds × overhead. Fallback la estimarea implicită
+    dacă nu există bench anterior."""
+    default = "~50 min" if target_folds >= 1000 else "~5 min"
+    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
+    if not fp.exists():
+        return default
+    try:
+        df = pd.read_csv(fp)
+        if df.empty or "runtime_sec" not in df.columns:
+            return default
+        mask = (df.get("failed", False) == False) & (df["runtime_sec"] > 0.05)  # noqa: E712
+        real = df[mask] if mask.any() else df
+        avg = float(real["runtime_sec"].mean())
+        total = avg * target_folds * overhead
+        if total < 60:
+            return f"~{int(total)} sec"
+        if total < 3600:
+            return f"~{int(total/60)} min"
+        return f"~{total/3600:.1f} h"
+    except Exception:  # noqa: BLE001
+        return default
+
+
 def _bench_progress() -> tuple[float, str]:
     """(fracție 0..1, text) din bench_full.log — caută [N/TOTAL]."""
     if not BENCH_LOG_FILE.exists():
@@ -1214,8 +1239,11 @@ def main_page() -> None:
         ui.button("🚀 Generează cu setările manuale", on_click=lambda: submit_generation(pure=False)).classes("w-full")
 
         with ui.expansion("🛠️ Re-Bench / Power-User", value=False).classes("w-full"):
-            ui.button("🧪 Re-Bench Quick (~5 min)", on_click=run_quick_rebench).classes("w-full")
-            ui.button("🔬 Re-Bench Full (~50 min)", on_click=run_full_rebench).classes("w-full")
+            _quick_eta = _estimate_bench_eta(150)
+            _full_eta = _estimate_bench_eta(1280)
+            ui.button(f"🧪 Re-Bench Quick ({_quick_eta})", on_click=run_quick_rebench).classes("w-full")
+            ui.button(f"🔬 Re-Bench Full ({_full_eta})", on_click=run_full_rebench).classes("w-full")
+            ui.label("ETA calibrat după ultima rulare (bench_results/folds.csv).").classes("text-caption")
 
         ui.separator()
         ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props("color=negative outline").classes("w-full")
