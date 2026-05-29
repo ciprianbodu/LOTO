@@ -370,22 +370,6 @@ def _start_walk_forward() -> None:
     threading.Thread(target=_worker_wf, daemon=True).start()
 
 
-def _wf_metrics(flat) -> dict:
-    """Agregă metrici simple din rezultatele walk-forward."""
-    if not flat:
-        return {}
-    pool_hits = [getattr(r, "hits_union", getattr(r, "hits", 0)) for r in flat]
-    var_hits = [getattr(r, "hits", 0) for r in flat]
-    n = len(flat)
-    return {
-        "n": n,
-        "avg_pool": sum(pool_hits) / n if n else 0,
-        "best_pool": max(pool_hits) if pool_hits else 0,
-        "avg_var": sum(var_hits) / n if n else 0,
-        "best_var": max(var_hits) if var_hits else 0,
-    }
-
-
 # --------------------------------------------------------------------------- #
 # UI — randare
 # --------------------------------------------------------------------------- #
@@ -584,6 +568,149 @@ def _render_cost(game: str, data: dict) -> None:
                     f"| Wheel complet ({len(variants)} var.) ≈ {len(variants)*price:,.0f} Lei.").classes("text-caption")
 
 
+PRIZE_MAP = {
+    "6/49": {3: 30, 4: 300, 5: 30000, 6: 1000000},
+    "5/40": {3: 50, 4: 500, 5: 50000, 6: 0},
+    "joker": {3: 60, 4: 600, 5: 60000, 6: 1000000},
+}
+
+
+def _render_adaptive(audit: dict) -> None:
+    ast = audit.get("adaptive_state")
+    if not ast:
+        return
+    event = ast.get("event")
+    meta = {
+        "normal": ("✅", "#28a745", "Performanță peste baseline"),
+        "underperf": ("⚠️", "#ffc107", "Sub baseline (1 hit) — corecție moderată"),
+        "catastrophe": ("🔥", "#dc3545", "CATASTROFĂ (0 hituri) — corecție amplificată + diversificare"),
+        "regime_reset": ("🚨", "#a020f0", "REGIM RESETAT — ponderi NQI rebalansate"),
+    }
+    icon, color, msg = meta.get(event, ("ℹ️", "#17a2b8", "Fără date pentru comparație"))
+    baseline = ast.get("baseline", 0.0) or 0.0
+    rolling = ast.get("rolling_avg")
+    parts = [f"<div style='font-weight:bold;margin-bottom:6px;'>{icon} Învățare Adaptivă: {msg} "
+             f"<span style='background:{'#a020f0' if ast.get('active_mode')=='reset' else '#28a745'};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;'>"
+             f"{'RESET' if ast.get('active_mode')=='reset' else 'NORMAL'}</span></div>"]
+    if event is not None:
+        ext = f"Ultima extragere: <strong>{ast.get('last_hits')}</strong> hituri în pool"
+        if baseline:
+            ext += f" <small style='color:#888;'>(baseline aleator: {baseline})</small>"
+        parts.append(f"<div>{ext}</div>")
+    if ast.get("streak_zero", 0) >= 1:
+        parts.append(f"<div>Streak catastrofe consecutive: <strong>{ast['streak_zero']}</strong></div>")
+    if rolling is not None:
+        rc = "#dc3545" if rolling < baseline else "#28a745"
+        parts.append(f"<div>Media rolling (5 extrageri): <strong style='color:{rc};'>{rolling:.2f}</strong></div>")
+    if ast.get("missed"):
+        parts.append(f"<div style='color:#dc3545;'>Numere ratate: {', '.join(map(str, ast['missed']))} → boost la următoarea predicție</div>")
+    if ast.get("false_positives"):
+        parts.append(f"<div style='color:#6c757d;'>Prezise dar absente: {', '.join(map(str, ast['false_positives'][:10]))} → penalizare</div>")
+    if ast.get("boosts"):
+        parts.append("<div><span style='color:#28a745;'>↑ Boost activ:</span> " +
+                     ", ".join(f"<strong>{n}</strong>×{m:.2f}" for n, m in ast["boosts"][:6]) + "</div>")
+    if ast.get("penalties"):
+        parts.append("<div><span style='color:#dc3545;'>↓ Penalizare activă:</span> " +
+                     ", ".join(f"<strong>{n}</strong>×{m:.2f}" for n, m in ast["penalties"][:6]) + "</div>")
+    cd = audit.get("catastrophe_diversification")
+    if cd and cd.get("injected"):
+        inj = ", ".join(f"{n}(gap×{gr})" for n, gr in cd["injected"])
+        ev = ", ".join(str(n) for n, _ in cd.get("evicted", []))
+        parts.append(f"<div style='color:#f4a261;'>💉 Diversificare forțată: injectate <strong>{inj}</strong> în locul lui <strong>{ev}</strong></div>")
+    hi = audit.get("hard_inversion")
+    if hi:
+        excl = hi.get("excluded", [])
+        parts.append(f"<div style='color:#e63946;'>🚫 Hard Inversion: <strong>{hi.get('n_excluded', len(excl))}</strong> "
+                     f"numere excluse temporar → {', '.join(str(n) for n in excl[:20])}</div>")
+    ui.html(f"<div style='margin-top:10px;padding:12px;background:rgba(20,30,50,0.5);border-left:4px solid {color};"
+            f"border-radius:8px;font-size:0.9em;'>{''.join(parts)}</div>")
+
+
+def _render_walk_forward(flat, game: str) -> None:
+    if not flat:
+        return
+    gk = _game_key_from(game)
+    draw_n = 6 if gk == "6/49" else 5
+    n = len(flat)
+    uniq = {getattr(p, "draw_index", i) for i, p in enumerate(flat)}
+    avg_var = sum(getattr(p, "hits", 0) for p in flat) / n
+    avg_pool = sum(getattr(p, "hits_union", 0) for p in flat) / n
+    best_var = max(getattr(p, "hits", 0) for p in flat)
+    best_pool = max(getattr(p, "hits_union", 0) for p in flat)
+    avg_rate = (avg_var / draw_n) * 100
+
+    with ui.card().classes("w-full mt-2"):
+        ui.label(f"📊 Walk-forward: {n} predicții pe {len(uniq)} extrageri").classes("text-bold text-info")
+        with ui.row().classes("gap-8"):
+            for lbl, val in [("Medie/variantă", f"{avg_var:.2f}"), ("Medie/pool", f"{avg_pool:.2f}"),
+                             ("Rată medie", f"{avg_rate:.1f}%"), ("Max variantă", best_var), ("Max pool", best_pool)]:
+                with ui.column().classes("items-center gap-0"):
+                    ui.label(lbl).classes("text-caption")
+                    ui.label(str(val)).classes("text-h6")
+
+        # Distribuție Nucleu Dur (hits_union per extragere unică)
+        seen, pool_dist = set(), {}
+        for p in flat:
+            di = getattr(p, "draw_index", id(p))
+            if di in seen:
+                continue
+            seen.add(di)
+            hu = getattr(p, "hits_union", 0)
+            pool_dist[hu] = pool_dist.get(hu, 0) + 1
+        tot = len(seen)
+        ui.label("Distribuție Nucleu Dur (câte numere au fost în pool):").classes("text-bold text-caption mt-2")
+        for h in sorted(pool_dist, reverse=True):
+            c = pool_dist[h]
+            if c == 0 and h > 3:
+                continue
+            pct = (c / tot * 100) if tot else 0
+            color = "#f4a261" if h >= 4 else ("#e9c46a" if h >= 3 else "#666")
+            ui.html(f"<div style='display:flex;align-items:center;gap:8px;'>"
+                    f"<div style='width:110px;font-size:0.85em;'>{h} numere</div>"
+                    f"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:12px;'>"
+                    f"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
+                    f"<div style='width:120px;text-align:right;font-size:0.85em;'>{c} extrageri ({pct:.0f}%)</div></div>")
+
+        # Tabel pool ≥4
+        rows_pool, seen2 = [], set()
+        for p in sorted(flat, key=lambda x: (getattr(x, "hits_union", 0), getattr(x, "draw_index", 0)), reverse=True):
+            hu = getattr(p, "hits_union", 0)
+            di = getattr(p, "draw_index", 0)
+            if hu >= 4 and di not in seen2:
+                seen2.add(di)
+                dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+                rows_pool.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}", "hits": f"🔥 {hu}"})
+        if rows_pool:
+            ui.label("🎯 Istoric Pool (≥4 numere):").classes("text-bold text-caption mt-2")
+            ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
+                              {"name": "hits", "label": "Numere în Nucleu", "field": "hits", "align": "left"}],
+                     rows=rows_pool).classes("w-full").props("dense")
+
+        # Tabel variante ≥3 + ROI
+        highs = [p for p in flat if getattr(p, "hits", 0) >= 3]
+        if highs:
+            rows_v, total_prize = [], 0
+            pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
+            for p in sorted(highs, key=lambda x: (x.hits, getattr(x, "draw_index", 0)), reverse=True):
+                dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+                prize = pm.get(p.hits, 0)
+                total_prize += prize
+                rows_v.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{getattr(p,'draw_index',0)}",
+                               "hits": f"⭐ {p.hits}", "prize": f"~{prize} Lei"})
+            ui.label("🎯 Istoric Câștiguri Variante (≥3 numere):").classes("text-bold text-caption mt-2")
+            ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
+                              {"name": "hits", "label": "Hits", "field": "hits", "align": "left"},
+                              {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "left"}],
+                     rows=rows_v).classes("w-full").props("dense")
+            total_variants = len({tuple(getattr(p, "variant", ())) for p in flat}) or n
+            cost = total_variants * PRICES.get(gk, 8.0) * len(uniq)
+            profit = total_prize - cost
+            roi = (profit / cost * 100) if cost > 0 else 0
+            rc = "text-positive" if profit >= 0 else "text-negative"
+            ui.label(f"Analiză financiară backtest: cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
+                     f"| ROI: {'+' if profit>=0 else ''}{roi:.1f}%").classes(rc)
+
+
 @ui.refreshable
 def results_panel() -> None:
     if STATE.get("wf_status"):
@@ -635,20 +762,15 @@ def results_panel() -> None:
                     final_pool = set(int(x) for x in pool)
                     if audit:
                         _render_audit(audit, final_pool)
+                        _render_adaptive(audit)
 
                     # Cost financiar (scheme reduse oficiale sau sistem complet)
                     _render_cost(game, data)
 
-                    # Walk-forward backtest
+                    # Walk-forward backtest (detaliat)
                     flat = STATE["retro"].get(f"{fname}_{game}")
                     if flat:
-                        m = _wf_metrics(flat)
-                        with ui.row().classes("gap-6 mt-2"):
-                            ui.label(f"WF extrageri test: {m.get('n')}")
-                            ui.label(f"Avg pool hits: {m.get('avg_pool'):.2f}")
-                            ui.label(f"Best pool: {m.get('best_pool')}")
-                            ui.label(f"Avg variantă: {m.get('avg_var'):.2f}")
-                            ui.label(f"Best variantă: {m.get('best_var')}")
+                        _render_walk_forward(flat, game)
 
                     # Top 10 variante simple
                     if variants:
