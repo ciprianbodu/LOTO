@@ -25,8 +25,9 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 set "ENV_COMPLETE=1"
 set "MISSING="
 
-REM Core app
-if not exist "%VENV_DIR%\Scripts\streamlit.exe" set "ENV_COMPLETE=0" & set "MISSING=!MISSING! streamlit"
+REM Core app (UI = NiceGUI; Streamlit ramane optional pentru app.py legacy)
+"%VENV_DIR%\Scripts\python" -c "import nicegui" >nul 2>&1
+if !ERRORLEVEL! NEQ 0 set "ENV_COMPLETE=0" & set "MISSING=!MISSING! nicegui"
 for %%M in (torch timesfm pandas numpy scipy) do (
     "%VENV_DIR%\Scripts\python" -c "import %%M" >nul 2>&1
     if !ERRORLEVEL! NEQ 0 (
@@ -59,7 +60,7 @@ if "%ENV_COMPLETE%"=="0" (
     echo ============================================================
     goto :error_exit
 )
-echo [OK] Mediul complet: streamlit + torch + timesfm + chronos + momentfm
+echo [OK] Mediul complet: nicegui + torch + timesfm + chronos + momentfm
 echo      + neuralforecast + rich + pynvml + transformers.
 
 echo [2/4] Eliberare resurse (Port 8000 + workeri vechi)...
@@ -82,8 +83,11 @@ echo [3/4] Pornire Worker...
 :: spawn-eaza un al doilea worker paralel - race condition confirmata 2026-05-02).
 start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
 
-echo [4/4] Pornire Streamlit...
-"%~dp0%VENV_DIR%\Scripts\python.exe" -m streamlit run "%~dp0app.py" --server.port 8000 --browser.gatherUsageStats false
+echo [4/4] Pornire UI NiceGUI (port 8000)...
+:: NiceGUI tine starea pe server si face update prin websocket (fara reload de
+:: pagina) -> bifele/CSV-ul NU se mai pierd. UI vechi Streamlit: app.py (legacy).
+set LOTO_UI_PORT=8000
+"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
 if !ERRORLEVEL! NEQ 0 goto :error_exit
 
 echo.
