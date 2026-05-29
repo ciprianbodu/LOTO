@@ -1165,4 +1165,5 @@ app.on_startup(_startup)
 
 if __name__ in {"__main__", "__mp_main__"}:
     _port = int(os.environ.get("LOTO_UI_PORT", "8080"))
-    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=True, dark=True)
+    # show=False: browserul e deschis de START_8000.bat (mai fiabil pe Windows).
+    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=False, dark=True)
