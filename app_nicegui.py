@@ -42,6 +42,7 @@ from cancel import lock_engine, unlock_engine
 from ui_shared import (
     PROJECT_ROOT,
     atomic_write_json,
+    atomic_write_text,
     clear_logs,
     decode_queue_result,
     ensure_worker_running,
@@ -57,6 +58,7 @@ logger = logging.getLogger("app_nicegui")
 UI_STATE_FILE = PROJECT_ROOT / ".ui_state.json"
 BENCH_PID_FILE = PROJECT_ROOT / ".bench_pid"
 BENCH_LOG_FILE = PROJECT_ROOT / "bench_full.log"
+REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
@@ -404,6 +406,7 @@ def _start_walk_forward() -> None:
         except Exception as exc:  # noqa: BLE001
             STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
         finally:
+            _save_report_file()  # rescriu raportul acum CU statisticile walk-forward
             try:
                 results_panel.refresh()
             except Exception:  # noqa: BLE001
@@ -437,6 +440,7 @@ def status_panel() -> None:
                 STATE["results"] = payload
                 STATE["active_job_id"] = None
             unlock_engine()
+            _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
             _start_walk_forward()
             results_panel.refresh()
             try:
@@ -888,34 +892,84 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
                      f"| ROI: {'+' if profit>=0 else ''}{roi:.1f}%").classes(rc)
 
 
+def _wf_summary(flat) -> str | None:
+    if not flat:
+        return None
+    nn = len(flat)
+    ap = sum(getattr(p, "hits_union", 0) for p in flat) / nn
+    av = sum(getattr(p, "hits", 0) for p in flat) / nn
+    bp = max(getattr(p, "hits_union", 0) for p in flat)
+    bv = max(getattr(p, "hits", 0) for p in flat)
+    return (f"{nn} predicții | avg pool={ap:.2f} | avg variantă={av:.2f} "
+            f"| best pool={bp} | best variantă={bv}")
+
+
 def _build_report() -> str:
     res = STATE.get("results")
     if not isinstance(res, tuple) or len(res) != 2:
         return "(fără rezultate)"
     rb, _ = res
-    out = ["=" * 64, "LOTO ENTERPRISE WHEELING — RAPORT", "=" * 64]
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    out = ["=" * 72, "LOTO ENTERPRISE WHEELING — RAPORT COMPLET", f"Generat: {ts}", "=" * 72]
+
+    def _dump_pool(d: dict, label: str | None, indent: str = "  ") -> None:
+        if label:
+            out.append(f"\n{indent}{'-'*60}\n{indent}{label}\n{indent}{'-'*60}")
+        pool = sorted(int(x) for x in (d.get("hard_core") or []))
+        stats = d.get("hard_core_stats") or {}
+        eff, req = d.get("pool_size"), d.get("pool_size_requested")
+        out.append(f"{indent}Pool efectiv: {eff}"
+                   + (f" (cerut {req})" if req and req != eff else "")
+                   + f" | Garanție: {d.get('guarantee')} | Variante: {len(d.get('variants') or [])}"
+                   + f" | Extrageri: {d.get('total_draws')}")
+        out.append(f"{indent}Nucleu dur (nr(frecvență)): "
+                   + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool))
+        if d.get("hard_core_joker"):
+            out.append(f"{indent}Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
+        if d.get("p10") is not None:
+            out.append(f"{indent}Interval p10–p90: {d.get('p10')} – {d.get('p90')} (g_range={d.get('g_range')})")
+        au = d.get("audit") or {}
+        if au:
+            out.append(f"{indent}--- Audit complet (JSON) ---")
+            for line in json.dumps(au, indent=2, ensure_ascii=False, default=str).splitlines():
+                out.append(f"{indent}{line}")
+        vs = d.get("variants") or []
+        out.append(f"{indent}--- Variante ({len(vs)}) ---")
+        for i, v in enumerate(vs, 1):
+            out.append(f"{indent}  V{i}: " + ", ".join(str(int(x)) for x in v))
+
     for fn, outs in rb:
-        out.append(f"\nFișier: {fn}")
+        out.append(f"\n{'#'*72}\nFIȘIER: {fn}\n{'#'*72}")
         for g, d in outs.items():
-            out.append(f"  {g.upper()} | pool={d.get('pool_size')} garanție={d.get('guarantee')} "
-                       f"variante={len(d.get('variants') or [])} extrageri={d.get('total_draws')}")
-            out.append("  Nucleu dur: " + ", ".join(str(int(x)) for x in sorted(d.get("hard_core") or [])))
-            if d.get("hard_core_joker"):
-                out.append("  Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
+            out.append(f"\n=================  JOC: {g.upper()}  =================")
             flat = STATE["retro"].get(f"{fn}_{g}")
-            if flat:
-                nn = len(flat)
-                ap = sum(getattr(p, "hits_union", 0) for p in flat) / nn
-                bp = max(getattr(p, "hits_union", 0) for p in flat)
-                out.append(f"  Walk-forward: {nn} predicții | avg pool={ap:.2f} | best pool={bp}")
-            for i, v in enumerate(d.get("variants") or [], 1):
-                out.append(f"    V{i}: " + ", ".join(str(int(x)) for x in v))
+            if d.get("auto_invert") and d.get("phase1"):
+                _dump_pool(d["phase1"], "🟢 POOL 1 — normal (cu validare walk-forward)")
+                wf = _wf_summary(flat)
+                if wf:
+                    out.append(f"  Walk-forward (Faza 1): {wf}")
+                _dump_pool(d, "🔄 POOL 2 — inversat (numerele excluse din Pool 1; pe șansă, fără validare)")
+            else:
+                _dump_pool(d, None)
+                wf = _wf_summary(flat)
+                if wf:
+                    out.append(f"  Walk-forward: {wf}")
     return "\n".join(out)
 
 
+def _save_report_file() -> None:
+    """Scrie raport_complet.txt (atomic) după generare. Îl poți deschide/lipi oricând."""
+    try:
+        atomic_write_text(REPORT_FILE, _build_report())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("save raport: %s", exc)
+
+
 def _show_report() -> None:
+    _save_report_file()
     with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-3xl"):
-        ui.label("Raport integral (selectează tot + Ctrl+C)").classes("text-bold")
+        ui.label("Raport integral").classes("text-bold")
+        ui.label(f"Salvat și în fișier: {REPORT_FILE.name} (în folderul proiectului)").classes("text-caption text-positive")
         ui.textarea(value=_build_report()).classes("w-full").props("readonly autogrow filled")
         ui.button("Închide", on_click=dlg.close)
     dlg.open()

@@ -64,3 +64,4 @@ uploaded_data/
 *.bak
 *.tmp
 .bench_cache/
+raport_complet.txt
