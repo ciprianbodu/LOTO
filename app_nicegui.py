@@ -355,13 +355,10 @@ def _start_walk_forward() -> None:
     if not (isinstance(results, tuple) and len(results) == 2):
         return
     results_bundle, _ = results
-    # Dacă inversarea a fost activă, statisticile ar fi înșelătoare → sărim.
-    for _fn, outs in results_bundle:
-        for _gl, d in outs.items():
-            if d.get("auto_invert"):
-                STATE["wf_status"] = ("⚠️ Walk-forward sărit — inversarea automată a fost activă "
-                                      "(statisticile ar fi pentru pool-ul normal, nu inversat).")
-                return
+    # NOTĂ inversare: walk-forward-ul rulează pipeline-ul NORMAL (Faza 1, pre-inversare),
+    # deci când auto_invert e ON validează pool-ul normal, nu cel inversat afișat.
+    # NU mai sărim — afișăm stats-urile etichetate clar ca "Faza 1" (vezi results_panel).
+    _has_invert = any(d.get("auto_invert") for _fn, outs in results_bundle for _gl, d in outs.items())
 
     def _worker_wf() -> None:
         try:
@@ -396,7 +393,8 @@ def _start_walk_forward() -> None:
             except Exception:  # noqa: BLE001
                 pass
 
-    STATE["wf_status"] = "📊 Pornesc walk-forward backtest (poate dura câteva minute)..."
+    STATE["wf_status"] = ("📊 Pornesc walk-forward backtest (poate dura câteva minute)..."
+                          + (" — validare FAZA 1 (pool normal), fiindcă auto-invert e ON" if _has_invert else ""))
     threading.Thread(target=_worker_wf, daemon=True).start()
 
 
@@ -759,7 +757,7 @@ def _render_adaptive(audit: dict) -> None:
             f"border-radius:8px;font-size:0.9em;'>{''.join(parts)}</div>")
 
 
-def _render_walk_forward(flat, game: str) -> None:
+def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
     if not flat:
         return
     gk = _game_label_for(game)
@@ -774,6 +772,10 @@ def _render_walk_forward(flat, game: str) -> None:
 
     with ui.card().classes("w-full mt-2"):
         ui.label(f"📊 Walk-forward: {n} predicții pe {len(uniq)} extrageri").classes("text-bold text-info")
+        if is_invert:
+            ui.label("ℹ️ Validare FAZA 1 (pool normal, pre-inversare) — pool-ul afișat mai sus "
+                     "este cel INVERSAT (Faza 2). Aceste cifre arată cum s-ar fi comportat istoric "
+                     "pool-ul normal pe care se bazează inversarea.").classes("text-caption text-amber-400")
         with ui.row().classes("gap-8"):
             for lbl, val in [("Medie/variantă", f"{avg_var:.2f}"), ("Medie/pool", f"{avg_pool:.2f}"),
                              ("Rată medie", f"{avg_rate:.1f}%"), ("Max variantă", best_var), ("Max pool", best_pool)]:
@@ -956,7 +958,7 @@ def results_panel() -> None:
                     # Walk-forward backtest (detaliat)
                     flat = STATE["retro"].get(f"{fname}_{game}")
                     if flat:
-                        _render_walk_forward(flat, game)
+                        _render_walk_forward(flat, game, is_invert=bool(data.get("auto_invert")))
 
                     # Variante: top 10 + toggle wheel complet
                     if variants:
