@@ -581,8 +581,16 @@ def _badges(numbers, stats: dict | None = None):
     with ui.row().classes("flex-wrap gap-1"):
         for n in sorted(int(x) for x in (numbers or [])):
             freq = stats.get(str(n), stats.get(n))
-            lbl = f"{n}" + (f" ({freq})" if freq is not None else "")
-            ui.badge(lbl).props("color=primary").classes("text-sm")
+            # Numărul de pool = mare/bold/alb; frecvența din paranteze = ștearsă
+            # (opacitate redusă) ca să NU concureze vizual cu numărul.
+            with ui.badge().props("color=primary").classes("text-sm"):
+                if freq is not None:
+                    ui.html(
+                        f'<span style="font-weight:700;font-size:1.05em">{n}</span>'
+                        f'<span style="opacity:0.45;margin-left:3px">({freq})</span>'
+                    )
+                else:
+                    ui.html(f'<span style="font-weight:700;font-size:1.05em">{n}</span>')
 
 
 # --------------------------------------------------------------------------- #
