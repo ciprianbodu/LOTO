@@ -469,8 +469,19 @@ def status_panel() -> None:
             ui.label(f"Job {state}: {stt.get('error_msg') or ''}").classes("text-negative")
             return
         with ui.card().classes("w-full"):
-            ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%")
+            tail = str(stt.get("log_tail") or "").strip()
+            lines = tail.splitlines() if tail else []
+            current = lines[-1] if lines else "se inițializează..."
+            elapsed_txt = ""
+            if STATE.get("job_start_time"):
+                elapsed_txt = f" · scurs {_fmt_dur(time.time() - STATE['job_start_time'])}"
+            ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%{elapsed_txt}").classes("text-bold")
             ui.linear_progress(value=pct / 100.0, show_value=False).props("instant-feedback")
+            ui.label(f"➡️ {current}").classes("text-caption text-info")
+            if len(lines) > 1:
+                with ui.expansion(f"Pași detaliați ({len(lines)})", value=False).classes("w-full"):
+                    ui.code("\n".join(lines[-15:]), language="text").classes(
+                        "w-full max-h-48 overflow-auto text-xs")
         return
 
     if bench_on:
