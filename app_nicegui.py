@@ -602,11 +602,11 @@ def _badges(numbers, stats: dict | None = None):
             with ui.badge().props("color=primary").classes("text-sm"):
                 if freq is not None:
                     ui.html(
-                        f'<span style="font-weight:700;font-size:1.05em">{n}</span>'
-                        f'<span style="opacity:0.45;margin-left:3px">({freq})</span>'
+                        f'<span style="font-weight:700;font-size:1.1em">{n}</span>'
+                        f'<span style="opacity:0.45;font-size:0.68em;margin-left:3px">({freq})</span>'
                     )
                 else:
-                    ui.html(f'<span style="font-weight:700;font-size:1.05em">{n}</span>')
+                    ui.html(f'<span style="font-weight:700;font-size:1.1em">{n}</span>')
 
 
 # --------------------------------------------------------------------------- #
