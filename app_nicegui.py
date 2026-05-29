@@ -896,8 +896,8 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
                               {"name": "hits", "label": "Numere în Nucleu", "field": "hits", "align": "left"}],
                      rows=rows_pool).classes("w-full").props("dense")
 
-        # Tabel variante ≥3 + ROI
-        highs = [p for p in flat if getattr(p, "hits", 0) >= 3]
+        # Tabel variante ≥4 + ROI (castigurile cu 3 nu intereseaza)
+        highs = [p for p in flat if getattr(p, "hits", 0) >= 4]
         if highs:
             rows_v, total_prize = [], 0
             pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
@@ -907,7 +907,7 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
                 total_prize += prize
                 rows_v.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{getattr(p,'draw_index',0)}",
                                "hits": f"⭐ {p.hits}", "prize": f"~{prize} Lei"})
-            ui.label("🎯 Istoric Câștiguri Variante (≥3 numere):").classes("text-bold text-caption mt-2")
+            ui.label("🎯 Istoric Câștiguri Variante (≥4 numere):").classes("text-bold text-caption mt-2")
             ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
                               {"name": "hits", "label": "Hits", "field": "hits", "align": "left"},
                               {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "left"}],
