@@ -827,8 +827,10 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
     best_pool = max(getattr(p, "hits_union", 0) for p in flat)
     avg_rate = (avg_var / draw_n) * 100
 
-    with ui.card().classes("w-full mt-2"):
-        ui.label(f"📊 Walk-forward: {n} predicții pe {len(uniq)} extrageri").classes("text-bold text-info")
+    _title = (f"📊 Walk-forward{' (Faza 1)' if is_invert else ''}: rată {avg_rate:.1f}% · "
+              f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n} predicții  (click pt detalii)")
+    with ui.expansion(_title, value=False).classes("w-full mt-2"):
+        ui.label(f"{n} predicții pe {len(uniq)} extrageri").classes("text-caption")
         if is_invert:
             ui.label("ℹ️ Validare FAZA 1 (pool normal, pre-inversare) — pool-ul afișat mai sus "
                      "este cel INVERSAT (Faza 2). Aceste cifre arată cum s-ar fi comportat istoric "
@@ -1019,6 +1021,21 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         ui.label(f"Garanție: {data.get('guarantee')}")
         ui.label(f"Variante: {len(variants)}")
         ui.label(f"Extrageri: {data.get('total_draws')}")
+
+    # Metoda câștigătoare folosită de scorer (din bench/best_methods.json)
+    bw = (data.get("audit") or {}).get("bench_winner") or {}
+    if bw:
+        parts = []
+        for gkey, info in bw.items():
+            m = info.get("method", "?")
+            fam = info.get("family")
+            ph = info.get("pool_hint")
+            parts.append(f"{gkey} → <b>{m}</b>" + (f" <span style='opacity:.6'>({fam}, pool {ph})</span>" if fam else ""))
+        ui.html("🏆 Metodă câștigătoare (bench): " + " &nbsp;|&nbsp; ".join(parts)).classes(
+            "text-caption text-positive")
+    else:
+        ui.label("🏆 Metodă scorer: TimesFM (fallback — fără decizie bench pt acest pool)").classes(
+            "text-caption text-grey")
 
     ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
     _badges(pool, stats)
