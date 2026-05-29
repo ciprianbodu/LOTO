@@ -15,9 +15,7 @@ import traceback
 import tempfile
 import os
 
-import platform
-_node = platform.node()
-LOG_FILE = f"loto-{_node}.log" if _node else "loto.log"
+LOG_FILE = "loto.log"
 
 logging.basicConfig(
     level=logging.INFO,

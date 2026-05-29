@@ -31,8 +31,7 @@ import requests
 # ensure_worker_running() va fi apelat mai jos, dupa configurarea paginii
 
 import platform
-_node = platform.node()
-LOG_FILE = f"loto-{_node}.log" if _node else "loto.log"
+LOG_FILE = "loto.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -2156,7 +2155,7 @@ with st.sidebar:
 
             # (3) Hard kill: worker.py + orice python din venv (training blocat)
             try:
-                venv_marker = ".venv_" + os.environ.get("COMPUTERNAME", "")
+                venv_marker = ".venv_LUPTATORI"
                 # Folosim PowerShell ca sa filtram precis dupa CommandLine + ExecutablePath
                 ps_cmd = (
                     f"Get-CimInstance Win32_Process "

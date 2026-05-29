@@ -52,7 +52,7 @@ REM :verify_phase — verifica venv, detecteaza GPU, importa core/benchmark
 REM ============================================================
 :verify_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv_%COMPUTERNAME%"
+set "VENV_DIR=.venv_LUPTATORI"
 echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
@@ -66,43 +66,22 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 
 echo.
 echo --- Detectare GPU ---
+REM Statie unica (LUPTATORI) - fara logica multi-statie/OneDrive. Detectam GPU
+REM o data si cache-uim in .machine_profile; daca exista, il folosim direct.
 set "GPU_TYPE=UNKNOWN"
 set "GPU_NAME="
-set "CACHED_MACHINE="
-set "NEED_DETECT=1"
-REM IMPORTANT: profil-ul e SINCRONIZAT prin OneDrive intre statii.
-REM Daca cache-ul e dintr-un .machine_profile salvat pe ALTA masina (alt
-REM COMPUTERNAME), refacem detectia — altfel o statie cu GPU pierde GPU-ul
-REM doar pentru ca laptop-ul fara GPU a scris ultimul in OneDrive.
-REM
-REM Folosim un FLAG (NEED_DETECT) in loc de `goto` din interiorul blocurilor
-REM imbricate — `goto` din `(...)` strica parser-ul cmd.exe si produce erori
-REM gen `'"CPU_ONLY"' is not recognized as an internal or external command`.
 if exist ".machine_profile" (
     for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
         if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
         if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
-        if "%%A"=="MACHINE" set "CACHED_MACHINE=%%B"
     )
-    if /i "!CACHED_MACHINE!"=="%COMPUTERNAME%" (
-        set "NEED_DETECT=0"
-        echo Profil hardware cached ^(local^): GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
-    ) else (
-        echo Profil cached e de pe alta statie ^(!CACHED_MACHINE! vs %COMPUTERNAME%^) - redetectez...
-        del /f /q .machine_profile >nul 2>&1
-        set "GPU_TYPE=UNKNOWN"
-        set "GPU_NAME="
-    )
-)
-
-if "!NEED_DETECT!"=="1" (
-    if not exist ".machine_profile" echo Profil hardware lipsa, detectez acum...
+    echo Profil hardware cached: GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
+) else (
+    echo Profil hardware lipsa, detectez acum...
     call :DetectGpu
-    if exist ".machine_profile" (
-        for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
-            if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
-            if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
-        )
+    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
+        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
+        if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
     )
     echo Detectie: GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
 )
@@ -158,7 +137,7 @@ REM :launch_phase — porneste worker + streamlit
 REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv_%COMPUTERNAME%"
+set "VENV_DIR=.venv_LUPTATORI"
 
 REM Re-aplica env vars din profil (sunt propagate in subprocese streamlit + worker)
 set "GPU_TYPE=NVIDIA"
@@ -228,6 +207,5 @@ for /f "tokens=*" %%G in ('powershell -NoProfile -Command "(Get-CimInstance Win3
     echo GPU_TYPE=!DETECTED_TYPE!
     echo GPU_NAME=!DETECTED_NAME!
     echo DETECTED_AT=%DATE% %TIME%
-    echo MACHINE=%COMPUTERNAME%
 ) > .machine_profile
 endlocal & exit /b 0

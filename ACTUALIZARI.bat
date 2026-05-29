@@ -2,10 +2,10 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-set VENV_DIR=.venv_%COMPUTERNAME%
+set VENV_DIR=.venv_LUPTATORI
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%CD%\%VENV_DIR%\Lib\site-packages
-set BACKUP_DIR=.venv_%COMPUTERNAME%_backup
+set BACKUP_DIR=.venv_LUPTATORI_backup
 set REQ_SNAPSHOT=requirements_snapshot.txt
 
 echo ============================================================
@@ -123,49 +123,26 @@ call :MigratePynvml
 echo.
 
 echo [1a2] Detectare profil hardware...
-REM IMPORTANT: NU mai citim orbeste .machine_profile pentru ca poate fi
-REM sincronizat prin OneDrive de pe ALTA masina (alt COMPUTERNAME) si
-REM minte despre prezenta GPU-ului. Verificam:
-REM   1. Daca .machine_profile e PENTRU MASINA CURENTA (MACHINE=COMPUTERNAME) -> trust
-REM   2. Altfel -> detectare DIRECTA prin nvidia-smi (sursa de adevar locala)
+REM Statie unica (LUPTATORI) - detectie directa prin nvidia-smi (sursa de adevar),
+REM rescriem .machine_profile de fiecare data. Fara logica multi-statie/OneDrive.
 set "GPU_TYPE=CPU_ONLY"
-set "CACHED_MACHINE="
-set "CACHE_VALID=0"
-if exist ".machine_profile" (
-    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
-        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
-        if "%%A"=="MACHINE" set "CACHED_MACHINE=%%B"
-    )
-    if /i "!CACHED_MACHINE!"=="%COMPUTERNAME%" (
-        set "CACHE_VALID=1"
-        echo   Profil cached ^(local^): GPU_TYPE=!GPU_TYPE!
-    ) else (
-        echo   .machine_profile e de pe !CACHED_MACHINE! ^(nu %COMPUTERNAME%^) - IGNOR si redetectez.
-    )
-)
-if "!CACHE_VALID!"=="0" (
-    REM Detectare directa prin nvidia-smi (sursa de adevar pe masina curenta)
-    set "GPU_TYPE=CPU_ONLY"
-    where nvidia-smi >nul 2>&1
+where nvidia-smi >nul 2>&1
+if not errorlevel 1 (
+    nvidia-smi -L >nul 2>&1
     if not errorlevel 1 (
-        nvidia-smi -L >nul 2>&1
-        if not errorlevel 1 (
-            set "GPU_TYPE=NVIDIA"
-        )
+        set "GPU_TYPE=NVIDIA"
     )
-    if /i "!GPU_TYPE!"=="NVIDIA" (
-        echo   Detectie locala: nvidia-smi OK -^> GPU_TYPE=NVIDIA
-    ) else (
-        echo   Detectie locala: nvidia-smi absent / fara GPU -^> GPU_TYPE=CPU_ONLY
-    )
-    REM Rescriem .machine_profile cu valorile MASINII CURENTE ca START_8000.bat sa nu mai cada in cache stale
-    (
-        echo GPU_TYPE=!GPU_TYPE!
-        echo GPU_NAME=
-        echo DETECTED_AT=%DATE% %TIME%
-        echo MACHINE=%COMPUTERNAME%
-    ) > .machine_profile
 )
+if /i "!GPU_TYPE!"=="NVIDIA" (
+    echo   Detectie: nvidia-smi OK -^> GPU_TYPE=NVIDIA
+) else (
+    echo   Detectie: nvidia-smi absent / fara GPU -^> GPU_TYPE=CPU_ONLY
+)
+(
+    echo GPU_TYPE=!GPU_TYPE!
+    echo GPU_NAME=
+    echo DETECTED_AT=%DATE% %TIME%
+) > .machine_profile
 
 echo.
 echo [1b] Install pachete BASE (comune CPU + GPU) din requirements_base.txt...

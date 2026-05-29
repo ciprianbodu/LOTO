@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import pickle
-import platform
 import re
 import subprocess
 import sys
@@ -24,8 +23,7 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
-_node = platform.node().replace(" ", "_") if platform.node() else ""
-LOG_FILE = f"loto-{_node}.log" if _node else "loto.log"
+LOG_FILE = "loto.log"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 WORKER_PATH = PROJECT_ROOT / "worker.py"

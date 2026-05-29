@@ -8,9 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import platform
-_machine_suffix = f"-{platform.node()}" if platform.node() else ""
-DB_PATH = f"loto_jobs{_machine_suffix}.db"
+DB_PATH = "loto_jobs.db"
 JOB_PENDING = "PENDING"
 JOB_RUNNING = "RUNNING"
 JOB_COMPLETED = "COMPLETED"
