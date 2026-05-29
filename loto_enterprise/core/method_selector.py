@@ -204,6 +204,18 @@ def recommend_optimal_config(
     apm = g.get("auto_pilot_per_pool", {})
     entry = apm.get(f"k{pool_size}", {})
 
+    # Pool cerut în afara gamei decise de bench (ex. k24, dar bench-ul a evaluat
+    # doar k6..k20) → folosim cel mai APROPIAT pool decis, în loc de fallback.
+    if not (entry and "scorer" in entry) and apm:
+        avail = sorted(int(k[1:]) for k in apm if k.startswith("k") and k[1:].isdigit())
+        if avail:
+            nearest = min(avail, key=lambda k: abs(k - pool_size))
+            cand = apm.get(f"k{nearest}", {})
+            if cand and "scorer" in cand:
+                logger.info("[method_selector] %s: pool k%d absent → folosesc k%d (cel mai apropiat decis)",
+                            game_key, pool_size, nearest)
+                entry = cand
+
     if entry and "scorer" in entry:
         return {
             "scorer": entry["scorer"],

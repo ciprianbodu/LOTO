@@ -182,11 +182,14 @@ def submit_generation(pure: bool = False) -> None:
 
 def apply_autopilot_and_generate() -> None:
     """Aplică sim_depth recomandat per joc din best_methods.json, apoi generează."""
+    # best_methods.json folosește CHEIA jocului (loto_6_49 ...), nu eticheta scurtă
+    # (6/49) întoarsă de _game_label_for → altfel lookup-ul eșua mereu → fallback.
+    _LABEL_TO_KEY = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         recs = []
         for fname, _ in STATE["datasets"]:
-            gk = _game_label_for(fname)
+            gk = _LABEL_TO_KEY.get(_game_label_for(fname), "loto_6_49")
             cfg = recommend_optimal_config(gk, int(SETTINGS["pool_size_val"]))
             if cfg and not cfg.get("fallback"):
                 SETTINGS["sim_depth_val"] = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
