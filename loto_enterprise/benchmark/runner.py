@@ -401,6 +401,12 @@ def run_benchmark(
                             game.key, method, pct, "RND" if is_random else "REAL",
                         )
                     else:
+                        logger.info(
+                            "[%d/%d] [%s/%s/%d%%/%s] START compute (train=%d test=%d)...",
+                            fold_idx, total_folds_est,
+                            game.key, method, pct, "RND" if is_random else "REAL",
+                            len(train), len(test),
+                        )
                         fr, _snap = _evaluate_fold(method, train, test, game, block_size)
                         fr.percentile = pct
                         fr.is_random = is_random
