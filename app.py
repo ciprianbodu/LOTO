@@ -2155,7 +2155,7 @@ with st.sidebar:
 
             # (3) Hard kill: worker.py + orice python din venv (training blocat)
             try:
-                venv_marker = ".venv_LUPTATORI"
+                venv_marker = ".venv_ALF-LUPTATORI"
                 # Folosim PowerShell ca sa filtram precis dupa CommandLine + ExecutablePath
                 ps_cmd = (
                     f"Get-CimInstance Win32_Process "

@@ -52,7 +52,7 @@ REM :verify_phase — verifica venv, detecteaza GPU, importa core/benchmark
 REM ============================================================
 :verify_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv_LUPTATORI"
+set "VENV_DIR=.venv_ALF-LUPTATORI"
 echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
@@ -137,7 +137,7 @@ REM :launch_phase — porneste worker + streamlit
 REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv_LUPTATORI"
+set "VENV_DIR=.venv_ALF-LUPTATORI"
 
 REM Re-aplica env vars din profil (sunt propagate in subprocese streamlit + worker)
 set "GPU_TYPE=NVIDIA"

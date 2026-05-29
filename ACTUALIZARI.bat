@@ -2,10 +2,10 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-set VENV_DIR=.venv_LUPTATORI
+set VENV_DIR=.venv_ALF-LUPTATORI
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%CD%\%VENV_DIR%\Lib\site-packages
-set BACKUP_DIR=.venv_LUPTATORI_backup
+set BACKUP_DIR=.venv_ALF-LUPTATORI_backup
 set REQ_SNAPSHOT=requirements_snapshot.txt
 
 echo ============================================================

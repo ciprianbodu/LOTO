@@ -215,7 +215,7 @@ def main():
 
     if not _is_in_venv():
         print("\n[ATENTIE] Ruleaza ACTUALIZARI.bat, nu direct verifica_mediu.py!")
-        print("          Cauta venv-ul: .venv_LUPTATORI\n")
+        print("          Cauta venv-ul: .venv_ALF-LUPTATORI\n")
 
     check_pytorch()
     check_foundation_models()

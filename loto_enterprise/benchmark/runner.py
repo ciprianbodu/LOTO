@@ -64,6 +64,8 @@ class GameDef:
 def _list_istoric_dirs() -> List[Path]:
     """Look in canonical locations for the istoric folder."""
     candidates = [
+        Path("_ISTORIC"),
+        Path("_istoric"),
         Path("ISTORIC"),
         Path("istoric"),
         Path("_LOTO/istoric"),
@@ -83,7 +85,7 @@ def discover_games(istoric_dir: Optional[str] = None) -> List[GameDef]:
         bases = _list_istoric_dirs()
         if not bases:
             raise FileNotFoundError(
-                "Niciun folder ISTORIC găsit. Caut în: ./ISTORIC, ./istoric, ./_LOTO/istoric"
+                "Niciun folder ISTORIC găsit. Caut în: ./_ISTORIC, ./ISTORIC, ./istoric, ./_LOTO/istoric"
             )
 
     games: List[GameDef] = []
