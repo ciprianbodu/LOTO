@@ -1050,10 +1050,14 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         for gkey, info in bw.items():
             m = info.get("method", "?")
             ph = info.get("pool_hint")
-            desc = _METHOD_DESC.get(m) or info.get("family", "")
+            fam = info.get("family", "")
+            desc = _METHOD_DESC.get(m, "")
             tail = ""
             if desc:
-                tail = f" <span style='opacity:.6'>— {desc}" + (f", pool {ph}" if ph else "") + "</span>"
+                tail += f" <span style='opacity:.65'>— {desc}</span>"
+            meta = ", ".join(x for x in [fam, (f"pool {ph}" if ph else "")] if x)
+            if meta:
+                tail += f" <span style='opacity:.45'>[{meta}]</span>"
             parts.append(f"{gkey} → <b>{m}</b>{tail}")
         ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes(
             "text-caption text-positive")
