@@ -1104,29 +1104,60 @@ with st.sidebar:
     )
     
     # Auto-load logic for persistence / refresh on start
+    # JS auto-refresh = full page reload → șterge session_state ȘI golește
+    # st.file_uploader. Ca să nu pierdem CSV-urile încărcate de utilizator,
+    # le-am persistat pe disk în uploaded_data/ (vezi blocul `if uploaded_files`).
+    _UPLOAD_DIR = "uploaded_data"
+    _UPLOAD_MANIFEST = os.path.join(_UPLOAD_DIR, "manifest.json")
     if "loaded_datasets" not in st.session_state:
-        local_csvs = [f for f in ["joker.csv", "loto_6_49.csv", "loto_5_40.csv", "input.csv"] if os.path.exists(f)]
-        if local_csvs:
-            auto_ds = []
+        auto_ds = []
+        # 1) Restaurează exact ce a încărcat utilizatorul (orice nume), din manifest.
+        if os.path.exists(_UPLOAD_MANIFEST):
+            try:
+                with open(_UPLOAD_MANIFEST, encoding="utf-8") as _mf:
+                    for name in json.load(_mf):
+                        fpath = os.path.join(_UPLOAD_DIR, name)
+                        if os.path.exists(fpath):
+                            auto_ds.append((name, pd.read_csv(fpath)))
+            except Exception as exc:
+                logger.warning("auto-load: manifest invalid (%s)", exc)
+        # 2) Fallback: CSV-uri cunoscute din directorul curent.
+        if not auto_ds:
+            local_csvs = [f for f in ["joker.csv", "loto_6_49.csv", "loto_5_40.csv", "input.csv"] if os.path.exists(f)]
             for fpath in local_csvs:
                 try:
-                    df = pd.read_csv(fpath)
-                    auto_ds.append((fpath, df))
+                    auto_ds.append((fpath, pd.read_csv(fpath)))
                 except Exception as exc:
                     logger.warning("auto-load: nu am putut citi %s: %s", fpath, exc)
-            if auto_ds:
-                st.session_state["loaded_datasets"] = auto_ds
+        if auto_ds:
+            st.session_state["loaded_datasets"] = auto_ds
 
     if uploaded_files:
         datasets = []
+        persisted_names = []
         for f in uploaded_files:
             try:
                 df = pd.read_csv(f)
                 datasets.append((f.name, df))
+                # Persistă pe disk ca auto-refresh (full page reload) să le poată
+                # reîncărca — altfel session_state golit → "Încărcați un CSV!".
+                try:
+                    os.makedirs(_UPLOAD_DIR, exist_ok=True)
+                    with open(os.path.join(_UPLOAD_DIR, f.name), "wb") as _dst:
+                        _dst.write(f.getvalue())
+                    persisted_names.append(f.name)
+                except Exception as exc:
+                    logger.warning("nu pot persista %s pe disk: %s", f.name, exc)
             except Exception as e:
                 st.error(f"Nu pot citi {f.name}: {e}")
         if datasets:
             st.session_state["loaded_datasets"] = datasets
+            if persisted_names:
+                try:
+                    with open(_UPLOAD_MANIFEST, "w", encoding="utf-8") as _mf:
+                        json.dump(persisted_names, _mf)
+                except Exception as exc:
+                    logger.warning("nu pot scrie manifest upload: %s", exc)
             # Set default lookback to 0 (100% history) ONLY if files changed
             current_files = [f.name for f in uploaded_files]
             if st.session_state.get("prev_uploaded_files") != current_files:

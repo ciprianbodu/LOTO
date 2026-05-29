@@ -53,3 +53,6 @@ pool_history.json
 .auto_invert.flag
 .ui_state.json
 bench_full.log
+
+# CSV-uri încărcate din UI (persistate pt. supraviețuire la refresh)
+uploaded_data/
