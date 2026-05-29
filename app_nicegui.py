@@ -82,6 +82,15 @@ STATE: dict = {
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
     "wf_status": "",         # text status walk-forward
     "pure_bench": False,
+    "calib": {},             # {game_label: {"best": int, "detail": dict}}
+    "calib_status": "",
+}
+
+GK_MATRIX = {  # etichetă afișată → cheia jocului din bench (best_methods.json / folds.csv)
+    "Loto 6/49": "loto_6_49",
+    "Loto 5/40": "loto_5_40",
+    "Joker Urna 1": "joker_urna1",
+    "Joker Urna 2": "joker_urna2",
 }
 
 
@@ -789,6 +798,135 @@ def results_panel() -> None:
                                     language="json").classes("w-full max-h-80 overflow-auto text-xs")
 
 
+def run_calibration_bg() -> None:
+    """Calibrare per-CSV (sim_depth optim) într-un thread de fundal."""
+    if not STATE["datasets"]:
+        ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
+        return
+    if STATE.get("calib_status"):
+        ui.notify("Calibrare deja în curs.", type="warning")
+        return
+    STATE["calib_status"] = "⚙️ Calibrare în curs..."
+    analysis_panel.refresh()
+
+    def _work() -> None:
+        try:
+            from calibreaza import run_calibration
+            from loto_engine import LotoEngine
+            res = {}
+            pool = int(SETTINGS["pool_size_val"])
+            for fname, df in STATE["datasets"]:
+                gl = _game_label_for(fname)
+                STATE["calib_status"] = f"⚙️ Calibrare {gl}..."
+                eng = LotoEngine(game_type=gl)
+                eng.data = df.copy()
+                eng._build_draw_matrix()
+                best, detail = run_calibration(eng, test_draws=2, pool_size=pool)
+                res[gl] = {"best": int(best), "detail": detail}
+                SETTINGS["sim_depth_val"] = int(best)
+            STATE["calib"] = res
+            _save_settings()
+            STATE["calib_status"] = ""
+        except Exception as exc:  # noqa: BLE001
+            STATE["calib_status"] = f"Calibrare eșuată: {exc}"
+            logger.error("calibrare: %s", exc)
+        finally:
+            try:
+                analysis_panel.refresh()
+            except Exception:  # noqa: BLE001
+                pass
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
+def _render_matrix_html(matrix) -> None:
+    """Heatmap HTML pentru o matrice (metode × ferestre %), verde = valoare mare."""
+    try:
+        vmin = float(matrix.values.min())
+        vmax = float(matrix.values.max())
+    except Exception:  # noqa: BLE001
+        return
+    span = (vmax - vmin) or 1.0
+    cols = list(matrix.columns)
+    head = "".join(f"<th style='padding:2px 6px;font-size:0.75em;'>{c}%</th>" for c in cols)
+    body = ""
+    for method, row in matrix.iterrows():
+        cells = ""
+        for c in cols:
+            v = float(row[c])
+            t = (v - vmin) / span  # 0..1
+            r = int(220 - 140 * t)
+            g = int(80 + 140 * t)
+            cells += f"<td style='padding:2px 6px;background:rgb({r},{g},80);color:#111;font-size:0.78em;text-align:center;'>{v:.3f}</td>"
+        body += f"<tr><td style='padding:2px 6px;font-weight:600;font-size:0.78em;'>{method}</td>{cells}</tr>"
+    ui.html(f"<table style='border-collapse:collapse;'><tr><th></th>{head}</tr>{body}</table>")
+
+
+@ui.refreshable
+def analysis_panel() -> None:
+    pool = int(SETTINGS["pool_size_val"])
+
+    # --- Status freshness ---
+    try:
+        from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation
+        reports = check_freshness()
+        rec = aggregate_recommendation(reports)
+        rec_lbl = {"use_cache": "✅ Cache valid — fără re-bench",
+                   "quick_rebench": "🟡 Quick re-bench recomandat",
+                   "full_rebench": "🔴 Full re-bench recomandat"}.get(rec, rec)
+        ui.label(f"Freshness benchmark: {rec_lbl}").classes("text-bold")
+        for gk, r in reports.items():
+            ui.label(f"  • {gk}: {getattr(r, 'status', '?')} "
+                     f"(rânduri {getattr(r,'current_rows','?')} vs cache {getattr(r,'cached_rows','?')})").classes("text-caption")
+    except Exception as exc:  # noqa: BLE001
+        ui.label(f"Freshness indisponibil ({exc}).").classes("text-caption")
+
+    # --- Decizie benchmark per joc ---
+    ui.label("Decizie benchmark (scorer optim per joc):").classes("text-bold mt-2")
+    try:
+        from loto_enterprise.core.method_selector import recommend_optimal_config
+        any_dec = False
+        for lbl, gk in GK_MATRIX.items():
+            ps = 1 if gk == "joker_urna2" else pool
+            cfg = recommend_optimal_config(gk, ps)
+            if cfg and not cfg.get("fallback"):
+                any_dec = True
+                ui.label(f"  • {lbl} (K={ps}): {cfg.get('scorer')} @ {cfg.get('sim_depth_pct')}% "
+                         f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')})").classes("text-caption")
+        if not any_dec:
+            ui.label("  Fără decizie încă — rulează un Re-Bench.").classes("text-caption text-warning")
+    except Exception as exc:  # noqa: BLE001
+        ui.label(f"  Decizie indisponibilă ({exc}).").classes("text-caption")
+
+    # --- Matrice walk-forward onestă (din bench folds) ---
+    try:
+        from loto_enterprise.benchmark.matrix_reader import load_folds, summary_per_game
+        folds = load_folds()
+        if folds is not None and not folds.empty:
+            with ui.expansion("🔬 Matrice Walk-Forward Onestă (joc × fereastră × model)", value=False).classes("w-full"):
+                ui.label("Celule = avg hits/extragere pe ferestre regresive 10-100% (fără data leak). Verde = mai mare.").classes("text-caption")
+                for lbl, gk in GK_MATRIX.items():
+                    ps = 1 if gk == "joker_urna2" else pool
+                    s = summary_per_game(folds, gk, ps)
+                    if not s.get("available"):
+                        continue
+                    ui.label(f"{lbl} (K={ps}) — top: {s['best_method']} (avg={s['best_mean']:.3f})").classes("text-bold mt-1")
+                    _render_matrix_html(s["matrix"])
+        else:
+            ui.label("Matrice walk-forward indisponibilă — rulează un benchmark.").classes("text-caption")
+    except Exception as exc:  # noqa: BLE001
+        ui.label(f"Matrice indisponibilă ({exc}).").classes("text-caption")
+
+    # --- Calibrare per-CSV ---
+    ui.separator()
+    with ui.row().classes("items-center gap-3"):
+        ui.button("⚙️ Calibrează AI-ul (sim_depth optim per CSV)", on_click=run_calibration_bg).props("outline")
+        if STATE.get("calib_status"):
+            ui.label(STATE["calib_status"]).classes("text-info")
+    for gl, c in (STATE.get("calib") or {}).items():
+        ui.label(f"  • {gl}: sim_depth optim = {c['best']}%").classes("text-caption text-positive")
+
+
 def _refresh_status() -> None:
     status_panel.refresh()
     logs_panel.refresh()
@@ -860,6 +998,8 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2"):
         status_panel()
+        with ui.expansion("📈 Analiză & Calibrare (Power-User)", value=False).classes("w-full"):
+            analysis_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=True).classes("w-full"):
             logs_panel()
         results_panel()
@@ -893,4 +1033,5 @@ def _startup() -> None:
 app.on_startup(_startup)
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title="Loto Enterprise Wheeling", port=8080, reload=False, show=False, dark=True)
+    _port = int(os.environ.get("LOTO_UI_PORT", "8080"))
+    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=False, dark=True)
