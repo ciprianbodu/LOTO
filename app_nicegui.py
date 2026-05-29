@@ -447,6 +447,143 @@ def _badges(numbers, stats: dict | None = None):
             ui.badge(lbl).props("color=primary").classes("text-sm")
 
 
+# --------------------------------------------------------------------------- #
+# Randare detaliată rezultate (audit, pipeline stages, financiar)
+# --------------------------------------------------------------------------- #
+PRICES = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}  # Lei/variantă (fallback loto.ro)
+PRICE_SIMPLE_TICKET = 5.0  # Lei/bilet simplu la agenție
+
+# Scheme reduse oficiale Loteria Română: (cod, n_variante) per (joc, pool_size)
+LR_SCHEMES = {
+    "6/49": {9: [("Cod 48", 12)], 10: [("Cod 49", 15), ("Cod 50", 30)],
+             11: [("Cod 56", 66)], 12: [("Cod 57", 22), ("Cod 58", 132)], 16: [("Cod 59", 112)]},
+    "5/40": {7: [("Cod 15", 9)], 8: [("Cod 16", 21)], 9: [("Cod 17", 30)], 10: [("Cod 18", 51)]},
+    "joker": {7: [("Cod 45", 5)], 8: [("Cod 35", 6)], 9: [("Cod 34", 9)], 10: [("Cod 24", 14)],
+              11: [("Cod 15", 22)], 12: [("Cod 14", 38)]},
+}
+STAGE_META = [
+    ("1_nqi_raw", "1. NQI Raw (scorer)", "#60a5fa",
+     "Pool brut din scorer (bench winner / TimesFM): top-K după scor de probabilitate."),
+    ("2_smart_selector", "2. Smart Selector", "#a78bfa",
+     "Rafinare hibridă: 40% Gap + 25% Trend + 20% Frequency + 15% Positional."),
+    ("3_anti_sequence", "3. Anti-Sequence Filter", "#f59e0b",
+     "Elimină secvențe de 3+ numere consecutive rare; înlocuiește cu rezerve top-frecvență."),
+    ("4_post_hoc_final", "4. POST-HOC Final", "#10b981",
+     "Validare retrospectivă: substituții iterative ce maximizează hit-urile. Rescrie 40-70% din pool."),
+]
+
+
+def _game_key_from(game: str) -> str:
+    low = game.lower()
+    if "5/40" in low or "5_40" in low:
+        return "5/40"
+    if "joker" in low:
+        return "joker"
+    return "6/49"
+
+
+def _render_audit(audit: dict, final_pool: set) -> None:
+    mi = (audit.get("manual_inversion") or {}).get("enforced_violations_fixed")
+    if mi:
+        rm = ", ".join(str(n) for n in mi.get("removed", [])) or "(none)"
+        ad = ", ".join(str(n) for n in mi.get("added_replacements", [])) or "(none)"
+        ui.markdown(f"🛡️ **Hard Enforcement Inversare:** scoase {rm}; înlocuite cu {ad}.").classes("text-info")
+
+    cf = audit.get("consecutive_filter")
+    if cf:
+        ui.markdown("⚠️ **Intervenție Filtru Anti-Secvență:**\n" + "\n".join(f"- {m}" for m in cf)).classes("text-warning")
+    if audit.get("kept_sequences"):
+        ui.markdown("ℹ️ **Verificare Anti-Secvență:**\n" + "\n".join(f"- {m}" for m in audit["kept_sequences"])).classes("text-info")
+
+    bw = audit.get("bench_winner") or {}
+    scorer_lbl = (f"{next(iter(bw.values())).get('method','?').upper()} (bench winner)" if bw else "Google TimesFM")
+
+    tex = audit.get("timesfm_excluded")
+    if tex:
+        s = ", ".join(f"{n} (inactiv {d}%)" for n, d in tex.items())
+        msg = f"🚫 **{scorer_lbl}** a exclus {len(tex)} numere din Urna 1: {s}"
+        tjk = audit.get("timesfm_excluded_joker")
+        if tjk:
+            sj = ", ".join(f"{n} (inactiv {d}%)" for n, d in tjk.items())
+            msg += f"\n\n🚫 și {len(tjk)} numere din Urna 2 (Joker): {sj}"
+        ui.markdown(msg).classes("text-negative")
+
+    af = audit.get("anomaly_filter")
+    if af:
+        ui.markdown(f"🚀 **Neural Anomaly Scoring:** din {af['original_count']} variante au rămas "
+                    f"**{af['final_count']}** (threshold {af['threshold']}).").classes("text-positive")
+
+    sm = audit.get("smart_selector")
+    if sm:
+        scores = sm.get("final_scores", {})
+        ui.markdown(f"🧠 **Smart Logic:** {sm.get('method','')}").classes("text-info")
+        kept = [n for n in sm.get("kept_numbers", []) if n in final_pool]
+        repl = [n for n in sm.get("replaced_numbers", []) if n not in final_pool]
+        if kept:
+            ui.markdown("✅ Păstrate: " + ", ".join(f"{n} ({scores.get(n,0):.3f})" for n in kept)).classes("text-caption")
+        if repl:
+            ui.markdown("🔄 Înlocuite: " + ", ".join(str(n) for n in repl)).classes("text-caption")
+
+
+def _render_stages(audit: dict) -> None:
+    stages = audit.get("pipeline_stages") or {}
+    if not stages:
+        return
+    with ui.expansion("🔍 Evoluția Pool-ului — Pipeline Stage-by-Stage", value=False).classes("w-full"):
+        prev: set | None = None
+        for key, title, color, desc in STAGE_META:
+            pool_list = stages.get(key)
+            if not pool_list:
+                continue
+            pool_set = set(int(x) for x in pool_list)
+            added = (pool_set - prev) if prev is not None else set()
+            removed = (prev - pool_set) if prev is not None else set()
+            chips = []
+            for n in sorted(pool_set):
+                if n in added:
+                    chips.append(f"<span style='background:#064e3b;color:#6ee7b7;padding:2px 8px;border-radius:10px;margin:2px;font-weight:bold;'>+{n}</span>")
+                else:
+                    chips.append(f"<span style='background:rgba(255,255,255,0.07);color:#e5e7eb;padding:2px 8px;border-radius:10px;margin:2px;'>{n}</span>")
+            for n in sorted(removed):
+                chips.append(f"<span style='background:#7f1d1d;color:#fecaca;padding:2px 8px;border-radius:10px;margin:2px;text-decoration:line-through;'>−{n}</span>")
+            delta = f" (Δ: +{len(added)}, −{len(removed)})" if prev is not None else ""
+            ui.html(
+                f"<div style='margin-top:8px;padding:8px;background:rgba(255,255,255,0.03);border-left:3px solid {color};border-radius:4px;'>"
+                f"<div style='font-weight:700;color:{color};'>{title}{delta}</div>"
+                f"<div style='font-size:0.85em;color:#94a3b8;margin:2px 0 6px 0;'>{desc}</div>"
+                f"<div>{''.join(chips)}</div></div>"
+            )
+            prev = pool_set
+
+
+def _render_cost(game: str, data: dict) -> None:
+    gk = _game_key_from(game)
+    price = PRICES.get(gk, 8.0)
+    draw_n = 6 if gk == "6/49" else 5
+    pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    import math
+    full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
+    jmult = max(1, len(data.get("hard_core_joker", []))) if gk == "joker" else 1
+    full_cost = full_vars * price * jmult
+
+    if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
+        parts = []
+        for code, base in LR_SCHEMES[gk][pool_used]:
+            tot = base * jmult
+            parts.append(f"**{code}** ({tot} var. ≈ {tot*price:,.0f} Lei)")
+        ui.markdown(f"💡 **Cost Nucleu Dur la Agenție** ({pool_used} nr.): " + " sau ".join(parts) +
+                    f"\n\n*(Sistem Complet ≈ {full_cost:,.0f} Lei)*").classes("text-info")
+    else:
+        ui.markdown(f"💡 **Cost Nucleu Dur la Agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
+                    f"{game.upper()}. Sistem Complet = {full_vars*jmult} variante ≈ **{full_cost:,.0f} Lei**.").classes("text-info")
+
+    variants = data.get("variants") or []
+    if variants:
+        n_simple = min(10, len(variants))
+        ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ≈ {n_simple*PRICE_SIMPLE_TICKET:,.0f} Lei "
+                    f"| Wheel complet ({len(variants)} var.) ≈ {len(variants)*price:,.0f} Lei.").classes("text-caption")
+
+
 @ui.refreshable
 def results_panel() -> None:
     if STATE.get("wf_status"):
@@ -494,6 +631,14 @@ def results_panel() -> None:
                         ui.label(f"Interval p10–p90: {data.get('p10')} – {data.get('p90')} "
                                  f"(g_range={data.get('g_range')})").classes("text-caption")
 
+                    audit = data.get("audit") or {}
+                    final_pool = set(int(x) for x in pool)
+                    if audit:
+                        _render_audit(audit, final_pool)
+
+                    # Cost financiar (scheme reduse oficiale sau sistem complet)
+                    _render_cost(game, data)
+
                     # Walk-forward backtest
                     flat = STATE["retro"].get(f"{fname}_{game}")
                     if flat:
@@ -514,10 +659,10 @@ def results_panel() -> None:
                             if len(variants) > 10:
                                 ui.label(f"... încă {len(variants) - 10} variante (cost ~{len(variants)*5} Lei).").classes("text-caption")
 
-                    # Audit (rezumat)
-                    audit = data.get("audit")
+                    # Pipeline stage-by-stage (evoluția pool-ului)
                     if audit:
-                        with ui.expansion("🔍 Audit pipeline", value=False).classes("w-full"):
+                        _render_stages(audit)
+                        with ui.expansion("🔍 Audit brut (JSON)", value=False).classes("w-full"):
                             ui.code(json.dumps(audit, indent=2, ensure_ascii=False, default=str),
                                     language="json").classes("w-full max-h-80 overflow-auto text-xs")
 
