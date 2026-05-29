@@ -114,13 +114,14 @@ if /i "!GPU_TYPE!"=="NVIDIA" (
 )
 
 echo.
-echo --- Verificare streamlit binary ---
-if not exist "%VENV_DIR%\Scripts\streamlit.exe" (
-    echo [LIPSA] streamlit.exe nu exista in venv.
+echo --- Verificare UI NiceGUI ---
+"%VENV_DIR%\Scripts\python.exe" -c "import nicegui" >nul 2>&1
+if not "!ERRORLEVEL!"=="0" (
+    echo [LIPSA] nicegui nu e instalat in venv.
     echo Solutie: ruleaza ACTUALIZARI.bat apoi reincearca.
     endlocal & exit /b 20
 )
-echo [OK] streamlit.exe prezent.
+echo [OK] nicegui prezent.
 
 REM Pe CPU-only, setam env vars ca import-urile sa fie rapide si offline.
 if /i not "!GPU_TYPE!"=="NVIDIA" (
@@ -181,8 +182,11 @@ timeout /t 1 /nobreak >nul 2>&1
 echo [3/4] Pornire Worker
 start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
 
-echo [4/4] Pornire Streamlit (port 8000)
-"%~dp0%VENV_DIR%\Scripts\python.exe" -m streamlit run "%~dp0app.py" --server.port 8000 --browser.gatherUsageStats false
+echo [4/4] Pornire UI NiceGUI (port 8000)
+REM NiceGUI tine starea pe server si face update prin websocket (fara reload de
+REM pagina) -^> bifele/CSV-ul NU se mai pierd. UI vechi Streamlit: app.py (legacy).
+set "LOTO_UI_PORT=8000"
+"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
 set "RC=!ERRORLEVEL!"
 endlocal & exit /b %RC%
 

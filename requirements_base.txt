@@ -6,7 +6,8 @@
 # =============================================================================
 
 # UI + utilitare
-streamlit
+nicegui                  # UI principal (app_nicegui.py)
+streamlit                # UI legacy (app.py)
 requests
 psutil
 matplotlib

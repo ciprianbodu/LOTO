@@ -55,3 +55,9 @@ bench_full.log
 .machine_profile
 best_methods.json.pre_*
 predictie_*.json
+
+# NiceGUI runtime (app_nicegui.py)
+uploaded_data/
+.nicegui/
+*.bak
+*.tmp

@@ -76,6 +76,7 @@ def main() -> int:
     # plus elimina riscul de hang pe import timesfm (HF Hub probe etc.).
     CPU_PROFILE = [
         # Strict ce e necesar pentru engine + UI cand merge cu fallback determinist:
+        ("nicegui",  True, "0-2"),   # UI principal (app_nicegui.py)
         ("pandas",   True, "0-1"),
         ("numpy",    True, "0-1"),
         ("scipy",    True, "1-3"),
