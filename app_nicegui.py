@@ -1006,6 +1006,27 @@ def _show_report() -> None:
     dlg.open()
 
 
+# Descriere lizibilă per metodă (ce e + din ce librărie) — afișată lângă 🏆
+_METHOD_DESC = {
+    "informer":   "rețea Transformer · NeuralForecast",
+    "autoformer": "rețea Transformer (Auto-Correlation) · NeuralForecast",
+    "fedformer":  "rețea Transformer (Fourier) · NeuralForecast",
+    "patchtst":   "rețea Transformer (patch-based) · NeuralForecast",
+    "nbeats":     "rețea MLP · NeuralForecast",
+    "nhits":      "rețea MLP ierarhică · NeuralForecast",
+    "tide":       "model MLP (Google TiDE) · NeuralForecast",
+    "dlinear":    "model liniar cu descompunere · NeuralForecast",
+    "deepar":     "RNN probabilistic · NeuralForecast",
+    "tcn":        "rețea convoluțională temporală · NeuralForecast",
+    "timesfm":    "model foundation pre-antrenat · Google TimesFM",
+    "chronos":    "model foundation pre-antrenat · Amazon Chronos",
+    "moment":     "model foundation pre-antrenat · CMU MOMENT",
+    "frequency":  "euristică simplă · frecvență recentă ponderată",
+    "recency":    "euristică simplă · gap-de-la-ultima-apariție",
+    "random":     "baseline aleator (prag de referință)",
+}
+
+
 def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "",
                       with_wf: bool = True) -> None:
     """Randează un pool complet (badges, p10/p90, audit, cost, WF, variante, stages).
@@ -1028,13 +1049,16 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         parts = []
         for gkey, info in bw.items():
             m = info.get("method", "?")
-            fam = info.get("family")
             ph = info.get("pool_hint")
-            parts.append(f"{gkey} → <b>{m}</b>" + (f" <span style='opacity:.6'>({fam}, pool {ph})</span>" if fam else ""))
-        ui.html("🏆 Metodă câștigătoare (bench): " + " &nbsp;|&nbsp; ".join(parts)).classes(
+            desc = _METHOD_DESC.get(m) or info.get("family", "")
+            tail = ""
+            if desc:
+                tail = f" <span style='opacity:.6'>— {desc}" + (f", pool {ph}" if ph else "") + "</span>"
+            parts.append(f"{gkey} → <b>{m}</b>{tail}")
+        ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes(
             "text-caption text-positive")
     else:
-        ui.label("🏆 Metodă scorer: TimesFM (fallback — fără decizie bench pt acest pool)").classes(
+        ui.label("🏆 Metodă scorer: TimesFM — model foundation (fallback, fără decizie bench)").classes(
             "text-caption text-grey")
 
     ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
