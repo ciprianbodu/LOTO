@@ -68,17 +68,37 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # D. DL Probabilistice/Recurente/SSM
 # E. Random baseline + classical for context
 ALL_SPEC_METHODS = [
-    # A
+    # A — foundation zero-shot
     "timesfm", "chronos", "moirai", "lag_llama", "moment",
     "tinytimemixer", "timegpt", "units", "timer",
-    # B
+    # B — NeuralForecast MLP/linear
     "nbeats", "nhits", "tide", "dlinear",
-    # C
+    # C — NeuralForecast transformers
     "patchtst", "informer", "autoformer", "fedformer",
-    # D
+    # D — NeuralForecast recurrent/conv + SSM
     "deepar", "tcn", "mamba",
-    # E
+    # E — baselines
     "random", "frequency", "recency",
+
+    # ─── MATEMATICE / STATISTICE / GEOMETRICE (~30, rapide, CPU) ───────────────
+    # Lanțuri Markov & n-grame (secvențial)
+    "markov_1", "markov_2", "markov_3", "ngram_bigram", "ngram_trigram", "vlmm",
+    # Bayesian / urne / count-models
+    "beta_binomial", "polya_urn", "bayes_poisson", "neg_binomial",
+    # Spectral / descompuneri (geometric/frecvențial)
+    "fourier", "wavelet_haar", "stl", "ssa", "dmd", "hmm_gaussian",
+    # Serii temporale clasice
+    "holt_winters", "theta_auto", "ets_auto", "ces_auto", "arima_auto",
+    "croston_classic", "croston_sba", "tsb", "adida", "imapa", "ses",
+    "naive_last", "seasonal_naive", "drift",
+
+    # ─── GPU (ML boosting pe GPU + rețele torch reprezentative) ────────────────
+    "ml_xgb_gpu", "ml_lgbm_gpu", "ml_catboost_gpu",
+    "torch_lstm_m", "torch_bilstm", "torch_gru_m", "torch_lstm_attn",
+    "torch_cnn1d", "torch_tcn", "torch_wavenet", "torch_resnet1d",
+    "torch_transformer", "torch_inception", "torch_squeeze_excite",
+    "torch_dilated_cnn", "torch_mlp_mixer", "torch_cnn_lstm",
+    "torch_bayesian_lstm", "torch_echo_state", "torch_time2vec",
 ]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]
