@@ -84,6 +84,7 @@ STATE: dict = {
     "pure_bench": False,
     "calib": {},             # {game_label: {"best": int, "detail": dict}}
     "calib_status": "",
+    "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
 }
 
 GK_MATRIX = {  # etichetă afișată → cheia jocului din bench (best_methods.json / folds.csv)
@@ -403,7 +404,13 @@ def status_panel() -> None:
             unlock_engine()
             _start_walk_forward()
             results_panel.refresh()
+            try:
+                ui.run_javascript(SOUND_JS)  # beep de finalizare
+            except Exception:  # noqa: BLE001
+                pass
+            _maybe_shutdown()
             ui.label("✅ Generare finalizată.").classes("text-positive text-lg")
+            _shutdown_banner()
             return
         if state in ("FAILED", "CANCELLED"):
             STATE["active_job_id"] = None
@@ -423,7 +430,62 @@ def status_panel() -> None:
             ui.label("Generarea poate porni după ce bench-ul termină.").classes("text-caption")
         return
 
-    ui.label("Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot.").classes("text-caption")
+    _shutdown_banner()
+    if isinstance(STATE.get("results"), tuple):
+        ui.label("✅ Ultima generare e gata (vezi mai jos).").classes("text-positive")
+    else:
+        ui.label("Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot.").classes("text-caption")
+
+
+SOUND_JS = (
+    "try{const c=new (window.AudioContext||window.webkitAudioContext)();"
+    "const o=c.createOscillator();const g=c.createGain();o.connect(g);g.connect(c.destination);"
+    "o.type='sine';o.frequency.value=880;g.gain.value=0.08;o.start();"
+    "o.stop(c.currentTime+0.35);}catch(e){}"
+)
+
+
+def _maybe_shutdown() -> None:
+    """Auto-shutdown PC la final dacă e cerut (bifă sau .shutdown_pending.flag)."""
+    flag = PROJECT_ROOT / ".shutdown_pending.flag"
+    want = bool(SETTINGS.get("shutdown_on_complete")) or flag.exists()
+    if not want or STATE.get("_shutdown_initiated"):
+        return
+    STATE["_shutdown_initiated"] = True
+    STATE["_shutdown_at"] = time.time()
+    if os.name == "nt":
+        try:
+            subprocess.Popen(["shutdown", "/s", "/t", "60", "/f", "/c",
+                              "Loto Enterprise: shutdown automat după job complete"])
+            logger.warning("[SHUTDOWN] shutdown /s /t 60 lansat (anulabil).")
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[SHUTDOWN] eșuat: %s", exc)
+            STATE["_shutdown_initiated"] = False
+    else:
+        logger.warning("[SHUTDOWN] cerut, dar OS non-Windows — sar peste comanda reală.")
+    try:
+        flag.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _cancel_shutdown() -> None:
+    if os.name == "nt":
+        try:
+            subprocess.Popen(["shutdown", "/a"])
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[SHUTDOWN] anulare eșuată: %s", exc)
+    STATE["_shutdown_initiated"] = False
+    ui.notify("Oprire anulată.", type="positive")
+    status_panel.refresh()
+
+
+def _shutdown_banner() -> None:
+    if not STATE.get("_shutdown_initiated"):
+        return
+    with ui.card().classes("w-full bg-red-900"):
+        ui.label("🔌 Oprire PC programată (60s). Poți anula:").classes("text-bold")
+        ui.button("❌ ANULEAZĂ OPRIREA", on_click=_cancel_shutdown).props("color=negative")
 
 
 @ui.refreshable
@@ -680,6 +742,24 @@ def _render_walk_forward(flat, game: str) -> None:
                     f"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
                     f"<div style='width:120px;text-align:right;font-size:0.85em;'>{c} extrageri ({pct:.0f}%)</div></div>")
 
+        # Distribuție performanță variante (bilete) — din .hits
+        var_dist = {}
+        for p in flat:
+            h = getattr(p, "hits", 0)
+            var_dist[h] = var_dist.get(h, 0) + 1
+        ui.label("Distribuție performanță variante (bilete):").classes("text-bold text-caption mt-2")
+        for h in sorted(var_dist, reverse=True):
+            c = var_dist[h]
+            if c == 0 and h > 3:
+                continue
+            pct = (c / n * 100) if n else 0
+            color = "#28a745" if h >= 3 else ("#17a2b8" if h >= 1 else "#666")
+            ui.html(f"<div style='display:flex;align-items:center;gap:8px;'>"
+                    f"<div style='width:110px;font-size:0.85em;'>{h} ghicite</div>"
+                    f"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:10px;'>"
+                    f"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
+                    f"<div style='width:90px;text-align:right;font-size:0.85em;'>{pct:.1f}%</div></div>")
+
         # Tabel pool ≥4
         rows_pool, seen2 = [], set()
         for p in sorted(flat, key=lambda x: (getattr(x, "hits_union", 0), getattr(x, "draw_index", 0)), reverse=True):
@@ -720,6 +800,39 @@ def _render_walk_forward(flat, game: str) -> None:
                      f"| ROI: {'+' if profit>=0 else ''}{roi:.1f}%").classes(rc)
 
 
+def _build_report() -> str:
+    res = STATE.get("results")
+    if not isinstance(res, tuple) or len(res) != 2:
+        return "(fără rezultate)"
+    rb, _ = res
+    out = ["=" * 64, "LOTO ENTERPRISE WHEELING — RAPORT", "=" * 64]
+    for fn, outs in rb:
+        out.append(f"\nFișier: {fn}")
+        for g, d in outs.items():
+            out.append(f"  {g.upper()} | pool={d.get('pool_size')} garanție={d.get('guarantee')} "
+                       f"variante={len(d.get('variants') or [])} extrageri={d.get('total_draws')}")
+            out.append("  Nucleu dur: " + ", ".join(str(int(x)) for x in sorted(d.get("hard_core") or [])))
+            if d.get("hard_core_joker"):
+                out.append("  Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
+            flat = STATE["retro"].get(f"{fn}_{g}")
+            if flat:
+                nn = len(flat)
+                ap = sum(getattr(p, "hits_union", 0) for p in flat) / nn
+                bp = max(getattr(p, "hits_union", 0) for p in flat)
+                out.append(f"  Walk-forward: {nn} predicții | avg pool={ap:.2f} | best pool={bp}")
+            for i, v in enumerate(d.get("variants") or [], 1):
+                out.append(f"    V{i}: " + ", ".join(str(int(x)) for x in v))
+    return "\n".join(out)
+
+
+def _show_report() -> None:
+    with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-3xl"):
+        ui.label("Raport integral (selectează tot + Ctrl+C)").classes("text-bold")
+        ui.textarea(value=_build_report()).classes("w-full").props("readonly autogrow filled")
+        ui.button("Închide", on_click=dlg.close)
+    dlg.open()
+
+
 @ui.refreshable
 def results_panel() -> None:
     if STATE.get("wf_status"):
@@ -733,7 +846,9 @@ def results_panel() -> None:
     if STATE.get("job_start_time"):
         elapsed = f" (în {time.time() - STATE['job_start_time']:.0f}s)"
 
-    ui.label(f"Rezultate{elapsed}").classes("text-h6 mt-2")
+    with ui.row().classes("items-center gap-3 mt-2"):
+        ui.label(f"Rezultate{elapsed}").classes("text-h6")
+        ui.button("📋 Raport integral", on_click=_show_report).props("flat dense")
 
     for fname, outs in results_bundle:
         with ui.card().classes("w-full"):
@@ -781,14 +896,27 @@ def results_panel() -> None:
                     if flat:
                         _render_walk_forward(flat, game)
 
-                    # Top 10 variante simple
+                    # Variante: top 10 + toggle wheel complet
                     if variants:
-                        with ui.expansion(f"Variante ({len(variants)}) — top 10", value=False).classes("w-full"):
-                            for i, v in enumerate(variants[:10], 1):
-                                nums = ", ".join(str(int(x)) for x in v)
-                                ui.label(f"{i:>2}. {nums}").classes("font-mono text-sm")
+                        is_jk = "joker" in game.lower()
+                        skey = f"{fname}_{game}"
+                        show_all = STATE["show_all"].get(skey, False)
+                        with ui.expansion(f"Variante ({len(variants)})", value=False).classes("w-full"):
+                            shown = variants if show_all else variants[:10]
+                            for i, v in enumerate(shown, 1):
+                                if is_jk and len(v) == 6:
+                                    nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
+                                else:
+                                    nums = ", ".join(str(int(x)) for x in v)
+                                ui.label(f"V{i:>3}: {nums}").classes("font-mono text-sm")
                             if len(variants) > 10:
-                                ui.label(f"... încă {len(variants) - 10} variante (cost ~{len(variants)*5} Lei).").classes("text-caption")
+                                def _toggle(k=skey):
+                                    STATE["show_all"][k] = not STATE["show_all"].get(k, False)
+                                    results_panel.refresh()
+                                ui.button(
+                                    f"🔼 Ascunde" if show_all else f"🔽 Arată toate ({len(variants)})",
+                                    on_click=_toggle,
+                                ).props("flat dense")
 
                     # Pipeline stage-by-stage (evoluția pool-ului)
                     if audit:
@@ -960,6 +1088,9 @@ def main_page() -> None:
         def datasets_label() -> None:
             if STATE["datasets"]:
                 ui.label("Încărcate: " + ", ".join(fn for fn, _ in STATE["datasets"])).classes("text-caption text-positive")
+                with ui.expansion("📅 Istoric CSV", value=False).classes("w-full"):
+                    for fn, df in STATE["datasets"]:
+                        ui.label(f"{fn}: {len(df)} extrageri × {len(df.columns)} coloane").classes("text-caption")
             else:
                 ui.label("Niciun CSV încărcat.").classes("text-caption text-warning")
         datasets_label()

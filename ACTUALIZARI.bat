@@ -117,7 +117,7 @@ echo.
 
 echo [1a] Detectare pachete benchmark deja instalate (skip daca prezente)...
 set "TO_INSTALL="
-for %%P in (rich pynvml chronos-forecasting momentfm neuralforecast utilsforecast) do (
+for %%P in (nicegui rich pynvml chronos-forecasting momentfm neuralforecast utilsforecast) do (
     "%VENV_PY%" -m pip show %%P >nul 2>&1
     if errorlevel 1 (
         set "TO_INSTALL=!TO_INSTALL! %%P"
@@ -140,8 +140,8 @@ if defined TO_INSTALL (
 )
 
 echo.
-echo [1b] Update minor pe pachete sigure (streamlit, requests, psutil, numba)...
-"%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed --upgrade streamlit requests psutil numba 2>nul
+echo [1b] Update minor pe pachete sigure (nicegui, streamlit, requests, psutil, numba)...
+"%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed --upgrade nicegui streamlit requests psutil numba 2>nul
 if errorlevel 1 (
     echo [ATENTIE] Update minor a esuat partial. Continui.
     echo.
