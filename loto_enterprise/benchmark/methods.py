@@ -551,17 +551,67 @@ def list_methods() -> List[str]:
     return list(METHODS.keys())
 
 
+_CUDA_OK: Optional[bool] = None
+
+
+def _cuda_available() -> bool:
+    """Cached torch.cuda.is_available() — evită re-import-ul torch la fiecare apel."""
+    global _CUDA_OK
+    if _CUDA_OK is None:
+        try:
+            import torch
+            _CUDA_OK = bool(torch.cuda.is_available())
+        except Exception:
+            _CUDA_OK = False
+    return _CUDA_OK
+
+
+def _capability_reason(name: str, fn: Callable, family: str) -> Optional[str]:
+    """Capability-based availability check.
+
+    Atributul `_unavailable_reason` acoperă doar metodele declarate explicit
+    indisponibile (`_unavailable_factory`). Dar scorerele NeuralForecast (rebound
+    la `_unavailable_nf` când lipsesc torch/neuralforecast) și cele foundation
+    (`timesfm/chronos/moment`, care returnează `{}` fără torch sau fără pachetul
+    propriu) NU au acel atribut — deci ar fi raportate fals ca "available" și ar
+    polua selecția winnerilor cu 0 hits. Verificăm aici capacitatea reală.
+    """
+    explicit = getattr(fn, "_unavailable_reason", None)
+    if explicit:
+        return explicit
+    # NeuralForecast families (nf-mlp, nf-transformer, nf-recurrent, nf-conv,
+    # nf-*-multi) au nevoie de neuralforecast + torch importabile ȘI de CUDA:
+    # `_make_nf_score` aruncă RuntimeError("CUDA required") fără GPU, deci pe o
+    # mașină cu torch dar fără CUDA scorerul ar returna tăcut {} (no-op fantomă).
+    if family.startswith("nf"):
+        if not _NF_AVAILABLE:
+            return _NF_ERR or "neuralforecast/torch indisponibil (import eșuat)"
+        if not _cuda_available():
+            return "CUDA indisponibil (modelele NeuralForecast cer GPU forțat)"
+        return None
+    # Foundation zero-shot reale (au pachet propriu): timesfm/chronos/moment.
+    _FOUNDATION_PKG = {"timesfm": "timesfm", "chronos": "chronos", "moment": "momentfm"}
+    if family == "foundation-zs" and name in _FOUNDATION_PKG:
+        import importlib.util
+        if importlib.util.find_spec("torch") is None:
+            return "torch neinstalat (modelul foundation îl cere)"
+        pkg = _FOUNDATION_PKG[name]
+        if importlib.util.find_spec(pkg) is None:
+            return f"pachetul {pkg} neinstalat"
+        return None
+    return None
+
+
 def method_meta(name: str) -> dict:
     fn, family, requires_train, notes = METHODS[name]
-    available = not getattr(fn, "_unavailable_reason", None)
+    reason = _capability_reason(name, fn, family)
     meta = {
         "name": name,
         "family": family,
         "requires_train": requires_train,
         "notes": notes,
-        "available": available,
+        "available": reason is None,
     }
-    reason = getattr(fn, "_unavailable_reason", None)
     if reason:
         meta["unavailable_reason"] = reason
     return meta

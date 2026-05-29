@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -35,11 +34,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from .methods import METHODS, call_method, method_meta
-from .hardware import (
-    snapshot as hw_snapshot,
-    format_snapshot,
-)
+from .methods import call_method, method_meta
 from .hw_sampler import HwSampler, HwSnapshot
 
 logger = logging.getLogger(__name__)
@@ -209,6 +204,7 @@ def _evaluate_fold(
         per_pool_bl_totals = {k: 0 for k in pool_sizes}
         per_pool_max = {k: 0 for k in pool_sizes}
         blocks = 0
+        nonempty_blocks = 0
         bl_sizes_seen: List[int] = []
         history = train_draws
         pos = 0
@@ -222,6 +218,7 @@ def _evaluate_fold(
                 history = np.concatenate([history, test_draws[pos:end]], axis=0)
                 pos = end
                 continue
+            nonempty_blocks += 1
 
             # Pre-compute top-K WITHOUT blacklist
             top_sets = {k: set(_top_k(scores, k)) for k in pool_sizes}
@@ -262,6 +259,12 @@ def _evaluate_fold(
         fr.max_hits_topk = per_pool_max[game.draw_n]
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
+        # Dacă NICIUN bloc n-a produs scoruri (metodă indisponibilă/eșuată la
+        # runtime, ex. foundation fără weights), marcăm fold-ul ca eșuat ca să
+        # fie EXCLUS din agregarea winnerilor — altfel ar concura cu 0.0 hits.
+        if n_test > 0 and nonempty_blocks == 0:
+            fr.failed = True
+            fr.error = "method returned empty scores for all blocks (unavailable at runtime)"
     except Exception as exc:
         fr.failed = True
         fr.error = f"{type(exc).__name__}: {exc}"
@@ -403,6 +406,10 @@ def _aggregate(
     }
     for game in games:
         sub = df[df["game"] == game.key] if not df.empty else df
+        # Excludem fold-urile eșuate (excepție sau scoruri goale) din agregare —
+        # altfel o metodă indisponibilă ar concura ca rival cu 0.0 hits.
+        if not sub.empty and "failed" in sub.columns:
+            sub = sub[sub["failed"] == False]  # noqa: E712
         pool_keys = pool_keys_per_game[game.key]
         per_method = {}
         for method in methods:
@@ -435,20 +442,25 @@ def _aggregate(
                 if k not in real.columns:
                     continue
                 real_mean = float(real[k].mean())
-                rnd_mean = float(rnd[k].mean()) if (not rnd.empty and k in rnd.columns) else 0.0
+                # Dacă baseline-ul random lipsește (fold-ul shuffled a eșuat
+                # asimetric, în timp ce cel real a reușit), NU inflăm lift-ul
+                # tratând rnd ca 0.0 — îl considerăm neconcludent (lift = 0).
+                _rnd_present = (not rnd.empty and k in rnd.columns)
+                rnd_mean = float(rnd[k].mean()) if _rnd_present else 0.0
                 # WITH blacklist column has _bl suffix
                 bl_col = f"{k}_bl"
+                _rnd_bl_present = (not rnd.empty and bl_col in rnd.columns)
                 real_mean_bl = float(real[bl_col].mean()) if bl_col in real.columns else 0.0
-                rnd_mean_bl = float(rnd[bl_col].mean()) if (not rnd.empty and bl_col in rnd.columns) else 0.0
+                rnd_mean_bl = float(rnd[bl_col].mean()) if _rnd_bl_present else 0.0
                 entry["per_pool"][k] = {
                     "avg_hits_real": real_mean,
                     "avg_hits_shuffled": rnd_mean,
-                    "lift_vs_shuffle": real_mean - rnd_mean,
+                    "lift_vs_shuffle": (real_mean - rnd_mean) if _rnd_present else 0.0,
                     "hit_rate_real": real_mean / game.draw_n,
                     # WITH blacklist
                     "avg_hits_real_bl": real_mean_bl,
                     "avg_hits_shuffled_bl": rnd_mean_bl,
-                    "lift_vs_shuffle_bl": real_mean_bl - rnd_mean_bl,
+                    "lift_vs_shuffle_bl": (real_mean_bl - rnd_mean_bl) if _rnd_bl_present else 0.0,
                     "blacklist_helps": real_mean_bl - real_mean,  # positive = blacklist improves
                 }
             per_method[method] = entry

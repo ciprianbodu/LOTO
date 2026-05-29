@@ -13,7 +13,6 @@ from datetime import datetime
 import itertools
 import numpy as np
 import pandas as pd
-from numba import jit
 import time
 import logging
 import os
@@ -78,6 +77,9 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     """
     start_time = time.time()
     pool_len = len(pool)
+    # Guard: guarantee nu poate depăși pick (altfel itertools.combinations cu
+    # r = pick-guarantee negativ → ValueError). Clamp în [1, pick].
+    guarantee = max(1, min(int(guarantee), int(pick)))
     logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
 
     if pool_len < pick:
@@ -336,6 +338,9 @@ class LotoEngine:
 
     def _build_draw_matrix(self) -> None:
         """Construiește o dată matrice (rows x draw_n) de numere întregi — fără split pe string în buclă."""
+        # Matricea se schimbă → invalidăm structurile memoizate (perf #1).
+        self._score_bundle_cache = None
+        self._appear_idx_cache = None
         if self.data is None:
             self._draw_matrix = None
             return
@@ -430,13 +435,18 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, force_exclude=None):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
             Backtester-ul îl lasă False (își gestionează propriul state in-memory).
+        force_exclude: set de numere excluse FORȚAT din univers pe toată durata
+            rulării (folosit de Inversarea automată: rularea B exclude pool-ul A).
         """
+        # Numere excluse forțat (Inversare automată). Aplicate în blacklist-ul de
+        # selecție + în candidații Smart Selector ca să nu poată reintra.
+        self._force_exclude = set(int(x) for x in (force_exclude or []))
         # Memoram pool_size-ul cerut pentru ca _scores_via_bench_winner să poată
         # selecta câștigătorul corect din best_methods.json (per pool size).
         self._winner_pool_hint = int(pool_size)
@@ -561,6 +571,9 @@ class LotoEngine:
 
         logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
+        # Backup pentru a NU muta permanent self.data (footgun: un engine reutilizat
+        # ar acumula trunchierile 2140→214→21). Restaurat înainte de return.
+        _lookback_backup = None
         if lookback > 0 and self.data is not None and not self.data.empty:
             effective_rows = int(len(self.data) * (lookback / 100.0))
             effective_rows = max(effective_rows, 1)
@@ -568,6 +581,7 @@ class LotoEngine:
             if effective_rows == 0:
                 actual_lookback = 1 # Măcar o extragere
             logging.info(f"[PIPELINE] Aplic limită de istoric: Ultimele {lookback}% ({actual_lookback} extrageri).")
+            _lookback_backup = self.data
             self.data = self.data.tail(effective_rows).copy()
             self._build_draw_matrix()
             
@@ -686,8 +700,22 @@ class LotoEngine:
                     "scope": "single_draw",
                 }
 
+        # === Inversare automată: excludem forțat pool-ul A din univers ===
+        if self._force_exclude:
+            max_n_safe = int(self.params.get("max_n", 49))
+            combined = blacklist | self._force_exclude
+            if len(combined) >= max_n_safe - pool_size:
+                logging.warning(
+                    f"[AUTO-INVERT] force_exclude ({len(self._force_exclude)}) + blacklist "
+                    f"({len(blacklist)}) blochează prea mult din univers ({max_n_safe}). Skip."
+                )
+            else:
+                blacklist = combined
+            self.audit["auto_invert"] = True
+            self.audit["auto_invert_excluded"] = sorted(int(x) for x in self._force_exclude)
+
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
-        
+
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
         self.audit['pipeline_stages'] = {
@@ -908,6 +936,10 @@ class LotoEngine:
             logging.debug(f"[PIPELINE] hit_forecast a eșuat: {_exc_fc}")
 
         logging.info("[PIPELINE] Pipeline completat cu succes.")
+        # Restaurăm istoricul complet dacă lookback l-a trunchiat (vezi backup sus).
+        if _lookback_backup is not None:
+            self.data = _lookback_backup
+            self._build_draw_matrix()
         return lines, p10, p90, g_range, context, self.audit
 
     def _get_initial_hard_core(self, freq: np.ndarray, pool_size=12, filter_consecutives=False, blacklist=None) -> list:
@@ -1078,130 +1110,37 @@ class LotoEngine:
         self.hard_core_joker_stats = {int(i) + 1: int(freq[i]) for i in top_indices}
         return [int(i) + 1 for i in top_indices]
 
-    def _apply_timesfm_filter(self, freq: np.ndarray) -> None:
-        """
-        Implementare custom de TimesFM bazată pe analiză statistică avansată.
-        Identifică și exclude numerele "inactive/moarte" din nucleu dur.
-        IMPORTANT: NU excludem niciodată numerele Cold (respectăm selecția Hot/Cold a utilizatorului).
-        """
-        if not hasattr(self, 'hard_core') or not self.hard_core:
-            return
-            
-        logging.info("[TIMESFM] Start analiză statistică avansată...")
-        
-        # Determinăm care numere din nucleu sunt Cold vs Hot
-        cold_numbers, hot_numbers = self._identify_cold_hot_numbers(freq)
-        logging.info(f"[TIMESFM] Numere Cold (protejate): {cold_numbers}")
-        logging.info(f"[TIMESFM] Numere Hot (pot fi excluse): {hot_numbers}")
-        
-        # Calculăm metrici doar pentru numerele Hot (nu atingem Cold)
-        exclusion_candidates = {}
-        total_draws = len(self.data) if self.data is not None else 1
-        
-        for num in self.hard_core:
-            # SĂRIM complet numerele Cold - nu pot fi excluse!
-            if num in cold_numbers:
-                logging.info(f"[TIMESFM] Protejăm numărul Cold {num} de la excludere")
-                continue
-                
-            num_idx = num - 1  # 0-based index
-            if num_idx >= len(freq):
-                continue
-                
-            # 1. Frecvență absolută
-            abs_freq = freq[num_idx]
-            
-            # 2. Frecvență relativă
-            rel_freq = abs_freq / total_draws if total_draws > 0 else 0
-            
-            # 3. Analiză trend ultimele 20% extrageri
-            recent_draws = max(20, int(total_draws * 0.2))
-            recent_freq = self._calculate_recent_frequency(num, recent_draws)
-            
-            # 4. Interval mediu între apariții
-            avg_gap = self._calculate_average_gap(num)
-            
-            # 5. Scor de inactivitate (doar pentru Hot numbers)
-            inactivity_score = (
-                (1 - recent_freq) * 0.5 +  # Trend recent scăzut (mai multă greutate)
-                min(avg_gap / 50, 1) * 0.5   # Gap mare între apariții
-            )
-            
-            exclusion_candidates[num] = {
-                'inactivity_score': inactivity_score,
-                'abs_freq': abs_freq,
-                'rel_freq': rel_freq,
-                'recent_freq': recent_freq,
-                'avg_gap': avg_gap
-            }
-        
-        if not exclusion_candidates:
-            logging.info("[TIMESFM] Niciun număr Hot disponibil pentru analiză TimesFM")
-            return
-        
-        # Sortăm după scor de inactivitate (descrescător)
-        sorted_candidates = sorted(exclusion_candidates.items(), 
-                                 key=lambda x: x[1]['inactivity_score'], 
-                                 reverse=True)
-        
-        # Determinăm câte numere să excludem (max 20% din nucleu, doar din Hot)
-        # Limităm excluderile la 10% din nucleu (numere Hot) pentru a păstra diversitatea
-        max_exclusions = max(1, min(len(hot_numbers), int(len(self.hard_core) * 0.1)))
-        numbers_to_exclude = []
-        
-        for num, metrics in sorted_candidates[:max_exclusions]:
-            # Excludem doar dacă scorul de inactivitate e > 0.5 (mai permisiv pentru Hot)
-            if metrics['inactivity_score'] > 0.5:
-                numbers_to_exclude.append(num)
-                logging.info(f"[TIMESFM] Candidat pentru excludere: {num} (scor: {metrics['inactivity_score']:.2f})")
-        
-        if numbers_to_exclude:
-            # Excludem numerele și le înlocuim cu cele mai bune alternative
-            self._replace_inactive_numbers(numbers_to_exclude, freq)
-            
-            # Salvăm în audit pentru afișare în UI
-            if 'timesfm_excluded' not in self.audit:
-                self.audit['timesfm_excluded'] = {}
-                
-            for num in numbers_to_exclude:
-                metrics = exclusion_candidates[num]
-                inactivity_pct = int(metrics['inactivity_score'] * 100)
-                self.audit['timesfm_excluded'][num] = inactivity_pct
-                
-            logging.info(f"[TIMESFM] Excluse {len(numbers_to_exclude)} numere Hot inactive: {numbers_to_exclude}")
-        else:
-            logging.info("[TIMESFM] Niciun număr Hot nu a îndeplinit criteriile de excludere")
-            
-        # Aplicăm același proces pentru Joker dacă e cazul
-        if self.game_type == "joker" and hasattr(self, 'hard_core_joker') and self.hard_core_joker:
-            self._apply_timesfm_filter_joker()
     
-    def _identify_cold_hot_numbers(self, freq: np.ndarray) -> tuple:
-        """
-        Identifică care numere din nucleul dur sunt Cold vs Hot
-        Returnează: (cold_numbers, hot_numbers)
-        """
-        if not hasattr(self, 'hard_core') or not self.hard_core:
-            return set(), set()
-        
-        # Calculăm frecvența mediană pentru a determina Cold vs Hot
-        all_freqs = [freq[num-1] for num in self.hard_core if num-1 < len(freq)]
-        if not all_freqs:
-            return set(), set()
-            
-        median_freq = sorted(all_freqs)[len(all_freqs)//2]
-        
-        cold_numbers = set()
-        hot_numbers = set()
-        
-        for num in self.hard_core:
-            if num-1 < len(freq):
-                if freq[num-1] <= median_freq:
-                    cold_numbers.add(num)
-                else:
-                    hot_numbers.add(num)
-        
-        return cold_numbers, hot_numbers
+    def _get_score_bundle(self, freq: np.ndarray) -> dict:
+        """Calculează (o singură dată per matrice) cele 5 dict-uri de scor pentru
+        ÎNTREG universul 1..max_n, memoizat.
+
+        Perf #1: înainte, `_apply_smart_selector` calcula scorurile pe pool, iar
+        `_replace_with_smart_alternatives` le RE-calcula pe universul rămas —
+        dublând cele mai scumpe scanări (gap/positional, O(numere×extrageri)).
+        Scorurile per-număr sunt globale (depind doar de istoric), deci le
+        calculăm o dată pe univers și ambii apelanți indexează subseturi.
+        Cache-ul e invalidat în `_build_draw_matrix` când matricea se schimbă;
+        ambii apelanți pasează același `freq` (pipeline-ul → 717 → 1139)."""
+        cache = getattr(self, "_score_bundle_cache", None)
+        if cache is not None:
+            return cache
+        max_n = int(self.params["max_n"])
+        saved_hc = self.hard_core
+        try:
+            # Funcțiile de scor iterează self.hard_core → îl punem pe tot universul.
+            self.hard_core = list(range(1, max_n + 1))
+            bundle = {
+                "gap": self._calculate_gap_scores(),
+                "trend": self._calculate_trend_scores(),
+                "frequency": self._calculate_frequency_scores(freq),
+                "positional": self._calculate_positional_scores(),
+                "recent": self._calculate_recent_hit_scores(),
+            }
+        finally:
+            self.hard_core = saved_hc
+        self._score_bundle_cache = bundle
+        return bundle
 
     def _apply_smart_selector(self, freq: np.ndarray) -> None:
         """
@@ -1226,11 +1165,12 @@ class LotoEngine:
 
         logging.info("[SMART] Inițiere Smart Selector v2 - analiză multi-factorială...")
 
-        gap_scores = self._calculate_gap_scores()
-        trend_scores = self._calculate_trend_scores()
-        frequency_scores = self._calculate_frequency_scores(freq)
-        positional_scores = self._calculate_positional_scores()
-        recent_hit_scores = self._calculate_recent_hit_scores()
+        _bundle = self._get_score_bundle(freq)
+        gap_scores = _bundle["gap"]
+        trend_scores = _bundle["trend"]
+        frequency_scores = _bundle["frequency"]
+        positional_scores = _bundle["positional"]
+        recent_hit_scores = _bundle["recent"]
 
         final_scores = {}
         for num in self.hard_core:
@@ -1415,17 +1355,26 @@ class LotoEngine:
             return {num: 0.5 for num in self.hard_core}
         
         positional_scores = {}
-        draw_n = self.params["draw_n"]
-        
+        draw_n = int(self.params["draw_n"])
+        max_n = int(self.params["max_n"])
+
+        # Perf #1: numărăm aparițiile per (număr, poziție) VECTORIZAT, o singură
+        # dată, în loc de o buclă triplă (rând × poziție) per fiecare număr.
+        # counts[v, pos] = câte extrageri au pe coloana `pos` valoarea `v`.
+        m = self._draw_matrix
+        # Matricea poate avea mai puține coloane decât draw_n (CSV cu mai puține
+        # coloane de numere) — originalul itera enumerate(row), deci pozițiile
+        # lipsă rămân 0. Replicăm exact: umplem doar coloanele existente.
+        actual_cols = m.shape[1]
+        counts = np.zeros((max_n + 1, draw_n), dtype=np.float64)
+        for pos in range(min(draw_n, actual_cols)):
+            col = m[:, pos]
+            valid = col[(col >= 1) & (col <= max_n)]
+            counts[:, pos] = np.bincount(valid, minlength=max_n + 1)[: max_n + 1]
+
         for num in self.hard_core:
-            position_counts = np.zeros(draw_n)
-            
-            # Numărăm aparițiile pe fiecare poziție
-            for row in self._draw_matrix:
-                for pos, val in enumerate(row):
-                    if val == num:
-                        position_counts[pos] += 1
-            
+            position_counts = counts[num] if 1 <= num <= max_n else np.zeros(draw_n)
+
             # Scor bazat pe consistența pozițională
             total_appearances = np.sum(position_counts)
             if total_appearances == 0:
@@ -1444,12 +1393,29 @@ class LotoEngine:
         logging.info(f"[SMART] Positional scores calculated: {positional_scores}")
         return positional_scores
     
+    def _appearance_index(self) -> dict:
+        """Map memoizat num -> np.ndarray cu indecșii (sortați) extragerilor în
+        care apare num. Construit O(numere×extrageri) o singură dată per matrice,
+        înlocuind scanările per-număr din _calculate_average_gap/_get_last_appearance
+        (perf #1). Invalidat în _build_draw_matrix."""
+        idx = getattr(self, "_appear_idx_cache", None)
+        if idx is not None:
+            return idx
+        idx = {}
+        m = self._draw_matrix
+        if m is not None and m.size:
+            max_n = int(self.params["max_n"])
+            for num in range(1, max_n + 1):
+                idx[num] = np.where((m == num).any(axis=1))[0]
+        self._appear_idx_cache = idx
+        return idx
+
     def _get_last_appearance(self, num: int) -> int:
         """Returnează indexul ultimei apariții a unui număr"""
         if self._draw_matrix is not None:
-            for i in range(len(self._draw_matrix) - 1, -1, -1):
-                if num in self._draw_matrix[i]:
-                    return i
+            appearances = self._appearance_index().get(num)
+            if appearances is not None and len(appearances):
+                return int(appearances[-1])
         return -1
     
     def _calculate_recent_frequency(self, num: int, recent_draws: int, offset: int = 0) -> float:
@@ -1485,31 +1451,33 @@ class LotoEngine:
         all_numbers = set(range(1, self.params["max_n"] + 1))
         current_pool = set(kept_numbers)
         available_numbers = all_numbers - current_pool
+        # Inversare automată: nu permitem reintroducerea numerelor excluse forțat.
+        _force_excl = getattr(self, "_force_exclude", None)
+        if _force_excl:
+            available_numbers -= _force_excl
 
         alternative_scores: dict = {}
-        temp_hard_core = list(available_numbers)
-        original_hard_core = self.hard_core.copy()
-        try:
-            self.hard_core = temp_hard_core
+        # Bundle de scoruri memoizat pe tot universul (perf #1) — nu mai
+        # re-calculăm cele 5 dict-uri (gap/positional sunt scumpe). Subsetul
+        # `available_numbers` ⊂ univers, deci .get(num) e identic cu varianta
+        # care punea temporar self.hard_core = available_numbers.
+        _bundle = self._get_score_bundle(freq)
+        gap_scores = _bundle["gap"]
+        trend_scores = _bundle["trend"]
+        frequency_scores = _bundle["frequency"]
+        positional_scores = _bundle["positional"]
+        recent_hit_scores = _bundle["recent"]
 
-            gap_scores = self._calculate_gap_scores()
-            trend_scores = self._calculate_trend_scores()
-            frequency_scores = self._calculate_frequency_scores(freq)
-            positional_scores = self._calculate_positional_scores()
-            recent_hit_scores = self._calculate_recent_hit_scores()
+        # Aceleași weights ca _apply_smart_selector v2
+        for num in available_numbers:
+            alternative_scores[num] = (
+                gap_scores.get(num, 0) * 0.30 +
+                trend_scores.get(num, 0) * 0.15 +
+                frequency_scores.get(num, 0) * 0.15 +
+                positional_scores.get(num, 0) * 0.10 +
+                recent_hit_scores.get(num, 0) * 0.30
+            )
 
-            # Aceleași weights ca _apply_smart_selector v2
-            for num in available_numbers:
-                alternative_scores[num] = (
-                    gap_scores.get(num, 0) * 0.30 +
-                    trend_scores.get(num, 0) * 0.15 +
-                    frequency_scores.get(num, 0) * 0.15 +
-                    positional_scores.get(num, 0) * 0.10 +
-                    recent_hit_scores.get(num, 0) * 0.30
-                )
-        finally:
-            self.hard_core = original_hard_core
-        
         # Sortăm alternative după scor
         sorted_alternatives = sorted(alternative_scores.items(), key=lambda x: x[1], reverse=True)
         
@@ -1537,11 +1505,10 @@ class LotoEngine:
             return 0.0
             
         appearances = []
-        
+
         if self._draw_matrix is not None and self._draw_matrix.size:
-            for i, row in enumerate(self._draw_matrix):
-                if num in row:
-                    appearances.append(i)
+            # Index precalculat (perf #1) — fără re-scanarea matricei per număr.
+            appearances = self._appearance_index().get(num, [])
         else:
             # Fallback
             for i, row in self.data.iterrows():
@@ -1556,90 +1523,14 @@ class LotoEngine:
                 except (ValueError, TypeError) as exc:
                     logging.debug("avg_gap: skip row (parse): %s", exc)
                     continue
-        
+
         if len(appearances) < 2:
             return float(len(self.data))  # Dacă a apărut o dată sau niciodată
-            
+
         gaps = [appearances[i+1] - appearances[i] for i in range(len(appearances)-1)]
         return sum(gaps) / len(gaps) if gaps else float(len(self.data))
     
-    def _replace_inactive_numbers(self, excluded_numbers: list, freq: np.ndarray) -> None:
-        """Înlocuiește numerele inactive cu cele mai bune alternative."""
-        # Găsim cele mai bune alternative (cele mai frecvente numere care nu sunt în nucleu)
-        all_numbers = set(range(1, self.params["max_n"] + 1))
-        current_pool = set(self.hard_core)
-        available_numbers = all_numbers - current_pool
-        
-        # Sortăm disponibile după frecvență (descrescător)
-        available_sorted = sorted(available_numbers, 
-                                key=lambda x: freq[x-1] if x-1 < len(freq) else 0, 
-                                reverse=True)
-        
-        # Înlocuim numerele excluse
-        for i, excluded_num in enumerate(excluded_numbers):
-            if i < len(available_sorted):
-                replacement = available_sorted[i]
-                # Găsim indexul numărului exclus și îl înlocuim
-                idx = self.hard_core.index(excluded_num)
-                self.hard_core[idx] = replacement
-                logging.info(f"[TIMESFM] Înlocuit {excluded_num} cu {replacement}")
-        
-        # Reactualizăm statisticile
-        self.hard_core_stats = {int(num): int(freq[num-1]) for num in self.hard_core}
     
-    def _apply_timesfm_filter_joker(self) -> None:
-        """Aplică filtrul TimesFM și pentru numerele Joker."""
-        if not hasattr(self, 'hard_core_joker') or not self.hard_core_joker:
-            return
-            
-        freq_joker = self.analyze_joker_frequency()
-        exclusion_candidates = {}
-        
-        for num in self.hard_core_joker:
-            num_idx = num - 1
-            if num_idx >= len(freq_joker):
-                continue
-                
-            abs_freq = freq_joker[num_idx]
-            total_joker_draws = np.sum(freq_joker)
-            rel_freq = abs_freq / total_joker_draws if total_joker_draws > 0 else 0
-            
-            # Pentru Joker, criteriul e mai strict (excludem doar dacă frecvența e foarte mică)
-            inactivity_score = 1 - rel_freq
-            exclusion_candidates[num] = inactivity_score
-        
-        # Excludem doar dacă scorul > 0.8 (foarte rar)
-        numbers_to_exclude = [num for num, score in exclusion_candidates.items() if score > 0.8]
-        
-        if numbers_to_exclude:
-            # Găsim alternative
-            all_joker = set(range(1, 21))  # Joker: 1-20
-            current_joker = set(self.hard_core_joker)
-            available_joker = all_joker - current_joker
-            
-            available_sorted = sorted(available_joker, 
-                                    key=lambda x: freq_joker[x-1] if x-1 < len(freq_joker) else 0, 
-                                    reverse=True)
-            
-            for i, excluded_num in enumerate(numbers_to_exclude):
-                if i < len(available_sorted):
-                    replacement = available_sorted[i]
-                    idx = self.hard_core_joker.index(excluded_num)
-                    self.hard_core_joker[idx] = replacement
-            
-            # Salvăm în audit
-            if 'timesfm_excluded_joker' not in self.audit:
-                self.audit['timesfm_excluded_joker'] = {}
-                
-            for num in numbers_to_exclude:
-                inactivity_pct = int(exclusion_candidates[num] * 100)
-                self.audit['timesfm_excluded_joker'][num] = inactivity_pct
-                
-            logging.info(f"[TIMESFM] Excluse {len(numbers_to_exclude)} numere Joker inactive: {numbers_to_exclude}")
-            
-        # Reactualizăm statisticile Joker
-        self.hard_core_joker_stats = {int(num): int(freq_joker[num-1]) for num in self.hard_core_joker}
-
     def _scores_via_bench_winner(self, is_joker_drum: bool = False) -> Dict[int, float]:
         """Route scoring through the benchmark-winning method for this game/pool.
 

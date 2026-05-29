@@ -179,15 +179,15 @@ class LotoBacktester:
         
         return cols[:self.params["draw_n"]]
     
-    def get_last_percentile_draws(self, percentile: float = 20.0) -> List[Tuple[Optional[str], Set[int]]]:
+    def get_last_percentile_draws(self, percentile: float = 20.0) -> List[Tuple[int, Optional[str], Set[int]]]:
         """
         Returnează ultimele N% extrageri pentru evaluare.
-        
+
         Args:
             percentile: Procentul din extrageri (default 20%)
-            
+
         Returns:
-            Lista de tuple (data, numere) pentru perioada evaluată
+            Lista de tuple (index, data, numere) pentru perioada evaluată
         """
         if not self.draws:
             return []

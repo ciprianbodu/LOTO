@@ -80,6 +80,15 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
             )
             """
         )
+        # Migrare: coloană de heartbeat folosită pentru a distinge un job VIU
+        # (worker activ, heartbeat recent) de unul ORFAN (worker mort). Necesară
+        # pentru fetch_running_job — vezi mai jos.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "updated_at" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN updated_at TIMESTAMP")
+            # Backfill: pentru rândurile existente folosim created_at ca punct de
+            # plecare, ca să nu fie considerate instant orfane.
+            conn.execute("UPDATE jobs SET updated_at = created_at WHERE updated_at IS NULL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS pipeline_cache (
@@ -115,29 +124,50 @@ def get_job_status(job_id: int, db_path: str = DB_PATH) -> dict[str, Any] | None
     return dict(row) if row else None
 
 
+def get_active_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+    """Read-only: cel mai recent job PENDING/RUNNING (FĂRĂ a-l revendica).
+
+    Folosit de UI ca să se re-ataşeze la un job în curs după un reload de pagină
+    sau tab nou — altfel `active_job_id` (doar în session_state) se pierde și
+    rezultatul rămâne orfan în DB, fără să fie vreodată afișat."""
+    init_job_queue(db_path)
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM jobs WHERE status IN (?, ?) ORDER BY id DESC LIMIT 1",
+            (JOB_PENDING, JOB_RUNNING),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
     """Actualizează progresul unui job și întoarce True dacă jobul a fost anulat între timp."""
     init_job_queue(db_path)
     pct_i = max(0, min(100, int(pct)))
     line = str(log_msg or "").strip()
-    if not line:
-        return False
-    ts = datetime.now().strftime("%H:%M:%S")
-    stamped = f"[{ts}] {line}"
     with _connect(db_path) as conn:
-        current = conn.execute(
-            "SELECT log_tail FROM jobs WHERE id = ?",
-            (int(job_id),),
-        ).fetchone()
-        prev_tail = (current["log_tail"] if current else "") if current else ""
-        merged = (prev_tail + ("\n" if prev_tail else "") + stamped).strip()
-        # keep tail compact to avoid unbounded growth
-        if len(merged) > 6000:
-            merged = merged[-6000:]
-        conn.execute(
-            "UPDATE jobs SET progress_pct = ?, log_tail = ? WHERE id = ?",
-            (pct_i, merged, int(job_id)),
-        )
+        if line:
+            ts = datetime.now().strftime("%H:%M:%S")
+            stamped = f"[{ts}] {line}"
+            current = conn.execute(
+                "SELECT log_tail FROM jobs WHERE id = ?",
+                (int(job_id),),
+            ).fetchone()
+            prev_tail = (current["log_tail"] if current else "") if current else ""
+            merged = (prev_tail + ("\n" if prev_tail else "") + stamped).strip()
+            # keep tail compact to avoid unbounded growth
+            if len(merged) > 6000:
+                merged = merged[-6000:]
+            conn.execute(
+                "UPDATE jobs SET progress_pct = ?, log_tail = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (pct_i, merged, int(job_id)),
+            )
+        else:
+            # Mesaj gol: tot actualizăm progresul + heartbeat (fără a adăuga în
+            # log_tail) — altfel cancel-ul nu era detectat și heartbeat-ul lipsea.
+            conn.execute(
+                "UPDATE jobs SET progress_pct = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (pct_i, int(job_id)),
+            )
         conn.commit()
 
     # Verificăm statusul după update pentru a semnaliza oprirea dacă e cazul
@@ -201,23 +231,43 @@ def _claim_job(
     return get_job_status(job_id, db_path=db_path)
 
 
+# Câte secunde fără heartbeat (updated_at) până considerăm un job RUNNING drept
+# orfan (worker mort). Trebuie să fie comod mai mare decât cea mai lungă pauză
+# TĂCUTĂ din pipeline (fără update de progres) — ex. cold-load TimesFM + prima
+# inferență pe CPU, sau pasele regresive grele — altfel un worker VIU lent ar fi
+# considerat orfan și job-ul i-ar fi re-revendicat (dublă execuție). Un worker
+# MORT rămâne mort, deci recuperarea funcționează la orice prag; mărim pragul ca
+# să eliminăm fals-pozitivele. (Soluția pe deplin robustă ar fi un thread
+# watchdog care bate heartbeat independent de granularitatea progresului.)
+STALE_RUNNING_SEC = 600
+
+
 def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return _claim_job(
         db_path,
         where_sql="status = ?",
         where_params=(JOB_PENDING,),
-        update_sql="UPDATE jobs SET status = ?, progress_pct = 1 WHERE id = ?",
+        update_sql="UPDATE jobs SET status = ?, progress_pct = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         update_extra_params=(JOB_RUNNING,),
     )
 
 
 def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
-    """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker)."""
+    """Re-revendicăm DOAR job-uri RUNNING orfane (worker mort), recunoscute prin
+    heartbeat stale (`updated_at` mai vechi de STALE_RUNNING_SEC).
+
+    Vechea condiție (`progress_pct <= 5`) nu putea distinge un job proaspăt pornit
+    de un worker VIU de unul orfan, deci doi workeri concurenți puteau revendica
+    și rula același job. Heartbeat-ul rezolvă asta: un worker viu actualizează
+    `updated_at` la fiecare update de progres."""
     return _claim_job(
         db_path,
-        where_sql="status = ? AND progress_pct <= 5",
+        where_sql=(
+            "status = ? AND (updated_at IS NULL "
+            f"OR updated_at <= datetime('now', '-{int(STALE_RUNNING_SEC)} seconds'))"
+        ),
         where_params=(JOB_RUNNING,),
-        update_sql="UPDATE jobs SET progress_pct = 2 WHERE id = ?",
+        update_sql="UPDATE jobs SET progress_pct = 2, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
 
 

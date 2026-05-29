@@ -35,10 +35,6 @@ CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 MIN_TEST_DRAWS_FOR_STABILITY = 30
 
 
-def _safe_lift(method_hits: float, random_hits: float) -> float:
-    return float(method_hits) - float(random_hits)
-
-
 def _windows_method_beats_random(
     sub_real_method: pd.DataFrame,
     sub_real_random: pd.DataFrame,

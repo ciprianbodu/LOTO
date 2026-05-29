@@ -16,12 +16,12 @@ from job_queue import (
     cancel_pending_running_jobs,
     clear_pipeline_cache,
     fail_running_jobs,
+    get_active_job,
     get_job_status,
-    is_job_cancelled,
     reset_job_queue,
     submit_job,
 )
-from cancel import is_engine_busy, lock_engine, unlock_engine
+from cancel import lock_engine, unlock_engine
 from loto_enterprise.core.backtesting import LotoBacktester
 import subprocess
 import psutil
@@ -192,8 +192,8 @@ def generate_hard_core_description(
     if 'anomaly_filter' in audit:
         filter_methods.append("🚀 Neural Anomaly Scoring")
         
-    if 'adaptive_bias' in audit or True: # Fiind implementat în engine, îl marcăm
-        filter_methods.append("🧠 Adaptive Local Tuning")
+    # Adaptive Local Tuning e mereu activ în engine — îl marcăm necondiționat.
+    filter_methods.append("🧠 Adaptive Local Tuning")
     
     # Construire descriere
     desc_parts = []
@@ -338,11 +338,6 @@ if "consecutive_filter_val" not in st.session_state:
     st.session_state["consecutive_filter_val"] = True
 
 # Mutat aici pentru a permite paginii sa se randeze partial inainte de blocaje
-def ensure_worker_running():
-    """Verifică dacă worker.py este activ (pornit acum de scriptul .bat)."""
-    # Nu mai pornim worker-ul de aici pentru a evita versiuni vechi ascunse în fundal
-    pass
-
 def _ensure_worker_running_runtime():
     if _is_worker_running():
         return
@@ -474,9 +469,20 @@ def reset_sidebar_settings():
     time.sleep(0.5)
 
 def _decode_queue_result(result_json: str) -> object:
-    data = json.loads(result_json)
-    blob = base64.b64decode(str(data.get("payload", "")))
-    return pickle.loads(blob)
+    # Defensiv: la cancel-race worker-ul poate scrie payload gol ("{}"); fără
+    # acest guard, base64/pickle pe "" aruncă EOFError → pagină roșie Streamlit.
+    # Întoarcem None, iar apelantul tratează deja non-tuple ca rezultat invalid.
+    try:
+        data = json.loads(result_json)
+    except Exception:
+        return None
+    payload = str((data or {}).get("payload", "")) if isinstance(data, dict) else ""
+    if not payload:
+        return None
+    try:
+        return pickle.loads(base64.b64decode(payload))
+    except Exception:
+        return None
 
 
 def _fmt_pool_inline(pool: list) -> str:
@@ -2177,6 +2183,14 @@ if st.session_state.get("queue_submit_requested") and not st.session_state.get("
         st.session_state["queue_submit_requested"] = False
         st.rerun()
 
+# Re-ataşare după reload/tab nou: active_job_id trăiește doar în session_state
+# (se pierde la refresh — iar app-ul se auto-reîncarcă la 5 min în timpul bench-ului).
+# Dacă există un job PENDING/RUNNING în DB dar nu avem unul în sesiune, ne re-legăm.
+if not st.session_state.get("active_job_id"):
+    _active = get_active_job()
+    if _active:
+        st.session_state["active_job_id"] = int(_active["id"])
+
 if st.session_state.get("active_job_id"):
     job_id = int(st.session_state["active_job_id"])
     st.info(f"⏳ Job în rulare (#{job_id})...")
@@ -2533,8 +2547,12 @@ if "persistent_results" in st.session_state:
                 data = outputs[game]
                 st.markdown(f'<div class="loto-card">', unsafe_allow_html=True)
                 st.markdown(f'<div class="loto-header">{game.upper()}</div>', unsafe_allow_html=True)
-                
+
                 audit = data.get('audit', {})
+                # Hard-core pool (pool final) — citit aici sus pentru ca este folosit
+                # mai jos la cross-check-ul mesajelor de audit (_final_pool_set).
+                hc = data.get('hard_core', [])
+                hc_stats = data.get('hard_core_stats', {})
                 
                 # Afișăm mesaj pentru sistemul inteligent de reducere
                 if 'reduction_filter' in audit and audit['reduction_filter']:
@@ -2724,31 +2742,37 @@ if "persistent_results" in st.session_state:
                             st.markdown(html, unsafe_allow_html=True)
                     st.markdown("<hr style='margin: 10px 0; border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
 
-                hc = data.get('hard_core', [])
-                hc_stats = data.get('hard_core_stats', {})
                 total_draws = data.get('total_draws', 1)
                 if total_draws == 0: total_draws = 1
 
                 # === Banner Auto-Invert (daca a fost activat la rulare) ===
+                # Afișăm AMBELE pool-uri ca rânduri: 🅰️ Pool A (runda 1, exclus) cu
+                # badge-uri + frecvențe, și 🅱️ Pool B = nucleul dur de mai jos.
                 if data.get("auto_invert"):
-                    excluded = data.get("first_pool_excluded", [])
-                    if excluded:
-                        excl_badges = " ".join(
-                            f"<span style='background: #6c757d; color: white; padding: 2px 8px; "
-                            f"border-radius: 4px; margin: 2px; display: inline-block;'>{int(n)}</span>"
-                            for n in excluded
-                        )
+                    _pa = data.get("auto_invert_pool_a") or {}
+                    pa_pool = _pa.get("hard_core") or data.get("first_pool_excluded", [])
+                    pa_stats = _pa.get("hard_core_stats", {})
+                    if pa_pool:
+                        pa_badges = ""
+                        for n in pa_pool:
+                            _h = pa_stats.get(str(n), pa_stats.get(n, 0))
+                            _pct = f"{int((_h / total_draws) * 100)}%" if isinstance(_h, int) and total_draws else "?"
+                            pa_badges += (
+                                f"<span class='loto-badge-hc' style='background:#6c757d;' "
+                                f"title='A apărut de {_h} ori'>{int(n)} "
+                                f"<small style='font-size:0.7em; opacity:0.9; font-weight:bold;'>({_pct})</small></span> "
+                            )
                         st.markdown(
                             f"<div style='background: rgba(255, 193, 7, 0.10); padding: 12px; "
                             f"border-radius: 8px; border-left: 4px solid #ffc107; margin: 10px 0;'>"
-                            f"<div style='color: #ffc107; font-weight: bold; margin-bottom: 6px;'>"
-                            f"🔄 Inversare automată ACTIVĂ</div>"
-                            f"<div style='font-size: 0.9em; color: #ccc; margin-bottom: 8px;'>"
-                            f"Pool-ul inițial (pasul 1, EXCLUS din runda 2):</div>"
-                            f"<div>{excl_badges}</div>"
-                            f"<div style='font-size: 0.85em; color: #aaa; margin-top: 8px;'>"
-                            f"Pool-ul afișat mai jos este rezultatul rulării a doua, "
-                            f"<strong>fără</strong> aceste {len(excluded)} numere.</div>"
+                            f"<div style='color: #ffc107; font-weight: bold; margin-bottom: 8px;'>"
+                            f"🔄 Inversare automată ACTIVĂ — 2 pool-uri</div>"
+                            f"<div style='font-size: 0.9em; color: #ccc; margin-bottom: 6px;'>"
+                            f"🅰️ <strong>Pool A</strong> (runda 1 — EXCLUS din runda 2):</div>"
+                            f"<div style='margin-bottom: 8px;'>{pa_badges}</div>"
+                            f"<div style='font-size: 0.85em; color: #aaa;'>"
+                            f"🅱️ <strong>Pool B</strong> (afișat mai jos) e generat <strong>fără</strong> "
+                            f"cele {len(pa_pool)} numere din A.</div>"
                             f"</div>",
                             unsafe_allow_html=True,
                         )
