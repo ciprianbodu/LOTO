@@ -42,6 +42,10 @@ bench_results/
 # Per-machine runtime state (regenerated each pipeline run)
 pool_history.json
 
+# Backup/temp produse de scrierea atomică (atomic_io)
+*.bak
+*.tmp
+
 # Auto-Pilot runtime flags
 .bench_pid
 .regenerate_after_bench

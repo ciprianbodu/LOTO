@@ -241,5 +241,6 @@ def update_best_methods_with_auto_pilot(
     for gk in games:
         games[gk]["auto_pilot_per_pool"] = matrix.get(gk, {})
 
-    bm_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    from loto_enterprise.core.atomic_io import atomic_write_json
+    atomic_write_json(bm_path, cfg)  # scriere atomică (tmp+fsync+os.replace+.bak)
     return matrix

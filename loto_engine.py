@@ -885,8 +885,8 @@ class LotoEngine:
                 "pool": self.hard_core,
                 "date": datetime.now().isoformat()
             }
-            with open(history_file, "w") as f:
-                json.dump(history, f)
+            from loto_enterprise.core.atomic_io import atomic_write_json
+            atomic_write_json(history_file, history, keep_backup=False)  # atomic; .bak inutil aici
                 
             self.audit["pool_variation"] = pool_variation
         except Exception as e:
