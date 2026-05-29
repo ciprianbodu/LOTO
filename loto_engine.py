@@ -116,7 +116,11 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     
     iteration = 0
     max_search_per_iter = 10000 if pool_len <= 15 else 50000
-    
+
+    # P3: cache ticket→target-set. Același ticket reapare la iterații diferite
+    # (base_ticket overlap) → evităm recalcul itertools.combinations. Bit-identic.
+    _tt_cache: dict = {}
+
     while len(covered_targets) < total_targets:
         if max_variants > 0 and len(wheel) >= max_variants:
             logging.info(f"[WHEEL] S-a atins limita maxima cerută de variante: {max_variants}.")
@@ -146,9 +150,12 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
             # începând cu cele mai bune numere (scor maxim).
             for extra_nums in itertools.combinations(remaining_pool, pick - guarantee):
                 ticket = tuple(sorted(list(base_ticket) + list(extra_nums)))
-                
-                # Evaluăm rapid
-                ticket_targets = set(itertools.combinations(ticket, guarantee))
+
+                # Evaluăm rapid (cu cache pe ticket — P3)
+                ticket_targets = _tt_cache.get(ticket)
+                if ticket_targets is None:
+                    ticket_targets = set(itertools.combinations(ticket, guarantee))
+                    _tt_cache[ticket] = ticket_targets
                 new_coverage = ticket_targets - covered_targets
                 
                 if len(new_coverage) > best_coverage:

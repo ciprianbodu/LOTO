@@ -343,6 +343,16 @@ def run_benchmark(
         rng.shuffle(idx)
         shuffled_draws = draws[idx]
 
+        # P1: hash CSV o SINGURĂ dată per joc (draws e identic la toate fold-urile;
+        # înainte era recalculat la fiecare fold → ~1280× degeaba).
+        csv_hash_game = None
+        if use_cache:
+            try:
+                from .bench_cache import compute_csv_hash, get_cached_fold, store_cached_fold
+                csv_hash_game = compute_csv_hash(draws)
+            except Exception as _cache_exc:
+                logger.debug(f"[bench_cache] init/hash failed: {_cache_exc}")
+
         for method in methods:
             meta = method_meta_map[method]
             if not meta["available"]:
@@ -374,13 +384,9 @@ def run_benchmark(
                     # use_cache=False -> ignoram cache complet (utilizator a fortat
                     # rebench, sau hardware s-a schimbat de la CPU la GPU).
                     cached_fr = None
-                    csv_hash_for_fold = None
-                    if use_cache:
+                    csv_hash_for_fold = csv_hash_game  # hoisted per-game (P1)
+                    if use_cache and csv_hash_for_fold is not None:
                         try:
-                            from .bench_cache import compute_csv_hash, get_cached_fold, store_cached_fold
-                            # Hash pe DRAWS-ul complet pentru consistenta intre fold-uri
-                            # cu acelasi CSV, dar percentile/method/game distinct.
-                            csv_hash_for_fold = compute_csv_hash(draws)
                             cached_fr = get_cached_fold(csv_hash_for_fold, method, pct, game.key, is_random)
                         except Exception as _cache_exc:
                             logger.debug(f"[bench_cache] lookup failed: {_cache_exc}")
