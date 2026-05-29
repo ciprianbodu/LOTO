@@ -55,11 +55,8 @@ logger = logging.getLogger("app_nicegui")
 # Constante / căi de stare pe disc (compatibile cu app.py & worker)
 # --------------------------------------------------------------------------- #
 UI_STATE_FILE = PROJECT_ROOT / ".ui_state.json"
-UPLOAD_DIR = PROJECT_ROOT / "uploaded_data"
-UPLOAD_MANIFEST = UPLOAD_DIR / "manifest.json"
 BENCH_PID_FILE = PROJECT_ROOT / ".bench_pid"
 BENCH_LOG_FILE = PROJECT_ROOT / "bench_full.log"
-KNOWN_CSVS = ["joker.csv", "loto_6_49.csv", "loto_5_40.csv", "input.csv"]
 
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
@@ -127,46 +124,6 @@ def _game_label_for(fname: str) -> str:
     if "joker" in low:
         return "joker"
     return "6/49"
-
-
-# --------------------------------------------------------------------------- #
-# Datasets (upload + auto-load de pe disk)
-# --------------------------------------------------------------------------- #
-def _load_datasets_from_disk() -> None:
-    """Restaurează CSV-urile încărcate (orice nume) din manifest, apoi fallback
-    la numele cunoscute — identic cu auto-load-ul din app.py."""
-    auto_ds = []
-    if UPLOAD_MANIFEST.exists():
-        try:
-            for name in json.loads(UPLOAD_MANIFEST.read_text(encoding="utf-8")):
-                fp = UPLOAD_DIR / name
-                if fp.exists():
-                    auto_ds.append((name, pd.read_csv(fp)))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("auto-load manifest: %s", exc)
-    if not auto_ds:
-        for name in KNOWN_CSVS:
-            fp = PROJECT_ROOT / name
-            if fp.exists():
-                try:
-                    auto_ds.append((name, pd.read_csv(fp)))
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("auto-load %s: %s", name, exc)
-    STATE["datasets"] = auto_ds
-
-
-def _persist_uploaded(name: str, content: bytes) -> None:
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    (UPLOAD_DIR / name).write_bytes(content)
-    names = []
-    if UPLOAD_MANIFEST.exists():
-        try:
-            names = json.loads(UPLOAD_MANIFEST.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            names = []
-    if name not in names:
-        names.append(name)
-    UPLOAD_MANIFEST.write_text(json.dumps(names), encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -590,13 +547,6 @@ STAGE_META = [
 ]
 
 
-def _game_key_from(game: str) -> str:
-    low = game.lower()
-    if "5/40" in low or "5_40" in low:
-        return "5/40"
-    if "joker" in low:
-        return "joker"
-    return "6/49"
 
 
 def _render_audit(audit: dict, final_pool: set) -> None:
@@ -674,7 +624,7 @@ def _render_stages(audit: dict) -> None:
 
 
 def _render_cost(game: str, data: dict) -> None:
-    gk = _game_key_from(game)
+    gk = _game_label_for(game)
     price = PRICES.get(gk, 8.0)
     draw_n = 6 if gk == "6/49" else 5
     pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
@@ -762,7 +712,7 @@ def _render_adaptive(audit: dict) -> None:
 def _render_walk_forward(flat, game: str) -> None:
     if not flat:
         return
-    gk = _game_key_from(game)
+    gk = _game_label_for(game)
     draw_n = 6 if gk == "6/49" else 5
     n = len(flat)
     uniq = {getattr(p, "draw_index", i) for i, p in enumerate(flat)}
