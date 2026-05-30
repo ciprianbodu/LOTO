@@ -1127,7 +1127,10 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
                 else:
                     nums = ", ".join(str(int(x)) for x in v)
-                ui.label(f"V{i:>3}: {nums}").classes("font-mono text-sm")
+                ui.html(
+                    f"<span style='color:#6b7280;font-weight:600'>V{i:>3}:</span> "
+                    f"<span style='color:#e5e7eb'>{nums}</span>"
+                ).classes("font-mono text-sm")
             if len(variants) > 10:
                 def _toggle(k=skey):
                     STATE["show_all"][k] = not STATE["show_all"].get(k, False)
