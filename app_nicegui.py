@@ -1333,8 +1333,8 @@ def analysis_panel() -> None:
         reports = check_freshness()
         rec = aggregate_recommendation(reports)
         rec_lbl = {"use_cache": "✅ Cache valid — fără re-bench",
-                   "quick_rebench": "🟡 Quick re-bench recomandat",
-                   "full_rebench": "🔴 Full re-bench recomandat"}.get(rec, rec)
+                   "quick_rebench": "🟡 Re-bench recomandat (drift ușor)",
+                   "full_rebench": "🔴 Re-bench recomandat (drift mare)"}.get(rec, rec)
         ui.label(f"Freshness benchmark: {rec_lbl}").classes("text-bold")
         for gk, r in reports.items():
             ui.label(f"  • {gk}: {getattr(r, 'status', '?')} "
