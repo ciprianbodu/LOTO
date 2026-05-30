@@ -1560,11 +1560,11 @@ def main_page() -> None:
         ui.button("🚀 Generează (setări manuale)", on_click=lambda: submit_generation(pure=False)
                   ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
 
-        with ui.expansion("🛠️ Re-Bench / Power-User", value=False).classes("w-full"):
-            _full_eta = _estimate_bench_eta(1280)
-            ui.button(f"🔬 Re-Bench Full ({_full_eta})", on_click=run_full_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
-            ui.label("ETA calibrat după ultima rulare (bench_results/folds.csv).").classes("text-caption")
-            _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
+        ui.separator()
+        _full_eta = _estimate_bench_eta(1280)
+        ui.button(f"🔬 RE-BENCH FULL ({_full_eta})", on_click=run_full_rebench
+                  ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
+        _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
         ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props("color=negative outline no-caps").classes("w-full").style(_BTN_STYLE)
