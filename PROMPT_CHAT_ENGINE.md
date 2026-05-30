@@ -30,27 +30,32 @@ combină-le cu ponderile date. (Toate scorurile se normalizează la [0,1] la fin
 
 **a) Gap (overdue) — pondere 0.30**
 - `appearances` = indicii extragerilor în care a apărut `k`.
-- dacă < 2 apariții → scor 0.5.
-- `avg_gap` = media diferențelor dintre apariții; `current_gap` = N − ultimul_index − 1.
-- scor = `min( (current_gap / avg_gap) / 2 , 1.0 )`. (cu cât e mai „întârziat", mai mare)
+- `avg_gap` = media diferențelor dintre apariții consecutive (interval mediu).
+- `current_gap` = N − index_ultima_apariție.
+- dacă `avg_gap == 0` → scor 0.5; altfel `gap_ratio = current_gap/avg_gap`,
+  **`scor = min(1.0, gap_ratio*0.7 + 0.3)`** (scalat în 0.3–1.0).
 
 **b) Trend — pondere 0.15**
-- numără aparițiile în prima jumătate vs a doua jumătate a istoricului.
-- scor = `aparitii_jumatatea_2 / total_aparitii` (creștere recentă = mai mare). 0.5 dacă 0 apariții.
+- `window = min(20, N//2)`.
+- `recent_freq` = apariții în ultimele `window` extrageri.
+- `older_freq` = apariții în cele `window` extrageri de DINAINTE (offset cu window).
+- dacă `older_freq == 0` → scor `0.6` (dacă recent_freq>0) altfel `0.4`;
+  altfel `trend_ratio = recent_freq/older_freq`, **`scor = min(1, max(0, (trend_ratio−0.5)*2))`**.
 
-**c) Frequency — pondere 0.15**
-- scor = `frecventa(k) / frecventa_maxima` (cât de des a ieșit, normalizat).
+**c) Frequency — pondere 0.15** (min-max pe frecvențele nenule)
+- `max_f`/`min_f` = max/min dintre frecvențele > 0.
+- dacă `max_f == min_f` → 0.5; altfel **`scor = (freq(k) − min_f)/(max_f − min_f)`**.
 
-**d) Positional — pondere 0.10**
-- pentru fiecare poziție din extragere (1..draw_n), construiește distribuția numerelor
-  care apar pe acea poziție; scorul lui `k` = cât de „bine se potrivește" cu pozițiile
-  în care a apărut istoric (medie a probabilităților pozaționale normalizate). Dacă
-  nu poți reproduce exact, aproximează cu: `1 − |rang_mediu_pozitie(k) − pozitie_asteptata| / draw_n`.
+**d) Positional — pondere 0.10** (consistență pozițională)
+- `counts[p]` = de câte ori `k` a apărut pe poziția `p` (0..draw_n−1) în extrageri.
+- `total = sum(counts)`; dacă 0 → 0.5.
+- `probs = counts/total`; `var = varianța(probs)`; **`scor = max(0, 1 − var*draw_n)`**
+  (poziții consistente = scor mare).
 
 **e) Recent-Hits — pondere 0.30**
-- fereastră scurtă `S=15`, lungă `L=50` (sau N/2 dacă N mic).
-- scor = `0.6 * (apariții în ultimele S / S) + 0.4 * (apariții în ultimele L / L)`,
-  normalizat la [0,1]. (numere „fierbinți" recent)
+- `S = min(15, N)`, `L = min(50, N)`.
+- `short_rate` = apariții în ultimele S / S; `long_rate` = apariții în ultimele L / L.
+- **`scor = 0.65*min(1, short_rate*2.5) + 0.35*min(1, long_rate*3.0)`**.
 
 **Scor final** `k`:
 ```
