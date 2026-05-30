@@ -63,12 +63,12 @@ REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
-    "sim_depth_val",
+    "sim_depth_val", "autopilot_after_bench",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
     "lookback_val": 0, "consecutive_filter_val": True, "auto_invert_val": False,
-    "shutdown_on_complete": False, "sim_depth_val": 40,
+    "shutdown_on_complete": False, "sim_depth_val": 40, "autopilot_after_bench": True,
 }
 
 # --------------------------------------------------------------------------- #
@@ -1576,6 +1576,7 @@ def main_page() -> None:
             ui.button(f"🧪 Re-Bench Quick ({_quick_eta})", on_click=run_quick_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
             ui.button(f"🔬 Re-Bench Full ({_full_eta})", on_click=run_full_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
             ui.label("ETA calibrat după ultima rulare (bench_results/folds.csv).").classes("text-caption")
+            _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
         ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props("color=negative outline no-caps").classes("w-full").style(_BTN_STYLE)
@@ -1597,7 +1598,17 @@ def main_page() -> None:
         # Consola e mereu LIVE (citire ieftină a 2 loguri la 2s) — așa vezi bench-ul
         # chiar dacă rulează manual din CMD, nu doar când UI-ul îl pornește.
         logs_panel.refresh()
-        if STATE.get("active_job_id") or _bench_running() or STATE.get("wf_status"):
+        bench_now = _bench_running()
+        # Înlănțuire: Re-Bench tocmai s-a terminat → pornește Auto-Pilot automat
+        if STATE.get("bench_was_running") and not bench_now:
+            STATE["bench_was_running"] = False
+            if (SETTINGS.get("autopilot_after_bench") and not STATE.get("active_job_id")
+                    and STATE["datasets"]):
+                ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
+                apply_autopilot_and_generate()
+        elif bench_now:
+            STATE["bench_was_running"] = True
+        if STATE.get("active_job_id") or bench_now or STATE.get("wf_status"):
             status_panel.refresh()
         if STATE.get("wf_status"):
             results_panel.refresh()  # bara walk-forward se umple live
