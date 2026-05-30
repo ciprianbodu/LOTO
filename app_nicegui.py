@@ -951,7 +951,7 @@ def _build_report() -> str:
         eff, req = d.get("pool_size"), d.get("pool_size_requested")
         out.append(f"{indent}Pool efectiv: {eff}"
                    + (f" (cerut {req})" if req and req != eff else "")
-                   + f" | Garanție: {d.get('guarantee')} | Variante: {len(d.get('variants') or [])}"
+                   + f" | Garanție: {d.get('guarantee')} | Variante simple: {len(d.get('variants') or [])}"
                    + f" | Extrageri: {d.get('total_draws')}")
         out.append(f"{indent}Nucleu dur (nr(frecvență)): "
                    + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool))
@@ -965,7 +965,7 @@ def _build_report() -> str:
             for line in json.dumps(au, indent=2, ensure_ascii=False, default=str).splitlines():
                 out.append(f"{indent}{line}")
         vs = d.get("variants") or []
-        out.append(f"{indent}--- Variante ({len(vs)}) ---")
+        out.append(f"{indent}--- Variante simple ({len(vs)}) ---")
         for i, v in enumerate(vs, 1):
             out.append(f"{indent}  V{i}: " + ", ".join(str(int(x)) for x in v))
 
@@ -1069,7 +1069,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
     with ui.row().classes("gap-6 items-center"):
         ui.label(f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else ""))
         ui.label(f"Garanție: {data.get('guarantee')}")
-        ui.label(f"Variante: {len(variants)}")
+        ui.label(f"Variante simple: {len(variants)}")
         ui.label(f"Extrageri: {data.get('total_draws')}")
 
     # Metoda câștigătoare folosită de scorer (din bench/best_methods.json)
@@ -1120,7 +1120,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         is_jk = "joker" in game.lower()
         skey = f"{fname}_{game}{skey_suffix}"
         show_all = STATE["show_all"].get(skey, False)
-        with ui.expansion(f"Variante ({len(variants)})", value=False).classes("w-full"):
+        with ui.expansion(f"Variante simple ({len(variants)})", value=False).classes("w-full"):
             shown = variants if show_all else variants[:10]
             for i, v in enumerate(shown, 1):
                 if is_jk and len(v) == 6:
