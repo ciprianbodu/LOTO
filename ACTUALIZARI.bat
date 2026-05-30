@@ -204,7 +204,6 @@ echo  Daca freshness e 'quick_rebench' sau 'full_rebench':
 echo    Quick (~5 min):  %VENV_PY% bench_all_methods.py --quick
 echo    Full  (~50 min): %VENV_PY% bench_all_methods.py
 echo  Pentru a porni aplicatia:  START_8000.bat
-echo  Pentru predictie CLI:      %VENV_PY% predict_with_winner.py
 echo ------------------------------------------------------------
 echo.
 pause

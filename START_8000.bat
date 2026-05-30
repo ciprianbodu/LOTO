@@ -185,7 +185,7 @@ start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
 
 echo [4/4] Pornire UI NiceGUI (port 8000)
 REM NiceGUI tine starea pe server si face update prin websocket (fara reload de
-REM pagina) -^> bifele/CSV-ul NU se mai pierd. UI vechi Streamlit: app.py (legacy).
+REM pagina) -^> bifele/CSV-ul NU se mai pierd.
 REM Deschidem browserul automat dupa 5s (timp ca serverul sa porneasca), intr-un
 REM proces paralel ca sa nu blocheze pornirea serverului.
 start "" /min cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:8000"
