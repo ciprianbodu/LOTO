@@ -258,16 +258,6 @@ def run_full_rebench() -> None:
     _launch_bench(["--no-rich", "--percentiles", "10,20,30,40,50,60,70,80,90,100"], "FULL Re-Bench")
 
 
-def run_quick_rebench() -> None:
-    try:
-        from loto_enterprise.benchmark.quick_rebench import quick_rebench_cli_args
-        args = quick_rebench_cli_args()
-    except Exception as exc:  # noqa: BLE001
-        ui.notify(f"Quick args indisponibile ({exc}).", type="negative")
-        return
-    _launch_bench(args, "QUICK Re-Bench")
-
-
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
     """ETA bench pe baza ULTIMEI rulări (bench_results/folds.csv): avg runtime_sec
     al folds-urilor reale × nr. folds × overhead. Fallback la estimarea implicită
@@ -1571,9 +1561,7 @@ def main_page() -> None:
                   ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
 
         with ui.expansion("🛠️ Re-Bench / Power-User", value=False).classes("w-full"):
-            _quick_eta = _estimate_bench_eta(150)
             _full_eta = _estimate_bench_eta(1280)
-            ui.button(f"🧪 Re-Bench Quick ({_quick_eta})", on_click=run_quick_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
             ui.button(f"🔬 Re-Bench Full ({_full_eta})", on_click=run_full_rebench).props("no-caps").classes("w-full").style(_BTN_STYLE)
             ui.label("ETA calibrat după ultima rulare (bench_results/folds.csv).").classes("text-caption")
             _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
