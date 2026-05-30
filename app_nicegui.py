@@ -112,10 +112,10 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
-    # Pool max 20 (bench acoperă doar k6..k20) — clamp valori vechi salvate (ex. 24).
+    # Pool max 16 (la pool mai mare inversarea nu mai merge pe jocuri mici) — clamp valori vechi.
     try:
-        if int(SETTINGS.get("pool_size_val", 10)) > 20:
-            SETTINGS["pool_size_val"] = 20
+        if int(SETTINGS.get("pool_size_val", 10)) > 16:
+            SETTINGS["pool_size_val"] = 16
     except (TypeError, ValueError):
         SETTINGS["pool_size_val"] = 10
 
@@ -1550,7 +1550,7 @@ def main_page() -> None:
             widget.on_value_change(lambda: _save_settings())
             return widget
 
-        _bind_save(ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=20, step=1).classes("w-full"), "pool_size_val")
+        _bind_save(ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=16, step=1).classes("w-full"), "pool_size_val")
         _bind_save(ui.number("Garanție minimă (Set Cover)", min=3, max=5, step=1).classes("w-full"), "guarantee_val")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
