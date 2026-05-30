@@ -67,44 +67,10 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # C. DL Transformers
 # D. DL Probabilistice/Recurente/SSM
 # E. Random baseline + classical for context
-ALL_SPEC_METHODS = [
-    # A — foundation zero-shot
-    "timesfm", "chronos", "moirai", "lag_llama", "moment",
-    "tinytimemixer", "timegpt", "units", "timer",
-    # B — NeuralForecast MLP/linear
-    "nbeats", "nhits", "tide", "dlinear",
-    # C — NeuralForecast transformers
-    "patchtst", "informer", "autoformer", "fedformer",
-    # D — NeuralForecast recurrent/conv + SSM
-    "deepar", "tcn", "mamba",
-    # E — baselines
-    "random", "frequency", "recency",
-
-    # ─── MATEMATICE / STATISTICE / GEOMETRICE (~30, rapide, CPU) ───────────────
-    # Lanțuri Markov & n-grame (secvențial)
-    "markov_1", "markov_2", "markov_3", "ngram_bigram", "ngram_trigram", "vlmm",
-    # Bayesian / urne / count-models
-    "beta_binomial", "polya_urn", "bayes_poisson", "neg_binomial",
-    # Spectral / descompuneri (geometric/frecvențial)
-    "fourier", "wavelet_haar", "stl", "ssa", "dmd", "hmm_gaussian",
-    # Serii temporale clasice
-    "holt_winters", "theta_auto", "ets_auto", "ces_auto", "arima_auto",
-    "croston_classic", "croston_sba", "tsb", "adida", "imapa", "ses",
-    "naive_last", "seasonal_naive", "drift",
-
-    # ─── GPU (ML boosting pe GPU + rețele torch reprezentative) ────────────────
-    "ml_xgb_gpu", "ml_lgbm_gpu", "ml_catboost_gpu",
-    "torch_lstm_m", "torch_bilstm", "torch_gru_m", "torch_lstm_attn",
-    "torch_cnn1d", "torch_tcn", "torch_wavenet", "torch_resnet1d",
-    "torch_transformer", "torch_inception", "torch_squeeze_excite",
-    "torch_dilated_cnn", "torch_mlp_mixer", "torch_cnn_lstm",
-    "torch_bayesian_lstm", "torch_echo_state", "torch_time2vec",
-
-    # ─── ML sklearn extra (gratuite, Python 3.11, fără instalări) ──────────────
-    "ml_hist_gb", "ml_hist_gb_deep", "ml_bernoulli_nb", "ml_complement_nb",
-    "ml_sgd_log", "ml_passive_aggressive", "ml_nearest_centroid", "ml_knn_30",
-    "ml_bagging", "ml_extra_trees_deep", "ml_mlp_deep", "ml_svm_linear", "ml_voting",
-]
+# TOATE metodele disponibile intra in bench full (cerut de utilizator): orice metoda
+# inregistrata in METHODS (acum sau viitoare via extensii) e inclusa automat.
+# Cele indisponibile (lib lipsa) sunt sarite rapid de runner. Ordine = registry.
+ALL_SPEC_METHODS = [m for m in list_methods() if method_meta(m).get("available", True)]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]
 
