@@ -313,7 +313,140 @@ def score_ml_catboost_gpu(draws_2d, max_num):
 # Registry
 # ===========================================================================
 
+def score_ml_hist_gb(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: HistGradientBoostingClassifier(max_iter=120, max_depth=4, random_state=42))
+
+
+def score_ml_hist_gb_deep(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: HistGradientBoostingClassifier(max_iter=200, max_depth=8, l2_regularization=1.0, random_state=42))
+
+
+def score_ml_bernoulli_nb(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.naive_bayes import BernoulliNB
+    return _sklearn_per_number(draws_2d, max_num, lambda: BernoulliNB())
+
+
+def score_ml_complement_nb(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.naive_bayes import ComplementNB
+    return _sklearn_per_number(draws_2d, max_num, lambda: ComplementNB())
+
+
+def score_ml_sgd_log(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.linear_model import SGDClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: SGDClassifier(loss="log_loss", max_iter=400, random_state=42))
+
+
+def score_ml_passive_aggressive(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.linear_model import PassiveAggressiveClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: PassiveAggressiveClassifier(max_iter=400, random_state=42))
+
+
+def score_ml_perceptron(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.linear_model import Perceptron
+    return _sklearn_per_number(draws_2d, max_num, lambda: Perceptron(max_iter=400, random_state=42))
+
+
+def score_ml_ridge_cv(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.linear_model import RidgeClassifierCV
+    return _sklearn_per_number(draws_2d, max_num, lambda: RidgeClassifierCV())
+
+
+def score_ml_nearest_centroid(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.neighbors import NearestCentroid
+    return _sklearn_per_number(draws_2d, max_num, lambda: NearestCentroid())
+
+
+def score_ml_knn_30(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.neighbors import KNeighborsClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: KNeighborsClassifier(n_neighbors=30))
+
+
+def score_ml_bagging(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.ensemble import BaggingClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: BaggingClassifier(n_estimators=30, random_state=42, n_jobs=1))
+
+
+def score_ml_extra_trees_deep(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.ensemble import ExtraTreesClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=120, max_depth=12, random_state=42, n_jobs=1))
+
+
+def score_ml_mlp_deep(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.neural_network import MLPClassifier
+    return _sklearn_per_number(draws_2d, max_num, lambda: MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=400, random_state=42))
+
+
+def score_ml_svm_linear(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.svm import SVC
+    return _sklearn_per_number(draws_2d, max_num, lambda: SVC(kernel="linear", probability=True, random_state=42))
+
+
+def score_ml_voting(draws_2d, max_num):
+    if not _check_sklearn():
+        return {}
+    from sklearn.ensemble import VotingClassifier, HistGradientBoostingClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.naive_bayes import BernoulliNB
+
+    def _mk():
+        return VotingClassifier(
+            estimators=[
+                ("lr", LogisticRegression(max_iter=200)),
+                ("nb", BernoulliNB()),
+                ("hb", HistGradientBoostingClassifier(max_iter=80, max_depth=4, random_state=42)),
+            ],
+            voting="soft",
+        )
+    return _sklearn_per_number(draws_2d, max_num, _mk)
+
+
 ML_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+    # === EXTRA sklearn (gratuite, Python 3.11, fără instalări) 2026-05-30 ===
+    "ml_hist_gb":          (score_ml_hist_gb,          "ml-boost",  True, "HistGradientBoosting (sklearn, rapid)"),
+    "ml_hist_gb_deep":     (score_ml_hist_gb_deep,     "ml-boost",  True, "HistGradientBoosting adânc + L2"),
+    "ml_bernoulli_nb":     (score_ml_bernoulli_nb,     "ml-bayes",  True, "Bernoulli Naive Bayes (binar)"),
+    "ml_complement_nb":    (score_ml_complement_nb,    "ml-bayes",  True, "Complement Naive Bayes"),
+    "ml_sgd_log":          (score_ml_sgd_log,          "ml-linear", True, "SGD log-loss (regresie logistică online)"),
+    "ml_passive_aggressive": (score_ml_passive_aggressive, "ml-linear", True, "Passive-Aggressive"),
+    "ml_perceptron":       (score_ml_perceptron,       "ml-linear", True, "Perceptron"),
+    "ml_ridge_cv":         (score_ml_ridge_cv,         "ml-linear", True, "Ridge Classifier CV"),
+    "ml_nearest_centroid": (score_ml_nearest_centroid, "ml-knn",    True, "Nearest Centroid"),
+    "ml_knn_30":           (score_ml_knn_30,           "ml-knn",    True, "K-NN k=30"),
+    "ml_bagging":          (score_ml_bagging,          "ml-tree",   True, "Bagging (30 estimatori)"),
+    "ml_extra_trees_deep": (score_ml_extra_trees_deep, "ml-tree",   True, "Extra Trees adânc (120)"),
+    "ml_mlp_deep":         (score_ml_mlp_deep,         "ml-nn",     True, "MLP (64,32) sklearn"),
+    "ml_svm_linear":       (score_ml_svm_linear,       "ml-kernel", True, "SVM kernel liniar"),
+    "ml_voting":           (score_ml_voting,           "ml-ensemble", True, "Voting soft (logistic+BNB+HistGB)"),
     # sklearn (all CPU)
     "ml_logistic":      (score_ml_logistic,      "ml-linear",   True,  "Logistic Regression (sklearn)"),
     "ml_ridge":         (score_ml_ridge,         "ml-linear",   True,  "Ridge Classifier"),

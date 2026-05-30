@@ -99,6 +99,11 @@ ALL_SPEC_METHODS = [
     "torch_transformer", "torch_inception", "torch_squeeze_excite",
     "torch_dilated_cnn", "torch_mlp_mixer", "torch_cnn_lstm",
     "torch_bayesian_lstm", "torch_echo_state", "torch_time2vec",
+
+    # ─── ML sklearn extra (gratuite, Python 3.11, fără instalări) ──────────────
+    "ml_hist_gb", "ml_hist_gb_deep", "ml_bernoulli_nb", "ml_complement_nb",
+    "ml_sgd_log", "ml_passive_aggressive", "ml_nearest_centroid", "ml_knn_30",
+    "ml_bagging", "ml_extra_trees_deep", "ml_mlp_deep", "ml_svm_linear", "ml_voting",
 ]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]
