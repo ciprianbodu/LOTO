@@ -139,15 +139,19 @@ def _game_label_for(fname: str) -> str:
 # --------------------------------------------------------------------------- #
 # Submit job (contract config_json identic cu app.py)
 # --------------------------------------------------------------------------- #
-def _build_config_json() -> str:
+def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
+    sim_depth_per_game = sim_depth_per_game or {}
     h = hashlib.sha256()
     for k in ("pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
               "consecutive_filter_val", "sim_depth_val"):
         h.update(str(SETTINGS[k]).encode("utf-8"))
+    h.update(str(sorted(sim_depth_per_game.items())).encode("utf-8"))  # adâncime per joc → cache key
     pure = bool(STATE.get("pure_bench"))
     datasets_cfg = []
     for fname, df in STATE["datasets"]:
         g_label = _game_label_for(fname)
+        # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
+        sd = int(sim_depth_per_game.get(g_label, SETTINGS["sim_depth_val"]))
         task = {
             "game_label": g_label,
             "pool_size": int(SETTINGS["pool_size_val"]),
@@ -156,7 +160,7 @@ def _build_config_json() -> str:
             "lookback": int(SETTINGS["lookback_val"]),
             "filter_consecutives": False if pure else bool(SETTINGS["consecutive_filter_val"]),
             "smart_reduction": False if pure else True,
-            "sim_depth_pct": int(SETTINGS["sim_depth_val"]),
+            "sim_depth_pct": sd,
             "pure_bench_mode": pure,
             "auto_invert": bool(SETTINGS["auto_invert_val"]),
         }
@@ -169,7 +173,7 @@ def _build_config_json() -> str:
     return json.dumps({"input_hash": h.hexdigest(), "use_cache": False, "datasets": datasets_cfg})
 
 
-def submit_generation(pure: bool = False) -> None:
+def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None) -> None:
     if not STATE["datasets"]:
         ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
         return
@@ -182,7 +186,7 @@ def submit_generation(pure: bool = False) -> None:
     STATE["wf_status"] = ""
     ensure_worker_running()
     lock_engine("deterministic_session")
-    cfg = _build_config_json()
+    cfg = _build_config_json(sim_depth_per_game)
     job_id = submit_job("pipeline", cfg)
     STATE["active_job_id"] = int(job_id)
     STATE["job_start_time"] = time.time()
@@ -196,23 +200,25 @@ def apply_autopilot_and_generate() -> None:
     # best_methods.json folosește CHEIA jocului (loto_6_49 ...), nu eticheta scurtă
     # (6/49) întoarsă de _game_label_for → altfel lookup-ul eșua mereu → fallback.
     _LABEL_TO_KEY = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}
+    per_game: dict = {}  # {game_label: sim_depth_pct} — FIECARE joc cu adâncimea lui
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         recs = []
         for fname, _ in STATE["datasets"]:
-            gk = _LABEL_TO_KEY.get(_game_label_for(fname), "loto_6_49")
+            label = _game_label_for(fname)
+            gk = _LABEL_TO_KEY.get(label, "loto_6_49")
             cfg = recommend_optimal_config(gk, int(SETTINGS["pool_size_val"]))
             if cfg and not cfg.get("fallback"):
-                SETTINGS["sim_depth_val"] = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
-                recs.append(f"{gk}: {cfg.get('scorer')} @ {cfg.get('sim_depth_pct')}%")
+                sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
+                per_game[label] = sd
+                recs.append(f"{gk}: {cfg.get('scorer')} @ {sd}%")
         if recs:
-            _save_settings()
-            ui.notify("Auto-Pilot: " + " | ".join(recs), type="info")
+            ui.notify("Auto-Pilot (adâncime per joc): " + " | ".join(recs), type="info")
         else:
             ui.notify("Fără decizie bench încă — rulează un Re-Bench întâi. Folosesc setările curente.", type="warning")
     except Exception as exc:  # noqa: BLE001
         ui.notify(f"Auto-Pilot indisponibil ({exc}); folosesc setările curente.", type="warning")
-    submit_generation(pure=False)
+    submit_generation(pure=False, sim_depth_per_game=per_game)
 
 
 # --------------------------------------------------------------------------- #
