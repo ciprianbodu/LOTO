@@ -955,6 +955,10 @@ def _build_report() -> str:
                    + f" | Extrageri: {d.get('total_draws')}")
         out.append(f"{indent}Nucleu dur (nr(frecvență)): "
                    + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool))
+        _omn = _omnius_for_pool(g, d)
+        if _omn:
+            out.append(f"{indent}⭐ OMNIUS (cel mai bun bilet din acest pool): "
+                       + ", ".join(str(n) for n in _omn))
         if d.get("hard_core_joker"):
             out.append(f"{indent}Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
         if d.get("p10") is not None:
@@ -1116,6 +1120,9 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         if flat:
             _render_walk_forward(flat, game, is_invert=False)
 
+    # OMNIUS — cel mai bun bilet din ACEST pool (separat per pool)
+    _render_omnius_pool(game, data)
+
     if variants:
         is_jk = "joker" in game.lower()
         skey = f"{fname}_{game}{skey_suffix}"
@@ -1146,6 +1153,55 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                           value=False).classes("w-full"):
             ui.code(json.dumps(audit, indent=2, ensure_ascii=False, default=str),
                     language="json").classes("w-full max-h-80 overflow-auto text-xs")
+
+
+def _num_scores(d: dict) -> dict:
+    """Scor per număr: smart_selector.final_scores (preferat) → frecvență → gol."""
+    au = d.get("audit") or {}
+    ss = (au.get("smart_selector") or {}).get("final_scores") or {}
+    if ss:
+        return {int(k): float(v) for k, v in ss.items()}
+    stats = d.get("hard_core_stats") or {}
+    try:
+        return {int(k): float(v) for k, v in stats.items()}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _omnius_for_pool(game: str, d: dict) -> list:
+    """Cel mai bun bilet din ACEST pool: top draw_n numere după scor (smart-selector
+    → frecvență). Separat per pool (nu combină pool-uri)."""
+    gk = _game_label_for(game)
+    draw_n = 6 if gk == "6/49" else 5
+    pool = sorted(int(x) for x in (d.get("hard_core") or []))
+    if not pool:
+        return []
+    scores = _num_scores(d)
+    top = [n for n, _ in sorted(((n, scores.get(n, 0.0)) for n in pool),
+                                key=lambda x: x[1], reverse=True)][:draw_n]
+    return sorted(top)
+
+
+def _render_omnius_pool(game: str, d: dict) -> None:
+    """Card OMNIUS pentru un singur pool — cel mai bun bilet din el."""
+    ticket = _omnius_for_pool(game, d)
+    if not ticket:
+        return
+    chips = "".join(
+        f"<span style='background:#064e3b;color:#fbbf24;padding:4px 11px;border-radius:14px;"
+        f"margin:3px;font-weight:800;font-size:1.1em'>{n}</span>" for n in ticket)
+    jk = d.get("hard_core_joker") or []
+    jk_txt = ""
+    if jk:
+        jkn = sorted(int(x) for x in jk)[:1]
+        if jkn:
+            jk_txt = (" <span style='opacity:.7'>+ joker</span> "
+                      f"<span style='background:#4c1d95;color:#ddd6fe;padding:4px 11px;"
+                      f"border-radius:14px;font-weight:800'>{jkn[0]}</span>")
+    with ui.card().classes("w-full").style("background:#1e1b4b;border:1px solid #f59e0b"):
+        ui.html("⭐ <b style='color:#fbbf24'>OMNIUS</b> — cel mai bun bilet din acest pool "
+                "<span style='opacity:.65;font-size:.8em'>(top numere după scor)</span>")
+        ui.html("<div style='margin:5px 0'>" + chips + jk_txt + "</div>")
 
 
 @ui.refreshable
