@@ -67,37 +67,49 @@ def _check_sklearn() -> bool:
         return False
 
 
+def _score_one_number(s, lag, classifier_factory):
+    """Antrenează 1 clasificator pe seria binară a unui număr → probabilitatea next-step.
+    Extras ca funcție ca să poată rula PARALEL (joblib) pe toate nucleele."""
+    if s.sum() < 2 or s.sum() > len(s) - 2:
+        return float(s.mean())  # degenerat (tot 0 sau tot 1) → media
+    X, y = _build_lag_features(s, lag_window=lag)
+    if X is None or len(np.unique(y)) < 2:
+        return float(s.mean())
+    try:
+        clf = classifier_factory()
+        clf.fit(X, y)
+        x_pred = s[-lag:].reshape(1, -1)
+        if hasattr(clf, "predict_proba"):
+            pp = clf.predict_proba(x_pred)
+            p = float(pp[0, 1]) if pp.shape[1] > 1 else 0.5
+        else:
+            p = float(clf.predict(x_pred)[0])
+        return max(0.0, min(1.0, p))
+    except Exception:
+        return float(s.mean())
+
+
 def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, context: int = 300) -> Dict[int, float]:
-    """Train one classifier per number on lag features, predict next-step probability."""
+    """Antrenează un clasificator per număr, PARALEL pe toate nucleele (joblib).
+    Înainte: 49 clasificatori în serie (1-2 threads). Acum: distribuiti pe toate
+    nucleele → CPU saturat. Clasificatorul intern ramane n_jobs=1 (evita
+    oversubscription: paralelism DOAR pe bucla numerelor, nu si in interior)."""
     if not _check_sklearn():
         return {}
     if draws_2d.shape[0] < lag + 5:
         return {}
     binary = _build_binary(draws_2d, max_num)
     ctx = min(context, binary.shape[1])
-    scores: Dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i, -ctx:].astype(np.int32)
-        if s.sum() < 2 or s.sum() > len(s) - 2:
-            # Degenerate (all zeros or all ones in window) — fallback to mean
-            scores[i + 1] = float(s.mean())
-            continue
-        X, y = _build_lag_features(s, lag_window=lag)
-        if X is None or len(np.unique(y)) < 2:
-            scores[i + 1] = float(s.mean())
-            continue
-        try:
-            clf = classifier_factory()
-            clf.fit(X, y)
-            # Predict for the most recent lag window
-            x_pred = s[-lag:].reshape(1, -1)
-            if hasattr(clf, "predict_proba"):
-                p = float(clf.predict_proba(x_pred)[0, 1]) if clf.predict_proba(x_pred).shape[1] > 1 else 0.5
-            else:
-                p = float(clf.predict(x_pred)[0])
-            scores[i + 1] = max(0.0, min(1.0, p))
-        except Exception:
-            scores[i + 1] = float(s.mean())
+    series = [binary[i, -ctx:].astype(np.int32) for i in range(max_num)]
+    try:
+        from joblib import Parallel, delayed
+        # n_jobs=-1: TOATE nucleele; backend loky (procese) ca sa ocoleasca GIL-ul.
+        results = Parallel(n_jobs=-1, backend="loky", prefer="processes")(
+            delayed(_score_one_number)(s, lag, classifier_factory) for s in series
+        )
+    except Exception:  # noqa: BLE001 — fallback secvential daca joblib pica
+        results = [_score_one_number(s, lag, classifier_factory) for s in series]
+    scores = {i + 1: float(results[i]) for i in range(max_num)}
     return _normalize(scores, max_num)
 
 
@@ -116,14 +128,14 @@ def score_ml_rf(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import RandomForestClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: RandomForestClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=-1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: RandomForestClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=1))
 
 
 def score_ml_extra_trees(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import ExtraTreesClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=-1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=1))
 
 
 def score_ml_gradient_boost(draws_2d, max_num):
@@ -387,14 +399,14 @@ def score_ml_bagging(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import BaggingClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: BaggingClassifier(n_estimators=30, random_state=42, n_jobs=-1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: BaggingClassifier(n_estimators=30, random_state=42, n_jobs=1))
 
 
 def score_ml_extra_trees_deep(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import ExtraTreesClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=120, max_depth=12, random_state=42, n_jobs=-1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=120, max_depth=12, random_state=42, n_jobs=1))
 
 
 def score_ml_mlp_deep(draws_2d, max_num):
