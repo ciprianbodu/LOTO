@@ -25,6 +25,17 @@ import numpy as np
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
 
+# Tensor Cores (RTX): matmul float32 pe 'high' → antrenare ~1.5-3× mai rapidă a
+# rețelelor neurale din bench (NeuralForecast/torch), cu pierdere de precizie
+# nesemnificativă (irelevant pe loto, oricum ~random). Elimină warning-ul torch.
+try:
+    import torch as _torch_init
+    if _torch_init.cuda.is_available() and hasattr(_torch_init, "set_float32_matmul_precision"):
+        _torch_init.set_float32_matmul_precision("high")
+        logger.info("[methods] Tensor Cores activate: float32_matmul_precision='high'")
+except Exception:  # noqa: BLE001
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Utilities
