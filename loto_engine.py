@@ -243,6 +243,16 @@ def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws
     return forecast
 
 
+def _audit_gpu_probe() -> str:
+    """Întoarce 'gpu' dacă torch vede CUDA, altfel 'cpu'. Folosit pt indicatorul
+    ⚡GPU/🐌CPU din audit — evaluat în procesul worker (device-ul REAL de calcul)."""
+    try:
+        import torch as _t
+        return "gpu" if _t.cuda.is_available() else "cpu"
+    except Exception:  # noqa: BLE001
+        return "cpu"
+
+
 class LotoEngine:
     # Routes _get_timesfm_scores through loto_enterprise.core.method_selector
     # — uses the model that WON the benchmark for this game/pool instead of
@@ -257,7 +267,8 @@ class LotoEngine:
         self.audit: dict = {
             "python_version": sys.version.split()[0],
             "python_executable": sys.executable,
-            "timesfm_error": TIMESFM_ERROR
+            "timesfm_error": TIMESFM_ERROR,
+            "compute_device": _audit_gpu_probe(),  # "gpu"/"cpu" real (torch.cuda in worker)
         }
         self.hard_core: list = []
         self.hard_core_stats: dict = {}
