@@ -430,7 +430,37 @@ def score_ml_voting(draws_2d, max_num):
     return _sklearn_per_number(draws_2d, max_num, _mk)
 
 
+def score_ml_gaussian_process(draws_2d, max_num):
+    """Gaussian Process classifier — modelare probabilista a incertitudinii pe lag-uri."""
+    if not _check_sklearn():
+        return {}
+    from sklearn.gaussian_process import GaussianProcessClassifier
+    from sklearn.gaussian_process.kernels import RBF
+    # context mic (GP e O(n^3)) — limitam puternic
+    return _sklearn_per_number(draws_2d, max_num,
+                               lambda: GaussianProcessClassifier(kernel=1.0 * RBF(1.0), max_iter_predict=50),
+                               lag=8, context=120)
+
+
+def score_ml_poly_logistic(draws_2d, max_num):
+    """Regresie logistica cu features polinomiale (grad 2) — capteaza interactiuni
+    intre lag-uri (symbolic-lite: cauta relatii ne-liniare in date)."""
+    if not _check_sklearn():
+        return {}
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import PolynomialFeatures
+    from sklearn.pipeline import make_pipeline
+    return _sklearn_per_number(draws_2d, max_num,
+                               lambda: make_pipeline(
+                                   PolynomialFeatures(degree=2, include_bias=False),
+                                   LogisticRegression(max_iter=300, C=0.5)),
+                               lag=6)
+
+
 ML_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+    # === Nisa: Gaussian Process + polinomial (sklearn, CPU) 2026-05-31 ===
+    "ml_gaussian_process": (score_ml_gaussian_process, "ml-kernel", True, "Gaussian Process (incertitudine probabilista)"),
+    "ml_poly_logistic":    (score_ml_poly_logistic,    "ml-linear", True, "Logistic + features polinomiale grad 2"),
     # === EXTRA sklearn (gratuite, Python 3.11, fără instalări) 2026-05-30 ===
     "ml_hist_gb":          (score_ml_hist_gb,          "ml-boost",  True, "HistGradientBoosting (sklearn, rapid)"),
     "ml_hist_gb_deep":     (score_ml_hist_gb_deep,     "ml-boost",  True, "HistGradientBoosting adânc + L2"),

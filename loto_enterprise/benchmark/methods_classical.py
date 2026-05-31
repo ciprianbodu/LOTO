@@ -978,8 +978,61 @@ def score_decade_balance(draws_2d, max_num):
 
 
 # ===========================================================================
+# NISA: reguli de asociere + compresie (Kolmogorov) (numpy, CPU) 2026-05-31
+# ===========================================================================
+
+def score_assoc_rules(draws_2d, max_num):
+    """Reguli de asociere (apriori-lite): numere care apar des IMPREUNA cu numerele
+    din ultima extragere → 'daca a iesit X, tinde sa iasa Y'. Confidence-based."""
+    n = draws_2d.shape[0]
+    if n < 10:
+        return {}
+    # matrice de co-aparitii + frecvente individuale
+    co = np.zeros((max_num + 1, max_num + 1), dtype=np.float64)
+    freq = np.zeros(max_num + 1, dtype=np.float64)
+    for row in draws_2d:
+        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
+        for a in nums:
+            freq[a] += 1
+            for b in nums:
+                if a != b:
+                    co[a, b] += 1
+    last = [int(v) for v in draws_2d[-1] if 1 <= int(v) <= max_num]
+    scores = {}
+    for k in range(1, max_num + 1):
+        # confidence medie: P(k | x) pt fiecare x din ultima extragere
+        conf = 0.0
+        for x in last:
+            if freq[x] > 0:
+                conf += co[x, k] / freq[x]
+        scores[k] = conf / max(len(last), 1)
+    return _normalize(scores, max_num)
+
+
+def score_compression(draws_2d, max_num):
+    """Complexitate Kolmogorov-lite: numere a caror serie binara e mai PUTIN
+    compresibila (mai 'structurata'/non-aleatoare) primesc scor mai mare. Folosim
+    lungimea zlib ca proxy de complexitate, ponderata cu frecventa recenta."""
+    import zlib
+    bm = _build_binary(draws_2d, max_num)
+    n = bm.shape[1]
+    w = min(80, n)
+    scores = {}
+    for i in range(max_num):
+        seq = bm[i, -w:].astype(np.uint8).tobytes()
+        comp_len = len(zlib.compress(seq, level=6))
+        ratio = comp_len / max(len(seq), 1)  # mare = mai putin compresibil = structura
+        recent = float(bm[i, -15:].mean()) if n >= 15 else float(bm[i].mean())
+        scores[i + 1] = ratio * 0.5 + recent * 0.5
+    return _normalize(scores, max_num)
+
+
+# ===========================================================================
 
 CLASSICAL_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+    # === Nisa: reguli asociere + compresie (numpy, CPU) 2026-05-31 ===
+    "assoc_rules":     (score_assoc_rules,     "association",      False, "Reguli asociere (apriori-lite, confidence)"),
+    "compression":     (score_compression,     "info-theory",     False, "Complexitate Kolmogorov (zlib proxy)"),
     # === Teoria numerelor + spread/sume pozitionale (numpy, CPU) 2026-05-31 ===
     "sum_affinity":    (score_sum_affinity,    "geometric-sum",   False, "Afinitate cu suma tipica a extragerii"),
     "parity_balance":  (score_parity_balance,  "geometric-parity", False, "Echilibru par/impar"),
