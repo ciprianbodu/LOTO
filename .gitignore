@@ -38,7 +38,11 @@ lightning_logs/
 ISTORIC/
 _ISTORIC/
 _istoric/
-bench_results/
+# bench_results: ignorăm tot FOLDER-ul, dar permitem folds.csv + report.json
+# (le comiți manual ca să le pot analiza). .pkl-urile grele rămân ignorate.
+bench_results/*
+!bench_results/folds.csv
+!bench_results/report.json
 *.pre_autopilot
 
 # Per-machine runtime state (regenerated each pipeline run)
