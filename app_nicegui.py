@@ -1722,8 +1722,6 @@ def main_page() -> None:
         _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
         ui.button("⚡ Auto-Pilot (decizie bench + generează)", on_click=apply_autopilot_and_generate
                   ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.button("🎯 Auto-Pilot Pure", on_click=lambda: submit_generation(pure=True)
-                  ).props("color=secondary outline no-caps").classes(_BTN).style(_BTN_STYLE)
         ui.button("🚀 Generează (setări manuale)", on_click=lambda: submit_generation(pure=False)
                   ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
 
