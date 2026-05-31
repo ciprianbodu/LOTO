@@ -520,7 +520,11 @@ def _hw_telemetry_html() -> str:
     cpu = ram = ""
     try:
         import psutil
-        cpu = f"{psutil.cpu_percent(interval=None):.0f}%"
+        ncores = psutil.cpu_count(logical=True) or 1
+        pct = psutil.cpu_percent(interval=None)
+        # nuclee "active" estimat: % total × nr_nuclee (ex. 25% din 32 ≈ 8 active)
+        active = round(pct / 100.0 * ncores)
+        cpu = f"{pct:.0f}% (~{active}/{ncores} nuclee)"
         vm = psutil.virtual_memory()
         ram = f"{vm.used/(1024**3):.1f}/{vm.total/(1024**3):.0f} GB ({vm.percent:.0f}%)"
     except Exception:  # noqa: BLE001

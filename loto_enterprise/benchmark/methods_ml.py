@@ -101,10 +101,13 @@ def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, co
     binary = _build_binary(draws_2d, max_num)
     ctx = min(context, binary.shape[1])
     series = [binary[i, -ctx:].astype(np.int32) for i in range(max_num)]
+    import os
+    n_workers = max(1, (os.cpu_count() or 4) - 1)  # toate nucleele minus 1 (sistem)
     try:
         from joblib import Parallel, delayed
-        # n_jobs=-1: TOATE nucleele; backend loky (procese) ca sa ocoleasca GIL-ul.
-        results = Parallel(n_jobs=-1, backend="loky", prefer="processes")(
+        # backend 'loky' (procese) cu n_jobs explicit = nr nuclee. Pe task-uri scurte
+        # batch_size mare reduce overhead-ul de dispecerizare → nuclee mai bine ocupate.
+        results = Parallel(n_jobs=n_workers, backend="loky", batch_size=4)(
             delayed(_score_one_number)(s, lag, classifier_factory) for s in series
         )
     except Exception:  # noqa: BLE001 — fallback secvential daca joblib pica
