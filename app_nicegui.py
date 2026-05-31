@@ -515,6 +515,41 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     return frac, text
 
 
+def _hw_telemetry_html() -> str:
+    """Consum live CPU/RAM/GPU/VRAM (pt afișare sub barele bench). Best-effort."""
+    cpu = ram = ""
+    try:
+        import psutil
+        cpu = f"{psutil.cpu_percent(interval=None):.0f}%"
+        vm = psutil.virtual_memory()
+        ram = f"{vm.used/(1024**3):.1f}/{vm.total/(1024**3):.0f} GB ({vm.percent:.0f}%)"
+    except Exception:  # noqa: BLE001
+        pass
+    gpu = vram = ""
+    try:
+        import subprocess as _sp
+        out = _sp.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if out.returncode == 0 and out.stdout.strip():
+            g, vu, vt = [x.strip() for x in out.stdout.strip().splitlines()[0].split(",")]
+            gpu = f"{g}%"
+            vram = f"{float(vu)/1024:.1f}/{float(vt)/1024:.0f} GB"
+    except Exception:  # noqa: BLE001
+        pass
+    parts = []
+    if cpu:  parts.append(f"<span style='color:#38bdf8'>CPU {cpu}</span>")
+    if ram:  parts.append(f"<span style='color:#60a5fa'>RAM {ram}</span>")
+    if gpu:  parts.append(f"<span style='color:#c084fc'>GPU {gpu}</span>")
+    if vram: parts.append(f"<span style='color:#a78bfa'>VRAM {vram}</span>")
+    if not parts:
+        return ""
+    return ("<div style='margin-top:6px;font-size:.82em;font-family:monospace;"
+            "opacity:.9'>📊 " + " &nbsp;·&nbsp; ".join(parts) + "</div>")
+
+
 def _bench_progress() -> tuple[float, str]:
     """Compat: progresul bench-ului principal (CPU/normal) din bench_full.log."""
     start_ts = None
@@ -736,6 +771,7 @@ def status_panel() -> None:
                     ui.html("⚡ <b style='color:#c084fc'>BENCH GPU</b> — " + rg[1])
                     ui.linear_progress(value=rg[0], show_value=False).props("instant-feedback rounded").classes("w-full")
             ui.label("CPU și GPU rulează în paralel; rezultatele apar separat când termină fiecare.").classes("text-caption")
+            ui.html(_hw_telemetry_html())  # consum live CPU/RAM/GPU/VRAM
         return
 
     _shutdown_banner()

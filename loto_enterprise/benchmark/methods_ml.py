@@ -116,14 +116,14 @@ def score_ml_rf(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import RandomForestClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: RandomForestClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: RandomForestClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=-1))
 
 
 def score_ml_extra_trees(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import ExtraTreesClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=50, max_depth=6, random_state=42, n_jobs=-1))
 
 
 def score_ml_gradient_boost(draws_2d, max_num):
@@ -387,14 +387,14 @@ def score_ml_bagging(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import BaggingClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: BaggingClassifier(n_estimators=30, random_state=42, n_jobs=1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: BaggingClassifier(n_estimators=30, random_state=42, n_jobs=-1))
 
 
 def score_ml_extra_trees_deep(draws_2d, max_num):
     if not _check_sklearn():
         return {}
     from sklearn.ensemble import ExtraTreesClassifier
-    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=120, max_depth=12, random_state=42, n_jobs=1))
+    return _sklearn_per_number(draws_2d, max_num, lambda: ExtraTreesClassifier(n_estimators=120, max_depth=12, random_state=42, n_jobs=-1))
 
 
 def score_ml_mlp_deep(draws_2d, max_num):
