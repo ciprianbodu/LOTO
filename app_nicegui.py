@@ -1389,7 +1389,7 @@ def analysis_panel() -> None:
 
 
 ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
-SUPPORTED_POOLS = set(range(6, 13))  # 6..12 (range slider UI)
+SUPPORTED_POOLS = set(range(6, 17))  # 6..16 (pool max actual; intrari >16 = stale vechi)
 
 
 def _clean_stale_adaptive(stale_keys) -> None:
@@ -1431,7 +1431,7 @@ def adaptive_history_panel() -> None:
              "(catastrofă/underperf/normal), regime resets, hard inversions.").classes("text-caption")
     if stale:
         with ui.row().classes("items-center gap-3"):
-            ui.label(f"⚠️ {len(stale)} configurări STALE (pool inaccesibil 6-12): {', '.join(stale)}").classes("text-warning text-caption")
+            ui.label(f"⚠️ {len(stale)} configurări STALE (pool inaccesibil 6-16): {', '.join(stale)}").classes("text-warning text-caption")
             ui.button("🗑️ Curăță stale", on_click=lambda s=stale: _clean_stale_adaptive(s)).props("flat dense color=negative")
 
     icons = {"catastrophe": "🔥", "underperf": "⚠️", "normal": "✅", "regime_reset": "🚨"}
