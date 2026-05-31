@@ -1308,14 +1308,37 @@ def _num_scores(d: dict) -> dict:
 
 
 def _omnius_for_pool(game: str, d: dict) -> list:
-    """Cel mai bun bilet din ACEST pool: top draw_n numere după scor (smart-selector
-    → frecvență). Separat per pool (nu combină pool-uri)."""
+    """Biletul OMNIUS din ACEST pool: cele mai bune draw_n numere.
+
+    Folosește scorerul OMNIUS (meta-învățare — ponderează metodele după performanța
+    recentă) dacă datele jocului sunt disponibile; altfel fallback la scorul
+    smart-selector/frecvență din audit. Numerele sunt RESTRÂNSE la pool-ul curent."""
     gk = _game_label_for(game)
     draw_n = 6 if gk == "6/49" else 5
     pool = sorted(int(x) for x in (d.get("hard_core") or []))
     if not pool:
         return []
-    scores = _num_scores(d)
+
+    # Încearcă meta-învățarea OMNIUS pe istoricul jocului (același scorer ca metoda bench)
+    omni_scores = None
+    try:
+        df = None
+        for fn, _df in STATE.get("datasets", []):
+            if _game_label_for(fn) == gk:
+                df = _df
+                break
+        if df is not None:
+            from loto_enterprise.benchmark.methods_omnius import score_omnius
+            cols = [c for c in df.columns if c.lower().startswith("n")][:draw_n]
+            if len(cols) >= draw_n:
+                import numpy as _np
+                draws = df[cols].to_numpy(dtype=_np.int64)
+                max_num = {"6/49": 49, "5/40": 40, "joker": 45}.get(gk, 49)
+                omni_scores = score_omnius(draws, max_num)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("OMNIUS meta pt bilet eșuat (fallback): %s", exc)
+
+    scores = omni_scores or _num_scores(d)
     top = [n for n, _ in sorted(((n, scores.get(n, 0.0)) for n in pool),
                                 key=lambda x: x[1], reverse=True)][:draw_n]
     return sorted(top)
@@ -1338,8 +1361,9 @@ def _render_omnius_pool(game: str, d: dict) -> None:
                       f"<span style='background:#4c1d95;color:#ddd6fe;padding:4px 11px;"
                       f"border-radius:14px;font-weight:800'>{jkn[0]}</span>")
     with ui.card().classes("w-full").style("background:#1e1b4b;border:1px solid #f59e0b"):
-        ui.html("⭐ <b style='color:#fbbf24'>OMNIUS</b> — cel mai bun bilet din acest pool "
-                "<span style='opacity:.65;font-size:.8em'>(top numere după scor)</span>")
+        ui.html("⭐ <b style='color:#fbbf24'>OMNIUS</b> — biletul meta-adaptiv din acest pool "
+                "<span style='opacity:.65;font-size:.8em'>(meta-învățare: ponderează metodele "
+                "după performanța recentă)</span>")
         ui.html("<div style='margin:5px 0'>" + chips + jk_txt + "</div>")
 
 
