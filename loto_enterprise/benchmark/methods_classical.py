@@ -699,8 +699,150 @@ def score_arima_statsmodels(draws_2d, max_num):
 # ===========================================================================
 # Registry of new classical methods
 # ===========================================================================
+# EXTRA matematice / geometrice (numpy pur, CPU, fără librării noi) 2026-05-31
+# ===========================================================================
+
+def score_gap_poisson(draws_2d, max_num):
+    """Overdue prin model Poisson pe gap-uri: P(număr e 'datorat') ~ gap_curent/gap_mediu."""
+    bm = _build_binary(draws_2d, max_num)
+    n = bm.shape[1]
+    scores = {}
+    for i in range(max_num):
+        idx = np.where(bm[i] > 0)[0]
+        if len(idx) < 2:
+            scores[i + 1] = 0.5
+            continue
+        gaps = np.diff(idx)
+        avg_gap = float(gaps.mean()) if len(gaps) else n
+        cur_gap = n - int(idx[-1]) - 1
+        scores[i + 1] = min(1.0, cur_gap / max(avg_gap, 1e-6))
+    return _normalize(scores, max_num)
+
+
+def score_entropy_window(draws_2d, max_num):
+    """Scor pe entropia aparițiilor: numere cu pattern regulat (entropie mică) → scor mai mare."""
+    bm = _build_binary(draws_2d, max_num)
+    n = bm.shape[1]
+    w = min(50, n)
+    scores = {}
+    for i in range(max_num):
+        seq = bm[i, -w:]
+        p = float(seq.mean())
+        if p <= 0 or p >= 1:
+            ent = 0.0
+        else:
+            ent = -(p * np.log2(p) + (1 - p) * np.log2(1 - p))
+        # regularitate (1-entropie) ponderată cu frecvența recentă
+        scores[i + 1] = (1.0 - ent) * 0.5 + p * 0.5
+    return _normalize(scores, max_num)
+
+
+def score_autocorr(draws_2d, max_num):
+    """Autocorelație lag-1..5 pe seria binară: numere cu auto-corelație pozitivă (revin ciclic)."""
+    bm = _build_binary(draws_2d, max_num)
+    scores = {}
+    for i in range(max_num):
+        s = bm[i] - bm[i].mean()
+        denom = float((s * s).sum()) + 1e-9
+        ac = 0.0
+        for lag in range(1, 6):
+            if len(s) > lag:
+                ac += float((s[:-lag] * s[lag:]).sum()) / denom
+        scores[i + 1] = ac
+    return _normalize(scores, max_num)
+
+
+def score_momentum(draws_2d, max_num):
+    """Momentum hot/cold: rata recentă (15) minus rata pe termen lung (60) → numere în creștere."""
+    bm = _build_binary(draws_2d, max_num)
+    n = bm.shape[1]
+    s_w, l_w = min(15, n), min(60, n)
+    scores = {}
+    for i in range(max_num):
+        short = float(bm[i, -s_w:].mean()) if s_w else 0.0
+        long = float(bm[i, -l_w:].mean()) if l_w else 0.0
+        scores[i + 1] = short - long  # >0 = în creștere recentă
+    return _normalize(scores, max_num)
+
+
+def score_pair_affinity(draws_2d, max_num):
+    """Afinitate de co-apariție: numere care apar des împreună cu numerele recente (graf de co-ocurență)."""
+    n_draws = draws_2d.shape[0]
+    if n_draws < 5:
+        return {}
+    co = np.zeros((max_num + 1, max_num + 1), dtype=np.float64)
+    for row in draws_2d:
+        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
+        for a in nums:
+            for b in nums:
+                if a != b:
+                    co[a, b] += 1.0
+    # numere recente (ultima fereastră)
+    recent = set()
+    for row in draws_2d[-10:]:
+        recent.update(int(v) for v in row if 1 <= int(v) <= max_num)
+    scores = {}
+    for k in range(1, max_num + 1):
+        scores[k] = float(sum(co[k, r] for r in recent))
+    return _normalize(scores, max_num)
+
+
+def score_centrality(draws_2d, max_num):
+    """Centralitate în graful de co-apariții (degree weighted) — numere 'hub' care leagă multe altele."""
+    n_draws = draws_2d.shape[0]
+    if n_draws < 5:
+        return {}
+    deg = np.zeros(max_num + 1, dtype=np.float64)
+    for row in draws_2d:
+        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
+        for a in nums:
+            deg[a] += len(nums) - 1
+    scores = {k: float(deg[k]) for k in range(1, max_num + 1)}
+    return _normalize(scores, max_num)
+
+
+def score_runs_test(draws_2d, max_num):
+    """Runs test: numere a căror serie de apariții se abate de la aleator (clustering/anti-clustering)."""
+    bm = _build_binary(draws_2d, max_num)
+    scores = {}
+    for i in range(max_num):
+        seq = bm[i].astype(int)
+        n1 = int(seq.sum()); n0 = len(seq) - n1
+        if n1 < 2 or n0 < 2:
+            scores[i + 1] = 0.5
+            continue
+        runs = 1 + int((seq[1:] != seq[:-1]).sum())
+        exp_runs = 1 + 2 * n1 * n0 / (n1 + n0)
+        # abatere normalizată (clustering recent = potențial overdue)
+        scores[i + 1] = abs(runs - exp_runs) / exp_runs
+    return _normalize(scores, max_num)
+
+
+def score_weighted_recent(draws_2d, max_num):
+    """Frecvență cu decay liniar pe poziție + boost pe ultimele 5 extrageri (geometric-temporal)."""
+    bm = _build_binary(draws_2d, max_num)
+    n = bm.shape[1]
+    weights = np.linspace(0.2, 1.0, n)  # recent = greutate mare
+    scores = {}
+    for i in range(max_num):
+        base = float((bm[i] * weights).sum())
+        boost = float(bm[i, -5:].sum()) * 2.0 if n >= 5 else 0.0
+        scores[i + 1] = base + boost
+    return _normalize(scores, max_num)
+
+
+# ===========================================================================
 
 CLASSICAL_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+    # === EXTRA matematice/geometrice (numpy, CPU, fără instalări) 2026-05-31 ===
+    "gap_poisson":     (score_gap_poisson,     "math-gap",       False, "Overdue Poisson pe gap-uri"),
+    "entropy_window":  (score_entropy_window,  "math-entropy",   False, "Entropie aparitii (regularitate)"),
+    "autocorr":        (score_autocorr,        "math-autocorr",  False, "Autocorelatie lag 1-5"),
+    "momentum":        (score_momentum,        "math-momentum",  False, "Hot/cold momentum (15 vs 60)"),
+    "pair_affinity":   (score_pair_affinity,   "geometric-graph", False, "Co-aparitie cu numerele recente"),
+    "centrality":      (score_centrality,      "geometric-graph", False, "Centralitate graf co-aparitii"),
+    "runs_test":       (score_runs_test,       "math-runs",      False, "Runs test (clustering serie)"),
+    "weighted_recent": (score_weighted_recent, "math-temporal",  False, "Frecventa cu decay + boost recent"),
     # statsforecast family
     "arima_auto":      (score_arima_auto,      "classical-arima",  False, "AutoARIMA per-number (statsforecast)"),
     "ets_auto":        (score_ets_auto,        "classical-ets",    False, "AutoETS per-number"),
