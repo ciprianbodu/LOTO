@@ -128,17 +128,17 @@ def main() -> int:
                              "se ia separat dupa combinarea folds-urilor).")
     args = parser.parse_args()
 
-    # Logăm SIMULTAN la consolă ȘI în bench_full.log (mode='w' = fresh la fiecare
-    # rulare). Astfel logul există indiferent cum e pornit bench-ul (manual sau din
-    # UI, pe orice OS) — esențial ca să vedem unde/de ce se oprește un full rebench
-    # (ex. ultima linie 'START compute' înainte de un crash GPU/OOM necapturabil).
+    # Log per --out: bench_results/ → bench_full.log; bench_results_gpu/ → bench_full_gpu.log.
+    # Astfel la bench PARALEL (CPU ‖ GPU) fiecare faza scrie in fisierul ei, fara sa se
+    # suprascrie reciproc → UI poate afisa progres SEPARAT pt CPU si GPU.
+    _log_name = "bench_full_gpu.log" if "gpu" in str(args.out).lower() else "bench_full.log"
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="[%(asctime)s] %(levelname)s %(name)s | %(message)s",
         datefmt="%H:%M:%S",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler("bench_full.log", encoding="utf-8", mode="w"),
+            logging.FileHandler(_log_name, encoding="utf-8", mode="w"),
         ],
     )
 

@@ -477,11 +477,44 @@ def _fmt_dur(sec) -> str:
     return f"{sec_}s"
 
 
-def _bench_progress() -> tuple[float, str]:
-    """(fracție 0..1, text + ETA live) din bench_full.log [N/TOTAL] + timestamp .bench_pid.
+BENCH_LOG_GPU_FILE = PROJECT_ROOT / "bench_full_gpu.log"
 
-    ETA = timp scurs (de la start, din .bench_pid) ÷ folds făcute × folds rămase.
-    Se auto-calibrează pe rularea curentă — nu depinde de un bench anterior."""
+
+def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
+    """(fracție, text live) dintr-un log de bench specific. None dacă logul lipsește.
+    Text = '% testat (N din M) · acum: joc/metodă · rămas ~X'."""
+    if not log_path.exists():
+        return None
+    cur = tot = 0
+    last_line = ""
+    try:
+        import re
+        txt = log_path.read_text(encoding="utf-8", errors="replace")
+        matches = re.findall(r"\[(\d+)/(\d+)\]\s*\[([^\]]+)\]", txt)
+        if matches:
+            cur, tot = int(matches[-1][0]), int(matches[-1][1])
+            last_line = matches[-1][2]  # ex. "loto_6_49/informer/50%/REAL"
+    except Exception:  # noqa: BLE001
+        pass
+    if tot <= 0:
+        return 0.03, "pornește... (estimez după primele teste)"
+    frac = max(0.0, min(1.0, cur / tot))
+    # detaliu live: ce metodă/joc/procent backtesting se testează ACUM
+    cur_txt = ""
+    if last_line:
+        parts = last_line.split("/")
+        if len(parts) >= 3:
+            cur_txt = f"  ·  acum: {parts[0]} / {parts[1]} / {parts[2]} backtest"
+    text = f"{int(frac*100)}% ({cur}/{tot} teste){cur_txt}"
+    if start_ts and cur > 0:
+        elapsed = max(0.0, time.time() - start_ts)
+        remaining = (tot - cur) * (elapsed / cur)
+        text += f"  ·  rămas ~{_fmt_dur(remaining)}"
+    return frac, text
+
+
+def _bench_progress() -> tuple[float, str]:
+    """Compat: progresul bench-ului principal (CPU/normal) din bench_full.log."""
     start_ts = None
     if BENCH_PID_FILE.exists():
         try:
@@ -490,28 +523,10 @@ def _bench_progress() -> tuple[float, str]:
                 start_ts = float(parts[1])
         except Exception:  # noqa: BLE001
             pass
-    if not BENCH_LOG_FILE.exists():
+    r = _bench_progress_from(BENCH_LOG_FILE, start_ts)
+    if r is None:
         return 0.0, "Bench pornește..."
-    cur = tot = 0
-    try:
-        import re
-        txt = BENCH_LOG_FILE.read_text(encoding="utf-8", errors="replace")
-        matches = re.findall(r"\[(\d+)/(\d+)\]", txt)
-        if matches:
-            cur, tot = int(matches[-1][0]), int(matches[-1][1])
-    except Exception:  # noqa: BLE001
-        pass
-    if tot <= 0:
-        return 0.05, "Bench în curs... (estimez ETA după primele folds)"
-    frac = max(0.0, min(1.0, cur / tot))
-    # cur/tot = teste individuale (metodă × fereastră × joc); arătăm % + timp clar.
-    text = f"Bench: {int(frac*100)}% testat ({cur} din {tot} teste)"
-    if start_ts and cur > 0:
-        elapsed = max(0.0, time.time() - start_ts)
-        per_fold = elapsed / cur
-        remaining = (tot - cur) * per_fold
-        text += (f"  ·  rămas ~{_fmt_dur(remaining)}  ·  scurs {_fmt_dur(elapsed)}")
-    return frac, text
+    return r
 
 
 # --------------------------------------------------------------------------- #
@@ -522,22 +537,40 @@ def cancel_all() -> None:
         cancel_pending_running_jobs("Oprit de utilizator")
     except Exception as exc:  # noqa: BLE001
         logger.warning("cancel jobs: %s", exc)
-    # Kill bench dacă rulează
+    # Kill AMBELE benchuri: CPU (din .bench_pid) + GPU paralel (din STATE["phased"])
+    import psutil
+    pids_to_kill = []
     if BENCH_PID_FILE.exists():
         try:
-            import psutil
-            pid = int(BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0])
+            pids_to_kill.append(int(BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0]))
+        except Exception:  # noqa: BLE001
+            pass
+    _ph = STATE.get("phased") or {}
+    if _ph.get("gpu_pid"):
+        pids_to_kill.append(int(_ph["gpu_pid"]))
+    for pid in pids_to_kill:
+        try:
             if psutil.pid_exists(pid):
                 psutil.Process(pid).terminate()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("kill bench: %s", exc)
-        try:
-            BENCH_PID_FILE.unlink()
-        except OSError:
-            pass
+            logger.warning("kill bench pid %s: %s", pid, exc)
+    # fallback: orice python care ruleaza bench_all_methods.py din acest proiect
+    try:
+        root = str(PROJECT_ROOT)
+        for p in psutil.process_iter(["cmdline"]):
+            cl = " ".join(p.info.get("cmdline") or [])
+            if "bench_all_methods.py" in cl and root in cl:
+                p.terminate()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("kill bench fallback: %s", exc)
+    try:
+        BENCH_PID_FILE.unlink()
+    except OSError:
+        pass
+    STATE["phased"] = None
     STATE["active_job_id"] = None
     unlock_engine()
-    ui.notify("Proces anulat.", type="warning")
+    ui.notify("Proces anulat (CPU + GPU).", type="warning")
     _refresh_status()
 
 
@@ -667,12 +700,34 @@ def status_panel() -> None:
                         "w-full max-h-48 overflow-auto text-xs")
         return
 
-    if bench_on:
-        frac, txt = _bench_progress()
+    # GPU paralel activ?
+    _ph = STATE.get("phased") or {}
+    _gpu_pid = _ph.get("gpu_pid") if _ph.get("mode") == "parallel" else None
+    _gpu_on = bool(_gpu_pid and _pids_alive([_gpu_pid]) and not _ph.get("gpu_done"))
+
+    if bench_on or _gpu_on:
         with ui.card().classes("w-full"):
-            ui.label(f"🔬 {txt}")
-            ui.linear_progress(value=frac, show_value=False).props("instant-feedback")
-            ui.label("Generarea poate porni după ce bench-ul termină.").classes("text-caption")
+            # Bara CPU
+            if bench_on:
+                _start = None
+                try:
+                    _p = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
+                    _start = float(_p[1]) if len(_p) > 1 else None
+                except Exception:  # noqa: BLE001
+                    pass
+                rc = _bench_progress_from(BENCH_LOG_FILE, _start)
+                if rc:
+                    ui.html("🖥️ <b style='color:#38bdf8'>BENCH CPU</b> — " + rc[1])
+                    ui.linear_progress(value=rc[0], show_value=False).props("instant-feedback").classes("w-full")
+            elif _gpu_on:
+                ui.label("🖥️ BENCH CPU — ✅ terminat").classes("text-positive text-caption")
+            # Bara GPU (paralel)
+            if _gpu_pid:
+                rg = _bench_progress_from(BENCH_LOG_GPU_FILE)
+                if rg:
+                    ui.html("⚡ <b style='color:#c084fc'>BENCH GPU</b> — " + rg[1])
+                    ui.linear_progress(value=rg[0], show_value=False).props("instant-feedback rounded").classes("w-full")
+            ui.label("CPU și GPU rulează în paralel; rezultatele apar separat când termină fiecare.").classes("text-caption")
         return
 
     _shutdown_banner()
