@@ -200,9 +200,8 @@ echo  Pentru upgrade Python: descarca un 3.11.x mai nou de la
 echo    https://www.python.org/downloads/  (bifeaza Add to PATH)
 echo    apoi reruleaza ACTUALIZARI.bat — va detecta si oferi upgrade.
 echo.
-echo  Daca freshness e 'quick_rebench' sau 'full_rebench':
-echo    Quick (~5 min):  %VENV_PY% bench_all_methods.py --quick
-echo    Full  (~50 min): %VENV_PY% bench_all_methods.py
+echo  Daca freshness recomanda re-bench:
+echo    Re-Bench Full: din UI (butonul portocaliu) sau %VENV_PY% bench_all_methods.py
 echo  Pentru a porni aplicatia:  START_8000.bat
 echo ------------------------------------------------------------
 echo.

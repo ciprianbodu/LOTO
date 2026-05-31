@@ -184,8 +184,8 @@ def check_bench_assets():
                 print(f"   {tag:>10s} {gk}: cached {r.cached_rows} vs curent {r.current_rows} "
                       f"({r.row_delta_pct:+.1f}%)")
             if rec in ("quick_rebench", "full_rebench"):
-                print(f"   Recomandat: ruleaza 'python bench_all_methods.py' "
-                      f"(quick: --methods top13 --percentiles 30,60,90 sau full)")
+                print("   Recomandat: ruleaza Re-Bench Full (din UI sau "
+                      "'python bench_all_methods.py')")
         except Exception as e:
             print(f"   [WARN] Freshness check failed: {e}")
     else:
@@ -232,9 +232,8 @@ def main():
     print("=" * 72)
     print("  Daca toate sectiunile au [OK] si freshness e 'fresh' / 'use_cache',")
     print("  poti porni aplicatia cu START_8000.bat fara nicio actiune.")
-    print("  Daca freshness e 'quick_rebench' / 'full_rebench':")
-    print("    python bench_all_methods.py --quick           (~5 min, top-13 metode)")
-    print("    python bench_all_methods.py                   (~50 min, complet)")
+    print("  Daca freshness recomanda re-bench:")
+    print("    Re-Bench Full din UI (buton portocaliu) sau: python bench_all_methods.py")
     print("=" * 72)
 
 

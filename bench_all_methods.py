@@ -17,8 +17,7 @@ Forțare CUDA: toate modelele neuronale rulează pe `torch.device("cuda")`
 
 Usage
 -----
-    python bench_all_methods.py
-    python bench_all_methods.py --quick                       # baseline + 1 NF
+    python bench_all_methods.py                               # Full (73 metode: CPU + top-3 GPU)
     python bench_all_methods.py --percentiles 10,30,50,70,100
     python bench_all_methods.py --methods random,frequency,timesfm,chronos
     python bench_all_methods.py --block-size 50               # walk-forward più fine
