@@ -122,6 +122,10 @@ def main() -> int:
                              "(a) utilizatorul forteaza rebench, (b) hardware s-a "
                              "schimbat (CPU->GPU) si rezultatele cache-uite sunt stale.")
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("--no-decision", action="store_true",
+                        help="Nu scrie best_methods.json (folosit la bench paralel pe faze: "
+                             "fiecare faza scrie doar folds.csv in --out propriu; decizia "
+                             "se ia separat dupa combinarea folds-urilor).")
     args = parser.parse_args()
 
     # Logăm SIMULTAN la consolă ȘI în bench_full.log (mode='w' = fresh la fiecare
@@ -281,22 +285,28 @@ def main() -> int:
     }
     out_path = Path(args.out)
     out_path.mkdir(exist_ok=True, parents=True)
-    from ui_shared import atomic_write_json
-    atomic_write_json("best_methods.json", best)  # atomic: tmp+fsync+os.replace
 
-    # Stamp CSV signatures so freshness detection knows when cache is stale
-    try:
-        from loto_enterprise.benchmark.freshness import write_signatures_to_best_methods
-        write_signatures_to_best_methods()
-    except Exception as _e:
-        logging.warning(f"[freshness] failed to stamp signatures: {_e}")
+    if args.no_decision:
+        # Bench paralel pe faze: scriem DOAR folds.csv in --out (deja scris de runner);
+        # decizia (best_methods.json) se ia separat dupa combinarea folds-urilor.
+        logging.info("[bench] --no-decision: sar scrierea best_methods.json (faza paralela).")
+    else:
+        from ui_shared import atomic_write_json
+        atomic_write_json("best_methods.json", best)  # atomic: tmp+fsync+os.replace
 
-    # Build per-(game, pool) auto-pilot matrix from folds.csv
-    try:
-        from loto_enterprise.benchmark.decision import update_best_methods_with_auto_pilot
-        update_best_methods_with_auto_pilot()
-    except Exception as _e:
-        logging.warning(f"[auto-pilot] failed to build decision matrix: {_e}")
+        # Stamp CSV signatures so freshness detection knows when cache is stale
+        try:
+            from loto_enterprise.benchmark.freshness import write_signatures_to_best_methods
+            write_signatures_to_best_methods()
+        except Exception as _e:
+            logging.warning(f"[freshness] failed to stamp signatures: {_e}")
+
+        # Build per-(game, pool) auto-pilot matrix from folds.csv
+        try:
+            from loto_enterprise.benchmark.decision import update_best_methods_with_auto_pilot
+            update_best_methods_with_auto_pilot()
+        except Exception as _e:
+            logging.warning(f"[auto-pilot] failed to build decision matrix: {_e}")
 
     # ─── Final summary panel ────────────────────────────────────────────────
     console.print()

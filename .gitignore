@@ -70,3 +70,4 @@ uploaded_data/
 .bench_cache/
 raport_complet.txt
 best_methods.json
+bench_results_gpu/
