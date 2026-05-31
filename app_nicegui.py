@@ -88,6 +88,8 @@ STATE: dict = {
     "calib": {},             # {game_label: {"best": int, "detail": dict}}
     "calib_status": "",
     "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
+    "phased": None,          # orchestrare bench 2 faze: {"stage": "cpu"/"gpu", ...}
+    "phased_snapshot": None, # decizia best_methods.json după Faza 1 (pt comparat cu Faza 2)
 }
 
 # R3: lock pentru mutații compuse pe STATE din thread-uri (walk-forward, calibrare)
@@ -254,8 +256,117 @@ def _launch_bench(args: list[str], label: str) -> None:
     _refresh_status()
 
 
+_PCTS = "10,20,30,40,50,60,70,80,90,100"
+
+
 def run_full_rebench() -> None:
-    _launch_bench(["--no-rich", "--percentiles", "10,20,30,40,50,60,70,80,90,100"], "FULL Re-Bench")
+    _launch_bench(["--no-rich", "--percentiles", _PCTS], "FULL Re-Bench")
+
+
+def _bench_methods_split():
+    """(cpu_methods, gpu_methods) din ALL_SPEC_METHODS, pt bench pe faze."""
+    try:
+        import bench_all_methods as _B
+        cpu = [m for m in _B.ALL_SPEC_METHODS if not _B._is_gpu_method(m)]
+        gpu = [m for m in _B.ALL_SPEC_METHODS if _B._is_gpu_method(m)]
+        return cpu, gpu
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bench split: %s", exc)
+        return [], []
+
+
+def _winners_snapshot() -> dict:
+    """{game_key: scorer} per pool curent din best_methods.json — pt comparat fazele."""
+    snap = {}
+    try:
+        from loto_enterprise.core.method_selector import _load_config
+        cfg = _load_config()
+        for gk, g in (cfg.get("games") or {}).items():
+            apm = g.get("auto_pilot_per_pool") or {}
+            snap[gk] = {k: (v or {}).get("scorer") for k, v in apm.items()}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("winners snapshot: %s", exc)
+    return snap
+
+
+def _on_bench_finished() -> None:
+    """Apelat când orice bench se termină. Gestionează atât Re-Bench simplu cât și
+    orchestrarea în 2 faze (CPU → Auto-Pilot → GPU → regenerare jocuri îmbunătățite)."""
+    ph = STATE.get("phased")
+    if ph and ph.get("stage") == "cpu":
+        # FAZA 1 (CPU) gata → snapshot decizie + Auto-Pilot + pornește FAZA 2 (GPU)
+        STATE["phased_snapshot"] = _winners_snapshot()
+        if SETTINGS.get("autopilot_after_bench") and STATE["datasets"]:
+            ui.notify("✅ FAZA 1 (CPU) gata → Auto-Pilot, apoi pornesc FAZA 2 (GPU).", type="positive")
+            apply_autopilot_and_generate()
+        gpu = ph.get("gpu_methods") or []
+        if gpu:
+            STATE["phased"] = {"stage": "gpu"}
+            _launch_bench(["--no-rich", "--percentiles", _PCTS, "--methods", ",".join(gpu)],
+                          "Re-Bench FAZA 2 (GPU)")
+        else:
+            STATE["phased"] = None
+            ui.notify("Nu există metode GPU de testat — gata.", type="info")
+        return
+
+    if ph and ph.get("stage") == "gpu":
+        # FAZA 2 (GPU) gata → comparăm decizia nouă cu snapshot-ul de după CPU
+        STATE["phased"] = None
+        before = STATE.get("phased_snapshot") or {}
+        after = _winners_snapshot()
+        changed = [gk for gk in after if after.get(gk) != before.get(gk)]
+        if changed:
+            ui.notify(f"⚡ GPU a îmbunătățit: {', '.join(changed)} → regenerez doar acestea.",
+                      type="positive")
+            _regenerate_changed_games(changed)
+        else:
+            ui.notify("FAZA 2 (GPU): nicio metodă GPU n-a bătut CPU → păstrez pool-urile CPU.",
+                      type="info")
+        return
+
+    # Re-Bench simplu (ne-fazat)
+    if (SETTINGS.get("autopilot_after_bench") and not STATE.get("active_job_id")
+            and STATE["datasets"]):
+        ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
+        apply_autopilot_and_generate()
+
+
+def _regenerate_changed_games(changed_keys: list) -> None:
+    """Regenerează DOAR jocurile (după game_key) unde decizia s-a schimbat la Faza 2."""
+    _KEY2LABEL = {"loto_6_49": "6/49", "loto_5_40": "5/40",
+                  "joker_urna1": "joker", "joker_urna2": "joker"}
+    labels = {_KEY2LABEL.get(gk) for gk in changed_keys if _KEY2LABEL.get(gk)}
+    if not labels:
+        return
+    # filtrăm dataset-urile la jocurile îmbunătățite, apoi Auto-Pilot pe ele
+    keep = [(fn, df) for fn, df in STATE["datasets"] if _game_label_for(fn) in labels]
+    if not keep:
+        return
+    if STATE.get("active_job_id"):
+        ui.notify("Aștept jobul curent înainte de regenerarea GPU...", type="warning")
+        return
+    _saved = STATE["datasets"]
+    STATE["datasets"] = keep  # temporar doar jocurile schimbate
+    try:
+        apply_autopilot_and_generate()
+    finally:
+        STATE["datasets"] = _saved  # restaurăm lista completă
+
+
+def run_phased_rebench() -> None:
+    """Re-Bench în 2 faze: Faza 1 CPU → Auto-Pilot → Faza 2 GPU → regenerare doar
+    jocurile unde GPU a bătut CPU (best_methods.json s-a schimbat)."""
+    if _bench_running():
+        ui.notify("Un bench rulează deja.", type="warning")
+        return
+    cpu, gpu = _bench_methods_split()
+    if not cpu:
+        ui.notify("Nu pot determina metodele CPU.", type="negative")
+        return
+    STATE["phased"] = {"stage": "cpu", "gpu_methods": gpu}
+    ui.notify(f"FAZA 1 (CPU, {len(cpu)} metode) pornită → apoi GPU.", type="info")
+    _launch_bench(["--no-rich", "--percentiles", _PCTS, "--methods", ",".join(cpu)],
+                  "Re-Bench FAZA 1 (CPU)")
 
 
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
@@ -1573,6 +1684,10 @@ def main_page() -> None:
         _full_eta = _estimate_bench_eta(1280)
         ui.button(f"🔬 RE-BENCH FULL ({_full_eta})", on_click=run_full_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.button("🔬 RE-BENCH 2 FAZE (CPU → Auto-Pilot → GPU)", on_click=run_phased_rebench
+                  ).props("color=deep-orange no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.label("Faza 1 CPU (rapid) → generează; Faza 2 GPU → regenerează DOAR jocurile "
+                 "unde GPU a bătut CPU.").classes("text-caption")
         _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
@@ -1596,13 +1711,10 @@ def main_page() -> None:
         # chiar dacă rulează manual din CMD, nu doar când UI-ul îl pornește.
         logs_panel.refresh()
         bench_now = _bench_running()
-        # Înlănțuire: Re-Bench tocmai s-a terminat → pornește Auto-Pilot automat
+        # Înlănțuire bench → Auto-Pilot (+ orchestrare 2 faze CPU→GPU)
         if STATE.get("bench_was_running") and not bench_now:
             STATE["bench_was_running"] = False
-            if (SETTINGS.get("autopilot_after_bench") and not STATE.get("active_job_id")
-                    and STATE["datasets"]):
-                ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
-                apply_autopilot_and_generate()
+            _on_bench_finished()
         elif bench_now:
             STATE["bench_was_running"] = True
         if STATE.get("active_job_id") or bench_now or STATE.get("wf_status"):
