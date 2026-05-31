@@ -1682,12 +1682,10 @@ def main_page() -> None:
 
         ui.separator()
         _full_eta = _estimate_bench_eta(1280)
-        ui.button(f"🔬 RE-BENCH FULL ({_full_eta})", on_click=run_full_rebench
+        ui.button(f"🔬 RE-BENCH ({_full_eta})", on_click=run_phased_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.button("🔬 RE-BENCH 2 FAZE (CPU → Auto-Pilot → GPU)", on_click=run_phased_rebench
-                  ).props("color=deep-orange no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.label("Faza 1 CPU (rapid) → generează; Faza 2 GPU → regenerează DOAR jocurile "
-                 "unde GPU a bătut CPU.").classes("text-caption")
+        ui.label("2 faze: Faza 1 CPU (rapid) → generează pool-uri; Faza 2 GPU → "
+                 "regenerează DOAR jocurile unde GPU a bătut CPU.").classes("text-caption")
         _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
