@@ -1071,6 +1071,15 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         ui.label(f"Garanție: {data.get('guarantee')}")
         ui.label(f"Variante simple: {len(variants)}")
         ui.label(f"Extrageri: {data.get('total_draws')}")
+        # Indicator GPU vs CPU — din audit.compute_device (scris de worker, device-ul REAL folosit)
+        _au = data.get("audit") or {}
+        _dev = _au.get("compute_device")
+        _gms = (_au.get("performance") or {}).get("gpu_time_ms")
+        _tsuf = f" <span style='opacity:.6'>({float(_gms)/1000:.1f}s)</span>" if _gms is not None else ""
+        if _dev == "gpu":
+            ui.html(f"<b style='color:#22c55e'>⚡ GPU</b>{_tsuf}")
+        elif _dev == "cpu":
+            ui.html(f"<b style='color:#f97316'>🐌 CPU</b>{_tsuf}")
 
     # Metoda câștigătoare folosită de scorer (din bench/best_methods.json)
     bw = (data.get("audit") or {}).get("bench_winner") or {}

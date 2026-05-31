@@ -1868,6 +1868,8 @@ class LotoEngine:
                 device = "gpu"
         except (RuntimeError, AttributeError) as exc:
             logging.debug("[TIMESFM] cuda probe failed, fallback la CPU: %s", exc)
+        # Salvăm device-ul REAL folosit (citit de UI pt indicatorul ⚡GPU/🐌CPU)
+        self.audit.setdefault('performance', {})['device'] = device
 
         total_available = len(self.data) if self.data is not None else 0
         limit = min(context_len, total_available)
