@@ -73,8 +73,10 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # sunt zgomot statistic. Modelele GPU grele (informer/fedformer) au iesit chiar SUB
 # random, consumand 90%+ GPU. Deci pastram toate CPU (cost ~zero) + cele 3 GPU care au
 # avut cel mai bun lift masurat (patchtst +0.009, dlinear +0.007, autoformer +0.005).
-# Restul de ~80 retele GPU = scoase (timp imens, rezultat <= random).
-_GPU_KEEP = {"patchtst", "dlinear", "autoformer"}
+# TOP 5 GPU dupa lift masurat (folds.csv): patchtst +0.009, dlinear +0.007,
+# autoformer +0.005, moment +0.005, tcn +0.003. Restul (informer/fedformer = sub
+# random; ~80 retele grele) scoase: timp imens, rezultat <= random.
+_GPU_KEEP = {"patchtst", "dlinear", "autoformer", "moment", "tcn"}
 
 
 def _is_gpu_method(m: str) -> bool:
