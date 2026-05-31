@@ -67,22 +67,28 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # C. DL Transformers
 # D. DL Probabilistice/Recurente/SSM
 # E. Random baseline + classical for context
-# TOATE metodele disponibile intra in bench full (cerut de utilizator): orice metoda
-# inregistrata in METHODS (acum sau viitoare via extensii) e inclusa automat.
-# Cele indisponibile (lib lipsa) sunt sarite rapid de runner. Ordine = registry.
+# Lista bench: TOATE metodele SIMPLE (CPU, instant) + DOAR top-3 GPU dovedite.
 #
-# EXCEPTIE: excludem variantele recurente GRELE (hidden mare, multi-layer, bidirectional,
-# hibride) — mananca mult timp GPU per fold, iar pe loterie (aleatoare) dau acelasi
-# rezultat ca variantele mici. Pastram doar LSTM/GRU simple (hidden 8-16).
-_HEAVY_EXCLUDE = {
-    "torch_lstm_m", "torch_lstm_l", "torch_lstm_xl",
-    "torch_bilstm", "torch_bilstm_deep",
-    "torch_gru_m", "torch_gru_l", "torch_bigru", "torch_bigru_deep",
-    "torch_lstm_attn", "torch_cnn_lstm", "torch_lstm_trans",
-    "torch_bayesian_lstm", "torch_conv_lstm", "torch_phased_lstm",
-}
-ALL_SPEC_METHODS = [m for m in list_methods()
-                    if method_meta(m).get("available", True) and m not in _HEAVY_EXCLUDE]
+# Decizie pe DATE REALE (folds.csv, 288 fold-uri): pe loterie (aleatoare), metodele
+# simple CPU (recency/frequency) au batut TOATE retelele neurale GPU, iar diferentele
+# sunt zgomot statistic. Modelele GPU grele (informer/fedformer) au iesit chiar SUB
+# random, consumand 90%+ GPU. Deci pastram toate CPU (cost ~zero) + cele 3 GPU care au
+# avut cel mai bun lift masurat (patchtst +0.009, dlinear +0.007, autoformer +0.005).
+# Restul de ~80 retele GPU = scoase (timp imens, rezultat <= random).
+_GPU_KEEP = {"patchtst", "dlinear", "autoformer"}
+
+
+def _is_gpu_method(m: str) -> bool:
+    fam = method_meta(m).get("family", "")
+    return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
+            or fam.startswith("nf-") or fam.startswith("foundation") or fam == "ssm")
+
+
+ALL_SPEC_METHODS = [
+    m for m in list_methods()
+    if method_meta(m).get("available", True)
+    and (not _is_gpu_method(m) or m in _GPU_KEEP)
+]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]
 
