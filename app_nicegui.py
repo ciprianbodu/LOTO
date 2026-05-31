@@ -353,12 +353,35 @@ def _regenerate_changed_games(changed_keys: list) -> None:
         STATE["datasets"] = _saved  # restaurăm lista completă
 
 
+def _istoric_has_data() -> bool:
+    """True dacă există măcar un CSV în _ISTORIC/ (sursa pe care o citește bench-ul)."""
+    try:
+        from loto_enterprise.benchmark.runner import _list_istoric_dirs
+        for d in _list_istoric_dirs():
+            if any(d.glob("*.csv")):
+                return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("istoric check: %s", exc)
+    return False
+
+
 def run_phased_rebench() -> None:
     """Re-Bench în 2 faze: Faza 1 CPU → Auto-Pilot → Faza 2 GPU → regenerare doar
     jocurile unde GPU a bătut CPU (best_methods.json s-a schimbat)."""
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
+    # Bench citește din _ISTORIC/; fără date acolo n-are ce testa.
+    if not _istoric_has_data():
+        ui.notify("Nu există date în _ISTORIC/ — adaugă CSV-urile cu extragerile "
+                  "(loto_6_49.csv, loto_5_40.csv, joker.csv) înainte de Re-Bench.",
+                  type="negative", timeout=8000)
+        return
+    # Auto-Pilot-ul de după faze generează din fișierul ÎNCĂRCAT în UI → avertizăm dacă lipsește.
+    if not STATE["datasets"]:
+        ui.notify("⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
+                  "de după NU va putea genera pool-uri. Încarcă fișierele la pasul 1.",
+                  type="warning", timeout=8000)
     cpu, gpu = _bench_methods_split()
     if not cpu:
         ui.notify("Nu pot determina metodele CPU.", type="negative")
