@@ -92,6 +92,8 @@ STATE: dict = {
     "phased_snapshot": None, # (rezervat)
     "results_gpu": None,     # rezultate din decizia GPU (secțiune ⚡ GPU, distinctă de CPU)
     "results_phase": None,   # "gpu" cât timp generarea curentă e pe decizia GPU
+    "bench_was_running": False,
+    "bench_cancelled": False, # True după Anulează → _tick NU mai pornește Auto-Pilot
 }
 
 # R3: lock pentru mutații compuse pe STATE din thread-uri (walk-forward, calibrare)
@@ -569,6 +571,12 @@ def cancel_all() -> None:
         pass
     STATE["phased"] = None
     STATE["active_job_id"] = None
+    STATE["results_phase"] = None
+    # IMPORTANT: marcăm că bench-ul NU mai e "în rulare" ca _tick să NU interpreteze
+    # disparitia procesului ca "bench terminat → Auto-Pilot". Altfel Anuleaza pornea
+    # generarea automat.
+    STATE["bench_was_running"] = False
+    STATE["bench_cancelled"] = True
     unlock_engine()
     ui.notify("Proces anulat (CPU + GPU).", type="warning")
     _refresh_status()
@@ -1876,15 +1884,18 @@ def main_page() -> None:
         # chiar dacă rulează manual din CMD, nu doar când UI-ul îl pornește.
         logs_panel.refresh()
         bench_now = _bench_running()
-        # Înlănțuire bench CPU → Auto-Pilot
+        # Înlănțuire bench CPU → Auto-Pilot (DOAR dacă nu a fost anulat manual)
         if STATE.get("bench_was_running") and not bench_now:
             STATE["bench_was_running"] = False
-            _on_bench_finished()
+            if not STATE.get("bench_cancelled"):
+                _on_bench_finished()
         elif bench_now:
             STATE["bench_was_running"] = True
+            STATE["bench_cancelled"] = False  # bench activ → resetăm flag-ul de anulare
         # Faza GPU paralelă: când procesul GPU se termină → decizie GPU + Auto-Pilot GPU
         _ph = STATE.get("phased") or {}
-        if _ph.get("mode") == "parallel" and _ph.get("gpu_pid") and not _ph.get("gpu_done"):
+        if (not STATE.get("bench_cancelled") and _ph.get("mode") == "parallel"
+                and _ph.get("gpu_pid") and not _ph.get("gpu_done")):
             if not _pids_alive([_ph["gpu_pid"]]):
                 _ph["gpu_done"] = True
                 _on_gpu_phase_done()
