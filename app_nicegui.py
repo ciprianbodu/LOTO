@@ -429,7 +429,7 @@ def run_phased_rebench() -> None:
         gpu_pid = _launch_bench_bg(["--no-rich", "--percentiles", _PCTS, "--methods", ",".join(gpu)],
                                    "bench_results_gpu", f"FAZA GPU ({len(gpu)} metode, paralel)")
     STATE["phased"] = {"mode": "parallel", "cpu_done": False, "gpu_done": not gpu_pid,
-                       "gpu_pid": gpu_pid}
+                       "gpu_pid": gpu_pid, "gpu_start": time.time()}
     ui.notify(f"🔬 Bench PARALEL pornit: CPU ({len(cpu)}) + GPU ({len(gpu)}) simultan.",
               type="info")
     _refresh_status()
@@ -721,9 +721,9 @@ def status_panel() -> None:
                     ui.linear_progress(value=rc[0], show_value=False).props("instant-feedback").classes("w-full")
             elif _gpu_on:
                 ui.label("🖥️ BENCH CPU — ✅ terminat").classes("text-positive text-caption")
-            # Bara GPU (paralel)
+            # Bara GPU (paralel) — start din STATE pt ETA
             if _gpu_pid:
-                rg = _bench_progress_from(BENCH_LOG_GPU_FILE)
+                rg = _bench_progress_from(BENCH_LOG_GPU_FILE, _ph.get("gpu_start"))
                 if rg:
                     ui.html("⚡ <b style='color:#c084fc'>BENCH GPU</b> — " + rg[1])
                     ui.linear_progress(value=rg[0], show_value=False).props("instant-feedback rounded").classes("w-full")
