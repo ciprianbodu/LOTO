@@ -521,13 +521,7 @@ def _make_ensemble(method_names: List[str], name: str) -> Callable:
     return _ensemble_score
 
 
-# Top-3 empiric (frequency + autoformer + kan) — best 4+ hits on N=30 bench
-score_ensemble_top3 = _make_ensemble(
-    ["frequency", "autoformer", "kan"],
-    "ensemble_top3",
-)
-
-# Top-5 empiric (top-3 + tide + rnn) — wider coverage
+# Top-5 empiric (frequency + autoformer + kan + tide + rnn) — wider coverage
 score_ensemble_top5 = _make_ensemble(
     ["frequency", "autoformer", "kan", "tide", "rnn"],
     "ensemble_top5",
@@ -614,8 +608,7 @@ METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
     # LLM-based (unavailable)
     "time_llm":    (score_time_llm,    "llm-ts",          True,  "TimeLLM (UNAVAILABLE — needs LLM backbone)"),
     # === ENSEMBLE — combine top-K methods, discovered empirically 2026-05-25 ===
-    "ensemble_top3":    (score_ensemble_top3,    "ensemble", False, "Average of top-3 (frequency + autoformer + kan)"),
-    "ensemble_top5":    (score_ensemble_top5,    "ensemble", False, "Average of top-5 (top-3 + tide + rnn)"),
+    "ensemble_top5":    (score_ensemble_top5,    "ensemble", False, "Average of top-5 (frequency+autoformer+kan+tide+rnn)"),
     "ensemble_diverse": (score_ensemble_diverse, "ensemble", False, "Diversified ensemble (frequency + fedformer + deepar)"),
 }
 

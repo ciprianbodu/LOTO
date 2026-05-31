@@ -167,6 +167,7 @@ class FoldResult:
     hits_per_pool_bl: Dict[str, float] = field(default_factory=dict)
     avg_hits_topk: float = 0.0          # avg hits at K = draw_n (base pool)
     max_hits_topk: int = 0
+    rate_4plus: float = 0.0             # rata extragerilor cu >=4 numere ghicite (regula 4+)
     blacklist_size: int = 0             # how many numbers were blacklisted per score round
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
@@ -210,6 +211,8 @@ def _evaluate_fold(
         per_pool_totals = {k: 0 for k in pool_sizes}
         per_pool_bl_totals = {k: 0 for k in pool_sizes}
         per_pool_max = {k: 0 for k in pool_sizes}
+        per_pool_4plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=4 numere ghicite
+        n_eval = 0                                     # nr. total extrageri evaluate
         blocks = 0
         empty_blocks = 0  # Count blocks where call_method returned {} (silent failure)
         bl_sizes_seen: List[int] = []
@@ -253,11 +256,14 @@ def _evaluate_fold(
 
             for j in range(pos, end):
                 actual = set(int(x) for x in test_draws[j])
+                n_eval += 1
                 for k in pool_sizes:
                     h = len(top_sets[k] & actual)
                     h_bl = len(top_sets_bl[k] & actual)
                     per_pool_totals[k] += h
                     per_pool_bl_totals[k] += h_bl
+                    if h >= 4:                       # regula 4+: numărăm hiturile mari
+                        per_pool_4plus[k] += 1
                     if h > per_pool_max[k]:
                         per_pool_max[k] = h
             history = np.concatenate([history, test_draws[pos:end]], axis=0)
@@ -279,6 +285,8 @@ def _evaluate_fold(
             fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_test, 1)
         fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.max_hits_topk = per_pool_max[game.draw_n]
+        # Regula 4+: rata de extrageri cu >=4 numere ghicite la pool-ul de bază (draw_n)
+        fr.rate_4plus = per_pool_4plus[game.draw_n] / max(n_eval, 1)
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
     except Exception as exc:

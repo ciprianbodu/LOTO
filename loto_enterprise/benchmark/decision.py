@@ -105,7 +105,7 @@ def decide_optimal_config_for_pool(
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     methods = [m for m in sub["method"].unique() if m != "random"]
 
-    qualifying: List[Tuple[str, float, int, int]] = []
+    qualifying: List[Tuple[str, float, int, int, float]] = []
     for m in methods:
         real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
         if real_m.empty:
@@ -117,7 +117,9 @@ def decide_optimal_config_for_pool(
         if consistency < CONSISTENCY_THRESHOLD:
             continue
         w_lift = _weighted_mean_lift(real_m, real_random, base_col)
-        qualifying.append((m, w_lift, n_beat, n_total))
+        # REGULA 4+: rata medie de extrageri cu >=4 numere ghicite (premiile reale)
+        r4 = float(real_m["rate_4plus"].mean()) if "rate_4plus" in real_m.columns else 0.0
+        qualifying.append((m, w_lift, n_beat, n_total, r4))
 
     if not qualifying:
         # Fallback: pick the method with overall highest avg_hits at base pool
@@ -137,13 +139,15 @@ def decide_optimal_config_for_pool(
             f"picked highest absolute avg_hits"
         )
     else:
-        # Sort by weighted lift descending; tiebreak on consistency
-        qualifying.sort(key=lambda r: (r[1], r[2] / max(r[3], 1)), reverse=True)
+        # REGULA 4+: sortăm întâi după rata de 4+ (premiile reale care contează),
+        # apoi după lift mediu, apoi consistență. Metoda care prinde cel mai des 4+
+        # câștigă, chiar dacă media generală (dominată de hituri mici) e similară.
+        qualifying.sort(key=lambda r: (r[4], r[1], r[2] / max(r[3], 1)), reverse=True)
         scorer = qualifying[0][0]
         rationale = (
-            f"{scorer} beat random in {qualifying[0][2]}/{qualifying[0][3]} windows "
-            f"(weighted lift = {qualifying[0][1]:+.4f}); "
-            f"selected from {len(qualifying)} qualifying methods"
+            f"{scorer}: rată 4+ = {qualifying[0][4]:.3f}, beat random in "
+            f"{qualifying[0][2]}/{qualifying[0][3]} windows (lift {qualifying[0][1]:+.4f}); "
+            f"din {len(qualifying)} metode calificate [prioritate: 4+ numere ghicite]"
         )
 
     # Pick the best sim_depth for the chosen scorer
