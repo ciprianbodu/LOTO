@@ -340,7 +340,12 @@ def run_benchmark(
             continue
         n = len(draws)
         logger.info("[%s] %d draws loaded from %s", game.key, n, game.csv_path)
-        rng = np.random.default_rng(random_seed + (hash(game.key) % 9973))
+        # BUG FIX cache: hash() built-in e RANDOMIZAT per pornire proces (PYTHONHASHSEED)
+        # → shuffle-ul random diferea la fiecare repornire → csv_hash diferit → cache miss
+        # pe TOATE fold-urile is_random la repornirea aplicatiei. Folosim un hash DETERMINIST.
+        import hashlib as _hl
+        _game_seed = int(_hl.md5(game.key.encode()).hexdigest()[:8], 16) % 9973
+        rng = np.random.default_rng(random_seed + _game_seed)
         idx = np.arange(n)
         rng.shuffle(idx)
         shuffled_draws = draws[idx]
