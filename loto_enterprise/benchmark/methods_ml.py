@@ -101,17 +101,10 @@ def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, co
     binary = _build_binary(draws_2d, max_num)
     ctx = min(context, binary.shape[1])
     series = [binary[i, -ctx:].astype(np.int32) for i in range(max_num)]
-    import os
-    n_workers = max(1, (os.cpu_count() or 4) - 1)  # toate nucleele minus 1 (sistem)
-    try:
-        from joblib import Parallel, delayed
-        # backend 'loky' (procese) cu n_jobs explicit = nr nuclee. Pe task-uri scurte
-        # batch_size mare reduce overhead-ul de dispecerizare → nuclee mai bine ocupate.
-        results = Parallel(n_jobs=n_workers, backend="loky", batch_size=4)(
-            delayed(_score_one_number)(s, lag, classifier_factory) for s in series
-        )
-    except Exception:  # noqa: BLE001 — fallback secvential daca joblib pica
-        results = [_score_one_number(s, lag, classifier_factory) for s in series]
+    # Cei 49 clasificatori rulează SECVENȚIAL aici, fiindcă paralelismul e acum la nivel
+    # de METODĂ (runner.py rulează mai multe metode simultan pe nuclee). Dublu-paralelism
+    # ar cauza oversubscription (N metode × 49 = mii de threads pe 32 nuclee → mai lent).
+    results = [_score_one_number(s, lag, classifier_factory) for s in series]
     scores = {i + 1: float(results[i]) for i in range(max_num)}
     return _normalize(scores, max_num)
 

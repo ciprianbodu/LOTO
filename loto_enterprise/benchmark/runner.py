@@ -368,6 +368,100 @@ def run_benchmark(
             except Exception as _cache_exc:
                 logger.debug(f"[bench_cache] init/hash failed: {_cache_exc}")
 
+        # ── Paralelizare metode CPU: rulează mai multe metode SIMULTAN (umple nucleele
+        # si in timpul metodelor instant). Doar metodele NON-GPU (torch/foundation
+        # raman secventiale ca sa nu se bata pe GPU). Definim worker-ul per (method,pct,is_random).
+        import os as _os
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _is_gpu_fam(m):
+            fam = method_meta_map.get(m, {}).get("family", "")
+            return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
+                    or fam.startswith("nf-") or fam.startswith("foundation") or fam == "ssm")
+
+        def _eval_task(method, pct, is_random, n_train, n_test):
+            """Un task atomic: cache lookup → compute → store. Întoarce (fr, from_cache)."""
+            src = shuffled_draws if is_random else draws
+            train = src[:n_train]
+            test = src[n_train:n_train + n_test]
+            cached_fr = None
+            if use_cache and csv_hash_game is not None:
+                try:
+                    cached_fr = get_cached_fold(csv_hash_game, method, pct, game.key, is_random)
+                except Exception:  # noqa: BLE001
+                    pass
+            if cached_fr is not None:
+                return cached_fr, True
+            fr, _snap = _evaluate_fold(method, train, test, game, block_size)
+            fr.percentile = pct
+            fr.is_random = is_random
+            if csv_hash_game is not None:
+                try:
+                    store_cached_fold(csv_hash_game, method, pct, game.key, is_random, fr)
+                except Exception:  # noqa: BLE001
+                    pass
+            return fr, False
+
+        # construim lista de task-uri (skip unavailable / train prea mic)
+        cpu_tasks = []   # (method, pct, is_random, n_train, n_test) — rulate PARALEL
+        gpu_tasks = []   # idem — rulate SECVENTIAL (un singur GPU)
+        for method in methods:
+            meta = method_meta_map[method]
+            if not meta["available"]:
+                logger.info("[%s/%s] SKIP (unavailable: %s)",
+                            game.key, method, meta.get("unavailable_reason"))
+                continue
+            for pct in percentiles:
+                n_test = max(1, int(math.ceil(n * pct / 100.0)))
+                n_train = max(0, n - n_test)
+                if pct >= 100:
+                    n_train = max(80, n_train)
+                    n_test = n - n_train
+                if n_train < 80:
+                    logger.info("[%s/%s/%d%%] skip — train too small (%d)",
+                                game.key, method, pct, n_train)
+                    continue
+                for is_random in (False, True):
+                    tup = (method, pct, is_random, n_train, n_test)
+                    (gpu_tasks if _is_gpu_fam(method) else cpu_tasks).append(tup)
+
+        total_this_game = len(cpu_tasks) + len(gpu_tasks)
+        done_this = 0
+
+        def _handle_result(method, pct, is_random, fr, from_cache):
+            nonlocal done_this
+            done_this += 1
+            fold_rows.append(fr)
+            tag = "CACHE HIT" if from_cache else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
+            logger.info("[%d/%d] [%s/%s/%d%%/%s] %s", done_this, total_this_game,
+                        game.key, method, pct, "RND" if is_random else "REAL", tag)
+            if progress_cb:
+                progress_cb(fold_idx_base + done_this, total_folds_est, fr, game)
+
+        fold_idx_base = fold_idx
+        # GPU: secvential (un singur GPU, nu paralelizam)
+        for (method, pct, is_random, n_train, n_test) in gpu_tasks:
+            try:
+                fr, fc = _eval_task(method, pct, is_random, n_train, n_test)
+                _handle_result(method, pct, is_random, fr, fc)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("[%s/%s] GPU task failed: %s", game.key, method, exc)
+        # CPU: PARALEL pe toate nucleele (mai multe metode simultan)
+        n_workers = max(1, (_os.cpu_count() or 4) - 1)
+        if cpu_tasks:
+            with ThreadPoolExecutor(max_workers=n_workers) as _ex:
+                futs = {_ex.submit(_eval_task, *t): t for t in cpu_tasks}
+                for fut in as_completed(futs):
+                    method, pct, is_random, _, _ = futs[fut]
+                    try:
+                        fr, fc = fut.result()
+                        _handle_result(method, pct, is_random, fr, fc)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error("[%s/%s] CPU task failed: %s", game.key, method, exc)
+        fold_idx = fold_idx_base + total_this_game
+        continue  # gata cu jocul curent (am procesat toate task-urile)
+
+        # ─── (cod vechi secvential, pastrat dezactivat sub 'continue') ───
         for method in methods:
             meta = method_meta_map[method]
             if not meta["available"]:
