@@ -70,7 +70,19 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # TOATE metodele disponibile intra in bench full (cerut de utilizator): orice metoda
 # inregistrata in METHODS (acum sau viitoare via extensii) e inclusa automat.
 # Cele indisponibile (lib lipsa) sunt sarite rapid de runner. Ordine = registry.
-ALL_SPEC_METHODS = [m for m in list_methods() if method_meta(m).get("available", True)]
+#
+# EXCEPTIE: excludem variantele recurente GRELE (hidden mare, multi-layer, bidirectional,
+# hibride) — mananca mult timp GPU per fold, iar pe loterie (aleatoare) dau acelasi
+# rezultat ca variantele mici. Pastram doar LSTM/GRU simple (hidden 8-16).
+_HEAVY_EXCLUDE = {
+    "torch_lstm_m", "torch_lstm_l", "torch_lstm_xl",
+    "torch_bilstm", "torch_bilstm_deep",
+    "torch_gru_m", "torch_gru_l", "torch_bigru", "torch_bigru_deep",
+    "torch_lstm_attn", "torch_cnn_lstm", "torch_lstm_trans",
+    "torch_bayesian_lstm", "torch_conv_lstm", "torch_phased_lstm",
+}
+ALL_SPEC_METHODS = [m for m in list_methods()
+                    if method_meta(m).get("available", True) and m not in _HEAVY_EXCLUDE]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]
 
