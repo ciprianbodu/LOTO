@@ -76,7 +76,11 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # TOP 5 GPU dupa lift masurat (folds.csv): patchtst +0.009, dlinear +0.007,
 # autoformer +0.005, moment +0.005, tcn +0.003. Restul (informer/fedformer = sub
 # random; ~80 retele grele) scoase: timp imens, rezultat <= random.
-_GPU_KEEP = {"patchtst", "dlinear", "autoformer", "moment", "tcn"}
+# +4 candidate promitatoare (2026-05-31): deepar (#6 masurat +0.0024, RNN probabilistic),
+# nhits (#7 +0.0004, MLP ierarhic), timesnet (SoTA 2023 multi-scale, familia tcn care a
+# mers), kan (Kolmogorov-Arnold Net 2024 — paradigma noua, invata functii nu ponderi).
+_GPU_KEEP = {"patchtst", "dlinear", "autoformer", "moment", "tcn",
+             "deepar", "nhits", "timesnet", "kan"}
 
 
 def _is_gpu_method(m: str) -> bool:
