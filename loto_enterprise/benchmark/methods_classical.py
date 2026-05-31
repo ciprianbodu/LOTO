@@ -832,8 +832,162 @@ def score_weighted_recent(draws_2d, max_num):
 
 
 # ===========================================================================
+# TEORIA NUMERELOR + SPREAD/SUME POZITIONALE (numpy, CPU) 2026-05-31
+# ===========================================================================
+
+def _draw_sum_profile(draws_2d):
+    """Profil sume: media + std a sumelor extragerilor (pt scoruri pozitionale)."""
+    sums = np.array([sum(int(v) for v in row if v > 0) for row in draws_2d], dtype=np.float64)
+    return float(sums.mean()), float(sums.std() + 1e-9)
+
+
+def score_sum_affinity(draws_2d, max_num):
+    """Afinitate cu suma TIPICA: numere care ajuta extragerea sa cada in banda de
+    sume cea mai frecventa istoric (geometric — pozitia pe axa sumelor)."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    mean_sum, std_sum = _draw_sum_profile(draws_2d)
+    draw_n = draws_2d.shape[1]
+    target_per_num = mean_sum / max(draw_n, 1)  # contributia medie a unui numar
+    scores = {}
+    for k in range(1, max_num + 1):
+        # cat de aproape e numarul de contributia "ideala" (gaussian pe distanta)
+        scores[k] = float(np.exp(-((k - target_per_num) ** 2) / (2 * (std_sum / draw_n) ** 2 + 1e-9)))
+    return _normalize(scores, max_num)
+
+
+def score_parity_balance(draws_2d, max_num):
+    """Echilibru par/impar: scor pe baza raportului par/impar tipic + nevoia curenta."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    # raport mediu de pare per extragere
+    even_counts = [sum(1 for v in row if int(v) % 2 == 0 and v > 0) for row in draws_2d]
+    avg_even = float(np.mean(even_counts))
+    draw_n = draws_2d.shape[1]
+    target_even_ratio = avg_even / max(draw_n, 1)
+    # ultima extragere: cate pare a avut → ce lipseste
+    last = draws_2d[-1]
+    last_even = sum(1 for v in last if int(v) % 2 == 0 and v > 0)
+    need_even = target_even_ratio > (last_even / max(draw_n, 1))
+    scores = {}
+    for k in range(1, max_num + 1):
+        is_even = (k % 2 == 0)
+        scores[k] = 1.0 if (is_even == need_even) else 0.4
+    return _normalize(scores, max_num)
+
+
+def score_digit_root(draws_2d, max_num):
+    """Radacina digitala (number theory): scor pe frecventa radacinii digitale recente.
+    Radacina digitala = 1 + (n-1)%9. Numere cu radacina 'fierbinte' recent → scor mare."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    def droot(n): return 1 + (n - 1) % 9 if n > 0 else 0
+    w = min(40, draws_2d.shape[0])
+    root_freq = np.zeros(10, dtype=np.float64)
+    for row in draws_2d[-w:]:
+        for v in row:
+            vi = int(v)
+            if vi > 0: root_freq[droot(vi)] += 1
+    scores = {k: float(root_freq[droot(k)]) for k in range(1, max_num + 1)}
+    return _normalize(scores, max_num)
+
+
+def score_modular(draws_2d, max_num):
+    """Reziduuri modulo (number theory): unele resturi mod 7/mod 10 ies mai des.
+    Combina semnalul mod 7 + mod 10 din istoric recent."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    w = min(60, draws_2d.shape[0])
+    m7 = np.zeros(7, dtype=np.float64); m10 = np.zeros(10, dtype=np.float64)
+    for row in draws_2d[-w:]:
+        for v in row:
+            vi = int(v)
+            if vi > 0:
+                m7[vi % 7] += 1; m10[vi % 10] += 1
+    scores = {}
+    for k in range(1, max_num + 1):
+        scores[k] = float(m7[k % 7] + m10[k % 10])
+    return _normalize(scores, max_num)
+
+
+def score_prime_bias(draws_2d, max_num):
+    """Bias prime/compuse: masoara cat de des ies prime vs compuse recent si scoreaza
+    in consecinta (number theory)."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    def is_prime(n):
+        if n < 2: return False
+        for d in range(2, int(n ** 0.5) + 1):
+            if n % d == 0: return False
+        return True
+    primes = {k for k in range(1, max_num + 1) if is_prime(k)}
+    w = min(40, draws_2d.shape[0])
+    p_hits = c_hits = 0
+    for row in draws_2d[-w:]:
+        for v in row:
+            vi = int(v)
+            if vi > 0:
+                if vi in primes: p_hits += 1
+                else: c_hits += 1
+    prime_rate = p_hits / max(p_hits + c_hits, 1)
+    scores = {}
+    for k in range(1, max_num + 1):
+        scores[k] = prime_rate if k in primes else (1 - prime_rate)
+    return _normalize(scores, max_num)
+
+
+def score_spread_position(draws_2d, max_num):
+    """Spread pozitional: scor pe baza pozitiei TIPICE a fiecarui numar in extragerea
+    sortata (numerele mici tind pe primele pozitii). Numere consistente pozitional."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    draw_n = draws_2d.shape[1]
+    pos_sum = np.zeros(max_num + 1, dtype=np.float64)
+    pos_cnt = np.zeros(max_num + 1, dtype=np.float64)
+    for row in draws_2d:
+        srow = sorted(int(v) for v in row if v > 0)
+        for pos, vi in enumerate(srow):
+            if 1 <= vi <= max_num:
+                pos_sum[vi] += pos; pos_cnt[vi] += 1
+    scores = {}
+    for k in range(1, max_num + 1):
+        if pos_cnt[k] == 0:
+            scores[k] = 0.5
+        else:
+            # pozitia medie normalizata; consistenta (frecventa) ca pondere
+            scores[k] = (pos_cnt[k] / draws_2d.shape[0])
+    return _normalize(scores, max_num)
+
+
+def score_decade_balance(draws_2d, max_num):
+    """Echilibru pe decade: scoreaza numerele din decadele sub-reprezentate recent
+    (1-10, 11-20...) — geometric pe axa valorilor."""
+    if draws_2d.shape[0] < 5:
+        return {}
+    n_dec = (max_num + 9) // 10
+    w = min(20, draws_2d.shape[0])
+    dec_freq = np.zeros(n_dec, dtype=np.float64)
+    for row in draws_2d[-w:]:
+        for v in row:
+            vi = int(v)
+            if vi > 0: dec_freq[(vi - 1) // 10] += 1
+    # decade rare → scor mare (compensare)
+    inv = dec_freq.max() - dec_freq + 1.0
+    scores = {k: float(inv[(k - 1) // 10]) for k in range(1, max_num + 1)}
+    return _normalize(scores, max_num)
+
+
+# ===========================================================================
 
 CLASSICAL_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+    # === Teoria numerelor + spread/sume pozitionale (numpy, CPU) 2026-05-31 ===
+    "sum_affinity":    (score_sum_affinity,    "geometric-sum",   False, "Afinitate cu suma tipica a extragerii"),
+    "parity_balance":  (score_parity_balance,  "geometric-parity", False, "Echilibru par/impar"),
+    "digit_root":      (score_digit_root,      "number-theory",   False, "Radacina digitala (1+(n-1)%9)"),
+    "modular":         (score_modular,         "number-theory",   False, "Reziduuri mod 7 + mod 10"),
+    "prime_bias":      (score_prime_bias,      "number-theory",   False, "Bias prime vs compuse"),
+    "spread_position": (score_spread_position, "geometric-pos",   False, "Pozitia tipica in extragerea sortata"),
+    "decade_balance":  (score_decade_balance,  "geometric-decade", False, "Compensare decade sub-reprezentate"),
     # === EXTRA matematice/geometrice (numpy, CPU, fără instalări) 2026-05-31 ===
     "gap_poisson":     (score_gap_poisson,     "math-gap",       False, "Overdue Poisson pe gap-uri"),
     "entropy_window":  (score_entropy_window,  "math-entropy",   False, "Entropie aparitii (regularitate)"),
