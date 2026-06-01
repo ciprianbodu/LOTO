@@ -791,11 +791,10 @@ class LotoEngine:
             self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
             self._consecutive_filter_applied = False
         else:
-            # [NEW] Optimizare suplimentară prin Smart Selector (Gap/Trend/Positional)
-            # Rafinează pool-ul pentru a maximiza hit-urile de 4 și 5 numere.
-            if hasattr(self, '_apply_smart_selector'):
-                logging.info("[PIPELINE] Rafinare nucleu prin Smart Selector (Hybrid Optimization)...")
-                self._apply_smart_selector(freq)
+            # Smart Selector (rafinare Gap/Trend/Positional) ELIMINAT la cererea
+            # utilizatorului: pe loterie aleatoare introducea noise peste decizia
+            # scorerului castigator (overfit pe euristici fara valoare predictiva reala).
+            # Pastram pool-ul BRUT al scorerului. POST-HOC + Anti-Sequence raman (la final).
             self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
 
             # NOTA: anti-sequence filter NU se mai aplica aici. POST-HOC poate
