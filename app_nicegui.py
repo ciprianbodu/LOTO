@@ -1298,10 +1298,6 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 
     if audit:
         _render_stages(audit)
-        with ui.expansion(f"🔍 Audit brut (JSON){(' — ' + skey_suffix.strip('_')) if skey_suffix else ''}",
-                          value=False).classes("w-full"):
-            ui.code(json.dumps(audit, indent=2, ensure_ascii=False, default=str),
-                    language="json").classes("w-full max-h-80 overflow-auto text-xs")
 
 
 def _num_scores(d: dict) -> dict:
