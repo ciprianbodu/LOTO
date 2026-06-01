@@ -465,7 +465,9 @@ def run_benchmark(
             done_this += 1
             fold_rows.append(fr)
             tag = "CACHE HIT" if from_cache else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
-            logger.info("[%d/%d] [%s/%s/%d%%/%s] %s", done_this, total_this_game,
+            # [N/M] = total GRAND (toate jocurile), consistent cu markerul [BENCH-SPLIT]
+            # și cu progres_cb — altfel UI arăta tot per-joc (3780) iar CPU/GPU grand (15120).
+            logger.info("[%d/%d] [%s/%s/%d%%/%s] %s", fold_idx_base + done_this, total_folds_est,
                         game.key, method, pct, "RND" if is_random else "REAL", tag)
             if progress_cb:
                 progress_cb(fold_idx_base + done_this, total_folds_est, fr, game)
