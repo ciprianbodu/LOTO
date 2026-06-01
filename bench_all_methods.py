@@ -79,20 +79,9 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # +4 candidate promitatoare (2026-05-31): deepar (#6 masurat +0.0024, RNN probabilistic),
 # nhits (#7 +0.0004, MLP ierarhic), timesnet (SoTA 2023 multi-scale, familia tcn care a
 # mers), kan (Kolmogorov-Arnold Net 2024 — paradigma noua, invata functii nu ponderi).
-_GPU_KEEP = {"patchtst", "dlinear", "autoformer", "moment", "tcn",
-             "deepar", "nhits", "timesnet", "kan"}
-
-
-def _is_gpu_method(m: str) -> bool:
-    fam = method_meta(m).get("family", "")
-    return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
-            or fam.startswith("nf-") or fam.startswith("foundation") or fam == "ssm")
-
-
-# TOATE metodele disponibile (CPU + TOATE GPU) — fără filtrul _GPU_KEEP, la cererea
-# utilizatorului (2026-06-01): reactivăm toate rețelele neurale / foundation / torch.
-# ⚠️ Bench-ul GPU durează semnificativ mai mult. _GPU_KEEP / _is_gpu_method rămân doar
-# pentru clasificare/etichetare CPU‖GPU, nu mai filtrează lista.
+# TOATE metodele disponibile (CPU + TOATE GPU/rețele neurale/foundation/torch), la cererea
+# utilizatorului (2026-06-01). ⚠️ Bench-ul GPU durează semnificativ mai mult.
+# Clasificarea CPU/GPU se face acum exclusiv în runner (_is_gpu_fam_global) și în UI.
 ALL_SPEC_METHODS = [
     m for m in list_methods()
     if method_meta(m).get("available", True)
