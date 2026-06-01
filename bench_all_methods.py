@@ -89,10 +89,13 @@ def _is_gpu_method(m: str) -> bool:
             or fam.startswith("nf-") or fam.startswith("foundation") or fam == "ssm")
 
 
+# TOATE metodele disponibile (CPU + TOATE GPU) — fără filtrul _GPU_KEEP, la cererea
+# utilizatorului (2026-06-01): reactivăm toate rețelele neurale / foundation / torch.
+# ⚠️ Bench-ul GPU durează semnificativ mai mult. _GPU_KEEP / _is_gpu_method rămân doar
+# pentru clasificare/etichetare CPU‖GPU, nu mai filtrează lista.
 ALL_SPEC_METHODS = [
     m for m in list_methods()
     if method_meta(m).get("available", True)
-    and (not _is_gpu_method(m) or m in _GPU_KEEP)
 ]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]

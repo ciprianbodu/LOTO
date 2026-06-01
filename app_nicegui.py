@@ -951,7 +951,7 @@ def _render_adaptive(audit: dict) -> None:
             f"border-radius:8px;font-size:0.9em;'>{''.join(parts)}</div>")
 
 
-def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
+def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str = "") -> None:
     if not flat:
         return
     gk = _game_label_for(game)
@@ -964,9 +964,14 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False) -> None:
     best_pool = max(getattr(p, "hits_union", 0) for p in flat)
     avg_rate = (avg_var / draw_n) * 100
 
-    _title = (f"📊 Walk-forward{' (Faza 1)' if is_invert else ''}: rată {avg_rate:.1f}% · "
+    _mtxt = f" · metodă: {method}" if method else ""
+    _title = (f"📊 Walk-forward{' (Faza 1)' if is_invert else ''}{_mtxt}: rată {avg_rate:.1f}% · "
               f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n} predicții  (click pt detalii)")
     with ui.expansion(_title, value=False).classes("w-full mt-2"):
+        if method:
+            ui.label(f"✅ Validat pe metoda câștigătoare a bench-ului: {method} "
+                     "(pipeline-ul regenerează pool-ul la fiecare extragere folosind acest scorer).").classes(
+                "text-caption text-positive")
         ui.label(f"{n} predicții pe {len(uniq)} extrageri").classes("text-caption")
         if is_invert:
             ui.label("ℹ️ Validare FAZA 1 (pool normal, pre-inversare) — pool-ul afișat mai sus "
@@ -1267,7 +1272,9 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
     if with_wf:
         flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
         if flat:
-            _render_walk_forward(flat, game, is_invert=False)
+            _bw = (data.get("audit") or {}).get("bench_winner") or {}
+            _wm = next((info.get("method") for info in _bw.values() if info.get("method")), "")
+            _render_walk_forward(flat, game, is_invert=False, method=_wm)
 
     # OMNIUS — cel mai bun bilet din ACEST pool (separat per pool)
     _render_omnius_pool(game, data)
