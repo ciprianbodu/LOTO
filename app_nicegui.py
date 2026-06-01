@@ -1778,9 +1778,10 @@ def main_page() -> None:
         _full_eta = _estimate_bench_eta(1280)
         ui.button("🔬 RE-BENCH (CPU ‖ GPU paralel)", on_click=run_phased_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.label("CPU și GPU rulează SIMULTAN. CPU termină primul → Auto-Pilot (secțiunea "
-                 "🖥️ CPU). GPU termină în paralel → al doilea Auto-Pilot (secțiunea ⚡ GPU). "
-                 "Le compari distinct.").classes("text-caption")
+        ui.label("Un singur bench testează TOATE metodele. Intern, metodele CPU rulează pe "
+                 "toate nucleele (în paralel) SIMULTAN cu metodele GPU. Toate concurează în "
+                 "ACELAȘI clasament → UN câștigător (regula 4+) → UN Auto-Pilot → UN walk-forward. "
+                 "Vezi clasamentul complet (CPU+GPU) la 🏆 Clasament bench.").classes("text-caption")
         _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
