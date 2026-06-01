@@ -11,7 +11,10 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 
-FOLDS_CSV = Path("bench_results/folds.csv")
+# Path ABSOLUT (rădăcina proiectului = parinte[2] al acestui fișier), nu relativ la CWD —
+# altfel matricea apărea „indisponibilă" când CWD-ul procesului ≠ rădăcina proiectului
+# (leaderboard-ul/ETA folosesc deja path absolut prin PROJECT_ROOT).
+FOLDS_CSV = Path(__file__).resolve().parents[2] / "bench_results" / "folds.csv"
 
 
 def load_folds() -> Optional[pd.DataFrame]:

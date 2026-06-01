@@ -280,7 +280,7 @@ def _istoric_has_data() -> bool:
     return False
 
 
-def run_phased_rebench() -> None:
+def run_rebench() -> None:
     """Re-Bench UNIC: un singur proces testează TOATE metodele. Intern, runner.py
     paralelizează metodele CPU pe toate nucleele (ProcessPool) și rulează cele GPU
     secvențial — deci CPU(multi-nuclee) ‖ GPU în același bench, fără 2 procese/secțiuni."""
@@ -816,8 +816,9 @@ LR_SCHEMES = {
 STAGE_META = [
     ("1_nqi_raw", "1. NQI Raw (scorer)", "#60a5fa",
      "Pool brut din scorer (bench winner / TimesFM): top-K după scor de probabilitate."),
-    ("2_smart_selector", "2. Smart Selector", "#a78bfa",
-     "Rafinare hibridă: 40% Gap + 25% Trend + 20% Frequency + 15% Positional."),
+    ("2_smart_selector", "2. Pool brut (fără rafinare)", "#a78bfa",
+     "Smart Selector ELIMINAT — pool-ul rămâne decizia PURĂ a scorerului câștigător "
+     "(fără rafinare hibridă). Etapă păstrată doar pentru numerotare (Δ mereu 0)."),
     ("3_anti_sequence", "3. Anti-Sequence Filter", "#f59e0b",
      "Elimină secvențe de 3+ numere consecutive rare; înlocuiește cu rezerve top-frecvență."),
     ("4_post_hoc_final", "4. POST-HOC Final", "#10b981",
@@ -1474,12 +1475,13 @@ def _method_library(name: str, family: str = "") -> str:
             return "NeuralForecast"
         if f.startswith("foundation"):
             return "Foundation (TimesFM/Chronos/MOMENT)"
+        if f.startswith("ml-"):
+            # ml-boost-gpu = XGBoost/LightGBM/CatBoost pe GPU (NU PyTorch, NU sklearn pur)
+            return "gradient boosting (XGBoost/LightGBM/CatBoost)" if "boost" in f else "scikit-learn"
         if f.startswith("torch") or f.endswith("-gpu"):
             return "PyTorch"
         if f == "ssm":
             return "state-space"
-        if f.startswith("ml-"):
-            return "scikit-learn"
         if f.startswith("classical"):
             return "statsmodels"
         if f.startswith("ensemble"):
@@ -1491,7 +1493,9 @@ def _method_library(name: str, family: str = "") -> str:
         return family  # familia brută dacă n-o recunoaștem
     n = (name or "").lower()
     if n.startswith("ml_"):
-        return "scikit-learn"
+        return ("gradient boosting (XGBoost/LightGBM/CatBoost)"
+                if any(b in n for b in ("xgb", "lgbm", "catboost", "boost", "gbm"))
+                else "scikit-learn")
     if n.startswith("torch_") or n.startswith("ens_torch") or n.endswith("_gpu"):
         return "PyTorch"
     if n in _GPU_NAME_SET:
@@ -1881,7 +1885,7 @@ def main_page() -> None:
 
         ui.separator()
         _full_eta = _estimate_bench_eta(1280)
-        ui.button("🔬 RE-BENCH (CPU ‖ GPU paralel)", on_click=run_phased_rebench
+        ui.button("🔬 RE-BENCH (CPU ‖ GPU paralel)", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
         ui.label("Un singur bench testează TOATE metodele. Intern, metodele CPU rulează pe "
                  "toate nucleele (în paralel) SIMULTAN cu metodele GPU. Toate concurează în "
