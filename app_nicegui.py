@@ -88,10 +88,6 @@ STATE: dict = {
     "calib": {},             # {game_label: {"best": int, "detail": dict}}
     "calib_status": "",
     "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
-    "phased": None,          # orchestrare bench paralel: {"mode":"parallel","gpu_pid":...}
-    "phased_snapshot": None, # (rezervat)
-    "results_gpu": None,     # rezultate din decizia GPU (secțiune ⚡ GPU, distinctă de CPU)
-    "results_phase": None,   # "gpu" cât timp generarea curentă e pe decizia GPU
     "bench_was_running": False,
     "bench_cancelled": False, # True după Anulează → _tick NU mai pornește Auto-Pilot
     "_log_cache": None,       # conținut loguri pre-citit în thread (ne-blocant pt UI)
@@ -188,13 +184,7 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
         ui.notify("Există deja un job în rulare.", type="warning")
         return
     STATE["pure_bench"] = pure
-    if STATE.get("results_phase") == "gpu":
-        # generare GPU (faza paralelă): NU șterge rezultatele CPU; doar pe cele GPU vechi
-        STATE["results_gpu"] = None
-    else:
-        # generare normală/CPU: resetează tot (inclusiv secțiunea GPU veche)
-        STATE["results"] = None
-        STATE["results_gpu"] = None
+    STATE["results"] = None
     STATE["retro"] = {}
     STATE["_omnius_cache"] = {}  # OMNIUS se recalculează pt noile pool-uri
     STATE["wf_status"] = ""
@@ -248,30 +238,6 @@ def _bench_running() -> bool:
     except Exception:  # noqa: BLE001
         return False
 
-
-def _pids_alive(pids: list) -> bool:
-    """True dacă MĂCAR un PID din listă mai rulează (pt bench paralel CPU+GPU)."""
-    try:
-        import psutil
-        return any(psutil.pid_exists(int(p)) for p in pids)
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _launch_bench_bg(args: list[str], out_dir: str, label: str) -> int | None:
-    """Pornește un bench în fundal cu --out propriu (pt rulare paralelă). Întoarce PID."""
-    py = sys.executable
-    cmd = [py, "bench_all_methods.py", "--out", out_dir, "--no-decision"] + args
-    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
-    try:
-        proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=flags)
-        ui.notify(f"{label} pornit (PID {proc.pid}).", type="positive")
-        return proc.pid
-    except Exception as exc:  # noqa: BLE001
-        ui.notify(f"Nu pot porni {label}: {exc}", type="negative")
-        return None
-
-
 def _launch_bench(args: list[str], label: str) -> None:
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
@@ -297,96 +263,12 @@ _PCTS = "10,20,30,40,50,60,70,80,90,100"
 def run_full_rebench() -> None:
     _launch_bench(["--no-rich", "--percentiles", _PCTS], "FULL Re-Bench")
 
-
-def _bench_methods_split():
-    """(cpu_methods, gpu_methods) din ALL_SPEC_METHODS, pt bench pe faze."""
-    try:
-        import bench_all_methods as _B
-        cpu = [m for m in _B.ALL_SPEC_METHODS if not _B._is_gpu_method(m)]
-        gpu = [m for m in _B.ALL_SPEC_METHODS if _B._is_gpu_method(m)]
-        return cpu, gpu
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("bench split: %s", exc)
-        return [], []
-
-
-def _winners_snapshot() -> dict:
-    """{game_key: scorer} per pool curent din best_methods.json — pt comparat fazele."""
-    snap = {}
-    try:
-        from loto_enterprise.core.method_selector import _load_config
-        cfg = _load_config()
-        for gk, g in (cfg.get("games") or {}).items():
-            apm = g.get("auto_pilot_per_pool") or {}
-            snap[gk] = {k: (v or {}).get("scorer") for k, v in apm.items()}
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("winners snapshot: %s", exc)
-    return snap
-
-
 def _on_bench_finished() -> None:
-    """Apelat când bench-ul CPU (pe BENCH_PID_FILE) se termină.
-    Mod PARALEL: CPU gata → snapshot + Auto-Pilot (GPU rulează în paralel, separat).
-    Mod simplu: Auto-Pilot."""
-    ph = STATE.get("phased")
-    if ph and ph.get("mode") == "parallel" and not ph.get("cpu_done"):
-        ph["cpu_done"] = True
-        STATE["phased_snapshot"] = _winners_snapshot()
-        if SETTINGS.get("autopilot_after_bench") and STATE["datasets"]:
-            ui.notify("✅ FAZA CPU gata → Auto-Pilot. (GPU rulează în paralel — regenerez "
-                      "jocurile îmbunătățite când termină.)", type="positive")
-            apply_autopilot_and_generate()
-        return
-
-    # Re-Bench simplu (ne-fazat)
+    """Re-Bench (unic) terminat → pornește Auto-Pilot automat (dacă e bifat)."""
     if (SETTINGS.get("autopilot_after_bench") and not STATE.get("active_job_id")
             and STATE["datasets"]):
         ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
         apply_autopilot_and_generate()
-
-
-def _on_gpu_phase_done() -> None:
-    """Faza GPU (paralelă) s-a terminat → ia decizia DOAR pe folds GPU → Auto-Pilot
-    separat → pool-urile GPU se afișează DISTINCT (secțiunea ⚡ GPU), lângă cele CPU."""
-    STATE["phased"] = None
-    try:
-        # Decizia pe folds GPU (bench_results_gpu/folds.csv) → best_methods.json
-        from loto_enterprise.benchmark.decision import update_best_methods_with_auto_pilot
-        gpu_folds = str(PROJECT_ROOT / "bench_results_gpu" / "folds.csv")
-        if Path(gpu_folds).exists():
-            update_best_methods_with_auto_pilot(folds_csv_path=gpu_folds)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("decizie GPU: %s", exc)
-        ui.notify(f"Eroare la decizia GPU: {exc}", type="negative")
-        return
-    if SETTINGS.get("autopilot_after_bench") and STATE["datasets"]:
-        ui.notify("⚡ FAZA GPU gata → Auto-Pilot GPU (rezultatele apar în secțiunea GPU).",
-                  type="positive")
-        STATE["results_phase"] = "gpu"   # marchez că următoarea generare = GPU
-        apply_autopilot_and_generate()
-
-
-def _regenerate_changed_games(changed_keys: list) -> None:
-    """Regenerează DOAR jocurile (după game_key) unde decizia s-a schimbat la Faza 2."""
-    _KEY2LABEL = {"loto_6_49": "6/49", "loto_5_40": "5/40",
-                  "joker_urna1": "joker", "joker_urna2": "joker"}
-    labels = {_KEY2LABEL.get(gk) for gk in changed_keys if _KEY2LABEL.get(gk)}
-    if not labels:
-        return
-    # filtrăm dataset-urile la jocurile îmbunătățite, apoi Auto-Pilot pe ele
-    keep = [(fn, df) for fn, df in STATE["datasets"] if _game_label_for(fn) in labels]
-    if not keep:
-        return
-    if STATE.get("active_job_id"):
-        ui.notify("Aștept jobul curent înainte de regenerarea GPU...", type="warning")
-        return
-    _saved = STATE["datasets"]
-    STATE["datasets"] = keep  # temporar doar jocurile schimbate
-    try:
-        apply_autopilot_and_generate()
-    finally:
-        STATE["datasets"] = _saved  # restaurăm lista completă
-
 
 def _istoric_has_data() -> bool:
     """True dacă există măcar un CSV în _ISTORIC/ (sursa pe care o citește bench-ul)."""
@@ -401,11 +283,10 @@ def _istoric_has_data() -> bool:
 
 
 def run_phased_rebench() -> None:
-    """Re-Bench PARALEL: CPU și GPU rulează SIMULTAN, fiecare în folderul lui
-    (bench_results/ și bench_results_gpu/), fără conflict pe folds.csv.
-    CPU termină primul (rapid) → Auto-Pilot. GPU termină în paralel → combin folds →
-    re-decid → regenerez DOAR jocurile unde GPU a bătut CPU."""
-    if _bench_running() or (STATE.get("phased") or {}).get("mode") == "parallel":
+    """Re-Bench UNIC: un singur proces testează TOATE metodele. Intern, runner.py
+    paralelizează metodele CPU pe toate nucleele (ProcessPool) și rulează cele GPU
+    secvențial — deci CPU(multi-nuclee) ‖ GPU în același bench, fără 2 procese/secțiuni."""
+    if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
     if not _istoric_has_data():
@@ -417,26 +298,8 @@ def run_phased_rebench() -> None:
         ui.notify("⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
                   "de după NU va putea genera pool-uri. Încarcă fișierele la pasul 1.",
                   type="warning", timeout=8000)
-    cpu, gpu = _bench_methods_split()
-    if not cpu:
-        ui.notify("Nu pot determina metodele CPU.", type="negative")
-        return
-
-    # CPU → scrie pe BENCH_PID_FILE (urmărit de _bench_running/_on_bench_finished, ca un bench normal)
-    cpu_pid = _launch_bench_bg(["--no-rich", "--percentiles", _PCTS, "--methods", ",".join(cpu)],
-                               "bench_results", f"FAZA CPU ({len(cpu)} metode)")
-    if cpu_pid:
-        BENCH_PID_FILE.write_text(f"{cpu_pid}|{int(time.time())}", encoding="utf-8")
-    # GPU → rulează în PARALEL, folder separat, urmărit prin STATE["phased"]["gpu_pid"]
-    gpu_pid = None
-    if gpu:
-        gpu_pid = _launch_bench_bg(["--no-rich", "--percentiles", _PCTS, "--methods", ",".join(gpu)],
-                                   "bench_results_gpu", f"FAZA GPU ({len(gpu)} metode, paralel)")
-    STATE["phased"] = {"mode": "parallel", "cpu_done": False, "gpu_done": not gpu_pid,
-                       "gpu_pid": gpu_pid, "gpu_start": time.time()}
-    ui.notify(f"🔬 Bench PARALEL pornit: CPU ({len(cpu)}) + GPU ({len(gpu)}) simultan.",
-              type="info")
-    _refresh_status()
+    # un singur bench, fără --methods (= TOATE), scrie best_methods.json (decizie 4+)
+    _launch_bench(["--no-rich", "--percentiles", _PCTS], "Re-Bench (toate metodele)")
 
 
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
@@ -479,9 +342,6 @@ def _fmt_dur(sec) -> str:
     if m:
         return f"{m}m {sec_}s"
     return f"{sec_}s"
-
-
-BENCH_LOG_GPU_FILE = PROJECT_ROOT / "bench_full_gpu.log"
 
 
 def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
@@ -598,24 +458,15 @@ def cancel_all() -> None:
         cancel_pending_running_jobs("Oprit de utilizator")
     except Exception as exc:  # noqa: BLE001
         logger.warning("cancel jobs: %s", exc)
-    # Kill AMBELE benchuri: CPU (din .bench_pid) + GPU paralel (din STATE["phased"])
+    # Kill bench (din .bench_pid) + fallback orice bench_all_methods.py din proiect
     import psutil
-    pids_to_kill = []
     if BENCH_PID_FILE.exists():
         try:
-            pids_to_kill.append(int(BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0]))
-        except Exception:  # noqa: BLE001
-            pass
-    _ph = STATE.get("phased") or {}
-    if _ph.get("gpu_pid"):
-        pids_to_kill.append(int(_ph["gpu_pid"]))
-    for pid in pids_to_kill:
-        try:
+            pid = int(BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0])
             if psutil.pid_exists(pid):
                 psutil.Process(pid).terminate()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("kill bench pid %s: %s", pid, exc)
-    # fallback: orice python care ruleaza bench_all_methods.py din acest proiect
+            logger.warning("kill bench pid: %s", exc)
     try:
         root = str(PROJECT_ROOT)
         for p in psutil.process_iter(["cmdline"]):
@@ -628,9 +479,7 @@ def cancel_all() -> None:
         BENCH_PID_FILE.unlink()
     except OSError:
         pass
-    STATE["phased"] = None
     STATE["active_job_id"] = None
-    STATE["results_phase"] = None
     # IMPORTANT: marcăm că bench-ul NU mai e "în rulare" ca _tick să NU interpreteze
     # disparitia procesului ca "bench terminat → Auto-Pilot". Altfel Anuleaza pornea
     # generarea automat.
@@ -644,31 +493,9 @@ def cancel_all() -> None:
 # --------------------------------------------------------------------------- #
 # Walk-forward backtest (în thread de fundal, ca să nu blocheze UI-ul)
 # --------------------------------------------------------------------------- #
-def _start_walk_forward_on_winner() -> None:
-    """Rulează walk-forward DOAR pe câștigătorul 4+ (CPU sau GPU). Daca exista o singura
-    faza (generare normala), ruleaza pe ea. Economiseste un WF costisitor (127 simulari)."""
-    has_cpu = isinstance(STATE.get("results"), tuple)
-    has_gpu = isinstance(STATE.get("results_gpu"), tuple)
-    if has_cpu and has_gpu:
-        # determinăm câștigătorul pe rata 4+ (medie pe jocuri) din folds CPU vs GPU
-        cpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results" / "folds.csv")
-        gpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results_gpu" / "folds.csv")
-        best_cpu = max((max(m.values(), default=0.0) for m in cpu_r.values()), default=0.0)
-        best_gpu = max((max(m.values(), default=0.0) for m in gpu_r.values()), default=0.0)
-        use_gpu = best_gpu > best_cpu
-        ui.notify(f"🎯 Walk-forward pe câștigătorul 4+: "
-                  f"{'⚡ GPU' if use_gpu else '🖥️ CPU'} (rată 4+ "
-                  f"{max(best_gpu, best_cpu):.4f}).", type="positive")
-        _start_walk_forward(use_gpu=use_gpu)
-    elif has_gpu:
-        _start_walk_forward(use_gpu=True)
-    else:
-        _start_walk_forward(use_gpu=False)
 
-
-def _start_walk_forward(use_gpu: bool = False) -> None:
-    key = "results_gpu" if use_gpu else "results"
-    results = STATE.get(key)
+def _start_walk_forward() -> None:
+    results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
         return
     results_bundle, _ = results
@@ -676,7 +503,7 @@ def _start_walk_forward(use_gpu: bool = False) -> None:
     # deci când auto_invert e ON validează pool-ul normal, nu cel inversat afișat.
     # NU mai sărim — afișăm stats-urile etichetate clar ca "Faza 1" (vezi results_panel).
     _has_invert = any(d.get("auto_invert") for _fn, outs in results_bundle for _gl, d in outs.items())
-    _pfx = "gpu_" if use_gpu else ""  # prefix retro ca CPU/GPU să nu se suprascrie
+    _pfx = ""  # bench unic → fără prefix de secțiune
 
     def _worker_wf() -> None:
         try:
@@ -752,27 +579,11 @@ def status_panel() -> None:
             if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
                 STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
             with STATE_LOCK:
-                _is_gpu_res = (STATE.get("results_phase") == "gpu")
-                if _is_gpu_res:
-                    STATE["results_gpu"] = payload   # rezultate GPU (secțiune distinctă)
-                    STATE["results_phase"] = None
-                else:
-                    STATE["results"] = payload       # rezultate CPU / normal
+                STATE["results"] = payload
                 STATE["active_job_id"] = None
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
-            # Walk-forward DOAR pe câștigător (4+), DUPĂ ce ambele faze sunt gata.
-            # Daca e bench paralel si inca asteptam cealalta faza → amânăm WF.
-            _ph_now = STATE.get("phased") or {}
-            _parallel = _ph_now.get("mode") == "parallel"
-            _both_ready = (isinstance(STATE.get("results"), tuple)
-                           and isinstance(STATE.get("results_gpu"), tuple))
-            if _parallel and not _both_ready:
-                # mai asteptam cealalta faza — doar afisam, fara WF deocamdata
-                ui.notify("Rezultate afișate. Walk-forward va rula pe câștigător când "
-                          "termină și cealaltă fază.", type="info")
-            else:
-                _start_walk_forward_on_winner()
+            _start_walk_forward()
             results_panel.refresh()
             try:
                 ui.run_javascript(SOUND_JS)  # beep de finalizare
@@ -803,34 +614,19 @@ def status_panel() -> None:
                         "w-full max-h-48 overflow-auto text-xs")
         return
 
-    # GPU paralel activ?
-    _ph = STATE.get("phased") or {}
-    _gpu_pid = _ph.get("gpu_pid") if _ph.get("mode") == "parallel" else None
-    _gpu_on = bool(_gpu_pid and _pids_alive([_gpu_pid]) and not _ph.get("gpu_done"))
-
-    if bench_on or _gpu_on:
+    if bench_on:
+        _start = None
+        try:
+            _p = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
+            _start = float(_p[1]) if len(_p) > 1 else None
+        except Exception:  # noqa: BLE001
+            pass
+        rc = _bench_progress_from(BENCH_LOG_FILE, _start)
         with ui.card().classes("w-full"):
-            # Bara CPU
-            if bench_on:
-                _start = None
-                try:
-                    _p = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
-                    _start = float(_p[1]) if len(_p) > 1 else None
-                except Exception:  # noqa: BLE001
-                    pass
-                rc = _bench_progress_from(BENCH_LOG_FILE, _start)
-                if rc:
-                    ui.html("🖥️ <b style='color:#38bdf8'>BENCH CPU</b> — " + rc[1])
-                    ui.linear_progress(value=rc[0], show_value=False).props("instant-feedback").classes("w-full")
-            elif _gpu_on:
-                ui.label("🖥️ BENCH CPU — ✅ terminat").classes("text-positive text-caption")
-            # Bara GPU (paralel) — start din STATE pt ETA
-            if _gpu_pid:
-                rg = _bench_progress_from(BENCH_LOG_GPU_FILE, _ph.get("gpu_start"))
-                if rg:
-                    ui.html("⚡ <b style='color:#c084fc'>BENCH GPU</b> — " + rg[1])
-                    ui.linear_progress(value=rg[0], show_value=False).props("instant-feedback rounded").classes("w-full")
-            ui.label("CPU și GPU rulează în paralel; rezultatele apar separat când termină fiecare.").classes("text-caption")
+            if rc:
+                ui.html("🔬 <b style='color:#38bdf8'>RE-BENCH</b> — " + rc[1])
+                ui.linear_progress(value=rc[0], show_value=False).props("instant-feedback").classes("w-full")
+            ui.label("Testez toate metodele (CPU pe nuclee ‖ GPU). Auto-Pilot pornește la final.").classes("text-caption")
             ui.html(_hw_telemetry_html())  # consum live CPU/RAM/GPU/VRAM
         return
 
@@ -1597,10 +1393,7 @@ def results_panel() -> None:
         ui.label(f"{int(_wfp * 100)}%").classes("text-caption text-info")
 
     results = STATE.get("results")
-    results_gpu = STATE.get("results_gpu")
-    has_cpu = isinstance(results, tuple) and len(results) == 2
-    has_gpu = isinstance(results_gpu, tuple) and len(results_gpu) == 2
-    if not has_cpu and not has_gpu:
+    if not (isinstance(results, tuple) and len(results) == 2):
         return
 
     elapsed = ""
@@ -1610,80 +1403,7 @@ def results_panel() -> None:
         ui.label(f"Rezultate{elapsed}").classes("text-h6")
         ui.button("📋 Raport integral", on_click=_show_report).props("flat dense")
 
-    # Comparativ CPU vs GPU pe regula 4+ (când ambele există)
-    if has_cpu and has_gpu:
-        _render_cpu_gpu_verdict()
-
-    # Secțiune CPU (sau rezultate normale) + secțiune GPU distinctă (bench paralel)
-    if has_cpu:
-        if has_gpu:
-            ui.html("<div style='background:#0f2942;border-left:4px solid #38bdf8;"
-                    "padding:6px 12px;border-radius:6px;margin-top:6px'>"
-                    "🖥️ <b style='color:#38bdf8;font-size:1.1em'>REZULTATE CPU</b> "
-                    "<span style='opacity:.7'>(metode rapide statistice/ML)</span></div>")
-        _render_results_bundle(results[0], res_prefix="")
-    if has_gpu:
-        ui.html("<div style='background:#2d1b3d;border-left:4px solid #c084fc;"
-                "padding:6px 12px;border-radius:6px;margin-top:14px'>"
-                "⚡ <b style='color:#c084fc;font-size:1.1em'>REZULTATE GPU</b> "
-                "<span style='opacity:.7'>(rețele neurale — rulate în paralel)</span></div>")
-        _render_results_bundle(results_gpu[0], res_prefix="gpu_")
-
-
-def _rate_4plus_per_game(folds_path) -> dict:
-    """{game_key: {method: avg rate_4plus}} din folds.csv (REAL, non-failed)."""
-    out = {}
-    try:
-        import csv as _csv
-        from collections import defaultdict
-        agg = defaultdict(lambda: defaultdict(list))
-        with open(folds_path, encoding="utf-8") as f:
-            for r in _csv.DictReader(f):
-                if str(r.get("is_random")).lower() in ("true", "1"): continue
-                if str(r.get("failed")).lower() in ("true", "1"): continue
-                try:
-                    agg[r["game"]][r["method"]].append(float(r.get("rate_4plus") or 0))
-                except (ValueError, KeyError):
-                    pass
-        for g, ms in agg.items():
-            out[g] = {m: (sum(v)/len(v) if v else 0.0) for m, v in ms.items()}
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("rate_4plus read: %s", exc)
-    return out
-
-
-def _render_cpu_gpu_verdict() -> None:
-    """Card: pe regula 4+, ce a câștigat (CPU vs GPU) per joc, cu motivul. Citește
-    rate_4plus din folds.csv (CPU) + bench_results_gpu/folds.csv (GPU)."""
-    cpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results" / "folds.csv")
-    gpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results_gpu" / "folds.csv")
-    if not cpu_r and not gpu_r:
-        return
-    rows = []
-    for gk in sorted(set(cpu_r) | set(gpu_r)):
-        best_cpu = max(cpu_r.get(gk, {}).items(), key=lambda x: x[1], default=(None, 0.0))
-        best_gpu = max(gpu_r.get(gk, {}).items(), key=lambda x: x[1], default=(None, 0.0))
-        if best_cpu[1] >= best_gpu[1]:
-            win, wm, wr, lm, lr, color = "🖥️ CPU", best_cpu[0], best_cpu[1], best_gpu[0], best_gpu[1], "#38bdf8"
-        else:
-            win, wm, wr, lm, lr, color = "⚡ GPU", best_gpu[0], best_gpu[1], best_cpu[0], best_cpu[1], "#c084fc"
-        rows.append((gk, win, wm, wr, lm, lr, color))
-    if not rows:
-        return
-    with ui.card().classes("w-full").style("background:#1a1a2e;border:1px solid #f59e0b"):
-        ui.html("🎯 <b style='color:#fbbf24'>VERDICT 4+ HITS</b> "
-                "<span style='opacity:.7;font-size:.85em'>(care a prins mai des ≥4 numere în backtest)</span>")
-        for gk, win, wm, wr, lm, lr, color in rows:
-            ui.html(
-                f"<div style='margin:3px 0'><b>{gk}</b>: câștigă "
-                f"<b style='color:{color}'>{win}</b> cu <b>{wm}</b> "
-                f"(rată 4+ = {wr:.4f})  <span style='opacity:.6'>vs {lm or '—'} ({lr:.4f})</span> "
-                f"→ motiv: a prins ≥4 numere de {wr/max(lr,1e-9):.1f}× mai des</div>"
-                if lr > 0 else
-                f"<div style='margin:3px 0'><b>{gk}</b>: câștigă "
-                f"<b style='color:{color}'>{win}</b> cu <b>{wm}</b> (rată 4+ = {wr:.4f})</div>"
-            )
-
+    _render_results_bundle(results[0])
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
     for fname, outs in results_bundle:
@@ -2055,30 +1775,24 @@ def main_page() -> None:
         from nicegui import run as _nrun
 
         def _blocking_probe():
-            """Rulat în THREAD: pid-uri + citiri loguri (lente OneDrive) → cache STATE."""
+            """Rulat în THREAD: pid bench + citiri loguri (lente OneDrive) → cache STATE."""
             try:
                 bn = _bench_running()
             except Exception:  # noqa: BLE001
                 bn = False
-            ph = STATE.get("phased") or {}
-            gpu_done_now = False
-            if ph.get("mode") == "parallel" and ph.get("gpu_pid") and not ph.get("gpu_done"):
-                gpu_done_now = not _pids_alive([ph["gpu_pid"]])
-            # pre-citim logurile în cache (ca refresh-ul UI să fie instant, ne-blocant)
             try:
                 STATE["_log_cache"] = read_logs_filtered(120)
             except Exception:  # noqa: BLE001
                 pass
-            return bn, gpu_done_now
+            return bn
 
         try:
-            bench_now, gpu_done_now = await _nrun.io_bound(_blocking_probe)
+            bench_now = await _nrun.io_bound(_blocking_probe)
         except Exception:  # noqa: BLE001
-            bench_now, gpu_done_now = False, False
+            bench_now = False
 
-        _active = bool(STATE.get("active_job_id") or bench_now or STATE.get("wf_status")
-                       or (STATE.get("phased") or {}).get("gpu_pid"))
-        # Înlănțuire bench CPU → Auto-Pilot
+        _active = bool(STATE.get("active_job_id") or bench_now or STATE.get("wf_status"))
+        # Re-Bench terminat → Auto-Pilot automat
         if STATE.get("bench_was_running") and not bench_now:
             STATE["bench_was_running"] = False
             if not STATE.get("bench_cancelled"):
@@ -2086,12 +1800,6 @@ def main_page() -> None:
         elif bench_now:
             STATE["bench_was_running"] = True
             STATE["bench_cancelled"] = False
-        # Faza GPU paralelă terminată
-        _ph = STATE.get("phased") or {}
-        if (not STATE.get("bench_cancelled") and _ph.get("mode") == "parallel"
-                and _ph.get("gpu_pid") and not _ph.get("gpu_done") and gpu_done_now):
-            _ph["gpu_done"] = True
-            _on_gpu_phase_done()
         # Refresh UI (rapid, din STATE) — doar când e activ
         if _active:
             logs_panel.refresh()
