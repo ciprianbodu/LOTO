@@ -1399,12 +1399,89 @@ def results_panel() -> None:
 
     _render_results_bundle(results[0])
 
+
+# nume de metode care folosesc GPU (rețele neurale) — fallback dacă telemetria bench
+# (gpu_pct/vram) e 0 pe rândul respectiv. Evită importul registry-ului greu (torch).
+_GPU_NAME_HINTS = {
+    "patchtst", "dlinear", "nlinear", "autoformer", "informer", "moment", "tcn", "deepar",
+    "nhits", "nbeats", "nbeatsx", "timesnet", "kan", "tft", "tide", "timemixer", "bitcn",
+    "deepnpts", "mlpmultivariate", "fedformer", "lstm", "gru", "rnn", "vanillatransformer",
+}
+
+
+def _method_uses_gpu(name: str, gpu_peak: float = 0.0, vram_peak: float = 0.0) -> bool:
+    """Etichetă CPU/GPU: întâi telemetria reală din bench (gpu%/vram), apoi euristica pe nume."""
+    if gpu_peak and gpu_peak > 1.0:
+        return True
+    if vram_peak and vram_peak > 1.0:
+        return True
+    ml = str(name).lower()
+    return (ml.startswith("torch_") or ml.startswith("ens_torch") or ml.endswith("_gpu")
+            or ml.startswith("nf_") or ml.startswith("foundation") or ml in _GPU_NAME_HINTS)
+
+
+def _render_bench_leaderboard(game_label: str, top_n: int = 5) -> None:
+    """Top-N metode din ULTIMUL bench pentru acest joc, clasate pe regula 4+ (rata
+    extragerilor cu ≥4 numere ghicite). CPU și GPU în ACELAȘI clasament — un singur bench.
+    Sursă: bench_results/folds.csv (scris de runner)."""
+    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
+    if not fp.exists():
+        return
+    try:
+        df = pd.read_csv(fp)
+    except Exception:  # noqa: BLE001
+        return
+    if df.empty or "method" not in df.columns or "game" not in df.columns:
+        return
+    key = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker"}.get(game_label, game_label)
+    sub = df[df["game"].astype(str).str.startswith(key)]
+    if "is_random" in sub.columns:
+        sub = sub[sub["is_random"] == False]  # noqa: E712
+    if "failed" in sub.columns:
+        sub = sub[sub["failed"] != True]  # noqa: E712
+    if sub.empty:
+        return
+    has_4plus = "rate_4plus" in sub.columns
+    metric = "rate_4plus" if has_4plus else "avg_hits_topk"
+    if metric not in sub.columns:
+        return
+    g = sub.groupby("method")
+    rows = []
+    for m, grp in g:
+        score = float(grp[metric].mean())
+        avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
+        gpu_pk = float(grp["gpu_pct_peak"].max()) if "gpu_pct_peak" in grp.columns else 0.0
+        vram_pk = float(grp["vram_mb_peak"].max()) if "vram_mb_peak" in grp.columns else 0.0
+        rows.append((m, score, avg, _method_uses_gpu(m, gpu_pk, vram_pk)))
+    rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
+    rows = rows[:top_n]
+    if not rows:
+        return
+    label = ("rata 4+ numere ghicite" if has_4plus else "medie hituri / extragere")
+    with ui.expansion(f"🏆 Clasament bench (top {len(rows)} metode · {label})",
+                      value=False).classes("w-full"):
+        ui.label("CPU și GPU în ACELAȘI clasament — un singur bench alege câștigătorul (regula 4+).").classes(
+            "text-caption text-grey")
+        for i, (m, score, avg, is_gpu) in enumerate(rows, 1):
+            tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
+            tag_cls = "text-deep-purple" if is_gpu else "text-blue"
+            sc_txt = f"4+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
+            desc = _METHOD_DESC.get(m, "")
+            with ui.row().classes("items-center gap-2 w-full"):
+                ui.label(f"{i}.").classes("text-bold text-grey w-6")
+                ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
+                ui.label(m).classes("text-bold")
+                ui.label(f"· {sc_txt} · medie/extragere {avg:.2f}"
+                         + (f" · {desc}" if desc else "")).classes("text-caption text-grey")
+
+
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
     for fname, outs in results_bundle:
         with ui.card().classes("w-full"):
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, data in outs.items():
                 with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
+                    _render_bench_leaderboard(game)
                     if data.get("auto_invert") and data.get("phase1"):
                         # AUTO-INVERT → DOUĂ pool-uri de jucat:
                         ui.label("🟢 POOL 1 — normal (pe date, cu validare walk-forward)").classes(
@@ -1479,7 +1556,7 @@ def analysis_panel() -> None:
         ui.label(f"Freshness indisponibil ({exc}).").classes("text-caption")
 
     # --- Decizie benchmark per joc ---
-    ui.label("Decizie benchmark (scorer optim per joc):").classes("text-bold mt-2")
+    ui.label("Decizie benchmark (scorer optim per joc — CPU/GPU + librărie):").classes("text-bold mt-2")
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         any_dec = False
@@ -1488,8 +1565,16 @@ def analysis_panel() -> None:
             cfg = recommend_optimal_config(gk, ps)
             if cfg and not cfg.get("fallback"):
                 any_dec = True
-                ui.label(f"  • {lbl} (K={ps}): {cfg.get('scorer')} @ {cfg.get('sim_depth_pct')}% "
-                         f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')})").classes("text-caption")
+                m = cfg.get("scorer", "?")
+                tag = "⚡ GPU" if _method_uses_gpu(m) else "🖥️ CPU"
+                desc = _METHOD_DESC.get(m, "")
+                with ui.row().classes("items-center gap-2"):
+                    ui.label(f"  • {lbl} (K={ps}):").classes("text-caption")
+                    ui.label(tag).classes("text-caption text-bold "
+                                          + ("text-deep-purple" if _method_uses_gpu(m) else "text-blue"))
+                    ui.label(f"{m} @ {cfg.get('sim_depth_pct')}% "
+                             f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')})"
+                             + (f" · {desc}" if desc else "")).classes("text-caption")
         if not any_dec:
             ui.label("  Fără decizie încă — rulează un Re-Bench.").classes("text-caption text-warning")
     except Exception as exc:  # noqa: BLE001
@@ -1507,7 +1592,11 @@ def analysis_panel() -> None:
                     s = summary_per_game(folds, gk, ps)
                     if not s.get("available"):
                         continue
-                    ui.label(f"{lbl} (K={ps}) — top: {s['best_method']} (avg={s['best_mean']:.3f})").classes("text-bold mt-1")
+                    _bm = s["best_method"]
+                    _tag = "⚡ GPU" if _method_uses_gpu(_bm) else "🖥️ CPU"
+                    _desc = _METHOD_DESC.get(_bm, "")
+                    ui.label(f"{lbl} (K={ps}) — top: {_tag} {_bm} (avg={s['best_mean']:.3f})"
+                             + (f" · {_desc}" if _desc else "")).classes("text-bold mt-1")
                     _render_matrix_html(s["matrix"])
         else:
             ui.label("Matrice walk-forward indisponibilă — rulează un benchmark.").classes("text-caption")
