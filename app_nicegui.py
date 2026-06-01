@@ -1518,8 +1518,8 @@ def _render_omnius_pool(game: str, d: dict) -> None:
                       f"border-radius:14px;font-weight:800'>{jkn[0]}</span>")
     with ui.card().classes("w-full").style("background:#1e1b4b;border:1px solid #f59e0b"):
         ui.html("⭐ <b style='color:#fbbf24'>OMNIUS</b> — biletul meta-adaptiv din acest pool "
-                "<span style='opacity:.65;font-size:.8em'>(meta-învățare: ponderează metodele "
-                "după performanța recentă)</span>")
+                "<span style='opacity:.65;font-size:.8em'>(50% meta-învățare + 50% Smart Logic "
+                "Hybrid: Gap/Trend/Freq/Positional/Recent)</span>")
         ui.html("<div style='margin:5px 0'>" + chips + jk_txt + "</div>")
 
 

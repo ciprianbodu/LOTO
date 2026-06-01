@@ -59,16 +59,66 @@ def _topk(scores: Dict[int, float], k: int) -> set:
     return set(n for n, _ in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k])
 
 
+def _smart_logic_hybrid(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+    """Smart Logic Hybrid v2 ca scorer standalone (replica formulei din engine, numpy pur):
+    30% Gap (overdue) + 30% Recent-Hits + 15% Trend + 15% Frequency + 10% Positional."""
+    n = draws_2d.shape[0]
+    draw_n = draws_2d.shape[1]
+    if n < 10:
+        return _normalize({}, max_num)
+    # matrice binară (max_num × n)
+    bm = np.zeros((max_num + 1, n), dtype=np.float32)
+    for i, row in enumerate(draws_2d):
+        for v in row:
+            vi = int(v)
+            if 1 <= vi <= max_num:
+                bm[vi, i] = 1.0
+    freq = bm[1:].sum(axis=1)  # frecvență per număr
+    fmax, fmin = (freq[freq > 0].max() if (freq > 0).any() else 1.0), (freq[freq > 0].min() if (freq > 0).any() else 0.0)
+    w = min(20, n // 2)
+    s_w, l_w = min(15, n), min(50, n)
+    gap, trend, frq, pos, rec = {}, {}, {}, {}, {}
+    for k in range(1, max_num + 1):
+        idx = np.where(bm[k] > 0)[0]
+        # Gap (overdue): current_gap / avg_gap, scalat 0.3-1.0
+        if len(idx) < 2:
+            gap[k] = 0.5
+        else:
+            avg_gap = float(np.diff(idx).mean()); cur = n - int(idx[-1])
+            gap[k] = min(1.0, (cur / avg_gap) * 0.7 + 0.3) if avg_gap > 0 else 0.5
+        # Trend: recent vs older window
+        rf = float(bm[k, -w:].sum()); of = float(bm[k, -2*w:-w].sum()) if n >= 2*w else 0.0
+        trend[k] = (0.6 if rf > 0 else 0.4) if of == 0 else min(1.0, max(0.0, (rf/of - 0.5) * 2))
+        # Frequency: min-max
+        frq[k] = (freq[k-1] - fmin) / max(fmax - fmin, 1e-9) if fmax != fmin else 0.5
+        # Recent-Hits: 0.65*short + 0.35*long
+        sr = float(bm[k, -s_w:].mean()) if s_w else 0.0
+        lr = float(bm[k, -l_w:].mean()) if l_w else 0.0
+        rec[k] = 0.65 * min(1.0, sr * 2.5) + 0.35 * min(1.0, lr * 3.0)
+        # Positional: consistență (varianță mică = scor mare)
+        counts = np.zeros(draw_n)
+        for i, row in enumerate(draws_2d):
+            for p, v in enumerate(row):
+                if int(v) == k and p < draw_n:
+                    counts[p] += 1
+        tot = counts.sum()
+        pos[k] = max(0.0, 1.0 - float(np.var(counts/tot)) * draw_n) if tot > 0 else 0.5
+    final = {k: gap[k]*0.30 + rec[k]*0.30 + trend[k]*0.15 + frq[k]*0.15 + pos[k]*0.10
+             for k in range(1, max_num + 1)}
+    return _normalize(final, max_num)
+
+
 def score_omnius(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
-    """Meta-scorer: ponderează candidații după performanța lor recentă (învățare adaptivă)."""
+    """OMNIUS = 50%% META-ÎNVĂȚARE (ponderează metodele după performanța recentă) +
+    50%% SMART LOGIC HYBRID (Gap/Trend/Freq/Positional/Recent). Combină cele două
+    abordări: 'ce metodă e în formă acum' + 'analiza multi-factorială a numerelor'."""
     from .methods import METHODS  # lazy (evită circular import)
 
     n = draws_2d.shape[0]
     draw_n = draws_2d.shape[1]
     if n < 30:
-        # prea puține date pt meta-învățare → fallback la frecvență simplă
-        fn = METHODS.get("frequency")
-        return fn[0](draws_2d, max_num) if fn else _normalize({}, max_num)
+        # prea puține date pt meta-învățare → doar Smart Logic
+        return _smart_logic_hybrid(draws_2d, max_num)
 
     # candidați disponibili în registry
     cands = [m for m in _OMNIUS_CANDIDATES if m in METHODS]
@@ -129,10 +179,17 @@ def score_omnius(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
         for num, val in sc_n.items():
             final[num] += wgt * val
 
-    return _normalize({k: float(final[k]) for k in range(1, max_num + 1)}, max_num)
+    meta_scores = _normalize({k: float(final[k]) for k in range(1, max_num + 1)}, max_num)
+
+    # ── 4. COMBINARE 50/50 cu Smart Logic Hybrid (Gap/Trend/Freq/Positional/Recent) ──
+    smart = _smart_logic_hybrid(draws_2d, max_num)
+    combined = {k: 0.5 * meta_scores.get(k, 0.0) + 0.5 * smart.get(k, 0.0)
+                for k in range(1, max_num + 1)}
+    logger.info("[OMNIUS] combinat 50%% meta-învățare + 50%% Smart Logic Hybrid")
+    return _normalize(combined, max_num)
 
 
 OMNIUS_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
-    "omnius": (score_omnius, "meta-adaptive", False,
+    "omnius": (score_omnius, "meta-adaptive", False,  # 50% meta-învățare + 50% Smart Logic Hybrid
                "OMNIUS — meta-învățare: ponderează metodele după performanța recentă"),
 }
