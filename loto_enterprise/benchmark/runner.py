@@ -375,7 +375,7 @@ def run_benchmark(
     # Importuri o singură dată (erau în buclă).
     import os as _os
     import hashlib as _hl
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
     try:
         from .bench_cache import compute_csv_hash, get_cached_fold, store_cached_fold
         _cache_ok = True
@@ -463,67 +463,98 @@ def run_benchmark(
     _nc = _os.cpu_count() or 4
     n_workers = max(1, _nc - max(2, _nc // 4))
     _ex = None
-    fut_ctx = {}
+    fut_kind = {}   # fut -> ("cpu"|"gpu", game, csv_hash)
+
+    # CPU: ProcessPool (procese reale, ocolesc GIL pe numpy pur).
+    _ex = None
     if all_cpu_compute:
         try:
             _ex = ProcessPoolExecutor(max_workers=n_workers)
             for (method, train, test, game, bs, pct, is_random, csv_hash) in all_cpu_compute:
                 fut = _ex.submit(_eval_fold_worker, (method, train, test, game, bs, pct, is_random))
-                fut_ctx[fut] = (game, csv_hash)
+                fut_kind[fut] = ("cpu", game, csv_hash)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[bench] ProcessPool indisponibil (%s) — CPU secvential.", exc)
             _ex = None
 
-    # GPU: secvenţial (un singur GPU) — rulează CONCURENT cu pool-ul CPU global de mai sus.
-    for (game, csv_hash, draws, shuffled, method, pct, is_random, n_train, n_test) in all_gpu_tasks:
+    # GPU: ThreadPool cu LOTO_GPU_CONCURRENCY worker-i (default 3). Datele de loto sunt
+    # mici → o singură rețea ține GPU-ul la ~9%% (restul timpului = overhead CPU pe
+    # PyTorch/NeuralForecast). Rulând câteva rețele concurent, fazele de overhead se
+    # SUPRAPUN și GPU-ul e mai ocupat → timp total mai mic. torch eliberează GIL pe
+    # operațiile CUDA, deci thread-urile chiar se suprapun. =1 → comportament secvențial.
+    gpu_conc = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "3")))
+
+    def _gpu_worker(task):
+        game, csv_hash, draws, shuffled, method, pct, is_random, n_train, n_test = task
+        src = shuffled if is_random else draws
+        train = src[:n_train]
+        test = src[n_train:n_train + n_test]
+        cached = None
+        if use_cache and _cache_ok and csv_hash is not None:
+            try:
+                cached = get_cached_fold(csv_hash, method, pct, game.key, is_random)
+            except Exception:  # noqa: BLE001
+                pass
+        if cached is not None:
+            return (method, pct, is_random, cached, None, True)
         try:
-            src = shuffled if is_random else draws
-            train = src[:n_train]
-            test = src[n_train:n_train + n_test]
-            cached = None
-            if use_cache and _cache_ok and csv_hash is not None:
+            fr, _snap = _evaluate_fold(method, train, test, game, block_size)
+            fr.percentile = pct
+            fr.is_random = is_random
+            if _cache_ok and csv_hash is not None:
                 try:
-                    cached = get_cached_fold(csv_hash, method, pct, game.key, is_random)
+                    store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
                 except Exception:  # noqa: BLE001
                     pass
-            if cached is not None:
-                _handle_result(game, method, pct, is_random, cached, True)
-            else:
-                fr, _snap = _evaluate_fold(method, train, test, game, block_size)
-                fr.percentile = pct
-                fr.is_random = is_random
-                if _cache_ok and csv_hash is not None:
-                    try:
-                        store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
-                    except Exception:  # noqa: BLE001
-                        pass
-                _handle_result(game, method, pct, is_random, fr, False)
+            return (method, pct, is_random, fr, None, False)
         except Exception as exc:  # noqa: BLE001
-            logger.error("[%s/%s] GPU task failed: %s", game.key, method, exc)
+            return (method, pct, is_random, None, f"{type(exc).__name__}: {exc}", False)
 
-    # Colectăm rezultatele CPU (deja calculate în paralel cu GPU-ul de mai sus).
-    if _ex is not None:
+    _gex = None
+    if all_gpu_tasks:
         try:
-            for fut in as_completed(list(fut_ctx.keys())):
-                game, csv_hash = fut_ctx[fut]
+            _gex = ThreadPoolExecutor(max_workers=gpu_conc)
+            logger.info("[bench] GPU concurrency = %d (LOTO_GPU_CONCURRENCY)", gpu_conc)
+            for task in all_gpu_tasks:
+                fut = _gex.submit(_gpu_worker, task)
+                fut_kind[fut] = ("gpu", task[0], task[1])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[bench] GPU ThreadPool indisponibil (%s) — GPU secvential.", exc)
+            _gex = None
+
+    # ── Drenaj INTERLEAVED peste CPU(procese) + GPU(thread-uri) — rulează tot concurent.
+    if fut_kind:
+        try:
+            for fut in as_completed(list(fut_kind.keys())):
+                kind, game, csv_hash = fut_kind[fut]
                 try:
-                    method, pct, is_random, fr, err = fut.result()
+                    res = fut.result()
                 except Exception as exc:  # noqa: BLE001
-                    logger.error("[%s] CPU future failed: %s", game.key, exc)
+                    logger.error("[%s] %s future failed: %s", game.key, kind, exc)
                     continue
+                if kind == "cpu":
+                    method, pct, is_random, fr, err = res
+                    from_cache = False
+                    # cache store pt CPU se face în procesul principal (subprocesul nu-l face)
+                    if err is None and fr is not None and _cache_ok and csv_hash is not None:
+                        try:
+                            store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
+                        except Exception:  # noqa: BLE001
+                            pass
+                else:
+                    method, pct, is_random, fr, err, from_cache = res  # GPU își face singur store
                 if err or fr is None:
-                    logger.error("[%s/%s] CPU task failed: %s", game.key, method, err)
+                    logger.error("[%s/%s] %s task failed: %s", game.key, method, kind, err)
                     continue
-                if _cache_ok and csv_hash is not None:
-                    try:
-                        store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
-                    except Exception:  # noqa: BLE001
-                        pass
-                _handle_result(game, method, pct, is_random, fr, False)
+                _handle_result(game, method, pct, is_random, fr, from_cache)
         finally:
-            _ex.shutdown(wait=True)
-    elif all_cpu_compute:
-        # fallback secvenţial dacă pool-ul n-a putut porni
+            if _ex is not None:
+                _ex.shutdown(wait=True)
+            if _gex is not None:
+                _gex.shutdown(wait=True)
+
+    # Fallback secvenţial pt categoria al cărei pool n-a putut porni.
+    if _ex is None and all_cpu_compute:
         for (method, train, test, game, bs, pct, is_random, csv_hash) in all_cpu_compute:
             try:
                 fr, _ = _evaluate_fold(method, train, test, game, bs)
@@ -533,7 +564,15 @@ def run_benchmark(
                     store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
                 _handle_result(game, method, pct, is_random, fr, False)
             except Exception as e2:  # noqa: BLE001
-                logger.error("[%s/%s] fallback failed: %s", game.key, method, e2)
+                logger.error("[%s/%s] CPU fallback failed: %s", game.key, method, e2)
+    if _gex is None and all_gpu_tasks:
+        for task in all_gpu_tasks:
+            game = task[0]
+            method, pct, is_random, fr, err, from_cache = _gpu_worker(task)
+            if err or fr is None:
+                logger.error("[%s/%s] GPU fallback failed: %s", game.key, method, err)
+                continue
+            _handle_result(game, method, pct, is_random, fr, from_cache)
 
     # ----- Save per-fold CSV -----
     rows = []
