@@ -94,6 +94,7 @@ STATE: dict = {
     "results_phase": None,   # "gpu" cât timp generarea curentă e pe decizia GPU
     "bench_was_running": False,
     "bench_cancelled": False, # True după Anulează → _tick NU mai pornește Auto-Pilot
+    "_log_cache": None,       # conținut loguri pre-citit în thread (ne-blocant pt UI)
 }
 
 # R3: lock pentru mutații compuse pe STATE din thread-uri (walk-forward, calibrare)
@@ -515,14 +516,18 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     return frac, text
 
 
-def _hw_telemetry_html() -> str:
-    """Consum live CPU/RAM/GPU/VRAM (pt afișare sub barele bench). Best-effort."""
+_HW_CACHE = {"html": "", "ts": 0.0, "running": False}
+
+
+def _hw_telemetry_refresh() -> None:
+    """Citește CPU/RAM/GPU/VRAM ÎN FUNDAL (thread) și cache-uiește HTML-ul. Apelat de un
+    thread separat — NU pe event-loop-ul UI (nvidia-smi/psutil sunt blocante → ar pica
+    WebSocket-ul 'connection lost')."""
     cpu = ram = ""
     try:
         import psutil
         ncores = psutil.cpu_count(logical=True) or 1
         pct = psutil.cpu_percent(interval=None)
-        # nuclee "active" estimat: % total × nr_nuclee (ex. 25% din 32 ≈ 8 active)
         active = round(pct / 100.0 * ncores)
         cpu = f"{pct:.0f}% (~{active}/{ncores} nuclee)"
         vm = psutil.virtual_memory()
@@ -535,12 +540,11 @@ def _hw_telemetry_html() -> str:
         out = _sp.run(
             ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
              "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=2,
+            capture_output=True, text=True, timeout=3,
         )
         if out.returncode == 0 and out.stdout.strip():
             g, vu, vt = [x.strip() for x in out.stdout.strip().splitlines()[0].split(",")]
-            gpu = f"{g}%"
-            vram = f"{float(vu)/1024:.1f}/{float(vt)/1024:.0f} GB"
+            gpu = f"{g}%"; vram = f"{float(vu)/1024:.1f}/{float(vt)/1024:.0f} GB"
     except Exception:  # noqa: BLE001
         pass
     parts = []
@@ -548,10 +552,25 @@ def _hw_telemetry_html() -> str:
     if ram:  parts.append(f"<span style='color:#60a5fa'>RAM {ram}</span>")
     if gpu:  parts.append(f"<span style='color:#c084fc'>GPU {gpu}</span>")
     if vram: parts.append(f"<span style='color:#a78bfa'>VRAM {vram}</span>")
-    if not parts:
-        return ""
-    return ("<div style='margin-top:6px;font-size:.82em;font-family:monospace;"
-            "opacity:.9'>📊 " + " &nbsp;·&nbsp; ".join(parts) + "</div>")
+    _HW_CACHE["html"] = ("<div style='margin-top:6px;font-size:.82em;font-family:monospace;"
+                         "opacity:.9'>📊 " + " &nbsp;·&nbsp; ".join(parts) + "</div>") if parts else ""
+
+
+def _hw_telemetry_html() -> str:
+    """Întoarce INSTANT HTML-ul cache-uit (ne-blocant). Pornește un thread de refresh
+    la fundal dacă datele-s vechi (>2.5s) — astfel event-loop-ul UI nu se blochează."""
+    import threading, time as _t
+    if not _HW_CACHE["running"] and (_t.time() - _HW_CACHE["ts"]) > 2.5:
+        _HW_CACHE["running"] = True
+        _HW_CACHE["ts"] = _t.time()
+
+        def _bg():
+            try:
+                _hw_telemetry_refresh()
+            finally:
+                _HW_CACHE["running"] = False
+        threading.Thread(target=_bg, daemon=True).start()
+    return _HW_CACHE["html"]
 
 
 def _bench_progress() -> tuple[float, str]:
@@ -877,7 +896,14 @@ def logs_panel() -> None:
     ui.label("⚙️ Engine / Worker — loto.log (include ce se întâmplă DUPĂ bench)").classes(
         "text-xs text-bold text-cyan-400"
     )
-    ui.code(read_logs_filtered(120), language="text").classes(
+    # citim din cache (populat de thread-ul _tick) ca să nu blocăm event-loop-ul UI
+    _logtxt = STATE.get("_log_cache")
+    if _logtxt is None:
+        try:
+            _logtxt = read_logs_filtered(120)
+        except Exception:  # noqa: BLE001
+            _logtxt = "(loguri indisponibile)"
+    ui.code(_logtxt, language="text").classes(
         "w-full max-h-72 overflow-auto text-xs"
     )
 
@@ -1983,38 +2009,56 @@ def main_page() -> None:
             logs_panel()
         results_panel()
 
-    # ---- Polling fără reload (înlocuiește hack-ul JS window.location.reload) ----
-    def _tick() -> None:
-        # Refresh DOAR când ceva e activ (job/bench/walk-forward). Refresh necondiționat
-        # la 2s reconstruia panourile mereu → interfera cu click-urile pe expansion-uri
-        # (meniurile păreau "moarte"). Acum UI-ul e responsiv când nu rulează nimic.
+    # ---- Polling fără reload. Munca BLOCANTĂ (citiri loguri OneDrive, psutil, pid-uri)
+    # rulează în io_bound (thread), ca event-loop-ul UI să NU se blocheze → fără
+    # 'connection lost'. Doar refresh-ul UI (rapid, din cache STATE) e pe loop. ----
+    async def _tick() -> None:
+        from nicegui import run as _nrun
+
+        def _blocking_probe():
+            """Rulat în THREAD: pid-uri + citiri loguri (lente OneDrive) → cache STATE."""
+            try:
+                bn = _bench_running()
+            except Exception:  # noqa: BLE001
+                bn = False
+            ph = STATE.get("phased") or {}
+            gpu_done_now = False
+            if ph.get("mode") == "parallel" and ph.get("gpu_pid") and not ph.get("gpu_done"):
+                gpu_done_now = not _pids_alive([ph["gpu_pid"]])
+            # pre-citim logurile în cache (ca refresh-ul UI să fie instant, ne-blocant)
+            try:
+                STATE["_log_cache"] = read_logs_filtered(120)
+            except Exception:  # noqa: BLE001
+                pass
+            return bn, gpu_done_now
+
         try:
-            bench_now = _bench_running()
+            bench_now, gpu_done_now = await _nrun.io_bound(_blocking_probe)
         except Exception:  # noqa: BLE001
-            bench_now = False
+            bench_now, gpu_done_now = False, False
+
         _active = bool(STATE.get("active_job_id") or bench_now or STATE.get("wf_status")
                        or (STATE.get("phased") or {}).get("gpu_pid"))
-        if _active:
-            logs_panel.refresh()
-        # Înlănțuire bench CPU → Auto-Pilot (DOAR dacă nu a fost anulat manual)
+        # Înlănțuire bench CPU → Auto-Pilot
         if STATE.get("bench_was_running") and not bench_now:
             STATE["bench_was_running"] = False
             if not STATE.get("bench_cancelled"):
                 _on_bench_finished()
         elif bench_now:
             STATE["bench_was_running"] = True
-            STATE["bench_cancelled"] = False  # bench activ → resetăm flag-ul de anulare
-        # Faza GPU paralelă: când procesul GPU se termină → decizie GPU + Auto-Pilot GPU
+            STATE["bench_cancelled"] = False
+        # Faza GPU paralelă terminată
         _ph = STATE.get("phased") or {}
         if (not STATE.get("bench_cancelled") and _ph.get("mode") == "parallel"
-                and _ph.get("gpu_pid") and not _ph.get("gpu_done")):
-            if not _pids_alive([_ph["gpu_pid"]]):
-                _ph["gpu_done"] = True
-                _on_gpu_phase_done()
-        if STATE.get("active_job_id") or bench_now or STATE.get("wf_status"):
+                and _ph.get("gpu_pid") and not _ph.get("gpu_done") and gpu_done_now):
+            _ph["gpu_done"] = True
+            _on_gpu_phase_done()
+        # Refresh UI (rapid, din STATE) — doar când e activ
+        if _active:
+            logs_panel.refresh()
             status_panel.refresh()
         if STATE.get("wf_status"):
-            results_panel.refresh()  # bara walk-forward se umple live
+            results_panel.refresh()
     ui.timer(2.0, _tick)
 
 
@@ -2044,4 +2088,7 @@ app.on_startup(_startup)
 if __name__ in {"__main__", "__mp_main__"}:
     _port = int(os.environ.get("LOTO_UI_PORT", "8080"))
     # show=False: browserul e deschis de START_8000.bat (mai fiabil pe Windows).
-    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=False, dark=True)
+    # reconnect_timeout mărit: cât rulează bench/walk-forward, event-loop-ul poate fi
+    # ocupat (citiri loguri OneDrive) → fără timeout generos, WebSocket pica 'connection lost'.
+    ui.run(title="Loto Enterprise Wheeling", port=_port, reload=False, show=False, dark=True,
+           reconnect_timeout=60.0)
