@@ -361,18 +361,32 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     if tot <= 0:
         return 0.03, "pornește... (estimez după primele teste)"
     frac = max(0.0, min(1.0, cur / tot))
-    # detaliu live: ce metodă/joc/procent backtesting se testează ACUM
-    cur_txt = ""
-    if last_line:
-        parts = last_line.split("/")
-        if len(parts) >= 3:
-            cur_txt = f"  ·  acum: {parts[0]} / {parts[1]} / {parts[2]} backtest"
-    text = f"{int(frac*100)}% ({cur}/{tot} teste){cur_txt}"
+    # Ce se testează ACUM, SEPARAT pe CPU și pe GPU (rulează concurent). Clasificăm
+    # fiecare linie din log după familia metodei (_method_is_gpu) și ținem ultima din
+    # fiecare categorie → linie CPU + linie GPU.
+    last_cpu = last_gpu = ""
+    try:
+        for _m in matches:
+            seg = _m[2].split("/")
+            if len(seg) >= 3:
+                entry = f"{seg[0]} / {seg[1]} / {seg[2]} backtest"
+                if _method_is_gpu(seg[1]):
+                    last_gpu = entry
+                else:
+                    last_cpu = entry
+    except Exception:  # noqa: BLE001
+        pass
+    text = f"{int(frac*100)}% ({cur}/{tot} teste)"
     if start_ts and cur > 0:
         elapsed = max(0.0, time.time() - start_ts)
         remaining = (tot - cur) * (elapsed / cur)
         text += f"  ·  rămas ~{_fmt_dur(remaining)}"
-    return frac, text
+    lines = [text]
+    if last_cpu:
+        lines.append(f"<span style='color:#38bdf8'>🖥️ CPU acum:</span> {last_cpu}")
+    if last_gpu:
+        lines.append(f"<span style='color:#c084fc'>⚡ GPU acum:</span> {last_gpu}")
+    return frac, "<br>".join(lines)
 
 
 _HW_CACHE = {"html": "", "ts": 0.0, "running": False}
@@ -386,7 +400,9 @@ def _hw_telemetry_refresh() -> None:
     try:
         import psutil
         ncores = psutil.cpu_count(logical=True) or 1
-        pct = psutil.cpu_percent(interval=None)
+        # interval=0.3 → citire instantanee REALĂ (blochează 0.3s, dar suntem în thread
+        # de fundal, nu pe event-loop). interval=None dădea mereu 0% la prima citire.
+        pct = psutil.cpu_percent(interval=0.3)
         active = round(pct / 100.0 * ncores)
         cpu = f"{pct:.0f}% (~{active}/{ncores} nuclee)"
         vm = psutil.virtual_memory()
