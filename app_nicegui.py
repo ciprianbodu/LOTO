@@ -1494,26 +1494,48 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
             fam = _f.iloc[0] if not _f.empty else ""
         rows.append((m, score, avg, _method_is_gpu(m, fam), _method_library(m, fam)))
     rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
-    rows = rows[:top_n]
     if not rows:
         return
+    cpu_rows = [r for r in rows if not r[3]][:top_n]
+    gpu_rows = [r for r in rows if r[3]][:top_n]
     label = ("rata 4+ numere ghicite" if has_4plus else "medie hituri / extragere")
-    with ui.expansion(f"🏆 Clasament bench (top {len(rows)} metode · {label})",
+    winner = rows[0]  # câștigătorul GLOBAL (CPU+GPU împreună) — cel ales de bench
+
+    def _row(i, rec):
+        m, score, avg, is_gpu, lib = rec
+        tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
+        tag_cls = "text-deep-purple" if is_gpu else "text-blue"
+        sc_txt = f"4+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
+        with ui.row().classes("items-center gap-2 w-full"):
+            ui.label(f"{i}.").classes("text-bold text-grey w-6")
+            ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
+            ui.label(m).classes("text-bold")
+            ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
+
+    with ui.expansion(f"🏆 Clasament bench (CPU + GPU separat · {label})",
                       value=False).classes("w-full"):
-        ui.label("CPU și GPU în ACELAȘI clasament — un singur bench alege câștigătorul (regula 4+).").classes(
-            "text-caption text-grey")
+        ui.label(f"Câștigător GLOBAL (toate metodele): {winner[0]} "
+                 f"({'⚡ GPU' if winner[3] else '🖥️ CPU'} · {winner[4]}).").classes(
+            "text-caption text-bold text-positive")
         if not has_family:
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
-        for i, (m, score, avg, is_gpu, lib) in enumerate(rows, 1):
-            tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
-            tag_cls = "text-deep-purple" if is_gpu else "text-blue"
-            sc_txt = f"4+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
-            with ui.row().classes("items-center gap-2 w-full"):
-                ui.label(f"{i}.").classes("text-bold text-grey w-6")
-                ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
-                ui.label(m).classes("text-bold")
-                ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
+        # ── Top CPU ──
+        ui.label(f"🖥️ Top {len(cpu_rows)} CPU (statistice / matematice / sklearn)").classes(
+            "text-bold text-blue mt-2")
+        for i, rec in enumerate(cpu_rows, 1):
+            _row(i, rec)
+        # ── Top GPU ──
+        ui.label(f"⚡ Top {len(gpu_rows)} GPU (rețele neurale / foundation)").classes(
+            "text-bold text-deep-purple mt-3")
+        if gpu_rows:
+            ui.label("Pe loto (date aleatoare) rețelele prind de obicei MAI PUȚINE 4+ decât "
+                     "euristicile simple — de-aia rar intră în topul global.").classes("text-caption text-grey")
+            for i, rec in enumerate(gpu_rows, 1):
+                _row(i, rec)
+        else:
+            ui.label("Nicio metodă GPU în acest bench (toate cele rulate au fost CPU).").classes(
+                "text-caption text-grey")
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
