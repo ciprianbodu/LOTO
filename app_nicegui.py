@@ -1407,7 +1407,7 @@ def _omnius_for_pool(game: str, d: dict) -> list:
                 import numpy as _np
                 draws = df[cols].to_numpy(dtype=_np.int64)
                 max_num = {"6/49": 49, "5/40": 40, "joker": 45}.get(gk, 49)
-                omni_scores = score_omnius(draws, max_num)
+                omni_scores = score_omnius(draws, max_num, budget_s=2.0)
     except Exception as exc:  # noqa: BLE001
         logger.debug("OMNIUS meta pt bilet eșuat (fallback): %s", exc)
 
