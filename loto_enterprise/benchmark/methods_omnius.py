@@ -41,14 +41,12 @@ def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
     return out
 
 
-# Candidați: metode RAPIDE și DIVERSE (fără GPU, fără sklearn greu) ca meta-învățarea
-# să fie rapidă. Acoperă familii distincte: frecvență, recență, markov, gap, spectral,
-# bayesian, momentum, graf, teoria numerelor.
+# Candidați: DOAR metode FOARTE rapide (numpy O(n), fără SSA/graf/sklearn care erau
+# lente × 20 ferestre → OMNIUS dura zeci de secunde). Acoperă familii distincte:
+# frecvență, recență, markov, gap, momentum, teoria numerelor, geometrie.
 _OMNIUS_CANDIDATES = [
     "frequency", "recency", "weighted_recent", "momentum",
-    "markov_1", "markov_2", "gap_poisson", "autocorr",
-    "fourier", "ssa", "beta_binomial", "bayes_poisson",
-    "pair_affinity", "centrality", "entropy_window",
+    "markov_1", "gap_poisson", "beta_binomial",
     "sum_affinity", "modular", "digit_root", "decade_balance",
 ]
 
@@ -126,7 +124,7 @@ def score_omnius(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
         return _normalize({}, max_num)
 
     # ── 1. Evaluare retroactivă pe ultimele W extrageri (învățare din greșeli) ──
-    W = min(40, n - 20)            # fereastra de "învățare"
+    W = min(20, n - 20)            # fereastra de "învățare" (20 = compromis viteză/semnal)
     start = n - W
     decay = np.exp(np.linspace(-1.5, 0.0, W))  # extragerile recente cântăresc mai mult
     perf = {m: 0.0 for m in cands}

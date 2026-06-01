@@ -196,6 +196,7 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
         STATE["results"] = None
         STATE["results_gpu"] = None
     STATE["retro"] = {}
+    STATE["_omnius_cache"] = {}  # OMNIUS se recalculează pt noile pool-uri
     STATE["wf_status"] = ""
     ensure_worker_running()
     lock_engine("deterministic_session")
@@ -1490,16 +1491,20 @@ def _num_scores(d: dict) -> dict:
 
 
 def _omnius_for_pool(game: str, d: dict) -> list:
-    """Biletul OMNIUS din ACEST pool: cele mai bune draw_n numere.
-
-    Folosește scorerul OMNIUS (meta-învățare — ponderează metodele după performanța
-    recentă) dacă datele jocului sunt disponibile; altfel fallback la scorul
-    smart-selector/frecvență din audit. Numerele sunt RESTRÂNSE la pool-ul curent."""
+    """Biletul OMNIUS din ACEST pool: cele mai bune draw_n numere (50% meta-învățare +
+    50%% Smart Logic). CACHE-uit pe (joc, pool) — score_omnius durează ~7s, iar UI-ul
+    îl chema la FIECARE randare/raport → satura CPU → 'connection lost'. Acum o dată."""
     gk = _game_label_for(game)
     draw_n = 6 if gk == "6/49" else 5
     pool = sorted(int(x) for x in (d.get("hard_core") or []))
     if not pool:
         return []
+
+    # Cache: cheie = joc + pool exact. Dacă pool-ul e același, refolosim rezultatul.
+    _ckey = (gk, tuple(pool))
+    _cache = STATE.setdefault("_omnius_cache", {})
+    if _ckey in _cache:
+        return _cache[_ckey]
 
     # Încearcă meta-învățarea OMNIUS pe istoricul jocului (același scorer ca metoda bench)
     omni_scores = None
@@ -1521,9 +1526,10 @@ def _omnius_for_pool(game: str, d: dict) -> list:
         logger.debug("OMNIUS meta pt bilet eșuat (fallback): %s", exc)
 
     scores = omni_scores or _num_scores(d)
-    top = [n for n, _ in sorted(((n, scores.get(n, 0.0)) for n in pool),
-                                key=lambda x: x[1], reverse=True)][:draw_n]
-    return sorted(top)
+    top = sorted([n for n, _ in sorted(((n, scores.get(n, 0.0)) for n in pool),
+                                       key=lambda x: x[1], reverse=True)][:draw_n])
+    _cache[_ckey] = top
+    return top
 
 
 def _render_omnius_pool(game: str, d: dict) -> None:
