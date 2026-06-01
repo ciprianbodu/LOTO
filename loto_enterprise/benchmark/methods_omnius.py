@@ -22,6 +22,8 @@ Algoritm:
 from __future__ import annotations
 
 import logging
+import os
+import time
 from typing import Dict, List, Tuple, Callable
 
 import numpy as np
@@ -41,14 +43,52 @@ def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
     return out
 
 
-# Candidați: DOAR metode FOARTE rapide (numpy O(n), fără SSA/graf/sklearn care erau
-# lente × 20 ferestre → OMNIUS dura zeci de secunde). Acoperă familii distincte:
-# frecvență, recență, markov, gap, momentum, teoria numerelor, geometrie.
-_OMNIUS_CANDIDATES = [
-    "frequency", "recency", "weighted_recent", "momentum",
-    "markov_1", "gap_poisson", "beta_binomial",
-    "sum_affinity", "modular", "digit_root", "decade_balance",
-]
+# ── OMNIUS = meta-selector COMPREHENSIV: ponderează TOATE metodele MATEMATICE din
+# registry (statistice/probabilistice/geometrice/teoria numerelor/Markov/spectrale...),
+# DINAMIC, după performanța lor recentă pe istoric. Exclude GPU/neural/ML (lente,
+# non-matematice) și meta/ensemble (recursie). Pentru a NU exploda în timp, evaluarea
+# retroactivă are un BUGET: metodele rapide sunt mereu ponderate, cele lente (fit de
+# model: statsmodels/SSA/Fourier/HMM) sunt evaluate ULTIMELE și sărite dacă se depășește
+# bugetul. Astfel "toate metodele matematice posibile" sunt incluse, fără a-l face lent.
+def _omnius_excluded_family(fam: str) -> bool:
+    f = (fam or "").lower()
+    return (f.startswith("nf-") or f.startswith("torch") or f.startswith("foundation")
+            or f == "ssm" or f.startswith("ml-") or f.startswith("ensemble")
+            or f == "meta-adaptive")
+
+
+def _omnius_slowish_family(fam: str) -> bool:
+    """Familii care pot fi LENTE (fit de model pe stația cu statsmodels) → evaluate ultimele."""
+    f = (fam or "").lower()
+    return (f.startswith("classical") or f == "spectral" or f == "hmm"
+            or f == "llm-ts" or f == "association")
+
+
+# metode excluse explicit: baseline pur-random, OMNIUS însuși (recursie), LLM (greu/torch)
+_OMNIUS_DENYLIST = {"random", "omnius", "time_llm"}
+
+_OMNIUS_CANDS_CACHE: List[str] | None = None
+
+
+def _omnius_candidates() -> List[str]:
+    """Listă DINAMICĂ de candidați = toate metodele matematice disponibile din registry
+    (fără GPU/ML/neural/meta), ordonate rapid→lent. Cache-uită (calculată o dată)."""
+    global _OMNIUS_CANDS_CACHE
+    if _OMNIUS_CANDS_CACHE is not None:
+        return _OMNIUS_CANDS_CACHE
+    from .methods import METHODS  # lazy (evită circular import)
+    pairs = []
+    for name, tup in METHODS.items():
+        fam = tup[1] if len(tup) > 1 else ""
+        if name in _OMNIUS_DENYLIST or _omnius_excluded_family(fam):
+            continue
+        pairs.append((name, fam))
+    # rapide întâi, posibil-lente la urmă; stabil alfabetic în fiecare grup
+    pairs.sort(key=lambda nf: (_omnius_slowish_family(nf[1]), nf[0]))
+    _OMNIUS_CANDS_CACHE = [n for n, _ in pairs]
+    logger.info("[OMNIUS] %d metode matematice candidate (meta-selector comprehensiv)",
+                len(_OMNIUS_CANDS_CACHE))
+    return _OMNIUS_CANDS_CACHE
 
 
 def _topk(scores: Dict[int, float], k: int) -> set:
@@ -106,10 +146,14 @@ def _smart_logic_hybrid(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     return _normalize(final, max_num)
 
 
-def score_omnius(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
-    """OMNIUS = 50%% META-ÎNVĂȚARE (ponderează metodele după performanța recentă) +
-    50%% SMART LOGIC HYBRID (Gap/Trend/Freq/Positional/Recent). Combină cele două
-    abordări: 'ce metodă e în formă acum' + 'analiza multi-factorială a numerelor'."""
+def score_omnius(draws_2d: np.ndarray, max_num: int, budget_s: float | None = None) -> Dict[int, float]:
+    """OMNIUS = meta-selector COMPREHENSIV: ponderează TOATE metodele matematice din
+    registry după performanța lor recentă (50%%) + Smart Logic Hybrid (50%%).
+
+    `budget_s` = bugetul (sec) pt evaluarea retroactivă a candidaților. Metodele rapide
+    sunt mereu evaluate; cele lente (statsmodels/SSA/Fourier/HMM) sunt evaluate ultimele
+    și sărite dacă se depășește bugetul → OMNIUS rămâne mărginit. Default: env
+    LOTO_OMNIUS_BUDGET_S sau 12s (UI-ul îi pasează ~2s ca biletul să fie instant)."""
     from .methods import METHODS  # lazy (evită circular import)
 
     n = draws_2d.shape[0]
@@ -118,62 +162,74 @@ def score_omnius(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
         # prea puține date pt meta-învățare → doar Smart Logic
         return _smart_logic_hybrid(draws_2d, max_num)
 
-    # candidați disponibili în registry
-    cands = [m for m in _OMNIUS_CANDIDATES if m in METHODS]
-    if not cands:
-        return _normalize({}, max_num)
+    if budget_s is None:
+        try:
+            budget_s = float(os.environ.get("LOTO_OMNIUS_BUDGET_S", "12"))
+        except (TypeError, ValueError):
+            budget_s = 12.0
 
-    # ── 1. Evaluare retroactivă pe ultimele W extrageri (învățare din greșeli) ──
-    W = min(20, n - 20)            # fereastra de "învățare" (20 = compromis viteză/semnal)
+    # candidați = toate metodele matematice din registry (rapide întâi, lente la urmă)
+    cands = [m for m in _omnius_candidates() if m in METHODS]
+    if not cands:
+        return _smart_logic_hybrid(draws_2d, max_num)
+
+    # ── 1. Evaluare retroactivă pe ultimele W extrageri (învățare din performanța recentă) ──
+    W = min(20, n - 20)            # fereastra de "învățare"
     start = n - W
     decay = np.exp(np.linspace(-1.5, 0.0, W))  # extragerile recente cântăresc mai mult
-    perf = {m: 0.0 for m in cands}
-    wsum = 0.0
+    wsum = float(decay.sum())
+    actuals = [set(int(v) for v in draws_2d[t] if 1 <= int(v) <= max_num) for t in range(start, n)]
 
-    for wi, t in enumerate(range(start, n)):
-        history = draws_2d[:t]              # ce s-ar fi știut la momentul t
-        actual = set(int(v) for v in draws_2d[t] if 1 <= int(v) <= max_num)
-        w = float(decay[wi])
-        wsum += w
-        for m in cands:
+    # Buclă CANDIDAT-exterior + BUGET: fiecare metodă e evaluată pe TOATE ferestrele (corect)
+    # sau deloc; odată depășit bugetul, metodele rămase (cele lente) sunt sărite din ponderare.
+    conf: Dict[str, float] = {}
+    t0 = time.perf_counter()
+    skipped = 0
+    for mi, m in enumerate(cands):
+        if conf and (time.perf_counter() - t0) > budget_s:
+            skipped = len(cands) - mi
+            break
+        fn = METHODS[m][0]
+        perf = 0.0
+        ok = True
+        for wi, t in enumerate(range(start, n)):
             try:
-                sc = METHODS[m][0](history, max_num)
+                sc = fn(draws_2d[:t], max_num)
             except Exception:  # noqa: BLE001
-                continue
-            if not sc:
-                continue
-            pred = _topk(sc, draw_n)        # ce ar fi pariat metoda
-            hits = len(pred & actual)
-            perf[m] += w * hits            # hituri ponderate cu recența
-
-    # scor de încredere normalizat (hituri medii recente per metodă)
-    conf = {m: perf[m] / max(wsum, 1e-9) for m in cands}
+                ok = False
+                break
+            if sc:
+                perf += float(decay[wi]) * len(_topk(sc, draw_n) & actuals[wi])
+        if ok:
+            conf[m] = perf / max(wsum, 1e-9)
+    if not conf:
+        return _smart_logic_hybrid(draws_2d, max_num)
+    eval_cands = list(conf.keys())
 
     # ── 2. Ponderi = softmax pe încredere (temperatură moderată → diversificare) ──
-    vals = np.array([conf[m] for m in cands], dtype=np.float64)
+    vals = np.array([conf[m] for m in eval_cands], dtype=np.float64)
     if vals.std() < 1e-9:
-        weights = np.ones(len(cands)) / len(cands)
+        weights = np.ones(len(eval_cands)) / len(eval_cands)
     else:
         z = (vals - vals.mean()) / (vals.std() + 1e-9)
         e = np.exp(z * 1.5)                 # temperatură 1.5: favorizează bunele, fără monopol
         weights = e / e.sum()
 
-    # log: ce a "învățat" OMNIUS (top 3 metode în formă)
-    ranked = sorted(zip(cands, weights), key=lambda x: -x[1])
-    top = ", ".join(f"{m}={w:.2f}" for m, w in ranked[:3])
-    logger.info(f"[OMNIUS] meta-învățare pe {W} extrageri → top: {top}")
+    ranked = sorted(zip(eval_cands, weights), key=lambda x: -x[1])
+    top = ", ".join(f"{m}={w:.2f}" for m, w in ranked[:5])
+    logger.info("[OMNIUS] meta-învățare: %d/%d metode ponderate (%d sărite buget) pe %d extrageri "
+                "→ top5: %s", len(eval_cands), len(cands), skipped, W, top)
 
     # ── 3. Scor final = combinație ponderată a scorurilor pe TOT istoricul ──
     final = np.zeros(max_num + 1, dtype=np.float64)
-    for m, wgt in zip(cands, weights):
+    for m, wgt in zip(eval_cands, weights):
         try:
             sc = METHODS[m][0](draws_2d, max_num)
         except Exception:  # noqa: BLE001
             continue
         if not sc:
             continue
-        # normalizăm scorul metodei la [0,1] înainte de combinare
-        sc_n = _normalize(sc, max_num)
+        sc_n = _normalize(sc, max_num)      # normalizăm la [0,1] înainte de combinare
         for num, val in sc_n.items():
             final[num] += wgt * val
 
@@ -183,11 +239,11 @@ def score_omnius(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     smart = _smart_logic_hybrid(draws_2d, max_num)
     combined = {k: 0.5 * meta_scores.get(k, 0.0) + 0.5 * smart.get(k, 0.0)
                 for k in range(1, max_num + 1)}
-    logger.info("[OMNIUS] combinat 50%% meta-învățare + 50%% Smart Logic Hybrid")
     return _normalize(combined, max_num)
 
 
 OMNIUS_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
-    "omnius": (score_omnius, "meta-adaptive", False,  # 50% meta-învățare + 50% Smart Logic Hybrid
-               "OMNIUS — meta-învățare: ponderează metodele după performanța recentă"),
+    "omnius": (score_omnius, "meta-adaptive", False,
+               "OMNIUS — meta-selector: ponderează TOATE metodele matematice după "
+               "performanța recentă pe istoric (50%) + Smart Logic Hybrid (50%)"),
 }
