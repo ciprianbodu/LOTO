@@ -365,9 +365,9 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     if tot <= 0:
         return 0.03, "pornește... (estimez după primele teste)"
     frac = max(0.0, min(1.0, cur / tot))
-    # Progres SEPARAT pe CPU și GPU (rulează concurent). Numărăm câte linii din log
-    # sunt CPU vs GPU (clasificate după familia metodei) și folosim totalurile din
-    # markerul [BENCH-SPLIT] pentru % și ETA per categorie.
+    # Progres SEPARAT pe CPU și GPU (rulează concurent). Eticheta CPU/GPU vine AUTORITAR
+    # din linia de log (seg[4] = CPU|GPU, scris de runner) — consistent cu totalurile din
+    # [BENCH-SPLIT]. Fallback pe euristica de nume doar pt loguri vechi (fără tag).
     cpu_done = gpu_done = 0
     last_cpu = last_gpu = ""
     try:
@@ -375,7 +375,11 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
             seg = _m[2].split("/")
             if len(seg) >= 3:
                 entry = f"{seg[0]} / {seg[1]} / {seg[2]} backtest"
-                if _method_is_gpu(seg[1]):
+                if len(seg) >= 5 and seg[4] in ("CPU", "GPU"):
+                    is_gpu_line = (seg[4] == "GPU")
+                else:
+                    is_gpu_line = _method_is_gpu(seg[1])  # fallback log vechi
+                if is_gpu_line:
                     gpu_done += 1
                     last_gpu = entry
                 else:
