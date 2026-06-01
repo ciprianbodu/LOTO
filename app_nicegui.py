@@ -624,8 +624,9 @@ def cancel_all() -> None:
 # --------------------------------------------------------------------------- #
 # Walk-forward backtest (în thread de fundal, ca să nu blocheze UI-ul)
 # --------------------------------------------------------------------------- #
-def _start_walk_forward() -> None:
-    results = STATE.get("results")
+def _start_walk_forward(use_gpu: bool = False) -> None:
+    key = "results_gpu" if use_gpu else "results"
+    results = STATE.get(key)
     if not (isinstance(results, tuple) and len(results) == 2):
         return
     results_bundle, _ = results
@@ -633,6 +634,7 @@ def _start_walk_forward() -> None:
     # deci când auto_invert e ON validează pool-ul normal, nu cel inversat afișat.
     # NU mai sărim — afișăm stats-urile etichetate clar ca "Faza 1" (vezi results_panel).
     _has_invert = any(d.get("auto_invert") for _fn, outs in results_bundle for _gl, d in outs.items())
+    _pfx = "gpu_" if use_gpu else ""  # prefix retro ca CPU/GPU să nu se suprascrie
 
     def _worker_wf() -> None:
         try:
@@ -663,7 +665,7 @@ def _start_walk_forward() -> None:
                             progress_cb=_wf_cb,
                         )
                         with STATE_LOCK:
-                            STATE["retro"][f"{fname}_{g_label}"] = flat
+                            STATE["retro"][f"{_pfx}{fname}_{g_label}"] = flat
                     except Exception as exc:  # noqa: BLE001
                         logger.error("walk-forward %s: %s", g_label, exc)
                     STATE["wf_progress"] = done / max(1, total)
@@ -708,7 +710,8 @@ def status_panel() -> None:
             if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
                 STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
             with STATE_LOCK:
-                if STATE.get("results_phase") == "gpu":
+                _is_gpu_res = (STATE.get("results_phase") == "gpu")
+                if _is_gpu_res:
                     STATE["results_gpu"] = payload   # rezultate GPU (secțiune distinctă)
                     STATE["results_phase"] = None
                 else:
@@ -716,7 +719,7 @@ def status_panel() -> None:
                 STATE["active_job_id"] = None
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
-            _start_walk_forward()
+            _start_walk_forward(use_gpu=_is_gpu_res)  # WF pe bundle-ul corect (CPU sau GPU)
             results_panel.refresh()
             try:
                 ui.run_javascript(SOUND_JS)  # beep de finalizare
@@ -1344,7 +1347,7 @@ _METHOD_DESC = {
 
 
 def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "",
-                      with_wf: bool = True) -> None:
+                      with_wf: bool = True, res_prefix: str = "") -> None:
     """Randează un pool complet (badges, p10/p90, audit, cost, WF, variante, stages).
     Folosit o dată normal, sau de DOUĂ ori la auto-invert (Faza 1 + Faza 2)."""
     pool = data.get("hard_core") or []
@@ -1408,7 +1411,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
     _render_cost(game, data)
 
     if with_wf:
-        flat = STATE["retro"].get(f"{fname}_{game}")
+        flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
         if flat:
             _render_walk_forward(flat, game, is_invert=False)
 
@@ -1542,6 +1545,10 @@ def results_panel() -> None:
         ui.label(f"Rezultate{elapsed}").classes("text-h6")
         ui.button("📋 Raport integral", on_click=_show_report).props("flat dense")
 
+    # Comparativ CPU vs GPU pe regula 4+ (când ambele există)
+    if has_cpu and has_gpu:
+        _render_cpu_gpu_verdict()
+
     # Secțiune CPU (sau rezultate normale) + secțiune GPU distinctă (bench paralel)
     if has_cpu:
         if has_gpu:
@@ -1549,16 +1556,71 @@ def results_panel() -> None:
                     "padding:6px 12px;border-radius:6px;margin-top:6px'>"
                     "🖥️ <b style='color:#38bdf8;font-size:1.1em'>REZULTATE CPU</b> "
                     "<span style='opacity:.7'>(metode rapide statistice/ML)</span></div>")
-        _render_results_bundle(results[0])
+        _render_results_bundle(results[0], res_prefix="")
     if has_gpu:
         ui.html("<div style='background:#2d1b3d;border-left:4px solid #c084fc;"
                 "padding:6px 12px;border-radius:6px;margin-top:14px'>"
                 "⚡ <b style='color:#c084fc;font-size:1.1em'>REZULTATE GPU</b> "
                 "<span style='opacity:.7'>(rețele neurale — rulate în paralel)</span></div>")
-        _render_results_bundle(results_gpu[0])
+        _render_results_bundle(results_gpu[0], res_prefix="gpu_")
 
 
-def _render_results_bundle(results_bundle) -> None:
+def _rate_4plus_per_game(folds_path) -> dict:
+    """{game_key: {method: avg rate_4plus}} din folds.csv (REAL, non-failed)."""
+    out = {}
+    try:
+        import csv as _csv
+        from collections import defaultdict
+        agg = defaultdict(lambda: defaultdict(list))
+        with open(folds_path, encoding="utf-8") as f:
+            for r in _csv.DictReader(f):
+                if str(r.get("is_random")).lower() in ("true", "1"): continue
+                if str(r.get("failed")).lower() in ("true", "1"): continue
+                try:
+                    agg[r["game"]][r["method"]].append(float(r.get("rate_4plus") or 0))
+                except (ValueError, KeyError):
+                    pass
+        for g, ms in agg.items():
+            out[g] = {m: (sum(v)/len(v) if v else 0.0) for m, v in ms.items()}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("rate_4plus read: %s", exc)
+    return out
+
+
+def _render_cpu_gpu_verdict() -> None:
+    """Card: pe regula 4+, ce a câștigat (CPU vs GPU) per joc, cu motivul. Citește
+    rate_4plus din folds.csv (CPU) + bench_results_gpu/folds.csv (GPU)."""
+    cpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results" / "folds.csv")
+    gpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results_gpu" / "folds.csv")
+    if not cpu_r and not gpu_r:
+        return
+    rows = []
+    for gk in sorted(set(cpu_r) | set(gpu_r)):
+        best_cpu = max(cpu_r.get(gk, {}).items(), key=lambda x: x[1], default=(None, 0.0))
+        best_gpu = max(gpu_r.get(gk, {}).items(), key=lambda x: x[1], default=(None, 0.0))
+        if best_cpu[1] >= best_gpu[1]:
+            win, wm, wr, lm, lr, color = "🖥️ CPU", best_cpu[0], best_cpu[1], best_gpu[0], best_gpu[1], "#38bdf8"
+        else:
+            win, wm, wr, lm, lr, color = "⚡ GPU", best_gpu[0], best_gpu[1], best_cpu[0], best_cpu[1], "#c084fc"
+        rows.append((gk, win, wm, wr, lm, lr, color))
+    if not rows:
+        return
+    with ui.card().classes("w-full").style("background:#1a1a2e;border:1px solid #f59e0b"):
+        ui.html("🎯 <b style='color:#fbbf24'>VERDICT 4+ HITS</b> "
+                "<span style='opacity:.7;font-size:.85em'>(care a prins mai des ≥4 numere în backtest)</span>")
+        for gk, win, wm, wr, lm, lr, color in rows:
+            ui.html(
+                f"<div style='margin:3px 0'><b>{gk}</b>: câștigă "
+                f"<b style='color:{color}'>{win}</b> cu <b>{wm}</b> "
+                f"(rată 4+ = {wr:.4f})  <span style='opacity:.6'>vs {lm or '—'} ({lr:.4f})</span> "
+                f"→ motiv: a prins ≥4 numere de {wr/max(lr,1e-9):.1f}× mai des</div>"
+                if lr > 0 else
+                f"<div style='margin:3px 0'><b>{gk}</b>: câștigă "
+                f"<b style='color:{color}'>{win}</b> cu <b>{wm}</b> (rată 4+ = {wr:.4f})</div>"
+            )
+
+
+def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
     for fname, outs in results_bundle:
         with ui.card().classes("w-full"):
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
@@ -1569,7 +1631,7 @@ def _render_results_bundle(results_bundle) -> None:
                         ui.label("🟢 POOL 1 — normal (pe date, cu validare walk-forward)").classes(
                             "text-bold text-positive text-lg mt-1")
                         ui.label("Pariul principal: pool-ul validat istoric.").classes("text-caption")
-                        _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=True)
+                        _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=True, res_prefix=res_prefix)
 
                         ui.separator().classes("my-3")
                         # Inversare neaplicată? (pool prea mare → Pool 2 = Pool 1)
@@ -1590,9 +1652,9 @@ def _render_results_bundle(results_bundle) -> None:
                             "text-bold text-warning text-lg")
                         ui.label("Plasă de siguranță, pe șansă — dacă Pool 1 nu nimerește nimic. "
                                  "Fără backtest/validare, intenționat.").classes("text-caption")
-                        _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False)
+                        _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False, res_prefix=res_prefix)
                     else:
-                        _render_pool_body(fname, game, data, with_wf=True)
+                        _render_pool_body(fname, game, data, with_wf=True, res_prefix=res_prefix)
 
 
 def run_calibration_bg() -> None:
@@ -1923,10 +1985,17 @@ def main_page() -> None:
 
     # ---- Polling fără reload (înlocuiește hack-ul JS window.location.reload) ----
     def _tick() -> None:
-        # Consola e mereu LIVE (citire ieftină a 2 loguri la 2s) — așa vezi bench-ul
-        # chiar dacă rulează manual din CMD, nu doar când UI-ul îl pornește.
-        logs_panel.refresh()
-        bench_now = _bench_running()
+        # Refresh DOAR când ceva e activ (job/bench/walk-forward). Refresh necondiționat
+        # la 2s reconstruia panourile mereu → interfera cu click-urile pe expansion-uri
+        # (meniurile păreau "moarte"). Acum UI-ul e responsiv când nu rulează nimic.
+        try:
+            bench_now = _bench_running()
+        except Exception:  # noqa: BLE001
+            bench_now = False
+        _active = bool(STATE.get("active_job_id") or bench_now or STATE.get("wf_status")
+                       or (STATE.get("phased") or {}).get("gpu_pid"))
+        if _active:
+            logs_panel.refresh()
         # Înlănțuire bench CPU → Auto-Pilot (DOAR dacă nu a fost anulat manual)
         if STATE.get("bench_was_running") and not bench_now:
             STATE["bench_was_running"] = False
