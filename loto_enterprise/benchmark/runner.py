@@ -349,7 +349,14 @@ def run_benchmark(
     fold_rows: List[FoldResult] = []
     method_meta_map = {m: method_meta(m) for m in methods}
 
+    def _is_gpu_fam_global(m):
+        fam = method_meta_map.get(m, {}).get("family", "")
+        return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
+                or fam.startswith("nf-") or fam.startswith("foundation") or fam == "ssm")
+
     total_folds_est = 0
+    cpu_total_est = 0
+    gpu_total_est = 0
     for game in games:
         for m in methods:
             meta = method_meta_map[m]
@@ -357,6 +364,12 @@ def run_benchmark(
                 continue
             for pct in percentiles:
                 total_folds_est += 2  # real + random
+                if _is_gpu_fam_global(m):
+                    gpu_total_est += 2
+                else:
+                    cpu_total_est += 2
+    # Marker parsabil de UI: împărțirea totalului pe CPU vs GPU (pt progres/ETA separat).
+    logger.info("[BENCH-SPLIT] cpu=%d gpu=%d total=%d", cpu_total_est, gpu_total_est, total_folds_est)
     fold_idx = 0
 
     for game in games:
