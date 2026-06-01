@@ -161,6 +161,15 @@ def main() -> int:
     console.print()
 
     games = discover_games(args.istoric)
+    # joker_urna2 trage 1 SINGUR număr (single-pick) → backtesting-ul și regula 4+ n-au
+    # sens (nu poți ghici „4+" cu 1 număr; rate_4plus mereu 0). Îl scoatem complet din
+    # bench. La generare, engine-ul folosește scorerul default pentru numărul de joker
+    # (oricum random — nicio metodă nu bate șansa pe 1 număr).
+    _n_before = len(games)
+    games = [g for g in games if not g.is_single_pick]
+    if len(games) < _n_before:
+        console.print(f"[dim]Sar {_n_before - len(games)} joc single-pick (ex. joker_urna2) "
+                      f"— backtesting irelevant pe 1 număr.[/dim]")
     console.rule("[bold]Jocuri detectate[/bold]")
     for g in games:
         console.print(
