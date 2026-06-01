@@ -255,9 +255,10 @@ def _launch_bench(args: list[str], label: str) -> None:
     _refresh_status()
 
 
-_PCTS = "30,60,100"  # grilă grosieră (scurt/mediu/lung): diferențele între ferestre sunt
-# zgomot statistic pe loto (4+ ~egal la toate), iar 10-30%% antrenau rețelele pe ~tot
-# istoricul = lent degeaba. 3 ferestre → bench ~3× mai rapid, fără pierdere reală.
+_PCTS = "10,20"  # ferestrele unde 4+ a ieșit cel mai sus în măsurători (max abs + medie:
+# 6/49 & 5/40 → 10%, joker_urna1 → 20%). ATENȚIE: sunt cele mai SCUMPE ferestre (antrenare
+# pe ~80-90%% din istoric → rețelele grele fac 25-30 min/fold), deci bench-ul rămâne lung
+# deși sunt doar 2 ferestre. Tunabil aici dacă devine prea lent.
 
 
 def run_full_rebench() -> None:
