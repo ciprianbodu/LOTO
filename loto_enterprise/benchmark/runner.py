@@ -481,7 +481,11 @@ def run_benchmark(
                 compute_args.append((method, src[:n_train], src[n_train:n_train + n_test],
                                      game, block_size, pct, is_random))
 
-        n_workers = max(1, (_os.cpu_count() or 4) - 1)
+        # Lăsăm nuclee libere pt UI (NiceGUI), worker, driver GPU + sistem. Altfel
+        # ProcessPool ocupa TOATE nucleele → procesul UI infometat → WebSocket pica
+        # ('connection lost'). Rezervăm ~25%% (min 2) din nuclee.
+        _nc = _os.cpu_count() or 4
+        n_workers = max(1, _nc - max(2, _nc // 4))
         if compute_args:
             try:
                 with ProcessPoolExecutor(max_workers=n_workers) as _ex:
