@@ -473,7 +473,7 @@ def run_benchmark(
     #     se suprapune → GPU mai ocupat, timp total mai mic. =1 → secvențial.
     _nc = _os.cpu_count() or 4
     n_workers = max(1, _nc - max(2, _nc // 4))
-    gpu_conc = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "4")))
+    gpu_conc = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "6")))
     fut_kind = {}   # fut -> ("cpu"|"gpu", game, csv_hash)
 
     def _make_pool(compute, max_workers, kind):
