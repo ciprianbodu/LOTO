@@ -37,6 +37,7 @@ import json
 import logging
 import pickle
 import time
+from dataclasses import MISSING, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -82,7 +83,19 @@ def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
         return None
     try:
         with open(f, "rb") as fh:
-            return pickle.load(fh)
+            obj = pickle.load(fh)
+        # Backfill câmpuri noi adăugate în FoldResult DUPĂ ce s-a scris cache-ul
+        # (ex. `family`) — altfel asdict()/acces atribut crapă pe obiecte vechi.
+        if is_dataclass(obj):
+            for fld in fields(obj):
+                if not hasattr(obj, fld.name):
+                    if fld.default is not MISSING:
+                        setattr(obj, fld.name, fld.default)
+                    elif fld.default_factory is not MISSING:  # type: ignore[misc]
+                        setattr(obj, fld.name, fld.default_factory())  # type: ignore[misc]
+                    else:
+                        setattr(obj, fld.name, None)
+        return obj
     except Exception as exc:
         logger.debug(f"[bench_cache] failed to load {f.name}: {exc}")
         try:
