@@ -386,26 +386,38 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
 
     elapsed = max(0.0, time.time() - start_ts) if start_ts else 0.0
 
-    def _cat_line(emoji, color, label, done, total, now_txt):
+    def _eta(done, total):
+        if elapsed > 0 and done > 0 and total > done:
+            return (total - done) * (elapsed / done)
+        return None
+
+    cpu_eta = _eta(cpu_done, cpu_tot)
+    gpu_eta = _eta(gpu_done, gpu_tot)
+
+    def _cat_line(emoji, color, label, done, total, eta, now_txt):
         parts = []
         if total > 0:
             pc = int(max(0.0, min(1.0, done / total)) * 100)
             parts.append(f"{pc}% ({done}/{total})")
         else:
             parts.append(f"{done} teste")
-        if elapsed > 0 and done > 0 and total > done:
-            rem = (total - done) * (elapsed / done)
-            parts.append(f"rămas ~{_fmt_dur(rem)}")
+        if eta is not None:
+            parts.append(f"rămas ~{_fmt_dur(eta)}")
+        elif total > 0 and done >= total:
+            parts.append("✅ gata")
         head = (f"<span style='color:{color}'>{emoji} {label}:</span> " + " · ".join(parts))
         return head + (f"<br><span style='opacity:.7'>&nbsp;&nbsp;&nbsp;&nbsp;acum: {now_txt}</span>" if now_txt else "")
 
+    # ETA GLOBAL = MAXIMUL dintre CPU și GPU: rulează CONCURENT, deci bench-ul se termină
+    # când termină cel mai LENT (de obicei GPU). Media/blend dădea un ETA fals de optimist
+    # (CPU termină multe task-uri instant → rata părea uriașă → „~17s" deși GPU avea 14m).
     text = f"{int(frac*100)}% ({cur}/{tot} teste)"
-    if elapsed > 0 and cur > 0:
-        remaining = (tot - cur) * (elapsed / cur)
-        text += f"  ·  rămas ~{_fmt_dur(remaining)}"
+    _etas = [e for e in (cpu_eta, gpu_eta) if e is not None]
+    if _etas:
+        text += f"  ·  rămas ~{_fmt_dur(max(_etas))} (cât cel mai lent track)"
     lines = [text]
-    lines.append(_cat_line("🖥️", "#38bdf8", "CPU", cpu_done, cpu_tot, last_cpu))
-    lines.append(_cat_line("⚡", "#c084fc", "GPU", gpu_done, gpu_tot, last_gpu))
+    lines.append(_cat_line("🖥️", "#38bdf8", "CPU", cpu_done, cpu_tot, cpu_eta, last_cpu))
+    lines.append(_cat_line("⚡", "#c084fc", "GPU", gpu_done, gpu_tot, gpu_eta, last_gpu))
     return frac, "<br>".join(lines)
 
 
