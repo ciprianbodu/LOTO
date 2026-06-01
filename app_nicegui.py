@@ -348,22 +348,27 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     if not log_path.exists():
         return None
     cur = tot = 0
-    last_line = ""
+    cpu_tot = gpu_tot = 0
+    matches = []
     try:
         import re
         txt = log_path.read_text(encoding="utf-8", errors="replace")
         matches = re.findall(r"\[(\d+)/(\d+)\]\s*\[([^\]]+)\]", txt)
         if matches:
             cur, tot = int(matches[-1][0]), int(matches[-1][1])
-            last_line = matches[-1][2]  # ex. "loto_6_49/informer/50%/REAL"
+        # marker scris de runner: [BENCH-SPLIT] cpu=N gpu=M total=T
+        _sp = re.findall(r"\[BENCH-SPLIT\]\s*cpu=(\d+)\s*gpu=(\d+)", txt)
+        if _sp:
+            cpu_tot, gpu_tot = int(_sp[-1][0]), int(_sp[-1][1])
     except Exception:  # noqa: BLE001
         pass
     if tot <= 0:
         return 0.03, "pornește... (estimez după primele teste)"
     frac = max(0.0, min(1.0, cur / tot))
-    # Ce se testează ACUM, SEPARAT pe CPU și pe GPU (rulează concurent). Clasificăm
-    # fiecare linie din log după familia metodei (_method_is_gpu) și ținem ultima din
-    # fiecare categorie → linie CPU + linie GPU.
+    # Progres SEPARAT pe CPU și GPU (rulează concurent). Numărăm câte linii din log
+    # sunt CPU vs GPU (clasificate după familia metodei) și folosim totalurile din
+    # markerul [BENCH-SPLIT] pentru % și ETA per categorie.
+    cpu_done = gpu_done = 0
     last_cpu = last_gpu = ""
     try:
         for _m in matches:
@@ -371,21 +376,36 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
             if len(seg) >= 3:
                 entry = f"{seg[0]} / {seg[1]} / {seg[2]} backtest"
                 if _method_is_gpu(seg[1]):
+                    gpu_done += 1
                     last_gpu = entry
                 else:
+                    cpu_done += 1
                     last_cpu = entry
     except Exception:  # noqa: BLE001
         pass
+
+    elapsed = max(0.0, time.time() - start_ts) if start_ts else 0.0
+
+    def _cat_line(emoji, color, label, done, total, now_txt):
+        parts = []
+        if total > 0:
+            pc = int(max(0.0, min(1.0, done / total)) * 100)
+            parts.append(f"{pc}% ({done}/{total})")
+        else:
+            parts.append(f"{done} teste")
+        if elapsed > 0 and done > 0 and total > done:
+            rem = (total - done) * (elapsed / done)
+            parts.append(f"rămas ~{_fmt_dur(rem)}")
+        head = (f"<span style='color:{color}'>{emoji} {label}:</span> " + " · ".join(parts))
+        return head + (f"<br><span style='opacity:.7'>&nbsp;&nbsp;&nbsp;&nbsp;acum: {now_txt}</span>" if now_txt else "")
+
     text = f"{int(frac*100)}% ({cur}/{tot} teste)"
-    if start_ts and cur > 0:
-        elapsed = max(0.0, time.time() - start_ts)
+    if elapsed > 0 and cur > 0:
         remaining = (tot - cur) * (elapsed / cur)
         text += f"  ·  rămas ~{_fmt_dur(remaining)}"
     lines = [text]
-    if last_cpu:
-        lines.append(f"<span style='color:#38bdf8'>🖥️ CPU acum:</span> {last_cpu}")
-    if last_gpu:
-        lines.append(f"<span style='color:#c084fc'>⚡ GPU acum:</span> {last_gpu}")
+    lines.append(_cat_line("🖥️", "#38bdf8", "CPU", cpu_done, cpu_tot, last_cpu))
+    lines.append(_cat_line("⚡", "#c084fc", "GPU", gpu_done, gpu_tot, last_gpu))
     return frac, "<br>".join(lines)
 
 
