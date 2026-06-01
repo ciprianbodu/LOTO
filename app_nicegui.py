@@ -85,15 +85,13 @@ STATE: dict = {
     "wf_status": "",         # text status walk-forward
     "wf_progress": 0.0,      # fracție 0..1 progres walk-forward (bară)
     "pure_bench": False,
-    "calib": {},             # {game_label: {"best": int, "detail": dict}}
-    "calib_status": "",
     "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
     "bench_was_running": False,
     "bench_cancelled": False, # True după Anulează → _tick NU mai pornește Auto-Pilot
     "_log_cache": None,       # conținut loguri pre-citit în thread (ne-blocant pt UI)
 }
 
-# R3: lock pentru mutații compuse pe STATE din thread-uri (walk-forward, calibrare)
+# R3: lock pentru mutații compuse pe STATE din thread-uri (walk-forward)
 # vs thread-ul principal UI. (Operațiile simple pe dict sunt atomice prin GIL;
 # lock-ul protejează secvențele multi-pas / iterările.)
 STATE_LOCK = threading.RLock()
@@ -1442,50 +1440,6 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                         _render_pool_body(fname, game, data, with_wf=True, res_prefix=res_prefix)
 
 
-def run_calibration_bg() -> None:
-    """Calibrare per-CSV (sim_depth optim) într-un thread de fundal."""
-    if not STATE["datasets"]:
-        ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
-        return
-    if STATE.get("calib_status"):
-        ui.notify("Calibrare deja în curs.", type="warning")
-        return
-    STATE["calib_status"] = "⚙️ Calibrare în curs..."
-    analysis_panel.refresh()
-
-    def _work() -> None:
-        try:
-            from calibreaza import run_calibration
-            from loto_engine import LotoEngine
-            res = {}
-            pool = int(SETTINGS["pool_size_val"])
-            with STATE_LOCK:
-                _datasets = list(STATE["datasets"])  # snapshot sub lock
-            for fname, df in _datasets:
-                gl = _game_label_for(fname)
-                STATE["calib_status"] = f"⚙️ Calibrare {gl}..."
-                eng = LotoEngine(game_type=gl)
-                eng.data = df.copy()
-                eng._build_draw_matrix()
-                best, detail = run_calibration(eng, test_draws=2, pool_size=pool)
-                res[gl] = {"best": int(best), "detail": detail}
-                SETTINGS["sim_depth_val"] = int(best)
-            with STATE_LOCK:
-                STATE["calib"] = res
-            _save_settings()
-            STATE["calib_status"] = ""
-        except Exception as exc:  # noqa: BLE001
-            STATE["calib_status"] = f"Calibrare eșuată: {exc}"
-            logger.error("calibrare: %s", exc)
-        finally:
-            try:
-                analysis_panel.refresh()
-            except Exception:  # noqa: BLE001
-                pass
-
-    threading.Thread(target=_work, daemon=True).start()
-
-
 def _render_matrix_html(matrix) -> None:
     """Heatmap HTML pentru o matrice (metode × ferestre %), verde = valoare mare."""
     try:
@@ -1563,15 +1517,6 @@ def analysis_panel() -> None:
             ui.label("Matrice walk-forward indisponibilă — rulează un benchmark.").classes("text-caption")
     except Exception as exc:  # noqa: BLE001
         ui.label(f"Matrice indisponibilă ({exc}).").classes("text-caption")
-
-    # --- Calibrare per-CSV ---
-    ui.separator()
-    with ui.row().classes("items-center gap-3"):
-        ui.button("⚙️ Calibrează AI-ul (sim_depth optim per CSV)", on_click=run_calibration_bg).props("outline")
-        if STATE.get("calib_status"):
-            ui.label(STATE["calib_status"]).classes("text-info")
-    for gl, c in (STATE.get("calib") or {}).items():
-        ui.label(f"  • {gl}: sim_depth optim = {c['best']}%").classes("text-caption text-positive")
 
 
 ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
@@ -1760,7 +1705,7 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2"):
         status_panel()
-        with ui.expansion("📈 Analiză & Calibrare (Power-User)", value=False).classes("w-full"):
+        with ui.expansion("📈 Analiză walk-forward (Power-User)", value=False).classes("w-full"):
             analysis_panel()
         with ui.expansion("🧠 Istoric Învățare Adaptivă", value=False).classes("w-full"):
             adaptive_history_panel()
