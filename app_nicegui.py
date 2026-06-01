@@ -1400,27 +1400,65 @@ def results_panel() -> None:
     _render_results_bundle(results[0])
 
 
-# nume de metode care folosesc GPU (rețele neurale) — fallback dacă telemetria bench
-# (gpu_pct/vram) e 0 pe rândul respectiv. Evită importul registry-ului greu (torch).
-_GPU_NAME_HINTS = {
-    "patchtst", "dlinear", "nlinear", "autoformer", "informer", "moment", "tcn", "deepar",
-    "nhits", "nbeats", "nbeatsx", "timesnet", "kan", "tft", "tide", "timemixer", "bitcn",
-    "deepnpts", "mlpmultivariate", "fedformer", "lstm", "gru", "rnn", "vanillatransformer",
+# Nume de metode GPU (rețele neurale / foundation) — fallback când folds.csv vechi
+# nu are coloana `family`. Evită importul registry-ului greu (torch) în UI.
+_GPU_NAME_SET = {
+    "dlinear", "nlinear", "nhits", "nbeats", "nbeatsx", "patchtst", "autoformer", "informer",
+    "fedformer", "tide", "timesnet", "timemixer", "bitcn", "deepnpts", "tcn", "deepar", "kan",
+    "mlpmultivariate", "vanilla_transformer", "itransformer", "tft", "moment", "timesfm",
+    "chronos", "tinytimemixer", "lstm", "gru", "rnn",
 }
 
 
-def _method_uses_gpu(name: str, gpu_peak: float = 0.0, vram_peak: float = 0.0) -> bool:
-    """Etichetă CPU/GPU: întâi telemetria reală din bench (gpu%/vram), apoi euristica pe nume."""
-    if gpu_peak and gpu_peak > 1.0:
-        return True
-    if vram_peak and vram_peak > 1.0:
-        return True
-    ml = str(name).lower()
-    return (ml.startswith("torch_") or ml.startswith("ens_torch") or ml.endswith("_gpu")
-            or ml.startswith("nf_") or ml.startswith("foundation") or ml in _GPU_NAME_HINTS)
+def _method_is_gpu(name: str, family: str = "") -> bool:
+    """Rulează pe GPU? Preferă `family` din folds.csv (autoritar, scris de runner);
+    altfel cade pe euristica de nume. NU folosește telemetria (gpu%/vram), care la bench-ul
+    paralel CPU‖GPU se 'scurge' pe rândurile metodelor CPU → ar eticheta greșit tot ca GPU."""
+    f = (family or "").strip().lower()
+    if f:
+        return (f.startswith("nf-") or f.startswith("foundation") or f.startswith("torch")
+                or f.endswith("-gpu") or f == "ssm")
+    n = (name or "").lower()
+    return (n.startswith("torch_") or n.startswith("ens_torch") or n.endswith("_gpu")
+            or n in _GPU_NAME_SET)
 
 
-def _render_bench_leaderboard(game_label: str, top_n: int = 5) -> None:
+def _method_library(name: str, family: str = "") -> str:
+    """Librăria/categoria lizibilă a metodei. Din `family` (preferat) sau din nume (fallback)."""
+    f = (family or "").strip().lower()
+    if f:
+        if f.startswith("nf-"):
+            return "NeuralForecast"
+        if f.startswith("foundation"):
+            return "Foundation (TimesFM/Chronos/MOMENT)"
+        if f.startswith("torch") or f.endswith("-gpu"):
+            return "PyTorch"
+        if f == "ssm":
+            return "state-space"
+        if f.startswith("ml-"):
+            return "scikit-learn"
+        if f.startswith("classical"):
+            return "statsmodels"
+        if f.startswith("ensemble"):
+            return "ansamblu (mix de metode)"
+        if f == "meta-adaptive":
+            return "OMNIUS (meta-învățare)"
+        if f.startswith("math") or f.startswith("geometric") or f.startswith("probabil"):
+            return "independent (numpy)"
+        return family  # familia brută dacă n-o recunoaștem
+    n = (name or "").lower()
+    if n.startswith("ml_"):
+        return "scikit-learn"
+    if n.startswith("torch_") or n.startswith("ens_torch") or n.endswith("_gpu"):
+        return "PyTorch"
+    if n in _GPU_NAME_SET:
+        return "NeuralForecast/Foundation"
+    if n in {"arima_auto", "ets_auto", "theta_auto", "holt_winters", "stl", "croston_classic"}:
+        return "statsmodels"
+    return "independent (numpy)"
+
+
+def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
     """Top-N metode din ULTIMUL bench pentru acest joc, clasate pe regula 4+ (rata
     extragerilor cu ≥4 numere ghicite). CPU și GPU în ACELAȘI clasament — un singur bench.
     Sursă: bench_results/folds.csv (scris de runner)."""
@@ -1445,14 +1483,16 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 5) -> None:
     metric = "rate_4plus" if has_4plus else "avg_hits_topk"
     if metric not in sub.columns:
         return
-    g = sub.groupby("method")
+    has_family = "family" in sub.columns
     rows = []
-    for m, grp in g:
+    for m, grp in sub.groupby("method"):
         score = float(grp[metric].mean())
         avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
-        gpu_pk = float(grp["gpu_pct_peak"].max()) if "gpu_pct_peak" in grp.columns else 0.0
-        vram_pk = float(grp["vram_mb_peak"].max()) if "vram_mb_peak" in grp.columns else 0.0
-        rows.append((m, score, avg, _method_uses_gpu(m, gpu_pk, vram_pk)))
+        fam = ""
+        if has_family:
+            _f = grp["family"].dropna().astype(str)
+            fam = _f.iloc[0] if not _f.empty else ""
+        rows.append((m, score, avg, _method_is_gpu(m, fam), _method_library(m, fam)))
     rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
     rows = rows[:top_n]
     if not rows:
@@ -1462,17 +1502,18 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 5) -> None:
                       value=False).classes("w-full"):
         ui.label("CPU și GPU în ACELAȘI clasament — un singur bench alege câștigătorul (regula 4+).").classes(
             "text-caption text-grey")
-        for i, (m, score, avg, is_gpu) in enumerate(rows, 1):
+        if not has_family:
+            ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
+                     "pentru etichete exacte.").classes("text-caption text-orange")
+        for i, (m, score, avg, is_gpu, lib) in enumerate(rows, 1):
             tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
             tag_cls = "text-deep-purple" if is_gpu else "text-blue"
             sc_txt = f"4+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
-            desc = _METHOD_DESC.get(m, "")
             with ui.row().classes("items-center gap-2 w-full"):
                 ui.label(f"{i}.").classes("text-bold text-grey w-6")
                 ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
                 ui.label(m).classes("text-bold")
-                ui.label(f"· {sc_txt} · medie/extragere {avg:.2f}"
-                         + (f" · {desc}" if desc else "")).classes("text-caption text-grey")
+                ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
@@ -1566,15 +1607,15 @@ def analysis_panel() -> None:
             if cfg and not cfg.get("fallback"):
                 any_dec = True
                 m = cfg.get("scorer", "?")
-                tag = "⚡ GPU" if _method_uses_gpu(m) else "🖥️ CPU"
-                desc = _METHOD_DESC.get(m, "")
+                fam = str(cfg.get("family", "") or "")
+                is_gpu = _method_is_gpu(m, fam)
+                lib = _method_library(m, fam)
                 with ui.row().classes("items-center gap-2"):
                     ui.label(f"  • {lbl} (K={ps}):").classes("text-caption")
-                    ui.label(tag).classes("text-caption text-bold "
-                                          + ("text-deep-purple" if _method_uses_gpu(m) else "text-blue"))
+                    ui.label("⚡ GPU" if is_gpu else "🖥️ CPU").classes(
+                        "text-caption text-bold " + ("text-deep-purple" if is_gpu else "text-blue"))
                     ui.label(f"{m} @ {cfg.get('sim_depth_pct')}% "
-                             f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')})"
-                             + (f" · {desc}" if desc else "")).classes("text-caption")
+                             f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')}) · {lib}").classes("text-caption")
         if not any_dec:
             ui.label("  Fără decizie încă — rulează un Re-Bench.").classes("text-caption text-warning")
     except Exception as exc:  # noqa: BLE001
@@ -1593,10 +1634,9 @@ def analysis_panel() -> None:
                     if not s.get("available"):
                         continue
                     _bm = s["best_method"]
-                    _tag = "⚡ GPU" if _method_uses_gpu(_bm) else "🖥️ CPU"
-                    _desc = _METHOD_DESC.get(_bm, "")
-                    ui.label(f"{lbl} (K={ps}) — top: {_tag} {_bm} (avg={s['best_mean']:.3f})"
-                             + (f" · {_desc}" if _desc else "")).classes("text-bold mt-1")
+                    _tag = "⚡ GPU" if _method_is_gpu(_bm) else "🖥️ CPU"
+                    _lib = _method_library(_bm)
+                    ui.label(f"{lbl} (K={ps}) — top: {_tag} {_bm} (avg={s['best_mean']:.3f}) · {_lib}").classes("text-bold mt-1")
                     _render_matrix_html(s["matrix"])
         else:
             ui.label("Matrice walk-forward indisponibilă — rulează un benchmark.").classes("text-caption")

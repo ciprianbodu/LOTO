@@ -165,6 +165,7 @@ class FoldResult:
     hits_per_pool: Dict[str, float] = field(default_factory=dict)
     # Hit rates per pool size WITH blacklist applied (bottom 25% excluded)
     hits_per_pool_bl: Dict[str, float] = field(default_factory=dict)
+    family: str = ""                    # familia/librăria metodei (nf-*, ml-*, classical-*, math-*, torch-*-gpu...)
     avg_hits_topk: float = 0.0          # avg hits at K = draw_n (base pool)
     max_hits_topk: int = 0
     rate_4plus: float = 0.0             # rata extragerilor cu >=4 numere ghicite (regula 4+)
@@ -201,6 +202,7 @@ def _evaluate_fold(
     fr = FoldResult(
         game=game.key, method=method_name, percentile=0, is_random=False,
         n_train=len(train_draws), n_test=n_test, runtime_sec=0.0,
+        family=str(method_meta(method_name).get("family", "") or ""),
         hits_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         hits_per_pool_bl={f"k{k}": 0.0 for k in pool_sizes},
     )
