@@ -25,14 +25,32 @@ import numpy as np
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
 
-# Tensor Cores (RTX): matmul float32 pe 'high' → antrenare ~1.5-3× mai rapidă a
-# rețelelor neurale din bench (NeuralForecast/torch), cu pierdere de precizie
-# nesemnificativă (irelevant pe loto, oricum ~random). Elimină warning-ul torch.
+# Tensor Cores (RTX): folosim unitățile specializate de matmul/conv ale GPU-ului dacă
+# le DETECTĂM și sunt UTILE — antrenare ~1.5-3× mai rapidă a rețelelor din bench
+# (NeuralForecast/torch), cu pierdere de precizie nesemnificativă (irelevant pe loto).
+# Se aplică în ORICE proces care importă methods (inclusiv worker-ii GPU ai bench-ului).
+# Dezactivabil cu LOTO_TF32=0. Rulează o singură dată la import.
 try:
+    import os as _os_init
     import torch as _torch_init
-    if _torch_init.cuda.is_available() and hasattr(_torch_init, "set_float32_matmul_precision"):
-        _torch_init.set_float32_matmul_precision("high")
-        logger.info("[methods] Tensor Cores activate: float32_matmul_precision='high'")
+    if _os_init.environ.get("LOTO_TF32", "1") != "0" and _torch_init.cuda.is_available():
+        # capability >= (8,0) = Ampere+ (RTX 30xx/40xx, A100) → TF32 pe Tensor Cores.
+        # (7,x) = Volta/Turing: au Tensor Cores FP16, dar nu TF32; flag-urile sunt no-op
+        # inofensiv acolo. cudnn.benchmark autotune-uiește kernel-urile conv (repetate).
+        try:
+            _cap = _torch_init.cuda.get_device_capability(0)
+        except Exception:  # noqa: BLE001
+            _cap = (0, 0)
+        _torch_init.backends.cudnn.benchmark = True
+        _torch_init.backends.cuda.matmul.allow_tf32 = True       # TF32 pt matmul (Tensor Cores)
+        _torch_init.backends.cudnn.allow_tf32 = True             # TF32 pt convoluții cuDNN
+        if hasattr(_torch_init, "set_float32_matmul_precision"):
+            _torch_init.set_float32_matmul_precision("high")     # = TF32
+        _name = _torch_init.cuda.get_device_name(0)
+        _tc = "TF32 (Ampere+)" if _cap >= (8, 0) else ("FP16-only (Volta/Turing)" if _cap >= (7, 0)
+                                                       else "fără Tensor Cores")
+        logger.info("[methods] Tensor Cores: %s pe %s (cc=%s) — cudnn.benchmark+TF32 activate",
+                    _tc, _name, _cap)
 except Exception:  # noqa: BLE001
     pass
 
