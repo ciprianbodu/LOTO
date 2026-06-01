@@ -644,6 +644,28 @@ def cancel_all() -> None:
 # --------------------------------------------------------------------------- #
 # Walk-forward backtest (în thread de fundal, ca să nu blocheze UI-ul)
 # --------------------------------------------------------------------------- #
+def _start_walk_forward_on_winner() -> None:
+    """Rulează walk-forward DOAR pe câștigătorul 4+ (CPU sau GPU). Daca exista o singura
+    faza (generare normala), ruleaza pe ea. Economiseste un WF costisitor (127 simulari)."""
+    has_cpu = isinstance(STATE.get("results"), tuple)
+    has_gpu = isinstance(STATE.get("results_gpu"), tuple)
+    if has_cpu and has_gpu:
+        # determinăm câștigătorul pe rata 4+ (medie pe jocuri) din folds CPU vs GPU
+        cpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results" / "folds.csv")
+        gpu_r = _rate_4plus_per_game(PROJECT_ROOT / "bench_results_gpu" / "folds.csv")
+        best_cpu = max((max(m.values(), default=0.0) for m in cpu_r.values()), default=0.0)
+        best_gpu = max((max(m.values(), default=0.0) for m in gpu_r.values()), default=0.0)
+        use_gpu = best_gpu > best_cpu
+        ui.notify(f"🎯 Walk-forward pe câștigătorul 4+: "
+                  f"{'⚡ GPU' if use_gpu else '🖥️ CPU'} (rată 4+ "
+                  f"{max(best_gpu, best_cpu):.4f}).", type="positive")
+        _start_walk_forward(use_gpu=use_gpu)
+    elif has_gpu:
+        _start_walk_forward(use_gpu=True)
+    else:
+        _start_walk_forward(use_gpu=False)
+
+
 def _start_walk_forward(use_gpu: bool = False) -> None:
     key = "results_gpu" if use_gpu else "results"
     results = STATE.get(key)
@@ -739,7 +761,18 @@ def status_panel() -> None:
                 STATE["active_job_id"] = None
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
-            _start_walk_forward(use_gpu=_is_gpu_res)  # WF pe bundle-ul corect (CPU sau GPU)
+            # Walk-forward DOAR pe câștigător (4+), DUPĂ ce ambele faze sunt gata.
+            # Daca e bench paralel si inca asteptam cealalta faza → amânăm WF.
+            _ph_now = STATE.get("phased") or {}
+            _parallel = _ph_now.get("mode") == "parallel"
+            _both_ready = (isinstance(STATE.get("results"), tuple)
+                           and isinstance(STATE.get("results_gpu"), tuple))
+            if _parallel and not _both_ready:
+                # mai asteptam cealalta faza — doar afisam, fara WF deocamdata
+                ui.notify("Rezultate afișate. Walk-forward va rula pe câștigător când "
+                          "termină și cealaltă fază.", type="info")
+            else:
+                _start_walk_forward_on_winner()
             results_panel.refresh()
             try:
                 ui.run_javascript(SOUND_JS)  # beep de finalizare
