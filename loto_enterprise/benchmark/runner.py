@@ -383,14 +383,16 @@ def run_benchmark(
         logger.debug(f"[bench_cache] import failed: {_cache_exc}")
         _cache_ok = False
 
-    def _handle_result(game, method, pct, is_random, fr, from_cache):
+    def _handle_result(game, method, pct, is_random, fr, from_cache, kind):
         nonlocal done_global
         done_global += 1
         fold_rows.append(fr)
         tag = "CACHE HIT" if from_cache else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
-        # [N/M] = total GRAND (toate jocurile), consistent cu [BENCH-SPLIT] și progress_cb.
-        logger.info("[%d/%d] [%s/%s/%d%%/%s] %s", done_global, total_folds_est,
-                    game.key, method, pct, "RND" if is_random else "REAL", tag)
+        # [N/M] = total GRAND; eticheta CPU/GPU (kind) scrisă AUTORITAR în linie, ca UI-ul
+        # să nu mai ghicească din nume (clasificarea după nume diverja de cea după familie
+        # → cpu_done depășea cpu_tot). Format: [game/method/pct/REAL|RND/CPU|GPU].
+        logger.info("[%d/%d] [%s/%s/%d%%/%s/%s] %s", done_global, total_folds_est,
+                    game.key, method, pct, "RND" if is_random else "REAL", kind.upper(), tag)
         if progress_cb:
             progress_cb(done_global, total_folds_est, fr, game)
 
@@ -452,7 +454,8 @@ def run_benchmark(
                         except Exception:  # noqa: BLE001
                             pass
                     if cached is not None:
-                        _handle_result(game, method, pct, is_random, cached, True)
+                        _handle_result(game, method, pct, is_random, cached, True,
+                                       "gpu" if is_gpu else "cpu")
                     else:
                         src = shuffled_draws if is_random else draws
                         args = (method, src[:n_train], src[n_train:n_train + n_test],
@@ -470,7 +473,7 @@ def run_benchmark(
     #     se suprapune → GPU mai ocupat, timp total mai mic. =1 → secvențial.
     _nc = _os.cpu_count() or 4
     n_workers = max(1, _nc - max(2, _nc // 4))
-    gpu_conc = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "2")))
+    gpu_conc = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "4")))
     fut_kind = {}   # fut -> ("cpu"|"gpu", game, csv_hash)
 
     def _make_pool(compute, max_workers, kind):
@@ -509,7 +512,7 @@ def run_benchmark(
                         store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
                     except Exception:  # noqa: BLE001
                         pass
-                _handle_result(game, method, pct, is_random, fr, False)
+                _handle_result(game, method, pct, is_random, fr, False, kind)
         finally:
             if _ex is not None:
                 _ex.shutdown(wait=True)
@@ -525,7 +528,7 @@ def run_benchmark(
                 fr.is_random = is_random
                 if _cache_ok and csv_hash is not None:
                     store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
-                _handle_result(game, method, pct, is_random, fr, False)
+                _handle_result(game, method, pct, is_random, fr, False, kind)
             except Exception as e2:  # noqa: BLE001
                 logger.error("[%s/%s] %s fallback failed: %s", game.key, method, kind, e2)
 
