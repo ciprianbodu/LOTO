@@ -255,7 +255,9 @@ def _launch_bench(args: list[str], label: str) -> None:
     _refresh_status()
 
 
-_PCTS = "10,20,30,40,50,60,70,80,90,100"
+_PCTS = "30,60,100"  # grilă grosieră (scurt/mediu/lung): diferențele între ferestre sunt
+# zgomot statistic pe loto (4+ ~egal la toate), iar 10-30%% antrenau rețelele pe ~tot
+# istoricul = lent degeaba. 3 ferestre → bench ~3× mai rapid, fără pierdere reală.
 
 
 def run_full_rebench() -> None:
