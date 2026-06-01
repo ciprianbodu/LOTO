@@ -458,16 +458,9 @@ def run_benchmark(
                 progress_cb(fold_idx_base + done_this, total_folds_est, fr, game)
 
         fold_idx_base = fold_idx
-        # GPU: secvential (un singur GPU, nu paralelizam)
-        for (method, pct, is_random, n_train, n_test) in gpu_tasks:
-            try:
-                fr, fc = _eval_task(method, pct, is_random, n_train, n_test)
-                _handle_result(method, pct, is_random, fr, fc)
-            except Exception as exc:  # noqa: BLE001
-                logger.error("[%s/%s] GPU task failed: %s", game.key, method, exc)
 
-        # CPU: cache lookup intai (skip cele cache-uite, instant), apoi PROCESE paralele
-        # pe restul. Procese (nu threads) = paralelism REAL, ocoleste GIL-ul pe numpy pur.
+        # ─── CPU ‖ GPU CONCURENT ─────────────────────────────────────────────
+        # 1. CPU: lookup cache (instant) → restul intră în compute_args.
         compute_args = []   # task-uri necache-uite → calcul paralel
         for (method, pct, is_random, n_train, n_test) in cpu_tasks:
             cached = None
@@ -483,35 +476,56 @@ def run_benchmark(
                 compute_args.append((method, src[:n_train], src[n_train:n_train + n_test],
                                      game, block_size, pct, is_random))
 
-        # Lăsăm nuclee libere pt UI (NiceGUI), worker, driver GPU + sistem. Altfel
-        # ProcessPool ocupa TOATE nucleele → procesul UI infometat → WebSocket pica
-        # ('connection lost'). Rezervăm ~25%% (min 2) din nuclee.
+        # 2. Pornim pool-ul CPU NON-BLOCANT (submit → futures) ca să ruleze
+        # SIMULTAN cu bucla GPU de mai jos. Lăsăm ~25%% (min 2) nuclee libere pt
+        # UI/worker/driver GPU — altfel UI înfometat → 'connection lost'.
         _nc = _os.cpu_count() or 4
         n_workers = max(1, _nc - max(2, _nc // 4))
+        _ex = None
+        cpu_futures = []
         if compute_args:
             try:
-                with ProcessPoolExecutor(max_workers=n_workers) as _ex:
-                    for (method, pct, is_random, fr, err) in _ex.map(_eval_fold_worker, compute_args):
-                        if err or fr is None:
-                            logger.error("[%s/%s] CPU task failed: %s", game.key, method, err)
-                            continue
-                        if csv_hash_game is not None:
-                            try:
-                                store_cached_fold(csv_hash_game, method, pct, game.key, is_random, fr)
-                            except Exception:  # noqa: BLE001
-                                pass
-                        _handle_result(method, pct, is_random, fr, False)
-            except Exception as exc:  # noqa: BLE001 — fallback secvential daca procesele pica
-                logger.warning("[bench] ProcessPool a esuat (%s) — fallback secvential.", exc)
-                for (method, src_tr, src_te, gm, bs, pct, is_random) in compute_args:
-                    try:
-                        fr, _ = _evaluate_fold(method, src_tr, src_te, gm, bs)
-                        fr.percentile = pct; fr.is_random = is_random
-                        if csv_hash_game is not None:
+                _ex = ProcessPoolExecutor(max_workers=n_workers)
+                cpu_futures = [_ex.submit(_eval_fold_worker, a) for a in compute_args]
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[bench] ProcessPool indisponibil (%s) — CPU secvential.", exc)
+                _ex = None
+
+        # 3. GPU: secvenţial în thread-ul principal — rulează CONCURENT cu pool-ul CPU.
+        for (method, pct, is_random, n_train, n_test) in gpu_tasks:
+            try:
+                fr, fc = _eval_task(method, pct, is_random, n_train, n_test)
+                _handle_result(method, pct, is_random, fr, fc)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("[%s/%s] GPU task failed: %s", game.key, method, exc)
+
+        # 4. Colectăm rezultatele CPU (deja calculate în paralel cu GPU-ul de mai sus).
+        if _ex is not None:
+            try:
+                for fut in as_completed(cpu_futures):
+                    method, pct, is_random, fr, err = fut.result()
+                    if err or fr is None:
+                        logger.error("[%s/%s] CPU task failed: %s", game.key, method, err)
+                        continue
+                    if csv_hash_game is not None:
+                        try:
                             store_cached_fold(csv_hash_game, method, pct, game.key, is_random, fr)
-                        _handle_result(method, pct, is_random, fr, False)
-                    except Exception as e2:  # noqa: BLE001
-                        logger.error("[%s/%s] fallback failed: %s", game.key, method, e2)
+                        except Exception:  # noqa: BLE001
+                            pass
+                    _handle_result(method, pct, is_random, fr, False)
+            finally:
+                _ex.shutdown(wait=True)
+        elif compute_args:
+            # fallback secvenţial dacă pool-ul n-a putut porni
+            for (method, src_tr, src_te, gm, bs, pct, is_random) in compute_args:
+                try:
+                    fr, _ = _evaluate_fold(method, src_tr, src_te, gm, bs)
+                    fr.percentile = pct; fr.is_random = is_random
+                    if csv_hash_game is not None:
+                        store_cached_fold(csv_hash_game, method, pct, game.key, is_random, fr)
+                    _handle_result(method, pct, is_random, fr, False)
+                except Exception as e2:  # noqa: BLE001
+                    logger.error("[%s/%s] fallback failed: %s", game.key, method, e2)
         fold_idx = fold_idx_base + total_this_game
         continue  # gata cu jocul curent (am procesat toate task-urile)
 
