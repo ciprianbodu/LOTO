@@ -383,6 +383,29 @@ def run_benchmark(
         logger.debug(f"[bench_cache] import failed: {_cache_exc}")
         _cache_ok = False
 
+    def _flush_folds():
+        """Scrie folds.csv ATOMIC din fold_rows-urile de PÂNĂ ACUM. Apelat periodic ca
+        rezultatele să supraviețuiască unei anulări/crash (înainte se scria DOAR la final
+        → 2h de bench anulat = folds.csv gol). Întoarce DataFrame-ul (pt agregare)."""
+        if not fold_rows:
+            return pd.DataFrame()
+        rows = []
+        for fr in fold_rows:
+            row = asdict(fr)
+            for k, v in row.pop("hits_per_pool").items():
+                row[k] = v
+            for k, v in row.pop("hits_per_pool_bl").items():
+                row[f"{k}_bl"] = v
+            rows.append(row)
+        _df = pd.DataFrame(rows)
+        try:
+            _tmp = out_path / "folds.csv.tmp"
+            _df.to_csv(_tmp, index=False)
+            _tmp.replace(out_path / "folds.csv")  # atomic (OneDrive-safe)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[bench] flush folds.csv esuat: %s", exc)
+        return _df
+
     def _handle_result(game, method, pct, is_random, fr, from_cache, kind):
         nonlocal done_global
         done_global += 1
@@ -393,6 +416,10 @@ def run_benchmark(
         # → cpu_done depășea cpu_tot). Format: [game/method/pct/REAL|RND/CPU|GPU].
         logger.info("[%d/%d] [%s/%s/%d%%/%s/%s] %s", done_global, total_folds_est,
                     game.key, method, pct, "RND" if is_random else "REAL", kind.upper(), tag)
+        # Flush periodic (la fiecare 100 rezultate noi necache-uite) → rezultate parțiale
+        # utilizabile chiar dacă se anulează. Sărim flush-ul pe cache hits (vin în rafală).
+        if not from_cache and done_global % 100 == 0:
+            _flush_folds()
         if progress_cb:
             progress_cb(done_global, total_folds_est, fr, game)
 
@@ -537,26 +564,16 @@ def run_benchmark(
     if _gex is None and all_gpu_compute:
         _run_seq(all_gpu_compute, "gpu")
 
-    # ----- Save per-fold CSV -----
-    rows = []
+    # ----- Save per-fold CSV (scriere finală; pe parcurs s-a flush-uit periodic) -----
+    df = _flush_folds()
     pool_keys_per_game = {}
     for g in games:
         if g.is_single_pick:
             pool_keys_per_game[g.key] = [f"k{g.draw_n}"]
         else:
             pool_keys_per_game[g.key] = [f"k{g.draw_n + i}" for i in range(g.pool_extra + 1)]
-
-    for fr in fold_rows:
-        row = asdict(fr)
-        # Flatten hits_per_pool (WITHOUT blacklist)
-        for k, v in row.pop("hits_per_pool").items():
-            row[k] = v
-        # Flatten hits_per_pool_bl (WITH blacklist) with "_bl" suffix
-        for k, v in row.pop("hits_per_pool_bl").items():
-            row[f"{k}_bl"] = v
-        rows.append(row)
-    df = pd.DataFrame(rows)
-    df.to_csv(out_path / "folds.csv", index=False)
+    if df.empty:
+        df = pd.DataFrame()
 
     # ----- Aggregate per (game, pool) → winner -----
     report = _aggregate(df, games, methods, method_meta_map, pool_keys_per_game)
