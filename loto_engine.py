@@ -1111,18 +1111,11 @@ class LotoEngine:
         else:
             all_sorted_indices = np.argsort(freq)[::-1]
             _replacement_signal = "raw frequency"
-        reserve_idx = len(pool)
         modifications = []
         logging.info(f"[ANTI-SEQ] Replacement signal: {_replacement_signal}")
-        
-        # Prevenim bucla infinită memorând secvențele validate (care rămân în pool)
-        validated_sequences = set()
-        
-        # Trackăm numerele scoase pentru a nu le re-adăuga: reserve_idx avansează
-        # prin all_sorted_indices și, dacă pool-ul inițial e NQI-based (nu pur
-        # frequency-based), reserve-ul putea ajunge la slot-ul de freq al unui
-        # număr tocmai eliminat ("not in current_pool" → re-adăugat ca noop).
-        # Bug observat 2026-05-02: "Scos 18 (freq 316), adăugat 18 (freq 316)".
+
+        # Trackăm numerele scoase ca să NU le re-adăugăm ca rezerve (altfel ai putea avea
+        # "Scos 18 → adăugat 18"). Bug observat 2026-05-02.
         removed_nums: set[int] = set()
 
         def _forms_run3(pool_set: set, num: int) -> bool:
@@ -1142,23 +1135,17 @@ class LotoEngine:
             if _iter_guard > 4 * max(len(pool), 1):  # anti-buclă (nu ar trebui atins)
                 break
             found_sequence = None
-            # Căutăm orice secvență de 3+ numere consecutive care nu a fost încă validată
+            # Căutăm orice run de 3+ numere consecutive în pool.
             for start_idx in range(len(current_pool) - 2):
                 consecutive_nums = [current_pool[start_idx]]
-                
-                # Extindem secvența atât timp cât găsim numere consecutive
                 for next_idx in range(start_idx + 1, len(current_pool)):
                     if current_pool[next_idx] == consecutive_nums[-1] + 1:
                         consecutive_nums.append(current_pool[next_idx])
                     else:
                         break
-                
-                # Verificăm dacă avem cel puțin 3 numere consecutive
                 if len(consecutive_nums) >= 3:
-                    seq = tuple(consecutive_nums)
-                    if seq not in validated_sequences:
-                        found_sequence = seq
-                        break
+                    found_sequence = tuple(consecutive_nums)
+                    break
             
             if not found_sequence:
                 break
