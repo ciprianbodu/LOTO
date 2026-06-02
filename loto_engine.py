@@ -883,6 +883,16 @@ class LotoEngine:
                     "added_replacements": [n for n in self.hard_core if n not in violated][-needed:] if needed > 0 else [],
                 }
                 logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
+
+            # Enforcement-ul de mai sus a putut REINTRODUCE secvențe de 3+ consecutive
+            # (înlocuiește numerele din blacklist cu top-scoring, fără să verifice
+            # consecutivitatea). Re-aplicăm anti-secvența ca ULTIM pas (evitând blacklist-ul
+            # ca să nu strice inversarea) → pool-ul FINAL inversat nu mai are 3+ consecutive.
+            if filter_consecutives:
+                self.hard_core = self._apply_consecutive_filter(
+                    self.hard_core, freq, scores=tfm_scores, avoid=set(self._manual_blacklist_set))
+                if 'pipeline_stages' in self.audit:
+                    self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
             else:
                 logging.info(f"[MANUAL-BLACKLIST] Pool curat ({len(self.hard_core)} numere, niciun violator).")
 
@@ -1055,7 +1065,8 @@ class LotoEngine:
         logging.info(f"[INIT] Nucleu inițial: {pool}")
         return pool
 
-    def _apply_consecutive_filter(self, pool: list, freq: np.ndarray, scores: dict | None = None) -> list:
+    def _apply_consecutive_filter(self, pool: list, freq: np.ndarray, scores: dict | None = None,
+                                  avoid: set | None = None) -> list:
         """Sparge orice secvență de 3+ numere consecutive din pool (STRICT — nu
         păstrăm niciodată 3+ consecutive, indiferent de istoric). Pentru fiecare run
         de 3+: scoatem cel mai slab număr (după frecvență) și punem cea mai bine cotată
@@ -1170,7 +1181,7 @@ class LotoEngine:
             chosen, chosen_any = None, None
             for idx in all_sorted_indices:
                 num = int(idx) + 1
-                if num in _pool_set or num in removed_nums:
+                if num in _pool_set or num in removed_nums or (avoid and num in avoid):
                     continue
                 if chosen_any is None:
                     chosen_any = num
