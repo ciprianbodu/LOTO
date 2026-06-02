@@ -255,10 +255,9 @@ def _launch_bench(args: list[str], label: str) -> None:
     _refresh_status()
 
 
-_PCTS = "10,20"  # ferestrele unde 4+ a ieșit cel mai sus în măsurători (max abs + medie:
-# 6/49 & 5/40 → 10%, joker_urna1 → 20%). ATENȚIE: sunt cele mai SCUMPE ferestre (antrenare
-# pe ~80-90%% din istoric → rețelele grele fac 25-30 min/fold), deci bench-ul rămâne lung
-# deși sunt doar 2 ferestre. Tunabil aici dacă devine prea lent.
+_PCTS = "10,30,60,100"  # 4 ferestre: 10% (zona unde 4+ a ieșit cel mai sus în măsurători)
+# + 30/60/100 (scurt-mediu-lung). NOTĂ: 10% e cea mai SCUMPĂ (antrenare pe ~90%% din istoric
+# → rețelele grele fac 25-30 min/fold); 100% e cea mai ieftină. Tunabil aici.
 
 
 def run_full_rebench() -> None:
