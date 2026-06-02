@@ -594,7 +594,7 @@ class LotoEngine:
             if not hasattr(self, "_temp_blacklist"):
                 self._temp_blacklist = set()
 
-        logging.info(f"[PIPELINE] Se inițializează motorul Neural Foundation (TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
+        logging.info(f"[PIPELINE] Inițializare scoring neural (câștigător bench / TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
         if lookback > 0 and self.data is not None and not self.data.empty:
             effective_rows = int(len(self.data) * (lookback / 100.0))
@@ -663,7 +663,7 @@ class LotoEngine:
         if 'performance' not in self.audit:
             self.audit['performance'] = {}
         self.audit['performance']['gpu_time_ms'] = round(gpu_time, 2)
-        logging.info(f"[PIPELINE] TimesFM GPU Time: {gpu_time:.2f}ms")
+        logging.info(f"[PIPELINE] Scoring neural ({_score_lbl}) GPU Time: {gpu_time:.2f}ms")
 
         # Aplicăm corecția de feedback (Adaptive Local Tuning) ANTERIOR rulării TimesFM
         if self.error_correction_map:
@@ -827,7 +827,7 @@ class LotoEngine:
             else:
                 self._consecutive_filter_applied = False
 
-            logging.info(f"[PIPELINE] Nucleu (Pool) generat prin TimesFM v2 NQI: {self.hard_core}")
+            logging.info(f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl} (NQI): {self.hard_core}")
 
             # POST-HOC VALIDATION: Verificăm pool-ul pe ultimele extrageri
             # Aceasta e optimizarea principală — un pool validat empiric
@@ -845,12 +845,12 @@ class LotoEngine:
             self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
         
         if self.game_type == "joker":
-            logging.info(f"[PIPELINE] TimesFM v2 pentru Urna 2 (Joker)...")
+            logging.info(f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)...")
             j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
             if j_scores:
                 sorted_j = sorted(j_scores.items(), key=lambda x: x[1], reverse=True)
                 self.hard_core_joker = [int(num) for num, _ in sorted_j[:2]]
-                logging.info(f"[PIPELINE] Nucleu Joker (TimesFM v2): {self.hard_core_joker}")
+                logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
                 self.audit['joker_predictions'] = {num: round(score, 4) for num, score in sorted_j[:5]}
             else:
                 freq_joker = self.analyze_joker_frequency()
