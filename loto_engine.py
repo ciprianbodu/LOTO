@@ -625,13 +625,26 @@ class LotoEngine:
         # Calibrare bară progres: TimesFM e cea mai lungă etapă (~3-15s pe GPU,
         # 15-30s pe CPU). Înainte: salt 15→45% cu 14s tăcere — UI părea blocat.
         # Acum: callback per fereastră de ensemble → progres aproape continuu.
+        # Etichetă progres = metoda REALĂ de scoring (câștigătorul bench dacă use_bench_winner
+        # e ON), nu mereu „TimesFM v2" (înșelător — de fapt rulează ex. torch_bilstm_deep).
+        _score_lbl = "TimesFM v2"
+        if self.use_bench_winner:
+            try:
+                from loto_enterprise.core.method_selector import get_winner_name
+                _gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
+                       "joker": "joker_urna1"}.get(self.game_type, "loto_6_49")
+                _wn = get_winner_name(_gk, pool_size=int(getattr(self, "_winner_pool_hint", 16)))
+                if _wn:
+                    _score_lbl = _wn
+            except Exception:  # noqa: BLE001
+                pass
         if progress_cb:
-            progress_cb(f"TimesFM v2: forecast neural (ctx={actual_lookback}, ~3-15s)...", 15)
+            progress_cb(f"🧠 Scoring neural: {_score_lbl} (ctx={actual_lookback})...", 15)
 
             def _tfm_window_progress(done, total, current_ctx):
                 # Map [done/total] în intervalul [15, 45] = 30 puncte
                 pct = 15 + int((done / max(total, 1)) * 30)
-                progress_cb(f"TimesFM v2: fereastră {done}/{total} (ctx={current_ctx})", pct)
+                progress_cb(f"🧠 {_score_lbl}: fereastră {done}/{total} (ctx={current_ctx})", pct)
 
             self._tfm_window_cb = _tfm_window_progress
         else:
@@ -645,7 +658,7 @@ class LotoEngine:
         gpu_time = (time.perf_counter() - start_gpu) * 1000
 
         if progress_cb:
-            progress_cb(f"TimesFM v2 complet ({gpu_time/1000:.1f}s). Procesez feedback adaptive...", 45)
+            progress_cb(f"🧠 {_score_lbl} complet ({gpu_time/1000:.1f}s). Procesez feedback adaptive...", 45)
         
         if 'performance' not in self.audit:
             self.audit['performance'] = {}
