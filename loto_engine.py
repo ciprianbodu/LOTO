@@ -1056,17 +1056,13 @@ class LotoEngine:
         return pool
 
     def _apply_consecutive_filter(self, pool: list, freq: np.ndarray, scores: dict | None = None) -> list:
-        """Caută secvențe de 3+ consecutive în pool; păstrează doar pe cele
-        care au istoric statistic semnificativ (≥0.05% din extrageri).
+        """Sparge orice secvență de 3+ numere consecutive din pool (STRICT — nu
+        păstrăm niciodată 3+ consecutive, indiferent de istoric). Pentru fiecare run
+        de 3+: scoatem cel mai slab număr (după frecvență) și punem cea mai bine cotată
+        rezervă care NU re-formează un run de 3+. Repetăm până nu mai rămâne niciun run.
 
-        Înlocuirea folosește `scores` (bench-winner sau NQI) dacă e furnizat,
-        altfel cade pe frecvența raw. Asta asigură coerență cu restul
-        pipeline-ului (fedformer / deepar / etc.).
-
-        Praguri:
-            - 6/49: triplet consecutiv specific apare ~0.11% din timp.
-              Prag 0.05% (= 1.3 ocurențe în 2549 extrageri) e statistic permisiv,
-              dar elimină triplete care nu au apărut niciodată.
+        Înlocuirea folosește `scores` (bench-winner sau NQI) dacă e furnizat, altfel cade
+        pe frecvența raw. Perechile (2 consecutive) sunt permise; doar 3+ sunt sparte.
         """
         if self.data is None or len(pool) < 3:
             return pool
@@ -1117,8 +1113,23 @@ class LotoEngine:
         # număr tocmai eliminat ("not in current_pool" → re-adăugat ca noop).
         # Bug observat 2026-05-02: "Scos 18 (freq 316), adăugat 18 (freq 316)".
         removed_nums: set[int] = set()
-        
+
+        def _forms_run3(pool_set: set, num: int) -> bool:
+            """True dacă adăugarea lui `num` creează un run de 3+ numere consecutive."""
+            run = 1
+            x = num - 1
+            while x in pool_set:
+                run += 1; x -= 1
+            x = num + 1
+            while x in pool_set:
+                run += 1; x += 1
+            return run >= 3
+
+        _iter_guard = 0
         while True:
+            _iter_guard += 1
+            if _iter_guard > 4 * max(len(pool), 1):  # anti-buclă (nu ar trebui atins)
+                break
             found_sequence = None
             # Căutăm orice secvență de 3+ numere consecutive care nu a fost încă validată
             for start_idx in range(len(current_pool) - 2):
@@ -1141,48 +1152,40 @@ class LotoEngine:
             if not found_sequence:
                 break
                 
-            # Verificăm în istoric
+            # STRICT (cerință utilizator): NU păstrăm NICIODATĂ secvențe de 3+ numere
+            # consecutive în pool, indiferent de istoric (4 consecutive apar întâmplător
+            # ~o dată în mii de extrageri — nu e semnal, nu le ținem). Spargem secvența.
             seq_set = set(found_sequence)
             occurrences = sum(1 for d_set in draw_sets if seq_set.issubset(d_set))
-            
-            total_draws = len(draw_sets)
-            # Prag statistic permisiv: 0.05% (= 1 aparitie in 2000 extrageri).
-            # Vechi 1% era matematic imposibil pentru triplete consecutive specifice.
-            # Cu prag 0.05% pastram tripletele care chiar au aparut macar o data
-            # in istoric — semnal statistic mai puternic decat 0%.
-            threshold = max(1, int(total_draws * 0.0005))
 
-            if occurrences >= threshold:
-                validated_sequences.add(found_sequence)
-                if 'kept_sequences' not in self.audit:
-                    self.audit['kept_sequences'] = []
-                self.audit['kept_sequences'].append(
-                    f"Secventa {found_sequence} pastrata (a iesit de {occurrences} ori "
-                    f">= prag {threshold} pe {total_draws} extrageri)."
-                )
-                continue # Trecem la următoarea secvență posibilă
-                
-            # Nu au ieșit. Găsim cel mai slab număr din secvență.
-            weakest_num = min(found_sequence, key=lambda x: freq[x-1])
+            # Scoatem cel mai slab număr din secvență (după frecvență).
+            weakest_num = min(found_sequence, key=lambda x: freq[x - 1])
             current_pool.remove(weakest_num)
             removed_nums.add(weakest_num)
+            _pool_set = set(current_pool)
 
-            # Adăugăm rezerva (sărim peste numerele deja scoase în această rulare
-            # ca să nu apară modificări tip "Scos X → adăugat X").
-            added = False
-            while reserve_idx < len(all_sorted_indices):
-                next_num = int(all_sorted_indices[reserve_idx]) + 1
-                reserve_idx += 1
-                if next_num not in current_pool and next_num not in removed_nums:
-                    current_pool.append(next_num)
-                    modifications.append(
-                        f"Scos {weakest_num} (frecvență {int(freq[weakest_num-1])}), "
-                        f"adăugat {next_num} (frecvență {int(freq[next_num-1])})"
-                    )
-                    added = True
+            # Alegem rezerva: cel mai bine cotat număr care NU re-formează un run de 3+;
+            # dacă niciunul (improbabil), cădem pe cel mai bine cotat disponibil (păstrăm
+            # dimensiunea pool-ului). Sărim numerele deja din pool sau scoase în rulare.
+            chosen, chosen_any = None, None
+            for idx in all_sorted_indices:
+                num = int(idx) + 1
+                if num in _pool_set or num in removed_nums:
+                    continue
+                if chosen_any is None:
+                    chosen_any = num
+                if not _forms_run3(_pool_set, num):
+                    chosen = num
                     break
-            
-            if not added: break
+            pick = chosen if chosen is not None else chosen_any
+            if pick is None:
+                break  # nu mai există rezerve (improbabil) — oprim
+            current_pool.append(pick)
+            modifications.append(
+                f"Scos {weakest_num} (frecvență {int(freq[weakest_num - 1])}) din secvența "
+                f"{found_sequence} [a ieșit de {occurrences}× în istoric], adăugat {pick} "
+                f"(frecvență {int(freq[pick - 1])})"
+            )
             current_pool = sorted(current_pool)
             
         if modifications:
