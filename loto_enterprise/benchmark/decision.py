@@ -130,21 +130,23 @@ def decide_optimal_config_for_pool(
         qualifying.append((m, w_lift, n_beat, n_total, r4))
 
     if not qualifying:
-        # Fallback: pick the method with overall highest avg_hits at base pool
+        # Fallback: nicio metodă nu a bătut random ≥60% din ferestre.
+        # Prioritizăm tot regula 4+, apoi avg_hits (la egalitate).
         ranked = []
         for m in methods + ["random"]:
             real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
             if real_m.empty:
                 continue
-            ranked.append((m, float(real_m[base_col].mean())))
-        ranked.sort(key=lambda kv: kv[1], reverse=True)
+            r4 = _rate_4plus_mean(real_m)
+            ranked.append((m, r4, float(real_m[base_col].mean())))
+        ranked.sort(key=lambda kv: (kv[1], kv[2]), reverse=True)
         if not ranked:
             return {"error": "no valid folds for any method"}
         scorer = ranked[0][0]
         rationale = (
             f"FALLBACK: no method consistently beat random "
             f"(≥{int(CONSISTENCY_THRESHOLD*100)}% of windows); "
-            f"picked highest absolute avg_hits"
+            f"picked highest 4+ rate ({ranked[0][1]:.3f}) + avg_hits"
         )
     else:
         # REGULA 4+: sortăm întâi după rata de 4+ (premiile reale care contează),

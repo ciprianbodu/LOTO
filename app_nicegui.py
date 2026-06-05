@@ -1218,12 +1218,11 @@ _METHOD_DESC = {
     "fedformer":  "rețea Transformer (Fourier) · NeuralForecast",
     "patchtst":   "rețea Transformer (patch-based) · NeuralForecast",
     "nbeats":     "rețea MLP · NeuralForecast",
-    "nhits":      "rețea MLP ierarhică · NeuralForecast",
+    "nhits":      "MLP ierarhic (N-HiTS) · NeuralForecast",
     "tide":       "model MLP (Google TiDE) · NeuralForecast",
     "dlinear":    "model liniar cu descompunere · NeuralForecast",
     "deepar":     "RNN probabilistic · NeuralForecast",
     "tcn":        "rețea convoluțională temporală · NeuralForecast",
-    "nhits":      "MLP ierarhic (N-HiTS) · NeuralForecast",
     "timesnet":   "multi-scale conv SoTA 2023 · NeuralForecast",
     "kan":        "Kolmogorov-Arnold Network 2024 (învață funcții) · NeuralForecast",
     "timesfm":    "model foundation pre-antrenat · Google TimesFM",
@@ -1307,7 +1306,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             parts.append(f"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>{tail}")
         ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes("text-caption")
     else:
-        ui.label("🏆 Metodă scorer: TimesFM — model foundation (fallback, fără decizie bench)").classes(
+        ui.label("🏆 Metodă scorer: fallback implicit (fără decizie bench disponibilă)").classes(
             "text-caption text-grey")
 
     ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
