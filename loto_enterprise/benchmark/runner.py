@@ -498,41 +498,85 @@ def run_benchmark(
     # torch.manual_seed/np.random.seed din rețele, context CUDA) NU se contaminează între
     # folds concurente. Folds corect sincronizate (rezultat determinist, identic cu
     # rularea secvențială), spre deosebire de thread-uri (care ar partaja RNG-ul global).
-    #   • CPU pool: ~75%% din nuclee (lăsăm UI/worker/sistem).
-    #   • GPU pool: LOTO_GPU_CONCURRENCY procese (default 2). Datele mici țin GPU la ~9%%
-    #     cu o rețea (restul = overhead CPU pe torch); rulând câteva concurent, overhead-ul
-    #     se suprapune → GPU mai ocupat, timp total mai mic. =1 → secvențial.
+    #   • CPU pool: ~75%% din nuclee, dar CAPAT după RAM (vezi mai jos).
+    #   • GPU pool: LOTO_GPU_CONCURRENCY (default 3), capat după RAM + max 4. Rulând câteva
+    #     rețele concurent, overhead-ul lor (torch/CUDA) se suprapune → GPU mai ocupat.
+    #   ⚠️ Fiecare proces importă tot stack-ul (torch ≈ 2.8 GB) → numărul TOTAL e limitat
+    #     de RAM ca să NU epuizeze memoria (commit-limit Windows 0xc000012d → procese moarte).
     _nc = _os.cpu_count() or 4
-    n_workers = max(1, _nc - max(2, _nc // 4))
-    gpu_conc = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "6")))
-    fut_kind = {}   # fut -> ("cpu"|"gpu", game, csv_hash)
+
+    # ── BUGET DE MEMORIE pentru procese (evită commit-limit Windows 0xc000012d) ──────
+    # Fiecare worker (CPU sau GPU) importă TOT registry-ul de metode (torch +
+    # neuralforecast + sklearn + statsmodels ≈ 2.5-3 GB RAM), iar cele GPU mai au și
+    # context CUDA. Prea multe procese simultan → RAM-ul se epuizează → procesele sunt
+    # OMORÂTE ("terminated abruptly") și nvidia-smi crapă (0xc000012d). De aceea limităm
+    # numărul TOTAL de procese (CPU+GPU rulează CONCURENT) după RAM-ul DISPONIBIL.
+    _PER_PROC_GB = 2.8
+    try:
+        import psutil as _ps
+        _avail_gb = _ps.virtual_memory().available / (1024 ** 3)
+    except Exception:  # noqa: BLE001
+        _avail_gb = 8.0
+    _proc_budget = max(2, int((_avail_gb * 0.50) / _PER_PROC_GB))  # ~50%% din RAM liber
+
+    # GPU: cerere din env (default 3), dar capată de buget + max 4 (contexte CUDA).
+    _gpu_req = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "3")))
+    gpu_conc = max(1, min(_gpu_req, 4, _proc_budget - 1))
+    # CPU: nuclee−25%, dar capat de bugetul RĂMAS + max 10 (24 procese torch pt metode
+    # numpy rapide e risipă — importul domină, nu calculul).
+    n_workers = max(1, min(_nc - max(2, _nc // 4), _proc_budget - gpu_conc, 10))
+    logger.info("[bench] RAM disp %.1f GB → buget %d procese (CPU=%d ‖ GPU=%d) "
+                "[per-proc ~%.1f GB; commit-limit-safe]",
+                _avail_gb, _proc_budget, n_workers, gpu_conc, _PER_PROC_GB)
+    fut_kind = {}   # fut -> (kind, game, csv_hash, args)  (args pt re-rulare la pool rupt)
 
     def _make_pool(compute, max_workers, kind):
         if not compute:
             return None
         try:
             ex = ProcessPoolExecutor(max_workers=max_workers)
-            for (method, train, test, game, bs, pct, is_random, csv_hash) in compute:
+            for args in compute:
+                method, train, test, game, bs, pct, is_random, csv_hash = args
                 fut = ex.submit(_eval_fold_worker, (method, train, test, game, bs, pct, is_random))
-                fut_kind[fut] = (kind, game, csv_hash)
+                fut_kind[fut] = (kind, game, csv_hash, args)
             logger.info("[bench] %s pool: %d task-uri pe %d procese", kind.upper(), len(compute), max_workers)
             return ex
         except Exception as exc:  # noqa: BLE001
             logger.warning("[bench] %s ProcessPool indisponibil (%s) — fallback secvential.", kind.upper(), exc)
             return None
 
+    def _run_seq_one(args, kind):
+        """Rulează UN task în procesul principal (fără pool) — folosit la fallback/re-rulare."""
+        method, train, test, game, bs, pct, is_random, csv_hash = args
+        try:
+            fr, _ = _evaluate_fold(method, train, test, game, bs)
+            fr.percentile = pct
+            fr.is_random = is_random
+            if _cache_ok and csv_hash is not None:
+                store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
+            _handle_result(game, method, pct, is_random, fr, False, kind)
+        except Exception as e2:  # noqa: BLE001
+            logger.error("[%s/%s] %s secvential failed: %s", game.key, method, kind, e2)
+
     _ex = _make_pool(all_cpu_compute, n_workers, "cpu")
     _gex = _make_pool(all_gpu_compute, gpu_conc, "gpu")
+
+    # task-uri ale căror futures au crăpat (pool rupt / worker omorât de OOM) →
+    # re-rulate SECVENȚIAL la final (în proces principal, unul câte unul → fără explozie
+    # de memorie), ca să NU pierdem rezultate.
+    failed_tasks = []
 
     # ── Drenaj INTERLEAVED peste ambele pool-uri — rulează tot concurent (CPU ‖ GPU).
     if fut_kind:
         try:
             for fut in as_completed(list(fut_kind.keys())):
-                kind, game, csv_hash = fut_kind[fut]
+                kind, game, csv_hash, args = fut_kind[fut]
                 try:
                     method, pct, is_random, fr, err = fut.result()
                 except Exception as exc:  # noqa: BLE001
-                    logger.error("[%s] %s future failed: %s", game.key, kind, exc)
+                    logger.error("[%s] %s future a crăpat (%s) — programez re-rulare secvențială.",
+                                 game.key, kind, exc)
+                    failed_tasks.append((kind, args))
                     continue
                 if err or fr is None:
                     logger.error("[%s/%s] %s task failed: %s", game.key, method, kind, err)
@@ -550,23 +594,18 @@ def run_benchmark(
             if _gex is not None:
                 _gex.shutdown(wait=True)
 
-    # Fallback secvenţial pt categoria al cărei pool n-a putut porni.
-    def _run_seq(compute, kind):
-        for (method, train, test, game, bs, pct, is_random, csv_hash) in compute:
-            try:
-                fr, _ = _evaluate_fold(method, train, test, game, bs)
-                fr.percentile = pct
-                fr.is_random = is_random
-                if _cache_ok and csv_hash is not None:
-                    store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
-                _handle_result(game, method, pct, is_random, fr, False, kind)
-            except Exception as e2:  # noqa: BLE001
-                logger.error("[%s/%s] %s fallback failed: %s", game.key, method, kind, e2)
-
+    # Fallback secvenţial: (a) pool care n-a putut porni, (b) task-uri cu future crăpat.
     if _ex is None and all_cpu_compute:
-        _run_seq(all_cpu_compute, "cpu")
+        for a in all_cpu_compute:
+            _run_seq_one(a, "cpu")
     if _gex is None and all_gpu_compute:
-        _run_seq(all_gpu_compute, "gpu")
+        for a in all_gpu_compute:
+            _run_seq_one(a, "gpu")
+    if failed_tasks:
+        logger.warning("[bench] Re-rulez SECVENȚIAL %d task-uri (pool rupt/OOM) — fără pierdere de rezultate.",
+                        len(failed_tasks))
+        for kind, a in failed_tasks:
+            _run_seq_one(a, kind)
 
     # ----- Save per-fold CSV (scriere finală; pe parcurs s-a flush-uit periodic) -----
     df = _flush_folds()
