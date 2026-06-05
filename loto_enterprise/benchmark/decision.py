@@ -94,6 +94,7 @@ def decide_optimal_config_for_pool(
     """
     base_col = f"k{pool_size}"
     base_col_bl = f"k{pool_size}_bl"
+    rate_4plus_col = f"rate_4plus_k{pool_size}"
 
     if base_col not in folds_df.columns:
         return {"error": f"column {base_col} missing in folds.csv"}
@@ -104,6 +105,13 @@ def decide_optimal_config_for_pool(
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     methods = [m for m in sub["method"].unique() if m != "random"]
+
+    def _rate_4plus_mean(frame: pd.DataFrame) -> float:
+        if rate_4plus_col in frame.columns:
+            return float(frame[rate_4plus_col].mean())
+        if "rate_4plus" in frame.columns:
+            return float(frame["rate_4plus"].mean())
+        return 0.0
 
     qualifying: List[Tuple[str, float, int, int, float]] = []
     for m in methods:
@@ -117,8 +125,8 @@ def decide_optimal_config_for_pool(
         if consistency < CONSISTENCY_THRESHOLD:
             continue
         w_lift = _weighted_mean_lift(real_m, real_random, base_col)
-        # REGULA 4+: rata medie de extrageri cu >=4 numere ghicite (premiile reale)
-        r4 = float(real_m["rate_4plus"].mean()) if "rate_4plus" in real_m.columns else 0.0
+        # REGULA 4+: rata medie de extrageri cu >=4 numere ghicite pentru pool-ul curent.
+        r4 = _rate_4plus_mean(real_m)
         qualifying.append((m, w_lift, n_beat, n_total, r4))
 
     if not qualifying:
@@ -145,7 +153,7 @@ def decide_optimal_config_for_pool(
         qualifying.sort(key=lambda r: (r[4], r[1], r[2] / max(r[3], 1)), reverse=True)
         scorer = qualifying[0][0]
         rationale = (
-            f"{scorer}: rată 4+ = {qualifying[0][4]:.3f}, beat random in "
+            f"{scorer}: rată 4+ @ k{pool_size} = {qualifying[0][4]:.3f}, beat random in "
             f"{qualifying[0][2]}/{qualifying[0][3]} windows (lift {qualifying[0][1]:+.4f}); "
             f"din {len(qualifying)} metode calificate [prioritate: 4+ numere ghicite]"
         )

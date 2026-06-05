@@ -144,13 +144,15 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
     h = hashlib.sha256()
     for k in ("pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
-              "consecutive_filter_val", "sim_depth_val"):
+              "consecutive_filter_val", "auto_invert_val", "sim_depth_val"):
         h.update(str(SETTINGS[k]).encode("utf-8"))
     h.update(str(sorted(sim_depth_per_game.items())).encode("utf-8"))  # adâncime per joc → cache key
     pure = bool(STATE.get("pure_bench"))
+    h.update(str(pure).encode("utf-8"))
     datasets_cfg = []
     for fname, df in STATE["datasets"]:
         g_label = _game_label_for(fname)
+        df_json = df.to_json(orient="split")
         # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
         sd = int(sim_depth_per_game.get(g_label, SETTINGS["sim_depth_val"]))
         task = {
@@ -167,10 +169,11 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         }
         datasets_cfg.append({
             "fname": fname,
-            "df_json": df.to_json(orient="split"),
+            "df_json": df_json,
             "tasks": [task],
         })
         h.update(fname.encode("utf-8"))
+        h.update(hashlib.sha256(df_json.encode("utf-8")).hexdigest().encode("ascii"))
     return json.dumps({"input_hash": h.hexdigest(), "use_cache": False, "datasets": datasets_cfg})
 
 
@@ -201,7 +204,7 @@ def apply_autopilot_and_generate() -> None:
     """Aplică sim_depth recomandat per joc din best_methods.json, apoi generează."""
     # best_methods.json folosește CHEIA jocului (loto_6_49 ...), nu eticheta scurtă
     # (6/49) întoarsă de _game_label_for → altfel lookup-ul eșua mereu → fallback.
-    _LABEL_TO_KEY = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}
+    _LABEL_TO_KEY = _LABEL_TO_FOLDS_GAME
     per_game: dict = {}  # {game_label: sim_depth_pct} — FIECARE joc cu adâncimea lui
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
@@ -1523,29 +1526,39 @@ def _method_library(name: str, family: str = "") -> str:
     return "independent (numpy)"
 
 
-def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
-    """Top-N metode din ULTIMUL bench pentru acest joc, clasate pe regula 4+ (rata
-    extragerilor cu ≥4 numere ghicite). CPU și GPU în ACELAȘI clasament — un singur bench.
-    Sursă: bench_results/folds.csv (scris de runner)."""
-    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
-    if not fp.exists():
-        return
-    try:
-        df = pd.read_csv(fp)
-    except Exception:  # noqa: BLE001
-        return
-    if df.empty or "method" not in df.columns or "game" not in df.columns:
-        return
-    key = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker"}.get(game_label, game_label)
-    sub = df[df["game"].astype(str).str.startswith(key)]
+# Eticheta UI/worker → cheia exactă din folds.csv / best_methods.json
+_LABEL_TO_FOLDS_GAME = {
+    "6/49": "loto_6_49",
+    "5/40": "loto_5_40",
+    "joker": "joker_urna1",
+}
+
+
+def _render_bench_leaderboard_slice(
+    df: pd.DataFrame,
+    folds_game_key: str,
+    pool: int,
+    section_label: str,
+    top_n: int = 10,
+) -> None:
+    """Un clasament bench pentru (joc bench, pool K) — fără amestec între joker urna1/urna2."""
+    sub = df[df["game"].astype(str) == folds_game_key]
     if "is_random" in sub.columns:
         sub = sub[sub["is_random"] == False]  # noqa: E712
     if "failed" in sub.columns:
         sub = sub[sub["failed"] != True]  # noqa: E712
     if sub.empty:
         return
-    has_4plus = "rate_4plus" in sub.columns
-    metric = "rate_4plus" if has_4plus else "avg_hits_topk"
+    metric_4plus_pool = f"rate_4plus_k{pool}"
+    if metric_4plus_pool in sub.columns:
+        has_4plus = True
+        metric = metric_4plus_pool
+    elif "rate_4plus" in sub.columns:
+        has_4plus = True
+        metric = "rate_4plus"
+    else:
+        has_4plus = False
+        metric = "avg_hits_topk"
     if metric not in sub.columns:
         return
     has_family = "family" in sub.columns
@@ -1563,7 +1576,11 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         return
     cpu_rows = [r for r in rows if not r[3]][:top_n]
     gpu_rows = [r for r in rows if r[3]][:top_n]
-    label = ("rata 4+ numere ghicite" if has_4plus else "medie hituri / extragere")
+    label = (
+        f"rata 4+ @ pool {pool}" if has_4plus and metric.startswith("rate_4plus_k")
+        else "rata 4+ numere ghicite" if has_4plus
+        else "medie hituri / extragere"
+    )
     winner = rows[0]  # câștigătorul GLOBAL (CPU+GPU împreună) — cel ales de bench
 
     def _row(i, rec):
@@ -1577,8 +1594,8 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
             ui.label(m).classes("text-bold")
             ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
 
-    with ui.expansion(f"🏆 Clasament bench (CPU + GPU separat · {label})",
-                      value=False).classes("w-full"):
+    title = f"🏆 Clasament bench — {section_label} (CPU + GPU · {label})"
+    with ui.expansion(title, value=False).classes("w-full"):
         ui.label(f"Câștigător GLOBAL (toate metodele): {winner[0]} "
                  f"({'⚡ GPU' if winner[3] else '🖥️ CPU'} · {winner[4]}).").classes(
             "text-caption text-bold text-positive")
@@ -1601,6 +1618,30 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         else:
             ui.label("Nicio metodă GPU în acest bench (toate cele rulate au fost CPU).").classes(
                 "text-caption text-grey")
+
+
+def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
+    """Top-N metode din ULTIMUL bench pentru acest joc (folds.csv). Joker = urne separate."""
+    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
+    if not fp.exists():
+        return
+    try:
+        df = pd.read_csv(fp)
+    except Exception:  # noqa: BLE001
+        return
+    if df.empty or "method" not in df.columns or "game" not in df.columns:
+        return
+    pool = int(SETTINGS.get("pool_size_val", 10))
+    if game_label == "joker":
+        slices = [
+            ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
+            ("joker_urna2", 1, "Joker Urna 2 (1/20)"),
+        ]
+    else:
+        folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
+        slices = [(folds_key, pool, game_label.upper())]
+    for folds_key, k_pool, sect in slices:
+        _render_bench_leaderboard_slice(df, folds_key, k_pool, sect, top_n=top_n)
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:

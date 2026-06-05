@@ -1,9 +1,8 @@
-"""Helpere neutre față de framework-ul de UI, partajate între front-end-ul
-Streamlit (app.py) și cel NiceGUI (app_nicegui.py).
+"""Helpere neutre față de framework-ul de UI (NiceGUI: app_nicegui.py).
 
 Conțin DOAR logică pură (decode rezultat job, citire/curățare loguri, lansare
-worker) — fără import de streamlit/nicegui — ca ambele UI-uri să le poată folosi
-identic. Backend-ul real (job_queue, worker, engine) rămâne neatins.
+worker) — fără import de nicegui — ca UI-ul să le poată folosi identic.
+Backend-ul real (job_queue, worker, engine) rămâne neatins.
 """
 
 from __future__ import annotations

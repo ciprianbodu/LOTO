@@ -7,13 +7,12 @@ For every (game, urn, method, percentile_window, real|random) fold we:
        single training per fold (fast). For block_size = 1 you get true
        per-step walk-forward (very slow for trainable nets).
     3. For each draw in the test window evaluate hits AT MULTIPLE POOL SIZES
-       draw_n .. draw_n + 6 (so a 6/49 game records hits for pools of
-       6, 7, 8, 9, 10, 11, 12). For Urna 2 the pool is fixed = draw_n.
+       draw_n .. draw_n + 14. For Urna 2 the pool is fixed = draw_n.
     4. Capture CPU%, RAM, GPU%, VRAM peak via a background sampler thread.
 
 Output:
     bench_results/folds.csv         one row per (game, method, pct, real?, fold)
-                                    with hits@K for K = draw_n..draw_n+6
+                                    with hits@K for K = draw_n..draw_n+14
     bench_results/report.json       aggregated stats + winner per (game, pool)
     bench_results/report.txt        plain text fallback
     bench_results/console.txt       saved rich-table output
@@ -57,7 +56,7 @@ class GameDef:
     cols: List[str]
     max_num: int
     draw_n: int
-    pool_extra: int = 6   # evaluate hits for pools = draw_n .. draw_n + pool_extra
+    pool_extra: int = 14  # evaluate hits for pools = draw_n .. draw_n + pool_extra
     is_single_pick: bool = False  # joker_urna2 → fixed pool_size = draw_n
 
 
@@ -169,6 +168,7 @@ class FoldResult:
     avg_hits_topk: float = 0.0          # avg hits at K = draw_n (base pool)
     max_hits_topk: int = 0
     rate_4plus: float = 0.0             # rata extragerilor cu >=4 numere ghicite (regula 4+)
+    rates_4plus_per_pool: Dict[str, float] = field(default_factory=dict)
     blacklist_size: int = 0             # how many numbers were blacklisted per score round
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
@@ -205,6 +205,7 @@ def _evaluate_fold(
         family=str(method_meta(method_name).get("family", "") or ""),
         hits_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         hits_per_pool_bl={f"k{k}": 0.0 for k in pool_sizes},
+        rates_4plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
     )
 
     sampler = HwSampler(interval=0.1).start()
@@ -285,10 +286,11 @@ def _evaluate_fold(
         for k in pool_sizes:
             fr.hits_per_pool[f"k{k}"] = per_pool_totals[k] / max(n_test, 1)
             fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_test, 1)
+            fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
         fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.max_hits_topk = per_pool_max[game.draw_n]
         # Regula 4+: rata de extrageri cu >=4 numere ghicite la pool-ul de bază (draw_n)
-        fr.rate_4plus = per_pool_4plus[game.draw_n] / max(n_eval, 1)
+        fr.rate_4plus = fr.rates_4plus_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
     except Exception as exc:
@@ -396,6 +398,8 @@ def run_benchmark(
                 row[k] = v
             for k, v in row.pop("hits_per_pool_bl").items():
                 row[f"{k}_bl"] = v
+            for k, v in row.pop("rates_4plus_per_pool", {}).items():
+                row[f"rate_4plus_{k}"] = v
             rows.append(row)
         _df = pd.DataFrame(rows)
         try:

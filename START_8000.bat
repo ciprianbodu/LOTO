@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM START_8000.bat — Launcher rapid + log silent in fundal.
-REM Pe success: nu mai vezi nimic despre log, pornesti direct streamlit.
+REM Pe success: nu mai vezi nimic despre log, pornesti direct NiceGUI (app_nicegui.py).
 REM Pe eroare: afisez log-ul automat si las fereastra deschisa.
 REM ============================================================
 cd /d "%~dp0"
@@ -151,13 +151,13 @@ endlocal & exit /b 0
 
 
 REM ============================================================
-REM :launch_phase — porneste worker + streamlit
+REM :launch_phase — porneste worker + NiceGUI
 REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
 set "VENV_DIR=.venv_ALF-LUPTATORI"
 
-REM Re-aplica env vars din profil (sunt propagate in subprocese streamlit + worker)
+REM Re-aplica env vars din profil (sunt propagate in subprocese NiceGUI + worker)
 set "GPU_TYPE=NVIDIA"
 if exist ".machine_profile" (
     for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (

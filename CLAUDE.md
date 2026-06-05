@@ -27,14 +27,14 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `job_queue.py` | coadă SQLite; `DB_PATH="loto_jobs.db"` |
 | `ui_shared.py` | helpere neutre (atomic_write_json/text, file_lock, ensure_worker_running) |
 | `loto_enterprise/benchmark/` | benchmark: `runner.py`, `decision.py`, `methods*.py`, `bench_cache.py` |
-| `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = lista testată (86 metode) |
+| `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = toate metodele `available` din registry |
 | `_ISTORIC/` | datele CSV (gitignore) | `best_methods.json` | decizia bench (gitignore) |
 | `raport_complet.txt` | raport generat (gitignore) |
 
 ## Benchmark (cum funcționează)
 - ~180 metode în `METHODS` (methods.py + extensii: methods_classical/ml/torch_extra/torch_advanced, încărcate de `_load_extra_methods`).
 - Scorer = `fn(draws_2d, max_num) -> {nr: scor_normalizat}`. Registry: `"nume": (fn, "family", trained, "desc")`.
-- `ALL_SPEC_METHODS` (în bench_all_methods.py) = ce testează Re-Bench Full (86 metode acum).
+- `ALL_SPEC_METHODS` (în bench_all_methods.py) = ce testează Re-Bench Full (toate metodele disponibile din `METHODS`, dinamic).
 - Re-Bench: walk-forward pe folduri → `folds.csv` (OVERWRITE, nu append) → `decision.py` → `best_methods.json` (`auto_pilot_per_pool[kN]` = câștigător + sim_depth per joc/pool).
 - **Cache fold** (`.bench_cache`, keyed pe csv_hash+method+pct+game+is_random): refolosit dacă datele nu s-au schimbat → re-bench rapid. NU amestecă (per metodă).
 - `method_selector.recommend_optimal_config(game_key, pool)` → metoda+sim_depth; cheie = `loto_6_49`/`loto_5_40`/`joker_urna1`, NU eticheta scurtă.

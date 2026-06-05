@@ -174,7 +174,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
         for task in ds.get("tasks", []):
             game_label = str(task["game_label"])
             p_size = int(task.get("pool_size", 12))
-            p_size = max(6, min(24, p_size))
+            p_size = max(6, min(16, p_size))  # aliniat cu UI (pool_size_val max 16)
             guar = int(task.get("guarantee", 4))
             max_var = int(task.get("max_variants", 0))
             lookback = int(task.get("lookback", 0))

@@ -1,7 +1,7 @@
 """Verifică + actualizează mediul aplicației LOTO.
 
 Acoperă:
-    • Librării standard sigure (streamlit, pandas, numpy, numba, ...)
+    • Librării standard sigure (nicegui, pandas, numpy, numba, ...)
     • PyTorch + CUDA (GPU detection)
     • Foundation models pentru benchmark: timesfm, chronos, momentfm
     • NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
@@ -27,7 +27,7 @@ from importlib.metadata import PackageNotFoundError, version as dist_version
 #   - timesfm / chronos / momentfm / neuralforecast (modele AI cu deps stricte)
 # Acestea ramin pe versiunea curenta din venv.
 SAFE_UPGRADE_PACKAGES = [
-    "streamlit",
+    "nicegui",
     "psutil",
     "requests",
     "rich",            # bench reporting tables

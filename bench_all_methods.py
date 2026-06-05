@@ -3,8 +3,7 @@
 Specul:
     • auto-detect ISTORIC/ (sau _LOTO/istoric/) cu CSV-uri per joc
     • teste pe FIECARE joc: 6/49, 5/40, Joker (Urna 1 = 5/45, Urna 2 = 1/20)
-    • toate cele 21 modele din lista (cele instalate rulează; restul sunt
-      raportate ca N/A cu motiv)
+    • toate metodele din registry (cele instalate rulează; restul N/A cu motiv)
     • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
     • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 6 (Urna 1)
       sau DRAW_SIZE (Urna 2)
@@ -17,7 +16,7 @@ Forțare CUDA: toate modelele neuronale rulează pe `torch.device("cuda")`
 
 Usage
 -----
-    python bench_all_methods.py                               # Full (73 metode: CPU + top-3 GPU)
+    python bench_all_methods.py                               # Full (toate metodele available)
     python bench_all_methods.py --percentiles 10,30,50,70,100
     python bench_all_methods.py --methods random,frequency,timesfm,chronos
     python bench_all_methods.py --block-size 50               # walk-forward più fine

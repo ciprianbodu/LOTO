@@ -24,9 +24,12 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from loto_enterprise.core.backtesting import scored_variant_numbers
+
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
+CACHE_VERSION = "v2"
 
 
 @dataclass
@@ -62,7 +65,7 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
 def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int) -> Path:
     safe = game_type.replace("/", "_")
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
-    return CACHE_DIR / f"walk_forward_{safe}_{csv_hash}_pool{pool_size}_d{depth}.pkl"
+    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}.pkl"
 
 
 def expand_predictions_to_flat(
@@ -77,7 +80,7 @@ def expand_predictions_to_flat(
     for p in preds:
         actual = set(p.actual_numbers)
         for variant in p.variants:
-            vset = set(variant)
+            vset = set(scored_variant_numbers(variant, game_type))
             hits = len(vset & actual)
             flat.append(WalkForwardResult(
                 draw_index=p.draw_index,

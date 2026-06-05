@@ -27,6 +27,25 @@ from loto_engine import LotoEngine
 
 logger = logging.getLogger(__name__)
 
+_GAME_DRAW_N = {
+    "6/49": 6,
+    "5/40": 5,
+    "joker": 5,
+}
+
+
+def scored_variant_numbers(variant: List[int], game_type: str) -> List[int]:
+    """Numbers that count against draw columns for hit scoring.
+
+    Joker tickets include the Urna 2 value for display; it must not count as an
+    Urna 1 hit in backtests or walk-forward expansion.
+    """
+    draw_n = int(_GAME_DRAW_N.get(game_type, 6))
+    vals = [int(n) for n in list(variant)]
+    if game_type == "joker":
+        return vals[:draw_n]
+    return vals
+
 
 @dataclass
 class BacktestResult:
@@ -178,6 +197,9 @@ class LotoBacktester:
                     cols.append(col)
         
         return cols[:self.params["draw_n"]]
+
+    def _scored_variant_numbers(self, variant: List[int]) -> List[int]:
+        return scored_variant_numbers(variant, self.game_type)
     
     def get_last_percentile_draws(self, percentile: float = 20.0) -> List[Tuple[Optional[str], Set[int]]]:
         """
@@ -219,7 +241,7 @@ class LotoBacktester:
         if target_draws is None:
             target_draws = self.get_last_percentile_draws(20.0)
         
-        variant_set = set(variant)
+        scored_variant = self._scored_variant_numbers(variant)
         results = []
         
         for idx, date, draw_nums in target_draws:
@@ -227,7 +249,7 @@ class LotoBacktester:
             # apariție din extragere), dar înlocuim list.remove() O(n) cu Counter O(1).
             draw_counts = Counter(draw_nums)
             hit_numbers = []
-            for n in variant:
+            for n in scored_variant:
                 if draw_counts[n] > 0:
                     hit_numbers.append(n)
                     draw_counts[n] -= 1
@@ -299,7 +321,7 @@ class LotoBacktester:
 
         variant_bin = np.zeros((V, max_n + 1), dtype=np.int8)
         for vi, v in enumerate(variants):
-            for n in v:
+            for n in self._scored_variant_numbers(v):
                 if 1 <= n <= max_n:
                     variant_bin[vi, n] = 1
 
@@ -349,7 +371,7 @@ class LotoBacktester:
         top_performing = sorted_results[:10]  # Top 10
         # Populăm hit_numbers DOAR pentru top performers (display field)
         for r in top_performing:
-            r.hit_numbers = set(r.variant) & r.draw_numbers
+            r.hit_numbers = set(self._scored_variant_numbers(r.variant)) & r.draw_numbers
         
         summary = BacktestSummary(
             total_draws_evaluated=len(target_draws),
@@ -533,11 +555,13 @@ class LotoBacktester:
 
                 max_hits = 0
                 for v in lines:
-                    h = len(set(v) & set(actual_draw))
+                    h = len(set(self._scored_variant_numbers(v)) & set(actual_draw))
                     if h > max_hits:
                         max_hits = h
 
-                predicted_union = set().union(*lines) if lines else set()
+                predicted_union = set().union(
+                    *(self._scored_variant_numbers(v) for v in lines)
+                ) if lines else set()
                 hits_union = len(predicted_union & set(actual_draw))
 
                 retro_pred = RetroactivePrediction(
