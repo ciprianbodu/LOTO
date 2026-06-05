@@ -605,6 +605,7 @@ def _start_walk_forward() -> None:
                 pass
 
     STATE["wf_progress"] = 0.0
+    STATE["wf_start"] = time.time()  # pt ETA walk-forward
     STATE["wf_status"] = ("📊 Pornesc walk-forward backtest (poate dura câteva minute)..."
                           + (" — validare FAZA 1 (pool normal), fiindcă auto-invert e ON" if _has_invert else ""))
     threading.Thread(target=_worker_wf, daemon=True).start()
@@ -1446,10 +1447,16 @@ def _render_omnius_pool(game: str, d: dict) -> None:
 @ui.refreshable
 def results_panel() -> None:
     if STATE.get("wf_status"):
-        ui.label(STATE["wf_status"]).classes("text-info")
         _wfp = float(STATE.get("wf_progress") or 0.0)
+        # ETA walk-forward: estimare liniară din progres (elapsed × (1-p)/p).
+        _eta = ""
+        _ws = STATE.get("wf_start")
+        if _ws and 0.02 < _wfp < 1.0:
+            _rem = (time.time() - _ws) * (1.0 - _wfp) / _wfp
+            _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
+        ui.label(STATE["wf_status"] + _eta).classes("text-info")
         ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
-        ui.label(f"{int(_wfp * 100)}%").classes("text-caption text-info")
+        ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
 
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
