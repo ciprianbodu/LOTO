@@ -28,6 +28,9 @@ REM ============================================================
 echo [-1/4] Detectie versiune Python venv vs sistem...
 for /f "tokens=2 delims= " %%V in ('"%VENV_PY%" --version 2^>^&1') do set VENV_VER=%%V
 for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set SYS_VER=%%V
+REM Daca interpretorul 3.14 lipseste de pe sistem, il INSTALAM automat (winget/python.org).
+if "%SYS_VER%"=="" call :ensure_python314
+if "%SYS_VER%"=="" goto :skip_python_upgrade
 echo   Venv:    %VENV_VER%
 echo   Sistem:  %SYS_VER%
 
@@ -196,9 +199,9 @@ call :CleanGhosts
 echo.
 
 echo ------------------------------------------------------------
-echo  Pentru upgrade Python: descarca un 3.14.x mai nou de la
-echo    https://www.python.org/downloads/  (bifeaza Add to PATH)
-echo    apoi reruleaza ACTUALIZARI.bat — va detecta si oferi upgrade.
+echo  Python: ACTUALIZARI.bat instaleaza/migreaza automat la 3.14 (winget sau
+echo    installer python.org). Daca instalarea auto esueaza, ia-l manual de la
+echo    https://www.python.org/downloads/  (bifeaza Add to PATH) si reruleaza.
 echo.
 echo  Daca freshness recomanda re-bench:
 echo    Re-Bench Full: din UI (butonul portocaliu) sau %VENV_PY% bench_all_methods.py
@@ -349,3 +352,45 @@ echo   Engine-ul foloseste fallback determinist ^(frecventa + recency + gap^).
 echo   Daca vrei totusi sa testezi, instaleaza manual:
 echo     %VENV_PY% -m pip install timesfm chronos-forecasting momentfm
 exit /b 0
+
+
+:ensure_python314
+REM ============================================================
+REM Instaleaza AUTOMAT interpretorul Python 3.14 daca "py -3.14" lipseste.
+REM Intai winget (Windows 10 1709+/11); daca nu exista, descarca installer-ul
+REM oficial python.org si il ruleaza silentios (user-scope, Add to PATH, py launcher).
+REM La final re-detecteaza si seteaza SYS_VER (vizibil in fluxul principal).
+REM ============================================================
+echo.
+echo   [INFO] Python 3.14 nu e instalat pe sistem ^(py -3.14 indisponibil^).
+echo          Incerc instalare automata...
+where winget >nul 2>&1
+if errorlevel 1 goto :ep_download
+echo   winget install -e --id Python.Python.3.14 --silent ...
+winget install -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
+goto :ep_verify
+
+:ep_download
+echo   winget indisponibil — descarc installer-ul oficial python.org ^(3.14.5^)...
+set "PY_URL=https://www.python.org/ftp/python/3.14.5/python-3.14.5-amd64.exe"
+set "PY_EXE=%TEMP%\python-3.14.5-amd64.exe"
+powershell -NoProfile -Command "try { Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' -UseBasicParsing } catch { exit 1 }"
+if not exist "%PY_EXE%" (
+    echo   [EROARE] Descarcare installer esuata ^(verifica conexiunea^).
+    goto :ep_verify
+)
+echo   Instalare silentioasa ^(user-scope, PrependPath, py launcher^)...
+"%PY_EXE%" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
+del "%PY_EXE%" >nul 2>&1
+
+:ep_verify
+set "SYS_VER="
+for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set SYS_VER=%%V
+if "%SYS_VER%"=="" (
+    echo   [EROARE] py -3.14 inca indisponibil dupa instalare.
+    echo           Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat, sau
+    echo           instaleaza manual de la https://www.python.org/downloads/ ^(bifeaza Add to PATH^).
+) else (
+    echo   [OK] Python instalat: %SYS_VER%
+)
+goto :eof
