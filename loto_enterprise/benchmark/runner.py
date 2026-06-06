@@ -356,6 +356,25 @@ def run_benchmark(
         return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
                 or fam.startswith("nf-") or fam.startswith("foundation") or fam == "ssm")
 
+    def _gpu_available() -> bool:
+        """CUDA prezent? La fel ca methods._cuda_ok. Dacă NU → benchul GPU se SARE
+        complet (fără fallback pe CPU — cerință explicită)."""
+        import os as _o
+        if _o.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
+            return False
+        try:
+            import torch
+            return bool(torch.cuda.is_available())
+        except Exception:  # noqa: BLE001
+            return False
+
+    _GPU_OK = _gpu_available()
+    _gpu_methods = [m for m in methods if method_meta_map[m]["available"] and _is_gpu_fam_global(m)]
+    if not _GPU_OK and _gpu_methods:
+        logger.warning("[bench] GPU NEDETECTAT → SAR peste benchul GPU (%d metode GPU ignorate, "
+                       "fără fallback pe CPU): %s", len(_gpu_methods), ", ".join(_gpu_methods[:8])
+                       + (" …" if len(_gpu_methods) > 8 else ""))
+
     total_folds_est = 0
     cpu_total_est = 0
     gpu_total_est = 0
@@ -364,6 +383,8 @@ def run_benchmark(
             meta = method_meta_map[m]
             if not meta["available"]:
                 continue
+            if _is_gpu_fam_global(m) and not _GPU_OK:
+                continue  # metodă GPU + fără CUDA → ignorată (nu intră în total)
             for pct in percentiles:
                 total_folds_est += 2  # real + random
                 if _is_gpu_fam_global(m):
@@ -463,6 +484,10 @@ def run_benchmark(
                             game.key, method, meta.get("unavailable_reason"))
                 continue
             is_gpu = _is_gpu_fam_global(method)
+            if is_gpu and not _GPU_OK:
+                logger.info("[%s/%s] SKIP GPU — fără CUDA (benchul GPU ignorat, fără fallback CPU)",
+                            game.key, method)
+                continue
             for pct in percentiles:
                 n_test = max(1, int(math.ceil(n * pct / 100.0)))
                 n_train = max(0, n - n_test)
@@ -520,8 +545,12 @@ def run_benchmark(
     _proc_budget = max(2, int((_avail_gb * 0.50) / _PER_PROC_GB))  # ~50%% din RAM liber
 
     # GPU: cerere din env (default 3), dar capată de buget + max 4 (contexte CUDA).
-    _gpu_req = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "3")))
-    gpu_conc = max(1, min(_gpu_req, 4, _proc_budget - 1))
+    # Fără CUDA → gpu_conc=0 (benchul GPU e sărit) ca tot bugetul să meargă pe CPU.
+    if not _GPU_OK or not all_gpu_compute:
+        gpu_conc = 0
+    else:
+        _gpu_req = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "3")))
+        gpu_conc = max(1, min(_gpu_req, 4, _proc_budget - 1))
     # CPU: nuclee−25%, dar capat de bugetul RĂMAS + max 10 (24 procese torch pt metode
     # numpy rapide e risipă — importul domină, nu calculul).
     n_workers = max(1, min(_nc - max(2, _nc // 4), _proc_budget - gpu_conc, 10))

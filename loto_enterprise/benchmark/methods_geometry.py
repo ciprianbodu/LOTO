@@ -53,9 +53,21 @@ def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
     return out
 
 
+def _cuda_ok() -> bool:
+    """CUDA prezent? Dacă NU, metodele GPU se SAR (return {}), fără fallback pe CPU."""
+    import os
+    if os.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
+        return False
+    try:
+        import torch
+        return bool(torch.cuda.is_available())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _device():
     import torch
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device("cuda")
 
 
 def _occurrence_grids(draws_2d: np.ndarray, max_num: int):
@@ -90,6 +102,8 @@ def score_geo_spatial_kde(draws_2d: np.ndarray, max_num: int) -> Dict[int, float
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"[geo_kde] torch indisponibil: {exc}")
         return {}
+    if not _cuda_ok():
+        return {}  # fără GPU → sărim (fără fallback CPU)
     if draws_2d.shape[0] < 10:
         return {}
     rows, cols = _grid_shape(max_num)
@@ -125,6 +139,8 @@ def score_geo_rowcol(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"[geo_rowcol] torch indisponibil: {exc}")
         return {}
+    if not _cuda_ok():
+        return {}  # fără GPU → sărim (fără fallback CPU)
     if draws_2d.shape[0] < 10:
         return {}
     rows, cols = _grid_shape(max_num)
@@ -160,6 +176,8 @@ def score_geo_cnn_next(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"[geo_cnn] torch indisponibil: {exc}")
         return {}
+    if not _cuda_ok():
+        return {}  # fără GPU → sărim (fără fallback CPU)
     W = 8  # fereastra de grile folosită ca input
     if draws_2d.shape[0] < W + 20:
         return {}
