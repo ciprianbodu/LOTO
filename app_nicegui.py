@@ -1025,7 +1025,8 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
 
     _mtxt = f" · metodă: {method}" if method else ""
     _title = (f"📊 Walk-forward{' (Faza 1)' if is_invert else ''}{_mtxt}: rată {avg_rate:.1f}% · "
-              f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n} predicții  (click pt detalii)")
+              f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n} predicții  "
+              f"▶ CLICK pt istoric hits per extragere + distribuții")
     with ui.expansion(_title, value=False).classes("w-full mt-2"):
         if method:
             ui.label(f"✅ Validat pe metoda câștigătoare a bench-ului: {method} "
@@ -1042,6 +1043,45 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                 with ui.column().classes("items-center gap-0"):
                     ui.label(lbl).classes("text-caption")
                     ui.label(str(val)).classes("text-h6")
+
+        # 📜 ISTORIC COMPLET hits per extragere (toate extragerile, cronologic) —
+        # ce caută userul: nu doar ≥4, ci FIECARE extragere testată în walk-forward,
+        # cu câte numere a prins pool-ul + cel mai bun bilet.
+        per_draw: dict = {}
+        for p in flat:
+            di = getattr(p, "draw_index", id(p))
+            d = per_draw.get(di)
+            if d is None:
+                dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+                d = per_draw[di] = {"date": dd, "pool": getattr(p, "hits_union", 0), "best": 0}
+            d["best"] = max(d["best"], getattr(p, "hits", 0))
+
+        def _hit_badge(h: int) -> str:
+            ic = "🔥" if h >= 4 else ("⭐" if h >= 3 else ("🔹" if h >= 1 else "·"))
+            return f"{ic} {h}"
+
+        rows_hist = []
+        for di in sorted(per_draw, reverse=True):  # cele mai recente extrageri sus
+            d = per_draw[di]
+            dd = d["date"]
+            rows_hist.append({
+                "draw": str(dd) if dd and str(dd) != "None" else f"#{di}",
+                "pool": _hit_badge(int(d["pool"])),
+                "best": _hit_badge(int(d["best"])),
+            })
+        if rows_hist:
+            ui.label(f"📜 Istoric hits per extragere ({len(rows_hist)} extrageri, cronologic — cele mai recente sus):").classes(
+                "text-bold text-caption mt-3")
+            ui.label("Pentru fiecare extragere reală testată: câte numere a prins Nucleul Dur (pool) "
+                     "și cel mai bun bilet generat. 🔥=4+ · ⭐=3 · 🔹=1-2 · ·=0").classes("text-caption text-grey")
+            ui.table(
+                columns=[
+                    {"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
+                    {"name": "pool", "label": "În Nucleu (pool)", "field": "pool", "align": "center"},
+                    {"name": "best", "label": "Cel mai bun bilet", "field": "best", "align": "center"},
+                ],
+                rows=rows_hist, pagination=15,
+            ).classes("w-full").props("dense")
 
         # Distribuție Nucleu Dur (hits_union per extragere unică)
         seen, pool_dist = set(), {}
@@ -1689,12 +1729,28 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
 
 
 def _render_matrix_html(matrix) -> None:
-    """Heatmap HTML pentru o matrice (metode × ferestre %), verde = valoare mare."""
-    try:
-        vmin = float(matrix.values.min())
-        vmax = float(matrix.values.max())
-    except Exception:  # noqa: BLE001
+    """Heatmap HTML pentru o matrice (metode × ferestre %), verde = valoare mare.
+
+    Robust la NaN: celulele fără date (metodă neevaluată la o fereastră) se
+    afișează ca „—" în loc să crape randarea (`int(NaN)` arunca „cannot convert
+    float NaN to integer" → toată matricea devenea indisponibilă).
+    """
+    import math
+    # vmin/vmax DOAR pe valorile finite (ignoră NaN/inf).
+    finite_vals = []
+    for _m, row in matrix.iterrows():
+        for c in matrix.columns:
+            try:
+                fv = float(row[c])
+            except Exception:  # noqa: BLE001
+                continue
+            if math.isfinite(fv):
+                finite_vals.append(fv)
+    if not finite_vals:
+        ui.label("(matrice goală — nicio fereastră cu date pentru aceste metode)").classes(
+            "text-caption text-grey")
         return
+    vmin, vmax = min(finite_vals), max(finite_vals)
     span = (vmax - vmin) or 1.0
     cols = list(matrix.columns)
     head = "".join(f"<th style='padding:2px 6px;font-size:0.75em;'>{c}%</th>" for c in cols)
@@ -1702,11 +1758,20 @@ def _render_matrix_html(matrix) -> None:
     for method, row in matrix.iterrows():
         cells = ""
         for c in cols:
-            v = float(row[c])
+            try:
+                v = float(row[c])
+            except Exception:  # noqa: BLE001
+                v = float("nan")
+            if not math.isfinite(v):
+                cells += ("<td style='padding:2px 6px;background:#2a2a2a;color:#666;"
+                          "font-size:0.78em;text-align:center;'>—</td>")
+                continue
             t = (v - vmin) / span  # 0..1
+            t = 0.0 if t < 0 else (1.0 if t > 1 else t)
             r = int(220 - 140 * t)
             g = int(80 + 140 * t)
-            cells += f"<td style='padding:2px 6px;background:rgb({r},{g},80);color:#111;font-size:0.78em;text-align:center;'>{v:.3f}</td>"
+            cells += (f"<td style='padding:2px 6px;background:rgb({r},{g},80);color:#111;"
+                      f"font-size:0.78em;text-align:center;'>{v:.3f}</td>")
         body += f"<tr><td style='padding:2px 6px;font-weight:600;font-size:0.78em;'>{method}</td>{cells}</tr>"
     ui.html(f"<table style='border-collapse:collapse;'><tr><th></th>{head}</tr>{body}</table>")
 
