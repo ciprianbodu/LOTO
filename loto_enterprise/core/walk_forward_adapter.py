@@ -6,8 +6,10 @@ folosind DOAR datele < t. Asta elimină recency bias şi reflectă cu acuratețe
 puterea predictivă reală.
 
 Cache:
-    - Pe disc: bench_results/walk_forward_<game>_<csv_hash>_<pool>_<depth>.pkl
-    - Reutilizat la următorul Auto-Pilot dacă (csv_hash, pool_size) match
+    - Pe disc: bench_results/walk_forward_<ver>_<game>_<csv_hash>_pool<N>_d<depth>_<dec_sig>.pkl
+    - Reutilizat la următorul Auto-Pilot dacă (csv_hash, pool_size, decizie bench) match.
+      dec_sig = semnătura deciziei (scorer/sim_depth/blacklist) → un Re-Bench care
+      schimbă câştigătorul invalidează automat cache-ul (altfel valida cu metoda veche).
     - Curățat manual cu clear_walk_forward_cache()
 """
 
@@ -29,7 +31,7 @@ from loto_enterprise.core.backtesting import scored_variant_numbers
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v2"
+CACHE_VERSION = "v3"  # v3: cheia include semnătura deciziei bench (scorer/sim_depth/BL)
 
 
 @dataclass
@@ -62,10 +64,32 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     return h[:12]
 
 
-def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int) -> Path:
+def _decision_sig(game_type: str, pool_size: int) -> str:
+    """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist) pentru
+    (joc, pool).
+
+    Walk-forward-ul rulează engine-ul, care alege metoda câştigătoare din
+    best_methods.json (per pool). Dacă semnătura NU intră în cheia de cache,
+    un Re-Bench care schimbă câştigătorul ar servi o validare VECHE. Includem
+    semnătura ca un câştigător nou să forţeze re-validare, iar o decizie
+    neschimbată să reutilizeze cache-ul.
+    """
+    try:
+        from loto_enterprise.core.method_selector import recommend_optimal_config
+        gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
+              "joker": "joker_urna1"}.get(game_type, "loto_6_49")
+        c = recommend_optimal_config(gk, int(pool_size))
+        raw = f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|{bool(c.get('use_blacklist', False))}"
+        return hashlib.md5(raw.encode()).hexdigest()[:8]
+    except Exception as exc:
+        logger.warning(f"[WALK-FWD] decision sig indisponibilă ({exc}) — folosesc 'nodec'")
+        return "nodec"
+
+
+def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str) -> Path:
     safe = game_type.replace("/", "_")
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
-    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}.pkl"
+    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}.pkl"
 
 
 def expand_predictions_to_flat(
@@ -110,9 +134,11 @@ def run_honest_walk_forward(
         meta_dict include: from_cache (bool), n_predictions, n_test_draws, csv_hash
     """
     csv_hash = _csv_hash(df_source, game_type)
-    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent))
+    dec_sig = _decision_sig(game_type, pool_size)
+    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig)
     meta = {
         "csv_hash": csv_hash,
+        "decision_sig": dec_sig,
         "cache_file": str(cache_file),
         "from_cache": False,
         "game_type": game_type,
@@ -129,7 +155,7 @@ def run_honest_walk_forward(
             meta["n_test_draws"] = cached["n_test_draws"]
             logger.info(
                 f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
-                f"hash={csv_hash} ({len(cached['flat'])} entries)"
+                f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
             )
             return cached["flat"], meta
         except Exception as exc:

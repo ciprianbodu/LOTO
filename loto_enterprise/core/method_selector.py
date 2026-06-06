@@ -31,13 +31,27 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
 _CACHE: Dict[str, Callable] = {}
 _CONFIG: Optional[Dict] = None
+_CONFIG_MTIME: float = -1.0
+_CONFIG_PATH_USED: Optional[Path] = None
 
 
 def _load_config(path: Optional[str] = None) -> Dict:
-    global _CONFIG
-    if _CONFIG is not None and path is None:
-        return _CONFIG
+    """Încarcă best_methods.json, cu reîncărcare automată la schimbarea fişierului.
+
+    Cache-ul global e invalidat când mtime-ul fişierului se schimbă (ex. după un
+    Re-Bench care rescrie decizia). Fără asta, worker-ul (Auto-Pilot) şi UI-ul
+    (walk-forward) ar folosi decizia VECHE până la restart. `stat()` e ieftin.
+    """
+    global _CONFIG, _CONFIG_MTIME, _CONFIG_PATH_USED
     cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
+    try:
+        mtime = cfg_path.stat().st_mtime
+    except OSError:
+        mtime = -1.0
+    if _CONFIG is not None and cfg_path == _CONFIG_PATH_USED and mtime == _CONFIG_MTIME:
+        return _CONFIG
+    _CONFIG_PATH_USED = cfg_path
+    _CONFIG_MTIME = mtime
     if not cfg_path.exists():
         logger.warning("[method_selector] %s missing — using frequency baseline", cfg_path)
         _CONFIG = {"games": {}}
