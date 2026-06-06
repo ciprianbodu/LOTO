@@ -8,9 +8,9 @@ from loto_engine import LotoEngine
 
 def main():
     engine = LotoEngine(game_type="6/49")
-    success = engine.load_data("input.csv")
+    success = engine.load_data("_ISTORIC/loto_6_49.csv")  # sursa reală 6/49
     if not success:
-        print("Eroare la încărcare input.csv")
+        print("Eroare la încărcare _ISTORIC/loto_6_49.csv (lipsește?)")
         return
         
     print(f"Date incarcate: {len(engine.data)} extrageri.")
