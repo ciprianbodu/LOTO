@@ -159,13 +159,10 @@ if not exist "requirements_base.txt" (
 )
 
 echo.
-REM Folosim !GPU_TYPE! (delayed expansion) ca sa luam valoarea EFECTIV setata
-REM in blocul de detectie de mai sus, nu valoarea snapshot-uita la parse time.
-if /i "!GPU_TYPE!"=="NVIDIA" (
-    call :InstallGpuStack
-) else (
-    call :InstallCpuStack
-)
+REM UN singur venv complet (CPU+GPU) peste tot: instalam MEREU stack-ul complet
+REM (torch+CUDA + librarii GPU active). Absenta GPU-ului se trateaza la RUNTIME
+REM (app/bench sar modulele GPU), nu prin venv-uri diferite per masina.
+call :InstallGpuStack
 
 echo.
 echo [1c] Curatare ghost-uri post-install (3 runde cu wait)...
@@ -270,84 +267,51 @@ exit /b 0
 
 
 :InstallGpuStack
-REM Instaleaza torch+cu128 + foundation models pentru masini cu GPU NVIDIA.
-echo [1c] Profil GPU detectat - instalez torch+cu128 + foundation models...
+REM Instaleaza stack-ul COMPLET (torch+cu128 + librarii GPU active) - MEREU, pe
+REM orice masina. Absenta GPU se trateaza la runtime (modulele GPU sunt sarite).
+echo [1c] Instalez stack-ul complet: torch+cu128 + librarii GPU active...
 echo.
 
-REM Check daca torch existent are CUDA si build tag corect. Pip vede 2.12.0+cpu
-REM si 2.12.0+cu128 ca "aceeasi versiune" si poate skip cu --upgrade, deci
-REM verificam EXPLICIT build tag-ul si fortez uninstall+install daca e nevoie.
+REM Verificam BUILD TAG-ul torch (+cu...), NU cuda.is_available(): pe o masina
+REM FARA GPU fizic, torch+cu128 e corect instalat dar cuda.is_available()=False
+REM -> altfel am reinstala ~2 GB la FIECARE rulare. Tag-ul spune daca wheel-ul e bun.
 set "TORCH_BUILD="
 for /f "delims=" %%V in ('"%VENV_PY%" -c "import torch; print(torch.__version__)" 2^>nul') do set "TORCH_BUILD=%%V"
 echo   torch instalat acum: !TORCH_BUILD!
 
-"%VENV_PY%" -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)" >nul 2>&1
+echo !TORCH_BUILD! | findstr /C:"+cu" >nul 2>&1
 if errorlevel 1 (
-    echo   torch fara CUDA ^(build !TORCH_BUILD!^) - reinstalez cu cu128 wheel...
+    echo   torch lipsa / build CPU ^(!TORCH_BUILD!^) - instalez wheel cu128...
     echo   ^(~2 GB, dureaza 3-5 minute la prima rulare^)
     REM Uninstall HARD ca pip sa nu trateze 2.12.0+cpu si 2.12.0+cu128 ca "same"
     "%VENV_PY%" -m pip uninstall -y torch torchvision torchaudio >nul 2>&1
     "%VENV_PY%" -m pip install --prefer-binary torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
     if errorlevel 1 (
-        echo   [EROARE] Install torch+cu128 esuat. Verifica conexiunea internet.
+        echo   [EROARE] Install torch+cu128 esuat. Verifica conexiunea / suport Python.
+        echo   ^(daca nu exista wheel pt versiunea de Python, scade la py -3.12^)
         echo   Manual: %VENV_PY% -m pip install torch --index-url https://download.pytorch.org/whl/cu128
         exit /b 5
     )
     REM Re-verifica dupa install
-    "%VENV_PY%" -c "import torch; print('  Post-install:', torch.__version__, '| CUDA:', torch.cuda.is_available())"
+    "%VENV_PY%" -c "import torch; print('  Post-install:', torch.__version__, '| CUDA runtime:', torch.cuda.is_available())"
 ) else (
-    echo   [OK] torch cu CUDA deja prezent ^(build !TORCH_BUILD!^) - skip reinstall.
+    echo   [OK] torch build cu128 deja prezent ^(!TORCH_BUILD!^) - skip reinstall.
 )
 
 echo.
-echo   Install foundation models din requirements_gpu_extras.txt...
+echo   Install librarii GPU active din requirements_gpu_extras.txt...
 if not exist "requirements_gpu_extras.txt" (
     echo   [WARN] requirements_gpu_extras.txt lipseste - sar peste.
 ) else (
-    REM --no-deps: evita backtracking pe transformers ^(pin strict 4.33.3^).
-    "%VENV_PY%" -m pip install --prefer-binary --no-deps -r requirements_gpu_extras.txt
+    REM CU dependinte: foundation models ^(pin strict transformers^) au fost scoase,
+    REM deci nu mai e backtracking - neuralforecast are nevoie de dependintele lui.
+    "%VENV_PY%" -m pip install --prefer-binary -r requirements_gpu_extras.txt
     if errorlevel 1 (
-        echo   [ATENTIE] Install partial foundation models. Continui.
+        echo   [ATENTIE] Install partial librarii GPU. Continui.
     ) else (
-        echo   [OK] Foundation models instalate.
+        echo   [OK] Librarii GPU active instalate.
     )
 )
-exit /b 0
-
-
-:InstallCpuStack
-REM Instaleaza torch+cpu pentru masini fara GPU NVIDIA. Stack-ul AI greu e
-REM exclus deliberat - engine-ul foloseste fallback determinist pe CPU.
-echo [1c] Profil CPU detectat - instalez torch+cpu ^(lean^)...
-echo.
-
-REM Check daca torch existent e fara CUDA. Daca da, skip.
-"%VENV_PY%" -c "import torch; assert not torch.cuda.is_available()" >nul 2>&1
-if not errorlevel 1 (
-    echo   [OK] torch+cpu deja prezent — skip reinstall.
-) else (
-    "%VENV_PY%" -c "import torch" >nul 2>&1
-    if not errorlevel 1 (
-        echo   torch cu CUDA detectat pe masina FARA GPU — reinstalez cu wheel CPU
-        echo   ^(economisesc ~1.8 GB + import time mai rapid^).
-        "%VENV_PY%" -m pip uninstall -y torch torchvision torchaudio >nul 2>&1
-    ) else (
-        echo   torch lipsa - instalez torch+cpu...
-    )
-    "%VENV_PY%" -m pip install --prefer-binary torch --index-url https://download.pytorch.org/whl/cpu
-    if errorlevel 1 (
-        echo   [ATENTIE] Install torch+cpu esuat. Aplicatia merge cu fallback determinist fara torch.
-    ) else (
-        echo   [OK] torch+cpu instalat.
-    )
-)
-
-echo.
-echo   Profilul CPU EXCLUDE foundation models ^(timesfm, chronos, momentfm,
-echo   neuralforecast, transformers^) - pe CPU sunt prea lente.
-echo   Engine-ul foloseste fallback determinist ^(frecventa + recency + gap^).
-echo   Daca vrei totusi sa testezi, instaleaza manual:
-echo     %VENV_PY% -m pip install timesfm chronos-forecasting momentfm
 exit /b 0
 
 
