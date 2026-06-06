@@ -1290,6 +1290,7 @@ _METHOD_DESC = {
     "geo_cnn_next_gpu":    "CNN spațial: geometria grilei următoare · PyTorch GPU",
     "cover_greedy": "greedy set-cover submodular (acoperire diversă) · CPU",
     "cover_rarity": "greedy cover ponderat pe raritatea extragerilor · CPU",
+    "winslips": "stil WinSlips: acoperire roată abreviată pe perechi (covering design) · CPU",
     "frequency":  "euristică simplă · frecvență recentă ponderată",
     "recency":    "euristică simplă · gap-de-la-ultima-apariție",
     "random":     "baseline aleator (prag de referință)",
