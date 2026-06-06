@@ -18,17 +18,10 @@ REM ===== Auto-update din GitHub (best-effort; NU blocheaza daca esueaza) =====
 REM Aduce ultimele fix-uri automat la fiecare pornire. best_methods.json /
 REM _ISTORIC / venv sunt gitignore-uite -> fara divergenta -> fast-forward curat.
 where git >nul 2>&1
-if not errorlevel 1 (
-    echo [GIT] Verific actualizari de pe GitHub...
-    git fetch origin main --quiet 2>nul
-    git merge --ff-only origin/main >nul 2>&1
-    if errorlevel 1 (
-        echo [GIT] Sar update-ul ^(divergenta/conflict/offline^) - pornesc cu codul curent.
-    ) else (
-        echo [GIT] Cod la zi cu GitHub.
-    )
-) else (
+if errorlevel 1 (
     echo [GIT] git negasit - sar peste auto-update.
+) else (
+    call :git_autoupdate
 )
 echo.
 
@@ -236,3 +229,36 @@ for /f "tokens=*" %%G in ('powershell -NoProfile -Command "(Get-CimInstance Win3
     echo DETECTED_AT=%DATE% %TIME%
 ) > .machine_profile
 endlocal & exit /b 0
+
+
+:git_autoupdate
+REM ============================================================
+REM Auto-update ROBUST. Inainte: la orice esec al fast-forward-ului sarea TACIT
+REM update-ul -> ramaneai pe cod vechi fara sa stii de ce. Acum: arata cauza reala
+REM (git status) si SINCRONIZEAZA FORTAT cu GitHub (cu backup in stash).
+REM   - Datele tale (best_methods.json, _ISTORIC, pool_history, raport, venv,
+REM     .machine_profile) sunt gitignore -> NU se pierd la reset.
+REM   - Modificarile locale la fisiere URMARITE sunt salvate in 'git stash list'.
+REM ============================================================
+echo [GIT] Verific actualizari de pe GitHub...
+git fetch origin main --quiet 2>nul
+if errorlevel 1 (
+    echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
+    goto :eof
+)
+git merge --ff-only origin/main >nul 2>&1
+if not errorlevel 1 (
+    echo [GIT] Cod la zi cu GitHub.
+    goto :eof
+)
+echo [GIT] Fast-forward imposibil ^(divergenta sau modificari locale^). Stare:
+git status -sb
+echo [GIT] Sincronizez FORTAT cu GitHub ^(backup local in stash^)...
+git stash push -m "auto-backup START_8000" >nul 2>&1
+git reset --hard origin/main >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
+) else (
+    echo [GIT] Sincronizat la zi cu GitHub. Backup local: ruleaza 'git stash list'.
+)
+goto :eof
