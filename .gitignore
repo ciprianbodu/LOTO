@@ -35,9 +35,9 @@ adaptive_state.json
 
 # Runtime artefacts (heavy, regenerated on demand)
 lightning_logs/
-ISTORIC/
-_ISTORIC/
-_istoric/
+# NOTĂ: _ISTORIC/ NU mai e ignorat — CSV-urile cu extragerile sunt versionate
+# (sursa de adevăr pentru bench/analiză). Le comiți din local cu:
+#   git add _ISTORIC && git commit -m "update istoric" && git push
 # bench_results: ignorăm tot FOLDER-ul, dar permitem folds.csv + report.json
 # (le comiți manual ca să le pot analiza). .pkl-urile grele rămân ignorate.
 bench_results/*

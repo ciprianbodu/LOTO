@@ -21,10 +21,12 @@ CSV = sys.argv[1] if len(sys.argv) > 1 else "_ISTORIC/joker.csv"
 PCT = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0
 
 df = pd.read_csv(CSV)
-main_cols = [c for c in ["n1", "n2", "n3", "n4", "n5", "n6"] if c in df.columns]
+# Detecție DIN DATE (nu din nume): K = coloane de numere completate, MAXN = max real.
+# (Mai robust — ex. fișierul 5/40 are 6 coloane completate, range 1-40.)
+main_cols = [c for c in ["n1", "n2", "n3", "n4", "n5", "n6"] if c in df.columns and df[c].notna().any()]
 has_joker = "joker" in df.columns
-MAXN = 45 if has_joker else (49 if len(main_cols) == 6 else 40)
-K = len(main_cols)  # numere extrase / extragere
+K = len(main_cols)  # numere extrase / extragere (din date)
+MAXN = int(df[main_cols].max().max())  # universul real observat
 
 n_total = len(df)
 cut = int(round(n_total * (100 - PCT) / 100.0))
