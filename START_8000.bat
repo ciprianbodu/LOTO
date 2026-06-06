@@ -175,8 +175,11 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr ":8000
 )
 timeout /t 3 /nobreak >nul 2>&1
 
-REM NOTA: NU mai resetam coada de joburi la pornire (numerotarea continua).
-REM Reset manual cand vrei: ruleaza  reset_jobs.py --force  separat.
+REM Golire coada de joburi la FIECARE pornire -> mereu fresh, fara joburi
+REM reziduale care se reiau singure (procesele vechi sunt deja omorate la [2/4],
+REM deci putem reseta in siguranta). Numerotarea reincepe de la #1.
+echo [2b/4] Golire coada de joburi (fresh start)
+"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0reset_jobs.py" --force
 
 echo [3/4] Pornire Worker
 start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
