@@ -369,6 +369,13 @@ def run_benchmark(
             return False
 
     _GPU_OK = _gpu_available()
+    # CPU-only: propagăm CUDA_VISIBLE_DEVICES=-1 în mediu ca PROCESELE-worker (spawn)
+    # să moștenească semnalul și să NU mai importe torch/neuralforecast (~2.8 GB
+    # fiecare) — vezi methods.py. Worker-ele CPU devin ușoare (~0.5 GB) → încap mult
+    # mai multe în RAM → bench CPU semnificativ mai rapid (nu mai e gâtuit la 2 procese).
+    if not _GPU_OK:
+        import os as _o_cpu
+        _o_cpu.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     _gpu_methods = [m for m in methods if method_meta_map[m]["available"] and _is_gpu_fam_global(m)]
     if not _GPU_OK and _gpu_methods:
         logger.warning("[bench] GPU NEDETECTAT → SAR peste benchul GPU (%d metode GPU ignorate, "
@@ -538,7 +545,9 @@ def run_benchmark(
     # context CUDA. Prea multe procese simultan → RAM-ul se epuizează → procesele sunt
     # OMORÂTE ("terminated abruptly") și nvidia-smi crapă (0xc000012d). De aceea limităm
     # numărul TOTAL de procese (CPU+GPU rulează CONCURENT) după RAM-ul DISPONIBIL.
-    _PER_PROC_GB = 2.8
+    # CPU-only: worker-ele NU importă torch (vezi mai sus) → ~0.6 GB/proces. Cu GPU:
+    # ~2.8 GB (torch+CUDA+neuralforecast). Estimarea corectă lasă mai multe procese CPU.
+    _PER_PROC_GB = 2.8 if _GPU_OK else 0.6
     try:
         import psutil as _ps
         _avail_gb = _ps.virtual_memory().available / (1024 ** 3)

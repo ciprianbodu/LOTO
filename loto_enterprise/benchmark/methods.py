@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 # Dezactivabil cu LOTO_TF32=0. Rulează o singură dată la import.
 try:
     import os as _os_init
+    # CPU-only (CUDA_VISIBLE_DEVICES=-1, setat de START_8000 pe masini fara GPU):
+    # NU importam torch la nivel de modul (~2.8 GB/proces degeaba) — metodele GPU
+    # sunt sarite oricum la runtime. Doar pe GPU importam + configuram TF32.
+    if _os_init.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
+        raise ImportError("CPU-only — skip torch top-level import")
     import torch as _torch_init
     if _os_init.environ.get("LOTO_TF32", "1") != "0" and _torch_init.cuda.is_available():
         # capability >= (8,0) = Ampere+ (RTX 30xx/40xx, A100) → TF32 pe Tensor Cores.
@@ -317,6 +322,12 @@ def score_moment(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
 _NF_AVAILABLE = False
 _NF_ERR: Optional[str] = None
 try:
+    import os as _os_nf
+    # CPU-only: nu importam neuralforecast/torch (~2.8 GB) — metodele nf-* sunt
+    # GPU si sunt sarite la runtime pe masini fara CUDA. Declanseaza calea de
+    # stub-uri de mai jos (identic cu "neuralforecast neinstalat").
+    if _os_nf.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
+        raise ImportError("CPU-only — skip neuralforecast/torch import (metode GPU sarite)")
     import pandas as pd  # noqa: F401
     import torch  # noqa: F401
     from neuralforecast import NeuralForecast
