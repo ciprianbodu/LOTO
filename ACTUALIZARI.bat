@@ -43,7 +43,7 @@ if "%VENV_VER%"=="%SYS_VER%" (
 echo.
 echo   [INFO] Versiune Python diferita detectata pe sistem.
 echo          Doresti sa migrezi venv-ul de la %VENV_VER% la %SYS_VER%?
-echo          (Pastreaza TOATE pachetele in versiuni identice; backup automat.)
+echo          (Recreeaza venv-ul + reinstaleaza CURAT din requirements; backup automat.)
 echo.
 choice /C YN /M "Upgrade Python venv "
 if errorlevel 2 goto :skip_python_upgrade
@@ -79,18 +79,15 @@ if errorlevel 1 (
 "%VENV_PY%" --version
 
 echo.
-echo   Reinstall pip + pachete IDENTIC din snapshot (poate dura 5-15 min)...
+echo   Upgrade pip in venv-ul nou. Pachetele NU se mai reinstaleaza din snapshot
+echo   (continea torch+cu128 / foundation models, incompatibile cu Python nou) -
+echo   se instaleaza mai jos, CURAT, din requirements_base + extras dupa hardware.
 "%VENV_PY%" -m pip install --upgrade pip --quiet
-"%VENV_PY%" -m pip install --prefer-binary -r "%REQ_SNAPSHOT%"
-if errorlevel 1 (
-    echo   [ATENTIE] Reinstall partial esuat. Backup pastrat la %BACKUP_DIR%.
-    echo   Revert: rmdir /s /q "%VENV_DIR%" ^& ren "%BACKUP_DIR%" "%VENV_DIR:~1%"
-    pause
-    exit /b 1
-)
 
 echo.
-echo   [OK] Upgrade Python complet. Backup: %BACKUP_DIR% (sterge dupa verificare).
+echo   [OK] Venv %SYS_VER% creat (gol). Pachetele se instaleaza in pasii [1b]+.
+echo        Snapshot vechi pastrat ca referinta: %REQ_SNAPSHOT%.
+echo        Backup venv vechi: %BACKUP_DIR% (sterge dupa verificare).
 echo.
 
 :skip_python_upgrade
