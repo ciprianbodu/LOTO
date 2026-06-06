@@ -81,21 +81,16 @@ REM Statie unica (LUPTATORI) - fara logica multi-statie/OneDrive. Detectam GPU
 REM o data si cache-uim in .machine_profile; daca exista, il folosim direct.
 set "GPU_TYPE=UNKNOWN"
 set "GPU_NAME="
-if exist ".machine_profile" (
-    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
-        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
-        if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
-    )
-    echo Profil hardware cached: GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
-) else (
-    echo Profil hardware lipsa, detectez acum...
-    call :DetectGpu
-    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
-        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
-        if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
-    )
-    echo Detectie: GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
+REM Re-detectam MEREU cu nvidia-smi (sursa de adevar). NU ne mai bazam pe
+REM .machine_profile cache-uit: pe OneDrive se sincronizeaza intre masini
+REM (ALF NVIDIA -> laptop fara GPU) si ar da profil GRESIT (verify_imports ar
+REM cere torch GPU pe o masina fara GPU -> RC=20). DetectGpu rescrie profilul.
+call :DetectGpu
+for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
+    if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
+    if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
 )
+echo Detectie GPU ^(nvidia-smi, sursa de adevar^): GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
 
 if /i "!GPU_TYPE!"=="NVIDIA" (
     echo Mod: GPU
