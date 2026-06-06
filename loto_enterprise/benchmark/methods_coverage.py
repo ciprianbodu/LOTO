@@ -102,6 +102,47 @@ def score_cover_rarity(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
 
 
+def score_winslips(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+    """Scorer stil WinSlips: acoperire de tip ROATĂ ABREVIATĂ pe PERECHI (covering
+    design, t=2). WinSlips garantează acoperirea t-subseturilor pool-ului; aici
+    scorăm numerele după contribuția la acoperirea PERECHILOR frecvente din istoric.
+
+    Acoperire submodulară pe perechi: o pereche (i,j) cu pondere P[i,j] valorează
+    a1 cu un capăt selectat și 1.0 cu ambele (a1=0.6 → al doilea capăt aduce 0.4 <
+    0.6 = randamente descrescătoare). Greedy: la fiecare pas alegem numărul cu cel
+    mai mare câștig marginal de acoperire de perechi. Efectul: roata acoperă cât
+    mai multe perechi DISTINCTE (diversitate), exact logica covering-design.
+
+    Independent (numpy), determinist, fără antrenare.
+    """
+    n = draws_2d.shape[0]
+    if n < 10:
+        return {}
+    B = _binary(draws_2d, max_num)               # (max_num, n)
+    rec = np.exp(np.linspace(-2.0, 0.0, n))       # recență
+    # Matrice de co-apariție ponderată: P[i,j] = suma ponderilor extragerilor în
+    # care i ȘI j apar împreună (= „perechile" pe care roata vrea să le acopere).
+    Bw = B * rec[None, :]
+    P = Bw @ B.T                                  # (max_num, max_num)
+    np.fill_diagonal(P, 0.0)
+    Sall = P.sum(axis=1)                          # pondere totală de perechi per număr
+    a1 = 0.6                                      # valoarea primului capăt (al doilea = 1-a1=0.4)
+    sel = np.zeros(max_num, dtype=bool)
+    Ssel = np.zeros(max_num, dtype=np.float64)    # P[i, selectate]
+    scores = np.zeros(max_num, dtype=np.float64)
+    for _step in range(max_num):
+        # câștig marginal = a1·(perechi cu capăt neselectat) + (1-a1)·(perechi completate)
+        gain = a1 * (Sall - Ssel) + (1.0 - a1) * Ssel
+        gain[sel] = -np.inf
+        idx = int(np.argmax(gain))
+        if not np.isfinite(gain[idx]):
+            break
+        scores[idx] = max(gain[idx], 0.0)
+        sel[idx] = True
+        Ssel = Ssel + P[:, idx]                   # idx selectat → actualizează perechile cu idx
+    return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+
+
 # ===========================================================================
 # Registry
 # ===========================================================================
@@ -110,4 +151,6 @@ COVERAGE_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
                      "greedy set-cover submodular (recență) — acoperire diversă · CPU"),
     "cover_rarity": (score_cover_rarity, "coverage", False,
                      "greedy cover ponderat pe raritatea extragerilor — combinații rare · CPU"),
+    "winslips": (score_winslips, "coverage", False,
+                 "stil WinSlips: acoperire roată abreviată pe perechi (covering design t=2) · CPU"),
 }
