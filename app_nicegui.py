@@ -1515,18 +1515,27 @@ def _render_omnius_pool(game: str, d: dict) -> None:
 
 
 @ui.refreshable
+def wf_progress_panel() -> None:
+    """Progres walk-forward, SEPARAT de results_panel: tick-ul (2s) refreshează DOAR
+    asta, nu tot bundle-ul de rezultate — altfel expansion-urile deschise de user
+    (ex. 🏆 Clasament bench, Variante, Pipeline) s-ar reseta/închide la fiecare poll."""
+    if not STATE.get("wf_status"):
+        return
+    _wfp = float(STATE.get("wf_progress") or 0.0)
+    # ETA walk-forward: estimare liniară din progres (elapsed × (1-p)/p).
+    _eta = ""
+    _ws = STATE.get("wf_start")
+    if _ws and 0.02 < _wfp < 1.0:
+        _rem = (time.time() - _ws) * (1.0 - _wfp) / _wfp
+        _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
+    ui.label(STATE["wf_status"] + _eta).classes("text-info")
+    ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
+    ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
+
+
+@ui.refreshable
 def results_panel() -> None:
-    if STATE.get("wf_status"):
-        _wfp = float(STATE.get("wf_progress") or 0.0)
-        # ETA walk-forward: estimare liniară din progres (elapsed × (1-p)/p).
-        _eta = ""
-        _ws = STATE.get("wf_start")
-        if _ws and 0.02 < _wfp < 1.0:
-            _rem = (time.time() - _ws) * (1.0 - _wfp) / _wfp
-            _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
-        ui.label(STATE["wf_status"] + _eta).classes("text-info")
-        ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
-        ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
+    wf_progress_panel()
 
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -2108,7 +2117,9 @@ def main_page() -> None:
             logs_panel.refresh()
             status_panel.refresh()
         if STATE.get("wf_status"):
-            results_panel.refresh()
+            # DOAR progresul WF — NU tot bundle-ul, ca expansion-urile deschise
+            # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 2s.
+            wf_progress_panel.refresh()
     ui.timer(2.0, _tick)
 
 
