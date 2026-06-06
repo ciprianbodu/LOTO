@@ -15,7 +15,11 @@ import os
 import sqlite3
 import sys
 
-DB = "loto_jobs.db"
+# Sursa unică pentru calea DB (în afara OneDrive — vezi job_queue._default_db_path).
+try:
+    from job_queue import DB_PATH as DB
+except Exception:  # noqa: BLE001
+    DB = "loto_jobs.db"
 
 
 def main() -> int:
