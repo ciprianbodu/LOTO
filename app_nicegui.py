@@ -1994,6 +1994,14 @@ def _refresh_status() -> None:
 def main_page() -> None:
     ui.dark_mode().enable()
 
+    # Chevron-ul expansion-urilor: vârful în JOS când e DESCHIS (arată spre conținut),
+    # în sus când e închis — invers față de implicitul Quasar. Inversăm rotația global
+    # pentru toate expansion-urile (q-expansion-item) printr-o singură regulă.
+    ui.add_css("""
+        .q-expansion-item__toggle-icon { transform: rotate(180deg) !important; }
+        .q-expansion-item__toggle-icon--rotated { transform: rotate(0deg) !important; }
+    """)
+
     with ui.header().classes("items-center justify-between"):
         ui.label("🎰 Loto Enterprise Wheeling").classes("text-h5")
         ui.label("NiceGUI — stare persistentă, fără reload").classes("text-caption")
