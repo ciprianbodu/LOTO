@@ -62,6 +62,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 3. Scrieri JSON de stare → mereu `atomic_write_json`.
 4. Test minimal după orice edit: `python3 -m py_compile <fisier>` + (pt UI) pornește pe un port liber și verifică HTTP 200 (sleep ~15s, importurile sunt grele).
 5. Commit pe main cu mesaj clar; push; (pe web: creează PR draft dacă nu există).
+6. **Blacklist metode** (`disabled_methods.json`): metode LEGENDATE ca slabe. NU le reactiva, NU le re-introduce și NU le folosi — nici când adaugi metode NOI. Bench-ul le exclude automat (`bench_all_methods` filtrează prin `disabled.load_disabled()`). Populare pe baza rezultatelor: `python prune_methods.py --apply` (după un bench COMPLET). Merge-only.
 
 ## Verificare rapidă (mediu container fără sklearn/torch by default)
 ```bash
