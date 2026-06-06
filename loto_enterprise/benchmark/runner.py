@@ -374,6 +374,8 @@ def run_benchmark(
         logger.warning("[bench] GPU NEDETECTAT → SAR peste benchul GPU (%d metode GPU ignorate, "
                        "fără fallback pe CPU): %s", len(_gpu_methods), ", ".join(_gpu_methods[:8])
                        + (" …" if len(_gpu_methods) > 8 else ""))
+        # Marker parsabil de UI → afișează track-ul GPU ca „PAUSED — fără GPU".
+        logger.warning("[BENCH-GPU-PAUSED] CUDA indisponibil — %d metode GPU sărite", len(_gpu_methods))
 
     total_folds_est = 0
     cpu_total_est = 0

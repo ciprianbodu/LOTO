@@ -354,6 +354,7 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
         return None
     cur = tot = 0
     cpu_tot = gpu_tot = 0
+    gpu_paused = False
     matches = []
     try:
         import re
@@ -365,6 +366,8 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
         _sp = re.findall(r"\[BENCH-SPLIT\]\s*cpu=(\d+)\s*gpu=(\d+)", txt)
         if _sp:
             cpu_tot, gpu_tot = int(_sp[-1][0]), int(_sp[-1][1])
+        # runner semnalează că nu există GPU → track-ul GPU e sărit (PAUSED).
+        gpu_paused = "[BENCH-GPU-PAUSED]" in txt
     except Exception:  # noqa: BLE001
         pass
     if tot <= 0:
@@ -426,7 +429,12 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
         text += f"  ·  rămas ~{_fmt_dur(max(_etas))} (cât cel mai lent track)"
     lines = [text]
     lines.append(_cat_line("🖥️", "#38bdf8", "CPU", cpu_done, cpu_tot, cpu_eta, last_cpu))
-    lines.append(_cat_line("⚡", "#c084fc", "GPU", gpu_done, gpu_tot, gpu_eta, last_gpu))
+    if gpu_paused:
+        lines.append("<span style='color:#c084fc'>⚡ GPU:</span> "
+                     "<b style='color:#f59e0b'>⏸ PAUSED — fără GPU</b> "
+                     "<span style='opacity:.7'>(CUDA indisponibil — metodele GPU sărite, fără fallback CPU)</span>")
+    else:
+        lines.append(_cat_line("⚡", "#c084fc", "GPU", gpu_done, gpu_tot, gpu_eta, last_gpu))
     return frac, "<br>".join(lines)
 
 
