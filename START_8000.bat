@@ -241,6 +241,9 @@ REM     .machine_profile) sunt gitignore -> NU se pierd la reset.
 REM   - Modificarile locale la fisiere URMARITE sunt salvate in 'git stash list'.
 REM ============================================================
 echo [GIT] Verific actualizari de pe GitHub...
+REM OneDrive strica scrierea atomica in .git -> "update_ref failed / Invalid argument"
+REM la merge/reset. Dezactivam appendAtomically (leacul recomandat de git insusi).
+git config windows.appendAtomically false >nul 2>&1
 git fetch origin main --quiet 2>nul
 if errorlevel 1 (
     echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
