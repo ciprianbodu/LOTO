@@ -1,7 +1,12 @@
 {
-  "disabled": [],
+  "disabled": [
+    "chronos",
+    "moment",
+    "timesfm"
+  ],
   "_meta": {
-    "note": "Metode LEGENDATE (slabe) — NU se mai rulează în benchmark, NU intră în decizie, NU se reactivează. Merge-only. Metodele NOI nu sunt afectate. Populează cu: python prune_methods.py --apply (după un bench COMPLET, pe folds.csv real).",
-    "count": 0
+    "note": "Metode legendate — NU se mai rulează în bench și NU se reactivează. Merge-only. Metodele noi nu sunt afectate.",
+    "last_reason": "Scoase din benchmark (foundation models) — pinuiau transformers==4.33.3/hub 0.24 → blocau Python pe 3.11",
+    "count": 3
   }
 }

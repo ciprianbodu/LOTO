@@ -8,20 +8,11 @@
 # Asta evita capcana ca pip sa downgradeze la wheel CPU sau sa puna torch in
 # alt python-side.
 #
-# Constrangeri STRICTE de versiuni (NU le upgrada manual):
-#   - momentfm 0.1.4 cere transformers==4.33.3 SI huggingface-hub==0.24.0
-#   - chronos-forecasting cere transformers>=4.30,<4.48 (compatibil 4.33.3)
-#   - timesfm 1.3.0 cere huggingface_hub>=0.23.0 (compatibil 0.24.0)
+# NOTA: foundation models (TimesFM / Chronos / MOMENT) au fost SCOASE din benchmark
+# (legendate in disabled_methods.json). Ele cereau transformers==4.33.3 +
+# huggingface_hub==0.24.0 (pin din 2023), ceea ce bloca Python pe 3.11. Odata
+# scoase, nu mai exista pinul → venv-ul poate urca pe Python nou.
 # =============================================================================
-
-# HuggingFace stack — pinned strict pentru momentfm
-huggingface_hub==0.24.0
-transformers==4.33.3
-
-# Time-series foundation models (zero-shot, GPU-accelerated)
-timesfm
-chronos-forecasting
-momentfm
 
 # NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
 # Autoformer / FEDformer / DeepAR / TCN)

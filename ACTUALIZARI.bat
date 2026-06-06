@@ -22,12 +22,12 @@ if not exist "%VENV_PY%" (
 )
 
 REM ============================================================
-REM [-1/4] Detectie Python: daca exista un 3.11.x mai nou decat
+REM [-1/4] Detectie Python: daca exista un 3.14.x mai nou decat
 REM cel din venv, oferim upgrade. Skip altfel.
 REM ============================================================
 echo [-1/4] Detectie versiune Python venv vs sistem...
 for /f "tokens=2 delims= " %%V in ('"%VENV_PY%" --version 2^>^&1') do set VENV_VER=%%V
-for /f "tokens=2 delims= " %%V in ('py -3.11 --version 2^>^&1') do set SYS_VER=%%V
+for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set SYS_VER=%%V
 echo   Venv:    %VENV_VER%
 echo   Sistem:  %SYS_VER%
 
@@ -65,8 +65,8 @@ if errorlevel 1 (
     goto :skip_python_upgrade
 )
 
-REM Creez venv nou cu cea mai noua 3.11.x
-py -3.11 -m venv "%VENV_DIR%"
+REM Creez venv nou cu cea mai noua 3.14.x
+py -3.14 -m venv "%VENV_DIR%"
 if errorlevel 1 (
     echo   [EROARE] Creare venv nou esuata. Restore backup...
     rmdir /s /q "%VENV_DIR%" 2>nul
@@ -196,7 +196,7 @@ call :CleanGhosts
 echo.
 
 echo ------------------------------------------------------------
-echo  Pentru upgrade Python: descarca un 3.11.x mai nou de la
+echo  Pentru upgrade Python: descarca un 3.14.x mai nou de la
 echo    https://www.python.org/downloads/  (bifeaza Add to PATH)
 echo    apoi reruleaza ACTUALIZARI.bat — va detecta si oferi upgrade.
 echo.

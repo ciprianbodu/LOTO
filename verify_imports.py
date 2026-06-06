@@ -89,10 +89,6 @@ def main() -> int:
     GPU_PROFILE = CPU_PROFILE + [
         # GPU only: stack-ul greu (torch + neural forecasters)
         ("torch",          True, "2-30"),
-        ("timesfm",        True, "5-60"),
-        ("transformers",   True, "2-15"),
-        ("chronos",        True, "2-15"),
-        ("momentfm",       True, "2-15"),
         ("neuralforecast", True, "2-15"),
         ("pynvml",         True, "0-1"),  # GPU telemetry
     ]
@@ -104,9 +100,8 @@ def main() -> int:
         print(f"Profil GPU (full stack): {total} module")
     else:
         print(f"Profil CPU (lean — fara libs GPU): {total} module")
-        print("Note: torch/timesfm/chronos/momentfm/neuralforecast/transformers SAREM")
-        print("      ca sa nu pierdem 30-60s la cold-start. Engine folosese fallback")
-        print("      determinist pe CPU (vezi _fallback_scores_no_tfm in timesfm_engine.py).")
+        print("Note: torch/neuralforecast SAREM ca sa nu pierdem 30-60s la cold-start.")
+        print("      Engine folosese fallback determinist pe CPU.")
     print()
 
     missing_required: list[str] = []
