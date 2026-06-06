@@ -661,6 +661,11 @@ def _load_extra_methods() -> None:
     except Exception as exc:
         logger.debug(f"[methods] methods_torch_advanced not loaded: {exc}")
     try:
+        from . import methods_geometry
+        extensions.append(("methods_geometry", methods_geometry.GEOMETRY_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_geometry not loaded: {exc}")
+    try:
         from . import methods_omnius
         extensions.append(("methods_omnius", methods_omnius.OMNIUS_METHODS))
     except Exception as exc:
