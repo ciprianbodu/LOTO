@@ -443,14 +443,27 @@ class LotoEngine:
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return [], 0.0
 
-        # Înlocuim logica veche (Random Pick) cu Wheeling logic matematic sigură pentru Urna 1
-        variants, coverage_pct = generate_combinatorial_wheel(
-            pool=self.hard_core, 
-            pick=self.params["draw_n"], 
-            guarantee=guarantee,
-            max_variants=max_variants,
-            scores=scores
-        )
+        # Wheeling: implicit greedy (bit-identic). Alternative selectabile prin env
+        # LOTO_WHEEL_METHOD = ilp|annealing|genetic|lajolla (fallback la greedy).
+        _wheel_method = os.environ.get("LOTO_WHEEL_METHOD", "greedy").strip().lower()
+        if _wheel_method and _wheel_method != "greedy":
+            from wheeling_methods import generate_wheel
+            variants, coverage_pct = generate_wheel(
+                _wheel_method,
+                pool=self.hard_core,
+                pick=self.params["draw_n"],
+                guarantee=guarantee,
+                max_variants=max_variants,
+                scores=scores,
+            )
+        else:
+            variants, coverage_pct = generate_combinatorial_wheel(
+                pool=self.hard_core,
+                pick=self.params["draw_n"],
+                guarantee=guarantee,
+                max_variants=max_variants,
+                scores=scores
+            )
         
         # Atașăm Joker din nucleul dur de Joker dacă e cazul
         if self.game_type == "joker" and hasattr(self, 'hard_core_joker') and self.hard_core_joker:
