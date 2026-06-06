@@ -75,9 +75,9 @@ echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
     echo [INFO] Creare mediu nou: %VENV_DIR%
-    py -3.11 -m venv "%VENV_DIR%"
+    py -3.14 -m venv "%VENV_DIR%"
     if not !ERRORLEVEL!==0 (
-        echo [EROARE] Creare venv esuata. Verifica Python 3.11 si permisiunile.
+        echo [EROARE] Creare venv esuata. Verifica Python 3.14 si permisiunile.
         endlocal & exit /b 10
     )
 )
