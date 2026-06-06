@@ -81,9 +81,17 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 # TOATE metodele disponibile (CPU + TOATE GPU/rețele neurale/foundation/torch), la cererea
 # utilizatorului (2026-06-01). ⚠️ Bench-ul GPU durează semnificativ mai mult.
 # Clasificarea CPU/GPU se face acum exclusiv în runner (_is_gpu_fam_global) și în UI.
+# Blacklist permanent (legendate de prune_methods.py pe baza rezultatelor bench).
+# Metodele de aici NU se mai rulează niciodată; cele noi nu sunt afectate.
+try:
+    from loto_enterprise.benchmark.disabled import load_disabled as _load_disabled
+    _DISABLED_METHODS = _load_disabled()
+except Exception:  # noqa: BLE001
+    _DISABLED_METHODS = set()
+
 ALL_SPEC_METHODS = [
     m for m in list_methods()
-    if method_meta(m).get("available", True)
+    if method_meta(m).get("available", True) and m not in _DISABLED_METHODS
 ]
 
 QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]

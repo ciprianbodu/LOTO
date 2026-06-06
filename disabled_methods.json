@@ -1,0 +1,7 @@
+{
+  "disabled": [],
+  "_meta": {
+    "note": "Metode LEGENDATE (slabe) — NU se mai rulează în benchmark, NU intră în decizie, NU se reactivează. Merge-only. Metodele NOI nu sunt afectate. Populează cu: python prune_methods.py --apply (după un bench COMPLET, pe folds.csv real).",
+    "count": 0
+  }
+}
