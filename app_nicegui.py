@@ -1288,6 +1288,8 @@ _METHOD_DESC = {
     "geo_spatial_kde_gpu": "densitate spațială 2D pe grila biletului (KDE conv) · PyTorch GPU",
     "geo_rowcol_gpu":      "propensiune geometrică rând × coloană pe bilet · PyTorch GPU",
     "geo_cnn_next_gpu":    "CNN spațial: geometria grilei următoare · PyTorch GPU",
+    "cover_greedy": "greedy set-cover submodular (acoperire diversă) · CPU",
+    "cover_rarity": "greedy cover ponderat pe raritatea extragerilor · CPU",
     "frequency":  "euristică simplă · frecvență recentă ponderată",
     "recency":    "euristică simplă · gap-de-la-ultima-apariție",
     "random":     "baseline aleator (prag de referință)",
@@ -1575,6 +1577,8 @@ def _method_library(name: str, family: str = "") -> str:
             return "ansamblu (mix de metode)"
         if f == "meta-adaptive":
             return "OMNIUS (meta-învățare)"
+        if f == "coverage":
+            return "greedy set-cover (numpy)"
         if f.startswith("math") or f.startswith("geometric") or f.startswith("probabil"):
             return "independent (numpy)"
         return family  # familia brută dacă n-o recunoaștem
