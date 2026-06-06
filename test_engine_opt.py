@@ -4,9 +4,9 @@ import time
 
 def test_engine():
     engine = LotoEngine(game_type="5/40")
-    success = engine.load_data("input.csv")  # Make sure input.csv exists
+    success = engine.load_data("_ISTORIC/loto_5_40.csv")  # sursa reală 5/40
     if not success:
-        print("Could not load input.csv")
+        print("Nu pot încărca _ISTORIC/loto_5_40.csv (lipsește?)")
         return
         
     print("Running Institutional Pipeline...")

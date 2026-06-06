@@ -57,7 +57,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - `_METHOD_DESC` (app_nicegui) = descrieri lizibile pt metode la afișarea 🏆.
 
 ## Reguli de aur (NU strica)
-1. **Bit-identitate engine**: orice modificare în `loto_engine.py` pe path-ul de generare → verifică pool+variante IDENTICE cu un baseline (rulează pipeline pe input.csv înainte/după).
+1. **Bit-identitate engine**: orice modificare în `loto_engine.py` pe path-ul de generare → verifică pool+variante IDENTICE cu un baseline (rulează pipeline pe un CSV din `_ISTORIC/` înainte/după).
 2. Nu sparge contractul worker↔UI (config_json / pickle result).
 3. Scrieri JSON de stare → mereu `atomic_write_json`.
 4. Test minimal după orice edit: `python3 -m py_compile <fisier>` + (pt UI) pornește pe un port liber și verifică HTTP 200 (sleep ~15s, importurile sunt grele).
