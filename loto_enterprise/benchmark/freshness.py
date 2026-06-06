@@ -28,10 +28,10 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 GAMES_CSV_MAP = {
-    "loto_6_49": ["ISTORIC/loto_6_49.csv", "_LOTO/istoric/loto_6_49.csv", "istoric/loto_6_49.csv"],
-    "loto_5_40": ["ISTORIC/loto_5_40.csv", "_LOTO/istoric/loto_5_40.csv", "istoric/loto_5_40.csv"],
-    "joker_urna1": ["ISTORIC/joker.csv", "_LOTO/istoric/joker.csv", "istoric/joker.csv"],
-    "joker_urna2": ["ISTORIC/joker.csv", "_LOTO/istoric/joker.csv", "istoric/joker.csv"],
+    "loto_6_49": ["_ISTORIC/loto_6_49.csv", "ISTORIC/loto_6_49.csv", "istoric/loto_6_49.csv", "_LOTO/istoric/loto_6_49.csv"],
+    "loto_5_40": ["_ISTORIC/loto_5_40.csv", "ISTORIC/loto_5_40.csv", "istoric/loto_5_40.csv", "_LOTO/istoric/loto_5_40.csv"],
+    "joker_urna1": ["_ISTORIC/joker.csv", "ISTORIC/joker.csv", "istoric/joker.csv", "_LOTO/istoric/joker.csv"],
+    "joker_urna2": ["_ISTORIC/joker.csv", "ISTORIC/joker.csv", "istoric/joker.csv", "_LOTO/istoric/joker.csv"],
 }
 
 

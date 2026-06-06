@@ -1139,29 +1139,46 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                               {"name": "hits", "label": "Numere în Nucleu", "field": "hits", "align": "left"}],
                      rows=rows_pool).classes("w-full").props("dense")
 
-        # Tabel variante ≥4 + ROI (castigurile cu 3 nu intereseaza)
+        # Tabel variante ≥4 — AGREGAT pe extragere. (Înainte: o linie per variantă →
+        # aceeași dată apărea de zeci de ori, fiindcă ~zeci de variante prind 4 pe
+        # aceeași extragere. Ilizibil.) Acum: o linie per (extragere, hits) + nr. bilete.
         highs = [p for p in flat if getattr(p, "hits", 0) >= 4]
         if highs:
-            rows_v, total_prize = [], 0
             pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
-            for p in sorted(highs, key=lambda x: (x.hits, getattr(x, "draw_index", 0)), reverse=True):
+            agg: dict = {}
+            for p in highs:
                 dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-                prize = pm.get(p.hits, 0)
-                total_prize += prize
-                rows_v.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{getattr(p,'draw_index',0)}",
-                               "hits": f"⭐ {p.hits}", "prize": f"~{prize} Lei"})
-            ui.label("🎯 Istoric Câștiguri Variante (≥4 numere):").classes("text-bold text-caption mt-2")
+                lbl = str(dd) if dd and str(dd) != "None" else f"#{getattr(p, 'draw_index', 0)}"
+                key = (lbl, int(p.hits))
+                agg[key] = agg.get(key, 0) + 1
+            rows_v = []
+            for (draw, h), cnt in sorted(agg.items(), key=lambda kv: (kv[0][1], kv[1]), reverse=True):
+                prize = pm.get(h, 0)
+                rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete",
+                               "prize": f"~{prize:,} Lei/bilet"})
+            n_draws_won = len({d for d, _ in agg})
+            ui.label(f"🎯 Istoric Câștiguri Variante (≥4 numere) — {n_draws_won} extrageri câștigătoare, agregat:").classes(
+                "text-bold text-caption mt-2")
             ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
-                              {"name": "hits", "label": "Hits", "field": "hits", "align": "left"},
-                              {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "left"}],
-                     rows=rows_v).classes("w-full").props("dense")
-            total_variants = len({tuple(getattr(p, "variant", ())) for p in flat}) or n
-            cost = total_variants * PRICES.get(gk, 8.0) * len(uniq)
+                              {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
+                              {"name": "n", "label": "Bilete câștigătoare", "field": "n", "align": "center"},
+                              {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "right"}],
+                     rows=rows_v, pagination=15).classes("w-full").props("dense")
+
+            # Analiză financiară ONESTĂ: fiecare entry din flat = UN bilet (extragere ×
+            # variantă) jucat. cost = nr. bilete × preț; premii = suma premiilor reale.
+            # (Înainte: total_variants_unice × preț × nr_extrageri → cost umflat de ~100×.)
+            total_prize = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)
+            cost = len(flat) * PRICES.get(gk, 8.0)
             profit = total_prize - cost
             roi = (profit / cost * 100) if cost > 0 else 0
             rc = "text-positive" if profit >= 0 else "text-negative"
-            ui.label(f"Analiză financiară backtest: cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
-                     f"| ROI: {'+' if profit>=0 else ''}{roi:.1f}%").classes(rc)
+            ui.label(f"Analiză financiară backtest (full wheel la fiecare din {len(uniq)} extrageri = "
+                     f"{len(flat):,} bilete): cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
+                     f"| ROI: {'+' if profit >= 0 else ''}{roi:.1f}%").classes(rc)
+            ui.label("ℹ️ Pe loterie ALEATOARE ROI-ul e mereu puternic negativ dacă joci tot wheel-ul la "
+                     "fiecare extragere — scopul aplicației e ACOPERIREA (4+), nu profitul.").classes(
+                "text-caption text-grey")
 
 
 def _wf_summary(flat) -> str | None:
