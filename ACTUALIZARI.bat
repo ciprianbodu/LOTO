@@ -111,6 +111,10 @@ echo [0b/4] Runda 2 (capturare DLL-uri eliberate intre timp)...
 call :CleanGhosts
 echo.
 
+echo [0c/4] Verificare INTEGRITATE Python + librarii (OneDrive poate corupe .dll/.pyd)...
+call :check_integrity
+echo.
+
 echo [1/4] Pip upgrade + pachete benchmark...
 "%VENV_PY%" -m pip install --upgrade pip --quiet
 echo.
@@ -313,6 +317,37 @@ if not exist "requirements_gpu_extras.txt" (
     )
 )
 exit /b 0
+
+
+:check_integrity
+REM Integritate venv: Python ruleaza? dependinte coerente (pip check)? librariile
+REM critice se importa (prinde coruptie binara .dll/.pyd de la sync OneDrive)?
+"%VENV_PY%" -c "import sys; print('  Python venv:', sys.version.split()[0])" 2>nul
+if errorlevel 1 (
+    echo   [EROARE] Python din venv NU ruleaza - corupt/incomplet.
+    echo            Sterge venv-ul si reruleaza START_8000.bat: rmdir /s /q "%VENV_DIR%"
+    goto :eof
+)
+echo   - pip check ^(dependinte lipsa/incompatibile = install corupt^)...
+"%VENV_PY%" -m pip check
+if errorlevel 1 (
+    echo   [ATENTIE] pip check a gasit probleme - le repara pasii [1b]+ ^(reinstall^).
+) else (
+    echo   [OK] Dependinte coerente.
+)
+echo   - smoke test import librarii critice...
+set "CUDA_VISIBLE_DEVICES=-1"
+"%VENV_PY%" -c "import numpy,pandas,scipy,numba,nicegui,torch,neuralforecast" 2>nul
+if errorlevel 1 (
+    set "CUDA_VISIBLE_DEVICES="
+    echo   [ATENTIE] O librarie critica NU se importa - posibil corupta ^(OneDrive^)
+    echo            SAU prima instalare ^(normal - se instaleaza la pasii [1b]+^).
+    echo            Daca persista dupa install: %VENV_PY% -m pip install --force-reinstall ^<pachet^>
+) else (
+    set "CUDA_VISIBLE_DEVICES="
+    echo   [OK] Librarii critice importate curat ^(numpy/pandas/scipy/numba/nicegui/torch/neuralforecast^).
+)
+goto :eof
 
 
 :ensure_python314
