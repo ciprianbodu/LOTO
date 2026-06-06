@@ -44,7 +44,27 @@ def render_hardware(console: Console, hw_snap: Dict) -> None:
     console.print(Panel("\n".join(body), title="[bold]HARDWARE[/bold]", border_style="cyan"))
 
 
+def _is_gpu_method(method: str, family: str = "") -> bool:
+    """Aceeași clasificare CPU/GPU ca runner-ul (_is_gpu_fam_global)."""
+    m = (method or "").lower()
+    f = (family or "").lower()
+    return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
+            or f.startswith("nf-") or f.startswith("foundation") or f == "ssm")
+
+
+def _gpu_available() -> bool:
+    import os
+    if os.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
+        return False
+    try:
+        import torch
+        return bool(torch.cuda.is_available())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def render_methods_table(console: Console, methods: List[str], method_meta_map: Dict) -> None:
+    gpu_ok = _gpu_available()
     t = Table(title="Methods to test", box=box.SIMPLE_HEAD)
     t.add_column("#", justify="right", style="dim")
     t.add_column("Method")
@@ -52,16 +72,27 @@ def render_methods_table(console: Console, methods: List[str], method_meta_map: 
     t.add_column("Trained?")
     t.add_column("Status")
     t.add_column("Notes", overflow="fold")
+    n_skip = 0
     for i, m in enumerate(methods, 1):
         meta = method_meta_map[m]
-        ok = "[green]OK[/green]" if meta["available"] else "[red]N/A[/red]"
+        is_gpu = _is_gpu_method(m, meta.get("family", ""))
+        if not meta["available"]:
+            status = "[red]N/A[/red]"
+        elif is_gpu and not gpu_ok:
+            status = "[yellow]⏸ SKIP (fără GPU)[/yellow]"
+            n_skip += 1
+        else:
+            status = "[green]OK[/green]"
         t.add_row(
             str(i), m, meta["family"],
             "yes" if meta["requires_train"] else "no",
-            ok,
+            status,
             (meta.get("unavailable_reason") or meta.get("notes") or "")[:80],
         )
     console.print(t)
+    if n_skip:
+        console.print(f"[yellow]⏸ {n_skip} metode GPU vor fi SĂRITE la rulare "
+                      f"(CUDA indisponibil — fără fallback CPU). Rulează doar metodele CPU.[/yellow]")
 
 
 def render_per_game(console: Console, report: Dict) -> None:
