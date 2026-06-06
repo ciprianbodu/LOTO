@@ -10,23 +10,38 @@ from pathlib import Path
 from typing import Any
 
 
+# Folder dedicat, în AFARA OneDrive, ales de utilizator pentru fișierele de stare
+# mutate (Windows). Schimbabil aici sau prin env LOTO_JOBS_DB.
+_PREFERRED_WIN_DIR = r"D:\_BUILD\_LOTO"
+
+
 def _default_db_path() -> str:
     """Coada SQLite NU trebuie să stea în OneDrive: sync-ul poate corupe WAL-ul
     bazei ACTIVE (scriere parțială) ȘI sincronizează joburi între mașini (laptop
-    ↔ ALF). O punem în stocare LOCALĂ (LOCALAPPDATA pe Windows, XDG cache pe Linux).
-    Override explicit: env LOTO_JOBS_DB. Fallback: cwd (comportamentul vechi)."""
+    ↔ ALF). O punem în AFARA OneDrive.
+      • Override explicit: env LOTO_JOBS_DB.
+      • Windows: D:\\_BUILD\\_LOTO (preferat), apoi %LOCALAPPDATA%\\LOTO.
+      • Linux: $XDG_CACHE_HOME/LOTO (sau ~/.cache/LOTO).
+      • Fallback final: cwd (comportamentul vechi)."""
     env = os.environ.get("LOTO_JOBS_DB")
     if env:
         return env
-    base = (os.environ.get("LOCALAPPDATA")       # Windows
-            or os.environ.get("XDG_CACHE_HOME")  # Linux
-            or os.path.join(os.path.expanduser("~"), ".cache"))
-    try:
-        d = os.path.join(base, "LOTO")
-        os.makedirs(d, exist_ok=True)
-        return os.path.join(d, "loto_jobs.db")
-    except Exception:  # noqa: BLE001
-        return "loto_jobs.db"
+    candidates: list[str] = []
+    if os.name == "nt":
+        candidates.append(_PREFERRED_WIN_DIR)
+        la = os.environ.get("LOCALAPPDATA")
+        if la:
+            candidates.append(os.path.join(la, "LOTO"))
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+        candidates.append(os.path.join(base, "LOTO"))
+    for d in candidates:
+        try:
+            os.makedirs(d, exist_ok=True)
+            return os.path.join(d, "loto_jobs.db")
+        except Exception:  # noqa: BLE001
+            continue
+    return "loto_jobs.db"
 
 
 DB_PATH = _default_db_path()
