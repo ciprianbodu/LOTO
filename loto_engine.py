@@ -339,7 +339,7 @@ class LotoEngine:
                 [c for c in self.data.columns
                  if str(c).lower().startswith("n") and str(c).lower() != "numbers"],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
-            )
+            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I), nu toate 6
             nums = []
             for c in n_cols:
                 if c in row and pd.notna(row[c]):
@@ -402,7 +402,10 @@ class LotoEngine:
         # Fallback (dacă lipsește _draw_matrix)
         all_numbers = []
         if self.data is not None:
-            n_cols = [c for c in self.data.columns if str(c).lower().startswith('n')]
+            n_cols = sorted(
+                [c for c in self.data.columns if str(c).lower().startswith('n')],
+                key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
+            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
             if n_cols:
                 raw_vals = self.data[n_cols].values.ravel()
                 all_numbers = raw_vals[~np.isnan(raw_vals)].astype(int).tolist()
@@ -1097,7 +1100,10 @@ class LotoEngine:
         else:
             # Robust columns detection
             df = self.data
-            n_cols = [c for c in df.columns if str(c).lower().startswith('n') and str(c).lower() != 'numbers']
+            n_cols = sorted(
+                [c for c in df.columns if str(c).lower().startswith('n') and str(c).lower() != 'numbers'],
+                key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
+            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
             if n_cols:
                 for _, row in df.iterrows():
                     draw_sets.append(set(pd.to_numeric(row[n_cols], errors='coerce').dropna().astype(int)))
@@ -1682,7 +1688,10 @@ class LotoEngine:
                     if "numbers" in row:
                         nums = [int(x) for x in str(row["numbers"]).split(",") if str(x).strip().isdigit()]
                     else:
-                        n_cols = [c for c in self.data.columns if str(c).lower().startswith('n')]
+                        n_cols = sorted(
+                            [c for c in self.data.columns if str(c).lower().startswith('n')],
+                            key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
+                        )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
                         nums = [int(row[c]) for c in n_cols if pd.notna(row.get(c))]
                     if num in nums:
                         appearances.append(i)
