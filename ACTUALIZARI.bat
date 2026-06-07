@@ -348,8 +348,12 @@ REM importul poate esua din motive runtime (DLL CUDA corupt OneDrive, ABI numpy
 REM dupa update-ul din [1b]) -> TORCH_BUILD gol -> reinstala ~2 GB INUTIL la
 REM fiecare rulare. `pip show` citeste doar metadata (rapid, nu incarca CUDA) si
 REM Version include tag-ul build (ex: 2.11.0+cu128).
+REM NOTA: ^| in for /f este problematic pe unele Windows -> scriem in fisier temp.
 set "TORCH_BUILD="
-for /f "tokens=2" %%V in ('"%VENV_PY%" -m pip show torch 2^>nul ^| findstr /B /C:"Version:"') do set "TORCH_BUILD=%%V"
+set "TORCH_VER_TMP=%TEMP%\loto_torch_ver.tmp"
+"%VENV_PY%" -m pip show torch > "%TORCH_VER_TMP%" 2>nul
+for /f "tokens=2" %%V in ('findstr /B /C:"Version:" "%TORCH_VER_TMP%"') do set "TORCH_BUILD=%%V"
+if exist "%TORCH_VER_TMP%" del "%TORCH_VER_TMP%" >nul 2>&1
 echo   torch instalat acum: !TORCH_BUILD!
 
 echo !TORCH_BUILD! | findstr /C:"+cu" >nul 2>&1
@@ -401,20 +405,34 @@ if not exist "requirements_gpu_extras.txt" (
 
 echo.
 echo   Install neuralforecast fara ray ^(ray n-are wheel pt Python 3.14^)...
-REM neuralforecast>=2.0 cere ray>=2.2.0 dar noi nu folosim distributed training.
-REM --no-deps sare ray; dep-urile reale (lightning/utilsforecast/coreforecast) vin din
-REM requirements_gpu_extras.txt de mai sus.
+REM neuralforecast>=2.0 cere ray+optuna+tornado; ray nu are wheel pt Python 3.14.
+REM Instalare in 2 pasi: --no-deps (sare ray), apoi optuna+tornado separat.
+REM Acestea sunt importate la startup de neuralforecast; fara ele import esueaza.
 "%VENV_PY%" -m pip show neuralforecast >nul 2>&1
 if errorlevel 1 (
     "%VENV_PY%" -m pip install --prefer-binary --no-deps neuralforecast
     if errorlevel 1 (
         echo   [ATENTIE] Install neuralforecast esuat. Metodele NF nu vor fi disponibile.
-    ) else (
-        echo   [OK] neuralforecast instalat ^(fara ray^).
+        goto :NF_Done
     )
+    echo   [OK] neuralforecast instalat ^(fara ray^).
 ) else (
     echo   [OK] neuralforecast deja prezent.
 )
+REM Instaleaza dep-urile de startup lipsa (optuna, tornado) — indiferent daca NF era deja acolo.
+"%VENV_PY%" -m pip show optuna >nul 2>&1
+if errorlevel 1 (
+    echo   Install optuna + tornado ^(cerute de neuralforecast la import^)...
+    "%VENV_PY%" -m pip install --prefer-binary optuna tornado
+    if errorlevel 1 (
+        echo   [ATENTIE] Install optuna/tornado esuat - import neuralforecast poate esua.
+    ) else (
+        echo   [OK] optuna + tornado instalate.
+    )
+) else (
+    echo   [OK] optuna + tornado deja prezente.
+)
+:NF_Done
 exit /b 0
 
 
