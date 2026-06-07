@@ -2,9 +2,9 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-set VENV_DIR=.venv
+set VENV_DIR=D:\_BUILD\_LOTO\.venv
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
-set SITE_PACKAGES=%CD%\%VENV_DIR%\Lib\site-packages
+set SITE_PACKAGES=%VENV_DIR%\Lib\site-packages
 set REQ_SNAPSHOT=requirements_snapshot.txt
 
 echo ============================================================
@@ -13,8 +13,12 @@ echo   Venv vizat: %VENV_DIR%
 echo ============================================================
 echo.
 
-REM Curatare resturi din versiuni vechi (backup-uri venv cu sufix, orice _backup).
-for /d %%D in (".venv_ALF-LUPTATORI_backup" ".venv_backup" ".venv_ALF-LUPTATORI") do (
+REM Asigura directorul de build (in afara OneDrive) exista.
+if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
+
+REM Curatare resturi din versiuni vechi (backup-uri venv cu sufix, orice _backup,
+REM plus venv-ul vechi relativ .venv din folderul de proiect — acum mutat la D:\_BUILD\_LOTO\.venv).
+for /d %%D in (".venv_ALF-LUPTATORI_backup" ".venv_backup" ".venv_ALF-LUPTATORI" ".venv") do (
     if exist "%%D" (
         echo [CLEANUP] Sterg folder vechi: %%D
         rmdir /s /q "%%D" >nul 2>&1

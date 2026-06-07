@@ -7,6 +7,9 @@ REM ============================================================
 cd /d "%~dp0"
 set "LOGFILE=%~dp0startup_8000.log"
 
+REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
+set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
+
 REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 > "%LOGFILE%" echo === START_8000 LOG ===
 >> "%LOGFILE%" echo Time:     %DATE% %TIME%
@@ -28,8 +31,8 @@ echo.
 REM ===== Auto-update CSV extrageri (best-effort, silent) =====
 REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC/ fara sa
 REM blocheze pornirea (exit 0 mereu, chiar si la eroare de retea).
-if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
+if exist "%VENV_DIR%\Scripts\python.exe" (
+    "%VENV_DIR%\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
 )
 
 REM ===== Verify phase (silent, logat in fundal) =====
@@ -70,11 +73,12 @@ REM :verify_phase — verifica venv, detecteaza GPU, importa core/benchmark
 REM ============================================================
 :verify_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv"
+set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
 echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
     echo [INFO] Creare mediu nou: %VENV_DIR%
+    if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
     py -3.14 -m venv "%VENV_DIR%"
     if not !ERRORLEVEL!==0 (
         echo [EROARE] Creare venv esuata. Verifica Python 3.14 si permisiunile.
@@ -84,14 +88,9 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 
 echo.
 echo --- Detectare GPU ---
-REM Statie unica (LUPTATORI) - fara logica multi-statie/OneDrive. Detectam GPU
-REM o data si cache-uim in .machine_profile; daca exista, il folosim direct.
+REM Re-detectam MEREU cu nvidia-smi (sursa de adevar).
 set "GPU_TYPE=UNKNOWN"
 set "GPU_NAME="
-REM Re-detectam MEREU cu nvidia-smi (sursa de adevar). NU ne mai bazam pe
-REM .machine_profile cache-uit: pe OneDrive se sincronizeaza intre masini
-REM (ALF NVIDIA -> laptop fara GPU) si ar da profil GRESIT (verify_imports ar
-REM cere torch GPU pe o masina fara GPU -> RC=20). DetectGpu rescrie profilul.
 call :DetectGpu
 for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
     if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
@@ -150,7 +149,7 @@ REM :launch_phase — porneste worker + NiceGUI
 REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv"
+set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
 
 REM Re-aplica env vars din profil (sunt propagate in subprocese NiceGUI + worker)
 set "GPU_TYPE=NVIDIA"
@@ -181,10 +180,10 @@ REM Golire coada de joburi la FIECARE pornire -> mereu fresh, fara joburi
 REM reziduale care se reiau singure (procesele vechi sunt deja omorate la [2/4],
 REM deci putem reseta in siguranta). Numerotarea reincepe de la #1.
 echo [2b/4] Golire coada de joburi (fresh start)
-"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0reset_jobs.py" --force
+"%VENV_DIR%\Scripts\python.exe" "%~dp0reset_jobs.py" --force
 
 echo [3/4] Pornire Worker
-start "LOTO WORKER" /min "%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
+start "LOTO WORKER" /min "%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
 
 echo [4/4] Pornire UI NiceGUI (port 8000)
 REM NiceGUI tine starea pe server si face update prin websocket (fara reload de
@@ -193,7 +192,7 @@ REM Deschidem browserul automat dupa 5s (timp ca serverul sa porneasca), intr-un
 REM proces paralel ca sa nu blocheze pornirea serverului.
 start "" /min cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:8000"
 set "LOTO_UI_PORT=8000"
-"%~dp0%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
+"%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
 set "RC=!ERRORLEVEL!"
 endlocal & exit /b %RC%
 
