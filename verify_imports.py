@@ -88,9 +88,12 @@ def main() -> int:
 
     GPU_PROFILE = CPU_PROFILE + [
         # GPU only: stack-ul greu (torch + neural forecasters)
-        ("torch",          True, "2-30"),
-        ("neuralforecast", True, "2-15"),
-        ("pynvml",         True, "0-1"),  # GPU telemetry
+        ("torch",          True,  "2-30"),
+        # neuralforecast OPTIONAL: versiunile vechi cer pytorch_lightning.utilities.distributed
+        # (sters in pytorch_lightning>=2.0). Daca importul esueaza, bench-ul sare metodele
+        # NHITS/NBEATS etc. dar aplicatia PORNESTE. Rulati ACTUALIZARI.bat sa corectati.
+        ("neuralforecast", False, "2-15"),
+        ("pynvml",         True,  "0-1"),  # GPU telemetry
     ]
 
     schema = GPU_PROFILE if is_gpu else CPU_PROFILE

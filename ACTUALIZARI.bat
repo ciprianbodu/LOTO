@@ -342,12 +342,25 @@ if errorlevel 1 (
 )
 
 echo.
+echo   Migrare pytorch_lightning -> lightning (pachet unificat ^>=2.0^)...
+REM neuralforecast^>=2.0 foloseste 'lightning', nu 'pytorch_lightning' vechi.
+REM Daca ambele sunt instalate, import-ul esueaza cu:
+REM   AttributeError: module 'pytorch_lightning.utilities' has no attribute 'distributed'
+REM Dezinstalam pytorch_lightning vechi ca sa nu mai fie conflict.
+"%VENV_PY%" -m pip show pytorch_lightning >nul 2>&1
+if not errorlevel 1 (
+    echo   - Gasit pytorch_lightning vechi. Dezinstalez...
+    "%VENV_PY%" -m pip uninstall -y pytorch_lightning >nul 2>&1
+    echo   [OK] pytorch_lightning vechi sters ^(lightning>=2.0 vine din neuralforecast deps^).
+) else (
+    echo   [OK] pytorch_lightning vechi absent - niciun conflict.
+)
+
+echo.
 echo   Install librarii GPU active din requirements_gpu_extras.txt...
 if not exist "requirements_gpu_extras.txt" (
     echo   [WARN] requirements_gpu_extras.txt lipseste - sar peste.
 ) else (
-    REM CU dependinte: foundation models ^(pin strict transformers^) au fost scoase,
-    REM deci nu mai e backtracking - neuralforecast are nevoie de dependintele lui.
     "%VENV_PY%" -m pip install --prefer-binary -r requirements_gpu_extras.txt
     if errorlevel 1 (
         echo   [ATENTIE] Install partial librarii GPU. Continui.
@@ -376,7 +389,7 @@ if errorlevel 1 (
 )
 echo   - smoke test import librarii critice...
 set "CUDA_VISIBLE_DEVICES=-1"
-"%VENV_PY%" -c "import numpy,pandas,scipy,numba,nicegui,torch,neuralforecast" 2>nul
+"%VENV_PY%" -c "import numpy,pandas,scipy,numba,nicegui,torch" 2>nul
 if errorlevel 1 (
     set "CUDA_VISIBLE_DEVICES="
     echo   [ATENTIE] O librarie critica NU se importa - posibil corupta ^(OneDrive^)
@@ -384,7 +397,9 @@ if errorlevel 1 (
     echo            Daca persista dupa install: %VENV_PY% -m pip install --force-reinstall ^<pachet^>
 ) else (
     set "CUDA_VISIBLE_DEVICES="
-    echo   [OK] Librarii critice importate curat ^(numpy/pandas/scipy/numba/nicegui/torch/neuralforecast^).
+    echo   [OK] Librarii critice importate curat ^(numpy/pandas/scipy/numba/nicegui/torch^).
+    REM neuralforecast e verificat separat - poate esua din cauza pytorch_lightning vechi
+    "%VENV_PY%" -c "import neuralforecast" 2>nul && echo   [OK] neuralforecast OK. || echo   [WARN] neuralforecast import esuat - ruleaza ACTUALIZARI.bat sa migreze la lightning>=2.0.
 )
 goto :eof
 

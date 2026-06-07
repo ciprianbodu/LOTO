@@ -16,8 +16,12 @@
 
 # NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
 # Autoformer / FEDformer / DeepAR / TCN)
-neuralforecast
+# neuralforecast>=2.0 foloseste 'lightning' (noul pachet unificat Pytorch Lightning)
+# in loc de 'pytorch_lightning' vechi — asta rezolva:
+#   AttributeError: module 'pytorch_lightning.utilities' has no attribute 'distributed'
+neuralforecast>=2.0.0
 utilsforecast
+lightning>=2.0
 
 # GPU-accelerated boosting (CatBoost are wheel cu suport CUDA inclus by default;
 # pentru XGBoost/LightGBM GPU sunt wheels separate, dar pe Windows merg si din
