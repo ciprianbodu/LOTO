@@ -5,13 +5,22 @@ cd /d "%~dp0"
 set VENV_DIR=.venv_ALF-LUPTATORI
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%CD%\%VENV_DIR%\Lib\site-packages
-set BACKUP_DIR=.venv_ALF-LUPTATORI_backup
 set REQ_SNAPSHOT=requirements_snapshot.txt
 
 echo ============================================================
 echo   ACTUALIZARE MEDIU LOTO ENTERPRISE
 echo   Venv vizat: %VENV_DIR%
 echo ============================================================
+echo.
+
+REM ===== Auto-update COD din GitHub (main) inainte de a actualiza mediul =====
+REM Asa, cand dai ACTUALIZARI.bat primesti si ultimul cod, si ultimele librarii.
+where git >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] git negasit - sar peste auto-update cod.
+) else (
+    call :git_autoupdate
+)
 echo.
 
 if not exist "%VENV_PY%" (
@@ -43,7 +52,7 @@ if "%VENV_VER%"=="%SYS_VER%" (
 echo.
 echo   [INFO] Versiune Python diferita detectata pe sistem.
 echo          Doresti sa migrezi venv-ul de la %VENV_VER% la %SYS_VER%?
-echo          (Recreeaza venv-ul + reinstaleaza CURAT din requirements; backup automat.)
+echo          (Recreeaza venv-ul + reinstaleaza CURAT din requirements; FARA backup venv.)
 echo.
 choice /C YN /M "Upgrade Python venv "
 if errorlevel 2 goto :skip_python_upgrade
@@ -60,20 +69,19 @@ REM Snapshot pachete instalate
 echo   Snapshot pachete -^> %REQ_SNAPSHOT%
 "%VENV_PY%" -m pip freeze > "%REQ_SNAPSHOT%"
 
-REM Backup venv vechi
-if exist "%BACKUP_DIR%" rmdir /s /q "%BACKUP_DIR%"
-ren "%VENV_DIR%" "%BACKUP_DIR:~1%"
-if errorlevel 1 (
-    echo   [EROARE] Backup esuat. Abandonez upgrade.
+REM Sterg venv-ul vechi DIRECT (fara backup - ai cerut sa nu mai ramana .._backup).
+REM Snapshot-ul de mai sus + reinstall-ul recreeaza acelasi mediu in venv-ul nou.
+echo   Sterg venv vechi: %VENV_DIR%
+rmdir /s /q "%VENV_DIR%"
+if exist "%VENV_DIR%" (
+    echo   [EROARE] Nu pot sterge venv-ul vechi ^(procese active inca?^). Abandonez upgrade.
     goto :skip_python_upgrade
 )
 
 REM Creez venv nou cu cea mai noua 3.14.x
 py -3.14 -m venv "%VENV_DIR%"
 if errorlevel 1 (
-    echo   [EROARE] Creare venv nou esuata. Restore backup...
-    rmdir /s /q "%VENV_DIR%" 2>nul
-    ren "%BACKUP_DIR%" "%VENV_DIR:~1%"
+    echo   [EROARE] Creare venv nou esuata. Ruleaza din nou ACTUALIZARI.bat.
     goto :skip_python_upgrade
 )
 "%VENV_PY%" --version
@@ -87,7 +95,6 @@ echo   se instaleaza mai jos, CURAT, din requirements_base + extras dupa hardwar
 echo.
 echo   [OK] Venv %SYS_VER% creat (gol). Pachetele se instaleaza in pasii [1b]+.
 echo        Snapshot vechi pastrat ca referinta: %REQ_SNAPSHOT%.
-echo        Backup venv vechi: %BACKUP_DIR% (sterge dupa verificare).
 echo.
 
 :skip_python_upgrade
@@ -209,6 +216,38 @@ echo.
 pause
 endlocal
 exit /b 0
+
+
+:git_autoupdate
+REM ============================================================
+REM Auto-update ROBUST din main (acelasi pattern ca START_8000.bat).
+REM Datele tale (best_methods.json, _ISTORIC, venv, .machine_profile) sunt
+REM gitignore -> NU se pierd la reset. Modificarile locale urmarite -> in stash.
+REM ============================================================
+echo [GIT] Verific actualizari cod de pe GitHub ^(main^)...
+REM OneDrive strica scrierea atomica in .git -> dezactivam appendAtomically.
+git config windows.appendAtomically false >nul 2>&1
+git fetch origin main --quiet 2>nul
+if errorlevel 1 (
+    echo [GIT] Offline / fetch esuat - continui cu codul curent.
+    goto :eof
+)
+git merge --ff-only origin/main >nul 2>&1
+if not errorlevel 1 (
+    echo [GIT] Cod la zi cu main.
+    goto :eof
+)
+echo [GIT] Fast-forward imposibil ^(divergenta / modificari locale^). Stare:
+git status -sb
+echo [GIT] Sincronizez FORTAT cu main ^(backup local in stash^)...
+git stash push -m "auto-backup ACTUALIZARI" >nul 2>&1
+git reset --hard origin/main >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Sincronizare fortata esuata - continui cu codul curent.
+) else (
+    echo [GIT] Sincronizat la zi cu main. Backup local: ruleaza 'git stash list'.
+)
+goto :eof
 
 
 :CleanGhosts
