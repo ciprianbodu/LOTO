@@ -13,6 +13,14 @@ echo   Venv vizat: %VENV_DIR%
 echo ============================================================
 echo.
 
+REM Curatare resturi din versiuni vechi (backup-uri venv cu sufix, orice _backup).
+for /d %%D in (".venv_ALF-LUPTATORI_backup" ".venv_backup" ".venv_ALF-LUPTATORI") do (
+    if exist "%%D" (
+        echo [CLEANUP] Sterg folder vechi: %%D
+        rmdir /s /q "%%D" >nul 2>&1
+    )
+)
+
 REM ===== Auto-update COD din GitHub (main) inainte de a actualiza mediul =====
 REM Asa, cand dai ACTUALIZARI.bat primesti si ultimul cod, si ultimele librarii.
 where git >nul 2>&1
