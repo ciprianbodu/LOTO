@@ -1761,11 +1761,16 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
 
     with ui.card().classes("w-full"):
         with ui.expansion(
-            "📊 Analiză & Clasament — clasament bench + walk-forward (toate jocurile)",
+            "📊 Analiză & Clasament — freshness · decizie · clasament · walk-forward",
             value=False,
         ).classes("w-full"):
             ui.label("Strâns aici ca rezultatele de sus (pool-uri + bilete de jucat) să rămână "
                      "curate. Deschide pentru detaliile de validare.").classes("text-caption text-grey")
+
+            # --- Freshness + Decizie benchmark + Matrice (era în Power-User) ---
+            analysis_panel()
+            ui.separator().classes("my-3")
+
             for fname, outs in results_bundle:
                 for game, data in _ordered_game_items(outs):
                     ui.separator().classes("my-3")
@@ -2133,8 +2138,6 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2"):
         status_panel()
-        with ui.expansion("📈 Analiză walk-forward (Power-User)", value=False).classes("w-full"):
-            analysis_panel()
         with ui.expansion("🧠 Istoric Învățare Adaptivă", value=False).classes("w-full"):
             adaptive_history_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes("w-full"):
