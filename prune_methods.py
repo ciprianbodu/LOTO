@@ -50,9 +50,14 @@ def _method_score(sub: pd.DataFrame) -> float:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Legendează cele mai slabe 50% metode (CPU/GPU)")
+    ap = argparse.ArgumentParser(
+        description="Legendează metodele slabe (CPU/GPU).\n"
+                    "  --top N  : păstrează doar top-N per categorie, dezactivează restul.\n"
+                    "  (fără --top): dezactivează jumătatea inferioară (comportament vechi).")
     ap.add_argument("--folds", default="bench_results/folds.csv")
     ap.add_argument("--apply", action="store_true", help="scrie în disabled_methods.json")
+    ap.add_argument("--top", type=int, default=None,
+                    help="păstrează top-N metode per categorie (CPU/GPU), dezactivează restul")
     args = ap.parse_args()
 
     fp = Path(args.folds)
@@ -82,12 +87,25 @@ def main() -> int:
     to_disable = []
     for is_gpu, grp in perf.groupby("is_gpu"):
         cat = "GPU" if is_gpu else "CPU"
-        cand = grp[~grp["method"].isin(PROTECTED)].sort_values("score")
-        n_cut = len(cand) // 2  # jumătatea inferioară (floor)
-        cut = cand.head(n_cut)["method"].tolist()
-        print(f"\n=== {cat}: {len(grp)} metode, protejate {sorted(set(grp['method'])&PROTECTED)}, "
-              f"dezactivez {n_cut} ===")
-        for _, r in cand.iterrows():
+        cand = grp[~grp["method"].isin(PROTECTED)].sort_values("score", ascending=False)
+        protected_in_grp = sorted(set(grp["method"]) & PROTECTED)
+
+        if args.top is not None:
+            # Păstrează top-N, dezactivează restul
+            keep = set(cand.head(args.top)["method"].tolist())
+            cut = cand[~cand["method"].isin(keep)]["method"].tolist()
+            print(f"\n=== {cat}: {len(grp)} metode, protejate {protected_in_grp}, "
+                  f"păstrez top-{args.top}, dezactivez {len(cut)} ===")
+        else:
+            # Comportament vechi: jumătatea inferioară
+            cand = cand.sort_values("score")
+            n_cut = len(cand) // 2
+            cut = cand.head(n_cut)["method"].tolist()
+            keep = set(cand["method"].tolist()) - set(cut)
+            print(f"\n=== {cat}: {len(grp)} metode, protejate {protected_in_grp}, "
+                  f"dezactivez {n_cut} (bottom 50%) ===")
+
+        for _, r in cand.sort_values("score", ascending=False).iterrows():
             mark = "❌ OFF" if r["method"] in cut else "   keep"
             print(f"  {mark}  {r['method']:24s} scor={r['score']:.4f}")
         to_disable.extend(cut)
@@ -99,7 +117,9 @@ def main() -> int:
 
     if args.apply:
         from loto_enterprise.benchmark.disabled import add_disabled
-        final = add_disabled(to_disable, reason=f"prune 50% din {fp.name}")
+        reason = (f"prune top-{args.top} din {fp.name}" if args.top
+                  else f"prune 50% din {fp.name}")
+        final = add_disabled(to_disable, reason=reason)
         print(f"\n✅ APLICAT. Blacklist permanent acum: {len(final)} metode.")
     else:
         print("\n(DRY-RUN — adaugă --apply ca să scrii în disabled_methods.json)")
