@@ -14,13 +14,12 @@
 # scoase, nu mai exista pinul → venv-ul poate urca pe Python nou.
 # =============================================================================
 
-# NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
-# Autoformer / FEDformer / DeepAR / TCN)
-# neuralforecast>=2.0 foloseste 'lightning' (noul pachet unificat Pytorch Lightning)
-# in loc de 'pytorch_lightning' vechi — asta rezolva:
-#   AttributeError: module 'pytorch_lightning.utilities' has no attribute 'distributed'
-neuralforecast>=2.0.0
+# NeuralForecast — instalat cu --no-deps in InstallGpuStack din ACTUALIZARI.bat
+# (ray>=2.2.0 cerut de neuralforecast nu are wheel pentru Python 3.14;
+#  noi nu folosim distributed training, deci ray nu e necesar la runtime).
+# Dep-urile reale (lightning, utilsforecast, coreforecast) sunt instalate separat.
 utilsforecast
+coreforecast
 lightning>=2.0
 
 # GPU-accelerated boosting (CatBoost are wheel cu suport CUDA inclus by default;

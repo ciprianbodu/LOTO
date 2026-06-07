@@ -396,6 +396,23 @@ if not exist "requirements_gpu_extras.txt" (
         echo   [OK] Librarii GPU active instalate.
     )
 )
+
+echo.
+echo   Install neuralforecast fara ray ^(ray n-are wheel pt Python 3.14^)...
+REM neuralforecast>=2.0 cere ray>=2.2.0 dar noi nu folosim distributed training.
+REM --no-deps sare ray; dep-urile reale (lightning/utilsforecast/coreforecast) vin din
+REM requirements_gpu_extras.txt de mai sus.
+"%VENV_PY%" -m pip show neuralforecast >nul 2>&1
+if errorlevel 1 (
+    "%VENV_PY%" -m pip install --prefer-binary --no-deps neuralforecast
+    if errorlevel 1 (
+        echo   [ATENTIE] Install neuralforecast esuat. Metodele NF nu vor fi disponibile.
+    ) else (
+        echo   [OK] neuralforecast instalat ^(fara ray^).
+    )
+) else (
+    echo   [OK] neuralforecast deja prezent.
+)
 exit /b 0
 
 
