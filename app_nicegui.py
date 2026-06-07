@@ -2139,8 +2139,6 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2"):
         status_panel()
-        with ui.expansion("🧠 Istoric Învățare Adaptivă", value=False).classes("w-full"):
-            adaptive_history_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes("w-full"):
             logs_panel()
         results_panel()
