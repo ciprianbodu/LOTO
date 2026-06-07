@@ -100,6 +100,17 @@ echo.
 :skip_python_upgrade
 
 REM ============================================================
+REM [0a/4] Auto-update CSV extrageri din _ISTORIC/
+REM ============================================================
+echo [0a/4] Verificare extrageri noi pe loto49.ro ^(update_csv.py^)...
+if exist "%VENV_PY%" (
+    "%VENV_PY%" "%~dp0update_csv.py" --verbose
+) else (
+    echo   [SKIP] Venv inca nu exista - sar peste ^(se va rula la urmatorul START_8000^).
+)
+echo.
+
+REM ============================================================
 REM [0/4] Kill procese venv + cleanup
 REM ============================================================
 echo [0/4] KILL Streamlit + worker + python.exe din venv...

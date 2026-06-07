@@ -25,6 +25,13 @@ if errorlevel 1 (
 )
 echo.
 
+REM ===== Auto-update CSV extrageri (best-effort, silent) =====
+REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC/ fara sa
+REM blocheze pornirea (exit 0 mereu, chiar si la eroare de retea).
+if exist "%~dp0.venv_ALF-LUPTATORI\Scripts\python.exe" (
+    "%~dp0.venv_ALF-LUPTATORI\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
+)
+
 REM ===== Verify phase (silent, logat in fundal) =====
 call :verify_phase >> "%LOGFILE%" 2>&1
 set "VERIFY_RC=%ERRORLEVEL%"
