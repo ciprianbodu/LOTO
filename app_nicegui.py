@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime as _dt
 from pathlib import Path
 
 import pandas as pd
@@ -1785,8 +1786,36 @@ def _render_bench_winner_only(game_label: str) -> None:
         ui.label(f"· {w[3]} · 4+: {w[1]*100:.1f}%").classes("text-caption text-grey")
 
 
+def _parse_draw_date(s):
+    """Parsează 'dd-mm-yyyy' → date. None dacă nu se poate (ex. eticheta '#index')."""
+    try:
+        return _dt.strptime(str(s).strip(), "%d-%m-%Y").date()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _gap_days_map(date_strs):
+    """{date_str: zile față de hit-ul ≥4 PRECEDENT (cronologic)}. Primul hit = None."""
+    parsed = [(s, _parse_draw_date(s)) for s in date_strs]
+    valid = sorted({d for _, d in parsed if d is not None})
+    gap_by_date = {}
+    prev = None
+    for d in valid:
+        gap_by_date[d] = (d - prev).days if prev is not None else None
+        prev = d
+    return {s: (gap_by_date.get(d) if d is not None else None) for s, d in parsed}
+
+
+def _fmt_gap(g) -> str:
+    """Formatează golul în zile pentru afișare în tabel."""
+    if g is None:
+        return "—"
+    return f"{g} zile" if g != 1 else "1 zi"
+
+
 def _render_hits_4plus(flat, game: str) -> None:
-    """Afișează doar tabelul extragerilor cu ≥4 hits (pool și variante)."""
+    """Afișează doar tabelul extragerilor cu ≥4 hits (pool, OMNIUS, variante).
+    Fiecare tabel include Δ zile = timpul față de hit-ul ≥4 precedent (cronologic)."""
     if not flat:
         return
     gk = _game_label_for(game)
@@ -1801,10 +1830,14 @@ def _render_hits_4plus(flat, game: str) -> None:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
             rows_pool.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}", "hits": f"🔥 {hu}"})
     if rows_pool:
+        gap_p = _gap_days_map([r["draw"] for r in rows_pool])
+        for r in rows_pool:
+            r["gap"] = _fmt_gap(gap_p.get(r["draw"]))
         ui.label(f"🎯 Pool ≥4 numere nimerite ({len(rows_pool)} extrageri):").classes("text-bold text-caption mt-2")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
-                     {"name": "hits", "label": "Numere în pool", "field": "hits", "align": "center"}],
+                     {"name": "hits", "label": "Numere în pool", "field": "hits", "align": "center"},
+                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "right"}],
             rows=rows_pool,
         ).classes("w-full").props("dense")
 
@@ -1821,10 +1854,14 @@ def _render_hits_4plus(flat, game: str) -> None:
             rows_omni.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}",
                               "hits": f"⭐ {oh}", "ticket": tk_txt})
     if rows_omni:
+        gap_o = _gap_days_map([r["draw"] for r in rows_omni])
+        for r in rows_omni:
+            r["gap"] = _fmt_gap(gap_o.get(r["draw"]))
         ui.label(f"⭐ OMNIUS ≥4 numere nimerite ({len(rows_omni)} extrageri):").classes("text-bold text-caption mt-2")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "hits", "label": "Hits OMNIUS", "field": "hits", "align": "center"},
+                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
                      {"name": "ticket", "label": "Bilet OMNIUS", "field": "ticket", "align": "right"}],
             rows=rows_omni, pagination=15,
         ).classes("w-full").props("dense")
@@ -1839,16 +1876,20 @@ def _render_hits_4plus(flat, game: str) -> None:
             lbl = str(dd) if dd and str(dd) != "None" else f"#{getattr(p, 'draw_index', 0)}"
             key = (lbl, int(p.hits))
             agg[key] = agg.get(key, 0) + 1
+        # Δ zile calculat pe EXTRAGERI distincte (nu per bilet) — golul între datele cu ≥4.
+        gap_v = _gap_days_map(sorted({d for d, _ in agg}))
         rows_v = []
         for (draw, h), cnt in sorted(agg.items(), key=lambda kv: (kv[0][1], kv[1]), reverse=True):
             prize = pm.get(h, 0)
             rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete",
+                           "gap": _fmt_gap(gap_v.get(draw)),
                            "prize": f"~{prize:,} Lei/bilet"})
         n_draws = len({d for d, _ in agg})
         ui.label(f"🎯 Bilete câștigătoare ≥4 ({n_draws} extrageri):").classes("text-bold text-caption mt-2")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
+                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
                      {"name": "n", "label": "Bilete", "field": "n", "align": "center"},
                      {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "right"}],
             rows=rows_v, pagination=15,
