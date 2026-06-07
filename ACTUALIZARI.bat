@@ -13,6 +13,16 @@ echo   Venv vizat: %VENV_DIR%
 echo ============================================================
 echo.
 
+REM ===== Auto-update COD din GitHub (main) inainte de a actualiza mediul =====
+REM Asa, cand dai ACTUALIZARI.bat primesti si ultimul cod, si ultimele librarii.
+where git >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] git negasit - sar peste auto-update cod.
+) else (
+    call :git_autoupdate
+)
+echo.
+
 if not exist "%VENV_PY%" (
     echo [EROARE] Mediul virtual %VENV_DIR% nu exista in proiect.
     echo Ruleaza intai START_8000.bat - va crea automat venv-ul.
@@ -205,6 +215,38 @@ echo.
 pause
 endlocal
 exit /b 0
+
+
+:git_autoupdate
+REM ============================================================
+REM Auto-update ROBUST din main (acelasi pattern ca START_8000.bat).
+REM Datele tale (best_methods.json, _ISTORIC, venv, .machine_profile) sunt
+REM gitignore -> NU se pierd la reset. Modificarile locale urmarite -> in stash.
+REM ============================================================
+echo [GIT] Verific actualizari cod de pe GitHub ^(main^)...
+REM OneDrive strica scrierea atomica in .git -> dezactivam appendAtomically.
+git config windows.appendAtomically false >nul 2>&1
+git fetch origin main --quiet 2>nul
+if errorlevel 1 (
+    echo [GIT] Offline / fetch esuat - continui cu codul curent.
+    goto :eof
+)
+git merge --ff-only origin/main >nul 2>&1
+if not errorlevel 1 (
+    echo [GIT] Cod la zi cu main.
+    goto :eof
+)
+echo [GIT] Fast-forward imposibil ^(divergenta / modificari locale^). Stare:
+git status -sb
+echo [GIT] Sincronizez FORTAT cu main ^(backup local in stash^)...
+git stash push -m "auto-backup ACTUALIZARI" >nul 2>&1
+git reset --hard origin/main >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Sincronizare fortata esuata - continui cu codul curent.
+) else (
+    echo [GIT] Sincronizat la zi cu main. Backup local: ruleaza 'git stash list'.
+)
+goto :eof
 
 
 :CleanGhosts
