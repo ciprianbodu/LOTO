@@ -1808,6 +1808,27 @@ def _render_hits_4plus(flat, game: str) -> None:
             rows=rows_pool,
         ).classes("w-full").props("dense")
 
+    # OMNIUS ≥4 (per-draw: biletul OMNIUS regenerat retroactiv la fiecare extragere)
+    rows_omni, seen_o = [], set()
+    for p in sorted(flat, key=lambda x: (getattr(x, "omnius_hits", 0), getattr(x, "draw_index", 0)), reverse=True):
+        oh = int(getattr(p, "omnius_hits", 0))
+        di = getattr(p, "draw_index", 0)
+        if oh >= 4 and di not in seen_o:
+            seen_o.add(di)
+            dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+            tk = getattr(p, "omnius_ticket", []) or []
+            tk_txt = " ".join(str(int(x)) for x in tk) if tk else "—"
+            rows_omni.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}",
+                              "hits": f"⭐ {oh}", "ticket": tk_txt})
+    if rows_omni:
+        ui.label(f"⭐ OMNIUS ≥4 numere nimerite ({len(rows_omni)} extrageri):").classes("text-bold text-caption mt-2")
+        ui.table(
+            columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                     {"name": "hits", "label": "Hits OMNIUS", "field": "hits", "align": "center"},
+                     {"name": "ticket", "label": "Bilet OMNIUS", "field": "ticket", "align": "right"}],
+            rows=rows_omni, pagination=15,
+        ).classes("w-full").props("dense")
+
     # Variante ≥4
     highs = [p for p in flat if getattr(p, "hits", 0) >= 4]
     if highs:
@@ -1833,7 +1854,7 @@ def _render_hits_4plus(flat, game: str) -> None:
             rows=rows_v, pagination=15,
         ).classes("w-full").props("dense")
 
-    if not rows_pool and not highs:
+    if not rows_pool and not highs and not rows_omni:
         ui.label("Nicio extragere cu ≥4 numere în istoricul walk-forward.").classes("text-caption text-grey")
 
 

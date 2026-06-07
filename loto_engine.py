@@ -797,7 +797,12 @@ class LotoEngine:
                     )
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
-        
+
+        # Snapshot READ-ONLY al scorurilor metodei câștigătoare (pt biletul OMNIUS
+        # retroactiv din walk-forward). NU afectează generarea pool-ului/variantelor
+        # — e doar o copie a dicționarului deja calculat. (regula bit-identitate OK)
+        self._last_pool_scores = {int(k): float(v) for k, v in (tfm_scores or {}).items()}
+
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
         self.audit['pipeline_stages'] = {

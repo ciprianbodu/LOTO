@@ -19,7 +19,7 @@ import hashlib
 import json
 import logging
 import pickle
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -31,7 +31,7 @@ from loto_enterprise.core.backtesting import scored_variant_numbers
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v3"  # v3: cheia include semnătura deciziei bench (scorer/sim_depth/BL)
+CACHE_VERSION = "v4"  # v4: flat-ul include omnius_hits/omnius_ticket per extragere
 
 
 @dataclass
@@ -43,6 +43,8 @@ class WalkForwardResult:
     hits: int
     hits_union: int  # cât din pool a nimerit per extragere
     target_draw_date: Optional[str] = None  # alias pt RetroactivePrediction
+    omnius_hits: int = 0  # cât a nimerit biletul OMNIUS la această extragere (per-draw)
+    omnius_ticket: List[int] = field(default_factory=list)  # biletul OMNIUS retroactiv
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -113,6 +115,8 @@ def expand_predictions_to_flat(
                 hits=hits,
                 hits_union=p.hits_union,
                 target_draw_date=p.target_draw_date,
+                omnius_hits=int(getattr(p, "omnius_hits", 0)),
+                omnius_ticket=list(getattr(p, "omnius_ticket", []) or []),
             ))
     return flat
 
