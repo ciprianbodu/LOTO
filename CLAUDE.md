@@ -40,7 +40,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - `method_selector.recommend_optimal_config(game_key, pool)` → metoda+sim_depth; cheie = `loto_6_49`/`loto_5_40`/`joker_urna1`, NU eticheta scurtă.
 
 ## Convenții / mediu
-- **O singură stație: ALF-LUPTATORI** (GPU NVIDIA). venv hardcodat `.venv_ALF-LUPTATORI`. Fără logică multi-stație.
+- **O singură stație: ALF-LUPTATORI** (GPU NVIDIA). venv hardcodat `.venv`. Fără logică multi-stație.
 - **Scrieri atomice** (`ui_shared.atomic_write_json`, tmp+fsync+os.replace) pt toate fișierele de stare JSON (OneDrive poate corupe la scriere parțială).
 - **Git: totul pe `main`.** Eu (asistent) push pe main; `START_8000.bat` face `git pull` automat la pornire. `best_methods.json`/`_ISTORIC`/`pool_history.json`/`raport_complet.txt` sunt gitignore.
 - ⚠️ Repo-ul e în OneDrive → `.git` poate fi corupt de sync. Recuperare: `git reset --hard HEAD && git pull origin main --no-edit`.

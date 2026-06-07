@@ -7,7 +7,7 @@ tabela, următorul job inserat primește din nou id = 1.
 refuză dacă există un job RUNNING (folosește --force ca să forțezi).
 
 Rulare:
-    .venv_ALF-LUPTATORI\\Scripts\\python reset_jobs.py
+    .venv\\Scripts\\python reset_jobs.py
 """
 from __future__ import annotations
 

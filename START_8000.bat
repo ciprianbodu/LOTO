@@ -28,8 +28,8 @@ echo.
 REM ===== Auto-update CSV extrageri (best-effort, silent) =====
 REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC/ fara sa
 REM blocheze pornirea (exit 0 mereu, chiar si la eroare de retea).
-if exist "%~dp0.venv_ALF-LUPTATORI\Scripts\python.exe" (
-    "%~dp0.venv_ALF-LUPTATORI\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
+if exist "%~dp0.venv\Scripts\python.exe" (
+    "%~dp0.venv\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
 )
 
 REM ===== Verify phase (silent, logat in fundal) =====
@@ -70,7 +70,7 @@ REM :verify_phase — verifica venv, detecteaza GPU, importa core/benchmark
 REM ============================================================
 :verify_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv_ALF-LUPTATORI"
+set "VENV_DIR=.venv"
 echo [1/4] Verificare Mediu Proiect (%VENV_DIR%)
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
@@ -150,7 +150,7 @@ REM :launch_phase — porneste worker + NiceGUI
 REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
-set "VENV_DIR=.venv_ALF-LUPTATORI"
+set "VENV_DIR=.venv"
 
 REM Re-aplica env vars din profil (sunt propagate in subprocese NiceGUI + worker)
 set "GPU_TYPE=NVIDIA"

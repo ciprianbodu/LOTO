@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-set VENV_DIR=.venv_ALF-LUPTATORI
+set VENV_DIR=.venv
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%CD%\%VENV_DIR%\Lib\site-packages
 set REQ_SNAPSHOT=requirements_snapshot.txt

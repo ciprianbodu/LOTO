@@ -13,7 +13,7 @@ walk-forward onestă.
 ## 🚀 Pornire
 
 Dublu-click pe **`START_8000.bat`** (sau în terminal). Face automat:
-1. Verifică mediul (venv `.venv_ALF-LUPTATORI`, GPU, importuri).
+1. Verifică mediul (venv `.venv`, GPU, importuri).
 2. **Trage automat ultimele actualizări de pe GitHub** (`git pull`).
 3. Oprește orice UI/worker vechi (eliberează portul 8000).
 4. Pornește worker-ul (fereastra „LOTO WORKER", minimizată) + UI-ul.

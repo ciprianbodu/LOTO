@@ -7,7 +7,7 @@ Citește bench_results/folds.csv (scris de runner la FINALUL bench-ului; coloana
 `rate_4plus` = fracția extragerilor în care pool-ul a prins ≥4 numere).
 
 Rulare:
-    .venv_ALF-LUPTATORI\\Scripts\\python analiza_4plus.py
+    .venv\\Scripts\\python analiza_4plus.py
 """
 from __future__ import annotations
 
