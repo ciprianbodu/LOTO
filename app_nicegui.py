@@ -1745,12 +1745,100 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         _render_bench_leaderboard_slice(df, folds_key, k_pool, sect, top_n=top_n)
 
 
-def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
-    """UN singur meniu global cu Clasamentul bench + Walk-forward pentru TOATE jocurile.
+def _render_bench_winner_only(game_label: str) -> None:
+    """Afișează doar metoda câștigătoare din bench pentru jocul dat."""
+    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
+    if not fp.exists():
+        return
+    try:
+        df = pd.read_csv(fp)
+    except Exception:
+        return
+    if df.empty or "method" not in df.columns or "game" not in df.columns:
+        return
+    pool = int(SETTINGS.get("pool_size_val", 10))
+    folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
+    if game_label == "joker":
+        folds_key = "joker_urna1"
+    sub = df[(df["game"] == folds_key) & (df.get("pool_k", df.get("pool", None)) == pool)] if "pool_k" in df.columns or "pool" in df.columns else df[df["game"] == folds_key]
+    metric = next((c for c in [f"rate_4plus_k{pool}", "rate_4plus"] if c in (sub.columns if not sub.empty else df.columns)), None)
+    if metric is None or sub.empty:
+        return
+    rows = []
+    for m, grp in sub.groupby("method"):
+        score = float(grp[metric].mean())
+        fam = ""
+        if "family" in grp.columns:
+            _f = grp["family"].dropna().astype(str)
+            fam = _f.iloc[0] if not _f.empty else ""
+        rows.append((m, score, _method_is_gpu(m, fam), _method_library(m, fam)))
+    if not rows:
+        return
+    rows.sort(key=lambda r: r[1], reverse=True)
+    w = rows[0]
+    tag = "⚡ GPU" if w[2] else "🖥️ CPU"
+    tag_cls = "text-deep-purple" if w[2] else "text-blue"
+    with ui.row().classes("items-center gap-2 mt-1"):
+        ui.label("🏆 Metodă câștigătoare:").classes("text-caption text-bold")
+        ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
+        ui.label(w[0]).classes("text-bold")
+        ui.label(f"· {w[3]} · 4+: {w[1]*100:.1f}%").classes("text-caption text-grey")
 
-    Le scoatem din cardurile per-joc (unde îngreunau citirea pool-urilor) și le strângem
-    aici, închis implicit. Așa rezultatele de jucat (pool + bilete) rămân curate.
-    """
+
+def _render_hits_4plus(flat, game: str) -> None:
+    """Afișează doar tabelul extragerilor cu ≥4 hits (pool și variante)."""
+    if not flat:
+        return
+    gk = _game_label_for(game)
+
+    # Pool ≥4
+    rows_pool, seen = [], set()
+    for p in sorted(flat, key=lambda x: (getattr(x, "hits_union", 0), getattr(x, "draw_index", 0)), reverse=True):
+        hu = getattr(p, "hits_union", 0)
+        di = getattr(p, "draw_index", 0)
+        if hu >= 4 and di not in seen:
+            seen.add(di)
+            dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+            rows_pool.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}", "hits": f"🔥 {hu}"})
+    if rows_pool:
+        ui.label(f"🎯 Pool ≥4 numere nimerite ({len(rows_pool)} extrageri):").classes("text-bold text-caption mt-2")
+        ui.table(
+            columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                     {"name": "hits", "label": "Numere în pool", "field": "hits", "align": "center"}],
+            rows=rows_pool,
+        ).classes("w-full").props("dense")
+
+    # Variante ≥4
+    highs = [p for p in flat if getattr(p, "hits", 0) >= 4]
+    if highs:
+        pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
+        agg: dict = {}
+        for p in highs:
+            dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+            lbl = str(dd) if dd and str(dd) != "None" else f"#{getattr(p, 'draw_index', 0)}"
+            key = (lbl, int(p.hits))
+            agg[key] = agg.get(key, 0) + 1
+        rows_v = []
+        for (draw, h), cnt in sorted(agg.items(), key=lambda kv: (kv[0][1], kv[1]), reverse=True):
+            prize = pm.get(h, 0)
+            rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete",
+                           "prize": f"~{prize:,} Lei/bilet"})
+        n_draws = len({d for d, _ in agg})
+        ui.label(f"🎯 Bilete câștigătoare ≥4 ({n_draws} extrageri):").classes("text-bold text-caption mt-2")
+        ui.table(
+            columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                     {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
+                     {"name": "n", "label": "Bilete", "field": "n", "align": "center"},
+                     {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "right"}],
+            rows=rows_v, pagination=15,
+        ).classes("w-full").props("dense")
+
+    if not rows_pool and not highs:
+        ui.label("Nicio extragere cu ≥4 numere în istoricul walk-forward.").classes("text-caption text-grey")
+
+
+def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
+    """Meniu global: metoda câștigătoare + istoric ≥4 hits per joc. Închis implicit."""
     has_folds = (PROJECT_ROOT / "bench_results" / "folds.csv").exists()
     has_wf = any(
         STATE["retro"].get(f"{res_prefix}{fn}_{g}")
@@ -1760,31 +1848,21 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
         return
 
     with ui.card().classes("w-full"):
-        with ui.expansion(
-            "📊 Analiză & Clasament — freshness · decizie · clasament · walk-forward",
-            value=False,
-        ).classes("w-full"):
-            ui.label("Strâns aici ca rezultatele de sus (pool-uri + bilete de jucat) să rămână "
-                     "curate. Deschide pentru detaliile de validare.").classes("text-caption text-grey")
-
-            # --- Freshness + Decizie benchmark + Matrice (era în Power-User) ---
-            analysis_panel()
-            ui.separator().classes("my-3")
-
+        with ui.expansion("📊 Analiză & Clasament", value=False).classes("w-full"):
             for fname, outs in results_bundle:
                 for game, data in _ordered_game_items(outs):
                     ui.separator().classes("my-3")
-                    ui.label(f"🎯 {game.upper()}  ·  {fname}").classes("text-bold text-lg")
+                    ui.label(f"🎯 {game.upper()}").classes("text-bold text-lg")
+
+                    # --- Top-10 CPU + GPU ---
                     _render_bench_leaderboard(game)
-                    # Walk-forward pe faza principală (phase1 când e auto-invert, altfel data)
+
+                    # --- Istoric ≥4 hits ---
                     main = (data.get("phase1")
                             if (data.get("auto_invert") and data.get("phase1")) else data)
                     flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
                     if flat:
-                        _bw = (main.get("audit") or {}).get("bench_winner") or {}
-                        _wm = next((info.get("method") for info in _bw.values()
-                                    if info.get("method")), "")
-                        _render_walk_forward(flat, game, is_invert=False, method=_wm)
+                        _render_hits_4plus(flat, game)
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
