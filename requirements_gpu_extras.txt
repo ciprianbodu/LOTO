@@ -20,8 +20,9 @@
 # Dep-urile reale (lightning, utilsforecast, coreforecast) sunt instalate separat.
 utilsforecast
 coreforecast
-# lightning<2.6.0: neuralforecast 3.x cere pytorch-lightning<2.6.0 (acelasi pachet, alias)
-lightning>=2.0,<2.6.0
+# neuralforecast 3.x cere pytorch-lightning<2.6.0 (pachetul CLASIC, nu umbrella 'lightning').
+# Pachetul 'lightning' aduce pytorch-lightning 2.6.x = conflict. Instalam direct clasicul.
+pytorch-lightning>=2.0.0,<2.6.0
 
 # GPU-accelerated boosting (CatBoost are wheel cu suport CUDA inclus by default;
 # pentru XGBoost/LightGBM GPU sunt wheels separate, dar pe Windows merg si din
