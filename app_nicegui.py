@@ -1787,11 +1787,17 @@ def _render_bench_winner_only(game_label: str) -> None:
 
 
 def _parse_draw_date(s):
-    """Parsează 'dd-mm-yyyy' → date. None dacă nu se poate (ex. eticheta '#index')."""
-    try:
-        return _dt.strptime(str(s).strip(), "%d-%m-%Y").date()
-    except Exception:  # noqa: BLE001
-        return None
+    """Parsează data unei extrageri → date. Acceptă dd-mm-yyyy sau yyyy-mm-dd.
+    None dacă nu se poate (ex. eticheta '#index')."""
+    raw = str(s).strip()
+    # taie partea de oră dacă există (ex. '2025-04-27 00:00:00')
+    raw = raw.split(" ")[0].split("T")[0]
+    for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return _dt.strptime(raw, fmt).date()
+        except Exception:  # noqa: BLE001
+            continue
+    return None
 
 
 def _gap_days_map(date_strs):
@@ -1899,6 +1905,78 @@ def _render_hits_4plus(flat, game: str) -> None:
         ui.label("Nicio extragere cu ≥4 numere în istoricul walk-forward.").classes("text-caption text-grey")
 
 
+# Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
+_DUE_WARN_RATIO = 0.8
+
+
+def _due_status(flat) -> dict | None:
+    """Status 'due' pentru hit-urile ≥4 pe POOL ale unui joc.
+
+    Întoarce dict cu: avg (interval mediu zile), last (data ultimului ≥4),
+    days_since (zile de la ultimul ≥4 până AZI), ratio (days_since/avg), n (nr hituri).
+    None dacă nu sunt destule date (<2 hituri ≥4 cu dată validă)."""
+    dates = sorted({
+        _parse_draw_date(getattr(p, "draw_date", getattr(p, "target_draw_date", None)))
+        for p in flat if int(getattr(p, "hits_union", 0)) >= 4
+    } - {None})
+    if len(dates) < 2:
+        return None
+    gaps = [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
+    avg = sum(gaps) / len(gaps)
+    last = dates[-1]
+    days_since = (_dt.now().date() - last).days
+    ratio = (days_since / avg) if avg > 0 else 0.0
+    return {"avg": avg, "last": last, "days_since": days_since, "ratio": ratio, "n": len(dates)}
+
+
+def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
+    """Banner + notificare când timpul de la ultimul ≥4 se apropie/depășește media.
+    Memento informativ — NU schimbă șansele (loteria e aleatoare)."""
+    flat_games = [
+        (fname, game, data)
+        for fname, outs in results_bundle
+        for game, data in outs.items()
+    ]
+    flat_games.sort(key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99))
+
+    alerts = []
+    for fname, game, _data in flat_games:
+        flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
+        if not flat:
+            continue
+        st = _due_status(flat)
+        if st and st["ratio"] >= _DUE_WARN_RATIO:
+            alerts.append((game, st))
+
+    if not alerts:
+        return
+
+    with ui.card().classes("w-full").style("background:#3b0764;border:1px solid #f59e0b"):
+        ui.html("🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥4</b>")
+        for game, st in alerts:
+            if st["ratio"] >= 1.0:
+                lvl, col = "🔴 ÎNTÂRZIAT", "#fca5a5"
+            else:
+                lvl, col = "🟡 SE APROPIE", "#fde68a"
+            ui.html(
+                f"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
+                f"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥4 "
+                f"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{st['avg']:.0f}</b> zile "
+                f"(<b>{st['ratio']*100:.0f}%</b> din interval)."
+            )
+        ui.html("<span style='opacity:.6;font-size:.8em'>⚠️ Loteria e aleatoare — "
+                "„întârzierea\" NU crește șansele. E doar un memento de acoperire, "
+                "nu o predicție.</span>")
+
+    # Notificare transientă (pop-up) la randarea rezultatelor.
+    try:
+        names = ", ".join(g.upper() for g, _ in alerts)
+        ui.notify(f"🔔 Se apropie media de ≥4: {names} — vezi alerta de sus.",
+                  type="warning", position="top", timeout=10000, close_button=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
     """Meniu global: metoda câștigătoare + istoric ≥4 hits per joc. Închis implicit."""
     has_folds = (PROJECT_ROOT / "bench_results" / "folds.csv").exists()
@@ -1936,6 +2014,9 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
+    # 0) Alertă „se apropie media de ≥4" — sus de tot, vizibilă imediat.
+    _render_due_alerts(results_bundle, res_prefix)
+
     # 1) Meniu global analiză — sus, închis implicit.
     _render_analysis_menu(results_bundle, res_prefix)
 
