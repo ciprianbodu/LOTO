@@ -36,10 +36,15 @@ if errorlevel 1 (
 echo.
 
 if not exist "%VENV_PY%" (
-    echo [EROARE] Mediul virtual %VENV_DIR% nu exista in proiect.
-    echo Ruleaza intai START_8000.bat - va crea automat venv-ul.
-    pause
-    exit /b 1
+    echo [INFO] Venv lipsa la %VENV_DIR% — il creez acum cu py -3.14...
+    if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
+    py -3.14 -m venv "%VENV_DIR%"
+    if errorlevel 1 (
+        echo [EROARE] Creare venv esuata. Verifica ca Python 3.14 e instalat ^(py -3.14 --version^).
+        pause
+        exit /b 1
+    )
+    echo [OK] Venv creat la %VENV_DIR%.
 )
 
 REM ============================================================
