@@ -206,6 +206,13 @@ echo [2/4] Verificare PyTorch + CUDA + foundation + NeuralForecast...
 "%VENV_PY%" verifica_mediu.py
 echo.
 
+echo [2b/4] Descarcare extrageri noi din loto49.ro...
+"%VENV_PY%" "%~dp0update_csv.py"
+if errorlevel 1 (
+    echo [WARN] update_csv.py a esuat ^(offline?^) - continui cu istoricul existent.
+)
+echo.
+
 echo [3/4] Verificare freshness best_methods.json...
 "%VENV_PY%" -c "import sys; sys.path.insert(0, '.'); from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation; r = check_freshness(); print('Overall recommendation:', aggregate_recommendation(r)); [print(f'  {gk}: {rep.status} (delta {rep.row_delta_pct:.1f}%%)') for gk, rep in r.items()]" 2>nul
 if errorlevel 1 (
