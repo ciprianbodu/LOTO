@@ -1696,7 +1696,7 @@ def _render_bench_leaderboard_slice(
             ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
 
     title = f"🏆 Clasament bench — {section_label} (CPU + GPU · {label})"
-    with ui.expansion(title, value=False).classes("w-full"):
+    with ui.expansion(title, value=True).classes("w-full"):
         ui.label(f"Câștigător GLOBAL (toate metodele): {winner[0]} "
                  f"({'⚡ GPU' if winner[3] else '🖥️ CPU'} · {winner[4]}).").classes(
             "text-caption text-bold text-positive")
