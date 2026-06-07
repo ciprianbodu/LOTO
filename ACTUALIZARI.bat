@@ -376,18 +376,17 @@ if errorlevel 1 (
 )
 
 echo.
-echo   Migrare pytorch_lightning -> lightning (pachet unificat ^>=2.0^)...
-REM neuralforecast^>=2.0 foloseste 'lightning', nu 'pytorch_lightning' vechi.
-REM Daca ambele sunt instalate, import-ul esueaza cu:
-REM   AttributeError: module 'pytorch_lightning.utilities' has no attribute 'distributed'
-REM Dezinstalam pytorch_lightning vechi ca sa nu mai fie conflict.
-"%VENV_PY%" -m pip show pytorch_lightning >nul 2>&1
+echo   Curatare pachet 'lightning' umbrella ^(aduce pytorch-lightning prea nou^)...
+REM neuralforecast 3.x cere pytorch-lightning<2.6.0 (pachetul CLASIC). Pachetul
+REM umbrella 'lightning' aduce pytorch-lightning 2.6.x = conflict. Il dezinstalam
+REM ca sa ramana DOAR pytorch-lightning<2.6.0 (instalat din requirements_gpu_extras).
+"%VENV_PY%" -m pip show lightning >nul 2>&1
 if not errorlevel 1 (
-    echo   - Gasit pytorch_lightning vechi. Dezinstalez...
-    "%VENV_PY%" -m pip uninstall -y pytorch_lightning >nul 2>&1
-    echo   [OK] pytorch_lightning vechi sters ^(lightning>=2.0 vine din neuralforecast deps^).
+    echo   - Gasit pachet umbrella 'lightning'. Dezinstalez ^(pastram pytorch-lightning clasic^)...
+    "%VENV_PY%" -m pip uninstall -y lightning >nul 2>&1
+    echo   [OK] 'lightning' umbrella sters.
 ) else (
-    echo   [OK] pytorch_lightning vechi absent - niciun conflict.
+    echo   [OK] 'lightning' umbrella absent - niciun conflict.
 )
 
 echo.
