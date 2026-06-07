@@ -343,11 +343,13 @@ REM orice masina. Absenta GPU se trateaza la runtime (modulele GPU sunt sarite).
 echo [1c] Instalez stack-ul complet: torch+cu128 + librarii GPU active...
 echo.
 
-REM Verificam BUILD TAG-ul torch (+cu...), NU cuda.is_available(): pe o masina
-REM FARA GPU fizic, torch+cu128 e corect instalat dar cuda.is_available()=False
-REM -> altfel am reinstala ~2 GB la FIECARE rulare. Tag-ul spune daca wheel-ul e bun.
+REM Verificam BUILD TAG-ul torch (+cu...) din METADATA pip, NU prin `import torch`:
+REM importul poate esua din motive runtime (DLL CUDA corupt OneDrive, ABI numpy
+REM dupa update-ul din [1b]) -> TORCH_BUILD gol -> reinstala ~2 GB INUTIL la
+REM fiecare rulare. `pip show` citeste doar metadata (rapid, nu incarca CUDA) si
+REM Version include tag-ul build (ex: 2.11.0+cu128).
 set "TORCH_BUILD="
-for /f "delims=" %%V in ('"%VENV_PY%" -c "import torch; print(torch.__version__)" 2^>nul') do set "TORCH_BUILD=%%V"
+for /f "tokens=2" %%V in ('"%VENV_PY%" -m pip show torch 2^>nul ^| findstr /B /C:"Version:"') do set "TORCH_BUILD=%%V"
 echo   torch instalat acum: !TORCH_BUILD!
 
 echo !TORCH_BUILD! | findstr /C:"+cu" >nul 2>&1
