@@ -1849,20 +1849,28 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
 
     with ui.card().classes("w-full"):
         with ui.expansion("📊 Analiză & Clasament", value=False).classes("w-full"):
-            for fname, outs in results_bundle:
-                for game, data in _ordered_game_items(outs):
-                    ui.separator().classes("my-3")
-                    ui.label(f"🎯 {game.upper()}").classes("text-bold text-lg")
+            # Aplatizăm toate jocurile din toate fișierele și le sortăm GLOBAL: 6/49, Joker, 5/40.
+            flat_games = [
+                (fname, game, data)
+                for fname, outs in results_bundle
+                for game, data in outs.items()
+            ]
+            flat_games.sort(
+                key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99)
+            )
+            for fname, game, data in flat_games:
+                ui.separator().classes("my-3")
+                ui.label(f"🎯 {game.upper()}").classes("text-bold text-lg")
 
-                    # --- Top-10 CPU + GPU ---
-                    _render_bench_leaderboard(game)
+                # --- Top-10 CPU + GPU ---
+                _render_bench_leaderboard(game)
 
-                    # --- Istoric ≥4 hits ---
-                    main = (data.get("phase1")
-                            if (data.get("auto_invert") and data.get("phase1")) else data)
-                    flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-                    if flat:
-                        _render_hits_4plus(flat, game)
+                # --- Istoric ≥4 hits ---
+                main = (data.get("phase1")
+                        if (data.get("auto_invert") and data.get("phase1")) else data)
+                flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
+                if flat:
+                    _render_hits_4plus(flat, game)
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
@@ -1870,7 +1878,15 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
     _render_analysis_menu(results_bundle, res_prefix)
 
     # 2) Pool-urile per joc — DOAR pool + bilete de jucat (fără clasament/walk-forward).
-    for fname, outs in results_bundle:
+    #    Sortăm fișierele după joc (6/49, Joker, 5/40), nu după ordinea de încărcare.
+    ordered_bundle = sorted(
+        results_bundle,
+        key=lambda fo: min(
+            (_GAME_DISPLAY_ORDER.get(_game_label_for(str(g)), 99) for g in fo[1]),
+            default=99,
+        ),
+    )
+    for fname, outs in ordered_bundle:
         with ui.card().classes("w-full"):
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, data in _ordered_game_items(outs):
