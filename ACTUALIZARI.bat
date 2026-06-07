@@ -207,10 +207,19 @@ echo [2/4] Verificare PyTorch + CUDA + foundation + NeuralForecast...
 echo.
 
 echo [2b/4] Descarcare extrageri noi din loto49.ro...
-"%VENV_PY%" "%~dp0update_csv.py"
-if errorlevel 1 (
-    echo [WARN] update_csv.py a esuat ^(offline?^) - continui cu istoricul existent.
+set "UPDATE_LOG=%TEMP%\loto_update_%RANDOM%.log"
+"%VENV_PY%" "%~dp0update_csv.py" > "%UPDATE_LOG%" 2>&1
+type "%UPDATE_LOG%"
+findstr /C:"extrageri noi" "%UPDATE_LOG%" >nul 2>&1
+if not errorlevel 1 (
+    powershell -NoProfile -Command "Write-Host '[OK] Extrageri noi descarcate si adaugate in _ISTORIC/.' -ForegroundColor Green"
+) else (
+    findstr /C:"EROARE" "%UPDATE_LOG%" >nul 2>&1
+    if not errorlevel 1 (
+        echo [WARN] update_csv.py a intampinat erori ^(offline?^) - continui cu istoricul existent.
+    )
 )
+del "%UPDATE_LOG%" >nul 2>&1
 echo.
 
 echo [3/4] Verificare freshness best_methods.json...
