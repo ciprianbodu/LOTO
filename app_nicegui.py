@@ -1788,7 +1788,10 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
-    # 1) Pool-urile per joc — DOAR pool + bilete de jucat (fără clasament/walk-forward).
+    # 1) Meniu global analiză — sus, închis implicit.
+    _render_analysis_menu(results_bundle, res_prefix)
+
+    # 2) Pool-urile per joc — DOAR pool + bilete de jucat (fără clasament/walk-forward).
     for fname, outs in results_bundle:
         with ui.card().classes("w-full"):
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
@@ -1824,8 +1827,6 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                     else:
                         _render_pool_body(fname, game, data, with_wf=False, res_prefix=res_prefix)
 
-    # 2) UN meniu global cu toată analiza (clasament + walk-forward), închis implicit.
-    _render_analysis_menu(results_bundle, res_prefix)
 
 
 def _render_matrix_html(matrix) -> None:
