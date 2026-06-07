@@ -5,7 +5,6 @@ cd /d "%~dp0"
 set VENV_DIR=.venv_ALF-LUPTATORI
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%CD%\%VENV_DIR%\Lib\site-packages
-set BACKUP_DIR=.venv_ALF-LUPTATORI_backup
 set REQ_SNAPSHOT=requirements_snapshot.txt
 
 echo ============================================================
@@ -40,7 +39,7 @@ if "%VENV_VER%"=="%SYS_VER%" (
 echo.
 echo   [INFO] Versiune Python diferita detectata pe sistem.
 echo          Doresti sa migrezi venv-ul de la %VENV_VER% la %SYS_VER%?
-echo          (Pastreaza TOATE pachetele in versiuni identice; backup automat.)
+echo          (Pastreaza TOATE pachetele in versiuni identice; FARA backup venv.)
 echo.
 choice /C YN /M "Upgrade Python venv "
 if errorlevel 2 goto :skip_python_upgrade
@@ -57,20 +56,19 @@ REM Snapshot pachete instalate
 echo   Snapshot pachete -^> %REQ_SNAPSHOT%
 "%VENV_PY%" -m pip freeze > "%REQ_SNAPSHOT%"
 
-REM Backup venv vechi
-if exist "%BACKUP_DIR%" rmdir /s /q "%BACKUP_DIR%"
-ren "%VENV_DIR%" "%BACKUP_DIR:~1%"
-if errorlevel 1 (
-    echo   [EROARE] Backup esuat. Abandonez upgrade.
+REM Sterg venv-ul vechi DIRECT (fara backup - ai cerut sa nu mai ramana .._backup).
+REM Snapshot-ul de mai sus + reinstall-ul recreeaza acelasi mediu in venv-ul nou.
+echo   Sterg venv vechi: %VENV_DIR%
+rmdir /s /q "%VENV_DIR%"
+if exist "%VENV_DIR%" (
+    echo   [EROARE] Nu pot sterge venv-ul vechi ^(procese active inca?^). Abandonez upgrade.
     goto :skip_python_upgrade
 )
 
 REM Creez venv nou cu cea mai noua 3.11.x
 py -3.11 -m venv "%VENV_DIR%"
 if errorlevel 1 (
-    echo   [EROARE] Creare venv nou esuata. Restore backup...
-    rmdir /s /q "%VENV_DIR%" 2>nul
-    ren "%BACKUP_DIR%" "%VENV_DIR:~1%"
+    echo   [EROARE] Creare venv nou esuata. Ruleaza din nou ACTUALIZARI.bat.
     goto :skip_python_upgrade
 )
 "%VENV_PY%" --version
@@ -80,14 +78,13 @@ echo   Reinstall pip + pachete IDENTIC din snapshot (poate dura 5-15 min)...
 "%VENV_PY%" -m pip install --upgrade pip --quiet
 "%VENV_PY%" -m pip install --prefer-binary -r "%REQ_SNAPSHOT%"
 if errorlevel 1 (
-    echo   [ATENTIE] Reinstall partial esuat. Backup pastrat la %BACKUP_DIR%.
-    echo   Revert: rmdir /s /q "%VENV_DIR%" ^& ren "%BACKUP_DIR%" "%VENV_DIR:~1%"
+    echo   [ATENTIE] Reinstall partial esuat. Ruleaza din nou ACTUALIZARI.bat ca sa completeze.
     pause
     exit /b 1
 )
 
 echo.
-echo   [OK] Upgrade Python complet. Backup: %BACKUP_DIR% (sterge dupa verificare).
+echo   [OK] Upgrade Python complet ^(fara backup venv^).
 echo.
 
 :skip_python_upgrade
