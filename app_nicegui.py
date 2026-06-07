@@ -137,6 +137,19 @@ def _game_label_for(fname: str) -> str:
     return "6/49"
 
 
+# Ordinea de AFIȘARE a jocurilor în UI / rapoarte: 6/49 primul, Joker al doilea, 5/40 al treilea.
+# (Independentă de ordinea în care s-au încărcat fișierele/dataset-urile.)
+_GAME_DISPLAY_ORDER = {"6/49": 0, "joker": 1, "5/40": 2}
+
+
+def _ordered_game_items(outs):
+    """Items din `outs` ordonate pentru afișare: 6/49, Joker, 5/40."""
+    return sorted(
+        outs.items(),
+        key=lambda kv: _GAME_DISPLAY_ORDER.get(_game_label_for(str(kv[0])), 99),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Submit job (contract config_json identic cu app.py)
 # --------------------------------------------------------------------------- #
@@ -571,7 +584,7 @@ def _start_walk_forward() -> None:
                 df_source = ds_by_name.get(fname)
                 if df_source is None:
                     continue
-                for g_label, data in outs.items():
+                for g_label, data in _ordered_game_items(outs):
                     done += 1
                     base = (done - 1) / max(1, total)
                     STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
@@ -1176,7 +1189,7 @@ def _build_report() -> str:
 
     for fn, outs in rb:
         out.append(f"\n{'#'*72}\nFIȘIER: {fn}\n{'#'*72}")
-        for g, d in outs.items():
+        for g, d in _ordered_game_items(outs):
             out.append(f"\n=================  JOC: {g.upper()}  =================")
             flat = STATE["retro"].get(f"{fn}_{g}")
             if d.get("auto_invert") and d.get("phase1"):
@@ -1654,7 +1667,7 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
     for fname, outs in results_bundle:
         with ui.card().classes("w-full"):
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
-            for game, data in outs.items():
+            for game, data in _ordered_game_items(outs):
                 with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
                     _render_bench_leaderboard(game)
                     if data.get("auto_invert") and data.get("phase1"):
