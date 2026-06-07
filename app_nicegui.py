@@ -1745,19 +1745,56 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         _render_bench_leaderboard_slice(df, folds_key, k_pool, sect, top_n=top_n)
 
 
+def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
+    """UN singur meniu global cu Clasamentul bench + Walk-forward pentru TOATE jocurile.
+
+    Le scoatem din cardurile per-joc (unde îngreunau citirea pool-urilor) și le strângem
+    aici, închis implicit. Așa rezultatele de jucat (pool + bilete) rămân curate.
+    """
+    has_folds = (PROJECT_ROOT / "bench_results" / "folds.csv").exists()
+    has_wf = any(
+        STATE["retro"].get(f"{res_prefix}{fn}_{g}")
+        for fn, outs in results_bundle for g, _ in outs.items()
+    )
+    if not (has_folds or has_wf):
+        return
+
+    with ui.card().classes("w-full"):
+        with ui.expansion(
+            "📊 Analiză & Clasament — clasament bench + walk-forward (toate jocurile)",
+            value=False,
+        ).classes("w-full"):
+            ui.label("Strâns aici ca rezultatele de sus (pool-uri + bilete de jucat) să rămână "
+                     "curate. Deschide pentru detaliile de validare.").classes("text-caption text-grey")
+            for fname, outs in results_bundle:
+                for game, data in _ordered_game_items(outs):
+                    ui.separator().classes("my-3")
+                    ui.label(f"🎯 {game.upper()}  ·  {fname}").classes("text-bold text-lg")
+                    _render_bench_leaderboard(game)
+                    # Walk-forward pe faza principală (phase1 când e auto-invert, altfel data)
+                    main = (data.get("phase1")
+                            if (data.get("auto_invert") and data.get("phase1")) else data)
+                    flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
+                    if flat:
+                        _bw = (main.get("audit") or {}).get("bench_winner") or {}
+                        _wm = next((info.get("method") for info in _bw.values()
+                                    if info.get("method")), "")
+                        _render_walk_forward(flat, game, is_invert=False, method=_wm)
+
+
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
+    # 1) Pool-urile per joc — DOAR pool + bilete de jucat (fără clasament/walk-forward).
     for fname, outs in results_bundle:
         with ui.card().classes("w-full"):
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, data in _ordered_game_items(outs):
                 with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
-                    _render_bench_leaderboard(game)
                     if data.get("auto_invert") and data.get("phase1"):
                         # AUTO-INVERT → DOUĂ pool-uri de jucat:
-                        ui.label("🟢 POOL 1 — normal (pe date, cu validare walk-forward)").classes(
+                        ui.label("🟢 POOL 1 — normal (pe date; validat istoric — vezi 📊 Analiză)").classes(
                             "text-bold text-positive text-lg mt-1")
                         ui.label("Pariul principal: pool-ul validat istoric.").classes("text-caption")
-                        _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=True, res_prefix=res_prefix)
+                        _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=False, res_prefix=res_prefix)
 
                         ui.separator().classes("my-3")
                         # Inversare neaplicată? (pool prea mare → Pool 2 = Pool 1)
@@ -1780,7 +1817,10 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                                  "Fără backtest/validare, intenționat.").classes("text-caption")
                         _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False, res_prefix=res_prefix)
                     else:
-                        _render_pool_body(fname, game, data, with_wf=True, res_prefix=res_prefix)
+                        _render_pool_body(fname, game, data, with_wf=False, res_prefix=res_prefix)
+
+    # 2) UN meniu global cu toată analiza (clasament + walk-forward), închis implicit.
+    _render_analysis_menu(results_bundle, res_prefix)
 
 
 def _render_matrix_html(matrix) -> None:
