@@ -215,6 +215,10 @@ if not errorlevel 1 (
     echo [WARN] update_csv.py a intampinat erori ^(offline?^) - continui cu istoricul existent.
 )
 del "%UPDATE_LOG%" >nul 2>&1
+
+REM Auto-commit + push extrageri noi din _ISTORIC pe GitHub (best-effort).
+where git >nul 2>&1
+if not errorlevel 1 call :push_istoric
 echo.
 
 echo [3/4] Verificare freshness best_methods.json...
@@ -274,6 +278,30 @@ if errorlevel 1 (
     echo [GIT] Sincronizare fortata esuata - continui cu codul curent.
 ) else (
     echo [GIT] Sincronizat la zi cu main. Backup local: ruleaza 'git stash list'.
+)
+goto :eof
+
+
+:push_istoric
+REM ============================================================
+REM Auto-commit + push al extragerilor noi din _ISTORIC/ (best-effort).
+REM Ruleaza DUPA update_csv.py. Daca nu sunt modificari -> nimic. Daca push-ul
+REM esueaza (offline) -> commit-ul ramane local si se reincearca data viitoare.
+REM ============================================================
+git config windows.appendAtomically false >nul 2>&1
+git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] _ISTORIC fara modificari - nimic de comis.
+    goto :eof
+)
+echo [GIT] Extrageri noi in _ISTORIC - commit + push pe GitHub...
+git add _ISTORIC >nul 2>&1
+git commit -m "auto: update istoric extrageri (%DATE%)" >nul 2>&1
+git push origin HEAD >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Push _ISTORIC esuat ^(offline?^) - se reincearca la urmatoarea rulare.
+) else (
+    echo [GIT] _ISTORIC pushat pe GitHub.
 )
 goto :eof
 

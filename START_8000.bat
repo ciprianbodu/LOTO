@@ -35,6 +35,12 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
     "%VENV_DIR%\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
 )
 
+REM ===== Auto-commit + push extrageri noi din _ISTORIC (best-effort) =====
+REM Daca update_csv a adaugat extrageri noi, le urcam pe GitHub ca sa fie
+REM versionate si sincronizate pe orice masina (+ vizibile pentru analiza).
+where git >nul 2>&1
+if not errorlevel 1 call :push_istoric >> "%LOGFILE%" 2>&1
+
 REM ===== Verify phase (silent, logat in fundal) =====
 call :verify_phase >> "%LOGFILE%" 2>&1
 set "VERIFY_RC=%ERRORLEVEL%"
@@ -267,5 +273,30 @@ if errorlevel 1 (
     echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
 ) else (
     echo [GIT] Sincronizat la zi cu GitHub. Backup local: ruleaza 'git stash list'.
+)
+goto :eof
+
+
+:push_istoric
+REM ============================================================
+REM Auto-commit + push al extragerilor noi din _ISTORIC/ (best-effort).
+REM Ruleaza DUPA update_csv.py. Daca nu sunt modificari -> nimic. Daca push-ul
+REM esueaza (offline) -> commit-ul ramane local si se reincearca data viitoare.
+REM ============================================================
+git config windows.appendAtomically false >nul 2>&1
+REM Exista modificari in _ISTORIC (fisiere noi/modificate)?
+git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] _ISTORIC fara modificari - nimic de comis.
+    goto :eof
+)
+echo [GIT] Extrageri noi in _ISTORIC - commit + push pe GitHub...
+git add _ISTORIC >nul 2>&1
+git commit -m "auto: update istoric extrageri (%DATE%)" >nul 2>&1
+git push origin HEAD >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Push _ISTORIC esuat ^(offline?^) - se reincearca la urmatoarea pornire.
+) else (
+    echo [GIT] _ISTORIC pushat pe GitHub.
 )
 goto :eof
