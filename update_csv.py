@@ -18,6 +18,14 @@ import re
 import sys
 import tempfile
 from datetime import date, datetime
+
+# Consola Windows e cp1252 by default -> diacriticele (ă, î) arunca UnicodeEncodeError.
+# Reconfiguram stdout/stderr pe UTF-8 cu fallback 'replace' ca sa nu mai crape.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
