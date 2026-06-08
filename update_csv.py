@@ -203,64 +203,52 @@ def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_mai
 
 def update_all() -> int:
     """Verifică și actualizează toate jocurile. Returnează numărul total de rânduri adăugate."""
+    from datetime import timedelta
     istoric_dir = _find_istoric_dir()
     if not istoric_dir:
         print("[UPDATE-CSV] Folderul _ISTORIC/ nu există — skip.")
         return 0
 
     total_added = 0
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    print(f"[UPDATE-CSV] Data curentă: {today.strftime('%d-%m-%Y')}")
 
     for game_key, cfg in GAME_CONFIGS.items():
         csv_path = istoric_dir / cfg["csv_name"]
         last = _last_date_in_csv(csv_path)
+        last_str = last.strftime("%d-%m-%Y") if last else "N/A"
 
-        # Decidem dacă verificăm: forțat SAU CSV lipsă SAU ultima dată < ieri
-        yesterday = date.today().replace(day=date.today().day - 1) if date.today().day > 1 else date.today()
-        try:
-            from datetime import timedelta
-            yesterday = date.today() - timedelta(days=1)
-        except Exception:
-            yesterday = date.today()
-
-        if not _FORCE and last and last >= yesterday:
-            if _VERBOSE:
-                print(f"[{cfg['display_name']}] La zi ({last}) — skip.")
-            continue
-
-        if _VERBOSE:
-            print(f"[{cfg['display_name']}] Ultima dată în CSV: {last or 'N/A'} — fetch...")
-        else:
-            print(f"[UPDATE-CSV] {cfg['display_name']}: verificare extrageri noi...", end=" ", flush=True)
-
+        # Fetch MEREU site-ul ca să raportăm ultima extragere reală (best-effort).
+        site_last = None
+        new_draws = []
         try:
             text = _get_page_text(cfg["recent_url"])
-            new_draws = _extract_draws(text, cfg["num_main"], cfg["has_joker"], after=last)
+            all_draws = _extract_draws(text, cfg["num_main"], cfg["has_joker"], after=None)
+            if all_draws:
+                site_last = all_draws[-1]["date"]
+            # Doar extragerile mai noi decât CSV-ul nostru
+            new_draws = [d for d in all_draws if (last is None or d["date"] > last)]
+        except Exception as exc:
+            print(f"  {cfg['display_name']:<12}: CSV={last_str} | site=EROARE ({type(exc).__name__}) — continuă cu datele existente.")
+            continue
 
-            if not new_draws:
-                if _VERBOSE:
-                    print(f"[{cfg['display_name']}] Nicio extragere nouă.")
-                else:
-                    print("la zi.")
-                continue
+        site_str = site_last.strftime("%d-%m-%Y") if site_last else "N/A"
+        gap = (today - site_last).days if site_last else None
+        gap_str = f"{gap} zile în urmă" if gap is not None else "?"
 
+        if new_draws:
             _append_rows_atomic(csv_path, new_draws, cfg["has_joker"], cfg["num_main"])
             dates_str = ", ".join(r["date"].strftime("%d-%m-%Y") for r in new_draws)
-            if _VERBOSE:
-                print(f"[{cfg['display_name']}] +{len(new_draws)} extrageri: {dates_str}")
-            else:
-                print(f"+{len(new_draws)} extrageri noi ({new_draws[-1]['date'].strftime('%d-%m-%Y')}).")
+            print(f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} (azi: {gap_str}) | +{len(new_draws)} extrageri noi: {dates_str}")
             total_added += len(new_draws)
-
-        except Exception as exc:
-            if _VERBOSE:
-                print(f"[{cfg['display_name']}] EROARE (rețea/parsing): {exc}")
-            else:
-                print(f"EROARE ({type(exc).__name__}) — continuă cu datele existente.")
+        else:
+            print(f"  {cfg['display_name']:<12}: CSV={last_str} | site={site_str} (azi: {gap_str}) | la zi.")
 
     if total_added > 0:
-        print(f"[UPDATE-CSV] Total adăugate: {total_added} extrageri. CSV-urile din _ISTORIC/ sunt la zi.")
-    elif _VERBOSE:
-        print("[UPDATE-CSV] Toate jocurile sunt la zi.")
+        print(f"[UPDATE-CSV] Total adăugate: {total_added} extrageri noi. CSV-urile din _ISTORIC/ sunt la zi.")
+    else:
+        print("[UPDATE-CSV] Toate jocurile sunt la zi (nicio extragere nouă pe loto49.ro).")
 
     return total_added
 
