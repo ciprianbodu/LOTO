@@ -1840,6 +1840,21 @@ def _render_hits_4plus(flat, game: str) -> None:
         for r in rows_pool:
             r["gap"] = _fmt_gap(gap_p.get(r["draw"]))
         ui.label(f"🎯 Pool ≥4 numere nimerite ({len(rows_pool)} extrageri):").classes("text-bold text-caption mt-2")
+        # Sumar MEREU vizibil: media intervalului între hituri ≥4 + cât a trecut de la ultimul.
+        st = _due_status(flat)
+        if st:
+            if st["ratio"] >= 1.0:
+                col, lvl = "#fca5a5", "🔴 ÎNTÂRZIAT"
+            elif st["ratio"] >= _DUE_WARN_RATIO:
+                col, lvl = "#fde68a", "🟡 SE APROPIE"
+            else:
+                col, lvl = "#86efac", "🟢 recent"
+            ui.html(
+                f"<span style='font-size:.85em'>📈 Media între hituri ≥4: "
+                f"<b>{st['avg']:.0f}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
+                f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
+                f"<span style='color:{col}'>{lvl}</span>)</span>"
+            ).classes("mt-1")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "hits", "label": "Numere în pool", "field": "hits", "align": "center"},
