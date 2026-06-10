@@ -1362,6 +1362,20 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         ui.label(f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else ""))
         ui.label(f"Garanție: {data.get('guarantee')}")
         ui.label(f"Variante simple: {len(variants)}")
+        # Acoperirea REALĂ a garanției (set-cover). 100% = orice grup de
+        # `guarantee` numere prinse în pool apare garantat pe cel puțin un bilet.
+        # <100% = limita "Variante maxime" a TĂIAT garanția — avertizăm vizibil
+        # (altfel utilizatorul crede că are garanție 4/4 dar nu o are).
+        _cov = (data.get("context") or {}).get("coverage_pct")
+        if _cov is not None:
+            if float(_cov) >= 100.0:
+                ui.html(f"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>")
+            else:
+                ui.html(
+                    f"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
+                    f"<span style='opacity:.7'>(limita «Variante maxime» a tăiat garanția — "
+                    f"pune 0 = nelimitat pentru garanție completă)</span>"
+                )
         ui.label(f"Extrageri: {data.get('total_draws')}")
         # Indicator GPU vs CPU — din audit.compute_device (scris de worker, device-ul REAL folosit)
         _au = data.get("audit") or {}
