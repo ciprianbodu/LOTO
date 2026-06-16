@@ -407,7 +407,7 @@ def run_benchmark(
     # Importuri o singură dată (erau în buclă).
     import os as _os
     import hashlib as _hl
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
     try:
         from .bench_cache import compute_csv_hash, get_cached_fold, store_cached_fold
         _cache_ok = True
@@ -607,32 +607,66 @@ def run_benchmark(
     failed_tasks = []
 
     # ── Drenaj INTERLEAVED peste ambele pool-uri — rulează tot concurent (CPU ‖ GPU).
+    # WATCHDOG: un singur task GPU care se blocheaza (deadlock CUDA / driver hang —
+    # ex. un ensemble torch care inlantuie 5 modele intr-un singur worker) NU mai
+    # tine tot bench-ul ostatic. Folosim wait(FIRST_COMPLETED) cu un buget de timp:
+    # daca NIMIC nu se mai termina intr-o fereastra intreaga, declaram restul "hung",
+    # le abandonam si continuam cu folds-urile deja stranse (decizia tolereaza lipsuri).
+    # Pragul e pe INACTIVITATE totala, nu pe durata unui task — deci munca lenta dar
+    # care progreseaza NU e taiata. Configurabil prin LOTO_BENCH_STALL_TIMEOUT (sec).
+    _stall_timeout = float(_os.environ.get("LOTO_BENCH_STALL_TIMEOUT", "900"))  # 15 min fara NICIUN rezultat = hung
+    _hung = False
     if fut_kind:
         try:
-            for fut in as_completed(list(fut_kind.keys())):
-                kind, game, csv_hash, args = fut_kind[fut]
-                try:
-                    method, pct, is_random, fr, err = fut.result()
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("[%s] %s future a crăpat (%s) — programez re-rulare secvențială.",
-                                 game.key, kind, exc)
-                    failed_tasks.append((kind, args))
-                    continue
-                if err or fr is None:
-                    logger.error("[%s/%s] %s task failed: %s", game.key, method, kind, err)
-                    continue
-                # cache store în procesul principal (subprocesul de calcul nu-l face)
-                if _cache_ok and csv_hash is not None:
+            pending = set(fut_kind.keys())
+            while pending:
+                done, pending = wait(pending, timeout=_stall_timeout, return_when=FIRST_COMPLETED)
+                if not done:
+                    # Fereastra intreaga fara niciun rezultat -> restul e blocat.
+                    by_kind = {}
+                    for fut in pending:
+                        kind, game, csv_hash, args = fut_kind[fut]
+                        by_kind[kind] = by_kind.get(kind, 0) + 1
+                    logger.error(
+                        "[bench] WATCHDOG: %d task-uri fara niciun rezultat in %.0fs (%s) — "
+                        "le abandonez (probabil deadlock CUDA). Bench-ul continua cu folds-urile stranse.",
+                        len(pending), _stall_timeout,
+                        ", ".join(f"{k}={v}" for k, v in by_kind.items()),
+                    )
+                    for fut in pending:
+                        kind, game, csv_hash, args = fut_kind[fut]
+                        logger.error("[bench] HUNG abandonat: [%s/%s] task=%s", game.key, kind, args[0])
+                        fut.cancel()
+                    _hung = True
+                    pending = set()
+                    break
+                for fut in done:
+                    kind, game, csv_hash, args = fut_kind[fut]
                     try:
-                        store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
-                    except Exception:  # noqa: BLE001
-                        pass
-                _handle_result(game, method, pct, is_random, fr, False, kind)
+                        method, pct, is_random, fr, err = fut.result()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error("[%s] %s future a crăpat (%s) — programez re-rulare secvențială.",
+                                     game.key, kind, exc)
+                        failed_tasks.append((kind, args))
+                        continue
+                    if err or fr is None:
+                        logger.error("[%s/%s] %s task failed: %s", game.key, method, kind, err)
+                        continue
+                    # cache store în procesul principal (subprocesul de calcul nu-l face)
+                    if _cache_ok and csv_hash is not None:
+                        try:
+                            store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
+                        except Exception:  # noqa: BLE001
+                            pass
+                    _handle_result(game, method, pct, is_random, fr, False, kind)
         finally:
+            # La hang: NU asteptam workerii blocati (shutdown(wait=True) ar atarna la
+            # randul lui) — anulam si abandonam procesele (ies cand moare parintele).
+            _wait_clean = not _hung
             if _ex is not None:
-                _ex.shutdown(wait=True)
+                _ex.shutdown(wait=_wait_clean, cancel_futures=_hung)
             if _gex is not None:
-                _gex.shutdown(wait=True)
+                _gex.shutdown(wait=_wait_clean, cancel_futures=_hung)
 
     # Fallback secvenţial: (a) pool care n-a putut porni, (b) task-uri cu future crăpat.
     if _ex is None and all_cpu_compute:
