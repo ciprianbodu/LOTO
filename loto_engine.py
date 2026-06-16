@@ -2383,32 +2383,41 @@ class LotoEngine:
             hit_target, hit_high, hit_max = 3, 4, 5
             w_target, w_high, w_max = 8, 35, 140
 
-        def _score_on_sets(test_set, target_sets):
-            """Scoring game-aware pentru un set de extrageri."""
-            total = 0
-            target_hits = 0
-            high_hits = 0
-            max_hits = 0
-            score = 0
-            for ds in target_sets:
-                overlap = len(test_set & ds)
-                total += overlap
-                if overlap >= hit_target:
-                    target_hits += 1
-                    score += w_target
-                if overlap >= hit_high:
-                    high_hits += 1
-                    score += w_high
-                if overlap >= hit_max:
-                    max_hits += 1
-                    score += w_max
+        # Vectorizat: overlap-urile pe toate extragerile dintr-o fereastra se obtin
+        # cu un singur produs matrice-vector (B @ indicator), in loc de intersectii
+        # de seturi in bucla Python. Scorurile raman INT exacti (count * weight =
+        # suma incrementala originala), deci selectia de swap-uri e bit-identica.
+        _ind_size = 1 + int(max(
+            int(self._draw_matrix.max()),
+            max(scores.keys(), default=0),
+            max(current_pool, default=0),
+        ))
+
+        def _bin_matrix(sets_list):
+            B = np.zeros((len(sets_list), _ind_size), dtype=bool)
+            for i, ds in enumerate(sets_list):
+                B[i, list(ds)] = True
+            return B
+
+        _B_short = _bin_matrix(backtest_sets)
+        _B_long = _bin_matrix(backtest_sets_long)
+
+        def _score_on_bin(indicator, B):
+            """Scoring game-aware pe o fereastra (matrice binara)."""
+            overlaps = B @ indicator
+            target_hits = int(np.count_nonzero(overlaps >= hit_target))
+            high_hits = int(np.count_nonzero(overlaps >= hit_high))
+            max_hits = int(np.count_nonzero(overlaps >= hit_max))
+            score = w_target * target_hits + w_high * high_hits + w_max * max_hits
+            total = int(overlaps.sum())
             return score, target_hits, high_hits, max_hits, total
 
         def count_hits(test_pool):
             """Combină scorul pe ferestre scurtă/lungă pentru robustețe."""
-            test_set = set(test_pool)
-            short_score, short_target, short_high, short_max, short_total = _score_on_sets(test_set, backtest_sets)
-            long_score, long_target, long_high, long_max, long_total = _score_on_sets(test_set, backtest_sets_long)
+            indicator = np.zeros(_ind_size, dtype=np.int64)
+            indicator[list(set(test_pool))] = 1
+            short_score, short_target, short_high, short_max, short_total = _score_on_bin(indicator, _B_short)
+            long_score, long_target, long_high, long_max, long_total = _score_on_bin(indicator, _B_long)
             combined_score = (0.7 * short_score) + (0.3 * long_score)
             combined_total = (0.7 * short_total) + (0.3 * long_total)
             return combined_score, short_target, short_high, short_max, combined_total

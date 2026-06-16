@@ -1035,21 +1035,33 @@ def _fallback_scores_no_tfm(
         return {n: 0.0 for n in range(1, max_num + 1)}
 
     total_rows = draw_matrix.shape[0]
-    recent = draw_matrix[-min(50, total_rows):]
-    very_recent = draw_matrix[-min(15, total_rows):]
+    n_recent = min(50, total_rows)
+    n_very_recent = min(15, total_rows)
 
-    scores: Dict[int, float] = {}
-    for n in range(1, max_num + 1):
-        hist_freq = float(np.mean([1.0 if n in row else 0.0 for row in draw_matrix]))
-        recent_freq = float(np.mean([1.0 if n in row else 0.0 for row in recent])) if len(recent) else 0.0
-        very_recent_freq = float(np.mean([1.0 if n in row else 0.0 for row in very_recent])) if len(very_recent) else 0.0
-        last_seen = total_rows
-        for i in range(total_rows - 1, -1, -1):
-            if n in draw_matrix[i]:
-                last_seen = total_rows - 1 - i
-                break
-        gap_signal = 1.0 / (1.0 + last_seen / 10.0)
-        scores[n] = 0.40 * recent_freq + 0.25 * very_recent_freq + 0.20 * hist_freq + 0.15 * gap_signal
+    # Vectorizat: matrice de membership (extragere x numar) construita o data,
+    # apoi frecventele/gap-urile pe toate numerele simultan. Operatiile float
+    # pastreaza aceeasi ordine ca bucla originala -> scoruri bit-identice.
+    membership = np.zeros((total_rows, max_num + 1), dtype=bool)
+    flat_vals = draw_matrix.astype(np.int64, copy=False)
+    row_idx = np.repeat(np.arange(total_rows), draw_matrix.shape[1])
+    vals = flat_vals.ravel()
+    in_range = (vals >= 1) & (vals <= max_num)
+    membership[row_idx[in_range], vals[in_range]] = True
+
+    hist_freq_arr = membership.mean(axis=0)
+    recent_freq_arr = membership[-n_recent:].mean(axis=0) if n_recent else np.zeros(max_num + 1)
+    very_recent_freq_arr = membership[-n_very_recent:].mean(axis=0) if n_very_recent else np.zeros(max_num + 1)
+
+    rev = membership[::-1]
+    has_any = rev.any(axis=0)
+    last_seen_arr = np.where(has_any, rev.argmax(axis=0), total_rows).astype(np.float64)
+    gap_signal_arr = 1.0 / (1.0 + last_seen_arr / 10.0)
+
+    score_arr = (
+        0.40 * recent_freq_arr + 0.25 * very_recent_freq_arr
+        + 0.20 * hist_freq_arr + 0.15 * gap_signal_arr
+    )
+    scores: Dict[int, float] = {n: float(score_arr[n]) for n in range(1, max_num + 1)}
 
     vmin = min(scores.values()) if scores else 0.0
     vmax = max(scores.values()) if scores else 1.0
