@@ -1,12 +1,13 @@
 {
   "disabled": [
     "chronos",
+    "ens_torch_novel",
     "moment",
     "timesfm"
   ],
   "_meta": {
     "note": "Metode legendate — NU se mai rulează în bench și NU se reactivează. Merge-only. Metodele noi nu sunt afectate.",
-    "last_reason": "Scoase din benchmark (foundation models) — pinuiau transformers==4.33.3/hub 0.24 → blocau Python pe 3.11",
-    "count": 3
+    "last_reason": "ens_torch_novel: ensemble GPU de 5 modele 'novel' rulate in serie intr-un singur proces — bloca repetat bench-ul la loto_6_49/100% backtest (deadlock, 0 progres >20min). Cost mare, valoare mica (ensemble rar bate componenta cea mai buna).",
+    "count": 4
   }
 }
