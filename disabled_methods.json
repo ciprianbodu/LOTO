@@ -2,13 +2,15 @@
   "disabled": [
     "chronos",
     "ens_torch_bayesian",
+    "ens_torch_giant",
+    "ens_torch_mega",
     "ens_torch_novel",
     "moment",
     "timesfm"
   ],
   "_meta": {
     "note": "Metode legendate — NU se mai rulează în bench și NU se reactivează. Merge-only. Metodele noi nu sunt afectate.",
-    "last_reason": "ens_torch_bayesian: ensemble GPU care inlantuie 3 sub-metode Bayesian (din care deep_ensemble_mlp antreneaza singur 5 MLP-uri → ~7 antrenari/fold) — bloca bench-ul la loto_6_49/100% backtest (0 progres >7min, GPU parcat la 760/2376, workeri la 100% CPU dar fara rezultate). Acelasi tipar ca ens_torch_novel. Cost mare, valoare mica.",
-    "count": 5
+    "last_reason": "Preventiv: ens_torch_giant (5 modele XL: lstm_xl 256/3-layer, transformer_xl 6-layer, wavenet_deep 40ep…) si ens_torch_mega (9-way incl. transformer_xl+wavenet_deep) — aceeasi familie de ensemble-uri torch grele care reantreneaza toate modelele PER FOLD walk-forward; la 100% backtest x REAL+RND x 3 procese GPU concurente blocheaza bench-ul ca ens_torch_novel/bayesian. Cost mare, valoare mica (ensemble rar bate componenta cea mai buna).",
+    "count": 7
   }
 }
