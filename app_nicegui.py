@@ -1834,27 +1834,56 @@ def _fmt_gap(g) -> str:
 
 
 def _render_hits_4plus(flat, game: str) -> None:
-    """Afișează doar tabelul extragerilor cu ≥4 hits (pool, OMNIUS, variante).
-    Fiecare tabel include Δ zile = timpul față de hit-ul ≥4 precedent (cronologic)."""
+    """Afișează extragerile cu ≥4 hits. UN tabel UNIFICAT (pool + bilete pe aceeași
+    linie, cheiat pe extragere) + un tabel separat OMNIUS.
+
+    `flat` = listă per (extragere × variantă): `hits_union` e per-EXTRAGERE (constant
+    pe variantele aceleiași extrageri) = câte numere din pool au picat; `hits` e
+    per-VARIANTĂ. Agregăm pe extragere. Rândurile = extragerile în care POOL-ul a
+    prins ≥4 (superset: orice bilet ≥4 ⇒ pool ≥4, deci nu pierdem nicio extragere cu
+    bilet câștigător). Δ zile = timpul față de hit-ul ≥4 precedent (cronologic)."""
     if not flat:
         return
     gk = _game_label_for(game)
+    pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
 
-    # Pool ≥4
-    rows_pool, seen = [], set()
-    for p in sorted(flat, key=lambda x: (getattr(x, "hits_union", 0), getattr(x, "draw_index", 0)), reverse=True):
-        hu = getattr(p, "hits_union", 0)
+    # ── Agregare pe extragere: pool (hits_union) + distribuția biletelor ≥4.
+    per_draw: dict = {}
+    for p in flat:
+        hu = int(getattr(p, "hits_union", 0))
+        if hu < 4:
+            continue
         di = getattr(p, "draw_index", 0)
-        if hu >= 4 and di not in seen:
-            seen.add(di)
+        d = per_draw.get(di)
+        if d is None:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-            rows_pool.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}", "hits": f"🔥 {hu}"})
-    if rows_pool:
-        gap_p = _gap_days_map([r["draw"] for r in rows_pool])
-        for r in rows_pool:
-            r["gap"] = _fmt_gap(gap_p.get(r["draw"]))
-        ui.label(f"🎯 Pool ≥4 numere nimerite ({len(rows_pool)} extrageri):").classes("text-bold text-caption mt-2")
-        # Sumar MEREU vizibil: media intervalului între hituri ≥4 + cât a trecut de la ultimul.
+            d = {"label": str(dd) if dd and str(dd) != "None" else f"#{di}",
+                 "pool": hu, "levels": {}}  # levels: {hits: nr_bilete}
+            per_draw[di] = d
+        h = int(getattr(p, "hits", 0))
+        if h >= 4:
+            d["levels"][h] = d["levels"].get(h, 0) + 1
+
+    if per_draw:
+        # Δ zile pe seria de extrageri (aceeași bază ca media de mai jos — POOL ≥4).
+        gap_map = _gap_days_map([d["label"] for d in per_draw.values()])
+        rows = []
+        for di, d in sorted(per_draw.items(),
+                            key=lambda kv: (kv[1]["pool"], max(kv[1]["levels"], default=0), kv[0]),
+                            reverse=True):
+            levels = d["levels"]
+            if levels:
+                best_txt = f"⭐ {max(levels)}"
+                # detaliu compact pe niveluri, ex. "2×⭐5 · 34×⭐4"
+                n_txt = " · ".join(f"{levels[h]}×⭐{h}" for h in sorted(levels, reverse=True))
+                total_prize = sum(pm.get(h, 0) * c for h, c in levels.items())
+                prize_txt = f"~{total_prize:,} Lei"
+            else:
+                best_txt = n_txt = prize_txt = "—"  # pool a acoperit ≥4, dar niciun bilet n-a aliniat ≥4
+            rows.append({"draw": d["label"], "gap": _fmt_gap(gap_map.get(d["label"])),
+                         "pool": f"🔥 {d['pool']}", "best": best_txt, "n": n_txt, "prize": prize_txt})
+        ui.label(f"🎯 Extrageri cu ≥4 — pool + bilete ({len(rows)} extrageri):").classes("text-bold text-caption mt-2")
+        # Sumar MEREU vizibil: media intervalului între hituri ≥4 (pe POOL) + cât a trecut.
         st = _due_status(flat)
         if st:
             if st["ratio"] >= 1.0:
@@ -1864,16 +1893,19 @@ def _render_hits_4plus(flat, game: str) -> None:
             else:
                 col, lvl = "#86efac", "🟢 recent"
             ui.html(
-                f"<span style='font-size:.85em'>📈 Media între hituri ≥4: "
+                f"<span style='font-size:.85em'>📈 Media între hituri ≥4 (pool): "
                 f"<b>{st['avg']:.0f}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
                 f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
                 f"<span style='color:{col}'>{lvl}</span>)</span>"
             ).classes("mt-1")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
-                     {"name": "hits", "label": "Numere în pool", "field": "hits", "align": "center"},
-                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "right"}],
-            rows=rows_pool,
+                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
+                     {"name": "pool", "label": "Numere în pool", "field": "pool", "align": "center"},
+                     {"name": "best", "label": "Cel mai bun bilet", "field": "best", "align": "center"},
+                     {"name": "n", "label": "Bilete ≥4", "field": "n", "align": "center"},
+                     {"name": "prize", "label": "Premiu estimat (total)", "field": "prize", "align": "right"}],
+            rows=rows, pagination=15,
         ).classes("w-full").props("dense")
 
     # OMNIUS ≥4 (per-draw: biletul OMNIUS regenerat retroactiv la fiecare extragere)
@@ -1901,36 +1933,7 @@ def _render_hits_4plus(flat, game: str) -> None:
             rows=rows_omni, pagination=15,
         ).classes("w-full").props("dense")
 
-    # Variante ≥4
-    highs = [p for p in flat if getattr(p, "hits", 0) >= 4]
-    if highs:
-        pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
-        agg: dict = {}
-        for p in highs:
-            dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-            lbl = str(dd) if dd and str(dd) != "None" else f"#{getattr(p, 'draw_index', 0)}"
-            key = (lbl, int(p.hits))
-            agg[key] = agg.get(key, 0) + 1
-        # Δ zile calculat pe EXTRAGERI distincte (nu per bilet) — golul între datele cu ≥4.
-        gap_v = _gap_days_map(sorted({d for d, _ in agg}))
-        rows_v = []
-        for (draw, h), cnt in sorted(agg.items(), key=lambda kv: (kv[0][1], kv[1]), reverse=True):
-            prize = pm.get(h, 0)
-            rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete",
-                           "gap": _fmt_gap(gap_v.get(draw)),
-                           "prize": f"~{prize:,} Lei/bilet"})
-        n_draws = len({d for d, _ in agg})
-        ui.label(f"🎯 Bilete câștigătoare ≥4 ({n_draws} extrageri):").classes("text-bold text-caption mt-2")
-        ui.table(
-            columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
-                     {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
-                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
-                     {"name": "n", "label": "Bilete", "field": "n", "align": "center"},
-                     {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "right"}],
-            rows=rows_v, pagination=15,
-        ).classes("w-full").props("dense")
-
-    if not rows_pool and not highs and not rows_omni:
+    if not per_draw and not rows_omni:
         ui.label("Nicio extragere cu ≥4 numere în istoricul walk-forward.").classes("text-caption text-grey")
 
 
