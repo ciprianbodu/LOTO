@@ -1834,20 +1834,22 @@ def _fmt_gap(g) -> str:
 
 
 def _render_hits_4plus(flat, game: str) -> None:
-    """Afișează extragerile cu ≥4 hits. UN tabel UNIFICAT (pool + bilete pe aceeași
-    linie, cheiat pe extragere) + un tabel separat OMNIUS.
+    """Afișează extragerile cu ≥4 hits — UN tabel cu coloane DISTINCTE pentru
+    pool, OMNIUS și biletele simple, cheiat pe extragere.
 
-    `flat` = listă per (extragere × variantă): `hits_union` e per-EXTRAGERE (constant
-    pe variantele aceleiași extrageri) = câte numere din pool au picat; `hits` e
-    per-VARIANTĂ. Agregăm pe extragere. Rândurile = extragerile în care POOL-ul a
-    prins ≥4 (superset: orice bilet ≥4 ⇒ pool ≥4, deci nu pierdem nicio extragere cu
-    bilet câștigător). Δ zile = timpul față de hit-ul ≥4 precedent (cronologic)."""
+    `flat` = listă per (extragere × variantă): `hits_union` (per-extragere) = câte
+    numere din pool au picat; `omnius_hits` (per-extragere) = câte a prins biletul
+    OMNIUS (top draw_n din pool ⇒ OMNIUS ⊆ pool ⇒ omnius_hits ≤ hits_union); `hits`
+    (per-variantă) = biletele simple din wheel. Agregăm pe extragere. Rândurile =
+    extragerile în care POOL-ul a prins ≥4 (superset: orice bilet/OMNIUS ≥4 ⇒ pool
+    ≥4, deci nu pierdem nimic). Δ zile = timpul față de hit-ul ≥4 precedent."""
     if not flat:
         return
     gk = _game_label_for(game)
     pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
 
-    # ── Agregare pe extragere: pool (hits_union) + distribuția biletelor ≥4.
+    # ── Agregare pe extragere: pool (hits_union) + OMNIUS (omnius_hits) + bilete ≥4.
+    # OMNIUS ⊆ pool ⇒ omnius_hits ≤ hits_union, deci rândul-set POOL≥4 le acoperă pe toate.
     per_draw: dict = {}
     for p in flat:
         hu = int(getattr(p, "hits_union", 0))
@@ -1858,7 +1860,8 @@ def _render_hits_4plus(flat, game: str) -> None:
         if d is None:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
             d = {"label": str(dd) if dd and str(dd) != "None" else f"#{di}",
-                 "pool": hu, "levels": {}}  # levels: {hits: nr_bilete}
+                 "pool": hu, "omnius": int(getattr(p, "omnius_hits", 0)),
+                 "levels": {}}  # levels: {hits: nr_bilete}
             per_draw[di] = d
         h = int(getattr(p, "hits", 0))
         if h >= 4:
@@ -1873,16 +1876,17 @@ def _render_hits_4plus(flat, game: str) -> None:
         for di, d in sorted(per_draw.items(), key=lambda kv: kv[0], reverse=True):
             levels = d["levels"]
             if levels:
-                best_txt = f"⭐ {max(levels)}"
                 # detaliu compact pe niveluri, ex. "2×⭐5 · 34×⭐4"
                 n_txt = " · ".join(f"{levels[h]}×⭐{h}" for h in sorted(levels, reverse=True))
                 total_prize = sum(pm.get(h, 0) * c for h, c in levels.items())
                 prize_txt = f"~{total_prize:,} Lei"
             else:
-                best_txt = n_txt = prize_txt = "—"  # pool a acoperit ≥4, dar niciun bilet n-a aliniat ≥4
+                n_txt = prize_txt = "—"  # pool a acoperit ≥4, dar niciun bilet n-a aliniat ≥4
+            _o = d["omnius"]
+            omni_txt = f"⭐ {_o}" if _o >= 4 else (str(_o) if _o else "—")
             rows.append({"draw": d["label"], "gap": _fmt_gap(gap_map.get(d["label"])),
-                         "pool": f"🔥 {d['pool']}", "best": best_txt, "n": n_txt, "prize": prize_txt})
-        ui.label(f"🎯 Extrageri cu ≥4 — pool + bilete ({len(rows)} extrageri):").classes("text-bold text-caption mt-2")
+                         "pool": f"🔥 {d['pool']}", "omnius": omni_txt, "n": n_txt, "prize": prize_txt})
+        ui.label(f"🎯 Extrageri cu ≥4 — pool · OMNIUS · bilete ({len(rows)} extrageri):").classes("text-bold text-caption mt-2")
         # Sumar MEREU vizibil: media intervalului între hituri ≥4 (pe POOL) + cât a trecut.
         st = _due_status(flat)
         if st:
@@ -1901,39 +1905,13 @@ def _render_hits_4plus(flat, game: str) -> None:
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
-                     {"name": "pool", "label": "Numere în pool", "field": "pool", "align": "center"},
-                     {"name": "best", "label": "Cel mai bun bilet", "field": "best", "align": "center"},
-                     {"name": "n", "label": "Bilete ≥4", "field": "n", "align": "center"},
+                     {"name": "pool", "label": "🔥 Pool (din 16)", "field": "pool", "align": "center"},
+                     {"name": "omnius", "label": "⭐ OMNIUS (bilet)", "field": "omnius", "align": "center"},
+                     {"name": "n", "label": "Bilete simple ≥4", "field": "n", "align": "center"},
                      {"name": "prize", "label": "Premiu estimat (total)", "field": "prize", "align": "right"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
-
-    # OMNIUS ≥4 (per-draw: biletul OMNIUS regenerat retroactiv la fiecare extragere)
-    rows_omni, seen_o = [], set()
-    for p in sorted(flat, key=lambda x: (getattr(x, "omnius_hits", 0), getattr(x, "draw_index", 0)), reverse=True):
-        oh = int(getattr(p, "omnius_hits", 0))
-        di = getattr(p, "draw_index", 0)
-        if oh >= 4 and di not in seen_o:
-            seen_o.add(di)
-            dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-            tk = getattr(p, "omnius_ticket", []) or []
-            tk_txt = " ".join(str(int(x)) for x in tk) if tk else "—"
-            rows_omni.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}",
-                              "hits": f"⭐ {oh}", "ticket": tk_txt})
-    if rows_omni:
-        gap_o = _gap_days_map([r["draw"] for r in rows_omni])
-        for r in rows_omni:
-            r["gap"] = _fmt_gap(gap_o.get(r["draw"]))
-        ui.label(f"⭐ OMNIUS ≥4 numere nimerite ({len(rows_omni)} extrageri):").classes("text-bold text-caption mt-2")
-        ui.table(
-            columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
-                     {"name": "hits", "label": "Hits OMNIUS", "field": "hits", "align": "center"},
-                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
-                     {"name": "ticket", "label": "Bilet OMNIUS", "field": "ticket", "align": "right"}],
-            rows=rows_omni, pagination=15,
-        ).classes("w-full").props("dense")
-
-    if not per_draw and not rows_omni:
+    else:
         ui.label("Nicio extragere cu ≥4 numere în istoricul walk-forward.").classes("text-caption text-grey")
 
 
