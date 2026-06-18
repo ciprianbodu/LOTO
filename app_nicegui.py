@@ -1665,15 +1665,21 @@ def _render_bench_leaderboard_slice(
         sub = sub[sub["failed"] != True]  # noqa: E712
     if sub.empty:
         return
-    metric_4plus_pool = f"rate_4plus_k{pool}"
-    if metric_4plus_pool in sub.columns:
-        has_4plus = True
-        metric = metric_4plus_pool
-    elif "rate_4plus" in sub.columns:
-        has_4plus = True
-        metric = "rate_4plus"
-    else:
-        has_4plus = False
+    try:
+        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
+    except Exception:  # noqa: BLE001
+        _T = 4
+    # preferă pragul configurat (3+); fallback la 4+ (folds.csv vechi) apoi avg_hits.
+    _shown_t, metric = _T, None
+    for _c in (f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"):
+        if _c in sub.columns:
+            metric = _c
+            break
+    if metric is None and (f"rate_4plus_k{pool}" in sub.columns or "rate_4plus" in sub.columns):
+        _shown_t = 4
+        metric = f"rate_4plus_k{pool}" if f"rate_4plus_k{pool}" in sub.columns else "rate_4plus"
+    has_4plus = metric is not None
+    if metric is None:
         metric = "avg_hits_topk"
     if metric not in sub.columns:
         return
@@ -1693,8 +1699,8 @@ def _render_bench_leaderboard_slice(
     cpu_rows = [r for r in rows if not r[3]][:top_n]
     gpu_rows = [r for r in rows if r[3]][:top_n]
     label = (
-        f"rata 4+ @ pool {pool}" if has_4plus and metric.startswith("rate_4plus_k")
-        else "rata 4+ numere ghicite" if has_4plus
+        f"rata {_shown_t}+ @ pool {pool}" if has_4plus and metric.endswith(f"_k{pool}")
+        else f"rata {_shown_t}+ numere ghicite" if has_4plus
         else "medie hituri / extragere"
     )
     winner = rows[0]  # câștigătorul GLOBAL (CPU+GPU împreună) — cel ales de bench
@@ -1703,7 +1709,7 @@ def _render_bench_leaderboard_slice(
         m, score, avg, is_gpu, lib = rec
         tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
         tag_cls = "text-deep-purple" if is_gpu else "text-blue"
-        sc_txt = f"4+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
+        sc_txt = f"{_shown_t}+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
         with ui.row().classes("items-center gap-2 w-full"):
             ui.label(f"{i}.").classes("text-bold text-grey w-6")
             ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
@@ -1727,7 +1733,7 @@ def _render_bench_leaderboard_slice(
         ui.label(f"⚡ Top {len(gpu_rows)} GPU (rețele neurale / foundation)").classes(
             "text-bold text-deep-purple mt-3")
         if gpu_rows:
-            ui.label("Pe loto (date aleatoare) rețelele prind de obicei MAI PUȚINE 4+ decât "
+            ui.label(f"Pe loto (date aleatoare) rețelele prind de obicei MAI PUȚINE {_shown_t}+ decât "
                      "euristicile simple — de-aia rar intră în topul global.").classes("text-caption text-grey")
             for i, rec in enumerate(gpu_rows, 1):
                 _row(i, rec)
@@ -1776,7 +1782,16 @@ def _render_bench_winner_only(game_label: str) -> None:
     if game_label == "joker":
         folds_key = "joker_urna1"
     sub = df[(df["game"] == folds_key) & (df.get("pool_k", df.get("pool", None)) == pool)] if "pool_k" in df.columns or "pool" in df.columns else df[df["game"] == folds_key]
-    metric = next((c for c in [f"rate_4plus_k{pool}", "rate_4plus"] if c in (sub.columns if not sub.empty else df.columns)), None)
+    try:
+        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
+    except Exception:  # noqa: BLE001
+        _T = 4
+    _cols = sub.columns if not sub.empty else df.columns
+    _shown_t = _T
+    metric = next((c for c in [f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"] if c in _cols), None)
+    if metric is None:
+        _shown_t = 4
+        metric = next((c for c in [f"rate_4plus_k{pool}", "rate_4plus"] if c in _cols), None)
     if metric is None or sub.empty:
         return
     rows = []
@@ -1797,7 +1812,7 @@ def _render_bench_winner_only(game_label: str) -> None:
         ui.label("🏆 Metodă câștigătoare:").classes("text-caption text-bold")
         ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
         ui.label(w[0]).classes("text-bold")
-        ui.label(f"· {w[3]} · 4+: {w[1]*100:.1f}%").classes("text-caption text-grey")
+        ui.label(f"· {w[3]} · {_shown_t}+: {w[1]*100:.1f}%").classes("text-caption text-grey")
 
 
 def _parse_draw_date(s):
@@ -2412,9 +2427,13 @@ def main_page() -> None:
         _full_eta = _estimate_bench_eta(1280)
         ui.button("🔬 RE-BENCH (CPU ‖ GPU paralel)", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
+        try:
+            from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _bt
+        except Exception:  # noqa: BLE001
+            _bt = 4
         ui.label("Un singur bench testează TOATE metodele. Intern, metodele CPU rulează pe "
                  "toate nucleele (în paralel) SIMULTAN cu metodele GPU. Toate concurează în "
-                 "ACELAȘI clasament → UN câștigător (regula 4+) → UN Auto-Pilot → UN walk-forward. "
+                 f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
                  "Vezi clasamentul complet (CPU+GPU) la 🏆 Clasament bench.").classes("text-caption")
         # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
         # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea

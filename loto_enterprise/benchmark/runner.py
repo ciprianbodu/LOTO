@@ -169,6 +169,8 @@ class FoldResult:
     max_hits_topk: int = 0
     rate_4plus: float = 0.0             # rata extragerilor cu >=4 numere ghicite (regula 4+)
     rates_4plus_per_pool: Dict[str, float] = field(default_factory=dict)
+    rate_3plus: float = 0.0             # rata extragerilor cu >=3 numere ghicite (regula 3+)
+    rates_3plus_per_pool: Dict[str, float] = field(default_factory=dict)
     blacklist_size: int = 0             # how many numbers were blacklisted per score round
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
@@ -206,6 +208,7 @@ def _evaluate_fold(
         hits_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         hits_per_pool_bl={f"k{k}": 0.0 for k in pool_sizes},
         rates_4plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
+        rates_3plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
     )
 
     sampler = HwSampler(interval=0.1).start()
@@ -215,6 +218,7 @@ def _evaluate_fold(
         per_pool_bl_totals = {k: 0 for k in pool_sizes}
         per_pool_max = {k: 0 for k in pool_sizes}
         per_pool_4plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=4 numere ghicite
+        per_pool_3plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=3 numere ghicite
         n_eval = 0                                     # nr. total extrageri evaluate
         blocks = 0
         empty_blocks = 0  # Count blocks where call_method returned {} (silent failure)
@@ -267,6 +271,8 @@ def _evaluate_fold(
                     per_pool_bl_totals[k] += h_bl
                     if h >= 4:                       # regula 4+: numărăm hiturile mari
                         per_pool_4plus[k] += 1
+                    if h >= 3:                       # regula 3+ (prag alternativ, configurabil)
+                        per_pool_3plus[k] += 1
                     if h > per_pool_max[k]:
                         per_pool_max[k] = h
             history = np.concatenate([history, test_draws[pos:end]], axis=0)
@@ -287,10 +293,12 @@ def _evaluate_fold(
             fr.hits_per_pool[f"k{k}"] = per_pool_totals[k] / max(n_test, 1)
             fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_test, 1)
             fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
+            fr.rates_3plus_per_pool[f"k{k}"] = per_pool_3plus[k] / max(n_eval, 1)
         fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.max_hits_topk = per_pool_max[game.draw_n]
         # Regula 4+: rata de extrageri cu >=4 numere ghicite la pool-ul de bază (draw_n)
         fr.rate_4plus = fr.rates_4plus_per_pool.get(f"k{game.draw_n}", 0.0)
+        fr.rate_3plus = fr.rates_3plus_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
     except Exception as exc:
@@ -430,6 +438,8 @@ def run_benchmark(
                 row[f"{k}_bl"] = v
             for k, v in row.pop("rates_4plus_per_pool", {}).items():
                 row[f"rate_4plus_{k}"] = v
+            for k, v in row.pop("rates_3plus_per_pool", {}).items():
+                row[f"rate_3plus_{k}"] = v
             rows.append(row)
         _df = pd.DataFrame(rows)
         try:

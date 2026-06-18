@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -33,6 +34,13 @@ logger = logging.getLogger(__name__)
 
 CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 MIN_TEST_DRAWS_FOR_STABILITY = 30
+
+# Pragul de hituri pe care bench-ul ALEGE metoda câștigătoare (rata extragerilor cu
+# ≥ acest număr de numere ghicite). A fost 4 (premii reale); setat pe 3 la cererea
+# utilizatorului — vrea optimizare pe rata de 3+ (mai densă statistic → selecție mai
+# STABILĂ; NU îmbunătățește șansele — loteria e aleatoare). Reversibil: schimbă aici
+# înapoi la 4, sau setează variabila de mediu LOTO_BENCH_TARGET=4.
+BENCH_HIT_TARGET = int(os.environ.get("LOTO_BENCH_TARGET", "3"))
 
 
 def _safe_lift(method_hits: float, random_hits: float) -> float:
@@ -94,7 +102,7 @@ def decide_optimal_config_for_pool(
     """
     base_col = f"k{pool_size}"
     base_col_bl = f"k{pool_size}_bl"
-    rate_4plus_col = f"rate_4plus_k{pool_size}"
+    rate_target_col = f"rate_{BENCH_HIT_TARGET}plus_k{pool_size}"
 
     if base_col not in folds_df.columns:
         return {"error": f"column {base_col} missing in folds.csv"}
@@ -106,11 +114,12 @@ def decide_optimal_config_for_pool(
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     methods = [m for m in sub["method"].unique() if m != "random"]
 
-    def _rate_4plus_mean(frame: pd.DataFrame) -> float:
-        if rate_4plus_col in frame.columns:
-            return float(frame[rate_4plus_col].mean())
-        if "rate_4plus" in frame.columns:
-            return float(frame["rate_4plus"].mean())
+    def _rate_target_mean(frame: pd.DataFrame) -> float:
+        # rata de ≥BENCH_HIT_TARGET; fallback la 4+ (folds.csv vechi, fără coloana 3+).
+        for c in (rate_target_col, f"rate_{BENCH_HIT_TARGET}plus",
+                  f"rate_4plus_k{pool_size}", "rate_4plus"):
+            if c in frame.columns:
+                return float(frame[c].mean())
         return 0.0
 
     qualifying: List[Tuple[str, float, int, int, float]] = []
@@ -125,8 +134,8 @@ def decide_optimal_config_for_pool(
         if consistency < CONSISTENCY_THRESHOLD:
             continue
         w_lift = _weighted_mean_lift(real_m, real_random, base_col)
-        # REGULA 4+: rata medie de extrageri cu >=4 numere ghicite pentru pool-ul curent.
-        r4 = _rate_4plus_mean(real_m)
+        # REGULA T+: rata medie de extrageri cu >=BENCH_HIT_TARGET numere ghicite.
+        r4 = _rate_target_mean(real_m)
         qualifying.append((m, w_lift, n_beat, n_total, r4))
 
     if not qualifying:
@@ -137,7 +146,7 @@ def decide_optimal_config_for_pool(
             real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
             if real_m.empty:
                 continue
-            r4 = _rate_4plus_mean(real_m)
+            r4 = _rate_target_mean(real_m)
             ranked.append((m, r4, float(real_m[base_col].mean())))
         ranked.sort(key=lambda kv: (kv[1], kv[2]), reverse=True)
         if not ranked:
@@ -146,18 +155,18 @@ def decide_optimal_config_for_pool(
         rationale = (
             f"FALLBACK: no method consistently beat random "
             f"(≥{int(CONSISTENCY_THRESHOLD*100)}% of windows); "
-            f"picked highest 4+ rate ({ranked[0][1]:.3f}) + avg_hits"
+            f"picked highest {BENCH_HIT_TARGET}+ rate ({ranked[0][1]:.3f}) + avg_hits"
         )
     else:
-        # REGULA 4+: sortăm întâi după rata de 4+ (premiile reale care contează),
-        # apoi după lift mediu, apoi consistență. Metoda care prinde cel mai des 4+
+        # REGULA T+: sortăm întâi după rata de BENCH_HIT_TARGET+ (pragul ales),
+        # apoi după lift mediu, apoi consistență. Metoda care prinde cel mai des T+
         # câștigă, chiar dacă media generală (dominată de hituri mici) e similară.
         qualifying.sort(key=lambda r: (r[4], r[1], r[2] / max(r[3], 1)), reverse=True)
         scorer = qualifying[0][0]
         rationale = (
-            f"{scorer}: rată 4+ @ k{pool_size} = {qualifying[0][4]:.3f}, beat random in "
+            f"{scorer}: rată {BENCH_HIT_TARGET}+ @ k{pool_size} = {qualifying[0][4]:.3f}, beat random in "
             f"{qualifying[0][2]}/{qualifying[0][3]} windows (lift {qualifying[0][1]:+.4f}); "
-            f"din {len(qualifying)} metode calificate [prioritate: 4+ numere ghicite]"
+            f"din {len(qualifying)} metode calificate [prioritate: {BENCH_HIT_TARGET}+ numere ghicite]"
         )
 
     # Pick the best sim_depth for the chosen scorer
