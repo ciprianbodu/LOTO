@@ -2146,6 +2146,39 @@ def _render_matrix_html(matrix) -> None:
     ui.html(f"<table style='border-collapse:collapse;'><tr><th></th>{head}</tr>{body}</table>")
 
 
+def _new_draws_summary():
+    """Câte extrageri noi s-au adăugat de la ultimul bench (per joc + total), din
+    semnăturile CSV stampilate în best_methods.json de modulul `freshness`
+    (`write_signatures_to_best_methods`, apelat la finalul fiecărui bench).
+
+    Întoarce None dacă freshness e indisponibil. `any_bench` = există măcar o
+    semnătură de la un bench anterior (altfel primul bench e oricum complet)."""
+    try:
+        from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation
+        reports = check_freshness()
+    except Exception:  # noqa: BLE001
+        return None
+    per, total, any_bench = {}, 0, False
+    for gk, r in reports.items():
+        if gk == "joker_urna2":  # alias pe aceeași sursă ca joker_urna1 — nu dubla
+            continue
+        if getattr(r, "status", "") == "missing":
+            continue
+        cached = int(getattr(r, "cached_rows", 0) or 0)
+        cur = int(getattr(r, "current_rows", 0) or 0)
+        if cached > 0:
+            any_bench = True
+        d = cur - cached
+        if d > 0:
+            per[gk] = d
+            total += d
+    try:
+        rec = aggregate_recommendation(reports)
+    except Exception:  # noqa: BLE001
+        rec = ""
+    return {"total": total, "per": per, "rec": rec, "any_bench": any_bench}
+
+
 @ui.refreshable
 def analysis_panel() -> None:
     pool = int(SETTINGS["pool_size_val"])
@@ -2399,6 +2432,23 @@ def main_page() -> None:
                  "toate nucleele (în paralel) SIMULTAN cu metodele GPU. Toate concurează în "
                  "ACELAȘI clasament → UN câștigător (regula 4+) → UN Auto-Pilot → UN walk-forward. "
                  "Vezi clasamentul complet (CPU+GPU) la 🏆 Clasament bench.").classes("text-caption")
+        # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
+        # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea
+        # paginii (se reîmprospătează la reload). Vezi _new_draws_summary / freshness.
+        _fresh = _new_draws_summary()
+        if _fresh is not None and _fresh["any_bench"]:
+            if _fresh["total"] > 0:
+                _g2l = {v: k for k, v in GK_MATRIX.items()}
+                _parts = ", ".join(f"{_g2l.get(gk, gk)} +{d}" for gk, d in _fresh["per"].items())
+                _col = "text-negative" if _fresh["rec"] == "full_rebench" else "text-warning"
+                ui.html(f"🆕 <b>+{_fresh['total']} extrageri noi</b> de la ultimul bench ({_parts}).").classes("text-caption " + _col)
+                ui.label("⚠️ Datele noi invalidează cache-ul → Re-Bench = recalcul COMPLET (nu rapid). "
+                         "Pentru generarea zilnică NU e nevoie de re-bench: Auto-Pilot folosește deja "
+                         "datele noi, iar câștigătorul bench abia se schimbă la câteva extrageri.").classes("text-caption " + _col)
+            elif _fresh["rec"] in ("quick_rebench", "full_rebench"):
+                ui.label("⚠️ Datele s-au schimbat de la ultimul bench → Re-Bench recalculează complet (fără cache).").classes("text-caption text-warning")
+            else:
+                ui.label("✅ Date neschimbate de la ultimul bench → Re-Bench folosește cache-ul (rapid).").classes("text-caption text-positive")
         _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
