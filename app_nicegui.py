@@ -1868,9 +1868,9 @@ def _render_hits_4plus(flat, game: str) -> None:
         # Δ zile pe seria de extrageri (aceeași bază ca media de mai jos — POOL ≥4).
         gap_map = _gap_days_map([d["label"] for d in per_draw.values()])
         rows = []
-        for di, d in sorted(per_draw.items(),
-                            key=lambda kv: (kv[1]["pool"], max(kv[1]["levels"], default=0), kv[0]),
-                            reverse=True):
+        # Ordine cronologică DESCRESCĂTOARE — cea mai recentă extragere ≥4 prima.
+        # draw_index e monoton cu data (CSV oldest→newest), deci index desc = dată desc.
+        for di, d in sorted(per_draw.items(), key=lambda kv: kv[0], reverse=True):
             levels = d["levels"]
             if levels:
                 best_txt = f"⭐ {max(levels)}"
