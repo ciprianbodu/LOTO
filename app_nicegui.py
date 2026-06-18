@@ -1884,8 +1884,11 @@ def _render_hits_4plus(flat, game: str) -> None:
                 n_txt = prize_txt = "—"  # pool a acoperit ≥4, dar niciun bilet n-a aliniat ≥4
             _o = d["omnius"]
             omni_txt = f"⭐ {_o}" if _o >= 4 else (str(_o) if _o else "—")
+            # OMNIUS = UN singur bilet → premiul lui = tariful nivelului lui de hits.
+            omni_prize_txt = f"~{pm.get(_o, 0):,} Lei" if _o >= 4 else "—"
             rows.append({"draw": d["label"], "gap": _fmt_gap(gap_map.get(d["label"])),
-                         "pool": f"🔥 {d['pool']}", "omnius": omni_txt, "n": n_txt, "prize": prize_txt})
+                         "pool": f"🔥 {d['pool']}", "n": n_txt, "prize": prize_txt,
+                         "omnius": omni_txt, "omnius_prize": omni_prize_txt})
         ui.label(f"🎯 Extrageri cu ≥4 — pool · OMNIUS · bilete ({len(rows)} extrageri):").classes("text-bold text-caption mt-2")
         # Sumar MEREU vizibil: media intervalului între hituri ≥4 (pe POOL) + cât a trecut.
         st = _due_status(flat)
@@ -1902,13 +1905,16 @@ def _render_hits_4plus(flat, game: str) -> None:
                 f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
                 f"<span style='color:{col}'>{lvl}</span>)</span>"
             ).classes("mt-1")
+        ui.label("💰 Premiu bilete = total din TOATE biletele wheel-ului ≥4 · "
+                 "💰 Premiu OMNIUS = un singur bilet (OMNIUS).").classes("text-caption text-grey")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
                      {"name": "pool", "label": "🔥 Pool (din 16)", "field": "pool", "align": "center"},
-                     {"name": "omnius", "label": "⭐ OMNIUS (bilet)", "field": "omnius", "align": "center"},
                      {"name": "n", "label": "Bilete simple ≥4", "field": "n", "align": "center"},
-                     {"name": "prize", "label": "Premiu estimat (total)", "field": "prize", "align": "right"}],
+                     {"name": "prize", "label": "💰 Premiu bilete (pool)", "field": "prize", "align": "right"},
+                     {"name": "omnius", "label": "⭐ OMNIUS (bilet)", "field": "omnius", "align": "center"},
+                     {"name": "omnius_prize", "label": "💰 Premiu OMNIUS", "field": "omnius_prize", "align": "right"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
     else:
