@@ -115,11 +115,14 @@ def decide_optimal_config_for_pool(
     methods = [m for m in sub["method"].unique() if m != "random"]
 
     def _rate_target_mean(frame: pd.DataFrame) -> float:
-        # rata de ≥BENCH_HIT_TARGET; fallback la 4+ (folds.csv vechi, fără coloana 3+).
+        # rata de ≥BENCH_HIT_TARGET; sare peste coloane all-NaN (cache vechi fără 3+)
+        # și cade pe 4+ → niciodată NaN în clasament/decizie.
         for c in (rate_target_col, f"rate_{BENCH_HIT_TARGET}plus",
                   f"rate_4plus_k{pool_size}", "rate_4plus"):
             if c in frame.columns:
-                return float(frame[c].mean())
+                v = float(frame[c].mean())
+                if v == v:  # nu e NaN (NaN != NaN)
+                    return v
         return 0.0
 
     qualifying: List[Tuple[str, float, int, int, float]] = []

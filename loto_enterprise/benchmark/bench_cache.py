@@ -46,7 +46,9 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path(".bench_cache")
-CACHE_VERSION = "v2"  # bump asta cand interface-ul se schimba (invalidates all)
+CACHE_VERSION = "v3"  # bump asta cand interface-ul se schimba (invalidates all)
+# v3: FoldResult are acum rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
+#     Foldurile v2 nu au coloana 3+ → trebuie recalculate (altfel rata 3+ iese NaN).
 INDEX_FILE = CACHE_DIR / "index.json"
 
 

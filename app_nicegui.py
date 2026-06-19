@@ -1677,15 +1677,20 @@ def _render_bench_leaderboard_slice(
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
         _T = 4
-    # preferă pragul configurat (3+); fallback la 4+ (folds.csv vechi) apoi avg_hits.
+    # preferă pragul configurat (3+); cere coloană cu DATE (nu all-NaN din cache vechi);
+    # fallback la 4+ apoi avg_hits.
+    def _has(c):
+        return c in sub.columns and sub[c].notna().any()
     _shown_t, metric = _T, None
     for _c in (f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"):
-        if _c in sub.columns:
+        if _has(_c):
             metric = _c
             break
-    if metric is None and (f"rate_4plus_k{pool}" in sub.columns or "rate_4plus" in sub.columns):
-        _shown_t = 4
-        metric = f"rate_4plus_k{pool}" if f"rate_4plus_k{pool}" in sub.columns else "rate_4plus"
+    if metric is None:
+        for _c in (f"rate_4plus_k{pool}", "rate_4plus"):
+            if _has(_c):
+                _shown_t, metric = 4, _c
+                break
     has_4plus = metric is not None
     if metric is None:
         metric = "avg_hits_topk"
@@ -1794,12 +1799,13 @@ def _render_bench_winner_only(game_label: str) -> None:
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
         _T = 4
-    _cols = sub.columns if not sub.empty else df.columns
+    def _ok(c):
+        return (not sub.empty) and c in sub.columns and sub[c].notna().any()
     _shown_t = _T
-    metric = next((c for c in [f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"] if c in _cols), None)
+    metric = next((c for c in [f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"] if _ok(c)), None)
     if metric is None:
         _shown_t = 4
-        metric = next((c for c in [f"rate_4plus_k{pool}", "rate_4plus"] if c in _cols), None)
+        metric = next((c for c in [f"rate_4plus_k{pool}", "rate_4plus"] if _ok(c)), None)
     if metric is None or sub.empty:
         return
     rows = []
