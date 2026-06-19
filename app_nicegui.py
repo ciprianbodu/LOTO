@@ -574,6 +574,7 @@ def cancel_all() -> None:
 def _start_walk_forward() -> None:
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
+        _maybe_shutdown()  # fără rezultate → nu rulează WF; ăsta e finalul, oprim acum
         return
     results_bundle, _ = results
     # NOTĂ inversare: walk-forward-ul rulează pipeline-ul NORMAL (Faza 1, pre-inversare),
@@ -625,6 +626,12 @@ def _start_walk_forward() -> None:
                 results_panel.refresh()
             except Exception:  # noqa: BLE001
                 pass
+            # ABIA ACUM (walk-forward terminat) declanșăm oprirea automată a PC-ului.
+            _maybe_shutdown()
+            try:
+                status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
+            except Exception:  # noqa: BLE001
+                pass
 
     STATE["wf_progress"] = 0.0
     STATE["wf_start"] = time.time()  # pt ETA walk-forward
@@ -661,14 +668,15 @@ def status_panel() -> None:
                 STATE["active_job_id"] = None
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
-            _start_walk_forward()
+            _start_walk_forward()  # async; oprirea PC se face la FINALUL walk-forward-ului
             results_panel.refresh()
             try:
                 ui.run_javascript(SOUND_JS)  # beep de finalizare
             except Exception:  # noqa: BLE001
                 pass
-            _maybe_shutdown()
-            ui.label("✅ Generare finalizată.").classes("text-positive text-lg")
+            # _maybe_shutdown() NU aici — walk-forward-ul încă rulează în fundal.
+            # Oprirea se declanșează în _worker_wf (la final) sau pe ramura fără rezultate.
+            ui.label("✅ Generare finalizată — rulează walk-forward...").classes("text-positive text-lg")
             _shutdown_banner()
             return
         if state in ("FAILED", "CANCELLED"):
