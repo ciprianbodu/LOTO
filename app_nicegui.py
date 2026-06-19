@@ -1154,17 +1154,18 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                     f"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
                     f"<div style='width:90px;text-align:right;font-size:0.85em;'>{pct:.1f}%</div></div>")
 
-        # Tabel pool ≥4
+        # Tabel pool ≥T (urmează ținta bench-ului: ≥3 sau ≥4)
+        _T = _bench_target()
         rows_pool, seen2 = [], set()
         for p in sorted(flat, key=lambda x: (getattr(x, "hits_union", 0), getattr(x, "draw_index", 0)), reverse=True):
             hu = getattr(p, "hits_union", 0)
             di = getattr(p, "draw_index", 0)
-            if hu >= 4 and di not in seen2:
+            if hu >= _T and di not in seen2:
                 seen2.add(di)
                 dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
                 rows_pool.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}", "hits": f"🔥 {hu}"})
         if rows_pool:
-            ui.label("🎯 Istoric Pool (≥4 numere):").classes("text-bold text-caption mt-2")
+            ui.label(f"🎯 Istoric Pool (≥{_T} numere):").classes("text-bold text-caption mt-2")
             ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
                               {"name": "hits", "label": "Numere în Nucleu", "field": "hits", "align": "left"}],
                      rows=rows_pool).classes("w-full").props("dense")
@@ -1172,7 +1173,7 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
         # Tabel variante ≥4 — AGREGAT pe extragere. (Înainte: o linie per variantă →
         # aceeași dată apărea de zeci de ori, fiindcă ~zeci de variante prind 4 pe
         # aceeași extragere. Ilizibil.) Acum: o linie per (extragere, hits) + nr. bilete.
-        highs = [p for p in flat if getattr(p, "hits", 0) >= 4]
+        highs = [p for p in flat if getattr(p, "hits", 0) >= _T]
         if highs:
             pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
             agg: dict = {}
@@ -1187,7 +1188,7 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                 rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete",
                                "prize": f"~{prize:,} Lei/bilet"})
             n_draws_won = len({d for d, _ in agg})
-            ui.label(f"🎯 Istoric Câștiguri Variante (≥4 numere) — {n_draws_won} extrageri câștigătoare, agregat:").classes(
+            ui.label(f"🎯 Istoric Câștiguri Variante (≥{_T} numere) — {n_draws_won} extrageri câștigătoare, agregat:").classes(
                 "text-bold text-caption mt-2")
             ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
                               {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
@@ -1862,6 +1863,16 @@ def _fmt_gap(g) -> str:
     return f"{g} zile" if g != 1 else "1 zi"
 
 
+def _bench_target() -> int:
+    """Pragul de hituri pe care optimizează bench-ul (BENCH_HIT_TARGET, implicit 3).
+    Analiza (tabel ≥N, media între hituri, alerte) urmează ACELAȘI prag ca selecția."""
+    try:
+        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
+        return int(BENCH_HIT_TARGET)
+    except Exception:  # noqa: BLE001
+        return 4
+
+
 def _render_hits_4plus(flat, game: str) -> None:
     """Afișează extragerile cu ≥4 hits — UN tabel cu coloane DISTINCTE pentru
     pool, OMNIUS și biletele simple, cheiat pe extragere.
@@ -1876,13 +1887,14 @@ def _render_hits_4plus(flat, game: str) -> None:
         return
     gk = _game_label_for(game)
     pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
+    _T = _bench_target()  # tabelul urmează ținta bench-ului (≥3 sau ≥4)
 
-    # ── Agregare pe extragere: pool (hits_union) + OMNIUS (omnius_hits) + bilete ≥4.
-    # OMNIUS ⊆ pool ⇒ omnius_hits ≤ hits_union, deci rândul-set POOL≥4 le acoperă pe toate.
+    # ── Agregare pe extragere: pool (hits_union) + OMNIUS (omnius_hits) + bilete ≥T.
+    # OMNIUS ⊆ pool ⇒ omnius_hits ≤ hits_union, deci rândul-set POOL≥T le acoperă pe toate.
     per_draw: dict = {}
     for p in flat:
         hu = int(getattr(p, "hits_union", 0))
-        if hu < 4:
+        if hu < _T:
             continue
         di = getattr(p, "draw_index", 0)
         d = per_draw.get(di)
@@ -1893,7 +1905,7 @@ def _render_hits_4plus(flat, game: str) -> None:
                  "levels": {}}  # levels: {hits: nr_bilete}
             per_draw[di] = d
         h = int(getattr(p, "hits", 0))
-        if h >= 4:
+        if h >= _T:
             d["levels"][h] = d["levels"].get(h, 0) + 1
 
     if per_draw:
@@ -1910,16 +1922,16 @@ def _render_hits_4plus(flat, game: str) -> None:
                 total_prize = sum(pm.get(h, 0) * c for h, c in levels.items())
                 prize_txt = f"~{total_prize:,} Lei"
             else:
-                n_txt = prize_txt = "—"  # pool a acoperit ≥4, dar niciun bilet n-a aliniat ≥4
+                n_txt = prize_txt = "—"  # pool a acoperit ≥T, dar niciun bilet n-a aliniat ≥T
             _o = d["omnius"]
-            omni_txt = f"⭐ {_o}" if _o >= 4 else (str(_o) if _o else "—")
+            omni_txt = f"⭐ {_o}" if _o >= _T else (str(_o) if _o else "—")
             # OMNIUS = UN singur bilet → premiul lui = tariful nivelului lui de hits.
-            omni_prize_txt = f"~{pm.get(_o, 0):,} Lei" if _o >= 4 else "—"
+            omni_prize_txt = f"~{pm.get(_o, 0):,} Lei" if _o >= _T else "—"
             rows.append({"draw": d["label"], "gap": _fmt_gap(gap_map.get(d["label"])),
                          "pool": f"🔥 {d['pool']}", "n": n_txt, "prize": prize_txt,
                          "omnius": omni_txt, "omnius_prize": omni_prize_txt})
-        ui.label(f"🎯 Extrageri cu ≥4 — pool · OMNIUS · bilete ({len(rows)} extrageri):").classes("text-bold text-caption mt-2")
-        # Sumar MEREU vizibil: media intervalului între hituri ≥4 (pe POOL) + cât a trecut.
+        ui.label(f"🎯 Extrageri cu ≥{_T} — pool · OMNIUS · bilete ({len(rows)} extrageri):").classes("text-bold text-caption mt-2")
+        # Sumar MEREU vizibil: media intervalului între hituri ≥T (pe POOL) + cât a trecut.
         st = _due_status(flat)
         if st:
             if st["ratio"] >= 1.0:
@@ -1929,25 +1941,25 @@ def _render_hits_4plus(flat, game: str) -> None:
             else:
                 col, lvl = "#86efac", "🟢 recent"
             ui.html(
-                f"<span style='font-size:.85em'>📈 Media între hituri ≥4 (pool): "
+                f"<span style='font-size:.85em'>📈 Media între hituri ≥{_T} (pool): "
                 f"<b>{st['avg']:.0f}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
                 f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
                 f"<span style='color:{col}'>{lvl}</span>)</span>"
             ).classes("mt-1")
-        ui.label("💰 Premiu bilete = total din TOATE biletele wheel-ului ≥4 · "
+        ui.label(f"💰 Premiu bilete = total din TOATE biletele wheel-ului ≥{_T} · "
                  "💰 Premiu OMNIUS = un singur bilet (OMNIUS).").classes("text-caption text-grey")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
                      {"name": "pool", "label": "🔥 Pool (din 16)", "field": "pool", "align": "center"},
-                     {"name": "n", "label": "Bilete simple ≥4", "field": "n", "align": "center"},
+                     {"name": "n", "label": f"Bilete simple ≥{_T}", "field": "n", "align": "center"},
                      {"name": "prize", "label": "💰 Premiu bilete (pool)", "field": "prize", "align": "right"},
                      {"name": "omnius", "label": "⭐ OMNIUS (bilet)", "field": "omnius", "align": "center"},
                      {"name": "omnius_prize", "label": "💰 Premiu OMNIUS", "field": "omnius_prize", "align": "right"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
     else:
-        ui.label("Nicio extragere cu ≥4 numere în istoricul walk-forward.").classes("text-caption text-grey")
+        ui.label(f"Nicio extragere cu ≥{_T} numere în istoricul walk-forward.").classes("text-caption text-grey")
 
 
 # Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
@@ -1960,9 +1972,10 @@ def _due_status(flat) -> dict | None:
     Întoarce dict cu: avg (interval mediu zile), last (data ultimului ≥4),
     days_since (zile de la ultimul ≥4 până AZI), ratio (days_since/avg), n (nr hituri).
     None dacă nu sunt destule date (<2 hituri ≥4 cu dată validă)."""
+    _T = _bench_target()
     dates = sorted({
         _parse_draw_date(getattr(p, "draw_date", getattr(p, "target_draw_date", None)))
-        for p in flat if int(getattr(p, "hits_union", 0)) >= 4
+        for p in flat if int(getattr(p, "hits_union", 0)) >= _T
     } - {None})
     if len(dates) < 2:
         return None
@@ -1996,8 +2009,9 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
     if not alerts:
         return
 
+    _T = _bench_target()
     with ui.card().classes("w-full").style("background:#3b0764;border:1px solid #f59e0b"):
-        ui.html("🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥4</b>")
+        ui.html(f"🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥{_T}</b>")
         for game, st in alerts:
             if st["ratio"] >= 1.0:
                 lvl, col = "🔴 ÎNTÂRZIAT", "#fca5a5"
@@ -2005,7 +2019,7 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
                 lvl, col = "🟡 SE APROPIE", "#fde68a"
             ui.html(
                 f"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
-                f"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥4 "
+                f"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥{_T} "
                 f"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{st['avg']:.0f}</b> zile "
                 f"(<b>{st['ratio']*100:.0f}%</b> din interval)."
             )
@@ -2016,7 +2030,7 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
     # Notificare transientă (pop-up) la randarea rezultatelor.
     try:
         names = ", ".join(g.upper() for g, _ in alerts)
-        ui.notify(f"🔔 Se apropie media de ≥4: {names} — vezi alerta de sus.",
+        ui.notify(f"🔔 Se apropie media de ≥{_T}: {names} — vezi alerta de sus.",
                   type="warning", position="top", timeout=10000, close_button=True)
     except Exception:  # noqa: BLE001
         pass
