@@ -786,6 +786,24 @@ def _build_mail_body() -> str:
     return "\n".join(lines).strip()
 
 
+def _send_test_email() -> None:
+    """Buton (declanșat de utilizator): trimite un mail de test ca să confirmi configul."""
+    cfg = load_mail_config(PROJECT_ROOT)
+    if not cfg:
+        ui.notify("📧 Lipsesc credențialele în mail_config.json (smtp_user/smtp_pass).", type="warning")
+        return
+    body = ("Test e-mail Loto Enterprise — configurarea funcționează ✅\n"
+            f"Următoarea extragere: {_next_draw_date()}\n"
+            "La finalul bench-ului vei primi: data + Pool 1 / OMNIUS 1 / Pool 2 / OMNIUS 2.")
+    try:
+        send_email(cfg, "🎰 Loto — mail de test", body)
+        ui.notify(f"📧 Mail de test trimis la {cfg['mail_to']}. Verifică inbox-ul.", type="positive")
+        logger.info("[MAIL] test trimis la %s", cfg["mail_to"])
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(f"📧 Test eșuat: {exc}", type="negative")
+        logger.error("[MAIL] test eșuat: %s", exc)
+
+
 def _maybe_send_results_email() -> None:
     """Trimite rezultatele pe mail la finalul pipeline-ului, dacă e bifat
     'mail_on_complete' ȘI SMTP-ul e configurat (mail_config.json / env). Best-effort:
@@ -2596,6 +2614,7 @@ def main_page() -> None:
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
         _bind_save(ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete")
+        ui.button("📧 Trimite mail de test", on_click=_send_test_email).props("outline no-caps size=sm").classes("text-caption")
 
         ui.separator()
         ui.label("3. Control Execuție").classes("text-bold")
