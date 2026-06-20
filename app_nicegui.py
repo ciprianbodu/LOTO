@@ -1809,6 +1809,8 @@ def _render_bench_live_leaderboard(bench_start=None) -> None:
     with ui.expansion("🏆 Clasament PARȚIAL (live — în timpul bench-ului)", value=True).classes("w-full"):
         ui.label("⏳ Se completează pe măsură ce metodele termină (de obicei CPU întâi, apoi GPU). "
                  "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului.").classes("text-caption text-grey")
+        ui.label("ℹ️ Walk-forward validation + istoric hits (≥3: pool/OMNIUS/bilete, media între hituri) "
+                 "apar DUPĂ bench — când Auto-Pilot generează pool-ul și rulează validarea.").classes("text-caption text-grey")
         for fk, kp, sect in [("loto_6_49", pool, "6/49"),
                              ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
                              ("loto_5_40", pool, "5/40")]:
