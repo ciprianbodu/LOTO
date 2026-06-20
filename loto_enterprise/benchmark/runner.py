@@ -411,6 +411,7 @@ def run_benchmark(
     # Marker parsabil de UI: împărțirea totalului pe CPU vs GPU (pt progres/ETA separat).
     logger.info("[BENCH-SPLIT] cpu=%d gpu=%d total=%d", cpu_total_est, gpu_total_est, total_folds_est)
     done_global = 0
+    _since_flush = 0  # rezultate de la ultimul flush (cache SAU compute) → flush robust
 
     # Importuri o singură dată (erau în buclă).
     import os as _os
@@ -451,7 +452,7 @@ def run_benchmark(
         return _df
 
     def _handle_result(game, method, pct, is_random, fr, from_cache, kind):
-        nonlocal done_global
+        nonlocal done_global, _since_flush
         done_global += 1
         fold_rows.append(fr)
         tag = "CACHE HIT" if from_cache else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
@@ -460,10 +461,15 @@ def run_benchmark(
         # → cpu_done depășea cpu_tot). Format: [game/method/pct/REAL|RND/CPU|GPU].
         logger.info("[%d/%d] [%s/%s/%d%%/%s/%s] %s", done_global, total_folds_est,
                     game.key, method, pct, "RND" if is_random else "REAL", kind.upper(), tag)
-        # Flush periodic (la fiecare 100 rezultate noi necache-uite) → rezultate parțiale
-        # utilizabile chiar dacă se anulează. Sărim flush-ul pe cache hits (vin în rafală).
-        if not from_cache and done_global % 100 == 0:
+        # Flush la fiecare 100 rezultate (cache SAU compute) → folds.csv rămâne proaspăt
+        # pe parcurs (clasament live + rezultate parțiale la anulare). NU pe
+        # `done_global % 100 == 0 and not from_cache`: rata flush-ul dacă al 100-lea
+        # rezultat pica pe un cache hit → folds.csv rămânea vechi TOT bench-ul. Count-based
+        # = robust (un burst de cache → 1 flush la 100, nu pe fiecare).
+        _since_flush += 1
+        if _since_flush >= 100:
             _flush_folds()
+            _since_flush = 0
         if progress_cb:
             progress_cb(done_global, total_folds_est, fr, game)
 
