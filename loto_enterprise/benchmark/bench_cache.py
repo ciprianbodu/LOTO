@@ -35,6 +35,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import pickle
 import time
 from dataclasses import MISSING, fields, is_dataclass
@@ -45,7 +46,22 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = Path(".bench_cache")
+def _resolve_cache_dir() -> Path:
+    """Cache-ul stă ÎN AFARA OneDrive (ca .venv) — altfel zeci de mii de fișiere mici
+    se sincronizează degeaba și pot fi corupte la sync parțial. Implicit pe stația
+    ALF-LUPTATORI: D:\\_BUILD\\_LOTO\\.bench_cache. Override: LOTO_BENCH_CACHE_DIR.
+    Fallback: local .bench_cache (container/CI/altă stație fără D:\\_BUILD)."""
+    env = os.environ.get("LOTO_BENCH_CACHE_DIR")
+    if env:
+        return Path(env)
+    if os.name == "nt":
+        base = Path(r"D:\_BUILD\_LOTO")
+        if base.exists():
+            return base / ".bench_cache"
+    return Path(".bench_cache")
+
+
+CACHE_DIR = _resolve_cache_dir()
 CACHE_VERSION = "v3"  # bump asta cand interface-ul se schimba (invalidates all)
 # v3: FoldResult are acum rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
 #     Foldurile v2 nu au coloana 3+ → trebuie recalculate (altfel rata 3+ iese NaN).
