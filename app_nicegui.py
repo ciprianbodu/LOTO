@@ -47,7 +47,9 @@ from ui_shared import (
     clear_logs,
     decode_queue_result,
     ensure_worker_running,
+    load_mail_config,
     read_logs_filtered,
+    send_email,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
@@ -64,12 +66,13 @@ REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
-    "sim_depth_val", "autopilot_after_bench",
+    "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
     "lookback_val": 0, "consecutive_filter_val": True, "auto_invert_val": False,
     "shutdown_on_complete": False, "sim_depth_val": 40, "autopilot_after_bench": True,
+    "mail_on_complete": False,
 }
 
 # --------------------------------------------------------------------------- #
@@ -574,7 +577,7 @@ def cancel_all() -> None:
 def _start_walk_forward() -> None:
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
-        _maybe_shutdown()  # fără rezultate → nu rulează WF; ăsta e finalul, oprim acum
+        _finalize_pipeline()  # fără rezultate → nu rulează WF; ăsta e finalul (mail + shutdown)
         return
     results_bundle, _ = results
     # NOTĂ inversare: walk-forward-ul rulează pipeline-ul NORMAL (Faza 1, pre-inversare),
@@ -626,8 +629,8 @@ def _start_walk_forward() -> None:
                 results_panel.refresh()
             except Exception:  # noqa: BLE001
                 pass
-            # ABIA ACUM (walk-forward terminat) declanșăm oprirea automată a PC-ului.
-            _maybe_shutdown()
+            # ABIA ACUM (walk-forward terminat): mail cu rezultate + oprirea PC-ului.
+            _finalize_pipeline()
             try:
                 status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
             except Exception:  # noqa: BLE001
@@ -731,6 +734,47 @@ SOUND_JS = (
     "o.type='sine';o.frequency.value=880;g.gain.value=0.08;o.start();"
     "o.stop(c.currentTime+0.35);}catch(e){}"
 )
+
+
+def _maybe_send_results_email() -> None:
+    """Trimite rezultatele pe mail la finalul pipeline-ului, dacă e bifat
+    'mail_on_complete' ȘI SMTP-ul e configurat (mail_config.json / env). Best-effort:
+    orice eroare e logată, NU oprește restul (shutdown etc.)."""
+    if not SETTINGS.get("mail_on_complete"):
+        return
+    cfg = load_mail_config(PROJECT_ROOT)
+    if not cfg:
+        logger.warning("[MAIL] cerut, dar SMTP neconfigurat (mail_config.json / env) — sar peste.")
+        try:
+            ui.notify("📧 Mail cerut, dar lipsesc credențialele (vezi mail_config.json).", type="warning")
+        except Exception:  # noqa: BLE001
+            pass
+        return
+    try:
+        body = _build_report()
+    except Exception:  # noqa: BLE001
+        body = REPORT_FILE.read_text(encoding="utf-8") if REPORT_FILE.exists() else "(raport indisponibil)"
+    subject = "🎰 Loto Enterprise — rezultate (bench + generare + walk-forward)"
+    try:
+        send_email(cfg, subject, body, attachments=[REPORT_FILE] if REPORT_FILE.exists() else None)
+        logger.info("[MAIL] rezultate trimise la %s", cfg["mail_to"])
+        try:
+            ui.notify(f"📧 Rezultate trimise pe mail ({cfg['mail_to']}).", type="positive")
+        except Exception:  # noqa: BLE001
+            pass
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[MAIL] trimitere eșuată: %s", exc)
+        try:
+            ui.notify(f"📧 Mail eșuat: {exc}", type="negative")
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _finalize_pipeline() -> None:
+    """La finalul pipeline-ului (după walk-forward / ramura fără rezultate): trimite
+    mailul (dacă e cerut) ÎNAINTE de oprirea PC-ului, apoi oprește PC-ul (dacă e cerut)."""
+    _maybe_send_results_email()
+    _maybe_shutdown()
 
 
 def _maybe_shutdown() -> None:
@@ -2500,6 +2544,7 @@ def main_page() -> None:
         _bind_save(ui.checkbox("Filtru Anti-Secvență"), "consecutive_filter_val")
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
+        _bind_save(ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete")
 
         ui.separator()
         ui.label("3. Control Execuție").classes("text-bold")

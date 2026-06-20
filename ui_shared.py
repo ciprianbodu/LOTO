@@ -28,6 +28,61 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 WORKER_PATH = PROJECT_ROOT / "worker.py"
 
 
+# ---------------------------------------------------------------------------
+# E-mail rezultate (SMTP) — OPȚIONAL. Config în mail_config.json (lângă proiect,
+# gitignored) sau env LOTO_SMTP_USER / LOTO_SMTP_PASS / LOTO_MAIL_TO.
+# Pentru Gmail e nevoie de o PAROLĂ DE APLICAȚIE (16 caractere, cu 2FA activ),
+# NU parola contului. Vezi mail_config.json.example.
+# ---------------------------------------------------------------------------
+def load_mail_config(project_root=PROJECT_ROOT):
+    """Întoarce config SMTP (dict) sau None dacă lipsesc user/parola/destinatar."""
+    cfg = {
+        "smtp_host": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "",
+        "smtp_pass": "",
+        "mail_to": "ciprianbodu@gmail.com",
+    }
+    f = Path(project_root) / "mail_config.json"
+    if f.exists():
+        try:
+            cfg.update(json.loads(f.read_text(encoding="utf-8")))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[mail] mail_config.json invalid: %s", exc)
+    cfg["smtp_user"] = os.environ.get("LOTO_SMTP_USER", cfg.get("smtp_user") or "")
+    cfg["smtp_pass"] = os.environ.get("LOTO_SMTP_PASS", cfg.get("smtp_pass") or "")
+    cfg["mail_to"] = os.environ.get("LOTO_MAIL_TO", cfg.get("mail_to") or "")
+    if not cfg["smtp_user"] or not cfg["smtp_pass"] or not cfg["mail_to"]:
+        return None
+    return cfg
+
+
+def send_email(cfg, subject, body, attachments=None):
+    """Trimite un e-mail text prin SMTP (STARTTLS). `attachments` = listă de căi de fișier."""
+    import smtplib
+    import ssl
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["From"] = cfg["smtp_user"]
+    msg["To"] = cfg["mail_to"]
+    msg["Subject"] = subject
+    msg.set_content(body or "(fără conținut)")
+    for path in (attachments or []):
+        try:
+            p = Path(path)
+            if p.exists():
+                msg.add_attachment(p.read_bytes(), maintype="text", subtype="plain",
+                                   filename=p.name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[mail] atașament %s eșuat: %s", path, exc)
+    ctx = ssl.create_default_context()
+    with smtplib.SMTP(cfg["smtp_host"], int(cfg["smtp_port"]), timeout=30) as s:
+        s.starttls(context=ctx)
+        s.login(cfg["smtp_user"], cfg["smtp_pass"])
+        s.send_message(msg)
+
+
 # --------------------------------------------------------------------------- #
 # Loguri
 # --------------------------------------------------------------------------- #

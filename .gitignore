@@ -70,4 +70,5 @@ uploaded_data/
 .bench_cache/
 raport_complet.txt
 best_methods.json
+mail_config.json
 bench_results_gpu/
