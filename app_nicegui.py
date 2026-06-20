@@ -714,6 +714,8 @@ def status_panel() -> None:
                 ui.linear_progress(value=rc[0], show_value=False).props("instant-feedback").classes("w-full")
             ui.label("Testez toate metodele (CPU pe nuclee ‖ GPU). Auto-Pilot pornește la final.").classes("text-caption")
             ui.html(_hw_telemetry_html())  # consum live CPU/RAM/GPU/VRAM
+        # Clasament PARȚIAL live: metodele apar pe măsură ce termină (CPU întâi, apoi GPU).
+        _render_bench_live_leaderboard(_start)
         return
 
     _shutdown_banner()
@@ -1778,6 +1780,39 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         slices = [(folds_key, pool, game_label.upper())]
     for folds_key, k_pool, sect in slices:
         _render_bench_leaderboard_slice(df, folds_key, k_pool, sect, top_n=top_n)
+
+
+def _render_bench_live_leaderboard(bench_start=None) -> None:
+    """Clasament PARȚIAL în timpul bench-ului — din folds.csv (flush-uit periodic la
+    ~100 rezultate). Metodele apar pe măsură ce TERMINĂ: de obicei CPU întâi (track-ul
+    CPU se închide mai devreme), apoi GPU. Câștigătorul final + Auto-Pilot se decid
+    abia la sfârșit. Citește folds.csv O DATĂ pe render (parțial → mic)."""
+    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
+    if not fp.exists():
+        return
+    # Până la primul flush al rulării CURENTE, folds.csv încă are rezultatele bench-ului
+    # ANTERIOR → nu le arăta ca „live".
+    if bench_start:
+        try:
+            if fp.stat().st_mtime < float(bench_start) - 2:
+                ui.label("⏳ Se calculează primele rezultate… (clasamentul parțial apare după primul flush).").classes("text-caption text-grey")
+                return
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        df = pd.read_csv(fp)
+    except Exception:  # noqa: BLE001
+        return  # mid-flush / gol → reîncearcă la următorul tick
+    if df.empty or "method" not in df.columns or "game" not in df.columns:
+        return
+    pool = int(SETTINGS.get("pool_size_val", 10))
+    with ui.expansion("🏆 Clasament PARȚIAL (live — în timpul bench-ului)", value=True).classes("w-full"):
+        ui.label("⏳ Se completează pe măsură ce metodele termină (de obicei CPU întâi, apoi GPU). "
+                 "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului.").classes("text-caption text-grey")
+        for fk, kp, sect in [("loto_6_49", pool, "6/49"),
+                             ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
+                             ("loto_5_40", pool, "5/40")]:
+            _render_bench_leaderboard_slice(df, fk, kp, sect, top_n=10)
 
 
 def _render_bench_winner_only(game_label: str) -> None:
