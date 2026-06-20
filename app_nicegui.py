@@ -1873,6 +1873,28 @@ def _bench_target() -> int:
         return 4
 
 
+def _target_data_ready() -> bool:
+    """True dacă folds.csv conține deja rata pentru pragul curent (≥BENCH_HIT_TARGET).
+    Dacă NU (după bump de schemă cache v2→v3 sau schimbare de prag), următorul
+    Re-Bench e un recalcul COMPLET (lent), nu rapid din cache — deci banner-ul nu
+    trebuie să mintă cu „cache rapid"."""
+    try:
+        _T = _bench_target()
+        f = PROJECT_ROOT / "bench_results" / "folds.csv"
+        if not f.exists():
+            return False
+        cols = [c for c in pd.read_csv(f, nrows=0).columns if c.startswith(f"rate_{_T}plus")]
+        if not cols:
+            return False
+        df = pd.read_csv(f, usecols=cols)
+        if df.empty:
+            return False
+        # fracția rândurilor cu măcar o valoare reală pentru prag (folduri calculate în schema curentă)
+        return float(df.notna().any(axis=1).mean()) >= 0.9
+    except Exception:  # noqa: BLE001
+        return True  # la dubiu, nu speria utilizatorul
+
+
 def _render_hits_4plus(flat, game: str) -> None:
     """Afișează extragerile cu ≥4 hits — UN tabel cu coloane DISTINCTE pentru
     pool, OMNIUS și biletele simple, cheiat pe extragere.
@@ -2478,8 +2500,12 @@ def main_page() -> None:
                          "datele noi, iar câștigătorul bench abia se schimbă la câteva extrageri.").classes("text-caption " + _col)
             elif _fresh["rec"] in ("quick_rebench", "full_rebench"):
                 ui.label("⚠️ Datele s-au schimbat de la ultimul bench → Re-Bench recalculează complet (fără cache).").classes("text-caption text-warning")
-            else:
+            elif _target_data_ready():
                 ui.label("✅ Date neschimbate de la ultimul bench → Re-Bench folosește cache-ul (rapid).").classes("text-caption text-positive")
+            else:
+                ui.label(f"⚠️ Următorul Re-Bench va fi COMPLET (~lent, nu din cache): datele pentru pragul "
+                         f"curent (≥{_bench_target()}) nu-s încă în cache (schemă nouă / prag schimbat). "
+                         "O singură dată — apoi redevine rapid.").classes("text-caption text-warning")
         _bind_save(ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"), "autopilot_after_bench")
 
         ui.separator()
