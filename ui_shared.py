@@ -42,6 +42,7 @@ def load_mail_config(project_root=PROJECT_ROOT):
         "smtp_user": "",
         "smtp_pass": "",
         "mail_to": "ciprianbodu@gmail.com",
+        "tls_insecure": False,  # true DOAR dacă AV-ul interceptează SSL și strică verificarea
     }
     f = Path(project_root) / "mail_config.json"
     if f.exists():
@@ -50,7 +51,8 @@ def load_mail_config(project_root=PROJECT_ROOT):
         except Exception as exc:  # noqa: BLE001
             logger.warning("[mail] mail_config.json invalid: %s", exc)
     cfg["smtp_user"] = os.environ.get("LOTO_SMTP_USER", cfg.get("smtp_user") or "")
-    cfg["smtp_pass"] = os.environ.get("LOTO_SMTP_PASS", cfg.get("smtp_pass") or "")
+    # Gmail app password se afișează cu spații (4×4) — le scoatem (altfel login eșuează).
+    cfg["smtp_pass"] = (os.environ.get("LOTO_SMTP_PASS", cfg.get("smtp_pass") or "") or "").replace(" ", "")
     cfg["mail_to"] = os.environ.get("LOTO_MAIL_TO", cfg.get("mail_to") or "")
     if not cfg["smtp_user"] or not cfg["smtp_pass"] or not cfg["mail_to"]:
         return None
@@ -76,7 +78,14 @@ def send_email(cfg, subject, body, attachments=None):
                                    filename=p.name)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[mail] atașament %s eșuat: %s", path, exc)
-    ctx = ssl.create_default_context()
+    # TLS VERIFICAT implicit (sigur). Verificarea se sare DOAR dacă utilizatorul a setat
+    # EXPLICIT "tls_insecure": true în mail_config.json — decizie conștientă a lui (ex.
+    # antivirus care interceptează SSL cu un cert pe care OpenSSL 3.x îl respinge).
+    if cfg.get("tls_insecure"):
+        ctx = ssl._create_unverified_context()
+        logger.warning("[mail] tls_insecure=true → trimitere FĂRĂ verificare de certificat TLS.")
+    else:
+        ctx = ssl.create_default_context()
     with smtplib.SMTP(cfg["smtp_host"], int(cfg["smtp_port"]), timeout=30) as s:
         s.starttls(context=ctx)
         s.login(cfg["smtp_user"], cfg["smtp_pass"])

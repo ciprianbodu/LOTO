@@ -736,6 +736,56 @@ SOUND_JS = (
 )
 
 
+def _next_draw_date() -> str:
+    """Următoarea extragere (Loteria Română: 6/49, 5/40, Joker — JOI și DUMINICĂ)."""
+    base = _dt.now().date()
+    o = base.toordinal()
+    for i in range(0, 8):
+        d = base.fromordinal(o + i)
+        if d.weekday() in (3, 6):  # 3 = Joi, 6 = Duminică
+            return d.strftime("%d-%m-%Y")
+    return base.strftime("%d-%m-%Y")
+
+
+def _build_mail_body() -> str:
+    """Conținut CONCIS pentru mail: data extragerii + Pool 1 / OMNIUS 1 / Pool 2 /
+    OMNIUS 2 per joc — DOAR numerele, fără raportul complet."""
+    results = STATE.get("results")
+    if not (isinstance(results, tuple) and len(results) == 2):
+        return "Nu există rezultate de generare."
+    rb, _ = results
+
+    def _nums(seq):
+        return " ".join(str(int(x)) for x in sorted(seq)) if seq else "—"
+
+    def _omni_line(g, pd):
+        t = _omnius_for_pool(g, pd) or []
+        s = " ".join(str(int(x)) for x in t)
+        jk = sorted(int(x) for x in (pd.get("hard_core_joker") or []))[:1]
+        if jk:
+            s += f"  + joker {jk[0]}"
+        return s or "—"
+
+    lines = [f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}",
+             f"(generat: {_dt.now().strftime('%d-%m-%Y %H:%M')})", ""]
+    for _fn, outs in rb:
+        for g, d in _ordered_game_items(outs):
+            inv = bool(d.get("auto_invert") and d.get("phase1"))
+            p1 = d["phase1"] if inv else d
+            jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))
+            lines.append(f"=== {g.upper()} ===")
+            lines.append("POOL 1:   " + _nums(p1.get("hard_core") or [])
+                         + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
+            lines.append("OMNIUS 1: " + _omni_line(g, p1))
+            if inv:
+                jk2 = sorted(int(x) for x in (d.get("hard_core_joker") or []))
+                lines.append("POOL 2:   " + _nums(d.get("hard_core") or [])
+                             + (f"  | joker: {_nums(jk2)}" if jk2 else ""))
+                lines.append("OMNIUS 2: " + _omni_line(g, d))
+            lines.append("")
+    return "\n".join(lines).strip()
+
+
 def _maybe_send_results_email() -> None:
     """Trimite rezultatele pe mail la finalul pipeline-ului, dacă e bifat
     'mail_on_complete' ȘI SMTP-ul e configurat (mail_config.json / env). Best-effort:
@@ -751,12 +801,13 @@ def _maybe_send_results_email() -> None:
             pass
         return
     try:
-        body = _build_report()
-    except Exception:  # noqa: BLE001
-        body = REPORT_FILE.read_text(encoding="utf-8") if REPORT_FILE.exists() else "(raport indisponibil)"
-    subject = "🎰 Loto Enterprise — rezultate (bench + generare + walk-forward)"
+        body = _build_mail_body()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[MAIL] build body: %s", exc)
+        body = "(eroare la construirea conținutului)"
+    subject = f"🎰 Loto — numere pentru extragerea {_next_draw_date()}"
     try:
-        send_email(cfg, subject, body, attachments=[REPORT_FILE] if REPORT_FILE.exists() else None)
+        send_email(cfg, subject, body)  # doar esențialul (data + pool/omnius), fără atașament
         logger.info("[MAIL] rezultate trimise la %s", cfg["mail_to"])
         try:
             ui.notify(f"📧 Rezultate trimise pe mail ({cfg['mail_to']}).", type="positive")

@@ -3,5 +3,6 @@
   "smtp_port": 587,
   "smtp_user": "adresa_ta@gmail.com",
   "smtp_pass": "PAROLA_DE_APLICATIE_16_CARACTERE_FARA_SPATII",
-  "mail_to": "ciprianbodu@gmail.com"
+  "mail_to": "ciprianbodu@gmail.com",
+  "tls_insecure": false
 }
