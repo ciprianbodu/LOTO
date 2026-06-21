@@ -11,6 +11,7 @@ folosind doar datele disponibile până la acel moment (walk-forward simulation)
 from __future__ import annotations
 
 import logging
+import time
 from collections import Counter, deque
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional, Set
@@ -432,7 +433,8 @@ class LotoBacktester:
                                   use_feedback: bool = True,
                                   enable_hard_inversion: bool = True,
                                   smart_reduction: bool = True,
-                                  progress_cb=None) -> List[RetroactivePrediction]:
+                                  progress_cb=None,
+                                  should_cancel=None) -> List[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
@@ -486,6 +488,20 @@ class LotoBacktester:
         # Iterăm prin fiecare punct de simulare
         for sim_idx in range(start_idx, n_draws, simulation_step):
             sim_num = sim_idx - start_idx + 1
+
+            # Oprire timpurie (anulare manuală SAU buget de timp) — o metodă GPU grea
+            # (ex. torch_wavenet_deep la Joker) reantrenează modelul la FIECARE pas, deci
+            # walk-forward-ul complet ar dura ore. should_cancel() permite o validare
+            # PARȚIALĂ (cât s-a apucat) în loc să blocheze pipeline-ul la nesfârșit.
+            # Garantăm minim o simulare (sim_num > 1) ca să nu întoarcem gol.
+            if should_cancel is not None and sim_num > 1:
+                try:
+                    if should_cancel():
+                        logger.warning("[BACKTEST] oprire timpurie la %d/%d (anulare/buget de timp) "
+                                       "→ validare parțială.", sim_num - 1, n_simulate)
+                        break
+                except Exception:  # noqa: BLE001
+                    pass
 
             if progress_cb is not None:
                 try:

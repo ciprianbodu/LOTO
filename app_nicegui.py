@@ -64,6 +64,13 @@ BENCH_PID_FILE = PROJECT_ROOT / ".bench_pid"
 BENCH_LOG_FILE = PROJECT_ROOT / "bench_full.log"
 REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 
+# Buget de timp TOTAL pentru walk-forward (toate jocurile). O metodă GPU grea (ex.
+# torch_wavenet_deep la Joker) reantrenează modelul la FIECARE pas retroactiv → un WF
+# complet (10% × ~2000 extrageri) ar dura ORE și pare „înghețat". Peste buget, validarea
+# se oprește PARȚIAL și pipeline-ul continuă (mail + shutdown). Jocurile rapide (6/49,
+# 5/40 — sub o secundă/pas) termină oricum integral. Anulabil și manual din UI.
+WF_TOTAL_BUDGET_S = 15 * 60
+
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
@@ -94,6 +101,7 @@ STATE: dict = {
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
     "wf_status": "",         # text status walk-forward
     "wf_progress": 0.0,      # fracție 0..1 progres walk-forward (bară)
+    "wf_cancel": False,      # True → oprește walk-forward (buton UI); pipeline continuă
     "pure_bench": False,
     "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
     "bench_was_running": False,
@@ -593,6 +601,13 @@ def _start_walk_forward() -> None:
     _pfx = ""  # bench unic → fără prefix de secțiune
 
     def _worker_wf() -> None:
+        STATE["wf_cancel"] = False
+        _wf_deadline = time.time() + WF_TOTAL_BUDGET_S
+
+        def _wf_should_cancel():
+            # Oprire timpurie: anulare manuală (buton UI) SAU buget de timp TOTAL depășit.
+            return bool(STATE.get("wf_cancel")) or time.time() > _wf_deadline
+
         try:
             from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
             with STATE_LOCK:
@@ -625,12 +640,25 @@ def _start_walk_forward() -> None:
                             pool_size=int(data.get("pool_size") or 10),
                             backtest_depth_percent=10.0, lookback_percent=100.0, use_cache=True,
                             progress_cb=_wf_cb,
+                            should_cancel=_wf_should_cancel,
                         )
+                        if meta.get("partial"):
+                            logger.warning("[WF] %s validat PARȚIAL: %s/%s extrageri "
+                                           "(buget de timp / anulare).",
+                                           g_label, meta.get("n_test_draws"), meta.get("n_expected"))
                         with STATE_LOCK:
                             STATE["retro"][f"{_pfx}{fname}_{g_label}"] = flat
                     except Exception as exc:  # noqa: BLE001
                         logger.error("walk-forward %s: %s", g_label, exc)
                     STATE["wf_progress"] = done / max(1, total)
+                    if _wf_should_cancel():
+                        # Buget depășit / anulat → nu mai pornim jocurile rămase.
+                        logger.warning("[WF] oprire walk-forward (buget/anulare) după %d/%d jocuri.",
+                                       done, total)
+                        break
+                else:
+                    continue
+                break
             STATE["wf_status"] = ""
             STATE["wf_progress"] = 1.0
         except Exception as exc:  # noqa: BLE001
@@ -1729,6 +1757,22 @@ def wf_progress_panel() -> None:
     ui.label(STATE["wf_status"] + _eta).classes("text-info")
     ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
     ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
+
+    def _cancel_wf() -> None:
+        # Oprește validarea (numerele sunt DEJA generate). Pipeline-ul continuă spre
+        # mail/shutdown. La Joker, walk-forward-ul cu metodă GPU grea durează ore.
+        STATE["wf_cancel"] = True
+        STATE["wf_status"] = "⏹ Opresc validarea... pipeline-ul continuă (mail/shutdown)."
+        try:
+            wf_progress_panel.refresh()
+        except Exception:  # noqa: BLE001
+            pass
+        ui.notify("⏹ Walk-forward se oprește. Rezultatele (numerele) sunt deja gata.",
+                  type="warning")
+
+    if not STATE.get("wf_cancel"):
+        ui.button("⏹ Oprește validarea (poate dura ore la Joker GPU)", on_click=_cancel_wf) \
+            .props("outline color=warning size=sm").classes("mt-1")
 
 
 @ui.refreshable

@@ -130,6 +130,7 @@ def run_honest_walk_forward(
     use_cache: bool = True,
     force_refresh: bool = False,
     progress_cb=None,
+    should_cancel=None,
 ) -> Tuple[List[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -157,6 +158,8 @@ def run_honest_walk_forward(
             meta["from_cache"] = True
             meta["n_predictions"] = cached["n_predictions"]
             meta["n_test_draws"] = cached["n_test_draws"]
+            meta["n_expected"] = cached.get("n_expected", cached["n_test_draws"])
+            meta["partial"] = cached.get("partial", False)
             logger.info(
                 f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
                 f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
@@ -184,11 +187,16 @@ def run_honest_walk_forward(
         enable_hard_inversion=False,  # idem
         smart_reduction=True,
         progress_cb=progress_cb,      # frac 0..1 per simulare → bară de progres în UI
+        should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
     )
 
+    # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
+    n_expected = max(1, int(len(df_source) * backtest_depth_percent / 100.0))
     flat = expand_predictions_to_flat(predictions, game_type)
     meta["n_predictions"] = len(predictions)
     meta["n_test_draws"] = len(set(p.draw_index for p in predictions))
+    meta["n_expected"] = n_expected
+    meta["partial"] = meta["n_test_draws"] < n_expected
 
     # Save cache
     try:
