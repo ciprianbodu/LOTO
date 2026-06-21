@@ -2127,25 +2127,30 @@ def _render_hits_4plus(flat, game: str) -> None:
     # (2) DATELE prinderii — TABELE SEPARATE: unul pentru Pool 1, unul pentru OMNIUS 1.
     # Fiecare: Data | Nimerite | Δ față de precedent (zile față de hit-ul ≥3 anterior AL
     # ACELEIAȘI surse). OMNIUS prinde ≥3 rar → tabelul lui e scurt (sau gol).
-    def _dates_table(title, pred, badge, empty_msg):
+    def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label="Δ față de precedent"):
+        # gap_on = pe ce subset se calculează Δ (implicit toate rândurile). Δ apare DOAR pe
+        # rândurile care satisfac gap_on (restul „—"). Ex. Pool 1: Δ pe seria de +5.
         items = sorted(((di, d) for di, d in per.items() if pred(d)),
                        key=lambda kv: kv[0], reverse=True)
         if not items:
             ui.label(empty_msg).classes("text-caption text-grey mt-2")
             return
-        gmap = _gap_days_map([d["label"] for _, d in items])
-        rows = [{"draw": d["label"], "hits": badge(d), "gap": _fmt_gap(gmap.get(d["label"]))}
+        _gp = gap_on or (lambda d: True)
+        gmap = _gap_days_map([d["label"] for _, d in items if _gp(d)])
+        rows = [{"draw": d["label"], "hits": badge(d),
+                 "gap": _fmt_gap(gmap.get(d["label"])) if _gp(d) else "—"}
                 for _, d in items]
         ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes("text-bold text-caption mt-3")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "hits", "label": "Nimerite", "field": "hits", "align": "center"},
-                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"}],
+                     {"name": "gap", "label": gap_label, "field": "gap", "align": "center"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
 
     _dates_table("🗓️ POOL 1 — datele cu ≥3", lambda d: d["pool"] >= 3,
-                 lambda d: f"🔥 {d['pool']}", "Pool 1 n-a prins ≥3 în istoricul walk-forward.")
+                 lambda d: f"🔥 {d['pool']}", "Pool 1 n-a prins ≥3 în istoricul walk-forward.",
+                 gap_on=lambda d: d["pool"] >= 5, gap_label="Δ față de precedent (+5)")
     _dates_table("🗓️ OMNIUS 1 — datele cu ≥3", lambda d: d["omnius"] >= 3,
                  lambda d: f"⭐ {d['omnius']}", "OMNIUS 1 n-a prins ≥3 în istoricul walk-forward.")
 
