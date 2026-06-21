@@ -768,21 +768,23 @@ def _build_mail_body() -> str:
 
     lines = [f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}",
              f"(generat: {_dt.now().strftime('%d-%m-%Y %H:%M')})", ""]
-    for _fn, outs in rb:
-        for g, d in _ordered_game_items(outs):
-            inv = bool(d.get("auto_invert") and d.get("phase1"))
-            p1 = d["phase1"] if inv else d
-            jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))
-            lines.append(f"=== {g.upper()} ===")
-            lines.append("POOL 1:   " + _nums(p1.get("hard_core") or [])
-                         + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
-            lines.append("OMNIUS 1: " + _omni_line(g, p1))
-            if inv:
-                jk2 = sorted(int(x) for x in (d.get("hard_core_joker") or []))
-                lines.append("POOL 2:   " + _nums(d.get("hard_core") or [])
-                             + (f"  | joker: {_nums(jk2)}" if jk2 else ""))
-                lines.append("OMNIUS 2: " + _omni_line(g, d))
-            lines.append("")
+    # Ordine FIXĂ în mail: 6/49 → Joker → 5/40 (aplatizăm jocurile din toate fișierele).
+    games = sorted(((g, d) for _fn, outs in rb for g, d in outs.items()),
+                   key=lambda gd: _GAME_DISPLAY_ORDER.get(_game_label_for(str(gd[0])), 99))
+    for g, d in games:
+        inv = bool(d.get("auto_invert") and d.get("phase1"))
+        p1 = d["phase1"] if inv else d
+        jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))
+        lines.append(f"=== {g.upper()} ===")
+        lines.append("POOL 1:   " + _nums(p1.get("hard_core") or [])
+                     + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
+        lines.append("OMNIUS 1: " + _omni_line(g, p1))
+        if inv:
+            jk2 = sorted(int(x) for x in (d.get("hard_core_joker") or []))
+            lines.append("POOL 2:   " + _nums(d.get("hard_core") or [])
+                         + (f"  | joker: {_nums(jk2)}" if jk2 else ""))
+            lines.append("OMNIUS 2: " + _omni_line(g, d))
+        lines.append("")
     return "\n".join(lines).strip()
 
 
