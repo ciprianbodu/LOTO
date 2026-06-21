@@ -2124,31 +2124,30 @@ def _render_hits_4plus(flat, game: str) -> None:
     ui.label("+3 / +4 = extrageri cu cel puțin 3 / 4 numere nimerite. "
              "Pool 2 / OMNIUS 2 (inversul) nu sunt validate walk-forward → nu apar aici.").classes("text-caption text-grey")
 
-    # (2) DATELE extragerilor în care Pool 1 a prins ≥3 (cele mai recente întâi).
-    winners = sorted(((di, d) for di, d in per.items() if d["pool"] >= 3),
-                     key=lambda kv: kv[0], reverse=True)
-    if winners:
-        # Δ Pool 1 = zile față de extragerea Pool1≥3 precedentă; Δ OMNIUS 1 = idem, dar pe
-        # seria proprie a hit-urilor OMNIUS≥3 (mai rare → goluri mai mari).
-        gap_pool = _gap_days_map([d["label"] for _, d in winners])
-        gap_omni = _gap_days_map([d["label"] for _, d in winners if d["omnius"] >= 3])
-        rows = []
-        for di, d in winners:
-            o = d["omnius"]
-            rows.append({"draw": d["label"],
-                         "pool": f"🔥 {d['pool']}",
-                         "gp": _fmt_gap(gap_pool.get(d["label"])),
-                         "omnius": f"⭐ {o}" if o >= 3 else (str(o) if o else "—"),
-                         "go": _fmt_gap(gap_omni.get(d["label"])) if o >= 3 else "—"})
-        ui.label(f"🗓️ Datele cu Pool 1 ≥3 ({len(rows)} extrageri, cele mai recente întâi):").classes("text-bold text-caption mt-3")
+    # (2) DATELE prinderii — TABELE SEPARATE: unul pentru Pool 1, unul pentru OMNIUS 1.
+    # Fiecare: Data | Nimerite | Δ față de precedent (zile față de hit-ul ≥3 anterior AL
+    # ACELEIAȘI surse). OMNIUS prinde ≥3 rar → tabelul lui e scurt (sau gol).
+    def _dates_table(title, pred, badge, empty_msg):
+        items = sorted(((di, d) for di, d in per.items() if pred(d)),
+                       key=lambda kv: kv[0], reverse=True)
+        if not items:
+            ui.label(empty_msg).classes("text-caption text-grey mt-2")
+            return
+        gmap = _gap_days_map([d["label"] for _, d in items])
+        rows = [{"draw": d["label"], "hits": badge(d), "gap": _fmt_gap(gmap.get(d["label"]))}
+                for _, d in items]
+        ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes("text-bold text-caption mt-3")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
-                     {"name": "pool", "label": "🔥 Pool 1", "field": "pool", "align": "center"},
-                     {"name": "gp", "label": "Δ Pool 1", "field": "gp", "align": "center"},
-                     {"name": "omnius", "label": "⭐ OMNIUS 1", "field": "omnius", "align": "center"},
-                     {"name": "go", "label": "Δ OMNIUS 1", "field": "go", "align": "center"}],
+                     {"name": "hits", "label": "Nimerite", "field": "hits", "align": "center"},
+                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
+
+    _dates_table("🗓️ POOL 1 — datele cu ≥3", lambda d: d["pool"] >= 3,
+                 lambda d: f"🔥 {d['pool']}", "Pool 1 n-a prins ≥3 în istoricul walk-forward.")
+    _dates_table("🗓️ OMNIUS 1 — datele cu ≥3", lambda d: d["omnius"] >= 3,
+                 lambda d: f"⭐ {d['omnius']}", "OMNIUS 1 n-a prins ≥3 în istoricul walk-forward.")
 
 
 # Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
