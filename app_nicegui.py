@@ -2128,19 +2128,25 @@ def _render_hits_4plus(flat, game: str) -> None:
     winners = sorted(((di, d) for di, d in per.items() if d["pool"] >= 3),
                      key=lambda kv: kv[0], reverse=True)
     if winners:
-        gap_map = _gap_days_map([d["label"] for _, d in winners])
+        # Δ Pool 1 = zile față de extragerea Pool1≥3 precedentă; Δ OMNIUS 1 = idem, dar pe
+        # seria proprie a hit-urilor OMNIUS≥3 (mai rare → goluri mai mari).
+        gap_pool = _gap_days_map([d["label"] for _, d in winners])
+        gap_omni = _gap_days_map([d["label"] for _, d in winners if d["omnius"] >= 3])
         rows = []
         for di, d in winners:
             o = d["omnius"]
-            rows.append({"draw": d["label"], "gap": _fmt_gap(gap_map.get(d["label"])),
+            rows.append({"draw": d["label"],
                          "pool": f"🔥 {d['pool']}",
-                         "omnius": f"⭐ {o}" if o >= 3 else (str(o) if o else "—")})
+                         "gp": _fmt_gap(gap_pool.get(d["label"])),
+                         "omnius": f"⭐ {o}" if o >= 3 else (str(o) if o else "—"),
+                         "go": _fmt_gap(gap_omni.get(d["label"])) if o >= 3 else "—"})
         ui.label(f"🗓️ Datele cu Pool 1 ≥3 ({len(rows)} extrageri, cele mai recente întâi):").classes("text-bold text-caption mt-3")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
-                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
                      {"name": "pool", "label": "🔥 Pool 1", "field": "pool", "align": "center"},
-                     {"name": "omnius", "label": "⭐ OMNIUS 1", "field": "omnius", "align": "center"}],
+                     {"name": "gp", "label": "Δ Pool 1", "field": "gp", "align": "center"},
+                     {"name": "omnius", "label": "⭐ OMNIUS 1", "field": "omnius", "align": "center"},
+                     {"name": "go", "label": "Δ OMNIUS 1", "field": "go", "align": "center"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
 
