@@ -2073,25 +2073,28 @@ def _render_hits_4plus(flat, game: str) -> None:
     a prins biletul OMNIUS."""
     if not flat:
         return
-    # Dedup pe extragere (hits_union / omnius_hits sunt per-extragere, repetate pe variante).
-    seen: dict = {}
+    # Dedup pe extragere (hits_union/omnius_hits sunt per-extragere, repetate pe variante).
+    per: dict = {}
     for p in flat:
         di = getattr(p, "draw_index", 0)
-        if di not in seen:
-            seen[di] = (int(getattr(p, "hits_union", 0)), int(getattr(p, "omnius_hits", 0)))
-    n = len(seen)
+        if di not in per:
+            dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+            per[di] = {"label": str(dd) if dd and str(dd) != "None" else f"#{di}",
+                       "pool": int(getattr(p, "hits_union", 0)),
+                       "omnius": int(getattr(p, "omnius_hits", 0))}
+    n = len(per)
     if not n:
         ui.label("Niciun istoric walk-forward.").classes("text-caption text-grey")
         return
-    pool3 = sum(1 for hu, _ in seen.values() if hu >= 3)
-    pool4 = sum(1 for hu, _ in seen.values() if hu >= 4)
-    omni3 = sum(1 for _, oh in seen.values() if oh >= 3)
-    omni4 = sum(1 for _, oh in seen.values() if oh >= 4)
+    pool3 = sum(1 for d in per.values() if d["pool"] >= 3)
+    pool4 = sum(1 for d in per.values() if d["pool"] >= 4)
+    omni3 = sum(1 for d in per.values() if d["omnius"] >= 3)
+    omni4 = sum(1 for d in per.values() if d["omnius"] >= 4)
 
     def _cell(k):
         return f"{k} ({k / n * 100:.0f}%)"
 
-    ui.label(f"🎯 Istoric hits — sumar (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
+    ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
     # Memento „întârziat": media intervalului între hituri ≥TARGET pe POOL + cât a trecut.
     _TT = _bench_target()
     st = _due_status(flat)
@@ -2108,6 +2111,7 @@ def _render_hits_4plus(flat, game: str) -> None:
             f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
             f"<span style='color:{col}'>{lvl}</span>)</span>"
         ).classes("mt-1")
+    # (1) SUMAR: de câte ori a prins fiecare +3 / +4.
     ui.table(
         columns=[{"name": "src", "label": "Sursă", "field": "src", "align": "left"},
                  {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
@@ -2117,6 +2121,26 @@ def _render_hits_4plus(flat, game: str) -> None:
     ).classes("w-full").props("dense")
     ui.label("+3 / +4 = extrageri cu cel puțin 3 / 4 numere nimerite. "
              "Pool 2 / OMNIUS 2 (inversul) nu sunt validate walk-forward → nu apar aici.").classes("text-caption text-grey")
+
+    # (2) DATELE extragerilor în care Pool 1 a prins ≥3 (cele mai recente întâi).
+    winners = sorted(((di, d) for di, d in per.items() if d["pool"] >= 3),
+                     key=lambda kv: kv[0], reverse=True)
+    if winners:
+        gap_map = _gap_days_map([d["label"] for _, d in winners])
+        rows = []
+        for di, d in winners:
+            o = d["omnius"]
+            rows.append({"draw": d["label"], "gap": _fmt_gap(gap_map.get(d["label"])),
+                         "pool": f"🔥 {d['pool']}",
+                         "omnius": f"⭐ {o}" if o >= 3 else (str(o) if o else "—")})
+        ui.label(f"🗓️ Datele cu Pool 1 ≥3 ({len(rows)} extrageri, cele mai recente întâi):").classes("text-bold text-caption mt-3")
+        ui.table(
+            columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                     {"name": "gap", "label": "Δ față de precedent", "field": "gap", "align": "center"},
+                     {"name": "pool", "label": "🔥 Pool 1", "field": "pool", "align": "center"},
+                     {"name": "omnius", "label": "⭐ OMNIUS 1", "field": "omnius", "align": "center"}],
+            rows=rows, pagination=15,
+        ).classes("w-full").props("dense")
 
 
 # Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
