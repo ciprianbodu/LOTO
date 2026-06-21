@@ -1813,6 +1813,16 @@ def _render_bench_leaderboard_slice(
     if metric not in sub.columns:
         return
     has_family = "family" in sub.columns
+
+    def _rate_for(grp, n):
+        """Rata de ≥n pentru o metodă (preferă coloana pe pool; sare peste NaN)."""
+        for c in (f"rate_{n}plus_k{pool}", f"rate_{n}plus"):
+            if c in grp.columns:
+                v = float(grp[c].mean())
+                if v == v:  # nu e NaN
+                    return v
+        return None
+
     rows = []
     for m, grp in sub.groupby("method"):
         score = float(grp[metric].mean())
@@ -1821,7 +1831,8 @@ def _render_bench_leaderboard_slice(
         if has_family:
             _f = grp["family"].dropna().astype(str)
             fam = _f.iloc[0] if not _f.empty else ""
-        rows.append((m, score, avg, _method_is_gpu(m, fam), _method_library(m, fam)))
+        rows.append((m, score, avg, _method_is_gpu(m, fam), _method_library(m, fam),
+                     _rate_for(grp, 3), _rate_for(grp, 4)))
     rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
     if not rows:
         return
@@ -1835,10 +1846,19 @@ def _render_bench_leaderboard_slice(
     winner = rows[0]  # câștigătorul GLOBAL (CPU+GPU împreună) — cel ales de bench
 
     def _row(i, rec):
-        m, score, avg, is_gpu, lib = rec
+        m, score, avg, is_gpu, lib = rec[:5]
+        r3, r4 = rec[5], rec[6]
         tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
         tag_cls = "text-deep-purple" if is_gpu else "text-blue"
-        sc_txt = f"{_shown_t}+: {score*100:.1f}%" if has_4plus else f"medie: {score:.3f}"
+        if has_4plus:
+            parts = []
+            if r3 is not None:
+                parts.append(f"3+: {r3*100:.1f}%")
+            if r4 is not None:
+                parts.append(f"4+: {r4*100:.1f}%")
+            sc_txt = " · ".join(parts) if parts else f"medie: {score:.3f}"
+        else:
+            sc_txt = f"medie: {score:.3f}"
         with ui.row().classes("items-center gap-2 w-full"):
             ui.label(f"{i}.").classes("text-bold text-grey w-6")
             ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
