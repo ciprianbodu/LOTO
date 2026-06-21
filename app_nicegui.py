@@ -843,9 +843,20 @@ def _maybe_send_results_email() -> None:
 
 def _finalize_pipeline() -> None:
     """La finalul pipeline-ului (după walk-forward / ramura fără rezultate): trimite
-    mailul (dacă e cerut) ÎNAINTE de oprirea PC-ului, apoi oprește PC-ul (dacă e cerut)."""
-    _maybe_send_results_email()
-    _maybe_shutdown()
+    mailul (dacă e cerut) ÎNAINTE de oprirea PC-ului, apoi oprește PC-ul (dacă e cerut).
+
+    Fiecare pas e izolat: o eroare la mail NU trebuie să blocheze oprirea PC-ului
+    (și invers). Logăm clar dacă vreun pas chiar nu s-a executat."""
+    logger.info("[FINALIZE] post-pipeline: mail_on_complete=%s shutdown_on_complete=%s",
+                SETTINGS.get("mail_on_complete"), SETTINGS.get("shutdown_on_complete"))
+    try:
+        _maybe_send_results_email()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[MAIL] finalize a eșuat (continui spre shutdown): %s", exc)
+    try:
+        _maybe_shutdown()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[SHUTDOWN] finalize a eșuat: %s", exc)
 
 
 def _maybe_shutdown() -> None:
