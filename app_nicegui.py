@@ -26,7 +26,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime as _dt
+from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 
 import pandas as pd
@@ -36,6 +36,7 @@ from job_queue import (
     cancel_pending_running_jobs,
     get_active_job,
     get_job_status,
+    get_latest_completed_job,
     init_job_queue,
     submit_job,
 )
@@ -67,12 +68,16 @@ UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
     "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
+    "last_finalized_job_id",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
     "lookback_val": 0, "consecutive_filter_val": True, "auto_invert_val": False,
     "shutdown_on_complete": False, "sim_depth_val": 40, "autopilot_after_bench": True,
     "mail_on_complete": False,
+    # NU e o bifă de UI: ultimul job dus prin finalize (mail/shutdown). Împiedică
+    # re-procesarea aceluiași job la fiecare repornire (altfel = shutdown repetat).
+    "last_finalized_job_id": 0,
 }
 
 # --------------------------------------------------------------------------- #
@@ -85,6 +90,7 @@ STATE: dict = {
     "job_start_time": None,
     "job_elapsed": None,     # durata FIXĂ a ultimei generări (sec); setată la COMPLETED
     "results": None,         # (results_bundle, count)
+    "results_recovered": None,  # etichetă „job #N · dată" dacă rezultatele-s recuperate (vechi)
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
     "wf_status": "",         # text status walk-forward
     "wf_progress": 0.0,      # fracție 0..1 progres walk-forward (bară)
@@ -591,6 +597,12 @@ def _start_walk_forward() -> None:
             from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
             with STATE_LOCK:
                 ds_by_name = {fn: df for fn, df in STATE["datasets"]}
+            if not ds_by_name:
+                # Tipic la RECUPERARE după restart: CSV-urile nu-s reîncărcate (se încarcă
+                # manual). Walk-forward se va sări (df_source None) → fără stats de validare,
+                # dar mail-ul (= doar numerele) și shutdown-ul rulează normal.
+                logger.warning("[WF] datasets goale (probabil recuperare după restart) → "
+                               "walk-forward sărit; mail/shutdown continuă fără stats de validare.")
             total = sum(len(o) for _, o in results_bundle)
             done = 0
             for fname, outs in results_bundle:
@@ -662,13 +674,26 @@ def status_panel() -> None:
         state = str(stt.get("status") or "")
         if state == "COMPLETED":
             payload = decode_queue_result(str(stt.get("result_json") or "{}"))
-            # Capturăm durata generării O SINGURĂ DATĂ (fixă) — altfel 'Rezultate (în X)'
-            # creștea live cât rula walk-forward-ul (acum − start_job recalculat mereu).
-            if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
-                STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
+            # Claim ATOMIC: un SINGUR renderer duce jobul în finalize. Dacă două
+            # taburi/reconnect-uri intră aproape simultan în ramura COMPLETED, doar cel
+            # care încă vede active_job_id == job_id procesează (mail/shutdown o dată);
+            # ceilalți doar afișează. Și marcăm jobul ca finalizat ACUM (înainte de
+            # WF/mail/shutdown) → o repornire în timpul walk-forward-ului NU-l reia.
             with STATE_LOCK:
-                STATE["results"] = payload
-                STATE["active_job_id"] = None
+                claimed = STATE.get("active_job_id") == int(job_id)
+                if claimed:
+                    # Durata generării O SINGURĂ DATĂ (fixă) — altfel 'Rezultate (în X)'
+                    # creștea live cât rula walk-forward-ul.
+                    if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
+                        STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
+                    STATE["results"] = payload
+                    STATE["results_recovered"] = None  # rezultat PROASPĂT → fără marcaj „vechi"
+                    STATE["active_job_id"] = None
+                    SETTINGS["last_finalized_job_id"] = int(job_id)
+            if not claimed:
+                ui.label("✅ Ultima generare e gata (vezi mai jos).").classes("text-positive")
+                return
+            _save_settings()
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
             _start_walk_forward()  # async; oprirea PC se face la FINALUL walk-forward-ului
@@ -723,7 +748,15 @@ def status_panel() -> None:
 
     _shutdown_banner()
     if isinstance(STATE.get("results"), tuple):
-        ui.label("✅ Ultima generare e gata (vezi mai jos).").classes("text-positive")
+        rec = STATE.get("results_recovered")
+        if rec:
+            # Rezultate recuperate dintr-o sesiune anterioară (job vechi, neprelucrat la
+            # momentul lui) → avertizăm CLAR: nu sunt din rularea curentă.
+            ui.label(f"⚠️ Rezultate RECUPERATE dintr-o sesiune anterioară ({rec}) — "
+                     "verifică data extragerii înainte să joci; re-rulează pentru numere noi.") \
+                .classes("text-warning text-bold")
+        else:
+            ui.label("✅ Ultima generare e gata (vezi mai jos).").classes("text-positive")
     else:
         ui.label("Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot.").classes("text-caption")
 
@@ -2747,6 +2780,91 @@ def main_page() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Recuperare la pornire a unui job terminat cât UI-ul era jos
+# --------------------------------------------------------------------------- #
+# Fereastra în care un job COMPLETED proaspăt mai DECLANȘEAZĂ mail + shutdown la
+# pornirea UI-ului. Peste ea: DOAR afișăm rezultatul (fără shutdown-surpriză la o
+# repornire mult ulterioară, fără mail cu numere vechi). Ținut SCURT intenționat:
+# dacă UI-ul revine în câteva minute e aproape sigur o repornire automată (cazul
+# „finalize ratat"); mai târziu = probabil utilizator prezent, care poate re-rula.
+# Shutdown-ul rămâne oricum anulabil 60s prin banner.
+RECOVERY_FINALIZE_WINDOW_S = 10 * 60
+
+
+def _completed_age_seconds(job: dict) -> float | None:
+    """Secunde de la finalizarea jobului. completed_at e UTC (CURRENT_TIMESTAMP).
+    None dacă lipsește/necitibil (joburi de dinainte de migrarea coloanei) SAU dacă
+    ceasul a sărit înapoi semnificativ (vechime negativă mare) — în acel caz NU
+    riscăm să clasificăm un job vechi drept „proaspăt" (= shutdown-surpriză)."""
+    ts = job.get("completed_at")
+    if not ts:
+        return None
+    try:
+        t = _dt.strptime(str(ts)[:19], "%Y-%m-%d %H:%M:%S")  # naiv = UTC
+        now_utc = _dt.now(_tz.utc).replace(tzinfo=None)  # naiv UTC (fără deprecation utcnow)
+        delta = (now_utc - t).total_seconds()
+        if delta < -120:
+            # Ceas dat înapoi (corecție NTP, resume VM, baterie BIOS) → suspect, NU proaspăt.
+            logger.warning("[RECOVERY] completed_at în viitor cu %.0fs (ceas?) → tratez ca vechi.", -delta)
+            return None
+        return max(0.0, delta)  # micile negative (sub-secundă) → 0
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _recover_completed_job() -> None:
+    """get_active_job() vede DOAR PENDING/RUNNING. Dacă worker-ul a terminat un job
+    cât UI-ul era complet jos, rezultatul (+ mail/shutdown de la final) ar rămâne
+    orfan. Îl readucem în flux O SINGURĂ DATĂ:
+      • PROASPĂT (în fereastră)  → flux COMPLET prin status_panel: afișare +
+        walk-forward + mail + shutdown (ca o finalizare normală pe care UI-ul a ratat-o);
+      • VECHI / fără completed_at → DOAR afișare (fără shutdown-surpriză, fără mail vechi).
+    `last_finalized_job_id` (persistat) împiedică re-procesarea la următoarea repornire."""
+    last = get_latest_completed_job()
+    if not last:
+        return
+    jid = int(last["id"])
+    try:
+        already = int(SETTINGS.get("last_finalized_job_id") or 0)
+    except (TypeError, ValueError):
+        already = 0
+    if jid == already:
+        return  # deja dus prin finalize într-o sesiune anterioară
+
+    payload = decode_queue_result(str(last.get("result_json") or "{}"))
+    if not (isinstance(payload, tuple) and len(payload) == 2):
+        # payload gol/invalid (ex. cancel-race) → marcăm văzut, nu reîncercăm la infinit
+        SETTINGS["last_finalized_job_id"] = jid
+        _save_settings()
+        return
+
+    age = _completed_age_seconds(last)
+    if age is not None and age <= RECOVERY_FINALIZE_WINDOW_S:
+        # Proaspăt → status_panel îl preia exact ca pe o finalizare normală (decode +
+        # STATE["results"] + walk-forward + mail + shutdown) și setează last_finalized.
+        # NU pornim worker-ul (jobul e gata).
+        STATE["active_job_id"] = jid
+        logger.warning("[RECOVERY] job #%s terminat acum %ss (în fereastră) → "
+                       "finalizez complet (mail/shutdown).", jid, int(age))
+    else:
+        # Vechi sau fără completed_at → doar afișăm numerele, fără mail/shutdown.
+        # Marcăm CLAR că-s dintr-o sesiune anterioară (la loto, a juca numere vechi
+        # crezându-le curente e o eroare reală) — afișat ca avertisment în status_panel.
+        when = str(last.get("completed_at") or "")[:16] or "sesiune anterioară"
+        with STATE_LOCK:
+            STATE["results"] = payload
+            STATE["results_recovered"] = f"job #{jid} · {when}"
+        SETTINGS["last_finalized_job_id"] = jid
+        _save_settings()
+        try:
+            _save_report_file()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[RECOVERY] raport: %s", exc)
+        logger.warning("[RECOVERY] job #%s prea vechi (%s) → doar afișez, fără mail/shutdown.",
+                       jid, "necunoscut" if age is None else f"{int(age)}s")
+
+
+# --------------------------------------------------------------------------- #
 # Bootstrap
 # --------------------------------------------------------------------------- #
 def _startup() -> None:
@@ -2765,6 +2883,13 @@ def _startup() -> None:
             ensure_worker_running()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
+    # Job terminat cât UI-ul era COMPLET jos (get_active_job vede doar PENDING/RUNNING)
+    # → altfel rezultatul + mail/shutdown rămân orfane. Doar dacă nu avem deja unul activ.
+    try:
+        if not STATE.get("active_job_id"):
+            _recover_completed_job()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("recover completed job startup: %s", exc)
 
 
 app.on_startup(_startup)

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # Folder dedicat, în AFARA OneDrive, ales de utilizator pentru fișierele de stare
@@ -124,8 +127,25 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
             )
             """
         )
+        # Migrare additivă: completed_at (joburile mai vechi NU o au). Folosită de UI
+        # ca să știe DACĂ un job COMPLETED e recent (recuperare după repornire UI →
+        # mail/shutdown DOAR pentru finalizări proaspete, fără surprize la joburi vechi).
+        migrated = True
+        try:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+            if "completed_at" not in cols:
+                conn.execute("ALTER TABLE jobs ADD COLUMN completed_at TIMESTAMP")
+        except sqlite3.OperationalError as exc:
+            # "duplicate column" = altă conexiune a adăugat-o deja (race UI↔worker) → benign.
+            # Altceva (lock/I/O OneDrive cât fișierul se sincronizează) → NU marcăm DB-ul
+            # ca inițializat, ca un apel ulterior să RE-încerce migrarea (altfel
+            # complete_job ar eșua cu "no such column" tot restul vieții procesului).
+            if "duplicate column" not in str(exc).lower():
+                logger.warning("[job_queue] migrare completed_at amânată: %s", exc)
+                migrated = False
         conn.commit()
-    _INITIALIZED_DBS.add(db_path)
+    if migrated:
+        _INITIALIZED_DBS.add(db_path)
 
 
 def submit_job(task_type: str, config_json: str, db_path: str = DB_PATH) -> int:
@@ -197,13 +217,35 @@ def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:
     with _connect(db_path) as conn:
         conn.execute(
             """
+            -- completed_at TREBUIE să rămână text UTC din CURRENT_TIMESTAMP
+            -- ('YYYY-MM-DD HH:MM:SS'): UI-ul (_completed_age_seconds) îl parsează ca
+            -- naiv-UTC. Nu-l scrie din Python (ar fi local → vechime greșită).
             UPDATE jobs
-            SET status = ?, progress_pct = 100, result_json = ?
+            SET status = ?, progress_pct = 100, result_json = ?, completed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (JOB_COMPLETED, result_json, int(job_id)),
         )
         conn.commit()
+
+
+def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+    """Read-only: cel mai recent job COMPLETED (cu completed_at, dacă există).
+
+    Folosit de UI la pornire ca să recupereze un job care s-a terminat cât UI-ul
+    era jos — get_active_job() întoarce doar PENDING/RUNNING, deci altfel rezultatul
+    (și mail-ul/shutdown-ul de la final) ar rămâne orfan. UI-ul decide pe baza
+    vechimii (completed_at) dacă mai declanșează mail/shutdown sau doar afișează."""
+    init_job_queue(db_path)
+    with _connect(db_path) as conn:
+        # După completed_at (cea mai recentă finalizare reală), cu id ca tie-break.
+        # NULLS LAST: joburile vechi fără completed_at nu „bat" unul proaspăt.
+        row = conn.execute(
+            "SELECT * FROM jobs WHERE status = ? "
+            "ORDER BY (completed_at IS NULL), completed_at DESC, id DESC LIMIT 1",
+            (JOB_COMPLETED,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> None:
