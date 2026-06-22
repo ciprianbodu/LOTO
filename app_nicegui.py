@@ -1981,6 +1981,47 @@ def _render_bench_leaderboard_slice(
                 "text-caption text-grey")
 
 
+def _render_last_csv_draw(fname: str) -> None:
+    """Reper lângă clasament: ULTIMA extragere reală din CSV-ul încărcat (data + numere
+    + joker dacă există). Faithful la CSV — arată exact ultima linie din fișier."""
+    df = next((d for f, d in STATE.get("datasets", []) if f == fname), None)
+    if df is None or len(df) == 0:
+        return
+    try:
+        last = df.iloc[-1]
+    except Exception:  # noqa: BLE001
+        return
+    cols = [str(c) for c in df.columns]
+    num_cols = sorted((c for c in cols if len(c) > 1 and c[0] == "n" and c[1:].isdigit()),
+                      key=lambda c: int(c[1:]))
+    nums = []
+    for c in num_cols:
+        try:
+            nums.append(int(last[c]))
+        except Exception:  # noqa: BLE001
+            pass
+    if not nums:
+        return
+    txt = "  ".join(str(n) for n in nums)
+    if "joker" in cols:
+        try:
+            txt += f"   ·   joker {int(last['joker'])}"
+        except Exception:  # noqa: BLE001
+            pass
+    date_str = ""
+    for dc in ("date", "Data", "data", "Date"):
+        if dc in cols:
+            try:
+                date_str = str(last[dc])
+            except Exception:  # noqa: BLE001
+                date_str = ""
+            break
+    cap = "📅 Ultima extragere din CSV" + (f" ({date_str})" if date_str else "") + ":"
+    with ui.row().classes("items-center gap-2"):
+        ui.label(cap).classes("text-caption text-grey")
+        ui.label(txt).classes("text-bold text-info")
+
+
 def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
     """Top-N metode din ULTIMUL bench pentru acest joc (folds.csv). Joker = urne separate."""
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
@@ -2341,6 +2382,9 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             for fname, game, data in flat_games:
                 ui.separator().classes("my-3")
                 ui.label(f"🎯 {game.upper()}").classes("text-bold text-lg")
+
+                # Reper: ultima extragere reală din CSV (deasupra clasamentului).
+                _render_last_csv_draw(fname)
 
                 # --- Top-10 CPU + GPU ---
                 _render_bench_leaderboard(game)
