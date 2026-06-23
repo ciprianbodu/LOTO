@@ -2426,12 +2426,14 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # --- Top-10 CPU + GPU ---
                 _render_bench_leaderboard(game)
 
-                # --- Istoric ≥4 hits ---
+                # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
                 main = (data.get("phase1")
                         if (data.get("auto_invert") and data.get("phase1")) else data)
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
                 if flat:
-                    _render_hits_4plus(flat, game)
+                    with ui.expansion("📜 Istoric hits (walk-forward) — arată / ascunde",
+                                      value=False).classes("w-full"):
+                        _render_hits_4plus(flat, game)
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
