@@ -1859,6 +1859,8 @@ def _method_library(name: str, family: str = "") -> str:
             return "OMNIUS (meta-învățare)"
         if f == "coverage":
             return "greedy set-cover (numpy)"
+        if f.startswith("graph"):
+            return "graph/network (numpy)"
         if f.startswith("math") or f.startswith("geometric") or f.startswith("probabil"):
             return "independent (numpy)"
         return family  # familia brută dacă n-o recunoaștem

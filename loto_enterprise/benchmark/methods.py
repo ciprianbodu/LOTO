@@ -686,6 +686,11 @@ def _load_extra_methods() -> None:
         extensions.append(("methods_omnius", methods_omnius.OMNIUS_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_omnius not loaded: {exc}")
+    try:
+        from . import methods_graph
+        extensions.append(("methods_graph", methods_graph.GRAPH_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_graph not loaded: {exc}")
 
     added = 0
     for modname, extra_dict in extensions:
