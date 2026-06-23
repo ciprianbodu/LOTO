@@ -9,7 +9,10 @@ gracefully degrade to CPU if hardware/lib unavailable.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
+import sys
 import warnings
 from typing import Dict, Tuple, Callable, Optional
 
@@ -17,6 +20,39 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _silence_native_stdio():
+    """Suprimă stdout+stderr la nivel de FILE DESCRIPTOR (C/C++) pe durata blocului.
+
+    CatBoost GPU tipărește din codul NATIV „Warning: less than 75% gpu memory
+    available for training. Free: X Total: Y" la FIECARE fit (un model/număr → zeci
+    de mesaje per apel, × folduri = potop) și IGNORĂ verbose=False/logging_level.
+    Redirectăm temporar fd 1/2 spre devnull DOAR în procesul curent (metodele CPU
+    rulează în procese separate → neafectate). Erorile reale rămân: CatBoost ridică
+    excepții Python, nu doar print-uri."""
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        saved_out, saved_err = os.dup(1), os.dup(2)
+    except Exception:  # noqa: BLE001
+        yield  # fără fd-uri reale (mediu fără consolă) → rulăm fără redirect
+        return
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved_out, 1)
+        os.dup2(saved_err, 2)
+        os.close(devnull)
+        os.close(saved_out)
+        os.close(saved_err)
 
 
 # ---------------------------------------------------------------------------
@@ -312,9 +348,12 @@ def score_ml_catboost_gpu(draws_2d, max_num):
     if not _has_cuda():
         return {}
     from catboost import CatBoostClassifier
-    return _sklearn_per_number(draws_2d, max_num,
-                               lambda: CatBoostClassifier(iterations=50, depth=4, task_type="GPU",
-                                                          verbose=False, allow_writing_files=False))
+    # Taie warning-ul nativ CatBoost GPU („less than 75% gpu memory...") care apare
+    # de zeci de ori per apel (1 model/număr) și ignoră verbose=False.
+    with _silence_native_stdio():
+        return _sklearn_per_number(draws_2d, max_num,
+                                   lambda: CatBoostClassifier(iterations=50, depth=4, task_type="GPU",
+                                                              verbose=False, allow_writing_files=False))
 
 
 # ===========================================================================
