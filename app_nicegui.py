@@ -75,7 +75,7 @@ UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
     "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
-    "last_finalized_job_id",
+    "last_finalized_job_id", "bench_use_cpu", "bench_use_gpu",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
@@ -85,6 +85,9 @@ DEFAULTS = {
     # NU e o bifă de UI: ultimul job dus prin finalize (mail/shutdown). Împiedică
     # re-procesarea aceluiași job la fiecare repornire (altfel = shutdown repetat).
     "last_finalized_job_id": 0,
+    # Metode bench pe dispozitiv. GPU implicit OFF: pe loto (date aleatoare) rețelele
+    # GPU prind constant MAI PUȚINE hituri decât euristicile CPU → timp irosit + VRAM.
+    "bench_use_cpu": True, "bench_use_gpu": False,
 }
 
 # --------------------------------------------------------------------------- #
@@ -277,11 +280,22 @@ def _launch_bench(args: list[str], label: str) -> None:
     py = sys.executable
     cmd = [py, "bench_all_methods.py"] + args
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
+    # Switch-uri CPU/GPU (persistate). Gard: NU le lăsăm pe ambele OFF (ar rămâne 0
+    # metode) → forțăm CPU ON.
+    use_cpu = bool(SETTINGS.get("bench_use_cpu", True))
+    use_gpu = bool(SETTINGS.get("bench_use_gpu", False))
+    if not use_cpu and not use_gpu:
+        use_cpu = True
+        ui.notify("⚠️ CPU și GPU erau ambele oprite → pornesc CPU (altfel n-ar rula nimic).",
+                  type="warning")
+    env = dict(os.environ)
+    env["LOTO_BENCH_CPU"] = "1" if use_cpu else "0"
+    env["LOTO_BENCH_GPU"] = "1" if use_gpu else "0"
     try:
         # bench_all_methods.py își scrie SINGUR bench_full.log (FileHandler) → nu
         # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
         # există acum și pe Windows, vizibil în consola DEBUG.
-        proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=flags)
+        proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=flags, env=env)
         BENCH_PID_FILE.write_text(f"{proc.pid}|{int(time.time())}", encoding="utf-8")
         ui.notify(f"{label} pornit (PID {proc.pid}).", type="positive")
     except Exception as exc:  # noqa: BLE001
@@ -638,7 +652,7 @@ def _start_walk_forward() -> None:
                         flat, meta = run_honest_walk_forward(
                             df_source=df_source, game_type=g_label,
                             pool_size=int(data.get("pool_size") or 10),
-                            backtest_depth_percent=10.0, lookback_percent=100.0, use_cache=True,
+                            backtest_depth_percent=25.0, lookback_percent=100.0, use_cache=True,
                             progress_cb=_wf_cb,
                             should_cancel=_wf_should_cancel,
                         )
@@ -2801,6 +2815,12 @@ def main_page() -> None:
         _full_eta = _estimate_bench_eta(1280)
         ui.button("🔬 RE-BENCH (CPU ‖ GPU paralel)", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
+        with ui.row().classes("gap-4 items-center"):
+            _bind_save(ui.checkbox("🖥️ Metode CPU"), "bench_use_cpu")
+            _bind_save(ui.checkbox("⚡ Metode GPU"), "bench_use_gpu")
+        ui.label("GPU implicit OPRIT: pe loto (date aleatoare) rețelele GPU prind constant "
+                 "mai puține hituri decât euristicile CPU, deci e timp + VRAM irosit. "
+                 "Bifează GPU doar dacă vrei comparația completă.").classes("text-caption text-grey")
         try:
             from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _bt
         except Exception:  # noqa: BLE001

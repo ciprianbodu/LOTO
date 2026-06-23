@@ -376,7 +376,25 @@ def run_benchmark(
         except Exception:  # noqa: BLE001
             return False
 
-    _GPU_OK = _gpu_available()
+    # Switch-uri din UI (env): LOTO_BENCH_GPU/CPU = "0" → dezactivat. GPU off din UI
+    # se comportă identic cu lipsa CUDA (track GPU sărit complet).
+    import os as _oenv
+    _gpu_off_user = _oenv.environ.get("LOTO_BENCH_GPU", "1") == "0"
+    _cpu_off_user = _oenv.environ.get("LOTO_BENCH_CPU", "1") == "0"
+
+    _GPU_OK = _gpu_available() and not _gpu_off_user
+
+    # CPU off din UI → rulează DOAR metode GPU (dacă GPU e activ). Gard: dacă n-ar
+    # rămâne nimic de rulat (GPU inactiv), ignorăm CPU-off ca să nu facem bench gol.
+    if _cpu_off_user:
+        _gpu_only = [m for m in methods if _is_gpu_fam_global(m)]
+        if _gpu_only and _GPU_OK:
+            logger.warning("[bench] CPU OFF (din setări UI) → rulez DOAR metode GPU (%d).", len(_gpu_only))
+            methods = _gpu_only
+            method_meta_map = {m: method_meta(m) for m in methods}
+        else:
+            logger.warning("[bench] CPU OFF cerut, dar fără metode GPU active → ignor (rulez CPU).")
+
     # CPU-only: propagăm CUDA_VISIBLE_DEVICES=-1 în mediu ca PROCESELE-worker (spawn)
     # să moștenească semnalul și să NU mai importe torch/neuralforecast (~2.8 GB
     # fiecare) — vezi methods.py. Worker-ele CPU devin ușoare (~0.5 GB) → încap mult
@@ -386,11 +404,12 @@ def run_benchmark(
         _o_cpu.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     _gpu_methods = [m for m in methods if method_meta_map[m]["available"] and _is_gpu_fam_global(m)]
     if not _GPU_OK and _gpu_methods:
-        logger.warning("[bench] GPU NEDETECTAT → SAR peste benchul GPU (%d metode GPU ignorate, "
-                       "fără fallback pe CPU): %s", len(_gpu_methods), ", ".join(_gpu_methods[:8])
+        _reason = "dezactivat din UI" if _gpu_off_user else "CUDA indisponibil"
+        logger.warning("[bench] GPU OFF (%s) → SAR peste benchul GPU (%d metode GPU ignorate, "
+                       "fără fallback pe CPU): %s", _reason, len(_gpu_methods), ", ".join(_gpu_methods[:8])
                        + (" …" if len(_gpu_methods) > 8 else ""))
         # Marker parsabil de UI → afișează track-ul GPU ca „PAUSED — fără GPU".
-        logger.warning("[BENCH-GPU-PAUSED] CUDA indisponibil — %d metode GPU sărite", len(_gpu_methods))
+        logger.warning("[BENCH-GPU-PAUSED] %s — %d metode GPU sărite", _reason, len(_gpu_methods))
 
     total_folds_est = 0
     cpu_total_est = 0
