@@ -1946,8 +1946,10 @@ def _render_bench_leaderboard_slice(
     rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
     if not rows:
         return
-    cpu_rows = [r for r in rows if not r[3]][:top_n]
-    gpu_rows = [r for r in rows if r[3]][:top_n]
+    cpu_all = [r for r in rows if not r[3]]
+    gpu_all = [r for r in rows if r[3]]
+    cpu_rows = cpu_all[:top_n]
+    gpu_rows = gpu_all[:top_n]
     label = (
         f"rata {_shown_t}+ @ pool {pool}" if has_4plus and metric.endswith(f"_k{pool}")
         else f"rata {_shown_t}+ numere ghicite" if has_4plus
@@ -1984,12 +1986,12 @@ def _render_bench_leaderboard_slice(
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
         # ── Top CPU ──
-        ui.label(f"🖥️ Top {len(cpu_rows)} CPU (statistice / matematice / sklearn)").classes(
+        ui.label(f"🖥️ Top {len(cpu_rows)} din {len(cpu_all)} CPU (statistice / matematice / sklearn)").classes(
             "text-bold text-blue mt-2")
         for i, rec in enumerate(cpu_rows, 1):
             _row(i, rec)
         # ── Top GPU ──
-        ui.label(f"⚡ Top {len(gpu_rows)} GPU (rețele neurale / foundation)").classes(
+        ui.label(f"⚡ Top {len(gpu_rows)} din {len(gpu_all)} GPU (rețele neurale / foundation)").classes(
             "text-bold text-deep-purple mt-3")
         if gpu_rows:
             ui.label(f"Pe loto (date aleatoare) rețelele prind de obicei MAI PUȚINE {_shown_t}+ decât "
