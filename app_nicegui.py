@@ -830,13 +830,19 @@ def _build_mail_body() -> str:
     lines = [f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}",
              f"(generat: {_dt.now().strftime('%d-%m-%Y %H:%M')})", ""]
     # Ordine FIXĂ în mail: 6/49 → Joker → 5/40 (aplatizăm jocurile din toate fișierele).
-    games = sorted(((g, d) for _fn, outs in rb for g, d in outs.items()),
-                   key=lambda gd: _GAME_DISPLAY_ORDER.get(_game_label_for(str(gd[0])), 99))
-    for g, d in games:
+    # Păstrăm fname ca să putem arăta ultima extragere reală din CSV pentru fiecare joc.
+    games = sorted(((fn, g, d) for fn, outs in rb for g, d in outs.items()),
+                   key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99))
+    for fn, g, d in games:
         inv = bool(d.get("auto_invert") and d.get("phase1"))
         p1 = d["phase1"] if inv else d
         jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))
         lines.append(f"=== {g.upper()} ===")
+        info = _last_csv_draw(fn)
+        if info:
+            _ds, _dn, _dj = info
+            _draw = " ".join(str(x) for x in _dn) + (f" + joker {_dj}" if _dj is not None else "")
+            lines.append(f"ultima extragere CSV: {_ds or '?'} → {_draw}")
         lines.append("POOL 1:   " + _nums(p1.get("hard_core") or [])
                      + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
         lines.append("OMNIUS 1: " + _omni_line(g, p1))
@@ -1981,16 +1987,16 @@ def _render_bench_leaderboard_slice(
                 "text-caption text-grey")
 
 
-def _render_last_csv_draw(fname: str) -> None:
-    """Reper lângă clasament: ULTIMA extragere reală din CSV-ul încărcat (data + numere
-    + joker dacă există). Faithful la CSV — arată exact ultima linie din fișier."""
+def _last_csv_draw(fname: str):
+    """(date_str, [numere], joker|None) din ULTIMA linie a CSV-ului încărcat pentru
+    acest fișier; None dacă lipsește. Faithful la CSV (exact ultima extragere)."""
     df = next((d for f, d in STATE.get("datasets", []) if f == fname), None)
     if df is None or len(df) == 0:
-        return
+        return None
     try:
         last = df.iloc[-1]
     except Exception:  # noqa: BLE001
-        return
+        return None
     cols = [str(c) for c in df.columns]
     num_cols = sorted((c for c in cols if len(c) > 1 and c[0] == "n" and c[1:].isdigit()),
                       key=lambda c: int(c[1:]))
@@ -2001,13 +2007,13 @@ def _render_last_csv_draw(fname: str) -> None:
         except Exception:  # noqa: BLE001
             pass
     if not nums:
-        return
-    txt = "  ".join(str(n) for n in nums)
+        return None
+    joker = None
     if "joker" in cols:
         try:
-            txt += f"   ·   joker {int(last['joker'])}"
+            joker = int(last["joker"])
         except Exception:  # noqa: BLE001
-            pass
+            joker = None
     date_str = ""
     for dc in ("date", "Data", "data", "Date"):
         if dc in cols:
@@ -2016,6 +2022,19 @@ def _render_last_csv_draw(fname: str) -> None:
             except Exception:  # noqa: BLE001
                 date_str = ""
             break
+    return (date_str, nums, joker)
+
+
+def _render_last_csv_draw(fname: str) -> None:
+    """Reper lângă clasament: ULTIMA extragere reală din CSV-ul încărcat (data + numere
+    + joker dacă există)."""
+    info = _last_csv_draw(fname)
+    if not info:
+        return
+    date_str, nums, joker = info
+    txt = "  ".join(str(n) for n in nums)
+    if joker is not None:
+        txt += f"   ·   joker {joker}"
     cap = "📅 Ultima extragere din CSV" + (f" ({date_str})" if date_str else "") + ":"
     with ui.row().classes("items-center gap-2"):
         ui.label(cap).classes("text-caption text-grey")
