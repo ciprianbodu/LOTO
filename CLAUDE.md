@@ -1,9 +1,10 @@
 # CLAUDE.md — orientare rapidă pentru asistent (citește ASTA, nu tot proiectul)
 
 ## Ce e proiectul
-App de optimizare pool-uri loto (6/49, 5/40, Joker) cu benchmark de ~180 metode de
-scoring (ML/foundation/statistice/geometrice) + wheeling (set-cover) + walk-forward.
+App de optimizare pool-uri loto (6/49, 5/40, Joker) cu benchmark de ~210 metode de
+scoring (statistice/ML/geometrice/**graf-network**/torch-foundation) + wheeling (set-cover) + walk-forward.
 **Loteria e aleatoare** — e instrument de optimizare a acoperirii, nu predicție.
+Diferențele dintre metode sunt în mare parte ZGOMOT (câștigătorul e instabil) — vezi memoria.
 UI = **NiceGUI** (`app_nicegui.py`), pe port 8000. Lansator: `START_8000.bat`.
 
 ## Arhitectură / flux de date
@@ -32,11 +33,12 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `raport_complet.txt` | raport generat (gitignore) |
 
 ## Benchmark (cum funcționează)
-- ~180 metode în `METHODS` (methods.py + extensii: methods_classical/ml/torch_extra/torch_advanced, încărcate de `_load_extra_methods`).
+- ~210 metode în `METHODS` (methods.py + extensii încărcate de `_load_extra_methods`: methods_classical/ml/torch_extra/torch_advanced/**geometry/coverage/omnius/graph**).
 - Scorer = `fn(draws_2d, max_num) -> {nr: scor_normalizat}`. Registry: `"nume": (fn, "family", trained, "desc")`.
-- `ALL_SPEC_METHODS` (în bench_all_methods.py) = ce testează Re-Bench Full (toate metodele disponibile din `METHODS`, dinamic).
-- Re-Bench: walk-forward pe folduri → `folds.csv` (OVERWRITE, nu append) → `decision.py` → `best_methods.json` (`auto_pilot_per_pool[kN]` = câștigător + sim_depth per joc/pool).
-- **Cache fold** (`.bench_cache`, keyed pe csv_hash+method+pct+game+is_random): refolosit dacă datele nu s-au schimbat → re-bench rapid. NU amestecă (per metodă).
+- **Switch-uri CPU/GPU** (UI, persistate `bench_use_cpu`/`bench_use_gpu`; env `LOTO_BENCH_CPU`/`LOTO_BENCH_GPU`): **GPU implicit OFF** (rețelele GPU prind mai puține hituri pe loto). GPU off în runner = identic cu lipsa CUDA (track sărit, `CUDA_VISIBLE_DEVICES=-1`).
+- `ALL_SPEC_METHODS` (în bench_all_methods.py) = metodele `available` din `METHODS` minus blacklist (dinamic).
+- Re-Bench: walk-forward pe folduri → `folds.csv` (OVERWRITE) → `decision.py` → `best_methods.json` (winner + sim_depth per joc/pool). **Țintă hituri = `BENCH_HIT_TARGET` (env `LOTO_BENCH_TARGET`, implicit 3+)**; clasamentul arată și 3+ și 4+.
+- **Cache fold** (`D:\_BUILD\_LOTO\.bench_cache`, în AFARA OneDrive; env `LOTO_BENCH_CACHE_DIR`): keyed pe `CACHE_VERSION`+csv_hash+method+pct+game+is_random. **Bump `CACHE_VERSION` (acum `v4`) când se schimbă output-ul unei metode** (altfel servește stale). Date noi = re-bench COMPLET (hash pe tot istoricul).
 - `method_selector.recommend_optimal_config(game_key, pool)` → metoda+sim_depth; cheie = `loto_6_49`/`loto_5_40`/`joker_urna1`, NU eticheta scurtă.
 
 ## Convenții / mediu
@@ -52,9 +54,13 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - **OMNIUS** = cel mai bun bilet SEPARAT per pool (top draw_n după scor). `_omnius_for_pool`.
 - **sim_depth PER JOC** la Auto-Pilot (`_build_config_json(sim_depth_per_game)`); manual = slider global.
 - **Auto-chain**: Re-Bench terminat → pornește automat Auto-Pilot (toggle `autopilot_after_bench`, detectat în `_tick`).
-- **Walk-forward** (`walk_forward_adapter.run_honest_walk_forward` → `backtesting.run_retroactive_backtest`, are `progress_cb`): validare Faza 1 (pool normal) chiar și la auto-invert; bară de progres determinată.
+- **Walk-forward** (`walk_forward_adapter.run_honest_walk_forward` → `backtesting.run_retroactive_backtest`): validare Faza 1 (pool normal) chiar și la auto-invert; `progress_cb` + bară determinată; **depth = 25%** din istoric.
+  - **Buget de timp + anulare**: `WF_TOTAL_BUDGET_S=15min` (deadline global) + `should_cancel` + buton „⏹ Oprește validarea". O metodă GPU grea (torch) reantrenată per pas ar dura ORE → se oprește PARȚIAL și pipeline-ul continuă (mail/shutdown). NU bloca pe asta.
+- **Familie graf/network** (`methods_graph.py`, 30 metode numpy/CPU): graf de co-apariție → centralitate/spectral/comunități/random-walk. `_adj` = ASOCIERE (lift centrat), NU co-apariție brută (altfel degenerează în frecvență). Afișat „graph/network (numpy)".
+- **Final pipeline** (`_finalize_pipeline`, după WF): mail rezultate (`mail_on_complete` + `mail_config.json` gitignored / env SMTP) + auto-shutdown (`shutdown_on_complete`, `shutdown /s /t 60` anulabil). Fiecare pas izolat în try/except; log `[FINALIZE]`/`[MAIL]`/`[SHUTDOWN]`.
+- **Recuperare job la pornire** (`_recover_completed_job`): job terminat cât UI-ul era jos (get_active_job vede doar PENDING/RUNNING). `completed_at` (job_queue) + fereastră 10min → finalizare completă; mai vechi → doar afișare marcată „recuperat". `last_finalized_job_id` (persistat) = finalizare O SINGURĂ DATĂ.
 - **Doar Re-Bench Full** (Quick scos — suprascria decizia cu doar 4 metode).
-- `_METHOD_DESC` (app_nicegui) = descrieri lizibile pt metode la afișarea 🏆.
+- `_METHOD_DESC` (app_nicegui) = descrieri lizibile pt metode la afișarea 🏆. `_method_library`/`_method_is_gpu` = categorie/CPU-vs-GPU în clasament.
 
 ## Reguli de aur (NU strica)
 1. **Bit-identitate engine**: orice modificare în `loto_engine.py` pe path-ul de generare → verifică pool+variante IDENTICE cu un baseline (rulează pipeline pe un CSV din `_ISTORIC/` înainte/după).
@@ -62,7 +68,8 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 3. Scrieri JSON de stare → mereu `atomic_write_json`.
 4. Test minimal după orice edit: `python3 -m py_compile <fisier>` + (pt UI) pornește pe un port liber și verifică HTTP 200 (sleep ~15s, importurile sunt grele).
 5. Commit pe main cu mesaj clar; push; (pe web: creează PR draft dacă nu există).
-6. **Blacklist metode** (`disabled_methods.json`): metode LEGENDATE ca slabe. NU le reactiva, NU le re-introduce și NU le folosi — nici când adaugi metode NOI. Bench-ul le exclude automat (`bench_all_methods` filtrează prin `disabled.load_disabled()`). Populare pe baza rezultatelor: `python prune_methods.py --apply` (după un bench COMPLET). Merge-only.
+6. **Blacklist metode** (`disabled_methods.json`): metode LEGENDATE ca slabe. NU le reactiva, NU le re-introduce și NU le folosi — nici când adaugi metode NOI. Bench-ul le exclude automat (`bench_all_methods` filtrează prin `disabled.load_disabled()`). Populare: `python prune_methods.py --apply` (după un bench COMPLET). Merge-only.
+   - ⚠️ **Tăierea pe performanță e ZGOMOT**: pe loto fiecare metodă câștigă vreo celulă joc×pool. `prune --top N` rankează după `max rate_4plus` peste pool-uri — metrică ≠ decizia reală (`rate_3plus` la pool-ul jocului) → poate dezactiva IREVERSIBIL câștigători reali. Singura tăiere clar justificată = **GPU off**. Vezi memoria `no-method-pruning-noise`.
 
 ## Verificare rapidă (mediu container fără sklearn/torch by default)
 ```bash
