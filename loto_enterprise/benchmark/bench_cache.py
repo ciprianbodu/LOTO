@@ -62,7 +62,9 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v3"  # bump asta cand interface-ul se schimba (invalidates all)
+CACHE_VERSION = "v4"  # bump asta cand interface-ul se schimba (invalidates all)
+# v4: metodele graf folosesc acum graf de ASOCIERE (lift centrat) în loc de co-apariție
+# brută — output schimbat → cache-ul vechi (raw) ar fi servit stale. Re-bench complet.
 # v3: FoldResult are acum rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
 #     Foldurile v2 nu au coloana 3+ → trebuie recalculate (altfel rata 3+ iese NaN).
 INDEX_FILE = CACHE_DIR / "index.json"

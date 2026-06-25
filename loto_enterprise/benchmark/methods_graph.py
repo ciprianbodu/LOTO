@@ -64,8 +64,13 @@ def _indicator(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
 
 
 def _adj(draws_2d: np.ndarray, max_num: int, halflife: float | None = None) -> np.ndarray:
-    """Matrice de adiacență (max_num × max_num) = co-apariții ponderate, diagonală 0.
-    halflife (extrageri) → extragerile recente cântăresc mai mult (decay exponențial)."""
+    """Adiacență (max_num × max_num) = co-apariție PESTE întâmplare (lift centrat).
+
+    Co-apariția BRUTĂ pe loto e ~ proporțională cu frecvențele (graf cvasi-complet,
+    aproape uniform) → degree/pagerank/eigenvector/closeness ar degenera TOATE în
+    „frecvență" (am observat 13/30 clasamente unice). Scădem co-apariția AȘTEPTATĂ sub
+    independență (c_i·c_j / W) și păstrăm doar excesul (≥0) → graf de ASOCIERE reală,
+    pe care centralitățile devin distincte. halflife → recență (decay exponențial)."""
     M = _indicator(draws_2d, max_num)  # (N, T)
     T = M.shape[1]
     if T == 0:
@@ -73,10 +78,14 @@ def _adj(draws_2d: np.ndarray, max_num: int, halflife: float | None = None) -> n
     if halflife and halflife > 0:
         ages = np.arange(T)[::-1].astype(np.float64)  # cea mai recentă = 0
         w = 0.5 ** (ages / float(halflife))
-        Mw = M * np.sqrt(w)[None, :]
-        A = Mw @ Mw.T
     else:
-        A = M @ M.T
+        w = np.ones(T, dtype=np.float64)
+    W = float(w.sum()) or 1.0
+    Mw = M * np.sqrt(w)[None, :]
+    O = Mw @ Mw.T                       # co-apariție observată (ponderată)
+    c = M @ w                           # „frecvențe" ponderate per număr
+    E = np.outer(c, c) / W              # co-apariție așteptată sub independență
+    A = np.maximum(O - E, 0.0)          # exces de asociere (lift centrat, ≥0)
     np.fill_diagonal(A, 0.0)
     return A
 
