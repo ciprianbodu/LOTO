@@ -2279,16 +2279,32 @@ def _render_hits_4plus(flat, game: str) -> None:
             f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
             f"<span style='color:{col}'>{lvl}</span>)</span>"
         ).classes("mt-1")
-    # (1) SUMAR: de câte ori a prins fiecare +3 / +4.
+    # (1) SUMAR: de câte ori a prins fiecare +3 / +4 + câștig BRUT estimat din istoricul WF.
+    # OMNIUS 1 = 1 bilet/extragere (Σ premiu pe nr. prinse); Pool 1 = wheel-ul COMPLET
+    # (Σ premiu pe TOATE variantele câștigătoare, ca în analiza financiară de jos). Brut =
+    # fără costul biletelor (la wheel costul e mare → ROI net de obicei negativ).
+    gk = _game_label_for(game)
+    pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
+    price = PRICES.get(gk, 8.0)
+    pool_gross = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)        # toate variantele
+    omni_gross = sum(pm.get(int(d["omnius"]), 0) for d in per.values())          # 1 bilet/extragere
+    pool_net = pool_gross - len(flat) * price            # wheel: fiecare entry din flat = 1 bilet
+    omni_net = omni_gross - len(per) * price             # OMNIUS: 1 bilet / extragere
     ui.table(
         columns=[{"name": "src", "label": "Sursă", "field": "src", "align": "left"},
                  {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
-                 {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"}],
-        rows=[{"src": "🔥 Pool 1 (din 16)", "p3": _cell(pool3), "p4": _cell(pool4)},
-              {"src": "⭐ OMNIUS 1 (bilet)", "p3": _cell(omni3), "p4": _cell(omni4)}],
+                 {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
+                 {"name": "win", "label": "💰 Câștig brut (WF)", "field": "win", "align": "right"}],
+        rows=[{"src": "🔥 Pool 1 (din 16)", "p3": _cell(pool3), "p4": _cell(pool4),
+               "win": f"~{pool_gross:,.0f} Lei"},
+              {"src": "⭐ OMNIUS 1 (bilet)", "p3": _cell(omni3), "p4": _cell(omni4),
+               "win": f"~{omni_gross:,.0f} Lei"}],
     ).classes("w-full").props("dense")
-    ui.label("+3 / +4 = extrageri cu cel puțin 3 / 4 numere nimerite. "
-             "Pool 2 / OMNIUS 2 (inversul) nu sunt validate walk-forward → nu apar aici.").classes("text-caption text-grey")
+    ui.label(f"💰 = câștig BRUT din premiile istoricului WF (fără costul biletelor). "
+             f"Realist NET (premii − cost bilete): Pool 1 ≈ {pool_net:,.0f} Lei, "
+             f"OMNIUS 1 ≈ {omni_net:,.0f} Lei — de regulă NEGATIV (loteria e aleatoare; "
+             f"wheel-ul costă mult). +3 / +4 = extrageri cu ≥3 / ≥4 nimerite. "
+             f"Pool 2 / OMNIUS 2 (inversul) nu-s validate WF.").classes("text-caption text-grey")
 
     # (2) DATELE prinderii — TABELE SEPARATE: unul pentru Pool 1, unul pentru OMNIUS 1.
     # Fiecare: Data | Nimerite | Δ față de precedent (zile față de hit-ul ≥3 anterior AL
