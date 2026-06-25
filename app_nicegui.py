@@ -1988,8 +1988,10 @@ def _render_bench_leaderboard_slice(
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
         # ── Top CPU ──
-        ui.label(f"🖥️ Top {len(cpu_rows)} din {len(cpu_all)} CPU (statistice / matematice / sklearn)").classes(
-            "text-bold text-blue mt-2")
+        ui.label(f"🖥️ Top {len(cpu_rows)} din {len(cpu_all)} CPU").classes("text-bold text-blue mt-2")
+        _cpu_cats = sorted({rec[4] for rec in cpu_all if rec[4]})  # categorii REALE prezente (din folds)
+        if _cpu_cats:
+            ui.label("Categorii: " + " · ".join(_cpu_cats)).classes("text-caption text-grey")
         for i, rec in enumerate(cpu_rows, 1):
             _row(i, rec)
         # ── Top GPU ──
