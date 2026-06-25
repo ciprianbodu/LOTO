@@ -2294,8 +2294,9 @@ def _render_hits_4plus(flat, game: str) -> None:
     # Fiecare: Data | Nimerite | Δ față de precedent (zile față de hit-ul ≥3 anterior AL
     # ACELEIAȘI surse). OMNIUS prinde ≥3 rar → tabelul lui e scurt (sau gol).
     def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label="Δ față de precedent"):
-        # gap_on = pe ce subset se calculează Δ (implicit toate rândurile). Δ apare DOAR pe
-        # rândurile care satisfac gap_on (restul „—"). Ex. Pool 1: Δ pe seria de +5.
+        # gap_on = pe ce subset se calculează Δ (implicit toate rândurile = seria ≥3 a
+        # tabelului). Δ apare DOAR pe rândurile care satisfac gap_on (restul „—"). Pool 1 și
+        # OMNIUS 1 folosesc acum seria ≥3 (gap_on implicit) → coloană complet populată.
         items = sorted(((di, d) for di, d in per.items() if pred(d)),
                        key=lambda kv: kv[0], reverse=True)
         if not items:
@@ -2315,8 +2316,7 @@ def _render_hits_4plus(flat, game: str) -> None:
         ).classes("w-full").props("dense")
 
     _dates_table("🗓️ POOL 1 — datele cu ≥3", lambda d: d["pool"] >= 3,
-                 lambda d: f"🔥 {d['pool']}", "Pool 1 n-a prins ≥3 în istoricul walk-forward.",
-                 gap_on=lambda d: d["pool"] >= 5, gap_label="Δ față de precedent (+5)")
+                 lambda d: f"🔥 {d['pool']}", "Pool 1 n-a prins ≥3 în istoricul walk-forward.")
     _dates_table("🗓️ OMNIUS 1 — datele cu ≥3", lambda d: d["omnius"] >= 3,
                  lambda d: f"⭐ {d['omnius']}", "OMNIUS 1 n-a prins ≥3 în istoricul walk-forward.")
 
