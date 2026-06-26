@@ -2465,8 +2465,10 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                         if (data.get("auto_invert") and data.get("phase1")) else data)
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
                 if flat:
-                    with ui.expansion("📜 Istoric hits (walk-forward) — arată / ascunde",
-                                      value=False).classes("w-full"):
+                    # Deschis implicit (apare după ce termină walk-forward), dar pliabil
+                    # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
+                    with ui.expansion("📜 Istoric hits (walk-forward) — click pentru ascunde",
+                                      value=True).classes("w-full"):
                         _render_hits_4plus(flat, game)
 
 
