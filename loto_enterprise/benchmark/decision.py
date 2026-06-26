@@ -36,11 +36,11 @@ CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 MIN_TEST_DRAWS_FOR_STABILITY = 30
 
 # Pragul de hituri pe care bench-ul ALEGE metoda câștigătoare (rata extragerilor cu
-# ≥ acest număr de numere ghicite). A fost 4 (premii reale); setat pe 3 la cererea
-# utilizatorului — vrea optimizare pe rata de 3+ (mai densă statistic → selecție mai
-# STABILĂ; NU îmbunătățește șansele — loteria e aleatoare). Reversibil: schimbă aici
-# înapoi la 4, sau setează variabila de mediu LOTO_BENCH_TARGET=4.
-BENCH_HIT_TARGET = int(os.environ.get("LOTO_BENCH_TARGET", "3"))
+# ≥ acest număr de numere ghicite). Implicit 4 (premii reale, la cererea utilizatorului).
+# A fost temporar 3 (rată mai densă → selecție mai stabilă), revenit la 4. NU schimbă
+# șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul. Reversibil:
+# schimbă aici, sau setează variabila de mediu LOTO_BENCH_TARGET=3.
+BENCH_HIT_TARGET = int(os.environ.get("LOTO_BENCH_TARGET", "4"))
 
 
 def _safe_lift(method_hits: float, random_hits: float) -> float:
