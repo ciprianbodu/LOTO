@@ -1957,7 +1957,14 @@ def _render_bench_leaderboard_slice(
         else f"rata {_shown_t}+ numere ghicite" if has_4plus
         else "medie hituri / extragere"
     )
-    winner = rows[0]  # câștigătorul GLOBAL (CPU+GPU împreună) — cel ales de bench
+    winner = rows[0]  # capul clasamentului după rata BRUTĂ a pragului (NU neapărat cel ALES)
+    # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1: decizia
+    # cere ÎN PLUS să bată „random" consistent (filtru de consistență), apoi rata pragului.
+    try:
+        from loto_enterprise.core.method_selector import get_winner_name
+        chosen_name = get_winner_name(folds_game_key, pool)
+    except Exception:  # noqa: BLE001
+        chosen_name = winner[0]
 
     def _row(i, rec):
         m, score, avg, is_gpu, lib = rec[:5]
@@ -1973,17 +1980,26 @@ def _render_bench_leaderboard_slice(
             sc_txt = " · ".join(parts) if parts else f"medie: {score:.3f}"
         else:
             sc_txt = f"medie: {score:.3f}"
+        is_chosen = (m == chosen_name)
         with ui.row().classes("items-center gap-2 w-full"):
             ui.label(f"{i}.").classes("text-bold text-grey w-6")
             ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
-            ui.label(m).classes("text-bold")
+            ui.label(("🏆 " + m) if is_chosen else m).classes(
+                "text-bold text-positive" if is_chosen else "text-bold")
             ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
 
     title = f"🏆 Clasament bench — {section_label} (CPU + GPU · {label})"
     with ui.expansion(title, value=True).classes("w-full"):
-        ui.label(f"Câștigător GLOBAL (toate metodele): {winner[0]} "
-                 f"({'⚡ GPU' if winner[3] else '🖥️ CPU'} · {winner[4]}).").classes(
-            "text-caption text-bold text-positive")
+        _chosen_lib = next((r[4] for r in rows if r[0] == chosen_name), "")
+        ui.html(f"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>"
+                + (f" · {_chosen_lib}" if _chosen_lib else "")).classes("text-caption")
+        if chosen_name != winner[0]:
+            # De ce #1 din listă != metoda aleasă: lista e sortată după rata BRUTĂ a pragului;
+            # decizia mai cere ca metoda să bată CONSTANT baseline-ul random (filtru consistență).
+            ui.label(f"ℹ️ Lista e sortată după rata brută {_shown_t}+ (cap: {winner[0]}). Metoda "
+                     f"ALEASĂ ({chosen_name}, marcată 🏆) cere ÎN PLUS să bată constant baseline-ul "
+                     f"random → la rate aproape egale (zgomot) se preferă cea STABILĂ; de-aia diferă de #1.").classes(
+                "text-caption text-grey")
         if not has_family:
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
