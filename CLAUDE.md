@@ -37,7 +37,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - Scorer = `fn(draws_2d, max_num) -> {nr: scor_normalizat}`. Registry: `"nume": (fn, "family", trained, "desc")`.
 - **Switch-uri CPU/GPU** (UI, persistate `bench_use_cpu`/`bench_use_gpu`; env `LOTO_BENCH_CPU`/`LOTO_BENCH_GPU`): **GPU implicit OFF** (rețelele GPU prind mai puține hituri pe loto). GPU off în runner = identic cu lipsa CUDA (track sărit, `CUDA_VISIBLE_DEVICES=-1`).
 - `ALL_SPEC_METHODS` (în bench_all_methods.py) = metodele `available` din `METHODS` minus blacklist (dinamic).
-- Re-Bench: walk-forward pe folduri → `folds.csv` (OVERWRITE) → `decision.py` → `best_methods.json` (winner + sim_depth per joc/pool). **Țintă hituri = `BENCH_HIT_TARGET` (env `LOTO_BENCH_TARGET`, implicit 3+)**; clasamentul arată și 3+ și 4+.
+- Re-Bench: walk-forward pe folduri → `folds.csv` (OVERWRITE) → `decision.py` → `best_methods.json` (winner + sim_depth per joc/pool). **Țintă hituri = `BENCH_HIT_TARGET` (env `LOTO_BENCH_TARGET`, default CURENT 4+; userul a oscilat 4→3→4)**; clasamentul arată și 3+ și 4+.
 - **Cache fold** (`D:\_BUILD\_LOTO\.bench_cache`, în AFARA OneDrive; env `LOTO_BENCH_CACHE_DIR`): keyed pe `CACHE_VERSION`+csv_hash+method+pct+game+is_random. **Bump `CACHE_VERSION` (acum `v4`) când se schimbă output-ul unei metode** (altfel servește stale). Date noi = re-bench COMPLET (hash pe tot istoricul).
 - `method_selector.recommend_optimal_config(game_key, pool)` → metoda+sim_depth; cheie = `loto_6_49`/`loto_5_40`/`joker_urna1`, NU eticheta scurtă.
 
