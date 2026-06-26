@@ -597,9 +597,18 @@ def run_benchmark(
     else:
         _gpu_req = max(1, int(_os.environ.get("LOTO_GPU_CONCURRENCY", "3")))
         gpu_conc = max(1, min(_gpu_req, 4, _proc_budget - 1))
-    # CPU: nuclee−25%, dar capat de bugetul RĂMAS + max 10 (24 procese torch pt metode
-    # numpy rapide e risipă — importul domină, nu calculul).
-    n_workers = max(1, min(_nc - max(2, _nc // 4), _proc_budget - gpu_conc, 10))
+    # CPU: nuclee−25%, capat de bugetul de RAM. La GPU ON, fiecare worker importă torch
+    # (~2.8 GB, import lent) → max 10 (24 procese torch = risipă + risc RAM). La GPU OFF
+    # worker-ele-s UȘOARE (~0.6 GB, fără torch) → folosim ~75% din nuclee.
+    _cpu_only = not _GPU_OK
+    if _cpu_only:
+        # Worker-e SINGLE-THREAD BLAS → N procese = N nuclee CURAT (fără oversubscription
+        # când rulăm multe). Metodele-s independente → paralelismul pe PROCESE bate
+        # threading-ul BLAS intra-metodă (date mici). Copiii (spawn) moștenesc env-ul.
+        for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+            _os.environ.setdefault(_tv, "1")
+    _cpu_cap = (_nc - max(2, _nc // 4)) if _cpu_only else 10
+    n_workers = max(1, min(_cpu_cap, _proc_budget - gpu_conc))
     logger.info("[bench] RAM disp %.1f GB → buget %d procese (CPU=%d ‖ GPU=%d) "
                 "[per-proc ~%.1f GB; commit-limit-safe]",
                 _avail_gb, _proc_budget, n_workers, gpu_conc, _PER_PROC_GB)
