@@ -652,7 +652,7 @@ def _start_walk_forward() -> None:
                         flat, meta = run_honest_walk_forward(
                             df_source=df_source, game_type=g_label,
                             pool_size=int(data.get("pool_size") or 10),
-                            backtest_depth_percent=30.0, lookback_percent=100.0, use_cache=True,
+                            backtest_depth_percent=50.0, lookback_percent=100.0, use_cache=True,
                             progress_cb=_wf_cb,
                             should_cancel=_wf_should_cancel,
                         )
