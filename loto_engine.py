@@ -918,10 +918,10 @@ class LotoEngine:
                 }
                 logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
 
-            # Enforcement-ul de mai sus a putut REINTRODUCE secvențe de 3+ consecutive
+            # Enforcement-ul de mai sus a putut REINTRODUCE numere consecutive
             # (înlocuiește numerele din blacklist cu top-scoring, fără să verifice
             # consecutivitatea). Re-aplicăm anti-secvența ca ULTIM pas (evitând blacklist-ul
-            # ca să nu strice inversarea) → pool-ul FINAL inversat nu mai are 3+ consecutive.
+            # ca să nu strice inversarea) → pool-ul FINAL inversat nu mai are consecutive.
             if filter_consecutives:
                 self.hard_core = self._apply_consecutive_filter(
                     self.hard_core, freq, scores=tfm_scores, avoid=set(self._manual_blacklist_set))
@@ -1101,15 +1101,15 @@ class LotoEngine:
 
     def _apply_consecutive_filter(self, pool: list, freq: np.ndarray, scores: dict | None = None,
                                   avoid: set | None = None) -> list:
-        """Sparge orice secvență de 3+ numere consecutive din pool (STRICT — nu
-        păstrăm niciodată 3+ consecutive, indiferent de istoric). Pentru fiecare run
-        de 3+: scoatem cel mai slab număr (după frecvență) și punem cea mai bine cotată
-        rezervă care NU re-formează un run de 3+. Repetăm până nu mai rămâne niciun run.
+        """STRICT (cerință utilizator): NU păstrăm NICIO pereche de numere consecutive
+        în pool (nici 9-10, nici 38-39). Pentru fiecare adiacență (run de 2+): scoatem
+        cel mai slab număr (după frecvență) și punem cea mai bine cotată rezervă care NU
+        e adiacentă cu vreun număr din pool. Repetăm până nu mai rămâne niciun consecutiv.
 
         Înlocuirea folosește `scores` (bench-winner sau NQI) dacă e furnizat, altfel cade
-        pe frecvența raw. Perechile (2 consecutive) sunt permise; doar 3+ sunt sparte.
+        pe frecvența raw. (Anterior: doar 3+ erau sparte, perechile permise.)
         """
-        if self.data is None or len(pool) < 3:
+        if self.data is None or len(pool) < 2:
             return pool
             
         draw_sets = []
@@ -1155,16 +1155,9 @@ class LotoEngine:
         # "Scos 18 → adăugat 18"). Bug observat 2026-05-02.
         removed_nums: set[int] = set()
 
-        def _forms_run3(pool_set: set, num: int) -> bool:
-            """True dacă adăugarea lui `num` creează un run de 3+ numere consecutive."""
-            run = 1
-            x = num - 1
-            while x in pool_set:
-                run += 1; x -= 1
-            x = num + 1
-            while x in pool_set:
-                run += 1; x += 1
-            return run >= 3
+        def _forms_adjacency(pool_set: set, num: int) -> bool:
+            """True dacă `num` e adiacent cu vreun număr din pool (ar crea consecutive)."""
+            return (num - 1) in pool_set or (num + 1) in pool_set
 
         _iter_guard = 0
         while True:
@@ -1172,24 +1165,23 @@ class LotoEngine:
             if _iter_guard > 4 * max(len(pool), 1):  # anti-buclă (nu ar trebui atins)
                 break
             found_sequence = None
-            # Căutăm orice run de 3+ numere consecutive în pool.
-            for start_idx in range(len(current_pool) - 2):
+            # Căutăm orice CONSECUTIV (run de 2+) în pool — strict, fără perechi.
+            for start_idx in range(len(current_pool) - 1):
                 consecutive_nums = [current_pool[start_idx]]
                 for next_idx in range(start_idx + 1, len(current_pool)):
                     if current_pool[next_idx] == consecutive_nums[-1] + 1:
                         consecutive_nums.append(current_pool[next_idx])
                     else:
                         break
-                if len(consecutive_nums) >= 3:
+                if len(consecutive_nums) >= 2:
                     found_sequence = tuple(consecutive_nums)
                     break
             
             if not found_sequence:
                 break
                 
-            # STRICT (cerință utilizator): NU păstrăm NICIODATĂ secvențe de 3+ numere
-            # consecutive în pool, indiferent de istoric (4 consecutive apar întâmplător
-            # ~o dată în mii de extrageri — nu e semnal, nu le ținem). Spargem secvența.
+            # STRICT (cerință utilizator): NU păstrăm NICIO pereche consecutivă în pool
+            # (nici 2 adiacente). Spargem orice consecutiv găsit.
             seq_set = set(found_sequence)
             occurrences = sum(1 for d_set in draw_sets if seq_set.issubset(d_set))
 
@@ -1199,7 +1191,7 @@ class LotoEngine:
             removed_nums.add(weakest_num)
             _pool_set = set(current_pool)
 
-            # Alegem rezerva: cel mai bine cotat număr care NU re-formează un run de 3+;
+            # Alegem rezerva: cel mai bine cotat număr care NU e adiacent (fără consecutive);
             # dacă niciunul (improbabil), cădem pe cel mai bine cotat disponibil (păstrăm
             # dimensiunea pool-ului). Sărim numerele deja din pool sau scoase în rulare.
             chosen, chosen_any = None, None
@@ -1209,7 +1201,7 @@ class LotoEngine:
                     continue
                 if chosen_any is None:
                     chosen_any = num
-                if not _forms_run3(_pool_set, num):
+                if not _forms_adjacency(_pool_set, num):
                     chosen = num
                     break
             pick = chosen if chosen is not None else chosen_any
