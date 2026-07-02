@@ -75,7 +75,7 @@ UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
     "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
-    "last_finalized_job_id", "bench_use_cpu", "bench_use_gpu",
+    "last_finalized_job_id", "bench_use_cpu", "bench_use_gpu", "wf_budget_min",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
@@ -88,6 +88,10 @@ DEFAULTS = {
     # Metode bench pe dispozitiv. GPU implicit OFF: pe loto (date aleatoare) rețelele
     # GPU prind constant MAI PUȚINE hituri decât euristicile CPU → timp irosit + VRAM.
     "bench_use_cpu": True, "bench_use_gpu": False,
+    # Buget walk-forward (minute). La depth 50% cu 15min: joker complet, dar 6/49 ≈
+    # 23/1280 simulări (felie subțire). Mărește-l (ex. 60-120) la rulările peste noapte
+    # (shutdown automat) pentru istoric validat mai adânc.
+    "wf_budget_min": 15,
 }
 
 # --------------------------------------------------------------------------- #
@@ -617,7 +621,11 @@ def _start_walk_forward() -> None:
 
     def _worker_wf() -> None:
         STATE["wf_cancel"] = False
-        _wf_deadline = time.time() + WF_TOTAL_BUDGET_S
+        try:
+            _budget_s = max(60.0, float(SETTINGS.get("wf_budget_min") or 15) * 60.0)
+        except (TypeError, ValueError):
+            _budget_s = float(WF_TOTAL_BUDGET_S)
+        _wf_deadline = time.time() + _budget_s
         STATE["wf_deadline"] = _wf_deadline  # pt plafonarea ETA-ului afișat (bugetul e dur)
 
         def _wf_cancel_all():
@@ -2477,7 +2485,8 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
             continue
         st = _due_status(flat)
         if st and st["ratio"] >= _DUE_WARN_RATIO:
-            alerts.append((game, st))
+            _m = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+            alerts.append((game, st, bool(_m.get("partial")), _m.get("n_test_draws")))
 
     if not alerts:
         return
@@ -2485,16 +2494,21 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
     _T = _bench_target()
     with ui.card().classes("w-full").style("background:#3b0764;border:1px solid #f59e0b"):
         ui.html(f"🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥{_T}</b>")
-        for game, st in alerts:
+        for game, st, _partial, _n_part in alerts:
             if st["ratio"] >= 1.0:
                 lvl, col = "🔴 ÎNTÂRZIAT", "#fca5a5"
             else:
                 lvl, col = "🟡 SE APROPIE", "#fde68a"
+            # Validare parțială → media/intervalul vin din PUȚINE extrageri → alerta
+            # e orientativă; spunem explicit (altfel „media ~18 zile" din 23 simulări
+            # pare la fel de solidă ca una din 1082).
+            _pnote = (f" <span style='opacity:.6'>(⚠️ validare PARȚIALĂ — doar {_n_part} "
+                      f"extrageri simulate; medie orientativă)</span>" if _partial else "")
             ui.html(
                 f"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
                 f"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥{_T} "
                 f"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{st['avg']:.0f}</b> zile "
-                f"(<b>{st['ratio']*100:.0f}%</b> din interval)."
+                f"(<b>{st['ratio']*100:.0f}%</b> din interval).{_pnote}"
             )
         ui.html("<span style='opacity:.6;font-size:.8em'>⚠️ Loteria e aleatoare — "
                 "„întârzierea\" NU crește șansele. E doar un memento de acoperire, "
@@ -2502,7 +2516,7 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
 
     # Notificare transientă (pop-up) la randarea rezultatelor.
     try:
-        names = ", ".join(g.upper() for g, _ in alerts)
+        names = ", ".join(a[0].upper() for a in alerts)
         ui.notify(f"🔔 Se apropie media de ≥{_T}: {names} — vezi alerta de sus.",
                   type="warning", position="top", timeout=10000, close_button=True)
     except Exception:  # noqa: BLE001
@@ -2919,6 +2933,10 @@ def main_page() -> None:
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
+        _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
+        ui.label("Validarea se oprește la buget (jocurile neterminate ies PARȚIALE, pe extragerile "
+                 "recente). La adâncime 50% cu 15 min: doar ~2-5% din 6/49 și 5/40 apucă să se valideze. "
+                 "Mărește-l (60-120) la rulările peste noapte cu oprire automată.").classes("text-caption text-grey")
         _bind_save(ui.checkbox("Filtru Anti-Secvență"), "consecutive_filter_val")
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
