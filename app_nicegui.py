@@ -618,6 +618,7 @@ def _start_walk_forward() -> None:
     def _worker_wf() -> None:
         STATE["wf_cancel"] = False
         _wf_deadline = time.time() + WF_TOTAL_BUDGET_S
+        STATE["wf_deadline"] = _wf_deadline  # pt plafonarea ETA-ului afișat (bugetul e dur)
 
         def _wf_cancel_all():
             # Oprire TOTALĂ: anulare manuală (buton UI) SAU buget global depășit.
@@ -805,7 +806,7 @@ def status_panel() -> None:
             ui.label("Testez toate metodele (CPU pe nuclee ‖ GPU). Auto-Pilot pornește la final.").classes("text-caption")
             ui.html(_hw_telemetry_html())  # consum live CPU/RAM/GPU/VRAM
         # Clasament PARȚIAL live: metodele apar pe măsură ce termină (CPU întâi, apoi GPU).
-        _render_bench_live_leaderboard(_start)
+        _render_bench_live_leaderboard(_start, progress=(rc[0] if rc else None))
         return
 
     _shutdown_banner()
@@ -1818,12 +1819,23 @@ def wf_progress_panel() -> None:
     if not STATE.get("wf_status"):
         return
     _wfp = float(STATE.get("wf_progress") or 0.0)
-    # ETA walk-forward: estimare liniară din progres (elapsed × (1-p)/p).
+    # ETA walk-forward: estimare liniară din progres (elapsed × (1-p)/p), PLAFONATĂ
+    # la bugetul de timp rămas (WF_TOTAL_BUDGET_S e deadline DUR — estimarea liniară
+    # arăta „~14m rămas" când bugetul mai permitea doar câteva minute).
     _eta = ""
     _ws = STATE.get("wf_start")
     if _ws and 0.02 < _wfp < 1.0:
         _rem = (time.time() - _ws) * (1.0 - _wfp) / _wfp
-        _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
+        _dl = STATE.get("wf_deadline")
+        if _dl:
+            _budget_left = max(0.0, float(_dl) - time.time())
+            if _rem > _budget_left:
+                _eta = (f"  ·  rămas ≤{_fmt_dur(_budget_left)} (buget; estimare liniară "
+                        f"~{_fmt_dur(_rem)} → jocurile rămase pot ieși PARȚIALE)")
+            else:
+                _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
+        else:
+            _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
     ui.label(STATE["wf_status"] + _eta).classes("text-info")
     ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
     ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
@@ -2151,11 +2163,13 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         _render_bench_leaderboard_slice(df, folds_key, k_pool, sect, top_n=top_n)
 
 
-def _render_bench_live_leaderboard(bench_start=None) -> None:
+def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
     """Clasament PARȚIAL în timpul bench-ului — din folds.csv (flush-uit periodic la
     ~100 rezultate). Metodele apar pe măsură ce TERMINĂ: de obicei CPU întâi (track-ul
     CPU se închide mai devreme), apoi GPU. Câștigătorul final + Auto-Pilot se decid
-    abia la sfârșit. Citește folds.csv O DATĂ pe render (parțial → mic)."""
+    abia la sfârșit. Citește folds.csv O DATĂ pe render (parțial → mic).
+    `progress` (0..1) — la ≥1.0 testele-s gata, dar procesul încă scrie decizia/raportul
+    → titlul NU mai zice „PARȚIAL" (inadvertență văzută în UI la 100%)."""
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
         return
@@ -2175,9 +2189,17 @@ def _render_bench_live_leaderboard(bench_start=None) -> None:
     if df.empty or "method" not in df.columns or "game" not in df.columns:
         return
     pool = int(SETTINGS.get("pool_size_val", 10))
-    with ui.expansion("🏆 Clasament PARȚIAL (live — în timpul bench-ului)", value=True).classes("w-full"):
-        ui.label("⏳ Se completează pe măsură ce metodele termină (de obicei CPU întâi, apoi GPU). "
-                 "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului.").classes("text-caption text-grey")
+    _done = progress is not None and float(progress) >= 1.0
+    _title = ("🏆 Clasament COMPLET (teste 100% — se scrie decizia/raportul...)" if _done
+              else "🏆 Clasament PARȚIAL (live — în timpul bench-ului)")
+    with ui.expansion(_title, value=True).classes("w-full"):
+        if _done:
+            ui.label("✅ Toate testele au rulat. Procesul de bench finalizează decizia "
+                     "(best_methods.json) + raportul — câștigătorul final și Auto-Pilot "
+                     "pornesc în câteva momente.").classes("text-caption text-positive")
+        else:
+            ui.label("⏳ Se completează pe măsură ce metodele termină (de obicei CPU întâi, apoi GPU). "
+                     "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului.").classes("text-caption text-grey")
         ui.label("ℹ️ Walk-forward validation + istoric hits (≥3: pool/OMNIUS/bilete, media între hituri) "
                  "apar DUPĂ bench — când Auto-Pilot generează pool-ul și rulează validarea.").classes("text-caption text-grey")
         for fk, kp, sect in [("loto_6_49", pool, "6/49"),
