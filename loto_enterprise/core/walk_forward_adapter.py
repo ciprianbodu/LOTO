@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -153,21 +154,36 @@ def run_honest_walk_forward(
         "backtest_depth_percent": backtest_depth_percent,
     }
 
+    cached = None
     if use_cache and not force_refresh and cache_file.exists():
         try:
             with open(cache_file, "rb") as f:
                 cached = pickle.load(f)
-            meta["from_cache"] = True
-            meta["n_predictions"] = cached["n_predictions"]
-            meta["n_test_draws"] = cached["n_test_draws"]
-            meta["n_expected"] = cached.get("n_expected", cached["n_test_draws"])
-            meta["partial"] = cached.get("partial", False)
+            if not cached.get("partial", False):
+                # COMPLET → servim direct (fast path neschimbat).
+                meta["from_cache"] = True
+                meta["n_predictions"] = cached["n_predictions"]
+                meta["n_test_draws"] = cached["n_test_draws"]
+                meta["n_expected"] = cached.get("n_expected", cached["n_test_draws"])
+                meta["partial"] = False
+                logger.info(
+                    f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
+                    f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
+                )
+                return cached["flat"], meta
+            # PARȚIAL → NU-l servim orbește: re-rulăm ca să EXTINDEM acoperirea
+            # (altfel un parțial rămâne înghețat până se schimbă CSV-ul, iar mărirea
+            # bugetului WF din UI n-ar avea niciun efect). Dacă rularea nouă iese
+            # MAI SCURTĂ decât cache-ul (mașină ocupată / anulare rapidă), păstrăm
+            # cache-ul — ambele acoperă coada RECENTĂ a aceleiași ferestre, deci
+            # cel mai lung îl conține strict pe cel mai scurt.
             logger.info(
-                f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
-                f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
+                f"[WALK-FWD] Cache PARȚIAL pentru {game_type} pool={pool_size} "
+                f"({cached.get('n_test_draws')}/{cached.get('n_expected')}) → re-rulez "
+                f"pentru a extinde acoperirea (bugetul curent poate fi mai mare)."
             )
-            return cached["flat"], meta
         except Exception as exc:
+            cached = None
             logger.warning(f"[WALK-FWD] Cache load failed: {exc} — re-run")
 
     # Cache miss → rulează walk-forward genuin
@@ -200,10 +216,28 @@ def run_honest_walk_forward(
     meta["n_expected"] = n_expected
     meta["partial"] = meta["n_test_draws"] < n_expected
 
-    # Save cache
+    # Rularea nouă a acoperit MAI PUȚIN decât cache-ul parțial existent (mașină
+    # ocupată / anulare rapidă) → păstrăm cache-ul (mai acoperitor, aceeași coadă
+    # recentă) și NU-l suprascriem cu regresia.
+    if cached is not None and int(cached.get("n_test_draws") or 0) > meta["n_test_draws"]:
+        logger.info(
+            f"[WALK-FWD] Rularea nouă ({meta['n_test_draws']} extrageri) < cache "
+            f"({cached.get('n_test_draws')}) → păstrez cache-ul (fără suprascriere)."
+        )
+        meta["from_cache"] = True
+        meta["n_predictions"] = cached["n_predictions"]
+        meta["n_test_draws"] = cached["n_test_draws"]
+        meta["n_expected"] = cached.get("n_expected", n_expected)
+        meta["partial"] = cached.get("partial", True)
+        return cached["flat"], meta
+
+    # Save cache (rulare nouă ≥ cache → suprascriem; scriere atomică anti-corupere
+    # la UI-restart în mijlocul pickle.dump — un cache trunchiat ar crăpa la load).
     try:
-        with open(cache_file, "wb") as f:
+        tmp_file = cache_file.with_suffix(".pkl.tmp")
+        with open(tmp_file, "wb") as f:
             pickle.dump({"flat": flat, **meta}, f)
+        os.replace(tmp_file, cache_file)
         logger.info(f"[WALK-FWD] Cache saved → {cache_file}")
     except Exception as exc:
         logger.warning(f"[WALK-FWD] Cache save failed: {exc}")
