@@ -485,9 +485,21 @@ class LotoBacktester:
             _has_adaptive = False
             logger.warning("[BACKTEST] adaptive_feedback indisponibil — folosesc legacy feedback.")
 
+        # Ordinea de iterare. FĂRĂ stare între pași (use_feedback=False ȘI
+        # enable_hard_inversion=False — exact cum apelează walk-forward-ul), pașii
+        # sunt matematic INDEPENDENȚI → ordinea nu schimbă niciun rezultat.
+        # Iterăm atunci de la RECENT spre VECHI, ca o oprire timpurie (buget de
+        # timp / anulare) să acopere extragerile RECENTE (relevante la validare),
+        # nu coada veche a ferestrei. (Bug văzut: WF 6/49 tăiat la 51 simulări,
+        # toate din 2014 → „istoric hits" și alerta ÎNTÂRZIAT deveneau absurde.)
+        # Cu feedback/inversiune activă (stare secvențială) păstrăm vechi→recent.
+        _stateless = (not use_feedback) and (not enable_hard_inversion)
+        sim_indices = list(range(start_idx, n_draws, simulation_step))
+        if _stateless:
+            sim_indices = sim_indices[::-1]
+
         # Iterăm prin fiecare punct de simulare
-        for sim_idx in range(start_idx, n_draws, simulation_step):
-            sim_num = sim_idx - start_idx + 1
+        for sim_num, sim_idx in enumerate(sim_indices, 1):
 
             # Oprire timpurie (anulare manuală SAU buget de timp) — o metodă GPU grea
             # (ex. torch_wavenet_deep la Joker) reantrenează modelul la FIECARE pas, deci
@@ -659,12 +671,16 @@ class LotoBacktester:
                 logger.error(traceback.format_exc())
                 continue
         
+        # Contract stabil pt consumatori: rezultate în ordine cronologică ASC
+        # (la iterarea recent→vechi lista s-ar întoarce altfel inversată).
+        retro_predictions.sort(key=lambda p: p.draw_index)
+
         # Statistici finale
         if retro_predictions:
             total_hits = sum(p.hits for p in retro_predictions)
             avg_hits = total_hits / len(retro_predictions)
             logger.info(f"[BACKTEST RETROACTIV] Complet: {len(retro_predictions)} simulări, medie {avg_hits:.2f} hits")
-        
+
         return retro_predictions
 
 

@@ -102,6 +102,7 @@ STATE: dict = {
     "results": None,         # (results_bundle, count)
     "results_recovered": None,  # etichetă „job #N · dată" dacă rezultatele-s recuperate (vechi)
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
+    "retro_meta": {},        # {aceeași cheie: {partial, n_test_draws, n_expected, from_cache}}
     "wf_status": "",         # text status walk-forward
     "wf_progress": 0.0,      # fracție 0..1 progres walk-forward (bară)
     "wf_cancel": False,      # True → oprește walk-forward (buton UI); pipeline continuă
@@ -618,8 +619,8 @@ def _start_walk_forward() -> None:
         STATE["wf_cancel"] = False
         _wf_deadline = time.time() + WF_TOTAL_BUDGET_S
 
-        def _wf_should_cancel():
-            # Oprire timpurie: anulare manuală (buton UI) SAU buget de timp TOTAL depășit.
+        def _wf_cancel_all():
+            # Oprire TOTALĂ: anulare manuală (buton UI) SAU buget global depășit.
             return bool(STATE.get("wf_cancel")) or time.time() > _wf_deadline
 
         try:
@@ -648,6 +649,17 @@ def _start_walk_forward() -> None:
                         # progres global = jocuri terminate + fracția jocului curent
                         STATE["wf_progress"] = min(1.0, _b + max(0.0, min(1.0, frac)) / _t)
 
+                    # Buget PER JOC (felie adaptivă din timpul global rămas): un joc
+                    # lent nu mai înfometează jocurile următoare (bug văzut: joker a
+                    # consumat tot bugetul → 5/40 parțial, 6/49 aproape zero). Minim
+                    # 60s/joc ca să apuce măcar câteva simulări.
+                    _games_left = max(1, total - done + 1)
+                    _game_deadline = time.time() + max(
+                        60.0, (_wf_deadline - time.time()) / _games_left)
+
+                    def _wf_should_cancel(_gd=_game_deadline):
+                        return _wf_cancel_all() or time.time() > _gd
+
                     try:
                         flat, meta = run_honest_walk_forward(
                             df_source=df_source, game_type=g_label,
@@ -658,16 +670,24 @@ def _start_walk_forward() -> None:
                         )
                         if meta.get("partial"):
                             logger.warning("[WF] %s validat PARȚIAL: %s/%s extrageri "
-                                           "(buget de timp / anulare).",
+                                           "(buget de timp / anulare) — acoperă extragerile RECENTE.",
                                            g_label, meta.get("n_test_draws"), meta.get("n_expected"))
                         with STATE_LOCK:
                             STATE["retro"][f"{_pfx}{fname}_{g_label}"] = flat
+                            STATE.setdefault("retro_meta", {})[f"{_pfx}{fname}_{g_label}"] = {
+                                "partial": bool(meta.get("partial")),
+                                "n_test_draws": meta.get("n_test_draws"),
+                                "n_expected": meta.get("n_expected"),
+                                "from_cache": bool(meta.get("from_cache")),
+                            }
                     except Exception as exc:  # noqa: BLE001
                         logger.error("walk-forward %s: %s", g_label, exc)
                     STATE["wf_progress"] = done / max(1, total)
-                    if _wf_should_cancel():
-                        # Buget depășit / anulat → nu mai pornim jocurile rămase.
-                        logger.warning("[WF] oprire walk-forward (buget/anulare) după %d/%d jocuri.",
+                    if _wf_cancel_all():
+                        # DOAR anulare manuală / buget GLOBAL epuizat oprește restul
+                        # jocurilor. Felia PER JOC expirată → jocul e parțial, dar
+                        # următoarele jocuri primesc felia lor normal.
+                        logger.warning("[WF] oprire walk-forward (anulare/buget global) după %d/%d jocuri.",
                                        done, total)
                         break
                 else:
@@ -2281,7 +2301,7 @@ def _target_data_ready() -> bool:
         return True  # la dubiu, nu speria utilizatorul
 
 
-def _render_hits_4plus(flat, game: str) -> None:
+def _render_hits_4plus(flat, game: str, meta: dict | None = None) -> None:
     """Istoric hits — SUMAR: de câte ori POOL 1 și OMNIUS 1 au prins +3 și +4 în
     walk-forward. Doar pool-ul NORMAL (Pool 1) e validat istoric; Pool 2 / OMNIUS 2
     (inversul) sunt „pe șansă, fără backtest" → NU au date aici.
@@ -2311,6 +2331,14 @@ def _render_hits_4plus(flat, game: str) -> None:
         return f"{k} ({k / n * 100:.0f}%)"
 
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
+    if meta and meta.get("partial"):
+        # Validare tăiată la buget de timp / anulare → acoperă doar o parte din
+        # fereastră (cea RECENTĂ, după fix-ul recent-first). Fără marcaj, userul ar
+        # crede că istoricul e complet (bug văzut: 6/49 arăta doar 2014 + alertă absurdă).
+        ui.label(f"⚠️ Validare PARȚIALĂ: {meta.get('n_test_draws')} din {meta.get('n_expected')} "
+                 f"extrageri planificate (oprită la buget de timp/anulare) — acoperă extragerile "
+                 f"CELE MAI RECENTE. Mediile/alertele se bazează doar pe porțiunea validată.").classes(
+            "text-warning text-caption text-bold")
     # Memento „întârziat": media intervalului între hituri ≥TARGET pe POOL + cât a trecut.
     _TT = _bench_target()
     st = _due_status(flat)
@@ -2499,7 +2527,8 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                     # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
                     with ui.expansion("📜 Istoric hits (walk-forward) — click pentru ascunde",
                                       value=True).classes("w-full"):
-                        _render_hits_4plus(flat, game)
+                        _render_hits_4plus(flat, game,
+                                           meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}"))
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:

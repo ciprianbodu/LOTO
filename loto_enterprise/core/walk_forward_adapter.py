@@ -31,7 +31,9 @@ from loto_enterprise.core.backtesting import scored_variant_numbers
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v4"  # v4: flat-ul include omnius_hits/omnius_ticket per extragere
+CACHE_VERSION = "v5"  # v5: iterare recent→vechi la oprire parțială (buget) — cache-urile
+# v4 parțiale acopereau felia VECHE a ferestrei (ex. 6/49 doar 2014) → orfanizate.
+# v4: flat-ul include omnius_hits/omnius_ticket per extragere.
 
 
 @dataclass
