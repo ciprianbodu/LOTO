@@ -56,7 +56,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - **OMNIUS** = cel mai bun bilet SEPARAT per pool (top draw_n după scor). `_omnius_for_pool`.
 - **sim_depth PER JOC** la Auto-Pilot (`_build_config_json(sim_depth_per_game)`); manual = slider global.
 - **Auto-chain**: Re-Bench terminat → pornește automat Auto-Pilot (toggle `autopilot_after_bench`, detectat în `_tick`).
-- **Walk-forward** (`walk_forward_adapter.run_honest_walk_forward` → `backtesting.run_retroactive_backtest`): validare Faza 1 (pool normal) chiar și la auto-invert; `progress_cb` + bară determinată; **depth = 50%** din istoric.
+- **Walk-forward** (`walk_forward_adapter.run_honest_walk_forward` → `backtesting.run_retroactive_backtest`): validare Faza 1 (pool normal) chiar și la auto-invert; `progress_cb` + bară determinată; **depth = 20%** din istoric (userul a oscilat 10→25→30→50→20).
   - **Buget de timp + anulare**: `WF_TOTAL_BUDGET_S=15min` (deadline global) + `should_cancel` + buton „⏹ Oprește validarea". O metodă GPU grea (torch) reantrenată per pas ar dura ORE → se oprește PARȚIAL și pipeline-ul continuă (mail/shutdown). NU bloca pe asta.
 - **Familie graf/network** (`methods_graph.py`, 30 metode numpy/CPU): graf de co-apariție → centralitate/spectral/comunități/random-walk. `_adj` = ASOCIERE (lift centrat), NU co-apariție brută (altfel degenerează în frecvență). Afișat „graph/network (numpy)".
 - **Final pipeline** (`_finalize_pipeline`, după WF): mail rezultate (`mail_on_complete` + `mail_config.json` gitignored / env SMTP) + auto-shutdown (`shutdown_on_complete`, `shutdown /s /t 60` anulabil). Fiecare pas izolat în try/except; log `[FINALIZE]`/`[MAIL]`/`[SHUTDOWN]`.

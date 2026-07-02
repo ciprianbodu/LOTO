@@ -673,7 +673,7 @@ def _start_walk_forward() -> None:
                         flat, meta = run_honest_walk_forward(
                             df_source=df_source, game_type=g_label,
                             pool_size=int(data.get("pool_size") or 10),
-                            backtest_depth_percent=50.0, lookback_percent=100.0, use_cache=True,
+                            backtest_depth_percent=20.0, lookback_percent=100.0, use_cache=True,
                             progress_cb=_wf_cb,
                             should_cancel=_wf_should_cancel,
                         )
@@ -2934,9 +2934,9 @@ def main_page() -> None:
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
         _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
-        ui.label("Validarea se oprește la buget (jocurile neterminate ies PARȚIALE, pe extragerile "
-                 "recente). La adâncime 50% cu 15 min: doar ~2-5% din 6/49 și 5/40 apucă să se valideze. "
-                 "Mărește-l (60-120) la rulările peste noapte cu oprire automată.").classes("text-caption text-grey")
+        ui.label("Validarea (pe ultimele 20% din istoric) se oprește la buget — jocurile neterminate "
+                 "ies PARȚIALE, pe extragerile recente, și se EXTIND la generările următoare. "
+                 "Mărește bugetul (60+) la rulările peste noapte pentru validare completă dintr-un foc.").classes("text-caption text-grey")
         _bind_save(ui.checkbox("Filtru Anti-Secvență"), "consecutive_filter_val")
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
