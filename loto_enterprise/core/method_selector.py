@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,125 @@ def get_scorer_for_game(
         name = "frequency"
     _CACHE[cache_key] = fn
     return fn
+
+
+def get_ensemble_for_game(
+    game_key: str,
+    pool_size: Optional[int] = None,
+    config_path: Optional[str] = None,
+    max_methods: int = 3,
+) -> List[Tuple[str, Callable, float]]:
+    """Return [(method_name, scorer_fn, weight), ...] — pondere ∝ limita Wilson
+    a ratei T+ (scrisă de decision.py în auto_pilot_per_pool[kN].ensemble).
+
+    Variance-reduction: combină scorurile mai multor metode CALIFICATE (nu doar
+    câștigătorul unic) — loteria e aleatoare, diferența dintre metode e majoritar
+    zgomot statistic, deci blend-ul reduce riscul ca o singură metodă "norocoasă"
+    pe date de test să domine complet pool-ul.
+
+    Fallback (best_methods.json vechi, fără câmp 'ensemble', sau toate metodele
+    din ensemble indisponibile la runtime) → listă cu UN SINGUR membru
+    (get_winner_name + get_scorer_for_game, weight=1.0) — identic cu
+    comportamentul dinaintea ensemble-ului.
+    """
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    entry: Dict = {}
+    if pool_size is not None:
+        apm = g.get("auto_pilot_per_pool", {})
+        if isinstance(apm, dict):
+            entry = apm.get(f"k{pool_size}", {}) or {}
+            if not entry.get("ensemble") and apm:
+                avail = sorted(int(k[1:]) for k in apm if k.startswith("k") and k[1:].isdigit())
+                if avail:
+                    nearest = min(avail, key=lambda k: abs(k - pool_size))
+                    cand = apm.get(f"k{nearest}", {}) or {}
+                    if cand.get("ensemble"):
+                        entry = cand
+
+    def _single_fallback() -> List[Tuple[str, Callable, float]]:
+        name = get_winner_name(game_key, pool_size, config_path)
+        fn = get_scorer_for_game(game_key, pool_size, config_path)
+        return [(name, fn, 1.0)]
+
+    raw_list = entry.get("ensemble") if isinstance(entry, dict) else None
+    if not raw_list:
+        return _single_fallback()
+
+    try:
+        from loto_enterprise.benchmark.methods import METHODS
+    except Exception as exc:
+        logger.error("[method_selector] benchmark.methods import failed: %s", exc)
+        raise
+
+    out: List[Tuple[str, Callable, float]] = []
+    for item in raw_list[:max_methods]:
+        name = item.get("method") if isinstance(item, dict) else None
+        weight = float(item.get("weight", 0.0)) if isinstance(item, dict) else 0.0
+        if not name or weight <= 0:
+            continue
+        cache_key = f"{name}#{pool_size or 'overall'}"
+        fn = _CACHE.get(cache_key)
+        if fn is None:
+            meta = METHODS.get(name)
+            if meta is None:
+                logger.warning("[method_selector] ensemble member %r unknown — skip", name)
+                continue
+            fn = meta[0]
+            if getattr(fn, "_unavailable_reason", None):
+                logger.warning("[method_selector] ensemble member %r unavailable (%s) — skip",
+                               name, fn._unavailable_reason)
+                continue
+            _CACHE[cache_key] = fn
+        out.append((name, fn, weight))
+
+    if not out:
+        logger.warning("[method_selector] toate metodele din ensemble %s indisponibile — fallback winner unic",
+                        game_key)
+        return _single_fallback()
+
+    total_w = sum(w for _, _, w in out)
+    if total_w <= 0:
+        return [(n, fn, 1.0 / len(out)) for n, fn, _ in out]
+    return [(n, fn, w / total_w) for n, fn, w in out]
+
+
+def combine_ensemble_scores(
+    contributions: List[Tuple[str, Dict[int, float], float]],
+) -> Dict[int, float]:
+    """Combină scorurile brute ale mai multor metode într-un singur scor per
+    număr, ponderat. Fiecare metodă e normalizată min-max la [0,1] ÎNAINTE de
+    combinare — altfel o metodă cu scala de valori mai mare ar domina artificial
+    suma, indiferent de calitatea ei relativă.
+
+    `contributions` = [(method_name, {num: raw_score}, weight), ...] — ponderile
+    NU trebuie să fie deja normalizate la sumă 1 (se renormalizează aici pe baza
+    metodelor care au produs efectiv scoruri, ca metodele eșuate/goale să nu
+    reducă artificial suma ponderilor active).
+
+    Cu UN SINGUR membru cu scoruri nevide, returnează scorurile lui BRUTE,
+    NEnormalizate — comportament bit-identic cu apelul direct al scorer-ului
+    (fără ensemble), ca să nu schimbăm nimic când decizia n-a construit un
+    blend real (ensemble cu 1 membru).
+    """
+    active = [(name, raw, w) for name, raw, w in contributions if raw]
+    if not active:
+        return {}
+    if len(active) == 1:
+        _name, raw, _w = active[0]
+        return {int(k): float(v) for k, v in raw.items()}
+
+    total_w = sum(w for _, _, w in active) or 1.0
+    combined: Dict[int, float] = {}
+    for _name, raw, weight in active:
+        w_norm = weight / total_w
+        vals = list(raw.values())
+        lo, hi = min(vals), max(vals)
+        span = (hi - lo) or 1.0
+        for num, v in raw.items():
+            scaled = (float(v) - lo) / span
+            combined[int(num)] = combined.get(int(num), 0.0) + w_norm * scaled
+    return combined
 
 
 def summary_line(game_key: str, pool_size: Optional[int] = None,

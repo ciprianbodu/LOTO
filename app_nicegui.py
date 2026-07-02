@@ -1580,19 +1580,35 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         ui.label(f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else ""))
         ui.label(f"Garanție: {data.get('guarantee')}")
         ui.label(f"Variante simple: {len(variants)}")
-        # Acoperirea REALĂ a garanției (set-cover). 100% = orice grup de
-        # `guarantee` numere prinse în pool apare garantat pe cel puțin un bilet.
-        # <100% = limita "Variante maxime" a TĂIAT garanția — avertizăm vizibil
-        # (altfel utilizatorul crede că are garanție 4/4 dar nu o are).
+        # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
+        # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
+        # pe cel puțin un bilet. <100% poate avea DOUĂ cauze diferite, pe care
+        # le distingem explicit (altfel utilizatorul crede că are garanție 4/4
+        # dar nu o are, sau nu știe ce să schimbe ca s-o recapete):
+        #   1. limita "Variante maxime" a tăiat wheeling-ul înainte de acoperire completă.
+        #   2. filtrul anti-anomalie a eliminat bilete DUPĂ wheeling (coverage_pct
+        #      recalculat pe setul final — vezi loto_engine.py run_institutional_pipeline).
         _cov = (data.get("context") or {}).get("coverage_pct")
         if _cov is not None:
             if float(_cov) >= 100.0:
                 ui.html(f"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>")
             else:
+                _anomaly = (data.get("audit") or {}).get("anomaly_filter") or {}
+                _cov_before = _anomaly.get("coverage_pct_before")
+                if _cov_before is not None and float(_cov_before) > float(_cov):
+                    _removed = int(_anomaly.get("original_count", 0)) - int(_anomaly.get("final_count", 0))
+                    reason = (
+                        f"filtrul anti-anomalie a eliminat {_removed} variante după wheeling "
+                        f"(acoperire inițială {float(_cov_before):.1f}% → {float(_cov):.1f}%)"
+                    )
+                else:
+                    reason = (
+                        "limita «Variante maxime» a tăiat garanția — "
+                        "pune 0 = nelimitat pentru garanție completă"
+                    )
                 ui.html(
                     f"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
-                    f"<span style='opacity:.7'>(limita «Variante maxime» a tăiat garanția — "
-                    f"pune 0 = nelimitat pentru garanție completă)</span>"
+                    f"<span style='opacity:.7'>({reason})</span>"
                 )
         ui.label(f"Extrageri: {data.get('total_draws')}")
         # Indicator GPU vs CPU — din audit.compute_device (scris de worker, device-ul REAL folosit)
@@ -1620,6 +1636,20 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             meta = ", ".join(x for x in [fam, (f"pool {ph}" if ph else "")] if x)
             if meta:
                 tail += f" <span style='opacity:.45'>[{meta}]</span>"
+            # Ensemble (variance-reduction): scorul final combină ponderat MAI
+            # MULTE metode calificate, nu doar câștigătorul unic afișat mai sus
+            # — vezi decision.py (ENSEMBLE_MAX_METHODS) și
+            # method_selector.combine_ensemble_scores. Cu 1 singur membru,
+            # `ensemble` lipsește din audit (comportament bit-identic, fără blend).
+            _ens = info.get("ensemble") or []
+            if len(_ens) > 1:
+                _ens_str = " + ".join(
+                    f"{e.get('method')} ({float(e.get('weight', 0)) * 100:.0f}%)" for e in _ens
+                )
+                tail += (
+                    f"<br><span style='opacity:.6;font-size:.85em'>⚖️ ensemble (variance-reduction): "
+                    f"{_ens_str}</span>"
+                )
             parts.append(f"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>{tail}")
         ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes("text-caption")
     else:

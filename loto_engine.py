@@ -445,7 +445,21 @@ class LotoEngine:
 
         # Wheeling: implicit greedy (bit-identic). Alternative selectabile prin env
         # LOTO_WHEEL_METHOD = ilp|annealing|genetic|lajolla (fallback la greedy).
-        _wheel_method = os.environ.get("LOTO_WHEEL_METHOD", "greedy").strip().lower()
+        _wheel_method_env = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
+        if _wheel_method_env:
+            # Override explicit — comportament neschimbat (backward-compat).
+            _wheel_method = _wheel_method_env
+        elif max_variants == 0:
+            # Implicit, fără cap de bilete ("garanție completă"): folosim cover
+            # EXACT/minim (ILP) când e fezabil — aceeași garanție 100%, dar cu
+            # bilete ≤ greedy (wheel_ilp compară intern cu greedy și păstrează
+            # varianta cu mai puține bilete; fallback automat la greedy dacă
+            # problema e prea mare sau ILP nu ajută). Schimbare INTENȚIONATĂ
+            # (mai puține bilete pt aceeași garanție), nu bit-identică cu greedy.
+            _wheel_method = "ilp"
+        else:
+            # Buget de bilete fix (max_variants>0): păstrăm greedy (neschimbat).
+            _wheel_method = "greedy"
         if _wheel_method and _wheel_method != "greedy":
             from wheeling_methods import generate_wheel
             variants, coverage_pct = generate_wheel(
@@ -935,18 +949,77 @@ class LotoEngine:
         wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
-        # Funcția 4: Anomaly Filtering via TimesFM v2 (skip pe Pure Mode)
+        # Funcția 4: Anomaly Filtering — PĂSTRÂND garanția combinatorică (skip pe Pure Mode)
         if smart_reduction and tfm_scores and not pure_bench_mode:
-            logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring v2 pe {len(lines)} variante...")
+            logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring pe {len(lines)} variante "
+                         f"(coverage-safe: nu sparge garanția)...")
             original_count = len(lines)
             anomaly_threshold = 0.7
-            lines = self.filter_variants_by_anomaly(lines, tfm_scores, threshold=anomaly_threshold)
-            logging.info(f"[PIPELINE] Anomaly v2: eliminat {original_count - len(lines)} variante (threshold={anomaly_threshold}).")
+            # Calculăm anomalia PER BILET (aceeași formulă ca filter_variants_by_anomaly),
+            # apoi eliminăm în ordine de la cel mai anomal, DAR doar dacă biletul e
+            # REDUNDANT (fiecare țintă a lui mai e acoperită de alt bilet rămas).
+            # Anterior, filtrul putea elimina UNICUL acoperitor al unei ținte din
+            # covering design, spărgând garanția chiar și cu max_variants=0
+            # ("nelimitat") — vezi ex. real Joker Pool1: 467→163 variante, acoperire
+            # căzută la 39.3% deși userul cerea garanție completă.
+            #
+            # NOTĂ (verificat empiric, 2026-07-02, pe _ISTORIC/*.csv, toate cele 3
+            # jocuri, pool 16, guarantee 4, buget de la 30 la nelimitat): cu
+            # garanție coverage-safe, threshold-ul de mai jos NU mai elimină NIMIC
+            # în practică (0 bilete eliminate în toate cazurile testate) — atât
+            # greedy-ul (maximizează acoperire NOUĂ per bilet), cât și ILP-ul
+            # (cover minim) produc wheel-uri aproape fără redundanță, deci fiecare
+            # bilet e deja "necesar" pentru cel puțin o țintă. Schimbarea valorii
+            # 0.7 (testat 0.3..0.95) NU modifică rezultatul — nu e un buton util
+            # de "tunat" cu setup-ul curent de wheeling. Las valoarea ca document
+            # istoric / plasă de siguranță pt eventuale wheel-uri viitoare cu
+            # redundanță reală (ex. metode de wheeling custom); NU investi timp
+            # aici fără să re-verifici mai întâi empiric (vezi log-ul de mai jos —
+            # dacă "removed=0" mereu, threshold-ul tot nu are efect).
+            anomaly_scores = [self.calculate_variant_anomaly_score(v, tfm_scores) for v in lines]
+            removal_priority = sorted(
+                (i for i, a in enumerate(anomaly_scores) if a > anomaly_threshold),
+                key=lambda i: anomaly_scores[i],
+                reverse=True,
+            )
+            from wheeling_methods import filter_preserving_coverage, compute_coverage_pct
+            lines, removed_count = filter_preserving_coverage(
+                lines, self.hard_core, guarantee, removal_priority
+            )
+            spared_count = len(removal_priority) - removed_count
+            if removed_count == 0 and removal_priority:
+                logging.info(
+                    f"[PIPELINE] Anomaly (coverage-safe): 0 variante eliminate efectiv — toate cele "
+                    f"{spared_count} candidate (threshold={anomaly_threshold}) erau necesare garanției "
+                    f"(filtru INERT în acest run — comun cu wheel-uri aproape-minimale)."
+                )
+            else:
+                logging.info(
+                    f"[PIPELINE] Anomaly (coverage-safe): eliminat {removed_count} variante "
+                    f"(threshold={anomaly_threshold}); {spared_count} anomale PĂSTRATE ca fiind "
+                    f"unicul acoperitor al unei ținte din garanție."
+                )
             self.audit['anomaly_filter'] = {
                 'original_count': original_count,
                 'final_count': len(lines),
-                'threshold': anomaly_threshold
+                'threshold': anomaly_threshold,
+                'candidates_for_removal': len(removal_priority),
+                'spared_for_coverage': spared_count,
             }
+            if removed_count > 0:
+                # Filtrarea e coverage-safe prin construcție (nu elimină unicul
+                # acoperitor al unei ținte), deci coverage_pct NU poate scădea —
+                # recalculăm doar ca dublă-verificare/transparență în audit.
+                recomputed_coverage = compute_coverage_pct(lines, self.hard_core, guarantee)
+                self.audit['anomaly_filter']['coverage_pct_before'] = coverage_pct
+                self.audit['anomaly_filter']['coverage_pct_after'] = recomputed_coverage
+                if recomputed_coverage < coverage_pct:
+                    logging.warning(
+                        "[ANOMALY] Neașteptat: acoperirea a scăzut de la %.2f%% la %.2f%% "
+                        "după filtrare coverage-safe (verifică logica) — elimină %d variante.",
+                        coverage_pct, recomputed_coverage, removed_count,
+                    )
+                coverage_pct = recomputed_coverage
         elif pure_bench_mode:
             logging.info(f"[PIPELINE] 🎯 PURE MODE: skip Anomaly filter — păstrăm toate {len(lines)} variante")
 
@@ -1154,6 +1227,11 @@ class LotoEngine:
         # Trackăm numerele scoase ca să NU le re-adăugăm ca rezerve (altfel ai putea avea
         # "Scos 18 → adăugat 18"). Bug observat 2026-05-02.
         removed_nums: set[int] = set()
+        # Instrumentare (audit): de câte ori garanția "zero consecutive" a trebuit să cadă
+        # pe fallback (nicio rezervă neadiacentă disponibilă) sau bucla a fost întreruptă
+        # de anti-loop guard — semnal că pool-ul rezultat poate încă avea o adiacență.
+        fallback_any_count = 0
+        guard_triggered = False
 
         def _forms_adjacency(pool_set: set, num: int) -> bool:
             """True dacă `num` e adiacent cu vreun număr din pool (ar crea consecutive)."""
@@ -1163,6 +1241,12 @@ class LotoEngine:
         while True:
             _iter_guard += 1
             if _iter_guard > 4 * max(len(pool), 1):  # anti-buclă (nu ar trebui atins)
+                guard_triggered = True
+                logging.warning(
+                    "[ANTI-SEQ] iter_guard atins (%d iterații) — opresc filtrul înainte de "
+                    "convergență completă; pool-ul poate încă conține numere consecutive.",
+                    _iter_guard - 1,
+                )
                 break
             found_sequence = None
             # Căutăm orice CONSECUTIV (run de 2+) în pool — strict, fără perechi.
@@ -1206,7 +1290,21 @@ class LotoEngine:
                     break
             pick = chosen if chosen is not None else chosen_any
             if pick is None:
+                logging.warning(
+                    "[ANTI-SEQ] Nicio rezervă disponibilă (pool epuizat) — opresc filtrul cu "
+                    "%d numere în pool (cerut %d); posibil consecutive rămase.",
+                    len(current_pool), len(pool),
+                )
                 break  # nu mai există rezerve (improbabil) — oprim
+            if chosen is None:
+                # Fallback: NU am găsit rezervă neadiacentă → garanția "zero consecutive"
+                # se poate încălca pentru acest pick (rezerva aleasă poate fi adiacentă).
+                fallback_any_count += 1
+                logging.warning(
+                    "[ANTI-SEQ] Fallback chosen_any pentru secvența %s: nicio rezervă neadiacentă "
+                    "disponibilă, aleg %d (poate reintroduce o adiacență).",
+                    found_sequence, pick,
+                )
             current_pool.append(pick)
             modifications.append(
                 f"Scos {weakest_num} (frecvență {int(freq[weakest_num - 1])}) din secvența "
@@ -1218,7 +1316,24 @@ class LotoEngine:
         if modifications:
             self.audit['consecutive_filter'] = modifications
             logging.info(f"[FILTER] Modificări anti-secvență: {modifications}")
-            
+
+        # Verificare finală (doar audit/log — nu schimbă pool-ul): garanția "zero
+        # consecutive" poate fi încălcată dacă fallback_any_count>0 sau guard_triggered.
+        remaining_adjacent = [
+            (a, b) for a, b in zip(current_pool, current_pool[1:]) if b == a + 1
+        ]
+        if fallback_any_count or guard_triggered or remaining_adjacent:
+            self.audit['consecutive_filter_warnings'] = {
+                "fallback_any_count": fallback_any_count,
+                "iter_guard_triggered": guard_triggered,
+                "remaining_adjacent_pairs": remaining_adjacent,
+            }
+            logging.warning(
+                "[ANTI-SEQ] Garanție posibil incompletă: fallback_any=%d, iter_guard=%s, "
+                "perechi adiacente rămase=%s",
+                fallback_any_count, guard_triggered, remaining_adjacent,
+            )
+
         return current_pool
         
     def _get_hard_core_joker(self, freq: np.ndarray, pool_size=3) -> list:
@@ -1804,7 +1919,7 @@ class LotoEngine:
         so the caller falls back to TimesFM.
         """
         try:
-            from loto_enterprise.core.method_selector import get_scorer_for_game, get_winner_name
+            from loto_enterprise.core.method_selector import get_ensemble_for_game, combine_ensemble_scores
         except Exception as exc:
             logging.warning("[ENGINE] method_selector import failed: %s", exc)
             return {}
@@ -1838,11 +1953,24 @@ class LotoEngine:
             draws_2d = self._draw_matrix.astype(np.int64)
 
         try:
-            winner = get_winner_name(game_key, pool_size=_pool_hint)
-            scorer = get_scorer_for_game(game_key, pool_size=_pool_hint)
-            logging.info("[ENGINE] bench-winner scoring: game=%s pool=%d -> %s",
-                         game_key, _pool_hint, winner)
-            scores = scorer(draws_2d, max_num)
+            ensemble = get_ensemble_for_game(game_key, pool_size=_pool_hint)
+            if not ensemble:
+                return {}
+            winner = ensemble[0][0]
+            logging.info(
+                "[ENGINE] bench-winner scoring: game=%s pool=%d -> %s%s",
+                game_key, _pool_hint, winner,
+                f" (+ ensemble x{len(ensemble)})" if len(ensemble) > 1 else "",
+            )
+            contributions = []
+            for name, fn, weight in ensemble:
+                try:
+                    raw = fn(draws_2d, max_num)
+                except Exception as exc_m:
+                    logging.warning("[ENGINE] ensemble member %s a eșuat: %s — sar peste", name, exc_m)
+                    raw = {}
+                contributions.append((name, raw, weight))
+            scores = combine_ensemble_scores(contributions)
             if not scores:
                 return {}
             family = ""
@@ -1853,11 +1981,16 @@ class LotoEngine:
                     family = meta[1]
             except Exception as _exc_fam:
                 logging.debug("[ENGINE] family lookup pt %s eșuat: %s", winner, _exc_fam)
-            self.audit.setdefault("bench_winner", {})[game_key] = {
+            bench_winner_info = {
                 "method": winner,
                 "pool_hint": _pool_hint,
                 "family": family,
             }
+            if len(ensemble) > 1:
+                bench_winner_info["ensemble"] = [
+                    {"method": n, "weight": round(w, 4)} for n, _raw, w in contributions if _raw
+                ]
+            self.audit.setdefault("bench_winner", {})[game_key] = bench_winner_info
             return {int(k): float(v) for k, v in scores.items()}
         except Exception as exc:
             logging.warning("[ENGINE] bench-winner scoring failed: %s", exc)

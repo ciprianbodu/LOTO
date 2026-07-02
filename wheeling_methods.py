@@ -64,6 +64,63 @@ def _coverage_pct(wheel: List[List[int]], pool: List[int], guarantee: int) -> fl
     return round(len(covered & targets) / len(targets) * 100.0, 2)
 
 
+def compute_coverage_pct(wheel: List[List[int]], pool: List[int], guarantee: int) -> float:
+    """API publică pt recalcularea acoperirii garanției pe un set de bilete DAT.
+
+    Folosit din loto_engine.py pentru a revalida `coverage_pct` DUPĂ filtre
+    post-wheeling (ex. anomaly filter) care pot elimina bilete fără să
+    actualizeze procentul de acoperire raportat inițial de wheeling."""
+    return _coverage_pct(wheel, pool, guarantee)
+
+
+def filter_preserving_coverage(
+    wheel: List[List[int]],
+    pool: List[int],
+    guarantee: int,
+    removal_priority: List[int],
+) -> Tuple[List[List[int]], int]:
+    """Elimină bilete din `wheel`, în ordinea din `removal_priority` (indici în
+    `wheel`, de la cel mai indezirabil la cel mai puțin dorit — ex. cele mai
+    "anomale" statistic), PĂSTRÂND garanția combinatorică — un bilet e eliminat
+    DOAR dacă toate țintele lui (subseturi de `guarantee` numere din pool) mai
+    sunt acoperite de cel puțin un alt bilet rămas.
+
+    Folosit ca să reconciliem filtrul anti-anomalie (bazat pe scoruri) cu
+    garanția de wheeling (bazată pe covering design) — anterior, filtrul putea
+    elimina bilete care erau UNICUL acoperitor al unei ținte, spărgând garanția
+    promisă utilizatorului chiar și în modul "nelimitat" (max_variants=0).
+
+    Returnează (wheel_filtrat, n_bilete_eliminate).
+    """
+    wheel = [list(t) for t in wheel]
+    targets_per_ticket = [
+        set(itertools.combinations(sorted(t), guarantee)) for t in wheel
+    ]
+    coverage_count: Dict[tuple, int] = {}
+    for targets in targets_per_ticket:
+        for t in targets:
+            coverage_count[t] = coverage_count.get(t, 0) + 1
+
+    keep = [True] * len(wheel)
+    removed = 0
+    for idx in removal_priority:
+        if idx < 0 or idx >= len(wheel) or not keep[idx]:
+            continue
+        targets = targets_per_ticket[idx]
+        # Sigur de eliminat DOAR dacă fiecare țintă a lui mai are ≥1 acoperitor
+        # rămas (coverage_count>1 acum, înainte de a-l scădea pe al lui). Ținte
+        # deja neacoperite (count=0, ex. dintr-un max_variants anterior) NU
+        # forțează eliminarea — sunt tratate conservator, biletul e păstrat.
+        if all(coverage_count.get(t, 0) > 1 for t in targets):
+            keep[idx] = False
+            for t in targets:
+                coverage_count[t] -= 1
+            removed += 1
+
+    result = [w for w, k in zip(wheel, keep) if k]
+    return result, removed
+
+
 def _order_by_scores(wheel: List[List[int]], scores) -> List[List[int]]:
     if not scores:
         return [sorted(t) for t in wheel]
