@@ -621,16 +621,27 @@ def _start_walk_forward() -> None:
 
     def _worker_wf() -> None:
         STATE["wf_cancel"] = False
-        try:
-            _budget_s = max(60.0, float(SETTINGS.get("wf_budget_min") or 15) * 60.0)
-        except (TypeError, ValueError):
-            _budget_s = float(WF_TOTAL_BUDGET_S)
-        _wf_deadline = time.time() + _budget_s
-        STATE["wf_deadline"] = _wf_deadline  # pt plafonarea ETA-ului afișat (bugetul e dur)
+        _wf_t0 = time.time()
+
+        def _budget_s_live() -> float:
+            # Citit LIVE din SETTINGS (nu o dată la pornire) → schimbarea bugetului din
+            # UI ÎN TIMPUL validării are efect imediat (mărești bugetul → rularea
+            # curentă continuă; îl micșorezi → se oprește mai devreme).
+            try:
+                return max(60.0, float(SETTINGS.get("wf_budget_min") or 15) * 60.0)
+            except (TypeError, ValueError):
+                return float(WF_TOTAL_BUDGET_S)
+
+        def _global_deadline() -> float:
+            dl = _wf_t0 + _budget_s_live()
+            STATE["wf_deadline"] = dl  # ETA-ul afișat urmărește și el schimbarea live
+            return dl
+
+        _global_deadline()  # inițializează STATE["wf_deadline"] pt panou
 
         def _wf_cancel_all():
             # Oprire TOTALĂ: anulare manuală (buton UI) SAU buget global depășit.
-            return bool(STATE.get("wf_cancel")) or time.time() > _wf_deadline
+            return bool(STATE.get("wf_cancel")) or time.time() > _global_deadline()
 
         try:
             from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
@@ -661,12 +672,13 @@ def _start_walk_forward() -> None:
                     # Buget PER JOC (felie adaptivă din timpul global rămas): un joc
                     # lent nu mai înfometează jocurile următoare (bug văzut: joker a
                     # consumat tot bugetul → 5/40 parțial, 6/49 aproape zero). Minim
-                    # 60s/joc ca să apuce măcar câteva simulări.
+                    # 60s/joc. Felia se recalculează LIVE din deadline-ul global →
+                    # mărirea bugetului din UI extinde și felia jocului CURENT.
                     _games_left = max(1, total - done + 1)
-                    _game_deadline = time.time() + max(
-                        60.0, (_wf_deadline - time.time()) / _games_left)
+                    _game_t0 = time.time()
 
-                    def _wf_should_cancel(_gd=_game_deadline):
+                    def _wf_should_cancel(_gt0=_game_t0, _gl=_games_left):
+                        _gd = _gt0 + max(60.0, (_global_deadline() - _gt0) / _gl)
                         return _wf_cancel_all() or time.time() > _gd
 
                     try:
