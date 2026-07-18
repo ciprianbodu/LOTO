@@ -1,57 +1,41 @@
-"""Verifică + actualizează mediul aplicației LOTO.
+"""Verifică + actualizează mediul aplicației LOTO (exclusiv CPU).
 
 Acoperă:
     • Librării standard sigure (nicegui, pandas, numpy, numba, ...)
-    • PyTorch + CUDA (GPU detection)
-    • Foundation models pentru benchmark: timesfm, chronos, momentfm
-    • NeuralForecast (NBEATS / NHITS / TiDE / DLinear / PatchTST / Informer /
-      Autoformer / FEDformer / DeepAR / TCN)
-    • Telemetrie hardware: rich, nvidia-ml-py (oficial; pynvml e deprecat)
+    • Metode statistice / ML CPU (scikit-learn, statsmodels, statsforecast,
+      hmmlearn, xgboost, lightgbm, catboost)
     • Verificare freshness a `best_methods.json` și a istoricului CSV
+
+NOTĂ: tot suportul GPU/neural (torch / CUDA / TimesFM / Chronos / MOMENT /
+NeuralForecast) a fost ELIMINAT din aplicație — nu se mai verifică nimic GPU.
 """
 
 from __future__ import annotations
 
 import importlib
-import importlib.util
-import os
 import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version as dist_version
 
 # Librarii standard care pot fi actualizate automat in siguranta.
-# Am exclus intentionat:
-#   - torch / torchvision / torchaudio (GPU build cu128 — risc CPU override)
-#   - pandas / numpy / numba (Python C-extensions; wheel-uri specifice per versiune
-#     de Python — upgrade nesigur poate cere build din sursa)
-#   - timesfm / chronos / momentfm / neuralforecast (modele AI cu deps stricte)
-# Acestea ramin pe versiunea curenta din venv.
+# Am exclus intentionat pandas / numpy / numba (Python C-extensions; wheel-uri
+# specifice per versiune de Python — upgrade nesigur poate cere build din sursa).
 SAFE_UPGRADE_PACKAGES = [
     "nicegui",
     "psutil",
     "requests",
     "rich",            # bench reporting tables
-    "nvidia-ml-py",    # GPU telemetry (oficial NVIDIA; expune modul `pynvml`)
 ]
 
-# Foundation models pentru benchmark — vrem să știm DACĂ sunt instalate, dar
-# NU le upgradăm automat (pot avea constraints de versiune pe torch / transformers).
-FOUNDATION_MODELS = {
-    "timesfm": "Google TimesFM",
-    "chronos": "Amazon Chronos (chronos-forecasting)",
-    "momentfm": "CMU MOMENT",
-}
-
-# NeuralForecast — un singur pachet, multiple arhitecturi
-NEURALFORECAST_MODELS = ["NBEATS", "NHITS", "TiDE", "DLinear", "PatchTST",
-                         "Informer", "Autoformer", "FEDformer", "DeepAR", "TCN"]
-
-# Modele opționale (NU sunt instalate by default — vezi requirements.txt)
-OPTIONAL_FOUNDATION_MODELS = {
-    "uni2ts": "Salesforce MOIRAI (necesită omegaconf<2.4)",
-    "lag_llama": "Lag-Llama (git install)",
-    "tinytimemixer": "IBM TinyTimeMixer (granite-tsfm)",
-    "mamba_ssm": "S-Mamba (CUDA kernel)",
+# Metode CPU pe care vrem sa stim DACA sunt instalate (nu le upgradam automat).
+CPU_METHOD_PACKAGES = {
+    "sklearn": "scikit-learn (ML classifiers)",
+    "statsmodels": "statsmodels (ARIMA/ETS/Holt-Winters)",
+    "statsforecast": "statsforecast (AutoARIMA/AutoETS/Theta/Croston)",
+    "hmmlearn": "hmmlearn (HMM)",
+    "xgboost": "XGBoost (gradient boosting CPU)",
+    "lightgbm": "LightGBM (gradient boosting CPU)",
+    "catboost": "CatBoost (gradient boosting CPU)",
 }
 
 
@@ -105,65 +89,17 @@ def _safe_version(modname: str) -> str:
     return v
 
 
-def check_pytorch():
-    _print_section("PYTORCH + CUDA")
-    try:
-        import torch
-        version = getattr(torch, "__version__", "Necunoscuta")
-        print(f"-> [OK] PyTorch v{version}")
-        if torch.cuda.is_available():
-            gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "NVIDIA GPU"
-            cuda_ver = getattr(torch.version, "cuda", "?")
-            print(f"-> [EXCELENT] CUDA {cuda_ver} ACTIV pe: {gpu_name}")
-            print(f"   (Update-ul PyTorch e BLOCAT — protejam build-ul cu CUDA)")
-        else:
-            print("-> [ATENTIE] PyTorch ruleaza pe CPU. Pentru NVIDIA GPU:")
-            print("   pip install torch --index-url https://download.pytorch.org/whl/cu128")
-    except ImportError:
-        print("-> [EROARE CRITICA] PyTorch lipseste! Instalare cu CUDA 12.8:")
-        print("   pip install torch --index-url https://download.pytorch.org/whl/cu128")
-
-
-def check_foundation_models():
-    _print_section("FOUNDATION MODELS (Zero-Shot)")
-    for mod, label in FOUNDATION_MODELS.items():
+def check_cpu_methods():
+    _print_section("METODE CPU (statistice / ML)")
+    for mod, label in CPU_METHOD_PACKAGES.items():
         try:
             importlib.import_module(mod)
             v = _safe_version(mod)
             print(f"-> [OK] {label}: v{v}")
         except ImportError:
-            print(f"-> [LIPSA] {label} — pip install {mod}")
+            print(f"-> [LIPSA] {label} — pip install {mod.replace('_', '-')}")
         except Exception as e:
             print(f"-> [EROARE] {label}: {type(e).__name__}: {e}")
-
-
-def check_neuralforecast():
-    _print_section("NEURALFORECAST (DL Architectures)")
-    try:
-        import neuralforecast
-        v = _safe_version("neuralforecast")
-        print(f"-> [OK] neuralforecast v{v}")
-        import neuralforecast.models as M
-        available = [m for m in NEURALFORECAST_MODELS if hasattr(M, m)]
-        missing = [m for m in NEURALFORECAST_MODELS if not hasattr(M, m)]
-        print(f"   Modele disponibile ({len(available)}/{len(NEURALFORECAST_MODELS)}): {', '.join(available)}")
-        if missing:
-            print(f"   [LIPSA] {', '.join(missing)} — verifica versiunea pachetului")
-    except ImportError:
-        print("-> [LIPSA] neuralforecast — `pip install neuralforecast`")
-    except Exception as e:
-        print(f"-> [EROARE] {type(e).__name__}: {e}")
-
-
-def check_optional_models():
-    _print_section("MODELE OPTIONALE (in afara default install)")
-    for mod, label in OPTIONAL_FOUNDATION_MODELS.items():
-        try:
-            importlib.import_module(mod)
-            v = _safe_version(mod)
-            print(f"-> [OK] {label}: v{v}")
-        except Exception:
-            print(f"-> [skip] {label} — install manual daca-l vrei in benchmark")
 
 
 def check_bench_assets():
@@ -209,7 +145,13 @@ def _is_in_venv() -> bool:
 
 
 def main():
-    print(f"Python: {sys.version.split()[0]}")
+    from ui_shared import check_python_version
+
+    py_ok, py_msg = check_python_version()
+    print(f"Python: {sys.version.split()[0]} — {py_msg}")
+    if not py_ok:
+        print(f"\n[EROARE] {py_msg}")
+        sys.exit(21)
     print(f"Exec:   {sys.executable}")
     print(f"Venv:   {'DA' if _is_in_venv() else 'NU (GLOBAL — gresit!)'}")
 
@@ -217,10 +159,7 @@ def main():
         print("\n[ATENTIE] Ruleaza ACTUALIZARI.bat, nu direct verifica_mediu.py!")
         print("          Cauta venv-ul: .venv\n")
 
-    check_pytorch()
-    check_foundation_models()
-    check_neuralforecast()
-    check_optional_models()
+    check_cpu_methods()
     check_bench_assets()
 
     upgrade_pip()

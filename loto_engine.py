@@ -18,48 +18,11 @@ import time
 import logging
 import os
 import sys
-from typing import List, Tuple, Dict, Set, Optional
 
-# Google TimesFM integration
-# Pe CPU-only (CUDA_VISIBLE_DEVICES=-1 setat de START_8000.bat) sau cand
-# LOTO_SKIP_TIMESFM=1, SAREM importul ca sa nu pierdem 30-60s la cold start.
-HAS_TIMESFM = False
-TIMESFM_ERROR = None
-torch = None
-timesfm = None
-_SKIP_TIMESFM = (
-    os.environ.get("LOTO_SKIP_TIMESFM") == "1"
-    or os.environ.get("CUDA_VISIBLE_DEVICES") == "-1"
-)
-if _SKIP_TIMESFM:
-    TIMESFM_ERROR = "Skip torch+timesfm (CPU-only sau LOTO_SKIP_TIMESFM=1)"
-    logging.info(f"[TIMESFM] {TIMESFM_ERROR} - folosesc fallback determinist.")
-else:
-    try:
-        import torch
-        import timesfm
-        HAS_TIMESFM = True
-    except ImportError as e:
-        TIMESFM_ERROR = str(e)
-        logging.warning(f"[TIMESFM] Librăria 'timesfm' sau 'torch' nu a fost găsită: {e}")
-    except Exception as e:
-        TIMESFM_ERROR = str(e)
-        logging.error(f"[TIMESFM] Eroare neașteptată la încărcarea modelului: {e}")
-
-# Cache global pentru modelul legacy
-_GLOBAL_LEGACY_TFM = None
-
-# TimesFM v2 engine (forecast_with_covariates, quantile, anomaly)
-try:
-    from loto_enterprise.core.timesfm_engine import (
-        get_timesfm_scores_v2,
-        get_regressive_blacklist_v2,
-        select_pool_from_scores,
-        filter_variants_by_anomaly_v2,
-    )
-    _HAS_TFM_V2 = True
-except ImportError:
-    _HAS_TFM_V2 = False
+# Scoring = câștigătorul benchmark (metode CPU) → fallback frecvență.
+# Tot suportul GPU/neural (TimesFM/torch/foundation) a fost eliminat din aplicație.
+# Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
+from loto_enterprise.core.pool_selection import select_pool_from_scores
 
 # Adaptive feedback (învățare persistentă post-extragere)
 try:
@@ -188,22 +151,15 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
 def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws: int = 127) -> dict:
     """
     Calculează probabilitatea teoretică P(k+ hits) pentru un pool RANDOM și
-    recomandă pool-ul minim necesar pentru a vedea ≥3 evenimente 4+ și 5+
-    pe `n_draws` extrageri.
+    recomandă pool-ul minim necesar pentru a vedea ≥3 evenimente pe ținta
+    principală (3+) și pe 4+/5+.
 
-    Asta e baseline-ul matematic ABSOLUT — orice engine trebuie să bată
-    cel puțin aceste valori pe 3+ ca să fie util. Pe 4+ și 5+ pe pool=10
-    evenimentele așteptate sunt deja <2/127, deci varianța observațională
-    e enormă (un engine bun poate părea "blocat la 0%" doar prin noroc rău).
-
-    Folosit de UI pentru a recomanda automat pool-uri mai mari când userul
-    vrea 4+ hits stabile statistic.
+    Baseline matematic — orice engine trebuie să bată cel puțin P(3+) random
+    ca să fie util. Pe 4+ / 5+ la pool mic evenimentele așteptate sunt rare.
 
     Returns dict cu:
         - random_baseline.P(k+)% per k=1..draw_n
-        - random_baseline.E(k+)/n (evenimente așteptate)
-        - recommendations.pool_for_3_events_4+ (minim pool pentru ≥3 evt 4+)
-        - recommendations.pool_for_3_events_5+ (minim pool pentru ≥3 evt 5+)
+        - recommendations.pool_for_3_events_{3,4,5}+
     """
     try:
         from math import comb
@@ -228,7 +184,9 @@ def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws
 
     target_events = 3
     recommendations: dict = {}
-    for target_k in (4, 5):
+    for target_k in (3, 4, 5):
+        if target_k > draw_n:
+            continue
         rec_pool = None
         for trial_pool in range(pool_size, min(max_n, pool_size + 20) + 1):
             p_k = sum(
@@ -243,22 +201,11 @@ def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws
     return forecast
 
 
-def _audit_gpu_probe() -> str:
-    """Întoarce 'gpu' dacă torch vede CUDA, altfel 'cpu'. Folosit pt indicatorul
-    ⚡GPU/🐌CPU din audit — evaluat în procesul worker (device-ul REAL de calcul)."""
-    try:
-        import torch as _t
-        return "gpu" if _t.cuda.is_available() else "cpu"
-    except Exception:  # noqa: BLE001
-        return "cpu"
-
-
 class LotoEngine:
     # Routes _get_timesfm_scores through loto_enterprise.core.method_selector
-    # — uses the model that WON the benchmark for this game/pool instead of
-    # hard-coded TimesFM. Default ON (spec: integrează câștigătorul în app).
-    # Set env LOTO_USE_BENCH_WINNER=0 to revert to the legacy TimesFM-only
-    # path (e.g. for A/B comparison).
+    # — uses the model that WON the benchmark for this game/pool. Fallback:
+    # frecvență (recency-weighted). Set env LOTO_USE_BENCH_WINNER=0 pentru a
+    # forța fallback-ul pe frecvență (A/B).
     use_bench_winner: bool = bool(int(os.environ.get("LOTO_USE_BENCH_WINNER", "1")))
 
     def __init__(self, game_type: str = "6/49"):
@@ -267,8 +214,7 @@ class LotoEngine:
         self.audit: dict = {
             "python_version": sys.version.split()[0],
             "python_executable": sys.executable,
-            "timesfm_error": TIMESFM_ERROR,
-            "compute_device": _audit_gpu_probe(),  # "gpu"/"cpu" real (torch.cuda in worker)
+            "compute_device": "cpu",  # GPU eliminat complet — scoring exclusiv CPU
         }
         self.hard_core: list = []
         self.hard_core_stats: dict = {}
@@ -276,7 +222,7 @@ class LotoEngine:
         self.data: pd.DataFrame | None = None
         self.arena2_index = None
         self._draw_matrix: np.ndarray | None = None
-        self.error_correction_map: Dict[int, float] = {}  # num -> bias_multiplier
+        self.error_correction_map: dict[int, float] = {}  # num -> bias_multiplier
         # Pool size hint for method_selector (the wheeling pool, typically 12)
         self._winner_pool_hint: int = 12
 
@@ -321,7 +267,7 @@ class LotoEngine:
             print(f"Eroare la încărcare date: {e}")
             return False
 
-    def _extract_draw_at_index(self, idx: int) -> Optional[List[int]]:
+    def _extract_draw_at_index(self, idx: int) -> list[int] | None:
         """Returnează numerele extrase la index-ul `idx` (0-based) din self.data
         sau None dacă nu există / nu sunt valide.
         """
@@ -351,7 +297,7 @@ class LotoEngine:
         except Exception:
             return None
 
-    def _extract_date_at_index(self, idx: int) -> Optional[str]:
+    def _extract_date_at_index(self, idx: int) -> str | None:
         """Returnează data extragerii la index-ul `idx` ca string sau None."""
         if self.data is None or idx < 0 or idx >= len(self.data):
             return None
@@ -490,7 +436,7 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=True, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
@@ -511,14 +457,12 @@ class LotoEngine:
         )
 
         # Pe pool=10, escalăm la guarantee=draw_n (full wheel) — C(10,draw_n)
-        # maximizează numărul de bilete cu 4+/5 hits când pool union e mare.
-        # Variantele sunt sortate după NQI sum descendent — primele bilete sunt
-        # cele mai concentrate pe top-scoruri.
+        # maximizează densitatea biletelor pe nucleul mic (acoperire completă).
         draw_n_for_game = int(self.params.get("draw_n", 6))
         if pool_size == 10 and guarantee < draw_n_for_game:
             logging.info(
                 "[PIPELINE] Pool=10 detectat: escalez guarantee de la %d la %d "
-                "(full wheel C(10,%d) pentru maximizare hit-uri 4+/5).",
+                "(full wheel C(10,%d)).",
                 guarantee, draw_n_for_game, draw_n_for_game,
             )
             guarantee = draw_n_for_game
@@ -624,7 +568,7 @@ class LotoEngine:
             if not hasattr(self, "_temp_blacklist"):
                 self._temp_blacklist = set()
 
-        logging.info(f"[PIPELINE] Inițializare scoring neural (câștigător bench / TimesFM) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
+        logging.info(f"[PIPELINE] Inițializare scoring (câștigător bench CPU) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
         if lookback > 0 and self.data is not None and not self.data.empty:
             effective_rows = int(len(self.data) * (lookback / 100.0))
@@ -645,19 +589,16 @@ class LotoEngine:
         if progress_cb:
             progress_cb("Analiza frecvenței...", 30)
 
-        # 4. Calcul Scoruri NQI (Neural Quality Index) prin TimesFM v2 - MUTAT AICI PENTRU OPTIMIZARE CACHE
+        # 4. Calcul scoruri per număr (câștigătorul bench CPU / ensemble)
         tfm_scores = {}
         total_draws = len(self.data) if self.data is not None else 0
         actual_lookback = total_draws
         self.audit["effective_rows_used"] = total_draws
         self.audit["lookback_pct"] = lookback
-            
-        # Calibrare bară progres: TimesFM e cea mai lungă etapă (~3-15s pe GPU,
-        # 15-30s pe CPU). Înainte: salt 15→45% cu 14s tăcere — UI părea blocat.
-        # Acum: callback per fereastră de ensemble → progres aproape continuu.
-        # Etichetă progres = metoda REALĂ de scoring (câștigătorul bench dacă use_bench_winner
-        # e ON), nu mereu „TimesFM v2" (înșelător — de fapt rulează ex. torch_bilstm_deep).
-        _score_lbl = "TimesFM v2"
+
+        # Etichetă progres = metoda REALĂ de scoring (câștigătorul bench dacă
+        # use_bench_winner e ON), altfel „frecvență".
+        _score_lbl = "frecvență"
         if self.use_bench_winner:
             try:
                 from loto_enterprise.core.method_selector import get_winner_name
@@ -669,107 +610,44 @@ class LotoEngine:
             except Exception:  # noqa: BLE001
                 pass
         if progress_cb:
-            progress_cb(f"🧠 Scoring neural: {_score_lbl} (ctx={actual_lookback})...", 15)
+            progress_cb(f"Scoring: {_score_lbl} (ctx={actual_lookback})...", 15)
 
-            def _tfm_window_progress(done, total, current_ctx):
-                # Map [done/total] în intervalul [15, 45] = 30 puncte
-                pct = 15 + int((done / max(total, 1)) * 30)
-                progress_cb(f"🧠 {_score_lbl}: fereastră {done}/{total} (ctx={current_ctx})", pct)
+        self._tfm_window_cb = None
 
-            self._tfm_window_cb = _tfm_window_progress
-        else:
-            self._tfm_window_cb = None
-
-        start_gpu = time.perf_counter()
+        start_score = time.perf_counter()
         try:
             tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
         finally:
             self._tfm_window_cb = None  # Cleanup ca să nu polueze apeluri viitoare
-        gpu_time = (time.perf_counter() - start_gpu) * 1000
+        score_time = (time.perf_counter() - start_score) * 1000
 
         if progress_cb:
-            progress_cb(f"🧠 {_score_lbl} complet ({gpu_time/1000:.1f}s). Procesez feedback adaptive...", 45)
-        
+            progress_cb(f"{_score_lbl} complet ({score_time/1000:.1f}s). Construiesc pool...", 45)
+
         if 'performance' not in self.audit:
             self.audit['performance'] = {}
-        self.audit['performance']['gpu_time_ms'] = round(gpu_time, 2)
-        logging.info(f"[PIPELINE] Scoring neural ({_score_lbl}) GPU Time: {gpu_time:.2f}ms")
+        self.audit['performance']['score_time_ms'] = round(score_time, 2)
+        logging.info(f"[PIPELINE] Scoring ({_score_lbl}) timp: {score_time:.2f}ms")
 
-        # Aplicăm corecția de feedback (Adaptive Local Tuning) ANTERIOR rulării TimesFM
-        if self.error_correction_map:
-            logging.info(f"[PIPELINE] Aplicare feedback BEFORE TimesFM pe {len(self.error_correction_map)} numere...")
-            for num, multiplier in self.error_correction_map.items():
-                if num in tfm_scores:
-                    tfm_scores[num] *= multiplier
-            self.audit['feedback_correction'] = {str(k): round(v, 3) for k, v in self.error_correction_map.items()}
-
-        # 5. Filtru Regresiv Multi-Timeframe (Smart Reduction)
-        # Engine-ul consultă acum decizia bench (should_use_blacklist) per
-        # (joc, pool). Dacă bench spune NO, _get_timesfm_regressive_blacklist
-        # întoarce instant set() — fără cost suplimentar. Dacă spune YES,
-        # rulează multi-window cu scorerul câștigător (fedformer/deepar/etc).
+        # Feedback adaptiv pe scoruri — DEZACTIVAT (cerere user: fără filtre).
+        # Pool-ul = scor pur al metodei câștigătoare / ensemble.
         blacklist = set()
         self.audit["sim_depth_pct"] = sim_depth_pct
-        if smart_reduction:
-            if progress_cb:
-                progress_cb(f"Analiză regresivă multi-pass (depth={sim_depth_pct}%, ~3-10s)...", 50)
-
-                def _regressive_step_progress(done, total, step_pct):
-                    # Map [done/total] în intervalul [50, 65] = 15 puncte
-                    pct = 50 + int((done / max(total, 1)) * 15)
-                    progress_cb(f"Regresiv: pas {done}/{total} (fereastră {step_pct}%)", pct)
-
-                self._regressive_step_cb = _regressive_step_progress
-            else:
-                self._regressive_step_cb = None
-
-            logging.info(f"[PIPELINE] Activare Analiză Regresivă Neurală (depth: {sim_depth_pct}%)...")
-            try:
-                blacklist = self._get_timesfm_regressive_blacklist(sim_depth_pct)
-            finally:
-                self._regressive_step_cb = None
-            # Modelul efectiv folosit pentru blacklist (poate fi diferit de scorerul principal
-            # dacă bench dezactivează blacklist-ul pentru acest pool)
-            bl_audit = self.audit.get("blacklist", {})
-            scorer_lbl = bl_audit.get("regressive_scorer", "TimesFM v2 (legacy)")
-            self.audit['reduction_filter'] = {
-                'combined_blacklist': list(blacklist),
-                'total_blocked': len(blacklist),
-                'model_used': scorer_lbl,
-                'sim_depth_pct': sim_depth_pct,
-                'disabled_by_bench': scorer_lbl == "DISABLED_BY_BENCH",
-            }
-        else:
-            logging.info("[PIPELINE] Reducție Smart dezactivată. Se continuă fără blacklist.")
-
-        # === Hard Inversion Temporară (post-catastrofă) ===
-        # Adăugăm pool-ul ratat anterior în blacklist DOAR pentru această extragere.
-        # Nu se persistă, nu se acumulează — efemeră.
-        temp_bl = getattr(self, "_temp_blacklist", set()) or set()
-        if temp_bl:
-            # Verificare safety: nu permitem ca union să elimine mai mult de 50% din univers.
-            max_n_safe = int(self.params.get("max_n", 49))
-            combined = blacklist | set(temp_bl)
-            if len(combined) >= max_n_safe - pool_size:
-                logging.warning(
-                    f"[HARD-INVERSION] Temp blacklist ({len(temp_bl)}) + regular ({len(blacklist)}) "
-                    f"= {len(combined)} blochează prea mult din univers ({max_n_safe}). Skip."
-                )
-            else:
-                blacklist = combined
-                self.audit["hard_inversion"] = {
-                    "trigger": "previous_catastrophe",
-                    "excluded": sorted(int(x) for x in temp_bl),
-                    "n_excluded": len(temp_bl),
-                    "scope": "single_draw",
-                }
+        self.audit['reduction_filter'] = {
+            'combined_blacklist': [],
+            'total_blocked': 0,
+            'model_used': 'DISABLED_ALL_FILTERS',
+            'sim_depth_pct': sim_depth_pct,
+            'disabled_by_user': True,
+        }
+        logging.info("[PIPELINE] Filtre dezactivate — pool = top-scor pur; singura excepție: auto-invert (manual_blacklist).")
 
         # === Manual Inversion (utilizator: butonul "Inverseaza Pool") ===
         # Userul a apăsat butonul de inversare după ce pool-ul anterior n-a ieșit
         # bine în extragerile reale. Tratăm pool-ul anterior ca blacklist explicit.
         # Stocam pe instanta ca atribut pentru a fi RESPECTAT STRICT pana la final
         # (Smart Selector + pool-complete fallback pot altfel sa-l incalce).
-        self._manual_blacklist_set: Set[int] = set()
+        self._manual_blacklist_set: set[int] = set()
         if manual_blacklist:
             try:
                 manual_set = set(int(n) for n in manual_blacklist if int(n) > 0)
@@ -817,67 +695,40 @@ class LotoEngine:
         # — e doar o copie a dicționarului deja calculat. (regula bit-identitate OK)
         self._last_pool_scores = {int(k): float(v) for k, v in (tfm_scores or {}).items()}
 
+        # Expunem ACELEAȘI scoruri și în audit, ca UI-ul să construiască biletul
+        # OMNIUS afișat cu EXACT scorurile validate în walk-forward (backtesting.py
+        # folosește engine._last_pool_scores). Fără asta, biletul OMNIUS AFIȘAT era
+        # rerankuit cu un scorer diferit (score_omnius/smart_selector) → statisticile
+        # „+4" din walk-forward descriau un alt bilet decât cel văzut de user.
+        # Aliniere = biletul afișat e cel a cărui rată T+ (țintă bench, implicit 3+)
+        # e efectiv măsurată în walk-forward.
+        # Read-only w.r.t. generare (bit-identitate OK). Se propagă automat la
+        # ambele pool-uri (Pool 1 = pass 1, Pool 2 = pass 2 au audit separat).
+        if self._last_pool_scores:
+            self.audit['omnius_pool_scores'] = dict(self._last_pool_scores)
+
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
         self.audit['pipeline_stages'] = {
             "1_nqi_raw": sorted(self.hard_core.copy()),
         }
 
-        # === PURE BENCH MODE — user request 2026-05-26 ===
-        # Skip Smart Selector + POST-HOC + Anti-Sequence cand pure_bench_mode=True.
-        # Flow minimal: scoring → pool top-N (deja făcut în _get_timesfm_pool cu
-        # diversificare empirică decade/parity) → wheel direct.
-        # Idea: bench-winner-ul DEJA e validat pe 1280 folds × 10 ferestre regresive.
-        # Adăugarea de rafinări (Smart Selector heuristic, POST-HOC overfit pe ultimele
-        # 50 extrageri, Anti-Sequence cu pragul 1%) poate INTRODUCE noise în loc să
-        # îmbunătățească. Pure mode = încredere completă în bench winner.
-        self.audit["pure_bench_mode"] = bool(pure_bench_mode)
-        if pure_bench_mode:
-            logging.info("[PIPELINE] 🎯 PURE BENCH MODE activ — skip Smart Selector + POST-HOC + Anti-Sequence")
-            self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
-            self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
-            self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
-            self._consecutive_filter_applied = False
-        else:
-            # Smart Selector (rafinare Gap/Trend/Positional) ELIMINAT la cererea
-            # utilizatorului: pe loterie aleatoare introducea noise peste decizia
-            # scorerului castigator (overfit pe euristici fara valoare predictiva reala).
-            # Pastram pool-ul BRUT al scorerului. POST-HOC + Anti-Sequence raman (la final).
-            self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
-
-            # NOTA: anti-sequence filter NU se mai aplica aici. POST-HOC poate
-            # reintroduce orice secventa, deci e mai eficient sa-l rulam DOAR
-            # la final (linia 656). Snapshot stage 3 pastrat pentru UI continuity.
-            self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
-
-            # Garanție finală: Nucleul dur trebuie să aibă exact pool_size numere.
-            # Trunchiere după scor TimesFM (nu după ordinea numerică — altfel pierzi bile tari).
-            if len(self.hard_core) > pool_size:
-                logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor NQI.")
-                ranked = sorted(self.hard_core, key=lambda n: tfm_scores.get(n, 0.0), reverse=True)
-                self.hard_core = sorted(ranked[:pool_size])
-            elif len(self.hard_core) < pool_size:
-                logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
-                self._consecutive_filter_applied = True
-            else:
-                self._consecutive_filter_applied = False
-
-            logging.info(f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl} (NQI): {self.hard_core}")
-
-            # POST-HOC VALIDATION: Verificăm pool-ul pe ultimele extrageri
-            # Aceasta e optimizarea principală — un pool validat empiric
-            if self.data is not None and self._draw_matrix is not None:
-                self.hard_core = self._validate_pool_retrospective(
-                    self.hard_core, tfm_scores, pool_size, blacklist
-                )
-
-            # Anti-secventa final — UNICUL apel din pipeline. Foloseste
-            # tfm_scores (bench-winner) pentru picking inlocuiri, consistent cu
-            # restul pipeline-ului.
-            if filter_consecutives:
-                logging.info("[PIPELINE] Aplicare Filtru Anti-Secventa pe nucleul final (cu bench-winner scoring)...")
-                self.hard_core = self._apply_consecutive_filter(self.hard_core, freq, scores=tfm_scores)
-            self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
+        # Flow minimal (cerere user 2026-07-08): scoring → pool top-N → wheel.
+        # Fără POST-HOC, anti-secvență, anomaly filter sau alte rafinări.
+        # Singura „inversare": manual_blacklist (auto-invert Pool 2).
+        self.audit["pure_bench_mode"] = True
+        self.audit["filters_disabled"] = True
+        if len(self.hard_core) > pool_size:
+            logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor.")
+            ranked = sorted(self.hard_core, key=lambda n: tfm_scores.get(n, 0.0), reverse=True)
+            self.hard_core = sorted(ranked[:pool_size])
+        elif len(self.hard_core) < pool_size:
+            logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
+        logging.info(f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}")
+        self._consecutive_filter_applied = False
+        self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
+        self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
+        self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
         
         if self.game_type == "joker":
             logging.info(f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)...")
@@ -932,96 +783,18 @@ class LotoEngine:
                 }
                 logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
 
-            # Enforcement-ul de mai sus a putut REINTRODUCE numere consecutive
-            # (înlocuiește numerele din blacklist cu top-scoring, fără să verifice
-            # consecutivitatea). Re-aplicăm anti-secvența ca ULTIM pas (evitând blacklist-ul
-            # ca să nu strice inversarea) → pool-ul FINAL inversat nu mai are consecutive.
-            if filter_consecutives:
-                self.hard_core = self._apply_consecutive_filter(
-                    self.hard_core, freq, scores=tfm_scores, avoid=set(self._manual_blacklist_set))
-                if 'pipeline_stages' in self.audit:
-                    self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
             else:
                 logging.info(f"[MANUAL-BLACKLIST] Pool curat ({len(self.hard_core)} numere, niciun violator).")
+            if 'pipeline_stages' in self.audit:
+                self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
         wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
-        # Funcția 4: Anomaly Filtering — PĂSTRÂND garanția combinatorică (skip pe Pure Mode)
-        if smart_reduction and tfm_scores and not pure_bench_mode:
-            logging.info(f"[PIPELINE] Aplicare Neural Anomaly Scoring pe {len(lines)} variante "
-                         f"(coverage-safe: nu sparge garanția)...")
-            original_count = len(lines)
-            anomaly_threshold = 0.7
-            # Calculăm anomalia PER BILET (aceeași formulă ca filter_variants_by_anomaly),
-            # apoi eliminăm în ordine de la cel mai anomal, DAR doar dacă biletul e
-            # REDUNDANT (fiecare țintă a lui mai e acoperită de alt bilet rămas).
-            # Anterior, filtrul putea elimina UNICUL acoperitor al unei ținte din
-            # covering design, spărgând garanția chiar și cu max_variants=0
-            # ("nelimitat") — vezi ex. real Joker Pool1: 467→163 variante, acoperire
-            # căzută la 39.3% deși userul cerea garanție completă.
-            #
-            # NOTĂ (verificat empiric, 2026-07-02, pe _ISTORIC/*.csv, toate cele 3
-            # jocuri, pool 16, guarantee 4, buget de la 30 la nelimitat): cu
-            # garanție coverage-safe, threshold-ul de mai jos NU mai elimină NIMIC
-            # în practică (0 bilete eliminate în toate cazurile testate) — atât
-            # greedy-ul (maximizează acoperire NOUĂ per bilet), cât și ILP-ul
-            # (cover minim) produc wheel-uri aproape fără redundanță, deci fiecare
-            # bilet e deja "necesar" pentru cel puțin o țintă. Schimbarea valorii
-            # 0.7 (testat 0.3..0.95) NU modifică rezultatul — nu e un buton util
-            # de "tunat" cu setup-ul curent de wheeling. Las valoarea ca document
-            # istoric / plasă de siguranță pt eventuale wheel-uri viitoare cu
-            # redundanță reală (ex. metode de wheeling custom); NU investi timp
-            # aici fără să re-verifici mai întâi empiric (vezi log-ul de mai jos —
-            # dacă "removed=0" mereu, threshold-ul tot nu are efect).
-            anomaly_scores = [self.calculate_variant_anomaly_score(v, tfm_scores) for v in lines]
-            removal_priority = sorted(
-                (i for i, a in enumerate(anomaly_scores) if a > anomaly_threshold),
-                key=lambda i: anomaly_scores[i],
-                reverse=True,
-            )
-            from wheeling_methods import filter_preserving_coverage, compute_coverage_pct
-            lines, removed_count = filter_preserving_coverage(
-                lines, self.hard_core, guarantee, removal_priority
-            )
-            spared_count = len(removal_priority) - removed_count
-            if removed_count == 0 and removal_priority:
-                logging.info(
-                    f"[PIPELINE] Anomaly (coverage-safe): 0 variante eliminate efectiv — toate cele "
-                    f"{spared_count} candidate (threshold={anomaly_threshold}) erau necesare garanției "
-                    f"(filtru INERT în acest run — comun cu wheel-uri aproape-minimale)."
-                )
-            else:
-                logging.info(
-                    f"[PIPELINE] Anomaly (coverage-safe): eliminat {removed_count} variante "
-                    f"(threshold={anomaly_threshold}); {spared_count} anomale PĂSTRATE ca fiind "
-                    f"unicul acoperitor al unei ținte din garanție."
-                )
-            self.audit['anomaly_filter'] = {
-                'original_count': original_count,
-                'final_count': len(lines),
-                'threshold': anomaly_threshold,
-                'candidates_for_removal': len(removal_priority),
-                'spared_for_coverage': spared_count,
-            }
-            if removed_count > 0:
-                # Filtrarea e coverage-safe prin construcție (nu elimină unicul
-                # acoperitor al unei ținte), deci coverage_pct NU poate scădea —
-                # recalculăm doar ca dublă-verificare/transparență în audit.
-                recomputed_coverage = compute_coverage_pct(lines, self.hard_core, guarantee)
-                self.audit['anomaly_filter']['coverage_pct_before'] = coverage_pct
-                self.audit['anomaly_filter']['coverage_pct_after'] = recomputed_coverage
-                if recomputed_coverage < coverage_pct:
-                    logging.warning(
-                        "[ANOMALY] Neașteptat: acoperirea a scăzut de la %.2f%% la %.2f%% "
-                        "după filtrare coverage-safe (verifică logica) — elimină %d variante.",
-                        coverage_pct, recomputed_coverage, removed_count,
-                    )
-                coverage_pct = recomputed_coverage
-        elif pure_bench_mode:
-            logging.info(f"[PIPELINE] 🎯 PURE MODE: skip Anomaly filter — păstrăm toate {len(lines)} variante")
+        # Filtru anti-anomalie pe variante — DEZACTIVAT (cerere user: fără filtre).
+        logging.info(f"[PIPELINE] Fără filtru anti-anomalie — păstrăm toate {len(lines)} variante")
 
         logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
 
@@ -1126,10 +899,8 @@ class LotoEngine:
                 logging.error(f"[ADAPTIVE] Eroare la persistarea pool-ului: {e}")
 
         # === Hit Forecast Diagnostic — baseline matematic + recomandare pool size ===
-        # Reaplicat din PR #2 (a fost pierdut la wipe-ul main din 2026-05-22).
         # Calculează P(k+ hits) pentru pool RANDOM și recomandă pool minim
-        # pentru ≥3 evenimente 4+ și 5+. UI-ul citește audit.hit_forecast
-        # și afișează banner "pentru 4+ stabil, mărește pool la N".
+        # pentru ≥3 evenimente 3+/4+/5+. UI-ul citește audit.hit_forecast.
         try:
             n_recent_for_forecast = max(int(len(self.data) * 0.05), 1) if self.data is not None else 100
             forecast = hypergeometric_hit_forecast(
@@ -1907,7 +1678,7 @@ class LotoEngine:
         # Reactualizăm statisticile Joker
         self.hard_core_joker_stats = {int(num): int(freq_joker[num-1]) for num in self.hard_core_joker}
 
-    def _scores_via_bench_winner(self, is_joker_drum: bool = False) -> Dict[int, float]:
+    def _scores_via_bench_winner(self, is_joker_drum: bool = False) -> dict[int, float]:
         """Route scoring through the benchmark-winning method for this game/pool.
 
         Maps:
@@ -1996,290 +1767,47 @@ class LotoEngine:
             logging.warning("[ENGINE] bench-winner scoring failed: %s", exc)
             return {}
 
-    def _get_timesfm_scores(self, is_joker_drum: bool = False, context_len: int = 4096) -> Dict[int, float]:
+    def _get_timesfm_scores(self, is_joker_drum: bool = False, context_len: int = 4096) -> dict[int, float]:
+        """Scoruri per număr pentru selecția pool-ului.
+
+        Sursă: metoda câștigătoare din benchmark pentru jocul/pool-ul curent
+        (via method_selector, ensemble). Dacă aceasta nu produce scoruri →
+        fallback determinist pe frecvență recency-weighted. Tot CPU.
+        (`context_len` păstrat pentru compatibilitatea semnăturii cu apelanții.)
         """
-        TimesFM v2 Engine — folosește TOATE capabilitățile:
-          1. forecast() cu normalize=True → point + 9 quantile (p10-p90)
-          2. forecast_with_covariates() cu XReg real:
-             - rolling_freq_10, rolling_freq_30 (dynamic numerical)
-             - gap_counter, draw_sum (dynamic numerical)
-             - number_norm, hist_frequency (static numerical)
-          3. Context Anomaly Detection (return_forecast_on_context)
-          4. Multi-Horizon Forecasting (H=20, weighted decay)
-          5. Adaptive Local Tuning (bias correction)
-        Rezultat: Neural Quality Index (NQI) per număr.
-        """
-        # Opt-in (default ON): dacă use_bench_winner == True, rutăm prin
-        # method_selector → modelul câștigător din benchmark per joc/pool.
         if self.use_bench_winner:
             scores = self._scores_via_bench_winner(is_joker_drum=is_joker_drum)
             if scores:
                 return scores
-            logging.warning("[ENGINE] bench-winner scoring returned empty — fallback TimesFM")
-        if _HAS_TFM_V2:
-            return get_timesfm_scores_v2(
-                data=self.data,
-                draw_matrix=self._draw_matrix,
-                params=self.params,
-                is_joker_drum=is_joker_drum,
-                context_len=context_len,
-                audit=self.audit,
-                regime_mode=getattr(self, "_adaptive_mode", "normal"),
-                window_progress_cb=getattr(self, "_tfm_window_cb", None),
-            )
-        # Fallback la implementarea veche dacă modulul v2 nu e disponibil
-        return self._get_timesfm_scores_legacy(is_joker_drum, context_len)
+            logging.warning("[ENGINE] bench-winner scoring returned empty — fallback frecvență")
+        return self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
 
-    def _get_timesfm_scores_legacy(self, is_joker_drum: bool = False, context_len: int = 4096) -> Dict[int, float]:
-        """
-        Interfața ULTRA cu Google TimesFM: Analiză multi-orizont, stabilitate (cuantile) și trend.
-        """
-        if not HAS_TIMESFM:
-            logging.error("[TIMESFM] Nu se poate rula predicția. Librăria 'timesfm' lipsește.")
+    def _frequency_fallback_scores(self, is_joker_drum: bool = False) -> dict[int, float]:
+        """Fallback determinist când câștigătorul bench nu produce scoruri:
+        frecvență recency-weighted (exp-decay) pe istoric, normalizată [0,1]."""
+        max_num = 20 if is_joker_drum else int(self.params["max_n"])
+        if is_joker_drum and self.data is not None and "joker" in self.data.columns:
+            draws_2d = self.data["joker"].to_numpy(dtype=np.int64).reshape(-1, 1)
+        elif self._draw_matrix is not None:
+            draws_2d = self._draw_matrix.astype(np.int64)
+        else:
             return {}
-        
-        device = "cpu"
-        try:
-            if torch.cuda.is_available():
-                device = "gpu"
-        except (RuntimeError, AttributeError) as exc:
-            logging.debug("[TIMESFM] cuda probe failed, fallback la CPU: %s", exc)
-        # Salvăm device-ul REAL folosit (citit de UI pt indicatorul ⚡GPU/🐌CPU)
-        self.audit.setdefault('performance', {})['device'] = device
+        n = draws_2d.shape[0]
+        if n == 0:
+            return {i: 1.0 for i in range(1, max_num + 1)}
+        weights = np.exp(np.linspace(-2.0, 0.0, n)).astype(np.float64)
+        raw = np.zeros(max_num + 1, dtype=np.float64)
+        for w, row in zip(weights, draws_2d):
+            for v in row:
+                vi = int(v)
+                if 1 <= vi <= max_num:
+                    raw[vi] += w
+        vals = raw[1:]
+        vmin, vmax = float(vals.min()), float(vals.max())
+        rng = max(vmax - vmin, 1e-12)
+        return {i: float((raw[i] - vmin) / rng) for i in range(1, max_num + 1)}
 
-        total_available = len(self.data) if self.data is not None else 0
-        limit = min(context_len, total_available)
-        
-        if limit < 32:
-            return {}
-
-        try:
-            global _GLOBAL_LEGACY_TFM
-            if _GLOBAL_LEGACY_TFM is not None:
-                tfm = _GLOBAL_LEGACY_TFM
-                logging.info("[TIMESFM] Folosim modelul legacy din memorie (HOT START).")
-            else:
-                logging.info("[TIMESFM] Încărcăm modelul legacy în memorie (COLD START)...")
-                # Configurăm orizontul la 5 pentru analiza de trend
-                # Parametri optimizați pentru TimesFM 2.0/2.5 (suportă context mai mare și orizont extins)
-                tfm = timesfm.TimesFm(
-                    hparams=timesfm.TimesFmHparams(
-                        context_len=4096, # Extins la 4096 pentru a suporta istoric complet
-                        horizon_len=20,   # Capacitate maximă pentru predicții pe termen lung
-                        input_patch_len=32,
-                        output_patch_len=128,
-                        num_layers=50,
-                        use_positional_embedding=False,
-                        backend=device
-                    ),
-                    checkpoint=timesfm.TimesFmCheckpoint(
-                        huggingface_repo_id="google/timesfm-2.0-500m-pytorch"
-                    )
-                )
-                _GLOBAL_LEGACY_TFM = tfm
-            
-            # Funcția 3: Pregătire Covariate (XReg Simulation) va fi apelată în interiorul buclei de ferestre.
-
-            
-            max_num = 20 if is_joker_drum else int(self.params["max_n"])
-            windows = []
-            stride = 512
-            current_end = total_available
-            current_start = max(0, current_end - limit)
-            
-            pos = total_available
-            while pos > current_start + 32:
-                w_start = max(current_start, pos - 4096)
-                windows.append((w_start, pos))
-                if pos <= 512 or (pos - stride) < current_start + 32: break
-                pos -= stride
-            
-            # Structuri pentru NQI (Neural Quality Index)
-            nqi_components = {n: {"point": 0.0, "stability": 0.0, "trend": 0.0} for n in range(1, max_num + 1)}
-            total_weight = 0.0
-            
-            for idx, (w_start, w_end) in enumerate(windows):
-                covariates = self._generate_loto_covariates(w_start, w_end)
-                weight = 1.0 / (1.5 ** idx)
-                total_weight += weight
-                
-                all_series = []
-                num_map = []
-                
-                current_draw_slice = []
-                if is_joker_drum:
-                    current_draw_slice = self.data['joker'].values[w_start:w_end]
-                else:
-                    if self._draw_matrix is not None:
-                        current_draw_slice = self._draw_matrix[w_start:w_end]
-
-                for num in range(1, max_num + 1):
-                    series = []
-                    if is_joker_drum:
-                        for val in current_draw_slice:
-                            series.append(1.0 if int(val) == num else 0.0)
-                    else:
-                        for draw in current_draw_slice:
-                            series.append(1.0 if num in draw else 0.0)
-                    
-                    if len(series) >= 32:
-                        all_series.append(np.array(series, dtype=np.float32))
-                        num_map.append(num)
-                
-                if all_series:
-                    # Rulăm forecast-ul (ne dă point_forecast și full_forecast cu cuantile)
-                    # point_forecast: (batch, horizon)
-                    # full_forecast: (batch, horizon, num_quantiles)
-                    point_forecast, full_forecast = tfm.forecast(inputs=all_series, freq=[0] * len(all_series))
-                    
-                    for i, num in enumerate(num_map):
-                        # 1. Scorul Punctual (imediat)
-                        p_val = float(point_forecast[i][0])
-                        
-                        # 2. Analiza de Stabilitate (Incertitudinea Cuantilelor)
-                        # Cuantele standard TimesFM: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-                        # Indicele 0 e p10, Indicele 8 e p90
-                        q10 = float(full_forecast[i, 0, 0])
-                        q90 = float(full_forecast[i, 0, 8])
-                        uncertainty = max(0.0001, q90 - q10)
-                        stability = 1.0 / (1.0 + uncertainty) # Mai stabil = scor mai mare
-                        
-                        # 3. Analiza de Trend Multi-Orizont (Funcția 2)
-                        future_values = point_forecast[i, :] # Toate cele 20 puncte viitoare
-                        
-                        # Calculăm un scor ponderat pe tot orizontul (decaying weight)
-                        horizon_score = 0.0
-                        for h_idx, h_val in enumerate(future_values):
-                            h_weight = 1.0 / (1.2 ** h_idx) # Pondere mai mare pentru viitorul apropiat
-                            horizon_score += float(h_val) * h_weight
-                        
-                        # Funcția 5: Adaptive Tuning (Compensarea erorilor recente)
-                        # Dacă numărul a ieșit recent dar modelul l-a subestimat, aplicăm un bias de corecție
-                        recent_bias = self._calculate_adaptive_bias(num)
-                        
-                        # Funcția 3: Integrare Covariate
-                        # Ajustăm scorul în funcție de corelația cu variabilele externe (ziua săptămânii, etc)
-                        covariate_bonus = self._apply_covariate_logic(num, covariates)
-
-                        nqi_components[num]["point"] += p_val * weight * recent_bias
-                        nqi_components[num]["stability"] += stability * weight
-                        nqi_components[num]["trend"] += (horizon_score + covariate_bonus) * weight
-            
-            # Calculăm NQI Final
-            final_scores = {}
-            if total_weight > 0:
-                for num in range(1, max_num + 1):
-                    p = nqi_components[num]["point"] / total_weight
-                    s = nqi_components[num]["stability"] / total_weight
-                    t = nqi_components[num]["trend"] / total_weight
-                    # NQI combină toți factorii: Predicție x Siguranță x Viitor Multi-Orizont
-                    final_scores[num] = p * s * t
-            
-            return final_scores
-
-
-        except Exception as e:
-            logging.error(f"[TIMESFM] Eroare la execuția modelului avansat: {e}")
-            return {}
-
-    def _get_timesfm_regressive_blacklist(self, sim_depth_pct: int) -> Set[int]:
-        """
-        Analiză Regresivă multi-pass.
-        Dacă `use_bench_winner` e activ, foloseste scorerul câștigător din
-        benchmark (poate fi TimesFM, FEDformer, MOMENT etc.). Altfel cade
-        pe TimesFM v2 hardcodat.
-        Rulează scoring pe ferestre de 100%, 90%, 80%... și elimină doar intersecția.
-        """
-        # Prefer bench winner (consistent cu scorerul principal)
-        if self.use_bench_winner and self._draw_matrix is not None:
-            try:
-                from loto_enterprise.core.method_selector import (
-                    get_scorer_for_game, get_winner_name, should_use_blacklist,
-                )
-                from loto_enterprise.core.timesfm_engine import get_regressive_blacklist_generic
-
-                if self.game_type == "joker":
-                    game_key = "joker_urna1"  # blacklist-ul de Urna 1; joker drum are propriul flux
-                    max_num = int(self.params["max_n"])
-                elif self.game_type == "5/40":
-                    game_key = "loto_5_40"
-                    max_num = int(self.params["max_n"])
-                else:
-                    game_key = "loto_6_49"
-                    max_num = int(self.params["max_n"])
-
-                # Respect bench decision: pentru unele (joc, pool) variantele
-                # SE COMPORTĂ MAI BINE FĂRĂ blacklist. Verificăm înainte să rulăm.
-                if not should_use_blacklist(game_key, pool_size=self._winner_pool_hint):
-                    logging.info(
-                        f"[BLACKLIST] use_bench_winner=ON, dar benchmark spune "
-                        f"NO-BLACKLIST pentru {game_key} pool={self._winner_pool_hint} "
-                        f"→ skip blacklist (return empty set)"
-                    )
-                    self.audit.setdefault("blacklist", {})["regressive_scorer"] = "DISABLED_BY_BENCH"
-                    self.audit["blacklist"]["regressive_blacklist"] = []
-                    return set()
-
-                scorer = get_scorer_for_game(game_key, pool_size=self._winner_pool_hint)
-                winner_name = get_winner_name(game_key, pool_size=self._winner_pool_hint)
-                logging.info(
-                    f"[BLACKLIST] use_bench_winner=ON → folosesc scorerul câștigător "
-                    f"<{winner_name}> pentru analiza regresivă"
-                )
-                bl = get_regressive_blacklist_generic(
-                    draw_matrix_full=self._draw_matrix,
-                    max_num=max_num,
-                    sim_depth_pct=sim_depth_pct,
-                    scorer_fn=scorer,
-                    scorer_label=winner_name,
-                )
-                self.audit.setdefault("blacklist", {})["regressive_scorer"] = winner_name
-                self.audit["blacklist"]["regressive_blacklist"] = sorted(bl)
-                return bl
-            except Exception as exc:
-                logging.warning(
-                    f"[BLACKLIST] bench-winner regressive failed ({exc}), "
-                    f"fallback la TimesFM v2"
-                )
-
-        if _HAS_TFM_V2 and self.data is not None:
-            return get_regressive_blacklist_v2(
-                data_full=self.data,
-                draw_matrix_full=self._draw_matrix,
-                params=self.params,
-                sim_depth_pct=sim_depth_pct,
-                rebuild_matrix_fn=self._build_draw_matrix,
-                audit=self.audit,
-                step_progress_cb=getattr(self, "_regressive_step_cb", None),
-            )
-        # Fallback legacy
-        if not HAS_TIMESFM: return set()
-        logging.info(f"[TIMESFM] Începe Analiza Regresivă Neurală (Prag: {sim_depth_pct}%)...")
-        steps = list(range(100, sim_depth_pct - 1, -10))
-        all_blacklists = []
-        original_data = self.data.copy() if self.data is not None else None
-        for step in steps:
-            num_rows = int(len(original_data) * (step / 100))
-            if num_rows < 32: continue
-            self.data = original_data.tail(num_rows).copy()
-            self._build_draw_matrix()
-            logging.info(f"[TIMESFM] Pas Regresiv: {step}% din istoric ({num_rows} extrageri)...")
-            scores = self._get_timesfm_scores_legacy(context_len=num_rows)
-            if scores:
-                all_values = list(scores.values())
-                threshold = np.percentile(all_values, 25)
-                current_blacklist = {num for num, score in scores.items() if score <= threshold}
-                all_blacklists.append(current_blacklist)
-        self.data = original_data
-        self._build_draw_matrix()
-        if not all_blacklists: return set()
-        final_blacklist = all_blacklists[0]
-        for bl in all_blacklists[1:]:
-            final_blacklist = final_blacklist.intersection(bl)
-        logging.info(f"[TIMESFM] Analiză Regresivă finalizată. {len(final_blacklist)} numere.")
-        return final_blacklist
-
-    def _get_timesfm_pool(self, scores: Dict[int, float], pool_size: int, blacklist: Set[int]) -> List[int]:
+    def _get_timesfm_pool(self, scores: dict[int, float], pool_size: int, blacklist: set[int]) -> list[int]:
         """
         Metoda principală de selecție a numerelor (Pool) bazată pe TimesFM v3.
         Folosește selecție diversificată pe zone (low/mid/high) pentru maximizarea hit-urilor.
@@ -2291,17 +1819,11 @@ class LotoEngine:
 
         max_num = int(self.params.get("max_n", 49))
 
-        # Folosim selectorul diversificat din v3 engine
-        if _HAS_TFM_V2:
-            pool = select_pool_from_scores(
-                scores, pool_size, blacklist, self.audit,
-                max_num=max_num, draw_matrix=self._draw_matrix,
-            )
-        else:
-            # Fallback legacy
-            valid_scores = {num: score for num, score in scores.items() if num not in blacklist}
-            sorted_nums = sorted(valid_scores.items(), key=lambda x: x[1], reverse=True)
-            pool = [num for num, score in sorted_nums[:pool_size]]
+        # Selector top-N după scor (aliniat bench / țintă 3+) — logică pură CPU.
+        pool = select_pool_from_scores(
+            scores, pool_size, blacklist, self.audit,
+            max_num=max_num, draw_matrix=self._draw_matrix,
+        )
         
         # Garanție pool complet: Dacă filtrele/blacklist-ul au fost prea agresive, completăm
         if len(pool) < pool_size:
@@ -2330,27 +1852,16 @@ class LotoEngine:
                         if len(pool) >= pool_size:
                             break
 
-        # === Catastrophe Diversification ===
-        # Dacă ultima extragere a fost o catastrofă (0 hituri), forțăm includerea
-        # a 2-3 numere "due" (cu cel mai mare gap_ratio) care nu sunt deja în pool.
-        # Înlocuim numerele cu cel mai mic scor TimesFM. Acest lucru sparge bias-ul
-        # care a dus la pierderea totală.
-        if getattr(self, "_adaptive_event", None) == "catastrophe" and self._draw_matrix is not None:
-            try:
-                pool = self._inject_due_numbers(pool, scores, blacklist, pool_size, max_inject=3)
-            except Exception as e:
-                logging.error(f"[CATASTROPHE] Eroare la injectare numere 'due': {e}")
-
         return sorted(pool[:pool_size])
 
     def _inject_due_numbers(
         self,
-        pool: List[int],
-        scores: Dict[int, float],
-        blacklist: Set[int],
+        pool: list[int],
+        scores: dict[int, float],
+        blacklist: set[int],
         pool_size: int,
         max_inject: int = 3,
-    ) -> List[int]:
+    ) -> list[int]:
         """Forțează includerea celor mai 'due' numere (gap_ratio mare) în pool,
         înlocuind numerele cu cel mai mic scor TimesFM. Apelat după catastrofă."""
         if self._draw_matrix is None or self._draw_matrix.shape[0] < 20:
@@ -2360,7 +1871,7 @@ class LotoEngine:
         total_draws = self._draw_matrix.shape[0]
 
         # Calculăm gap_ratio pentru toate numerele 1..max_n
-        gap_ratios: Dict[int, float] = {}
+        gap_ratios: dict[int, float] = {}
         for num in range(1, max_n + 1):
             if num in blacklist:
                 continue
@@ -2421,8 +1932,8 @@ class LotoEngine:
         return new_pool
 
     def _validate_pool_retrospective(
-        self, pool: List[int], scores: Dict[int, float], pool_size: int, blacklist: Set[int]
-    ) -> List[int]:
+        self, pool: list[int], scores: dict[int, float], pool_size: int, blacklist: set[int]
+    ) -> list[int]:
         """
         Post-Hoc Pool Validation: Verifică și optimizează pool-ul pe ultimele extrageri.
         
@@ -2430,7 +1941,7 @@ class LotoEngine:
         1. Swap-out: Numerele din pool care NU au apărut deloc în ultimele 15 extrageri
            sunt înlocuite cu cele mai bune alternative (din scores, care nu sunt în blacklist).
         2. Walk-Forward Refinement: Iterativ, testăm dacă înlocuirea unui număr din pool
-           cu un candidat extern crește rata de hit-uri de 4+.
+           cu un candidat extern crește rata de hit-uri pe ținta bench (3+).
         """
         if self._draw_matrix is None or self._draw_matrix.shape[0] < 20:
             if len(pool) > pool_size:
@@ -2439,10 +1950,12 @@ class LotoEngine:
             return sorted(pool)
 
         draw_n = int(self.params.get("draw_n", 6))
-        
-        # Determinăm pragul de hit bazat pe tipul de joc
-        hit_target = max(draw_n - 2, 3)  # 4 pentru 6/49, 3 pentru 5/40
-        
+        try:
+            from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
+            hit_target = min(int(BENCH_HIT_TARGET), draw_n)
+        except Exception:  # noqa: BLE001
+            hit_target = min(3, draw_n)
+
         logging.info(f"[POST-HOC] Validare retrospectivă pool (target: {hit_target}+ hits)...")
         
         n_recent = min(15, self._draw_matrix.shape[0] - 5)
@@ -2494,19 +2007,17 @@ class LotoEngine:
 
         current_pool = sorted(pool_set)
         
-        # Pas 2: Walk-Forward Refinement (Optimizat pentru hit-uri majore, game-aware)
+        # Pas 2: Walk-Forward Refinement — țintă principală = BENCH_HIT_TARGET (3+).
         # Combinație între fereastră scurtă (reactivitate) și lungă (stabilitate).
         n_backtest = min(50, self._draw_matrix.shape[0] - 5)
         backtest_sets = [set(int(v) for v in row if v > 0) for row in self._draw_matrix[-n_backtest:]]
         n_backtest_long = min(150, self._draw_matrix.shape[0] - 5)
         backtest_sets_long = [set(int(v) for v in row if v > 0) for row in self._draw_matrix[-n_backtest_long:]]
-        
-        if draw_n == 6:
-            hit_target, hit_high, hit_max = 4, 5, 6
-            w_target, w_high, w_max = 10, 45, 180
-        else:
-            hit_target, hit_high, hit_max = 3, 4, 5
-            w_target, w_high, w_max = 8, 35, 140
+
+        # hit_target deja setat din BENCH_HIT_TARGET; high/max = trepte superioare.
+        hit_high = min(hit_target + 1, draw_n)
+        hit_max = min(hit_target + 2, draw_n)
+        w_target, w_high, w_max = 12, 30, 80  # greutate pe 3+, apoi 4+/5+
 
         # Vectorizat: overlap-urile pe toate extragerile dintr-o fereastra se obtin
         # cu un singur produs matrice-vector (B @ indicator), in loc de intersectii
@@ -2669,44 +2180,7 @@ class LotoEngine:
         return sorted(current_pool[:pool_size])
 
 
-    def _generate_loto_covariates(self, start: int, end: int) -> dict:
-        """Generează variabile externe (covariate) pentru fereastra de analiză."""
-        if self.data is None: return {}
-        subset = self.data.iloc[start:end]
-        
-        # Exemplu: Trendul sumei numerelor (indicator de 'căldură' a urnei)
-        if self._draw_matrix is not None:
-            draw_sums = np.sum(self._draw_matrix[start:end], axis=1)
-            avg_sum = np.mean(draw_sums) if draw_sums.size > 0 else 0
-        else:
-            avg_sum = 0
-            
-        return {
-            "avg_sum_trend": avg_sum,
-            "is_recent": 1.0 if end > len(self.data) - 50 else 0.5
-        }
-
-    def _apply_covariate_logic(self, num: int, covariates: dict) -> float:
-        """Ajustează scorul în funcție de variabilele externe."""
-        # Exemplu: Dacă urna e 'fierbinte' (sume mari), favorizăm numerele mari
-        bonus = 0.0
-        if covariates.get("avg_sum_trend", 0) > 150 and num > 30:
-            bonus += 0.05
-        return bonus
-
-    def _calculate_adaptive_bias(self, num: int) -> float:
-        """
-        Funcția 5: Adaptive Tuning.
-        Calculează un factor de corecție bazat pe performanța recentă a modelului.
-        """
-        if self.data is None or len(self.data) < 10: return 1.0
-        # Verificăm dacă numărul a ieșit în ultimele 5 extrageri
-        recent_count = self._calculate_recent_frequency(num, 5)
-        if recent_count > 0:
-            return 1.15 # Bias pozitiv pentru numere 'on fire' neidentificate de modelul static
-        return 1.0
-
-    def calculate_variant_anomaly_score(self, variant: List[int], scores: Dict[int, float]) -> float:
+    def calculate_variant_anomaly_score(self, variant: list[int], scores: dict[int, float]) -> float:
         """
         Funcția 4: Anomaly Scoring.
         Evaluează cât de 'anormală' este o variantă față de predicția neurală.
@@ -2730,10 +2204,8 @@ class LotoEngine:
             anomaly = 1.0
         return float(anomaly)
 
-    def filter_variants_by_anomaly(self, variants: List[List[int]], scores: Dict[int, float], threshold: float = 0.7) -> List[List[int]]:
-        """Elimină variantele considerate anomalii statistice de model (v2 cu safe fallback)."""
-        if _HAS_TFM_V2:
-            return filter_variants_by_anomaly_v2(variants, scores, threshold)
+    def filter_variants_by_anomaly(self, variants: list[list[int]], scores: dict[int, float], threshold: float = 0.7) -> list[list[int]]:
+        """Elimină variantele considerate anomalii statistice (scor mediu prea mic vs. top)."""
         filtered = []
         for v in variants:
             score = self.calculate_variant_anomaly_score(v, scores)

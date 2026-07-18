@@ -1,8 +1,8 @@
 # =============================================================================
-# requirements_base.txt — pachete COMUNE intre TORINO (CPU) si LUPTATORI (GPU)
-# Instalate de ACTUALIZARI.bat indiferent de hardware.
-# Torch + foundation models NU sunt aici (vezi requirements_gpu_extras.txt si
-# requirements_cpu_extras.txt — instalate dupa profil detectat).
+# requirements_base.txt — TOATE dependențele aplicației (exclusiv CPU).
+# Python țintă: 3.14.6 (py -3.14, venv D:\_BUILD\_LOTO\.venv).
+# Instalate de ACTUALIZARI.bat. Suportul GPU/neural (torch / TimesFM / Chronos /
+# NeuralForecast / foundation models) a fost ELIMINAT complet din aplicație.
 # =============================================================================
 
 # UI + utilitare
@@ -20,17 +20,20 @@ numba
 
 # Benchmark / lab utilitare
 rich
-nvidia-ml-py             # oficial NVIDIA; expune modul `pynvml` pentru hw_sampler
 
-# Classical statistical methods (CPU-friendly, both envs):
+# Metode statistice / ML (toate CPU):
 # - scikit-learn: 12+ ML classifiers (logistic, RF, KNN, SVM, ...)
 # - statsmodels: ARIMA, ETS, Holt-Winters, STL decomposition
 # - statsforecast: AutoARIMA, AutoETS, Theta, CES, Croston family, ADIDA, IMAPA
 # - hmmlearn: HMM (Hidden Markov Model)
-# - xgboost / lightgbm / catboost: gradient boosting (CPU; GPU variants au constrains separate)
+# - xgboost / lightgbm / catboost: gradient boosting (CPU)
 scikit-learn
 statsmodels
 statsforecast
 hmmlearn
 xgboost
 lightgbm
+catboost
+
+# Teste unitare (test_decision.py, test_method_selector.py)
+pytest

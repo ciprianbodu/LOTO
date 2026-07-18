@@ -15,7 +15,7 @@ bat random la 4+, decizia nu le alege.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, Tuple
+from typing import Callable
 
 import numpy as np
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Utilitare comune
 # ===========================================================================
 
-def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
+def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vals = np.fromiter(scores.values(), dtype=np.float64)
@@ -78,7 +78,7 @@ def _greedy_cover(B: np.ndarray, draw_w: np.ndarray, r: float = 0.5) -> np.ndarr
 # Metode originale (3)
 # ===========================================================================
 
-def score_cover_greedy(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_greedy(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Greedy max-coverage cu ponderare de recență (extragerile recente cântăresc
     mai mult). Favorizează numere care acoperă extrageri DIVERSE recente."""
     n = draws_2d.shape[0]
@@ -90,7 +90,7 @@ def score_cover_greedy(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
 
 
-def score_cover_rarity(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_rarity(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Greedy cover unde fiecare extragere e ponderată cu RARITATEA ei (inversul
     frecvenței globale a numerelor sale) × recență → acoperă combinațiile rare."""
     n = draws_2d.shape[0]
@@ -108,7 +108,7 @@ def score_cover_rarity(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
 
 
-def score_winslips(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_winslips(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Stil WinSlips: acoperire roată abreviată pe PERECHI (covering design t=2).
     Scorăm numerele după contribuția la acoperirea perechilor frecvente din istoric."""
     n = draws_2d.shape[0]
@@ -140,7 +140,7 @@ def score_winslips(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
 # Metode noi de cover design (10)
 # ===========================================================================
 
-def score_cover_entropy_max(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_entropy_max(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Maximizare entropie informațională: preferă numere cu auto-informație mare
     (rare în distribuție) × acoperire recentă → pool mai divers informațional."""
     n = draws_2d.shape[0]
@@ -155,7 +155,7 @@ def score_cover_entropy_max(draws_2d: np.ndarray, max_num: int) -> Dict[int, flo
     return _normalize(scores, max_num)
 
 
-def score_cover_balanced_spread(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_balanced_spread(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Acoperire echilibrată: scor maxim pentru numere la marginile intervalului
     (distanță față de centru) × frecvență recentă → pool distribuit uniform 1..max_num."""
     n = draws_2d.shape[0]
@@ -170,7 +170,7 @@ def score_cover_balanced_spread(draws_2d: np.ndarray, max_num: int) -> Dict[int,
     return _normalize(scores, max_num)
 
 
-def score_cover_diversity_mmr(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_diversity_mmr(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Maximum Marginal Relevance (MMR): echilibrează frecvența recentă cu
     DIVERSITATEA față de numerele deja selectate. λ=0.5 → 50% relevance, 50% diversity.
     Produce un set de numere cu co-apariții minime între ele."""
@@ -206,7 +206,7 @@ def score_cover_diversity_mmr(draws_2d: np.ndarray, max_num: int) -> Dict[int, f
     return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
 
 
-def score_cover_harmonic_rank(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_harmonic_rank(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Ponderare harmonică pe rangul de frecvență: numărul cu rangul k primește
     scorul 1/k. Amortizează dominanța numerelor cu frecvență mare → preferă
     un eșalonament lin al importanței."""
@@ -221,7 +221,7 @@ def score_cover_harmonic_rank(draws_2d: np.ndarray, max_num: int) -> Dict[int, f
     return _normalize(scores, max_num)
 
 
-def score_cover_min_overlap(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_min_overlap(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Minimizare suprapunere: favorează numere cu co-apariție MICĂ față de
     numerele cu frecvență mare. Produce un pool unde numerele sunt cât mai
     independente unele de altele (redundanță minimă)."""
@@ -245,7 +245,7 @@ def score_cover_min_overlap(draws_2d: np.ndarray, max_num: int) -> Dict[int, flo
     return _normalize(scores, max_num)
 
 
-def score_cover_triplet(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_triplet(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Covering design pe TRIPLETE (t=3): extinde winslips de la perechi la triplete.
     Scorăm fiecare număr după contribuția la acoperirea tripletelor frecvente din
     istoric — un pool ce acoperă mai multe triplete garantează mai ușor 4/5/6 corecte."""
@@ -265,7 +265,7 @@ def score_cover_triplet(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     return _normalize(scores, max_num)
 
 
-def score_cover_temporal_shift(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_temporal_shift(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Detecție schimbare temporală: raportul frecvență recentă (25%) / frecvență istorică.
     Numere cu creștere recentă semnificativă primesc scor mare → pool adaptat la
     tendința curentă, nu la media istorică."""
@@ -281,7 +281,7 @@ def score_cover_temporal_shift(draws_2d: np.ndarray, max_num: int) -> Dict[int, 
     return _normalize(scores, max_num)
 
 
-def score_cover_positional_bands(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_positional_bands(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Acoperire pe benzi poziționale (decade): împarte [1..max_num] în 5 benzi egale
     și echilibrează selecția între ele. Numere din benzi sub-reprezentate în ponderile
     recente primesc un bonus → pool echilibrat pe tot intervalul."""
@@ -302,7 +302,7 @@ def score_cover_positional_bands(draws_2d: np.ndarray, max_num: int) -> Dict[int
     return _normalize(scores, max_num)
 
 
-def score_cover_complement(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_complement(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Acoperire complement: identifică numerele ce rar co-apar cu TOP-K numere
     (frecvente). Aceste numere „complementare" completează pool-ul cu zone ale
     spațiului numeric neacoperite de candidații principali."""
@@ -326,7 +326,7 @@ def score_cover_complement(draws_2d: np.ndarray, max_num: int) -> Dict[int, floa
     return _normalize(scores, max_num)
 
 
-def score_cover_adaptive_blend(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def score_cover_adaptive_blend(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Blend adaptiv: combină semnalele de la cover_greedy, cover_entropy_max și
     cover_temporal_shift cu ponderi proporționale cu variabilitatea lor (high-variance
     signal → mai puțin trustworthy → greutate mai mică). Meta-scorer de acoperire."""
@@ -334,7 +334,7 @@ def score_cover_adaptive_blend(draws_2d: np.ndarray, max_num: int) -> Dict[int, 
     if n < 10:
         return {}
 
-    def _to_arr(d: Dict[int, float]) -> np.ndarray:
+    def _to_arr(d: dict[int, float]) -> np.ndarray:
         return np.array([d.get(i + 1, 0.0) for i in range(max_num)])
 
     s1 = _to_arr(score_cover_greedy(draws_2d, max_num))
@@ -351,7 +351,7 @@ def score_cover_adaptive_blend(draws_2d: np.ndarray, max_num: int) -> Dict[int, 
 # ===========================================================================
 # Registry
 # ===========================================================================
-COVERAGE_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+COVERAGE_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     # originale
     "cover_greedy": (score_cover_greedy, "coverage", False,
                      "greedy set-cover submodular (recență) — acoperire diversă · CPU"),

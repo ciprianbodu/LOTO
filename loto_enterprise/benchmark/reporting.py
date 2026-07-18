@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 import pandas as pd
 from rich.console import Console
 from rich.panel import Panel
@@ -19,10 +17,9 @@ def _fmt(v, prec=3):
     return str(v)
 
 
-def render_hardware(console: Console, hw_snap: Dict) -> None:
+def render_hardware(console: Console, hw_snap: dict) -> None:
     cpu = hw_snap.get("cpu", {})
     ram = hw_snap.get("ram", {})
-    gpu = hw_snap.get("gpu", {})
     body = [
         f"[bold]CPU[/bold]    : {cpu.get('processor', 'n/a')}",
         f"          {cpu.get('physical_cores', '?')} cores / "
@@ -30,41 +27,10 @@ def render_hardware(console: Console, hw_snap: Dict) -> None:
         f"[bold]RAM[/bold]    : {ram.get('total_gb', '?')} GB total "
         f"({ram.get('used_gb', '?')} used | {ram.get('available_gb', '?')} free)",
     ]
-    if gpu.get("cuda_available"):
-        for d in gpu.get("devices", []):
-            body.append(
-                f"[bold]GPU[{d['index']}][/bold] : {d['name']} | "
-                f"compute {d.get('compute_capability', '?')} | "
-                f"{d.get('multi_processor_count', '?')} SMs | "
-                f"VRAM {d.get('used_vram_gb', '?')} / {d['total_vram_gb']} GB"
-            )
-        body.append(f"[bold]Torch[/bold]  : {gpu.get('torch_version', '?')} | CUDA {gpu.get('cuda_version', '?')}")
-    else:
-        body.append("[red]GPU: CUDA not available[/red]")
     console.print(Panel("\n".join(body), title="[bold]HARDWARE[/bold]", border_style="cyan"))
 
 
-def _is_gpu_method(method: str, family: str = "") -> bool:
-    """Aceeași clasificare CPU/GPU ca runner-ul (_is_gpu_fam_global)."""
-    m = (method or "").lower()
-    f = (family or "").lower()
-    return (m.startswith("torch_") or m.startswith("ens_torch") or m.endswith("_gpu")
-            or f.startswith("nf-") or f.startswith("foundation") or f == "ssm")
-
-
-def _gpu_available() -> bool:
-    import os
-    if os.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
-        return False
-    try:
-        import torch
-        return bool(torch.cuda.is_available())
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def render_methods_table(console: Console, methods: List[str], method_meta_map: Dict) -> None:
-    gpu_ok = _gpu_available()
+def render_methods_table(console: Console, methods: list[str], method_meta_map: dict) -> None:
     t = Table(title="Methods to test", box=box.SIMPLE_HEAD)
     t.add_column("#", justify="right", style="dim")
     t.add_column("Method")
@@ -72,17 +38,9 @@ def render_methods_table(console: Console, methods: List[str], method_meta_map: 
     t.add_column("Trained?")
     t.add_column("Status")
     t.add_column("Notes", overflow="fold")
-    n_skip = 0
     for i, m in enumerate(methods, 1):
         meta = method_meta_map[m]
-        is_gpu = _is_gpu_method(m, meta.get("family", ""))
-        if not meta["available"]:
-            status = "[red]N/A[/red]"
-        elif is_gpu and not gpu_ok:
-            status = "[yellow]⏸ SKIP (fără GPU)[/yellow]"
-            n_skip += 1
-        else:
-            status = "[green]OK[/green]"
+        status = "[red]N/A[/red]" if not meta["available"] else "[green]OK[/green]"
         t.add_row(
             str(i), m, meta["family"],
             "yes" if meta["requires_train"] else "no",
@@ -90,18 +48,15 @@ def render_methods_table(console: Console, methods: List[str], method_meta_map: 
             (meta.get("unavailable_reason") or meta.get("notes") or "")[:80],
         )
     console.print(t)
-    if n_skip:
-        console.print(f"[yellow]⏸ {n_skip} metode GPU vor fi SĂRITE la rulare "
-                      f"(CUDA indisponibil — fără fallback CPU). Rulează doar metodele CPU.[/yellow]")
 
 
-def render_per_game(console: Console, report: Dict) -> None:
+def render_per_game(console: Console, report: dict) -> None:
     for game_key, data in report["games"].items():
         title = f"[bold magenta]{data['label']}[/bold magenta]  (max={data['max_num']}, draw={data['draw_n']})"
         console.print()
         console.rule(title)
 
-        pool_keys: List[str] = data["pool_keys"]
+        pool_keys: list[str] = data["pool_keys"]
         per_method = data["per_method"]
 
         # Table 1: avg_hits per pool size, per method
@@ -144,15 +99,12 @@ def render_per_game(console: Console, report: Dict) -> None:
         # here. Build it from the report by reading the underlying csv (passed in).
         # Skipped — handled by render_regressive_table that takes folds.csv.
 
-        # Table 3: hardware footprint per method
+        # Table 3: hardware footprint per method (CPU/RAM)
         t3 = Table(title="Hardware footprint", box=box.MINIMAL_HEAVY_HEAD)
         t3.add_column("Method")
         t3.add_column("CPU% peak", justify="right")
         t3.add_column("CPU% avg", justify="right")
         t3.add_column("RAM peak (GB)", justify="right")
-        t3.add_column("GPU% peak", justify="right")
-        t3.add_column("GPU% avg", justify="right")
-        t3.add_column("VRAM peak (MB)", justify="right")
         t3.add_column("avg t/fold (s)", justify="right")
         for m in ordered:
             d = per_method[m]
@@ -161,9 +113,6 @@ def render_per_game(console: Console, report: Dict) -> None:
                 _fmt(d.get("cpu_pct_peak", 0.0), 1),
                 _fmt(d.get("cpu_pct_avg", 0.0), 1),
                 _fmt(d.get("ram_gb_peak", 0.0), 2),
-                _fmt(d.get("gpu_pct_peak", 0.0), 1),
-                _fmt(d.get("gpu_pct_avg", 0.0), 1),
-                _fmt(d.get("vram_mb_peak", 0.0), 0),
                 _fmt(d.get("mean_runtime_sec", 0.0), 1),
             )
         console.print(t3)
@@ -226,10 +175,10 @@ def render_regressive_table(console: Console, folds_df: pd.DataFrame, game_key: 
         t.add_column(f"{p}%", justify="right")
     t.add_column("mean", justify="right", style="bold")
     # Compute mean per method
-    rows: List[tuple] = []
+    rows: list[tuple] = []
     for m in methods:
         cells = []
-        vals: List[float] = []
+        vals: list[float] = []
         for p in pcts:
             r = sub[(sub["method"] == m) & (sub["percentile"] == p)]
             if r.empty:

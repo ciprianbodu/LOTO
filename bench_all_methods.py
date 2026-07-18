@@ -7,18 +7,18 @@ Specul:
     • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
     • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 6 (Urna 1)
       sau DRAW_SIZE (Urna 2)
-    • telemetrie: CPU% peak/avg, RAM peak, GPU% peak/avg, VRAM peak
+    • telemetrie: CPU% peak/avg, RAM peak
     • output în consolă cu tabele `rich`
     • la final scrie best_methods.json (per-pool winner per joc)
 
-Forțare CUDA: toate modelele neuronale rulează pe `torch.device("cuda")`
-(spec); modelele NF aruncă RuntimeError dacă CUDA lipsește.
+Suport GPU/neural (torch/TimesFM/foundation) eliminat complet — benchmark
+exclusiv CPU (numpy/sklearn/statsmodels).
 
 Usage
 -----
     python bench_all_methods.py                               # Full (toate metodele available)
     python bench_all_methods.py --percentiles 10,30,50,70,100
-    python bench_all_methods.py --methods random,frequency,timesfm,chronos
+    python bench_all_methods.py --methods random,frequency,recency
     python bench_all_methods.py --block-size 50               # walk-forward più fine
 """
 
@@ -59,28 +59,10 @@ from loto_enterprise.benchmark.reporting import (
 from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 
 
-# Ordered exactly as the spec lists them (A → E):
-# A. Fundaționale Zero-Shot
-# B. DL Liniare/MLP
-# C. DL Transformers
-# D. DL Probabilistice/Recurente/SSM
-# E. Random baseline + classical for context
-# Lista bench: TOATE metodele SIMPLE (CPU, instant) + DOAR top-3 GPU dovedite.
-#
-# Decizie pe DATE REALE (folds.csv, 288 fold-uri): pe loterie (aleatoare), metodele
-# simple CPU (recency/frequency) au batut TOATE retelele neurale GPU, iar diferentele
-# sunt zgomot statistic. Modelele GPU grele (informer/fedformer) au iesit chiar SUB
-# random, consumand 90%+ GPU. Deci pastram toate CPU (cost ~zero) + cele 3 GPU care au
-# avut cel mai bun lift masurat (patchtst +0.009, dlinear +0.007, autoformer +0.005).
-# TOP 5 GPU dupa lift masurat (folds.csv): patchtst +0.009, dlinear +0.007,
-# autoformer +0.005, moment +0.005, tcn +0.003. Restul (informer/fedformer = sub
-# random; ~80 retele grele) scoase: timp imens, rezultat <= random.
-# +4 candidate promitatoare (2026-05-31): deepar (#6 masurat +0.0024, RNN probabilistic),
-# nhits (#7 +0.0004, MLP ierarhic), timesnet (SoTA 2023 multi-scale, familia tcn care a
-# mers), kan (Kolmogorov-Arnold Net 2024 — paradigma noua, invata functii nu ponderi).
-# TOATE metodele disponibile (CPU + TOATE GPU/rețele neurale/foundation/torch), la cererea
-# utilizatorului (2026-06-01). ⚠️ Bench-ul GPU durează semnificativ mai mult.
-# Clasificarea CPU/GPU se face acum exclusiv în runner (_is_gpu_fam_global) și în UI.
+# Lista bench = TOATE metodele disponibile din registry (exclusiv CPU).
+# Pe date REALE (folds.csv): pe loterie (aleatoare), metodele simple (recency/frequency)
+# bat consistent restul, iar diferentele sunt zgomot statistic. Tot suportul GPU/neural
+# (torch/foundation/NeuralForecast) a fost eliminat — nu mai exista metode GPU.
 # Blacklist permanent (legendate de prune_methods.py pe baza rezultatelor bench).
 # Metodele de aici NU se mai rulează niciodată; cele noi nu sunt afectate.
 try:
@@ -94,7 +76,7 @@ ALL_SPEC_METHODS = [
     if method_meta(m).get("available", True) and m not in _DISABLED_METHODS
 ]
 
-QUICK_METHODS = ["random", "frequency", "recency", "dlinear"]
+QUICK_METHODS = ["random", "frequency", "recency"]
 
 
 def main() -> int:
@@ -116,14 +98,13 @@ def main() -> int:
                         help="Walk-forward re-score block; default = score-once-per-fold. "
                              "block_size=1 = true per-step walk-forward (foarte lent).")
     parser.add_argument("--quick", action="store_true",
-                        help="Quick: baseline + 1 NF")
+                        help="Quick: random + frequency + recency")
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--no-rich", action="store_true",
                         help="Plain-text output în loc de rich tables")
     parser.add_argument("--no-cache", action="store_true",
-                        help="Ignora cache-ul disk (.bench_cache/). Folosit cand: "
-                             "(a) utilizatorul forteaza rebench, (b) hardware s-a "
-                             "schimbat (CPU->GPU) si rezultatele cache-uite sunt stale.")
+                        help="Ignora cache-ul disk (.bench_cache/). Folosit cand "
+                             "utilizatorul forteaza rebench.")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--no-decision", action="store_true",
                         help="Nu scrie best_methods.json (folosit la bench paralel pe faze: "
@@ -131,10 +112,8 @@ def main() -> int:
                              "se ia separat dupa combinarea folds-urilor).")
     args = parser.parse_args()
 
-    # Log per --out: bench_results/ → bench_full.log; bench_results_gpu/ → bench_full_gpu.log.
-    # Astfel la bench PARALEL (CPU ‖ GPU) fiecare faza scrie in fisierul ei, fara sa se
-    # suprascrie reciproc → UI poate afisa progres SEPARAT pt CPU si GPU.
-    _log_name = "bench_full_gpu.log" if "gpu" in str(args.out).lower() else "bench_full.log"
+    # Benchmark exclusiv CPU → un singur log.
+    _log_name = "bench_full.log"
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="[%(asctime)s] %(levelname)s %(name)s | %(message)s",

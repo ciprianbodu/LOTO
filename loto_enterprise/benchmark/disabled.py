@@ -11,14 +11,14 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Iterable, Set
+from typing import Iterable
 
 logger = logging.getLogger(__name__)
 
 _PATH = Path(__file__).resolve().parents[2] / "disabled_methods.json"
 
 
-def load_disabled() -> Set[str]:
+def load_disabled() -> set[str]:
     try:
         if _PATH.exists():
             data = json.loads(_PATH.read_text(encoding="utf-8"))
@@ -28,7 +28,7 @@ def load_disabled() -> Set[str]:
     return set()
 
 
-def add_disabled(names: Iterable[str], reason: str = "") -> Set[str]:
+def add_disabled(names: Iterable[str], reason: str = "") -> set[str]:
     """Adaugă (union, nu șterge niciodată) metode în blacklist. Întoarce setul final."""
     cur = load_disabled()
     before = len(cur)

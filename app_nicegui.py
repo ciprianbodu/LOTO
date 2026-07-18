@@ -50,7 +50,9 @@ from ui_shared import (
     ensure_worker_running,
     load_mail_config,
     read_logs_filtered,
+    render_html_safe,
     send_email,
+    html_escape,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
@@ -64,34 +66,30 @@ BENCH_PID_FILE = PROJECT_ROOT / ".bench_pid"
 BENCH_LOG_FILE = PROJECT_ROOT / "bench_full.log"
 REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 
-# Buget de timp TOTAL pentru walk-forward (toate jocurile). O metodă GPU grea (ex.
-# torch_wavenet_deep la Joker) reantrenează modelul la FIECARE pas retroactiv → un WF
-# complet (10% × ~2000 extrageri) ar dura ORE și pare „înghețat". Peste buget, validarea
-# se oprește PARȚIAL și pipeline-ul continuă (mail + shutdown). Jocurile rapide (6/49,
-# 5/40 — sub o secundă/pas) termină oricum integral. Anulabil și manual din UI.
-WF_TOTAL_BUDGET_S = 15 * 60
+# Buget de timp TOTAL pentru walk-forward (toate jocurile). Peste buget, validarea
+# se oprește PARȚIAL și pipeline-ul continuă (mail + shutdown).
+WF_TOTAL_BUDGET_S = 90 * 60
+# Adâncime walk-forward: ultimele X% din istoric simulate onest (fără lookahead).
+WF_DEPTH_PERCENT = 30.0
 
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
-    "consecutive_filter_val", "auto_invert_val", "shutdown_on_complete",
+    "auto_invert_val", "shutdown_on_complete",
     "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
-    "last_finalized_job_id", "bench_use_cpu", "bench_use_gpu", "wf_budget_min",
+    "last_finalized_job_id", "wf_budget_min",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
-    "lookback_val": 0, "consecutive_filter_val": True, "auto_invert_val": False,
+    "lookback_val": 0, "auto_invert_val": False,
     "shutdown_on_complete": False, "sim_depth_val": 40, "autopilot_after_bench": True,
     "mail_on_complete": False,
     # NU e o bifă de UI: ultimul job dus prin finalize (mail/shutdown). Împiedică
     # re-procesarea aceluiași job la fiecare repornire (altfel = shutdown repetat).
     "last_finalized_job_id": 0,
-    # Metode bench pe dispozitiv. GPU implicit OFF: pe loto (date aleatoare) rețelele
-    # GPU prind constant MAI PUȚINE hituri decât euristicile CPU → timp irosit + VRAM.
-    "bench_use_cpu": True, "bench_use_gpu": False,
-    # Buget walk-forward (minute). La depth 50% cu 15min: joker complet, dar 6/49 ≈
-    # 23/1280 simulări (felie subțire). Mărește-l (ex. 60-120) la rulările peste noapte
-    # (shutdown automat) pentru istoric validat mai adânc.
-    "wf_budget_min": 15,
+    # Buget walk-forward (minute). Plafon de siguranță (anulare automată), NU timp real de rulare:
+    # cu WF paralel (~80% CPU) validarea completă la 30% depth durează minute, nu ore.
+    # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
+    "wf_budget_min": 90,
 }
 
 # --------------------------------------------------------------------------- #
@@ -109,7 +107,7 @@ STATE: dict = {
     "retro_meta": {},        # {aceeași cheie: {partial, n_test_draws, n_expected, from_cache}}
     "wf_status": "",         # text status walk-forward
     "wf_progress": 0.0,      # fracție 0..1 progres walk-forward (bară)
-    "wf_cancel": False,      # True → oprește walk-forward (buton UI); pipeline continuă
+    "wf_start": None,        # timestamp pornire WF (ETA în UI)
     "pure_bench": False,
     "show_all": {},          # {f"{fname}_{game}": bool} — toggle wheel complet
     "bench_was_running": False,
@@ -166,6 +164,9 @@ def _game_label_for(fname: str) -> str:
 # Ordinea de AFIȘARE a jocurilor în UI / rapoarte: 6/49 primul, Joker al doilea, 5/40 al treilea.
 # (Independentă de ordinea în care s-au încărcat fișierele/dataset-urile.)
 _GAME_DISPLAY_ORDER = {"6/49": 0, "joker": 1, "5/40": 2}
+# Ordinea walk-forward: jocuri rapide / adesea din cache ÎNTÂI, 6/49 (cel mai lent) ULTIM
+# → primește restul bugetului global, nu doar prima felie (1/N).
+_WF_GAME_ORDER = {"joker": 0, "5/40": 1, "6/49": 2}
 
 
 def _ordered_game_items(outs):
@@ -176,6 +177,28 @@ def _ordered_game_items(outs):
     )
 
 
+def _ordered_wf_game_items(outs):
+    """Ordine walk-forward: Joker → 5/40 → 6/49 (6/49 ultim = mai mult timp rămas)."""
+    return sorted(
+        outs.items(),
+        key=lambda kv: _WF_GAME_ORDER.get(_game_label_for(str(kv[0])), 99),
+    )
+
+
+def _iter_wf_jobs(results_bundle):
+    """(fname, game_label, data, auto_invert) — doar Pool 1 (OMNIUS 1).
+
+    Pool 2 / OMNIUS 2 = plasă de siguranță, fără walk-forward (evită dublarea timpului).
+    """
+    for fname, outs in results_bundle:
+        for g_label, data in _ordered_wf_game_items(outs):
+            yield fname, g_label, data, False
+
+
+def _count_wf_jobs(results_bundle) -> int:
+    return sum(1 for _ in _iter_wf_jobs(results_bundle))
+
+
 # --------------------------------------------------------------------------- #
 # Submit job (contract config_json identic cu app.py)
 # --------------------------------------------------------------------------- #
@@ -183,7 +206,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
     h = hashlib.sha256()
     for k in ("pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
-              "consecutive_filter_val", "auto_invert_val", "sim_depth_val"):
+              "auto_invert_val", "sim_depth_val"):
         h.update(str(SETTINGS[k]).encode("utf-8"))
     h.update(str(sorted(sim_depth_per_game.items())).encode("utf-8"))  # adâncime per joc → cache key
     pure = bool(STATE.get("pure_bench"))
@@ -200,10 +223,10 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "guarantee": int(SETTINGS["guarantee_val"]),
             "max_variants": int(SETTINGS["max_variants_val"]),
             "lookback": int(SETTINGS["lookback_val"]),
-            "filter_consecutives": False if pure else bool(SETTINGS["consecutive_filter_val"]),
-            "smart_reduction": False if pure else True,
+            "filter_consecutives": False,
+            "smart_reduction": False,
             "sim_depth_pct": sd,
-            "pure_bench_mode": pure,
+            "pure_bench_mode": True,
             "auto_invert": bool(SETTINGS["auto_invert_val"]),
         }
         datasets_cfg.append({
@@ -285,17 +308,8 @@ def _launch_bench(args: list[str], label: str) -> None:
     py = sys.executable
     cmd = [py, "bench_all_methods.py"] + args
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
-    # Switch-uri CPU/GPU (persistate). Gard: NU le lăsăm pe ambele OFF (ar rămâne 0
-    # metode) → forțăm CPU ON.
-    use_cpu = bool(SETTINGS.get("bench_use_cpu", True))
-    use_gpu = bool(SETTINGS.get("bench_use_gpu", False))
-    if not use_cpu and not use_gpu:
-        use_cpu = True
-        ui.notify("⚠️ CPU și GPU erau ambele oprite → pornesc CPU (altfel n-ar rula nimic).",
-                  type="warning")
+    # Bench exclusiv CPU (GPU eliminat complet din aplicație).
     env = dict(os.environ)
-    env["LOTO_BENCH_CPU"] = "1" if use_cpu else "0"
-    env["LOTO_BENCH_GPU"] = "1" if use_gpu else "0"
     try:
         # bench_all_methods.py își scrie SINGUR bench_full.log (FileHandler) → nu
         # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
@@ -337,8 +351,7 @@ def _istoric_has_data() -> bool:
 
 def run_rebench() -> None:
     """Re-Bench UNIC: un singur proces testează TOATE metodele. Intern, runner.py
-    paralelizează metodele CPU pe toate nucleele (ProcessPool) și rulează cele GPU
-    secvențial — deci CPU(multi-nuclee) ‖ GPU în același bench, fără 2 procese/secțiuni."""
+    paralelizează metodele CPU pe toate nucleele (ProcessPool)."""
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
@@ -351,7 +364,7 @@ def run_rebench() -> None:
         ui.notify("⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
                   "de după NU va putea genera pool-uri. Încarcă fișierele la pasul 1.",
                   type="warning", timeout=8000)
-    # un singur bench, fără --methods (= TOATE), scrie best_methods.json (decizie 4+)
+    # un singur bench, fără --methods (= TOATE), scrie best_methods.json (decizie 3+)
     _launch_bench(["--no-rich", "--percentiles", _PCTS], "Re-Bench (toate metodele)")
 
 
@@ -403,98 +416,42 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     if not log_path.exists():
         return None
     cur = tot = 0
-    cpu_tot = gpu_tot = 0
-    gpu_paused = False
-    matches = []
+    last_now = ""
     try:
         import re
         txt = log_path.read_text(encoding="utf-8", errors="replace")
         matches = re.findall(r"\[(\d+)/(\d+)\]\s*\[([^\]]+)\]", txt)
         if matches:
             cur, tot = int(matches[-1][0]), int(matches[-1][1])
-        # marker scris de runner: [BENCH-SPLIT] cpu=N gpu=M total=T
-        _sp = re.findall(r"\[BENCH-SPLIT\]\s*cpu=(\d+)\s*gpu=(\d+)", txt)
-        if _sp:
-            cpu_tot, gpu_tot = int(_sp[-1][0]), int(_sp[-1][1])
-        # runner semnalează că nu există GPU → track-ul GPU e sărit (PAUSED).
-        gpu_paused = "[BENCH-GPU-PAUSED]" in txt
+            seg = matches[-1][2].split("/")
+            if len(seg) >= 3:
+                last_now = f"{seg[0]} / {seg[1]} / {seg[2]} backtest"
     except Exception:  # noqa: BLE001
         pass
     if tot <= 0:
         return 0.03, "pornește... (estimez după primele teste)"
     frac = max(0.0, min(1.0, cur / tot))
-    # Progres SEPARAT pe CPU și GPU (rulează concurent). Eticheta CPU/GPU vine AUTORITAR
-    # din linia de log (seg[4] = CPU|GPU, scris de runner) — consistent cu totalurile din
-    # [BENCH-SPLIT]. Fallback pe euristica de nume doar pt loguri vechi (fără tag).
-    cpu_done = gpu_done = 0
-    last_cpu = last_gpu = ""
-    try:
-        for _m in matches:
-            seg = _m[2].split("/")
-            if len(seg) >= 3:
-                entry = f"{seg[0]} / {seg[1]} / {seg[2]} backtest"
-                if len(seg) >= 5 and seg[4] in ("CPU", "GPU"):
-                    is_gpu_line = (seg[4] == "GPU")
-                else:
-                    is_gpu_line = _method_is_gpu(seg[1])  # fallback log vechi
-                if is_gpu_line:
-                    gpu_done += 1
-                    last_gpu = entry
-                else:
-                    cpu_done += 1
-                    last_cpu = entry
-    except Exception:  # noqa: BLE001
-        pass
 
     elapsed = max(0.0, time.time() - start_ts) if start_ts else 0.0
+    eta = (tot - cur) * (elapsed / cur) if (elapsed > 0 and cur > 0 and tot > cur) else None
 
-    def _eta(done, total):
-        if elapsed > 0 and done > 0 and total > done:
-            return (total - done) * (elapsed / done)
-        return None
-
-    cpu_eta = _eta(cpu_done, cpu_tot)
-    gpu_eta = _eta(gpu_done, gpu_tot)
-
-    def _cat_line(emoji, color, label, done, total, eta, now_txt):
-        parts = []
-        if total > 0:
-            pc = int(max(0.0, min(1.0, done / total)) * 100)
-            parts.append(f"{pc}% ({done}/{total})")
-        else:
-            parts.append(f"{done} teste")
-        if eta is not None:
-            parts.append(f"rămas ~{_fmt_dur(eta)}")
-        elif total > 0 and done >= total:
-            parts.append("✅ gata")
-        head = (f"<span style='color:{color}'>{emoji} {label}:</span> " + " · ".join(parts))
-        return head + (f"<br><span style='opacity:.7'>&nbsp;&nbsp;&nbsp;&nbsp;acum: {now_txt}</span>" if now_txt else "")
-
-    # ETA GLOBAL = MAXIMUL dintre CPU și GPU: rulează CONCURENT, deci bench-ul se termină
-    # când termină cel mai LENT (de obicei GPU). Media/blend dădea un ETA fals de optimist
-    # (CPU termină multe task-uri instant → rata părea uriașă → „~17s" deși GPU avea 14m).
     text = f"{int(frac*100)}% ({cur}/{tot} teste)"
-    _etas = [e for e in (cpu_eta, gpu_eta) if e is not None]
-    if _etas:
-        text += f"  ·  rămas ~{_fmt_dur(max(_etas))} (cât cel mai lent track)"
-    lines = [text]
-    lines.append(_cat_line("🖥️", "#38bdf8", "CPU", cpu_done, cpu_tot, cpu_eta, last_cpu))
-    if gpu_paused:
-        lines.append("<span style='color:#c084fc'>⚡ GPU:</span> "
-                     "<b style='color:#f59e0b'>⏸ PAUSED — fără GPU</b> "
-                     "<span style='opacity:.7'>(CUDA indisponibil — metodele GPU sărite, fără fallback CPU)</span>")
-    else:
-        lines.append(_cat_line("⚡", "#c084fc", "GPU", gpu_done, gpu_tot, gpu_eta, last_gpu))
-    return frac, "<br>".join(lines)
+    if eta is not None:
+        text += f"  ·  rămas ~{_fmt_dur(eta)}"
+    elif cur >= tot:
+        text += "  ·  ✅ gata"
+    if last_now:
+        text += f"<br><span style='opacity:.7'>acum: {last_now}</span>"
+    return frac, text
 
 
 _HW_CACHE = {"html": "", "ts": 0.0, "running": False}
 
 
 def _hw_telemetry_refresh() -> None:
-    """Citește CPU/RAM/GPU/VRAM ÎN FUNDAL (thread) și cache-uiește HTML-ul. Apelat de un
-    thread separat — NU pe event-loop-ul UI (nvidia-smi/psutil sunt blocante → ar pica
-    WebSocket-ul 'connection lost')."""
+    """Citește CPU/RAM ÎN FUNDAL (thread) și cache-uiește HTML-ul. Apelat de un
+    thread separat — NU pe event-loop-ul UI (psutil e blocant → ar pica
+    WebSocket-ul 'connection lost'). GPU eliminat complet."""
     cpu = ram = ""
     try:
         import psutil
@@ -508,26 +465,16 @@ def _hw_telemetry_refresh() -> None:
         ram = f"{vm.used/(1024**3):.1f}/{vm.total/(1024**3):.0f} GB ({vm.percent:.0f}%)"
     except Exception:  # noqa: BLE001
         pass
-    gpu = vram = ""
-    try:
-        import subprocess as _sp
-        out = _sp.run(
-            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=3,
-        )
-        if out.returncode == 0 and out.stdout.strip():
-            g, vu, vt = [x.strip() for x in out.stdout.strip().splitlines()[0].split(",")]
-            gpu = f"{g}%"; vram = f"{float(vu)/1024:.1f}/{float(vt)/1024:.0f} GB"
-    except Exception:  # noqa: BLE001
-        pass
     parts = []
-    if cpu:  parts.append(f"<span style='color:#38bdf8'>CPU {cpu}</span>")
-    if ram:  parts.append(f"<span style='color:#60a5fa'>RAM {ram}</span>")
-    if gpu:  parts.append(f"<span style='color:#c084fc'>GPU {gpu}</span>")
-    if vram: parts.append(f"<span style='color:#a78bfa'>VRAM {vram}</span>")
-    _HW_CACHE["html"] = ("<div style='margin-top:6px;font-size:.82em;font-family:monospace;"
-                         "opacity:.9'>📊 " + " &nbsp;·&nbsp; ".join(parts) + "</div>") if parts else ""
+    if cpu:
+        parts.append(render_html_safe(t"<span style='color:#38bdf8'>CPU {cpu}</span>"))
+    if ram:
+        parts.append(render_html_safe(t"<span style='color:#60a5fa'>RAM {ram}</span>"))
+    _HW_CACHE["html"] = (
+        render_html_safe(t"<div style='margin-top:6px;font-size:.82em;font-family:monospace;opacity:.9'>📊 ")
+        + " &nbsp;·&nbsp; ".join(parts)
+        + render_html_safe(t"</div>")
+    ) if parts else ""
 
 
 def _hw_telemetry_html() -> str:
@@ -599,7 +546,7 @@ def cancel_all() -> None:
     STATE["bench_was_running"] = False
     STATE["bench_cancelled"] = True
     unlock_engine()
-    ui.notify("Proces anulat (CPU + GPU).", type="warning")
+    ui.notify("Proces anulat.", type="warning")
     _refresh_status()
 
 
@@ -613,15 +560,11 @@ def _start_walk_forward() -> None:
         _finalize_pipeline()  # fără rezultate → nu rulează WF; ăsta e finalul (mail + shutdown)
         return
     results_bundle, _ = results
-    # NOTĂ inversare: walk-forward-ul rulează pipeline-ul NORMAL (Faza 1, pre-inversare),
-    # deci când auto_invert e ON validează pool-ul normal, nu cel inversat afișat.
-    # NU mai sărim — afișăm stats-urile etichetate clar ca "Faza 1" (vezi results_panel).
-    _has_invert = any(d.get("auto_invert") for _fn, outs in results_bundle for _gl, d in outs.items())
+    # Walk-forward: doar Pool 1 / OMNIUS 1 (Pool 2 = inversare, fără validare istorică).
     _pfx = ""  # bench unic → fără prefix de secțiune
 
     def _worker_wf() -> None:
-        STATE["wf_cancel"] = False
-        _wf_t0 = time.time()
+        _wf_t0 = float(STATE.get("wf_start") or time.time())
 
         def _budget_s_live() -> float:
             # Citit LIVE din SETTINGS (nu o dată la pornire) → schimbarea bugetului din
@@ -640,8 +583,8 @@ def _start_walk_forward() -> None:
         _global_deadline()  # inițializează STATE["wf_deadline"] pt panou
 
         def _wf_cancel_all():
-            # Oprire TOTALĂ: anulare manuală (buton UI) SAU buget global depășit.
-            return bool(STATE.get("wf_cancel")) or time.time() > _global_deadline()
+            # Buget global depășit → oprire parțială walk-forward.
+            return time.time() > _global_deadline()
 
         try:
             from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
@@ -653,67 +596,96 @@ def _start_walk_forward() -> None:
                 # dar mail-ul (= doar numerele) și shutdown-ul rulează normal.
                 logger.warning("[WF] datasets goale (probabil recuperare după restart) → "
                                "walk-forward sărit; mail/shutdown continuă fără stats de validare.")
-            total = sum(len(o) for _, o in results_bundle)
+            total = _count_wf_jobs(results_bundle)
             done = 0
-            for fname, outs in results_bundle:
+            for fname, g_label, data, wf_invert in _iter_wf_jobs(results_bundle):
                 df_source = ds_by_name.get(fname)
                 if df_source is None:
                     continue
-                for g_label, data in _ordered_game_items(outs):
-                    done += 1
-                    base = (done - 1) / max(1, total)
-                    STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
-                    STATE["wf_progress"] = base
+                done += 1
+                _pool_lbl = "Pool 2" if wf_invert else "Pool 1"
+                base = (done - 1) / max(1, total)
+                STATE["wf_status"] = f"📊 Walk-forward {_pool_lbl} {done}/{total}: {g_label}..."
+                STATE["wf_progress"] = base
 
-                    def _wf_cb(frac, _b=base, _t=total):
-                        # progres global = jocuri terminate + fracția jocului curent
-                        STATE["wf_progress"] = min(1.0, _b + max(0.0, min(1.0, frac)) / _t)
-
-                    # Buget PER JOC (felie adaptivă din timpul global rămas): un joc
-                    # lent nu mai înfometează jocurile următoare (bug văzut: joker a
-                    # consumat tot bugetul → 5/40 parțial, 6/49 aproape zero). Minim
-                    # 60s/joc. Felia se recalculează LIVE din deadline-ul global →
-                    # mărirea bugetului din UI extinde și felia jocului CURENT.
-                    _games_left = max(1, total - done + 1)
-                    _game_t0 = time.time()
-
-                    def _wf_should_cancel(_gt0=_game_t0, _gl=_games_left):
-                        _gd = _gt0 + max(60.0, (_global_deadline() - _gt0) / _gl)
-                        return _wf_cancel_all() or time.time() > _gd
-
-                    try:
-                        flat, meta = run_honest_walk_forward(
-                            df_source=df_source, game_type=g_label,
-                            pool_size=int(data.get("pool_size") or 10),
-                            backtest_depth_percent=20.0, lookback_percent=100.0, use_cache=True,
-                            progress_cb=_wf_cb,
-                            should_cancel=_wf_should_cancel,
+                def _wf_cb(frac, n_done=0, n_total=0, _b=base, _t=total,
+                           _d=done, _tot=total, _lbl=_pool_lbl, _g=g_label):
+                    frac = max(0.0, min(1.0, float(frac)))
+                    STATE["wf_progress"] = min(1.0, _b + frac / _t)
+                    if n_total > 0:
+                        STATE["wf_status"] = (
+                            f"📊 Walk-forward {_lbl} {_d}/{_tot}: {_g} — "
+                            f"pas {n_done}/{n_total} ({int(frac * 100)}%)"
                         )
-                        if meta.get("partial"):
-                            logger.warning("[WF] %s validat PARȚIAL: %s/%s extrageri "
-                                           "(buget de timp / anulare) — acoperă extragerile RECENTE.",
-                                           g_label, meta.get("n_test_draws"), meta.get("n_expected"))
-                        with STATE_LOCK:
-                            STATE["retro"][f"{_pfx}{fname}_{g_label}"] = flat
-                            STATE.setdefault("retro_meta", {})[f"{_pfx}{fname}_{g_label}"] = {
-                                "partial": bool(meta.get("partial")),
-                                "n_test_draws": meta.get("n_test_draws"),
-                                "n_expected": meta.get("n_expected"),
-                                "from_cache": bool(meta.get("from_cache")),
-                            }
-                    except Exception as exc:  # noqa: BLE001
-                        logger.error("walk-forward %s: %s", g_label, exc)
-                    STATE["wf_progress"] = done / max(1, total)
-                    if _wf_cancel_all():
-                        # DOAR anulare manuală / buget GLOBAL epuizat oprește restul
-                        # jocurilor. Felia PER JOC expirată → jocul e parțial, dar
-                        # următoarele jocuri primesc felia lor normal.
-                        logger.warning("[WF] oprire walk-forward (anulare/buget global) după %d/%d jocuri.",
-                                       done, total)
-                        break
-                else:
-                    continue
-                break
+                    else:
+                        STATE["wf_status"] = (
+                            f"📊 Walk-forward {_lbl} {_d}/{_tot}: {_g} — "
+                            f"{int(frac * 100)}%"
+                        )
+
+                # Buget PER JOC (felie adaptivă din timpul global rămas): un joc
+                # lent nu mai înfometează jocurile următoare (bug văzut: joker a
+                # consumat tot bugetul → 5/40 parțial, 6/49 aproape zero). Minim
+                # 60s/joc. Felia se recalculează LIVE din deadline-ul global →
+                # mărirea bugetului din UI extinde și felia jocului CURENT.
+                _games_left = max(1, total - done + 1)
+                _game_t0 = time.time()
+
+                def _wf_should_cancel(_gt0=_game_t0, _gl=_games_left):
+                    _gd = _gt0 + max(60.0, (_global_deadline() - _gt0) / _gl)
+                    return _wf_cancel_all() or time.time() > _gd
+
+                try:
+                    flat, meta = run_honest_walk_forward(
+                        df_source=df_source, game_type=g_label,
+                        pool_size=int(data.get("pool_size") or 10),
+                        backtest_depth_percent=WF_DEPTH_PERCENT, lookback_percent=100.0, use_cache=True,
+                        progress_cb=_wf_cb,
+                        should_cancel=_wf_should_cancel,
+                        auto_invert=wf_invert,
+                    )
+                    if meta.get("partial"):
+                        logger.warning("[WF] %s %s validat PARȚIAL: %s/%s extrageri "
+                                       "(buget de timp / anulare) — acoperă extragerile RECENTE.",
+                                       _pool_lbl, g_label, meta.get("n_test_draws"), meta.get("n_expected"))
+                    _rk = f"{_pfx}{fname}_{g_label}" + ("_p2" if wf_invert else "")
+                    with STATE_LOCK:
+                        STATE["retro"][_rk] = flat
+                        STATE.setdefault("retro_meta", {})[_rk] = {
+                            "partial": bool(meta.get("partial")),
+                            "n_test_draws": meta.get("n_test_draws"),
+                            "n_expected": meta.get("n_expected"),
+                            "from_cache": bool(meta.get("from_cache")),
+                            "auto_invert": wf_invert,
+                        }
+                    # Pool 2 / OMNIUS 2: istoric retrospectiv (pool+wheel curent), fără WF dublu.
+                    if (not wf_invert and data.get("auto_invert") and data.get("phase1")
+                            and flat):
+                        try:
+                            from loto_enterprise.core.walk_forward_adapter import (
+                                build_retrospective_pool_hits_flat,
+                            )
+                            _p2rk = f"{_pfx}{fname}_{g_label}_p2"
+                            _flat_p2, _meta_p2 = build_retrospective_pool_hits_flat(
+                                flat,
+                                df_source,
+                                g_label,
+                                list(data.get("hard_core") or []),
+                                list(data.get("variants") or []),
+                                _omnius_for_pool(g_label, data),
+                            )
+                            with STATE_LOCK:
+                                STATE["retro"][_p2rk] = _flat_p2
+                                STATE.setdefault("retro_meta", {})[_p2rk] = _meta_p2
+                        except Exception as _p2exc:  # noqa: BLE001
+                            logger.warning("[WF] retrospectiv Pool 2 %s: %s", g_label, _p2exc)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("walk-forward %s: %s", g_label, exc)
+                STATE["wf_progress"] = done / max(1, total)
+                if _wf_cancel_all():
+                    logger.warning("[WF] oprire walk-forward (buget global) după %d/%d jocuri.",
+                                   done, total)
+                    break
             STATE["wf_status"] = ""
             STATE["wf_progress"] = 1.0
         except Exception as exc:  # noqa: BLE001
@@ -733,8 +705,7 @@ def _start_walk_forward() -> None:
 
     STATE["wf_progress"] = 0.0
     STATE["wf_start"] = time.time()  # pt ETA walk-forward
-    STATE["wf_status"] = ("📊 Pornesc walk-forward backtest (poate dura câteva minute)..."
-                          + (" — validare FAZA 1 (pool normal), fiindcă auto-invert e ON" if _has_invert else ""))
+    STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU) — Pool 1 / OMNIUS 1..."
     threading.Thread(target=_worker_wf, daemon=True).start()
 
 
@@ -821,11 +792,11 @@ def status_panel() -> None:
         rc = _bench_progress_from(BENCH_LOG_FILE, _start)
         with ui.card().classes("w-full"):
             if rc:
-                ui.html("🔬 <b style='color:#38bdf8'>RE-BENCH</b> — " + rc[1])
+                ui.html(render_html_safe(t"🔬 <b style='color:#38bdf8'>RE-BENCH</b> — {rc[1]}"))
                 ui.linear_progress(value=rc[0], show_value=False).props("instant-feedback").classes("w-full")
-            ui.label("Testez toate metodele (CPU pe nuclee ‖ GPU). Auto-Pilot pornește la final.").classes("text-caption")
-            ui.html(_hw_telemetry_html())  # consum live CPU/RAM/GPU/VRAM
-        # Clasament PARȚIAL live: metodele apar pe măsură ce termină (CPU întâi, apoi GPU).
+            ui.label("Testez toate metodele (CPU, pe toate nucleele). Auto-Pilot pornește la final.").classes("text-caption")
+            ui.html(_hw_telemetry_html())  # consum live CPU/RAM
+        # Clasament PARȚIAL live: metodele apar pe măsură ce termină.
         _render_bench_live_leaderboard(_start, progress=(rc[0] if rc else None))
         return
 
@@ -1093,12 +1064,12 @@ def _badges(numbers, stats: dict | None = None):
             # (opacitate redusă) ca să NU concureze vizual cu numărul.
             with ui.badge().props("color=primary").classes("text-sm"):
                 if freq is not None:
-                    ui.html(
-                        f'<span style="font-weight:700;font-size:1.1em">{n}</span>'
-                        f'<span style="opacity:0.45;font-size:0.68em;margin-left:3px">({freq})</span>'
-                    )
+                    ui.html(render_html_safe(
+                        t'<span style="font-weight:700;font-size:1.1em">{n}</span>'
+                        t'<span style="opacity:0.45;font-size:0.68em;margin-left:3px">({freq})</span>'
+                    ))
                 else:
-                    ui.html(f'<span style="font-weight:700;font-size:1.1em">{n}</span>')
+                    ui.html(render_html_safe(t'<span style="font-weight:700;font-size:1.1em">{n}</span>'))
 
 
 # --------------------------------------------------------------------------- #
@@ -1117,17 +1088,35 @@ LR_SCHEMES = {
 }
 STAGE_META = [
     ("1_nqi_raw", "1. NQI Raw (scorer)", "#60a5fa",
-     "Pool brut din scorer (bench winner / TimesFM): top-K după scor de probabilitate."),
+     "Pool brut din scorer (bench winner CPU / frecvență): top-K după scor de probabilitate."),
     ("2_smart_selector", "2. Pool brut (fără rafinare)", "#a78bfa",
      "Smart Selector ELIMINAT — pool-ul rămâne decizia PURĂ a scorerului câștigător "
      "(fără rafinare hibridă). Etapă păstrată doar pentru numerotare (Δ mereu 0)."),
-    ("3_anti_sequence", "3. Anti-Sequence Filter", "#f59e0b",
-     "Elimină secvențe de 3+ numere consecutive rare; înlocuiește cu rezerve top-frecvență."),
-    ("4_post_hoc_final", "4. POST-HOC Final", "#10b981",
-     "Validare retrospectivă: substituții iterative ce maximizează hit-urile. Rescrie 40-70% din pool."),
+    ("3_anti_sequence", "3. Anti-Sequence (dezactivat)", "#f59e0b",
+     "Filtru anti-secvență ELIMINAT — pool-ul rămâne decizia scorerului."),
+    ("4_post_hoc_final", "4. POST-HOC (dezactivat)", "#10b981",
+     "Validare retrospectivă ELIMINATĂ — fără rescrieri post-scoring."),
 ]
 
 
+
+
+def _fmt_num(x) -> str:
+    """Formatează un număr pentru UI (evită repr numpy np.float64(...))."""
+    if x is None:
+        return "?"
+    try:
+        return f"{float(x):.1f}"
+    except (TypeError, ValueError):
+        return str(x)
+
+
+def _fmt_g_range(g) -> str:
+    if g is None:
+        return "—"
+    if isinstance(g, (list, tuple)) and len(g) >= 2:
+        return f"[{_fmt_num(g[0])}, {_fmt_num(g[1])}]"
+    return str(g)
 
 
 def _render_audit(audit: dict, final_pool: set) -> None:
@@ -1144,7 +1133,7 @@ def _render_audit(audit: dict, final_pool: set) -> None:
         ui.markdown("ℹ️ **Verificare Anti-Secvență:**\n" + "\n".join(f"- {m}" for m in audit["kept_sequences"])).classes("text-info")
 
     bw = audit.get("bench_winner") or {}
-    scorer_lbl = (f"{next(iter(bw.values())).get('method','?').upper()} (bench winner)" if bw else "Google TimesFM")
+    scorer_lbl = (f"{next(iter(bw.values())).get('method','?').upper()} (bench winner)" if bw else "frecvență")
 
     tex = audit.get("timesfm_excluded")
     if tex:
@@ -1158,7 +1147,7 @@ def _render_audit(audit: dict, final_pool: set) -> None:
 
     af = audit.get("anomaly_filter")
     if af:
-        ui.markdown(f"🚀 **Neural Anomaly Scoring:** din {af['original_count']} variante au rămas "
+        ui.markdown(f"🔍 **Filtru anti-anomalie (scor statistic):** din {af['original_count']} variante au rămas "
                     f"**{af['final_count']}** (threshold {af['threshold']}).").classes("text-positive")
 
     sm = audit.get("smart_selector")
@@ -1189,18 +1178,25 @@ def _render_stages(audit: dict) -> None:
             chips = []
             for n in sorted(pool_set):
                 if n in added:
-                    chips.append(f"<span style='background:#064e3b;color:#6ee7b7;padding:2px 8px;border-radius:10px;margin:2px;font-weight:bold;'>+{n}</span>")
+                    chips.append(render_html_safe(
+                        t"<span style='background:#064e3b;color:#6ee7b7;padding:2px 8px;border-radius:10px;margin:2px;font-weight:bold;'>+{n}</span>"
+                    ))
                 else:
-                    chips.append(f"<span style='background:rgba(255,255,255,0.07);color:#e5e7eb;padding:2px 8px;border-radius:10px;margin:2px;'>{n}</span>")
+                    chips.append(render_html_safe(
+                        t"<span style='background:rgba(255,255,255,0.07);color:#e5e7eb;padding:2px 8px;border-radius:10px;margin:2px;'>{n}</span>"
+                    ))
             for n in sorted(removed):
-                chips.append(f"<span style='background:#7f1d1d;color:#fecaca;padding:2px 8px;border-radius:10px;margin:2px;text-decoration:line-through;'>−{n}</span>")
+                chips.append(render_html_safe(
+                    t"<span style='background:#7f1d1d;color:#fecaca;padding:2px 8px;border-radius:10px;margin:2px;text-decoration:line-through;'>−{n}</span>"
+                ))
+            chips_html = "".join(chips)
             delta = f" (Δ: +{len(added)}, −{len(removed)})" if prev is not None else ""
-            ui.html(
-                f"<div style='margin-top:8px;padding:8px;background:rgba(255,255,255,0.03);border-left:3px solid {color};border-radius:4px;'>"
-                f"<div style='font-weight:700;color:{color};'>{title}{delta}</div>"
-                f"<div style='font-size:0.85em;color:#94a3b8;margin:2px 0 6px 0;'>{desc}</div>"
-                f"<div>{''.join(chips)}</div></div>"
-            )
+            ui.html(render_html_safe(
+                t"<div style='margin-top:8px;padding:8px;background:rgba(255,255,255,0.03);border-left:3px solid {color};border-radius:4px;'>"
+                t"<div style='font-weight:700;color:{color};'>{title}{delta}</div>"
+                t"<div style='font-size:0.85em;color:#94a3b8;margin:2px 0 6px 0;'>{desc}</div>"
+                t"<div>{chips_html}</div></div>"
+            ))
             prev = pool_set
 
 
@@ -1253,41 +1249,70 @@ def _render_adaptive(audit: dict) -> None:
     icon, color, msg = meta.get(event, ("ℹ️", "#17a2b8", "Fără date pentru comparație"))
     baseline = ast.get("baseline", 0.0) or 0.0
     rolling = ast.get("rolling_avg")
-    parts = [f"<div style='font-weight:bold;margin-bottom:6px;'>{icon} Învățare Adaptivă: {msg} "
-             f"<span style='background:{'#a020f0' if ast.get('active_mode')=='reset' else '#28a745'};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;'>"
-             f"{'RESET' if ast.get('active_mode')=='reset' else 'NORMAL'}</span></div>"]
+    _active_bg = "#a020f0" if ast.get("active_mode") == "reset" else "#28a745"
+    _active_lbl = "RESET" if ast.get("active_mode") == "reset" else "NORMAL"
+    parts = [render_html_safe(
+        t"<div style='font-weight:bold;margin-bottom:6px;'>{icon} Învățare Adaptivă: {msg} "
+        t"<span style='background:{_active_bg};color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;'>{_active_lbl}</span></div>"
+    )]
     if event is not None:
-        ext = f"Ultima extragere: <strong>{ast.get('last_hits')}</strong> hituri în pool"
+        ext = render_html_safe(t"Ultima extragere: <strong>{ast.get('last_hits')}</strong> hituri în pool")
         if baseline:
-            ext += f" <small style='color:#888;'>(baseline aleator: {baseline})</small>"
-        parts.append(f"<div>{ext}</div>")
+            ext += render_html_safe(t" <small style='color:#888;'>(baseline aleator: {baseline})</small>")
+        parts.append(render_html_safe(t"<div>{ext}</div>"))
     if ast.get("streak_zero", 0) >= 1:
-        parts.append(f"<div>Streak catastrofe consecutive: <strong>{ast['streak_zero']}</strong></div>")
+        parts.append(render_html_safe(
+            t"<div>Streak catastrofe consecutive: <strong>{ast['streak_zero']}</strong></div>"
+        ))
     if rolling is not None:
         rc = "#dc3545" if rolling < baseline else "#28a745"
-        parts.append(f"<div>Media rolling (5 extrageri): <strong style='color:{rc};'>{rolling:.2f}</strong></div>")
+        parts.append(render_html_safe(
+            t"<div>Media rolling (5 extrageri): <strong style='color:{rc};'>{rolling:.2f}</strong></div>"
+        ))
     if ast.get("missed"):
-        parts.append(f"<div style='color:#dc3545;'>Numere ratate: {', '.join(map(str, ast['missed']))} → boost la următoarea predicție</div>")
+        _missed = ", ".join(map(str, ast["missed"]))
+        parts.append(render_html_safe(
+            t"<div style='color:#dc3545;'>Numere ratate: {_missed} → boost la următoarea predicție</div>"
+        ))
     if ast.get("false_positives"):
-        parts.append(f"<div style='color:#6c757d;'>Prezise dar absente: {', '.join(map(str, ast['false_positives'][:10]))} → penalizare</div>")
+        _fp = ", ".join(map(str, ast["false_positives"][:10]))
+        parts.append(render_html_safe(
+            t"<div style='color:#6c757d;'>Prezise dar absente: {_fp} → penalizare</div>"
+        ))
     if ast.get("boosts"):
-        parts.append("<div><span style='color:#28a745;'>↑ Boost activ:</span> " +
-                     ", ".join(f"<strong>{n}</strong>×{m:.2f}" for n, m in ast["boosts"][:6]) + "</div>")
+        _boosts = ", ".join(f"{n}×{m:.2f}" for n, m in ast["boosts"][:6])
+        parts.append(render_html_safe(
+            t"<div><span style='color:#28a745;'>↑ Boost activ:</span> <strong>{_boosts}</strong></div>"
+        ))
     if ast.get("penalties"):
-        parts.append("<div><span style='color:#dc3545;'>↓ Penalizare activă:</span> " +
-                     ", ".join(f"<strong>{n}</strong>×{m:.2f}" for n, m in ast["penalties"][:6]) + "</div>")
+        _pen = ", ".join(f"{n}×{m:.2f}" for n, m in ast["penalties"][:6])
+        parts.append(render_html_safe(
+            t"<div><span style='color:#dc3545;'>↓ Penalizare activă:</span> <strong>{_pen}</strong></div>"
+        ))
     cd = audit.get("catastrophe_diversification")
     if cd and cd.get("injected"):
         inj = ", ".join(f"{n}(gap×{gr})" for n, gr in cd["injected"])
         ev = ", ".join(str(n) for n, _ in cd.get("evicted", []))
-        parts.append(f"<div style='color:#f4a261;'>💉 Diversificare forțată: injectate <strong>{inj}</strong> în locul lui <strong>{ev}</strong></div>")
+        parts.append(render_html_safe(
+            t"<div style='color:#f4a261;'>💉 Diversificare forțată: injectate <strong>{inj}</strong> "
+            t"în locul lui <strong>{ev}</strong></div>"
+        ))
     hi = audit.get("hard_inversion")
     if hi:
         excl = hi.get("excluded", [])
-        parts.append(f"<div style='color:#e63946;'>🚫 Hard Inversion: <strong>{hi.get('n_excluded', len(excl))}</strong> "
-                     f"numere excluse temporar → {', '.join(str(n) for n in excl[:20])}</div>")
-    ui.html(f"<div style='margin-top:10px;padding:12px;background:rgba(20,30,50,0.5);border-left:4px solid {color};"
-            f"border-radius:8px;font-size:0.9em;'>{''.join(parts)}</div>")
+        _excl_txt = ", ".join(str(n) for n in excl[:20])
+        parts.append(render_html_safe(
+            t"<div style='color:#e63946;'>🚫 Hard Inversion: <strong>{hi.get('n_excluded', len(excl))}</strong> "
+            t"numere excluse temporar → {_excl_txt}</div>"
+        ))
+    ui.html(
+        render_html_safe(
+            t"<div style='margin-top:10px;padding:12px;background:rgba(20,30,50,0.5);border-left:4px solid {color};"
+            t"border-radius:8px;font-size:0.9em;'>"
+        )
+        + "".join(parts)
+        + render_html_safe(t"</div>")
+    )
 
 
 def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str = "") -> None:
@@ -1380,11 +1405,13 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                 continue
             pct = (c / tot * 100) if tot else 0
             color = "#f4a261" if h >= 4 else ("#e9c46a" if h >= 3 else "#666")
-            ui.html(f"<div style='display:flex;align-items:center;gap:8px;'>"
-                    f"<div style='width:110px;font-size:0.85em;'>{h} numere</div>"
-                    f"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:12px;'>"
-                    f"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
-                    f"<div style='width:120px;text-align:right;font-size:0.85em;'>{c} extrageri ({pct:.0f}%)</div></div>")
+            ui.html(render_html_safe(
+                t"<div style='display:flex;align-items:center;gap:8px;'>"
+                t"<div style='width:110px;font-size:0.85em;'>{h} numere</div>"
+                t"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:12px;'>"
+                t"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
+                t"<div style='width:120px;text-align:right;font-size:0.85em;'>{c} extrageri ({pct:.0f}%)</div></div>"
+            ))
 
         # Distribuție performanță variante (bilete) — din .hits
         var_dist = {}
@@ -1398,11 +1425,13 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                 continue
             pct = (c / n * 100) if n else 0
             color = "#28a745" if h >= 3 else ("#17a2b8" if h >= 1 else "#666")
-            ui.html(f"<div style='display:flex;align-items:center;gap:8px;'>"
-                    f"<div style='width:110px;font-size:0.85em;'>{h} ghicite</div>"
-                    f"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:10px;'>"
-                    f"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
-                    f"<div style='width:90px;text-align:right;font-size:0.85em;'>{pct:.1f}%</div></div>")
+            ui.html(render_html_safe(
+                t"<div style='display:flex;align-items:center;gap:8px;'>"
+                t"<div style='width:110px;font-size:0.85em;'>{h} ghicite</div>"
+                t"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:10px;'>"
+                t"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
+                t"<div style='width:90px;text-align:right;font-size:0.85em;'>{pct:.1f}%</div></div>"
+            ))
 
         # Tabel pool ≥T (urmează ținta bench-ului: ≥3 sau ≥4)
         _T = _bench_target()
@@ -1458,7 +1487,7 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                      f"{len(flat):,} bilete): cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
                      f"| ROI: {'+' if profit >= 0 else ''}{roi:.1f}%").classes(rc)
             ui.label("ℹ️ Pe loterie ALEATOARE ROI-ul e mereu puternic negativ dacă joci tot wheel-ul la "
-                     "fiecare extragere — scopul aplicației e ACOPERIREA (4+), nu profitul.").classes(
+                     "fiecare extragere — scopul aplicației e ACOPERIREA (3+), nu profitul.").classes(
                 "text-caption text-grey")
 
 
@@ -1501,7 +1530,8 @@ def _build_report() -> str:
         if d.get("hard_core_joker"):
             out.append(f"{indent}Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
         if d.get("p10") is not None:
-            out.append(f"{indent}Interval p10–p90: {d.get('p10')} – {d.get('p90')} (g_range={d.get('g_range')})")
+            out.append(f"{indent}Interval p10–p90: {_fmt_num(d.get('p10'))} – {_fmt_num(d.get('p90'))} "
+                       f"(g_range={_fmt_g_range(d.get('g_range'))})")
         au = d.get("audit") or {}
         if au:
             out.append(f"{indent}--- Audit complet (JSON) ---")
@@ -1551,24 +1581,6 @@ def _show_report() -> None:
 
 # Descriere lizibilă per metodă (ce e + din ce librărie) — afișată lângă 🏆
 _METHOD_DESC = {
-    "informer":   "rețea Transformer · NeuralForecast",
-    "autoformer": "rețea Transformer (Auto-Correlation) · NeuralForecast",
-    "fedformer":  "rețea Transformer (Fourier) · NeuralForecast",
-    "patchtst":   "rețea Transformer (patch-based) · NeuralForecast",
-    "nbeats":     "rețea MLP · NeuralForecast",
-    "nhits":      "MLP ierarhic (N-HiTS) · NeuralForecast",
-    "tide":       "model MLP (Google TiDE) · NeuralForecast",
-    "dlinear":    "model liniar cu descompunere · NeuralForecast",
-    "deepar":     "RNN probabilistic · NeuralForecast",
-    "tcn":        "rețea convoluțională temporală · NeuralForecast",
-    "timesnet":   "multi-scale conv SoTA 2023 · NeuralForecast",
-    "kan":        "Kolmogorov-Arnold Network 2024 (învață funcții) · NeuralForecast",
-    "timesfm":    "model foundation pre-antrenat · Google TimesFM",
-    "chronos":    "model foundation pre-antrenat · Amazon Chronos",
-    "moment":     "model foundation pre-antrenat · CMU MOMENT",
-    "geo_spatial_kde_gpu": "densitate spațială 2D pe grila biletului (KDE conv) · PyTorch GPU",
-    "geo_rowcol_gpu":      "propensiune geometrică rând × coloană pe bilet · PyTorch GPU",
-    "geo_cnn_next_gpu":    "CNN spațial: geometria grilei următoare · PyTorch GPU",
     "cover_greedy": "greedy set-cover submodular (acoperire diversă) · CPU",
     "cover_rarity": "greedy cover ponderat pe raritatea extragerilor · CPU",
     "winslips": "stil WinSlips: acoperire roată abreviată pe perechi (covering design) · CPU",
@@ -1596,14 +1608,9 @@ _METHOD_DESC = {
     "theta_auto": "metoda Theta · serie temporală",
     "ets_auto":   "ETS (error-trend-seasonal) · serie temporală",
     "arima_auto": "ARIMA auto · serie temporală",
-    # GPU
-    "ml_xgb_gpu":      "XGBoost pe GPU · gradient boosting",
-    "ml_lgbm_gpu":     "LightGBM pe GPU · gradient boosting",
-    "ml_catboost_gpu": "CatBoost pe GPU · gradient boosting",
-    "torch_lstm_m":    "LSTM (PyTorch, GPU)",
-    "torch_transformer": "Transformer (PyTorch, GPU)",
-    "torch_tcn":       "rețea convoluțională temporală (PyTorch, GPU)",
-    "torch_bayesian_lstm": "LSTM bayesian (PyTorch, GPU)",
+    "649_katz12_gap88": "12% KatzCommunity + 88% gap_poisson (search winner, +21.7% 4+ @ k16)",
+    "649_katz15_gap85": "15% KatzCommunity + 85% gap_poisson (search blend)",
+    "graph_649_katz_community": "60% KatzHigh + 40% community strength (graf)",
 }
 
 
@@ -1632,7 +1639,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         _cov = (data.get("context") or {}).get("coverage_pct")
         if _cov is not None:
             if float(_cov) >= 100.0:
-                ui.html(f"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>")
+                ui.html(render_html_safe(t"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>"))
             else:
                 _anomaly = (data.get("audit") or {}).get("anomaly_filter") or {}
                 _cov_before = _anomaly.get("coverage_pct_before")
@@ -1647,20 +1654,19 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                         "limita «Variante maxime» a tăiat garanția — "
                         "pune 0 = nelimitat pentru garanție completă"
                     )
-                ui.html(
-                    f"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
-                    f"<span style='opacity:.7'>({reason})</span>"
-                )
+                ui.html(render_html_safe(
+                    t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
+                    t"<span style='opacity:.7'>({reason})</span>"
+                ))
         ui.label(f"Extrageri: {data.get('total_draws')}")
-        # Indicator GPU vs CPU — din audit.compute_device (scris de worker, device-ul REAL folosit)
+        # Timp de scoring (CPU — GPU eliminat complet).
         _au = data.get("audit") or {}
-        _dev = _au.get("compute_device")
-        _gms = (_au.get("performance") or {}).get("gpu_time_ms")
-        _tsuf = f" <span style='opacity:.6'>({float(_gms)/1000:.1f}s)</span>" if _gms is not None else ""
-        if _dev == "gpu":
-            ui.html(f"<b style='color:#22c55e'>⚡ GPU</b>{_tsuf}")
-        elif _dev == "cpu":
-            ui.html(f"<b style='color:#f97316'>🐌 CPU</b>{_tsuf}")
+        _sms = (_au.get("performance") or {}).get("score_time_ms")
+        if _sms is not None:
+            ui.html(render_html_safe(
+                t"<b style='color:#f97316'>🖥️ CPU</b> "
+                t"<span style='opacity:.6'>({float(_sms) / 1000:.1f}s)</span>"
+            ))
 
     # Metoda câștigătoare folosită de scorer (din bench/best_methods.json)
     bw = (data.get("audit") or {}).get("bench_winner") or {}
@@ -1673,26 +1679,26 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             desc = _METHOD_DESC.get(m, "")
             tail = ""
             if desc:
-                tail += f" <span style='opacity:.65'>— {desc}</span>"
+                tail += render_html_safe(t" <span style='opacity:.65'>— {desc}</span>")
             meta = ", ".join(x for x in [fam, (f"pool {ph}" if ph else "")] if x)
             if meta:
-                tail += f" <span style='opacity:.45'>[{meta}]</span>"
-            # Ensemble (variance-reduction): scorul final combină ponderat MAI
-            # MULTE metode calificate, nu doar câștigătorul unic afișat mai sus
-            # — vezi decision.py (ENSEMBLE_MAX_METHODS) și
-            # method_selector.combine_ensemble_scores. Cu 1 singur membru,
-            # `ensemble` lipsește din audit (comportament bit-identic, fără blend).
+                tail += render_html_safe(t" <span style='opacity:.45'>[{meta}]</span>")
             _ens = info.get("ensemble") or []
             if len(_ens) > 1:
                 _ens_str = " + ".join(
                     f"{e.get('method')} ({float(e.get('weight', 0)) * 100:.0f}%)" for e in _ens
                 )
-                tail += (
-                    f"<br><span style='opacity:.6;font-size:.85em'>⚖️ ensemble (variance-reduction): "
-                    f"{_ens_str}</span>"
+                tail += render_html_safe(
+                    t"<br><span style='opacity:.6;font-size:.85em'>⚖️ ensemble (variance-reduction): {_ens_str}</span>"
                 )
-            parts.append(f"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>{tail}")
-        ui.html("🏆 Metodă câștigătoare (bench): " + "<br>".join(parts)).classes("text-caption")
+            parts.append(
+                render_html_safe(t"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>")
+                + tail
+            )
+        ui.html(
+            render_html_safe(t"🏆 Metodă câștigătoare (bench): ")
+            + "<br>".join(parts)
+        ).classes("text-caption")
     else:
         ui.label("🏆 Metodă scorer: fallback implicit (fără decizie bench disponibilă)").classes(
             "text-caption text-grey")
@@ -1704,8 +1710,8 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
 
     if data.get("p10") is not None:
-        ui.label(f"Interval p10–p90: {data.get('p10')} – {data.get('p90')} "
-                 f"(g_range={data.get('g_range')})").classes("text-caption")
+        ui.label(f"Interval p10–p90: {_fmt_num(data.get('p10'))} – {_fmt_num(data.get('p90'))} "
+                 f"(g_range={_fmt_g_range(data.get('g_range'))})").classes("text-caption")
 
     audit = data.get("audit") or {}
     final_pool = set(int(x) for x in pool)
@@ -1723,7 +1729,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             _render_walk_forward(flat, game, is_invert=False, method=_wm)
 
     # OMNIUS — cel mai bun bilet din ACEST pool (separat per pool)
-    _render_omnius_pool(game, data)
+    _render_omnius_pool(game, data, wf_validated=(skey_suffix != "_p2"))
 
     if variants:
         is_jk = "joker" in game.lower()
@@ -1736,10 +1742,10 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
                 else:
                     nums = ", ".join(str(int(x)) for x in v)
-                ui.html(
-                    f"<span style='color:#6b7280;font-weight:600'>V{i:>3}:</span> "
-                    f"<span style='color:#e5e7eb'>{nums}</span>"
-                ).classes("font-mono text-sm")
+                ui.html(render_html_safe(
+                    t"<span style='color:#6b7280;font-weight:600'>V{i:>3}:</span> "
+                    t"<span style='color:#e5e7eb'>{nums}</span>"
+                )).classes("font-mono text-sm")
             if len(variants) > 10:
                 def _toggle(k=skey):
                     STATE["show_all"][k] = not STATE["show_all"].get(k, False)
@@ -1767,9 +1773,19 @@ def _num_scores(d: dict) -> dict:
 
 
 def _omnius_for_pool(game: str, d: dict) -> list:
-    """Biletul OMNIUS din ACEST pool: cele mai bune draw_n numere (50% meta-învățare +
-    50%% Smart Logic). CACHE-uit pe (joc, pool) — score_omnius durează ~7s, iar UI-ul
-    îl chema la FIECARE randare/raport → satura CPU → 'connection lost'. Acum o dată."""
+    """Biletul OMNIUS din ACEST pool: cele mai bune draw_n numere.
+
+    PRIORITATE (aliniat cu walk-forward pe ținta 3+): folosim EXACT scorurile
+    metodei câștigătoare (ensemble bench, `audit.omnius_pool_scores`) pe care
+    backtesting.py le-a folosit ca să măsoare `omnius_hits`. Astfel biletul
+    AFIȘAT este chiar biletul a cărui rată de 3+ e validată istoric — top draw_n
+    după scor, fără filtre de paritate / progresie.
+    Se aplică identic pt OMNIUS 1 (Pool 1) și OMNIUS 2 (Pool 2), fiecare cu
+    scorurile propriului pool.
+
+    Fallback (rezultate vechi fără scoruri salvate SAU bench-winner dezactivat):
+    meta-învățarea OMNIUS (50% meta + 50% Smart Logic) → `_num_scores`.
+    CACHE-uit pe (joc, pool) — evită re-calcul la fiecare randare/raport."""
     gk = _game_label_for(game)
     draw_n = 6 if gk == "6/49" else 5
     pool = sorted(int(x) for x in (d.get("hard_core") or []))
@@ -1782,53 +1798,87 @@ def _omnius_for_pool(game: str, d: dict) -> list:
     if _ckey in _cache:
         return _cache[_ckey]
 
-    # Încearcă meta-învățarea OMNIUS pe istoricul jocului (același scorer ca metoda bench)
-    omni_scores = None
-    try:
-        df = None
-        for fn, _df in STATE.get("datasets", []):
-            if _game_label_for(fn) == gk:
-                df = _df
-                break
-        if df is not None:
-            from loto_enterprise.benchmark.methods_omnius import score_omnius
-            cols = [c for c in df.columns if c.lower().startswith("n")][:draw_n]
-            if len(cols) >= draw_n:
-                import numpy as _np
-                draws = df[cols].to_numpy(dtype=_np.int64)
-                max_num = {"6/49": 49, "5/40": 40, "joker": 45}.get(gk, 49)
-                omni_scores = score_omnius(draws, max_num, budget_s=2.0)
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("OMNIUS meta pt bilet eșuat (fallback): %s", exc)
+    # (1) PREFERAT: scorurile EXACTE validate în walk-forward pentru +4.
+    scores: dict = {}
+    _pool_scores = (d.get("audit") or {}).get("omnius_pool_scores") or {}
+    if _pool_scores:
+        try:
+            scores = {int(k): float(v) for k, v in _pool_scores.items()}
+        except (TypeError, ValueError):
+            scores = {}
 
-    scores = omni_scores or _num_scores(d)
-    top = sorted([n for n, _ in sorted(((n, scores.get(n, 0.0)) for n in pool),
-                                       key=lambda x: x[1], reverse=True)][:draw_n])
+    # (2) FALLBACK: meta-învățarea OMNIUS (rezultate vechi / bench-winner off).
+    if not scores:
+        try:
+            df = None
+            for fn, _df in STATE.get("datasets", []):
+                if _game_label_for(fn) == gk:
+                    df = _df
+                    break
+            if df is not None:
+                from loto_enterprise.benchmark.methods_omnius import score_omnius
+                cols = [c for c in df.columns if c.lower().startswith("n")][:draw_n]
+                if len(cols) >= draw_n:
+                    import numpy as _np
+                    draws = df[cols].to_numpy(dtype=_np.int64)
+                    max_num = {"6/49": 49, "5/40": 40, "joker": 45}.get(gk, 49)
+                    scores = score_omnius(draws, max_num, budget_s=2.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("OMNIUS meta pt bilet eșuat (fallback): %s", exc)
+
+    scores = scores or _num_scores(d)
+    from loto_enterprise.benchmark.methods_omnius import pick_omnius_ticket
+    top = pick_omnius_ticket(pool, scores, draw_n)
     _cache[_ckey] = top
     return top
 
 
-def _render_omnius_pool(game: str, d: dict) -> None:
+def _render_omnius_pool(game: str, d: dict, *, wf_validated: bool = True) -> None:
     """Card OMNIUS pentru un singur pool — cel mai bun bilet din el."""
     ticket = _omnius_for_pool(game, d)
     if not ticket:
         return
     chips = "".join(
-        f"<span style='background:#064e3b;color:#fbbf24;padding:4px 11px;border-radius:14px;"
-        f"margin:3px;font-weight:800;font-size:1.1em'>{n}</span>" for n in ticket)
+        render_html_safe(
+            t"<span style='background:#064e3b;color:#fbbf24;padding:4px 11px;border-radius:14px;"
+            t"margin:3px;font-weight:800;font-size:1.1em'>{n}</span>"
+        )
+        for n in ticket)
     jk = d.get("hard_core_joker") or []
     jk_txt = ""
     if jk:
         jkn = sorted(int(x) for x in jk)[:1]
         if jkn:
-            jk_txt = (" <span style='opacity:.7'>+ joker</span> "
-                      f"<span style='background:#4c1d95;color:#ddd6fe;padding:4px 11px;"
-                      f"border-radius:14px;font-weight:800'>{jkn[0]}</span>")
+            jk_txt = (
+                render_html_safe(t" <span style='opacity:.7'>+ joker</span> ")
+                + render_html_safe(
+                    t"<span style='background:#4c1d95;color:#ddd6fe;padding:4px 11px;"
+                    t"border-radius:14px;font-weight:800'>{jkn[0]}</span>"
+                )
+            )
+    # Descrierea reflectă scorul EFECTIV folosit: dacă avem scorurile validate WF
+    # (omnius_pool_scores) → biletul e cel optimizat/validat pt 3+; altfel fallback meta.
+    _has_validated = bool((d.get("audit") or {}).get("omnius_pool_scores"))
+    if _has_validated and wf_validated:
+        _desc = ("cel mai bun bilet din pool după scorul metodei câștigătoare "
+                 "(ensemble bench — ACELAȘI scor validat walk-forward pentru 3+)")
+    elif _has_validated:
+        _desc = ("cel mai bun bilet din pool inversat după scorul metodei câștigătoare "
+                 "(ensemble bench — fără validare walk-forward)")
+    else:
+        _desc = ("biletul meta-adaptiv din acest pool — ponderează metodele matematice "
+                 "după performanța recentă + Smart Logic Hybrid")
     with ui.card().classes("w-full").style("background:#1e1b4b;border:1px solid #f59e0b"):
-        ui.html("⭐ <b style='color:#fbbf24'>OMNIUS</b> — biletul meta-adaptiv din acest pool "
-                "<span style='opacity:.65;font-size:.8em'>(ponderează TOATE metodele matematice "
-                "după performanța recentă + Smart Logic Hybrid)</span>")
-        ui.html("<div style='margin:5px 0'>" + chips + jk_txt + "</div>")
+        ui.html(render_html_safe(
+            t"⭐ <b style='color:#fbbf24'>OMNIUS</b> — "
+            t"<span style='opacity:.65;font-size:.8em'>{_desc}</span>"
+        ))
+        ui.html(
+            render_html_safe(t"<div style='margin:5px 0'>")
+            + chips
+            + jk_txt
+            + render_html_safe(t"</div>")
+        )
 
 
 @ui.refreshable
@@ -1860,22 +1910,6 @@ def wf_progress_panel() -> None:
     ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
     ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
 
-    def _cancel_wf() -> None:
-        # Oprește validarea (numerele sunt DEJA generate). Pipeline-ul continuă spre
-        # mail/shutdown. La Joker, walk-forward-ul cu metodă GPU grea durează ore.
-        STATE["wf_cancel"] = True
-        STATE["wf_status"] = "⏹ Opresc validarea... pipeline-ul continuă (mail/shutdown)."
-        try:
-            wf_progress_panel.refresh()
-        except Exception:  # noqa: BLE001
-            pass
-        ui.notify("⏹ Walk-forward se oprește. Rezultatele (numerele) sunt deja gata.",
-                  type="warning")
-
-    if not STATE.get("wf_cancel"):
-        ui.button("⏹ Oprește validarea (poate dura ore la Joker GPU)", on_click=_cancel_wf) \
-            .props("outline color=warning size=sm").classes("mt-1")
-
 
 @ui.refreshable
 def results_panel() -> None:
@@ -1895,44 +1929,12 @@ def results_panel() -> None:
     _render_results_bundle(results[0])
 
 
-# Nume de metode GPU (rețele neurale / foundation) — fallback când folds.csv vechi
-# nu are coloana `family`. Evită importul registry-ului greu (torch) în UI.
-_GPU_NAME_SET = {
-    "dlinear", "nlinear", "nhits", "nbeats", "nbeatsx", "patchtst", "autoformer", "informer",
-    "fedformer", "tide", "timesnet", "timemixer", "bitcn", "deepnpts", "tcn", "deepar", "kan",
-    "mlpmultivariate", "vanilla_transformer", "itransformer", "tft", "moment", "timesfm",
-    "chronos", "tinytimemixer", "lstm", "gru", "rnn",
-}
-
-
-def _method_is_gpu(name: str, family: str = "") -> bool:
-    """Rulează pe GPU? Preferă `family` din folds.csv (autoritar, scris de runner);
-    altfel cade pe euristica de nume. NU folosește telemetria (gpu%/vram), care la bench-ul
-    paralel CPU‖GPU se 'scurge' pe rândurile metodelor CPU → ar eticheta greșit tot ca GPU."""
-    f = (family or "").strip().lower()
-    if f:
-        return (f.startswith("nf-") or f.startswith("foundation") or f.startswith("torch")
-                or f.endswith("-gpu") or f == "ssm")
-    n = (name or "").lower()
-    return (n.startswith("torch_") or n.startswith("ens_torch") or n.endswith("_gpu")
-            or n in _GPU_NAME_SET)
-
-
 def _method_library(name: str, family: str = "") -> str:
     """Librăria/categoria lizibilă a metodei. Din `family` (preferat) sau din nume (fallback)."""
     f = (family or "").strip().lower()
     if f:
-        if f.startswith("nf-"):
-            return "NeuralForecast"
-        if f.startswith("foundation"):
-            return "Foundation (TimesFM/Chronos/MOMENT)"
         if f.startswith("ml-"):
-            # ml-boost-gpu = XGBoost/LightGBM/CatBoost pe GPU (NU PyTorch, NU sklearn pur)
             return "gradient boosting (XGBoost/LightGBM/CatBoost)" if "boost" in f else "scikit-learn"
-        if f.startswith("torch") or f.endswith("-gpu"):
-            return "PyTorch"
-        if f == "ssm":
-            return "state-space"
         if f.startswith("classical"):
             return "statsmodels"
         if f.startswith("ensemble"):
@@ -1951,10 +1953,6 @@ def _method_library(name: str, family: str = "") -> str:
         return ("gradient boosting (XGBoost/LightGBM/CatBoost)"
                 if any(b in n for b in ("xgb", "lgbm", "catboost", "boost", "gbm"))
                 else "scikit-learn")
-    if n.startswith("torch_") or n.startswith("ens_torch") or n.endswith("_gpu"):
-        return "PyTorch"
-    if n in _GPU_NAME_SET:
-        return "NeuralForecast/Foundation"
     if n in {"arima_auto", "ets_auto", "theta_auto", "holt_winters", "stl", "croston_classic"}:
         return "statsmodels"
     return "independent (numpy)"
@@ -1986,7 +1984,7 @@ def _render_bench_leaderboard_slice(
     try:
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
-        _T = 4
+        _T = 3
     # preferă pragul configurat (3+); cere coloană cu DATE (nu all-NaN din cache vechi);
     # fallback la 4+ apoi avg_hits.
     def _has(c):
@@ -2025,15 +2023,12 @@ def _render_bench_leaderboard_slice(
         if has_family:
             _f = grp["family"].dropna().astype(str)
             fam = _f.iloc[0] if not _f.empty else ""
-        rows.append((m, score, avg, _method_is_gpu(m, fam), _method_library(m, fam),
+        rows.append((m, score, avg, _method_library(m, fam),
                      _rate_for(grp, 3), _rate_for(grp, 4)))
     rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
     if not rows:
         return
-    cpu_all = [r for r in rows if not r[3]]
-    gpu_all = [r for r in rows if r[3]]
-    cpu_rows = cpu_all[:top_n]
-    gpu_rows = gpu_all[:top_n]
+    top_rows = rows[:top_n]
     label = (
         f"rata {_shown_t}+ @ pool {pool}" if has_4plus and metric.endswith(f"_k{pool}")
         else f"rata {_shown_t}+ numere ghicite" if has_4plus
@@ -2049,10 +2044,8 @@ def _render_bench_leaderboard_slice(
         chosen_name = winner[0]
 
     def _row(i, rec):
-        m, score, avg, is_gpu, lib = rec[:5]
-        r3, r4 = rec[5], rec[6]
-        tag = "⚡ GPU" if is_gpu else "🖥️ CPU"
-        tag_cls = "text-deep-purple" if is_gpu else "text-blue"
+        m, score, avg, lib = rec[:4]
+        r3, r4 = rec[4], rec[5]
         if has_4plus:
             parts = []
             if r3 is not None:
@@ -2065,16 +2058,17 @@ def _render_bench_leaderboard_slice(
         is_chosen = (m == chosen_name)
         with ui.row().classes("items-center gap-2 w-full"):
             ui.label(f"{i}.").classes("text-bold text-grey w-6")
-            ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
             ui.label(("🏆 " + m) if is_chosen else m).classes(
                 "text-bold text-positive" if is_chosen else "text-bold")
             ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
 
-    title = f"🏆 Clasament bench — {section_label} (CPU + GPU · {label})"
+    title = f"🏆 Clasament bench — {section_label} ({label})"
     with ui.expansion(title, value=True).classes("w-full"):
-        _chosen_lib = next((r[4] for r in rows if r[0] == chosen_name), "")
-        ui.html(f"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>"
-                + (f" · {_chosen_lib}" if _chosen_lib else "")).classes("text-caption")
+        _chosen_lib = next((r[3] for r in rows if r[0] == chosen_name), "")
+        _chosen_suffix = f" · {_chosen_lib}" if _chosen_lib else ""
+        ui.html(render_html_safe(
+            t"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>{_chosen_suffix}"
+        )).classes("text-caption")
         if chosen_name != winner[0]:
             # De ce #1 din listă != metoda aleasă: lista e sortată după rata BRUTĂ a pragului;
             # decizia mai cere ca metoda să bată CONSTANT baseline-ul random (filtru consistență).
@@ -2085,24 +2079,12 @@ def _render_bench_leaderboard_slice(
         if not has_family:
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
-        # ── Top CPU ──
-        ui.label(f"🖥️ Top {len(cpu_rows)} din {len(cpu_all)} CPU").classes("text-bold text-blue mt-2")
-        _cpu_cats = sorted({rec[4] for rec in cpu_all if rec[4]})  # categorii REALE prezente (din folds)
-        if _cpu_cats:
-            ui.label("Categorii: " + " · ".join(_cpu_cats)).classes("text-caption text-grey")
-        for i, rec in enumerate(cpu_rows, 1):
+        ui.label(f"Top {len(top_rows)} din {len(rows)} metode").classes("text-bold text-blue mt-2")
+        _cats = sorted({rec[3] for rec in rows if rec[3]})  # categorii REALE prezente (din folds)
+        if _cats:
+            ui.label("Categorii: " + " · ".join(_cats)).classes("text-caption text-grey")
+        for i, rec in enumerate(top_rows, 1):
             _row(i, rec)
-        # ── Top GPU ──
-        ui.label(f"⚡ Top {len(gpu_rows)} din {len(gpu_all)} GPU (rețele neurale / foundation)").classes(
-            "text-bold text-deep-purple mt-3")
-        if gpu_rows:
-            ui.label(f"Pe loto (date aleatoare) rețelele prind de obicei MAI PUȚINE {_shown_t}+ decât "
-                     "euristicile simple — de-aia rar intră în topul global.").classes("text-caption text-grey")
-            for i, rec in enumerate(gpu_rows, 1):
-                _row(i, rec)
-        else:
-            ui.label("Nicio metodă GPU în acest bench (toate cele rulate au fost CPU).").classes(
-                "text-caption text-grey")
 
 
 def _last_csv_draw(fname: str):
@@ -2185,9 +2167,8 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
 
 def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
     """Clasament PARȚIAL în timpul bench-ului — din folds.csv (flush-uit periodic la
-    ~100 rezultate). Metodele apar pe măsură ce TERMINĂ: de obicei CPU întâi (track-ul
-    CPU se închide mai devreme), apoi GPU. Câștigătorul final + Auto-Pilot se decid
-    abia la sfârșit. Citește folds.csv O DATĂ pe render (parțial → mic).
+    ~100 rezultate). Metodele apar pe măsură ce TERMINĂ. Câștigătorul final + Auto-Pilot
+    se decid abia la sfârșit. Citește folds.csv O DATĂ pe render (parțial → mic).
     `progress` (0..1) — la ≥1.0 testele-s gata, dar procesul încă scrie decizia/raportul
     → titlul NU mai zice „PARȚIAL" (inadvertență văzută în UI la 100%)."""
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
@@ -2218,10 +2199,10 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
                      "(best_methods.json) + raportul — câștigătorul final și Auto-Pilot "
                      "pornesc în câteva momente.").classes("text-caption text-positive")
         else:
-            ui.label("⏳ Se completează pe măsură ce metodele termină (de obicei CPU întâi, apoi GPU). "
+            ui.label("⏳ Se completează pe măsură ce metodele termină. "
                      "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului.").classes("text-caption text-grey")
-        ui.label("ℹ️ Walk-forward validation + istoric hits (≥3: pool/OMNIUS/bilete, media între hituri) "
-                 "apar DUPĂ bench — când Auto-Pilot generează pool-ul și rulează validarea.").classes("text-caption text-grey")
+        ui.label("ℹ️ Walk-forward: istoricul listează +3 și +4; targetul bench/alerte rămâne "
+                 f"≥{_bench_target()}.").classes("text-caption text-grey")
         for fk, kp, sect in [("loto_6_49", pool, "6/49"),
                              ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
                              ("loto_5_40", pool, "5/40")]:
@@ -2247,7 +2228,7 @@ def _render_bench_winner_only(game_label: str) -> None:
     try:
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
-        _T = 4
+        _T = 3
     def _ok(c):
         return (not sub.empty) and c in sub.columns and sub[c].notna().any()
     _shown_t = _T
@@ -2264,18 +2245,15 @@ def _render_bench_winner_only(game_label: str) -> None:
         if "family" in grp.columns:
             _f = grp["family"].dropna().astype(str)
             fam = _f.iloc[0] if not _f.empty else ""
-        rows.append((m, score, _method_is_gpu(m, fam), _method_library(m, fam)))
+        rows.append((m, score, _method_library(m, fam)))
     if not rows:
         return
     rows.sort(key=lambda r: r[1], reverse=True)
     w = rows[0]
-    tag = "⚡ GPU" if w[2] else "🖥️ CPU"
-    tag_cls = "text-deep-purple" if w[2] else "text-blue"
     with ui.row().classes("items-center gap-2 mt-1"):
         ui.label("🏆 Metodă câștigătoare:").classes("text-caption text-bold")
-        ui.label(tag).classes(f"text-caption text-bold {tag_cls}")
         ui.label(w[0]).classes("text-bold")
-        ui.label(f"· {w[3]} · {_shown_t}+: {w[1]*100:.1f}%").classes("text-caption text-grey")
+        ui.label(f"· {w[2]} · {_shown_t}+: {w[1]*100:.1f}%").classes("text-caption text-grey")
 
 
 def _parse_draw_date(s):
@@ -2293,7 +2271,7 @@ def _parse_draw_date(s):
 
 
 def _gap_days_map(date_strs):
-    """{date_str: zile față de hit-ul ≥4 PRECEDENT (cronologic)}. Primul hit = None."""
+    """DEPRECATED helper — folosește `_hit_gap_rows` (gap pe secvența de hituri)."""
     parsed = [(s, _parse_draw_date(s)) for s in date_strs]
     valid = sorted({d for _, d in parsed if d is not None})
     gap_by_date = {}
@@ -2302,6 +2280,51 @@ def _gap_days_map(date_strs):
         gap_by_date[d] = (d - prev).days if prev is not None else None
         prev = d
     return {s: (gap_by_date.get(d) if d is not None else None) for s, d in parsed}
+
+
+def _hit_gap_rows(items: list[tuple], today=None) -> list[dict]:
+    """Construiește gap-uri pe secvența de hituri (draw_index), nu pe date unice.
+
+    `items` = [(draw_index, d), ...] deja filtrate, orice ordine.
+    Pentru fiecare hit (afișat newest-first):
+      - cel mai recent: zile de la acel hit **până AZI** (cât a trecut de atunci)
+      - restul: zile de la acel hit **până la hit-ul următor mai recent**
+        (intervalul real dintre două hituri consecutive în WF)
+
+    Asta elimină confuzia veche: Δ pe primul rând era „de la hit-ul anterior”,
+    deci pe 11-01-2026 apărea „31 zile” (= Dec→Ian), deși de atunci trecuseră ~jumătate de an.
+    """
+    today = today or _dt.now().date()
+    # Cronologic: vechi → nou (după draw_index = ordinea WF)
+    chrono = sorted(items, key=lambda kv: kv[0])
+    # gap_after[di] = zile de la acest hit până la următorul mai recent (sau azi)
+    gap_after: dict[int, int | None] = {}
+    for i, (di, d) in enumerate(chrono):
+        d_here = _parse_draw_date(d.get("label"))
+        if d_here is None:
+            gap_after[di] = None
+            continue
+        if i + 1 < len(chrono):
+            d_next = _parse_draw_date(chrono[i + 1][1].get("label"))
+            gap_after[di] = (d_next - d_here).days if d_next is not None else None
+        else:
+            # cel mai recent hit din listă → până azi
+            gap_after[di] = (today - d_here).days
+    # Afișare: newest first
+    rows_out = []
+    newest_di = chrono[-1][0] if chrono else None
+    for di, d in sorted(items, key=lambda kv: kv[0], reverse=True):
+        g = gap_after.get(di)
+        if g is None:
+            gap_txt = "—"
+        elif di == newest_di:
+            gap_txt = f"acum {g} zile" if g != 1 else "acum 1 zi"
+            if g == 0:
+                gap_txt = "azi"
+        else:
+            gap_txt = f"{g} zile" if g != 1 else "1 zi"
+        rows_out.append((di, d, gap_txt))
+    return rows_out
 
 
 def _fmt_gap(g) -> str:
@@ -2313,12 +2336,12 @@ def _fmt_gap(g) -> str:
 
 def _bench_target() -> int:
     """Pragul de hituri pe care optimizează bench-ul (BENCH_HIT_TARGET, implicit 3).
-    Analiza (tabel ≥N, media între hituri, alerte) urmează ACELAȘI prag ca selecția."""
+    Analiza (tabel date ≥N, media între hituri, alerte) urmează ACELAȘI prag ca selecția."""
     try:
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
         return int(BENCH_HIT_TARGET)
     except Exception:  # noqa: BLE001
-        return 4
+        return 3
 
 
 def _target_data_ready() -> bool:
@@ -2343,15 +2366,40 @@ def _target_data_ready() -> bool:
         return True  # la dubiu, nu speria utilizatorul
 
 
-def _render_hits_4plus(flat, game: str, meta: dict | None = None) -> None:
-    """Istoric hits — SUMAR: de câte ori POOL 1 și OMNIUS 1 au prins +3 și +4 în
-    walk-forward. Doar pool-ul NORMAL (Pool 1) e validat istoric; Pool 2 / OMNIUS 2
-    (inversul) sunt „pe șansă, fără backtest" → NU au date aici.
-    `hits_union` = câte numere din pool au picat per extragere; `omnius_hits` = câte
-    a prins biletul OMNIUS."""
-    if not flat:
+def _ensure_retrospective_pool2_flat(
+    fname: str, game: str, data: dict, flat_pool1, res_prefix: str = "",
+) -> None:
+    """Calculează istoric Pool 2 din WF Pool 1 + pool curent, dacă lipsește (lazy, secunde)."""
+    if not (data.get("auto_invert") and data.get("phase1") and flat_pool1):
         return
-    # Dedup pe extragere (hits_union/omnius_hits sunt per-extragere, repetate pe variante).
+    rk = f"{res_prefix}{fname}_{game}_p2"
+    if STATE["retro"].get(rk):
+        return
+    df_source = None
+    for fn, df in STATE.get("datasets", []):
+        if fn == fname:
+            df_source = df
+            break
+    if df_source is None:
+        return
+    try:
+        from loto_enterprise.core.walk_forward_adapter import build_retrospective_pool_hits_flat
+        flat_p2, meta_p2 = build_retrospective_pool_hits_flat(
+            flat_pool1,
+            df_source,
+            game,
+            list(data.get("hard_core") or []),
+            list(data.get("variants") or []),
+            _omnius_for_pool(game, data),
+        )
+        STATE["retro"][rk] = flat_p2
+        STATE.setdefault("retro_meta", {})[rk] = meta_p2
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("retrospectiv Pool 2 lazy %s: %s", game, exc)
+
+
+def _wf_per_draw_stats(flat) -> dict:
+    """Dedup walk-forward pe extragere: pool hits_union + omnius_hits."""
     per: dict = {}
     for p in flat:
         di = getattr(p, "draw_index", 0)
@@ -2360,6 +2408,15 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None) -> None:
             per[di] = {"label": str(dd) if dd and str(dd) != "None" else f"#{di}",
                        "pool": int(getattr(p, "hits_union", 0)),
                        "omnius": int(getattr(p, "omnius_hits", 0))}
+    return per
+
+
+def _render_hits_4plus(flat, game: str, meta: dict | None = None,
+                       flat_p2=None, meta_p2: dict | None = None) -> None:
+    """Istoric hits — SUMAR: POOL 1 / OMNIUS 1 (+ POOL 2 / OMNIUS 2 la auto-invert)."""
+    if not flat:
+        return
+    per = _wf_per_draw_stats(flat)
     n = len(per)
     if not n:
         ui.label("Niciun istoric walk-forward.").classes("text-caption text-grey")
@@ -2369,18 +2426,27 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None) -> None:
     omni3 = sum(1 for d in per.values() if d["omnius"] >= 3)
     omni4 = sum(1 for d in per.values() if d["omnius"] >= 4)
 
-    def _cell(k):
-        return f"{k} ({k / n * 100:.0f}%)"
+    per2 = _wf_per_draw_stats(flat_p2) if flat_p2 else {}
+    n2 = len(per2)
+    pool3_2 = sum(1 for d in per2.values() if d["pool"] >= 3) if per2 else 0
+    pool4_2 = sum(1 for d in per2.values() if d["pool"] >= 4) if per2 else 0
+    omni3_2 = sum(1 for d in per2.values() if d["omnius"] >= 3) if per2 else 0
+    omni4_2 = sum(1 for d in per2.values() if d["omnius"] >= 4) if per2 else 0
+
+    def _cell(k, denom):
+        return f"{k} ({k / denom * 100:.0f}%)" if denom else "—"
 
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
-    if meta and meta.get("partial"):
-        # Validare tăiată la buget de timp / anulare → acoperă doar o parte din
-        # fereastră (cea RECENTĂ, după fix-ul recent-first). Fără marcaj, userul ar
-        # crede că istoricul e complet (bug văzut: 6/49 arăta doar 2014 + alertă absurdă).
-        ui.label(f"⚠️ Validare PARȚIALĂ: {meta.get('n_test_draws')} din {meta.get('n_expected')} "
-                 f"extrageri planificate (oprită la buget de timp/anulare) — acoperă extragerile "
-                 f"CELE MAI RECENTE. Mediile/alertele se bazează doar pe porțiunea validată.").classes(
-            "text-warning text-caption text-bold")
+    for _m, _lbl in ((meta, "Pool 1"), (meta_p2, "Pool 2")):
+        if _m and _m.get("partial"):
+            ui.label(f"⚠️ Validare PARȚIALĂ ({_lbl}): {_m.get('n_test_draws')} din "
+                     f"{_m.get('n_expected')} extrageri — extragerile CELE MAI RECENTE.").classes(
+                "text-warning text-caption text-bold")
+        if _m and _m.get("retrospective") and _lbl == "Pool 2":
+            ui.label(
+                "ℹ️ Pool 2 / OMNIUS 2: istoric RETROSPECTIV (pool + wheel de azi pe aceleași "
+                f"extrageri ca WF Pool 1) — nu e walk-forward onest; doar informativ."
+            ).classes("text-caption text-grey")
     # Memento „întârziat": media intervalului între hituri ≥TARGET pe POOL + cât a trecut.
     _TT = _bench_target()
     st = _due_status(flat)
@@ -2391,12 +2457,14 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None) -> None:
             col, lvl = "#fde68a", "🟡 SE APROPIE"
         else:
             col, lvl = "#86efac", "🟢 recent"
-        ui.html(
-            f"<span style='font-size:.85em'>📈 Media între hituri ≥{_TT} (pool): "
-            f"<b>{st['avg']:.0f}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
-            f"(<b style='color:{col}'>{st['ratio']*100:.0f}%</b> din interval · "
-            f"<span style='color:{col}'>{lvl}</span>)</span>"
-        ).classes("mt-1")
+        _avg_d = f"{st['avg']:.0f}"
+        _ratio_pct = f"{st['ratio'] * 100:.0f}"
+        ui.html(render_html_safe(
+            t"<span style='font-size:.85em'>📈 Media între hituri ≥{_TT} (pool): "
+            t"<b>{_avg_d}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
+            t"(<b style='color:{col}'>{_ratio_pct}%</b> din interval · "
+            t"<span style='color:{col}'>{lvl}</span>)</span>"
+        )).classes("mt-1")
     # (1) SUMAR: de câte ori a prins fiecare +3 / +4 + câștig BRUT estimat din istoricul WF.
     # OMNIUS 1 = 1 bilet/extragere (Σ premiu pe nr. prinse); Pool 1 = wheel-ul COMPLET
     # (Σ premiu pe TOATE variantele câștigătoare, ca în analiza financiară de jos). Brut =
@@ -2408,51 +2476,122 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None) -> None:
     omni_gross = sum(pm.get(int(d["omnius"]), 0) for d in per.values())          # 1 bilet/extragere
     pool_net = pool_gross - len(flat) * price            # wheel: fiecare entry din flat = 1 bilet
     omni_net = omni_gross - len(per) * price             # OMNIUS: 1 bilet / extragere
+    rows = [{"src": "🔥 Pool 1 (din 16)", "p3": _cell(pool3, n), "p4": _cell(pool4, n),
+             "win": f"~{pool_gross:,.0f} Lei"},
+            {"src": "⭐ OMNIUS 1 (bilet)", "p3": _cell(omni3, n), "p4": _cell(omni4, n),
+             "win": f"~{omni_gross:,.0f} Lei"}]
+    if per2:
+        pool_gross_2 = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat_p2)
+        omni_gross_2 = sum(pm.get(int(d["omnius"]), 0) for d in per2.values())
+        rows.extend([
+            {"src": "🔄 Pool 2 (retrospectiv)", "p3": _cell(pool3_2, n2), "p4": _cell(pool4_2, n2),
+             "win": f"~{pool_gross_2:,.0f} Lei"},
+            {"src": "⭐ OMNIUS 2 (retrospectiv)", "p3": _cell(omni3_2, n2), "p4": _cell(omni4_2, n2),
+             "win": f"~{omni_gross_2:,.0f} Lei"},
+        ])
     ui.table(
         columns=[{"name": "src", "label": "Sursă", "field": "src", "align": "left"},
                  {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
                  {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
                  {"name": "win", "label": "💰 Câștig brut (WF)", "field": "win", "align": "right"}],
-        rows=[{"src": "🔥 Pool 1 (din 16)", "p3": _cell(pool3), "p4": _cell(pool4),
-               "win": f"~{pool_gross:,.0f} Lei"},
-              {"src": "⭐ OMNIUS 1 (bilet)", "p3": _cell(omni3), "p4": _cell(omni4),
-               "win": f"~{omni_gross:,.0f} Lei"}],
+        rows=rows,
     ).classes("w-full").props("dense")
-    ui.label(f"💰 = câștig BRUT din premiile istoricului WF (fără costul biletelor). "
-             f"Realist NET (premii − cost bilete): Pool 1 ≈ {pool_net:,.0f} Lei, "
-             f"OMNIUS 1 ≈ {omni_net:,.0f} Lei — de regulă NEGATIV (loteria e aleatoare; "
-             f"wheel-ul costă mult). +3 / +4 = extrageri cu ≥3 / ≥4 nimerite. "
-             f"Pool 2 / OMNIUS 2 (inversul) nu-s validate WF.").classes("text-caption text-grey")
+    _cap = (f"💰 = câștig BRUT din premiile istoricului WF (fără costul biletelor). "
+            f"Realist NET: Pool 1 ≈ {pool_net:,.0f} Lei, OMNIUS 1 ≈ {omni_net:,.0f} Lei — "
+            f"de regulă NEGATIV (loteria e aleatoare). +3 / +4 = extrageri cu ≥3 / ≥4 nimerite.")
+    if per2:
+        pool_net_2 = pool_gross_2 - len(flat_p2) * price
+        omni_net_2 = omni_gross_2 - n2 * price
+        _cap += (f" Pool 2 / OMNIUS 2 = retrospectiv (wheel curent). "
+                 f"NET Pool 2 ≈ {pool_net_2:,.0f} Lei, OMNIUS 2 ≈ {omni_net_2:,.0f} Lei.")
+    ui.label(_cap).classes("text-caption text-grey")
 
-    # (2) DATELE prinderii — TABELE SEPARATE: unul pentru Pool 1, unul pentru OMNIUS 1.
-    # Fiecare: Data | Nimerite | Δ față de precedent (zile față de hit-ul ≥3 anterior AL
-    # ACELEIAȘI surse). OMNIUS prinde ≥3 rar → tabelul lui e scurt (sau gol).
-    def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label="Δ față de precedent"):
-        # gap_on = pe ce subset se calculează Δ (implicit toate rândurile = seria ≥3 a
-        # tabelului). Δ apare DOAR pe rândurile care satisfac gap_on (restul „—"). Pool 1 și
-        # OMNIUS 1 folosesc acum seria ≥3 (gap_on implicit) → coloană complet populată.
-        items = sorted(((di, d) for di, d in per.items() if pred(d)),
-                       key=lambda kv: kv[0], reverse=True)
+    # (2) DATELE prinderii — listă ≥3 (acoperire); 🔥 marchează targetul bench (≥_TT).
+    # Δ pe cel mai recent = „acum X zile” (până azi); pe rest = interval până la hit-ul următor.
+    def _pool_badge(d):
+        h = int(d["pool"])
+        return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
+
+    def _omni_badge(d):
+        h = int(d["omnius"])
+        return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
+
+    def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label=None):
+        items = [(di, d) for di, d in per.items() if pred(d)]
         if not items:
             ui.label(empty_msg).classes("text-caption text-grey mt-2")
             return
         _gp = gap_on or (lambda d: True)
-        gmap = _gap_days_map([d["label"] for _, d in items if _gp(d)])
-        rows = [{"draw": d["label"], "hits": badge(d),
-                 "gap": _fmt_gap(gmap.get(d["label"])) if _gp(d) else "—"}
-                for _, d in items]
+        # Gap-uri doar pe hiturile care ating ținta; restul (dacă apar) fără Δ.
+        gap_items = [(di, d) for di, d in items if _gp(d)]
+        gap_txt = {di: g for di, _d, g in _hit_gap_rows(gap_items)}
+        _gl = gap_label or f"Δ până la următorul ≥{_TT} (sau azi)"
+        rows = []
+        for di, d in sorted(items, key=lambda kv: kv[0], reverse=True):
+            rows.append({
+                "draw": d["label"],
+                "hits": badge(d),
+                "gap": gap_txt.get(di, "—") if _gp(d) else "—",
+            })
         ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes("text-bold text-caption mt-3")
         ui.table(
             columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
                      {"name": "hits", "label": "Nimerite", "field": "hits", "align": "center"},
-                     {"name": "gap", "label": gap_label, "field": "gap", "align": "center"}],
+                     {"name": "gap", "label": _gl, "field": "gap", "align": "center"}],
             rows=rows, pagination=15,
         ).classes("w-full").props("dense")
 
-    _dates_table("🗓️ POOL 1 — datele cu ≥3", lambda d: d["pool"] >= 3,
-                 lambda d: f"🔥 {d['pool']}", "Pool 1 n-a prins ≥3 în istoricul walk-forward.")
-    _dates_table("🗓️ OMNIUS 1 — datele cu ≥3", lambda d: d["omnius"] >= 3,
-                 lambda d: f"⭐ {d['omnius']}", "OMNIUS 1 n-a prins ≥3 în istoricul walk-forward.")
+    ui.label(
+        f"🗓️ Istoric: extrageri cu ≥3 în pool/OMNIUS. 🔥 = target bench (≥{_TT}); "
+        f"⭐ = doar +3. Δ pe primul rând = „acum X zile” (de la ultimul hit până azi); "
+        f"pe rest = zile până la hit-ul următor mai recent."
+    ).classes("text-caption text-grey mt-2")
+    _dates_table("🗓️ POOL 1", lambda d: d["pool"] >= 3, _pool_badge,
+                 "Pool 1 n-a prins ≥3 în istoricul walk-forward.",
+                 gap_on=lambda d: d["pool"] >= _TT,
+                 gap_label=f"Δ → următorul ≥{_TT} / azi")
+    _dates_table("🗓️ OMNIUS 1", lambda d: d["omnius"] >= 3, _omni_badge,
+                 "OMNIUS 1 n-a prins ≥3 în istoricul walk-forward.",
+                 gap_on=lambda d: d["omnius"] >= _TT,
+                 gap_label=f"Δ → următorul ≥{_TT} / azi")
+    if per2:
+        def _dates_table_p2(title, pred, badge, empty_msg, gap_on):
+            items = [(di, d) for di, d in per2.items() if pred(d)]
+            if not items:
+                ui.label(empty_msg).classes("text-caption text-grey mt-2")
+                return
+            gap_items = [(di, d) for di, d in items if gap_on(d)]
+            gap_txt = {di: g for di, _d, g in _hit_gap_rows(gap_items)}
+            rows = []
+            for di, d in sorted(items, key=lambda kv: kv[0], reverse=True):
+                rows.append({
+                    "draw": d["label"],
+                    "hits": badge(d),
+                    "gap": gap_txt.get(di, "—") if gap_on(d) else "—",
+                })
+            ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes(
+                "text-bold text-caption mt-3")
+            ui.table(
+                columns=[{"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                         {"name": "hits", "label": "Nimerite", "field": "hits", "align": "center"},
+                         {"name": "gap", "label": f"Δ → următorul ≥{_TT} / azi", "field": "gap", "align": "center"}],
+                rows=rows, pagination=15,
+            ).classes("w-full").props("dense")
+
+        def _pool_badge_p2(d):
+            h = int(d["pool"])
+            return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
+
+        def _omni_badge_p2(d):
+            h = int(d["omnius"])
+            return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
+
+        _dates_table_p2("🗓️ POOL 2", lambda d: d["pool"] >= 3, _pool_badge_p2,
+                        "Pool 2 n-a prins ≥3 în istoricul walk-forward.",
+                        lambda d: d["pool"] >= _TT)
+        _dates_table_p2("🗓️ OMNIUS 2", lambda d: d["omnius"] >= 3, _omni_badge_p2,
+                        "OMNIUS 2 n-a prins ≥3 în istoricul walk-forward.",
+                        lambda d: d["omnius"] >= _TT)
 
 
 # Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
@@ -2460,11 +2599,11 @@ _DUE_WARN_RATIO = 0.8
 
 
 def _due_status(flat) -> dict | None:
-    """Status 'due' pentru hit-urile ≥4 pe POOL ale unui joc.
+    """Status 'due' pentru hit-urile ≥BENCH_HIT_TARGET pe POOL ale unui joc.
 
-    Întoarce dict cu: avg (interval mediu zile), last (data ultimului ≥4),
-    days_since (zile de la ultimul ≥4 până AZI), ratio (days_since/avg), n (nr hituri).
-    None dacă nu sunt destule date (<2 hituri ≥4 cu dată validă)."""
+    Întoarce dict cu: avg (interval mediu zile), last (data ultimului ≥T),
+    days_since (zile de la ultimul ≥T până AZI), ratio (days_since/avg), n (nr hituri).
+    None dacă nu sunt destule date (<2 hituri ≥T cu dată validă)."""
     _T = _bench_target()
     dates = sorted({
         _parse_draw_date(getattr(p, "draw_date", getattr(p, "target_draw_date", None)))
@@ -2505,7 +2644,7 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
 
     _T = _bench_target()
     with ui.card().classes("w-full").style("background:#3b0764;border:1px solid #f59e0b"):
-        ui.html(f"🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥{_T}</b>")
+        ui.html(render_html_safe(t"🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥{_T}</b>"))
         for game, st, _partial, _n_part in alerts:
             if st["ratio"] >= 1.0:
                 lvl, col = "🔴 ÎNTÂRZIAT", "#fca5a5"
@@ -2514,17 +2653,26 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
             # Validare parțială → media/intervalul vin din PUȚINE extrageri → alerta
             # e orientativă; spunem explicit (altfel „media ~18 zile" din 23 simulări
             # pare la fel de solidă ca una din 1082).
-            _pnote = (f" <span style='opacity:.6'>(⚠️ validare PARȚIALĂ — doar {_n_part} "
-                      f"extrageri simulate; medie orientativă)</span>" if _partial else "")
-            ui.html(
-                f"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
-                f"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥{_T} "
-                f"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{st['avg']:.0f}</b> zile "
-                f"(<b>{st['ratio']*100:.0f}%</b> din interval).{_pnote}"
+            _pnote = (
+                render_html_safe(
+                    t" <span style='opacity:.6'>(⚠️ validare PARȚIALĂ — doar {_n_part} "
+                    t"extrageri simulate; medie orientativă)</span>"
+                )
+                if _partial else ""
             )
-        ui.html("<span style='opacity:.6;font-size:.8em'>⚠️ Loteria e aleatoare — "
-                "„întârzierea\" NU crește șansele. E doar un memento de acoperire, "
-                "nu o predicție.</span>")
+            _avg_d = f"{st['avg']:.0f}"
+            _ratio_pct = f"{st['ratio'] * 100:.0f}"
+            ui.html(render_html_safe(
+                t"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
+                t"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥{_T} "
+                t"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{_avg_d}</b> zile "
+                t"(<b>{_ratio_pct}%</b> din interval).{_pnote}"
+            ))
+        ui.html(render_html_safe(
+            t"<span style='opacity:.6;font-size:.8em'>⚠️ Loteria e aleatoare — "
+            t"„întârzierea\" NU crește șansele. E doar un memento de acoperire, "
+            t"nu o predicție.</span>"
+        ))
 
     # Notificare transientă (pop-up) la randarea rezultatelor.
     try:
@@ -2541,6 +2689,10 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
     has_wf = any(
         STATE["retro"].get(f"{res_prefix}{fn}_{g}")
         for fn, outs in results_bundle for g, _ in outs.items()
+    ) or any(
+        STATE["retro"].get(f"{res_prefix}{fn}_{g}_p2")
+        for fn, outs in results_bundle for g, d in outs.items()
+        if d.get("auto_invert") and d.get("phase1")
     )
     if not (has_folds or has_wf):
         return
@@ -2563,20 +2715,34 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # Reper: ultima extragere reală din CSV (deasupra clasamentului).
                 _render_last_csv_draw(fname)
 
-                # --- Top-10 CPU + GPU ---
+                # --- Top-10 metode ---
                 _render_bench_leaderboard(game)
 
                 # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
                 main = (data.get("phase1")
                         if (data.get("auto_invert") and data.get("phase1")) else data)
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-                if flat:
+                flat_p2 = None
+                if data.get("auto_invert") and data.get("phase1"):
+                    _ensure_retrospective_pool2_flat(fname, game, data, flat, res_prefix)
+                    flat_p2 = STATE["retro"].get(f"{res_prefix}{fname}_{game}_p2")
+                if flat or flat_p2:
                     # Deschis implicit (apare după ce termină walk-forward), dar pliabil
                     # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
                     with ui.expansion("📜 Istoric hits (walk-forward) — click pentru ascunde",
                                       value=True).classes("w-full"):
-                        _render_hits_4plus(flat, game,
-                                           meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}"))
+                        if flat:
+                            _render_hits_4plus(
+                                flat, game,
+                                meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}"),
+                                flat_p2=flat_p2,
+                                meta_p2=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}_p2"),
+                            )
+                        elif flat_p2:
+                            _render_hits_4plus(
+                                flat_p2, game,
+                                meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}_p2"),
+                            )
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
@@ -2624,8 +2790,8 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                             ).classes("text-caption text-negative")
                         ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
                             "text-bold text-warning text-lg")
-                        ui.label("Plasă de siguranță, pe șansă — dacă Pool 1 nu nimerește nimic. "
-                                 "Fără backtest/validare, intenționat.").classes("text-caption")
+                        ui.label("Plasă de siguranță — istoric retrospectiv Pool 2 / OMNIUS 2 "
+                                 "în 📊 Analiză (fără WF dublu).").classes("text-caption")
                         _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False, res_prefix=res_prefix)
                     else:
                         _render_pool_body(fname, game, data, with_wf=False, res_prefix=res_prefix)
@@ -2657,7 +2823,9 @@ def _render_matrix_html(matrix) -> None:
     vmin, vmax = min(finite_vals), max(finite_vals)
     span = (vmax - vmin) or 1.0
     cols = list(matrix.columns)
-    head = "".join(f"<th style='padding:2px 6px;font-size:0.75em;'>{c}%</th>" for c in cols)
+    head = "".join(
+        render_html_safe(t"<th style='padding:2px 6px;font-size:0.75em;'>{c}%</th>") for c in cols
+    )
     body = ""
     for method, row in matrix.iterrows():
         cells = ""
@@ -2667,17 +2835,33 @@ def _render_matrix_html(matrix) -> None:
             except Exception:  # noqa: BLE001
                 v = float("nan")
             if not math.isfinite(v):
-                cells += ("<td style='padding:2px 6px;background:#2a2a2a;color:#666;"
-                          "font-size:0.78em;text-align:center;'>—</td>")
+                cells += (
+                    "<td style='padding:2px 6px;background:#2a2a2a;color:#666;"
+                    "font-size:0.78em;text-align:center;'>—</td>"
+                )
                 continue
-            t = (v - vmin) / span  # 0..1
-            t = 0.0 if t < 0 else (1.0 if t > 1 else t)
-            r = int(220 - 140 * t)
-            g = int(80 + 140 * t)
-            cells += (f"<td style='padding:2px 6px;background:rgb({r},{g},80);color:#111;"
-                      f"font-size:0.78em;text-align:center;'>{v:.3f}</td>")
-        body += f"<tr><td style='padding:2px 6px;font-weight:600;font-size:0.78em;'>{method}</td>{cells}</tr>"
-    ui.html(f"<table style='border-collapse:collapse;'><tr><th></th>{head}</tr>{body}</table>")
+            frac = (v - vmin) / span  # 0..1
+            frac = 0.0 if frac < 0 else (1.0 if frac > 1 else frac)
+            r = int(220 - 140 * frac)
+            g = int(80 + 140 * frac)
+            cells += render_html_safe(
+                t"<td style='padding:2px 6px;background:rgb({r},{g},80);color:#111;"
+                t"font-size:0.78em;text-align:center;'>{v:.3f}</td>"
+            )
+        body += (
+            render_html_safe(
+                t"<tr><td style='padding:2px 6px;font-weight:600;font-size:0.78em;'>{method}</td>"
+            )
+            + cells
+            + render_html_safe(t"</tr>")
+        )
+    ui.html(
+        render_html_safe(t"<table style='border-collapse:collapse;'><tr><th></th>")
+        + head
+        + render_html_safe(t"</tr>")
+        + body
+        + render_html_safe(t"</table>")
+    )
 
 
 def _new_draws_summary():
@@ -2733,7 +2917,7 @@ def analysis_panel() -> None:
         ui.label(f"Freshness indisponibil ({exc}).").classes("text-caption")
 
     # --- Decizie benchmark per joc ---
-    ui.label("Decizie benchmark (scorer optim per joc — CPU/GPU + librărie):").classes("text-bold mt-2")
+    ui.label("Decizie benchmark (scorer optim per joc — librărie):").classes("text-bold mt-2")
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         any_dec = False
@@ -2744,12 +2928,9 @@ def analysis_panel() -> None:
                 any_dec = True
                 m = cfg.get("scorer", "?")
                 fam = str(cfg.get("family", "") or "")
-                is_gpu = _method_is_gpu(m, fam)
                 lib = _method_library(m, fam)
                 with ui.row().classes("items-center gap-2"):
                     ui.label(f"  • {lbl} (K={ps}):").classes("text-caption")
-                    ui.label("⚡ GPU" if is_gpu else "🖥️ CPU").classes(
-                        "text-caption text-bold " + ("text-deep-purple" if is_gpu else "text-blue"))
                     ui.label(f"{m} @ {cfg.get('sim_depth_pct')}% "
                              f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')}) · {lib}").classes("text-caption")
         if not any_dec:
@@ -2770,9 +2951,8 @@ def analysis_panel() -> None:
                     if not s.get("available"):
                         continue
                     _bm = s["best_method"]
-                    _tag = "⚡ GPU" if _method_is_gpu(_bm) else "🖥️ CPU"
                     _lib = _method_library(_bm)
-                    ui.label(f"{lbl} (K={ps}) — top: {_tag} {_bm} (avg={s['best_mean']:.3f}) · {_lib}").classes("text-bold mt-1")
+                    ui.label(f"{lbl} (K={ps}) — top: {_bm} (avg={s['best_mean']:.3f}) · {_lib}").classes("text-bold mt-1")
                     _render_matrix_html(s["matrix"])
         else:
             ui.label("Matrice walk-forward indisponibilă — rulează un benchmark.").classes("text-caption")
@@ -2946,10 +3126,10 @@ def main_page() -> None:
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
         _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
-        ui.label("Validarea (pe ultimele 20% din istoric) se oprește la buget — jocurile neterminate "
-                 "ies PARȚIALE, pe extragerile recente, și se EXTIND la generările următoare. "
-                 "Mărește bugetul (60+) la rulările peste noapte pentru validare completă dintr-un foc.").classes("text-caption text-grey")
-        _bind_save(ui.checkbox("Filtru Anti-Secvență"), "consecutive_filter_val")
+        ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric) rulează doar Pool 1 / OMNIUS 1: "
+                 "Joker → 5/40 → 6/49 (6/49 ultim). Pool 2 / OMNIUS 2 nu intră în WF. "
+                 "WF paralel (~80% CPU) — de obicei minute, nu ore. Bugetul e plafon de siguranță."
+                 ).classes("text-caption text-grey")
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
         _bind_save(ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete")
@@ -2966,22 +3146,16 @@ def main_page() -> None:
 
         ui.separator()
         _full_eta = _estimate_bench_eta(1280)
-        ui.button("🔬 RE-BENCH (CPU ‖ GPU paralel)", on_click=run_rebench
+        ui.button("🔬 RE-BENCH", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
-        with ui.row().classes("gap-4 items-center"):
-            _bind_save(ui.checkbox("🖥️ Metode CPU"), "bench_use_cpu")
-            _bind_save(ui.checkbox("⚡ Metode GPU"), "bench_use_gpu")
-        ui.label("GPU implicit OPRIT: pe loto (date aleatoare) rețelele GPU prind constant "
-                 "mai puține hituri decât euristicile CPU, deci e timp + VRAM irosit. "
-                 "Bifează GPU doar dacă vrei comparația completă.").classes("text-caption text-grey")
         try:
             from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _bt
         except Exception:  # noqa: BLE001
-            _bt = 4
-        ui.label("Un singur bench testează TOATE metodele. Intern, metodele CPU rulează pe "
-                 "toate nucleele (în paralel) SIMULTAN cu metodele GPU. Toate concurează în "
+            _bt = 3
+        ui.label("Un singur bench testează TOATE metodele (exclusiv CPU), pe toate nucleele "
+                 "(în paralel). Toate concurează în "
                  f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
-                 "Vezi clasamentul complet (CPU+GPU) la 🏆 Clasament bench.").classes("text-caption")
+                 "Vezi clasamentul complet la 🏆 Clasament bench.").classes("text-caption")
         # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
         # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea
         # paginii (se reîmprospătează la reload). Vezi _new_draws_summary / freshness.
@@ -2991,7 +3165,10 @@ def main_page() -> None:
                 _g2l = {v: k for k, v in GK_MATRIX.items()}
                 _parts = ", ".join(f"{_g2l.get(gk, gk)} +{d}" for gk, d in _fresh["per"].items())
                 _col = "text-negative" if _fresh["rec"] == "full_rebench" else "text-warning"
-                ui.html(f"🆕 <b>+{_fresh['total']} extrageri noi</b> de la ultimul bench ({_parts}).").classes("text-caption " + _col)
+                _fresh_total = _fresh["total"]
+                ui.html(render_html_safe(
+                    t"🆕 <b>+{_fresh_total} extrageri noi</b> de la ultimul bench ({_parts})."
+                )).classes("text-caption " + _col)
                 ui.label("⚠️ Datele noi invalidează cache-ul → Re-Bench = recalcul COMPLET (nu rapid). "
                          "Pentru generarea zilnică NU e nevoie de re-bench: Auto-Pilot folosește deja "
                          "datele noi, iar câștigătorul bench abia se schimbă la câteva extrageri.").classes("text-caption " + _col)
@@ -3056,7 +3233,7 @@ def main_page() -> None:
             # DOAR progresul WF — NU tot bundle-ul, ca expansion-urile deschise
             # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 2s.
             wf_progress_panel.refresh()
-    ui.timer(2.0, _tick)
+    ui.timer(1.0, _tick)
 
 
 # --------------------------------------------------------------------------- #

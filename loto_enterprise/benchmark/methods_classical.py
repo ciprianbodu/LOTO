@@ -1,7 +1,7 @@
 """Classical statistical + Markov + Bayesian + spectral prediction methods.
 
 Each scorer respects the same interface as methods.py:
-    score_xxx(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]
+    score_xxx(draws_2d: np.ndarray, max_num: int) -> dict[int, float]
 
 All methods here are CPU-friendly (no GPU required). Lazy imports — if a
 library is missing, the scorer returns {} and the method is marked unavailable.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Callable
 
 import numpy as np
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Shared helpers (copy of utilities so this module is self-contained)
 # ---------------------------------------------------------------------------
 
-def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
+def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vals = np.fromiter(scores.values(), dtype=np.float64)
@@ -57,8 +57,8 @@ def _unavailable(reason: str) -> Callable:
 # STATSFORECAST — many auto methods at once with similar API
 # ===========================================================================
 
-_STATSF_OK: Optional[bool] = None
-_STATSF_ERR: Optional[str] = None
+_STATSF_OK: bool | None = None
+_STATSF_ERR: str | None = None
 
 
 def _check_statsforecast() -> bool:
@@ -75,7 +75,7 @@ def _check_statsforecast() -> bool:
     return _STATSF_OK
 
 
-def _statsforecast_per_number(draws_2d, max_num, model_factory, context: int = 256) -> Dict[int, float]:
+def _statsforecast_per_number(draws_2d, max_num, model_factory, context: int = 256) -> dict[int, float]:
     """Run a statsforecast model per number on its binary indicator series.
 
     `model_factory` is a callable returning a fresh model instance per series.
@@ -87,7 +87,7 @@ def _statsforecast_per_number(draws_2d, max_num, model_factory, context: int = 2
         return {}
     binary = _build_binary(draws_2d, max_num)
     ctx = min(context, binary.shape[1])
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         series = binary[i, -ctx:].astype(np.float32)
         if series.sum() < 2:
@@ -253,7 +253,7 @@ def score_drift(draws_2d, max_num):
     n = binary.shape[1]
     if n < 3:
         return _normalize({n: 0.5 for n in range(1, max_num + 1)}, max_num)
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i, -min(50, n):]
         if len(s) < 2:
@@ -269,14 +269,14 @@ def score_drift(draws_2d, max_num):
 # MARKOV CHAINS & N-GRAMS — sequence models
 # ===========================================================================
 
-def _markov_score(draws_2d, max_num, order: int = 1, decay: float = 0.05) -> Dict[int, float]:
+def _markov_score(draws_2d, max_num, order: int = 1, decay: float = 0.05) -> dict[int, float]:
     """K-th order Markov chain on binary appearance: P(num appears | last K draws)."""
     if draws_2d.shape[0] <= order:
         return {}
     binary = _build_binary(draws_2d, max_num)  # (max_num, n)
     n = binary.shape[1]
     # For each number, conditional P(appear_t | appear_t-1..t-order)
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     weights = np.exp(-decay * np.arange(n - order)[::-1]).astype(np.float64)
     for i in range(max_num):
         s = binary[i]
@@ -311,7 +311,7 @@ def score_ngram_bigram(draws_2d, max_num):
     if draws_2d.shape[0] < 3:
         return {}
     binary = _build_binary(draws_2d, max_num)
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(int)
         # Count (prev → next) transitions: P(1 | last)
@@ -334,7 +334,7 @@ def score_ngram_trigram(draws_2d, max_num):
     if draws_2d.shape[0] < 4:
         return {}
     binary = _build_binary(draws_2d, max_num)
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(int)
         last2 = (int(s[-2]), int(s[-1]))
@@ -356,7 +356,7 @@ def score_vlmm(draws_2d, max_num):
         return {}
     binary = _build_binary(draws_2d, max_num)
     n = binary.shape[1]
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(int)
         weighted_p = 0.0
@@ -397,7 +397,7 @@ def score_beta_binomial(draws_2d, max_num):
     expected_p = float(draws_2d.shape[1] / max_num)  # prior mean
     alpha_0 = 2.0 * expected_p
     beta_0 = 2.0 * (1.0 - expected_p)
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i]
         eff_n = float(weights.sum() * len(s))
@@ -414,7 +414,7 @@ def score_polya_urn(draws_2d, max_num):
     n = binary.shape[1]
     # Recency weight for "draws" near the end
     weights = np.exp(np.linspace(-1.5, 0.0, n))
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i]
         # Pólya: counts of successes vs failures, weighted by recency
@@ -434,7 +434,7 @@ def score_bayesian_poisson(draws_2d, max_num):
     recent = binary[:, -window:]
     # Gamma(a, b) prior with a=1, b=2 (rate ~ 0.5)
     a0, b0 = 1.0, 2.0
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         k = float(recent[i].sum())
         # Posterior mean rate
@@ -451,7 +451,7 @@ def score_negative_binomial(draws_2d, max_num):
         return {}
     window = min(80, n)
     recent = binary[:, -window:]
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         counts = float(recent[i].sum())
         mean = counts / window
@@ -471,7 +471,7 @@ def score_fourier_top_k(draws_2d, max_num):
     n = binary.shape[1]
     if n < 16:
         return {}
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(np.float32)
         # FFT
@@ -496,7 +496,7 @@ def score_wavelet_haar(draws_2d, max_num):
     n = binary.shape[1]
     if n < 32:
         return {}
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(np.float32)
         # Single-level Haar: pairs of averages
@@ -519,7 +519,7 @@ def score_stl_decompose(draws_2d, max_num):
     n = binary.shape[1]
     if n < 30:
         return {}
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     period = max(2, min(7, n // 5))
     for i in range(max_num):
         s = binary[i].astype(np.float64)
@@ -544,7 +544,7 @@ def score_ssa(draws_2d, max_num):
     if n < 30:
         return {}
     L = min(20, n // 3)
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(np.float64)
         K = n - L + 1
@@ -615,7 +615,7 @@ def score_hmm_gaussian(draws_2d, max_num):
     n = binary.shape[1]
     if n < 30:
         return {}
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(np.float64).reshape(-1, 1)
         if s.sum() < 3:
@@ -655,7 +655,7 @@ def score_holtwinters_add(draws_2d, max_num):
     n = binary.shape[1]
     if n < 20:
         return {}
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(np.float64)
         if s.sum() < 3:
@@ -680,7 +680,7 @@ def score_arima_statsmodels(draws_2d, max_num):
     n = binary.shape[1]
     if n < 20:
         return {}
-    scores: Dict[int, float] = {}
+    scores: dict[int, float] = {}
     for i in range(max_num):
         s = binary[i].astype(np.float64)
         if s.sum() < 3:
@@ -1013,7 +1013,7 @@ def score_compression(draws_2d, max_num):
     """Complexitate Kolmogorov-lite: numere a caror serie binara e mai PUTIN
     compresibila (mai 'structurata'/non-aleatoare) primesc scor mai mare. Folosim
     lungimea zlib ca proxy de complexitate, ponderata cu frecventa recenta."""
-    import zlib
+    from compression import zlib
     bm = _build_binary(draws_2d, max_num)
     n = bm.shape[1]
     w = min(80, n)
@@ -1029,7 +1029,7 @@ def score_compression(draws_2d, max_num):
 
 # ===========================================================================
 
-CLASSICAL_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+CLASSICAL_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     # === Nisa: reguli asociere + compresie (numpy, CPU) 2026-05-31 ===
     "assoc_rules":     (score_assoc_rules,     "association",      False, "Reguli asociere (apriori-lite, confidence)"),
     "compression":     (score_compression,     "info-theory",     False, "Complexitate Kolmogorov (zlib proxy)"),

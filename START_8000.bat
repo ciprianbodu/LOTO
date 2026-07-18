@@ -75,7 +75,7 @@ exit /b 0
 
 
 REM ============================================================
-REM :verify_phase — verifica venv, detecteaza GPU, importa core/benchmark
+REM :verify_phase — verifica venv + importa core/benchmark (exclusiv CPU)
 REM ============================================================
 :verify_phase
 setlocal enabledelayedexpansion
@@ -93,24 +93,6 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 )
 
 echo.
-echo --- Detectare GPU ---
-REM Re-detectam MEREU cu nvidia-smi (sursa de adevar).
-set "GPU_TYPE=UNKNOWN"
-set "GPU_NAME="
-call :DetectGpu
-for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
-    if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
-    if "%%A"=="GPU_NAME" set "GPU_NAME=%%B"
-)
-echo Detectie GPU ^(nvidia-smi, sursa de adevar^): GPU_TYPE=!GPU_TYPE!  NAME=!GPU_NAME!
-
-if /i "!GPU_TYPE!"=="NVIDIA" (
-    echo Mod: GPU
-) else (
-    echo Mod: CPU-ONLY ^(setez CUDA_VISIBLE_DEVICES=-1 ca torch sa nu probleze CUDA^)
-)
-
-echo.
 echo --- Verificare UI NiceGUI ---
 "%VENV_DIR%\Scripts\python.exe" -c "import nicegui" >nul 2>&1
 if not "!ERRORLEVEL!"=="0" (
@@ -120,21 +102,10 @@ if not "!ERRORLEVEL!"=="0" (
 )
 echo [OK] nicegui prezent.
 
-REM Pe CPU-only, setam env vars ca import-urile sa fie rapide si offline.
-if /i not "!GPU_TYPE!"=="NVIDIA" (
-    set CUDA_VISIBLE_DEVICES=-1
-    set HF_HUB_OFFLINE=1
-    set TRANSFORMERS_OFFLINE=1
-    set PYTHONUNBUFFERED=1
-) else (
-    set HF_HUB_OFFLINE=1
-    set TRANSFORMERS_OFFLINE=1
-    set PYTHONUNBUFFERED=1
-)
+set PYTHONUNBUFFERED=1
 
 echo.
-echo --- Verificare imports prin verify_imports.py ---
-echo ^(timesfm OPTIONAL pe CPU, REQUIRED pe GPU; progress real-time^)
+echo --- Verificare imports prin verify_imports.py ^(exclusiv CPU^) ---
 "%VENV_DIR%\Scripts\python.exe" -u "%~dp0verify_imports.py"
 set "VERIFY_PY_RC=!ERRORLEVEL!"
 
@@ -156,25 +127,14 @@ REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
 set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
-
-REM Re-aplica env vars din profil (sunt propagate in subprocese NiceGUI + worker)
-set "GPU_TYPE=NVIDIA"
-if exist ".machine_profile" (
-    for /f "tokens=1,2 delims==" %%A in (.machine_profile) do (
-        if "%%A"=="GPU_TYPE" set "GPU_TYPE=%%B"
-    )
-)
-if /i not "!GPU_TYPE!"=="NVIDIA" set CUDA_VISIBLE_DEVICES=-1
-REM Modelele TimesFM sunt deja cached local; nu vrem network calls la runtime.
-set HF_HUB_OFFLINE=1
-set TRANSFORMERS_OFFLINE=1
+set PYTHONUNBUFFERED=1
 
 echo [2/4] Eliberare resurse (port 8000, UI + worker + bench vechi)
 REM Omoara procesele python ale ACESTUI proiect din sesiunea anterioara: app_nicegui.py
 REM (UI care tine portul 8000), worker.py, SI bench_all_methods.py (bench-ul ruleaza in
 REM CMD propriu, CREATE_NEW_CONSOLE -> ramanea deschis dupa restart si putea rula in
 REM paralel cu un bench nou = doua procese scriu folds.csv = corupere). Omorand parintele
-REM bench, copiii din ProcessPool (CPU/GPU) ies singuri (pipe rupt).
+REM bench, copiii din ProcessPool ies singuri (pipe rupt).
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*app_nicegui.py*' -or $_.CommandLine -like '*worker.py*' -or $_.CommandLine -like '*bench_all_methods.py*') -and $_.CommandLine -like '*%~dp0*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host ('[CLEANUP] Oprit PID ' + $_.ProcessId) }"
 REM Fallback: orice mai asculta pe 8000 (LISTENING)
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr ":8000" 2^>nul') do (
@@ -203,51 +163,13 @@ set "RC=!ERRORLEVEL!"
 endlocal & exit /b %RC%
 
 
-REM ============================================================
-REM :DetectGpu — detecteaza GPU NVIDIA si scrie .machine_profile
-REM ============================================================
-:DetectGpu
-setlocal enabledelayedexpansion
-set "DETECTED_TYPE=CPU_ONLY"
-set "DETECTED_NAME="
-
-REM Test 1: nvidia-smi (rapid)
-where nvidia-smi >nul 2>&1
-if !ERRORLEVEL!==0 (
-    nvidia-smi -L >nul 2>&1
-    if !ERRORLEVEL!==0 (
-        set "DETECTED_TYPE=NVIDIA"
-        for /f "tokens=*" %%G in ('nvidia-smi --query-gpu^=name --format^=csv^,noheader 2^>nul') do (
-            if "!DETECTED_NAME!"=="" set "DETECTED_NAME=%%G"
-        )
-        goto :DG_Write
-    )
-)
-
-REM Test 2: PowerShell fallback (Win32_VideoController) — caut NVIDIA
-for /f "tokens=*" %%G in ('powershell -NoProfile -Command "(Get-CimInstance Win32_VideoController | Where-Object { $_.Name -like '*NVIDIA*' } | Select-Object -First 1).Name" 2^>nul') do (
-    if not "%%G"=="" (
-        set "DETECTED_TYPE=NVIDIA"
-        set "DETECTED_NAME=%%G"
-    )
-)
-
-:DG_Write
-(
-    echo GPU_TYPE=!DETECTED_TYPE!
-    echo GPU_NAME=!DETECTED_NAME!
-    echo DETECTED_AT=%DATE% %TIME%
-) > .machine_profile
-endlocal & exit /b 0
-
-
 :git_autoupdate
 REM ============================================================
 REM Auto-update ROBUST. Inainte: la orice esec al fast-forward-ului sarea TACIT
 REM update-ul -> ramaneai pe cod vechi fara sa stii de ce. Acum: arata cauza reala
 REM (git status) si SINCRONIZEAZA FORTAT cu GitHub (cu backup in stash).
-REM   - Datele tale (best_methods.json, _ISTORIC, pool_history, raport, venv,
-REM     .machine_profile) sunt gitignore -> NU se pierd la reset.
+REM   - Datele tale (best_methods.json, _ISTORIC, pool_history, raport, venv)
+REM     sunt gitignore -> NU se pierd la reset.
 REM   - Modificarile locale la fisiere URMARITE sunt salvate in 'git stash list'.
 REM ============================================================
 echo [GIT] Verific actualizari de pe GitHub...

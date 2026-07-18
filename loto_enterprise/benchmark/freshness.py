@@ -21,7 +21,6 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -38,7 +37,7 @@ GAMES_CSV_MAP = {
 @dataclass
 class FreshnessReport:
     game_key: str
-    csv_path: Optional[str]
+    csv_path: str | None
     cached_rows: int
     current_rows: int
     cached_hash: str
@@ -48,7 +47,7 @@ class FreshnessReport:
     recommendation: str  # "use_cache" | "quick_rebench" | "full_rebench" | "use_cache_no_csv"
 
 
-def _resolve_csv(game_key: str) -> Optional[Path]:
+def _resolve_csv(game_key: str) -> Path | None:
     for candidate in GAMES_CSV_MAP.get(game_key, []):
         p = Path(candidate)
         if p.exists():
@@ -56,7 +55,7 @@ def _resolve_csv(game_key: str) -> Optional[Path]:
     return None
 
 
-def _content_hash(csv_path: Path, num_cols: Optional[List[str]] = None) -> Tuple[str, int]:
+def _content_hash(csv_path: Path, num_cols: list[str] | None = None) -> tuple[str, int]:
     """Hash CSV content using the number columns (or all if not provided)."""
     df = pd.read_csv(csv_path)
     n_rows = len(df)
@@ -69,7 +68,7 @@ def _content_hash(csv_path: Path, num_cols: Optional[List[str]] = None) -> Tuple
     return h, n_rows
 
 
-def compute_csv_signature(game_key: str) -> Tuple[Optional[str], str, int]:
+def compute_csv_signature(game_key: str) -> tuple[str | None, str, int]:
     """Return (csv_path, hash, n_rows). Path is None if CSV missing."""
     p = _resolve_csv(game_key)
     if p is None:
@@ -84,13 +83,13 @@ def compute_csv_signature(game_key: str) -> Tuple[Optional[str], str, int]:
     return str(p), h, n
 
 
-def write_signatures_to_best_methods(best_methods_path: str = "best_methods.json") -> Dict[str, dict]:
+def write_signatures_to_best_methods(best_methods_path: str = "best_methods.json") -> dict[str, dict]:
     """Stamp the current CSV signatures into best_methods.json._meta.csv_signatures."""
     bm = Path(best_methods_path)
     if not bm.exists():
         return {}
     cfg = json.loads(bm.read_text(encoding="utf-8"))
-    sigs: Dict[str, dict] = {}
+    sigs: dict[str, dict] = {}
     for gk in GAMES_CSV_MAP:
         path, h, n = compute_csv_signature(gk)
         sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
@@ -101,10 +100,10 @@ def write_signatures_to_best_methods(best_methods_path: str = "best_methods.json
 
 def check_freshness(
     best_methods_path: str = "best_methods.json",
-) -> Dict[str, FreshnessReport]:
+) -> dict[str, FreshnessReport]:
     """Compare current CSV signatures against the cached ones."""
     bm = Path(best_methods_path)
-    out: Dict[str, FreshnessReport] = {}
+    out: dict[str, FreshnessReport] = {}
     if not bm.exists():
         for gk in GAMES_CSV_MAP:
             out[gk] = FreshnessReport(
@@ -173,7 +172,7 @@ def check_freshness(
     return out
 
 
-def aggregate_recommendation(reports: Dict[str, FreshnessReport]) -> str:
+def aggregate_recommendation(reports: dict[str, FreshnessReport]) -> str:
     """Pick the strongest recommendation across all games."""
     priority = {"full_rebench": 3, "quick_rebench": 2, "use_cache": 1, "use_cache_no_csv": 0}
     best = "use_cache"

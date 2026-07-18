@@ -15,6 +15,10 @@ import traceback
 import tempfile
 import os
 
+from ui_shared import pack_queue_result, require_python_version
+
+require_python_version()
+
 LOG_FILE = "loto.log"
 
 # LOTO_DEBUG=1 → loguri DEBUG (mai mult detaliu despre ce face engine-ul DUPA
@@ -66,8 +70,6 @@ class ResourceMonitor:
         self.interval = interval
         self.max_cpu = 0.0
         self.max_ram = 0.0
-        self.max_gpu = 0.0
-        self.max_vram_gb = 0.0
         self.running = False
         self._thread = None
         
@@ -82,7 +84,6 @@ class ResourceMonitor:
             self._thread.join()
             
     def _monitor(self):
-        import subprocess
         while self.running:
             try:
                 # CPU & RAM
@@ -93,40 +94,16 @@ class ResourceMonitor:
             except Exception as e:
                 logging.warning(f"[MONITOR] Eroare CPU/RAM: {e}")
 
-            try:
-                # GPU & VRAM (via torch & nvidia-smi)
-                import torch
-                if torch.cuda.is_available():
-                    # VRAM
-                    vram_bytes = torch.cuda.max_memory_reserved(0)
-                    self.max_vram_gb = max(self.max_vram_gb, vram_bytes / (1024**3))
-
-                    # GPU Utilization (%)
-                    try:
-                        gpu_output = subprocess.check_output(
-                            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                            encoding="utf-8", timeout=2
-                        )
-                        gpu_load = float(gpu_output.strip().split("\n")[0])
-                        self.max_gpu = max(self.max_gpu, gpu_load)
-                    except Exception as e:
-                        logging.debug(f"[MONITOR] nvidia-smi indisponibil: {e}")
-            except Exception as e:
-                logging.debug(f"[MONITOR] Eroare GPU/VRAM: {e}")
-
             time.sleep(self.interval)
 
     def get_stats(self):
         return {
             "max_cpu": round(self.max_cpu, 1),
             "max_ram": round(self.max_ram, 1),
-            "max_gpu": round(self.max_gpu, 1),
-            "max_vram_gb": round(self.max_vram_gb, 2)
         }
 
 def _pack_result_payload(payload: object) -> str:
-    blob = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    return json.dumps({"encoding": "pickle+b64", "payload": base64.b64encode(blob).decode("ascii")})
+    return pack_queue_result(payload)
 
 
 def _run_pipeline_job(job: dict) -> str:
@@ -178,8 +155,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             guar = int(task.get("guarantee", 4))
             max_var = int(task.get("max_variants", 0))
             lookback = int(task.get("lookback", 0))
-            filter_cons = bool(task.get("filter_consecutives", True))
-            smart_red = bool(task.get("smart_reduction", True))
+            filter_cons = bool(task.get("filter_consecutives", False))
+            smart_red = bool(task.get("smart_reduction", False))
             sim_depth = int(task.get("sim_depth_pct", 10))
             pure_bench = bool(task.get("pure_bench_mode", False))
             # Auto-Invert: ruleaza pipeline-ul de DOUA ori — primul pool e
@@ -241,7 +218,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     filter_consecutives=filter_cons,
                     smart_reduction=smart_red,
                     sim_depth_pct=sim_depth,
-                    enable_adaptive_persistence=True,
+                    enable_adaptive_persistence=False,
                     pure_bench_mode=pure_bench,
                 )
                 if pool_clamp_info is not None:

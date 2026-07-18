@@ -104,9 +104,8 @@ if errorlevel 1 (
 "%VENV_PY%" --version
 
 echo.
-echo   Upgrade pip in venv-ul nou. Pachetele NU se mai reinstaleaza din snapshot
-echo   (continea torch+cu128 / foundation models, incompatibile cu Python nou) -
-echo   se instaleaza mai jos, CURAT, din requirements_base + extras dupa hardware.
+echo   Upgrade pip in venv-ul nou. Pachetele se instaleaza mai jos, CURAT,
+echo   din requirements_base.txt (exclusiv CPU).
 "%VENV_PY%" -m pip install --upgrade pip --quiet
 
 echo.
@@ -143,54 +142,18 @@ echo [1/4] Pip upgrade + pachete benchmark...
 "%VENV_PY%" -m pip install --upgrade pip --quiet
 echo.
 
-echo [1a] Migrare pynvml deprecat -^> nvidia-ml-py (oficial NVIDIA)...
-REM PyTorch 2.5+ emite FutureWarning daca pachetul vechi 'pynvml' e instalat.
-REM Pachetul oficial 'nvidia-ml-py' expune ACELASI modul Python 'pynvml',
-REM deci codul (hw_sampler.py: import pynvml) ramane neschimbat.
-call :MigratePynvml
-echo.
-
-echo [1a2] Detectare profil hardware...
-REM Statie unica (LUPTATORI) - detectie directa prin nvidia-smi (sursa de adevar),
-REM rescriem .machine_profile de fiecare data. Fara logica multi-statie/OneDrive.
-set "GPU_TYPE=CPU_ONLY"
-where nvidia-smi >nul 2>&1
-if not errorlevel 1 (
-    nvidia-smi -L >nul 2>&1
-    if not errorlevel 1 (
-        set "GPU_TYPE=NVIDIA"
-    )
-)
-if /i "!GPU_TYPE!"=="NVIDIA" (
-    echo   Detectie: nvidia-smi OK -^> GPU_TYPE=NVIDIA
-) else (
-    echo   Detectie: nvidia-smi absent / fara GPU -^> GPU_TYPE=CPU_ONLY
-)
-(
-    echo GPU_TYPE=!GPU_TYPE!
-    echo GPU_NAME=
-    echo DETECTED_AT=%DATE% %TIME%
-) > .machine_profile
-
-echo.
-echo [1b] Install pachete BASE (comune CPU + GPU) din requirements_base.txt...
+echo [1b] Install pachete din requirements_base.txt (exclusiv CPU)...
 if not exist "requirements_base.txt" (
     echo   [WARN] requirements_base.txt lipseste — sar peste.
 ) else (
     "%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed -r requirements_base.txt
     if errorlevel 1 (
-        echo   [ATENTIE] Install partial base a esuat. Continui.
+        echo   [ATENTIE] Install partial a esuat. Continui.
         echo.
     ) else (
-        echo   [OK] Pachete base instalate / actualizate.
+        echo   [OK] Pachete instalate / actualizate.
     )
 )
-
-echo.
-REM UN singur venv complet (CPU+GPU) peste tot: instalam MEREU stack-ul complet
-REM (torch+CUDA + librarii GPU active). Absenta GPU-ului se trateaza la RUNTIME
-REM (app/bench sar modulele GPU), nu prin venv-uri diferite per masina.
-call :InstallGpuStack
 
 echo.
 echo [1c] Curatare ghost-uri post-install (3 runde cu wait)...
@@ -202,7 +165,7 @@ timeout /t 2 /nobreak >nul
 call :CleanGhosts
 echo.
 
-echo [2/4] Verificare PyTorch + CUDA + foundation + NeuralForecast...
+echo [2/4] Verificare mediu (CPU): metode statistice/ML + assets benchmark...
 "%VENV_PY%" verifica_mediu.py
 echo.
 
@@ -253,7 +216,7 @@ exit /b 0
 :git_autoupdate
 REM ============================================================
 REM Auto-update ROBUST din main (acelasi pattern ca START_8000.bat).
-REM Datele tale (best_methods.json, _ISTORIC, venv, .machine_profile) sunt
+REM Datele tale (best_methods.json, _ISTORIC, venv) sunt
 REM gitignore -> NU se pierd la reset. Modificarile locale urmarite -> in stash.
 REM ============================================================
 echo [GIT] Verific actualizari cod de pe GitHub ^(main^)...
@@ -325,144 +288,6 @@ if !GHOSTS! EQU 0 (
 exit /b 0
 
 
-:MigratePynvml
-REM Subrutina izolata: foloseste setlocal propriu si goto in loc de errorlevel-capture
-setlocal
-"%VENV_PY%" -m pip show nvidia-ml-py >nul 2>&1
-if not errorlevel 1 goto :MP_HasNew
-
-REM nvidia-ml-py LIPSESTE - verificam daca trebuie sa dezinstalam pynvml vechi
-"%VENV_PY%" -m pip show pynvml >nul 2>&1
-if errorlevel 1 goto :MP_InstallNew
-
-echo   - Detectat pynvml deprecat. Dezinstalez...
-"%VENV_PY%" -m pip uninstall -y pynvml >nul 2>&1
-
-:MP_InstallNew
-echo   - Instalez nvidia-ml-py (oficial NVIDIA)...
-"%VENV_PY%" -m pip install --prefer-binary nvidia-ml-py
-if errorlevel 1 (
-    echo   [ATENTIE] Install nvidia-ml-py esuat. Telemetrie GPU optionala dezactivata.
-    goto :MP_End
-)
-echo   [OK] nvidia-ml-py instalat (expune modul Python 'pynvml').
-goto :MP_End
-
-:MP_HasNew
-echo   [OK] nvidia-ml-py deja prezent.
-REM IMPORTANT: chiar daca nvidia-ml-py e instalat, pynvml vechi poate fi
-REM inca prezent in venv (instalat ca dep tranzitiv sau cache). Atunci torch
-REM importa modulul vechi si emite FutureWarning. Verificam si curatam.
-"%VENV_PY%" -m pip show pynvml >nul 2>&1
-if not errorlevel 1 (
-    echo   - Detectat ^(in plus^) pynvml deprecat alaturi de nvidia-ml-py. Dezinstalez pynvml...
-    "%VENV_PY%" -m pip uninstall -y pynvml >nul 2>&1
-    echo   [OK] pynvml vechi sters. nvidia-ml-py ramane sursa pentru modulul Python 'pynvml'.
-)
-
-:MP_End
-endlocal
-exit /b 0
-
-
-:InstallGpuStack
-REM Instaleaza stack-ul COMPLET (torch+cu128 + librarii GPU active) - MEREU, pe
-REM orice masina. Absenta GPU se trateaza la runtime (modulele GPU sunt sarite).
-echo [1c] Instalez stack-ul complet: torch+cu128 + librarii GPU active...
-echo.
-
-REM Verificam BUILD TAG-ul torch (+cu...) din METADATA pip, NU prin `import torch`:
-REM importul poate esua din motive runtime (DLL CUDA corupt OneDrive, ABI numpy
-REM dupa update-ul din [1b]) -> TORCH_BUILD gol -> reinstala ~2 GB INUTIL la
-REM fiecare rulare. `pip show` citeste doar metadata (rapid, nu incarca CUDA) si
-REM Version include tag-ul build (ex: 2.11.0+cu128).
-REM NOTA: ^| in for /f este problematic pe unele Windows -> scriem in fisier temp.
-set "TORCH_BUILD="
-set "TORCH_VER_TMP=%TEMP%\loto_torch_ver.tmp"
-"%VENV_PY%" -m pip show torch > "%TORCH_VER_TMP%" 2>nul
-for /f "tokens=2" %%V in ('findstr /B /C:"Version:" "%TORCH_VER_TMP%"') do set "TORCH_BUILD=%%V"
-if exist "%TORCH_VER_TMP%" del "%TORCH_VER_TMP%" >nul 2>&1
-echo   torch instalat acum: !TORCH_BUILD!
-
-echo !TORCH_BUILD! | findstr /C:"+cu" >nul 2>&1
-if errorlevel 1 (
-    echo   torch lipsa / build CPU ^(!TORCH_BUILD!^) - instalez wheel cu128...
-    echo   ^(~2 GB, dureaza 3-5 minute la prima rulare^)
-    REM Uninstall HARD ca pip sa nu trateze 2.12.0+cpu si 2.12.0+cu128 ca "same"
-    "%VENV_PY%" -m pip uninstall -y torch torchvision torchaudio >nul 2>&1
-    "%VENV_PY%" -m pip install --prefer-binary torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-    if errorlevel 1 (
-        echo   [EROARE] Install torch+cu128 esuat. Verifica conexiunea / suport Python.
-        echo   ^(daca nu exista wheel pt versiunea de Python, scade la py -3.12^)
-        echo   Manual: %VENV_PY% -m pip install torch --index-url https://download.pytorch.org/whl/cu128
-        exit /b 5
-    )
-    REM Re-verifica dupa install
-    "%VENV_PY%" -c "import torch; print('  Post-install:', torch.__version__, '| CUDA runtime:', torch.cuda.is_available())"
-) else (
-    echo   [OK] torch build cu128 deja prezent ^(!TORCH_BUILD!^) - skip reinstall.
-)
-
-echo.
-echo   Curatare pachet 'lightning' umbrella ^(aduce pytorch-lightning prea nou^)...
-REM neuralforecast 3.x cere pytorch-lightning<2.6.0 (pachetul CLASIC). Pachetul
-REM umbrella 'lightning' aduce pytorch-lightning 2.6.x = conflict. Il dezinstalam
-REM ca sa ramana DOAR pytorch-lightning<2.6.0 (instalat din requirements_gpu_extras).
-"%VENV_PY%" -m pip show lightning >nul 2>&1
-if not errorlevel 1 (
-    echo   - Gasit pachet umbrella 'lightning'. Dezinstalez ^(pastram pytorch-lightning clasic^)...
-    "%VENV_PY%" -m pip uninstall -y lightning >nul 2>&1
-    echo   [OK] 'lightning' umbrella sters.
-) else (
-    echo   [OK] 'lightning' umbrella absent - niciun conflict.
-)
-
-echo.
-echo   Install librarii GPU active din requirements_gpu_extras.txt...
-if not exist "requirements_gpu_extras.txt" (
-    echo   [WARN] requirements_gpu_extras.txt lipseste - sar peste.
-) else (
-    "%VENV_PY%" -m pip install --prefer-binary -r requirements_gpu_extras.txt
-    if errorlevel 1 (
-        echo   [ATENTIE] Install partial librarii GPU. Continui.
-    ) else (
-        echo   [OK] Librarii GPU active instalate.
-    )
-)
-
-echo.
-echo   Install neuralforecast fara ray ^(ray n-are wheel pt Python 3.14^)...
-REM neuralforecast>=2.0 cere ray+optuna+tornado; ray nu are wheel pt Python 3.14.
-REM Instalare in 2 pasi: --no-deps (sare ray), apoi optuna+tornado separat.
-REM Acestea sunt importate la startup de neuralforecast; fara ele import esueaza.
-"%VENV_PY%" -m pip show neuralforecast >nul 2>&1
-if errorlevel 1 (
-    "%VENV_PY%" -m pip install --prefer-binary --no-deps neuralforecast
-    if errorlevel 1 (
-        echo   [ATENTIE] Install neuralforecast esuat. Metodele NF nu vor fi disponibile.
-        goto :NF_Done
-    )
-    echo   [OK] neuralforecast instalat ^(fara ray^).
-) else (
-    echo   [OK] neuralforecast deja prezent.
-)
-REM Instaleaza dep-urile de startup lipsa (optuna, tornado) — indiferent daca NF era deja acolo.
-"%VENV_PY%" -m pip show optuna >nul 2>&1
-if errorlevel 1 (
-    echo   Install optuna + tornado ^(cerute de neuralforecast la import^)...
-    "%VENV_PY%" -m pip install --prefer-binary optuna tornado
-    if errorlevel 1 (
-        echo   [ATENTIE] Install optuna/tornado esuat - import neuralforecast poate esua.
-    ) else (
-        echo   [OK] optuna + tornado instalate.
-    )
-) else (
-    echo   [OK] optuna + tornado deja prezente.
-)
-:NF_Done
-exit /b 0
-
-
 :check_integrity
 REM Integritate venv: Python ruleaza? dependinte coerente (pip check)? librariile
 REM critice se importa (prinde coruptie binara .dll/.pyd de la sync OneDrive)?
@@ -479,19 +304,14 @@ if errorlevel 1 (
 ) else (
     echo   [OK] Dependinte coerente.
 )
-echo   - smoke test import librarii critice...
-set "CUDA_VISIBLE_DEVICES=-1"
-"%VENV_PY%" -c "import numpy,pandas,scipy,numba,nicegui,torch" 2>nul
+echo   - smoke test import librarii critice ^(CPU^)...
+"%VENV_PY%" -c "import numpy,pandas,scipy,numba,nicegui" 2>nul
 if errorlevel 1 (
-    set "CUDA_VISIBLE_DEVICES="
     echo   [ATENTIE] O librarie critica NU se importa - posibil corupta ^(OneDrive^)
     echo            SAU prima instalare ^(normal - se instaleaza la pasii [1b]+^).
     echo            Daca persista dupa install: %VENV_PY% -m pip install --force-reinstall ^<pachet^>
 ) else (
-    set "CUDA_VISIBLE_DEVICES="
-    echo   [OK] Librarii critice importate curat ^(numpy/pandas/scipy/numba/nicegui/torch^).
-    REM neuralforecast e verificat separat - poate esua din cauza pytorch_lightning vechi
-    "%VENV_PY%" -c "import neuralforecast" 2>nul && echo   [OK] neuralforecast OK. || echo   [WARN] neuralforecast import esuat - ruleaza ACTUALIZARI.bat sa migreze la lightning>=2.0.
+    echo   [OK] Librarii critice importate curat ^(numpy/pandas/scipy/numba/nicegui^).
 )
 goto :eof
 
@@ -513,9 +333,9 @@ winget install -e --id Python.Python.3.14 --silent --accept-package-agreements -
 goto :ep_verify
 
 :ep_download
-echo   winget indisponibil — descarc installer-ul oficial python.org ^(3.14.5^)...
-set "PY_URL=https://www.python.org/ftp/python/3.14.5/python-3.14.5-amd64.exe"
-set "PY_EXE=%TEMP%\python-3.14.5-amd64.exe"
+echo   winget indisponibil — descarc installer-ul oficial python.org ^(3.14.6^)...
+set "PY_URL=https://www.python.org/ftp/python/3.14.6/python-3.14.6-amd64.exe"
+set "PY_EXE=%TEMP%\python-3.14.6-amd64.exe"
 powershell -NoProfile -Command "try { Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' -UseBasicParsing } catch { exit 1 }"
 if not exist "%PY_EXE%" (
     echo   [EROARE] Descarcare installer esuata ^(verifica conexiunea^).

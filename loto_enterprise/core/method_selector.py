@@ -24,18 +24,18 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
-_CACHE: Dict[str, Callable] = {}
-_CONFIG: Optional[Dict] = None
+_CACHE: dict[str, Callable] = {}
+_CONFIG: dict | None = None
 _CONFIG_MTIME: float = -1.0
-_CONFIG_PATH_USED: Optional[Path] = None
+_CONFIG_PATH_USED: Path | None = None
 
 
-def _load_config(path: Optional[str] = None) -> Dict:
+def _load_config(path: str | None = None) -> dict:
     """Încarcă best_methods.json, cu reîncărcare automată la schimbarea fişierului.
 
     Cache-ul global e invalidat când mtime-ul fişierului se schimbă (ex. după un
@@ -66,8 +66,8 @@ def _load_config(path: Optional[str] = None) -> Dict:
 
 def get_winner_name(
     game_key: str,
-    pool_size: Optional[int] = None,
-    config_path: Optional[str] = None,
+    pool_size: int | None = None,
+    config_path: str | None = None,
 ) -> str:
     """Resolve the configured winner method for (game, pool_size).
 
@@ -106,8 +106,8 @@ def get_winner_name(
 
 def should_use_blacklist(
     game_key: str,
-    pool_size: Optional[int] = None,
-    config_path: Optional[str] = None,
+    pool_size: int | None = None,
+    config_path: str | None = None,
 ) -> bool:
     """Return True if the benchmark says blacklist helps for this (game, pool).
 
@@ -138,8 +138,8 @@ def should_use_blacklist(
 
 def get_scorer_for_game(
     game_key: str,
-    pool_size: Optional[int] = None,
-    config_path: Optional[str] = None,
+    pool_size: int | None = None,
+    config_path: str | None = None,
 ) -> Callable:
     """Return the chosen scoring function for a given (game, pool_size)."""
     name = get_winner_name(game_key, pool_size, config_path)
@@ -147,11 +147,12 @@ def get_scorer_for_game(
     if cache_key in _CACHE:
         return _CACHE[cache_key]
     try:
-        from loto_enterprise.benchmark.methods import METHODS
+        from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
     except Exception as exc:
         logger.error("[method_selector] benchmark.methods import failed: %s", exc)
         raise
 
+    name = resolve_method_name(name)
     if name not in METHODS:
         logger.warning("[method_selector] unknown winner %r, falling back to frequency", name)
         name = "frequency"
@@ -169,10 +170,10 @@ def get_scorer_for_game(
 
 def get_ensemble_for_game(
     game_key: str,
-    pool_size: Optional[int] = None,
-    config_path: Optional[str] = None,
+    pool_size: int | None = None,
+    config_path: str | None = None,
     max_methods: int = 3,
-) -> List[Tuple[str, Callable, float]]:
+) -> list[tuple[str, Callable, float]]:
     """Return [(method_name, scorer_fn, weight), ...] — pondere ∝ limita Wilson
     a ratei T+ (scrisă de decision.py în auto_pilot_per_pool[kN].ensemble).
 
@@ -188,7 +189,7 @@ def get_ensemble_for_game(
     """
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
-    entry: Dict = {}
+    entry: dict = {}
     if pool_size is not None:
         apm = g.get("auto_pilot_per_pool", {})
         if isinstance(apm, dict):
@@ -201,7 +202,7 @@ def get_ensemble_for_game(
                     if cand.get("ensemble"):
                         entry = cand
 
-    def _single_fallback() -> List[Tuple[str, Callable, float]]:
+    def _single_fallback() -> list[tuple[str, Callable, float]]:
         name = get_winner_name(game_key, pool_size, config_path)
         fn = get_scorer_for_game(game_key, pool_size, config_path)
         return [(name, fn, 1.0)]
@@ -211,17 +212,18 @@ def get_ensemble_for_game(
         return _single_fallback()
 
     try:
-        from loto_enterprise.benchmark.methods import METHODS
+        from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
     except Exception as exc:
         logger.error("[method_selector] benchmark.methods import failed: %s", exc)
         raise
 
-    out: List[Tuple[str, Callable, float]] = []
+    out: list[tuple[str, Callable, float]] = []
     for item in raw_list[:max_methods]:
         name = item.get("method") if isinstance(item, dict) else None
         weight = float(item.get("weight", 0.0)) if isinstance(item, dict) else 0.0
         if not name or weight <= 0:
             continue
+        name = resolve_method_name(name)
         cache_key = f"{name}#{pool_size or 'overall'}"
         fn = _CACHE.get(cache_key)
         if fn is None:
@@ -249,8 +251,8 @@ def get_ensemble_for_game(
 
 
 def combine_ensemble_scores(
-    contributions: List[Tuple[str, Dict[int, float], float]],
-) -> Dict[int, float]:
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> dict[int, float]:
     """Combină scorurile brute ale mai multor metode într-un singur scor per
     număr, ponderat. Fiecare metodă e normalizată min-max la [0,1] ÎNAINTE de
     combinare — altfel o metodă cu scala de valori mai mare ar domina artificial
@@ -274,7 +276,7 @@ def combine_ensemble_scores(
         return {int(k): float(v) for k, v in raw.items()}
 
     total_w = sum(w for _, _, w in active) or 1.0
-    combined: Dict[int, float] = {}
+    combined: dict[int, float] = {}
     for _name, raw, weight in active:
         w_norm = weight / total_w
         vals = list(raw.values())
@@ -286,8 +288,8 @@ def combine_ensemble_scores(
     return combined
 
 
-def summary_line(game_key: str, pool_size: Optional[int] = None,
-                 config_path: Optional[str] = None) -> str:
+def summary_line(game_key: str, pool_size: int | None = None,
+                 config_path: str | None = None) -> str:
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
     label = g.get("label", game_key)
@@ -300,12 +302,12 @@ def summary_line(game_key: str, pool_size: Optional[int] = None,
     return f"[{label}] overall scorer = {winner}"
 
 
-def all_per_pool_winners(game_key: str, config_path: Optional[str] = None) -> Dict[int, str]:
+def all_per_pool_winners(game_key: str, config_path: str | None = None) -> dict[int, str]:
     """Map pool_size_int -> winner_method_name for this game."""
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
     wpp = g.get("winners_per_pool", {}) or {}
-    out: Dict[int, str] = {}
+    out: dict[int, str] = {}
     for k, v in wpp.items():
         if not isinstance(k, str) or not k.startswith("k"):
             continue
@@ -319,8 +321,8 @@ def all_per_pool_winners(game_key: str, config_path: Optional[str] = None) -> Di
 def recommend_optimal_config(
     game_key: str,
     pool_size: int,
-    config_path: Optional[str] = None,
-) -> Dict:
+    config_path: str | None = None,
+) -> dict:
     """Return the optimal (scorer, sim_depth_pct, use_blacklist) for (game, pool).
 
     Consumed by the auto-pilot - reads `auto_pilot_per_pool[kN]` from
@@ -372,13 +374,13 @@ def recommend_optimal_config(
 
 
 def get_all_auto_pilot_configs(
-    game_key: str, config_path: Optional[str] = None
-) -> Dict[int, Dict]:
+    game_key: str, config_path: str | None = None
+) -> dict[int, dict]:
     """Return {pool_size: optimal_config} for this game - for UI rendering."""
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
     apm = g.get("auto_pilot_per_pool", {}) or {}
-    out: Dict[int, Dict] = {}
+    out: dict[int, dict] = {}
     for k, c in apm.items():
         if not isinstance(k, str) or not k.startswith("k"):
             continue

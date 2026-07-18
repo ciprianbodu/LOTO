@@ -7,7 +7,6 @@
     "beta_binomial",
     "centrality",
     "ces_auto",
-    "chronos",
     "compression",
     "cover_adaptive_blend",
     "cover_balanced_spread",
@@ -24,12 +23,6 @@
     "decade_balance",
     "digit_root",
     "drift",
-    "ens_torch_bayesian",
-    "ens_torch_giant",
-    "ens_torch_mega",
-    "ens_torch_novel",
-    "ensemble_diverse",
-    "ensemble_top5",
     "entropy_window",
     "ets_auto",
     "gap_poisson",
@@ -50,7 +43,7 @@
     "ml_hist_gb_deep",
     "ml_knn_15",
     "ml_knn_30",
-    "ml_lgbm_cpu",
+    "ml_lgbm",
     "ml_mlp",
     "ml_mlp_deep",
     "ml_naive_bayes",
@@ -61,9 +54,8 @@
     "ml_sgd_log",
     "ml_svm_linear",
     "ml_voting",
-    "ml_xgb_cpu",
+    "ml_xgb",
     "modular",
-    "moment",
     "momentum",
     "naive_last",
     "ngram_bigram",
@@ -76,7 +68,6 @@
     "ssa",
     "stl",
     "theta_auto",
-    "timesfm",
     "tsb",
     "vlmm",
     "wavelet_haar",
@@ -85,7 +76,7 @@
   ],
   "_meta": {
     "note": "Metode legendate — NU se mai rulează în bench și NU se reactivează. Merge-only. Metodele noi nu sunt afectate.",
-    "last_reason": "User: păstrează uniunea top-10/joc (pool 16, 3+) + baseline/omnius; scoate restul (23.06.2026)",
-    "count": 82
+    "last_reason": "User: scos tot suportul GPU (metode neural/foundation/torch + TimesFM) — intrările GPU eliminate din denylist (03.07.2026)",
+    "count": 75
   }
 }

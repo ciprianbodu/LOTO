@@ -3,53 +3,22 @@
 Apelat din START_8000.bat. Imprima fiecare modul cu durata + statut,
 flushed line-by-line pentru ca log-ul sa fie util in timp real.
 
-Variabile env setate de bat inainte de a apela acest script:
-  CUDA_VISIBLE_DEVICES=-1   (pe CPU mode)
-  HF_HUB_OFFLINE=1          (forteaza timesfm sa nu loveasca HF Hub la import)
-  TRANSFORMERS_OFFLINE=1    (similar pentru transformers)
+Aplicatia ruleaza exclusiv pe CPU — suportul GPU/neural (torch / TimesFM /
+NeuralForecast / pynvml) a fost ELIMINAT complet. Verificam doar stack-ul CPU.
 
 Exit codes:
   0   = toate REQUIRED OK
   20  = cel putin un REQUIRED LIPSA
+  21  = Python < 3.14
 """
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 import time
 
 
-def detect_gpu_mode() -> tuple[str, str]:
-    """Citeste .machine_profile (scris de START_8000.bat :DetectGpu)."""
-    gpu_type = "CPU_ONLY"
-    gpu_name = ""
-    try:
-        with open(".machine_profile", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                if k == "GPU_TYPE":
-                    gpu_type = v.strip()
-                elif k == "GPU_NAME":
-                    gpu_name = v.strip()
-    except FileNotFoundError:
-        pass
-    return gpu_type, gpu_name
-
-
-def setup_offline_env() -> None:
-    """Asiguram ca import-urile de modele AI NU lovesc network la load."""
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-    # Pe CPU: spune torch sa nu probleze CUDA (rapid import).
-    if os.environ.get("CUDA_VISIBLE_DEVICES") is None and detect_gpu_mode()[0] != "NVIDIA":
-        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-
-def try_import(name: str, required: bool, eta: str) -> tuple[bool, float, str]:
+def try_import(name: str) -> tuple[bool, float, str]:
     """Importa un modul, returneaza (ok, elapsed, msg)."""
     t0 = time.perf_counter()
     try:
@@ -62,20 +31,18 @@ def try_import(name: str, required: bool, eta: str) -> tuple[bool, float, str]:
 
 
 def main() -> int:
-    setup_offline_env()
-    gpu_type, gpu_name = detect_gpu_mode()
-    is_gpu = (gpu_type == "NVIDIA")
+    from ui_shared import check_python_version
 
-    print(f"Mod hardware: {gpu_type}" + (f" ({gpu_name})" if gpu_name else ""))
-    print(f"HF_HUB_OFFLINE={os.environ.get('HF_HUB_OFFLINE', 'unset')}  "
-          f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', 'unset')}")
+    py_ok, py_msg = check_python_version()
+    print(f"Python: {sys.version.split()[0]} — {py_msg}")
+    if not py_ok:
+        print(f"[EROARE] {py_msg}")
+        return 21
+    print(f"Exec:   {sys.executable}")
     print()
 
-    # Doua profile distincte: pe CPU NU mai incarcam nimic legat de GPU.
-    # Asta evita 30-60s pierdute la cold-start torch/timesfm pe masini fara CUDA,
-    # plus elimina riscul de hang pe import timesfm (HF Hub probe etc.).
-    CPU_PROFILE = [
-        # Strict ce e necesar pentru engine + UI cand merge cu fallback determinist:
+    # Stack CPU: strict ce e necesar pentru engine + UI.
+    SCHEMA = [
         ("nicegui",  True, "0-2"),   # UI principal (app_nicegui.py)
         ("pandas",   True, "0-1"),
         ("numpy",    True, "0-1"),
@@ -84,38 +51,26 @@ def main() -> int:
         ("psutil",   True, "0-1"),
         ("requests", True, "0-1"),
         ("rich",     True, "0-1"),
+        # Metode CPU — optionale: daca lipsesc, bench-ul sare metodele respective,
+        # dar aplicatia PORNESTE (engine are fallback determinist).
+        ("sklearn",       False, "0-2"),
+        ("statsmodels",   False, "0-3"),
+        ("statsforecast", False, "0-3"),
     ]
+    total = len(SCHEMA)
 
-    GPU_PROFILE = CPU_PROFILE + [
-        # GPU only: stack-ul greu (torch + neural forecasters)
-        ("torch",          True,  "2-30"),
-        # neuralforecast OPTIONAL: versiunile vechi cer pytorch_lightning.utilities.distributed
-        # (sters in pytorch_lightning>=2.0). Daca importul esueaza, bench-ul sare metodele
-        # NHITS/NBEATS etc. dar aplicatia PORNESTE. Rulati ACTUALIZARI.bat sa corectati.
-        ("neuralforecast", False, "2-15"),
-        ("pynvml",         True,  "0-1"),  # GPU telemetry
-    ]
-
-    schema = GPU_PROFILE if is_gpu else CPU_PROFILE
-    total = len(schema)
-
-    if is_gpu:
-        print(f"Profil GPU (full stack): {total} module")
-    else:
-        print(f"Profil CPU (lean — fara libs GPU): {total} module")
-        print("Note: torch/neuralforecast SAREM ca sa nu pierdem 30-60s la cold-start.")
-        print("      Engine folosese fallback determinist pe CPU.")
+    print(f"Profil CPU: {total} module (aplicatie exclusiv CPU — fara libs GPU)")
     print()
 
     missing_required: list[str] = []
     optional_missing: list[str] = []
     ok_count = 0
 
-    for i, (name, required, eta) in enumerate(schema, 1):
+    for i, (name, required, eta) in enumerate(SCHEMA, 1):
         tag = "REQ" if required else "opt"
         print(f"[{i:2d}/{total}] {name:18s} ({tag}, ETA {eta}s) ... ", end="", flush=True)
 
-        ok, elapsed, err = try_import(name, required, eta)
+        ok, elapsed, err = try_import(name)
         if ok:
             print(f"OK   ({elapsed:5.2f}s)", flush=True)
             ok_count += 1

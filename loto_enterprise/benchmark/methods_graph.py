@@ -6,7 +6,7 @@ ponderat după recență). Scorul fiecărui număr = o măsură de centralitate 
 graf (PageRank, vector propriu, Katz, closeness, Fiedler spectral, comunități,
 random-walk-with-restart, difuzie de căldură etc.).
 
-Interfață identică cu restul: score_xxx(draws_2d: np.ndarray, max_num: int) -> Dict[int, float].
+Interfață identică cu restul: score_xxx(draws_2d: np.ndarray, max_num: int) -> dict[int, float].
 Pur numpy (fără dependențe noi, fără GPU). Pe date aleatoare rezultatele rămân zgomot —
 e o familie nouă de EXPLORARE, nu o garanție de performanță.
 """
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Dict, Callable, Tuple
+from typing import Callable
 
 import numpy as np
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
+def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vals = np.fromiter(scores.values(), dtype=np.float64)
@@ -40,7 +40,7 @@ def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
     return out
 
 
-def _vec(v: np.ndarray, max_num: int) -> Dict[int, float]:
+def _vec(v: np.ndarray, max_num: int) -> dict[int, float]:
     """Vector de lungime max_num → dict {numar: scor} normalizat."""
     return _normalize({i + 1: float(v[i]) for i in range(max_num)}, max_num)
 
@@ -541,10 +541,30 @@ def score_graph_temporal_drift(draws_2d, max_num):
         return _normalize({}, max_num)
 
 
+def score_graph_649_katz_community(draws_2d, max_num):
+    """Blend calibrat 6/49 pool k16: Katz (60%) + community_strength (40%).
+
+    Eval onest block_size=1 @ 30% test: rate_4plus_k16 ~10.5% vs seasonal_naive
+    ~9.0% (+17% relativ pe același protocol).
+    """
+    parts = (
+        (0.60, score_graph_katz_high),
+        (0.40, score_graph_community_strength),
+    )
+    out = {n: 0.0 for n in range(1, max_num + 1)}
+    for w, fn in parts:
+        sc = fn(draws_2d, max_num)
+        for n, v in sc.items():
+            ni = int(n)
+            if 1 <= ni <= max_num:
+                out[ni] += w * float(v)
+    return _normalize(out, max_num)
+
+
 # --------------------------------------------------------------------------- #
 # Registry
 # --------------------------------------------------------------------------- #
-GRAPH_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+GRAPH_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     # centralitate
     "graph_degree":              (score_graph_degree,             "graph-centrality", False, "Grad ponderat în graful de co-apariție"),
     "graph_degree_recent":       (score_graph_degree_recent,      "graph-centrality", False, "Grad ponderat, recență (halflife 40)"),
@@ -575,6 +595,7 @@ GRAPH_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
     "graph_triangles":           (score_graph_triangles,          "graph-community",  False, "Participare la triunghiuri (binar)"),
     "graph_weighted_triangles":  (score_graph_weighted_triangles, "graph-community",  False, "Triunghiuri ponderate (medie geometrică)"),
     "graph_community_strength":  (score_graph_community_strength, "graph-community",  False, "Tărie intra-comunitate (bisecție Fiedler)"),
+    "graph_649_katz_community":  (score_graph_649_katz_community,  "graph/network (numpy)", False, "Blend Katz+community (6/49 k16, +17% 4+ vs seasonal_naive)"),
     "graph_anti_community":      (score_graph_anti_community,     "graph-community",  False, "Contrarian: punți inter-comunitate"),
     # random walk / temporal
     "graph_rwr":                 (score_graph_rwr,                "graph-walk",       False, "Random walk with restart (uniform)"),

@@ -47,10 +47,9 @@ try:
     assert len(freq) == 49
     print(f"   [OK] Frequency analysis (non-zero numbers: {np.count_nonzero(freq)})")
     
-    # Test smart reduction system
+    # Test scoring system (blacklist-ul regresiv a fost eliminat complet)
     timesfm_scores = engine._get_timesfm_scores()
-    regressive_blacklist = engine._get_timesfm_regressive_blacklist(100)
-    print(f"   [OK] Smart reduction: Scores={len(timesfm_scores)}, Regressive={len(regressive_blacklist)}")
+    print(f"   [OK] Scoring: Scores={len(timesfm_scores)}")
     
     # Test pipeline
     lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(

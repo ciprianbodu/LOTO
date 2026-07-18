@@ -36,13 +36,14 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import time
 from dataclasses import MISSING, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
+
+from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v4"  # bump asta cand interface-ul se schimba (invalidates all)
+CACHE_VERSION = "v7"  # v7: top649 649_katz12_gap88 (12% Katz + 88% gap_poisson)
 # v4: metodele graf folosesc acum graf de ASOCIERE (lift centrat) în loc de co-apariție
 # brută — output schimbat → cache-ul vechi (raw) ar fi servit stale. Re-bench complet.
 # v3: FoldResult are acum rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
@@ -94,7 +95,7 @@ def _ensure_cache_dir():
 
 
 def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
-                    is_random: bool = False) -> Optional[Any]:
+                    is_random: bool = False) -> Any | None:
     """Return cached FoldResult or None."""
     _ensure_cache_dir()
     key = _fold_key(csv_hash, method, percentile, game_key, is_random)
@@ -102,8 +103,7 @@ def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
     if not f.exists():
         return None
     try:
-        with open(f, "rb") as fh:
-            obj = pickle.load(fh)
+        obj = pickle_load_path(f)
         # Backfill câmpuri noi adăugate în FoldResult DUPĂ ce s-a scris cache-ul
         # (ex. `family`) — altfel asdict()/acces atribut crapă pe obiecte vechi.
         if is_dataclass(obj):
@@ -131,13 +131,12 @@ def store_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str
     key = _fold_key(csv_hash, method, percentile, game_key, is_random)
     f = CACHE_DIR / f"{key}.pkl"
     try:
-        with open(f, "wb") as fh:
-            pickle.dump(result, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle_store_path(f, result)
     except Exception as exc:
         logger.warning(f"[bench_cache] failed to write {f.name}: {exc}")
 
 
-def cache_stats() -> Dict[str, int]:
+def cache_stats() -> dict[str, int]:
     """Return number of cached folds + total disk size."""
     _ensure_cache_dir()
     files = list(CACHE_DIR.glob("*.pkl"))
@@ -148,7 +147,7 @@ def cache_stats() -> Dict[str, int]:
     }
 
 
-def clear_cache(older_than_days: Optional[int] = None) -> int:
+def clear_cache(older_than_days: int | None = None) -> int:
     """Delete cached folds. Returns number deleted.
 
     Daca older_than_days e setat, doar folds mai vechi sunt sterse.
@@ -171,18 +170,18 @@ def clear_cache(older_than_days: Optional[int] = None) -> int:
 # Adaptive coarse-to-fine sweep
 # ---------------------------------------------------------------------------
 
-def coarse_percentiles() -> List[int]:
+def coarse_percentiles() -> list[int]:
     """3 percentile pentru pass-ul coarse — repere robuste."""
     return [30, 60, 100]
 
 
-def fine_percentiles() -> List[int]:
+def fine_percentiles() -> list[int]:
     """10 percentile pentru pass-ul fine pe survivors."""
     return [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 
-def select_survivors(coarse_results: List[Dict], top_k_pct: float = 0.7,
-                     min_keep: int = 10) -> List[str]:
+def select_survivors(coarse_results: list[dict], top_k_pct: float = 0.7,
+                     min_keep: int = 10) -> list[str]:
     """
     Din rezultatele coarse, pastreaza top-K% metode (default 70%).
 
@@ -193,7 +192,7 @@ def select_survivors(coarse_results: List[Dict], top_k_pct: float = 0.7,
     Returnam lista de nume metode care supravietuiesc pentru fine sweep.
     """
     # Agregam scoruri per metoda
-    method_scores: Dict[str, float] = {}
+    method_scores: dict[str, float] = {}
     for r in coarse_results:
         method = r.get("method")
         if not method:
@@ -208,7 +207,7 @@ def select_survivors(coarse_results: List[Dict], top_k_pct: float = 0.7,
 
 
 def estimate_time_savings(n_methods: int, n_percentiles_full: int = 10,
-                          n_coarse: int = 3, survival_rate: float = 0.7) -> Dict:
+                          n_coarse: int = 3, survival_rate: float = 0.7) -> dict:
     """Estimare teoretica a economisirii de timp prin adaptive sweep."""
     full_folds = n_methods * n_percentiles_full
     adaptive_folds = (n_methods * n_coarse) + (int(n_methods * survival_rate) * n_percentiles_full)
@@ -224,8 +223,8 @@ def estimate_time_savings(n_methods: int, n_percentiles_full: int = 10,
 # Pool size locality: skip pool sizes where winner is stable
 # ---------------------------------------------------------------------------
 
-def detect_stable_pool_neighborhoods(winners_per_pool: Dict[str, str],
-                                      min_run: int = 3) -> List[str]:
+def detect_stable_pool_neighborhoods(winners_per_pool: dict[str, str],
+                                      min_run: int = 3) -> list[str]:
     """
     Detecteaza intervale de pool sizes unde castigatorul e acelasi.
 

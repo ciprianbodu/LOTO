@@ -6,8 +6,6 @@ Folosit de UI pentru a afişa matricea walk-forward onest, fără re-compute.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
-
 import pandas as pd
 
 
@@ -17,7 +15,7 @@ import pandas as pd
 FOLDS_CSV = Path(__file__).resolve().parents[2] / "bench_results" / "folds.csv"
 
 
-def load_folds() -> Optional[pd.DataFrame]:
+def load_folds() -> pd.DataFrame | None:
     if not FOLDS_CSV.exists():
         return None
     try:
@@ -96,7 +94,7 @@ def lift_matrix(
     return lift
 
 
-def summary_per_game(df: pd.DataFrame, game_key: str, pool_size: int) -> Dict:
+def summary_per_game(df: pd.DataFrame, game_key: str, pool_size: int) -> dict:
     """Sumar text-friendly pentru un (game, pool)."""
     matrix = matrix_for_game(df, game_key, pool_size)
     if matrix.empty:

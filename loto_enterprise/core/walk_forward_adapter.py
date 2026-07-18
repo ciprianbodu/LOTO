@@ -19,35 +19,34 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from loto_enterprise.core.backtesting import scored_variant_numbers
+from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
 
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v5"  # v5: iterare recent→vechi la oprire parțială (buget) — cache-urile
-# v4 parțiale acopereau felia VECHE a ferestrei (ex. 6/49 doar 2014) → orfanizate.
-# v4: flat-ul include omnius_hits/omnius_ticket per extragere.
+CACHE_VERSION = "v9"  # v9: pool top-N pur + OMNIUS top-N (optimizare hits 3+)
+# v8: 649_katz12_gap88 scorer 6/49 k16
 
 
 @dataclass
 class WalkForwardResult:
     """Per (draw, variant) entry — drop-in pentru UI care aşteaptă lista flat."""
     draw_index: int
-    draw_date: Optional[str]
-    variant: List[int]
+    draw_date: str | None
+    variant: list[int]
     hits: int
     hits_union: int  # cât din pool a nimerit per extragere
-    target_draw_date: Optional[str] = None  # alias pt RetroactivePrediction
+    target_draw_date: str | None = None  # alias pt RetroactivePrediction
     omnius_hits: int = 0  # cât a nimerit biletul OMNIUS la această extragere (per-draw)
-    omnius_ticket: List[int] = field(default_factory=list)  # biletul OMNIUS retroactiv
+    omnius_ticket: list[int] = field(default_factory=list)  # biletul OMNIUS retroactiv
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -91,21 +90,23 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
         return "nodec"
 
 
-def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str) -> Path:
+def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str,
+                auto_invert: bool = False) -> Path:
     safe = game_type.replace("/", "_")
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
-    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}.pkl"
+    inv = "_inv" if auto_invert else ""
+    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}{inv}.pkl"
 
 
 def expand_predictions_to_flat(
-    preds: List[Any], game_type: str
-) -> List[WalkForwardResult]:
+    preds: list[Any], game_type: str
+) -> list[WalkForwardResult]:
     """RetroactivePrediction[N draws] → WalkForwardResult[N draws × M variants].
 
     Fiecare RetroactivePrediction conține lista de variante prezise pentru o
     extragere. UI consumă lista flat (variantă × extragere). Expand explicit.
     """
-    flat: List[WalkForwardResult] = []
+    flat: list[WalkForwardResult] = []
     for p in preds:
         actual = set(p.actual_numbers)
         for variant in p.variants:
@@ -134,7 +135,8 @@ def run_honest_walk_forward(
     force_refresh: bool = False,
     progress_cb=None,
     should_cancel=None,
-) -> Tuple[List[WalkForwardResult], dict]:
+    auto_invert: bool = False,
+) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
     Returns:
@@ -143,7 +145,8 @@ def run_honest_walk_forward(
     """
     csv_hash = _csv_hash(df_source, game_type)
     dec_sig = _decision_sig(game_type, pool_size)
-    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig)
+    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig,
+                            auto_invert=auto_invert)
     meta = {
         "csv_hash": csv_hash,
         "decision_sig": dec_sig,
@@ -152,13 +155,13 @@ def run_honest_walk_forward(
         "game_type": game_type,
         "pool_size": pool_size,
         "backtest_depth_percent": backtest_depth_percent,
+        "auto_invert": bool(auto_invert),
     }
 
     cached = None
     if use_cache and not force_refresh and cache_file.exists():
         try:
-            with open(cache_file, "rb") as f:
-                cached = pickle.load(f)
+            cached = pickle_load_path(cache_file)
             if not cached.get("partial", False):
                 # COMPLET → servim direct (fast path neschimbat).
                 meta["from_cache"] = True
@@ -191,6 +194,7 @@ def run_honest_walk_forward(
     logger.info(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
+        f"{' (Pool 2 / inversare)' if auto_invert else ''}"
     )
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
@@ -203,9 +207,10 @@ def run_honest_walk_forward(
         simulation_step=1,
         use_feedback=False,           # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem
-        smart_reduction=True,
+        smart_reduction=False,
         progress_cb=progress_cb,      # frac 0..1 per simulare → bară de progres în UI
         should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
+        auto_invert=auto_invert,
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
@@ -234,15 +239,92 @@ def run_honest_walk_forward(
     # Save cache (rulare nouă ≥ cache → suprascriem; scriere atomică anti-corupere
     # la UI-restart în mijlocul pickle.dump — un cache trunchiat ar crăpa la load).
     try:
-        tmp_file = cache_file.with_suffix(".pkl.tmp")
-        with open(tmp_file, "wb") as f:
-            pickle.dump({"flat": flat, **meta}, f)
-        os.replace(tmp_file, cache_file)
+        pickle_store_path_atomic(cache_file, {"flat": flat, **meta})
         logger.info(f"[WALK-FWD] Cache saved → {cache_file}")
     except Exception as exc:
         logger.warning(f"[WALK-FWD] Cache save failed: {exc}")
 
     return flat, meta
+
+
+def build_retrospective_pool_hits_flat(
+    flat_reference: list[WalkForwardResult],
+    df_source: pd.DataFrame,
+    game_type: str,
+    pool_numbers: list[int],
+    variants: list,
+    omnius_ticket: list[int],
+) -> tuple[list[WalkForwardResult], dict]:
+    """Istoric hits Pool 2 / OMNIUS 2 fără walk-forward onest.
+
+    Folosește ACELEAȘI extrageri ca WF Pool 1, dar pool-ul + wheel-ul CURENT
+    (generat azi). Rapid (secunde): nu regenerează pipeline-ul la fiecare pas.
+    Informativ pentru plasa de siguranță — NU înlocuiește validarea WF Pool 1.
+    """
+    from loto_enterprise.core.backtesting import LotoBacktester
+
+    if not flat_reference or not pool_numbers:
+        return [], {"retrospective": True, "n_test_draws": 0, "partial": False}
+
+    bt = LotoBacktester(df_source, game_type=game_type)
+    draw_n = int({"6/49": 6, "5/40": 5, "joker": 5}.get(game_type, 6))
+    pool_set = {int(x) for x in pool_numbers}
+    omni_nums = [int(x) for x in (omnius_ticket or [])[:draw_n]]
+    omni_set = set(omni_nums)
+    variants = variants or []
+
+    draw_indices = sorted({int(getattr(p, "draw_index", -1)) for p in flat_reference} - {-1})
+    flat_out: list[WalkForwardResult] = []
+    n_draws = 0
+
+    for di in draw_indices:
+        if di < 0 or di >= len(bt.draws):
+            continue
+        raw = bt.draws[di]
+        actual = set(int(x) for x in raw[:draw_n])
+        dd = bt.dates[di] if di < len(bt.dates) else None
+        hits_union = len(pool_set & actual)
+        omnius_hits = len(omni_set & actual)
+        n_draws += 1
+
+        if variants:
+            for v in variants:
+                vset = set(scored_variant_numbers(v, game_type))
+                flat_out.append(WalkForwardResult(
+                    draw_index=di,
+                    draw_date=str(dd) if dd else None,
+                    variant=list(v),
+                    hits=len(vset & actual),
+                    hits_union=hits_union,
+                    target_draw_date=str(dd) if dd else None,
+                    omnius_hits=omnius_hits,
+                    omnius_ticket=list(omni_nums),
+                ))
+        else:
+            flat_out.append(WalkForwardResult(
+                draw_index=di,
+                draw_date=str(dd) if dd else None,
+                variant=[],
+                hits=hits_union,
+                hits_union=hits_union,
+                target_draw_date=str(dd) if dd else None,
+                omnius_hits=omnius_hits,
+                omnius_ticket=list(omni_nums),
+            ))
+
+    meta = {
+        "retrospective": True,
+        "n_test_draws": n_draws,
+        "n_expected": n_draws,
+        "partial": False,
+        "from_cache": False,
+        "auto_invert": True,
+    }
+    logger.info(
+        "[WALK-FWD] Retrospectiv Pool 2 %s: %d extrageri, %d intrări flat (fără WF)",
+        game_type, n_draws, len(flat_out),
+    )
+    return flat_out, meta
 
 
 def clear_walk_forward_cache() -> int:

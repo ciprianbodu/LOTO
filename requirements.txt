@@ -1,23 +1,16 @@
-# NOTA: SPLIT in 3 fisiere (din 2026-05) pentru profile per-hardware:
+# =============================================================================
+# requirements.txt — set unificat de dependențe (exclusiv CPU).
 #
-#   requirements_base.txt          — comun la TOATE masinile (CPU + GPU)
-#   requirements_gpu_extras.txt    — extras pentru masini cu GPU NVIDIA
-#   requirements_cpu_extras.txt    — extras pentru masini CPU-only (gol acum)
+# ACTUALIZARI.bat instalează din requirements_base.txt (sursa autoritară).
+# Acest fișier rămâne DOAR ca referință rapidă a stack-ului complet.
 #
-# ACTUALIZARI.bat citeste .machine_profile (scris de START_8000.bat :DetectGpu)
-# si instaleaza base + extras potrivit. Torch e instalat SEPARAT cu index URL
-# corect (cu128 pentru NVIDIA, cpu pentru fara GPU).
-#
-# Acest fisier (requirements.txt) ramane DOAR DOCUMENTATIE — un snapshot legacy
-# al setului unificat. NU mai e folosit direct de niciun bat.
-#
-# Constrangeri stricte (NU le upgrada manual!):
-#   - momentfm 0.1.4 cere transformers==4.33.3 ȘI huggingface-hub==0.24.0 (==)
-#   - chronos-forecasting cere transformers>=4.30,<4.48 (compatibil cu 4.33.3)
-#   - timesfm 1.3.0 cere huggingface_hub>=0.23.0 (compatibil cu 0.24.0)
-# Versiunile actuale sunt SINGURUL set care satisface toate constrangerile simultan.
+# Suportul GPU/neural (torch / TimesFM / Chronos / MOMENT / NeuralForecast /
+# transformers / nvidia-ml-py) a fost ELIMINAT complet din aplicație — benchmark
+# și engine rulează exclusiv pe CPU (numpy / sklearn / statsmodels).
+# =============================================================================
 
-# Core app
+# Core app + UI
+nicegui
 streamlit
 pandas
 numpy
@@ -27,27 +20,14 @@ numba
 scipy
 matplotlib
 
-# Deep learning (GPU build — NU upgrada peste pip; foloseste install CUDA-aware)
-torch
-huggingface_hub==0.24.0     # pin strict (cerut de momentfm)
-transformers==4.33.3        # pin strict (cerut de momentfm)
-
-# Time-series foundation models (zero-shot)
-timesfm
-chronos-forecasting
-momentfm
-
-# Time-series deep learning architectures (NeuralForecast: NBEATS, NHITS,
-# TiDE, DLinear, PatchTST, Informer, Autoformer, FEDformer, DeepAR, TCN)
-neuralforecast
-utilsforecast
-
-# Benchmark / lab dependencies
+# Benchmark / lab
 rich
-pynvml          # nvidia-ml-py for GPU% telemetry (HwSampler)
 
-# Optional foundation models (commented out — install on demand):
-#   uni2ts                # Salesforce MOIRAI (incompatible with omegaconf>=2.4)
-#   lag-llama             # Lag-Llama (manual git install)
-#   granite-tsfm          # IBM TinyTimeMixer
-#   mamba-ssm             # S-Mamba (requires CUDA toolkit + causal-conv1d)
+# Metode statistice / ML (CPU)
+scikit-learn
+statsmodels
+statsforecast
+hmmlearn
+xgboost
+lightgbm
+catboost

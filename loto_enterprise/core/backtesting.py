@@ -14,7 +14,7 @@ import logging
 import time
 from collections import Counter, deque
 from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional, Set
+from itertools import batched
 from pathlib import Path
 from datetime import datetime
 
@@ -28,6 +28,167 @@ from loto_engine import LotoEngine
 
 logger = logging.getLogger(__name__)
 
+# ── Walk-forward paralel (stateless): ~80% nuclee CPU, ca la bench ─────────────
+_WF_CPU_FRACTION = float(__import__("os").environ.get("LOTO_WF_CPU_FRAC", "0.80"))
+_WF_PER_PROC_GB = 0.8  # engine + wheeling per proces
+_WF_PER_PROC_GB_INVERT = 1.4  # Pool 2: 2× pipeline / pas
+_WF_STEP_TIMEOUT_S = float(__import__("os").environ.get("LOTO_WF_STEP_TIMEOUT_S", "900"))
+_WF_SHARED: dict = {}
+
+
+def _wf_max_workers(auto_invert: bool = False) -> int:
+    """Procese WF: min(80% nuclee, buget RAM) — evită oversubscription BLAS."""
+    import os
+    per_proc = _WF_PER_PROC_GB_INVERT if auto_invert else _WF_PER_PROC_GB
+    try:
+        import psutil
+        avail_gb = psutil.virtual_memory().available / (1024 ** 3)
+        ram_cap = max(1, int((avail_gb * 0.50) / per_proc))
+    except Exception:  # noqa: BLE001
+        ram_cap = 999
+    nc = os.cpu_count() or 4
+    cpu_cap = max(1, int(nc * _WF_CPU_FRACTION))
+    return max(1, min(cpu_cap, ram_cap))
+
+
+def _wf_report_progress(progress_cb, done: int, total: int) -> None:
+    if progress_cb is None or total <= 0:
+        return
+    frac = done / total
+    try:
+        progress_cb(frac, done, total)
+    except TypeError:
+        try:
+            progress_cb(frac)
+        except Exception:  # noqa: BLE001
+            pass
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _wf_worker_init(df_pickle: bytes, game_type: str, draws_tuples, dates) -> None:
+    """Initializer ProcessPool: încarcă DataFrame + extrageri o singură dată per proces."""
+    import os
+    import pickle
+    global _WF_SHARED
+    for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        os.environ[_tv] = "1"
+    _WF_SHARED = {
+        "df": pickle.loads(df_pickle),
+        "game_type": game_type,
+        "draws": [list(t) for t in draws_tuples],
+        "dates": dates,
+    }
+
+
+def _retroactive_step_stateless(
+    df: pd.DataFrame,
+    draws: list,
+    dates: list,
+    game_type: str,
+    sim_idx: int,
+    pool_size: int,
+    guarantee: int,
+    max_variants: int,
+    lookback_percent: float,
+    filter_consecutives: bool,
+    smart_reduction: bool,
+    auto_invert: bool = False,
+) -> RetroactivePrediction | None:
+    """Un pas walk-forward stateless (fără feedback / inversiune între pași).
+
+  auto_invert=True: Faza 1 (pool normal) → Faza 2 (manual_blacklist=Pool1), ca în UI.
+    """
+    if sim_idx >= len(draws) or sim_idx < 1:
+        return None
+    historical_df = df.iloc[:sim_idx].copy()
+    if len(historical_df) < 5:
+        return None
+
+    target_date = dates[sim_idx] if sim_idx < len(dates) else f"Draw_{sim_idx}"
+    sim_date = dates[sim_idx - 1] if sim_idx > 0 else "Start"
+
+    def _run_pipeline(manual_blacklist=None):
+        eng = LotoEngine(game_type)
+        eng.data = historical_df
+        eng._build_draw_matrix()
+        eng.error_correction_map = {}
+        eng._adaptive_mode = "normal"
+        eng._adaptive_event = None
+        eng._temp_blacklist = set()
+        out_lines, _, _, _, _, _audit = eng.run_institutional_pipeline(
+            progress_cb=None,
+            pool_size=pool_size,
+            guarantee=guarantee,
+            max_variants=max_variants,
+            lookback=lookback_percent,
+            filter_consecutives=filter_consecutives,
+            smart_reduction=smart_reduction,
+            enable_adaptive_persistence=False,
+            manual_blacklist=manual_blacklist,
+        )
+        return eng, out_lines
+
+    engine, lines = _run_pipeline()
+    if auto_invert:
+        pool1 = list(engine.hard_core)
+        engine, lines = _run_pipeline(manual_blacklist=pool1)
+
+    actual_draw = draws[sim_idx]
+    actual_set = set(actual_draw)
+    max_hits = 0
+    for v in lines:
+        h = len(set(scored_variant_numbers(v, game_type)) & actual_set)
+        if h > max_hits:
+            max_hits = h
+
+    predicted_union = set().union(
+        *(scored_variant_numbers(v, game_type) for v in lines)
+    ) if lines else set()
+    hits_union = len(predicted_union & actual_set)
+
+    draw_n = int(_GAME_DRAW_N.get(game_type, 6))
+    omni_scores = getattr(engine, "_last_pool_scores", None) or {}
+    from loto_enterprise.benchmark.methods_omnius import pick_omnius_ticket
+    omnius_ticket = pick_omnius_ticket(
+        list(engine.hard_core), omni_scores, draw_n,
+    )
+    omnius_hits = len(set(omnius_ticket) & actual_set)
+
+    return RetroactivePrediction(
+        simulation_date=str(sim_date),
+        target_draw_date=str(target_date),
+        variants=lines,
+        predicted_numbers=set(engine.hard_core),
+        actual_numbers=actual_draw,
+        hits=max_hits,
+        hits_union=hits_union,
+        pool_size=pool_size,
+        guarantee=guarantee,
+        game_type=game_type,
+        draw_index=sim_idx,
+        omnius_ticket=omnius_ticket,
+        omnius_hits=omnius_hits,
+    )
+
+
+def _wf_worker_step(args):
+    """Worker picklable: (sim_idx, pool_size, guarantee, max_variants, lookback, filter_consec, smart_red, auto_invert)."""
+    (sim_idx, pool_size, guarantee, max_variants, lookback_percent,
+     filter_consecutives, smart_reduction, auto_invert) = args
+    shared = _WF_SHARED
+    try:
+        return _retroactive_step_stateless(
+            shared["df"], shared["draws"], shared["dates"], shared["game_type"],
+            sim_idx, pool_size, guarantee, max_variants,
+            lookback_percent, filter_consecutives, smart_reduction,
+            auto_invert=bool(auto_invert),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[BACKTEST] WF worker sim_idx=%s: %s", sim_idx, exc)
+        return None
+
+
 _GAME_DRAW_N = {
     "6/49": 6,
     "5/40": 5,
@@ -35,7 +196,7 @@ _GAME_DRAW_N = {
 }
 
 
-def scored_variant_numbers(variant: List[int], game_type: str) -> List[int]:
+def scored_variant_numbers(variant: list[int], game_type: str) -> list[int]:
     """Numbers that count against draw columns for hit scoring.
 
     Joker tickets include the Urna 2 value for display; it must not count as an
@@ -51,11 +212,11 @@ def scored_variant_numbers(variant: List[int], game_type: str) -> List[int]:
 @dataclass
 class BacktestResult:
     """Rezultatul unei singure comparări variantă vs extragere."""
-    draw_date: Optional[str]
-    draw_numbers: Set[int]
-    variant: List[int]
+    draw_date: str | None
+    draw_numbers: set[int]
+    variant: list[int]
     hits: int
-    hit_numbers: Set[int]
+    hit_numbers: set[int]
     hit_rate: float
     draw_index: int = 0
     hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union) la această extragere
@@ -72,10 +233,10 @@ class BacktestSummary:
     worst_draw_hits: int
     median_hits: float
     std_hits: float
-    distribution: Dict[int, int]  # hits -> count
-    top_performing_draws: List[BacktestResult]
+    distribution: dict[int, int]  # hits -> count
+    top_performing_draws: list[BacktestResult]
     avg_union_hits: float = 0.0  # Media hit-urilor pe întregul pool
-    all_results: List[BacktestResult] = field(default_factory=list)
+    all_results: list[BacktestResult] = field(default_factory=list)
 
 
 @dataclass
@@ -83,16 +244,16 @@ class RetroactivePrediction:
     """Previziune generată retroactiv pentru un punct istoric."""
     simulation_date: str  # Data la care s-ar fi făcut previziunea
     target_draw_date: str  # Data extragerii vizate
-    variants: List[List[int]]  # Variantele generate
-    predicted_numbers: Set[int]  # Toate numerele prezise (union)
-    actual_numbers: Set[int]  # Numerele care au ieșit efectiv
+    variants: list[list[int]]  # Variantele generate
+    predicted_numbers: set[int]  # Toate numerele prezise (union)
+    actual_numbers: set[int]  # Numerele care au ieșit efectiv
     hits: int  # Câte numere s-au potrivit
     pool_size: int  # Dimensiunea pool-ului folosit
     guarantee: int  # Garanția folosită
     game_type: str  # Tipul jocului
     draw_index: int = 0  # Indexul extragerii
     hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union)
-    omnius_ticket: List[int] = field(default_factory=list)  # biletul OMNIUS (top draw_n din pool)
+    omnius_ticket: list[int] = field(default_factory=list)  # biletul OMNIUS (top draw_n din pool)
     omnius_hits: int = 0  # Câte numere a nimerit biletul OMNIUS la această extragere
 
 
@@ -114,15 +275,15 @@ class LotoBacktester:
         self.data_input = data_input
         self.game_type = game_type
         self.params = self._get_game_params(game_type)
-        self.df: Optional[pd.DataFrame] = None
+        self.df: pd.DataFrame | None = None
         if isinstance(data_input, pd.DataFrame):
             self.df = data_input
             self.csv_path = Path("dataframe_input")
         else:
             self.csv_path = Path(data_input)
             
-        self.draws: List[Set[int]] = []
-        self.dates: List[Optional[str]] = []
+        self.draws: list[set[int]] = []
+        self.dates: list[str | None] = []
         
         self._load_data()
     
@@ -180,7 +341,7 @@ class LotoBacktester:
         
         logger.info(f"[BACKTEST] Extrageri valide procesate: {len(self.draws)}")
     
-    def _detect_number_columns(self) -> List[str]:
+    def _detect_number_columns(self) -> list[str]:
         """Detectează automat coloanele care conțin numere."""
         cols = []
         
@@ -201,10 +362,10 @@ class LotoBacktester:
         
         return cols[:self.params["draw_n"]]
 
-    def _scored_variant_numbers(self, variant: List[int]) -> List[int]:
+    def _scored_variant_numbers(self, variant: list[int]) -> list[int]:
         return scored_variant_numbers(variant, self.game_type)
     
-    def get_last_percentile_draws(self, percentile: float = 20.0) -> List[Tuple[Optional[str], Set[int]]]:
+    def get_last_percentile_draws(self, percentile: float = 20.0) -> list[tuple[str | None, set[int]]]:
         """
         Returnează ultimele N% extrageri pentru evaluare.
         
@@ -230,7 +391,7 @@ class LotoBacktester:
         logger.info(f"[BACKTEST] Perioada evaluare: ultimele {n_eval} extrageri din {n_draws} ({percentile}%)")
         return result
     
-    def evaluate_variant(self, variant: List[int], target_draws: Optional[List] = None) -> List[BacktestResult]:
+    def evaluate_variant(self, variant: list[int], target_draws: list | None = None) -> list[BacktestResult]:
         """
         Evaluează o singură variantă contra extragerilor țintă.
         
@@ -272,7 +433,7 @@ class LotoBacktester:
         
         return results
     
-    def evaluate_variants(self, variants: List[List[int]], percentile: float = 20.0) -> BacktestSummary:
+    def evaluate_variants(self, variants: list[list[int]], percentile: float = 20.0) -> BacktestSummary:
         """
         Evaluează multiple variante și generează un sumar.
 
@@ -427,14 +588,15 @@ class LotoBacktester:
     def run_retroactive_backtest(self, pool_size: int = 12, guarantee: int = 4,
                                   lookback_percent: float = 20.0,
                                   backtest_depth_percent: float = 5.0,
-                                  filter_consecutives: bool = True,
+                                  filter_consecutives: bool = False,
                                   max_variants: int = 0,
                                   simulation_step: int = 1,
                                   use_feedback: bool = True,
                                   enable_hard_inversion: bool = True,
-                                  smart_reduction: bool = True,
+                                  smart_reduction: bool = False,
                                   progress_cb=None,
-                                  should_cancel=None) -> List[RetroactivePrediction]:
+                                  should_cancel=None,
+                                  auto_invert: bool = False) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
@@ -463,16 +625,16 @@ class LotoBacktester:
         logger.info(f"[BACKTEST RETROACTIV] Simulăm pentru {n_simulate} extrageri din {n_draws}")
         
         retro_predictions = []
-        feedback_map: Dict[int, float] = {}  # num -> multiplier
+        feedback_map: dict[int, float] = {}  # num -> multiplier
         # State adaptiv in-memory pentru backtest (NU atinge adaptive_state.json)
-        adaptive_history: List[Dict] = []
+        adaptive_history: list[Dict] = []
         streak_zero = 0
         active_mode = "normal"
         reset_duration = 0
         # Hard inversion temporară între iterații: pool-ul de la pasul anterior
         # care a produs catastrofă (excludere o singură extragere).
-        prev_pool_for_inversion: List[int] = []
-        prev_event_for_inversion: Optional[str] = None
+        prev_pool_for_inversion: list[int] = []
+        prev_event_for_inversion: str | None = None
 
         # Importăm noul modul; fallback la logica veche dacă lipsește
         try:
@@ -498,7 +660,99 @@ class LotoBacktester:
         if _stateless:
             sim_indices = sim_indices[::-1]
 
-        # Iterăm prin fiecare punct de simulare
+        # ── Paralel pe ~80% nuclee când pașii sunt independenți (walk-forward UI) ──
+        if _stateless and len(sim_indices) > 1:
+            import os
+            import pickle
+            from concurrent.futures import ProcessPoolExecutor, as_completed
+
+            n_workers = _wf_max_workers(auto_invert=auto_invert)
+            n_steps = len(sim_indices)
+            inv_note = " (Pool 2: 2× pipeline/pas)" if auto_invert else ""
+            logger.info(
+                "[BACKTEST] Walk-forward PARALEL: %d pași pe %d procese (~%.0f%% CPU, RAM-cap)%s",
+                n_steps, n_workers, _WF_CPU_FRACTION * 100, inv_note,
+            )
+            for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+                os.environ.setdefault(_tv, "1")
+
+            task_args = [
+                (sim_idx, pool_size, guarantee, max_variants,
+                 lookback_percent, filter_consecutives, smart_reduction, auto_invert)
+                for sim_idx in sim_indices
+            ]
+            df_pickle = pickle.dumps(self.df, protocol=pickle.HIGHEST_PROTOCOL)
+            draws_tuples = [tuple(d) for d in self.draws]
+            done_count = 0
+            cancelled = False
+            batch_size = max(n_workers * 2, 8)
+            last_log_pct = -1
+
+            try:
+                with ProcessPoolExecutor(
+                    max_workers=n_workers,
+                    initializer=_wf_worker_init,
+                    initargs=(df_pickle, self.game_type, draws_tuples, self.dates),
+                ) as ex:
+                    for batch in batched(task_args, batch_size):
+                        if should_cancel is not None and done_count > 0:
+                            try:
+                                if should_cancel():
+                                    cancelled = True
+                                    logger.warning(
+                                        "[BACKTEST] oprire timpurie WF paralel la %d/%d "
+                                        "(buget) → validare parțială.",
+                                        done_count, n_steps,
+                                    )
+                                    break
+                            except Exception:  # noqa: BLE001
+                                pass
+                        futures = {ex.submit(_wf_worker_step, a): a[0] for a in batch}
+                        for fut in as_completed(futures):
+                            try:
+                                pred = fut.result(timeout=_WF_STEP_TIMEOUT_S)
+                                if pred is not None:
+                                    retro_predictions.append(pred)
+                            except Exception as exc:  # noqa: BLE001
+                                logger.error("[BACKTEST] WF future eșuat sim_idx=%s: %s",
+                                             futures.get(fut), exc)
+                            done_count += 1
+                            _wf_report_progress(progress_cb, done_count, n_steps)
+                            pct = int(done_count * 100 / max(1, n_steps))
+                            if pct >= last_log_pct + 10:
+                                last_log_pct = pct - (pct % 10)
+                                logger.info("[BACKTEST] WF progres: %d/%d pași (%d%%)",
+                                            done_count, n_steps, pct)
+                        if cancelled:
+                            break
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[BACKTEST] ProcessPool WF indisponibil (%s) — fallback secvențial.", exc)
+                retro_predictions.clear()
+                cancelled = False
+                done_count = 0
+            else:
+                if not cancelled:
+                    retro_predictions.sort(key=lambda p: p.draw_index)
+                    if retro_predictions:
+                        total_hits = sum(p.hits for p in retro_predictions)
+                        avg_hits = total_hits / len(retro_predictions)
+                        logger.info(
+                            "[BACKTEST RETROACTIV] Complet (paralel): %d simulări, medie %.2f hits",
+                            len(retro_predictions), avg_hits,
+                        )
+                    return retro_predictions
+                # cancelled → sort parțial și return
+                retro_predictions.sort(key=lambda p: p.draw_index)
+                if retro_predictions:
+                    total_hits = sum(p.hits for p in retro_predictions)
+                    avg_hits = total_hits / len(retro_predictions)
+                    logger.info(
+                        "[BACKTEST RETROACTIV] Parțial (paralel): %d simulări, medie %.2f hits",
+                        len(retro_predictions), avg_hits,
+                    )
+                return retro_predictions
+
+        # Iterăm prin fiecare punct de simulare (secvențial — feedback/inversiune sau fallback)
         for sim_num, sim_idx in enumerate(sim_indices, 1):
 
             # Oprire timpurie (anulare manuală SAU buget de timp) — o metodă GPU grea
@@ -517,7 +771,7 @@ class LotoBacktester:
 
             if progress_cb is not None:
                 try:
-                    progress_cb(sim_num / max(1, n_simulate))
+                    _wf_report_progress(progress_cb, sim_num, n_simulate)
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -599,9 +853,9 @@ class LotoBacktester:
                 # dar regenerat onest pentru fiecare extragere trecută, fără lookahead).
                 _draw_n = 6 if self.game_type == "6/49" else 5
                 _omni_scores = getattr(engine, "_last_pool_scores", None) or {}
-                _omnius_ticket = sorted(
-                    sorted(engine.hard_core, key=lambda n: _omni_scores.get(int(n), 0.0),
-                           reverse=True)[:_draw_n]
+                from loto_enterprise.benchmark.methods_omnius import pick_omnius_ticket
+                _omnius_ticket = pick_omnius_ticket(
+                    list(engine.hard_core), _omni_scores, _draw_n,
                 )
                 _omnius_hits = len(set(_omnius_ticket) & set(actual_draw))
 
@@ -684,7 +938,7 @@ class LotoBacktester:
         return retro_predictions
 
 
-def quick_backtest(data_input: str | pd.DataFrame, variants: List[List[int]], game_type: str = "6/49", percentile: float = 20.0) -> BacktestSummary:
+def quick_backtest(data_input: str | pd.DataFrame, variants: list[list[int]], game_type: str = "6/49", percentile: float = 20.0) -> BacktestSummary:
     """
     Funcție conveniență pentru backtest rapid.
     
@@ -715,13 +969,12 @@ if __name__ == "__main__":
     ]
     
     # Căutăm un fișier CSV în directorul curent
-    import glob
-    csv_files = glob.glob("*.csv")
+    csv_files = sorted(Path.cwd().glob("*.csv"))
     
     if csv_files:
-        print(f"\nTestare cu fișierul: {csv_files[0]}")
+        print(f"\nTestare cu fișierul: {csv_files[0].name}")
         try:
-            quick_backtest(csv_files[0], test_variants, "6/49", 20.0)
+            quick_backtest(str(csv_files[0]), test_variants, "6/49", 20.0)
         except Exception as e:
             print(f"Eroare la testare: {e}")
     else:

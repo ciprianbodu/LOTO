@@ -24,6 +24,57 @@ logger = logging.getLogger(__name__)
 
 LOG_FILE = "loto.log"
 
+# Versiune Python țintă (ALF-LUPTATORI). ACTUALIZARI.bat / START_8000.bat folosesc py -3.14.
+PYTHON_MIN = (3, 14)
+PYTHON_TARGET_PATCH = 6  # 3.14.6 — informativ în mesaje
+
+
+def check_python_version(*, strict: bool = False) -> tuple[bool, str]:
+    """Verifică că interpretorul e Python 3.14+ (recomandat 3.14.6).
+
+    Returns (ok, message). strict=True → eșuează dacă patch-ul e sub țintă.
+    """
+    vi = sys.version_info
+    if vi < PYTHON_MIN:
+        return False, (
+            f"Python {vi.major}.{vi.minor}.{vi.micro} detectat — necesar "
+            f">= {PYTHON_MIN[0]}.{PYTHON_MIN[1]}. "
+            f"Ruleaza ACTUALIZARI.bat (py -3.14) sau instaleaza Python 3.14.6."
+        )
+    if strict and (vi.major, vi.minor, vi.micro) < (*PYTHON_MIN, PYTHON_TARGET_PATCH):
+        return False, (
+            f"Python {vi.major}.{vi.minor}.{vi.micro} — recomandat "
+            f"{PYTHON_MIN[0]}.{PYTHON_MIN[1]}.{PYTHON_TARGET_PATCH}. "
+            f"Ruleaza ACTUALIZARI.bat pentru upgrade venv."
+        )
+    return True, f"Python {vi.major}.{vi.minor}.{vi.micro} OK (tinta 3.14.{PYTHON_TARGET_PATCH})"
+
+
+def require_python_version(*, strict: bool = False) -> None:
+    ok, msg = check_python_version(strict=strict)
+    if not ok:
+        raise RuntimeError(msg)
+
+
+import html as _html_module
+from string.templatelib import Interpolation, Template
+
+
+def render_html_safe(tmpl: Template) -> str:
+    """Procesează t-string (PEP 750) cu escape HTML pe interpolări dinamice."""
+    parts: list[str] = []
+    for piece in tmpl:
+        if isinstance(piece, Interpolation):
+            parts.append(_html_module.escape(str(piece.value), quote=True))
+        else:
+            parts.append(piece)
+    return "".join(parts)
+
+
+def html_escape(value: object) -> str:
+    """Escape HTML pentru fragmente asamblate manual (ex. heatmap, chips)."""
+    return _html_module.escape(str(value), quote=True)
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 WORKER_PATH = PROJECT_ROOT / "worker.py"
 
@@ -129,8 +180,24 @@ def clear_logs() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Decode rezultat job (pickle+b64, scris de worker._pack_result_payload)
+# Decode / encode rezultat job (pickle+zstd+b64 pe 3.14; fallback pickle+b64)
 # --------------------------------------------------------------------------- #
+ENCODING_PICKLE_B64 = "pickle+b64"
+ENCODING_PICKLE_ZSTD_B64 = "pickle+zstd+b64"
+
+
+def pack_queue_result(payload: object) -> str:
+    """Serializează rezultatul jobului: pickle → zstd (PEP 784) → base64."""
+    from compression import zstd
+
+    raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+    compressed = zstd.compress(raw, 3)
+    return json.dumps({
+        "encoding": ENCODING_PICKLE_ZSTD_B64,
+        "payload": base64.b64encode(compressed).decode("ascii"),
+    })
+
+
 def decode_queue_result(result_json: str) -> object:
     """La cancel-race worker-ul poate scrie payload gol ('{}'); întoarcem None
     și apelantul tratează non-tuple ca rezultat invalid."""
@@ -138,11 +205,23 @@ def decode_queue_result(result_json: str) -> object:
         data = json.loads(result_json)
     except Exception:  # noqa: BLE001
         return None
-    payload = str((data or {}).get("payload", "")) if isinstance(data, dict) else ""
+    if not isinstance(data, dict):
+        return None
+    payload = str(data.get("payload", ""))
     if not payload:
         return None
+    enc = str(data.get("encoding", ENCODING_PICKLE_B64))
     try:
-        return pickle.loads(base64.b64decode(payload))
+        blob = base64.b64decode(payload)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        if enc == ENCODING_PICKLE_ZSTD_B64:
+            from compression import zstd
+            blob = zstd.decompress(blob)
+        elif enc != ENCODING_PICKLE_B64:
+            return None
+        return pickle.loads(blob)
     except Exception:  # noqa: BLE001
         return None
 

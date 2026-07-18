@@ -25,7 +25,6 @@ import logging
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ _REGIME_STREAK_THRESHOLD = 3
 _REGIME_MAX_DURATION = 5
 
 # Magnitudini de feedback per eveniment (missed +X, false_positive -Y)
-_MAGNITUDES: Dict[str, Tuple[float, float]] = {
+_MAGNITUDES: dict[str, tuple[float, float]] = {
     "normal":      (0.10, 0.05),
     "underperf":   (0.15, 0.10),
     "catastrophe": (0.30, 0.20),
@@ -172,12 +171,12 @@ def classify_event(pool_hits: int) -> str:
 
 
 def detect_regime_mismatch(
-    history: List[dict],
+    history: list[dict],
     game_type: str,
     pool_size: int,
     window: int = _ROLLING_WINDOW,
     threshold: float = _REGIME_UNDERPERF_THRESHOLD,
-) -> Tuple[bool, float]:
+) -> tuple[bool, float]:
     """
     Detectează regime mismatch — fereastră rolling cu media hiturilor pool
     SEMNIFICATIV sub baseline-ul aleator.
@@ -199,16 +198,16 @@ def detect_regime_mismatch(
 
 
 def compute_post_draw_feedback(
-    last_pool: List[int],
-    actual_draw: List[int],
-    current_map: Dict[int, float],
-    history: Optional[List[dict]] = None,
+    last_pool: list[int],
+    actual_draw: list[int],
+    current_map: dict[int, float],
+    history: list[dict] | None = None,
     game_type: str = "6/49",
     pool_size: int = 12,
     streak_zero: int = 0,
     prev_mode: str = "normal",
     reset_duration: int = 0,
-) -> Tuple[Dict[int, float], str, Dict[str, object]]:
+) -> tuple[dict[int, float], str, dict[str, object]]:
     """
     Calculează noul `error_correction_map` după ce s-a întâmplat o extragere
     reală.
@@ -226,8 +225,8 @@ def compute_post_draw_feedback(
     Returns:
         (new_map, event_type, regime_info)
     """
-    pool_set: Set[int] = {int(n) for n in last_pool}
-    actual_set: Set[int] = {int(n) for n in actual_draw}
+    pool_set: set[int] = {int(n) for n in last_pool}
+    actual_set: set[int] = {int(n) for n in actual_draw}
     pool_hits = len(pool_set & actual_set)
 
     event = classify_event(pool_hits)
@@ -314,9 +313,9 @@ def compute_post_draw_feedback(
 def update_state_after_draw(
     game_type: str,
     pool_size: int,
-    actual_draw: List[int],
-    actual_date: Optional[str] = None,
-) -> Optional[Tuple[str, Dict[str, object]]]:
+    actual_draw: list[int],
+    actual_date: str | None = None,
+) -> tuple[str, dict[str, object]] | None:
     """
     Wrapper convenabil: încarcă state, calculează feedback pentru last_pool vs
     actual_draw, salvează state actualizat. Returnează (event, regime_info) sau
@@ -370,9 +369,9 @@ def update_state_after_draw(
 def record_predicted_pool(
     game_type: str,
     pool_size: int,
-    pool: List[int],
+    pool: list[int],
     data_rows: int = 0,
-    pool_date: Optional[str] = None,
+    pool_date: str | None = None,
 ) -> None:
     """Marchează pool-ul curent prezis ca fiind cel asupra căruia se va aplica
     feedback la următoarea extragere reală.
@@ -394,13 +393,13 @@ def get_active_mode(game_type: str, pool_size: int) -> str:
 
 
 def compute_temp_blacklist(
-    last_pool: List[int],
-    last_event: Optional[str],
+    last_pool: list[int],
+    last_event: str | None,
     universe_size: int = 49,
     pool_size: int = 12,
     enable_full_inversion: bool = True,
     partial_k: int = 4,
-) -> Set[int]:
+) -> set[int]:
     """
     Hard Inversion Temporară: după o CATASTROFĂ (0 hits), excludem temporar
     numere din pool-ul ratat la următoarea predicție.

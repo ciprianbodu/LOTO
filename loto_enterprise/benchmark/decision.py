@@ -25,8 +25,6 @@ import logging
 import math
 import os
 from pathlib import Path
-from typing import Dict, List, Tuple
-
 import numpy as np
 import pandas as pd
 
@@ -47,11 +45,10 @@ MIN_TEST_DRAWS_FOR_STABILITY = 30
 ENSEMBLE_MAX_METHODS = 3
 
 # Pragul de hituri pe care bench-ul ALEGE metoda câștigătoare (rata extragerilor cu
-# ≥ acest număr de numere ghicite). Implicit 4 (premii reale, la cererea utilizatorului).
-# A fost temporar 3 (rată mai densă → selecție mai stabilă), revenit la 4. NU schimbă
-# șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul. Reversibil:
-# schimbă aici, sau setează variabila de mediu LOTO_BENCH_TARGET=3.
-BENCH_HIT_TARGET = int(os.environ.get("LOTO_BENCH_TARGET", "4"))
+# ≥ acest număr de numere ghicite). Implicit 3 (rată mai densă → selecție mai stabilă).
+# NU schimbă șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul.
+# Reversibil: schimbă aici, sau setează LOTO_BENCH_TARGET=4.
+BENCH_HIT_TARGET = int(os.environ.get("LOTO_BENCH_TARGET", "3"))
 
 
 def _safe_lift(method_hits: float, random_hits: float) -> float:
@@ -61,7 +58,7 @@ def _safe_lift(method_hits: float, random_hits: float) -> float:
 def _wilson_lower_bound(successes: float, n: float, z: float = 1.0) -> float:
     """Limită inferioară de încredere (Wilson score) pt o proporție.
 
-    Evenimentele T+ (implicit 4+) sunt RARE la pool-uri mici (0-2 evenimente în
+    Evenimentele T+ (implicit 3+) pe pool-uri mici pot fi rare (puține evenimente în
     sute de extrageri de test) — o comparație pe medie brută poate favoriza o
     metodă cu 1 eveniment din pură șansă în fața uneia cu 0, fără nicio
     semnificație statistică. Wilson reduce increderea în proporții estimate din
@@ -83,7 +80,7 @@ def _windows_method_beats_random(
     sub_real_method: pd.DataFrame,
     sub_real_random: pd.DataFrame,
     base_col: str,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Return (n_windows_beat, n_windows_total) for method vs random baseline."""
     if sub_real_method.empty or sub_real_random.empty:
         return 0, 0
@@ -122,7 +119,7 @@ def _weighted_mean_lift(
     return weighted_sum / weight_total if weight_total > 0 else 0.0
 
 
-def _build_ensemble_weights(entries: List[Tuple[str, float]]) -> List[Dict]:
+def _build_ensemble_weights(entries: list[tuple[str, float]]) -> list[dict]:
     """Transformă [(method, confidence), ...] (deja ordonate, top-K) în
     [{"method": m, "weight": w}, ...] cu ponderi proporționale cu confidence
     (limita Wilson), normalizate la sumă 1. Floor mic (1e-6) ca metodele cu
@@ -143,7 +140,7 @@ def decide_optimal_config_for_pool(
     game_key: str,
     pool_size: int,
     draw_n: int,
-) -> Dict:
+) -> dict:
     """Run the decision algorithm for one (game, pool_size) pair.
 
     Returns a dict with the chosen scorer, sim_depth, use_blacklist + rationale.
@@ -196,7 +193,7 @@ def decide_optimal_config_for_pool(
         n_total = float(pairs["n_test"].sum())
         return _wilson_lower_bound(successes, n_total)
 
-    qualifying: List[Tuple[str, float, int, int, float, float]] = []
+    qualifying: list[tuple[str, float, int, int, float, float]] = []
     for m in methods:
         real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
         if real_m.empty:
@@ -303,8 +300,8 @@ def decide_optimal_config_for_pool(
 
 def build_auto_pilot_matrix(
     folds_csv_path: str,
-    games_meta: Dict[str, Dict],
-) -> Dict[str, Dict[str, Dict]]:
+    games_meta: dict[str, dict],
+) -> dict[str, dict[str, dict]]:
     """Build the full {game_key: {pool_key: config}} matrix from folds.csv.
 
     Args:
@@ -317,7 +314,7 @@ def build_auto_pilot_matrix(
     df = pd.read_csv(folds_csv_path)
     if "failed" not in df.columns:
         df["failed"] = False
-    matrix: Dict[str, Dict[str, Dict]] = {}
+    matrix: dict[str, dict[str, dict]] = {}
     for gk, meta in games_meta.items():
         matrix[gk] = {}
         for k in meta["pool_range"]:
@@ -331,7 +328,7 @@ def build_auto_pilot_matrix(
 def update_best_methods_with_auto_pilot(
     best_methods_path: str = "best_methods.json",
     folds_csv_path: str = "bench_results/folds.csv",
-) -> Dict:
+) -> dict:
     """Read folds.csv, run decision algo, write `auto_pilot_per_pool` into best_methods.json."""
     bm_path = Path(best_methods_path)
     if not bm_path.exists():

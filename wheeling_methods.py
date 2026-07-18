@@ -2,7 +2,7 @@
 existent din loto_engine.generate_combinatorial_wheel.
 
 Toate au ACEEAȘI semnătură drop-in:
-    fn(pool, pick, guarantee, max_variants, scores) -> (List[List[int]], coverage_pct)
+    fn(pool, pick, guarantee, max_variants, scores) -> (list[list[int]], coverage_pct)
 
 și rezolvă același covering design: fiecare submulțime de `guarantee` numere din
 pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
@@ -12,7 +12,7 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
   • wheel_annealing  — pornește din greedy și REDUCE biletele (remove redundante
                        + swap) prin simulated annealing, păstrând acoperirea.
   • wheel_genetic    — buget FIX de bilete; algoritm genetic care MAXIMIZEAZĂ
-                       acoperirea (ponderată pe scoruri). Fitness pe GPU (torch).
+                       acoperirea (ponderată pe scoruri). Fitness pe CPU (numpy).
   • wheel_lajolla    — designuri optime cunoscute (fișiere covering_designs/);
                        altfel cade pe ILP exact (mic) → greedy. „Best-known".
 
@@ -27,7 +27,6 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -47,13 +46,13 @@ def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
     return generate_combinatorial_wheel(pool, pick, guarantee, max_variants, scores)
 
 
-def _sorted_pool(pool, scores) -> List[int]:
+def _sorted_pool(pool, scores) -> list[int]:
     if scores:
         return sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
     return sorted(list(pool))
 
 
-def _coverage_pct(wheel: List[List[int]], pool: List[int], guarantee: int) -> float:
+def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
     targets = set(itertools.combinations(sorted(pool), guarantee))
     if not targets:
         return 100.0
@@ -64,7 +63,7 @@ def _coverage_pct(wheel: List[List[int]], pool: List[int], guarantee: int) -> fl
     return round(len(covered & targets) / len(targets) * 100.0, 2)
 
 
-def compute_coverage_pct(wheel: List[List[int]], pool: List[int], guarantee: int) -> float:
+def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
     """API publică pt recalcularea acoperirii garanției pe un set de bilete DAT.
 
     Folosit din loto_engine.py pentru a revalida `coverage_pct` DUPĂ filtre
@@ -74,11 +73,11 @@ def compute_coverage_pct(wheel: List[List[int]], pool: List[int], guarantee: int
 
 
 def filter_preserving_coverage(
-    wheel: List[List[int]],
-    pool: List[int],
+    wheel: list[list[int]],
+    pool: list[int],
     guarantee: int,
-    removal_priority: List[int],
-) -> Tuple[List[List[int]], int]:
+    removal_priority: list[int],
+) -> tuple[list[list[int]], int]:
     """Elimină bilete din `wheel`, în ordinea din `removal_priority` (indici în
     `wheel`, de la cel mai indezirabil la cel mai puțin dorit — ex. cele mai
     "anomale" statistic), PĂSTRÂND garanția combinatorică — un bilet e eliminat
@@ -96,7 +95,7 @@ def filter_preserving_coverage(
     targets_per_ticket = [
         set(itertools.combinations(sorted(t), guarantee)) for t in wheel
     ]
-    coverage_count: Dict[tuple, int] = {}
+    coverage_count: dict[tuple, int] = {}
     for targets in targets_per_ticket:
         for t in targets:
             coverage_count[t] = coverage_count.get(t, 0) + 1
@@ -121,7 +120,7 @@ def filter_preserving_coverage(
     return result, removed
 
 
-def _order_by_scores(wheel: List[List[int]], scores) -> List[List[int]]:
+def _order_by_scores(wheel: list[list[int]], scores) -> list[list[int]]:
     if not scores:
         return [sorted(t) for t in wheel]
     return sorted([sorted(t) for t in wheel],
@@ -272,7 +271,7 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
 
 
 # ===========================================================================
-# 3) Algoritm genetic — buget FIX, MAXIMIZEAZĂ acoperirea (fitness pe GPU)
+# 3) Algoritm genetic — buget FIX, MAXIMIZEAZĂ acoperirea (fitness pe CPU/numpy)
 # ===========================================================================
 _GA_MAX_BLOCKS = 60000
 
@@ -292,63 +291,61 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
     budget = min(max_variants, nb) if max_variants > 0 else min(len(g_wheel), nb)
     budget = max(1, budget)
     try:
-        import torch
-        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        import numpy as np
+        rng = np.random.default_rng(seed)
         blocks = list(itertools.combinations(pool, pick))
         bidx = {b: i for i, b in enumerate(blocks)}
         targets = list(itertools.combinations(pool, guarantee))
         tidx = {t: i for i, t in enumerate(targets)}
         # M[b, t] = 1 dacă blocul b acoperă ținta t (t ⊆ b)
-        M = torch.zeros((nb, nt), dtype=torch.float32, device=dev)
+        M = np.zeros((nb, nt), dtype=np.float32)
         for j, b in enumerate(blocks):
             for sub in itertools.combinations(b, guarantee):
                 M[j, tidx[sub]] = 1.0
         # ponderi ținte după scoruri (ținte din numere bune cântăresc mai mult)
         if scores:
-            tw = torch.tensor([sum(scores.get(n, 0.0) for n in t) for t in targets],
-                              dtype=torch.float32, device=dev)
+            tw = np.array([sum(scores.get(n, 0.0) for n in t) for t in targets],
+                          dtype=np.float32)
             tw = tw / (tw.mean() + 1e-9)
         else:
-            tw = torch.ones(nt, device=dev)
+            tw = np.ones(nt, dtype=np.float32)
 
-        gen = torch.Generator(device=dev); gen.manual_seed(seed)
-
-        def fitness(P_idx):  # P_idx: (P, budget) long
+        def fitness(P_idx):  # P_idx: (P, budget) int
             masks = M[P_idx]                # (P, budget, nt)
-            cov = masks.amax(dim=1)         # (P, nt) acoperit?
-            return (cov * tw).sum(dim=1)    # (P,)
+            cov = masks.max(axis=1)         # (P, nt) acoperit?
+            return (cov * tw).sum(axis=1)   # (P,)
 
         # populație inițială: indici aleatori de blocuri
-        P = torch.randint(0, nb, (pop, budget), generator=gen, device=dev)
+        P = rng.integers(0, nb, size=(pop, budget))
         # ELITISM: sămânță = soluția greedy (mapată pe indici), trunchiată/umplută la buget.
         g_idx = [bidx[tuple(sorted(t))] for t in g_wheel if tuple(sorted(t)) in bidx]
         if g_idx:
             if len(g_idx) >= budget:
-                seed = torch.tensor(g_idx[:budget], device=dev, dtype=torch.long)
+                seed_row = np.array(g_idx[:budget], dtype=np.int64)
             else:
-                pad = torch.randint(0, nb, (budget - len(g_idx),), generator=gen, device=dev)
-                seed = torch.cat([torch.tensor(g_idx, device=dev, dtype=torch.long), pad])
-            P[0] = seed  # GA pornește de la ≥ acoperirea greedy → poate doar îmbunătăți
+                pad = rng.integers(0, nb, size=(budget - len(g_idx),))
+                seed_row = np.concatenate([np.array(g_idx, dtype=np.int64), pad])
+            P[0] = seed_row  # GA pornește de la ≥ acoperirea greedy → poate doar îmbunătăți
         best_idx, best_fit = None, -1.0
         for _g in range(gens):
             fit = fitness(P)
-            mx = int(torch.argmax(fit))
+            mx = int(np.argmax(fit))
             if float(fit[mx]) > best_fit:
-                best_fit = float(fit[mx]); best_idx = P[mx].clone()
+                best_fit = float(fit[mx]); best_idx = P[mx].copy()
             # selecție prin turnir
-            a = torch.randint(0, pop, (pop,), generator=gen, device=dev)
-            b = torch.randint(0, pop, (pop,), generator=gen, device=dev)
-            winners = torch.where(fit[a] >= fit[b], a, b)
+            a = rng.integers(0, pop, size=pop)
+            b = rng.integers(0, pop, size=pop)
+            winners = np.where(fit[a] >= fit[b], a, b)
             parents = P[winners]
             # crossover uniform între perechi consecutive
-            perm = torch.randperm(pop, generator=gen, device=dev)
+            perm = rng.permutation(pop)
             p2 = parents[perm]
-            mask = torch.rand(parents.shape, generator=gen, device=dev) < 0.5
-            child = torch.where(mask, parents, p2)
+            mask = rng.random(parents.shape) < 0.5
+            child = np.where(mask, parents, p2)
             # mutație: înlocuiește ~8% din gene cu blocuri aleatoare
-            mut = torch.rand(child.shape, generator=gen, device=dev) < 0.08
-            rnd = torch.randint(0, nb, child.shape, generator=gen, device=dev)
-            child = torch.where(mut, rnd, child)
+            mut = rng.random(child.shape) < 0.08
+            rnd = rng.integers(0, nb, size=child.shape)
+            child = np.where(mut, rnd, child)
             child[0] = best_idx  # elitism
             P = child
 
@@ -367,7 +364,7 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
 _LAJOLLA_DIRS = [Path("covering_designs"), Path("_ISTORIC/covering_designs")]
 
 
-def _load_lajolla(v: int, pick: int, guarantee: int) -> Optional[List[List[int]]]:
+def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
     """Citește un design C(v, pick, guarantee) dintr-un fișier local dacă există.
     Format La Jolla: fiecare linie = un bloc de `pick` numere (1-based, 1..v)."""
     for d in _LAJOLLA_DIRS:

@@ -4,17 +4,14 @@ Each scorer respects the standard interface. ML methods use a windowed-lag
 feature representation: for each candidate number, build features from the
 last K binary appearance values and learn a 1-step-ahead classifier.
 
-Boosting methods have CPU and GPU variants (suffix _gpu) — GPU variants
-gracefully degrade to CPU if hardware/lib unavailable.
+Boosting methods are CPU-only (XGBoost / LightGBM / CatBoost). GPU variants au
+fost eliminate odată cu tot suportul GPU din aplicație.
 """
 from __future__ import annotations
 
-import contextlib
 import logging
-import os
-import sys
 import warnings
-from typing import Dict, Tuple, Callable, Optional
+from typing import Callable
 
 import numpy as np
 
@@ -22,44 +19,11 @@ warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
 
 
-@contextlib.contextmanager
-def _silence_native_stdio():
-    """Suprimă stdout+stderr la nivel de FILE DESCRIPTOR (C/C++) pe durata blocului.
-
-    CatBoost GPU tipărește din codul NATIV „Warning: less than 75% gpu memory
-    available for training. Free: X Total: Y" la FIECARE fit (un model/număr → zeci
-    de mesaje per apel, × folduri = potop) și IGNORĂ verbose=False/logging_level.
-    Redirectăm temporar fd 1/2 spre devnull DOAR în procesul curent (metodele CPU
-    rulează în procese separate → neafectate). Erorile reale rămân: CatBoost ridică
-    excepții Python, nu doar print-uri."""
-    try:
-        sys.stdout.flush()
-        sys.stderr.flush()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        saved_out, saved_err = os.dup(1), os.dup(2)
-    except Exception:  # noqa: BLE001
-        yield  # fără fd-uri reale (mediu fără consolă) → rulăm fără redirect
-        return
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    try:
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        yield
-    finally:
-        os.dup2(saved_out, 1)
-        os.dup2(saved_err, 2)
-        os.close(devnull)
-        os.close(saved_out)
-        os.close(saved_err)
-
-
 # ---------------------------------------------------------------------------
 # Helpers (same as classical)
 # ---------------------------------------------------------------------------
 
-def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
+def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vals = np.fromiter(scores.values(), dtype=np.float64)
@@ -125,7 +89,7 @@ def _score_one_number(s, lag, classifier_factory):
         return float(s.mean())
 
 
-def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, context: int = 300) -> Dict[int, float]:
+def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, context: int = 300) -> dict[int, float]:
     """Antrenează un clasificator per număr, PARALEL pe toate nucleele (joblib).
     Înainte: 49 clasificatori în serie (1-2 threads). Acum: distribuiti pe toate
     nucleele → CPU saturat. Clasificatorul intern ramane n_jobs=1 (evita
@@ -250,7 +214,7 @@ def score_ml_mlp(draws_2d, max_num):
 
 
 # ===========================================================================
-# Boosting — XGBoost / LightGBM / CatBoost (CPU + GPU variants)
+# Boosting — XGBoost / LightGBM / CatBoost (CPU only)
 # ===========================================================================
 
 def _has_xgboost():
@@ -277,18 +241,7 @@ def _has_catboost():
         return False
 
 
-def _has_cuda():
-    import os
-    if os.environ.get("CUDA_VISIBLE_DEVICES") == "-1":
-        return False
-    try:
-        import torch  # noqa: F401
-        return bool(torch.cuda.is_available())
-    except Exception:
-        return False
-
-
-def score_ml_xgb_cpu(draws_2d, max_num):
+def score_ml_xgb(draws_2d, max_num):
     if not _has_xgboost():
         return {}
     from xgboost import XGBClassifier
@@ -297,19 +250,7 @@ def score_ml_xgb_cpu(draws_2d, max_num):
                                                      verbosity=0, use_label_encoder=False, eval_metric="logloss"))
 
 
-def score_ml_xgb_gpu(draws_2d, max_num):
-    if not _has_xgboost():
-        return {}
-    if not _has_cuda():
-        return {}  # Gracefully skip on CPU-only machines
-    from xgboost import XGBClassifier
-    return _sklearn_per_number(draws_2d, max_num,
-                               lambda: XGBClassifier(n_estimators=50, max_depth=4, tree_method="hist",
-                                                     device="cuda", verbosity=0,
-                                                     use_label_encoder=False, eval_metric="logloss"))
-
-
-def score_ml_lgbm_cpu(draws_2d, max_num):
+def score_ml_lgbm(draws_2d, max_num):
     if not _has_lightgbm():
         return {}
     from lightgbm import LGBMClassifier
@@ -318,42 +259,13 @@ def score_ml_lgbm_cpu(draws_2d, max_num):
                                                       verbosity=-1, force_row_wise=True))
 
 
-def score_ml_lgbm_gpu(draws_2d, max_num):
-    if not _has_lightgbm():
-        return {}
-    if not _has_cuda():
-        return {}
-    from lightgbm import LGBMClassifier
-    try:
-        return _sklearn_per_number(draws_2d, max_num,
-                                   lambda: LGBMClassifier(n_estimators=50, max_depth=4, num_leaves=15,
-                                                          device_type="gpu", verbosity=-1))
-    except Exception:
-        # LightGBM GPU requires special build; gracefully fail
-        return {}
-
-
-def score_ml_catboost_cpu(draws_2d, max_num):
+def score_ml_catboost(draws_2d, max_num):
     if not _has_catboost():
         return {}
     from catboost import CatBoostClassifier
     return _sklearn_per_number(draws_2d, max_num,
                                lambda: CatBoostClassifier(iterations=50, depth=4, verbose=False,
                                                           allow_writing_files=False))
-
-
-def score_ml_catboost_gpu(draws_2d, max_num):
-    if not _has_catboost():
-        return {}
-    if not _has_cuda():
-        return {}
-    from catboost import CatBoostClassifier
-    # Taie warning-ul nativ CatBoost GPU („less than 75% gpu memory...") care apare
-    # de zeci de ori per apel (1 model/număr) și ignoră verbose=False.
-    with _silence_native_stdio():
-        return _sklearn_per_number(draws_2d, max_num,
-                                   lambda: CatBoostClassifier(iterations=50, depth=4, task_type="GPU",
-                                                              verbose=False, allow_writing_files=False))
 
 
 # ===========================================================================
@@ -504,7 +416,7 @@ def score_ml_poly_logistic(draws_2d, max_num):
                                lag=6)
 
 
-ML_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+ML_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     # === Nisa: Gaussian Process + polinomial (sklearn, CPU) 2026-05-31 ===
     "ml_gaussian_process": (score_ml_gaussian_process, "ml-kernel", True, "Gaussian Process (incertitudine probabilista)"),
     "ml_poly_logistic":    (score_ml_poly_logistic,    "ml-linear", True, "Logistic + features polinomiale grad 2"),
@@ -539,12 +451,8 @@ ML_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
     "ml_knn_15":        (score_ml_knn_15,        "ml-knn",      True,  "K-NN k=15"),
     "ml_svm_rbf":       (score_ml_svm_rbf,       "ml-kernel",   True,  "SVM RBF kernel"),
     "ml_mlp":           (score_ml_mlp,           "ml-nn",       True,  "MLP (16,8) sklearn"),
-    # Boosting CPU
-    "ml_xgb_cpu":       (score_ml_xgb_cpu,       "ml-boost",    True,  "XGBoost CPU (hist)"),
-    "ml_lgbm_cpu":      (score_ml_lgbm_cpu,      "ml-boost",    True,  "LightGBM CPU"),
-    "ml_catboost_cpu":  (score_ml_catboost_cpu,  "ml-boost",    True,  "CatBoost CPU"),
-    # Boosting GPU (LUPTATORI)
-    "ml_xgb_gpu":       (score_ml_xgb_gpu,       "ml-boost-gpu", True, "XGBoost CUDA (LUPTATORI)"),
-    "ml_lgbm_gpu":      (score_ml_lgbm_gpu,      "ml-boost-gpu", True, "LightGBM GPU"),
-    "ml_catboost_gpu":  (score_ml_catboost_gpu,  "ml-boost-gpu", True, "CatBoost GPU"),
+    # Gradient boosting (XGBoost / LightGBM / CatBoost — exclusiv CPU)
+    "ml_xgb":       (score_ml_xgb,       "ml-boost",    True,  "XGBoost (hist)"),
+    "ml_lgbm":      (score_ml_lgbm,      "ml-boost",    True,  "LightGBM"),
+    "ml_catboost":  (score_ml_catboost,  "ml-boost",    True,  "CatBoost"),
 }

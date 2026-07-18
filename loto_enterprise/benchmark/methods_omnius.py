@@ -24,14 +24,14 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Dict, List, Tuple, Callable
+from typing import Callable
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-def _normalize(scores: Dict[int, float], max_num: int) -> Dict[int, float]:
+def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vals = np.fromiter(scores.values(), dtype=np.float64)
@@ -67,10 +67,10 @@ def _omnius_slowish_family(fam: str) -> bool:
 # metode excluse explicit: baseline pur-random, OMNIUS însuși (recursie), LLM (greu/torch)
 _OMNIUS_DENYLIST = {"random", "omnius", "time_llm"}
 
-_OMNIUS_CANDS_CACHE: List[str] | None = None
+_OMNIUS_CANDS_CACHE: list[str] | None = None
 
 
-def _omnius_candidates() -> List[str]:
+def _omnius_candidates() -> list[str]:
     """Listă DINAMICĂ de candidați = toate metodele matematice disponibile din registry
     (fără GPU/ML/neural/meta), ordonate rapid→lent. Cache-uită (calculată o dată)."""
     global _OMNIUS_CANDS_CACHE
@@ -91,13 +91,13 @@ def _omnius_candidates() -> List[str]:
     return _OMNIUS_CANDS_CACHE
 
 
-def _topk(scores: Dict[int, float], k: int) -> set:
+def _topk(scores: dict[int, float], k: int) -> set:
     if not scores:
         return set()
     return set(n for n, _ in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k])
 
 
-def _smart_logic_hybrid(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
+def _smart_logic_hybrid(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Smart Logic Hybrid v2 ca scorer standalone (replica formulei din engine, numpy pur):
     30% Gap (overdue) + 30% Recent-Hits + 15% Trend + 15% Frequency + 10% Positional."""
     n = draws_2d.shape[0]
@@ -146,7 +146,7 @@ def _smart_logic_hybrid(draws_2d: np.ndarray, max_num: int) -> Dict[int, float]:
     return _normalize(final, max_num)
 
 
-def score_omnius(draws_2d: np.ndarray, max_num: int, budget_s: float | None = None) -> Dict[int, float]:
+def score_omnius(draws_2d: np.ndarray, max_num: int, budget_s: float | None = None) -> dict[int, float]:
     """OMNIUS = meta-selector COMPREHENSIV: ponderează TOATE metodele matematice din
     registry după performanța lor recentă (50%%) + Smart Logic Hybrid (50%%).
 
@@ -182,7 +182,7 @@ def score_omnius(draws_2d: np.ndarray, max_num: int, budget_s: float | None = No
 
     # Buclă CANDIDAT-exterior + BUGET: fiecare metodă e evaluată pe TOATE ferestrele (corect)
     # sau deloc; odată depășit bugetul, metodele rămase (cele lente) sunt sărite din ponderare.
-    conf: Dict[str, float] = {}
+    conf: dict[str, float] = {}
     t0 = time.perf_counter()
     skipped = 0
     for mi, m in enumerate(cands):
@@ -242,7 +242,22 @@ def score_omnius(draws_2d: np.ndarray, max_num: int, budget_s: float | None = No
     return _normalize(combined, max_num)
 
 
-OMNIUS_METHODS: Dict[str, Tuple[Callable, str, bool, str]] = {
+def pick_omnius_ticket(
+    pool: list[int],
+    scores: dict[int, float],
+    draw_n: int,
+) -> list[int]:
+    """Alege draw_n numere din pool: top după scor (fără filtre).
+
+    Aliniat cu bench / walk-forward pe ținta 3+: fără constrângeri de paritate
+    sau progresie aritmetică care abat biletul de la scorul validat.
+    """
+    draw_n = max(1, int(draw_n))
+    ranked = sorted({int(n) for n in pool}, key=lambda n: scores.get(n, 0.0), reverse=True)
+    return sorted(ranked[:draw_n])
+
+
+OMNIUS_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     "omnius": (score_omnius, "meta-adaptive", False,
                "OMNIUS — meta-selector: ponderează TOATE metodele matematice după "
                "performanța recentă pe istoric (50%) + Smart Logic Hybrid (50%)"),
