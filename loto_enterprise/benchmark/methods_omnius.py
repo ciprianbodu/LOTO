@@ -28,6 +28,8 @@ from typing import Callable
 
 import numpy as np
 
+from loto_enterprise.core.ranking import rank_by_score
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,6 +94,10 @@ def _omnius_candidates() -> list[str]:
 
 
 def _topk(scores: dict[int, float], k: int) -> set:
+    # INTENȚIONAT în afara unificării cu core.ranking.rank_by_score: e folosit
+    # doar în meta-evaluarea internă a lui score_omnius; schimbarea tie-break-ului
+    # ar schimba OUTPUT-ul metodei "omnius" -> ar cere bump CACHE_VERSION în
+    # bench_cache (altfel fold-urile din cache devin stale silențios).
     if not scores:
         return set()
     return set(n for n, _ in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k])
@@ -250,11 +256,15 @@ def pick_omnius_ticket(
     """Alege draw_n numere din pool: top după scor (fără filtre).
 
     Aliniat cu bench / walk-forward pe ținta 3+: fără constrângeri de paritate
-    sau progresie aritmetică care abat biletul de la scorul validat.
+    sau progresie aritmetică care abat biletul de la scorul validat. Tie-break
+    prin regula canonică `rank_by_score` (scor desc, număr desc) — înainte, la
+    scoruri egale, ordinea era cea de iterare a set-ului (nespecificată, în
+    practică favoriza numerele MICI — degenerare).
     """
     draw_n = max(1, int(draw_n))
-    ranked = sorted({int(n) for n in pool}, key=lambda n: scores.get(n, 0.0), reverse=True)
-    return sorted(ranked[:draw_n])
+    # Restrângem scorurile la pool (dedup; scor lipsă = 0.0), apoi ranking canonic.
+    pool_scores = {n: float(scores.get(n, 0.0)) for n in {int(v) for v in pool}}
+    return sorted(rank_by_score(pool_scores, draw_n))
 
 
 OMNIUS_METHODS: dict[str, tuple[Callable, str, bool, str]] = {

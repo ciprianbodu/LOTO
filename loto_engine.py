@@ -427,7 +427,9 @@ class LotoEngine:
         
         # Atașăm Joker din nucleul dur de Joker dacă e cazul
         if self.game_type == "joker" and hasattr(self, 'hard_core_joker') and self.hard_core_joker:
-            # Ciclam prin jokerii favoriți pentru fiecare variantă de Urna 1
+            # Atașăm jokerul favorit pe fiecare variantă de Urna 1. Codul rămâne
+            # ciclic (generic pe lungimea listei), dar cu urna2 single-pick
+            # (pool 1, aliniat bench) toate variantele primesc ACELAȘI joker.
             jokers = self.hard_core_joker
             joker_pool_size = len(jokers)
             for idx, variant in enumerate(variants):
@@ -456,17 +458,11 @@ class LotoEngine:
             f"[PIPELINE] ▶ pool_size primit de la UI = {pool_size}, guarantee = {guarantee}"
         )
 
-        # Pe pool=10, escalăm la guarantee=draw_n (full wheel) — C(10,draw_n)
-        # maximizează densitatea biletelor pe nucleul mic (acoperire completă).
-        draw_n_for_game = int(self.params.get("draw_n", 6))
-        if pool_size == 10 and guarantee < draw_n_for_game:
-            logging.info(
-                "[PIPELINE] Pool=10 detectat: escalez guarantee de la %d la %d "
-                "(full wheel C(10,%d)).",
-                guarantee, draw_n_for_game, draw_n_for_game,
-            )
-            guarantee = draw_n_for_game
-            self.audit["full_wheel_pool10"] = True
+        # Garanția cerută în UI se respectă ÎNTOTDEAUNA — fără escaladare implicită.
+        # (Istoric: pe pool=10 garanția era suprascrisă silențios cu draw_n → full
+        # wheel C(10,draw_n), de ~10x mai scump decât coverul minim pentru garanția
+        # cerută, iar UI-ul afișa în continuare garanția veche. Cine vrea full wheel
+        # setează explicit Garanție = draw_n în UI.)
 
         # === ADAPTIVE FEEDBACK PRE-RUN: detectăm extrageri reale apărute de la
         # ultima predicție și ajustăm error_correction_map ÎNAINTE de TimesFM. ===
@@ -733,15 +729,30 @@ class LotoEngine:
         if self.game_type == "joker":
             logging.info(f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)...")
             j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
+            # joker_urna2 e single-pick (pool 1) în TOT lanțul bench→decizie→UI
+            # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
+            # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.
+            # Candidații alternativi rămân disponibili în audit['joker_predictions'].
             if j_scores:
                 sorted_j = sorted(j_scores.items(), key=lambda x: x[1], reverse=True)
-                self.hard_core_joker = [int(num) for num, _ in sorted_j[:2]]
+                self.hard_core_joker = [int(num) for num, _ in sorted_j[:1]]
                 logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
                 self.audit['joker_predictions'] = {num: round(score, 4) for num, score in sorted_j[:5]}
             else:
                 freq_joker = self.analyze_joker_frequency()
-                self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=2)
+                self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
+                # Candidați informativi (top-5 după frecvență) și pe fallback,
+                # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
+                self.audit['joker_predictions'] = {
+                    int(i) + 1: int(freq_joker[i]) for i in np.argsort(freq_joker)[-5:][::-1]
+                }
                 logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
+            # Auto-invert (Pool 2) NU inversează Urna 2: univers mic (1-20), iar
+            # scoring-ul urna2 ignoră manual_blacklist → pass 2 recalculează pe
+            # aceleași date și obține ACELAȘI joker la ambele pool-uri. Cheie de
+            # audit explicită ca UI-ul să poată avertiza, nu să afirme implicit
+            # că Pool 2 conține numere excluse din Pool 1.
+            self.audit['joker_urna2_inverted'] = False
 
         if progress_cb:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
@@ -791,6 +802,9 @@ class LotoEngine:
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
         wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
+        # Contract cu UI: garanția EFECTIV folosită la wheel (identică cu cea cerută
+        # în UI — nu mai există nicio escaladare pe drum). UI-ul o afișează ca atare.
+        self.audit["wheel_guarantee_used"] = int(guarantee)
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
         # Filtru anti-anomalie pe variante — DEZACTIVAT (cerere user: fără filtre).
@@ -2017,7 +2031,14 @@ class LotoEngine:
         # hit_target deja setat din BENCH_HIT_TARGET; high/max = trepte superioare.
         hit_high = min(hit_target + 1, draw_n)
         hit_max = min(hit_target + 2, draw_n)
-        w_target, w_high, w_max = 12, 30, 80  # greutate pe 3+, apoi 4+/5+
+
+        # Ponderi UNIFORME, independente de tinta: pragurile sunt CUMULATIVE
+        # (o extragere cu >=T+1 hits numara si la >=T), deci tinta trebuie sa
+        # aiba ponderea DOMINANTA, iar treptele superioare doar departajeaza la
+        # egalitate. Vechea ramura 4+ (5/100/10) facea ca o extragere cu 5 hits
+        # sa valoreze 105 vs 5 pentru exact 4 → optimizatorul sacrifica ~21 de
+        # extrageri cu 4 hits pentru una cu 5, contrar tintei declarate.
+        w_target, w_high, w_max = 100, 10, 1
 
         # Vectorizat: overlap-urile pe toate extragerile dintr-o fereastra se obtin
         # cu un singur produs matrice-vector (B @ indicator), in loc de intersectii

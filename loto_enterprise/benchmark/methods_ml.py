@@ -68,25 +68,40 @@ def _check_sklearn() -> bool:
 
 
 def _score_one_number(s, lag, classifier_factory):
-    """Antrenează 1 clasificator pe seria binară a unui număr → probabilitatea next-step.
-    Extras ca funcție ca să poată rula PARALEL (joblib) pe toate nucleele."""
+    """Antrenează 1 clasificator pe seria binară a unui număr → scorul next-step.
+    Extras ca funcție ca să poată rula PARALEL (joblib) pe toate nucleele.
+
+    Numerele NEscorabile de model (serie degenerată, features insuficiente,
+    excepție la fit/predict) întorc SENTINEL NaN — apelanta (_sklearn_per_number)
+    le mapează la minimul scorurilor REUȘITE, deci rămân pe ACEEAȘI scală cu
+    path-ul principal. Înainte, fallback-ul float(s.mean()) (~0.03) ateriza pe o
+    scală STRĂINĂ față de decision_function (nemărginit, ex. ±5 la Ridge) →
+    poziție arbitrară în ranking după min-max normalize."""
     if s.sum() < 2 or s.sum() > len(s) - 2:
-        return float(s.mean())  # degenerat (tot 0 sau tot 1) → media
+        return float("nan")  # degenerat (tot 0 sau tot 1) → nescorabil de model
     X, y = _build_lag_features(s, lag_window=lag)
     if X is None or len(np.unique(y)) < 2:
-        return float(s.mean())
+        return float("nan")
     try:
         clf = classifier_factory()
         clf.fit(X, y)
         x_pred = s[-lag:].reshape(1, -1)
+        # Preferăm scoruri CONTINUE. RidgeClassifier / LinearSVC etc. n-au
+        # predict_proba → predict() e 0/1 și poate da TOATE numerele 0 → după
+        # min-max normalize pool-ul degeneră în 1..K (sau, în ensemble cu
+        # prime_bias, în „cele mai mici compuse"). decision_function e treapta
+        # corectă pentru ranking.
         if hasattr(clf, "predict_proba"):
             pp = clf.predict_proba(x_pred)
-            p = float(pp[0, 1]) if pp.shape[1] > 1 else 0.5
-        else:
-            p = float(clf.predict(x_pred)[0])
-        return max(0.0, min(1.0, p))
+            if pp.shape[1] > 1:
+                return float(pp[0, 1])
+            return 0.5
+        if hasattr(clf, "decision_function"):
+            df = np.asarray(clf.decision_function(x_pred), dtype=np.float64).reshape(-1)
+            return float(df[0])
+        return float(clf.predict(x_pred)[0])
     except Exception:
-        return float(s.mean())
+        return float("nan")
 
 
 def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, context: int = 300) -> dict[int, float]:
@@ -105,6 +120,18 @@ def _sklearn_per_number(draws_2d, max_num, classifier_factory, lag: int = 10, co
     # de METODĂ (runner.py rulează mai multe metode simultan pe nuclee). Dublu-paralelism
     # ar cauza oversubscription (N metode × 49 = mii de threads pe 32 nuclee → mai lent).
     results = [_score_one_number(s, lag, classifier_factory) for s in series]
+    # Numerele eșuate (sentinel NaN) → MINIMUL scorurilor reușite: rămân pe
+    # scala modelului (comparabile cu restul), clasate ultimele — nu mai
+    # injectăm o valoare dintr-o scală străină (vechiul s.mean() ~0.03 vs
+    # decision_function ±5 → poziție arbitrară după min-max normalize).
+    valid = [r for r in results if r == r]  # NaN != NaN
+    if not valid:
+        # NICIUN număr scorabil de model → fallback CONSISTENT: frecvența
+        # empirică (s.mean()) pentru toate — aceeași scală [0,1] între ele.
+        results = [float(s.mean()) for s in series]
+    else:
+        floor = min(valid)
+        results = [r if r == r else floor for r in results]
     scores = {i + 1: float(results[i]) for i in range(max_num)}
     return _normalize(scores, max_num)
 

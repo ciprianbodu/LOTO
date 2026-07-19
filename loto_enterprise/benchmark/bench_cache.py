@@ -63,11 +63,17 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v7"  # v7: top649 649_katz12_gap88 (12% Katz + 88% gap_poisson)
-# v4: metodele graf folosesc acum graf de ASOCIERE (lift centrat) în loc de co-apariție
-# brută — output schimbat → cache-ul vechi (raw) ar fi servit stale. Re-bench complet.
-# v3: FoldResult are acum rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
-#     Foldurile v2 nu au coloana 3+ → trebuie recalculate (altfel rata 3+ iese NaN).
+CACHE_VERSION = "v10"
+# Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet):
+# v10: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
+# v9:  prime_bias + frecvență (nu mai degenera la „cele mai mici compuse”).
+# v8:  nefolosită (sărită la bump-ul v7→v9).
+# v7:  top649 649_katz12_gap88 (12% Katz + 88% gap_poisson).
+# v6:  nefolosită (sărită).
+# v5:  nefolosită (sărită).
+# v4:  metodele graf folosesc graf de ASOCIERE (lift centrat) în loc de co-apariție brută.
+# v3:  FoldResult are rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
+# v2:  versiunea inițială.
 INDEX_FILE = CACHE_DIR / "index.json"
 
 

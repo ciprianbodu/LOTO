@@ -156,12 +156,15 @@ def _load_extra_methods() -> None:
         logger.info(f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules).")
 
 
-# Alias-uri pentru nume vechi (înainte de eliminarea GPU: ml_*_cpu). Nu intră în bench
-# (list_methods le exclude) — doar rezolvă best_methods.json / folds.csv vechi până la re-bench.
+# Alias-uri pentru nume vechi (înainte de eliminarea GPU: ml_*_cpu) și duplicate eliminate
+# (649_top_autocorr delega pur către autocorr — două sloturi de clasament, semnal dublu în
+# ensemble). Nu intră în bench (list_methods le exclude) — doar rezolvă best_methods.json /
+# folds.csv vechi până la re-bench.
 METHOD_ALIASES: dict[str, str] = {
     "ml_xgb_cpu": "ml_xgb",
     "ml_lgbm_cpu": "ml_lgbm",
     "ml_catboost_cpu": "ml_catboost",
+    "649_top_autocorr": "autocorr",
 }
 
 

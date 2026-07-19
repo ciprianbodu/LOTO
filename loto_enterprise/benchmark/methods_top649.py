@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .methods_classical import score_autocorr, score_beta_binomial, score_gap_poisson, score_markov_2, score_prime_bias
+from .methods_classical import score_beta_binomial, score_gap_poisson, score_markov_2, score_prime_bias
 from .methods_graph import (
     score_graph_649_katz_community,
     score_graph_community_strength,
@@ -83,10 +83,6 @@ def score_top649_15_katz85_markov15(draws_2d, max_num):
     return make_blend_scorer([(0.85, score_graph_katz_high), (0.15, score_markov_2)])(draws_2d, max_num)
 
 
-def score_top649_16_autocorr(draws_2d, max_num):
-    return score_autocorr(draws_2d, max_num)
-
-
 def score_top649_17_katz65_katzhigh35(draws_2d, max_num):
     return make_blend_scorer([(0.65, score_graph_649_katz_community), (0.35, score_graph_katz_high)])(draws_2d, max_num)
 
@@ -120,7 +116,6 @@ TOP649_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     "649_katz65_second35":   (score_top649_13_katz65_second35,   "top649", False, "65% KatzCommunity + 35% second_order"),
     "649_katz85_second15":   (score_top649_14_katz85_second15,   "top649", False, "85% KatzCommunity + 15% second_order"),
     "649_katz85_markov15":   (score_top649_15_katz85_markov15,   "top649", False, "85% KatzHigh + 15% markov_2"),
-    "649_top_autocorr":      (score_top649_16_autocorr,          "top649", False, "autocorr lag 1-5"),
     "649_katz65_katzhigh35": (score_top649_17_katz65_katzhigh35, "top649", False, "65% KatzCommunity + 35% KatzHigh"),
     "649_katz75_katzhigh25": (score_top649_18_katz75_katzhigh25, "top649", False, "75% KatzCommunity + 25% KatzHigh"),
     "649_katz75_second25":   (score_top649_19_katz75_second25,   "top649", False, "75% KatzCommunity + 25% second_order"),

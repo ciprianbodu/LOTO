@@ -38,6 +38,7 @@ from .hardware import (
     format_snapshot,
 )
 from .hw_sampler import HwSampler, HwSnapshot
+from loto_enterprise.core.ranking import rank_by_score
 
 logger = logging.getLogger(__name__)
 
@@ -182,9 +183,13 @@ class FoldResult:
 
 
 def _top_k(scores: dict[int, float], k: int) -> list[int]:
-    if not scores:
-        return []
-    return [n for n, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:k]]
+    # Deleagă la regula canonică (scor desc, apoi număr mare întâi — evită
+    # degenerarea 1..K) din core.ranking — ACEEAȘI folosită de producție
+    # (pool_selection) și de biletul OMNIUS. Cu freq=None comportamentul e
+    # bit-identic cu vechea implementare locală, deci fold-urile din bench
+    # cache (CACHE_VERSION curent) rămân valide — fără bump.
+    # Filtrarea (ex. blacklist „numere moarte") rămâne la apelant.
+    return rank_by_score(scores, k)
 
 
 def _evaluate_fold(

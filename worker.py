@@ -162,6 +162,16 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             # Auto-Invert: ruleaza pipeline-ul de DOUA ori — primul pool e
             # considerat "excluded" si reluam cu el ca blacklist, returnam pool B.
             auto_invert = bool(task.get("auto_invert", False))
+            bench_hit_target = int(task.get("bench_hit_target", 3))
+
+            try:
+                import loto_enterprise.benchmark.decision as decision
+                decision.BENCH_HIT_TARGET = bench_hit_target
+                os.environ["LOTO_BENCH_TARGET"] = str(bench_hit_target)
+                logging.info(f"[worker] S-a setat tinta de benchmark la {bench_hit_target}+ hits.")
+            except Exception as exc:
+                logging.warning(f"[worker] Nu s-a putut seta tinta de benchmark: {exc}")
+
             logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
             logging.debug(f"[worker] Full task: {task}")
             

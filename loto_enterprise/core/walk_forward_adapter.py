@@ -32,8 +32,19 @@ from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_at
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v9"  # v9: pool top-N pur + OMNIUS top-N (optimizare hits 3+)
-# v8: 649_katz12_gap88 scorer 6/49 k16
+CACHE_VERSION = "v12"
+# Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v12: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
+# v11: prime_bias tie-break frecvență + _decision_sig include BENCH_HIT_TARGET + tie-break pool.
+# v10: nefolosită (sărită la bump-ul v9→v11).
+# v9:  pool top-N pur + OMNIUS top-N (optimizare hits 3+).
+# v8:  649_katz12_gap88 scorer 6/49 k16.
+# v7:  nefolosită (sărită).
+# v6:  sufix _inv.pkl pentru cache-ul Pool 2 (auto-invert).
+# v5:  iterare recent→vechi la oprire parțială (buget) — cache-urile v4 parțiale acopereau felia veche.
+# v4:  flat-ul include omnius_hits/omnius_ticket per extragere.
+# v3:  cheia include semnătura deciziei bench (scorer/sim_depth/blacklist).
+# v2:  versiunea inițială.
 
 
 @dataclass
@@ -69,7 +80,7 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
 
 
 def _decision_sig(game_type: str, pool_size: int) -> str:
-    """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist) pentru
+    """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target) pentru
     (joc, pool).
 
     Walk-forward-ul rulează engine-ul, care alege metoda câştigătoare din
@@ -80,10 +91,11 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
     """
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
+        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
         gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
               "joker": "joker_urna1"}.get(game_type, "loto_6_49")
         c = recommend_optimal_config(gk, int(pool_size))
-        raw = f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|{bool(c.get('use_blacklist', False))}"
+        raw = f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}"
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         logger.warning(f"[WALK-FWD] decision sig indisponibilă ({exc}) — folosesc 'nodec'")

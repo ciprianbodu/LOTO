@@ -911,8 +911,11 @@ def score_modular(draws_2d, max_num):
 
 
 def score_prime_bias(draws_2d, max_num):
-    """Bias prime/compuse: masoara cat de des ies prime vs compuse recent si scoreaza
-    in consecinta (number theory)."""
+    """Bias prime/compuse + frecvență în clasă (tie-break).
+
+    Fără tie-break, scorul are doar 2 nivele → top-K degeneră în „cele mai mici
+    N compuse/prime” (ordine numerică), nu un pool util.
+    """
     if draws_2d.shape[0] < 5:
         return {}
     def is_prime(n):
@@ -930,9 +933,19 @@ def score_prime_bias(draws_2d, max_num):
                 if vi in primes: p_hits += 1
                 else: c_hits += 1
     prime_rate = p_hits / max(p_hits + c_hits, 1)
+    freq = np.zeros(max_num + 1, dtype=np.float64)
+    for row in draws_2d:
+        for v in row:
+            vi = int(v)
+            if 1 <= vi <= max_num:
+                freq[vi] += 1.0
+    fmax = float(freq.max()) or 1.0
     scores = {}
     for k in range(1, max_num + 1):
-        scores[k] = prime_rate if k in primes else (1 - prime_rate)
+        base = prime_rate if k in primes else (1.0 - prime_rate)
+        # 0.01 << diferența tipică între clase (~0.2–0.5) → clasa domină, frecvența
+        # doar rupe egalitățile din aceeași clasă.
+        scores[k] = base + 0.01 * (freq[k] / fmax)
     return _normalize(scores, max_num)
 
 

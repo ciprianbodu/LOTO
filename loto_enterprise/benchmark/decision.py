@@ -165,10 +165,22 @@ def decide_optimal_config_for_pool(
         rate_target_col, f"rate_{BENCH_HIT_TARGET}plus",
         f"rate_4plus_k{pool_size}", "rate_4plus",
     )
+    # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
+    # fallback de metrică (ex. ținta 3+ dar folds.csv vechi are doar 4+) —
+    # trebuie SEMNALIZAT (rate_col_mismatch + rationale), nu tăcut.
+    _target_cols = {rate_target_col, f"rate_{BENCH_HIT_TARGET}plus"}
+    _mismatch_cols_used: set[str] = set()
 
     def _resolve_rate_col(frame: pd.DataFrame) -> str | None:
         for c in _rate_target_candidate_cols:
             if c in frame.columns and frame[c].notna().any():
+                if c not in _target_cols and c not in _mismatch_cols_used:
+                    _mismatch_cols_used.add(c)  # log O DATĂ per (game, pool, coloană)
+                    logger.warning(
+                        "[decision] %s k%d: coloanele rate_%dplus lipsesc/all-NaN în folds.csv — "
+                        "decizia cade pe %r (metrica 4+), deși ținta e %d+. Re-rulează bench-ul.",
+                        game_key, pool_size, BENCH_HIT_TARGET, c, BENCH_HIT_TARGET,
+                    )
                 return c
         return None
 
@@ -256,9 +268,16 @@ def decide_optimal_config_for_pool(
         top_k = qualifying[:ENSEMBLE_MAX_METHODS]
         ensemble = _build_ensemble_weights([(m, r4_conf) for m, _, _, _, _, r4_conf in top_k])
 
-    # Pick the best sim_depth for the chosen scorer
+    # Pick the best sim_depth for the chosen scorer based on target hit rate (percentage of drawings)
     real_chosen = sub[(sub["method"] == scorer) & (sub["is_random"] == False)]  # noqa: E712
+    rate_col = _resolve_rate_col(real_chosen)
+    if rate_col is None:
+        rate_col = base_col  # fallback to avg_hits — tot un fallback de metrică
+        _mismatch_cols_used.add(base_col)
+
+
     by_pct = real_chosen.groupby("percentile").agg(
+        target_rate=(rate_col, "mean"),
         avg_hits=(base_col, "mean"),
         n_test=("n_test", "mean"),
         runtime=("runtime_sec", "mean"),
@@ -267,9 +286,9 @@ def decide_optimal_config_for_pool(
     stable = by_pct[by_pct["n_test"] >= MIN_TEST_DRAWS_FOR_STABILITY]
     if stable.empty:
         stable = by_pct
-    # Sort by avg_hits desc, tiebreak on larger sim_depth
+    # Sort by target_rate desc (optimizing percentage of hits), tiebreak on avg_hits desc
     stable = stable.sort_values(
-        by=["avg_hits"], ascending=False
+        by=["target_rate", "avg_hits"], ascending=[False, False]
     )
     best_pct = int(stable.index[0])
     best_avg = float(stable.iloc[0]["avg_hits"])
@@ -285,6 +304,16 @@ def decide_optimal_config_for_pool(
             if bl_avg > no_bl:
                 use_bl = True
 
+    # Semnalizare fallback de metrică: dacă ORICE rezoluție a folosit o coloană
+    # din afara țintei (3+ absent → 4+), o marcăm în rezultat + rationale — ca
+    # UI-ul și logurile să nu pretindă că decizia s-a luat pe metrica "T+".
+    rate_col_mismatch = bool(_mismatch_cols_used)
+    if rate_col_mismatch:
+        rationale += (
+            f" [ATENȚIE: metrica {BENCH_HIT_TARGET}+ indisponibilă în folds.csv — "
+            f"decizie luată pe {', '.join(sorted(_mismatch_cols_used))}; re-rulează bench-ul]"
+        )
+
     return {
         "scorer": scorer,
         "ensemble": ensemble,
@@ -293,6 +322,8 @@ def decide_optimal_config_for_pool(
         "avg_hits": best_avg,
         "avg_hits_with_blacklist": bl_avg,
         "rationale": rationale,
+        "rate_col_used": rate_col,
+        "rate_col_mismatch": rate_col_mismatch,
         "qualifying_methods": len(qualifying),
         "consistency_threshold": CONSISTENCY_THRESHOLD,
     }

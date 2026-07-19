@@ -250,8 +250,75 @@ def get_ensemble_for_game(
     return [(n, fn, w / total_w) for n, fn, w in out]
 
 
+def _has_variance(raw: dict) -> bool:
+    """Scoruri PLATE (toate egale) = fără informație de ranking — filtrate din blend."""
+    vals = [float(v) for v in raw.values()]
+    if len(vals) < 2:
+        return False
+    return (max(vals) - min(vals)) > 1e-12
+
+
+def _split_active(
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]]]:
+    """Împarte contribuțiile în (active, dropped) — logica UNICĂ de filtrare,
+    partajată de combine_ensemble_scores și describe_ensemble (ca UI-ul să vadă
+    EXACT aceeași listă pe care blend-ul o folosește efectiv).
+
+    Ignoră scoruri goale SAU plate (toate egale) — altfel un Ridge defect
+    (toate 0) + prime_bias (2 nivele) → pool = „cele mai mici compuse".
+    dropped = [(nume, motiv)], motiv ∈ {"empty", "flat"}."""
+    active: list[tuple[str, dict[int, float], float]] = []
+    dropped: list[tuple[str, str]] = []
+    for name, raw, w in contributions:
+        if not raw:
+            dropped.append((name, "empty"))
+        elif not _has_variance(raw):
+            dropped.append((name, "flat"))
+        else:
+            active.append((name, raw, w))
+    return active, dropped
+
+
+def describe_ensemble(
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> dict:
+    """Metadata pt afișare (UI): cine e EFECTIV activ în blend vs. nominal.
+
+    Aplică exact filtrarea din combine_ensemble_scores (goale/plate afară,
+    renormalizare pe activi) FĂRĂ să combine scorurile — UI-ul o poate apela
+    ca să afișeze membrii reali + ponderile efectiv folosite, nu cele nominale.
+
+    Returnează:
+        active  — [{"method", "weight"}] ponderi RENORMALIZATE pe membrii activi
+        dropped — [{"method", "reason"}] reason ∈ {"empty", "flat"}
+        nominal_count / active_count — dimensiunile listelor
+        single_active_normalized — True când nominal >1 dar 1 activ (scorurile
+            supraviețuitorului sunt min-max normalizate, nu brute)
+        fallback_flat — True când NICIUN membru nu are varianță și blend-ul
+            cade pe primul nevid (chiar plat)
+    """
+    active, dropped = _split_active(contributions)
+    if len(active) == 1:
+        active_out = [{"method": active[0][0], "weight": 1.0}]
+    elif active:
+        total_w = sum(w for _, _, w in active) or 1.0
+        active_out = [{"method": n, "weight": w / total_w} for n, _raw, w in active]
+    else:
+        active_out = []
+    return {
+        "active": active_out,
+        "dropped": [{"method": n, "reason": r} for n, r in dropped],
+        "nominal_count": len(contributions),
+        "active_count": len(active),
+        "single_active_normalized": len(contributions) > 1 and len(active) == 1,
+        "fallback_flat": not active and any(raw for _n, raw, _w in contributions),
+    }
+
+
 def combine_ensemble_scores(
     contributions: list[tuple[str, dict[int, float], float]],
+    audit: dict | None = None,
 ) -> dict[int, float]:
     """Combină scorurile brute ale mai multor metode într-un singur scor per
     număr, ponderat. Fiecare metodă e normalizată min-max la [0,1] ÎNAINTE de
@@ -263,17 +330,54 @@ def combine_ensemble_scores(
     metodelor care au produs efectiv scoruri, ca metodele eșuate/goale să nu
     reducă artificial suma ponderilor active).
 
-    Cu UN SINGUR membru cu scoruri nevide, returnează scorurile lui BRUTE,
-    NEnormalizate — comportament bit-identic cu apelul direct al scorer-ului
-    (fără ensemble), ca să nu schimbăm nimic când decizia n-a construit un
-    blend real (ensemble cu 1 membru).
+    `audit` (opțional) — dict în care se scriu membrii EFECTIV folosiți, ca
+    filtrarea (goale/plate) să fie OBSERVABILĂ din UI, nu tăcută:
+        audit["ensemble_active"]  = [(nume, pondere_renormalizată), ...]
+        audit["ensemble_dropped"] = [nume, ...]
+        + flag-urile single_active_normalized / fallback_flat când e cazul.
+
+    Bit-identitate: DOAR cu ensemble NOMINAL de exact 1 membru (decizia n-a
+    construit un blend real) scorurile lui se întorc BRUTE, NEnormalizate —
+    identic cu apelul direct al scorer-ului (CLAUDE.md regula 1). Când nominal
+    >1 dar rămâne 1 singur membru ACTIV, scorurile lui sunt min-max normalizate
+    (rank-preserving, pool identic) — exact „membru normalizat înainte de
+    combinare", nu un scorer diferit pe tăcute.
     """
-    active = [(name, raw, w) for name, raw, w in contributions if raw]
+    active, dropped = _split_active(contributions)
+
+    if audit is not None:
+        if len(active) == 1:
+            audit["ensemble_active"] = [(active[0][0], 1.0)]
+        elif active:
+            _tw = sum(w for _, _, w in active) or 1.0
+            audit["ensemble_active"] = [(n, w / _tw) for n, _raw, w in active]
+        else:
+            audit["ensemble_active"] = []
+        audit["ensemble_dropped"] = [n for n, _reason in dropped]
+
     if not active:
+        # fallback: primul nevid, chiar dacă e plat (mai bun decât pool gol);
+        # plat = toate valorile egale, deci scalarea nu ar schimba nimic în ranking
+        for name, raw, w in contributions:
+            if raw:
+                if audit is not None:
+                    audit["ensemble_active"] = [(name, 1.0)]
+                    audit["ensemble_fallback_flat"] = True
+                return {int(k): float(v) for k, v in raw.items()}
         return {}
     if len(active) == 1:
         _name, raw, _w = active[0]
-        return {int(k): float(v) for k, v in raw.items()}
+        if len(contributions) == 1:
+            # ensemble NOMINAL cu 1 membru → scoruri BRUTE (bit-identic, vezi docstring)
+            return {int(k): float(v) for k, v in raw.items()}
+        # nominal >1 dar 1 activ → min-max normalize (monoton → același pool),
+        # consecvent cu tratamentul membrilor dintr-un blend real
+        if audit is not None:
+            audit["ensemble_single_active_normalized"] = True
+        vals = list(raw.values())
+        lo, hi = min(vals), max(vals)
+        span = (hi - lo) or 1.0
+        return {int(k): (float(v) - lo) / span for k, v in raw.items()}
 
     total_w = sum(w for _, _, w in active) or 1.0
     combined: dict[int, float] = {}
@@ -358,6 +462,11 @@ def recommend_optimal_config(
             "use_blacklist": bool(entry.get("use_blacklist", False)),
             "avg_hits": float(entry.get("avg_hits", 0.0)),
             "rationale": entry.get("rationale", ""),
+            # membrii ensemble (nominali, din decizie) + semnalizarea fallback-ului
+            # de metrică (3+→4+) — altfel panoul de status din UI nu le poate afișa
+            "ensemble": entry.get("ensemble") or [],
+            "rate_col_used": entry.get("rate_col_used"),
+            "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
             "fallback": False,
         }
 

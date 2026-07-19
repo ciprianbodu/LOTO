@@ -1,16 +1,21 @@
 """Selecție de pool din scoruri — top-N pur (aliniat cu bench).
 
-Logică pură CPU (numpy). Bench-ul (`runner._top_k`) evaluează metodele pe
+Logică pură CPU. Bench-ul (`runner._top_k`) evaluează metodele pe
 pool = top-K după scor. Producția trebuie să folosească ACEEAȘI regulă, altfel
-câștigătorul pe rata 3+ din bench nu se reproduce în generare.
+câștigătorul pe rata 3+ din bench nu se reproduce în generare. Ambele deleagă
+la regula canonică `core.ranking.rank_by_score` (scor desc, număr desc).
 
 Diversificarea empirică decade/paritate a fost scoasă (2026-07): introducea
-divergență față de metrică și față de decizia Auto-Pilot pe 3+.
+divergență față de metrică și față de decizia Auto-Pilot pe 3+. Tie-break-ul
+pe frecvență din ``draw_matrix`` a fost scos și el (2026-07): bench-ul nu îl
+aplica, deci la scoruri egale pool-ul generat DIVERGA de cel validat.
 """
 
 from __future__ import annotations
 
 import numpy as np
+
+from loto_enterprise.core.ranking import rank_by_score
 
 
 def select_pool_from_scores(
@@ -23,20 +28,28 @@ def select_pool_from_scores(
 ) -> list[int]:
     """Selectează top ``pool_size`` numere după scor (fără filtre de diversitate).
 
-    ``draw_matrix`` e acceptat pentru compatibilitate API; nu influențează selecția.
+    Regula canonică `rank_by_score`: la scoruri egale, număr descrescător —
+    IDENTIC cu bench `runner._top_k` (evită degenerarea „1,2,3…K” / „cele mai
+    mici compuse”). ``draw_matrix`` rămâne în semnătură pentru compatibilitate
+    cu apelantul din loto_engine, dar NU mai influențează selecția.
     """
-    del draw_matrix  # API compat; selecție = doar scor
     valid = {
         int(n): float(s)
         for n, s in scores.items()
         if int(n) not in blacklist and 1 <= int(n) <= max_num
     }
-    sorted_nums = sorted(valid.items(), key=lambda x: x[1], reverse=True)
-    pool = [n for n, _ in sorted_nums[: max(0, int(pool_size))]]
+    ranked_all = rank_by_score(valid, len(valid))
+    pool = ranked_all[: max(0, int(pool_size))]
 
     if audit is not None:
-        audit["timesfm_predictions"] = {n: round(s, 6) for n, s in sorted_nums[:25]}
+        n_unique = len({round(s, 9) for s in valid.values()})
+        audit["timesfm_predictions"] = {n: round(valid[n], 6) for n in ranked_all[:25]}
         audit["pool_selection"] = "top_score_pure"
-        audit["pool_selection_note"] = "top-N după scor (aliniat bench / țintă 3+)"
+        audit["pool_selection_note"] = "top-N după scor (regulă canonică ranking, aliniat bench / țintă 3+)"
+        audit["pool_score_unique_levels"] = n_unique
+        if n_unique < max(3, int(pool_size) // 2):
+            audit["pool_selection_warning"] = (
+                f"scorer cu doar {n_unique} nivele distincte — tie-break canonic (număr desc)"
+            )
 
     return sorted(pool)

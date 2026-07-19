@@ -15,8 +15,11 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        acoperirea (ponderată pe scoruri). Fitness pe CPU (numpy).
   • wheel_lajolla    — designuri optime cunoscute (fișiere covering_designs/);
                        altfel cade pe ILP exact (mic) → greedy. „Best-known".
+  • wheel_union34    — UNIUNEA coverelor ILP pt guarantee=3 ȘI guarantee=4:
+                       garantează SIMULTAN 3-din-3 și 4-din-4 la o fracție din
+                       costul sistemului complet.
 
-Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla.
+Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34.
 Orice eșec/limită → fallback la greedy (sigur). Default = greedy (bit-identic).
 """
 from __future__ import annotations
@@ -408,6 +411,55 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
 
 
 # ===========================================================================
+# 5) UNIUNE 3∪4 — garanție SIMULTANĂ 3-din-3 ȘI 4-din-4 (uniune de covere ILP)
+# ===========================================================================
+def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
+                  time_limit: float = 15.0):
+    """Cover UNIUNE 3∪4: garantează SIMULTAN că ORICE 3-subset ȘI ORICE 4-subset
+    din pool sunt conținute în cel puțin un bilet (3-din-3 și 4-din-4).
+
+    Motivație: ținta bench e 3+, dar premiile 4+ contează — uniunea convertește
+    AMBELE tipuri de evenimente pool→bilet la o fracție din costul sistemului
+    complet. Empiric (venv): pool 10, bilet 6 → uniune = 30 bilete (vs 210
+    complet); pool 10, bilet 5 → 63 bilete (vs 252 complet).
+
+    Construiește coverul ILP pentru guarantee=3 și separat pentru guarantee=4
+    (refolosește wheel_ilp, cu guard-urile și fallback-urile lui), face UNIUNEA
+    cu dedup pe tuple sortate și ordonează după scoruri. `coverage_pct` raportat
+    = pe guarantee-ul CERUT de apelant (compute_coverage_pct). Parametrul
+    `guarantee` NU schimbă componentele uniunii (mereu 3 și 4) — la guarantee>4
+    doar se loghează WARNING (metoda e gândită pentru ținte 3/4).
+    """
+    pool = _sorted_pool(pool, scores)
+    v = len(pool)
+    if v < pick:
+        return [list(pool)], 100.0
+    if guarantee > 4:
+        logger.warning("[WHEEL-U34] guarantee=%d > 4 — metoda e gândită pentru ținte 3/4; "
+                       "componentele rămân 3∪4, acoperirea e raportată pe %d",
+                       guarantee, guarantee)
+    seen: set[tuple[int, ...]] = set()
+    union: list[list[int]] = []
+    for g in (3, 4):
+        if g > pick:
+            continue  # bilet prea mic ca să conțină un g-subset → componentă imposibilă
+        comp, _ = wheel_ilp(pool, pick, g, 0, scores, time_limit=time_limit)
+        for t in comp:
+            key = tuple(sorted(t))
+            if key not in seen:
+                seen.add(key)
+                union.append(list(key))
+    union = _order_by_scores(union, scores)
+    if max_variants > 0 and len(union) > max_variants:
+        # consecvent cu wheel_ilp: tăiem DUPĂ ordonarea pe scoruri, dar garanția pică
+        logger.warning("[WHEEL-U34] max_variants=%d < uniune=%d — tai după scoruri, "
+                       "garanția 3∪4 NU mai e 100%%", max_variants, len(union))
+        union = union[:max_variants]
+    logger.info("[WHEEL-U34] uniune 3∪4 = %d bilete (pool=%d, pick=%d)", len(union), v, pick)
+    return union, compute_coverage_pct(union, pool, guarantee)
+
+
+# ===========================================================================
 # Dispatcher
 # ===========================================================================
 WHEEL_METHODS = {
@@ -415,6 +467,7 @@ WHEEL_METHODS = {
     "annealing": wheel_annealing,
     "genetic": wheel_genetic,
     "lajolla": wheel_lajolla,
+    "union34": wheel_union34,
 }
 
 
