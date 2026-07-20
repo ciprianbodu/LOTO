@@ -16,6 +16,14 @@ Selection rules (in priority order):
 
 The output is written to best_methods.json under `auto_pilot_per_pool[gk][kN]`
 with full traceability (rationale + supporting numbers).
+
+Invarianți (NU strica):
+    * Baseline-urile NEDETERMINISTE (`EXCLUDED_FROM_PRODUCTION`, adică `random`)
+      sunt doar REFERINȚĂ de comparație — nu pot deveni niciodată scorer de
+      producție, nici pe ramura de fallback.
+    * Ensemble-ul nu e simplă feliere top-K: membrii cu semnătură de performanță
+      cvasi-identică sunt săriți (`ENSEMBLE_MAX_CORR`), altfel eticheta
+      "variance-reduction" ar fi falsă.
 """
 
 from __future__ import annotations
@@ -43,6 +51,31 @@ MIN_TEST_DRAWS_FOR_STABILITY = 30
 # degenerează la un singur membru (weight=1.0) — bit-identic cu comportamentul
 # vechi (fără normalizare/combinare în loto_engine.py).
 ENSEMBLE_MAX_METHODS = 3
+
+# Corelația maximă acceptată între semnăturile de performanță a doi membri de
+# ensemble. Peste prag => membrii sunt redundanți (aceeași serie de rate pe
+# aceleași folduri) și "variance-reduction" ar fi o etichetă FALSĂ: media a două
+# metode cvasi-identice are aceeași varianță ca una singură. Vezi
+# `_select_ensemble_members`.
+ENSEMBLE_MAX_CORR = 0.99
+
+# Baseline-uri care NU au voie să devină NICIODATĂ scorer de producție.
+# `random` (methods.py: `np.random.default_rng()` FĂRĂ sămânță) e nedeterminist:
+# două rulări pe aceleași date dau pool-uri diferite => decizia nu e nici
+# reproductibilă, nici auditabilă, iar poziția lui în clasament e pur zgomot
+# (pe 5/40 iese chiar #2 din 107 metode — exact dovada că diferențele dintre
+# metode sunt zgomot, nu semnal). Rolul lui e DOAR de podea de sanitate în
+# bench ("cât înseamnă pură șansă"), niciodată de generator.
+# `frequency`/`recency` rămân permise ca scorer: sunt baseline-uri DETERMINISTE
+# (aceleași date → același scor), reproductibile și explicabile pentru
+# utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
+# "numere date cu zarul" nu.
+EXCLUDED_FROM_PRODUCTION = frozenset({"random"})
+
+# Plasă de siguranță DETERMINISTĂ când nu rămâne nicio metodă reală în
+# folds.csv (niciodată `random` — vezi EXCLUDED_FROM_PRODUCTION).
+SAFE_FALLBACK_SCORER = "frequency"
+DEFAULT_SIM_DEPTH_PCT = 40  # identic cu default-ul din method_selector
 
 # Pragul de hituri pe care bench-ul ALEGE metoda câștigătoare (rata extragerilor cu
 # ≥ acest număr de numere ghicite). Implicit 3 (rată mai densă → selecție mai stabilă).
@@ -135,6 +168,124 @@ def _build_ensemble_weights(entries: list[tuple[str, float]]) -> list[dict]:
     return [{"method": m, "weight": round(c / total, 4)} for m, c in floored]
 
 
+def _perf_signature_frame(
+    sub_real: pd.DataFrame,
+    methods: list[str],
+    target: int,
+) -> pd.DataFrame | None:
+    """Semnătura de performanță a fiecărei metode, din folds.csv.
+
+    decision.py NU are vectorii de scor bruți (lucrează pe folds.csv), deci
+    redundanța se măsoară pe ce EXISTĂ: ratele T+ pe toate pool-urile × toate
+    ferestrele sim_depth (pivot `method` × `(rate_col, percentile)`). Două
+    metode care produc practic același pool au și aceeași serie de rate.
+
+    Coloanele sunt CENTRATE pe metode (se scade media pe coloană) — altfel
+    "forma" comună tuturor metodelor (k20 are inevitabil rată mai mare decât
+    k6) ar împinge orice pereche spre corelație 1 și am elimina membri
+    legitimi. După centrare rămâne doar cum DEVIAZĂ o metodă de la consens.
+
+    Returnează None dacă nu se poate construi o semnătură utilizabilă
+    (fără coloane de rată, sub 2 puncte pe metodă) → dedup dezactivat.
+    """
+    rate_cols = [
+        c for c in sub_real.columns
+        if c.startswith(f"rate_{target}plus_k") and sub_real[c].notna().any()
+    ]
+    if not rate_cols:  # folds.csv vechi (doar 4+) — vezi _resolve_rate_col
+        rate_cols = [
+            c for c in sub_real.columns
+            if c.startswith("rate_4plus_k") and sub_real[c].notna().any()
+        ]
+    if not rate_cols:
+        return None
+    frame = sub_real[sub_real["method"].isin(methods)]
+    if frame.empty:
+        return None
+    try:
+        piv = frame.pivot_table(
+            index="method", columns="percentile", values=rate_cols, aggfunc="mean",
+        )
+    except Exception as exc:  # date malformate — dedup e best-effort, nu blocant
+        logger.warning("[decision] semnătura de performanță indisponibilă: %s", exc)
+        return None
+    piv = piv.dropna(axis=1, how="any")  # doar coloane complete → comparabile 1:1
+    if piv.shape[0] < 2 or piv.shape[1] < 2:
+        return None
+    return piv - piv.mean(axis=0)
+
+
+def _signature_corr(v: np.ndarray, w: np.ndarray) -> float | None:
+    """Corelație Pearson între două semnături; None dacă nu e definită.
+
+    Serii IDENTICE → 1.0 explicit (corrcoef dă NaN când una are varianță zero,
+    ex. o metodă exact pe consens după centrare).
+    Corelația e SEMNATĂ; apelantul decide ce face cu semnul. Atenție: pe SCORURI
+    (`method_selector._select_decorrelated`) anti-corelația NU e complementaritate —
+    după min-max normalizare blend-ul devine monoton în membrul mai greu, deci
+    membrul anti-corelat nu aduce informație. Aici măsurăm însă RATE pe folduri,
+    unde semnul are altă semnificație: două metode care câștigă pe folduri diferite
+    chiar se completează. Cele două straturi au deci praguri și semantici diferite
+    în mod DELIBERAT — vezi ENSEMBLE_MAX_CORR (rate, semnat) vs MAX_MEMBER_CORR
+    (scoruri, modul).
+    """
+    if v.shape != w.shape or v.size < 2:
+        return None
+    if np.allclose(v, w, rtol=1e-9, atol=1e-12):
+        return 1.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        c = np.corrcoef(v, w)[0, 1]
+    return None if not np.isfinite(c) else float(c)
+
+
+def _select_ensemble_members(
+    ordered: list[tuple[str, float]],
+    sig: pd.DataFrame | None,
+    max_members: int = ENSEMBLE_MAX_METHODS,
+    max_corr: float = ENSEMBLE_MAX_CORR,
+) -> tuple[list[tuple[str, float]], list[dict]]:
+    """Alege membrii ensemble-ului cu DECORELARE, nu prin simplă feliere top-K.
+
+    `ordered` = [(metodă, confidence Wilson), ...] deja sortate descrescător.
+    Se parcurge lista în ordine și se păstrează o metodă doar dacă semnătura ei
+    de performanță nu e cvasi-identică (corelație ≥ `max_corr`) cu a unui membru
+    deja păstrat — adică se ține mereu cea cu Wilson mai bun, iar duplicatul se
+    sare. Fără asta, top-K poate conține variante ale aceleiași metode
+    (ex. blend-uri pe aceleași două componente), iar eticheta
+    "variance-reduction" ar fi falsă.
+
+    Returnează (membri_păstrați, eliminați_ca_redundanți). Al doilea element
+    folosește vocabularul din method_selector.describe_ensemble ("vs"/"r") ca
+    UI-ul să poată explica uniform de ce lipsește o metodă din blend.
+    """
+    kept: list[tuple[str, float]] = []
+    dropped: list[dict] = []
+    for m, conf in ordered:
+        if len(kept) >= max_members:
+            break
+        redundant_with: str | None = None
+        redundant_r: float | None = None
+        if sig is not None and m in sig.index:
+            v = sig.loc[m].to_numpy(dtype=float)
+            for kept_m, _kept_conf in kept:
+                if kept_m not in sig.index:
+                    continue
+                c = _signature_corr(v, sig.loc[kept_m].to_numpy(dtype=float))
+                if c is not None and c >= max_corr:
+                    redundant_with, redundant_r = kept_m, c
+                    break
+        if redundant_with is None:
+            kept.append((m, conf))
+        else:
+            dropped.append({
+                "method": m,
+                "vs": redundant_with,
+                "r": round(float(redundant_r), 4),
+                "reason": "perf_signature",
+            })
+    return kept, dropped
+
+
 def decide_optimal_config_for_pool(
     folds_df: pd.DataFrame,
     game_key: str,
@@ -157,7 +308,10 @@ def decide_optimal_config_for_pool(
         return {"error": f"no folds for game {game_key}"}
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
-    methods = [m for m in sub["method"].unique() if m != "random"]
+    # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
+    # candidați — ca și restul baseline-urilor nedeterministe (vezi
+    # EXCLUDED_FROM_PRODUCTION): nu au voie să ajungă scorer de producție.
+    methods = [m for m in sub["method"].unique() if m not in EXCLUDED_FROM_PRODUCTION]
 
     # Coloane candidate pt rata T+, în ordine de preferință; sare peste coloane
     # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.
@@ -223,11 +377,21 @@ def decide_optimal_config_for_pool(
         r4_conf = _rate_target_confidence(real_m)
         qualifying.append((m, w_lift, n_beat, n_total, r4, r4_conf))
 
+    # Decizia e "low confidence" când nicio metodă nu a trecut pragul de
+    # consistență față de random — alegem tot o metodă REALĂ (nu baseline-ul
+    # nedeterminist), dar marcăm explicit că diferențele sunt zgomot.
+    low_confidence = False
+    dropped_redundant: list[dict] = []
+
     if not qualifying:
         # Fallback: nicio metodă nu a bătut random ≥60% din ferestre.
         # Prioritizăm tot regula T+ (robust, via Wilson), apoi avg_hits (la egalitate).
+        # `random` NU e candidat aici (EXCLUDED_FROM_PRODUCTION): faptul că
+        # nimeni nu-l bate consistent NU îl face scorer legitim — ar însemna să
+        # generăm pool-uri nedeterministe, nereproductibile.
+        low_confidence = True
         ranked = []
-        for m in methods + ["random"]:
+        for m in methods:
             real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
             if real_m.empty:
                 continue
@@ -236,13 +400,45 @@ def decide_optimal_config_for_pool(
             ranked.append((m, r4_conf, r4, float(real_m[base_col].mean())))
         ranked.sort(key=lambda kv: (kv[1], kv[3]), reverse=True)
         if not ranked:
-            return {"error": "no valid folds for any method"}
+            # Nicio metodă reală utilizabilă în folds.csv → cădem pe baseline-ul
+            # DETERMINIST, niciodată pe `random`. Nu mai putem calcula sim_depth
+            # (nu există rânduri pt scorer) → valori implicite + low_confidence.
+            logger.warning(
+                "[decision] %s k%d: nicio metodă reală în folds.csv — fallback determinist %r",
+                game_key, pool_size, SAFE_FALLBACK_SCORER,
+            )
+            return {
+                "scorer": SAFE_FALLBACK_SCORER,
+                "ensemble": _build_ensemble_weights([(SAFE_FALLBACK_SCORER, 1.0)]),
+                "sim_depth_pct": DEFAULT_SIM_DEPTH_PCT,
+                "use_blacklist": False,
+                # 0.0, NU None: `method_selector.recommend_optimal_config` și UI-ul
+                # citesc `avg_hits` și îl formatează cu :.3f — None ar arunca
+                # TypeError exact pe calea de fallback, adică fix când totul merge
+                # deja prost. `low_confidence` marchează că cifra nu e măsurată.
+                "avg_hits": 0.0,
+                "avg_hits_with_blacklist": 0.0,
+                "rationale": (
+                    f"FALLBACK: nicio metodă reală în folds.csv pentru k{pool_size}; "
+                    f"selecție conservatoare pe baseline-ul DETERMINIST "
+                    f"{SAFE_FALLBACK_SCORER} (baseline-urile nedeterministe "
+                    f"{sorted(EXCLUDED_FROM_PRODUCTION)} nu pot fi scorer de producție)"
+                ),
+                "rate_col_used": None,
+                "rate_col_mismatch": bool(_mismatch_cols_used),
+                "qualifying_methods": 0,
+                "consistency_threshold": CONSISTENCY_THRESHOLD,
+                "low_confidence": True,
+                "ensemble_dropped_redundant": [],
+            }
         scorer = ranked[0][0]
         rationale = (
             f"FALLBACK: no method consistently beat random "
             f"(≥{int(CONSISTENCY_THRESHOLD*100)}% of windows); "
             f"picked highest {BENCH_HIT_TARGET}+ rate (raw={ranked[0][2]:.3f}, "
-            f"Wilson_lb={ranked[0][1]:.3f}) + avg_hits"
+            f"Wilson_lb={ranked[0][1]:.3f}) + avg_hits "
+            f"[nicio metodă nu bate random; selecție conservatoare, "
+            f"diferențele sunt zgomot]"
         )
         # Fallback: NICIO metodă a bătut random — conservator, ensemble cu un
         # singur membru (nu combinăm metode neconfirmate statistic).
@@ -265,8 +461,24 @@ def decide_optimal_config_for_pool(
         # "predicție mai bună" (loteria e aleatoare; diferențele dintre
         # metodele calificate sunt majoritar zgomot statistic). Cu o singură
         # metodă calificată, degenerează la ensemble cu 1 membru (weight=1.0).
-        top_k = qualifying[:ENSEMBLE_MAX_METHODS]
-        ensemble = _build_ensemble_weights([(m, r4_conf) for m, _, _, _, _, r4_conf in top_k])
+        # NU e simplă feliere top-K: metodele cvasi-identice (aceeași semnătură
+        # de performanță pe folduri) sunt sărite — vezi _select_ensemble_members.
+        ordered = [(m, r4_conf) for m, _, _, _, _, r4_conf in qualifying]
+        sig = _perf_signature_frame(
+            sub[sub["is_random"] == False],  # noqa: E712
+            [m for m, _ in ordered],
+            BENCH_HIT_TARGET,
+        )
+        members, dropped_redundant = _select_ensemble_members(
+            ordered, sig, ENSEMBLE_MAX_METHODS, ENSEMBLE_MAX_CORR,
+        )
+        if dropped_redundant:
+            logger.info(
+                "[decision] %s k%d: %d membri ensemble eliminați ca redundanți (r≥%.2f): %s",
+                game_key, pool_size, len(dropped_redundant), ENSEMBLE_MAX_CORR,
+                ", ".join(f"{d['method']}~{d['vs']}" for d in dropped_redundant),
+            )
+        ensemble = _build_ensemble_weights(members)
 
     # Pick the best sim_depth for the chosen scorer based on target hit rate (percentage of drawings)
     real_chosen = sub[(sub["method"] == scorer) & (sub["is_random"] == False)]  # noqa: E712
@@ -326,6 +538,12 @@ def decide_optimal_config_for_pool(
         "rate_col_mismatch": rate_col_mismatch,
         "qualifying_methods": len(qualifying),
         "consistency_threshold": CONSISTENCY_THRESHOLD,
+        # True = nicio metodă nu bate random consistent → alegerea e conservatoare,
+        # diferențele dintre metode sunt zgomot (UI-ul poate avertiza).
+        "low_confidence": low_confidence,
+        # Membri săriți de la ensemble fiindcă erau cvasi-identici cu unul deja
+        # păstrat (decorelare pe RATE; decorelarea pe SCORURI e în method_selector).
+        "ensemble_dropped_redundant": dropped_redundant,
     }
 
 

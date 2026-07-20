@@ -196,9 +196,9 @@ def _ordered_wf_game_items(outs):
 
 
 def _iter_wf_jobs(results_bundle):
-    """(fname, game_label, data, auto_invert) — doar Pool 1 (OMNIUS 1).
+    """(fname, game_label, data, auto_invert) — doar Pool 1.
 
-    Pool 2 / OMNIUS 2 = plasă de siguranță, fără walk-forward (evită dublarea timpului).
+    Pool 2 = plasă de siguranță, fără walk-forward (evită dublarea timpului).
     """
     for fname, outs in results_bundle:
         for g_label, data in _ordered_wf_game_items(outs):
@@ -260,7 +260,6 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
     STATE["pure_bench"] = pure
     STATE["results"] = None
     STATE["retro"] = {}
-    STATE["_omnius_cache"] = {}  # OMNIUS se recalculează pt noile pool-uri
     STATE["wf_status"] = ""
     ensure_worker_running()
     lock_engine("deterministic_session")
@@ -424,7 +423,11 @@ def _fmt_dur(sec) -> str:
 
 def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     """(fracție, text live) dintr-un log de bench specific. None dacă logul lipsește.
-    Text = '% testat (N din M) · acum: joc/metodă · rămas ~X'."""
+
+    Log: `[N/M] [game/method/pct%/REAL|RND/CPU] ...`
+    Text (plain, fără HTML): `% (N/M teste) · rămas ~X · acum: joc · metodă · fereastră pct% · REAL/RND`.
+    `pct%` = fereastra istorică a fold-ului (ex. ultimele 60% din CSV), NU progresul bench.
+    """
     if not log_path.exists():
         return None
     cur = tot = 0
@@ -432,12 +435,20 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     try:
         import re
         txt = log_path.read_text(encoding="utf-8", errors="replace")
+        # Ultima linie de progres: [1048/2568] [loto_5_40/ml_svm_rbf/60%/REAL/CPU]
         matches = re.findall(r"\[(\d+)/(\d+)\]\s*\[([^\]]+)\]", txt)
         if matches:
             cur, tot = int(matches[-1][0]), int(matches[-1][1])
-            seg = matches[-1][2].split("/")
+            seg = [s.strip() for s in matches[-1][2].split("/") if s.strip()]
+            # game / method / window% / REAL|RND [/CPU]
             if len(seg) >= 3:
-                last_now = f"{seg[0]} / {seg[1]} / {seg[2]} backtest"
+                game, method, window = seg[0], seg[1], seg[2]
+                kind = seg[3] if len(seg) >= 4 else ""
+                # „60% backtest" e greșit — e fereastra pe istoric, nu % din bench.
+                parts = [game, method, f"fereastră {window}"]
+                if kind in ("REAL", "RND"):
+                    parts.append(kind)
+                last_now = " · ".join(parts)
     except Exception:  # noqa: BLE001
         pass
     if tot <= 0:
@@ -453,7 +464,7 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     elif cur >= tot:
         text += "  ·  ✅ gata"
     if last_now:
-        text += f"<br><span style='opacity:.7'>acum: {last_now}</span>"
+        text += f"  ·  acum: {last_now}"
     return frac, text
 
 
@@ -572,7 +583,7 @@ def _start_walk_forward() -> None:
         _finalize_pipeline()  # fără rezultate → nu rulează WF; ăsta e finalul (mail + shutdown)
         return
     results_bundle, _ = results
-    # Walk-forward: doar Pool 1 / OMNIUS 1 (Pool 2 = inversare, fără validare istorică).
+    # Walk-forward: doar Pool 1 (Pool 2 = inversare, fără validare istorică).
     _pfx = ""  # bench unic → fără prefix de secțiune
 
     def _worker_wf() -> None:
@@ -672,7 +683,7 @@ def _start_walk_forward() -> None:
                             # pool-ul REAL cu care a rulat WF (pt afișare corectă în istoric)
                             "pool_size": meta.get("pool_size"),
                         }
-                    # Pool 2 / OMNIUS 2: istoric retrospectiv (pool+wheel curent), fără WF dublu.
+                    # Pool 2: istoric retrospectiv (pool+wheel curent), fără WF dublu.
                     if (not wf_invert and data.get("auto_invert") and data.get("phase1")
                             and flat):
                         try:
@@ -686,7 +697,7 @@ def _start_walk_forward() -> None:
                                 g_label,
                                 list(data.get("hard_core") or []),
                                 list(data.get("variants") or []),
-                                _omnius_for_pool(g_label, data),
+                                [],  # fără bilet OMNIUS în UI
                             )
                             with STATE_LOCK:
                                 STATE["retro"][_p2rk] = _flat_p2
@@ -719,7 +730,7 @@ def _start_walk_forward() -> None:
 
     STATE["wf_progress"] = 0.0
     STATE["wf_start"] = time.time()  # pt ETA walk-forward
-    STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU) — Pool 1 / OMNIUS 1..."
+    STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU) — Pool 1..."
     threading.Thread(target=_worker_wf, daemon=True).start()
 
 
@@ -849,8 +860,8 @@ def _next_draw_date() -> str:
 
 
 def _build_mail_body() -> str:
-    """Conținut CONCIS pentru mail: data extragerii + Pool 1 / OMNIUS 1 / Pool 2 /
-    OMNIUS 2 per joc — DOAR numerele, fără raportul complet."""
+    """Conținut CONCIS pentru mail: data extragerii + Pool 1 / Pool 2 per joc —
+    DOAR numerele, fără raportul complet."""
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
         return "Nu există rezultate de generare."
@@ -858,14 +869,6 @@ def _build_mail_body() -> str:
 
     def _nums(seq):
         return " ".join(str(int(x)) for x in sorted(seq)) if seq else "—"
-
-    def _omni_line(g, pd):
-        t = _omnius_for_pool(g, pd) or []
-        s = " ".join(str(int(x)) for x in t)
-        jk = sorted(int(x) for x in (pd.get("hard_core_joker") or []))[:1]
-        if jk:
-            s += f"  + joker {jk[0]}"
-        return s or "—"
 
     lines = [f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}",
              f"(generat: {_dt.now().strftime('%d-%m-%Y %H:%M')})", ""]
@@ -885,12 +888,10 @@ def _build_mail_body() -> str:
             lines.append(f"ultima extragere CSV: {_ds or '?'} → {_draw}")
         lines.append("POOL 1:   " + _nums(p1.get("hard_core") or [])
                      + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
-        lines.append("OMNIUS 1: " + _omni_line(g, p1))
         if inv:
             jk2 = sorted(int(x) for x in (d.get("hard_core_joker") or []))
             lines.append("POOL 2:   " + _nums(d.get("hard_core") or [])
                          + (f"  | joker: {_nums(jk2)}" if jk2 else ""))
-            lines.append("OMNIUS 2: " + _omni_line(g, d))
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -903,7 +904,7 @@ def _send_test_email() -> None:
         return
     body = ("Test e-mail Loto Enterprise — configurarea funcționează ✅\n"
             f"Următoarea extragere: {_next_draw_date()}\n"
-            "La finalul bench-ului vei primi: data + Pool 1 / OMNIUS 1 / Pool 2 / OMNIUS 2.")
+            "La finalul bench-ului vei primi: data + Pool 1 / Pool 2.")
     try:
         send_email(cfg, "🎰 Loto — mail de test", body)
         ui.notify(f"📧 Mail de test trimis la {cfg['mail_to']}. Verifică inbox-ul.", type="positive")
@@ -934,7 +935,7 @@ def _maybe_send_results_email() -> None:
         body = "(eroare la construirea conținutului)"
     subject = f"🎰 Loto — numere pentru extragerea {_next_draw_date()}"
     try:
-        send_email(cfg, subject, body)  # doar esențialul (data + pool/omnius), fără atașament
+        send_email(cfg, subject, body)  # doar esențialul (data + pool), fără atașament
         logger.info("[MAIL] rezultate trimise la %s", cfg["mail_to"])
         try:
             ui.notify(f"📧 Rezultate trimise pe mail ({cfg['mail_to']}).", type="positive")
@@ -1222,26 +1223,46 @@ def _render_cost(game: str, data: dict) -> None:
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
     jmult = max(1, len(data.get("hard_core_joker", []))) if gk == "joker" else 1
     full_cost = full_vars * price * jmult
+    # jmult CONSECVENT în TOATE formulele de cost de mai jos (scheme oficiale, sistem
+    # complet, bilete simple, wheel): la Joker fiecare variantă se joacă cu fiecare
+    # număr joker din nucleu, deci multiplică orice număr de variante.
+    _jk_txt = f" × {jmult} nr. joker" if jmult > 1 else ""
 
+    # „Sistem complet" = TOATE combinațiile C(pool, draw_n) de la agenție (fără garanție
+    # de acoperire — e exhaustiv). NU confunda cu „wheel-ul nostru" de mai jos, care e
+    # un cover MINIM la garanția cerută (de ~10x mai ieftin).
+    _full_lbl = f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} ≈ {full_cost:,.0f} Lei"
     if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
         parts = []
         for code, base in LR_SCHEMES[gk][pool_used]:
             tot = base * jmult
             parts.append(f"**{code}** ({tot} var. ≈ {tot*price:,.0f} Lei)")
-        ui.markdown(f"💡 **Cost Nucleu Dur la Agenție** ({pool_used} nr.): " + " sau ".join(parts) +
-                    f"\n\n*(Sistem Complet ≈ {full_cost:,.0f} Lei)*").classes("text-info")
+        ui.markdown(f"💡 **Scheme reduse oficiale la agenție** ({pool_used} nr.): " + " sau ".join(parts) +
+                    f"\n\n*({_full_lbl} — toate combinațiile, exhaustiv)*").classes("text-info")
+        # Garanția schemelor „Cod NN" NU e documentată nicăieri în proiect (doar codul
+        # și numărul de variante) → nu o putem afirma. Fără avertisment, utilizatorul
+        # poate crede că cele 15 variante de la „Cod 49" au aceeași garanție ca cele
+        # 21 ale wheel-ului nostru (care ESTE verificată — vezi „Acoperire garanție").
+        ui.markdown("⚠️ **Garanția schemelor oficiale nu e documentată în app** (avem doar "
+                    "codul + numărul de variante). NU presupune că e aceeași cu garanția "
+                    "configurată aici — verific-o la agenție înainte să compari numărul de "
+                    "variante cu wheel-ul nostru de mai jos.").classes("text-caption text-orange")
     else:
-        ui.markdown(f"💡 **Cost Nucleu Dur la Agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
-                    f"{game.upper()}. Sistem Complet = {full_vars*jmult} variante ≈ **{full_cost:,.0f} Lei**.").classes("text-info")
+        ui.markdown(f"💡 **Cost la agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
+                    f"{game.upper()}. **{_full_lbl}** (toate combinațiile, exhaustiv).").classes("text-info")
 
     variants = data.get("variants") or []
     if variants:
         n_simple = min(10, len(variants))
-        # Preț per JOC (nu constantă globală) + jmult CONSECVENT cu „Sistem Complet":
-        # la Joker fiecare variantă se joacă cu fiecare număr joker din nucleu.
-        _jk_txt = f" × {jmult} nr. joker" if jmult > 1 else ""
-        ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ≈ {n_simple*price:,.0f} Lei "
-                    f"| Wheel complet ({len(variants)} var.{_jk_txt}) ≈ "
+        # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
+        # schemele oficiale de mai sus; fallback pe cea cerută din setări.
+        _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
+        if _g_used is None:
+            _g_used = data.get("guarantee")
+        _g_txt = f"garanție {_g_used}" if _g_used is not None else "garanția configurată"
+        ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
+                    f"{n_simple*price*jmult:,.0f} Lei "
+                    f"| **Wheel-ul nostru** ({_g_txt}, cover minim): {len(variants)} var.{_jk_txt} ≈ "
                     f"{len(variants)*price*jmult:,.0f} Lei.").classes("text-caption")
 
 
@@ -1584,10 +1605,6 @@ def _build_report() -> str:
                    + f" | Extrageri: {d.get('total_draws')}")
         out.append(f"{indent}Nucleu dur (nr(frecvență)): "
                    + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool))
-        _omn = _omnius_for_pool(g, d)
-        if _omn:
-            out.append(f"{indent}⭐ OMNIUS (cel mai bun bilet din acest pool): "
-                       + ", ".join(str(n) for n in _omn))
         if d.get("hard_core_joker"):
             out.append(f"{indent}Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
         if d.get("p10") is not None:
@@ -1808,9 +1825,6 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             _wm = next((info.get("method") for info in _bw.values() if info.get("method")), "")
             _render_walk_forward(flat, game, is_invert=False, method=_wm)
 
-    # OMNIUS — cel mai bun bilet din ACEST pool (separat per pool)
-    _render_omnius_pool(game, data, wf_validated=(skey_suffix != "_p2"))
-
     if variants:
         is_jk = "joker" in game.lower()
         skey = f"{fname}_{game}{skey_suffix}"
@@ -1837,128 +1851,6 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 
     if audit:
         _render_stages(audit)
-
-
-def _num_scores(d: dict) -> dict:
-    """Scor per număr: smart_selector.final_scores (preferat) → frecvență → gol."""
-    au = d.get("audit") or {}
-    ss = (au.get("smart_selector") or {}).get("final_scores") or {}
-    if ss:
-        return {int(k): float(v) for k, v in ss.items()}
-    stats = d.get("hard_core_stats") or {}
-    try:
-        return {int(k): float(v) for k, v in stats.items()}
-    except (TypeError, ValueError):
-        return {}
-
-
-def _omnius_for_pool(game: str, d: dict) -> list:
-    """Biletul OMNIUS din ACEST pool: cele mai bune draw_n numere.
-
-    PRIORITATE (aliniat cu walk-forward pe ținta 3+): folosim EXACT scorurile
-    metodei câștigătoare (ensemble bench, `audit.omnius_pool_scores`) pe care
-    backtesting.py le-a folosit ca să măsoare `omnius_hits`. Astfel biletul
-    AFIȘAT este chiar biletul a cărui rată de 3+ e validată istoric — top draw_n
-    după scor, fără filtre de paritate / progresie.
-    Se aplică identic pt OMNIUS 1 (Pool 1) și OMNIUS 2 (Pool 2), fiecare cu
-    scorurile propriului pool.
-
-    Fallback (rezultate vechi fără scoruri salvate SAU bench-winner dezactivat):
-    meta-învățarea OMNIUS (50% meta + 50% Smart Logic) → `_num_scores`.
-    CACHE-uit pe (joc, pool) — evită re-calcul la fiecare randare/raport."""
-    gk = _game_label_for(game)
-    draw_n = 6 if gk == "6/49" else 5
-    pool = sorted(int(x) for x in (d.get("hard_core") or []))
-    if not pool:
-        return []
-
-    # Cache: cheie = joc + pool exact. Dacă pool-ul e același, refolosim rezultatul.
-    _ckey = (gk, tuple(pool))
-    _cache = STATE.setdefault("_omnius_cache", {})
-    if _ckey in _cache:
-        return _cache[_ckey]
-
-    # (1) PREFERAT: scorurile EXACTE validate în walk-forward pentru +4.
-    scores: dict = {}
-    _pool_scores = (d.get("audit") or {}).get("omnius_pool_scores") or {}
-    if _pool_scores:
-        try:
-            scores = {int(k): float(v) for k, v in _pool_scores.items()}
-        except (TypeError, ValueError):
-            scores = {}
-
-    # (2) FALLBACK: meta-învățarea OMNIUS (rezultate vechi / bench-winner off).
-    if not scores:
-        try:
-            df = None
-            for fn, _df in STATE.get("datasets", []):
-                if _game_label_for(fn) == gk:
-                    df = _df
-                    break
-            if df is not None:
-                from loto_enterprise.benchmark.methods_omnius import score_omnius
-                cols = [c for c in df.columns if c.lower().startswith("n")][:draw_n]
-                if len(cols) >= draw_n:
-                    import numpy as _np
-                    draws = df[cols].to_numpy(dtype=_np.int64)
-                    max_num = {"6/49": 49, "5/40": 40, "joker": 45}.get(gk, 49)
-                    scores = score_omnius(draws, max_num, budget_s=2.0)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("OMNIUS meta pt bilet eșuat (fallback): %s", exc)
-
-    scores = scores or _num_scores(d)
-    from loto_enterprise.benchmark.methods_omnius import pick_omnius_ticket
-    top = pick_omnius_ticket(pool, scores, draw_n)
-    _cache[_ckey] = top
-    return top
-
-
-def _render_omnius_pool(game: str, d: dict, *, wf_validated: bool = True) -> None:
-    """Card OMNIUS pentru un singur pool — cel mai bun bilet din el."""
-    ticket = _omnius_for_pool(game, d)
-    if not ticket:
-        return
-    chips = "".join(
-        render_html_safe(
-            t"<span style='background:#064e3b;color:#fbbf24;padding:4px 11px;border-radius:14px;"
-            t"margin:3px;font-weight:800;font-size:1.1em'>{n}</span>"
-        )
-        for n in ticket)
-    jk = d.get("hard_core_joker") or []
-    jk_txt = ""
-    if jk:
-        jkn = sorted(int(x) for x in jk)[:1]
-        if jkn:
-            jk_txt = (
-                render_html_safe(t" <span style='opacity:.7'>+ joker</span> ")
-                + render_html_safe(
-                    t"<span style='background:#4c1d95;color:#ddd6fe;padding:4px 11px;"
-                    t"border-radius:14px;font-weight:800'>{jkn[0]}</span>"
-                )
-            )
-    # Descrierea reflectă scorul EFECTIV folosit: dacă avem scorurile validate WF
-    # (omnius_pool_scores) → biletul e cel optimizat/validat pt 3+; altfel fallback meta.
-    _has_validated = bool((d.get("audit") or {}).get("omnius_pool_scores"))
-    if _has_validated and wf_validated:
-        _desc = ("cel mai bun bilet din pool după scorul metodei câștigătoare "
-                 "(ensemble bench — ACELAȘI scor validat walk-forward pentru 3+)")
-    elif _has_validated:
-        _desc = ("cel mai bun bilet din pool inversat după scorul metodei câștigătoare "
-                 "(ensemble bench — fără validare walk-forward)")
-    else:
-        _desc = ("biletul meta-adaptiv din acest pool — ponderează metodele matematice "
-                 "după performanța recentă + Smart Logic Hybrid")
-    with ui.card().classes("w-full").style("background:#1e1b4b;border:1px solid #f59e0b"):
-        ui.html(render_html_safe(
-            t"⭐ <b style='color:#fbbf24'>OMNIUS</b> — "
-            t"<span style='opacity:.65;font-size:.8em'>{_desc}</span>"
-        ))
-        ui.html(
-            render_html_safe(t"<div style='margin:5px 0'>")
-            + chips
-            + jk_txt
-            + render_html_safe(t"</div>")
-        )
 
 
 @ui.refreshable
@@ -2046,6 +1938,45 @@ _LABEL_TO_FOLDS_GAME = {
 }
 
 
+def _baseline_methods() -> frozenset[str]:
+    """Metodele care sunt DOAR baseline de referință, NU candidați de producție.
+
+    Trebuie să rămână SINCRON cu excluderea din decizie (decision.py:
+    `methods = [m for m in ... if m != "random"]`). Preferăm constanta din
+    decision.py dacă există; altfel fallback identic cu ce face decizia azi.
+    NB: `frequency` are family="baseline" în folds.csv, DAR decizia NU o exclude
+    (e și fallback-ul de scoring în producție) → rămâne candidat aici."""
+    try:
+        from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION as _EX
+        return frozenset(str(m) for m in _EX)
+    except Exception:  # noqa: BLE001
+        return frozenset({"random"})
+
+
+def _wilson_pooled_rate(grp, metric: str) -> float | None:
+    """Limita inferioară Wilson pe rata POOLED (Σ rate·n_test / Σ n_test).
+
+    ACEEAȘI metrică pe care decision.py alege câștigătorul (`_rate_target_confidence`):
+    formula Wilson e IMPORTATĂ din decision.py (nu duplicată); aici doar agregăm
+    pooled pe n_test, ca ordinea din clasament să coincidă cu ordinea deciziei.
+    (`_rate_target_confidence` e closure intern în decide_optimal_config_for_pool,
+    deci neimportabil ca atare.) None = nu se poate calcula (fără n_test / import)."""
+    try:
+        from loto_enterprise.benchmark.decision import _wilson_lower_bound
+    except Exception:  # noqa: BLE001
+        return None
+    if metric not in grp.columns or "n_test" not in grp.columns:
+        return None
+    pairs = grp[[metric, "n_test"]].dropna()
+    if pairs.empty:
+        return None
+    successes = float((pairs[metric] * pairs["n_test"]).sum())
+    n_total = float(pairs["n_test"].sum())
+    if n_total <= 0:
+        return None
+    return float(_wilson_lower_bound(successes, n_total))
+
+
 def _render_bench_leaderboard_slice(
     df: pd.DataFrame,
     folds_game_key: str,
@@ -2095,7 +2026,9 @@ def _render_bench_leaderboard_slice(
                     return v
         return None
 
+    _BASE = _baseline_methods()
     rows = []
+    _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
     for m, grp in sub.groupby("method"):
         score = float(grp[metric].mean())
         avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
@@ -2103,17 +2036,42 @@ def _render_bench_leaderboard_slice(
         if has_family:
             _f = grp["family"].dropna().astype(str)
             fam = _f.iloc[0] if not _f.empty else ""
+        # Wilson doar pe RATE (proporții). Când metrica e fallback-ul avg_hits_topk
+        # (folds vechi fără coloane rate_*), nu e proporție → nu are sens.
+        conf = _wilson_pooled_rate(grp, metric) if has_4plus else None
+        if conf is not None:
+            _conf_ok = True
         rows.append((m, score, avg, _method_library(m, fam),
-                     _rate_for(grp, 3), _rate_for(grp, 4)))
-    rows.sort(key=lambda r: (r[1], r[2]), reverse=True)
+                     _rate_for(grp, 3), _rate_for(grp, 4), conf))
+    # ORDONARE = ACEEAȘI metrică pe care decide decizia (Wilson pooled pe n_test),
+    # nu media neponderată a ferestrelor — altfel „capul de listă" din UI nu e
+    # metoda aleasă și diferența pare inexplicabilă. Rata brută rămâne tie-break
+    # (și informație afișată). Fără n_test/decision.py → cădem pe vechea ordonare.
+    rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
     if not rows:
         return
-    top_rows = rows[:top_n]
+    # Baseline-urile („random") NU sunt candidați: rămân vizibile ca reper, dar nu
+    # primesc rang și nu intră în „Top N din M metode".
+    competitors = [r for r in rows if r[0] not in _BASE]
+    if not competitors:
+        return
+    # Slice afișat: primele `top_n` CANDIDATE + baseline-urile care cad printre ele.
+    top_idx: list[int] = []
+    _n_comp = 0
+    for _i, rec in enumerate(rows):
+        top_idx.append(_i)
+        if rec[0] not in _BASE:
+            _n_comp += 1
+            if _n_comp >= top_n:
+                break
+    top_rows = [rows[i] for i in top_idx]
+    _n_shown = _n_comp
     label = (
         f"rata {_shown_t}+ @ pool {pool}" if has_4plus and metric.endswith(f"_k{pool}")
         else f"rata {_shown_t}+ numere ghicite" if has_4plus
         else "medie hituri / extragere"
     )
+    label += " · sortat ca decizia (Wilson)" if _conf_ok else " · sortat după rata brută"
     # Baseline-ul PUR aleator (hipergeometric) la acest pool — afișat O DATĂ în titlu
     # + multiplicator pe fiecare rată. Onestitate: „3+: 10%" pare edge, dar hazardul
     # singur dă ~9% la pool 10 pe 6/49 → diferența reală e mică (zgomot).
@@ -2122,7 +2080,7 @@ def _render_bench_leaderboard_slice(
     _rnd_t = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
     if has_4plus and _rnd_t is not None:
         label += f" · baseline random = {_rnd_t * 100:.2f}%"
-    winner = rows[0]  # capul clasamentului după rata BRUTĂ a pragului (NU neapărat cel ALES)
+    winner = competitors[0]  # capul clasamentului (doar candidați, baseline-urile excluse)
     # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1: decizia
     # cere ÎN PLUS să bată „random" consistent (filtru de consistență), apoi rata pragului.
     try:
@@ -2132,25 +2090,33 @@ def _render_bench_leaderboard_slice(
         chosen_name = winner[0]
 
     def _row(i, rec):
+        """`i=None` → rând de BASELINE (referință, fără rang și fără pretenția de candidat)."""
         m, score, avg, lib = rec[:4]
-        r3, r4 = rec[4], rec[5]
+        r3, r4, conf = rec[4], rec[5], rec[6]
         if has_4plus:
             parts = []
+            # Primul = criteriul REAL de ordonare/decizie (Wilson pooled); ratele brute
+            # rămân ca informație secundară.
+            if conf is not None:
+                parts.append(f"Wilson {_shown_t}+: {conf*100:.2f}%")
             if r3 is not None:
                 _m3 = f" ({r3 / _rnd3:.2f}x random)" if _rnd3 else ""
-                parts.append(f"3+: {r3*100:.1f}%{_m3}")
+                parts.append(f"brut 3+: {r3*100:.1f}%{_m3}")
             if r4 is not None:
                 _m4 = f" ({r4 / _rnd4:.2f}x random)" if _rnd4 else ""
-                parts.append(f"4+: {r4*100:.1f}%{_m4}")
+                parts.append(f"brut 4+: {r4*100:.1f}%{_m4}")
             sc_txt = " · ".join(parts) if parts else f"medie: {score:.3f}"
         else:
             sc_txt = f"medie: {score:.3f}"
-        is_chosen = (m == chosen_name)
+        is_base = i is None
+        is_chosen = (not is_base) and (m == chosen_name)
         with ui.row().classes("items-center gap-2 w-full"):
-            ui.label(f"{i}.").classes("text-bold text-grey w-6")
+            ui.label("🎲" if is_base else f"{i}.").classes("text-bold text-grey w-6")
             ui.label(("🏆 " + m) if is_chosen else m).classes(
-                "text-bold text-positive" if is_chosen else "text-bold")
-            ui.label(f"· {lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
+                "text-bold text-positive" if is_chosen
+                else "text-bold text-orange" if is_base else "text-bold")
+            _pref = "baseline (referință, NU e candidat) · " if is_base else ""
+            ui.label(f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
 
     title = f"🏆 Clasament bench — {section_label} ({label})"
     with ui.expansion(title, value=True).classes("w-full"):
@@ -2182,21 +2148,39 @@ def _render_bench_leaderboard_slice(
                 t"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>{_chosen_suffix}"
             )).classes("text-caption")
         if chosen_name != winner[0]:
-            # De ce #1 din listă != metoda aleasă: lista e sortată după rata BRUTĂ a pragului;
-            # decizia mai cere ca metoda să bată CONSTANT baseline-ul random (filtru consistență).
-            ui.label(f"ℹ️ Lista e sortată după rata brută {_shown_t}+ (cap: {winner[0]}). Metoda "
-                     f"ALEASĂ ({chosen_name}, marcată 🏆) cere ÎN PLUS să bată constant baseline-ul "
-                     f"random → la rate aproape egale (zgomot) se preferă cea STABILĂ; de-aia diferă de #1.").classes(
-                "text-caption text-grey")
+            # ORDONAREA e acum identică cu a deciziei (Wilson pooled) → singura sursă de
+            # diferență rămasă e filtrul de consistență (metoda trebuie să bată random în
+            # ≥60% din ferestre), pe care lista NU îl aplică.
+            _ord = (f"aceeași metrică ca decizia (limita Wilson a ratei {_shown_t}+, pooled pe n_test)"
+                    if _conf_ok else f"rata brută {_shown_t}+ (n_test lipsă → fără Wilson)")
+            ui.label(f"ℹ️ Lista e sortată după {_ord}; cap: {winner[0]}. Metoda ALEASĂ "
+                     f"({chosen_name}, marcată 🏆) trece ÎN PLUS filtrul de consistență (să bată "
+                     f"random în ≥60% din ferestre), pe care clasamentul nu-l aplică — de-aia "
+                     f"poate diferi de #1.").classes("text-caption text-grey")
         if not has_family:
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
-        ui.label(f"Top {len(top_rows)} din {len(rows)} metode").classes("text-bold text-blue mt-2")
-        _cats = sorted({rec[3] for rec in rows if rec[3]})  # categorii REALE prezente (din folds)
+        ui.label(f"Top {_n_shown} din {len(competitors)} metode candidate").classes("text-bold text-blue mt-2")
+        _cats = sorted({rec[3] for rec in competitors if rec[3]})  # categorii REALE (din folds)
         if _cats:
             ui.label("Categorii: " + " · ".join(_cats)).classes("text-caption text-grey")
-        for i, rec in enumerate(top_rows, 1):
-            _row(i, rec)
+        _rank = 0
+        for rec in top_rows:
+            if rec[0] in _BASE:
+                _row(None, rec)          # baseline: vizibil ca reper, fără rang
+            else:
+                _rank += 1
+                _row(_rank, rec)
+        # Baseline-urile care NU au intrat în slice: spune unde ar cădea (informativ),
+        # fără să pară competitor.
+        _shown_names = {rec[0] for rec in top_rows}
+        for _bi, _brec in enumerate(rows):
+            if _brec[0] not in _BASE or _brec[0] in _shown_names:
+                continue
+            _better = sum(1 for r in rows[:_bi] if r[0] not in _BASE)
+            ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — ar cădea pe locul "
+                     f"{_better + 1} din {len(competitors)} metode candidate.").classes(
+                "text-caption text-grey")
 
 
 def _last_csv_draw(fname: str):
@@ -2502,7 +2486,7 @@ def _ensure_retrospective_pool2_flat(
             game,
             list(data.get("hard_core") or []),
             list(data.get("variants") or []),
-            _omnius_for_pool(game, data),
+            [],  # fără bilet OMNIUS în UI
         )
         STATE["retro"][rk] = flat_p2
         STATE.setdefault("retro_meta", {})[rk] = meta_p2
@@ -2526,7 +2510,7 @@ def _wf_per_draw_stats(flat) -> dict:
 def _render_hits_4plus(flat, game: str, meta: dict | None = None,
                        flat_p2=None, meta_p2: dict | None = None,
                        pool_n: int | None = None, pool_n_p2: int | None = None) -> None:
-    """Istoric hits — SUMAR: POOL 1 / OMNIUS 1 (+ POOL 2 / OMNIUS 2 la auto-invert).
+    """Istoric hits — SUMAR: POOL 1 (+ POOL 2 la auto-invert).
     `pool_n`/`pool_n_p2` = pool-ul EFECTIV din rezultat (apelant); meta WF (dacă
     are `pool_size`) are prioritate — NU setarea curentă din SETTINGS."""
     if not flat:
@@ -2538,15 +2522,11 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         return
     pool3 = sum(1 for d in per.values() if d["pool"] >= 3)
     pool4 = sum(1 for d in per.values() if d["pool"] >= 4)
-    omni3 = sum(1 for d in per.values() if d["omnius"] >= 3)
-    omni4 = sum(1 for d in per.values() if d["omnius"] >= 4)
 
     per2 = _wf_per_draw_stats(flat_p2) if flat_p2 else {}
     n2 = len(per2)
     pool3_2 = sum(1 for d in per2.values() if d["pool"] >= 3) if per2 else 0
     pool4_2 = sum(1 for d in per2.values() if d["pool"] >= 4) if per2 else 0
-    omni3_2 = sum(1 for d in per2.values() if d["omnius"] >= 3) if per2 else 0
-    omni4_2 = sum(1 for d in per2.values() if d["omnius"] >= 4) if per2 else 0
 
     def _cell(k, denom):
         return f"{k} ({k / denom * 100:.0f}%)" if denom else "—"
@@ -2559,7 +2539,7 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
                 "text-warning text-caption text-bold")
         if _m and _m.get("retrospective") and _lbl == "Pool 2":
             ui.label(
-                "ℹ️ Pool 2 / OMNIUS 2: istoric RETROSPECTIV (pool + wheel de azi pe aceleași "
+                "ℹ️ Pool 2: istoric RETROSPECTIV (pool + wheel de azi pe aceleași "
                 f"extrageri ca WF Pool 1) — nu e walk-forward onest; doar informativ."
             ).classes("text-caption text-grey")
     # Memento „întârziat": media intervalului între hituri ≥TARGET pe POOL + cât a trecut.
@@ -2580,72 +2560,98 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             t"(<b style='color:{col}'>{_ratio_pct}%</b> din interval · "
             t"<span style='color:{col}'>{lvl}</span>)</span>"
         )).classes("mt-1")
-    # (1) SUMAR: de câte ori a prins fiecare +3 / +4 + câștig BRUT estimat din istoricul WF.
-    # OMNIUS 1 = 1 bilet/extragere (Σ premiu pe nr. prinse); Pool 1 = wheel-ul COMPLET
-    # (Σ premiu pe TOATE variantele câștigătoare, ca în analiza financiară de jos). Brut =
-    # fără costul biletelor (la wheel costul e mare → ROI net de obicei negativ).
+    # (1) SUMAR: +3 / +4 pe pool + câștig BRUT estimat din istoricul WF.
+    # Pool = wheel-ul COMPLET (Σ premiu pe TOATE variantele câștigătoare).
     gk = _game_label_for(game)
     pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
     price = PRICES.get(gk, 8.0)
-    draw_n = 6 if gk == "6/49" else 5
     # Pool-ul REAL (nu string fix „din 16"): meta WF (salvat la rulare) are prioritate,
     # apoi rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
     _pn1 = int((meta or {}).get("pool_size") or pool_n or 0)
     _pn2 = int((meta_p2 or {}).get("pool_size") or pool_n_p2 or _pn1 or 0)
     pool_gross = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)        # toate variantele
-    omni_gross = sum(pm.get(int(d["omnius"]), 0) for d in per.values())          # 1 bilet/extragere
-    pool_net = pool_gross - len(flat) * price            # wheel: fiecare entry din flat = 1 bilet
-    omni_net = omni_gross - len(per) * price             # OMNIUS: 1 bilet / extragere
+    # BAZA DE COST = numărul REAL de bilete: o intrare din `flat` = 1 bilet la 1 extragere
+    # (același set de obiecte peste care s-a sumat brutul → formula e corectă aritmetic).
+    # ATENȚIE: bazele celor două pool-uri NU sunt identice și nu pot fi făcute identice:
+    #   • Pool 1 = walk-forward REAL → wheel-ul e regenerat la fiecare pas (cover minim
+    #     ILP/greedy), deci len(wheel) VARIAZĂ de la o extragere la alta;
+    #   • Pool 2 = retrospectiv → replayează UN SINGUR wheel (cel de azi) pe toate
+    #     extragerile → exact n2 × len(variante_azi).
+    # De aceea afișăm EXPLICIT biletele + costul fiecăruia și adăugăm metrici
+    # NORMALIZATE (ROI = brut/cost și NET/extragere), singurele comparabile direct.
+    n_tick_1 = len(flat)
+    cost_1 = n_tick_1 * price
+    pool_net = pool_gross - cost_1
+    tick_avg_1 = (n_tick_1 / n) if n else 0.0
+    roi_1 = (pool_gross / cost_1) if cost_1 else 0.0
+    net_draw_1 = (pool_net / n) if n else 0.0
 
-    # Baseline-ul PUR aleator per rând: Pool = K numere din pool; OMNIUS = 1 bilet
-    # simplu de draw_n numere. Calculat hipergeometric din parametrii jocului.
+    # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
     def _bcell(K):
         b3, b4 = _random_rate_hypergeo(gk, K, 3), _random_rate_hypergeo(gk, K, 4)
         if b3 is None or b4 is None:
             return "—"
         return f"{b3 * 100:.1f}% / {b4 * 100:.2f}%"
 
+    def _tick_cell(n_tick, avg, cost):
+        return f"{n_tick:,} ({avg:.2f}/extr.) · {cost:,.0f} Lei"
+
+    def _net_cell(net, roi):
+        return f"{net:,.0f} Lei (ROI {roi:.2f})"
+
     rows = [{"src": f"🔥 Pool 1 (din {_pn1})" if _pn1 else "🔥 Pool 1",
              "p3": _cell(pool3, n), "p4": _cell(pool4, n),
-             "rnd": _bcell(_pn1), "win": f"~{pool_gross:,.0f} Lei"},
-            {"src": f"⭐ OMNIUS 1 (bilet de {draw_n} nr.)",
-             "p3": _cell(omni3, n), "p4": _cell(omni4, n),
-             "rnd": _bcell(draw_n), "win": f"~{omni_gross:,.0f} Lei"}]
+             "rnd": _bcell(_pn1), "tick": _tick_cell(n_tick_1, tick_avg_1, cost_1),
+             "win": f"~{pool_gross:,.0f} Lei", "net": _net_cell(pool_net, roi_1)}]
     if per2:
         pool_gross_2 = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat_p2)
-        omni_gross_2 = sum(pm.get(int(d["omnius"]), 0) for d in per2.values())
-        rows.extend([
+        n_tick_2 = len(flat_p2)
+        cost_2 = n_tick_2 * price
+        pool_net_2 = pool_gross_2 - cost_2
+        tick_avg_2 = (n_tick_2 / n2) if n2 else 0.0
+        roi_2 = (pool_gross_2 / cost_2) if cost_2 else 0.0
+        net_draw_2 = (pool_net_2 / n2) if n2 else 0.0
+        rows.append(
             {"src": f"🔄 Pool 2 (din {_pn2}, retrospectiv)" if _pn2 else "🔄 Pool 2 (retrospectiv)",
              "p3": _cell(pool3_2, n2), "p4": _cell(pool4_2, n2),
-             "rnd": _bcell(_pn2), "win": f"~{pool_gross_2:,.0f} Lei"},
-            {"src": f"⭐ OMNIUS 2 (bilet de {draw_n} nr., retrospectiv)",
-             "p3": _cell(omni3_2, n2), "p4": _cell(omni4_2, n2),
-             "rnd": _bcell(draw_n), "win": f"~{omni_gross_2:,.0f} Lei"},
-        ])
+             "rnd": _bcell(_pn2), "tick": _tick_cell(n_tick_2, tick_avg_2, cost_2),
+             "win": f"~{pool_gross_2:,.0f} Lei", "net": _net_cell(pool_net_2, roi_2)},
+        )
     ui.table(
         columns=[{"name": "src", "label": "Sursă", "field": "src", "align": "left"},
                  {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
                  {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
                  {"name": "rnd", "label": "🎲 random (3+ / 4+)", "field": "rnd", "align": "center"},
-                 {"name": "win", "label": "💰 Câștig brut (WF)", "field": "win", "align": "right"}],
+                 {"name": "tick", "label": "🎟️ Bilete jucate (cost)", "field": "tick", "align": "center"},
+                 {"name": "win", "label": "💰 Câștig brut (WF)", "field": "win", "align": "right"},
+                 {"name": "net", "label": "📉 NET (ROI)", "field": "net", "align": "right"}],
         rows=rows,
     ).classes("w-full").props("dense")
-    _cap = (f"💰 = câștig BRUT din premiile istoricului WF (fără costul biletelor). "
-            f"Realist NET: Pool 1 ≈ {pool_net:,.0f} Lei, OMNIUS 1 ≈ {omni_net:,.0f} Lei — "
-            f"de regulă NEGATIV (loteria e aleatoare). +3 / +4 = extrageri cu ≥3 / ≥4 nimerite.")
+    _cap = ("💰 = câștig BRUT din premiile istoricului WF (fără costul biletelor). "
+            "🎟️ = biletele efectiv jucate (o intrare walk-forward = 1 bilet la 1 extragere) "
+            "și costul lor. NET = brut − cost (de regulă NEGATIV — loteria e aleatoare); "
+            "ROI = brut / cost (lei câștigați per leu jucat). "
+            "🎲 = baseline PUR aleator (hipergeometric, calculat din parametrii jocului și "
+            "mărimea pool-ului) — pragul față de care trebuie citite coloanele +3 / +4. "
+            "+3 / +4 = extrageri cu ≥3 / ≥4 nimerite.")
     if per2:
-        pool_net_2 = pool_gross_2 - len(flat_p2) * price
-        omni_net_2 = omni_gross_2 - n2 * price
-        _cap += (f" Pool 2 / OMNIUS 2 = retrospectiv (wheel curent). "
-                 f"NET Pool 2 ≈ {pool_net_2:,.0f} Lei, OMNIUS 2 ≈ {omni_net_2:,.0f} Lei.")
+        _cap += (
+            f" ⚠️ Bazele de cost DIFERĂ, deci cele două NET nu se compară direct: "
+            f"Pool 1 = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere — wheel REGENERAT la "
+            f"fiecare pas walk-forward, dimensiune variabilă), Pool 2 = {n_tick_2:,} bilete "
+            f"({tick_avg_2:.2f}/extragere — retrospectiv, ACELAȘI wheel de azi pe toate "
+            f"extragerile). Comparabile sunt ROI ({roi_1:.2f} vs {roi_2:.2f}) și "
+            f"NET/extragere ({net_draw_1:,.1f} vs {net_draw_2:,.1f} Lei)."
+        )
+    else:
+        _cap += (f" Pool 1 = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere) · "
+                 f"NET/extragere ≈ {net_draw_1:,.1f} Lei.")
     ui.label(_cap).classes("text-caption text-grey")
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
-    _tt_checks = [("Pool 1", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn1),
-                  ("OMNIUS 1", sum(1 for d in per.values() if d["omnius"] >= _TT), n, draw_n)]
+    _tt_checks = [("Pool 1", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn1)]
     if per2:
-        _tt_checks += [("Pool 2", sum(1 for d in per2.values() if d["pool"] >= _TT), n2, _pn2),
-                       ("OMNIUS 2", sum(1 for d in per2.values() if d["omnius"] >= _TT), n2, draw_n)]
+        _tt_checks += [("Pool 2", sum(1 for d in per2.values() if d["pool"] >= _TT), n2, _pn2)]
     _losers = []
     for _lbl3, _cnt, _den, _K in _tt_checks:
         _b = _random_rate_hypergeo(gk, _K, _TT) if _K else None
@@ -2661,10 +2667,6 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     # Δ pe cel mai recent = „acum X zile” (până azi); pe rest = interval până la hit-ul următor.
     def _pool_badge(d):
         h = int(d["pool"])
-        return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
-
-    def _omni_badge(d):
-        h = int(d["omnius"])
         return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
 
     def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label=None):
@@ -2696,17 +2698,13 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     # apare niciodată → mențiunea lui ar fi text mort/contradictoriu.
     _star_leg = ("⭐ = exact 3; " if _TT == 4 else f"⭐ = 3–{_TT - 1}; ") if _TT > 3 else ""
     ui.label(
-        f"🗓️ Istoric: extrageri cu ≥3 în pool/OMNIUS. 🔥 = target bench (≥{_TT}); "
+        f"🗓️ Istoric: extrageri cu ≥3 în pool. 🔥 = target bench (≥{_TT}); "
         f"{_star_leg}Δ pe primul rând = „acum X zile” (de la ultimul hit până azi); "
         f"pe rest = zile până la hit-ul următor mai recent."
     ).classes("text-caption text-grey mt-2")
     _dates_table("🗓️ POOL 1", lambda d: d["pool"] >= 3, _pool_badge,
                  "Pool 1 n-a prins ≥3 în istoricul walk-forward.",
                  gap_on=lambda d: d["pool"] >= _TT,
-                 gap_label=f"Δ → următorul ≥{_TT} / azi")
-    _dates_table("🗓️ OMNIUS 1", lambda d: d["omnius"] >= 3, _omni_badge,
-                 "OMNIUS 1 n-a prins ≥3 în istoricul walk-forward.",
-                 gap_on=lambda d: d["omnius"] >= _TT,
                  gap_label=f"Δ → următorul ≥{_TT} / azi")
     if per2:
         def _dates_table_p2(title, pred, badge, empty_msg, gap_on):
@@ -2736,16 +2734,9 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             h = int(d["pool"])
             return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
 
-        def _omni_badge_p2(d):
-            h = int(d["omnius"])
-            return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
-
         _dates_table_p2("🗓️ POOL 2", lambda d: d["pool"] >= 3, _pool_badge_p2,
                         "Pool 2 n-a prins ≥3 în istoricul walk-forward.",
                         lambda d: d["pool"] >= _TT)
-        _dates_table_p2("🗓️ OMNIUS 2", lambda d: d["omnius"] >= 3, _omni_badge_p2,
-                        "OMNIUS 2 n-a prins ≥3 în istoricul walk-forward.",
-                        lambda d: d["omnius"] >= _TT)
 
 
 # Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
@@ -2952,7 +2943,7 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                             ).classes("text-caption text-negative")
                         ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
                             "text-bold text-warning text-lg")
-                        ui.label("Plasă de siguranță — istoric retrospectiv Pool 2 / OMNIUS 2 "
+                        ui.label("Plasă de siguranță — istoric retrospectiv Pool 2 "
                                  "în 📊 Analiză (fără WF dublu).").classes("text-caption")
                         _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False, res_prefix=res_prefix)
                     else:
@@ -3311,8 +3302,8 @@ def main_page() -> None:
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
         ).classes("w-full")
-        ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric) rulează doar Pool 1 / OMNIUS 1: "
-                 "Joker → 5/40 → 6/49 (6/49 ultim). Pool 2 / OMNIUS 2 nu intră în WF. "
+        ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric) rulează doar Pool 1: "
+                 "Joker → 5/40 → 6/49 (6/49 ultim). Pool 2 nu intră în WF. "
                  "WF paralel (~80% CPU) — de obicei minute, nu ore. Bugetul e plafon de siguranță."
                  ).classes("text-caption text-grey")
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")

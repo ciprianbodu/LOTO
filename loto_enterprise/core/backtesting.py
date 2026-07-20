@@ -147,14 +147,6 @@ def _retroactive_step_stateless(
     ) if lines else set()
     hits_union = len(predicted_union & actual_set)
 
-    draw_n = int(_GAME_DRAW_N.get(game_type, 6))
-    omni_scores = getattr(engine, "_last_pool_scores", None) or {}
-    from loto_enterprise.benchmark.methods_omnius import pick_omnius_ticket
-    omnius_ticket = pick_omnius_ticket(
-        list(engine.hard_core), omni_scores, draw_n,
-    )
-    omnius_hits = len(set(omnius_ticket) & actual_set)
-
     return RetroactivePrediction(
         simulation_date=str(sim_date),
         target_draw_date=str(target_date),
@@ -167,8 +159,6 @@ def _retroactive_step_stateless(
         guarantee=guarantee,
         game_type=game_type,
         draw_index=sim_idx,
-        omnius_ticket=omnius_ticket,
-        omnius_hits=omnius_hits,
     )
 
 
@@ -253,8 +243,6 @@ class RetroactivePrediction:
     game_type: str  # Tipul jocului
     draw_index: int = 0  # Indexul extragerii
     hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union)
-    omnius_ticket: list[int] = field(default_factory=list)  # biletul OMNIUS (top draw_n din pool)
-    omnius_hits: int = 0  # Câte numere a nimerit biletul OMNIUS la această extragere
 
 
 class LotoBacktester:
@@ -848,17 +836,6 @@ class LotoBacktester:
                 ) if lines else set()
                 hits_union = len(predicted_union & set(actual_draw))
 
-                # Biletul OMNIUS retroactiv = top draw_n numere din pool după scorul
-                # metodei câștigătoare (același criteriu ca biletul OMNIUS afișat azi,
-                # dar regenerat onest pentru fiecare extragere trecută, fără lookahead).
-                _draw_n = 6 if self.game_type == "6/49" else 5
-                _omni_scores = getattr(engine, "_last_pool_scores", None) or {}
-                from loto_enterprise.benchmark.methods_omnius import pick_omnius_ticket
-                _omnius_ticket = pick_omnius_ticket(
-                    list(engine.hard_core), _omni_scores, _draw_n,
-                )
-                _omnius_hits = len(set(_omnius_ticket) & set(actual_draw))
-
                 retro_pred = RetroactivePrediction(
                     simulation_date=str(sim_date),
                     target_draw_date=str(target_date),
@@ -871,8 +848,6 @@ class LotoBacktester:
                     guarantee=guarantee,
                     game_type=self.game_type,
                     draw_index=sim_idx,
-                    omnius_ticket=_omnius_ticket,
-                    omnius_hits=_omnius_hits,
                 )
 
                 retro_predictions.append(retro_pred)

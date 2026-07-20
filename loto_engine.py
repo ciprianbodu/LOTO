@@ -686,22 +686,10 @@ class LotoEngine:
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
 
-        # Snapshot READ-ONLY al scorurilor metodei câștigătoare (pt biletul OMNIUS
-        # retroactiv din walk-forward). NU afectează generarea pool-ului/variantelor
-        # — e doar o copie a dicționarului deja calculat. (regula bit-identitate OK)
-        self._last_pool_scores = {int(k): float(v) for k, v in (tfm_scores or {}).items()}
-
-        # Expunem ACELEAȘI scoruri și în audit, ca UI-ul să construiască biletul
-        # OMNIUS afișat cu EXACT scorurile validate în walk-forward (backtesting.py
-        # folosește engine._last_pool_scores). Fără asta, biletul OMNIUS AFIȘAT era
-        # rerankuit cu un scorer diferit (score_omnius/smart_selector) → statisticile
-        # „+4" din walk-forward descriau un alt bilet decât cel văzut de user.
-        # Aliniere = biletul afișat e cel a cărui rată T+ (țintă bench, implicit 3+)
-        # e efectiv măsurată în walk-forward.
-        # Read-only w.r.t. generare (bit-identitate OK). Se propagă automat la
-        # ambele pool-uri (Pool 1 = pass 1, Pool 2 = pass 2 au audit separat).
-        if self._last_pool_scores:
-            self.audit['omnius_pool_scores'] = dict(self._last_pool_scores)
+        # Biletul OMNIUS a fost eliminat din UI și din walk-forward → snapshot-ul
+        # de scoruri (`_last_pool_scores`) și audit['omnius_pool_scores'] nu mai au
+        # niciun consumator. Scoase: erau doar date moarte în payload și în raport.
+        # (Metoda de scoring "omnius" din registry-ul de bench rămâne neatinsă.)
 
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
@@ -1755,7 +1743,11 @@ class LotoEngine:
                     logging.warning("[ENGINE] ensemble member %s a eșuat: %s — sar peste", name, exc_m)
                     raw = {}
                 contributions.append((name, raw, weight))
-            scores = combine_ensemble_scores(contributions)
+            # Auditul primeşte compoziţia EFECTIVĂ (după filtrul de varianţă şi
+            # decorelare), nu pe cea nominală din best_methods.json — altfel UI-ul
+            # afişează 3 membri când blend-ul a folosit 2.
+            _ens_audit: dict = {}
+            scores = combine_ensemble_scores(contributions, audit=_ens_audit)
             if not scores:
                 return {}
             family = ""
@@ -1772,9 +1764,27 @@ class LotoEngine:
                 "family": family,
             }
             if len(ensemble) > 1:
-                bench_winner_info["ensemble"] = [
-                    {"method": n, "weight": round(w, 4)} for n, _raw, w in contributions if _raw
+                # Membrii EFECTIV folosiţi (ponderi renormalizate după eliminări),
+                # cu fallback la lista nominală dacă auditul lipseşte.
+                _active = _ens_audit.get("ensemble_active")
+                if _active:
+                    bench_winner_info["ensemble"] = [
+                        {"method": n, "weight": round(float(w), 4)} for n, w in _active
+                    ]
+                else:
+                    bench_winner_info["ensemble"] = [
+                        {"method": n, "weight": round(w, 4)} for n, _raw, w in contributions if _raw
+                    ]
+                _dropped = list(_ens_audit.get("ensemble_dropped_correlated") or [])
+                _dropped += [
+                    (d.get("method"), None, d.get("reason"))
+                    for d in (_ens_audit.get("ensemble_dropped") or [])
+                    if isinstance(d, dict)
                 ]
+                if _dropped:
+                    bench_winner_info["ensemble_dropped"] = [
+                        {"method": t[0], "vs": t[2], "r": t[1]} for t in _dropped
+                    ]
             self.audit.setdefault("bench_winner", {})[game_key] = bench_winner_info
             return {int(k): float(v) for k, v in scores.items()}
         except Exception as exc:

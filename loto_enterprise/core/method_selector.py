@@ -258,6 +258,188 @@ def _has_variance(raw: dict) -> bool:
     return (max(vals) - min(vals)) > 1e-12
 
 
+# --- Decorelare membri ensemble -------------------------------------------
+# Prag peste care doi membri sunt considerați REDUNDANȚI (aceeași informație de
+# ranking) — auditul a arătat perechi cu |Spearman| ∈ {0.98, 1.00} în ensemble-
+# urile scrise de decision.py (ex. 649_katz15_gap85 + 649_katz25_gap75 = blend-uri
+# pe ACELEAȘI componente, cover_positional_bands + frequency la 5/40 → r=+0.98).
+# Un asemenea "ensemble" e un no-op: nu reduce varianța, doar dublează un semnal.
+MAX_MEMBER_CORR = 0.95
+# Sub atâtea numere comune, Spearman e degenerat (cu 2 puncte e mereu ±1) —
+# nu filtrăm nimic. Pool-urile reale au 40..49 numere, deci pragul nu se atinge
+# în producție; protejează doar apelurile sintetice (teste, scoruri parțiale).
+_MIN_CORR_SAMPLE = 8
+
+_SPEARMAN_FN: Callable | None = None
+_SPEARMAN_TRIED = False
+
+
+def _get_spearman() -> Callable | None:
+    """scipy.stats.spearmanr dacă e disponibil (import LEAZY, o singură dată).
+
+    scipy vine oricum cu sklearn, dar method_selector e importat și în contexte
+    minimale → fără dependență obligatorie: la eșec cădem pe implementarea numpy.
+    """
+    global _SPEARMAN_FN, _SPEARMAN_TRIED
+    if not _SPEARMAN_TRIED:
+        _SPEARMAN_TRIED = True
+        try:
+            from scipy.stats import spearmanr
+            _SPEARMAN_FN = spearmanr
+        except Exception as exc:
+            logger.debug("[method_selector] scipy.stats indisponibil (%s) — Spearman pe numpy", exc)
+            _SPEARMAN_FN = None
+    return _SPEARMAN_FN
+
+
+def _rank_avg(vals: list[float]) -> list[float]:
+    """Ranguri cu MEDIA pe egalități (echivalent rankdata(..., method='average')).
+
+    Egalitățile sunt frecvente la scorurile de loto (multe metode dau platouri),
+    deci rangul „competition" ar introduce corelații artificiale.
+    """
+    order = sorted(range(len(vals)), key=lambda i: vals[i])
+    ranks = [0.0] * len(vals)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and vals[order[j + 1]] == vals[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0 + 1.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg
+        i = j + 1
+    return ranks
+
+
+def _spearman_numpy(a: list[float], b: list[float]) -> float | None:
+    """Fallback: Pearson pe ranguri (= Spearman) cu numpy; None dacă e degenerat."""
+    ra, rb = _rank_avg(a), _rank_avg(b)
+    try:
+        import numpy as _np
+        x = _np.asarray(ra, dtype=float)
+        y = _np.asarray(rb, dtype=float)
+        xc = x - x.mean()
+        yc = y - y.mean()
+        den = float(_np.sqrt(float((xc * xc).sum()) * float((yc * yc).sum())))
+        if den <= 0.0:
+            return None
+        return float((xc * yc).sum() / den)
+    except Exception:
+        # nici numpy nu e disponibil → Python pur (≤49 numere, cost neglijabil)
+        n = len(ra)
+        if n < 2:
+            return None
+        ma, mb = sum(ra) / n, sum(rb) / n
+        sxy = sum((ra[i] - ma) * (rb[i] - mb) for i in range(n))
+        sxx = sum((v - ma) ** 2 for v in ra)
+        syy = sum((v - mb) ** 2 for v in rb)
+        den = (sxx * syy) ** 0.5
+        if den <= 0.0:
+            return None
+        return sxy / den
+
+
+def _pair_corr(raw_a: dict, raw_b: dict) -> float | None:
+    """|Spearman| între două seturi de scoruri, pe numerele COMUNE.
+
+    None = necalculabil (prea puține numere comune, varianță nulă pe ranguri,
+    NaN) → perechea nu poate justifica o eliminare.
+    """
+    common = sorted(set(raw_a.keys()) & set(raw_b.keys()))
+    if len(common) < _MIN_CORR_SAMPLE:
+        return None
+    a = [float(raw_a[k]) for k in common]
+    b = [float(raw_b[k]) for k in common]
+    sp = _get_spearman()
+    if sp is not None:
+        try:
+            res = sp(a, b)
+            r = getattr(res, "statistic", None)
+            if r is None:
+                r = res[0]
+            r = float(r)
+            if r == r:  # nu NaN
+                return r
+        except Exception as exc:
+            logger.debug("[method_selector] spearmanr a eșuat (%s) — fallback numpy", exc)
+    r = _spearman_numpy(a, b)
+    if r is None or r != r:
+        return None
+    return r
+
+
+def _select_decorrelated(
+    active: list[tuple[str, dict[int, float], float]],
+) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, float, str]]]:
+    """Selecție GREEDY decorelată peste membrii activi (deja filtrați de plate).
+
+    Parcurge membrii în ordinea DESCRESCĂTOARE a ponderii și acceptă unul doar
+    dacă |Spearman| față de TOȚI membrii deja acceptați e sub `MAX_MEMBER_CORR`.
+    Două cazuri, ambele nocive:
+      - r >= +0.95 → redundant: blend-ul e un no-op (aceeași informație de două ori);
+      - r <= -0.95 → ANTI-corelat: tot redundant, dar din alt motiv. După min-max
+        normalizare, y ≈ 1 - x, deci blend-ul devine w2 + (w1-w2)*x — o funcţie
+        MONOTONĂ de x. Ranking-ul rezultat e identic cu al membrului mai greu, iar
+        la ponderi egale (w1 == w2) degenerează în scor CONSTANT (pool degenerat).
+        În ambele cazuri membrul nu aduce informaţie nouă → EXCLUS. Logat WARNING.
+
+    Returnează (kept, dropped) unde dropped = [(nume, r_max_semnat, față_de_cine)].
+    `kept` păstrează ORDINEA ORIGINALĂ a listei `active` — când nu se elimină
+    nimic, suma ponderată rămâne bit-identică cu cea dinaintea acestui filtru.
+    """
+    if len(active) < 2:
+        return active, []
+    # Tie-break pe NUME, nu pe indice: ponderile Wilson ies frecvent egale
+    # (34/33/33), iar ordinea listei depinde de ordinea cheilor din
+    # best_methods.json → acelaşi ensemble ar fi dat pool-uri diferite după o
+    # simplă reserializare a JSON-ului. Numele e stabil între rulări.
+    order = sorted(range(len(active)), key=lambda i: (-active[i][2], active[i][0]))
+    kept_idx: list[int] = []
+    dropped: list[tuple[str, float, str]] = []
+    for i in order:
+        name, raw, _w = active[i]
+        worst_r = 0.0
+        worst_vs = ""
+        for j in kept_idx:
+            r = _pair_corr(raw, active[j][1])
+            if r is None:
+                continue
+            if abs(r) > abs(worst_r):
+                worst_r, worst_vs = r, active[j][0]
+        if worst_vs and abs(worst_r) >= MAX_MEMBER_CORR:
+            dropped.append((name, round(worst_r, 4), worst_vs))
+            if worst_r <= -MAX_MEMBER_CORR:
+                logger.warning(
+                    "[method_selector] ensemble: %r ANTI-corelat cu %r (Spearman=%.4f) — "
+                    "EXCLUS (blend-ul devine monoton în celălalt membru; la ponderi "
+                    "egale → scor constant / pool degenerat)",
+                    name, worst_vs, worst_r,
+                )
+            else:
+                logger.info(
+                    "[method_selector] ensemble: %r redundant cu %r (Spearman=%.4f) — exclus",
+                    name, worst_vs, worst_r,
+                )
+            continue
+        kept_idx.append(i)
+    kept = [active[i] for i in sorted(kept_idx)]
+    return kept, dropped
+
+
+def _resolve_members(
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]], list[tuple[str, float, str]]]:
+    """Pipeline-ul COMPLET de selecție a membrilor: varianță → decorelare.
+
+    Sursa UNICĂ de adevăr pentru combine_ensemble_scores și describe_ensemble
+    (UI-ul trebuie să vadă exact membrii pe care blend-ul îi folosește efectiv).
+    """
+    active, dropped = _split_active(contributions)
+    active, dropped_corr = _select_decorrelated(active)
+    return active, dropped, dropped_corr
+
+
 def _split_active(
     contributions: list[tuple[str, dict[int, float], float]],
 ) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]]]:
@@ -286,19 +468,24 @@ def describe_ensemble(
     """Metadata pt afișare (UI): cine e EFECTIV activ în blend vs. nominal.
 
     Aplică exact filtrarea din combine_ensemble_scores (goale/plate afară,
-    renormalizare pe activi) FĂRĂ să combine scorurile — UI-ul o poate apela
+    apoi decorelarea greedy) FĂRĂ să combine scorurile — UI-ul o poate apela
     ca să afișeze membrii reali + ponderile efectiv folosite, nu cele nominale.
 
     Returnează:
         active  — [{"method", "weight"}] ponderi RENORMALIZATE pe membrii activi
-        dropped — [{"method", "reason"}] reason ∈ {"empty", "flat"}
+        dropped — [{"method", "reason", ...}] TOATE eliminările, în ordinea
+            etapelor; reason ∈ {"empty", "flat", "correlated", "anticorrelated"}.
+            Pentru cele două motive de corelație se adaugă și "r" (Spearman
+            semnat) + "vs" (membrul păstrat față de care s-a măsurat).
+        dropped_correlated — doar eliminările de corelație, aceleași câmpuri
+            (comod pt UI: „redundant cu X, r=0.98")
         nominal_count / active_count — dimensiunile listelor
         single_active_normalized — True când nominal >1 dar 1 activ (scorurile
             supraviețuitorului sunt min-max normalizate, nu brute)
         fallback_flat — True când NICIUN membru nu are varianță și blend-ul
             cade pe primul nevid (chiar plat)
     """
-    active, dropped = _split_active(contributions)
+    active, dropped, dropped_corr = _resolve_members(contributions)
     if len(active) == 1:
         active_out = [{"method": active[0][0], "weight": 1.0}]
     elif active:
@@ -306,9 +493,19 @@ def describe_ensemble(
         active_out = [{"method": n, "weight": w / total_w} for n, _raw, w in active]
     else:
         active_out = []
+    corr_out = [
+        {
+            "method": n,
+            "reason": "anticorrelated" if r <= -MAX_MEMBER_CORR else "correlated",
+            "r": r,
+            "vs": vs,
+        }
+        for n, r, vs in dropped_corr
+    ]
     return {
         "active": active_out,
-        "dropped": [{"method": n, "reason": r} for n, r in dropped],
+        "dropped": [{"method": n, "reason": r} for n, r in dropped] + corr_out,
+        "dropped_correlated": corr_out,
         "nominal_count": len(contributions),
         "active_count": len(active),
         "single_active_normalized": len(contributions) > 1 and len(active) == 1,
@@ -330,20 +527,30 @@ def combine_ensemble_scores(
     metodelor care au produs efectiv scoruri, ca metodele eșuate/goale să nu
     reducă artificial suma ponderilor active).
 
+    DECORELARE: după filtrul de varianță se aplică o selecție GREEDY
+    (`_select_decorrelated`) — un membru intră în blend doar dacă |Spearman|
+    față de toți cei deja acceptați e sub `MAX_MEMBER_CORR`. Fără ea, „ensemble-
+    ul" putea fi un no-op (doi membri cu r=0.98 = același semnal numărat de două
+    ori) sau chiar DEGENERAT (doi membri cu r=-1.0 se anulează → scor constant).
+    Ponderile se renormalizează pe membrii RĂMAȘI.
+
     `audit` (opțional) — dict în care se scriu membrii EFECTIV folosiți, ca
-    filtrarea (goale/plate) să fie OBSERVABILĂ din UI, nu tăcută:
+    filtrarea să fie OBSERVABILĂ din UI, nu tăcută:
         audit["ensemble_active"]  = [(nume, pondere_renormalizată), ...]
-        audit["ensemble_dropped"] = [nume, ...]
+        audit["ensemble_dropped"] = [nume, ...]  — doar goale/plate (semantică
+            neschimbată față de versiunea dinaintea decorelării)
+        audit["ensemble_dropped_correlated"] = [(nume, r_max, față_de_cine), ...]
         + flag-urile single_active_normalized / fallback_flat când e cazul.
 
     Bit-identitate: DOAR cu ensemble NOMINAL de exact 1 membru (decizia n-a
     construit un blend real) scorurile lui se întorc BRUTE, NEnormalizate —
-    identic cu apelul direct al scorer-ului (CLAUDE.md regula 1). Când nominal
-    >1 dar rămâne 1 singur membru ACTIV, scorurile lui sunt min-max normalizate
-    (rank-preserving, pool identic) — exact „membru normalizat înainte de
-    combinare", nu un scorer diferit pe tăcute.
+    identic cu apelul direct al scorer-ului (CLAUDE.md regula 1); cu un singur
+    membru nu se calculează nicio corelație. Când nominal >1 dar rămâne 1 singur
+    membru ACTIV, scorurile lui sunt min-max normalizate (rank-preserving, pool
+    identic) — exact „membru normalizat înainte de combinare", nu un scorer
+    diferit pe tăcute.
     """
-    active, dropped = _split_active(contributions)
+    active, dropped, dropped_corr = _resolve_members(contributions)
 
     if audit is not None:
         if len(active) == 1:
@@ -354,6 +561,7 @@ def combine_ensemble_scores(
         else:
             audit["ensemble_active"] = []
         audit["ensemble_dropped"] = [n for n, _reason in dropped]
+        audit["ensemble_dropped_correlated"] = [(n, r, vs) for n, r, vs in dropped_corr]
 
     if not active:
         # fallback: primul nevid, chiar dacă e plat (mai bun decât pool gol);

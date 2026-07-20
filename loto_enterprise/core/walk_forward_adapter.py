@@ -19,7 +19,7 @@ import hashlib
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +32,9 @@ from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_at
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v12"
+CACHE_VERSION = "v13"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v13: flat-ul NU mai conține omnius_hits/omnius_ticket (biletul OMNIUS scos din WF/UI) — structură incompatibilă cu v12.
 # v12: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
 # v11: prime_bias tie-break frecvență + _decision_sig include BENCH_HIT_TARGET + tie-break pool.
 # v10: nefolosită (sărită la bump-ul v9→v11).
@@ -56,8 +57,6 @@ class WalkForwardResult:
     hits: int
     hits_union: int  # cât din pool a nimerit per extragere
     target_draw_date: str | None = None  # alias pt RetroactivePrediction
-    omnius_hits: int = 0  # cât a nimerit biletul OMNIUS la această extragere (per-draw)
-    omnius_ticket: list[int] = field(default_factory=list)  # biletul OMNIUS retroactiv
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -95,7 +94,16 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
         gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
               "joker": "joker_urna1"}.get(game_type, "loto_6_49")
         c = recommend_optimal_config(gk, int(pool_size))
-        raw = f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}"
+        # Ensemble-ul intră în semnătură: scoringul de producție e blend-ul, nu
+        # doar `scorer`. Fără el, o schimbare de compoziție/ponderi (sau de prag
+        # de decorelare) ar schimba pool-ul dar ar servi cache WF vechi.
+        _ens = c.get("ensemble") or {}
+        if isinstance(_ens, dict):
+            _ens_sig = ",".join(f"{k}:{round(float(v), 4)}" for k, v in sorted(_ens.items()))
+        else:
+            _ens_sig = ",".join(sorted(str(m) for m in _ens))
+        raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
+               f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         logger.warning(f"[WALK-FWD] decision sig indisponibilă ({exc}) — folosesc 'nodec'")
@@ -131,8 +139,6 @@ def expand_predictions_to_flat(
                 hits=hits,
                 hits_union=p.hits_union,
                 target_draw_date=p.target_draw_date,
-                omnius_hits=int(getattr(p, "omnius_hits", 0)),
-                omnius_ticket=list(getattr(p, "omnius_ticket", []) or []),
             ))
     return flat
 
@@ -265,9 +271,9 @@ def build_retrospective_pool_hits_flat(
     game_type: str,
     pool_numbers: list[int],
     variants: list,
-    omnius_ticket: list[int],
+    omnius_ticket: list[int] | None = None,  # IGNORAT (biletul OMNIUS scos); păstrat pt call-site-urile existente
 ) -> tuple[list[WalkForwardResult], dict]:
-    """Istoric hits Pool 2 / OMNIUS 2 fără walk-forward onest.
+    """Istoric hits Pool 2 fără walk-forward onest.
 
     Folosește ACELEAȘI extrageri ca WF Pool 1, dar pool-ul + wheel-ul CURENT
     (generat azi). Rapid (secunde): nu regenerează pipeline-ul la fiecare pas.
@@ -281,8 +287,6 @@ def build_retrospective_pool_hits_flat(
     bt = LotoBacktester(df_source, game_type=game_type)
     draw_n = int({"6/49": 6, "5/40": 5, "joker": 5}.get(game_type, 6))
     pool_set = {int(x) for x in pool_numbers}
-    omni_nums = [int(x) for x in (omnius_ticket or [])[:draw_n]]
-    omni_set = set(omni_nums)
     variants = variants or []
 
     draw_indices = sorted({int(getattr(p, "draw_index", -1)) for p in flat_reference} - {-1})
@@ -296,7 +300,6 @@ def build_retrospective_pool_hits_flat(
         actual = set(int(x) for x in raw[:draw_n])
         dd = bt.dates[di] if di < len(bt.dates) else None
         hits_union = len(pool_set & actual)
-        omnius_hits = len(omni_set & actual)
         n_draws += 1
 
         if variants:
@@ -309,8 +312,6 @@ def build_retrospective_pool_hits_flat(
                     hits=len(vset & actual),
                     hits_union=hits_union,
                     target_draw_date=str(dd) if dd else None,
-                    omnius_hits=omnius_hits,
-                    omnius_ticket=list(omni_nums),
                 ))
         else:
             flat_out.append(WalkForwardResult(
@@ -320,8 +321,6 @@ def build_retrospective_pool_hits_flat(
                 hits=hits_union,
                 hits_union=hits_union,
                 target_draw_date=str(dd) if dd else None,
-                omnius_hits=omnius_hits,
-                omnius_ticket=list(omni_nums),
             ))
 
     meta = {
