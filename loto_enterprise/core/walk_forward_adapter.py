@@ -7,10 +7,16 @@ puterea predictivă reală.
 
 Cache:
     - Pe disc: bench_results/walk_forward_<ver>_<game>_<csv_hash>_pool<N>_d<depth>_<dec_sig>.pkl
+      (CACHE_DIR e o cale RELATIVĂ, deci cache-ul stă ÎN repo/OneDrive — spre
+      deosebire de cache-ul de bench, care e mutat în afara OneDrive.)
     - Reutilizat la următorul Auto-Pilot dacă (csv_hash, pool_size, decizie bench) match.
-      dec_sig = semnătura deciziei (scorer/sim_depth/blacklist) → un Re-Bench care
-      schimbă câştigătorul invalidează automat cache-ul (altfel valida cu metoda veche).
-    - Curățat manual cu clear_walk_forward_cache()
+      dec_sig = semnătura deciziei (scorer/sim_depth/blacklist/ensemble) → un Re-Bench
+      care schimbă câştigătorul sau compoziţia ensemble-ului invalidează automat
+      cache-ul (altfel valida cu metoda veche).
+    - Un bump de CACHE_VERSION doar schimbă NUMELE fişierului: pickle-urile vechi
+      rămân pe disc la nesfârşit. `purge_stale_wf_cache()` le inventariază (implicit
+      dry-run) şi le poate şterge; `clear_walk_forward_cache()` şterge TOT, inclusiv
+      versiunea curentă.
 """
 
 from __future__ import annotations
@@ -34,7 +40,14 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = Path("bench_results")
 CACHE_VERSION = "v13"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
-# v13: flat-ul NU mai conține omnius_hits/omnius_ticket (biletul OMNIUS scos din WF/UI) — structură incompatibilă cu v12.
+# v13: (a) flat-ul NU mai conține omnius_hits/omnius_ticket (biletul OMNIUS scos din
+#      WF/UI) — structură incompatibilă cu v12; (b) DECORELAREA membrilor de ensemble
+#      (method_selector.MAX_MEMBER_CORR=0.95, pe scoruri) + filtrul de redundanță din
+#      decizie pot schimba POOL-ul generat față de v12 — deci cache-urile v12 validează
+#      un pool care nu se mai generează; (c) `_decision_sig` include acum ensemble-ul
+#      (compoziție + ponderi), nu doar `scorer`.
+#      Motivul (b) e cel important: (a) singur ar fi fost compatibil la unpickle
+#      (dataclass-ul se dezserializează fără __init__), deci NU justifica singur bump-ul.
 # v12: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
 # v11: prime_bias tie-break frecvență + _decision_sig include BENCH_HIT_TARGET + tie-break pool.
 # v10: nefolosită (sărită la bump-ul v9→v11).
@@ -143,6 +156,50 @@ def expand_predictions_to_flat(
     return flat
 
 
+def _merge_partial_coverage(
+    cached: dict,
+    flat_new: list[WalkForwardResult],
+    meta: dict,
+) -> tuple[list[WalkForwardResult], dict]:
+    """REUNIUNE (pe `draw_index`) între un cache PARȚIAL şi rularea nouă.
+
+    De ce reuniune şi nu „câştigă cel mai lung": acoperirea parţială NU e garantat
+    un prefix contiguu al cozii recente. Paşii se lansează în ordine recent→vechi,
+    dar un pas care crapă sau depăşeşte `_WF_STEP_TIMEOUT_S` e SĂRIT
+    (`backtesting._wf_worker_step` loghează şi întoarce None), deci două rulări pot
+    avea GĂURI diferite: o rulare mai lungă în total poate rata extrageri pe care
+    cache-ul le avea. Regula veche („păstrez cache-ul dacă are mai multe extrageri")
+    arunca exact felia acoperită doar de cealaltă rulare.
+
+    Contract: cheia de cache fixează (csv_hash, joc, pool, depth, decizie), deci
+    intrările pentru acelaşi `draw_index` sunt echivalente — la conflict păstrăm
+    rularea NOUĂ. Rezultatul e monoton crescător prin construcţie.
+    """
+    cached_flat = list(cached.get("flat") or [])
+    if not cached_flat:
+        return flat_new, meta
+
+    new_idx = {int(getattr(r, "draw_index", -1)) for r in flat_new}
+    extra = [r for r in cached_flat if int(getattr(r, "draw_index", -1)) not in new_idx]
+    if not extra:
+        return flat_new, meta
+
+    extra_idx = {int(getattr(r, "draw_index", -1)) for r in extra}
+    merged = sorted(flat_new + extra, key=lambda r: int(getattr(r, "draw_index", -1)))
+    meta["n_predictions"] = int(meta.get("n_predictions") or 0) + len(extra_idx)
+    meta["n_test_draws"] = len(new_idx | extra_idx)
+    meta["partial"] = meta["n_test_draws"] < int(meta.get("n_expected") or 0)
+    meta["merged_partial_cache"] = len(extra_idx)
+    # Dacă rularea nouă n-a produs nimic (anulare imediată), rezultatul e integral
+    # din cache → UI-ul trebuie să vadă from_cache=True, nu o „rulare" fantomă.
+    meta["from_cache"] = not flat_new
+    logger.info(
+        "[WALK-FWD] Reuniune cu cache-ul parţial: +%d extrageri din cache → %d/%d.",
+        len(extra_idx), meta["n_test_draws"], meta.get("n_expected"),
+    )
+    return merged, meta
+
+
 def run_honest_walk_forward(
     df_source: pd.DataFrame,
     game_type: str,
@@ -161,6 +218,7 @@ def run_honest_walk_forward(
         (flat_results, meta_dict)
         meta_dict include: from_cache (bool), n_predictions, n_test_draws, csv_hash
     """
+    _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
     dec_sig = _decision_sig(game_type, pool_size)
     cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig,
@@ -194,10 +252,11 @@ def run_honest_walk_forward(
                 return cached["flat"], meta
             # PARȚIAL → NU-l servim orbește: re-rulăm ca să EXTINDEM acoperirea
             # (altfel un parțial rămâne înghețat până se schimbă CSV-ul, iar mărirea
-            # bugetului WF din UI n-ar avea niciun efect). Dacă rularea nouă iese
-            # MAI SCURTĂ decât cache-ul (mașină ocupată / anulare rapidă), păstrăm
-            # cache-ul — ambele acoperă coada RECENTĂ a aceleiași ferestre, deci
-            # cel mai lung îl conține strict pe cel mai scurt.
+            # bugetului WF din UI n-ar avea niciun efect). La final REUNIM rularea
+            # nouă cu cache-ul pe `draw_index` (vezi `_merge_partial_coverage`) —
+            # acoperirile parțiale sunt cozi RECENTE ale aceleiași ferestre, dar pot
+            # avea găuri diferite (pași crăpați/timeout), deci „cel mai lung îl
+            # conține pe cel mai scurt" NU e garantat.
             logger.info(
                 f"[WALK-FWD] Cache PARȚIAL pentru {game_type} pool={pool_size} "
                 f"({cached.get('n_test_draws')}/{cached.get('n_expected')}) → re-rulez "
@@ -239,22 +298,13 @@ def run_honest_walk_forward(
     meta["n_expected"] = n_expected
     meta["partial"] = meta["n_test_draws"] < n_expected
 
-    # Rularea nouă a acoperit MAI PUȚIN decât cache-ul parțial existent (mașină
-    # ocupată / anulare rapidă) → păstrăm cache-ul (mai acoperitor, aceeași coadă
-    # recentă) și NU-l suprascriem cu regresia.
-    if cached is not None and int(cached.get("n_test_draws") or 0) > meta["n_test_draws"]:
-        logger.info(
-            f"[WALK-FWD] Rularea nouă ({meta['n_test_draws']} extrageri) < cache "
-            f"({cached.get('n_test_draws')}) → păstrez cache-ul (fără suprascriere)."
-        )
-        meta["from_cache"] = True
-        meta["n_predictions"] = cached["n_predictions"]
-        meta["n_test_draws"] = cached["n_test_draws"]
-        meta["n_expected"] = cached.get("n_expected", n_expected)
-        meta["partial"] = cached.get("partial", True)
-        return cached["flat"], meta
+    # Cache PARȚIAL existent → REUNIUNE, nu „câștigă cel mai lung": nicio extragere
+    # deja validată nu se pierde, iar acoperirea se acumulează între sesiuni chiar
+    # dacă rularea curentă a fost oprită devreme (buget/anulare) sau a sărit pași.
+    if cached is not None:
+        flat, meta = _merge_partial_coverage(cached, flat, meta)
 
-    # Save cache (rulare nouă ≥ cache → suprascriem; scriere atomică anti-corupere
+    # Save cache (rezultatul reunit ⊇ cache → suprascriem; scriere atomică anti-corupere
     # la UI-restart în mijlocul pickle.dump — un cache trunchiat ar crăpa la load).
     try:
         pickle_store_path_atomic(cache_file, {"flat": flat, **meta})
@@ -271,13 +321,19 @@ def build_retrospective_pool_hits_flat(
     game_type: str,
     pool_numbers: list[int],
     variants: list,
-    omnius_ticket: list[int] | None = None,  # IGNORAT (biletul OMNIUS scos); păstrat pt call-site-urile existente
+    omnius_ticket: list[int] | None = None,  # PARAMETRU MORT — vezi docstring
 ) -> tuple[list[WalkForwardResult], dict]:
     """Istoric hits Pool 2 fără walk-forward onest.
 
     Folosește ACELEAȘI extrageri ca WF Pool 1, dar pool-ul + wheel-ul CURENT
     (generat azi). Rapid (secunde): nu regenerează pipeline-ul la fiecare pas.
     Informativ pentru plasa de siguranță — NU înlocuiește validarea WF Pool 1.
+
+    ⚠️ `omnius_ticket` e IGNORAT COMPLET: biletul OMNIUS a fost scos din UI și din
+    walk-forward (2026-07), iar corpul funcției nu-l atinge nicăieri. NU-l pasa
+    crezând că influențează rezultatul — nu o face. E păstrat DOAR ca poziția a
+    6-a să nu crape apelanții vechi (înainte pasau `[]` pozițional). De șters din
+    semnătură când nu mai există niciun call-site cu 6 argumente în istoric/repo.
     """
     from loto_enterprise.core.backtesting import LotoBacktester
 
@@ -338,8 +394,91 @@ def build_retrospective_pool_hits_flat(
     return flat_out, meta
 
 
+def _stale_wf_cache_files() -> list[Path]:
+    """Cache-urile WF scrise de versiuni VECHI de CACHE_VERSION (inaccesibile azi)."""
+    if not CACHE_DIR.exists():
+        return []
+    prefix_now = f"walk_forward_{CACHE_VERSION}_"
+    return sorted(
+        f for f in CACHE_DIR.glob("walk_forward_*.pkl")
+        if not f.name.startswith(prefix_now)
+    )
+
+
+def purge_stale_wf_cache(dry_run: bool = True) -> dict:
+    """Inventariază (şi opţional şterge) cache-urile WF de la versiuni VECHI.
+
+    Un bump de CACHE_VERSION schimbă doar NUMELE fişierului de cache: pickle-urile
+    versiunilor anterioare rămân pe disc la nesfârşit, permanent inaccesibile — iar
+    `CACHE_DIR` fiind o cale relativă (`bench_results/`, deci ÎN repo/OneDrive), se
+    şi sincronizează. Funcţia e DRY-RUN implicit: doar LISTEAZĂ şi însumează, ca
+    decizia de ştergere să rămână a utilizatorului.
+
+    Spre deosebire de `clear_walk_forward_cache()`, NU atinge versiunea curentă.
+
+    Args:
+        dry_run: True (implicit) = doar raportează; False = şterge efectiv.
+
+    Returns:
+        {"n_files", "bytes", "mb", "files" (list[str]), "deleted" (bool),
+         "n_deleted", "version": CACHE_VERSION}
+    """
+    files = _stale_wf_cache_files()
+    total = 0
+    for f in files:
+        try:
+            total += f.stat().st_size
+        except OSError:
+            pass
+    n_deleted = 0
+    if not dry_run:
+        for f in files:
+            try:
+                f.unlink()
+                n_deleted += 1
+            except OSError as exc:
+                logger.warning("[WALK-FWD] nu pot şterge %s: %s", f.name, exc)
+    return {
+        "n_files": len(files),
+        "bytes": total,
+        "mb": round(total / (1024 * 1024), 1),
+        "files": [f.name for f in files],
+        "deleted": not dry_run,
+        "n_deleted": n_deleted,
+        "version": CACHE_VERSION,
+    }
+
+
+_stale_cache_logged = False
+
+
+def _log_stale_wf_cache_once() -> None:
+    """Anunţă O SINGURĂ DATĂ pe proces cât spaţiu ocupă cache-urile WF vechi.
+
+    Pur informativ — NU şterge nimic (vezi `purge_stale_wf_cache`). Eşecurile sunt
+    înghiţite: igiena de disc nu are voie să pice un walk-forward.
+    """
+    global _stale_cache_logged
+    if _stale_cache_logged:
+        return
+    _stale_cache_logged = True
+    try:
+        info = purge_stale_wf_cache(dry_run=True)
+        if info["n_files"]:
+            logger.info(
+                "[WALK-FWD] %d cache-uri WF de la versiuni vechi (≠%s) ocupă %.1f MB în "
+                "%s/ — inaccesibile. Curăţare opţională: "
+                "walk_forward_adapter.purge_stale_wf_cache(dry_run=False).",
+                info["n_files"], CACHE_VERSION, info["mb"], CACHE_DIR,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[WALK-FWD] inventar cache vechi eşuat: %s", exc)
+
+
 def clear_walk_forward_cache() -> int:
-    """Şterge toate cache-urile walk-forward; returnează numărul de fişiere şterse."""
+    """Şterge toate cache-urile walk-forward (TOATE versiunile, inclusiv cea curentă);
+    returnează numărul de fişiere şterse. Pentru a păstra versiunea curentă și a
+    șterge doar reziduurile vechi, folosește `purge_stale_wf_cache(dry_run=False)`."""
     if not CACHE_DIR.exists():
         return 0
     deleted = 0

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Callable
 
@@ -251,9 +252,18 @@ def get_ensemble_for_game(
 
 
 def _has_variance(raw: dict) -> bool:
-    """Scoruri PLATE (toate egale) = fără informație de ranking — filtrate din blend."""
+    """Scoruri PLATE (toate egale) = fără informație de ranking — filtrate din blend.
+
+    Tot aici cad și scorurile NE-FINITE (NaN/inf): un singur NaN otrăvește
+    min-max-ul membrului ȘI suma ponderată (numărul respectiv iese NaN în pool),
+    iar `core.ranking.rank_by_score` devine dependent de ordinea de inserare pe
+    NaN. Un membru cu scoruri ne-finite = metodă DEFECTĂ, nu semnal slab → afară
+    din blend, la fel ca unul plat (același motiv raportat: „flat").
+    """
     vals = [float(v) for v in raw.values()]
     if len(vals) < 2:
+        return False
+    if not all(math.isfinite(v) for v in vals):
         return False
     return (max(vals) - min(vals)) > 1e-12
 
@@ -266,8 +276,14 @@ def _has_variance(raw: dict) -> bool:
 # Un asemenea "ensemble" e un no-op: nu reduce varianța, doar dublează un semnal.
 MAX_MEMBER_CORR = 0.95
 # Sub atâtea numere comune, Spearman e degenerat (cu 2 puncte e mereu ±1) —
-# nu filtrăm nimic. Pool-urile reale au 40..49 numere, deci pragul nu se atinge
-# în producție; protejează doar apelurile sintetice (teste, scoruri parțiale).
+# nu filtrăm nimic. Atenție: eșantionul e UNIVERSUL de numere scorate, nu
+# pool-ul: 20 (joker_urna2, single-pick — loto_engine.py fixează max_num=20),
+# 40 (5/40), 45 (joker_urna1), 49 (6/49). Deci pragul de 8 NU se atinge în
+# producție (protejează apelurile sintetice: teste, scoruri parțiale), DAR pe
+# universuri mici (20) un |Spearman| >= MAX_MEMBER_CORR se atinge mult mai ușor
+# din întâmplare decât pe 49 — mai ales cu scorere care produc platouri de
+# egalități. Dacă vreodată eliminările pe joker_urna2 par arbitrare, criteriul
+# corect e un p-value (sau un prag scalat cu n), nu doar |r|.
 _MIN_CORR_SAMPLE = 8
 
 _SPEARMAN_FN: Callable | None = None
@@ -341,16 +357,30 @@ def _spearman_numpy(a: list[float], b: list[float]) -> float | None:
 
 
 def _pair_corr(raw_a: dict, raw_b: dict) -> float | None:
-    """|Spearman| între două seturi de scoruri, pe numerele COMUNE.
+    """Spearman SEMNAT între două seturi de scoruri, pe numerele COMUNE.
 
-    None = necalculabil (prea puține numere comune, varianță nulă pe ranguri,
-    NaN) → perechea nu poate justifica o eliminare.
+    Valoarea NU e în modul: semnul e semnificativ mai departe (apelantul aplică
+    `abs()` pentru prag, iar `describe_ensemble` folosește semnul ca să eticheteze
+    eliminarea „correlated" vs „anticorrelated").
+
+    None = necalculabil → perechea nu poate justifica o eliminare:
+      - mai puține de `_MIN_CORR_SAMPLE` numere comune;
+      - valori ne-finite (NaN/inf) în oricare dintre seturi;
+      - varianță nulă pe ranguri (numitor 0) sau eșec de calcul.
     """
     common = sorted(set(raw_a.keys()) & set(raw_b.keys()))
     if len(common) < _MIN_CORR_SAMPLE:
         return None
     a = [float(raw_a[k]) for k in common]
     b = [float(raw_b[k]) for k in common]
+    # NaN/inf: scipy întoarce NaN (deci am cădea pe fallback-ul numpy), iar
+    # `_rank_avg` sortează NaN-urile pe o poziție arbitrară dar STABILĂ → ar
+    # rezulta o corelație FINITĂ și BOGUS (ex. 1.0000 pentru două seturi care
+    # diferă doar printr-un NaN) care ar justifica o eliminare reală. Un scor
+    # ne-finit înseamnă „metodă defectă", nu „membru redundant".
+    if not all(math.isfinite(v) for v in a) or not all(math.isfinite(v) for v in b):
+        logger.debug("[method_selector] corelație sărită: scoruri ne-finite pe %d numere comune", len(common))
+        return None
     sp = _get_spearman()
     if sp is not None:
         try:
@@ -369,6 +399,35 @@ def _pair_corr(raw_a: dict, raw_b: dict) -> float | None:
     return r
 
 
+# Ordinea de lectură a etapelor = ordinea de execuție din `_resolve_members`:
+#   1. `_split_active`        — filtru de varianță (goale/plate)
+#   2. `_select_decorrelated` — decorelare greedy Spearman
+#   3. `_resolve_members`     — pipeline-ul care le înlănțuie (+ memo + logare)
+
+
+def _split_active(
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]]]:
+    """Împarte contribuțiile în (active, dropped) — logica UNICĂ de filtrare,
+    partajată de combine_ensemble_scores și describe_ensemble (ca UI-ul să vadă
+    EXACT aceeași listă pe care blend-ul o folosește efectiv).
+
+    Ignoră scoruri goale SAU plate (toate egale) — altfel un Ridge defect
+    (toate 0) + prime_bias (2 nivele) → pool = „cele mai mici compuse".
+    „flat" acoperă și scorurile NE-FINITE (vezi `_has_variance`).
+    dropped = [(nume, motiv)], motiv ∈ {"empty", "flat"}."""
+    active: list[tuple[str, dict[int, float], float]] = []
+    dropped: list[tuple[str, str]] = []
+    for name, raw, w in contributions:
+        if not raw:
+            dropped.append((name, "empty"))
+        elif not _has_variance(raw):
+            dropped.append((name, "flat"))
+        else:
+            active.append((name, raw, w))
+    return active, dropped
+
+
 def _select_decorrelated(
     active: list[tuple[str, dict[int, float], float]],
 ) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, float, str]]]:
@@ -382,7 +441,10 @@ def _select_decorrelated(
         normalizare, y ≈ 1 - x, deci blend-ul devine w2 + (w1-w2)*x — o funcţie
         MONOTONĂ de x. Ranking-ul rezultat e identic cu al membrului mai greu, iar
         la ponderi egale (w1 == w2) degenerează în scor CONSTANT (pool degenerat).
-        În ambele cazuri membrul nu aduce informaţie nouă → EXCLUS. Logat WARNING.
+        În ambele cazuri membrul nu aduce informaţie nouă → EXCLUS.
+
+    NU loghează nimic: logarea e a apelantului (`_resolve_members`), ca
+    `describe_ensemble` să poată reface calculul fără să reemită WARNING-urile.
 
     Returnează (kept, dropped) unde dropped = [(nume, r_max_semnat, față_de_cine)].
     `kept` păstrează ORDINEA ORIGINALĂ a listei `active` — când nu se elimină
@@ -409,57 +471,97 @@ def _select_decorrelated(
                 worst_r, worst_vs = r, active[j][0]
         if worst_vs and abs(worst_r) >= MAX_MEMBER_CORR:
             dropped.append((name, round(worst_r, 4), worst_vs))
-            if worst_r <= -MAX_MEMBER_CORR:
-                logger.warning(
-                    "[method_selector] ensemble: %r ANTI-corelat cu %r (Spearman=%.4f) — "
-                    "EXCLUS (blend-ul devine monoton în celălalt membru; la ponderi "
-                    "egale → scor constant / pool degenerat)",
-                    name, worst_vs, worst_r,
-                )
-            else:
-                logger.info(
-                    "[method_selector] ensemble: %r redundant cu %r (Spearman=%.4f) — exclus",
-                    name, worst_vs, worst_r,
-                )
             continue
         kept_idx.append(i)
     kept = [active[i] for i in sorted(kept_idx)]
     return kept, dropped
 
 
+# Perechile (eliminat, față_de_cine, tip) deja raportate la nivel WARNING/INFO.
+# În walk-forward `combine_ensemble_scores` e apelat de sute de ori cu ACELAȘI
+# ensemble → aceeași eliminare ar produce sute de linii identice în loto.log.
+# Prima apariție se loghează normal, restul cad pe DEBUG.
+_LOGGED_DROPS: set[tuple[str, str, str]] = set()
+
+# Memo cu O SINGURĂ intrare pentru ultimul apel la `_resolve_members`:
+# `describe_ensemble` (API pt UI) și `combine_ensemble_scores` refac exact
+# același pipeline pe aceleași contribuții — fără memo s-ar plăti de două ori
+# costul O(k²) de spearmanr. `logged` reține dacă rezultatul a fost deja
+# raportat, ca un `describe` (silențios) urmat de un `combine` să nu piardă
+# WARNING-ul, iar un `combine` urmat de `describe` să nu-l dubleze.
+# Tuplu (nu dict): rebindarea unei singure variabile globale e atomică sub GIL,
+# deci nu poate exista o stare intermediară „cheie nouă + valoare veche".
+_RESOLVE_MEMO: tuple | None = None  # (key, (active, dropped, dropped_corr), logged)
+
+
+def _memo_key(contributions: list[tuple[str, dict[int, float], float]]):
+    """Cheie hashabilă pentru memo (None = necalculabilă → fără memo).
+
+    Include scorurile, nu doar numele: în walk-forward același ensemble e
+    rulat pe ferestre diferite, deci pool-ul rezultat DIFERĂ.
+    """
+    try:
+        return tuple(
+            (str(n), float(w), tuple(sorted((int(k), float(v)) for k, v in raw.items())))
+            for n, raw, w in contributions
+        )
+    except Exception:
+        return None
+
+
+def _log_decorrelation(dropped_corr: list[tuple[str, float, str]]) -> None:
+    """Raportează eliminările de corelație, o SINGURĂ dată per (pereche, tip)."""
+    for name, r, vs in dropped_corr:
+        anti = r <= -MAX_MEMBER_CORR
+        key = (name, vs, "anti" if anti else "redundant")
+        first = key not in _LOGGED_DROPS
+        _LOGGED_DROPS.add(key)
+        if anti:
+            log = logger.warning if first else logger.debug
+            log(
+                "[method_selector] ensemble: %r ANTI-corelat cu %r (Spearman=%.4f) — "
+                "EXCLUS (blend-ul devine monoton în celălalt membru; la ponderi "
+                "egale → scor constant / pool degenerat)",
+                name, vs, r,
+            )
+        else:
+            log = logger.info if first else logger.debug
+            log(
+                "[method_selector] ensemble: %r redundant cu %r (Spearman=%.4f) — exclus",
+                name, vs, r,
+            )
+
+
 def _resolve_members(
     contributions: list[tuple[str, dict[int, float], float]],
+    log: bool = True,
 ) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]], list[tuple[str, float, str]]]:
     """Pipeline-ul COMPLET de selecție a membrilor: varianță → decorelare.
 
     Sursa UNICĂ de adevăr pentru combine_ensemble_scores și describe_ensemble
     (UI-ul trebuie să vadă exact membrii pe care blend-ul îi folosește efectiv).
+
+    `log=False` (folosit de `describe_ensemble`) = calcul pur, fără efecte în
+    log: afișarea în UI nu trebuie să pară o a doua decizie de excludere.
     """
+    global _RESOLVE_MEMO
+    key = _memo_key(contributions)
+    memo = _RESOLVE_MEMO
+    if key is not None and memo is not None and key == memo[0]:
+        result = memo[1]
+        if log and not memo[2]:
+            _log_decorrelation(result[2])
+            _RESOLVE_MEMO = (key, result, True)
+        return result
+
     active, dropped = _split_active(contributions)
     active, dropped_corr = _select_decorrelated(active)
-    return active, dropped, dropped_corr
-
-
-def _split_active(
-    contributions: list[tuple[str, dict[int, float], float]],
-) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]]]:
-    """Împarte contribuțiile în (active, dropped) — logica UNICĂ de filtrare,
-    partajată de combine_ensemble_scores și describe_ensemble (ca UI-ul să vadă
-    EXACT aceeași listă pe care blend-ul o folosește efectiv).
-
-    Ignoră scoruri goale SAU plate (toate egale) — altfel un Ridge defect
-    (toate 0) + prime_bias (2 nivele) → pool = „cele mai mici compuse".
-    dropped = [(nume, motiv)], motiv ∈ {"empty", "flat"}."""
-    active: list[tuple[str, dict[int, float], float]] = []
-    dropped: list[tuple[str, str]] = []
-    for name, raw, w in contributions:
-        if not raw:
-            dropped.append((name, "empty"))
-        elif not _has_variance(raw):
-            dropped.append((name, "flat"))
-        else:
-            active.append((name, raw, w))
-    return active, dropped
+    result = (active, dropped, dropped_corr)
+    if log:
+        _log_decorrelation(dropped_corr)
+    if key is not None:
+        _RESOLVE_MEMO = (key, result, log)
+    return result
 
 
 def describe_ensemble(
@@ -470,13 +572,16 @@ def describe_ensemble(
     Aplică exact filtrarea din combine_ensemble_scores (goale/plate afară,
     apoi decorelarea greedy) FĂRĂ să combine scorurile — UI-ul o poate apela
     ca să afișeze membrii reali + ponderile efectiv folosite, nu cele nominale.
+    Apel PUR: nu loghează nimic (vezi `_resolve_members(log=False)`) și
+    refolosește memo-ul, deci nu re-plătește costul O(k²) de spearmanr.
 
     Returnează:
         active  — [{"method", "weight"}] ponderi RENORMALIZATE pe membrii activi
-        dropped — [{"method", "reason", ...}] TOATE eliminările, în ordinea
-            etapelor; reason ∈ {"empty", "flat", "correlated", "anticorrelated"}.
-            Pentru cele două motive de corelație se adaugă și "r" (Spearman
-            semnat) + "vs" (membrul păstrat față de care s-a măsurat).
+        dropped — [{"method", "reason", "r", "vs"}] TOATE eliminările, în
+            ordinea etapelor. Schema e UNIFORMĂ: pentru „empty"/„flat" (unde
+            corelația nici nu se calculează) "r" și "vs" sunt None, ca un
+            consumator să poată itera fără garda de KeyError.
+            reason ∈ {"empty", "flat", "correlated", "anticorrelated"}.
         dropped_correlated — doar eliminările de corelație, aceleași câmpuri
             (comod pt UI: „redundant cu X, r=0.98")
         nominal_count / active_count — dimensiunile listelor
@@ -484,8 +589,17 @@ def describe_ensemble(
             supraviețuitorului sunt min-max normalizate, nu brute)
         fallback_flat — True când NICIUN membru nu are varianță și blend-ul
             cade pe primul nevid (chiar plat)
+
+    ⚠️ Vocabularul de `reason` NU e închis la nivel de proiect: decizia de bench
+    (`decision._select_ensemble_members`) emite, cu ACELEAȘI chei
+    {method, vs, r, reason}, o a cincea valoare — "perf_signature" — scrisă în
+    best_methods.json sub `ensemble_dropped_redundant`. Sunt DOUĂ straturi cu
+    axe diferite: aici se măsoară corelația între SCORURI (per număr, la
+    generare), acolo între SEMNĂTURILE DE PERFORMANȚĂ (rate T+ pe folds). Un
+    consumator de UI care traduce `reason` trebuie deci să acopere
+    {"empty", "flat", "correlated", "anticorrelated", "perf_signature"}.
     """
-    active, dropped, dropped_corr = _resolve_members(contributions)
+    active, dropped, dropped_corr = _resolve_members(contributions, log=False)
     if len(active) == 1:
         active_out = [{"method": active[0][0], "weight": 1.0}]
     elif active:
@@ -504,7 +618,12 @@ def describe_ensemble(
     ]
     return {
         "active": active_out,
-        "dropped": [{"method": n, "reason": r} for n, r in dropped] + corr_out,
+        # schemă uniformă: „empty"/„flat" primesc r/vs = None (nu s-a calculat
+        # nicio corelație pentru ele), ca `dropped` să fie iterabilă uniform
+        "dropped": (
+            [{"method": n, "reason": reason, "r": None, "vs": None} for n, reason in dropped]
+            + corr_out
+        ),
         "dropped_correlated": corr_out,
         "nominal_count": len(contributions),
         "active_count": len(active),
@@ -530,8 +649,11 @@ def combine_ensemble_scores(
     DECORELARE: după filtrul de varianță se aplică o selecție GREEDY
     (`_select_decorrelated`) — un membru intră în blend doar dacă |Spearman|
     față de toți cei deja acceptați e sub `MAX_MEMBER_CORR`. Fără ea, „ensemble-
-    ul" putea fi un no-op (doi membri cu r=0.98 = același semnal numărat de două
-    ori) sau chiar DEGENERAT (doi membri cu r=-1.0 se anulează → scor constant).
+    ul" putea fi un no-op în două feluri: doi membri cu r=+0.98 = același semnal
+    numărat de două ori; doi membri cu r=-1.0 → la ponderi ~EGALE blend-ul
+    devine CONSTANT (pool degenerat), iar la ponderi inegale degenerează în
+    ranking-ul membrului DOMINANT (blend = w2 + (w1-w2)·x, monoton în x) — în
+    ambele cazuri al doilea membru nu aduce informație.
     Ponderile se renormalizează pe membrii RĂMAȘI.
 
     `audit` (opțional) — dict în care se scriu membrii EFECTIV folosiți, ca
@@ -644,7 +766,12 @@ def recommend_optimal_config(
         - use_blacklist = True only if +BL outperforms no-BL at that window
 
     Returns dict with keys: scorer, sim_depth_pct, use_blacklist, avg_hits,
-    rationale, fallback.
+    rationale, ensemble, rate_col_used, rate_col_mismatch, low_confidence,
+    ensemble_dropped_redundant, fallback.
+
+    E SINGURUL API prin care UI-ul citește decizia → lista de chei e o listă
+    ALBĂ: orice câmp nou scris de `decision.py` care trebuie afișat se adaugă
+    EXPLICIT aici, altfel rămâne invizibil (date moarte în best_methods.json).
     """
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
@@ -675,6 +802,14 @@ def recommend_optimal_config(
             "ensemble": entry.get("ensemble") or [],
             "rate_col_used": entry.get("rate_col_used"),
             "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
+            # low_confidence = nicio metodă n-a bătut random consistent (decizia
+            # a căzut pe ramura de fallback din decision.py) → UI-ul NU are voie
+            # să afirme că metoda a trecut filtrul de consistență.
+            "low_confidence": bool(entry.get("low_confidence", False)),
+            # membrii săriți de decizie ca redundanți pe semnătura de performanță
+            # ({method, vs, r, reason:"perf_signature"}) — ca UI-ul să explice
+            # de ce un top-3 nominal are mai puțini membri
+            "ensemble_dropped_redundant": entry.get("ensemble_dropped_redundant") or [],
             "fallback": False,
         }
 
@@ -686,6 +821,10 @@ def recommend_optimal_config(
         "use_blacklist": use_bl,
         "avg_hits": 0.0,
         "rationale": "fallback: no auto_pilot_per_pool entry - using per-pool winner",
+        # nu există intrare de decizie pentru (joc, pool) → alegerea nu e
+        # susținută de nicio măsurătoare: un fallback E prin definiție low confidence
+        "low_confidence": True,
+        "ensemble_dropped_redundant": [],
         "fallback": True,
     }
 

@@ -697,7 +697,6 @@ def _start_walk_forward() -> None:
                                 g_label,
                                 list(data.get("hard_core") or []),
                                 list(data.get("variants") or []),
-                                [],  # fără bilet OMNIUS în UI
                             )
                             with STATE_LOCK:
                                 STATE["retro"][_p2rk] = _flat_p2
@@ -1221,12 +1220,16 @@ def _render_cost(game: str, data: dict) -> None:
     pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
     import math
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
-    jmult = max(1, len(data.get("hard_core_joker", []))) if gk == "joker" else 1
-    full_cost = full_vars * price * jmult
-    # jmult CONSECVENT în TOATE formulele de cost de mai jos (scheme oficiale, sistem
-    # complet, bilete simple, wheel): la Joker fiecare variantă se joacă cu fiecare
-    # număr joker din nucleu, deci multiplică orice număr de variante.
-    _jk_txt = f" × {jmult} nr. joker" if jmult > 1 else ""
+    full_cost = full_vars * price
+    # FĂRĂ multiplicator de joker în NICIUNA dintre formulele de cost de mai jos.
+    # Motiv (verificat în `loto_engine.generate_predictions`): jokerul se atașează
+    # CICLIC — `assigned_joker = jokers[idx % len(jokers)]`, un singur număr per
+    # variantă, NU produsul cartezian variante × jokeri. În plus nucleul Urnei 2 e
+    # single-pick (`sorted_j[:1]` / `_get_hard_core_joker(pool_size=1)`, aliniat
+    # bench), deci lista are oricum 1 element. Concluzie: nr. BILETE = nr. VARIANTE,
+    # pe toate cele patru formule (scheme oficiale, sistem complet, bilete simple,
+    # wheel) → toate se citesc pe ACEEAȘI bază.
+    _jk_txt = " · 1 nr. joker/bilet" if gk == "joker" else ""
 
     # „Sistem complet" = TOATE combinațiile C(pool, draw_n) de la agenție (fără garanție
     # de acoperire — e exhaustiv). NU confunda cu „wheel-ul nostru" de mai jos, care e
@@ -1235,8 +1238,7 @@ def _render_cost(game: str, data: dict) -> None:
     if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
         parts = []
         for code, base in LR_SCHEMES[gk][pool_used]:
-            tot = base * jmult
-            parts.append(f"**{code}** ({tot} var. ≈ {tot*price:,.0f} Lei)")
+            parts.append(f"**{code}** ({base} var.{_jk_txt} ≈ {base*price:,.0f} Lei)")
         ui.markdown(f"💡 **Scheme reduse oficiale la agenție** ({pool_used} nr.): " + " sau ".join(parts) +
                     f"\n\n*({_full_lbl} — toate combinațiile, exhaustiv)*").classes("text-info")
         # Garanția schemelor „Cod NN" NU e documentată nicăieri în proiect (doar codul
@@ -1261,9 +1263,9 @@ def _render_cost(game: str, data: dict) -> None:
             _g_used = data.get("guarantee")
         _g_txt = f"garanție {_g_used}" if _g_used is not None else "garanția configurată"
         ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
-                    f"{n_simple*price*jmult:,.0f} Lei "
+                    f"{n_simple*price:,.0f} Lei "
                     f"| **Wheel-ul nostru** ({_g_txt}, cover minim): {len(variants)} var.{_jk_txt} ≈ "
-                    f"{len(variants)*price*jmult:,.0f} Lei.").classes("text-caption")
+                    f"{len(variants)*price:,.0f} Lei.").classes("text-caption")
 
 
 PRIZE_MAP = {
@@ -1953,6 +1955,58 @@ def _baseline_methods() -> frozenset[str]:
         return frozenset({"random"})
 
 
+def _decision_entry(folds_game_key: str, pool: int) -> dict:
+    """Intrarea deciziei pentru (joc, pool) din best_methods.json (`auto_pilot_per_pool[kN]`).
+
+    `{}` dacă lipsește fișierul/cheia. Folosim `_load_config` din method_selector
+    (cache invalidat pe mtime → vede un Re-Bench fără restart de UI)."""
+    try:
+        from loto_enterprise.core.method_selector import _load_config
+        g = (_load_config().get("games") or {}).get(folds_game_key) or {}
+        e = (g.get("auto_pilot_per_pool") or {}).get(f"k{int(pool)}")
+        return e if isinstance(e, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _decision_low_confidence(entry: dict) -> bool | None:
+    """Decizia a căzut pe ramura de FALLBACK (nicio metodă n-a bătut random consistent)?
+
+    True/False, sau None dacă nu se poate ști. Citim `low_confidence` (cheie nouă)
+    și, pentru best_methods.json scrise de decizia VECHE (fără cheia asta),
+    deducem din `qualifying_methods == 0` — decision.py scrie 0 exact pe ramurile
+    de fallback (`len(qualifying)` e 0 acolo)."""
+    if not entry:
+        return None
+    if "low_confidence" in entry:
+        return bool(entry["low_confidence"])
+    if "qualifying_methods" in entry:
+        try:
+            return int(entry["qualifying_methods"]) == 0
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
+def _consistency_pct(entry: dict) -> int:
+    """Pragul de consistență al deciziei, în %, ca ÎNTREG (60 = „≥60% din ferestre").
+
+    Preferăm valoarea stampilată în best_methods.json (`consistency_threshold`,
+    scrisă chiar de decizia care a produs intrarea), apoi constanta din
+    decision.py; ultimul resort 60 = `CONSISTENCY_THRESHOLD` actual."""
+    try:
+        v = entry.get("consistency_threshold")
+        if v is not None:
+            return int(round(float(v) * 100))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from loto_enterprise.benchmark.decision import CONSISTENCY_THRESHOLD
+        return int(round(float(CONSISTENCY_THRESHOLD) * 100))
+    except Exception:  # noqa: BLE001
+        return 60
+
+
 def _wilson_pooled_rate(grp, metric: str) -> float | None:
     """Limita inferioară Wilson pe rata POOLED (Σ rate·n_test / Σ n_test).
 
@@ -2026,9 +2080,31 @@ def _render_bench_leaderboard_slice(
                     return v
         return None
 
+    # TIE-BREAK IDENTIC cu decizia (decision.py: `qualifying.sort(key=(Wilson_lb,
+    # w_lift, consistență))`). Egalitățile EXACTE pe Wilson sunt masive (succesele
+    # sunt întregi → multe metode au aceeași proporție pooled), deci fără aceleași
+    # chei secundare ordinea din UI ar diverge de decizie pe ~un sfert din poziții.
+    # `base_col` = media de hituri la pool (k{pool}) — exact coloana pe care
+    # decizia calculează lift-ul vs `random` și consistența pe ferestre.
+    _base_col = f"k{pool}"
+    _lift_fn = _beat_fn = None
+    _rnd_frame = None
+    if _base_col in sub.columns:
+        try:
+            from loto_enterprise.benchmark.decision import (
+                _weighted_mean_lift as _lift_fn,
+                _windows_method_beats_random as _beat_fn,
+            )
+            _rnd_frame = sub[sub["method"] == "random"]
+            if _rnd_frame.empty:
+                _lift_fn = _beat_fn = None
+        except Exception:  # noqa: BLE001
+            _lift_fn = _beat_fn = None
+
     _BASE = _baseline_methods()
     rows = []
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
+    _lift_ok = False  # lift+consistență calculabile → tie-break identic cu decizia
     for m, grp in sub.groupby("method"):
         score = float(grp[metric].mean())
         avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
@@ -2041,13 +2117,27 @@ def _render_bench_leaderboard_slice(
         conf = _wilson_pooled_rate(grp, metric) if has_4plus else None
         if conf is not None:
             _conf_ok = True
+        w_lift = cons = None
+        if _lift_fn is not None:
+            try:
+                w_lift = float(_lift_fn(grp, _rnd_frame, _base_col))
+                _nb, _nt = _beat_fn(grp, _rnd_frame, _base_col)
+                cons = _nb / max(_nt, 1)
+                _lift_ok = True
+            except Exception:  # noqa: BLE001
+                w_lift = cons = None
         rows.append((m, score, avg, _method_library(m, fam),
-                     _rate_for(grp, 3), _rate_for(grp, 4), conf))
-    # ORDONARE = ACEEAȘI metrică pe care decide decizia (Wilson pooled pe n_test),
-    # nu media neponderată a ferestrelor — altfel „capul de listă" din UI nu e
-    # metoda aleasă și diferența pare inexplicabilă. Rata brută rămâne tie-break
-    # (și informație afișată). Fără n_test/decision.py → cădem pe vechea ordonare.
-    rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
+                     _rate_for(grp, 3), _rate_for(grp, 4), conf, w_lift, cons))
+    # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson
+    # pooled pe n_test → lift mediu ponderat vs random → consistență). Fără
+    # decision.py / fără coloana k{pool} / fără rândurile `random` → cădem pe
+    # (Wilson, rată brută, avg_hits) și eticheta o spune explicit.
+    if _lift_ok:
+        rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0),
+                                 (r[7] if r[7] is not None else -1e18),
+                                 (r[8] if r[8] is not None else -1.0)), reverse=True)
+    else:
+        rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
     if not rows:
         return
     # Baseline-urile („random") NU sunt candidați: rămân vizibile ca reper, dar nu
@@ -2071,7 +2161,14 @@ def _render_bench_leaderboard_slice(
         else f"rata {_shown_t}+ numere ghicite" if has_4plus
         else "medie hituri / extragere"
     )
-    label += " · sortat ca decizia (Wilson)" if _conf_ok else " · sortat după rata brută"
+    # Eticheta spune EXACT cât face ordonarea: „ca decizia" doar când și tie-break-ul
+    # secundar e cel al deciziei (lift + consistență), altfel nu promite identitate.
+    if _conf_ok and _lift_ok:
+        label += " · sortat ca decizia (Wilson → lift → consistență)"
+    elif _conf_ok:
+        label += " · sortat după Wilson (tie-break ≠ decizia: rată brută, nu lift)"
+    else:
+        label += " · sortat după rata brută"
     # Baseline-ul PUR aleator (hipergeometric) la acest pool — afișat O DATĂ în titlu
     # + multiplicator pe fiecare rată. Onestitate: „3+: 10%" pare edge, dar hazardul
     # singur dă ~9% la pool 10 pe 6/49 → diferența reală e mică (zgomot).
@@ -2081,8 +2178,13 @@ def _render_bench_leaderboard_slice(
     if has_4plus and _rnd_t is not None:
         label += f" · baseline random = {_rnd_t * 100:.2f}%"
     winner = competitors[0]  # capul clasamentului (doar candidați, baseline-urile excluse)
-    # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1: decizia
-    # cere ÎN PLUS să bată „random" consistent (filtru de consistență), apoi rata pragului.
+    # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1 din
+    # mai multe motive (filtru de consistență, ramura de fallback, decizie scrisă de
+    # un bench mai vechi decât folds.csv). Explicația exactă se compune mai jos, din
+    # intrarea reală a deciziei, nu dintr-o presupunere.
+    _dec = _decision_entry(folds_game_key, pool)
+    _dec_low = _decision_low_confidence(_dec)
+    _cons_pct = _consistency_pct(_dec)
     try:
         from loto_enterprise.core.method_selector import get_winner_name
         chosen_name = get_winner_name(folds_game_key, pool)
@@ -2148,15 +2250,43 @@ def _render_bench_leaderboard_slice(
                 t"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>{_chosen_suffix}"
             )).classes("text-caption")
         if chosen_name != winner[0]:
-            # ORDONAREA e acum identică cu a deciziei (Wilson pooled) → singura sursă de
-            # diferență rămasă e filtrul de consistență (metoda trebuie să bată random în
-            # ≥60% din ferestre), pe care lista NU îl aplică.
-            _ord = (f"aceeași metrică ca decizia (limita Wilson a ratei {_shown_t}+, pooled pe n_test)"
-                    if _conf_ok else f"rata brută {_shown_t}+ (n_test lipsă → fără Wilson)")
+            # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există,
+            # în funcție de ce spune intrarea reală a deciziei. Vechiul text invoca
+            # DOAR filtrul de consistență: incomplet (mai există ordonarea și
+            # decorelarea ensemble-ului) și FALS pe ramura de fallback, unde
+            # scorer-ul e ales tocmai fiindcă nimeni n-a trecut pragul.
+            if _conf_ok and _lift_ok:
+                _ord = (f"aceleași chei ca decizia (limita Wilson a ratei {_shown_t}+ pooled pe "
+                        f"n_test → lift mediu vs random → consistență)")
+            elif _conf_ok:
+                _ord = (f"limita Wilson a ratei {_shown_t}+ (pooled pe n_test); tie-break-ul "
+                        f"secundar diferă de decizie (rată brută, nu lift)")
+            else:
+                _ord = f"rata brută {_shown_t}+ (n_test lipsă → fără Wilson)"
+            if _dec_low is True:
+                _why = ("nicio metodă n-a bătut random consistent (≥"
+                        f"{_cons_pct}% din ferestre) → decizia a căzut pe "
+                        "ramura CONSERVATOARE de fallback: alegerea nu e o dovadă de "
+                        "superioritate, diferențele sunt zgomot")
+            elif _dec_low is False:
+                _why = (f"decizia aplică ÎN PLUS filtrul de consistență (să bată random în ≥"
+                        f"{_cons_pct}% din ferestre), pe care clasamentul "
+                        f"nu-l aplică; iar la scoring pool-ul folosește ensemble-ul, din care "
+                        f"membrii redundanți/corelați sunt eliminați")
+            else:
+                _why = ("best_methods.json nu spune pe ce ramură s-a luat decizia (fișier scris "
+                        "de o versiune veche) — poate fi filtrul de consistență, ramura de "
+                        "fallback sau pur și simplu o decizie mai veche decât folds.csv")
             ui.label(f"ℹ️ Lista e sortată după {_ord}; cap: {winner[0]}. Metoda ALEASĂ "
-                     f"({chosen_name}, marcată 🏆) trece ÎN PLUS filtrul de consistență (să bată "
-                     f"random în ≥60% din ferestre), pe care clasamentul nu-l aplică — de-aia "
-                     f"poate diferi de #1.").classes("text-caption text-grey")
+                     f"({chosen_name}, marcată 🏆) diferă fiindcă {_why}.").classes(
+                "text-caption text-grey")
+        elif _dec_low is True:
+            # Chiar și când ALEASĂ == #1, ramura de fallback trebuie spusă: „câștigătorul"
+            # nu a bătut hazardul consistent.
+            ui.label(f"⚠️ Decizia pentru acest pool e pe ramura de FALLBACK: nicio metodă n-a "
+                     f"bătut random în ≥{_cons_pct}% din ferestre. "
+                     f"Alegerea e conservatoare — diferențele dintre metode sunt zgomot.").classes(
+                "text-caption text-warning")
         if not has_family:
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
@@ -2181,6 +2311,20 @@ def _render_bench_leaderboard_slice(
             ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — ar cădea pe locul "
                      f"{_better + 1} din {len(competitors)} metode candidate.").classes(
                 "text-caption text-grey")
+        # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
+        # slice, spune unde cade. Altfel 🏆 lipsește complet din listă, fără niciun
+        # indiciu — exact metoda despre care utilizatorul vrea să știe cel mai mult.
+        if chosen_name and chosen_name not in _shown_names:
+            _ci = next((i for i, r in enumerate(rows) if r[0] == chosen_name), None)
+            if _ci is None:
+                ui.label(f"🏆 metoda ALEASĂ «{chosen_name}» nu apare în folds.csv pentru acest "
+                         f"(joc, pool) — decizia e mai veche decât bench-ul curent.").classes(
+                    "text-caption text-orange")
+            else:
+                _cbetter = sum(1 for r in rows[:_ci] if r[0] not in _BASE)
+                ui.label(f"🏆 metoda ALEASĂ «{chosen_name}» — locul {_cbetter + 1} din "
+                         f"{len(competitors)} metode candidate (în afara top-{top_n} afișat)."
+                         ).classes("text-caption text-positive")
 
 
 def _last_csv_draw(fname: str):
@@ -2305,51 +2449,12 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
             _render_bench_leaderboard_slice(df, fk, kp, sect, top_n=10)
 
 
-def _render_bench_winner_only(game_label: str) -> None:
-    """Afișează doar metoda câștigătoare din bench pentru jocul dat."""
-    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
-    if not fp.exists():
-        return
-    try:
-        df = pd.read_csv(fp)
-    except Exception:
-        return
-    if df.empty or "method" not in df.columns or "game" not in df.columns:
-        return
-    pool = int(SETTINGS.get("pool_size_val", 10))
-    folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
-    if game_label == "joker":
-        folds_key = "joker_urna1"
-    sub = df[(df["game"] == folds_key) & (df.get("pool_k", df.get("pool", None)) == pool)] if "pool_k" in df.columns or "pool" in df.columns else df[df["game"] == folds_key]
-    try:
-        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
-    except Exception:  # noqa: BLE001
-        _T = 3
-    def _ok(c):
-        return (not sub.empty) and c in sub.columns and sub[c].notna().any()
-    _shown_t = _T
-    metric = next((c for c in [f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"] if _ok(c)), None)
-    if metric is None:
-        _shown_t = 4
-        metric = next((c for c in [f"rate_4plus_k{pool}", "rate_4plus"] if _ok(c)), None)
-    if metric is None or sub.empty:
-        return
-    rows = []
-    for m, grp in sub.groupby("method"):
-        score = float(grp[metric].mean())
-        fam = ""
-        if "family" in grp.columns:
-            _f = grp["family"].dropna().astype(str)
-            fam = _f.iloc[0] if not _f.empty else ""
-        rows.append((m, score, _method_library(m, fam)))
-    if not rows:
-        return
-    rows.sort(key=lambda r: r[1], reverse=True)
-    w = rows[0]
-    with ui.row().classes("items-center gap-2 mt-1"):
-        ui.label("🏆 Metodă câștigătoare:").classes("text-caption text-bold")
-        ui.label(w[0]).classes("text-bold")
-        ui.label(f"· {w[2]} · {_shown_t}+: {w[1]*100:.1f}%").classes("text-caption text-grey")
+# NOTĂ: `_render_bench_winner_only` a fost ȘTEARSĂ (2026-07). Era cod MORT (zero
+# call-site-uri) și rămăsese pe calea VECHE, divergentă: nu filtra `is_random`/`failed`,
+# nu excludea baseline-urile (`EXCLUDED_FROM_PRODUCTION`), sorta după media BRUTĂ (nu
+# Wilson) și nu citea deloc best_methods.json — deci putea anunța drept „câștigătoare"
+# altă metodă decât cea folosită efectiv la generare (și putea pune `random` pe podium).
+# Sursa UNICĂ de adevăr pentru „cine e câștigătorul" e `_render_bench_leaderboard_slice`.
 
 
 def _parse_draw_date(s):
@@ -2486,7 +2591,6 @@ def _ensure_retrospective_pool2_flat(
             game,
             list(data.get("hard_core") or []),
             list(data.get("variants") or []),
-            [],  # fără bilet OMNIUS în UI
         )
         STATE["retro"][rk] = flat_p2
         STATE.setdefault("retro_meta", {})[rk] = meta_p2
@@ -2495,15 +2599,18 @@ def _ensure_retrospective_pool2_flat(
 
 
 def _wf_per_draw_stats(flat) -> dict:
-    """Dedup walk-forward pe extragere: pool hits_union + omnius_hits."""
+    """Dedup walk-forward pe extragere: pool hits_union.
+
+    `flat` are o intrare per (extragere × variantă); aici păstrăm o singură
+    intrare per extragere, fiindcă `hits_union` (câte numere din POOL au ieșit)
+    e identic pentru toate variantele aceleiași extrageri."""
     per: dict = {}
     for p in flat:
         di = getattr(p, "draw_index", 0)
         if di not in per:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
             per[di] = {"label": str(dd) if dd and str(dd) != "None" else f"#{di}",
-                       "pool": int(getattr(p, "hits_union", 0)),
-                       "omnius": int(getattr(p, "omnius_hits", 0))}
+                       "pool": int(getattr(p, "hits_union", 0))}
     return per
 
 
@@ -2572,13 +2679,19 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     pool_gross = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)        # toate variantele
     # BAZA DE COST = numărul REAL de bilete: o intrare din `flat` = 1 bilet la 1 extragere
     # (același set de obiecte peste care s-a sumat brutul → formula e corectă aritmetic).
-    # ATENȚIE: bazele celor două pool-uri NU sunt identice și nu pot fi făcute identice:
-    #   • Pool 1 = walk-forward REAL → wheel-ul e regenerat la fiecare pas (cover minim
-    #     ILP/greedy), deci len(wheel) VARIAZĂ de la o extragere la alta;
-    #   • Pool 2 = retrospectiv → replayează UN SINGUR wheel (cel de azi) pe toate
-    #     extragerile → exact n2 × len(variante_azi).
-    # De aceea afișăm EXPLICIT biletele + costul fiecăruia și adăugăm metrici
-    # NORMALIZATE (ROI = brut/cost și NET/extragere), singurele comparabile direct.
+    # DE CE diferă bazele celor două pool-uri (verificat pe cache-urile WF de pe disc, nu
+    # presupus): Pool 2 replayează exact `draw_index`-ii din Pool 1 (n2 ≤ n, egale în
+    # practică), deci diferența vine în esență din BILETE/EXTRAGERE. Cauza reală e că cele
+    # două wheel-uri se generează cu PARAMETRI DIFERIȚI:
+    #   • Pool 1 = walk-forward, care își impune propriile setări în
+    #     `run_honest_walk_forward` (`guarantee=max(4, pool_size//3)`, `max_variants=0`);
+    #   • Pool 2 = retrospectiv → replayează wheel-ul de AZI, generat cu garanția și
+    #     capul de bilete configurate în UI → exact n2 × len(variante_azi).
+    # Variația cover-ului între pașii WF e SECUNDARĂ, nu cauza (măsurat pe cache-urile
+    # pool 10: 6/49 → 21 bilete la toate cele 769 extrageri, constant; 5/40 → 52 la 486
+    # extrageri și 51 la 29; joker → 52 la 636 și 51 la 14).
+    # De aceea afișăm EXPLICIT biletele + costul fiecăruia și ROI (brut/cost), singura
+    # metrică adimensională, independentă de câte bilete se joacă.
     n_tick_1 = len(flat)
     cost_1 = n_tick_1 * price
     pool_net = pool_gross - cost_1
@@ -2635,14 +2748,27 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             "mărimea pool-ului) — pragul față de care trebuie citite coloanele +3 / +4. "
             "+3 / +4 = extrageri cu ≥3 / ≥4 nimerite.")
     if per2:
+        # NET/extragere NU e o metrică normalizată: NET/extr = (bilete/extragere) × preț ×
+        # (ROI − 1), deci scalează liniar cu câte bilete se joacă. E comparabil DOAR când
+        # cele două baze de bilete/extragere coincid. Singura mărime adimensională e ROI.
+        _same_base = abs(tick_avg_1 - tick_avg_2) <= 0.01 * max(tick_avg_1, tick_avg_2, 1e-9)
+        _draws_txt = (f"aceleași {n} extrageri" if n == n2
+                      else f"{n} vs {n2} extrageri")
         _cap += (
-            f" ⚠️ Bazele de cost DIFERĂ, deci cele două NET nu se compară direct: "
-            f"Pool 1 = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere — wheel REGENERAT la "
-            f"fiecare pas walk-forward, dimensiune variabilă), Pool 2 = {n_tick_2:,} bilete "
-            f"({tick_avg_2:.2f}/extragere — retrospectiv, ACELAȘI wheel de azi pe toate "
-            f"extragerile). Comparabile sunt ROI ({roi_1:.2f} vs {roi_2:.2f}) și "
-            f"NET/extragere ({net_draw_1:,.1f} vs {net_draw_2:,.1f} Lei)."
+            f" {'ℹ️' if _same_base else '⚠️'} Bazele de cost "
+            f"({_draws_txt}, bilete/extragere {tick_avg_1:.2f} vs {tick_avg_2:.2f}): "
+            f"Pool 1 = {n_tick_1:,} bilete (wheel regenerat de walk-forward cu garanția LUI "
+            f"internă, fără cap de bilete), Pool 2 = {n_tick_2:,} bilete (retrospectiv, ACELAȘI "
+            f"wheel de azi, cu garanția/capul din setări, pe toate extragerile). "
+            f"Comparabil direct e ROI ({roi_1:.2f} vs {roi_2:.2f}) — e adimensional. "
         )
+        if _same_base:
+            _cap += (f"Aici bazele coincid, deci și NET/extragere se poate compara "
+                     f"({net_draw_1:,.1f} vs {net_draw_2:,.1f} Lei).")
+        else:
+            _cap += (f"NET/extragere ({net_draw_1:,.1f} vs {net_draw_2:,.1f} Lei) NU se compară "
+                     f"aici: NET/extragere = bilete/extragere × preț × (ROI − 1), deci scalează "
+                     f"cu numărul de bilete, nu cu calitatea pool-ului.")
     else:
         _cap += (f" Pool 1 = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere) · "
                  f"NET/extragere ≈ {net_draw_1:,.1f} Lei.")

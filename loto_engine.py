@@ -23,6 +23,10 @@ import sys
 # Tot suportul GPU/neural (TimesFM/torch/foundation) a fost eliminat din aplicație.
 # Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
 from loto_enterprise.core.pool_selection import select_pool_from_scores
+# Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
+# selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
+# regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
+from loto_enterprise.core.ranking import rank_by_score
 
 # Adaptive feedback (învățare persistentă post-extragere)
 try:
@@ -390,7 +394,8 @@ class LotoEngine:
             return [], 0.0
 
         # Wheeling: implicit greedy (bit-identic). Alternative selectabile prin env
-        # LOTO_WHEEL_METHOD = ilp|annealing|genetic|lajolla (fallback la greedy).
+        # LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34
+        # (necunoscut → greedy). Lista completă: wheeling_methods.WHEEL_METHODS.
         _wheel_method_env = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
         if _wheel_method_env:
             # Override explicit — comportament neschimbat (backward-compat).
@@ -704,8 +709,11 @@ class LotoEngine:
         self.audit["filters_disabled"] = True
         if len(self.hard_core) > pool_size:
             logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor.")
-            ranked = sorted(self.hard_core, key=lambda n: tfm_scores.get(n, 0.0), reverse=True)
-            self.hard_core = sorted(ranked[:pool_size])
+            # Trunchiere prin regula canonică (nu sortare proprie): la scoruri egale
+            # decide numărul mare, exact ca bench-ul. Ramură defensivă — selectorul
+            # întoarce deja cel mult pool_size numere.
+            ranked = rank_by_score({int(n): float(tfm_scores.get(n, 0.0)) for n in self.hard_core}, pool_size)
+            self.hard_core = sorted(ranked)
         elif len(self.hard_core) < pool_size:
             logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
         logging.info(f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}")
@@ -722,10 +730,13 @@ class LotoEngine:
             # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.
             # Candidații alternativi rămân disponibili în audit['joker_predictions'].
             if j_scores:
-                sorted_j = sorted(j_scores.items(), key=lambda x: x[1], reverse=True)
-                self.hard_core_joker = [int(num) for num, _ in sorted_j[:1]]
+                # Tie-break CANONIC (rank_by_score), NU sortare proprie: bench-ul
+                # validează joker_urna2 prin `runner._top_k` → aceeași regulă, altfel
+                # la scoruri egale engine-ul ar alege alt număr decât cel validat.
+                ranked_j = rank_by_score(j_scores, 5)
+                self.hard_core_joker = [int(ranked_j[0])]
                 logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
-                self.audit['joker_predictions'] = {num: round(score, 4) for num, score in sorted_j[:5]}
+                self.audit['joker_predictions'] = {int(n): round(float(j_scores[n]), 4) for n in ranked_j}
             else:
                 freq_joker = self.analyze_joker_frequency()
                 self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
@@ -760,20 +771,22 @@ class LotoEngine:
                 )
                 # Elimin violarile
                 self.hard_core = [n for n in self.hard_core if n not in mb]
-                # Completez cu top-scoring numere care NU sunt in manual_blacklist
+                # Completez cu top-scoring numere care NU sunt in manual_blacklist.
+                # Selecția trece prin rank_by_score (regula canonică): filtrarea
+                # (blacklist manual + numerele deja în pool) rămâne la apelant,
+                # conform contractului modulului.
                 if tfm_scores:
-                    sorted_clean = sorted(
-                        ((n, s) for n, s in tfm_scores.items() if n not in mb and n not in self.hard_core),
-                        key=lambda x: x[1], reverse=True,
-                    )
+                    clean_scores = {
+                        int(n): float(s) for n, s in tfm_scores.items()
+                        if n not in mb and n not in self.hard_core
+                    }
                 else:
-                    freq_score = {i+1: float(f) for i, f in enumerate(freq)}
-                    sorted_clean = sorted(
-                        ((n, s) for n, s in freq_score.items() if n not in mb and n not in self.hard_core),
-                        key=lambda x: x[1], reverse=True,
-                    )
+                    clean_scores = {
+                        i + 1: float(f) for i, f in enumerate(freq)
+                        if (i + 1) not in mb and (i + 1) not in self.hard_core
+                    }
                 needed = pool_size - len(self.hard_core)
-                for n, _ in sorted_clean[:needed]:
+                for n in rank_by_score(clean_scores, needed):
                     self.hard_core.append(int(n))
                 self.hard_core = sorted(self.hard_core)
                 self.audit.setdefault("manual_inversion", {})["enforced_violations_fixed"] = {

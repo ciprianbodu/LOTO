@@ -24,6 +24,19 @@ Invarianți (NU strica):
     * Ensemble-ul nu e simplă feliere top-K: membrii cu semnătură de performanță
       cvasi-identică sunt săriți (`ENSEMBLE_MAX_CORR`), altfel eticheta
       "variance-reduction" ar fi falsă.
+
+Cât prinde EFECTIV stratul de decorelare de aici (ca să nu pară mai puternic
+decât e): semnătura se măsoară pe RATE din folds.csv, CENTRATE pe coloane, deci
+prinde doar redundanța aproape perfectă. Măsurat pe `bench_results/folds.csv`
+(20.07.2026): la loto_6_49 doar 7 perechi din 5565 ating r≥0.99, iar pe toată
+matricea de decizie rezultă o SINGURĂ eliminare (loto_5_40 k16:
+`croston_sba` ~ `croston_classic`, r=1.0). Contra-exemplul care contează:
+`649_katz15_gap85` vs `649_katz25_gap75` dau r=0.93 pe RATE — sub prag, deci NU
+se elimină aici — deși pe SCORURI au r=0.996. Redundanța de tip "generează
+practic același pool" rămâne pe seama stratului următor,
+`method_selector._select_decorrelated` (MAX_MEMBER_CORR=0.95, pe vectorii de
+scor reali). Stratul de aici e o plasă ieftină pe datele pe care le AVEM în
+folds.csv, NU garanția de decorelare.
 """
 
 from __future__ import annotations
@@ -59,13 +72,29 @@ ENSEMBLE_MAX_METHODS = 3
 # `_select_ensemble_members`.
 ENSEMBLE_MAX_CORR = 0.99
 
+# Eșantion minim (metode × puncte) sub care dedup-ul de ensemble se DEZACTIVEAZĂ.
+# Corelația Pearson degenerează pe puține puncte: pe 2 coloane dă mereu ±1.0
+# indiferent de valori (verificat: `_signature_corr([0.1,-0.1], [0.3,-0.3])` →
+# +1.0000, iar cu semne opuse → -1.0000), deci am elimina membri fără nicio
+# dovadă. Simetric, cu puține METODE "consensul" scăzut la centrare e estimat
+# din prea puține observații (cu 2 metode rândurile centrate sunt exact opuse →
+# r=-1 mereu), deci nici acolo nu merită încredere.
+# Pe date reale garda e INERTĂ: semnătura are (106, 60) pe toate cele 3 jocuri
+# din folds.csv (15 pool-uri × 4 ferestre) — e o plasă pentru folds.csv
+# trunchiate/sintetice, nu o schimbare de politică în producție.
+ENSEMBLE_MIN_SIGNATURE_POINTS = 5
+
 # Baseline-uri care NU au voie să devină NICIODATĂ scorer de producție.
 # `random` (methods.py: `np.random.default_rng()` FĂRĂ sămânță) e nedeterminist:
 # două rulări pe aceleași date dau pool-uri diferite => decizia nu e nici
 # reproductibilă, nici auditabilă, iar poziția lui în clasament e pur zgomot
-# (pe 5/40 iese chiar #2 din 107 metode — exact dovada că diferențele dintre
-# metode sunt zgomot, nu semnal). Rolul lui e DOAR de podea de sanitate în
-# bench ("cât înseamnă pură șansă"), niciodată de generator.
+# (pe folds.csv din 20.07.2026, cu metrica PROPRIE a deciziei — Wilson-lb pe
+# `rate_3plus_k{K}`, pooled pe n_test — `random` urcă până la #6/107 pe
+# loto_5_40 k5, #14/107 pe joker_urna1 k15, #40/107 pe loto_6_49 k20; exact
+# dovada că diferențele dintre metode sunt zgomot, nu semnal. Cifrele se
+# RENUMĂRĂ după fiecare bench, nu se citează din memorie).
+# Rolul lui e DOAR de podea de sanitate în bench ("cât înseamnă pură șansă"),
+# niciodată de generator.
 # `frequency`/`recency` rămân permise ca scorer: sunt baseline-uri DETERMINISTE
 # (aceleași date → același scor), reproductibile și explicabile pentru
 # utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
@@ -185,6 +214,19 @@ def _perf_signature_frame(
     k6) ar împinge orice pereche spre corelație 1 și am elimina membri
     legitimi. După centrare rămâne doar cum DEVIAZĂ o metodă de la consens.
 
+    Semnătura e POOL-AGNOSTICĂ, DELIBERAT: `rate_cols` ia TOATE coloanele
+    `rate_{target}plus_k*` ale jocului, nu doar pool-ul pentru care se decide,
+    deci frame-ul e IDENTIC pentru toți k ai aceluiași joc (verificat pe
+    folds.csv: shape (106, 60) = 15 pool-uri × 4 ferestre percentile, iar
+    `sig(k6).equals(sig(k20))` → True). Motivul e statistic, nu neatenție:
+    restrânsă la coloana pool-ului CURENT, semnătura ar avea 4 puncte (cele 4
+    ferestre) — sub `ENSEMBLE_MIN_SIGNATURE_POINTS`, adică fix zona în care
+    Pearson degenerează și am elimina membri pe zgomot. Consecința ACCEPTATĂ:
+    două metode care coincid la k7..k20 dar diferă la k6 sunt tratate ca
+    redundante și la k6 (redundanța se măsoară PE TOT JOCUL, nu per pool).
+    Recalcularea de 15 ori per joc e intenționat nememoizată: costă ~3 ms/apel
+    (măsurat), adică sub 1.5% din cei ~3.3 s ai unei `build_auto_pilot_matrix`.
+
     Returnează None dacă nu se poate construi o semnătură utilizabilă
     (fără coloane de rată, sub 2 puncte pe metodă) → dedup dezactivat.
     """
@@ -218,8 +260,14 @@ def _perf_signature_frame(
 def _signature_corr(v: np.ndarray, w: np.ndarray) -> float | None:
     """Corelație Pearson între două semnături; None dacă nu e definită.
 
-    Serii IDENTICE → 1.0 explicit (corrcoef dă NaN când una are varianță zero,
-    ex. o metodă exact pe consens după centrare).
+    Scurtătura `np.allclose` acoperă DOAR identitatea (serii EGALE → 1.0), NU
+    varianța nulă în general. Două serii CONSTANTE dar diferite rămân
+    necalculabile: `_signature_corr([1,1,1], [2,2,2])` → None, nu 1.0 (verificat);
+    la fel `_signature_corr([1,1,1], [1,2,3])` → None. Motivul e că `corrcoef`
+    dă NaN când o serie are varianță zero (ex. o metodă exact pe consens după
+    centrare), iar None înseamnă aici "necalculabil", nu "necorelat":
+    `_select_ensemble_members` NU elimină pe baza lui — la îndoială păstrăm
+    membrul, ca să nu tăiem din lipsă de dovezi.
     Corelația e SEMNATĂ; apelantul decide ce face cu semnul. Atenție: pe SCORURI
     (`method_selector._select_decorrelated`) anti-corelația NU e complementaritate —
     după min-max normalizare blend-ul devine monoton în membrul mai greu, deci
@@ -254,12 +302,36 @@ def _select_ensemble_members(
     (ex. blend-uri pe aceleași două componente), iar eticheta
     "variance-reduction" ar fi falsă.
 
+    Pragul e SEMNAT (`c >= max_corr`), nu în modul: pe RATE, doi membri
+    anti-corelați câștigă pe folduri diferite, deci se completează — îi
+    păstrăm. Stratul următor (`method_selector._select_decorrelated`) lucrează
+    pe SCORURI și elimină în MODUL (|r| ≥ MAX_MEMBER_CORR), inclusiv
+    anti-corelații. Diferența e deliberată (vezi `_signature_corr`), dar are o
+    consecință de reținut: ensemble-ul + ponderile Wilson scrise în
+    best_methods.json sunt NOMINALE — la generare pot fi reduse tacit de
+    method_selector, deci nu sunt neapărat cele folosite efectiv.
+
     Returnează (membri_păstrați, eliminați_ca_redundanți). Al doilea element
-    folosește vocabularul din method_selector.describe_ensemble ("vs"/"r") ca
-    UI-ul să poată explica uniform de ce lipsește o metodă din blend.
+    reia CHEILE din method_selector.describe_ensemble ({method, vs, r, reason}),
+    ca UI-ul să poată explica uniform de ce lipsește o metodă din blend — DAR
+    valoarea `reason` e "perf_signature", care nu apare în enum-ul documentat
+    acolo ({"empty", "flat", "correlated", "anticorrelated"}): acolo axa e
+    SCORURILE (engine), aici sunt RATELE pe folduri (decizie). Un consumator de
+    UI trebuie deci să trateze `reason` ca enum DESCHIS, nu închis.
     """
     kept: list[tuple[str, float]] = []
     dropped: list[dict] = []
+    # Gardă de eșantion: pe semnături prea scurte (puține ferestre/pool-uri) sau
+    # cu prea puține metode, corelația degenerează spre ±1 și am elimina membri
+    # pe zgomot — vezi ENSEMBLE_MIN_SIGNATURE_POINTS. Dedup dezactivat, NU
+    # aproximat. Inert pe date reale (semnătura are 60 de coloane × 106 metode).
+    if sig is not None and min(sig.shape) < ENSEMBLE_MIN_SIGNATURE_POINTS:
+        logger.info(
+            "[decision] dedup ensemble dezactivat: semnătură prea mică %s "
+            "(prag %d pe ambele axe) — corelația ar fi nefiabilă",
+            tuple(sig.shape), ENSEMBLE_MIN_SIGNATURE_POINTS,
+        )
+        sig = None
     for m, conf in ordered:
         if len(kept) >= max_members:
             break
@@ -411,7 +483,16 @@ def decide_optimal_config_for_pool(
                 "scorer": SAFE_FALLBACK_SCORER,
                 "ensemble": _build_ensemble_weights([(SAFE_FALLBACK_SCORER, 1.0)]),
                 "sim_depth_pct": DEFAULT_SIM_DEPTH_PCT,
-                "use_blacklist": False,
+                # True, NU False: înainte celula degenerată întorcea {"error": ...}
+                # (fără cheia "scorer"), deci `recommend_optimal_config` cădea pe
+                # ramura fallback → `should_use_blacklist`, a cărei politică
+                # documentată e "default True (safe — producția rulează
+                # blacklist-ul oricum)". Cheia asta e citită PRIMA de
+                # `should_use_blacklist` (auto_pilot_per_pool[kN].use_blacklist),
+                # deci un False aici ar fi schimbat TACIT politica exact pe cazul
+                # cel mai degradat (nicio metodă reală în folds.csv), unde n-avem
+                # nicio măsurătoare care să justifice renunțarea la blacklist.
+                "use_blacklist": True,
                 # 0.0, NU None: `method_selector.recommend_optimal_config` și UI-ul
                 # citesc `avg_hits` și îl formatează cu :.3f — None ar arunca
                 # TypeError exact pe calea de fallback, adică fix când totul merge
@@ -538,8 +619,17 @@ def decide_optimal_config_for_pool(
         "rate_col_mismatch": rate_col_mismatch,
         "qualifying_methods": len(qualifying),
         "consistency_threshold": CONSISTENCY_THRESHOLD,
+        # ATENȚIE: următoarele două chei sunt TELEMETRIE ADITIVĂ în
+        # best_methods.json (debug / inspecție manuală), NU un contract de UI.
+        # Verificat prin grep pe tot repo-ul: niciun consumator în afara acestui
+        # fișier — `method_selector.recommend_optimal_config` întoarce o listă
+        # ALBĂ de chei și nu le propagă, deci UI-ul nu le vede. Sunt păstrate
+        # fiindcă nu strică nimic (JSON aditiv) și fiindcă un consumator viitor
+        # le poate citi; până atunci NU te baza pe ele pentru afișare.
+        #
         # True = nicio metodă nu bate random consistent → alegerea e conservatoare,
-        # diferențele dintre metode sunt zgomot (UI-ul poate avertiza).
+        # diferențele dintre metode sunt zgomot. Pe folds.csv curent semnalul NU
+        # e validat pe nicio celulă reală (0 din 46 de celule ies low_confidence).
         "low_confidence": low_confidence,
         # Membri săriți de la ensemble fiindcă erau cvasi-identici cu unul deja
         # păstrat (decorelare pe RATE; decorelarea pe SCORURI e în method_selector).
