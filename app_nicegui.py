@@ -595,8 +595,13 @@ def _start_walk_forward() -> None:
             # Citit LIVE din SETTINGS (nu o dată la pornire) → schimbarea bugetului din
             # UI ÎN TIMPUL validării are efect imediat (mărești bugetul → rularea
             # curentă continuă; îl micșorezi → se oprește mai devreme).
+            # Fallback-ul e DEFAULTS, nu o constantă separată: `or` se declanșează pe
+            # orice valoare falsy (câmpul UI golit dă None), iar o valoare hardcodată
+            # aici ar reduce tăcut bugetul — cu oprire parțială a validării, fără ca
+            # UI-ul să arate altceva decât numărul pe care l-a introdus utilizatorul.
             try:
-                return max(60.0, float(SETTINGS.get("wf_budget_min") or 15) * 60.0)
+                _b = float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"])
+                return max(60.0, _b * 60.0)
             except (TypeError, ValueError):
                 return float(WF_TOTAL_BUDGET_S)
 
@@ -1627,8 +1632,17 @@ def _build_report() -> str:
                 out.append(f"{indent}{line}")
         vs = d.get("variants") or []
         out.append(f"{indent}--- Variante simple ({len(vs)}) ---")
+        # La Joker ultimul element al variantei e NUMĂRUL DE JOKER, nu un al 6-lea
+        # număr din urnă (engine-ul îl atașează ciclic în `generate_predictions`).
+        # Îl separăm cu „+", ca în UI — altfel raportul îl arăta ca număr obișnuit,
+        # deseori duplicând vizual o valoare deja prezentă în variantă.
+        _is_jk = bool(d.get("hard_core_joker"))
         for i, v in enumerate(vs, 1):
-            out.append(f"{indent}  V{i}: " + ", ".join(str(int(x)) for x in v))
+            if _is_jk and len(v) == 6:
+                nums = ", ".join(str(int(x)) for x in v[:5]) + f"  + joker {int(v[-1])}"
+            else:
+                nums = ", ".join(str(int(x)) for x in v)
+            out.append(f"{indent}  V{i}: " + nums)
 
     for fn, outs in rb:
         out.append(f"\n{'#'*72}\nFIȘIER: {fn}\n{'#'*72}")

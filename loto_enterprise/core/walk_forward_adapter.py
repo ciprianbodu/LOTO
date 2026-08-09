@@ -10,9 +10,11 @@ Cache:
       (CACHE_DIR e o cale RELATIVĂ, deci cache-ul stă ÎN repo/OneDrive — spre
       deosebire de cache-ul de bench, care e mutat în afara OneDrive.)
     - Reutilizat la următorul Auto-Pilot dacă (csv_hash, pool_size, decizie bench) match.
-      dec_sig = semnătura deciziei (scorer/sim_depth/blacklist/ensemble) → un Re-Bench
-      care schimbă câştigătorul sau compoziţia ensemble-ului invalidează automat
-      cache-ul (altfel valida cu metoda veche).
+      dec_sig = semnătura deciziei (scorer/sim_depth/blacklist/ensemble/target) PLUS
+      wheel-ul efectiv (algoritm + garanţia internă a WF) → un Re-Bench care schimbă
+      câştigătorul, sau o schimbare de algoritm de wheeling, invalidează automat
+      cache-ul. Wheel-ul contează pentru că din numărul de BILETE ies costul şi ROI-ul
+      raportate; fără el, raportul afişa cifre calculate pe un wheel care nu mai exista.
     - Un bump de CACHE_VERSION doar schimbă NUMELE fişierului: pickle-urile vechi
       rămân pe disc la nesfârşit. `purge_stale_wf_cache()` le inventariază (implicit
       dry-run) şi le poate şterge; `clear_walk_forward_cache()` şterge TOT, inclusiv
@@ -38,8 +40,16 @@ from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_at
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v13"
+CACHE_VERSION = "v14"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v14: `_decision_sig` include acum WHEEL-ul efectiv (algoritm + garanția internă a WF).
+#      Cheia veche fixa doar scorer/ensemble/target, deci trecerea wheeling-ului de la
+#      ILP la designurile La Jolla (6/49 pool 12: ~54 → 41 bilete) NU a invalidat nimic:
+#      raportul continua să afișeze COSTURI și ROI calculate pe wheel-ul vechi, alături
+#      de un Pool 2 regenerat cu cel nou (41.819 bilete vs 31.611 pe aceleași extrageri).
+#      Bump-ul de VERSIUNE (peste schimbarea de sig, care ar fi invalidat oricum) e ca
+#      pickle-urile v13 să devină vizibile pentru `purge_stale_wf_cache`, altfel ar fi
+#      rămas orfane la nesfârșit sub aceeași versiune.
 # v13: (a) flat-ul NU mai conține omnius_hits/omnius_ticket (biletul OMNIUS scos din
 #      WF/UI) — structură incompatibilă cu v12; (b) DECORELAREA membrilor de ensemble
 #      (method_selector.MAX_MEMBER_CORR=0.95, pe scoruri) + filtrul de redundanță din
@@ -91,9 +101,35 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     return h[:12]
 
 
+def _wf_guarantee(pool_size: int) -> int:
+    """Garanția cu care walk-forward-ul regenerează wheel-ul la fiecare pas.
+
+    SURSĂ UNICĂ: valoarea e pasată `run_retroactive_backtest(guarantee=...)` mai jos.
+    Nu e garanția din setările UI — WF are propria formulă, independentă de ea.
+    """
+    return max(4, int(pool_size) // 3)
+
+
+def _wheel_sig(pool_size: int) -> str:
+    """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
+
+    WF rulează mereu cu `max_variants=0`, deci rezolvă aceeași ramură ca engine-ul
+    (`loto_engine.generate_predictions`): override explicit din env `LOTO_WHEEL_METHOD`
+    dacă e setat, altfel `lajolla`.
+
+    DE CE intră în cheia de cache: numărul de BILETE per extragere depinde exclusiv de
+    algoritmul de wheeling, iar din el se calculează costul, câștigul net și ROI-ul din
+    raport. Fără wheel în cheie, schimbarea ILP → La Jolla (6/49 pool 12: ~54 → 41
+    bilete) a servit în continuare cache vechi, iar raportul arăta costuri umflate cu
+    ~32% pentru Pool 1, lângă un Pool 2 recalculat cu wheel-ul nou.
+    """
+    method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
+    return f"{method}|g{_wf_guarantee(pool_size)}"
+
+
 def _decision_sig(game_type: str, pool_size: int) -> str:
-    """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target) pentru
-    (joc, pool).
+    """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target +
+    ensemble + wheel) pentru (joc, pool).
 
     Walk-forward-ul rulează engine-ul, care alege metoda câştigătoare din
     best_methods.json (per pool). Dacă semnătura NU intră în cheia de cache,
@@ -116,11 +152,16 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
         else:
             _ens_sig = ",".join(sorted(str(m) for m in _ens))
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-               f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}")
+               f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}|"
+               f"{_wheel_sig(pool_size)}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
-        logger.warning(f"[WALK-FWD] decision sig indisponibilă ({exc}) — folosesc 'nodec'")
-        return "nodec"
+        # Chiar fără decizia bench, wheel-ul rămâne calculabil (env + pool) și TREBUIE
+        # să intre în cheie: altfel toate jocurile ar cădea pe același „nodec" și un
+        # schimb de algoritm de wheeling ar servi tăcut cache vechi.
+        logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
+                       f"semnătură doar pe wheel")
+        return "nd" + hashlib.md5(_wheel_sig(pool_size).encode()).hexdigest()[:6]
 
 
 def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str,

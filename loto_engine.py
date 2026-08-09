@@ -874,7 +874,18 @@ class LotoEngine:
                     logging.warning("[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.", exc)
                     history = {}
             
-            hist_key = f"{self.game_type}_{pool_size}"
+            # Cheia SEPARĂ Pool 1 de Pool 2. Fără sufix, auto-inversarea (care rulează
+            # pipeline-ul de două ori pe același joc+pool) scria ambele pool-uri sub
+            # aceeași cheie: ultima trecere câștiga, iar la rularea următoare Pool 1 se
+            # compara cu Pool 2 al rulării precedente. Cum Pool 2 e prin construcție
+            # DISJUNCT de Pool 1, tracker-ul raporta mereu schimbare totală
+            # (toate numerele „added", toate „removed") — informație fără conținut.
+            _pass = "p2" if getattr(self, "_manual_blacklist_set", None) else "p1"
+            hist_key = f"{self.game_type}_{pool_size}_{_pass}"
+            # Cheile în formatul vechi (fără sufix) nu mai sunt citite de nimeni și ar
+            # rămâne în fișier la nesfârșit; le eliminăm la prima scriere.
+            history = {k: v for k, v in history.items()
+                       if k.endswith("_p1") or k.endswith("_p2")}
             last_pool = history.get(hist_key, {}).get("pool", [])
             
             pool_variation = {}
