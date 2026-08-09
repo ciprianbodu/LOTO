@@ -79,9 +79,16 @@ ENSEMBLE_MAX_CORR = 0.99
 # dovadă. Simetric, cu puține METODE "consensul" scăzut la centrare e estimat
 # din prea puține observații (cu 2 metode rândurile centrate sunt exact opuse →
 # r=-1 mereu), deci nici acolo nu merită încredere.
-# Pe date reale garda e INERTĂ: semnătura are (106, 60) pe toate cele 3 jocuri
-# din folds.csv (15 pool-uri × 4 ferestre) — e o plasă pentru folds.csv
-# trunchiate/sintetice, nu o schimbare de politică în producție.
+# ⚠️ ACTUALIZAT 2026-07-27 — garda NU mai e inertă. Înainte de curarea de metode
+# (`curated_methods.json`), pe folds.csv cu 107 metode semnătura era (106, 60) pe
+# toate cele 3 jocuri, deci garda nu se declanșa niciodată. Cu setul curat (16
+# metode benchuite) numărul de metode CALIFICATE per pool scade la 2-4 → sub prag
+# → dedup-ul pe semnătura de performanță e SĂRIT sistematic (vezi log-ul
+# "[decision] dedup ensemble dezactivat"). Consecință: `ensemble_dropped_redundant`
+# rămâne gol. NU e o regresie: curarea garantează deja că niciun membru nu e
+# redundant pe axa SCORURI (|Spearman| < 0.95), iar decorelarea de la runtime
+# (`method_selector._select_decorrelated`) rămâne activă — dedup-ul de aici nu mai
+# are ce să taie. Dacă se revine la toate metodele, garda redevine inertă singură.
 ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 
 # Baseline-uri care NU au voie să devină NICIODATĂ scorer de producție.

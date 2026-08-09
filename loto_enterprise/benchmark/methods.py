@@ -145,6 +145,11 @@ def _load_extra_methods() -> None:
         extensions.append(("methods_top649", methods_top649.TOP649_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_top649 not loaded: {exc}")
+    try:
+        from . import methods_math_extra
+        extensions.append(("methods_math_extra", methods_math_extra.MATH_EXTRA_METHODS))
+    except Exception as exc:
+        logger.debug(f"[methods] methods_math_extra not loaded: {exc}")
 
     added = 0
     for modname, extra_dict in extensions:

@@ -4,9 +4,11 @@
 App de optimizare pool-uri loto (6/49, 5/40, Joker) cu benchmark de metode de
 scoring **exclusiv CPU** (statistice/ML sklearn/geometrice/**graf-network**/coverage) +
 wheeling (set-cover) + walk-forward.
-Cifre reale (verificate 2026-07-20): **180 metode înregistrate** în `METHODS`, din care
-**73 blacklistate** (`disabled_methods.json`) → **107 efectiv rulate** de bench
-(`ALL_SPEC_METHODS`). Nu cita din memorie „~130"/„108"/„102" — renumără.
+Cifre reale (verificate 2026-07-27): **180 metode înregistrate** în `METHODS`, din care
+**73 blacklistate** (`disabled_methods.json`) → **107 candidate**, iar peste ele
+**curarea reversibilă** (`curated_methods.json`) lasă **16 efectiv rulate** de bench
+(`ALL_SPEC_METHODS`) — 15 de producție + `random` ca baseline.
+Nu cita din memorie „~130"/„108"/„102"/„107" — renumără (vezi „Curare de metode").
 **Loteria e aleatoare** — e instrument de optimizare a acoperirii, nu predicție.
 Diferențele dintre metode sunt în mare parte ZGOMOT (câștigătorul e instabil) — vezi memoria.
 UI = **NiceGUI** (`app_nicegui.py`), pe port 8000. Lansator: `START_8000.bat`.
@@ -34,11 +36,12 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `job_queue.py` | coadă SQLite; `DB_PATH="loto_jobs.db"` |
 | `ui_shared.py` | helpere neutre (atomic_write_json/text, file_lock, ensure_worker_running) |
 | `loto_enterprise/benchmark/` | benchmark: `runner.py`, `decision.py`, `methods*.py`, `bench_cache.py` |
-| `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = toate metodele `available` din registry |
+| `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = `available` minus blacklist, apoi **∩ curated** (vezi „Curare de metode") |
 | `_ISTORIC/` | datele CSV cu extragerile (VERSIONATE în git) |
 | `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v13`), separat de cel din `bench_cache.py`; `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
 | `best_methods.json` | decizia bench per joc/pool: winner + `ensemble` + `ensemble_dropped_redundant` (membri săriți ca redundanți: `{method, vs, r, reason:"perf_signature"}`) + `low_confidence` + sim_depth (gitignore). `ensemble_dropped_redundant` și `low_confidence` sunt chei NOI, scrise doar de decizia curentă — un fișier generat înainte nu le are; rescrie-l cu `update_best_methods_with_auto_pilot()`. Nu sunt propagate de `method_selector.recommend_optimal_config` (listă albă de chei) → azi sunt telemetrie pt debug, nu contract UI |
-| `disabled_methods.json` | blacklist metode (73 în acest moment); merge-only |
+| `disabled_methods.json` | blacklist metode (73 în acest moment); merge-only, **IREVERSIBIL** |
+| `curated_methods.json` | **curare REVERSIBILĂ** a setului rulat (16 în acest moment); versionat în git; șterge/golește `active` → revine la tot. Citit de `loto_enterprise/benchmark/curated.py` |
 | `bench_results/folds.csv` | output brut walk-forward al bench-ului (OVERWRITE la fiecare Re-Bench) |
 | `raport_complet.txt` | raport generat (gitignore) |
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
@@ -48,11 +51,75 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
   în `methods.py` + **7** module de extensii — `methods_classical` (49), `methods_ml` (34),
   `methods_coverage` (13), `methods_omnius` (1), **`methods_graph`** (31),
   **`methods_search_649`** (29, `SEARCH_649_NEW`), **`methods_top649`** (20, `TOP649_METHODS`).
-  Minus blacklist (73) → **107** rulate efectiv (`ALL_SPEC_METHODS`).
-  Renumără cu: `python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"`.
+  Minus blacklist (73) → **107 candidate**; minus curare (`curated_methods.json`) → **16**
+  rulate efectiv (`ALL_SPEC_METHODS`).
+  Renumără cu: `python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"`
+  și `python -c "import bench_all_methods as b; print(len(b.ALL_SPEC_METHODS), b.CURATION_INFO)"`.
 - Scorer = `fn(draws_2d, max_num) -> {nr: scor_normalizat}`. Registry: `"nume": (fn, "family", trained, "desc")`.
 - **Exclusiv CPU** — GPU/neural/torch/TimesFM/NeuralForecast eliminate complet (2026-07).
-- `ALL_SPEC_METHODS` (în bench_all_methods.py) = metodele `available` din `METHODS` minus blacklist (dinamic).
+- `ALL_SPEC_METHODS` (în bench_all_methods.py) = `available` minus blacklist, **apoi ∩ curated** (dinamic, ambele filtre se compun).
+
+### Curare de metode (`curated_methods.json`) — REVERSIBILĂ, ≠ blacklist
+- **Ce e**: un al doilea filtru peste `ALL_SPEC_METHODS`, în rădăcina repo. Dacă fișierul
+  există și `active` e nevidă, bench-ul rulează DOAR acel subset. Absent/gol/invalid →
+  comportamentul de dinainte (toate metodele `available` minus blacklist). Cod:
+  `loto_enterprise/benchmark/curated.py` (`load_curated`, `is_curation_active`,
+  `apply_curation`, `curated_meta`, `log_curation`, `REQUIRED_METHODS`).
+- **Deosebirea de `disabled_methods.json`**: blacklist-ul e MERGE-ONLY și permanent
+  (regula de aur 6) — o metodă intrată acolo nu se mai scoate. Curarea e o SELECȚIE
+  ACTIVĂ, complet reversibilă. **NU muta curarea în blacklist** — ar face tăierea a 90+
+  metode ireversibilă.
+- **ANULARE (cum revii la toate metodele)**: șterge `curated_methods.json` (sau golește
+  lista `active` la `[]`), apoi rulează un **Re-Bench**. `ALL_SPEC_METHODS` redevine
+  automat cele 107. Nimic nu se pierde între timp: metodele tăiate rămân în `METHODS`,
+  nefolosite. Fără re-bench, `bench_results/folds.csv` și `best_methods.json` rămân cele
+  vechi — decizia continuă să aleagă din metodele DIN folds, nu din curare.
+- ⚠️ **Criteriul e ACOPERIREA DE SEMNAL DISTINCT, NU clasamentul.** Tăierea pe performanță
+  e ZGOMOT, măsurat pe datele reale: overlap top-15 între prima și a doua jumătate a
+  ferestrelor = **13-20%** (joker 3/15, 5/40 3/15, 6/49 2/15) → „top 15" nu e o
+  proprietate stabilă a metodelor; iar din 45 de celule joc×pool doar **19** metode
+  distincte câștigă vreo celulă, **4 dintre ele fiind câștigate de baseline-ul `random`**
+  → „a câștigat o celulă" nu e dovadă de calitate. Deci selecția păstrează metode cu
+  scoruri NECORELATE între ele (|Spearman| < `method_selector.MAX_MEMBER_CORR` = 0.95) și
+  elimină clonele. **Nu re-selecta setul pe baza clasamentului** — vezi și regula de aur 6.
+- **Ce NU schimbă curarea**: rata de hituri 3+/4+. `P(≥3 din pool de K)` e hipergeometrică
+  — depinde doar de K și de joc (pool 10: 6/49 = 9.03%, 5/40 = 8.93%, joker = 6.47%), nu
+  de CARE numere sunt în pool. Pârghiile reale rămân dimensiunea pool-ului și acoperirea
+  pool→bilete (wheeling).
+- **Ce schimbă real**: (1) ensemble-ul nu mai e no-op — 0/120 perechi au |r| ≥ 0.95 în
+  vreun joc (cea mai corelată: `graph_katz_low ~ graph_rwr_recent` = 0.9096 pe 6/49),
+  deci top-3-ul ales de `decision.py` supraviețuiește întreg decorelării din
+  `method_selector`, în loc să colapseze la 1 membru activ; (2) clasamentul UI devine
+  citibil (16 rânduri în loc de 107); (3) bench mai rapid.
+- **MĂSURAT după primul re-bench cu curare (2026-07-27, 384 folduri)** — nu predicție:
+  5/40 = ensemble de 3 membri pe toate cele 15 pool-uri; 6/49 = 3 membri pe 12/15
+  pool-uri, 1 membru pe 3; joker_urna1 = 3 membri pe 5/15, 2 pe 6/15, 1 pe 4/15 și
+  **1 pool cu `low_confidence=True`**. Deci „ensemble plin pe toate jocurile" NU se
+  confirmă peste tot: cu 15 candidați, la unele pool-uri trec gate-ul de consistență
+  doar 1-2 metode. Renumără după fiecare re-bench, nu cita de aici.
+- ⚠️ **Efect secundar real: `ENSEMBLE_MIN_SIGNATURE_POINTS = 5` nu mai e o gardă inertă.**
+  Cu 107 metode semnătura era (106, 60) și garda nu se declanșa niciodată; cu 16 metode
+  numărul de CALIFICATE per pool e 2-4 → sub prag → dedup-ul pe semnătura de performanță
+  din `decision.py` e SĂRIT sistematic, iar `ensemble_dropped_redundant` rămâne gol.
+  Nu e regresie (curarea garantează deja necorelarea pe axa SCORURI, iar
+  `method_selector._select_decorrelated` rămâne activ), dar comentariul „garda e INERTĂ"
+  din `decision.py` era stale și a fost corectat.
+  ⚠️ **Onest despre viteză**: 88.7% din economie vine din 4 metode scumpe (`omnius` 65.3%
+  din tot bench-ul, `ml_catboost`, `croston_sba`, `croston_classic`) — tăind DOAR acele 4
+  se obținea deja factor ~8.9x. Restul drumului (103→16) aduce doar factorul suplimentar
+  ~3.5x. Reducerea la 15 se justifică prin decorelare, nu prin viteză.
+- **Metode STRUCTURAL obligatorii în `active`** (`curated.REQUIRED_METHODS`):
+  `random` și `frequency`. `frequency` = `decision.SAFE_FALLBACK_SCORER`. `random` NU e
+  candidat de producție (`decision.EXCLUDED_FROM_PRODUCTION`) dar e indispensabil ca
+  BASELINE: `decision._windows_method_beats_random()` întoarce `(0, 0)` dacă rândul
+  `random` lipsește din folds.csv → `n_total == 0` → `continue` pe TOATE metodele →
+  `qualifying` gol → `low_confidence` pe toate jocurile. Fără `random` gate-ul de
+  consistență nu funcționează deloc.
+- **Override explicit**: `--methods a,b,c` și `--quick` ocolesc curarea (deliberat).
+- **Plase de siguranță** în `apply_curation`: nume necunoscute/blacklistate se sar cu
+  WARNING; dacă lista nu lasă NICIO metodă validă, curarea e ignorată și rulează tot
+  (mai bine tot decât bench gol). Telemetria ajunge în `best_methods.json._meta.curated`
+  și în banner-ul UI de Re-Bench (`_curation_banner_info` în `app_nicegui.py`).
 - Re-Bench: walk-forward pe folduri → `bench_results/folds.csv` (OVERWRITE) → `decision.py` → `best_methods.json` (winner + sim_depth per joc/pool). **Țintă hituri = `BENCH_HIT_TARGET` (env `LOTO_BENCH_TARGET`, default 3+)**; clasamentul arată și 3+ și 4+.
   ⚠️ `LOTO_BENCH_TARGET` acceptă REALMENTE doar **3** sau **4**: `runner.py` emite exclusiv coloanele `rate_3plus_*` / `rate_4plus_*`. Orice altă valoare (ex. 5) face `decision._resolve_rate_col` să cadă TĂCUT pe metrica 4+ (doar un WARNING în log + `rate_col_mismatch=True`) — decizia se ia atunci pe altă țintă decât cea cerută.
 - **Decizie robustă (Wilson) + ensemble**: decision.py filtrează întâi pe **gate-ul de consistență** — o metodă e „calificată" doar dacă bate baseline-ul `random` în ≥60% din ferestre (`CONSISTENCY_THRESHOLD = 0.60`) — apoi sortează calificatele după limita inferioară Wilson a ratei T+ (pooled pe n_test; evenimente 4+ rare → media brută favoriza „1 hit norocos") și scrie `ensemble` (top-`ENSEMBLE_MAX_METHODS`=3 calificate, pondere ∝ Wilson) în `auto_pilot_per_pool[kN]`. Dacă NICIO metodă nu trece gate-ul → ramură de fallback cu `low_confidence=True` (alegerea e conservatoare, nu „cea mai consistentă").
@@ -121,8 +188,10 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 4. Test minimal după orice edit: `python3 -m py_compile <fisier>` + (pt UI) pornește pe un port liber și verifică HTTP 200 (sleep ~15s, importurile sunt grele).
 5. Commit pe main cu mesaj clar; push; (pe web: creează PR draft dacă nu există).
 6. **Blacklist metode** (`disabled_methods.json`): metode LEGENDATE ca slabe. NU le reactiva, NU le re-introduce și NU le folosi — nici când adaugi metode NOI. Bench-ul le exclude automat (`bench_all_methods` filtrează prin `disabled.load_disabled()`). Populare: `python prune_methods.py --apply` (după un bench COMPLET). Merge-only.
-   - ⚠️ **Tăierea pe performanță e ZGOMOT**: pe loto fiecare metodă câștigă vreo celulă joc×pool. `prune --top N` rankează după `max rate_4plus` peste pool-uri — metrică ≠ decizia reală (`rate_3plus` la pool-ul jocului) → poate dezactiva IREVERSIBIL câștigători reali.
+   - ⚠️ **Tăierea pe performanță e ZGOMOT**: pe loto fiecare metodă câștigă vreo celulă joc×pool. `prune --top N` rankează după `max rate_4plus` peste pool-uri — metrică ≠ decizia reală (`rate_3plus` la pool-ul jocului) → poate dezactiva IREVERSIBIL câștigători reali. Măsurat: overlap top-15 între jumătățile de date = 13-20%, iar `random` câștigă 4 din 45 de celule.
+   - ✅ **Vrei mai puține metode? Folosește `curated_methods.json`, NU blacklist-ul** (vezi „Curare de metode"): același efect pe bench, dar REVERSIBIL, iar criteriul e redundanța (|Spearman| ≥ 0.95), nu clasamentul.
 7. **Baseline-urile NU au voie să devină scorer de producție**: `random` (nedeterminist, fără sămânță) e REFERINȚĂ de comparație, nu candidat — vezi `decision.EXCLUDED_FROM_PRODUCTION = {"random"}`. Nu-l scoate din set și nu-l lăsa să ajungă în `best_methods.json`/`ensemble`, oricât de bine ar arăta pe folds. (`frequency` rămâne permis: e baseline DETERMINIST și e `SAFE_FALLBACK_SCORER`. `recency` e DETERMINIST dar e **blacklistat** în `disabled_methods.json` — deci nu e candidat, din regula 6, nu din regula asta.)
+   - ⚠️ Corolar: `random` trebuie totuși să RULEZE în bench. E în `curated.REQUIRED_METHODS` — dacă îl scoți din `curated_methods.json`, gate-ul de consistență din `decision.py` se rupe complet (`low_confidence` pe toate jocurile), nu doar „lipsește o linie din clasament".
 8. **Top-N după scor** → în cod NOU, mereu `core.ranking.rank_by_score` (vezi „Tie-break canonic"); nu scrie sortare proprie.
    ⚠️ Regula NU e încă respectată peste tot — `loto_engine.py` are **patru** selecții „top-N după scor" cu `sorted(..., reverse=True)` propriu, care la scoruri EGALE dau alte numere decât bench-ul (`sorted` e stabil → păstrează ordinea de inserare, adică număr MIC întâi; `rank_by_score` ia număr MARE întâi):
    trunchierea pool-ului supradimensionat (`ranked = sorted(self.hard_core, ...)`), selecția Urnei 2 la Joker (`sorted_j`, single-pick — bench-ul validează `joker_urna2` prin `runner._top_k` → `rank_by_score`), și cele două completări de pool pe path-ul `manual_blacklist` / auto-invert (`sorted_clean`, varianta pe scoruri + varianta pe fallback-ul de frecvență).

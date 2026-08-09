@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "created": "2026-07-30",
+    "updated": "2026-07-30",
+    "criterion": "6/49 medie/extragere >= 0.75 din ~112 metode CPU; apoi |Spearman| < 0.94",
+    "note": "gol/absent = toate metodele. random+frequency obligatorii (decision gate).",
+    "n_scanned": 112,
+    "n_passed_avg": 38,
+    "n_active": 17,
+    "threshold_avg_hits": 0.75,
+    "threshold_spearman": 0.94
+  },
+  "active": [
+    "frequency",
+    "random",
+    "ml_logistic",
+    "cover_positional_bands",
+    "sum_affinity",
+    "649_wilson_lb",
+    "649_katz25_gap75_b",
+    "omnius",
+    "649_decade_hot",
+    "nmf_cooc",
+    "649_mod7_hot",
+    "graph_community_strength",
+    "graph_neighbor_degree",
+    "649_mom_10_40",
+    "649_katz75_prime25",
+    "ml_complement_nb",
+    "ml_nearest_centroid"
+  ]
+}

@@ -401,13 +401,13 @@ class LotoEngine:
             # Override explicit — comportament neschimbat (backward-compat).
             _wheel_method = _wheel_method_env
         elif max_variants == 0:
-            # Implicit, fără cap de bilete ("garanție completă"): folosim cover
-            # EXACT/minim (ILP) când e fezabil — aceeași garanție 100%, dar cu
-            # bilete ≤ greedy (wheel_ilp compară intern cu greedy și păstrează
-            # varianta cu mai puține bilete; fallback automat la greedy dacă
-            # problema e prea mare sau ILP nu ajută). Schimbare INTENȚIONATĂ
-            # (mai puține bilete pt aceeași garanție), nu bit-identică cu greedy.
-            _wheel_method = "ilp"
+            # Implicit, fără cap de bilete ("garanție completă"): design de acoperire
+            # CUNOSCUT-OPTIM din covering_designs/ (La Jolla) când există pt
+            # C(pool, pick, guarantee); altfel cade automat pe ILP, iar ILP pe greedy.
+            # Lanțul e monoton: niciodată mai multe bilete decât înainte, aceeași
+            # garanție 100%. Măsurat pe pool 12/garanție 4: 6/49 54→41 bilete,
+            # 5/40+Joker 123→113 (ILP la 15s nici nu atingea aceste valori).
+            _wheel_method = "lajolla"
         else:
             # Buget de bilete fix (max_variants>0): păstrăm greedy (neschimbat).
             _wheel_method = "greedy"
@@ -861,8 +861,18 @@ class LotoEngine:
             history_file = Path("pool_history.json")
             history = {}
             if history_file.exists():
-                with open(history_file, "r") as f:
-                    history = json.load(f)
+                # Un fișier corupt (scriere parțială / sync OneDrive) nu are voie să
+                # dezactiveze tracker-ul PERMANENT: fără asta excepția se repeta la
+                # fiecare rulare, iar `pool_variation` rămânea gol la nesfârșit.
+                # Repornim de la zero — istoricul e informativ, nu critic.
+                try:
+                    with open(history_file, "r", encoding="utf-8") as f:
+                        history = json.load(f)
+                    if not isinstance(history, dict):
+                        raise ValueError(f"structură neașteptată: {type(history).__name__}")
+                except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+                    logging.warning("[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.", exc)
+                    history = {}
             
             hist_key = f"{self.game_type}_{pool_size}"
             last_pool = history.get(hist_key, {}).get("pool", [])

@@ -71,10 +71,30 @@ try:
 except Exception:  # noqa: BLE001
     _DISABLED_METHODS = set()
 
-ALL_SPEC_METHODS = [
+_AVAILABLE_METHODS = [
     m for m in list_methods()
     if method_meta(m).get("available", True) and m not in _DISABLED_METHODS
 ]
+
+# Al DOILEA filtru, REVERSIBIL: curated_methods.json (rădăcina repo). Dacă fișierul
+# există și are `active` nevidă, bench-ul rulează DOAR acel subset (criteriu:
+# acoperire de semnal distinct, nu clasament). Absent/gol → comportamentul de
+# dinainte (toate metodele available minus blacklist). Cele două filtre se compun:
+# curated ∩ (available minus disabled). Log-ul se emite în main(), după
+# logging.basicConfig() (aici, la import, handler-ele încă nu există).
+try:
+    from loto_enterprise.benchmark.curated import (
+        apply_curation as _apply_curation,
+        log_curation as _log_curation,
+    )
+    ALL_SPEC_METHODS, CURATION_INFO = _apply_curation(_AVAILABLE_METHODS)
+except Exception as _exc:  # noqa: BLE001
+    ALL_SPEC_METHODS = list(_AVAILABLE_METHODS)
+    CURATION_INFO = {"active": False, "n_before": len(_AVAILABLE_METHODS),
+                     "n_after": len(_AVAILABLE_METHODS), "error": str(_exc)}
+
+    def _log_curation(info):  # noqa: D103 — no-op dacă modulul lipsește
+        return None
 
 QUICK_METHODS = ["random", "frequency", "recency"]
 
@@ -124,6 +144,15 @@ def main() -> int:
         ],
     )
 
+    # Starea curării în log (acum că handler-ele există). --methods/--quick sunt
+    # override-uri EXPLICITE ale utilizatorului → ocolesc curarea, deliberat.
+    _explicit = bool(args.quick or args.methods)
+    if _explicit and CURATION_INFO.get("active"):
+        logging.info("[curated] curare IGNORATĂ: lista de metode e dată explicit "
+                     "(--methods/--quick).")
+    else:
+        _log_curation(CURATION_INFO)
+
     methods = (
         QUICK_METHODS if args.quick
         else (args.methods.split(",") if args.methods else ALL_SPEC_METHODS)
@@ -144,6 +173,13 @@ def main() -> int:
 
     meta_map = {m: method_meta(m) for m in methods}
     render_methods_table(console, methods, meta_map)
+    if CURATION_INFO.get("active") and not _explicit:
+        console.print(
+            f"[bold yellow]🎯 Curare activă:[/bold yellow] {CURATION_INFO['n_after']} metode "
+            f"din {CURATION_INFO['n_before']} "
+            f"[dim](criteriu: acoperire de semnal, nu clasament — "
+            f"anulare: șterge/golește curated_methods.json + re-bench)[/dim]"
+        )
     console.print()
 
     games = discover_games(args.istoric)
@@ -249,6 +285,9 @@ def main() -> int:
             "block_size": args.block_size,
             "percentiles": pcts,
             "methods_tested": methods,
+            # Telemetrie de curare: ca să se vadă în best_methods.json că bench-ul
+            # a rulat un SUBSET (și de ce clasamentul are mai puține rânduri).
+            "curated": dict(CURATION_INFO),
             "n_folds_total": report.get("n_folds_total", 0),
             "blacklist_rule": "numere absente din ultimele 50-200 extrageri (semnal independent de scorer)",
         },

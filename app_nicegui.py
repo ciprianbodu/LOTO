@@ -102,6 +102,7 @@ STATE: dict = {
     "active_job_id": None,
     "job_start_time": None,
     "job_elapsed": None,     # durata FIXĂ a ultimei generări (sec); setată la COMPLETED
+    "wf_elapsed": None,      # durata FIXĂ generare+walk-forward (sec); setată la finalul WF
     "results": None,         # (results_bundle, count)
     "results_recovered": None,  # etichetă „job #N · dată" dacă rezultatele-s recuperate (vechi)
     "retro": {},             # {f"{fname}_{game}": flat_walk_forward}
@@ -268,6 +269,7 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
     STATE["active_job_id"] = int(job_id)
     STATE["job_start_time"] = time.time()
     STATE["job_elapsed"] = None  # reset; se fixează la COMPLETED
+    STATE["wf_elapsed"] = None   # reset; se fixează la finalul walk-forward
     ui.notify(f"Job #{job_id} trimis.", type="positive")
     _refresh_status()
 
@@ -580,7 +582,7 @@ def cancel_all() -> None:
 def _start_walk_forward() -> None:
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
-        _finalize_pipeline()  # fără rezultate → nu rulează WF; ăsta e finalul (mail + shutdown)
+        _finalize_pipeline()  # fără rezultate → nu rulează WF; mail deja trimis mai sus, doar shutdown
         return
     results_bundle, _ = results
     # Walk-forward: doar Pool 1 (Pool 2 = inversare, fără validare istorică).
@@ -715,12 +717,15 @@ def _start_walk_forward() -> None:
         except Exception as exc:  # noqa: BLE001
             STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
         finally:
+            if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
+                STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
             _save_report_file()  # rescriu raportul acum CU statisticile walk-forward
             try:
                 results_panel.refresh()
             except Exception:  # noqa: BLE001
                 pass
-            # ABIA ACUM (walk-forward terminat): mail cu rezultate + oprirea PC-ului.
+            # Mail-ul a plecat deja imediat după generare (vezi status_panel).
+            # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
             _finalize_pipeline()
             try:
                 status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
@@ -774,6 +779,13 @@ def status_panel() -> None:
             _save_settings()
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
+            # Mail-ul conține DOAR Pool 1/Pool 2 (fără stats WF, vezi _build_mail_body) →
+            # numerele sunt deja fixate acum; nu are rost să aștepte walk-forward-ul de
+            # raportare (poate dura minute/ore). Trimis o singură dată (claimed == True mai sus).
+            try:
+                _maybe_send_results_email()
+            except Exception as exc:  # noqa: BLE001
+                logger.error("[MAIL] trimitere imediată eșuată: %s", exc)
             _start_walk_forward()  # async; oprirea PC se face la FINALUL walk-forward-ului
             results_panel.refresh()
             try:
@@ -949,17 +961,13 @@ def _maybe_send_results_email() -> None:
 
 
 def _finalize_pipeline() -> None:
-    """La finalul pipeline-ului (după walk-forward / ramura fără rezultate): trimite
-    mailul (dacă e cerut) ÎNAINTE de oprirea PC-ului, apoi oprește PC-ul (dacă e cerut).
-
-    Fiecare pas e izolat: o eroare la mail NU trebuie să blocheze oprirea PC-ului
-    (și invers). Logăm clar dacă vreun pas chiar nu s-a executat."""
-    logger.info("[FINALIZE] post-pipeline: mail_on_complete=%s shutdown_on_complete=%s",
-                SETTINGS.get("mail_on_complete"), SETTINGS.get("shutdown_on_complete"))
-    try:
-        _maybe_send_results_email()
-    except Exception as exc:  # noqa: BLE001
-        logger.error("[MAIL] finalize a eșuat (continui spre shutdown): %s", exc)
+    """La finalul walk-forward-ului (sau ramura fără rezultate): oprește PC-ul (dacă
+    e cerut). Mailul NU se trimite aici — pleacă imediat după generare (vezi
+    status_panel, ramura COMPLETED), fiindcă nu are conținut dependent de WF
+    (`_build_mail_body` = doar Pool 1/Pool 2) și n-are rost să aștepte minute/ore
+    de validare retroactivă doar ca notificare să ajungă mai târziu."""
+    logger.info("[FINALIZE] post-walk-forward: shutdown_on_complete=%s",
+                SETTINGS.get("shutdown_on_complete"))
     try:
         _maybe_shutdown()
     except Exception as exc:  # noqa: BLE001
@@ -1688,6 +1696,11 @@ _METHOD_DESC = {
     "theta_auto": "metoda Theta · serie temporală",
     "ets_auto":   "ETS (error-trend-seasonal) · serie temporală",
     "arima_auto": "ARIMA auto · serie temporală",
+    "pca_resid_surprise": "surpriză residuală după PCA dominant · matematic",
+    "mi_lag_bag": "mutual information cu bag-ul extragerii anterioare · matematic",
+    "nmf_cooc": "NMF pe co-apariții recente · matematic",
+    "cusum_appearance": "CUSUM pe reziduuri de apariție (regim) · matematic",
+    "circular_kernel": "kernel densitate pe topologia circulară 1…N · matematic",
     "649_katz12_gap88": "12% KatzCommunity + 88% gap_poisson (search winner, +21.7% 4+ @ k16)",
     "649_katz15_gap85": "15% KatzCommunity + 85% gap_poisson (search blend)",
     "graph_649_katz_community": "60% KatzHigh + 40% community strength (graf)",
@@ -1895,7 +1908,12 @@ def results_panel() -> None:
 
     elapsed = ""
     if STATE.get("job_elapsed") is not None:
-        elapsed = f" (în {_fmt_dur(STATE['job_elapsed'])})"
+        elapsed = f" (generare: {_fmt_dur(STATE['job_elapsed'])}"
+        if STATE.get("wf_elapsed") is not None:
+            elapsed += f" · total cu walk-forward: {_fmt_dur(STATE['wf_elapsed'])}"
+        elif STATE.get("wf_status"):
+            elapsed += " · walk-forward încă rulează"
+        elapsed += ")"
     with ui.row().classes("items-center gap-3 mt-2"):
         ui.label(f"Rezultate{elapsed}").classes("text-h6")
         ui.button("📋 Raport integral", on_click=_show_report).props("flat dense")
@@ -2308,8 +2326,12 @@ def _render_bench_leaderboard_slice(
             if _brec[0] not in _BASE or _brec[0] in _shown_names:
                 continue
             _better = sum(1 for r in rows[:_bi] if r[0] not in _BASE)
+            # Numitorul include și baseline-ul însuși (nu doar candidații) — altfel
+            # poziția poate ajunge la N+1 „din N" (contradicție) când baseline-ul
+            # e sub TOȚI candidații.
             ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — ar cădea pe locul "
-                     f"{_better + 1} din {len(competitors)} metode candidate.").classes(
+                     f"{_better + 1} din {len(competitors) + 1} "
+                     f"({len(competitors)} metode candidate + acest baseline).").classes(
                 "text-caption text-grey")
         # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
         # slice, spune unde cade. Altfel 🏆 lipsește complet din listă, fără niciun
@@ -2543,6 +2565,30 @@ def _bench_target() -> int:
         return int(BENCH_HIT_TARGET)
     except Exception:  # noqa: BLE001
         return 3
+
+
+def _curation_banner_info():
+    """Starea curării de metode (curated_methods.json) pentru banner-ul de Re-Bench.
+
+    Întoarce None dacă nu e nicio curare activă (fișier absent/gol → bench-ul
+    rulează toate metodele available minus blacklist, ca înainte). Curarea e
+    complet REVERSIBILĂ (nu e blacklist) — vezi CLAUDE.md.
+    """
+    try:
+        from loto_enterprise.benchmark.curated import apply_curation, curated_path
+        from loto_enterprise.benchmark.disabled import load_disabled
+        from loto_enterprise.benchmark.methods import list_methods, method_meta
+
+        disabled = load_disabled()
+        avail = [m for m in list_methods()
+                 if method_meta(m).get("available", True) and m not in disabled]
+        _kept, info = apply_curation(avail)
+        if not info.get("active"):
+            return None
+        info["path"] = curated_path().name
+        return info
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _target_data_ready() -> bool:
@@ -3454,10 +3500,26 @@ def main_page() -> None:
             from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _bt
         except Exception:  # noqa: BLE001
             _bt = 3
-        ui.label("Un singur bench testează TOATE metodele (exclusiv CPU), pe toate nucleele "
+        ui.label("Un singur bench testează metodele active (exclusiv CPU), pe toate nucleele "
                  "(în paralel). Toate concurează în "
                  f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
                  "Vezi clasamentul complet la 🏆 Clasament bench.").classes("text-caption")
+        # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
+        # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
+        _cur = _curation_banner_info()
+        if _cur is not None:
+            ui.html(render_html_safe(
+                t"🎯 <b>Curare activă: {_cur['n_after']} metode din {_cur['n_before']}</b> "
+                t"(criteriu: acoperire de semnal, nu clasament)."
+            )).classes("text-caption text-info")
+            ui.label("Dezactivare (revine la toate metodele): șterge sau golește lista "
+                     f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
+                     "Nimic nu se pierde — nu e blacklist.").classes("text-caption text-grey")
+            if _cur["missing_required"]:
+                ui.label("⚠️ Lipsesc din curare metode structurale "
+                         f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
+                         "cădea pe low_confidence. Adaugă-le în curated_methods.json."
+                         ).classes("text-caption text-negative")
         # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
         # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea
         # paginii (se reîmprospătează la reload). Vezi _new_draws_summary / freshness.
