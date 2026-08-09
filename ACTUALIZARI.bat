@@ -184,6 +184,8 @@ where git >nul 2>&1
 if not errorlevel 1 call :push_istoric
 echo.
 
+REM Cache WF vechi (alt CACHE_VERSION) in bench_results/ - inaccesibil, umfla OneDrive.
+REM Doar stale: purge_stale_wf_cache (NU clear_walk_forward_cache - pastreaza versiunea curenta).
 echo [2c/4] Curatare cache walk-forward stale (versiuni vechi CACHE_VERSION)...
 "%VENV_PY%" -c "import sys; sys.path.insert(0, '.'); from loto_enterprise.core.walk_forward_adapter import purge_stale_wf_cache, CACHE_VERSION; r=purge_stale_wf_cache(dry_run=False); print('  CACHE_VERSION curenta:', CACHE_VERSION); print('  Fisiere stale gasite:', r.get('n_files', 0), '('+str(r.get('mb', 0))+' MB)'); print('  Sterse efectiv:', r.get('n_deleted', 0))" 2>nul
 if errorlevel 1 (
