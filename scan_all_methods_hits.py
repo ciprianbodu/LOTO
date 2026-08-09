@@ -86,8 +86,9 @@ def _load_draws(csv_path: Path, draw_n: int) -> np.ndarray:
     return df[cols[:draw_n]].to_numpy(dtype=np.int64)
 
 
-# Meta-selector: rulează zeci de metode înăuntru → blocaj pe scan paralel.
-_SKIP_SLOW = {"omnius"}
+# Metode prea lente pentru scanul paralel (rulează alte metode înăuntru → blocaj).
+# Gol de la eliminarea lui `omnius` (2026-08-09); hook-ul rămâne pentru viitor.
+_SKIP_SLOW: set[str] = set()
 
 
 def _available_methods() -> list[str]:

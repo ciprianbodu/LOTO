@@ -3,7 +3,8 @@
 De ce există modulul: până în 2026-07 existau trei implementări divergente ale
 selecției „top-N după scor" — bench (`runner._top_k`), producție
 (`pool_selection.select_pool_from_scores`) și biletul OMNIUS
-(`pick_omnius_ticket`) — fiecare cu ALT tie-break la scoruri egale (număr mare /
+(`pick_omnius_ticket`, eliminat între timp odată cu modulul `methods_omnius`) —
+fiecare cu ALT tie-break la scoruri egale (număr mare /
 frecvență / ordinea de iterare a set-ului). Pe scoreri cu puține nivele
 distincte, pool-ul VALIDAT de bench diferea de pool-ul GENERAT în producție
 (6/16 numere diferite pe un scorer cu 2 nivele), încălcând regula din CLAUDE.md:
@@ -12,10 +13,9 @@ distincte, pool-ul VALIDAT de bench diferea de pool-ul GENERAT în producție
 Regula CANONICĂ de sortare (în această ordine, toate DESCRESCĂTOR):
   1. scor;
   2. frecvență — OPȚIONALĂ (0.0 pentru toți dacă ``freq`` e None). Toate
-     call-site-urile actuale pasează None: biletul OMNIUS nu are acces la
-     extrageri prin semnătura lui publică, deci singura regulă aplicabilă
-     IDENTIC peste bench/producție/OMNIUS e cea FĂRĂ frecvență — consistența
-     bate frecvența ca tie-break;
+     call-site-urile actuale (bench + producție) pasează None: regula trebuie să
+     fie aplicabilă IDENTIC în ambele, iar bench-ul nu pasează frecvențe —
+     consistența bate frecvența ca tie-break;
   3. numărul însuși — determinist; „număr mare întâi" evită degenerarea
      „1,2,3…K" / „cele mai mici compuse" la egalitate de scor.
 

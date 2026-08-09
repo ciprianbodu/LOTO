@@ -4,11 +4,11 @@
 App de optimizare pool-uri loto (6/49, 5/40, Joker) cu benchmark de metode de
 scoring **exclusiv CPU** (statistice/ML sklearn/geometrice/**graf-network**/coverage) +
 wheeling (set-cover) + walk-forward.
-Cifre reale (verificate 2026-07-27): **180 metode înregistrate** în `METHODS`, din care
-**73 blacklistate** (`disabled_methods.json`) → **107 candidate**, iar peste ele
+Cifre reale (verificate 2026-08-09): **184 metode înregistrate** în `METHODS`, din care
+**73 blacklistate** (`disabled_methods.json`) → **111 candidate**, iar peste ele
 **curarea reversibilă** (`curated_methods.json`) lasă **16 efectiv rulate** de bench
 (`ALL_SPEC_METHODS`) — 15 de producție + `random` ca baseline.
-Nu cita din memorie „~130"/„108"/„102"/„107" — renumără (vezi „Curare de metode").
+Nu cita din memorie „~130"/„108"/„102"/„107"/„180" — renumără (vezi „Curare de metode").
 **Loteria e aleatoare** — e instrument de optimizare a acoperirii, nu predicție.
 Diferențele dintre metode sunt în mare parte ZGOMOT (câștigătorul e instabil) — vezi memoria.
 UI = **NiceGUI** (`app_nicegui.py`), pe port 8000. Lansator: `START_8000.bat`.
@@ -47,11 +47,13 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
 
 ## Benchmark (cum funcționează)
-- **180 metode** în `METHODS`, **44 familii**. Compoziție (verificată 2026-07-20): 3 de bază
+- **184 metode** în `METHODS`, **48 familii**. Compoziție (verificată 2026-08-09): 3 de bază
   în `methods.py` + **7** module de extensii — `methods_classical` (49), `methods_ml` (34),
-  `methods_coverage` (13), `methods_omnius` (1), **`methods_graph`** (31),
-  **`methods_search_649`** (29, `SEARCH_649_NEW`), **`methods_top649`** (20, `TOP649_METHODS`).
-  Minus blacklist (73) → **107 candidate**; minus curare (`curated_methods.json`) → **16**
+  `methods_coverage` (13), **`methods_graph`** (31),
+  **`methods_search_649`** (29, `SEARCH_649_NEW`), **`methods_top649`** (20, `TOP649_METHODS`),
+  **`methods_math_extra`** (5, `MATH_EXTRA_METHODS`).
+  (`methods_omnius` a fost ELIMINAT — vezi nota OMNIUS de mai jos.)
+  Minus blacklist (73) → **111 candidate**; minus curare (`curated_methods.json`) → **16**
   rulate efectiv (`ALL_SPEC_METHODS`).
   Renumără cu: `python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"`
   și `python -c "import bench_all_methods as b; print(len(b.ALL_SPEC_METHODS), b.CURATION_INFO)"`.
@@ -108,6 +110,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
   din tot bench-ul, `ml_catboost`, `croston_sba`, `croston_classic`) — tăind DOAR acele 4
   se obținea deja factor ~8.9x. Restul drumului (103→16) aduce doar factorul suplimentar
   ~3.5x. Reducerea la 15 se justifică prin decorelare, nu prin viteză.
+  (Măsurătoare ISTORICĂ, 2026-07: `omnius` a fost eliminat din proiect în 2026-08-09.)
 - **Metode STRUCTURAL obligatorii în `active`** (`curated.REQUIRED_METHODS`):
   `random` și `frequency`. `frequency` = `decision.SAFE_FALLBACK_SCORER`. `random` NU e
   candidat de producție (`decision.EXCLUDED_FROM_PRODUCTION`) dar e indispensabil ca
@@ -152,9 +155,12 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 ## Decizii/feature-uri importante (acumulate)
 - **Pool max 16** (UI input + clamp la load) — ca inversarea să meargă pe toate jocurile (univers mic la 5/40=40, joker=45).
 - **Auto-invert** = 2 treceri: Pool 1 normal, apoi Pool 2 = re-rulare cu `manual_blacklist=Pool1` (excludere strictă, „Hard Enforcement"). UI afișează AMBELE pool-uri. Dacă pool prea mare → engine sare inversarea (audit.manual_inversion.skipped) → UI avertizează că Pool 2 = Pool 1.
-- **OMNIUS — biletul NU mai există** (2026-07): a fost scos din UI, din walk-forward și din engine.
-  - Ce a rămas: metoda de scoring **`omnius`** din registry-ul de bench (`methods_omnius.py`, family `meta-adaptive`) — meta-selector care ponderează toate metodele matematice; e un scorer normal, la fel ca oricare altul.
-  - Ce a dispărut: `_omnius_for_pool` (**funcție inexistentă — nu o căuta**), `engine._last_pool_scores`, `audit['omnius_pool_scores']`, `omnius_hits`/`omnius_ticket` din flat-ul WF. `pick_omnius_ticket` mai există în `methods_omnius.py` dar **nu are call-site** — nu o reintroduce în pipeline.
+- **OMNIUS — ELIMINAT COMPLET** (biletul în 2026-07, metoda de scoring în 2026-08-09).
+  - **Modulul `methods_omnius.py` NU MAI EXISTĂ** — nu-l căuta, nu-l reintroduce. Odată cu el au dispărut `score_omnius`, `pick_omnius_ticket`, `_omnius_candidates` și familia `meta-adaptive` (azi zero metode).
+  - **De ce a fost scos** (motiv de CORECTITUDINE, nu de gust): `_omnius_candidates()` își lua candidații direct din `METHODS`, filtrând doar printr-un denylist propriu (`random`, `omnius`, `time_llm`) + câteva familii — **fără să citească `disabled_methods.json` sau `curated_methods.json`**. Măsurat: pondera intern **149 de metode, din care 50 BLACKLISTATE**, adică repunea în pool-ul de producție metode legendate ca slabe → **încălca regula de aur 6**, și ocolea complet curarea (doar 12 din cele 17 curate erau printre candidați). Dacă vreodată reintroduci un meta-selector, **filtrează-i candidații prin blacklist + curare**.
+  - Performanța nu-l justifica oricum: locul 6/17 la `joker_urna1` k12, `Wilson_lb = 0.1052` identic cu `ml_logistic`, dar **13.44 s/fereastră vs 0.15** (89% din bench-ul de Joker, 26 din 29 s de generare).
+  - Ce a dispărut mai devreme, odată cu biletul: `_omnius_for_pool` (**funcție inexistentă — nu o căuta**), `engine._last_pool_scores`, `audit['omnius_pool_scores']`, `omnius_hits`/`omnius_ticket` din flat-ul WF.
+  - ⚠️ `best_methods.json` generat ÎNAINTE de eliminare încă listează `omnius` în ensemble-urile Joker (k8/k11/k12/k13). Nu crapă: `method_selector.get_ensemble_for_game` sare membrii necunoscuți cu WARNING și renormalizează ponderile (3 membri → 2, ~50/50). Dispare de tot la primul Re-Bench.
   - `loto_enterprise/core/walk_forward_adapter.py` → `build_retrospective_pool_hits_flat` păstrează un parametru `omnius_ticket` **IGNORAT** (compat pt call-site-uri; UI-ul pasează `[]` POZIȚIONAL, deci ștergerea parametrului cere ștergerea simultană a celor două argumente din `app_nicegui.py`, altfel TypeError).
   - **NU re-adăuga afișarea biletului OMNIUS** — e o decizie deliberată a utilizatorului.
 - **sim_depth PER JOC** la Auto-Pilot (`_build_config_json(sim_depth_per_game)`); manual = slider global.
@@ -173,7 +179,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - **Tie-break canonic — `loto_enterprise/core/ranking.rank_by_score`** (sursă UNICĂ de adevăr).
   Regula: sortare DESCRESCĂTOARE după tripletul `(scor, freq, număr)`, unde `freq` e OPȚIONAL (toate call-site-urile actuale pasează `None` → 0.0 pentru toți). „Număr mare întâi" evită degenerarea „1,2,3…K" la scoruri egale.
   ⚠️ **Precondiție: scoruri FINITE.** Regula nu se aplică deloc la `NaN`: comparația de tuple face scurt-circuit pe primul element, deci tie-break-ul pe număr nu mai intră niciodată, iar rezultatul devine dependent de ORDINEA DE INSERARE în dict (verificat: același conținut inserat în altă ordine dă alt top-3; la all-NaN, ordinea returnată e pur și simplu ordinea dictului). Nici `_normalize` din registry nu filtrează NaN — un singur NaN otrăvește tot dict-ul (`vmin`/`vmax` devin NaN). **Metodă nouă = garantează scoruri finite.**
-  Deleagă efectiv la ea: bench (`runner._top_k`) și producție (`pool_selection.select_pool_from_scores`) — singurele două căi ACTIVE. `methods_omnius.pick_omnius_ticket` deleagă și ea, dar e **cod MORT** (fără call-site, vezi nota OMNIUS mai sus) — nu conta pe ea ca al treilea consumator. Înainte existau 3 tie-break-uri divergente → pool-ul VALIDAT de bench diferea de cel GENERAT (6/16 numere pe un scorer cu 2 nivele).
+  Deleagă efectiv la ea: bench (`runner._top_k`) și producție (`pool_selection.select_pool_from_scores`) — singurele două căi ACTIVE (al treilea consumator istoric, `pick_omnius_ticket`, a dispărut odată cu `methods_omnius.py`). Înainte existau 3 tie-break-uri divergente → pool-ul VALIDAT de bench diferea de cel GENERAT (6/16 numere pe un scorer cu 2 nivele).
   ⚠️ **REGULĂ OBLIGATORIE pentru cod nou**: orice selecție „top-N după scor" (bench, engine, UI, analiză) apelează `rank_by_score` — **nu scrie `sorted(..., reverse=True)[:k]` propriu**. (Codul EXISTENT nu e încă 100% migrat — vezi excepțiile enumerate la regula de aur 8.) Modulul e pur stdlib (importabil din `benchmark/` și `core/`, picklabil pt ProcessPoolExecutor). Filtrarea (blacklist, interval `1..max_num`) rămâne la apelant.
   `pool_selection.select_pool_from_scores` = top-N pur, fără diversificare decade/paritate și fără tie-break pe frecvență (scoase 2026-07). `draw_matrix` a rămas în semnătură doar pt compat — NU influențează selecția.
 - **Final pipeline** (`_finalize_pipeline`, după WF): mail rezultate (`mail_on_complete` + `mail_config.json` gitignored / env SMTP) + auto-shutdown (`shutdown_on_complete`, `shutdown /s /t 60` anulabil). Fiecare pas izolat în try/except; log `[FINALIZE]`/`[MAIL]`/`[SHUTDOWN]`.

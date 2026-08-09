@@ -9,7 +9,7 @@ Each scorer is a callable that accepts:
 with scores normalized to [0, 1] (higher = more likely to be drawn next).
 
 A METHODS dict at the bottom registers every available method. Extra CPU
-methods (classical / ML / coverage / graph / omnius) are merged from extension
+methods (classical / ML / coverage / graph) are merged from extension
 modules at import time.
 
 NOTĂ: tot GPU-ul a fost eliminat din aplicație — nu mai există metode
@@ -102,9 +102,13 @@ METHODS: dict[str, tuple[Callable, str, bool, str]] = {
 
 # ============================================================================
 # EXTENSIONS — extra CPU methods loaded from methods_classical.py, methods_ml.py,
-# methods_coverage.py, methods_omnius.py, methods_graph.py. Loaded lazily; if any
-# module is missing or import fails, the loader logs and continues.
+# methods_coverage.py, methods_graph.py. Loaded lazily; if any module is missing
+# or import fails, the loader logs and continues.
 # (Modulele GPU — torch_extra / torch_advanced / geometry — au fost eliminate.)
+# ⚠️ methods_omnius a fost ELIMINAT (2026-08-09): meta-selectorul își lua candidații
+# direct din METHODS, fără să citească disabled_methods.json sau curated_methods.json
+# → repunea în pool 50 de metode BLACKLISTATE, încălcând regula de aur 6. NU-l
+# reintroduce fără să-i filtrezi candidații prin blacklist + curare.
 # ============================================================================
 def _load_extra_methods() -> None:
     """Merge METHODS dicts from CPU extension modules into the global METHODS."""
@@ -125,11 +129,6 @@ def _load_extra_methods() -> None:
         extensions.append(("methods_coverage", methods_coverage.COVERAGE_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_coverage not loaded: {exc}")
-    try:
-        from . import methods_omnius
-        extensions.append(("methods_omnius", methods_omnius.OMNIUS_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_omnius not loaded: {exc}")
     try:
         from . import methods_graph
         extensions.append(("methods_graph", methods_graph.GRAPH_METHODS))

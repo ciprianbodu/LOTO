@@ -1931,8 +1931,6 @@ def _method_library(name: str, family: str = "") -> str:
             return "statsmodels"
         if f.startswith("ensemble"):
             return "ansamblu (mix de metode)"
-        if f == "meta-adaptive":
-            return "OMNIUS (meta-învățare)"
         if f == "coverage":
             return "greedy set-cover (numpy)"
         if f.startswith("graph"):
