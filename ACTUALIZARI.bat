@@ -184,6 +184,13 @@ where git >nul 2>&1
 if not errorlevel 1 call :push_istoric
 echo.
 
+echo [2c/4] Curatare cache walk-forward stale (versiuni vechi CACHE_VERSION)...
+"%VENV_PY%" -c "import sys; sys.path.insert(0, '.'); from loto_enterprise.core.walk_forward_adapter import purge_stale_wf_cache, CACHE_VERSION; r=purge_stale_wf_cache(dry_run=False); print('  CACHE_VERSION curenta:', CACHE_VERSION); print('  Fisiere stale gasite:', r.get('n_files', 0), '('+str(r.get('mb', 0))+' MB)'); print('  Sterse efectiv:', r.get('n_deleted', 0))" 2>nul
+if errorlevel 1 (
+    echo   [WARN] Purge cache WF esuat - continui ^(import/disk?^).
+)
+echo.
+
 echo [3/4] Verificare freshness best_methods.json...
 "%VENV_PY%" -c "import sys; sys.path.insert(0, '.'); from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation; r = check_freshness(); print('Overall recommendation:', aggregate_recommendation(r)); [print(f'  {gk}: {rep.status} (delta {rep.row_delta_pct:.1f}%%)') for gk, rep in r.items()]" 2>nul
 if errorlevel 1 (

@@ -340,9 +340,6 @@ _PCTS = "10,30,60,100"  # 4 ferestre: 10% (zona unde 4+ a ieșit cel mai sus în
 # → rețelele grele fac 25-30 min/fold); 100% e cea mai ieftină. Tunabil aici.
 
 
-def run_full_rebench() -> None:
-    _launch_bench(["--no-rich", "--percentiles", _PCTS], "FULL Re-Bench")
-
 def _on_bench_finished() -> None:
     """Re-Bench (unic) terminat → pornește Auto-Pilot automat (dacă e bifat)."""
     if (SETTINGS.get("autopilot_after_bench") and not STATE.get("active_job_id")
@@ -519,25 +516,6 @@ def _hw_telemetry_html() -> str:
     return _HW_CACHE["html"]
 
 
-def _bench_progress() -> tuple[float, str]:
-    """Compat: progresul bench-ului principal (CPU/normal) din bench_full.log."""
-    start_ts = None
-    if BENCH_PID_FILE.exists():
-        try:
-            parts = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
-            if len(parts) > 1:
-                start_ts = float(parts[1])
-        except Exception:  # noqa: BLE001
-            pass
-    r = _bench_progress_from(BENCH_LOG_FILE, start_ts)
-    if r is None:
-        return 0.0, "Bench pornește..."
-    return r
-
-
-# --------------------------------------------------------------------------- #
-# Cancel
-# --------------------------------------------------------------------------- #
 def cancel_all() -> None:
     try:
         cancel_pending_running_jobs("Oprit de utilizator")
@@ -1145,7 +1123,7 @@ def _fmt_g_range(g) -> str:
     return str(g)
 
 
-def _render_audit(audit: dict, final_pool: set) -> None:
+def _render_audit(audit: dict) -> None:
     mi = (audit.get("manual_inversion") or {}).get("enforced_violations_fixed")
     if mi:
         rm = ", ".join(str(n) for n in mi.get("removed", [])) or "(none)"
@@ -1155,37 +1133,10 @@ def _render_audit(audit: dict, final_pool: set) -> None:
     cf = audit.get("consecutive_filter")
     if cf:
         ui.markdown("⚠️ **Intervenție Filtru Anti-Secvență:**\n" + "\n".join(f"- {m}" for m in cf)).classes("text-warning")
-    if audit.get("kept_sequences"):
-        ui.markdown("ℹ️ **Verificare Anti-Secvență:**\n" + "\n".join(f"- {m}" for m in audit["kept_sequences"])).classes("text-info")
-
-    bw = audit.get("bench_winner") or {}
-    scorer_lbl = (f"{next(iter(bw.values())).get('method','?').upper()} (bench winner)" if bw else "frecvență")
-
-    tex = audit.get("timesfm_excluded")
-    if tex:
-        s = ", ".join(f"{n} (inactiv {d}%)" for n, d in tex.items())
-        msg = f"🚫 **{scorer_lbl}** a exclus {len(tex)} numere din Urna 1: {s}"
-        tjk = audit.get("timesfm_excluded_joker")
-        if tjk:
-            sj = ", ".join(f"{n} (inactiv {d}%)" for n, d in tjk.items())
-            msg += f"\n\n🚫 și {len(tjk)} numere din Urna 2 (Joker): {sj}"
-        ui.markdown(msg).classes("text-negative")
-
-    af = audit.get("anomaly_filter")
-    if af:
-        ui.markdown(f"🔍 **Filtru anti-anomalie (scor statistic):** din {af['original_count']} variante au rămas "
-                    f"**{af['final_count']}** (threshold {af['threshold']}).").classes("text-positive")
-
-    sm = audit.get("smart_selector")
-    if sm:
-        scores = sm.get("final_scores", {})
-        ui.markdown(f"🧠 **Smart Logic:** {sm.get('method','')}").classes("text-info")
-        kept = [n for n in sm.get("kept_numbers", []) if n in final_pool]
-        repl = [n for n in sm.get("replaced_numbers", []) if n not in final_pool]
-        if kept:
-            ui.markdown("✅ Păstrate: " + ", ".join(f"{n} ({scores.get(n,0):.3f})" for n in kept)).classes("text-caption")
-        if repl:
-            ui.markdown("🔄 Înlocuite: " + ", ".join(str(n) for n in repl)).classes("text-caption")
+    # Aici erau randate `timesfm_excluded`, `anomaly_filter`, `smart_selector` și
+    # `kept_sequences`. Niciuna dintre chei nu mai are PRODUCĂTOR în engine (filtrele
+    # TimesFM, Smart Selector și anti-anomalie au fost scoase din pipeline), deci
+    # ramurile nu se mai executau niciodată.
 
 
 def _render_stages(audit: dict) -> None:
@@ -1747,30 +1698,19 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         ui.label(f"Variante simple: {len(variants)}")
         # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
-        # pe cel puțin un bilet. <100% poate avea DOUĂ cauze diferite, pe care
-        # le distingem explicit (altfel utilizatorul crede că are garanție 4/4
-        # dar nu o are, sau nu știe ce să schimbe ca s-o recapete):
-        #   1. limita "Variante maxime" a tăiat wheeling-ul înainte de acoperire completă.
-        #   2. filtrul anti-anomalie a eliminat bilete DUPĂ wheeling (coverage_pct
-        #      recalculat pe setul final — vezi loto_engine.py run_institutional_pipeline).
+        # pe cel puțin un bilet. Singura cauză rămasă pentru <100% e limita de
+        # variante: nu mai există niciun filtru care să elimine bilete DUPĂ wheeling
+        # (a doua ramură, pe `audit.anomaly_filter`, nu se mai executa niciodată —
+        # engine-ul nu mai scrie cheia).
         _cov = (data.get("context") or {}).get("coverage_pct")
         if _cov is not None:
             if float(_cov) >= 100.0:
                 ui.html(render_html_safe(t"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>"))
             else:
-                _anomaly = (data.get("audit") or {}).get("anomaly_filter") or {}
-                _cov_before = _anomaly.get("coverage_pct_before")
-                if _cov_before is not None and float(_cov_before) > float(_cov):
-                    _removed = int(_anomaly.get("original_count", 0)) - int(_anomaly.get("final_count", 0))
-                    reason = (
-                        f"filtrul anti-anomalie a eliminat {_removed} variante după wheeling "
-                        f"(acoperire inițială {float(_cov_before):.1f}% → {float(_cov):.1f}%)"
-                    )
-                else:
-                    reason = (
-                        "limita «Variante maxime» a tăiat garanția — "
-                        "pune 0 = nelimitat pentru garanție completă"
-                    )
+                reason = (
+                    "limita «Variante maxime» a tăiat garanția — "
+                    "pune 0 = nelimitat pentru garanție completă"
+                )
                 ui.html(render_html_safe(
                     t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
                     t"<span style='opacity:.7'>({reason})</span>"
@@ -1840,9 +1780,8 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                  f"(g_range={_fmt_g_range(data.get('g_range'))})").classes("text-caption")
 
     audit = data.get("audit") or {}
-    final_pool = set(int(x) for x in pool)
     if audit:
-        _render_audit(audit, final_pool)
+        _render_audit(audit)
         _render_adaptive(audit)
 
     _render_cost(game, data)
@@ -2519,18 +2458,6 @@ def _parse_draw_date(s):
     return None
 
 
-def _gap_days_map(date_strs):
-    """DEPRECATED helper — folosește `_hit_gap_rows` (gap pe secvența de hituri)."""
-    parsed = [(s, _parse_draw_date(s)) for s in date_strs]
-    valid = sorted({d for _, d in parsed if d is not None})
-    gap_by_date = {}
-    prev = None
-    for d in valid:
-        gap_by_date[d] = (d - prev).days if prev is not None else None
-        prev = d
-    return {s: (gap_by_date.get(d) if d is not None else None) for s, d in parsed}
-
-
 def _hit_gap_rows(items: list[tuple], today=None) -> list[dict]:
     """Construiește gap-uri pe secvența de hituri (draw_index), nu pe date unice.
 
@@ -2574,13 +2501,6 @@ def _hit_gap_rows(items: list[tuple], today=None) -> list[dict]:
             gap_txt = f"{g} zile" if g != 1 else "1 zi"
         rows_out.append((di, d, gap_txt))
     return rows_out
-
-
-def _fmt_gap(g) -> str:
-    """Formatează golul în zile pentru afișare în tabel."""
-    if g is None:
-        return "—"
-    return f"{g} zile" if g != 1 else "1 zi"
 
 
 def _bench_target() -> int:
@@ -3249,72 +3169,6 @@ def _new_draws_summary():
 
 
 @ui.refreshable
-def analysis_panel() -> None:
-    pool = int(SETTINGS["pool_size_val"])
-
-    # --- Status freshness ---
-    try:
-        from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation
-        reports = check_freshness()
-        rec = aggregate_recommendation(reports)
-        rec_lbl = {"use_cache": "✅ Cache valid — fără re-bench",
-                   "quick_rebench": "🟡 Re-bench recomandat (drift ușor)",
-                   "full_rebench": "🔴 Re-bench recomandat (drift mare)"}.get(rec, rec)
-        ui.label(f"Freshness benchmark: {rec_lbl}").classes("text-bold")
-        for gk, r in reports.items():
-            ui.label(f"  • {gk}: {getattr(r, 'status', '?')} "
-                     f"(rânduri {getattr(r,'current_rows','?')} vs cache {getattr(r,'cached_rows','?')})").classes("text-caption")
-    except Exception as exc:  # noqa: BLE001
-        ui.label(f"Freshness indisponibil ({exc}).").classes("text-caption")
-
-    # --- Decizie benchmark per joc ---
-    ui.label("Decizie benchmark (scorer optim per joc — librărie):").classes("text-bold mt-2")
-    try:
-        from loto_enterprise.core.method_selector import recommend_optimal_config
-        any_dec = False
-        for lbl, gk in GK_MATRIX.items():
-            ps = 1 if gk == "joker_urna2" else pool
-            cfg = recommend_optimal_config(gk, ps)
-            if cfg and not cfg.get("fallback"):
-                any_dec = True
-                m = cfg.get("scorer", "?")
-                fam = str(cfg.get("family", "") or "")
-                lib = _method_library(m, fam)
-                with ui.row().classes("items-center gap-2"):
-                    ui.label(f"  • {lbl} (K={ps}):").classes("text-caption")
-                    ui.label(f"{m} @ {cfg.get('sim_depth_pct')}% "
-                             f"(avg {cfg.get('avg_hits', 0):.3f}, BL={cfg.get('use_blacklist')}) · {lib}").classes("text-caption")
-        if not any_dec:
-            ui.label("  Fără decizie încă — rulează un Re-Bench.").classes("text-caption text-warning")
-    except Exception as exc:  # noqa: BLE001
-        ui.label(f"  Decizie indisponibilă ({exc}).").classes("text-caption")
-
-    # --- Matrice walk-forward onestă (din bench folds) ---
-    try:
-        from loto_enterprise.benchmark.matrix_reader import load_folds, summary_per_game
-        folds = load_folds()
-        if folds is not None and not folds.empty:
-            with ui.expansion("🔬 Matrice Walk-Forward Onestă (joc × fereastră × model)", value=False).classes("w-full"):
-                ui.label("Celule = avg hits/extragere pe ferestre regresive 10-100% (fără data leak). Verde = mai mare.").classes("text-caption")
-                for lbl, gk in GK_MATRIX.items():
-                    ps = 1 if gk == "joker_urna2" else pool
-                    s = summary_per_game(folds, gk, ps)
-                    if not s.get("available"):
-                        continue
-                    _bm = s["best_method"]
-                    _lib = _method_library(_bm)
-                    ui.label(f"{lbl} (K={ps}) — top: {_bm} (avg={s['best_mean']:.3f}) · {_lib}").classes("text-bold mt-1")
-                    _render_matrix_html(s["matrix"])
-        else:
-            ui.label("Matrice walk-forward indisponibilă — rulează un benchmark.").classes("text-caption")
-    except Exception as exc:  # noqa: BLE001
-        ui.label(f"Matrice indisponibilă ({exc}).").classes("text-caption")
-
-
-ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
-SUPPORTED_POOLS = set(range(6, 17))  # 6..16 (pool max actual; intrari >16 = stale vechi)
-
-
 def _clean_stale_adaptive(stale_keys) -> None:
     try:
         from ui_shared import file_lock

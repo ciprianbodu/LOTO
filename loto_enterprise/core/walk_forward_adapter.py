@@ -362,19 +362,12 @@ def build_retrospective_pool_hits_flat(
     game_type: str,
     pool_numbers: list[int],
     variants: list,
-    omnius_ticket: list[int] | None = None,  # PARAMETRU MORT — vezi docstring
 ) -> tuple[list[WalkForwardResult], dict]:
     """Istoric hits Pool 2 fără walk-forward onest.
 
     Folosește ACELEAȘI extrageri ca WF Pool 1, dar pool-ul + wheel-ul CURENT
     (generat azi). Rapid (secunde): nu regenerează pipeline-ul la fiecare pas.
     Informativ pentru plasa de siguranță — NU înlocuiește validarea WF Pool 1.
-
-    ⚠️ `omnius_ticket` e IGNORAT COMPLET: biletul OMNIUS a fost scos din UI și din
-    walk-forward (2026-07), iar corpul funcției nu-l atinge nicăieri. NU-l pasa
-    crezând că influențează rezultatul — nu o face. E păstrat DOAR ca poziția a
-    6-a să nu crape apelanții vechi (înainte pasau `[]` pozițional). De șters din
-    semnătură când nu mai există niciun call-site cu 6 argumente în istoric/repo.
     """
     from loto_enterprise.core.backtesting import LotoBacktester
 
