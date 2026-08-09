@@ -60,12 +60,25 @@ import html as _html_module
 from string.templatelib import Interpolation, Template
 
 
+_CONVERSIONS = {"a": ascii, "r": repr, "s": str}
+
+
 def render_html_safe(tmpl: Template) -> str:
-    """Procesează t-string (PEP 750) cu escape HTML pe interpolări dinamice."""
+    """Procesează t-string (PEP 750) cu escape HTML pe interpolări dinamice.
+
+    Spre deosebire de f-string-uri, la t-string-uri `format_spec` și `conversion`
+    NU se aplică singure — sunt doar metadate pe Interpolation, iar procesorul
+    trebuie să le aplice explicit. Fără `format()`, un `{x:.1f}` se randa cu toată
+    coada binară a float-ului (0.5244800000000001 în loc de 0.5).
+    """
     parts: list[str] = []
     for piece in tmpl:
         if isinstance(piece, Interpolation):
-            parts.append(_html_module.escape(str(piece.value), quote=True))
+            value = piece.value
+            if piece.conversion:
+                value = _CONVERSIONS[piece.conversion](value)
+            text = format(value, piece.format_spec or "")
+            parts.append(_html_module.escape(text, quote=True))
         else:
             parts.append(piece)
     return "".join(parts)

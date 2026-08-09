@@ -1,12 +1,15 @@
 {
   "_meta": {
     "created": "2026-07-30",
-    "updated": "2026-07-30",
+    "updated": "2026-08-09",
     "criterion": "6/49 medie/extragere >= 0.75 din ~112 metode CPU; apoi |Spearman| < 0.94",
     "note": "gol/absent = toate metodele. random+frequency obligatorii (decision gate).",
+    "removed_2026_08_09": {
+      "omnius": "Meta-selector care isi ia candidatii direct din registry-ul METHODS, fara sa citeasca disabled_methods.json sau curated_methods.json: pondera intern 149 de metode, din care 50 BLACKLISTATE (incalca regula de aur 6, reintroducea in pool metode legendate ca slabe) si doar 12 din setul curat. Performanta nu il justifica: locul 6/17 la joker k12, Wilson_lb 0.1052 = identic cu ml_logistic, dar 13.44 s/fereastra vs 0.15 (89% din timpul de bench pe joker, 26 din 29 s de generare)."
+    },
     "n_scanned": 112,
     "n_passed_avg": 38,
-    "n_active": 17,
+    "n_active": 16,
     "threshold_avg_hits": 0.75,
     "threshold_spearman": 0.94
   },
@@ -18,7 +21,6 @@
     "sum_affinity",
     "649_wilson_lb",
     "649_katz25_gap75_b",
-    "omnius",
     "649_decade_hot",
     "nmf_cooc",
     "649_mod7_hot",
