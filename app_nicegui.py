@@ -197,7 +197,10 @@ def _ordered_wf_game_items(outs):
 
 
 def _iter_wf_jobs(results_bundle):
-    """(fname, game_label, data, auto_invert=False) — un singur pool (fără inversare)."""
+    """(fname, game_label, data, auto_invert) — doar Pool 1.
+
+    Pool 2 = plasă de siguranță, fără walk-forward (evită dublarea timpului).
+    """
     for fname, outs in results_bundle:
         for g_label, data in _ordered_wf_game_items(outs):
             yield fname, g_label, data, False
@@ -235,7 +238,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "smart_reduction": False,
             "sim_depth_pct": sd,
             "pure_bench_mode": True,
-            "auto_invert": False,  # mecanism scos 2026-08-09; cheia rămâne pt compat payload
+            "auto_invert": bool(SETTINGS["auto_invert_val"]),
             "bench_hit_target": int(SETTINGS.get("bench_hit_target", 3)),
         }
         datasets_cfg.append({
@@ -560,7 +563,7 @@ def _start_walk_forward() -> None:
         _finalize_pipeline()  # fără rezultate → nu rulează WF; mail deja trimis mai sus, doar shutdown
         return
     results_bundle, _ = results
-    # Walk-forward: un singur pool per joc (auto-invert scos).
+    # Walk-forward: doar Pool 1 (Pool 2 = inversare, fără validare istorică).
     _pfx = ""  # bench unic → fără prefix de secțiune
 
     def _worker_wf() -> None:
@@ -608,7 +611,7 @@ def _start_walk_forward() -> None:
                 if df_source is None:
                     continue
                 done += 1
-                _pool_lbl = "Pool"
+                _pool_lbl = "Pool 2" if wf_invert else "Pool 1"
                 base = (done - 1) / max(1, total)
                 STATE["wf_status"] = f"📊 Walk-forward {_pool_lbl} {done}/{total}: {g_label}..."
                 STATE["wf_progress"] = base
@@ -665,6 +668,26 @@ def _start_walk_forward() -> None:
                             # pool-ul REAL cu care a rulat WF (pt afișare corectă în istoric)
                             "pool_size": meta.get("pool_size"),
                         }
+                    # Pool 2: istoric retrospectiv (pool+wheel curent), fără WF dublu.
+                    if (not wf_invert and data.get("auto_invert") and data.get("phase1")
+                            and flat):
+                        try:
+                            from loto_enterprise.core.walk_forward_adapter import (
+                                build_retrospective_pool_hits_flat,
+                            )
+                            _p2rk = f"{_pfx}{fname}_{g_label}_p2"
+                            _flat_p2, _meta_p2 = build_retrospective_pool_hits_flat(
+                                flat,
+                                df_source,
+                                g_label,
+                                list(data.get("hard_core") or []),
+                                list(data.get("variants") or []),
+                            )
+                            with STATE_LOCK:
+                                STATE["retro"][_p2rk] = _flat_p2
+                                STATE.setdefault("retro_meta", {})[_p2rk] = _meta_p2
+                        except Exception as _p2exc:  # noqa: BLE001
+                            logger.warning("[WF] retrospectiv Pool 2 %s: %s", g_label, _p2exc)
                 except Exception as exc:  # noqa: BLE001
                     logger.error("walk-forward %s: %s", g_label, exc)
                 STATE["wf_progress"] = done / max(1, total)
@@ -739,7 +762,7 @@ def status_panel() -> None:
             _save_settings()
             unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
-            # Mail-ul conține DOAR pool (fără stats WF, vezi _build_mail_body) →
+            # Mail-ul conține DOAR Pool 1/Pool 2 (fără stats WF, vezi _build_mail_body) →
             # numerele sunt deja fixate acum; nu are rost să aștepte walk-forward-ul de
             # raportare (poate dura minute/ore). Trimis o singură dată (claimed == True mai sus).
             try:
@@ -831,7 +854,7 @@ def _next_draw_date() -> str:
 
 
 def _build_mail_body() -> str:
-    """Conținut CONCIS pentru mail: data extragerii + pool per joc —
+    """Conținut CONCIS pentru mail: data extragerii + Pool 1 / Pool 2 per joc —
     DOAR numerele, fără raportul complet."""
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -848,17 +871,21 @@ def _build_mail_body() -> str:
     games = sorted(((fn, g, d) for fn, outs in rb for g, d in outs.items()),
                    key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99))
     for fn, g, d in games:
-        # Legacy auto_invert: phase1 era pool-ul normal — preferăm asta dacă există.
-        pool = d["phase1"] if d.get("phase1") else d
-        jk = sorted(int(x) for x in (pool.get("hard_core_joker") or []))
+        inv = bool(d.get("auto_invert") and d.get("phase1"))
+        p1 = d["phase1"] if inv else d
+        jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))
         lines.append(f"=== {g.upper()} ===")
         info = _last_csv_draw(fn)
         if info:
             _ds, _dn, _dj = info
             _draw = " ".join(str(x) for x in _dn) + (f" + joker {_dj}" if _dj is not None else "")
             lines.append(f"ultima extragere CSV: {_ds or '?'} → {_draw}")
-        lines.append("POOL:     " + _nums(pool.get("hard_core") or [])
-                     + (f"  | joker: {_nums(jk)}" if jk else ""))
+        lines.append("POOL 1:   " + _nums(p1.get("hard_core") or [])
+                     + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
+        if inv:
+            jk2 = sorted(int(x) for x in (d.get("hard_core_joker") or []))
+            lines.append("POOL 2:   " + _nums(d.get("hard_core") or [])
+                         + (f"  | joker: {_nums(jk2)}" if jk2 else ""))
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -871,7 +898,7 @@ def _send_test_email() -> None:
         return
     body = ("Test e-mail Loto Enterprise — configurarea funcționează ✅\n"
             f"Următoarea extragere: {_next_draw_date()}\n"
-            "La finalul bench-ului vei primi: data + pool-urile.")
+            "La finalul bench-ului vei primi: data + Pool 1 / Pool 2.")
     try:
         send_email(cfg, "🎰 Loto — mail de test", body)
         ui.notify(f"📧 Mail de test trimis la {cfg['mail_to']}. Verifică inbox-ul.", type="positive")
@@ -920,7 +947,7 @@ def _finalize_pipeline() -> None:
     """La finalul walk-forward-ului (sau ramura fără rezultate): oprește PC-ul (dacă
     e cerut). Mailul NU se trimite aici — pleacă imediat după generare (vezi
     status_panel, ramura COMPLETED), fiindcă nu are conținut dependent de WF
-    (`_build_mail_body` = doar pool) și n-are rost să aștepte minute/ore
+    (`_build_mail_body` = doar Pool 1/Pool 2) și n-are rost să aștepte minute/ore
     de validare retroactivă doar ca notificare să ajungă mai târziu."""
     logger.info("[FINALIZE] post-walk-forward: shutdown_on_complete=%s",
                 SETTINGS.get("shutdown_on_complete"))
@@ -1097,6 +1124,12 @@ def _fmt_g_range(g) -> str:
 
 
 def _render_audit(audit: dict) -> None:
+    mi = (audit.get("manual_inversion") or {}).get("enforced_violations_fixed")
+    if mi:
+        rm = ", ".join(str(n) for n in mi.get("removed", [])) or "(none)"
+        ad = ", ".join(str(n) for n in mi.get("added_replacements", [])) or "(none)"
+        ui.markdown(f"🛡️ **Hard Enforcement Inversare:** scoase {rm}; înlocuite cu {ad}.").classes("text-info")
+
     cf = audit.get("consecutive_filter")
     if cf:
         ui.markdown("⚠️ **Intervenție Filtru Anti-Secvență:**\n" + "\n".join(f"- {m}" for m in cf)).classes("text-warning")
@@ -1567,11 +1600,17 @@ def _build_report() -> str:
         for g, d in _ordered_game_items(outs):
             out.append(f"\n=================  JOC: {g.upper()}  =================")
             flat = STATE["retro"].get(f"{fn}_{g}")
-            pool = d["phase1"] if d.get("phase1") else d
-            _dump_pool(pool, None)
-            wf = _wf_summary(flat)
-            if wf:
-                out.append(f"  Walk-forward: {wf}")
+            if d.get("auto_invert") and d.get("phase1"):
+                _dump_pool(d["phase1"], "🟢 POOL 1 — normal (cu validare walk-forward)")
+                wf = _wf_summary(flat)
+                if wf:
+                    out.append(f"  Walk-forward (Faza 1): {wf}")
+                _dump_pool(d, "🔄 POOL 2 — inversat (numerele excluse din Pool 1; pe șansă, fără validare)")
+            else:
+                _dump_pool(d, None)
+                wf = _wf_summary(flat)
+                if wf:
+                    out.append(f"  Walk-forward: {wf}")
     return "\n".join(out)
 
 
@@ -2520,6 +2559,36 @@ def _target_data_ready() -> bool:
         return True  # la dubiu, nu speria utilizatorul
 
 
+def _ensure_retrospective_pool2_flat(
+    fname: str, game: str, data: dict, flat_pool1, res_prefix: str = "",
+) -> None:
+    """Calculează istoric Pool 2 din WF Pool 1 + pool curent, dacă lipsește (lazy, secunde)."""
+    if not (data.get("auto_invert") and data.get("phase1") and flat_pool1):
+        return
+    rk = f"{res_prefix}{fname}_{game}_p2"
+    if STATE["retro"].get(rk):
+        return
+    df_source = None
+    for fn, df in STATE.get("datasets", []):
+        if fn == fname:
+            df_source = df
+            break
+    if df_source is None:
+        return
+    try:
+        from loto_enterprise.core.walk_forward_adapter import build_retrospective_pool_hits_flat
+        flat_p2, meta_p2 = build_retrospective_pool_hits_flat(
+            flat_pool1,
+            df_source,
+            game,
+            list(data.get("hard_core") or []),
+            list(data.get("variants") or []),
+        )
+        STATE["retro"][rk] = flat_p2
+        STATE.setdefault("retro_meta", {})[rk] = meta_p2
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("retrospectiv Pool 2 lazy %s: %s", game, exc)
+
 
 def _wf_per_draw_stats(flat) -> dict:
     """Dedup walk-forward pe extragere: pool hits_union.
@@ -2562,7 +2631,7 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         return f"{k} ({k / denom * 100:.0f}%)" if denom else "—"
 
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
-    for _m, _lbl in ((meta, "Pool"), (meta_p2, "Pool 2")):
+    for _m, _lbl in ((meta, "Pool 1"), (meta_p2, "Pool 2")):
         if _m and _m.get("partial"):
             ui.label(f"⚠️ Validare PARȚIALĂ ({_lbl}): {_m.get('n_test_draws')} din "
                      f"{_m.get('n_expected')} extrageri — extragerile CELE MAI RECENTE.").classes(
@@ -2635,7 +2704,7 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     def _net_cell(net, roi):
         return f"{net:,.0f} Lei (ROI {roi:.2f})"
 
-    rows = [{"src": f"🔥 Pool (din {_pn1})" if _pn1 else "🔥 Pool",
+    rows = [{"src": f"🔥 Pool 1 (din {_pn1})" if _pn1 else "🔥 Pool 1",
              "p3": _cell(pool3, n), "p4": _cell(pool4, n),
              "rnd": _bcell(_pn1), "tick": _tick_cell(n_tick_1, tick_avg_1, cost_1),
              "win": f"~{pool_gross:,.0f} Lei", "net": _net_cell(pool_net, roi_1)}]
@@ -2693,12 +2762,12 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
                      f"aici: NET/extragere = bilete/extragere × preț × (ROI − 1), deci scalează "
                      f"cu numărul de bilete, nu cu calitatea pool-ului.")
     else:
-        _cap += (f" Pool = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere) · "
+        _cap += (f" Pool 1 = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere) · "
                  f"NET/extragere ≈ {net_draw_1:,.1f} Lei.")
     ui.label(_cap).classes("text-caption text-grey")
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
-    _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn1)]
+    _tt_checks = [("Pool 1", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn1)]
     if per2:
         _tt_checks += [("Pool 2", sum(1 for d in per2.values() if d["pool"] >= _TT), n2, _pn2)]
     _losers = []
@@ -2751,8 +2820,8 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         f"{_star_leg}Δ pe primul rând = „acum X zile” (de la ultimul hit până azi); "
         f"pe rest = zile până la hit-ul următor mai recent."
     ).classes("text-caption text-grey mt-2")
-    _dates_table("🗓️ POOL", lambda d: d["pool"] >= 3, _pool_badge,
-                 "Pool-ul n-a prins ≥3 în istoricul walk-forward.",
+    _dates_table("🗓️ POOL 1", lambda d: d["pool"] >= 3, _pool_badge,
+                 "Pool 1 n-a prins ≥3 în istoricul walk-forward.",
                  gap_on=lambda d: d["pool"] >= _TT,
                  gap_label=f"Δ → următorul ≥{_TT} / azi")
     if per2:
@@ -2883,6 +2952,10 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
     has_wf = any(
         STATE["retro"].get(f"{res_prefix}{fn}_{g}")
         for fn, outs in results_bundle for g, _ in outs.items()
+    ) or any(
+        STATE["retro"].get(f"{res_prefix}{fn}_{g}_p2")
+        for fn, outs in results_bundle for g, d in outs.items()
+        if d.get("auto_invert") and d.get("phase1")
     )
     if not (has_folds or has_wf):
         return
@@ -2909,19 +2982,38 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 _render_bench_leaderboard(game)
 
                 # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
-                main = data.get("phase1") if data.get("phase1") else data
+                main = (data.get("phase1")
+                        if (data.get("auto_invert") and data.get("phase1")) else data)
+                # Pool-ul EFECTIV per fază (din REZULTAT, nu din SETTINGS — setarea
+                # se poate schimba după rulare): main = Pool 1; data = Pool 2 la
+                # auto-invert (altfel identic cu main).
                 _pn_main = int(main.get("pool_size") or len(main.get("hard_core") or []))
+                _pn_inv = int(data.get("pool_size") or len(data.get("hard_core") or []))
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-                if flat:
+                flat_p2 = None
+                if data.get("auto_invert") and data.get("phase1"):
+                    _ensure_retrospective_pool2_flat(fname, game, data, flat, res_prefix)
+                    flat_p2 = STATE["retro"].get(f"{res_prefix}{fname}_{game}_p2")
+                if flat or flat_p2:
                     # Deschis implicit (apare după ce termină walk-forward), dar pliabil
                     # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
                     with ui.expansion("📜 Istoric hits (walk-forward) — click pentru ascunde",
                                       value=True).classes("w-full"):
-                        _render_hits_4plus(
-                            flat, game,
-                            meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}"),
-                            pool_n=_pn_main,
-                        )
+                        if flat:
+                            _render_hits_4plus(
+                                flat, game,
+                                meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}"),
+                                flat_p2=flat_p2,
+                                meta_p2=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}_p2"),
+                                pool_n=_pn_main,
+                                pool_n_p2=_pn_inv,
+                            )
+                        elif flat_p2:
+                            _render_hits_4plus(
+                                flat_p2, game,
+                                meta=STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}_p2"),
+                                pool_n=_pn_inv,
+                            )
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
@@ -2945,9 +3037,35 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, data in _ordered_game_items(outs):
                 with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
-                    # Un singur pool. La rezultate legacy cu auto_invert, phase1 = pool-ul normal.
-                    pool = data["phase1"] if data.get("phase1") else data
-                    _render_pool_body(fname, game, pool, with_wf=False, res_prefix=res_prefix)
+                    if data.get("auto_invert") and data.get("phase1"):
+                        # AUTO-INVERT → DOUĂ pool-uri de jucat:
+                        ui.label("🟢 POOL 1 — normal (pe date; validat istoric — vezi 📊 Analiză)").classes(
+                            "text-bold text-positive text-lg mt-1")
+                        ui.label("Pariul principal: pool-ul validat istoric.").classes("text-caption")
+                        _render_pool_body(fname, game, data["phase1"], skey_suffix="_p1", with_wf=False, res_prefix=res_prefix)
+
+                        ui.separator().classes("my-3")
+                        # Inversare neaplicată? (pool prea mare → Pool 2 = Pool 1)
+                        _p1 = set(int(x) for x in (data["phase1"].get("hard_core") or []))
+                        _p2 = set(int(x) for x in (data.get("hard_core") or []))
+                        _mi = (data.get("audit") or {}).get("manual_inversion") or {}
+                        if _p2 == _p1 or _mi.get("skipped"):
+                            pmax = _mi.get("pool_max_pentru_inversare")
+                            ui.label("⚠️ INVERSARE NEAPLICATĂ — Pool 2 e identic cu Pool 1!").classes(
+                                "text-bold text-negative text-lg")
+                            ui.label(
+                                f"Pool-ul ({len(_p2)}) e prea mare pentru inversare la acest joc — după "
+                                f"excluderea Pool 1 + numerele moarte nu mai rămân destule numere."
+                                + (f" Reduceți pool-ul la ≤{pmax} pentru acest joc ca să meargă inversarea." if pmax else "")
+                                + " Momentan Pool 2 NU e o alternativă reală."
+                            ).classes("text-caption text-negative")
+                        ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
+                            "text-bold text-warning text-lg")
+                        ui.label("Plasă de siguranță — istoric retrospectiv Pool 2 "
+                                 "în 📊 Analiză (fără WF dublu).").classes("text-caption")
+                        _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False, res_prefix=res_prefix)
+                    else:
+                        _render_pool_body(fname, game, data, with_wf=False, res_prefix=res_prefix)
 
 
 
@@ -3236,10 +3354,11 @@ def main_page() -> None:
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
         ).classes("w-full")
-        ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric): "
-                 "Joker → 5/40 → 6/49 (6/49 ultim). "
+        ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric) rulează doar Pool 1: "
+                 "Joker → 5/40 → 6/49 (6/49 ultim). Pool 2 nu intră în WF. "
                  "WF paralel (~80% CPU) — de obicei minute, nu ore. Bugetul e plafon de siguranță."
                  ).classes("text-caption text-grey")
+        _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
         _bind_save(ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete")
         ui.button("📧 Trimite mail de test", on_click=_send_test_email).props("outline no-caps size=sm").classes("text-caption")

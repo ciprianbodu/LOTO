@@ -31,18 +31,15 @@ logger = logging.getLogger(__name__)
 # ── Walk-forward paralel (stateless): ~80% nuclee CPU, ca la bench ─────────────
 _WF_CPU_FRACTION = float(__import__("os").environ.get("LOTO_WF_CPU_FRAC", "0.80"))
 _WF_PER_PROC_GB = 0.8  # engine + wheeling per proces
+_WF_PER_PROC_GB_INVERT = 1.4  # Pool 2: 2× pipeline / pas
 _WF_STEP_TIMEOUT_S = float(__import__("os").environ.get("LOTO_WF_STEP_TIMEOUT_S", "900"))
 _WF_SHARED: dict = {}
 
 
 def _wf_max_workers(auto_invert: bool = False) -> int:
-    """Procese WF: min(80% nuclee, buget RAM) — evită oversubscription BLAS.
-
-    auto_invert e IGNORAT (mecanism scos 2026-08-09); parametrul rămâne pt compat.
-    """
+    """Procese WF: min(80% nuclee, buget RAM) — evită oversubscription BLAS."""
     import os
-    del auto_invert  # no-op; păstrat în semnătură
-    per_proc = _WF_PER_PROC_GB
+    per_proc = _WF_PER_PROC_GB_INVERT if auto_invert else _WF_PER_PROC_GB
     try:
         import psutil
         avail_gb = psutil.virtual_memory().available / (1024 ** 3)
@@ -98,9 +95,9 @@ def _retroactive_step_stateless(
     smart_reduction: bool,
     auto_invert: bool = False,
 ) -> RetroactivePrediction | None:
-    """Un pas walk-forward stateless (fără feedback între pași).
+    """Un pas walk-forward stateless (fără feedback / inversiune între pași).
 
-    auto_invert e IGNORAT (manual_blacklist / Pool 2 scoase 2026-08-09).
+  auto_invert=True: Faza 1 (pool normal) → Faza 2 (manual_blacklist=Pool1), ca în UI.
     """
     if sim_idx >= len(draws) or sim_idx < 1:
         return None
@@ -111,30 +108,31 @@ def _retroactive_step_stateless(
     target_date = dates[sim_idx] if sim_idx < len(dates) else f"Draw_{sim_idx}"
     sim_date = dates[sim_idx - 1] if sim_idx > 0 else "Start"
 
-    if auto_invert:
-        logger.debug(
-            "[BACKTEST] auto_invert=True la sim_idx=%s — IGNORAT (mecanism scos).",
-            sim_idx,
+    def _run_pipeline(manual_blacklist=None):
+        eng = LotoEngine(game_type)
+        eng.data = historical_df
+        eng._build_draw_matrix()
+        eng.error_correction_map = {}
+        eng._adaptive_mode = "normal"
+        eng._adaptive_event = None
+        eng._temp_blacklist = set()
+        out_lines, _, _, _, _, _audit = eng.run_institutional_pipeline(
+            progress_cb=None,
+            pool_size=pool_size,
+            guarantee=guarantee,
+            max_variants=max_variants,
+            lookback=lookback_percent,
+            filter_consecutives=filter_consecutives,
+            smart_reduction=smart_reduction,
+            enable_adaptive_persistence=False,
+            manual_blacklist=manual_blacklist,
         )
+        return eng, out_lines
 
-    eng = LotoEngine(game_type)
-    eng.data = historical_df
-    eng._build_draw_matrix()
-    eng.error_correction_map = {}
-    eng._adaptive_mode = "normal"
-    eng._adaptive_event = None
-    eng._temp_blacklist = set()
-    lines, _, _, _, _, _audit = eng.run_institutional_pipeline(
-        progress_cb=None,
-        pool_size=pool_size,
-        guarantee=guarantee,
-        max_variants=max_variants,
-        lookback=lookback_percent,
-        filter_consecutives=filter_consecutives,
-        smart_reduction=smart_reduction,
-        enable_adaptive_persistence=False,
-    )
-    engine = eng
+    engine, lines = _run_pipeline()
+    if auto_invert:
+        pool1 = list(engine.hard_core)
+        engine, lines = _run_pipeline(manual_blacklist=pool1)
 
     actual_draw = draws[sim_idx]
     actual_set = set(actual_draw)
@@ -656,15 +654,12 @@ class LotoBacktester:
             import pickle
             from concurrent.futures import ProcessPoolExecutor, as_completed
 
-            n_workers = _wf_max_workers()
+            n_workers = _wf_max_workers(auto_invert=auto_invert)
             n_steps = len(sim_indices)
-            if auto_invert:
-                logger.info(
-                    "[BACKTEST] auto_invert cerut — IGNORAT (mecanism scos); WF pe un singur pool."
-                )
+            inv_note = " (Pool 2: 2× pipeline/pas)" if auto_invert else ""
             logger.info(
-                "[BACKTEST] Walk-forward PARALEL: %d pași pe %d procese (~%.0f%% CPU, RAM-cap)",
-                n_steps, n_workers, _WF_CPU_FRACTION * 100,
+                "[BACKTEST] Walk-forward PARALEL: %d pași pe %d procese (~%.0f%% CPU, RAM-cap)%s",
+                n_steps, n_workers, _WF_CPU_FRACTION * 100, inv_note,
             )
             for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
                 os.environ.setdefault(_tv, "1")
