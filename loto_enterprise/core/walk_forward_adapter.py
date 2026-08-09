@@ -312,7 +312,7 @@ def run_honest_walk_forward(
     logger.info(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
-        f"{' (Pool 2 / inversare)' if auto_invert else ''}"
+        f"{' (auto_invert IGNORAT)' if auto_invert else ''}"
     )
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
