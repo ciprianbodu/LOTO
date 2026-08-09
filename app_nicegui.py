@@ -2088,12 +2088,26 @@ def _render_bench_leaderboard_slice(
     has_family = "family" in sub.columns
 
     def _rate_for(grp, n):
-        """Rata de ≥n pentru o metodă (preferă coloana pe pool; sare peste NaN)."""
+        """Rata de ≥n pentru o metodă, POOLED pe n_test (preferă coloana pe pool).
+
+        Ponderarea e obligatorie, nu cosmetică: ferestrele sunt CUIBĂRITE (fiecare e
+        ultimele P% din istoric — vezi `runner.run_benchmark`), deci au dimensiuni de
+        ordine de mărime diferite (6/49: 258 / 772 / 1544 / 2492 extrageri). O medie
+        neponderată dă aceeași greutate ferestrei de 258 ca celei de 2492 și fabrică
+        astfel „lift-uri" care nu există în datele pooled — exact metrica pe care se
+        ia decizia (`_wilson_pooled_rate` / decision.py) e pooled pe n_test.
+        Fără `n_test` (folds vechi) cădem pe media neponderată, ca înainte."""
         for c in (f"rate_{n}plus_k{pool}", f"rate_{n}plus"):
-            if c in grp.columns:
-                v = float(grp[c].mean())
-                if v == v:  # nu e NaN
-                    return v
+            if c not in grp.columns:
+                continue
+            if "n_test" in grp.columns:
+                pairs = grp[[c, "n_test"]].dropna()
+                n_total = float(pairs["n_test"].sum()) if not pairs.empty else 0.0
+                if n_total > 0:
+                    return float((pairs[c] * pairs["n_test"]).sum() / n_total)
+            v = float(grp[c].mean())
+            if v == v:  # nu e NaN
+                return v
         return None
 
     # TIE-BREAK IDENTIC cu decizia (decision.py: `qualifying.sort(key=(Wilson_lb,
