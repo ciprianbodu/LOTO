@@ -169,13 +169,24 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
             return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
         chosen = [list(blocks[j]) for j in range(nb) if res.x[j] > 0.5]
         # HiGHS poate returna o soluție feasibilă NEoptimă la limita de timp →
-        # comparăm cu greedy și păstrăm wheel-ul cu mai PUȚINE bilete (ambele 100%).
+        # comparăm cu greedy. Criteriul e (ACOPERIRE, apoi bilete), nu doar numărul
+        # de bilete: greedy-ul se oprește la 1000 de iterații
+        # (`loto_engine.generate_combinatorial_wheel`), deci pe o cerere degenerată
+        # (`guarantee == pick`, unde doar sistemul complet acoperă 100%) întoarce
+        # 1001 bilete la ~33% acoperire. Comparate doar pe număr, „mai puține bilete"
+        # ar fi câștigat cu o acoperire de trei ori mai mică — iar comentariul de
+        # dinainte („ambele 100%") era fals exact în cazul ăsta.
         g_wheel, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)
-        if len(g_wheel) <= len(chosen):
-            logger.info("[WHEEL-ILP] greedy (%d) ≤ ILP (%d) → păstrez greedy", len(g_wheel), len(chosen))
+        ilp_cov = _coverage_pct(chosen, pool, guarantee)
+        g_cov = _coverage_pct(g_wheel, pool, guarantee)
+        # `>=` păstrează comportamentul vechi la egalitate (ambele 100% → greedy).
+        if (g_cov, -len(g_wheel)) >= (ilp_cov, -len(chosen)):
+            logger.info("[WHEEL-ILP] greedy (%d bilete, %.2f%%) ≥ ILP (%d bilete, %.2f%%) → păstrez greedy",
+                        len(g_wheel), g_cov, len(chosen), ilp_cov)
             chosen = [list(t) for t in g_wheel]
         else:
-            logger.info("[WHEEL-ILP] cover minim ILP = %d bilete (greedy era %d)", len(chosen), len(g_wheel))
+            logger.info("[WHEEL-ILP] cover ILP = %d bilete la %.2f%% (greedy era %d la %.2f%%)",
+                        len(chosen), ilp_cov, len(g_wheel), g_cov)
         if max_variants > 0 and len(chosen) > max_variants:
             chosen = _order_by_scores(chosen, scores)[:max_variants]
         return _order_by_scores(chosen, scores), _coverage_pct(chosen, pool, guarantee)
@@ -364,7 +375,17 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
 # ===========================================================================
 # 4) La Jolla — designuri optime cunoscute (fișiere) → ILP → greedy
 # ===========================================================================
-_LAJOLLA_DIRS = [Path("covering_designs"), Path("_ISTORIC/covering_designs")]
+# Ancorate la MODUL, nu la directorul de lucru. Căile relative rămân pe listă (ca
+# override), dar nu mai sunt singura sursă: cu ele singure, orice apel cu alt CWD
+# pierdea tăcut designul și cădea pe ILP/greedy — măsurat pe 6/49 pool 12
+# garanție 4: 55 de bilete în loc de 41 (+34%) pentru exact aceeași garanție.
+_MODULE_DIR = Path(__file__).resolve().parent
+_LAJOLLA_DIRS = [
+    _MODULE_DIR / "covering_designs",
+    _MODULE_DIR / "_ISTORIC" / "covering_designs",
+    Path("covering_designs"),
+    Path("_ISTORIC/covering_designs"),
+]
 
 
 def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:

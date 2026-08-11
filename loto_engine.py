@@ -856,6 +856,10 @@ class LotoEngine:
             context["last_3"] = extract_draws(self.data.tail(3))
             
         context["coverage_pct"] = coverage_pct
+        # Necesar UI-ului ca să atribuie corect cauza unei acoperiri <100%: limita
+        # de variante SAU garanție degenerată. Fără el, mesajul acuza mereu limita,
+        # inclusiv când era deja 0 (nelimitat), și sfătuia „pune 0" fără efect.
+        context["max_variants"] = int(max_variants)
             
         if progress_cb:
             progress_cb("Pipeline complet!", 100)

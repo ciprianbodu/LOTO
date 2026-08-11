@@ -1698,19 +1698,34 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         ui.label(f"Variante simple: {len(variants)}")
         # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
-        # pe cel puțin un bilet. Singura cauză rămasă pentru <100% e limita de
-        # variante: nu mai există niciun filtru care să elimine bilete DUPĂ wheeling
+        # pe cel puțin un bilet. Niciun filtru nu mai elimină bilete DUPĂ wheeling
         # (a doua ramură, pe `audit.anomaly_filter`, nu se mai executa niciodată —
-        # engine-ul nu mai scrie cheia).
+        # engine-ul nu mai scrie cheia), deci rămân DOUĂ cauze pentru <100%:
+        #   1. limita «Variante maxime»;
+        #   2. garanția = câte numere se extrag (cerere degenerată: singurul cover
+        #      100% e sistemul complet — 5/40 pool 15 → C(15,5) = 3003 bilete —, iar
+        #      greedy-ul se oprește la 1000 de iterații → 1001 bilete la 33%).
+        # Mesajul de dinainte atribuia MEREU cauza 1, inclusiv când «Variante
+        # maxime» era deja 0, și sfătuia „pune 0 = nelimitat" fără efect.
         _cov = (data.get("context") or {}).get("coverage_pct")
         if _cov is not None:
             if float(_cov) >= 100.0:
                 ui.html(render_html_safe(t"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>"))
             else:
-                reason = (
-                    "limita «Variante maxime» a tăiat garanția — "
-                    "pune 0 = nelimitat pentru garanție completă"
-                )
+                try:
+                    _mv = int((data.get("context") or {}).get("max_variants") or 0)
+                except (TypeError, ValueError):
+                    _mv = 0
+                if _mv > 0:
+                    reason = (
+                        "limita «Variante maxime» a tăiat garanția — "
+                        "pune 0 = nelimitat pentru garanție completă"
+                    )
+                else:
+                    reason = (
+                        f"garanția {_g_used} e prea mare pentru pool-ul ales — "
+                        "acoperirea 100% ar cere sistemul complet; scade garanția cu 1"
+                    )
                 ui.html(render_html_safe(
                     t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
                     t"<span style='opacity:.7'>({reason})</span>"

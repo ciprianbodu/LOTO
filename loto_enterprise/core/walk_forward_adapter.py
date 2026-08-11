@@ -101,16 +101,31 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     return h[:12]
 
 
-def _wf_guarantee(pool_size: int) -> int:
+# Câte numere se extrag per joc (= `pick`-ul wheel-ului).
+_WF_PICK = {"6/49": 6, "5/40": 5, "joker": 5}
+
+
+def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
     """Garanția cu care walk-forward-ul regenerează wheel-ul la fiecare pas.
 
     SURSĂ UNICĂ: valoarea e pasată `run_retroactive_backtest(guarantee=...)` mai jos.
     Nu e garanția din setările UI — WF are propria formulă, independentă de ea.
+
+    Plafonată la `pick - 1` când jocul e cunoscut. `guarantee == pick` e o cerere
+    DEGENERATĂ: singurul cover 100% e sistemul complet (5/40 pool 15 → C(15,5) =
+    3003 bilete), iar greedy-ul se oprește la 1000 de iterații → 1001 bilete la
+    33% acoperire. Formula `max(4, pool//3)` atinge 5 de la pool 15, iar la 5/40 și
+    Joker `pick` e tot 5 → degenerare la orice pool ≥ 15. Plafonul e intern (WF își
+    alege singur garanția); garanția CERUTĂ DE UTILIZATOR în UI rămâne respectată
+    întotdeauna, inclusiv `guarantee == pick` = sistem complet, deliberat.
     """
-    return max(4, int(pool_size) // 3)
+    g = max(4, int(pool_size) // 3)
+    if pick:
+        g = min(g, int(pick) - 1)
+    return max(1, g)
 
 
-def _wheel_sig(pool_size: int) -> str:
+def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
     WF rulează mereu cu `max_variants=0`, deci rezolvă aceeași ramură ca engine-ul
@@ -124,7 +139,7 @@ def _wheel_sig(pool_size: int) -> str:
     ~32% pentru Pool 1, lângă un Pool 2 recalculat cu wheel-ul nou.
     """
     method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
-    return f"{method}|g{_wf_guarantee(pool_size)}"
+    return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}"
 
 
 def _decision_sig(game_type: str, pool_size: int) -> str:
@@ -153,7 +168,7 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
             _ens_sig = ",".join(sorted(str(m) for m in _ens))
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
                f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}|"
-               f"{_wheel_sig(pool_size)}")
+               f"{_wheel_sig(pool_size, game_type)}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         # Chiar fără decizia bench, wheel-ul rămâne calculabil (env + pool) și TREBUIE
@@ -161,7 +176,7 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
         # schimb de algoritm de wheeling ar servi tăcut cache vechi.
         logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
                        f"semnătură doar pe wheel")
-        return "nd" + hashlib.md5(_wheel_sig(pool_size).encode()).hexdigest()[:6]
+        return "nd" + hashlib.md5(_wheel_sig(pool_size, game_type).encode()).hexdigest()[:6]
 
 
 def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str,
@@ -317,7 +332,7 @@ def run_honest_walk_forward(
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
-        guarantee=max(4, pool_size // 3),
+        guarantee=_wf_guarantee(pool_size, _WF_PICK.get(game_type)),
         lookback_percent=lookback_percent,
         backtest_depth_percent=backtest_depth_percent,
         filter_consecutives=False,
