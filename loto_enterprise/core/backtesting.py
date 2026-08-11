@@ -33,6 +33,21 @@ _WF_CPU_FRACTION = float(__import__("os").environ.get("LOTO_WF_CPU_FRAC", "0.80"
 _WF_PER_PROC_GB = 0.8  # engine + wheeling per proces
 _WF_PER_PROC_GB_INVERT = 1.4  # Pool 2: 2× pipeline / pas
 _WF_STEP_TIMEOUT_S = float(__import__("os").environ.get("LOTO_WF_STEP_TIMEOUT_S", "900"))
+# Sondă de cost: pornirea a ~25 de procese are o rampă de câteva secunde (primul
+# rezultat la ~7.9 s, regim staționar abia după ~10 batch-uri). Când pasul e ieftin
+# — pool 12/garanție 4, unde există design La Jolla local, deci wheel-ul e o citire
+# de fișier — paralelizarea e COST NET: măsurat 57.2 s paralel vs 22.5 s secvențial
+# pe cele 3 jocuri, cu rezultate bit-identice. Când NU există design local se cade pe
+# ILP cu time_limit=15 s/pas, iar secvențial ar însemna ore → decidem pe măsurătoare,
+# nu pe presupunere: cronometrăm primii pași în proces și abia apoi alegem.
+_WF_PROBE_STEPS = int(__import__("os").environ.get("LOTO_WF_PROBE_STEPS", "20"))
+_WF_SERIAL_MAX_MS = float(__import__("os").environ.get("LOTO_WF_SERIAL_MAX_MS", "100"))
+# Sonda se oprește la PRIMA dintre: `_WF_PROBE_STEPS` pași sau `_WF_PROBE_BUDGET_S`
+# secunde. Bugetul de timp e esențial pentru cazul SCUMP: fără design La Jolla local
+# un pas costă ~15 s (ILP la time_limit), deci 20 de pași ar însemna 5 minute de
+# sondă înainte de a porni procesele. Cu buget, un singur pas e destul ca să
+# decidem „paralel" — iar rezultatul lui nu se pierde.
+_WF_PROBE_BUDGET_S = float(__import__("os").environ.get("LOTO_WF_PROBE_BUDGET_S", "2.0"))
 _WF_SHARED: dict = {}
 
 
@@ -658,10 +673,6 @@ class LotoBacktester:
             n_workers = _wf_max_workers(auto_invert=auto_invert)
             n_steps = len(sim_indices)
             inv_note = " (Pool 2: 2× pipeline/pas)" if auto_invert else ""
-            logger.info(
-                "[BACKTEST] Walk-forward PARALEL: %d pași pe %d procese (~%.0f%% CPU, RAM-cap)%s",
-                n_steps, n_workers, _WF_CPU_FRACTION * 100, inv_note,
-            )
             for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
                 os.environ.setdefault(_tv, "1")
 
@@ -677,66 +688,123 @@ class LotoBacktester:
             batch_size = max(n_workers * 2, 8)
             last_log_pct = -1
 
+            def _step_in_process(a):
+                """Același pas ca `_wf_worker_step`, dar în procesul curent."""
+                return _retroactive_step_stateless(
+                    self.df, self.draws, self.dates, self.game_type,
+                    a[0], a[1], a[2], a[3], a[4], a[5], a[6],
+                    auto_invert=bool(a[7]),
+                )
+
             try:
-                with ProcessPoolExecutor(
-                    max_workers=n_workers,
-                    initializer=_wf_worker_init,
-                    initargs=(df_pickle, self.game_type, draws_tuples, self.dates),
-                ) as ex:
-                    for batch in batched(task_args, batch_size):
-                        if should_cancel is not None and done_count > 0:
+                # ── Sondă: cronometrăm primii pași ÎN PROCES; munca nu se pierde
+                # în niciuna din ramuri (rezultatele intră în retro_predictions). ──
+                probe_n = min(_WF_PROBE_STEPS, n_steps)
+                t_probe = time.perf_counter()
+                probe_done = 0
+                for a in task_args[:probe_n]:
+                    try:
+                        pred = _step_in_process(a)
+                        if pred is not None:
+                            retro_predictions.append(pred)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error("[BACKTEST] WF sondă sim_idx=%s: %s", a[0], exc)
+                    done_count += 1
+                    probe_done += 1
+                    _wf_report_progress(progress_cb, done_count, n_steps)
+                    if time.perf_counter() - t_probe >= _WF_PROBE_BUDGET_S:
+                        break  # pași scumpi: 1-2 măsurători ajung pentru decizie
+                ms_per_step = (time.perf_counter() - t_probe) / max(1, probe_done) * 1000.0
+                remaining = task_args[probe_done:]
+                go_serial = ms_per_step < _WF_SERIAL_MAX_MS
+
+                logger.info(
+                    "[BACKTEST] WF sondă: %.1f ms/pas pe %d pași → %s (prag %.0f ms)%s",
+                    ms_per_step, probe_done,
+                    "SECVENȚIAL" if go_serial else f"PARALEL pe {n_workers} procese",
+                    _WF_SERIAL_MAX_MS, inv_note,
+                )
+
+                if go_serial:
+                    # Pași ieftini: rampa de pornire a proceselor ar costa mai mult
+                    # decât tot restul rulării. Rezultatele sunt identice — pașii
+                    # stateless nu depind de proces.
+                    for a in remaining:
+                        if should_cancel is not None:
                             try:
                                 if should_cancel():
                                     cancelled = True
                                     logger.warning(
-                                        "[BACKTEST] oprire timpurie WF paralel la %d/%d "
-                                        "(buget) → validare parțială.",
-                                        done_count, n_steps,
+                                        "[BACKTEST] oprire timpurie WF secvențial la %d/%d "
+                                        "(buget) → validare parțială.", done_count, n_steps,
                                     )
                                     break
                             except Exception:  # noqa: BLE001
                                 pass
-                        futures = {ex.submit(_wf_worker_step, a): a[0] for a in batch}
-                        for fut in as_completed(futures):
-                            try:
-                                pred = fut.result(timeout=_WF_STEP_TIMEOUT_S)
-                                if pred is not None:
-                                    retro_predictions.append(pred)
-                            except Exception as exc:  # noqa: BLE001
-                                logger.error("[BACKTEST] WF future eșuat sim_idx=%s: %s",
-                                             futures.get(fut), exc)
-                            done_count += 1
-                            _wf_report_progress(progress_cb, done_count, n_steps)
-                            pct = int(done_count * 100 / max(1, n_steps))
-                            if pct >= last_log_pct + 10:
-                                last_log_pct = pct - (pct % 10)
-                                logger.info("[BACKTEST] WF progres: %d/%d pași (%d%%)",
-                                            done_count, n_steps, pct)
-                        if cancelled:
-                            break
+                        try:
+                            pred = _step_in_process(a)
+                            if pred is not None:
+                                retro_predictions.append(pred)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.error("[BACKTEST] WF pas sim_idx=%s: %s", a[0], exc)
+                        done_count += 1
+                        _wf_report_progress(progress_cb, done_count, n_steps)
+                        pct = int(done_count * 100 / max(1, n_steps))
+                        if pct >= last_log_pct + 10:
+                            last_log_pct = pct - (pct % 10)
+                            logger.info("[BACKTEST] WF progres: %d/%d pași (%d%%)",
+                                        done_count, n_steps, pct)
+                elif remaining:
+                    with ProcessPoolExecutor(
+                        max_workers=n_workers,
+                        initializer=_wf_worker_init,
+                        initargs=(df_pickle, self.game_type, draws_tuples, self.dates),
+                    ) as ex:
+                        for batch in batched(remaining, batch_size):
+                            if should_cancel is not None and done_count > 0:
+                                try:
+                                    if should_cancel():
+                                        cancelled = True
+                                        logger.warning(
+                                            "[BACKTEST] oprire timpurie WF paralel la %d/%d "
+                                            "(buget) → validare parțială.",
+                                            done_count, n_steps,
+                                        )
+                                        break
+                                except Exception:  # noqa: BLE001
+                                    pass
+                            futures = {ex.submit(_wf_worker_step, a): a[0] for a in batch}
+                            for fut in as_completed(futures):
+                                try:
+                                    pred = fut.result(timeout=_WF_STEP_TIMEOUT_S)
+                                    if pred is not None:
+                                        retro_predictions.append(pred)
+                                except Exception as exc:  # noqa: BLE001
+                                    logger.error("[BACKTEST] WF future eșuat sim_idx=%s: %s",
+                                                 futures.get(fut), exc)
+                                done_count += 1
+                                _wf_report_progress(progress_cb, done_count, n_steps)
+                                pct = int(done_count * 100 / max(1, n_steps))
+                                if pct >= last_log_pct + 10:
+                                    last_log_pct = pct - (pct % 10)
+                                    logger.info("[BACKTEST] WF progres: %d/%d pași (%d%%)",
+                                                done_count, n_steps, pct)
+                            if cancelled:
+                                break
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[BACKTEST] ProcessPool WF indisponibil (%s) — fallback secvențial.", exc)
+                logger.warning("[BACKTEST] WF rapid indisponibil (%s) — fallback secvențial.", exc)
                 retro_predictions.clear()
                 cancelled = False
                 done_count = 0
             else:
-                if not cancelled:
-                    retro_predictions.sort(key=lambda p: p.draw_index)
-                    if retro_predictions:
-                        total_hits = sum(p.hits for p in retro_predictions)
-                        avg_hits = total_hits / len(retro_predictions)
-                        logger.info(
-                            "[BACKTEST RETROACTIV] Complet (paralel): %d simulări, medie %.2f hits",
-                            len(retro_predictions), avg_hits,
-                        )
-                    return retro_predictions
-                # cancelled → sort parțial și return
+                _mode = "secvențial" if go_serial else "paralel"
                 retro_predictions.sort(key=lambda p: p.draw_index)
                 if retro_predictions:
                     total_hits = sum(p.hits for p in retro_predictions)
                     avg_hits = total_hits / len(retro_predictions)
                     logger.info(
-                        "[BACKTEST RETROACTIV] Parțial (paralel): %d simulări, medie %.2f hits",
+                        "[BACKTEST RETROACTIV] %s (%s): %d simulări, medie %.2f hits",
+                        "Parțial" if cancelled else "Complet", _mode,
                         len(retro_predictions), avg_hits,
                     )
                 return retro_predictions
