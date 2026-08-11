@@ -443,7 +443,7 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None, track_pool_variation=True):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
@@ -454,6 +454,13 @@ class LotoEngine:
             excludă din selecție (ex: butonul "Inverseaza Pool" din UI care
             tratează pool-ul anterior ca blacklist). Se combină cu blacklist-ul
             calculat automat de motor, cu safety check anti-saturare.
+
+        track_pool_variation: Dacă True (implicit — producție), compară pool-ul
+            cu ultimul pool salvat pentru același joc+dimensiune+trecere și
+            rescrie pool_history.json. Pașii de walk-forward/backtest îl lasă
+            False: scriu pe aceeași cheie ca producția, deci ar suprascrie
+            pool-ul real. NU folosi enable_adaptive_persistence ca poartă —
+            producția îl pasează tot False (worker.py).
         """
         # Memoram pool_size-ul cerut pentru ca _scores_via_bench_winner să poată
         # selecta câștigătorul corect din best_methods.json (per pool size).
@@ -854,61 +861,69 @@ class LotoEngine:
             progress_cb("Pipeline complet!", 100)
 
         # --- TRACK POOL VARIATION ---
-        try:
-            import json
-            from pathlib import Path
-            from datetime import datetime
+        # Pașii de walk-forward / backtest NU au voie să scrie aici: cheia e
+        # `{joc}_{pool}_{pass}` — EXACT cheia de producție. Cei ~1940 de pași ai
+        # unui ciclu WF suprascriau intrarea reală, iar `pool_variation` din raport
+        # compara pool-ul curent cu un pool dintr-un punct istoric arbitrar. În plus,
+        # cele ~25 de procese WF scriau concurent același `.tmp` (nume fix în
+        # ui_shared.atomic_write_*) → 216 linii „Eroare la tracker-ul de variație"
+        # în loto.log între 2026-07-06 și 2026-08-08.
+        if track_pool_variation:
+            try:
+                import json
+                from pathlib import Path
+                from datetime import datetime
             
-            history_file = Path("pool_history.json")
-            history = {}
-            if history_file.exists():
-                # Un fișier corupt (scriere parțială / sync OneDrive) nu are voie să
-                # dezactiveze tracker-ul PERMANENT: fără asta excepția se repeta la
-                # fiecare rulare, iar `pool_variation` rămânea gol la nesfârșit.
-                # Repornim de la zero — istoricul e informativ, nu critic.
-                try:
-                    with open(history_file, "r", encoding="utf-8") as f:
-                        history = json.load(f)
-                    if not isinstance(history, dict):
-                        raise ValueError(f"structură neașteptată: {type(history).__name__}")
-                except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
-                    logging.warning("[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.", exc)
-                    history = {}
+                history_file = Path("pool_history.json")
+                history = {}
+                if history_file.exists():
+                    # Un fișier corupt (scriere parțială / sync OneDrive) nu are voie să
+                    # dezactiveze tracker-ul PERMANENT: fără asta excepția se repeta la
+                    # fiecare rulare, iar `pool_variation` rămânea gol la nesfârșit.
+                    # Repornim de la zero — istoricul e informativ, nu critic.
+                    try:
+                        with open(history_file, "r", encoding="utf-8") as f:
+                            history = json.load(f)
+                        if not isinstance(history, dict):
+                            raise ValueError(f"structură neașteptată: {type(history).__name__}")
+                    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+                        logging.warning("[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.", exc)
+                        history = {}
             
-            # Cheia SEPARĂ Pool 1 de Pool 2. Fără sufix, auto-inversarea (care rulează
-            # pipeline-ul de două ori pe același joc+pool) scria ambele pool-uri sub
-            # aceeași cheie: ultima trecere câștiga, iar la rularea următoare Pool 1 se
-            # compara cu Pool 2 al rulării precedente. Cum Pool 2 e prin construcție
-            # DISJUNCT de Pool 1, tracker-ul raporta mereu schimbare totală
-            # (toate numerele „added", toate „removed") — informație fără conținut.
-            _pass = "p2" if getattr(self, "_manual_blacklist_set", None) else "p1"
-            hist_key = f"{self.game_type}_{pool_size}_{_pass}"
-            # Cheile în formatul vechi (fără sufix) nu mai sunt citite de nimeni și ar
-            # rămâne în fișier la nesfârșit; le eliminăm la prima scriere.
-            history = {k: v for k, v in history.items()
-                       if k.endswith("_p1") or k.endswith("_p2")}
-            last_pool = history.get(hist_key, {}).get("pool", [])
+                # Cheia SEPARĂ Pool 1 de Pool 2. Fără sufix, auto-inversarea (care rulează
+                # pipeline-ul de două ori pe același joc+pool) scria ambele pool-uri sub
+                # aceeași cheie: ultima trecere câștiga, iar la rularea următoare Pool 1 se
+                # compara cu Pool 2 al rulării precedente. Cum Pool 2 e prin construcție
+                # DISJUNCT de Pool 1, tracker-ul raporta mereu schimbare totală
+                # (toate numerele „added", toate „removed") — informație fără conținut.
+                _pass = "p2" if getattr(self, "_manual_blacklist_set", None) else "p1"
+                hist_key = f"{self.game_type}_{pool_size}_{_pass}"
+                # Cheile în formatul vechi (fără sufix) nu mai sunt citite de nimeni și ar
+                # rămâne în fișier la nesfârșit; le eliminăm la prima scriere.
+                history = {k: v for k, v in history.items()
+                           if k.endswith("_p1") or k.endswith("_p2")}
+                last_pool = history.get(hist_key, {}).get("pool", [])
             
-            pool_variation = {}
-            if last_pool:
-                added = sorted(list(set(self.hard_core) - set(last_pool)))
-                removed = sorted(list(set(last_pool) - set(self.hard_core)))
-                pool_variation = {
-                    "added": added,
-                    "removed": removed,
-                    "changed": bool(added or removed)
+                pool_variation = {}
+                if last_pool:
+                    added = sorted(list(set(self.hard_core) - set(last_pool)))
+                    removed = sorted(list(set(last_pool) - set(self.hard_core)))
+                    pool_variation = {
+                        "added": added,
+                        "removed": removed,
+                        "changed": bool(added or removed)
+                    }
+            
+                history[hist_key] = {
+                    "pool": self.hard_core,
+                    "date": datetime.now().isoformat()
                 }
-            
-            history[hist_key] = {
-                "pool": self.hard_core,
-                "date": datetime.now().isoformat()
-            }
-            from ui_shared import atomic_write_json
-            atomic_write_json(history_file, history)  # atomic: tmp+fsync+os.replace
+                from ui_shared import atomic_write_json
+                atomic_write_json(history_file, history)  # atomic: tmp+fsync+os.replace
                 
-            self.audit["pool_variation"] = pool_variation
-        except Exception as e:
-            logging.error(f"[PIPELINE] Eroare la tracker-ul de variație: {e}")
+                self.audit["pool_variation"] = pool_variation
+            except Exception as e:
+                logging.error(f"[PIPELINE] Eroare la tracker-ul de variație: {e}")
 
         # --- ADAPTIVE FEEDBACK POST-RUN: persistăm pool-ul nou + state ---
         if enable_adaptive_persistence and _HAS_ADAPTIVE:

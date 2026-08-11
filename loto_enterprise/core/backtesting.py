@@ -126,6 +126,7 @@ def _retroactive_step_stateless(
             smart_reduction=smart_reduction,
             enable_adaptive_persistence=False,
             manual_blacklist=manual_blacklist,
+            track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
         )
         return eng, out_lines
 
@@ -820,6 +821,7 @@ class LotoBacktester:
                     filter_consecutives=filter_consecutives,
                     smart_reduction=smart_reduction,
                     enable_adaptive_persistence=False,
+                    track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
                 )
 
                 # Evaluăm rezultatul contra extragerii reale
