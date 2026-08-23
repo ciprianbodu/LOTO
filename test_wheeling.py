@@ -20,6 +20,7 @@ from wheeling_methods import (
     cap_wheel_max_coverage,
     clamp_wheel_guarantee,
     resolve_task_guarantee,
+    wf_effective_guarantee,
     compute_coverage_pct,
     filter_preserving_coverage,
     generate_wheel,
@@ -179,6 +180,28 @@ def test_resolve_task_guarantee_auto_and_manual_clamp():
     assert resolve_task_guarantee("5/40", target=3, guarantee=6, auto=False) == 5
     assert resolve_task_guarantee("6/49", target=4, guarantee=4, auto=False) == 4
     assert resolve_task_guarantee("joker", target=3, guarantee="x", auto=False) == 3
+
+
+def test_wf_effective_guarantee_default_formula_unchanged():
+    """Fără requested: aceeași formulă ca v14 — cache-ul vechi rămâne valid."""
+    assert wf_effective_guarantee(10, 6) == 4
+    assert wf_effective_guarantee(12, 6) == 4
+    assert wf_effective_guarantee(9, 6) == 4
+    assert wf_effective_guarantee(15, 5) == 4  # max(4, 5) cap pick-1
+    assert wf_effective_guarantee(16, 6) == 5
+    assert wf_effective_guarantee(8, None) == 4
+
+
+def test_wf_effective_guarantee_follows_production_not_complete_system():
+    """Validarea trebuie să coste același cover ca biletele jucate (auto g=3),
+    dar nu rulează sistemul complet (guarantee == pick)."""
+    assert wf_effective_guarantee(10, 6, requested=3) == 3
+    assert wf_effective_guarantee(10, 6, requested=4) == 4
+    assert wf_effective_guarantee(15, 5, requested=3) == 3
+    assert wf_effective_guarantee(15, 5, requested=5) == 4
+    assert wf_effective_guarantee(12, 6, requested=6) == 5
+    assert wf_effective_guarantee(10, 6, requested="x") == 4
+    assert wf_effective_guarantee(10, 6, requested=0) == 4
 
 
 def test_clamp_wheel_guarantee_impossible_becomes_complete_system():

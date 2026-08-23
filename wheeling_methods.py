@@ -102,6 +102,48 @@ def clamp_wheel_guarantee(guarantee: int, pick: int) -> int:
     return g if g >= 1 else 1
 
 
+def wf_effective_guarantee(
+    pool_size: int,
+    pick: int | None = None,
+    requested=None,
+) -> int:
+    """Garanția cu care walk-forward-ul regenerează wheel-ul la fiecare pas.
+
+    Dacă e dată garanția de producție (``requested``), o folosim — dar
+    plafonată la ``pick - 1``. ``guarantee == pick`` e sistem complet
+    (C(v, pick) bilete); WF nu-l rulează: la 5/40+Joker pool ≥ 15
+    degenerează, iar greedy-ul se oprește la 1000 de iterații.
+
+    Fără ``requested`` rămâne formula istorică ``max(4, pool//3)``
+    (call-site-uri care nu pasează wheel-ul jucat).
+    """
+    if pick is not None:
+        try:
+            pick = int(pick)
+        except (TypeError, ValueError):
+            pick = None
+        else:
+            if pick < 2:
+                pick = None
+    if requested is not None:
+        try:
+            g = int(requested)
+        except (TypeError, ValueError):
+            g = None
+        else:
+            if g >= 1:
+                if pick:
+                    g = min(g, pick - 1)
+                return max(1, g)
+    try:
+        g = max(4, int(pool_size) // 3)
+    except (TypeError, ValueError):
+        g = 4
+    if pick:
+        g = min(g, pick - 1)
+    return max(1, g)
+
+
 def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
     """Apel lazy la greedy-ul canonic (evită import circular)."""
     from loto_engine import generate_combinatorial_wheel

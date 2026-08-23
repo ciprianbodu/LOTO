@@ -227,6 +227,15 @@ def _count_wf_jobs(results_bundle) -> int:
     return sum(1 for _ in _iter_wf_jobs(results_bundle))
 
 
+def _result_wheel_guarantee(data: dict):
+    """Garanția EFECTIV folosită la wheel-ul de producție (audit, altfel task)."""
+    audit = data.get("audit") if isinstance(data.get("audit"), dict) else {}
+    g = audit.get("wheel_guarantee_used")
+    if g is None:
+        g = data.get("guarantee")
+    return g
+
+
 # --------------------------------------------------------------------------- #
 # Submit job (contract config_json identic cu app.py)
 # --------------------------------------------------------------------------- #
@@ -675,6 +684,7 @@ def _start_walk_forward() -> None:
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
                         auto_invert=wf_invert,
+                        guarantee=_result_wheel_guarantee(data),
                     )
                     if meta.get("partial"):
                         logger.warning("[WF] %s %s validat PARȚIAL: %s/%s extrageri "
@@ -1246,9 +1256,7 @@ def _render_cost(game: str, data: dict) -> None:
         n_simple = min(10, len(variants))
         # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
         # schemele oficiale de mai sus; fallback pe cea cerută din setări.
-        _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
-        if _g_used is None:
-            _g_used = data.get("guarantee")
+        _g_used = _result_wheel_guarantee(data)
         _g_txt = f"garanție {_g_used}" if _g_used is not None else "garanția configurată"
         ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
                     f"{n_simple*price:,.0f} Lei "
@@ -1711,9 +1719,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         # Garanția EFECTIV folosită la wheel (audit.wheel_guarantee_used) vs cea CERUTĂ
         # din setări — pot diferi; rezultate vechi n-au cheia → fallback pe setare.
         _g_req = data.get("guarantee")
-        _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
-        if _g_used is None:
-            _g_used = _g_req
+        _g_used = _result_wheel_guarantee(data)
         try:
             _g_diff = _g_req is not None and int(_g_used) != int(_g_req)
         except (TypeError, ValueError):
@@ -2713,10 +2719,10 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     # presupus): Pool 2 replayează exact `draw_index`-ii din Pool 1 (n2 ≤ n, egale în
     # practică), deci diferența vine în esență din BILETE/EXTRAGERE. Cauza reală e că cele
     # două wheel-uri se generează cu PARAMETRI DIFERIȚI:
-    #   • Pool 1 = walk-forward, care își impune propriile setări în
-    #     `run_honest_walk_forward` (`guarantee=max(4, pool_size//3)`, `max_variants=0`);
-    #   • Pool 2 = retrospectiv → replayează wheel-ul de AZI, generat cu garanția și
-    #     capul de bilete configurate în UI → exact n2 × len(variante_azi).
+    #   • Pool 1 = walk-forward, cu ACEEAȘI garanție de producție
+    #     (`audit.wheel_guarantee_used`, plafonată la pick-1) și `max_variants=0`;
+    #   • Pool 2 = retrospectiv → replayează wheel-ul de AZI (aceeași garanție,
+    #     plus capul de bilete din setări) → exact n2 × len(variante_azi).
     # Variația cover-ului între pașii WF e SECUNDARĂ, nu cauza (măsurat pe cache-urile
     # pool 10: 6/49 → 21 bilete la toate cele 769 extrageri, constant; 5/40 → 52 la 486
     # extrageri și 51 la 29; joker → 52 la 636 și 51 la 14).
@@ -2787,9 +2793,9 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         _cap += (
             f" {'ℹ️' if _same_base else '⚠️'} Bazele de cost "
             f"({_draws_txt}, bilete/extragere {tick_avg_1:.2f} vs {tick_avg_2:.2f}): "
-            f"Pool 1 = {n_tick_1:,} bilete (wheel regenerat de walk-forward cu garanția LUI "
-            f"internă, fără cap de bilete), Pool 2 = {n_tick_2:,} bilete (retrospectiv, ACELAȘI "
-            f"wheel de azi, cu garanția/capul din setări, pe toate extragerile). "
+            f"Pool 1 = {n_tick_1:,} bilete (wheel regenerat de walk-forward cu ACEEAȘI "
+            f"garanție ca producția, fără cap de bilete), Pool 2 = {n_tick_2:,} bilete "
+            f"(retrospectiv, ACELAȘI wheel de azi, pe toate extragerile). "
             f"Comparabil direct e ROI ({roi_1:.2f} vs {roi_2:.2f}) — e adimensional. "
         )
         if _same_base:

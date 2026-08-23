@@ -11,10 +11,11 @@ Cache:
       deosebire de cache-ul de bench, care e mutat în afara OneDrive.)
     - Reutilizat la următorul Auto-Pilot dacă (csv_hash, pool_size, decizie bench) match.
       dec_sig = semnătura deciziei (scorer/sim_depth/blacklist/ensemble/target) PLUS
-      wheel-ul efectiv (algoritm + garanţia internă a WF) → un Re-Bench care schimbă
-      câştigătorul, sau o schimbare de algoritm de wheeling, invalidează automat
-      cache-ul. Wheel-ul contează pentru că din numărul de BILETE ies costul şi ROI-ul
-      raportate; fără el, raportul afişa cifre calculate pe un wheel care nu mai exista.
+      wheel-ul efectiv (algoritm + garanţia WF, inclusiv cea de producţie dacă e
+      pasată) → un Re-Bench care schimbă câştigătorul, sau o schimbare de algoritm
+      de wheeling / garanţie, invalidează automat cache-ul. Wheel-ul contează
+      pentru că din numărul de BILETE ies costul şi ROI-ul raportate; fără el,
+      raportul afişa cifre calculate pe un wheel care nu mai exista.
     - Un bump de CACHE_VERSION doar schimbă NUMELE fişierului: pickle-urile vechi
       rămân pe disc la nesfârşit. `purge_stale_wf_cache()` le inventariază (implicit
       dry-run) şi le poate şterge; `clear_walk_forward_cache()` şterge TOT, inclusiv
@@ -36,6 +37,7 @@ import pandas as pd
 
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
+from wheeling_methods import wf_effective_guarantee
 
 logger = logging.getLogger(__name__)
 
@@ -105,27 +107,27 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
 _WF_PICK = {"6/49": 6, "5/40": 5, "joker": 5}
 
 
-def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
-    """Garanția cu care walk-forward-ul regenerează wheel-ul la fiecare pas.
+def _wf_guarantee(
+    pool_size: int,
+    pick: int | None = None,
+    requested=None,
+) -> int:
+    """Garanția pasată `run_retroactive_backtest(guarantee=...)`.
 
-    SURSĂ UNICĂ: valoarea e pasată `run_retroactive_backtest(guarantee=...)` mai jos.
-    Nu e garanția din setările UI — WF are propria formulă, independentă de ea.
-
-    Plafonată la `pick - 1` când jocul e cunoscut. `guarantee == pick` e o cerere
-    DEGENERATĂ: singurul cover 100% e sistemul complet (5/40 pool 15 → C(15,5) =
-    3003 bilete), iar greedy-ul se oprește la 1000 de iterații → 1001 bilete la
-    33% acoperire. Formula `max(4, pool//3)` atinge 5 de la pool 15, iar la 5/40 și
-    Joker `pick` e tot 5 → degenerare la orice pool ≥ 15. Plafonul e intern (WF își
-    alege singur garanția); garanția CERUTĂ DE UTILIZATOR în UI rămâne respectată
-    întotdeauna, inclusiv `guarantee == pick` = sistem complet, deliberat.
+    Dacă UI/engine pasează garanția de producție (`requested` = audit
+    `wheel_guarantee_used`), validarea costă ACELAȘI cover ca biletele jucate
+    (plafonată la `pick-1` — WF nu rulează sistemul complet). Fără `requested`
+    rămâne formula istorică `max(4, pool//3)`, ca să nu invalideze call-site-uri
+    vechi / cache-ul când g coincid.
     """
-    g = max(4, int(pool_size) // 3)
-    if pick:
-        g = min(g, int(pick) - 1)
-    return max(1, g)
+    return wf_effective_guarantee(pool_size, pick, requested)
 
 
-def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
+def _wheel_sig(
+    pool_size: int,
+    game_type: str | None = None,
+    requested=None,
+) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
     WF rulează mereu cu `max_variants=0`, deci rezolvă aceeași ramură ca engine-ul
@@ -137,12 +139,16 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     raport. Fără wheel în cheie, schimbarea ILP → La Jolla (6/49 pool 12: ~54 → 41
     bilete) a servit în continuare cache vechi, iar raportul arăta costuri umflate cu
     ~32% pentru Pool 1, lângă un Pool 2 recalculat cu wheel-ul nou.
+
+    Garanția de producție (când e pasată) intră în `gN`: auto g=3 vs formula
+    veche g=4 trebuie să fie chei DIFERITE. Fără `requested`, `gN` e identic cu
+    v14 → cache-ul vechi rămâne valid pe calea default.
     """
     method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
-    return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}"
+    return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type), requested)}"
 
 
-def _decision_sig(game_type: str, pool_size: int) -> str:
+def _decision_sig(game_type: str, pool_size: int, requested=None) -> str:
     """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target +
     ensemble + wheel) pentru (joc, pool).
 
@@ -168,7 +174,7 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
             _ens_sig = ",".join(sorted(str(m) for m in _ens))
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
                f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}|"
-               f"{_wheel_sig(pool_size, game_type)}")
+               f"{_wheel_sig(pool_size, game_type, requested)}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         # Chiar fără decizia bench, wheel-ul rămâne calculabil (env + pool) și TREBUIE
@@ -176,7 +182,9 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
         # schimb de algoritm de wheeling ar servi tăcut cache vechi.
         logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
                        f"semnătură doar pe wheel")
-        return "nd" + hashlib.md5(_wheel_sig(pool_size, game_type).encode()).hexdigest()[:6]
+        return "nd" + hashlib.md5(
+            _wheel_sig(pool_size, game_type, requested).encode()
+        ).hexdigest()[:6]
 
 
 def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str,
@@ -267,8 +275,13 @@ def run_honest_walk_forward(
     progress_cb=None,
     should_cancel=None,
     auto_invert: bool = False,
+    guarantee=None,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
+
+    guarantee: garanția de producție (audit.wheel_guarantee_used). Dacă e
+    dată, WF validează ACELAȘI cover ca biletele jucate (plafon `pick-1`).
+    Lipsă → formula istorică, bit-identică cu v14 pe cheia de cache.
 
     Returns:
         (flat_results, meta_dict)
@@ -276,7 +289,9 @@ def run_honest_walk_forward(
     """
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
-    dec_sig = _decision_sig(game_type, pool_size)
+    pick = _WF_PICK.get(game_type)
+    wf_g = _wf_guarantee(int(pool_size), pick, guarantee)
+    dec_sig = _decision_sig(game_type, pool_size, guarantee)
     cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig,
                             auto_invert=auto_invert)
     meta = {
@@ -288,6 +303,7 @@ def run_honest_walk_forward(
         "pool_size": pool_size,
         "backtest_depth_percent": backtest_depth_percent,
         "auto_invert": bool(auto_invert),
+        "guarantee": wf_g,
     }
 
     cached = None
@@ -326,13 +342,13 @@ def run_honest_walk_forward(
     from loto_enterprise.core.backtesting import LotoBacktester
     logger.info(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
-        f"pool={pool_size} depth={backtest_depth_percent}%"
+        f"pool={pool_size} g={wf_g} depth={backtest_depth_percent}%"
         f"{' (Pool 2 / inversare)' if auto_invert else ''}"
     )
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
-        guarantee=_wf_guarantee(pool_size, _WF_PICK.get(game_type)),
+        guarantee=wf_g,
         lookback_percent=lookback_percent,
         backtest_depth_percent=backtest_depth_percent,
         filter_consecutives=False,
