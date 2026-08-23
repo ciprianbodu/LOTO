@@ -143,10 +143,9 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
-    # Pool max 16 (la pool mai mare inversarea nu mai merge pe jocuri mici) — clamp valori vechi.
+    # Pool 6..16 (worker-ul clampează la fel; fără min, UI putea arăta 0–5).
     try:
-        if int(SETTINGS.get("pool_size_val", 10)) > 16:
-            SETTINGS["pool_size_val"] = 16
+        SETTINGS["pool_size_val"] = min(16, max(6, int(SETTINGS.get("pool_size_val", 10))))
     except (TypeError, ValueError):
         SETTINGS["pool_size_val"] = 10
     # Garanția din UI e 3..5. O valoare veche (ex. 6) pe 5/40/Joker (pick=5)
@@ -161,6 +160,10 @@ def _load_settings() -> None:
         SETTINGS["max_variants_val"] = min(10000, max(0, mv))
     except (TypeError, ValueError):
         SETTINGS["max_variants_val"] = 0
+    try:
+        SETTINGS["lookback_val"] = min(100, max(0, int(SETTINGS.get("lookback_val", 0))))
+    except (TypeError, ValueError):
+        SETTINGS["lookback_val"] = 0
     SETTINGS["guarantee_auto_val"] = bool(SETTINGS.get("guarantee_auto_val", True))
 
     # Inițializează variabila din modulul decision și os.environ din setările salvate

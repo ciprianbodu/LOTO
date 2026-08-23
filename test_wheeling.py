@@ -383,3 +383,54 @@ def test_expand_empty_wheel_keeps_the_draw():
     assert flat[0].hits == 0
     assert flat[0].hits_union == 2
     assert flat[0].draw_index == 7
+
+
+def test_load_data_rejects_empty_and_header_only_csv(tmp_path):
+    """CSV gol / doar header nu mai fabrică pool [49,48,…] și nu crapă pe isnan."""
+    pytest.importorskip("pandas")
+    from loto_engine import LotoEngine
+
+    empty = tmp_path / "empty.csv"
+    empty.write_text("date,n1,n2,n3,n4,n5,n6\n", encoding="utf-8")
+    eng = LotoEngine("6/49")
+    assert eng.load_data(str(empty)) is False
+    assert eng.audit.get("data_unusable") is True
+
+    noschema = tmp_path / "noschema.csv"
+    noschema.write_text("date,value\n2020-01-01,1\n", encoding="utf-8")
+    eng2 = LotoEngine("6/49")
+    assert eng2.load_data(str(noschema)) is False
+
+    good = tmp_path / "good.csv"
+    good.write_text(
+        "date,n1,n2,n3,n4,n5,n6\n2020-01-01,1,2,3,4,5,6\n", encoding="utf-8"
+    )
+    eng3 = LotoEngine("6/49")
+    assert eng3.load_data(str(good)) is True
+    assert eng3._count_usable_draws() == 1
+
+
+def test_analyze_frequency_header_only_does_not_crash():
+    """Fallback-ul pe coloane object (CSV header-only) nu mai face np.isnan pe string."""
+    pytest.importorskip("pandas")
+    import pandas as pd
+
+    from loto_engine import LotoEngine
+
+    eng = LotoEngine("6/49")
+    eng.data = pd.DataFrame(columns=["date", "n1", "n2", "n3", "n4", "n5", "n6"])
+    eng._draw_matrix = None
+    freq = eng.analyze_frequency()
+    assert len(freq) == 49
+    assert int(freq.sum()) == 0
+
+
+def test_frequency_fallback_empty_history_is_empty_dict():
+    pytest.importorskip("pandas")
+    import numpy as np
+
+    from loto_engine import LotoEngine
+
+    eng = LotoEngine("6/49")
+    eng._draw_matrix = np.zeros((0, 6), dtype=np.int32)
+    assert eng._frequency_fallback_scores() == {}

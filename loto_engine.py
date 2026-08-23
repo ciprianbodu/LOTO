@@ -335,18 +335,63 @@ class LotoEngine:
         }
         return params.get(game_type, params["6/49"])
 
+    def _count_usable_draws(self) -> int:
+        """Câte rânduri au destule numere valide în 1..max_n pentru un draw."""
+        max_n = int(self.params["max_n"])
+        draw_n = int(self.params["draw_n"])
+        if self._draw_matrix is not None and self._draw_matrix.size:
+            m = self._draw_matrix
+            in_range = (m >= 1) & (m <= max_n)
+            return int(np.sum(in_range.sum(axis=1) >= draw_n))
+        if self.data is None or self.data.empty:
+            return 0
+        if "numbers" in self.data.columns:
+            n_ok = 0
+            for raw in self.data["numbers"].astype(str):
+                try:
+                    nums = [
+                        int(x) for x in raw.split(",")
+                        if str(x).strip().lstrip("-").isdigit()
+                    ]
+                    nums = [x for x in nums if 1 <= x <= max_n]
+                    if len(nums) >= draw_n:
+                        n_ok += 1
+                except (TypeError, ValueError):
+                    continue
+            return n_ok
+        return 0
+
     def load_data(self, csv_path: str) -> bool:
-        """Încarcă date din CSV."""
+        """Încarcă date din CSV. False dacă e gol / fără extrageri valide."""
         try:
             self.data = pd.read_csv(csv_path)
+            if self.data is None or self.data.empty:
+                logging.error("[ENGINE] CSV gol: %s", csv_path)
+                self.data = None
+                self._draw_matrix = None
+                self.audit["data_unusable"] = True
+                return False
             self._build_draw_matrix()
+            n_ok = self._count_usable_draws()
+            if n_ok < 1:
+                logging.error("[ENGINE] CSV fără extrageri valide: %s", csv_path)
+                self.audit["data_unusable"] = True
+                self.audit["rows_loaded"] = len(self.data)
+                return False
             self.audit["rows_loaded"] = len(self.data)
+            self.audit["usable_draws"] = n_ok
             self.audit["game_detected"] = self.game_type
-            # Bug 1.6 Fix: hashlib.sha256 determinist în loc de hash() care variază între rulări
-            self.audit["hash"] = hashlib.sha256(self.data.values.tobytes()).hexdigest()[:16]
+            # tobytes() crapă pe coloane object (date-uri); CSV-ul e totuși valid.
+            try:
+                blob = self.data.values.tobytes()
+            except (TypeError, ValueError):
+                blob = self.data.to_csv(index=False).encode("utf-8")
+            self.audit["hash"] = hashlib.sha256(blob).hexdigest()[:16]
             return True
         except Exception as e:
-            print(f"Eroare la încărcare date: {e}")
+            logging.error("[ENGINE] Eroare la încărcare date: %s", e)
+            self.data = None
+            self._draw_matrix = None
             return False
 
     def _extract_draw_at_index(self, idx: int) -> list[int] | None:
@@ -442,8 +487,11 @@ class LotoEngine:
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
             )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
             if n_cols:
-                raw_vals = self.data[n_cols].values.ravel()
-                all_numbers = raw_vals[~np.isnan(raw_vals)].astype(int).tolist()
+                raw_vals = pd.to_numeric(
+                    self.data[n_cols].to_numpy().ravel(), errors="coerce"
+                )
+                finite = raw_vals[np.isfinite(raw_vals)]
+                all_numbers = finite.astype(np.int64).tolist()
             elif "numbers" in self.data.columns:
                 for _, row in self.data.iterrows():
                     try:
@@ -705,7 +753,13 @@ class LotoEngine:
             logging.info(f"[PIPELINE] Aplic limită de istoric: Ultimele {lookback}% ({actual_lookback} extrageri).")
             self.data = self.data.tail(effective_rows).copy()
             self._build_draw_matrix()
-            
+
+        if self._count_usable_draws() < 1:
+            self.audit["data_unusable"] = True
+            raise ValueError(
+                "Nicio extragere validă în date — nu fabric un pool din scoruri plate."
+            )
+
         if progress_cb:
             progress_cb("Inițializare motor...", 10)
 
@@ -1494,7 +1548,7 @@ class LotoEngine:
             return {}
         n = draws_2d.shape[0]
         if n == 0:
-            return {i: 1.0 for i in range(1, max_num + 1)}
+            return {}
         weights = np.exp(np.linspace(-2.0, 0.0, n)).astype(np.float64)
         raw = np.zeros(max_num + 1, dtype=np.float64)
         for w, row in zip(weights, draws_2d):
