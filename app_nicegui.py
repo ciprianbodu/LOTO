@@ -236,6 +236,30 @@ def _result_wheel_guarantee(data: dict):
     return g
 
 
+def _result_max_variants(data: dict) -> int:
+    """Capul de bilete din contextul de producție (0 = nelimitat)."""
+    ctx = data.get("context") if isinstance(data.get("context"), dict) else {}
+    raw = ctx.get("max_variants")
+    if raw is None:
+        raw = data.get("max_variants")
+    try:
+        return max(0, int(raw or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _result_lookback(data: dict):
+    """Lookback-ul de producție (0 = tot istoricul)."""
+    raw = data.get("lookback")
+    if raw is None:
+        audit = data.get("audit") if isinstance(data.get("audit"), dict) else {}
+        raw = audit.get("lookback_pct")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 # --------------------------------------------------------------------------- #
 # Submit job (contract config_json identic cu app.py)
 # --------------------------------------------------------------------------- #
@@ -685,6 +709,8 @@ def _start_walk_forward() -> None:
                         should_cancel=_wf_should_cancel,
                         auto_invert=wf_invert,
                         guarantee=_result_wheel_guarantee(data),
+                        max_variants=_result_max_variants(data),
+                        lookback=_result_lookback(data),
                     )
                     if meta.get("partial"):
                         logger.warning("[WF] %s %s validat PARȚIAL: %s/%s extrageri "
@@ -1716,6 +1742,12 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 
     with ui.row().classes("gap-6 items-center"):
         ui.label(f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else ""))
+        _inc = (data.get("audit") or {}).get("pool_incomplete")
+        if isinstance(_inc, dict) and int(_inc.get("got") or 0) < int(_inc.get("requested") or 0):
+            ui.label(
+                f"⚠️ Pool incomplet: {_inc.get('got')} din {_inc.get('requested')} "
+                f"— blacklist/inversare n-au lăsat destule numere; wheel-ul e pe pool-ul redus."
+            ).classes("text-orange")
         # Garanția EFECTIV folosită la wheel (audit.wheel_guarantee_used) vs cea CERUTĂ
         # din setări — pot diferi; rezultate vechi n-au cheia → fallback pe setare.
         _g_req = data.get("guarantee")
@@ -1726,6 +1758,14 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             _g_diff = _g_used != _g_req
         ui.label(f"Garanție: {_g_used}" + (f" (cerută: {_g_req})" if _g_diff else ""))
         ui.label(f"Variante simple: {len(variants)}")
+        _au_w = data.get("audit") or {}
+        if _au_w.get("wheel_pool_too_small") or _au_w.get("wheel_empty") or not variants:
+            _too = _au_w.get("wheel_pool_too_small") or {}
+            if isinstance(_too, dict) and _too.get("pick"):
+                _why = f"pool {_too.get('pool')} < bilet {_too.get('pick')}"
+            else:
+                _why = "niciun bilet valid"
+            ui.label(f"⚠️ Wheel gol ({_why}) — nu juca aceste variante.").classes("text-red")
         # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
         # pe cel puțin un bilet. Niciun filtru nu mai elimină bilete DUPĂ wheeling
@@ -1745,7 +1785,13 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     _mv = int((data.get("context") or {}).get("max_variants") or 0)
                 except (TypeError, ValueError):
                     _mv = 0
-                if _mv > 0:
+                _too = (data.get("audit") or {}).get("wheel_pool_too_small")
+                if isinstance(_too, dict) and _too.get("pick"):
+                    reason = (
+                        f"pool-ul are {_too.get('pool')} numere, biletul cere {_too.get('pick')} "
+                        "— biletele nu sunt jucabile"
+                    )
+                elif _mv > 0:
                     reason = (
                         "limita «Variante maxime» a tăiat garanția — "
                         "pune 0 = nelimitat pentru garanție completă"
@@ -2719,10 +2765,11 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     # presupus): Pool 2 replayează exact `draw_index`-ii din Pool 1 (n2 ≤ n, egale în
     # practică), deci diferența vine în esență din BILETE/EXTRAGERE. Cauza reală e că cele
     # două wheel-uri se generează cu PARAMETRI DIFERIȚI:
-    #   • Pool 1 = walk-forward, cu ACEEAȘI garanție de producție
-    #     (`audit.wheel_guarantee_used`, plafonată la pick-1) și `max_variants=0`;
-    #   • Pool 2 = retrospectiv → replayează wheel-ul de AZI (aceeași garanție,
-    #     plus capul de bilete din setări) → exact n2 × len(variante_azi).
+    #   • Pool 1 = walk-forward, cu ACEEAȘI garanție / cap / lookback de producție
+    #     (`audit.wheel_guarantee_used` plafonată la pick-1; max_variants și
+    #     lookback 1–99 din rezultat);
+    #   • Pool 2 = retrospectiv → replayează wheel-ul de AZI (aceiași parametri)
+    #     → exact n2 × len(variante_azi).
     # Variația cover-ului între pașii WF e SECUNDARĂ, nu cauza (măsurat pe cache-urile
     # pool 10: 6/49 → 21 bilete la toate cele 769 extrageri, constant; 5/40 → 52 la 486
     # extrageri și 51 la 29; joker → 52 la 636 și 51 la 14).

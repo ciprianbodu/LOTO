@@ -19,8 +19,11 @@ from wheeling_methods import (
     auto_wheel_guarantee,
     cap_wheel_max_coverage,
     clamp_wheel_guarantee,
+    empty_if_undersized,
     resolve_task_guarantee,
+    wf_cache_wheel_extras,
     wf_effective_guarantee,
+    wf_production_lookback,
     compute_coverage_pct,
     filter_preserving_coverage,
     generate_wheel,
@@ -137,9 +140,10 @@ def test_coverage_pct_matches_independent_count():
 
 def test_pool_smaller_than_ticket_does_not_crash():
     """Pool sub dimensiunea biletului e o stare degenerată reală (pool trunchiat);
-    nu trebuie să arunce excepție în mijlocul pipeline-ului."""
+    nu trebuie să arunce excepție și NU raportează 100% pe bilete injucabile."""
     wheel, coverage = generate_wheel("lajolla", [4, 8, 15], 6, 4, 0, None)
-    assert wheel and coverage == pytest.approx(100.0)
+    assert wheel == []
+    assert coverage == pytest.approx(0.0)
 
 
 def test_filter_preserving_coverage_keeps_guarantee():
@@ -204,6 +208,35 @@ def test_wf_effective_guarantee_follows_production_not_complete_system():
     assert wf_effective_guarantee(10, 6, requested=0) == 4
 
 
+def test_wf_production_lookback_default_keeps_full_history():
+    assert wf_production_lookback(None) == 100.0
+    assert wf_production_lookback(0) == 100.0
+    assert wf_production_lookback(100) == 100.0
+    assert wf_production_lookback("x") == 100.0
+    assert wf_production_lookback(20) == 20.0
+    assert wf_production_lookback(99) == 99.0
+
+
+def test_wf_cache_wheel_extras_empty_on_default_path():
+    """Calea uzuală (mv=0, lookback tot) trebuie să lase cheia v14 neschimbată."""
+    assert wf_cache_wheel_extras(0, None) == ""
+    assert wf_cache_wheel_extras(0, 0) == ""
+    assert wf_cache_wheel_extras(0, 100) == ""
+    assert wf_cache_wheel_extras(10, 0) == "|mv10"
+    assert wf_cache_wheel_extras(0, 20) == "|lb20"
+    assert wf_cache_wheel_extras(10, 20) == "|mv10|lb20"
+
+
+def test_undersized_pool_is_not_fake_full_coverage():
+    """Pool < pick nu mai raportează 100% pe un bilet injucabil."""
+    assert empty_if_undersized([1, 2, 3], 6) == ([], 0.0)
+    assert empty_if_undersized(list(range(1, 7)), 6) is None
+    for method in ("ilp", "lajolla", "union34", "annealing", "genetic"):
+        wheel, cov = generate_wheel(method, [1, 2, 3], pick=6, guarantee=3, max_variants=0)
+        assert wheel == [], method
+        assert cov == 0.0, method
+
+
 def test_clamp_wheel_guarantee_impossible_becomes_complete_system():
     assert clamp_wheel_guarantee(4, 6) == 4
     assert clamp_wheel_guarantee(6, 6) == 6
@@ -245,6 +278,15 @@ def test_cap_wheel_union_guarantees_keeps_unique_3_cover():
     assert (2, 4, 5, 6) in {tuple(t) for t in both}
     assert (2, 4, 5, 6) not in {tuple(t) for t in only4}
     assert compute_coverage_pct(both, pool, 3) > compute_coverage_pct(only4, pool, 3)
+
+
+def test_greedy_undersized_pool_is_not_fake_full_coverage():
+    pytest.importorskip("pandas")
+    from loto_engine import generate_combinatorial_wheel
+
+    wheel, cov = generate_combinatorial_wheel([1, 2, 3], pick=6, guarantee=3)
+    assert wheel == []
+    assert cov == 0.0
 
 
 def test_guarantee_equals_pick_is_complete_system():

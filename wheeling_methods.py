@@ -144,6 +144,60 @@ def wf_effective_guarantee(
     return max(1, g)
 
 
+def wf_production_lookback(lookback) -> float:
+    """Lookback-ul WF: 0 / 100 / invalid → 100 (tot istoricul pasului, ca v14).
+    1–99 → același trim procentual ca producția.
+    """
+    try:
+        lb = int(lookback)
+    except (TypeError, ValueError):
+        return 100.0
+    if 1 <= lb <= 99:
+        return float(lb)
+    return 100.0
+
+
+def wf_cache_wheel_extras(max_variants=0, lookback=None) -> str:
+    """Sufix de cache doar când producția iese din default (mv=0, lookback tot).
+
+    Gol pe calea uzuală → cheia v14 rămâne identică.
+    """
+    parts: list[str] = []
+    try:
+        mv = max(0, int(max_variants or 0))
+    except (TypeError, ValueError):
+        mv = 0
+    if mv:
+        parts.append(f"mv{mv}")
+    try:
+        lb = int(lookback)
+    except (TypeError, ValueError):
+        lb = None
+    else:
+        if 1 <= lb <= 99:
+            parts.append(f"lb{lb}")
+    return ("|" + "|".join(parts)) if parts else ""
+
+
+def empty_if_undersized(pool, pick):
+    """Pool prea mic pentru un bilet valid: 0 bilete, acoperire 0.
+
+    Înainte se întorcea ``[list(pool)]`` cu 100% — UI arăta verde pe
+    bilete injucabile. Path-ul uzual (pool ≥ pick) nu trece pe aici.
+    """
+    try:
+        n, p = len(pool), int(pick)
+    except (TypeError, ValueError):
+        return [], 0.0
+    if n < p:
+        logger.warning(
+            "[WHEEL] pool=%d < pick=%d — 0 bilete, acoperire 0%% (nu 100%% pe bilet invalid)",
+            n, p,
+        )
+        return [], 0.0
+    return None
+
+
 def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
     """Apel lazy la greedy-ul canonic (evită import circular)."""
     from loto_engine import generate_combinatorial_wheel
@@ -327,8 +381,9 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
               time_limit: float = 15.0):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
+    early = empty_if_undersized(pool, pick)
+    if early is not None:
+        return early
     nb, nt = _comb(v, pick), _comb(v, guarantee)
     if nb > _ILP_MAX_BLOCKS or nt > _ILP_MAX_TARGETS:
         logger.info("[WHEEL-ILP] prea mare (blocuri=%d ținte=%d) → greedy", nb, nt)
@@ -388,8 +443,9 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
                     iters: int = 4000, seed: int = 42):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
+    early = empty_if_undersized(pool, pick)
+    if early is not None:
+        return early
     base, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)  # plecăm din greedy complet
     targets = list(itertools.combinations(pool, guarantee))
     if not targets:
@@ -480,8 +536,9 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
                   pop: int = 200, gens: int = 80, seed: int = 42):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
+    early = empty_if_undersized(pool, pick)
+    if early is not None:
+        return early
     nb, nt = _comb(v, pick), _comb(v, guarantee)
     if nb > _GA_MAX_BLOCKS:
         logger.info("[WHEEL-GA] univers prea mare (blocuri=%d) → greedy", nb)
@@ -597,8 +654,9 @@ def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
 def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
+    early = empty_if_undersized(pool, pick)
+    if early is not None:
+        return early
     design = _load_lajolla(v, pick, guarantee)
     if design is not None:
         # mapăm indicii 1..v ai design-ului pe pool-ul sortat după scor (numerele bune
@@ -639,8 +697,9 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
     """
     pool = _sorted_pool(pool, scores)
     v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
+    early = empty_if_undersized(pool, pick)
+    if early is not None:
+        return early
     if guarantee > 4:
         logger.warning("[WHEEL-U34] guarantee=%d > 4 — metoda e gândită pentru ținte 3/4; "
                        "componentele rămân 3∪4, acoperirea e raportată pe %d",

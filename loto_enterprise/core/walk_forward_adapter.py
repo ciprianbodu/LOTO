@@ -37,7 +37,11 @@ import pandas as pd
 
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
-from wheeling_methods import wf_effective_guarantee
+from wheeling_methods import (
+    wf_cache_wheel_extras,
+    wf_effective_guarantee,
+    wf_production_lookback,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,12 +131,16 @@ def _wheel_sig(
     pool_size: int,
     game_type: str | None = None,
     requested=None,
+    max_variants: int = 0,
+    lookback=None,
 ) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
-    WF rulează mereu cu `max_variants=0`, deci rezolvă aceeași ramură ca engine-ul
-    (`loto_engine.generate_predictions`): override explicit din env `LOTO_WHEEL_METHOD`
-    dacă e setat, altfel `lajolla`.
+    Default (`max_variants=0`, lookback tot istoricul): aceeași ramură ca
+    engine-ul fără cap — override `LOTO_WHEEL_METHOD` sau `lajolla`.
+    Cu cap de bilete, producția cade pe greedy; suffix-ul `|mvN` ține cheile
+    separate. Lookback 1–99 (trim de producție) → `|lbN`. Calea default rămâne
+    `lajolla|gN` ca v14.
 
     DE CE intră în cheia de cache: numărul de BILETE per extragere depinde exclusiv de
     algoritmul de wheeling, iar din el se calculează costul, câștigul net și ROI-ul din
@@ -141,14 +149,27 @@ def _wheel_sig(
     ~32% pentru Pool 1, lângă un Pool 2 recalculat cu wheel-ul nou.
 
     Garanția de producție (când e pasată) intră în `gN`: auto g=3 vs formula
-    veche g=4 trebuie să fie chei DIFERITE. Fără `requested`, `gN` e identic cu
-    v14 → cache-ul vechi rămâne valid pe calea default.
+    veche g=4 trebuie să fie chei DIFERITE. Fără `requested` / cap / lookback
+    parțial, `gN` e identic cu v14 → cache-ul vechi rămâne valid pe calea default.
     """
-    method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
-    return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type), requested)}"
+    try:
+        mv = max(0, int(max_variants or 0))
+    except (TypeError, ValueError):
+        mv = 0
+    method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
+    if not method:
+        method = "greedy" if mv else "lajolla"
+    extras = wf_cache_wheel_extras(mv, lookback)
+    return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type), requested)}{extras}"
 
 
-def _decision_sig(game_type: str, pool_size: int, requested=None) -> str:
+def _decision_sig(
+    game_type: str,
+    pool_size: int,
+    requested=None,
+    max_variants: int = 0,
+    lookback=None,
+) -> str:
     """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target +
     ensemble + wheel) pentru (joc, pool).
 
@@ -174,7 +195,7 @@ def _decision_sig(game_type: str, pool_size: int, requested=None) -> str:
             _ens_sig = ",".join(sorted(str(m) for m in _ens))
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
                f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}|"
-               f"{_wheel_sig(pool_size, game_type, requested)}")
+               f"{_wheel_sig(pool_size, game_type, requested, max_variants, lookback)}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         # Chiar fără decizia bench, wheel-ul rămâne calculabil (env + pool) și TREBUIE
@@ -183,7 +204,7 @@ def _decision_sig(game_type: str, pool_size: int, requested=None) -> str:
         logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
                        f"semnătură doar pe wheel")
         return "nd" + hashlib.md5(
-            _wheel_sig(pool_size, game_type, requested).encode()
+            _wheel_sig(pool_size, game_type, requested, max_variants, lookback).encode()
         ).hexdigest()[:6]
 
 
@@ -276,12 +297,15 @@ def run_honest_walk_forward(
     should_cancel=None,
     auto_invert: bool = False,
     guarantee=None,
+    max_variants: int = 0,
+    lookback=None,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
     guarantee: garanția de producție (audit.wheel_guarantee_used). Dacă e
     dată, WF validează ACELAȘI cover ca biletele jucate (plafon `pick-1`).
-    Lipsă → formula istorică, bit-identică cu v14 pe cheia de cache.
+    max_variants / lookback: aceleași ca producția; 0 / tot istoricul = calea
+    v14 (cheia de cache neschimbată). Lipsă guarantee → formula istorică.
 
     Returns:
         (flat_results, meta_dict)
@@ -290,8 +314,14 @@ def run_honest_walk_forward(
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
     pick = _WF_PICK.get(game_type)
+    try:
+        mv = max(0, int(max_variants or 0))
+    except (TypeError, ValueError):
+        mv = 0
+    if lookback is not None:
+        lookback_percent = wf_production_lookback(lookback)
     wf_g = _wf_guarantee(int(pool_size), pick, guarantee)
-    dec_sig = _decision_sig(game_type, pool_size, guarantee)
+    dec_sig = _decision_sig(game_type, pool_size, guarantee, mv, lookback)
     cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig,
                             auto_invert=auto_invert)
     meta = {
@@ -304,6 +334,8 @@ def run_honest_walk_forward(
         "backtest_depth_percent": backtest_depth_percent,
         "auto_invert": bool(auto_invert),
         "guarantee": wf_g,
+        "max_variants": mv,
+        "lookback_percent": lookback_percent,
     }
 
     cached = None
@@ -342,7 +374,8 @@ def run_honest_walk_forward(
     from loto_enterprise.core.backtesting import LotoBacktester
     logger.info(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
-        f"pool={pool_size} g={wf_g} depth={backtest_depth_percent}%"
+        f"pool={pool_size} g={wf_g} mv={mv} lb={lookback_percent} "
+        f"depth={backtest_depth_percent}%"
         f"{' (Pool 2 / inversare)' if auto_invert else ''}"
     )
     bt = LotoBacktester(df_source, game_type=game_type)
@@ -352,7 +385,7 @@ def run_honest_walk_forward(
         lookback_percent=lookback_percent,
         backtest_depth_percent=backtest_depth_percent,
         filter_consecutives=False,
-        max_variants=0,
+        max_variants=mv,
         simulation_step=1,
         use_feedback=False,           # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem

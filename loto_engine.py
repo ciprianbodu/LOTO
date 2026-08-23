@@ -61,7 +61,11 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
 
     if pool_len < pick:
-        return [list(pool)], 100.0
+        logging.warning(
+            "[WHEEL] pool=%d < pick=%d — 0 bilete, acoperire 0%% (nu 100%% pe bilet invalid)",
+            pool_len, pick,
+        )
+        return [], 0.0
     if guarantee > pick:
         logging.warning(
             "[WHEEL] guarantee=%d > pick=%d — clamp la pick (sistem complet), "
@@ -449,10 +453,16 @@ class LotoEngine:
     def generate_predictions(self, guarantee=4, max_variants=0, scores=None):
         """Generează predicții bazate pe analiză."""
         if not hasattr(self, 'hard_core') or not self.hard_core:
+            self.audit["wheel_empty"] = True
             return [], 0.0
 
         from wheeling_methods import clamp_wheel_guarantee
         pick = int(self.params["draw_n"])
+        if len(self.hard_core) < pick:
+            self.audit["wheel_pool_too_small"] = {
+                "pool": len(self.hard_core),
+                "pick": pick,
+            }
         requested_g = int(guarantee)
         guarantee = clamp_wheel_guarantee(requested_g, pick)
         if guarantee != requested_g:
@@ -511,6 +521,8 @@ class LotoEngine:
                 assigned_joker = jokers[idx % joker_pool_size]
                 variant.append(assigned_joker)  # Elementul 6 este Joker-ul
 
+        if not variants:
+            self.audit["wheel_empty"] = True
         return variants, coverage_pct
 
     def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None, track_pool_variation=True):
@@ -908,6 +920,16 @@ class LotoEngine:
                 )
             if 'pipeline_stages' in self.audit:
                 self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
+
+        if len(self.hard_core or []) < int(pool_size):
+            self.audit["pool_incomplete"] = {
+                "requested": int(pool_size),
+                "got": len(self.hard_core or []),
+            }
+            logging.warning(
+                "[PIPELINE] Pool incomplet: %d/%d numere — wheel-ul rulează pe pool-ul redus.",
+                len(self.hard_core or []), int(pool_size),
+            )
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
