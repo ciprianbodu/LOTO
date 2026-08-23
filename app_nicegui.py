@@ -260,6 +260,19 @@ def _result_lookback(data: dict):
         return None
 
 
+def _wf_source_data(data: dict) -> dict:
+    """WF onest e pe Pool 1. La auto-invert, ``data`` e Pass 2."""
+    phase1 = data.get("phase1")
+    if data.get("auto_invert") and isinstance(phase1, dict):
+        return phase1
+    return data
+
+
+def _played_tickets(flat) -> list:
+    """Intrări flat care sunt bilete reale (sar sentinel-ul wheel-gol)."""
+    return [p for p in (flat or []) if getattr(p, "variant", None)]
+
+
 # --------------------------------------------------------------------------- #
 # Submit job (contract config_json identic cu app.py)
 # --------------------------------------------------------------------------- #
@@ -701,16 +714,17 @@ def _start_walk_forward() -> None:
                     return _wf_cancel_all() or time.time() > _gd
 
                 try:
+                    wf_src = _wf_source_data(data)
                     flat, meta = run_honest_walk_forward(
                         df_source=df_source, game_type=g_label,
-                        pool_size=int(data.get("pool_size") or 10),
+                        pool_size=int(wf_src.get("pool_size") or wf_src.get("pool_size_requested") or 10),
                         backtest_depth_percent=WF_DEPTH_PERCENT, lookback_percent=100.0, use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
                         auto_invert=wf_invert,
-                        guarantee=_result_wheel_guarantee(data),
-                        max_variants=_result_max_variants(data),
-                        lookback=_result_lookback(data),
+                        guarantee=_result_wheel_guarantee(wf_src),
+                        max_variants=_result_max_variants(wf_src),
+                        lookback=_result_lookback(wf_src),
                     )
                     if meta.get("partial"):
                         logger.warning("[WF] %s %s validat PARȚIAL: %s/%s extrageri "
@@ -1421,12 +1435,14 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
         return
     gk = _game_label_for(game)
     draw_n = 6 if gk == "6/49" else 5
-    n = len(flat)
+    played = _played_tickets(flat)
+    n = len(played) or len(flat)
     uniq = {getattr(p, "draw_index", i) for i, p in enumerate(flat)}
-    avg_var = sum(getattr(p, "hits", 0) for p in flat) / n
-    avg_pool = sum(getattr(p, "hits_union", 0) for p in flat) / n
-    best_var = max(getattr(p, "hits", 0) for p in flat)
-    best_pool = max(getattr(p, "hits_union", 0) for p in flat)
+    src = played or flat
+    avg_var = sum(getattr(p, "hits", 0) for p in src) / n
+    avg_pool = sum(getattr(p, "hits_union", 0) for p in src) / n
+    best_var = max(getattr(p, "hits", 0) for p in src)
+    best_pool = max(getattr(p, "hits_union", 0) for p in src)
     avg_rate = (avg_var / draw_n) * 100
 
     _mtxt = f" · metodă: {method}" if method else ""
@@ -1584,13 +1600,14 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
             # Analiză financiară ONESTĂ: fiecare entry din flat = UN bilet (extragere ×
             # variantă) jucat. cost = nr. bilete × preț; premii = suma premiilor reale.
             # (Înainte: total_variants_unice × preț × nr_extrageri → cost umflat de ~100×.)
-            total_prize = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)
-            cost = len(flat) * PRICES.get(gk, 8.0)
+            played = _played_tickets(flat)
+            total_prize = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in played)
+            cost = len(played) * PRICES.get(gk, 8.0)
             profit = total_prize - cost
             roi = (profit / cost * 100) if cost > 0 else 0
             rc = "text-positive" if profit >= 0 else "text-negative"
             ui.label(f"Analiză financiară backtest (full wheel la fiecare din {len(uniq)} extrageri = "
-                     f"{len(flat):,} bilete): cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
+                     f"{len(played):,} bilete): cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
                      f"| ROI: {'+' if profit >= 0 else ''}{roi:.1f}%").classes(rc)
             ui.label("ℹ️ Pe loterie ALEATOARE ROI-ul e mereu puternic negativ dacă joci tot wheel-ul la "
                      "fiecare extragere — scopul aplicației e ACOPERIREA (3+), nu profitul.").classes(
@@ -1600,11 +1617,13 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
 def _wf_summary(flat) -> str | None:
     if not flat:
         return None
-    nn = len(flat)
-    ap = sum(getattr(p, "hits_union", 0) for p in flat) / nn
-    av = sum(getattr(p, "hits", 0) for p in flat) / nn
-    bp = max(getattr(p, "hits_union", 0) for p in flat)
-    bv = max(getattr(p, "hits", 0) for p in flat)
+    played = _played_tickets(flat)
+    src = played or flat
+    nn = len(src)
+    ap = sum(getattr(p, "hits_union", 0) for p in src) / nn
+    av = sum(getattr(p, "hits", 0) for p in src) / nn
+    bp = max(getattr(p, "hits_union", 0) for p in src)
+    bv = max(getattr(p, "hits", 0) for p in src)
     return (f"{nn} predicții | avg pool={ap:.2f} | avg variantă={av:.2f} "
             f"| best pool={bp} | best variantă={bv}")
 
@@ -1786,15 +1805,21 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                 except (TypeError, ValueError):
                     _mv = 0
                 _too = (data.get("audit") or {}).get("wheel_pool_too_small")
+                _inc_cov = (data.get("audit") or {}).get("wheel_coverage_incomplete") or {}
                 if isinstance(_too, dict) and _too.get("pick"):
                     reason = (
                         f"pool-ul are {_too.get('pool')} numere, biletul cere {_too.get('pick')} "
                         "— biletele nu sunt jucabile"
                     )
-                elif _mv > 0:
+                elif _inc_cov.get("reason") == "max_variants" or _mv > 0:
                     reason = (
                         "limita «Variante maxime» a tăiat garanția — "
                         "pune 0 = nelimitat pentru garanție completă"
+                    )
+                elif _inc_cov.get("reason") == "greedy_timeout_or_early_stop":
+                    reason = (
+                        "cover-ul s-a oprit înainte de 100% (timeout greedy/ILP) — "
+                        "nu e un câmp de setat; scade pool-ul sau garanția"
                     )
                 else:
                     reason = (
@@ -2775,7 +2800,7 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     # extrageri și 51 la 29; joker → 52 la 636 și 51 la 14).
     # De aceea afișăm EXPLICIT biletele + costul fiecăruia și ROI (brut/cost), singura
     # metrică adimensională, independentă de câte bilete se joacă.
-    n_tick_1 = len(flat)
+    n_tick_1 = len(_played_tickets(flat))
     cost_1 = n_tick_1 * price
     pool_net = pool_gross - cost_1
     tick_avg_1 = (n_tick_1 / n) if n else 0.0
@@ -2801,7 +2826,7 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
              "win": f"~{pool_gross:,.0f} Lei", "net": _net_cell(pool_net, roi_1)}]
     if per2:
         pool_gross_2 = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat_p2)
-        n_tick_2 = len(flat_p2)
+        n_tick_2 = len(_played_tickets(flat_p2))
         cost_2 = n_tick_2 * price
         pool_net_2 = pool_gross_2 - cost_2
         tick_avg_2 = (n_tick_2 / n2) if n2 else 0.0

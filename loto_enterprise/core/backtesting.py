@@ -158,10 +158,7 @@ def _retroactive_step_stateless(
         if h > max_hits:
             max_hits = h
 
-    predicted_union = set().union(
-        *(scored_variant_numbers(v, game_type) for v in lines)
-    ) if lines else set()
-    hits_union = len(predicted_union & actual_set)
+    hits_union = hits_in_pool(engine.hard_core, actual_set)
 
     return RetroactivePrediction(
         simulation_date=str(sim_date),
@@ -213,6 +210,20 @@ def scored_variant_numbers(variant: list[int], game_type: str) -> list[int]:
     if game_type == "joker":
         return vals[:draw_n]
     return vals
+
+
+def hits_in_pool(hard_core, actual) -> int:
+    """Câte numere din POOL au ieșit (nu uniunea biletelor).
+
+    Pe acoperire 100% coincid; pe wheel incomplet / gol, uniunea biletelor
+    sub-numără hiturile din pool. UI-ul tratează ``hits_union`` ca pool hits.
+    """
+    try:
+        pool = {int(n) for n in (hard_core or [])}
+        draw = {int(x) for x in (actual or [])}
+    except (TypeError, ValueError):
+        return 0
+    return len(pool & draw)
 
 
 @dataclass
@@ -901,10 +912,7 @@ class LotoBacktester:
                     if h > max_hits:
                         max_hits = h
 
-                predicted_union = set().union(
-                    *(self._scored_variant_numbers(v) for v in lines)
-                ) if lines else set()
-                hits_union = len(predicted_union & set(actual_draw))
+                hits_union = hits_in_pool(engine.hard_core, actual_draw)
 
                 retro_pred = RetroactivePrediction(
                     simulation_date=str(sim_date),

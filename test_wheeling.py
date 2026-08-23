@@ -322,3 +322,38 @@ def test_initial_hard_core_fills_zero_frequency_numbers():
     assert len(pool) == 5
     assert 1 in pool
     assert len(set(pool)) == 5
+
+
+def test_hits_in_pool_counts_pool_not_ticket_union():
+    pytest.importorskip("pandas")
+    from loto_enterprise.core.backtesting import hits_in_pool
+
+    assert hits_in_pool([1, 2, 3, 4], [1, 9, 8]) == 1
+    assert hits_in_pool([1, 2, 3], [1, 2, 3]) == 3
+    assert hits_in_pool([], [1, 2]) == 0
+    assert hits_in_pool([1, 2], None) == 0
+
+
+def test_expand_empty_wheel_keeps_the_draw():
+    """Un pas fără bilete nu mai dispare din istoric (denominator mincinos)."""
+    pytest.importorskip("pandas")
+    from types import SimpleNamespace
+
+    try:
+        from loto_enterprise.core.walk_forward_adapter import expand_predictions_to_flat
+    except ModuleNotFoundError:
+        pytest.skip("walk_forward_adapter cere compression.zstd (Python 3.14)")
+
+    p = SimpleNamespace(
+        actual_numbers={1, 2, 3},
+        variants=[],
+        draw_index=7,
+        target_draw_date="2020-01-01",
+        hits_union=2,
+    )
+    flat = expand_predictions_to_flat([p], "6/49")
+    assert len(flat) == 1
+    assert flat[0].variant == []
+    assert flat[0].hits == 0
+    assert flat[0].hits_union == 2
+    assert flat[0].draw_index == 7

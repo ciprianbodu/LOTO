@@ -227,6 +227,18 @@ def expand_predictions_to_flat(
     flat: list[WalkForwardResult] = []
     for p in preds:
         actual = set(p.actual_numbers)
+        if not p.variants:
+            # Fără sentinel, extragerea dispare din istoric (denominator mai mic).
+            # variant=[] nu e bilet jucat — UI-ul trebuie să-l sară la cost.
+            flat.append(WalkForwardResult(
+                draw_index=p.draw_index,
+                draw_date=p.target_draw_date,
+                variant=[],
+                hits=0,
+                hits_union=p.hits_union,
+                target_draw_date=p.target_draw_date,
+            ))
+            continue
         for variant in p.variants:
             vset = set(scored_variant_numbers(variant, game_type))
             hits = len(vset & actual)
@@ -468,11 +480,12 @@ def build_retrospective_pool_hits_flat(
                     target_draw_date=str(dd) if dd else None,
                 ))
         else:
+            # Pool hits rămân în hits_union; hits e per-bilet (0 dacă nu s-a jucat).
             flat_out.append(WalkForwardResult(
                 draw_index=di,
                 draw_date=str(dd) if dd else None,
                 variant=[],
-                hits=hits_union,
+                hits=0,
                 hits_union=hits_union,
                 target_draw_date=str(dd) if dd else None,
             ))

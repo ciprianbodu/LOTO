@@ -523,6 +523,19 @@ class LotoEngine:
 
         if not variants:
             self.audit["wheel_empty"] = True
+        try:
+            _cov = float(coverage_pct)
+        except (TypeError, ValueError):
+            _cov = 0.0
+        if _cov < 100.0:
+            self.audit["wheel_coverage_incomplete"] = {
+                "pct": _cov,
+                "reason": (
+                    "max_variants" if int(max_variants or 0) > 0
+                    else "greedy_timeout_or_early_stop"
+                ),
+                "tickets": len(variants),
+            }
         return variants, coverage_pct
 
     def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None, track_pool_variation=True):

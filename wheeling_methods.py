@@ -723,7 +723,12 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
             union, pool, guarantee, max_variants, scores, guarantees=(3, 4),
         )
     logger.info("[WHEEL-U34] uniune 3∪4 = %d bilete (pool=%d, pick=%d)", len(union), v, pick)
-    return union, compute_coverage_pct(union, pool, guarantee)
+    covs = [
+        compute_coverage_pct(union, pool, g)
+        for g in (3, 4)
+        if g <= pick
+    ]
+    return union, min(covs) if covs else compute_coverage_pct(union, pool, guarantee)
 
 
 # ===========================================================================
