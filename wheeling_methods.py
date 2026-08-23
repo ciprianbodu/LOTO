@@ -43,6 +43,20 @@ def _comb(n: int, k: int) -> int:
     return math.comb(n, k) if 0 <= k <= n else 0
 
 
+def clamp_wheel_guarantee(guarantee: int, pick: int) -> int:
+    """``guarantee > pick`` e imposibil (un bilet nu poate conține un subset
+    mai mare decât el). Clamp la ``pick`` = sistem complet, nu wheel gol."""
+    try:
+        g, p = int(guarantee), int(pick)
+    except (TypeError, ValueError):
+        return 1
+    if p < 1:
+        return 1
+    if g > p:
+        return p
+    return g if g >= 1 else 1
+
+
 def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
     """Apel lazy la greedy-ul canonic (evită import circular)."""
     from loto_engine import generate_combinatorial_wheel
@@ -580,6 +594,7 @@ WHEEL_METHODS = {
 
 def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=None):
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic."""
+    guarantee = clamp_wheel_guarantee(guarantee, pick)
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if fn is None:
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)

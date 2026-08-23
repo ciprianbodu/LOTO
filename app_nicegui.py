@@ -145,6 +145,18 @@ def _load_settings() -> None:
             SETTINGS["pool_size_val"] = 16
     except (TypeError, ValueError):
         SETTINGS["pool_size_val"] = 10
+    # Garanția din UI e 3..5. O valoare veche (ex. 6) pe 5/40/Joker (pick=5)
+    # devenea guarantee>pick → wheel gol.
+    try:
+        g = int(SETTINGS.get("guarantee_val", 4))
+        SETTINGS["guarantee_val"] = min(5, max(3, g))
+    except (TypeError, ValueError):
+        SETTINGS["guarantee_val"] = 4
+    try:
+        mv = int(SETTINGS.get("max_variants_val", 0))
+        SETTINGS["max_variants_val"] = min(10000, max(0, mv))
+    except (TypeError, ValueError):
+        SETTINGS["max_variants_val"] = 0
 
     # Inițializează variabila din modulul decision și os.environ din setările salvate
     try:
@@ -1702,9 +1714,8 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         # (a doua ramură, pe `audit.anomaly_filter`, nu se mai executa niciodată —
         # engine-ul nu mai scrie cheia), deci rămân DOUĂ cauze pentru <100%:
         #   1. limita «Variante maxime»;
-        #   2. garanția = câte numere se extrag (cerere degenerată: singurul cover
-        #      100% e sistemul complet — 5/40 pool 15 → C(15,5) = 3003 bilete —, iar
-        #      greedy-ul se oprește la 1000 de iterații → 1001 bilete la 33%).
+        #   2. garanția = câte numere se extrag (sistem complet C(v, pick));
+        #      guarantee > pick e clamp-ată la pick, nu mai produce wheel gol.
         # Mesajul de dinainte atribuia MEREU cauza 1, inclusiv când «Variante
         # maxime» era deja 0, și sfătuia „pune 0 = nelimitat" fără efect.
         _cov = (data.get("context") or {}).get("coverage_pct")

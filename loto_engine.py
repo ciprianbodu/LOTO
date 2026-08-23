@@ -64,11 +64,11 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
         return [list(pool)], 100.0
     if guarantee > pick:
         logging.warning(
-            "[WHEEL] guarantee=%d > pick=%d — țintă imposibilă (un bilet nu poate "
-            "conține un subset mai mare decât el). Acoperire 0%%.",
+            "[WHEEL] guarantee=%d > pick=%d — clamp la pick (sistem complet), "
+            "nu wheel gol.",
             guarantee, pick,
         )
-        return [], 0.0
+        guarantee = pick
 
     def _finite_num_score(n) -> float:
         v = scores.get(n, 0) if scores else 0
@@ -451,6 +451,18 @@ class LotoEngine:
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return [], 0.0
 
+        from wheeling_methods import clamp_wheel_guarantee
+        pick = int(self.params["draw_n"])
+        requested_g = int(guarantee)
+        guarantee = clamp_wheel_guarantee(requested_g, pick)
+        if guarantee != requested_g:
+            logging.warning(
+                "[WHEEL] guarantee cerută=%d > pick=%d — folosesc %d (sistem complet).",
+                requested_g, pick, guarantee,
+            )
+        self.audit["wheel_guarantee_requested"] = requested_g
+        self.audit["wheel_guarantee_used"] = int(guarantee)
+
         # Wheeling: implicit greedy (bit-identic). Alternative selectabile prin env
         # LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34
         # (necunoscut → greedy). Lista completă: wheeling_methods.WHEEL_METHODS.
@@ -474,7 +486,7 @@ class LotoEngine:
             variants, coverage_pct = generate_wheel(
                 _wheel_method,
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=pick,
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
@@ -482,7 +494,7 @@ class LotoEngine:
         else:
             variants, coverage_pct = generate_combinatorial_wheel(
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=pick,
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores
@@ -900,9 +912,8 @@ class LotoEngine:
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
         wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
-        # Contract cu UI: garanția EFECTIV folosită la wheel (identică cu cea cerută
-        # în UI — nu mai există nicio escaladare pe drum). UI-ul o afișează ca atare.
-        self.audit["wheel_guarantee_used"] = int(guarantee)
+        # Garanția EFECTIVĂ e scrisă în generate_predictions (clamp la pick dacă
+        # cererea e imposibilă). UI-ul arată used vs requested.
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar

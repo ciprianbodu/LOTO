@@ -17,6 +17,7 @@ from wheeling_methods import (
     WHEEL_METHODS,
     _order_by_scores,
     cap_wheel_max_coverage,
+    clamp_wheel_guarantee,
     compute_coverage_pct,
     filter_preserving_coverage,
     generate_wheel,
@@ -158,6 +159,15 @@ def test_order_by_scores_ignores_nan():
     ordered = _order_by_scores(wheel, scores)
     assert ordered[0] == [1, 2, 3]
     assert ordered[1] == [4, 5, 6]
+
+
+def test_clamp_wheel_guarantee_impossible_becomes_complete_system():
+    assert clamp_wheel_guarantee(4, 6) == 4
+    assert clamp_wheel_guarantee(6, 6) == 6
+    assert clamp_wheel_guarantee(7, 5) == 5
+    assert clamp_wheel_guarantee(5, 5) == 5
+    assert clamp_wheel_guarantee(0, 6) == 1
+    assert clamp_wheel_guarantee("x", 6) == 1
 
 
 def test_cap_wheel_max_coverage_keeps_more_hits_than_score_slice():

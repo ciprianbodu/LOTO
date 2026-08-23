@@ -263,7 +263,7 @@ def _evaluate_fold(
             bl_sizes_seen.append(len(blacklist))
 
             # Top-K WITH blacklist: exclude blacklisted, then take top-K
-            filtered_scores = {n: s for n, s in scores.items() if n not in blacklist}
+            filtered_scores = {int(n): s for n, s in scores.items() if int(n) not in blacklist}
             top_sets_bl = {k: set(_top_k(filtered_scores, k)) for k in pool_sizes}
 
             for j in range(pos, end):
