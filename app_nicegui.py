@@ -41,6 +41,7 @@ from job_queue import (
     submit_job,
 )
 from cancel import lock_engine, unlock_engine
+from wheeling_methods import auto_wheel_guarantee
 from ui_shared import (
     PROJECT_ROOT,
     atomic_write_json,
@@ -77,6 +78,7 @@ UI_PERSIST_KEYS = [
     "auto_invert_val", "shutdown_on_complete",
     "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
     "last_finalized_job_id", "wf_budget_min", "bench_hit_target",
+    "guarantee_auto_val",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
@@ -91,6 +93,8 @@ DEFAULTS = {
     # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
     "wf_budget_min": 90,
     "bench_hit_target": 3,
+    # Garanția Set Cover urmează ținta 3+/4+ per joc (nu e predicție).
+    "guarantee_auto_val": True,
 }
 
 # --------------------------------------------------------------------------- #
@@ -228,22 +232,28 @@ def _count_wf_jobs(results_bundle) -> int:
 def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
     h = hashlib.sha256()
-    for k in ("pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
-              "auto_invert_val", "sim_depth_val", "bench_hit_target"):
+    for k in ("pool_size_val", "guarantee_val", "guarantee_auto_val", "max_variants_val",
+              "lookback_val", "auto_invert_val", "sim_depth_val", "bench_hit_target"):
         h.update(str(SETTINGS[k]).encode("utf-8"))
     h.update(str(sorted(sim_depth_per_game.items())).encode("utf-8"))  # adâncime per joc → cache key
     pure = bool(STATE.get("pure_bench"))
     h.update(str(pure).encode("utf-8"))
     datasets_cfg = []
+    target = int(SETTINGS.get("bench_hit_target", 3))
+    auto_g = bool(SETTINGS.get("guarantee_auto_val", True))
     for fname, df in STATE["datasets"]:
         g_label = _game_label_for(fname)
         df_json = df.to_json(orient="split")
         # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
         sd = int(sim_depth_per_game.get(g_label, SETTINGS["sim_depth_val"]))
+        guarantee = (
+            auto_wheel_guarantee(g_label, target)
+            if auto_g else int(SETTINGS["guarantee_val"])
+        )
         task = {
             "game_label": g_label,
             "pool_size": int(SETTINGS["pool_size_val"]),
-            "guarantee": int(SETTINGS["guarantee_val"]),
+            "guarantee": int(guarantee),
             "max_variants": int(SETTINGS["max_variants_val"]),
             "lookback": int(SETTINGS["lookback_val"]),
             "filter_consecutives": False,
@@ -3352,7 +3362,35 @@ def main_page() -> None:
             return widget
 
         _bind_save(ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=16, step=1).classes("w-full"), "pool_size_val")
-        _bind_save(ui.number("Garanție minimă (Set Cover)", min=3, max=5, step=1).classes("w-full"), "guarantee_val")
+
+        @ui.refreshable
+        def _guarantee_hint():
+            t = int(SETTINGS.get("bench_hit_target", 3) or 3)
+            if SETTINGS.get("guarantee_auto_val", True):
+                ui.label(
+                    f"Garanție efectivă: 6/49 = {auto_wheel_guarantee('6/49', t)}, "
+                    f"5/40 și Joker = {auto_wheel_guarantee('5/40', t)} "
+                    f"(după ținta {t}+). Nu e predicție — e acoperirea pool→bilet."
+                ).classes("text-caption text-grey")
+            else:
+                ui.label(
+                    "Manual: aceeași valoare pe toate jocurile. "
+                    "3 = mai ieftin (asigură 3-în-pool pe un bilet); "
+                    "4 = mai scump (asigură și 4-în-pool)."
+                ).classes("text-caption text-grey")
+
+        def _on_g_auto():
+            _save_settings()
+            _guarantee_hint.refresh()
+
+        g_auto = ui.checkbox("Garanție automată (după ținta 3+/4+)")
+        g_auto.bind_value(SETTINGS, "guarantee_auto_val")
+        g_auto.on_value_change(lambda: _on_g_auto())
+        g_num = ui.number("Garanție minimă (Set Cover) — doar dacă auto e OFF", min=3, max=5, step=1).classes("w-full")
+        _bind_save(g_num, "guarantee_val")
+        g_num.bind_enabled_from(SETTINGS, "guarantee_auto_val", backward=lambda v: not bool(v))
+        _guarantee_hint()
+
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
@@ -3361,6 +3399,7 @@ def main_page() -> None:
         def _on_target_change(e):
             SETTINGS["bench_hit_target"] = int(e.value)
             _save_settings()
+            _guarantee_hint.refresh()
             try:
                 import loto_enterprise.benchmark.decision as decision
                 target = int(e.value)

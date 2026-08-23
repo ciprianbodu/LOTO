@@ -16,6 +16,7 @@ import pytest
 from wheeling_methods import (
     WHEEL_METHODS,
     _order_by_scores,
+    auto_wheel_guarantee,
     cap_wheel_max_coverage,
     clamp_wheel_guarantee,
     compute_coverage_pct,
@@ -159,6 +160,17 @@ def test_order_by_scores_ignores_nan():
     ordered = _order_by_scores(wheel, scores)
     assert ordered[0] == [1, 2, 3]
     assert ordered[1] == [4, 5, 6]
+
+
+def test_auto_wheel_guarantee_follows_target_not_complete_system():
+    assert auto_wheel_guarantee("6/49", 3) == 3
+    assert auto_wheel_guarantee("6/49", 4) == 4
+    assert auto_wheel_guarantee("5/40", 3) == 3
+    assert auto_wheel_guarantee("5/40", 4) == 4
+    assert auto_wheel_guarantee("joker", 4) == 4
+    # niciodată guarantee == pick (sistem complet); ținta bench e doar 3 sau 4
+    assert auto_wheel_guarantee("5/40", 5) == 4
+    assert auto_wheel_guarantee("6/49", 99) == 4
 
 
 def test_clamp_wheel_guarantee_impossible_becomes_complete_system():

@@ -43,6 +43,31 @@ def _comb(n: int, k: int) -> int:
     return math.comb(n, k) if 0 <= k <= n else 0
 
 
+_GAME_PICK = {"6/49": 6, "5/40": 5, "joker": 5}
+
+
+def auto_wheel_guarantee(game_label: str, target: int, pick: int | None = None) -> int:
+    """Garanție Set Cover din ținta bench (3+ / 4+), fără sistem complet.
+
+    Acoperă evenimentul măsurat (3-în-pool sau 4-în-pool) pe bilete.
+    Plafonată la ``pick - 1`` ca să nu degenereze în C(v, pick) bilete.
+    """
+    if pick is None:
+        low = (game_label or "").lower()
+        if "5/40" in low or "5_40" in low:
+            pick = 5
+        elif "joker" in low:
+            pick = 5
+        else:
+            pick = _GAME_PICK.get(game_label, 6)
+    try:
+        t = 4 if int(target) >= 4 else 3
+    except (TypeError, ValueError):
+        t = 3
+    g = min(max(t, 3), int(pick) - 1, 5)
+    return clamp_wheel_guarantee(g, pick)
+
+
 def clamp_wheel_guarantee(guarantee: int, pick: int) -> int:
     """``guarantee > pick`` e imposibil (un bilet nu poate conține un subset
     mai mare decât el). Clamp la ``pick`` = sistem complet, nu wheel gol."""
