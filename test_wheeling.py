@@ -16,6 +16,7 @@ import pytest
 from wheeling_methods import (
     WHEEL_METHODS,
     _order_by_scores,
+    cap_wheel_max_coverage,
     compute_coverage_pct,
     filter_preserving_coverage,
     generate_wheel,
@@ -159,11 +160,44 @@ def test_order_by_scores_ignores_nan():
     assert ordered[1] == [4, 5, 6]
 
 
+def test_cap_wheel_max_coverage_keeps_more_hits_than_score_slice():
+    """Sub buget, tăierea după scor poate arunca acoperirea; greedy pe bilete o păstrează."""
+    pool = [1, 2, 3, 4, 5, 6]
+    # 3 bilete: primele 2 (scor mare) acoperă doar {1,2,3,4};
+    # al 3-lea (scor mic) e necesar pentru 5 și 6.
+    tickets = [(1, 2, 3), (2, 3, 4), (4, 5, 6)]
+    scores = {1: 10.0, 2: 10.0, 3: 10.0, 4: 1.0, 5: 0.0, 6: 0.0}
+
+    by_score = tickets[:2]
+    capped = cap_wheel_max_coverage(tickets, pool, guarantee=2, max_variants=2, scores=scores)
+    assert len(capped) <= 2
+    assert compute_coverage_pct(capped, pool, 2) > compute_coverage_pct(by_score, pool, 2)
+
+
+def test_cap_wheel_stops_when_full_coverage_then_fills_budget():
+    pool = [1, 2, 3, 4]
+    tickets = [(1, 2, 3), (1, 2, 4), (1, 3, 4), (2, 3, 4)]
+    capped = cap_wheel_max_coverage(tickets, pool, guarantee=2, max_variants=10)
+    assert compute_coverage_pct(capped, pool, 2) == pytest.approx(100.0)
+    assert len(capped) == len(tickets)
+
+
+def test_cap_wheel_union_guarantees_keeps_unique_3_cover():
+    """union34: un bilet slab pe scor poate fi necesar pe 3-din-3."""
+    pool = [1, 2, 3, 4, 5, 6]
+    tickets = [(1, 2, 3, 4), (1, 2, 3, 5), (2, 4, 5, 6)]
+    scores = {1: 10.0, 2: 10.0, 3: 10.0, 4: 1.0, 5: 1.0, 6: 0.0}
+    only4 = cap_wheel_max_coverage(tickets, pool, 4, 2, scores)
+    both = cap_wheel_max_coverage(tickets, pool, 4, 2, scores, guarantees=(3, 4))
+    assert (2, 4, 5, 6) in {tuple(t) for t in both}
+    assert (2, 4, 5, 6) not in {tuple(t) for t in only4}
+    assert compute_coverage_pct(both, pool, 3) > compute_coverage_pct(only4, pool, 3)
+
+
 def test_guarantee_equals_pick_is_complete_system():
     """Sistem complet (guarantee==pick): C(v, pick) bilete, acoperire 100%.
     Greedy-ul vechi se oprea la 1000 de iterații și raporta ~33%."""
-    pandas = pytest.importorskip("pandas")
-    del pandas
+    pytest.importorskip("pandas")
     from math import comb
 
     from loto_engine import generate_combinatorial_wheel
@@ -177,3 +211,19 @@ def test_guarantee_equals_pick_is_complete_system():
     capped, cap_cov = generate_combinatorial_wheel(pool, pick=6, guarantee=6, max_variants=5)
     assert len(capped) == 5
     assert cap_cov < 100.0
+
+
+def test_initial_hard_core_fills_zero_frequency_numbers():
+    """Istoric scurt: fără umplere, pool-ul rămânea cu 1 număr și wheel-ul pierdea bilete."""
+    pytest.importorskip("pandas")
+    import numpy as np
+
+    from loto_engine import LotoEngine
+
+    eng = LotoEngine("6/49")
+    freq = np.zeros(49, dtype=np.float64)
+    freq[0] = 5.0
+    pool = eng._get_initial_hard_core(freq, pool_size=5, blacklist=set())
+    assert len(pool) == 5
+    assert 1 in pool
+    assert len(set(pool)) == 5

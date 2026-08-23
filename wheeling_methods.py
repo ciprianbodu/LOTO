@@ -51,8 +51,20 @@ def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
 
 def _sorted_pool(pool, scores) -> list[int]:
     if scores:
-        return sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
+        return sorted(list(pool), key=lambda x: _num_score(x, scores), reverse=True)
     return sorted(list(pool))
+
+
+def _num_score(n, scores) -> float:
+    """Scor finit al unui număr; NaN/inf/lipsă → −inf (ultimele la sort desc)."""
+    v = scores.get(n, 0) if scores else 0
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return float("-inf")
+    if math.isfinite(fv):
+        return fv
+    return float("-inf")
 
 
 def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
@@ -127,14 +139,73 @@ def _ticket_score(ticket, scores) -> float:
     """Sumă de scoruri FINITE pe bilet. NaN/inf nu mai otrăvesc ordinea."""
     s = 0.0
     for n in ticket:
-        v = scores.get(n, 0) if scores else 0
-        try:
-            fv = float(v)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(fv):
-            s += fv
+        v = _num_score(n, scores)
+        if math.isfinite(v):
+            s += v
     return s
+
+
+def cap_wheel_max_coverage(
+    wheel: list[list[int]],
+    pool: list[int],
+    guarantee: int,
+    max_variants: int,
+    scores=None,
+    guarantees: tuple[int, ...] | None = None,
+) -> list[list[int]]:
+    """Taie wheel-ul la ``max_variants`` păstrând CÂT MAI MULTE ținte acoperite.
+
+    Tăierea după scor (``wheel[:N]``) poate scoate unicul acoperitor al unei
+    ținte și păstra bilete redundante. Aici: greedy set-cover pe biletele
+    existente, tie-break pe scor. Dacă acoperirea ajunge 100% înainte de cap,
+    umplem restul bugetului cu bilete rămase (mai multe șanse, aceeași
+    garanție). ``guarantees`` (ex. union34: 3 și 4) unește țintele; implicit
+    doar ``guarantee``.
+    """
+    if max_variants <= 0 or len(wheel) <= max_variants:
+        return [sorted(t) for t in wheel]
+    gs = tuple(g for g in (guarantees or (guarantee,)) if isinstance(g, int) and g > 0)
+    if not gs:
+        gs = (guarantee,)
+    pool_t = tuple(sorted(pool))
+    remaining: set[tuple[int, ...]] = set()
+    for g in gs:
+        remaining |= set(itertools.combinations(pool_t, g))
+    tickets = [tuple(sorted(t)) for t in wheel]
+    targets_of = []
+    for t in tickets:
+        tset: set[tuple[int, ...]] = set()
+        for g in gs:
+            tset |= set(itertools.combinations(t, g))
+        targets_of.append(tset)
+    chosen: list[list[int]] = []
+    used: set[int] = set()
+    while remaining and len(chosen) < max_variants:
+        best_i = -1
+        best_cov = -1
+        best_sc = float("-inf")
+        for i, tts in enumerate(targets_of):
+            if i in used:
+                continue
+            cov = len(tts & remaining)
+            sc = _ticket_score(tickets[i], scores)
+            if cov > best_cov or (cov == best_cov and sc > best_sc):
+                best_cov = cov
+                best_sc = sc
+                best_i = i
+        if best_i < 0 or best_cov <= 0:
+            break
+        used.add(best_i)
+        chosen.append(list(tickets[best_i]))
+        remaining -= targets_of[best_i]
+    if len(chosen) < max_variants:
+        rest = [tickets[i] for i in range(len(tickets)) if i not in used]
+        rest.sort(key=lambda t: _ticket_score(t, scores), reverse=True)
+        for t in rest:
+            if len(chosen) >= max_variants:
+                break
+            chosen.append(list(t))
+    return chosen
 
 
 def _order_by_scores(wheel: list[list[int]], scores) -> list[list[int]]:
@@ -202,7 +273,7 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
             logger.info("[WHEEL-ILP] cover ILP = %d bilete la %.2f%% (greedy era %d la %.2f%%)",
                         len(chosen), ilp_cov, len(g_wheel), g_cov)
         if max_variants > 0 and len(chosen) > max_variants:
-            chosen = _order_by_scores(chosen, scores)[:max_variants]
+            chosen = cap_wheel_max_coverage(chosen, pool, guarantee, max_variants, scores)
         return _order_by_scores(chosen, scores), _coverage_pct(chosen, pool, guarantee)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WHEEL-ILP] eșec (%s) → greedy", exc)
@@ -293,7 +364,7 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
 
     wheel = [list(t) for t in cur]
     if max_variants > 0 and len(wheel) > max_variants:
-        wheel = _order_by_scores(wheel, scores)[:max_variants]
+        wheel = cap_wheel_max_coverage(wheel, pool, guarantee, max_variants, scores)
     logger.info("[WHEEL-SA] %d bilete (din %d greedy)", len(wheel), len(base))
     return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
 
@@ -438,7 +509,7 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                 wheel.append(sorted(mapped))
         if wheel:
             if max_variants > 0 and len(wheel) > max_variants:
-                wheel = _order_by_scores(wheel, scores)[:max_variants]
+                wheel = cap_wheel_max_coverage(wheel, pool, guarantee, max_variants, scores)
             return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
     # fără fișier → încearcă ILP exact (mic), altfel greedy
     logger.info("[WHEEL-LaJolla] fără design local pt C(%d,%d,%d) → ILP/greedy", v, pick, guarantee)
@@ -486,10 +557,11 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
                 union.append(list(key))
     union = _order_by_scores(union, scores)
     if max_variants > 0 and len(union) > max_variants:
-        # consecvent cu wheel_ilp: tăiem DUPĂ ordonarea pe scoruri, dar garanția pică
-        logger.warning("[WHEEL-U34] max_variants=%d < uniune=%d — tai după scoruri, "
-                       "garanția 3∪4 NU mai e 100%%", max_variants, len(union))
-        union = union[:max_variants]
+        logger.warning("[WHEEL-U34] max_variants=%d < uniune=%d — tai păstrând acoperirea "
+                       "maximă; garanția 3∪4 poate pică", max_variants, len(union))
+        union = cap_wheel_max_coverage(
+            union, pool, guarantee, max_variants, scores, guarantees=(3, 4),
+        )
     logger.info("[WHEEL-U34] uniune 3∪4 = %d bilete (pool=%d, pick=%d)", len(union), v, pick)
     return union, compute_coverage_pct(union, pool, guarantee)
 

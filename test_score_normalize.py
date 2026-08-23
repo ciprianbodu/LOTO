@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from loto_enterprise.benchmark.score_normalize import normalize_scores
+from loto_enterprise.benchmark.methods import METHODS, call_method
 
 
 def _legacy_unsafe(scores: dict[int, float], max_num: int) -> dict[int, float]:
@@ -64,3 +65,42 @@ def test_blend_skips_nan_component_keeps_finite_ranking():
     out = make_blend_scorer([(0.5, good), (0.5, bad)])(np.zeros((2, 2)), 5)
     assert all(math.isfinite(v) for v in out.values())
     assert out[5] > out[1]
+
+
+def test_call_method_sanitizes_only_when_nonfinite():
+    def _mixed(_draws, _max_num):
+        return {1: 2.0, 2: float("nan"), 3: 1.0}
+
+    def _clean(_draws, _max_num):
+        return {1: 0.25, 2: 0.75}
+
+    def _empty(_draws, _max_num):
+        return {}
+
+    def _none(_draws, _max_num):
+        return None
+
+    METHODS["_tmp_mixed"] = (_mixed, "test", False, "tmp")
+    METHODS["_tmp_clean"] = (_clean, "test", False, "tmp")
+    METHODS["_tmp_empty"] = (_empty, "test", False, "tmp")
+    METHODS["_tmp_none"] = (_none, "test", False, "tmp")
+    draws = np.array([[1, 2, 3]], dtype=int)
+    try:
+        mixed, _dt = call_method("_tmp_mixed", draws, 5)
+        assert mixed[1] == 1.0
+        assert mixed[2] == 0.0
+        assert mixed[3] == 0.0
+
+        clean, _dt = call_method("_tmp_clean", draws, 5)
+        assert clean == {1: 0.25, 2: 0.75}
+
+        empty, _dt = call_method("_tmp_empty", draws, 5)
+        assert empty == {}
+
+        none, _dt = call_method("_tmp_none", draws, 5)
+        assert none == {}
+    finally:
+        del METHODS["_tmp_mixed"]
+        del METHODS["_tmp_clean"]
+        del METHODS["_tmp_empty"]
+        del METHODS["_tmp_none"]

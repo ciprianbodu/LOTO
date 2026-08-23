@@ -193,8 +193,19 @@ def method_meta(name: str) -> dict:
 
 def call_method(name: str, draws_2d: np.ndarray, max_num: int) -> tuple[dict[int, float], float]:
     """Call a registered method; returns (scores_dict, wall_time_sec)."""
+    from loto_enterprise.core.ranking import is_finite_score
+
     fn, _family, _train, _notes = METHODS[name]
     t0 = time.perf_counter()
     scores = fn(draws_2d, max_num)
     dt = time.perf_counter() - t0
+    # Plasă: un NaN scăpat de scorer nu mai otrăvește tot fold-ul. Pe scoruri
+    # toate finite dict-ul rămâne neschimbat (fără restretch, fără bump cache).
+    # Non-dict (None, listă) → {} ca fold eșuat, nu excepție în mijlocul bench-ului.
+    if not isinstance(scores, dict):
+        logger.warning("[call_method] %s a întors %s, nu dict — tratez ca fold eșuat",
+                       name, type(scores).__name__)
+        scores = {}
+    elif scores and any(not is_finite_score(v) for v in scores.values()):
+        scores = _normalize(scores, max_num)
     return scores, dt
