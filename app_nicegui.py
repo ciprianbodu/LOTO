@@ -216,13 +216,26 @@ def _ordered_wf_game_items(outs):
     )
 
 
+def _game_failed(data: dict) -> bool:
+    """Joc din bundle-ul parțial: are eroare, nu pool jucabil."""
+    if not isinstance(data, dict):
+        return True
+    if data.get("error"):
+        return True
+    audit = data.get("audit") if isinstance(data.get("audit"), dict) else {}
+    return bool(audit.get("pipeline_error"))
+
+
 def _iter_wf_jobs(results_bundle):
     """(fname, game_label, data, auto_invert) — doar Pool 1.
 
     Pool 2 = plasă de siguranță, fără walk-forward (evită dublarea timpului).
+    Jocurile eșuate din bundle-ul parțial sunt sărite (altfel WF rula cu pool 10).
     """
     for fname, outs in results_bundle:
         for g_label, data in _ordered_wf_game_items(outs):
+            if _game_failed(data):
+                continue
             yield fname, g_label, data, False
 
 
@@ -957,6 +970,12 @@ def _build_mail_body() -> str:
     games = sorted(((fn, g, d) for fn, outs in rb for g, d in outs.items()),
                    key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99))
     for fn, g, d in games:
+        if _game_failed(d):
+            err = d.get("error") or (d.get("audit") or {}).get("pipeline_error") or "necunoscut"
+            lines.append(f"=== {g.upper()} ===")
+            lines.append(f"⚠️ EȘUAT: {err}")
+            lines.append("")
+            continue
         inv = bool(d.get("auto_invert") and d.get("phase1"))
         p1 = d["phase1"] if inv else d
         jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))

@@ -212,21 +212,27 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
     return bool(is_job_cancelled(job_id, db_path=db_path))
 
 
-def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:
+def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> bool:
+    """Marchează COMPLETED doar dacă jobul e încă RUNNING.
+
+    Dacă utilizatorul a anulat în fereastra dintre check și complete,
+    CANCELLED nu e suprascris (altfel porneau mail/shutdown).
+    """
     init_job_queue(db_path)
     with _connect(db_path) as conn:
-        conn.execute(
+        cur = conn.execute(
             """
             -- completed_at TREBUIE să rămână text UTC din CURRENT_TIMESTAMP
             -- ('YYYY-MM-DD HH:MM:SS'): UI-ul (_completed_age_seconds) îl parsează ca
             -- naiv-UTC. Nu-l scrie din Python (ar fi local → vechime greșită).
             UPDATE jobs
             SET status = ?, progress_pct = 100, result_json = ?, completed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            WHERE id = ? AND status = ?
             """,
-            (JOB_COMPLETED, result_json, int(job_id)),
+            (JOB_COMPLETED, result_json, int(job_id), JOB_RUNNING),
         )
         conn.commit()
+        return cur.rowcount > 0
 
 
 def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
@@ -248,19 +254,21 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> None:
+def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> bool:
+    """FAILED doar pe RUNNING — nu rescrie CANCELLED."""
     init_job_queue(db_path)
     msg = str(error_msg or "Unknown worker error")
     with _connect(db_path) as conn:
-        conn.execute(
+        cur = conn.execute(
             """
             UPDATE jobs
             SET status = ?, result_json = ?, log_tail = ?
-            WHERE id = ?
+            WHERE id = ? AND status = ?
             """,
-            (JOB_FAILED, msg, msg[-6000:], int(job_id)),
+            (JOB_FAILED, msg, msg[-6000:], int(job_id), JOB_RUNNING),
         )
         conn.commit()
+        return cur.rowcount > 0
 
 
 def _claim_job(

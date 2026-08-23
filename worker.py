@@ -14,6 +14,7 @@ import time
 import traceback
 import tempfile
 import os
+from pathlib import Path
 
 from ui_shared import pack_queue_result, require_python_version
 
@@ -382,7 +383,31 @@ def _requeue_on_terminate(*_args) -> None:
         pass
 
 
+def _peer_worker_running() -> bool:
+    """Alt worker.py pe același repo — evităm doi daemoni + requeue furat."""
+    try:
+        import psutil
+    except ImportError:
+        return False
+    me = os.getpid()
+    root = str(Path(__file__).resolve().parent)
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        try:
+            if int(proc.info.get("pid") or 0) == me:
+                continue
+            cmdline = proc.info.get("cmdline") or []
+            cmd = " ".join(str(p) for p in cmdline)
+            if "worker.py" in cmd and root in cmd:
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, TypeError):
+            continue
+    return False
+
+
 def main() -> None:
+    if _peer_worker_running():
+        logging.info("[worker] alt worker rulează deja — ies (fără requeue).")
+        return
     atexit.register(_requeue_on_terminate)
     for _sig in (signal.SIGTERM, signal.SIGINT):
         try:
@@ -427,8 +452,13 @@ def main() -> None:
                 logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
                 continue
 
-            complete_job(job_id, result_json)
-            logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
+            if complete_job(job_id, result_json):
+                logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
+            else:
+                logging.info(
+                    f"[worker] Job {job_id} nu s-a marcat COMPLETED "
+                    f"(anulat sau status schimbat între timp)."
+                )
             
         except Exception as exc:
             tb = traceback.format_exc()

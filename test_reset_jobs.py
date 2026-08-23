@@ -151,6 +151,33 @@ def test_force_deletes_completed_job_already_finalized(isolated_db, monkeypatch)
     assert completed_id not in _job_ids(isolated_db)
 
 
+def test_complete_job_does_not_overwrite_cancelled(isolated_db):
+    jid = _insert_job(isolated_db, "CANCELLED")
+    ok = job_queue.complete_job(jid, "{}", db_path=isolated_db)
+    assert ok is False
+    with sqlite3.connect(isolated_db) as con:
+        st = con.execute("SELECT status FROM jobs WHERE id=?", (jid,)).fetchone()[0]
+    assert st == "CANCELLED"
+
+
+def test_complete_job_marks_running(isolated_db):
+    jid = _insert_job(isolated_db, "RUNNING")
+    ok = job_queue.complete_job(jid, "{}", db_path=isolated_db)
+    assert ok is True
+    with sqlite3.connect(isolated_db) as con:
+        st = con.execute("SELECT status FROM jobs WHERE id=?", (jid,)).fetchone()[0]
+    assert st == "COMPLETED"
+
+
+def test_fail_job_does_not_overwrite_cancelled(isolated_db):
+    jid = _insert_job(isolated_db, "CANCELLED")
+    ok = job_queue.fail_job(jid, "boom", db_path=isolated_db)
+    assert ok is False
+    with sqlite3.connect(isolated_db) as con:
+        st = con.execute("SELECT status FROM jobs WHERE id=?", (jid,)).fetchone()[0]
+    assert st == "CANCELLED"
+
+
 def test_no_db_file_returns_zero_without_touching_anything(tmp_path, monkeypatch):
     missing_db = str(tmp_path / "does_not_exist.db")
     monkeypatch.setattr(reset_jobs, "DB", missing_db)

@@ -316,8 +316,24 @@ def is_worker_running() -> bool:
 def ensure_worker_running() -> None:
     if is_worker_running():
         return
+    lock_path = PROJECT_ROOT / ".worker_spawn.lock"
+    fd = None
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        time.sleep(0.4)
+        if is_worker_running():
+            return
+        try:
+            if time.time() - lock_path.stat().st_mtime > 15:
+                lock_path.unlink(missing_ok=True)
+        except OSError:
+            return
+        return
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
+        if is_worker_running():
+            return
         subprocess.Popen(
             [sys.executable, str(WORKER_PATH)],
             cwd=str(PROJECT_ROOT),
@@ -330,3 +346,13 @@ def ensure_worker_running() -> None:
         logger.info("[ui_shared] worker.py lansat.")
     except Exception as exc:  # noqa: BLE001
         logger.error("[ui_shared] nu pot lansa worker.py: %s", exc)
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
