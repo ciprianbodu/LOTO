@@ -161,6 +161,7 @@ def _load_settings() -> None:
         SETTINGS["max_variants_val"] = min(10000, max(0, mv))
     except (TypeError, ValueError):
         SETTINGS["max_variants_val"] = 0
+    SETTINGS["guarantee_auto_val"] = bool(SETTINGS.get("guarantee_auto_val", True))
 
     # Inițializează variabila din modulul decision și os.environ din setările salvate
     try:
@@ -254,6 +255,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "game_label": g_label,
             "pool_size": int(SETTINGS["pool_size_val"]),
             "guarantee": int(guarantee),
+            "guarantee_auto": auto_g,
             "max_variants": int(SETTINGS["max_variants_val"]),
             "lookback": int(SETTINGS["lookback_val"]),
             "filter_consecutives": False,
@@ -3379,23 +3381,6 @@ def main_page() -> None:
                     "4 = mai scump (asigură și 4-în-pool)."
                 ).classes("text-caption text-grey")
 
-        def _on_g_auto():
-            _save_settings()
-            _guarantee_hint.refresh()
-
-        g_auto = ui.checkbox("Garanție automată (după ținta 3+/4+)")
-        g_auto.bind_value(SETTINGS, "guarantee_auto_val")
-        g_auto.on_value_change(lambda: _on_g_auto())
-        g_num = ui.number("Garanție minimă (Set Cover) — doar dacă auto e OFF", min=3, max=5, step=1).classes("w-full")
-        _bind_save(g_num, "guarantee_val")
-        g_num.bind_enabled_from(SETTINGS, "guarantee_auto_val", backward=lambda v: not bool(v))
-        _guarantee_hint()
-
-        _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
-        _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
-        _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
-        _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
-
         def _on_target_change(e):
             SETTINGS["bench_hit_target"] = int(e.value)
             _save_settings()
@@ -3419,6 +3404,24 @@ def main_page() -> None:
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
         ).classes("w-full")
+
+        def _on_g_auto():
+            _save_settings()
+            _guarantee_hint.refresh()
+
+        g_auto = ui.checkbox("Garanție automată (după ținta 3+/4+)")
+        g_auto.bind_value(SETTINGS, "guarantee_auto_val")
+        g_auto.on_value_change(lambda: _on_g_auto())
+        g_num = ui.number("Garanție minimă (Set Cover) — doar dacă auto e OFF", min=3, max=5, step=1).classes("w-full")
+        _bind_save(g_num, "guarantee_val")
+        g_num.bind_enabled_from(SETTINGS, "guarantee_auto_val", backward=lambda v: not bool(v))
+        _guarantee_hint()
+
+        _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
+        _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
+        _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
+        _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
+
         ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric) rulează doar Pool 1: "
                  "Joker → 5/40 → 6/49 (6/49 ultim). Pool 2 nu intră în WF. "
                  "WF paralel (~80% CPU) — de obicei minute, nu ore. Bugetul e plafon de siguranță."

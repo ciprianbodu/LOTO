@@ -152,7 +152,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             game_label = str(task["game_label"])
             p_size = int(task.get("pool_size", 12))
             p_size = max(6, min(16, p_size))  # aliniat cu UI (pool_size_val max 16)
-            guar = int(task.get("guarantee", 4))
+            guar_raw = task.get("guarantee", 4)
             max_var = int(task.get("max_variants", 0))
             lookback = int(task.get("lookback", 0))
             filter_cons = bool(task.get("filter_consecutives", False))
@@ -172,7 +172,11 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             except Exception as exc:
                 logging.warning(f"[worker] Nu s-a putut seta tinta de benchmark: {exc}")
 
-            logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
+            logging.info(
+                f"[worker] Se procesează task pentru {game_label} "
+                f"(Pool: {task.get('pool_size')}, Garanție cerută: {task.get('guarantee')}, "
+                f"auto={bool(task.get('guarantee_auto'))})"
+            )
             logging.debug(f"[worker] Full task: {task}")
             
             def progress_cb(msg, pct):
@@ -193,6 +197,20 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     game_mapped = "5/40"
                 elif "joker" in game_label.lower():
                     game_mapped = "joker"
+
+                from wheeling_methods import resolve_task_guarantee
+                _pick = {"6/49": 6, "5/40": 5, "joker": 5}.get(game_mapped, 6)
+                guar = resolve_task_guarantee(
+                    game_mapped,
+                    target=bench_hit_target,
+                    guarantee=guar_raw,
+                    auto=bool(task.get("guarantee_auto")),
+                    pick=_pick,
+                )
+                logging.info(
+                    "[worker] Garanție efectivă %s = %d (pick=%d, țintă %d+, auto=%s)",
+                    game_mapped, guar, _pick, bench_hit_target, bool(task.get("guarantee_auto")),
+                )
 
                 # Auto-clamp pool_size cand auto_invert e ON.
                 # Reguli matematice: cu inversare, dupa primul pool excludem P numere

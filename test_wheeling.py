@@ -19,6 +19,7 @@ from wheeling_methods import (
     auto_wheel_guarantee,
     cap_wheel_max_coverage,
     clamp_wheel_guarantee,
+    resolve_task_guarantee,
     compute_coverage_pct,
     filter_preserving_coverage,
     generate_wheel,
@@ -171,6 +172,13 @@ def test_auto_wheel_guarantee_follows_target_not_complete_system():
     # niciodată guarantee == pick (sistem complet); ținta bench e doar 3 sau 4
     assert auto_wheel_guarantee("5/40", 5) == 4
     assert auto_wheel_guarantee("6/49", 99) == 4
+
+
+def test_resolve_task_guarantee_auto_and_manual_clamp():
+    assert resolve_task_guarantee("5/40", target=3, guarantee=6, auto=True) == 3
+    assert resolve_task_guarantee("5/40", target=3, guarantee=6, auto=False) == 5
+    assert resolve_task_guarantee("6/49", target=4, guarantee=4, auto=False) == 4
+    assert resolve_task_guarantee("joker", target=3, guarantee="x", auto=False) == 3
 
 
 def test_clamp_wheel_guarantee_impossible_becomes_complete_system():

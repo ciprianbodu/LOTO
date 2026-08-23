@@ -68,6 +68,26 @@ def auto_wheel_guarantee(game_label: str, target: int, pick: int | None = None) 
     return clamp_wheel_guarantee(g, pick)
 
 
+def resolve_task_guarantee(
+    game_label: str,
+    *,
+    target: int,
+    guarantee,
+    auto: bool,
+    pick: int | None = None,
+) -> int:
+    """Garanția pe care o rulează worker-ul: auto după țintă, altfel clamp la pick."""
+    if auto:
+        return auto_wheel_guarantee(game_label, target, pick)
+    if pick is None:
+        low = (game_label or "").lower()
+        pick = 5 if ("5/40" in low or "5_40" in low or "joker" in low) else 6
+    try:
+        return clamp_wheel_guarantee(int(guarantee), pick)
+    except (TypeError, ValueError):
+        return auto_wheel_guarantee(game_label, target, pick)
+
+
 def clamp_wheel_guarantee(guarantee: int, pick: int) -> int:
     """``guarantee > pick`` e imposibil (un bilet nu poate conține un subset
     mai mare decât el). Clamp la ``pick`` = sistem complet, nu wheel gol."""
