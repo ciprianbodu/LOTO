@@ -387,8 +387,15 @@ class LotoEngine:
     def analyze_frequency(self) -> np.ndarray:
         """Analiză frecvență numerelor (vectorizat pe matrice sau coloana numbers)."""
         logging.info(f"[ENGINE] Analiză frecvență (Versiune {VERSION})...")
+
+        def _store(freq: np.ndarray) -> np.ndarray:
+            # Completarea de pool citește self.freq. Fără asta, getattr(..., None)
+            # lăsa umplerea pe „număr mare" (0.0 egale) în loc de frecvență.
+            self.freq = freq
+            return freq
+
         if self.data is None:
-            return np.array([], dtype=np.int64)
+            return _store(np.array([], dtype=np.int64))
 
         max_n = int(self.params["max_n"])
 
@@ -396,9 +403,9 @@ class LotoEngine:
             vals = self._draw_matrix.ravel()
             vals = vals[(vals >= 1) & (vals <= max_n)]
             if vals.size == 0:
-                return np.zeros(max_n, dtype=np.int64)
+                return _store(np.zeros(max_n, dtype=np.int64))
             freq = np.bincount(vals.astype(np.int64), minlength=max_n + 1)
-            return freq[1 : max_n + 1]
+            return _store(freq[1 : max_n + 1])
 
         # Fallback (dacă lipsește _draw_matrix)
         all_numbers = []
@@ -420,12 +427,12 @@ class LotoEngine:
                         continue
         
         if not all_numbers:
-            return np.zeros(max_n, dtype=np.int64)
+            return _store(np.zeros(max_n, dtype=np.int64))
             
         arr = np.asarray(all_numbers, dtype=np.int64)
         arr = arr[(arr >= 1) & (arr <= max_n)]
         freq = np.bincount(arr, minlength=max_n + 1)
-        return freq[1 : max_n + 1]
+        return _store(freq[1 : max_n + 1])
 
     def analyze_joker_frequency(self) -> np.ndarray:
         """Analiză frecvență pentru Urna 2 la Joker (1-20)."""
@@ -1453,6 +1460,8 @@ class LotoEngine:
                 len(pool), pool_size,
             )
             freq = getattr(self, "freq", None)
+            if freq is None or (hasattr(freq, "size") and freq.size == 0):
+                freq = self.analyze_frequency()
             pool = complete_pool(
                 pool, pool_size,
                 max_num=max_num,

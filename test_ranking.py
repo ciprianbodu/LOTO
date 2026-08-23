@@ -89,3 +89,17 @@ def test_complete_pool_enforcement_never_readds_exclude():
         allow_excluded_last_resort=False,
     )
     assert out == [1]
+
+
+def test_complete_pool_without_freq_falls_to_number_desc():
+    """self.freq lipsea → golurile erau 0.0 → se alegea numărul mare, nu frecventul."""
+    out = complete_pool([1], 3, max_num=5, scores={1: 1.0})
+    assert out == [1, 4, 5]  # sortat numeric; apartenența e 5 apoi 4 (număr desc)
+
+
+def test_complete_pool_with_freq_prefers_frequent_not_largest():
+    out = complete_pool(
+        [1], 3, max_num=5, scores={1: 1.0},
+        freq={2: 9.0, 3: 8.0, 5: 0.1},
+    )
+    assert out == [1, 2, 3]
