@@ -337,7 +337,16 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     logging.info(f"[worker] Job {job_id} oprit la cerere (Stop Requested).")
                     return "{}"
                 logging.error(f"Eroare la procesarea task-ului {game_label}: {e}")
-                raise
+                # Nu aruncăm tot jobul: celelalte jocuri/CSV-uri rămân livrabile.
+                outputs[game_label] = {
+                    "error": str(e),
+                    "total_draws": 0,
+                    "hard_core": [],
+                    "variants": [],
+                    "pool_size": 0,
+                    "audit": {"pipeline_error": str(e)},
+                    "context": {"coverage_pct": 0.0, "max_variants": 0},
+                }
             finally:
                 step_idx += 1
 
@@ -347,7 +356,11 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             except OSError as exc:
                 logging.warning("Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc)
             
-        results_bundle.append((fname, outputs))
+        if outputs:
+            results_bundle.append((fname, outputs))
+
+    if not results_bundle:
+        raise RuntimeError("Niciun joc nu a produs rezultat.")
 
     update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI...")
     persistent = (results_bundle, len(results_bundle))

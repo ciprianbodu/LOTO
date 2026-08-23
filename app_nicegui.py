@@ -814,6 +814,12 @@ def status_panel() -> None:
         state = str(stt.get("status") or "")
         if state == "COMPLETED":
             payload = decode_queue_result(str(stt.get("result_json") or "{}"))
+            if not (isinstance(payload, tuple) and len(payload) == 2):
+                STATE["active_job_id"] = None
+                unlock_engine()
+                ui.label("❌ Rezultat invalid / gol — jobul s-a încheiat fără date. Reîncearcă.").classes(
+                    "text-negative")
+                return
             # Claim ATOMIC: un SINGUR renderer duce jobul în finalize. Dacă două
             # taburi/reconnect-uri intră aproape simultan în ramura COMPLETED, doar cel
             # care încă vede active_job_id == job_id procesează (mail/shutdown o dată);
@@ -857,7 +863,10 @@ def status_panel() -> None:
         if state in ("FAILED", "CANCELLED"):
             STATE["active_job_id"] = None
             unlock_engine()
-            ui.label(f"Job {state}: {stt.get('error_msg') or ''}").classes("text-negative")
+            err = str(stt.get("result_json") or stt.get("log_tail") or stt.get("error_msg") or "").strip()
+            if err.startswith("{") or "pickle" in err[:40].lower():
+                err = str(stt.get("log_tail") or "")[:2000]
+            ui.label(f"Job {state}: {err[:800] or 'fără mesaj'}").classes("text-negative")
             return
         with ui.card().classes("w-full"):
             tail = str(stt.get("log_tail") or "").strip()
@@ -1753,6 +1762,11 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                       with_wf: bool = True, res_prefix: str = "") -> None:
     """Randează un pool complet (badges, p10/p90, audit, cost, WF, variante, stages).
     Folosit o dată normal, sau de DOUĂ ori la auto-invert (Faza 1 + Faza 2)."""
+    if data.get("error") or (data.get("audit") or {}).get("pipeline_error"):
+        ui.label(
+            f"⚠️ Generare eșuată pentru acest joc: "
+            f"{data.get('error') or (data.get('audit') or {}).get('pipeline_error')}"
+        ).classes("text-red")
     pool = data.get("hard_core") or []
     stats = data.get("hard_core_stats") or {}
     eff = data.get("pool_size")

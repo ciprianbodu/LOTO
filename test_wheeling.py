@@ -324,6 +324,32 @@ def test_initial_hard_core_fills_zero_frequency_numbers():
     assert len(set(pool)) == 5
 
 
+def test_int_or_none_skips_dirty_csv_cells():
+    pytest.importorskip("pandas")
+    import pandas as pd
+
+    from loto_engine import _int_or_none
+
+    assert _int_or_none(7) == 7
+    assert _int_or_none("12") == 12
+    assert _int_or_none("—") is None
+    assert _int_or_none("") is None
+    assert _int_or_none(float("nan")) is None
+    assert _int_or_none(pd.NA) is None
+
+
+def test_joker_column_drops_nan_not_int64_min():
+    pytest.importorskip("pandas")
+    import pandas as pd
+
+    from loto_engine import _joker_column_as_draws
+
+    df = pd.DataFrame({"joker": [3, None, 7, "x", 21, 1]})
+    arr = _joker_column_as_draws(df)
+    assert arr is not None
+    assert arr.reshape(-1).tolist() == [3, 7, 1]
+
+
 def test_hits_in_pool_counts_pool_not_ticket_union():
     pytest.importorskip("pandas")
     from loto_enterprise.core.backtesting import hits_in_pool

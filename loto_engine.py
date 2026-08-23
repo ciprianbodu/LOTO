@@ -29,6 +29,29 @@ from loto_enterprise.core.pool_selection import complete_pool, select_pool_from_
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
 from loto_enterprise.core.ranking import is_finite_score, rank_by_score
 
+
+def _int_or_none(x):
+    """Conversie defensivă pentru celule CSV (context / display). NaN / text → None."""
+    try:
+        if x is None or (isinstance(x, float) and x != x):
+            return None
+        if pd.isna(x):
+            return None
+        return int(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def _joker_column_as_draws(df) -> np.ndarray | None:
+    """Urna 2 ca matrice (n, 1), doar valori 1–20. Fără NaN → −2**63 în int64."""
+    if df is None or "joker" not in getattr(df, "columns", []):
+        return None
+    vals = pd.to_numeric(df["joker"], errors="coerce").dropna().astype(np.int64)
+    vals = vals[(vals >= 1) & (vals <= 20)]
+    if vals.empty:
+        return None
+    return vals.to_numpy().reshape(-1, 1)
+
 # Adaptive feedback (învățare persistentă post-extragere)
 try:
     from loto_enterprise.core.adaptive_feedback import (
@@ -982,9 +1005,9 @@ class LotoEngine:
                     d = {"date": str(row.get("date", "")).split()[0] if "date" in row else "N/A", "numbers": [], "joker": None}
                     n_cols = sorted([c for c in df_subset.columns if str(c).lower().startswith("n") and str(c).lower() != "numbers"], key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"))
                     nums = [row[c] for c in n_cols if pd.notna(row.get(c))]
-                    d["numbers"] = [int(x) for x in nums]
-                    if "joker" in df_subset.columns and pd.notna(row.get("joker")):
-                        d["joker"] = int(row["joker"])
+                    d["numbers"] = [n for x in nums if (n := _int_or_none(x)) is not None]
+                    if "joker" in df_subset.columns:
+                        d["joker"] = _int_or_none(row.get("joker"))
                     draws.append(d)
                 return draws
 
@@ -1369,8 +1392,10 @@ class LotoEngine:
 
         if self._draw_matrix is None:
             return {}
-        if is_joker_drum and self.data is not None and "joker" in self.data.columns:
-            draws_2d = self.data["joker"].to_numpy(dtype=np.int64).reshape(-1, 1)
+        if is_joker_drum:
+            draws_2d = _joker_column_as_draws(self.data)
+            if draws_2d is None:
+                return {}
         else:
             draws_2d = self._draw_matrix.astype(np.int64)
 
@@ -1459,8 +1484,10 @@ class LotoEngine:
         """Fallback determinist când câștigătorul bench nu produce scoruri:
         frecvență recency-weighted (exp-decay) pe istoric, normalizată [0,1]."""
         max_num = 20 if is_joker_drum else int(self.params["max_n"])
-        if is_joker_drum and self.data is not None and "joker" in self.data.columns:
-            draws_2d = self.data["joker"].to_numpy(dtype=np.int64).reshape(-1, 1)
+        if is_joker_drum:
+            draws_2d = _joker_column_as_draws(self.data)
+            if draws_2d is None:
+                return {}
         elif self._draw_matrix is not None:
             draws_2d = self._draw_matrix.astype(np.int64)
         else:
