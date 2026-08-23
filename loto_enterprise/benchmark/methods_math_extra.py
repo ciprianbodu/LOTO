@@ -14,23 +14,9 @@ from typing import Callable
 
 import numpy as np
 
+from .score_normalize import normalize_scores as _normalize
+
 logger = logging.getLogger(__name__)
-
-
-def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
-    if not scores:
-        return {n: 0.0 for n in range(1, max_num + 1)}
-    vals = np.fromiter((float(v) for v in scores.values()), dtype=np.float64)
-    if not np.isfinite(vals).all():
-        vals = np.nan_to_num(vals, nan=0.0, posinf=0.0, neginf=0.0)
-        scores = {int(k): float(np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0))
-                  for k, v in scores.items()}
-    vmin, vmax = float(vals.min()), float(vals.max())
-    rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((float(v) - vmin) / rng) for k, v in scores.items()}
-    for n in range(1, max_num + 1):
-        out.setdefault(n, 0.0)
-    return out
 
 
 def _build_binary(draws_2d: np.ndarray, max_num: int) -> np.ndarray:

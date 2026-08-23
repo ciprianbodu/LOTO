@@ -185,11 +185,20 @@ class FoldResult:
 def _top_k(scores: dict[int, float], k: int) -> list[int]:
     # Deleagă la regula canonică (scor desc, apoi număr mare întâi — evită
     # degenerarea 1..K) din core.ranking — ACEEAȘI folosită de producție
-    # (pool_selection) și de biletul OMNIUS. Cu freq=None comportamentul e
-    # bit-identic cu vechea implementare locală, deci fold-urile din bench
-    # cache (CACHE_VERSION curent) rămân valide — fără bump.
-    # Filtrarea (ex. blacklist „numere moarte") rămâne la apelant.
-    return rank_by_score(scores, k)
+    # (pool_selection). Cu freq=None + scoruri finite comportamentul e
+    # bit-identic cu vechea implementare, deci fold-urile din bench cache
+    # (CACHE_VERSION curent) rămân valide — fără bump.
+    # Non-finitele sunt sărite (ca în select_pool_from_scores): un NaN nu
+    # mai bagă numărul în pool pe ordinea de inserare.
+    finite: dict[int, float] = {}
+    for n, s in scores.items():
+        try:
+            fs = float(s)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(fs):
+            finite[int(n)] = fs
+    return rank_by_score(finite, k)
 
 
 def _evaluate_fold(

@@ -13,6 +13,8 @@ aplica, deci la scoruri egale pool-ul generat DIVERGA de cel validat.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from loto_enterprise.core.ranking import rank_by_score
@@ -33,11 +35,18 @@ def select_pool_from_scores(
     mici compuse”). ``draw_matrix`` rămâne în semnătură pentru compatibilitate
     cu apelantul din loto_engine, dar NU mai influențează selecția.
     """
-    valid = {
-        int(n): float(s)
-        for n, s in scores.items()
-        if int(n) not in blacklist and 1 <= int(n) <= max_num
-    }
+    valid = {}
+    for n, s in scores.items():
+        ni = int(n)
+        if ni in blacklist or ni < 1 or ni > max_num:
+            continue
+        try:
+            fs = float(s)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(fs):
+            continue
+        valid[ni] = fs
     ranked_all = rank_by_score(valid, len(valid))
     pool = ranked_all[: max(0, int(pool_size))]
 

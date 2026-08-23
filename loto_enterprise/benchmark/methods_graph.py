@@ -18,26 +18,10 @@ from typing import Callable
 
 import numpy as np
 
+from .score_normalize import normalize_scores as _normalize
+
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
-
-
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
-def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
-    if not scores:
-        return {n: 0.0 for n in range(1, max_num + 1)}
-    vals = np.fromiter(scores.values(), dtype=np.float64)
-    vals = vals[np.isfinite(vals)]
-    if vals.size == 0:
-        return {n: 0.0 for n in range(1, max_num + 1)}
-    vmin, vmax = float(vals.min()), float(vals.max())
-    rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((v - vmin) / rng) if np.isfinite(v) else 0.0 for k, v in scores.items()}
-    for n in range(1, max_num + 1):
-        out.setdefault(n, 0.0)
-    return out
 
 
 def _vec(v: np.ndarray, max_num: int) -> dict[int, float]:

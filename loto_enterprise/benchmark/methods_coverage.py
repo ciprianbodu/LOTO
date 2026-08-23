@@ -19,23 +19,9 @@ from typing import Callable
 
 import numpy as np
 
+from .score_normalize import normalize_scores as _normalize
+
 logger = logging.getLogger(__name__)
-
-
-# ===========================================================================
-# Utilitare comune
-# ===========================================================================
-
-def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
-    if not scores:
-        return {n: 0.0 for n in range(1, max_num + 1)}
-    vals = np.fromiter(scores.values(), dtype=np.float64)
-    vmin, vmax = float(vals.min()), float(vals.max())
-    rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((v - vmin) / rng) for k, v in scores.items()}
-    for n in range(1, max_num + 1):
-        out.setdefault(n, 0.0)
-    return out
 
 
 def _binary(draws_2d: np.ndarray, max_num: int) -> np.ndarray:

@@ -251,19 +251,43 @@ def get_ensemble_for_game(
     return [(n, fn, w / total_w) for n, fn, w in out]
 
 
+def _replace_nonfinite(raw: dict) -> dict[int, float]:
+    """Înlocuiește NaN/non-numeric cu minimul finit (aceeași scală).
+
+    Un singur glitch numeric nu mai scoate TOT membrul din ensemble (semnalul
+    finit rămâne). Toate non-finite / dict gol → {} (tratat ca empty mai jos).
+    Pe un dict TOATE finite: aceleași chei/valori (int/float), bit-identic.
+    """
+    if not raw:
+        return {}
+    finite_vals: list[float] = []
+    parsed: list[tuple[int, float | None]] = []
+    for k, v in raw.items():
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            parsed.append((int(k), None))
+            continue
+        if math.isfinite(fv):
+            finite_vals.append(fv)
+            parsed.append((int(k), fv))
+        else:
+            parsed.append((int(k), None))
+    if not finite_vals:
+        return {}
+    floor = min(finite_vals)
+    return {k: (v if v is not None else floor) for k, v in parsed}
+
+
 def _has_variance(raw: dict) -> bool:
     """Scoruri PLATE (toate egale) = fără informație de ranking — filtrate din blend.
 
-    Tot aici cad și scorurile NE-FINITE (NaN/inf): un singur NaN otrăvește
-    min-max-ul membrului ȘI suma ponderată (numărul respectiv iese NaN în pool),
-    iar `core.ranking.rank_by_score` devine dependent de ordinea de inserare pe
-    NaN. Un membru cu scoruri ne-finite = metodă DEFECTĂ, nu semnal slab → afară
-    din blend, la fel ca unul plat (același motiv raportat: „flat").
+    Apelată pe dict DEJA sanitizat (`_replace_nonfinite`): valorile sunt finite.
+    Un membru care rămâne plat după sanitizare (inclusiv „toate NaN → {}" pe
+    ramura empty) nu aduce ranking → afară, ca înainte.
     """
     vals = [float(v) for v in raw.values()]
     if len(vals) < 2:
-        return False
-    if not all(math.isfinite(v) for v in vals):
         return False
     return (max(vals) - min(vals)) > 1e-12
 
@@ -414,17 +438,19 @@ def _split_active(
 
     Ignoră scoruri goale SAU plate (toate egale) — altfel un Ridge defect
     (toate 0) + prime_bias (2 nivele) → pool = „cele mai mici compuse".
-    „flat" acoperă și scorurile NE-FINITE (vezi `_has_variance`).
+    Înainte de varianță: `_replace_nonfinite` (un NaN nu mai omoară membrul).
+    Dict rămas gol după sanitizare = „empty".
     dropped = [(nume, motiv)], motiv ∈ {"empty", "flat"}."""
     active: list[tuple[str, dict[int, float], float]] = []
     dropped: list[tuple[str, str]] = []
     for name, raw, w in contributions:
-        if not raw:
+        clean = _replace_nonfinite(raw)
+        if not clean:
             dropped.append((name, "empty"))
-        elif not _has_variance(raw):
+        elif not _has_variance(clean):
             dropped.append((name, "flat"))
         else:
-            active.append((name, raw, w))
+            active.append((name, clean, w))
     return active, dropped
 
 

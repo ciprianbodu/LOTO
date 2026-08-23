@@ -104,6 +104,33 @@ def test_flat_scores_no_division_by_zero():
     assert all(v == v for v in out.values())  # nu NaN
 
 
+def test_single_nan_does_not_drop_member_or_poison_blend():
+    """Un NaN pe un număr nu mai scoate tot membrul din ensemble.
+
+    Numărul defect ia minimul finit (floor) → rămâne ultimul pe scala metodei;
+    celelalte numere își păstrează ranking-ul.
+    """
+    raw_good = {1: 1.0, 2: 0.0, 3: 0.5}
+    raw_glitch = {1: 10.0, 2: float("nan"), 3: 0.0}
+    out = ms.combine_ensemble_scores([
+        ("good", raw_good, 0.5),
+        ("glitch", raw_glitch, 0.5),
+    ])
+    assert set(out.keys()) == {1, 2, 3}
+    assert all(v == v for v in out.values())
+    # Ambele metode (după floor pe NaN) pun 1 în cap → blend-ul îl păstrează.
+    assert out[1] > out[2]
+    assert out[1] > out[3]
+
+
+def test_all_nan_member_is_empty_not_poison():
+    out = ms.combine_ensemble_scores([
+        ("dead", {1: float("nan"), 2: float("nan")}, 0.5),
+        ("alive", {1: 1.0, 2: 0.0}, 0.5),
+    ])
+    assert out == {1: 1.0, 2: 0.0}
+
+
 # ---------------------------------------------------------------------------
 # get_ensemble_for_game
 # ---------------------------------------------------------------------------

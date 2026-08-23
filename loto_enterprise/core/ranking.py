@@ -40,12 +40,29 @@ def rank_by_score(
     decide APARTENENȚA la egalitate de scor, nu doar ordinea!). Filtrarea
     (blacklist, interval 1..max_num) rămâne responsabilitatea apelantului —
     helperul nu filtrează nimic. Dict gol sau ``k <= 0`` -> [].
+
+    Precondiție relaxată: un NaN nu mai ocolește tot tripletul de sortare
+    (comparația de tuple face scurt-circuit → rezultat dependent de inserare).
+    NaN e tratat ca „cel mai slab" (ca −inf), deci tie-break-ul pe număr rămâne
+    determinist. ±inf își păstrează locul ( +inf primul, −inf ultimul).
+    Pe scoruri TOATE finite rezultatul e bit-identic cu sortarea veche.
     """
     if not scores or k <= 0:
         return []
     f = freq or {}
     return [n for n, _ in sorted(
         scores.items(),
-        key=lambda kv: (kv[1], f.get(kv[0], 0.0), kv[0]),
+        key=lambda kv: (_score_key(kv[1]), f.get(kv[0], 0.0), kv[0]),
         reverse=True,
     )[: int(k)]]
+
+
+def _score_key(score) -> float:
+    """Cheie de sortare: finite neschimbate; NaN / non-numeric → −inf."""
+    try:
+        fs = float(score)
+    except (TypeError, ValueError):
+        return float("-inf")
+    if fs != fs:  # NaN — singurul caz în care comparația de tuple se rupea
+        return float("-inf")
+    return fs
