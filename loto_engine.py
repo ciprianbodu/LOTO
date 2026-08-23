@@ -23,7 +23,7 @@ import sys
 # Scoring = câștigătorul benchmark (metode CPU) → fallback frecvență.
 # Tot suportul GPU/neural (TimesFM/torch/foundation) a fost eliminat din aplicație.
 # Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
-from loto_enterprise.core.pool_selection import select_pool_from_scores
+from loto_enterprise.core.pool_selection import complete_pool, select_pool_from_scores
 # Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
@@ -191,8 +191,11 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
             logging.warning("[WHEEL] Nu am găsit acoperire suplimentară, oprire timpurie.")
             break
             
-        if iteration > 1000:  # Timeout extins pt pool-uri mari, dar mult mai rapid
-            logging.warning(f"[WHEEL] TIMEOUT: 1000 iterații.")
+        # Prag = max(1000, nr. ținte): pe path-ul uzual (pool 12, g=4 → 495 ținte)
+        # rămâne 1000, bit-identic. Pe pool 16 / g aproape de pick, 1000 tăia
+        # acoperirea înainte să se închidă cover-ul.
+        if iteration > max(1000, total_targets):
+            logging.warning("[WHEEL] TIMEOUT: %d iterații.", max(1000, total_targets))
             break
             
     coverage_pct = 100.0 if total_targets == 0 else round((len(covered_targets) / total_targets) * 100, 2)
@@ -779,7 +782,18 @@ class LotoEngine:
             )
             self.hard_core = sorted(ranked)
         elif len(self.hard_core) < pool_size:
-            logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
+            logging.warning(
+                f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. "
+                f"Pool_size solicitat: {pool_size}. Completez din universul permis."
+            )
+            self.hard_core = complete_pool(
+                self.hard_core, pool_size,
+                max_num=int(self.params.get("max_n", 49)),
+                scores=tfm_scores,
+                exclude=set(blacklist),
+                freq=freq,
+                allow_excluded_last_resort=not bool(self._manual_blacklist_set),
+            )
         logging.info(f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}")
         self._consecutive_filter_applied = False
         self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
@@ -793,13 +807,17 @@ class LotoEngine:
             # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
             # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.
             # Candidații alternativi rămân disponibili în audit['joker_predictions'].
-            if j_scores:
+            # Un dict plin de NaN e truthy — fără finite_j rămâneam fără joker
+            # pe TOATE biletele (generate_predictions sare lista goală).
+            finite_j = {
+                int(n): float(s) for n, s in (j_scores or {}).items() if is_finite_score(s)
+            }
+            ranked_j = rank_by_score(finite_j, 5)
+            if ranked_j:
                 # Tie-break CANONIC (rank_by_score), NU sortare proprie: bench-ul
                 # validează joker_urna2 prin `runner._top_k` → aceeași regulă, altfel
                 # la scoruri egale engine-ul ar alege alt număr decât cel validat.
-                finite_j = {int(n): float(s) for n, s in j_scores.items() if is_finite_score(s)}
-                ranked_j = rank_by_score(finite_j, 5)
-                self.hard_core_joker = [int(ranked_j[0])] if ranked_j else []
+                self.hard_core_joker = [int(ranked_j[0])]
                 logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
                 self.audit['joker_predictions'] = {int(n): round(float(finite_j[n]), 4) for n in ranked_j}
             else:
@@ -843,29 +861,32 @@ class LotoEngine:
                 # Selecția trece prin rank_by_score (regula canonică): filtrarea
                 # (blacklist manual + numerele deja în pool) rămâne la apelant,
                 # conform contractului modulului.
-                if tfm_scores:
-                    clean_scores = {
-                        int(n): float(s) for n, s in tfm_scores.items()
-                        if int(n) not in mb and int(n) not in self.hard_core
-                        and is_finite_score(s)
-                    }
-                else:
-                    clean_scores = {
-                        i + 1: float(f) for i, f in enumerate(freq)
-                        if (i + 1) not in mb and (i + 1) not in self.hard_core
-                    }
-                needed = pool_size - len(self.hard_core)
-                for n in rank_by_score(clean_scores, needed):
-                    self.hard_core.append(int(n))
-                self.hard_core = sorted(self.hard_core)
+                before_fill = set(self.hard_core)
+                self.hard_core = complete_pool(
+                    self.hard_core, pool_size,
+                    max_num=int(self.params.get("max_n", 49)),
+                    scores=tfm_scores,
+                    exclude=mb,
+                    freq=freq,
+                    allow_excluded_last_resort=False,
+                )
                 self.audit.setdefault("manual_inversion", {})["enforced_violations_fixed"] = {
                     "removed": sorted(violated),
-                    "added_replacements": [n for n in self.hard_core if n not in violated][-needed:] if needed > 0 else [],
+                    "added_replacements": sorted(n for n in self.hard_core if n not in before_fill),
                 }
                 logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
 
             else:
                 logging.info(f"[MANUAL-BLACKLIST] Pool curat ({len(self.hard_core)} numere, niciun violator).")
+            if len(self.hard_core) < pool_size:
+                self.hard_core = complete_pool(
+                    self.hard_core, pool_size,
+                    max_num=int(self.params.get("max_n", 49)),
+                    scores=tfm_scores,
+                    exclude=mb,
+                    freq=freq,
+                    allow_excluded_last_resort=False,
+                )
             if 'pipeline_stages' in self.audit:
                 self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
 
@@ -1422,33 +1443,24 @@ class LotoEngine:
             max_num=max_num, draw_matrix=self._draw_matrix,
         )
         
-        # Garanție pool complet: Dacă filtrele/blacklist-ul au fost prea agresive, completăm
+        # Garanție pool complet: întâi universul PERMIS (nu blacklist), apoi
+        # last-resort din blacklist ca K să nu scadă — enforcement-ul manual
+        # scoate violatorii și recompletează fără ei.
         if len(pool) < pool_size:
-            logging.warning(f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). Se completează cu cele mai bune numere din blacklist.")
-            
-            # Completare prin regula canonică (nu sorted() propriu): NaN afară,
-            # la egalitate de scor decide numărul mare — ca bench-ul.
-            leftover = {
-                int(num): float(score)
-                for num, score in scores.items()
-                if int(num) in blacklist and int(num) not in pool and is_finite_score(score)
-            }
-            needed = pool_size - len(pool)
-            pool.extend(rank_by_score(leftover, needed))
-                
-            # Dacă tot nu avem destule (e.g. scores e incomplet), fallback final pe frecvență globală
-            if len(pool) < pool_size:
-                logging.warning(f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). Fallback final pe frecvență globală.")
-                freq = getattr(self, 'freq', None)
-                if freq is None:
-                    freq = self.analyze_frequency()
-                
-                freq_scores = {
-                    i + 1: float(freq[i])
-                    for i in range(len(freq))
-                    if (i + 1) not in pool
-                }
-                pool.extend(rank_by_score(freq_scores, pool_size - len(pool)))
+            logging.warning(
+                "[TIMESFM] Pool incomplet (%d/%d). Completez din numerele permise "
+                "(nu din blacklist).",
+                len(pool), pool_size,
+            )
+            freq = getattr(self, "freq", None)
+            pool = complete_pool(
+                pool, pool_size,
+                max_num=max_num,
+                scores=scores,
+                exclude=set(blacklist or set()),
+                freq=freq,
+                allow_excluded_last_resort=True,
+            )
 
         return sorted(pool[:pool_size])
 
