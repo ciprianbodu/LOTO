@@ -123,11 +123,25 @@ def filter_preserving_coverage(
     return result, removed
 
 
+def _ticket_score(ticket, scores) -> float:
+    """Sumă de scoruri FINITE pe bilet. NaN/inf nu mai otrăvesc ordinea."""
+    s = 0.0
+    for n in ticket:
+        v = scores.get(n, 0) if scores else 0
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(fv):
+            s += fv
+    return s
+
+
 def _order_by_scores(wheel: list[list[int]], scores) -> list[list[int]]:
     if not scores:
         return [sorted(t) for t in wheel]
     return sorted([sorted(t) for t in wheel],
-                  key=lambda t: sum(scores.get(n, 0) for n in t), reverse=True)
+                  key=lambda t: _ticket_score(t, scores), reverse=True)
 
 
 # ===========================================================================

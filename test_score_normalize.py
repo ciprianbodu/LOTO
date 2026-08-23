@@ -49,3 +49,18 @@ def test_nan_does_not_poison_other_scores():
 def test_all_nan_returns_zeros():
     out = normalize_scores({1: float("nan"), 2: float("inf")}, 2)
     assert out == {1: 0.0, 2: 0.0}
+
+
+def test_blend_skips_nan_component_keeps_finite_ranking():
+    """Un component NaN nu mai otrăvește blend-ul: numărul păstrează celelalte semnale."""
+    from loto_enterprise.benchmark.methods_search_649 import make_blend_scorer
+
+    def good(_draws, max_num):
+        return {n: float(n) for n in range(1, max_num + 1)}
+
+    def bad(_draws, max_num):
+        return {n: float("nan") for n in range(1, max_num + 1)}
+
+    out = make_blend_scorer([(0.5, good), (0.5, bad)])(np.zeros((2, 2)), 5)
+    assert all(math.isfinite(v) for v in out.values())
+    assert out[5] > out[1]

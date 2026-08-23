@@ -13,11 +13,9 @@ aplica, deci la scoruri egale pool-ul generat DIVERGA de cel validat.
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
-from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.ranking import is_finite_score, rank_by_score
 
 
 def select_pool_from_scores(
@@ -40,13 +38,9 @@ def select_pool_from_scores(
         ni = int(n)
         if ni in blacklist or ni < 1 or ni > max_num:
             continue
-        try:
-            fs = float(s)
-        except (TypeError, ValueError):
+        if not is_finite_score(s):
             continue
-        if not math.isfinite(fs):
-            continue
-        valid[ni] = fs
+        valid[ni] = float(s)
     ranked_all = rank_by_score(valid, len(valid))
     pool = ranked_all[: max(0, int(pool_size))]
 

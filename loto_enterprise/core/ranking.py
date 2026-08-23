@@ -57,6 +57,15 @@ def rank_by_score(
     )[: int(k)]]
 
 
+def is_finite_score(score) -> bool:
+    """True doar pentru un scor numeric finit (nu NaN, ±inf, non-numeric)."""
+    try:
+        fs = float(score)
+    except (TypeError, ValueError):
+        return False
+    return fs == fs and fs not in (float("inf"), float("-inf"))
+
+
 def _score_key(score) -> float:
     """Cheie de sortare: finite neschimbate; NaN / non-numeric → −inf."""
     try:

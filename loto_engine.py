@@ -11,6 +11,7 @@ import functools
 from datetime import datetime
 
 import itertools
+import math
 import numpy as np
 import pandas as pd
 from numba import jit
@@ -26,7 +27,7 @@ from loto_enterprise.core.pool_selection import select_pool_from_scores
 # Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
-from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.ranking import is_finite_score, rank_by_score
 
 # Adaptive feedback (învățare persistentă post-extragere)
 try:
@@ -61,12 +62,45 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
 
     if pool_len < pick:
         return [list(pool)], 100.0
+    if guarantee > pick:
+        logging.warning(
+            "[WHEEL] guarantee=%d > pick=%d — țintă imposibilă (un bilet nu poate "
+            "conține un subset mai mare decât el). Acoperire 0%%.",
+            guarantee, pick,
+        )
+        return [], 0.0
 
     # Sortăm pool-ul după scoruri pentru a favoriza numerele puternice
     if scores:
         pool = sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
     else:
         pool = sorted(list(pool))
+
+    # guarantee == pick = sistem complet: fiecare țintă ESTE un bilet.
+    # Greedy-ul vechi se oprea la 1000 de iterații → 1001 bilete la ~33% acoperire
+    # (pool 15/pick 5 = 3003 ținte). Aici enumerăm C(v, pick) și tăiem doar dacă
+    # utilizatorul a cerut max_variants. Path-ul uzual (guarantee < pick, ex. 4<6)
+    # nu trece pe aici — bit-identic.
+    if guarantee == pick:
+        tickets = [list(t) for t in itertools.combinations(pool, pick)]
+        if scores:
+            def _ticket_score(t):
+                s = 0.0
+                for n in t:
+                    v = scores.get(n, 0)
+                    if is_finite_score(v):
+                        s += float(v)
+                return s
+            tickets.sort(key=_ticket_score, reverse=True)
+        if max_variants > 0:
+            tickets = tickets[:max_variants]
+        n_all = math.comb(pool_len, pick)
+        cov = 100.0 if n_all == 0 else round(100.0 * len(tickets) / n_all, 2)
+        logging.info(
+            "[WHEEL] sistem complet (guarantee==pick=%d): %d/%d bilete, acoperire %s%%",
+            pick, len(tickets), n_all, cov,
+        )
+        return tickets, cov
 
     # Generăm toate combinațiile de garanție ca ținte, dar le sortăm numeric
     # pentru a fi consistente cu rezultatul numeric al wheeling-ului.
@@ -740,10 +774,11 @@ class LotoEngine:
                 # Tie-break CANONIC (rank_by_score), NU sortare proprie: bench-ul
                 # validează joker_urna2 prin `runner._top_k` → aceeași regulă, altfel
                 # la scoruri egale engine-ul ar alege alt număr decât cel validat.
-                ranked_j = rank_by_score(j_scores, 5)
-                self.hard_core_joker = [int(ranked_j[0])]
+                finite_j = {int(n): float(s) for n, s in j_scores.items() if is_finite_score(s)}
+                ranked_j = rank_by_score(finite_j, 5)
+                self.hard_core_joker = [int(ranked_j[0])] if ranked_j else []
                 logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
-                self.audit['joker_predictions'] = {int(n): round(float(j_scores[n]), 4) for n in ranked_j}
+                self.audit['joker_predictions'] = {int(n): round(float(finite_j[n]), 4) for n in ranked_j}
             else:
                 freq_joker = self.analyze_joker_frequency()
                 self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
@@ -1347,13 +1382,15 @@ class LotoEngine:
         if len(pool) < pool_size:
             logging.warning(f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). Se completează cu cele mai bune numere din blacklist.")
             
-            # Luăm numerele din blacklist, sortate după scor (cele mai bune dintre cele "rele")
-            blacklisted_nums = [(num, score) for num, score in scores.items() if num in blacklist and num not in pool]
-            sorted_blacklisted = sorted(blacklisted_nums, key=lambda x: x[1], reverse=True)
-            
+            # Completare prin regula canonică (nu sorted() propriu): NaN afară,
+            # la egalitate de scor decide numărul mare — ca bench-ul.
+            leftover = {
+                int(num): float(score)
+                for num, score in scores.items()
+                if int(num) in blacklist and int(num) not in pool and is_finite_score(score)
+            }
             needed = pool_size - len(pool)
-            for num, _ in sorted_blacklisted[:needed]:
-                pool.append(num)
+            pool.extend(rank_by_score(leftover, needed))
                 
             # Dacă tot nu avem destule (e.g. scores e incomplet), fallback final pe frecvență globală
             if len(pool) < pool_size:

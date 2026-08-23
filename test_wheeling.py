@@ -15,6 +15,7 @@ import pytest
 
 from wheeling_methods import (
     WHEEL_METHODS,
+    _order_by_scores,
     compute_coverage_pct,
     filter_preserving_coverage,
     generate_wheel,
@@ -147,3 +148,32 @@ def test_filter_preserving_coverage_keeps_guarantee():
     assert removed >= 0
     assert len(filtered) == len(wheel) - removed
     assert _covers_all(filtered, pool, 3), "filtrarea a spart garanția"
+
+
+def test_order_by_scores_ignores_nan():
+    """Un NaN pe un număr nu mai face ordinea biletelor dependentă de inserare."""
+    wheel = [[1, 2, 3], [4, 5, 6]]
+    scores = {1: 1.0, 2: 1.0, 3: 1.0, 4: float("nan"), 5: 0.1, 6: 0.1}
+    ordered = _order_by_scores(wheel, scores)
+    assert ordered[0] == [1, 2, 3]
+    assert ordered[1] == [4, 5, 6]
+
+
+def test_guarantee_equals_pick_is_complete_system():
+    """Sistem complet (guarantee==pick): C(v, pick) bilete, acoperire 100%.
+    Greedy-ul vechi se oprea la 1000 de iterații și raporta ~33%."""
+    pandas = pytest.importorskip("pandas")
+    del pandas
+    from math import comb
+
+    from loto_engine import generate_combinatorial_wheel
+
+    pool = list(range(1, 9))
+    wheel, coverage = generate_combinatorial_wheel(pool, pick=6, guarantee=6, max_variants=0)
+    assert len(wheel) == comb(8, 6)
+    assert coverage == pytest.approx(100.0)
+    assert _covers_all(wheel, pool, 6)
+
+    capped, cap_cov = generate_combinatorial_wheel(pool, pick=6, guarantee=6, max_variants=5)
+    assert len(capped) == 5
+    assert cap_cov < 100.0

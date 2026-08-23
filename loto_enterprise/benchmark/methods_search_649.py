@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import math
 from typing import Callable
 
 import numpy as np
@@ -74,7 +75,12 @@ def make_blend_scorer(parts: list[tuple[float, Callable]]) -> Callable:
             for n, v in sc.items():
                 ni = int(n)
                 if 1 <= ni <= max_num:
-                    out[ni] += w * float(v)
+                    try:
+                        fv = float(v)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(fv):
+                        out[ni] += w * fv
         return _normalize(out, max_num)
 
     return _score

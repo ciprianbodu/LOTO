@@ -38,7 +38,7 @@ from .hardware import (
     format_snapshot,
 )
 from .hw_sampler import HwSampler, HwSnapshot
-from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.ranking import is_finite_score, rank_by_score
 
 logger = logging.getLogger(__name__)
 
@@ -190,14 +190,7 @@ def _top_k(scores: dict[int, float], k: int) -> list[int]:
     # (CACHE_VERSION curent) rămân valide — fără bump.
     # Non-finitele sunt sărite (ca în select_pool_from_scores): un NaN nu
     # mai bagă numărul în pool pe ordinea de inserare.
-    finite: dict[int, float] = {}
-    for n, s in scores.items():
-        try:
-            fs = float(s)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(fs):
-            finite[int(n)] = fs
+    finite = {int(n): float(s) for n, s in scores.items() if is_finite_score(s)}
     return rank_by_score(finite, k)
 
 

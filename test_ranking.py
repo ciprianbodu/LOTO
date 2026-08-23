@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from loto_enterprise.core.pool_selection import select_pool_from_scores
-from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.ranking import is_finite_score, rank_by_score
 
 
 def test_finite_scores_highest_first_then_number_desc():
@@ -23,6 +23,15 @@ def test_all_nan_falls_back_to_number_desc_deterministically():
     b = {5: float("nan"), 3: float("nan"), 1: float("nan")}
     assert rank_by_score(a, 3) == [5, 3, 1]
     assert rank_by_score(b, 3) == [5, 3, 1]
+
+
+def test_is_finite_score_rejects_nan_inf_and_junk():
+    assert is_finite_score(0.0) and is_finite_score(1.5)
+    assert not is_finite_score(float("nan"))
+    assert not is_finite_score(float("inf"))
+    assert not is_finite_score(float("-inf"))
+    assert not is_finite_score("x")
+    assert not is_finite_score(None)
 
 
 def test_select_pool_skips_nonfinite_and_keeps_finite_top():
