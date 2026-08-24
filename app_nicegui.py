@@ -170,7 +170,8 @@ def _load_settings() -> None:
     except (TypeError, ValueError):
         SETTINGS["sim_depth_val"] = 40
     try:
-        SETTINGS["wf_budget_min"] = min(480, max(1, int(SETTINGS.get("wf_budget_min", 90))))
+        b = min(480, max(5, int(SETTINGS.get("wf_budget_min", 90))))
+        SETTINGS["wf_budget_min"] = int(round(b / 5) * 5) or 5
     except (TypeError, ValueError):
         SETTINGS["wf_budget_min"] = 90
     try:
@@ -3562,7 +3563,7 @@ def main_page() -> None:
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
-        _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
+        _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=5, max=480, step=5).classes("w-full"), "wf_budget_min")
 
         ui.label(f"Validarea (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric) rulează doar Pool 1: "
                  "Joker → 5/40 → 6/49 (6/49 ultim). Pool 2 nu intră în WF. "
