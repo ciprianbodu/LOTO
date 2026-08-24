@@ -40,10 +40,10 @@ import pandas as pd
 from job_queue import (
     JOB_RUNNING,
     JOB_CANCELLED,
+    build_game_failure_output,
     complete_job,
     fail_job,
     fetch_pending_job,
-    fetch_running_job,
     get_pipeline_cache,
     is_job_cancelled,
     put_pipeline_cache,
@@ -188,6 +188,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     raise Exception("STOP_REQUESTED")
 
             try:
+                phase1_data = None
                 # Verificăm dacă job-ul a fost anulat între timp
                 if is_job_cancelled(job_id):
                     logging.info(f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire.")
@@ -340,16 +341,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     logging.info(f"[worker] Job {job_id} oprit la cerere (Stop Requested).")
                     return "{}"
                 logging.error(f"Eroare la procesarea task-ului {game_label}: {e}")
-                # Nu aruncăm tot jobul: celelalte jocuri/CSV-uri rămân livrabile.
-                outputs[game_label] = {
-                    "error": str(e),
-                    "total_draws": 0,
-                    "hard_core": [],
-                    "variants": [],
-                    "pool_size": 0,
-                    "audit": {"pipeline_error": str(e)},
-                    "context": {"coverage_pct": 0.0, "max_variants": 0},
-                }
+                if phase1_data is not None:
+                    logging.warning(
+                        "[worker] Pass 2 a eșuat pentru %s — livrez Pool 1 (Pass 1 a reușit).",
+                        game_label,
+                    )
+                outputs[game_label] = build_game_failure_output(e, phase1_data=phase1_data)
             finally:
                 step_idx += 1
 
@@ -425,8 +422,6 @@ def main() -> None:
     while True:
         try:
             job = fetch_pending_job()
-            if not job:
-                job = fetch_running_job()
             if not job:
                 time.sleep(2)
                 continue

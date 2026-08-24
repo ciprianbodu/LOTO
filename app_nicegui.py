@@ -165,6 +165,19 @@ def _load_settings() -> None:
     except (TypeError, ValueError):
         SETTINGS["lookback_val"] = 0
     SETTINGS["guarantee_auto_val"] = bool(SETTINGS.get("guarantee_auto_val", True))
+    try:
+        SETTINGS["sim_depth_val"] = min(100, max(10, int(SETTINGS.get("sim_depth_val", 40))))
+    except (TypeError, ValueError):
+        SETTINGS["sim_depth_val"] = 40
+    try:
+        SETTINGS["wf_budget_min"] = min(480, max(1, int(SETTINGS.get("wf_budget_min", 90))))
+    except (TypeError, ValueError):
+        SETTINGS["wf_budget_min"] = 90
+    try:
+        t = int(SETTINGS.get("bench_hit_target", 3))
+        SETTINGS["bench_hit_target"] = t if t in (3, 4) else 3
+    except (TypeError, ValueError):
+        SETTINGS["bench_hit_target"] = 3
 
     # Inițializează variabila din modulul decision și os.environ din setările salvate
     try:
@@ -980,6 +993,8 @@ def _build_mail_body() -> str:
         p1 = d["phase1"] if inv else d
         jk1 = sorted(int(x) for x in (p1.get("hard_core_joker") or []))
         lines.append(f"=== {g.upper()} ===")
+        if (d.get("audit") or {}).get("auto_invert_pass2_failed"):
+            lines.append("⚠️ Pool 2 (inversare) eșuat — mai jos e Pool 1.")
         info = _last_csv_draw(fn)
         if info:
             _ds, _dn, _dj = info
@@ -1789,6 +1804,12 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             f"⚠️ Generare eșuată pentru acest joc: "
             f"{data.get('error') or (data.get('audit') or {}).get('pipeline_error')}"
         ).classes("text-red")
+    _p2err = (data.get("audit") or {}).get("pass2_error")
+    if (data.get("audit") or {}).get("auto_invert_pass2_failed"):
+        ui.label(
+            "⚠️ Inversarea (Pool 2) a eșuat — afișez Pool 1. "
+            f"{_p2err or ''}"
+        ).classes("text-orange")
     pool = data.get("hard_core") or []
     stats = data.get("hard_core_stats") or {}
     eff = data.get("pool_size")
@@ -2707,7 +2728,7 @@ def _target_data_ready() -> bool:
         # fracția rândurilor cu măcar o valoare reală pentru prag (folduri calculate în schema curentă)
         return float(df.notna().any(axis=1).mean()) >= 0.9
     except Exception:  # noqa: BLE001
-        return True  # la dubiu, nu speria utilizatorul
+        return False  # folds.csv ilizibil → nu minți cu „cache rapid"
 
 
 def _ensure_retrospective_pool2_flat(
@@ -2717,8 +2738,9 @@ def _ensure_retrospective_pool2_flat(
     if not (data.get("auto_invert") and data.get("phase1") and flat_pool1):
         return
     rk = f"{res_prefix}{fname}_{game}_p2"
-    if STATE["retro"].get(rk):
-        return
+    with STATE_LOCK:
+        if STATE["retro"].get(rk):
+            return
     df_source = None
     for fn, df in STATE.get("datasets", []):
         if fn == fname:
@@ -2735,8 +2757,9 @@ def _ensure_retrospective_pool2_flat(
             list(data.get("hard_core") or []),
             list(data.get("variants") or []),
         )
-        STATE["retro"][rk] = flat_p2
-        STATE.setdefault("retro_meta", {})[rk] = meta_p2
+        with STATE_LOCK:
+            STATE["retro"][rk] = flat_p2
+            STATE.setdefault("retro_meta", {})[rk] = meta_p2
     except Exception as exc:  # noqa: BLE001
         logger.warning("retrospectiv Pool 2 lazy %s: %s", game, exc)
 
@@ -3496,12 +3519,17 @@ def main_page() -> None:
                 ).classes("text-caption text-grey")
 
         def _on_target_change(e):
-            SETTINGS["bench_hit_target"] = int(e.value)
+            try:
+                target = int(e.value)
+            except (TypeError, ValueError):
+                return
+            if target not in (3, 4):
+                return
+            SETTINGS["bench_hit_target"] = target
             _save_settings()
             _guarantee_hint.refresh()
             try:
                 import loto_enterprise.benchmark.decision as decision
-                target = int(e.value)
                 decision.BENCH_HIT_TARGET = target
                 os.environ["LOTO_BENCH_TARGET"] = str(target)
                 if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():

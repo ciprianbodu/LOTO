@@ -310,7 +310,13 @@ def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
 
 
 def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
-    """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker)."""
+    """Preluăm job-uri RUNNING rămase (doar pentru recuperare manuală).
+
+    Worker-ul NU îl mai apelează în loop: la pornire ``requeue_running_jobs``
+    trece RUNNING → PENDING, iar ``fetch_pending_job`` le ia atomic. Un al
+    doilea worker care apela ``fetch_running_job`` putea fura un job abia
+    revendicat (progress ≤ 5).
+    """
     return _claim_job(
         db_path,
         where_sql="status = ? AND progress_pct <= 5",
@@ -501,4 +507,38 @@ def put_pipeline_cache(input_hash: str, result_json: str, db_path: str = DB_PATH
             """
         )
         conn.commit()
+
+
+_PHASE1_COPY_KEYS = (
+    "total_draws", "hard_core", "hard_core_stats", "hard_core_joker",
+    "hard_core_joker_stats", "variants", "pool_size", "pool_size_requested",
+    "guarantee", "max_variants", "lookback", "p10", "p90", "g_range", "context",
+)
+
+
+def build_game_failure_output(exc, *, phase1_data=None) -> dict:
+    """Rezultat per joc la excepție: dacă Pass 1 a reușit, îl livrăm (Pool 2 a picat)."""
+    err = str(exc)
+    if phase1_data:
+        audit = dict(phase1_data.get("audit") or {})
+        audit["auto_invert_pass2_failed"] = True
+        audit["pass2_error"] = err
+        out = {k: phase1_data.get(k) for k in _PHASE1_COPY_KEYS}
+        out.update({
+            "audit": audit,
+            "auto_invert": False,
+            "phase1": None,
+            "first_pool_excluded": [],
+            "resource_stats": {},
+        })
+        return out
+    return {
+        "error": err,
+        "total_draws": 0,
+        "hard_core": [],
+        "variants": [],
+        "pool_size": 0,
+        "audit": {"pipeline_error": err},
+        "context": {"coverage_pct": 0.0, "max_variants": 0},
+    }
 
