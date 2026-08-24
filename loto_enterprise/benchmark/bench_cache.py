@@ -63,8 +63,11 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v10"
+CACHE_VERSION = "v11"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet):
+# v11: score_sum_affinity nu mai e gaussiană pe |k − medie/n| (Joker top-11 era
+#      MEREU 18–28 consecutiv). Scorul e masa de extrageri cu sumă tipică care
+#      conțin k — output-ul metodei se schimbă, cache-ul v10 e stale.
 # v10: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
 # v9:  prime_bias + frecvență (nu mai degenera la „cele mai mici compuse”).
 # v8:  nefolosită (sărită la bump-ul v7→v9).

@@ -835,24 +835,36 @@ def score_weighted_recent(draws_2d, max_num):
 # TEORIA NUMERELOR + SPREAD/SUME POZITIONALE (numpy, CPU) 2026-05-31
 # ===========================================================================
 
-def _draw_sum_profile(draws_2d):
-    """Profil sume: media + std a sumelor extragerilor (pt scoruri pozitionale)."""
-    sums = np.array([sum(int(v) for v in row if v > 0) for row in draws_2d], dtype=np.float64)
-    return float(sums.mean()), float(sums.std() + 1e-9)
+def _draw_sums(draws_2d) -> np.ndarray:
+    """Suma fiecărei extrageri (ignoră padding 0)."""
+    return np.array(
+        [sum(int(v) for v in row if int(v) > 0) for row in draws_2d],
+        dtype=np.float64,
+    )
 
 
 def score_sum_affinity(draws_2d, max_num):
-    """Afinitate cu suma TIPICA: numere care ajuta extragerea sa cada in banda de
-    sume cea mai frecventa istoric (geometric — pozitia pe axa sumelor)."""
+    """Afinitate EMPIRICĂ cu suma tipică: cât de des apare k în extrageri a căror
+    SUMĂ e aproape de media istorică (gaussian pe suma extragerii, nu pe k).
+
+    Varianta veche era ``exp(-((k − mean/n)² / …))`` — o gaussiană pe axa 1…N,
+    independentă de istoricul lui k. Pe Joker 5/45 vârful e ~23, deci top-11 era
+    MEREU 18–28 consecutiv. Asta nu e afinitate, e distanță la medie.
+    Un număr mic poate intra într-o extragere cu sumă tipică alături de numere
+    mari; scorul trebuie să reflecte asta, nu |k − 23|.
+    """
     if draws_2d.shape[0] < 5:
         return {}
-    mean_sum, std_sum = _draw_sum_profile(draws_2d)
-    draw_n = draws_2d.shape[1]
-    target_per_num = mean_sum / max(draw_n, 1)  # contributia medie a unui numar
+    sums = _draw_sums(draws_2d)
+    mean_sum = float(sums.mean())
+    std_sum = float(sums.std()) + 1e-9
+    typicality = np.exp(-0.5 * ((sums - mean_sum) / std_sum) ** 2)
+    # (max_num, n_draws) @ (n_draws,) → masă de extrageri cu sumă tipică care conțin k
+    raw = _build_binary(draws_2d, max_num).astype(np.float64) @ typicality
     scores = {}
     for k in range(1, max_num + 1):
-        # cat de aproape e numarul de contributia "ideala" (gaussian pe distanta)
-        scores[k] = float(np.exp(-((k - target_per_num) ** 2) / (2 * (std_sum / draw_n) ** 2 + 1e-9)))
+        v = float(raw[k - 1])
+        scores[k] = v if np.isfinite(v) else 0.0
     return _normalize(scores, max_num)
 
 
@@ -1047,7 +1059,7 @@ CLASSICAL_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     "assoc_rules":     (score_assoc_rules,     "association",      False, "Reguli asociere (apriori-lite, confidence)"),
     "compression":     (score_compression,     "info-theory",     False, "Complexitate Kolmogorov (zlib proxy)"),
     # === Teoria numerelor + spread/sume pozitionale (numpy, CPU) 2026-05-31 ===
-    "sum_affinity":    (score_sum_affinity,    "geometric-sum",   False, "Afinitate cu suma tipica a extragerii"),
+    "sum_affinity":    (score_sum_affinity,    "geometric-sum",   False, "Afinitate empirica cu suma tipica (nu gaussian pe axa 1..N)"),
     "parity_balance":  (score_parity_balance,  "geometric-parity", False, "Echilibru par/impar"),
     "digit_root":      (score_digit_root,      "number-theory",   False, "Radacina digitala (1+(n-1)%9)"),
     "modular":         (score_modular,         "number-theory",   False, "Reziduuri mod 7 + mod 10"),

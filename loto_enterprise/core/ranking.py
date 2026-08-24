@@ -26,6 +26,36 @@ fără risc de import circular — iar funcția e simplă, la nivel de modul
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+
+def longest_consecutive_run(nums: Iterable[int]) -> int:
+    """Lungimea celei mai lungi secvențe de întregi consecutivi din ``nums``.
+
+    Folosit ca gardă de degenerare: un scorer unimodal pe axa 1…N (ex. vechea
+    ``sum_affinity`` = gaussiană pe |k − medie/n|) produce un pool care e un
+    singur bloc consecutiv. Nu e semnal, e geometria formulei.
+    """
+    s = sorted({int(x) for x in nums})
+    if not s:
+        return 0
+    best = cur = 1
+    for a, b in zip(s, s[1:]):
+        if b == a + 1:
+            cur += 1
+            best = max(best, cur)
+        else:
+            cur = 1
+    return best
+
+
+def is_consecutive_block(nums: Iterable[int], *, min_size: int = 6) -> bool:
+    """True dacă tot setul e un interval [min, max] fără găuri și are ≥ min_size elemente."""
+    s = sorted({int(x) for x in nums})
+    if len(s) < min_size:
+        return False
+    return s[-1] - s[0] + 1 == len(s)
+
 
 def rank_by_score(
     scores: dict[int, float],

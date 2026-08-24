@@ -40,8 +40,11 @@ from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_at
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v14"
+CACHE_VERSION = "v15"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v15: score_sum_affinity rescris (nu mai produce pool consecutiv 18–28 pe Joker).
+#      Pool-ul GENERAT se schimbă oriunde metoda e membru activ (Joker k11 = solo
+#      winner) → pickle-urile v14 validează un pool care nu se mai generează.
 # v14: `_decision_sig` include acum WHEEL-ul efectiv (algoritm + garanția internă a WF).
 #      Cheia veche fixa doar scorer/ensemble/target, deci trecerea wheeling-ului de la
 #      ILP la designurile La Jolla (6/49 pool 12: ~54 → 41 bilete) NU a invalidat nimic:

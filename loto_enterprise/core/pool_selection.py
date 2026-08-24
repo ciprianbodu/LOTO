@@ -15,7 +15,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.ranking import (
+    is_consecutive_block,
+    longest_consecutive_run,
+    rank_by_score,
+)
 
 
 def select_pool_from_scores(
@@ -50,6 +54,16 @@ def select_pool_from_scores(
         if n_unique < max(3, int(pool_size) // 2):
             audit["pool_selection_warning"] = (
                 f"scorer cu doar {n_unique} nivele distincte — tie-break canonic (număr desc)"
+            )
+        run = longest_consecutive_run(pool)
+        audit["pool_longest_consecutive_run"] = run
+        block = is_consecutive_block(pool, min_size=6)
+        audit["pool_is_consecutive_block"] = block
+        if block:
+            lo, hi = min(pool), max(pool)
+            audit["pool_consecutive_warning"] = (
+                f"pool-ul e un bloc consecutiv {lo}–{hi} ({len(pool)} numere) — "
+                "scorer degenerat pe axa valorilor, nu semnal"
             )
 
     return sorted(pool)

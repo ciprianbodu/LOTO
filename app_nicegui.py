@@ -1617,6 +1617,9 @@ def _build_report() -> str:
                    + f" | Extrageri: {d.get('total_draws')}")
         out.append(f"{indent}Nucleu dur (nr(frecvență)): "
                    + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool))
+        _cw = _consecutive_pool_warning(pool)
+        if _cw:
+            out.append(f"{indent}⚠️ {_cw}")
         if d.get("hard_core_joker"):
             out.append(f"{indent}Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
         if d.get("p10") is not None:
@@ -1700,6 +1703,7 @@ _METHOD_DESC = {
     "fourier":    "analiză spectrală Fourier (cicluri) · geometric/frecvențial",
     "wavelet_haar": "transformată wavelet Haar · geometric/frecvențial",
     "stl":        "descompunere STL (trend+sezon) · serie temporală",
+    "sum_affinity": "afinitate empirică cu suma tipică a extragerii (nu Gaussian pe |k−medie/n|) · geometric",
     "ssa":        "Singular Spectrum Analysis · geometric",
     "dmd":        "Dynamic Mode Decomposition · geometric",
     "hmm_gaussian":  "Hidden Markov Model gaussian · probabilistic",
@@ -1716,6 +1720,23 @@ _METHOD_DESC = {
     "649_katz15_gap85": "15% KatzCommunity + 85% gap_poisson (search blend)",
     "graph_649_katz_community": "60% KatzHigh + 40% community strength (graf)",
 }
+
+
+def _consecutive_pool_warning(pool) -> str | None:
+    """Avertisment dacă tot pool-ul e un interval fără găuri (ex. Joker 18–28).
+
+    Calculat din numere, nu din audit — ca să apară și pe rezultate vechi,
+    generate înainte de flag-ul din pool_selection.
+    """
+    from loto_enterprise.core.ranking import is_consecutive_block
+    nums = [int(x) for x in (pool or [])]
+    if not is_consecutive_block(nums, min_size=6):
+        return None
+    lo, hi = min(nums), max(nums)
+    return (
+        f"POOL CONSECUTIV — {lo}–{hi} ({len(nums)} numere la rând). "
+        "Asta e degenerare a scorer-ului pe axa 1…N, nu un pattern real."
+    )
 
 
 def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "",
@@ -1832,6 +1853,9 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 
     ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
     _badges(pool, stats)
+    _cw = _consecutive_pool_warning(pool)
+    if _cw:
+        ui.label(f"⚠️ {_cw}").classes("text-bold text-negative mt-1")
     if data.get("hard_core_joker"):
         ui.label("Joker:").classes("text-bold mt-1")
         _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
