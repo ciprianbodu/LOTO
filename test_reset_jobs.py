@@ -202,10 +202,21 @@ def test_stale_unstarted_pending_without_worker():
     assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is True
 
 
-def test_not_stale_when_worker_alive():
-    """Job tocmai trimis, worker viu, încă nepreluat → trebuie reatașat."""
+def test_unstarted_even_if_worker_alive():
+    """La boot, 0% fără log e leftover — worker viu nu-l face job real."""
     job = {"status": "PENDING", "progress_pct": 0, "log_tail": ""}
-    assert job_queue.is_stale_unstarted_job(job, worker_alive=True) is False
+    assert job_queue.is_unstarted_job(job) is True
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=True) is True
+
+
+def test_started_job_with_worker_log_is_not_unstarted():
+    job = {
+        "status": "RUNNING",
+        "progress_pct": 2,
+        "log_tail": "[12:00] Job preluat de worker.",
+    }
+    assert job_queue.is_unstarted_job(job) is False
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is False
 
 
 def test_not_stale_when_running_with_progress():

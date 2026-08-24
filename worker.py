@@ -34,8 +34,6 @@ logging.basicConfig(
     ]
 )
 
-import pandas as pd
-
 from job_queue import (
     JOB_RUNNING,
     JOB_CANCELLED,
@@ -49,8 +47,6 @@ from job_queue import (
     requeue_running_jobs,
     update_job_progress,
 )
-
-from loto_engine import LotoEngine
 
 # Windows console safety: evită crash pe diacritice/Unicode în print-uri din stack.
 try:
@@ -120,6 +116,16 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     use_cache = bool(cfg.get("use_cache", True))
     datasets_cfg = list(cfg.get("datasets", []))
     job_id = int(job["id"])
+
+    if not datasets_cfg:
+        fail_job(job_id, "Job fără CSV — nimic de generat.")
+        return None
+
+    update_job_progress(job_id, 3, "Încarc motorul de generare...")
+    # Import GREU după ce jobul e deja preluat (altfel UI stă pe 0% /
+    # «se inițializează...» cât se încarcă pandas+engine).
+    import pandas as pd
+    from loto_engine import LotoEngine
 
     total_steps = max(1, sum(len(d.get("tasks", [])) for d in datasets_cfg))
     step_idx = 0
@@ -386,6 +392,9 @@ def main() -> None:
                 result_json = _run_pipeline_job(job)
             else:
                 fail_job(job_id, f"Unsupported task type: {task_type}")
+                continue
+
+            if result_json is None:
                 continue
 
             if is_job_cancelled(job_id):

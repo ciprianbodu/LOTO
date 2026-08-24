@@ -39,7 +39,7 @@ from job_queue import (
     get_latest_completed_job,
     init_job_queue,
     is_fresh_ui_start,
-    is_stale_unstarted_job,
+    is_unstarted_job,
     submit_job,
 )
 from cancel import lock_engine, unlock_engine
@@ -50,7 +50,6 @@ from ui_shared import (
     clear_logs,
     decode_queue_result,
     ensure_worker_running,
-    is_worker_running,
     load_mail_config,
     read_logs_filtered,
     render_html_safe,
@@ -727,6 +726,20 @@ def _start_walk_forward() -> None:
 # --------------------------------------------------------------------------- #
 # UI — randare
 # --------------------------------------------------------------------------- #
+_UNSTARTED_WORKER_WAIT_S = 45.0
+
+
+def _abandon_unstarted_ui_job(reason: str) -> None:
+    """Scoate de pe ecran un job pe care worker-ul nu l-a preluat (0%, fără log)."""
+    try:
+        cancel_pending_running_jobs(reason)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("abandon unstarted: %s", exc)
+    STATE["active_job_id"] = None
+    STATE["job_start_time"] = None
+    unlock_engine()
+
+
 @ui.refreshable
 def status_panel() -> None:
     job_id = STATE.get("active_job_id")
@@ -787,6 +800,31 @@ def status_panel() -> None:
             STATE["active_job_id"] = None
             unlock_engine()
             ui.label(f"Job {state}: {stt.get('error_msg') or ''}").classes("text-negative")
+            return
+        # 0% + fără log = worker-ul NU a preluat jobul. Nu ținem ecranul blocat
+        # pe «se inițializează...» la infinit. Leftover la boot (fără job_start_time)
+        # → scoatem imediat. Click Generează în sesiunea asta → așteptăm worker-ul
+        # câteva zeci de secunde, apoi abandonăm.
+        if is_unstarted_job(stt):
+            t0 = STATE.get("job_start_time")
+            if t0 is None:
+                _abandon_unstarted_ui_job(
+                    "Job nepornit la afișare (0%, fără log) — scos de pe ecran."
+                )
+                ui.label("Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot.").classes("text-caption")
+                return
+            waited = time.time() - float(t0)
+            if waited > _UNSTARTED_WORKER_WAIT_S:
+                _abandon_unstarted_ui_job(
+                    "Worker-ul nu a preluat jobul în 45s."
+                )
+                ui.label("Worker-ul nu a pornit. Reîncearcă Generează.").classes("text-negative")
+                return
+            current = "aștept worker-ul..."
+            elapsed_txt = f" · scurs {_fmt_dur(waited)}"
+            ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%{elapsed_txt}").classes("text-bold")
+            ui.linear_progress(value=0, show_value=False).props("instant-feedback")
+            ui.label(f"➡️ {current}").classes("text-caption text-info")
             return
         with ui.card().classes("w-full"):
             tail = str(stt.get("log_tail") or "").strip()
@@ -3592,10 +3630,10 @@ def _startup() -> None:
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
     # NU auto-încărcăm CSV-uri: utilizatorul încarcă manual de fiecare dată.
-    # START_8000 (LOTO_FRESH_START=1): sesiune nouă — NU reatașa și NU porni
-    # un job. Altfel worker-ul (pornit ÎNAINTEA UI-ului) preia un leftover și
-    # ecranul arată «⏳ Job în rulare (#1) — 0% / se inițializează...» fără
-    # click pe Generează. Reatașarea rămâne doar la restart UI cu worker viu.
+    # La boot-ul procesului UI user-ul n-a apăsat încă Generează. Un job 0%
+    # fără log e leftover — dacă îl reatașăm, ecranul rămâne pe
+    # «⏳ Job în rulare (#1) — 0% / se inițializează...» la infinit
+    # (worker-ul nu l-a preluat). START_8000 anulează TOATE leftover-urile.
     try:
         if is_fresh_ui_start():
             n = cancel_pending_running_jobs(
@@ -3607,21 +3645,17 @@ def _startup() -> None:
                 )
         else:
             active = get_active_job()
-            if active:
-                if is_stale_unstarted_job(active, is_worker_running()):
-                    jid = int(active["id"])
-                    cancel_pending_running_jobs(
-                        f"Job orfan #{jid} anulat la pornirea UI (worker mort, 0% progres)."
-                    )
-                    logger.warning(
-                        "[STARTUP] job #%s PENDING 0%% fără worker → anulat (nu reatașez).",
-                        jid,
-                    )
-                else:
-                    STATE["active_job_id"] = int(active["id"])
-                    # Job în curs (worker poate fi mort mid-run) → pornim worker-ul
-                    # ca să-l reia (requeue_running_jobs: RUNNING→PENDING).
-                    ensure_worker_running()
+            if active and is_unstarted_job(active):
+                jid = int(active["id"])
+                cancel_pending_running_jobs(
+                    f"Job orfan #{jid} anulat la pornirea UI (0%, fără log)."
+                )
+                logger.warning(
+                    "[STARTUP] job #%s nepornit → anulat (nu reatașez).", jid,
+                )
+            elif active:
+                STATE["active_job_id"] = int(active["id"])
+                ensure_worker_running()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
     # Job terminat cât UI-ul era COMPLET jos (get_active_job vede doar PENDING/RUNNING)

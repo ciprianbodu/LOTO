@@ -183,23 +183,29 @@ def get_active_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def is_stale_unstarted_job(job: dict | None, worker_alive: bool) -> bool:
-    """PENDING 0% fără log, worker mort = cadavru, nu job viu.
+def is_unstarted_job(job: dict | None) -> bool:
+    """PENDING/RUNNING cu ≤1% și fără log = worker-ul NU l-a preluat.
 
-    START_8000 omoară worker-ul; dacă un astfel de rând rămâne în DB și UI-ul
-    îl reatașează, afișează «⏳ Job în rulare (#1) — 0% / se inițializează...»
-    la o pornire goală. RUNNING cu progres, sau PENDING cât worker-ul e viu
-    (tocmai trimis, încă nepreluat), NU sunt stale.
+    Ecranul «⏳ Job în rulare (#1) — 0% / se inițializează...» e exact starea
+    asta. La pornirea UI-ului e leftover, nu click pe Generează. Un job viu
+    are log_tail («Job preluat de worker.») și progress ≥ 2.
     """
-    if not job or worker_alive:
+    if not job:
         return False
     status = str(job.get("status") or "")
+    if status not in {JOB_PENDING, JOB_RUNNING}:
+        return False
     try:
         pct = int(job.get("progress_pct") or 0)
     except (TypeError, ValueError):
         pct = 0
     tail = str(job.get("log_tail") or "").strip()
-    return status == JOB_PENDING and pct <= 1 and not tail
+    return pct <= 1 and not tail
+
+
+def is_stale_unstarted_job(job: dict | None, worker_alive: bool) -> bool:
+    """Compat: unstarted, ignorând worker_alive (la boot user-ul n-a apăsat încă)."""
+    return is_unstarted_job(job)
 
 
 def is_fresh_ui_start() -> bool:
