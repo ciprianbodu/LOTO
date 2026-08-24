@@ -1,10 +1,10 @@
 """
-Test pentru `reset_jobs.py` — cele 3 scenarii introduse în commit fda5948
-("reset_jobs: păstrează munca utilă la --force"):
+Test pentru `reset_jobs.py` — START_8000.bat omoară worker-ul, apoi --force:
 
-  1. Sesiune curată (nimic PENDING/RUNNING, ultimul COMPLETED deja finalizat
-     de UI) → golire COMPLETĂ + VACUUM → următorul job devine #1.
-  2. Există joburi PENDING/RUNNING → sunt PĂSTRATE (nu se pierde munca în curs).
+  1. Sesiune curată (nimic de recuperat) → golire COMPLETĂ + VACUUM → următorul
+     job devine #1.
+  2. PENDING/RUNNING rămase după kill NU se păstrează (sunt cadavre; altfel UI-ul
+     arată «Job în rulare (#1) — 0% / se inițializează...» la o pornire goală).
   3. Ultimul job COMPLETED NU a fost încă finalizat de UI (`last_finalized_job_id`
      diferit) → e PĂSTRAT, ca `_recover_completed_job` din app_nicegui.py să
      poată încă trimite mail/shutdown pentru el.
@@ -80,10 +80,11 @@ def test_force_clean_session_resets_autoincrement(isolated_db, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Scenariul 2: joburi PENDING/RUNNING → păstrate
+# Scenariul 2: leftover PENDING/RUNNING după kill → ȘTERSE (nu reapar la pornire)
 # --------------------------------------------------------------------------- #
 
-def test_force_keeps_pending_and_running_jobs(isolated_db, monkeypatch):
+def test_force_deletes_pending_and_running_jobs(isolated_db, monkeypatch):
+    """START_8000 a omorât worker-ul: PENDING/RUNNING sunt cadavre, nu muncă în curs."""
     pending_id = _insert_job(isolated_db, "PENDING")
     running_id = _insert_job(isolated_db, "RUNNING")
     old_completed_id = _insert_job(isolated_db, "COMPLETED", completed=True)
@@ -94,9 +95,10 @@ def test_force_keeps_pending_and_running_jobs(isolated_db, monkeypatch):
 
     assert rc == 0
     remaining = _job_ids(isolated_db)
-    assert pending_id in remaining
-    assert running_id in remaining
+    assert pending_id not in remaining
+    assert running_id not in remaining
     assert old_completed_id not in remaining  # deja finalizat de UI → nu se păstrează
+    assert remaining == set()
 
 
 def test_without_force_refuses_when_running_present(isolated_db, monkeypatch):
@@ -140,6 +142,34 @@ def test_force_keeps_latest_completed_job_if_not_finalized(isolated_db, monkeypa
     assert old_id not in remaining
 
 
+def test_force_drops_pending_but_keeps_unfinalized_completed(isolated_db, monkeypatch):
+    """Cadavrul PENDING nu blochează recuperarea unui COMPLETED nefinalizat."""
+    pending_id = _insert_job(isolated_db, "PENDING")
+    completed_id = _insert_job(isolated_db, "COMPLETED", completed=True)
+    monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", lambda: 0)
+
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+    rc = reset_jobs.main()
+
+    assert rc == 0
+    remaining = _job_ids(isolated_db)
+    assert pending_id not in remaining
+    assert completed_id in remaining
+
+
+def test_force_ghost_pending_resets_autoincrement(isolated_db, monkeypatch):
+    """Job-ul fantomă #1 (0%, fără log) nu trebuie să rămână; următorul job e iar #1."""
+    ghost = _insert_job(isolated_db, "PENDING")
+    assert ghost == 1
+    monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", lambda: 0)
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+    reset_jobs.main()
+
+    assert _job_ids(isolated_db) == set()
+    new_id = job_queue.submit_job("pipeline", "{}", db_path=isolated_db)
+    assert new_id == 1
+
+
 def test_force_deletes_completed_job_already_finalized(isolated_db, monkeypatch):
     completed_id = _insert_job(isolated_db, "COMPLETED", completed=True)
     monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", lambda: completed_id)
@@ -159,3 +189,42 @@ def test_no_db_file_returns_zero_without_touching_anything(tmp_path, monkeypatch
     rc = reset_jobs.main()
 
     assert rc == 0
+
+
+# --------------------------------------------------------------------------- #
+# is_stale_unstarted_job — garda din _startup
+# --------------------------------------------------------------------------- #
+
+def test_stale_unstarted_pending_without_worker():
+    job = {"status": "PENDING", "progress_pct": 0, "log_tail": ""}
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is True
+    job["progress_pct"] = 1  # fetch_pending_job pune 1 la claim; tot e nepornit
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is True
+
+
+def test_not_stale_when_worker_alive():
+    """Job tocmai trimis, worker viu, încă nepreluat → trebuie reatașat."""
+    job = {"status": "PENDING", "progress_pct": 0, "log_tail": ""}
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=True) is False
+
+
+def test_not_stale_when_running_with_progress():
+    job = {"status": "RUNNING", "progress_pct": 40, "log_tail": "[12:00] scoring"}
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is False
+
+
+def test_not_stale_when_pending_has_log():
+    job = {
+        "status": "PENDING",
+        "progress_pct": 0,
+        "log_tail": "Worker restart detectat: job reprogramat automat.",
+    }
+    assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is False
+
+
+def test_force_then_get_active_job_is_none(isolated_db, monkeypatch):
+    """După --force pe un cadavru PENDING, UI-ul nu mai are ce reatașa."""
+    _insert_job(isolated_db, "PENDING")
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+    reset_jobs.main()
+    assert job_queue.get_active_job(db_path=isolated_db) is None

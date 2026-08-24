@@ -38,6 +38,7 @@ from job_queue import (
     get_job_status,
     get_latest_completed_job,
     init_job_queue,
+    is_stale_unstarted_job,
     submit_job,
 )
 from cancel import lock_engine, unlock_engine
@@ -48,6 +49,7 @@ from ui_shared import (
     clear_logs,
     decode_queue_result,
     ensure_worker_running,
+    is_worker_running,
     load_mail_config,
     read_logs_filtered,
     render_html_safe,
@@ -3589,14 +3591,27 @@ def _startup() -> None:
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
     # NU auto-încărcăm CSV-uri: utilizatorul încarcă manual de fiecare dată.
-    # Re-atașare la un job activ (dacă UI-ul a fost repornit cât rula worker-ul)
+    # Re-atașare la un job activ DOAR dacă e muncă reală: worker viu, sau job
+    # RUNNING cu progres. Un PENDING 0% fără log + worker mort e un cadavru
+    # (rămas după kill) — dacă îl reatașăm, UI-ul arată
+    # «⏳ Job în rulare (#1) — 0% / se inițializează...» la o pornire goală.
     try:
         active = get_active_job()
         if active:
-            STATE["active_job_id"] = int(active["id"])
-            # Job orfan (worker poate fi mort) → pornim worker-ul ca să-l reia
-            # (requeue_running_jobs la startup worker repune RUNNING→PENDING).
-            ensure_worker_running()
+            if is_stale_unstarted_job(active, is_worker_running()):
+                jid = int(active["id"])
+                cancel_pending_running_jobs(
+                    f"Job orfan #{jid} anulat la pornirea UI (worker mort, 0% progres)."
+                )
+                logger.warning(
+                    "[STARTUP] job #%s PENDING 0%% fără worker → anulat (nu reatașez).",
+                    jid,
+                )
+            else:
+                STATE["active_job_id"] = int(active["id"])
+                # Job în curs (worker poate fi mort mid-run) → pornim worker-ul
+                # ca să-l reia (requeue_running_jobs: RUNNING→PENDING).
+                ensure_worker_running()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
     # Job terminat cât UI-ul era COMPLET jos (get_active_job vede doar PENDING/RUNNING)

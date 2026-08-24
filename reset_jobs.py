@@ -1,21 +1,20 @@
-"""Resetează coada de joburi (golește tabela `jobs` din loto_jobs.db) — DAR păstrează
-munca utilă, ca să nu se piardă rezultate la repornirea prin START_8000.bat.
+"""Resetează coada de joburi (golește tabela `jobs` din loto_jobs.db) la pornire.
 
 Numerotarea joburilor (#1, #2, …) e `id INTEGER PRIMARY KEY` în SQLite. Golind
 tabela, următorul job inserat primește din nou id = 1.
 
-START_8000.bat rulează ăsta cu `--force` la FIECARE pornire. Ca să nu distrugem
-munca în curs sau un rezultat proaspăt pe care UI-ul nu l-a apucat să-l finalizeze
-(mail/shutdown — vezi `_recover_completed_job` din app_nicegui.py), PĂSTRĂM:
-  • joburile PENDING / RUNNING (în coadă / în lucru de către worker);
-  • cel mai recent job COMPLETED dacă NU a fost încă finalizat de UI
-    (id ≠ `last_finalized_job_id` din .ui_state.json).
-Dacă nimic nu califică (cazul normal la început de sesiune) → golire COMPLETĂ +
-VACUUM → următorul job e #1.
+START_8000.bat omoară UI + worker + bench, APOI rulează ăsta cu `--force`.
+PENDING/RUNNING rămase sunt cadavre (procesele au fost deja omorâte) — dacă le
+păstrăm, noul worker le reia singur, iar UI-ul arată la o pornire goală:
+  «⏳ Job în rulare (#1) — 0% / se inițializează...».
+Păstrăm DOAR cel mai recent job COMPLETED dacă NU a fost încă finalizat de UI
+(id ≠ `last_finalized_job_id` din .ui_state.json) — altfel mail/shutdown de la
+`_recover_completed_job` s-ar pierde. Dacă nimic nu califică (cazul normal la
+început de sesiune) → golire COMPLETĂ + VACUUM → următorul job e #1.
 
 Rulare:
     .venv\\Scripts\\python reset_jobs.py            # refuză dacă există RUNNING
-    .venv\\Scripts\\python reset_jobs.py --force     # forțează (păstrează totuși munca utilă)
+    .venv\\Scripts\\python reset_jobs.py --force     # șterge și RUNNING (după kill)
 """
 from __future__ import annotations
 
@@ -63,10 +62,10 @@ def main() -> int:
 
         total = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
 
-        # PĂSTRĂM munca utilă: joburi în curs + un rezultat proaspăt nefinalizat.
+        # Păstrăm DOAR un rezultat COMPLETED pe care UI-ul nu l-a finalizat încă
+        # (mail/shutdown). PENDING/RUNNING nu: START_8000 a omorât worker-ul, deci
+        # nu e muncă în curs — e un job-fantomă care ar reapărea la fiecare pornire.
         keep: set[int] = set()
-        for (jid,) in con.execute("SELECT id FROM jobs WHERE status IN ('PENDING', 'RUNNING')"):
-            keep.add(int(jid))
         last_fin = _last_finalized_job_id()
         row = con.execute(
             "SELECT id FROM jobs WHERE status = 'COMPLETED' "
@@ -79,9 +78,9 @@ def main() -> int:
             placeholders = ",".join("?" * len(keep))
             con.execute(f"DELETE FROM jobs WHERE id NOT IN ({placeholders})", tuple(sorted(keep)))
             con.commit()
-            print(f"✅ Șterse {total - len(keep)} joburi; PĂSTRATE {len(keep)} "
-                  f"(în curs / rezultat nefinalizat): {sorted(keep)}. "
-                  f"(Nu resetez numerotarea — există muncă utilă.)")
+            print(f"✅ Șterse {total - len(keep)} joburi; PĂSTRAT {len(keep)} "
+                  f"rezultat nefinalizat: {sorted(keep)}. "
+                  f"(Nu resetez numerotarea — recuperarea UI are nevoie de id-ul ăsta.)")
         else:
             con.execute("DELETE FROM jobs")
             con.commit()

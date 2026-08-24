@@ -183,6 +183,25 @@ def get_active_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def is_stale_unstarted_job(job: dict | None, worker_alive: bool) -> bool:
+    """PENDING 0% fără log, worker mort = cadavru, nu job viu.
+
+    START_8000 omoară worker-ul; dacă un astfel de rând rămâne în DB și UI-ul
+    îl reatașează, afișează «⏳ Job în rulare (#1) — 0% / se inițializează...»
+    la o pornire goală. RUNNING cu progres, sau PENDING cât worker-ul e viu
+    (tocmai trimis, încă nepreluat), NU sunt stale.
+    """
+    if not job or worker_alive:
+        return False
+    status = str(job.get("status") or "")
+    try:
+        pct = int(job.get("progress_pct") or 0)
+    except (TypeError, ValueError):
+        pct = 0
+    tail = str(job.get("log_tail") or "").strip()
+    return status == JOB_PENDING and pct <= 1 and not tail
+
+
 def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
     """Actualizează progresul unui job și întoarce True dacă jobul a fost anulat între timp."""
     init_job_queue(db_path)
