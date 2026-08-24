@@ -201,11 +201,16 @@ def _ordered_wf_game_items(outs):
 def _iter_wf_jobs(results_bundle):
     """(fname, game_label, data, auto_invert) — doar Pool 1.
 
-    Pool 2 = plasă de siguranță, fără walk-forward (evită dublarea timpului).
+    Ordinea e pe JOC (Joker → 5/40 → 6/49), NU pe ordinea fișierelor încărcate.
+    Altfel upload 6/49 + 5/40 + joker rula 6/49 ca 1/3 și îi mânca bugetul;
+    6/49 trebuie ULTIM ca să primească timpul rămas. Pool 2 fără WF.
     """
+    jobs: list[tuple] = []
     for fname, outs in results_bundle:
-        for g_label, data in _ordered_wf_game_items(outs):
-            yield fname, g_label, data, False
+        for g_label, data in outs.items():
+            jobs.append((fname, g_label, data, False))
+    jobs.sort(key=lambda j: _WF_GAME_ORDER.get(_game_label_for(str(j[1])), 99))
+    yield from jobs
 
 
 def _count_wf_jobs(results_bundle) -> int:
@@ -2391,6 +2396,11 @@ def _last_csv_draw(fname: str):
             pass
     if not nums:
         return None
+    # 5/40 are n6 în CSV (istoric), dar Cat. I e doar primele 5 — engine-ul taie
+    # la draw_n. Afișăm ACEEAȘI tăiere, nu un al 6-lea număr care nu e jucat.
+    label = _game_label_for(fname)
+    draw_n = 5 if label in ("5/40", "joker") else 6
+    nums = nums[:draw_n]
     joker = None
     if "joker" in cols:
         try:
