@@ -202,6 +202,15 @@ def is_stale_unstarted_job(job: dict | None, worker_alive: bool) -> bool:
     return status == JOB_PENDING and pct <= 1 and not tail
 
 
+def is_fresh_ui_start() -> bool:
+    """START_8000.bat setează LOTO_FRESH_START=1: sesiune nouă, fără job automat.
+
+    Fără acest flag (repornire doar a UI-ului, worker încă viu) reatașarea
+    rămâne permisă. Valorile acceptate: 1 / true / yes.
+    """
+    return os.environ.get("LOTO_FRESH_START", "").strip().lower() in {"1", "true", "yes"}
+
+
 def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
     """Actualizează progresul unui job și întoarce True dacă jobul a fost anulat între timp."""
     init_job_queue(db_path)

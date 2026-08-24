@@ -38,6 +38,7 @@ from job_queue import (
     get_job_status,
     get_latest_completed_job,
     init_job_queue,
+    is_fresh_ui_start,
     is_stale_unstarted_job,
     submit_job,
 )
@@ -3591,27 +3592,36 @@ def _startup() -> None:
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
     # NU auto-încărcăm CSV-uri: utilizatorul încarcă manual de fiecare dată.
-    # Re-atașare la un job activ DOAR dacă e muncă reală: worker viu, sau job
-    # RUNNING cu progres. Un PENDING 0% fără log + worker mort e un cadavru
-    # (rămas după kill) — dacă îl reatașăm, UI-ul arată
-    # «⏳ Job în rulare (#1) — 0% / se inițializează...» la o pornire goală.
+    # START_8000 (LOTO_FRESH_START=1): sesiune nouă — NU reatașa și NU porni
+    # un job. Altfel worker-ul (pornit ÎNAINTEA UI-ului) preia un leftover și
+    # ecranul arată «⏳ Job în rulare (#1) — 0% / se inițializează...» fără
+    # click pe Generează. Reatașarea rămâne doar la restart UI cu worker viu.
     try:
-        active = get_active_job()
-        if active:
-            if is_stale_unstarted_job(active, is_worker_running()):
-                jid = int(active["id"])
-                cancel_pending_running_jobs(
-                    f"Job orfan #{jid} anulat la pornirea UI (worker mort, 0% progres)."
-                )
+        if is_fresh_ui_start():
+            n = cancel_pending_running_jobs(
+                "Pornire START_8000: sesiune nouă, fără job automat."
+            )
+            if n:
                 logger.warning(
-                    "[STARTUP] job #%s PENDING 0%% fără worker → anulat (nu reatașez).",
-                    jid,
+                    "[STARTUP] LOTO_FRESH_START: anulate %s job(uri) leftover.", n,
                 )
-            else:
-                STATE["active_job_id"] = int(active["id"])
-                # Job în curs (worker poate fi mort mid-run) → pornim worker-ul
-                # ca să-l reia (requeue_running_jobs: RUNNING→PENDING).
-                ensure_worker_running()
+        else:
+            active = get_active_job()
+            if active:
+                if is_stale_unstarted_job(active, is_worker_running()):
+                    jid = int(active["id"])
+                    cancel_pending_running_jobs(
+                        f"Job orfan #{jid} anulat la pornirea UI (worker mort, 0% progres)."
+                    )
+                    logger.warning(
+                        "[STARTUP] job #%s PENDING 0%% fără worker → anulat (nu reatașez).",
+                        jid,
+                    )
+                else:
+                    STATE["active_job_id"] = int(active["id"])
+                    # Job în curs (worker poate fi mort mid-run) → pornim worker-ul
+                    # ca să-l reia (requeue_running_jobs: RUNNING→PENDING).
+                    ensure_worker_running()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
     # Job terminat cât UI-ul era COMPLET jos (get_active_job vede doar PENDING/RUNNING)

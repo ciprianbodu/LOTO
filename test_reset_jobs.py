@@ -222,7 +222,28 @@ def test_not_stale_when_pending_has_log():
     assert job_queue.is_stale_unstarted_job(job, worker_alive=False) is False
 
 
-def test_force_then_get_active_job_is_none(isolated_db, monkeypatch):
+def test_fresh_ui_start_flag(monkeypatch):
+    monkeypatch.delenv("LOTO_FRESH_START", raising=False)
+    assert job_queue.is_fresh_ui_start() is False
+    monkeypatch.setenv("LOTO_FRESH_START", "1")
+    assert job_queue.is_fresh_ui_start() is True
+    monkeypatch.setenv("LOTO_FRESH_START", "true")
+    assert job_queue.is_fresh_ui_start() is True
+    monkeypatch.setenv("LOTO_FRESH_START", "no")
+    assert job_queue.is_fresh_ui_start() is False
+
+
+def test_fresh_start_cancels_leftover_pending(isolated_db, monkeypatch):
+    """START_8000: leftover PENDING e anulat, nu e reluat ca job nou."""
+    jid = _insert_job(isolated_db, "PENDING")
+    n = job_queue.cancel_pending_running_jobs(
+        "Pornire START_8000: sesiune nouă, fără job automat.",
+        db_path=isolated_db,
+    )
+    assert n == 1
+    assert job_queue.get_active_job(db_path=isolated_db) is None
+    st = job_queue.get_job_status(jid, db_path=isolated_db)
+    assert st["status"] == "CANCELLED"
     """După --force pe un cadavru PENDING, UI-ul nu mai are ce reatașa."""
     _insert_job(isolated_db, "PENDING")
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])

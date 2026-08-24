@@ -158,6 +158,10 @@ REM Deschidem browserul automat dupa 5s (timp ca serverul sa porneasca), intr-un
 REM proces paralel ca sa nu blocheze pornirea serverului.
 start "" /min cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:8000"
 set "LOTO_UI_PORT=8000"
+REM Sesiune noua: UI-ul NU reia un job vechi si NU afiseaza «Job în rulare»
+REM pana nu apesi Genereaza / Auto-Pilot. Worker-ul NU primeste flag-ul
+REM (trebuie sa preia joburile pe care le trimitI TU dupa pornire).
+set "LOTO_FRESH_START=1"
 "%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
 set "RC=!ERRORLEVEL!"
 endlocal & exit /b %RC%
