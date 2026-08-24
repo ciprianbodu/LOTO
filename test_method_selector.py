@@ -194,3 +194,46 @@ def test_get_ensemble_all_unavailable_falls_back_to_winner(temp_config):
     name, _fn, weight = result[0]
     assert name == "frequency"  # fallback la get_winner_name (scorer)
     assert weight == 1.0
+
+
+def test_get_winner_name_nearest_pool(temp_config):
+    """Pool k11 absent → folosește k10 (cel mai apropiat decis), fără WARNING."""
+    cfg_path = temp_config({
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {
+                    "scorer": "frequency",
+                    "ensemble": [{"method": "frequency", "weight": 1.0}],
+                },
+            }
+        }
+    })
+    assert ms.get_winner_name("loto_6_49", pool_size=11, config_path=cfg_path) == "frequency"
+
+
+def test_joker_urna2_is_frequency_without_warning(temp_config, caplog):
+    """Re-Bench sare Urna 2 — production scorer e frequency, fără «no winner» WARNING.
+
+    Un best_methods.json vechi care totuși are ensemble pe joker_urna2 trebuie IGNORAT.
+    """
+    import logging
+    cfg_path = temp_config({
+        "joker_urna2": {
+            "auto_pilot_per_pool": {
+                "k1": {
+                    "scorer": "frequency",
+                    "ensemble": [
+                        {"method": "frequency", "weight": 0.5},
+                        {"method": "random", "weight": 0.5},
+                    ],
+                }
+            }
+        }
+    })
+    with caplog.at_level(logging.WARNING):
+        assert ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path) == "frequency"
+        result = ms.get_ensemble_for_game("joker_urna2", pool_size=1, config_path=cfg_path)
+    assert len(result) == 1
+    assert result[0][0] == "frequency"
+    assert result[0][2] == 1.0
+    assert not any("no winner" in r.message for r in caplog.records)

@@ -49,6 +49,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+
 logger = logging.getLogger(__name__)
 
 
@@ -117,7 +119,12 @@ DEFAULT_SIM_DEPTH_PCT = 40  # identic cu default-ul din method_selector
 # ≥ acest număr de numere ghicite). Implicit 3 (rată mai densă → selecție mai stabilă).
 # NU schimbă șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul.
 # Reversibil: schimbă aici, sau setează LOTO_BENCH_TARGET=4.
-BENCH_HIT_TARGET = int(os.environ.get("LOTO_BENCH_TARGET", "3"))
+# Doar 3 sau 4: runner-ul emite exclusiv rate_3plus_* / rate_4plus_*. Orice
+# altă valoare făcea `_resolve_rate_col` să cadă TĂCUT pe 4+ (doar WARNING
+# în log) — decizia se lua pe altă țintă decât cea cerută.
+# `clamp_bench_hit_target` e importat din `hit_target` (stdlib) — re-exportat aici.
+
+BENCH_HIT_TARGET = clamp_bench_hit_target(os.environ.get("LOTO_BENCH_TARGET", "3"))
 
 
 def _safe_lift(method_hits: float, random_hits: float) -> float:

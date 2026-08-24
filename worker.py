@@ -168,7 +168,11 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             # Auto-Invert: ruleaza pipeline-ul de DOUA ori — primul pool e
             # considerat "excluded" si reluam cu el ca blacklist, returnam pool B.
             auto_invert = bool(task.get("auto_invert", False))
-            bench_hit_target = int(task.get("bench_hit_target", 3))
+            try:
+                from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+                bench_hit_target = clamp_bench_hit_target(task.get("bench_hit_target", 3))
+            except Exception:
+                bench_hit_target = 3
 
             try:
                 import loto_enterprise.benchmark.decision as decision
@@ -203,7 +207,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                 # Auto-clamp pool_size cand auto_invert e ON.
                 # Reguli matematice: cu inversare, dupa primul pool excludem P numere
                 # si trebuie sa umplem inca P din ce ramane. Deci P <= (max_n - buffer) / 2.
-                # Buffer=1 lasa margine pentru auto-blacklist intern (sim_depth).
                 _max_num_per_game = {"6/49": 49, "5/40": 40, "joker": 45}
                 _max_num = _max_num_per_game.get(game_mapped, 49)
                 pool_clamp_info = None

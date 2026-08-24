@@ -36,12 +36,17 @@ import pandas as pd
 
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
+from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_pct
 
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v15"
+CACHE_VERSION = "v16"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v16: `_decision_sig` include lookback-ul efectiv (0 din UI = 100%) + serializare
+#      stabilă a ensemble-ului (listă {method, weight}, nu str(dict)). Fără lookback
+#      în cheie, un slider „ultimele X%” schimba pool-ul de producție dar WF
+#      valida tot istoricul din cache.
 # v15: score_sum_affinity rescris (nu mai produce pool consecutiv 18–28 pe Joker).
 #      Pool-ul GENERAT se schimbă oriunde metoda e membru activ (Joker k11 = solo
 #      winner) → pickle-urile v14 validează un pool care nu se mai generează.
@@ -145,15 +150,9 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}"
 
 
-def _decision_sig(game_type: str, pool_size: int) -> str:
+def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0) -> str:
     """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target +
-    ensemble + wheel) pentru (joc, pool).
-
-    Walk-forward-ul rulează engine-ul, care alege metoda câştigătoare din
-    best_methods.json (per pool). Dacă semnătura NU intră în cheia de cache,
-    un Re-Bench care schimbă câştigătorul ar servi o validare VECHE. Includem
-    semnătura ca un câştigător nou să forţeze re-validare, iar o decizie
-    neschimbată să reutilizeze cache-ul.
+    ensemble + wheel + lookback) pentru (joc, pool).
     """
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
@@ -161,22 +160,13 @@ def _decision_sig(game_type: str, pool_size: int) -> str:
         gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
               "joker": "joker_urna1"}.get(game_type, "loto_6_49")
         c = recommend_optimal_config(gk, int(pool_size))
-        # Ensemble-ul intră în semnătură: scoringul de producție e blend-ul, nu
-        # doar `scorer`. Fără el, o schimbare de compoziție/ponderi (sau de prag
-        # de decorelare) ar schimba pool-ul dar ar servi cache WF vechi.
-        _ens = c.get("ensemble") or {}
-        if isinstance(_ens, dict):
-            _ens_sig = ",".join(f"{k}:{round(float(v), 4)}" for k, v in sorted(_ens.items()))
-        else:
-            _ens_sig = ",".join(sorted(str(m) for m in _ens))
+        _ens_sig = _ensemble_sig(c.get("ensemble") or [])
+        lb = lookback_pct(lookback_percent)
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
                f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}|"
-               f"{_wheel_sig(pool_size, game_type)}")
+               f"{_wheel_sig(pool_size, game_type)}|lb{lb}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
-        # Chiar fără decizia bench, wheel-ul rămâne calculabil (env + pool) și TREBUIE
-        # să intre în cheie: altfel toate jocurile ar cădea pe același „nodec" și un
-        # schimb de algoritm de wheeling ar servi tăcut cache vechi.
         logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
                        f"semnătură doar pe wheel")
         return "nd" + hashlib.md5(_wheel_sig(pool_size, game_type).encode()).hexdigest()[:6]
@@ -279,7 +269,7 @@ def run_honest_walk_forward(
     """
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
-    dec_sig = _decision_sig(game_type, pool_size)
+    dec_sig = _decision_sig(game_type, pool_size, lookback_percent)
     cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig,
                             auto_invert=auto_invert)
     meta = {

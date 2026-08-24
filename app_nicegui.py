@@ -74,6 +74,30 @@ WF_TOTAL_BUDGET_S = 90 * 60
 # Adâncime walk-forward: ultimele X% din istoric simulate onest (fără lookahead).
 WF_DEPTH_PERCENT = 30.0
 
+
+def _effective_lookback_pct() -> float:
+    """0 în UI = tot istoricul (100% pentru WF). Altfel clamp 1–100."""
+    try:
+        v = int(SETTINGS.get("lookback_val") or 0)
+    except (TypeError, ValueError):
+        v = 0
+    if v <= 0:
+        return 100.0
+    return float(max(1, min(100, v)))
+
+
+def _clamped_bench_target(value=None) -> int:
+    raw = SETTINGS.get("bench_hit_target", 3) if value is None else value
+    try:
+        from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+        return clamp_bench_hit_target(raw)
+    except Exception:  # noqa: BLE001
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            n = 3
+        return n if n in (3, 4) else 3
+
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
     "auto_invert_val", "shutdown_on_complete",
@@ -151,7 +175,8 @@ def _load_settings() -> None:
     # Inițializează variabila din modulul decision și os.environ din setările salvate
     try:
         import loto_enterprise.benchmark.decision as decision
-        target = int(SETTINGS.get("bench_hit_target", 3))
+        target = _clamped_bench_target()
+        SETTINGS["bench_hit_target"] = target
         decision.BENCH_HIT_TARGET = target
         os.environ["LOTO_BENCH_TARGET"] = str(target)
     except Exception as exc:
@@ -246,7 +271,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "sim_depth_pct": sd,
             "pure_bench_mode": True,
             "auto_invert": bool(SETTINGS["auto_invert_val"]),
-            "bench_hit_target": int(SETTINGS.get("bench_hit_target", 3)),
+            "bench_hit_target": _clamped_bench_target(),
         }
         datasets_cfg.append({
             "fname": fname,
@@ -282,11 +307,16 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
 
 
 def apply_autopilot_and_generate() -> None:
-    """Aplică sim_depth recomandat per joc din best_methods.json, apoi generează."""
+    """Aplică scorer-ul (și sim_depth de telemetrie) din best_methods.json, apoi generează.
+
+    sim_depth e fereastra de bench unde avg_hits a picat — se stochează în audit,
+    NU taie pool-ul și NU schimbă biletele. Mesajul de notify nu mai pretinde
+    că «@ 50%» modifică tichetele.
+    """
     # best_methods.json folosește CHEIA jocului (loto_6_49 ...), nu eticheta scurtă
     # (6/49) întoarsă de _game_label_for → altfel lookup-ul eșua mereu → fallback.
     _LABEL_TO_KEY = _LABEL_TO_FOLDS_GAME
-    per_game: dict = {}  # {game_label: sim_depth_pct} — FIECARE joc cu adâncimea lui
+    per_game: dict = {}  # {game_label: sim_depth_pct} — telemetrie per joc, nu filtru
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         recs = []
@@ -297,9 +327,10 @@ def apply_autopilot_and_generate() -> None:
             if cfg and not cfg.get("fallback"):
                 sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
                 per_game[label] = sd
-                recs.append(f"{gk}: {cfg.get('scorer')} @ {sd}%")
+                low = " · low_confidence" if cfg.get("low_confidence") else ""
+                recs.append(f"{gk}: {cfg.get('scorer')}{low}")
         if recs:
-            ui.notify("Auto-Pilot (adâncime per joc): " + " | ".join(recs), type="info")
+            ui.notify("Auto-Pilot (scorer per joc, din Re-Bench): " + " | ".join(recs), type="info")
         else:
             ui.notify("Fără decizie bench încă — rulează un Re-Bench întâi. Folosesc setările curente.", type="warning")
     except Exception as exc:  # noqa: BLE001
@@ -329,7 +360,7 @@ def _launch_bench(args: list[str], label: str) -> None:
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
     # Bench exclusiv CPU (GPU eliminat complet din aplicație).
     env = dict(os.environ)
-    env["LOTO_BENCH_TARGET"] = str(SETTINGS.get("bench_hit_target", 3))
+    env["LOTO_BENCH_TARGET"] = str(_clamped_bench_target())
     try:
         # bench_all_methods.py își scrie SINGUR bench_full.log (FileHandler) → nu
         # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
@@ -654,7 +685,9 @@ def _start_walk_forward() -> None:
                     flat, meta = run_honest_walk_forward(
                         df_source=df_source, game_type=g_label,
                         pool_size=int(data.get("pool_size") or 10),
-                        backtest_depth_percent=WF_DEPTH_PERCENT, lookback_percent=100.0, use_cache=True,
+                        backtest_depth_percent=WF_DEPTH_PERCENT,
+                        lookback_percent=_effective_lookback_pct(),
+                        use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
                         auto_invert=wf_invert,
@@ -1829,7 +1862,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     f"{e.get('method')} ({float(e.get('weight', 0)) * 100:.0f}%)" for e in _ens
                 )
                 tail += render_html_safe(
-                    t"<br><span style='opacity:.75;font-size:.85em'>— pool-ul folosește ensemble-ul de {_n_ens} metode de mai jos</span>"
+                    t"<br><span style='opacity:.75;font-size:.85em'>— pool-ul folosește ensemble-ul ACTIV de {_n_ens} metode (după decorelare)</span>"
                     t"<br><span style='opacity:.6;font-size:.85em'>⚖️ ensemble (variance-reduction): {_ens_str}</span>"
                 )
                 # Cu ensemble >1, pool-ul NU vine dintr-o singură metodă →
@@ -1842,11 +1875,52 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                 head = render_html_safe(
                     t"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>"
                 )
+            if info.get("single_pick_unbenched"):
+                tail += render_html_safe(
+                    t"<br><span style='opacity:.7;font-size:.85em'>Urna 2: fără Re-Bench "
+                    t"(1 număr → rata 4+ e 0). Scorer: frequency.</span>"
+                )
+            elif info.get("fallback"):
+                _why = info.get("reason") or "fallback"
+                tail += render_html_safe(
+                    t"<br><span style='opacity:.7;font-size:.85em'>fallback: {_why}</span>"
+                )
+            _dropped = info.get("ensemble_dropped") or []
+            if _dropped:
+                _dparts = []
+                for d in _dropped:
+                    if isinstance(d, dict):
+                        nm = d.get("method") or "?"
+                        vs = d.get("vs")
+                        r = d.get("r")
+                        extra = ""
+                        if vs:
+                            extra += f" vs {vs}"
+                        if r is not None:
+                            try:
+                                extra += f", r={float(r):.2f}"
+                            except (TypeError, ValueError):
+                                extra += f", r={r}"
+                        _dparts.append(f"{nm}{extra}")
+                    else:
+                        _dparts.append(str(d))
+                _dstr = "; ".join(_dparts)
+                tail += render_html_safe(
+                    t"<br><span style='opacity:.6;font-size:.85em'>săriți la generare (corelație/plat): {_dstr}</span>"
+                )
             parts.append(head + tail)
         ui.html(
             render_html_safe(t"🏆 Metodă câștigătoare (bench): ")
             + "<br>".join(parts)
         ).classes("text-caption")
+        _gk_pool = _LABEL_TO_FOLDS_GAME.get(_game_label_for(game), "")
+        if _gk_pool:
+            _dec_p = _decision_entry(_gk_pool, int(eff or SETTINGS.get("pool_size_val") or 10))
+            if _decision_low_confidence(_dec_p) is True:
+                ui.label(
+                    "⚠️ Decizie low_confidence: nicio metodă n-a bătut random consistent "
+                    "pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
+                ).classes("text-caption text-warning")
     else:
         ui.label("🏆 Metodă scorer: fallback implicit (fără decizie bench disponibilă)").classes(
             "text-caption text-grey")
@@ -2085,6 +2159,36 @@ def _wilson_pooled_rate(grp, metric: str) -> float | None:
     return float(_wilson_lower_bound(successes, n_total))
 
 
+def _last_generation_bench_info(folds_game_key: str) -> dict:
+    """Ensemble-ul EFECTIV din ultima generare (`audit.bench_winner`), dacă există.
+
+    Clasamentul citea `get_ensemble_for_game` (nominal, înainte de decorelarea
+    pe scoruri). Pool-ul e construit din membrii ACTIVI după combine — deci
+    3 nominali puteau deveni 2 în panoul Nucleu dur. Preferăm auditul ultimei
+    generări; `{}` dacă n-a rulat încă Generate.
+    """
+    results = STATE.get("results")
+    if not (isinstance(results, tuple) and len(results) == 2):
+        return {}
+    bundle = results[0]
+    if not bundle:
+        return {}
+    for _fname, outs in bundle:
+        if not isinstance(outs, dict):
+            continue
+        for _g, data in outs.items():
+            if not isinstance(data, dict):
+                continue
+            for blob in (data.get("phase1"), data):
+                if not isinstance(blob, dict):
+                    continue
+                bw = (blob.get("audit") or {}).get("bench_winner") or {}
+                info = bw.get(folds_game_key)
+                if isinstance(info, dict) and (info.get("ensemble") or info.get("method")):
+                    return info
+    return {}
+
+
 def _render_bench_leaderboard_slice(
     df: pd.DataFrame,
     folds_game_key: str,
@@ -2200,12 +2304,38 @@ def _render_bench_leaderboard_slice(
     # pooled pe n_test → lift mediu ponderat vs random → consistență). Fără
     # decision.py / fără coloana k{pool} / fără rândurile `random` → cădem pe
     # (Wilson, rată brută, avg_hits) și eticheta o spune explicit.
+    _dec = _decision_entry(folds_game_key, pool)
+    _dec_low = _decision_low_confidence(_dec)
+    _cons_pct = _consistency_pct(_dec)
+    _fail_gate: set[str] = set()
+    _gate_applied = False
+
+    def _sort_key_lift(r):
+        return ((r[6] if r[6] is not None else -1.0),
+                (r[7] if r[7] is not None else -1e18),
+                (r[8] if r[8] is not None else -1.0))
+
     if _lift_ok:
-        rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0),
-                                 (r[7] if r[7] is not None else -1e18),
-                                 (r[8] if r[8] is not None else -1.0)), reverse=True)
+        rows.sort(key=_sort_key_lift, reverse=True)
     else:
         rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
+    # Poarta de consistență CA LA DECIZIE: calificatele (bat random în ≥60%
+    # ferestre) întâi. Fără asta, #1 din listă putea fi o metodă cu Wilson mare
+    # care n-a trecut gate-ul, iar 🏆 era altcineva.
+    if _lift_ok and _dec_low is not True:
+        _thresh = float(_cons_pct) / 100.0
+        _bases_r = [r for r in rows if r[0] in _BASE]
+        _qual = [r for r in rows if r[0] not in _BASE
+                 and r[8] is not None and r[8] >= _thresh]
+        _fail = [r for r in rows if r[0] not in _BASE
+                 and (r[8] is None or r[8] < _thresh)]
+        if _qual:
+            _qual.sort(key=_sort_key_lift, reverse=True)
+            _fail.sort(key=_sort_key_lift, reverse=True)
+            _bases_r.sort(key=_sort_key_lift, reverse=True)
+            rows = _qual + _fail + _bases_r
+            _fail_gate = {r[0] for r in _fail}
+            _gate_applied = True
     if not rows:
         return
     # Baseline-urile („random") NU sunt candidați: rămân vizibile ca reper, dar nu
@@ -2232,7 +2362,11 @@ def _render_bench_leaderboard_slice(
     # Eticheta spune EXACT cât face ordonarea: „ca decizia" doar când și tie-break-ul
     # secundar e cel al deciziei (lift + consistență), altfel nu promite identitate.
     if _conf_ok and _lift_ok:
-        label += " · sortat ca decizia (Wilson → lift → consistență)"
+        if _gate_applied:
+            label += (f" · sortat ca decizia (poartă ≥{_cons_pct}% vs random "
+                      "→ Wilson → lift → consistență)")
+        else:
+            label += " · sortat ca decizia (Wilson → lift → consistență)"
     elif _conf_ok:
         label += " · sortat după Wilson (tie-break ≠ decizia: rată brută, nu lift)"
     else:
@@ -2247,12 +2381,7 @@ def _render_bench_leaderboard_slice(
         label += f" · baseline random = {_rnd_t * 100:.2f}%"
     winner = competitors[0]  # capul clasamentului (doar candidați, baseline-urile excluse)
     # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1 din
-    # mai multe motive (filtru de consistență, ramura de fallback, decizie scrisă de
-    # un bench mai vechi decât folds.csv). Explicația exactă se compune mai jos, din
-    # intrarea reală a deciziei, nu dintr-o presupunere.
-    _dec = _decision_entry(folds_game_key, pool)
-    _dec_low = _decision_low_confidence(_dec)
-    _cons_pct = _consistency_pct(_dec)
+    # mai multe motive (ramura de fallback, decizie mai veche decât folds.csv).
     try:
         from loto_enterprise.core.method_selector import get_winner_name
         chosen_name = get_winner_name(folds_game_key, pool)
@@ -2280,35 +2409,51 @@ def _render_bench_leaderboard_slice(
             sc_txt = f"medie: {score:.3f}"
         is_base = i is None
         is_chosen = (not is_base) and (m == chosen_name)
+        _gate_txt = ""
+        if (not is_base) and m in _fail_gate:
+            _gate_txt = f" · nu trece poarta (≥{_cons_pct}% ferestre vs random)"
         with ui.row().classes("items-center gap-2 w-full"):
             ui.label("🎲" if is_base else f"{i}.").classes("text-bold text-grey w-6")
             ui.label(("🏆 " + m) if is_chosen else m).classes(
                 "text-bold text-positive" if is_chosen
                 else "text-bold text-orange" if is_base else "text-bold")
             _pref = "baseline (referință, NU e candidat) · " if is_base else ""
-            ui.label(f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg:.2f}").classes("text-caption text-grey")
+            ui.label(f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg:.2f}{_gate_txt}").classes(
+                "text-caption text-grey")
 
     title = f"🏆 Clasament bench — {section_label} ({label})"
     with ui.expansion(title, value=True).classes("w-full"):
         _chosen_lib = next((r[3] for r in rows if r[0] == chosen_name), "")
         _chosen_suffix = f" · {_chosen_lib}" if _chosen_lib else ""
-        # Ensemble-ul EFECTIV folosit la pool (best_methods.json): cu >1 membru,
-        # pool-ul NU e construit din metoda unică → „ALEASĂ" ar fi fals; capul de
-        # listă e doar cea mai stabilă componentă a blend-ului.
+        # Ensemble: preferă membrii ACTIVI din ultima generare (după decorelare
+        # pe scoruri). Fără generare, arătăm ensemble-ul NOMINAL din best_methods
+        # și îl etichetăm ca atare — nu mai pretindem că 3 membri = pool-ul.
         _ens_names: list[tuple[str, float]] = []
-        try:
-            from loto_enterprise.core.method_selector import get_ensemble_for_game
-            _ens_names = [(nm, float(wt)) for nm, _fn, wt in
-                          get_ensemble_for_game(folds_game_key, pool, max_methods=3)]
-        except Exception:  # noqa: BLE001
-            _ens_names = []
+        _ens_source = ""
+        _gen_info = _last_generation_bench_info(folds_game_key)
+        _gen_ens = _gen_info.get("ensemble") if isinstance(_gen_info, dict) else None
+        _gen_dropped = (_gen_info.get("ensemble_dropped") if isinstance(_gen_info, dict) else None) or []
+        if _gen_ens:
+            _ens_names = [
+                (e.get("method"), float(e.get("weight", 0) or 0))
+                for e in _gen_ens if isinstance(e, dict) and e.get("method")
+            ]
+            _ens_source = "efectiv (după decorelare pe scoruri, ultima generare)"
+        else:
+            try:
+                from loto_enterprise.core.method_selector import get_ensemble_for_game
+                _ens_names = [(nm, float(wt)) for nm, _fn, wt in
+                              get_ensemble_for_game(folds_game_key, pool, max_methods=3)]
+                _ens_source = "nominal (înainte de decorelarea pe scoruri la generare)"
+            except Exception:  # noqa: BLE001
+                _ens_names = []
         if len(_ens_names) > 1:
             _n_ens = len(_ens_names)
             _ens_str = " + ".join(f"{nm} ({wt * 100:.0f}%)" for nm, wt in _ens_names)
             ui.html(render_html_safe(
                 t"🏆 <b style='color:#22c55e'>Metoda CAP DE LISTĂ (cea mai stabilă): {chosen_name}</b>"
                 t"{_chosen_suffix} <span style='opacity:.75'>— pool-ul folosește "
-                t"ensemble-ul de {_n_ens} metode de mai jos</span>"
+                t"ensemble-ul de {_n_ens} metode de mai jos ({_ens_source})</span>"
             )).classes("text-caption")
             ui.html(render_html_safe(
                 t"<span style='opacity:.6;font-size:.85em'>⚖️ ensemble (variance-reduction): {_ens_str}</span>"
@@ -2317,12 +2462,33 @@ def _render_bench_leaderboard_slice(
             ui.html(render_html_safe(
                 t"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>{_chosen_suffix}"
             )).classes("text-caption")
+        if _gen_dropped:
+            _dparts = []
+            for d in _gen_dropped:
+                if isinstance(d, dict):
+                    nm = d.get("method") or "?"
+                    vs = d.get("vs")
+                    extra = f" vs {vs}" if vs else ""
+                    _dparts.append(f"{nm}{extra}")
+                else:
+                    _dparts.append(str(d))
+            ui.label("ℹ️ Săriți la generare (corelație/plat): " + "; ".join(_dparts)).classes(
+                "text-caption text-grey")
+        _dec_dropped = (_dec or {}).get("ensemble_dropped_redundant") or []
+        if _dec_dropped:
+            _dparts = []
+            for d in _dec_dropped:
+                if isinstance(d, dict):
+                    nm = d.get("method") or "?"
+                    vs = d.get("vs")
+                    extra = f" vs {vs}" if vs else ""
+                    _dparts.append(f"{nm}{extra}")
+                else:
+                    _dparts.append(str(d))
+            ui.label("ℹ️ Decizia a sărit ca redundanți (semnătură de performanță): "
+                     + "; ".join(_dparts)).classes("text-caption text-grey")
         if chosen_name != winner[0]:
-            # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există,
-            # în funcție de ce spune intrarea reală a deciziei. Vechiul text invoca
-            # DOAR filtrul de consistență: incomplet (mai există ordonarea și
-            # decorelarea ensemble-ului) și FALS pe ramura de fallback, unde
-            # scorer-ul e ales tocmai fiindcă nimeni n-a trecut pragul.
+            # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există.
             if _conf_ok and _lift_ok:
                 _ord = (f"aceleași chei ca decizia (limita Wilson a ratei {_shown_t}+ pooled pe "
                         f"n_test → lift mediu vs random → consistență)")
@@ -2336,6 +2502,9 @@ def _render_bench_leaderboard_slice(
                         f"{_cons_pct}% din ferestre) → decizia a căzut pe "
                         "ramura CONSERVATOARE de fallback: alegerea nu e o dovadă de "
                         "superioritate, diferențele sunt zgomot")
+            elif _gate_applied:
+                _why = ("decizia e dintr-un bench mai vechi decât folds.csv, sau "
+                        "ensemble-ul de scoring a rămas pe alt cap de listă")
             elif _dec_low is False:
                 _why = (f"decizia aplică ÎN PLUS filtrul de consistență (să bată random în ≥"
                         f"{_cons_pct}% din ferestre), pe care clasamentul "
@@ -2358,7 +2527,15 @@ def _render_bench_leaderboard_slice(
         if not has_family:
             ui.label("ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "
                      "pentru etichete exacte.").classes("text-caption text-orange")
-        ui.label(f"Top {_n_shown} din {len(competitors)} metode candidate").classes("text-bold text-blue mt-2")
+        _n_qual = sum(1 for r in competitors if r[0] not in _fail_gate)
+        _n_fail = len(_fail_gate)
+        if _gate_applied and _n_fail:
+            ui.label(
+                f"Top {_n_shown} din {len(competitors)} metode candidate "
+                f"({_n_qual} calificate, {_n_fail} sub poarta de consistență)"
+            ).classes("text-bold text-blue mt-2")
+        else:
+            ui.label(f"Top {_n_shown} din {len(competitors)} metode candidate").classes("text-bold text-blue mt-2")
         _cats = sorted({rec[3] for rec in competitors if rec[3]})  # categorii REALE (din folds)
         if _cats:
             ui.label("Categorii: " + " · ".join(_cats)).classes("text-caption text-grey")
@@ -2458,10 +2635,25 @@ def _render_last_csv_draw(fname: str) -> None:
         ui.label(txt).classes("text-bold text-info")
 
 
+def _render_urna2_unbenched_note() -> None:
+    """Joker Urna 2 nu are clasament folds — Re-Bench sare single-pick."""
+    with ui.expansion("🏆 Clasament bench — Joker Urna 2 (1/20)", value=True).classes("w-full"):
+        ui.label(
+            "Re-Bench NU evaluează Urna 2: e un singur număr (1/20), deci rata 4+ e 0 "
+            "pe orice metodă — un clasament ar fi zgomot pur."
+        ).classes("text-caption")
+        ui.label(
+            "În producție bila Joker (Urna 2) e scorată cu frequency (fallback determinist). "
+            "Nu e inversată pe Pool 2."
+        ).classes("text-caption text-grey")
+
+
 def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
     """Top-N metode din ULTIMUL bench pentru acest joc (folds.csv). Joker = urne separate."""
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
+        if game_label == "joker":
+            _render_urna2_unbenched_note()
         return
     try:
         df = pd.read_csv(fp)
@@ -2471,15 +2663,11 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         return
     pool = int(SETTINGS.get("pool_size_val", 10))
     if game_label == "joker":
-        slices = [
-            ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
-            ("joker_urna2", 1, "Joker Urna 2 (1/20)"),
-        ]
-    else:
-        folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
-        slices = [(folds_key, pool, game_label.upper())]
-    for folds_key, k_pool, sect in slices:
-        _render_bench_leaderboard_slice(df, folds_key, k_pool, sect, top_n=top_n)
+        _render_bench_leaderboard_slice(df, "joker_urna1", pool, "Joker Urna 1 (5/45)", top_n=top_n)
+        _render_urna2_unbenched_note()
+        return
+    folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
+    _render_bench_leaderboard_slice(df, folds_key, pool, game_label.upper(), top_n=top_n)
 
 
 def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
@@ -2594,13 +2782,8 @@ def _hit_gap_rows(items: list[tuple], today=None) -> list[dict]:
 
 
 def _bench_target() -> int:
-    """Pragul de hituri pe care optimizează bench-ul (BENCH_HIT_TARGET, implicit 3).
-    Analiza (tabel date ≥N, media între hituri, alerte) urmează ACELAȘI prag ca selecția."""
-    try:
-        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
-        return int(BENCH_HIT_TARGET)
-    except Exception:  # noqa: BLE001
-        return 3
+    """Pragul de hituri pe care optimizează bench-ul (doar 3 sau 4)."""
+    return _clamped_bench_target()
 
 
 def _curation_banner_info():
@@ -3419,15 +3602,24 @@ def main_page() -> None:
         _bind_save(ui.number("Garanție minimă (Set Cover)", min=3, max=5, step=1).classes("w-full"), "guarantee_val")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
-        _bind_save(ui.number("Adâncime Simulare Backtesting (%)", min=10, max=100, step=10).classes("w-full"), "sim_depth_val")
+        _bind_save(ui.number(
+            "Fereastră bench (telemetrie, nu schimbă pool-ul) (%)",
+            min=10, max=100, step=10,
+        ).classes("w-full"), "sim_depth_val")
+        ui.label(
+            "Fereastra de mai sus e telemetrie Auto-Pilot (unde avg_hits a picat pe bench). "
+            "NU filtrează numere și NU schimbă biletele. Walk-forward validează ultimele "
+            f"{int(WF_DEPTH_PERCENT)}% din istoric. «Ultimele X% extrageri» taie CSV-ul de producție "
+            "(0 = tot istoricul)."
+        ).classes("text-caption text-grey")
         _bind_save(ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes("w-full"), "wf_budget_min")
 
         def _on_target_change(e):
-            SETTINGS["bench_hit_target"] = int(e.value)
+            target = _clamped_bench_target(e.value)
+            SETTINGS["bench_hit_target"] = target
             _save_settings()
             try:
                 import loto_enterprise.benchmark.decision as decision
-                target = int(e.value)
                 decision.BENCH_HIT_TARGET = target
                 os.environ["LOTO_BENCH_TARGET"] = str(target)
                 if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():
@@ -3440,7 +3632,7 @@ def main_page() -> None:
 
         ui.select(
             {3: "3+ Hits", 4: "4+ Hits"},
-            value=int(SETTINGS.get("bench_hit_target", 3)),
+            value=_clamped_bench_target(),
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
         ).classes("w-full")
@@ -3466,10 +3658,7 @@ def main_page() -> None:
         _full_eta = _estimate_bench_eta(1280)
         ui.button("🔬 RE-BENCH", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
-        try:
-            from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _bt
-        except Exception:  # noqa: BLE001
-            _bt = 3
+        _bt = _clamped_bench_target()
         ui.label("Un singur bench testează metodele active (exclusiv CPU), pe toate nucleele "
                  "(în paralel). Toate concurează în "
                  f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "

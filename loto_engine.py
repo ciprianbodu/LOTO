@@ -840,13 +840,14 @@ class LotoEngine:
             "last_3": []
         }
         if self.data is not None and not self.data.empty:
+            draw_n = int(self.params.get("draw_n", 6))
             def extract_draws(df_subset):
                 draws = []
                 for _, row in df_subset.iterrows():
                     d = {"date": str(row.get("date", "")).split()[0] if "date" in row else "N/A", "numbers": [], "joker": None}
                     n_cols = sorted([c for c in df_subset.columns if str(c).lower().startswith("n") and str(c).lower() != "numbers"], key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"))
                     nums = [row[c] for c in n_cols if pd.notna(row.get(c))]
-                    d["numbers"] = [int(x) for x in nums]
+                    d["numbers"] = [int(x) for x in nums][:draw_n]
                     if "joker" in df_subset.columns and pd.notna(row.get("joker")):
                         d["joker"] = int(row["joker"])
                     draws.append(d)
@@ -987,11 +988,12 @@ class LotoEngine:
             blacklist = set()
         
         # Luăm top cele mai frecvente numere ca punct de plecare
-        sorted_indices = np.argsort(freq)[::-1]  # Descrescător
-        valid_indices = [int(i) + 1 for i in sorted_indices if i < len(freq) and freq[i] > 0 and (int(i) + 1) not in blacklist]
-        
-        # Luăm primele N numere cele mai frecvente care nu sunt în blacklist
-        pool = valid_indices[:pool_size]
+        freq_scores = {
+            int(i) + 1: float(freq[i])
+            for i in range(len(freq))
+            if freq[i] > 0 and (int(i) + 1) not in blacklist
+        }
+        pool = rank_by_score(freq_scores, pool_size)
         
         if filter_consecutives:
             pool = self._apply_consecutive_filter(pool, freq)
@@ -1170,9 +1172,12 @@ class LotoEngine:
         
     def _get_hard_core_joker(self, freq: np.ndarray, pool_size=3) -> list:
         """Selectează nucleul dur pentru Joker (1-based) și salvează statisticile."""
-        top_indices = np.argsort(freq)[-pool_size:][::-1]
-        self.hard_core_joker_stats = {int(i) + 1: int(freq[i]) for i in top_indices}
-        return [int(i) + 1 for i in top_indices]
+        freq_scores = {int(i) + 1: float(freq[i]) for i in range(len(freq))}
+        pool = rank_by_score(freq_scores, pool_size)
+        self.hard_core_joker_stats = {
+            int(n): int(freq[n - 1]) for n in pool if n - 1 < len(freq)
+        }
+        return pool
 
     def _scores_via_bench_winner(self, is_joker_drum: bool = False) -> dict[int, float]:
         """Route scoring through the benchmark-winning method for this game/pool.
@@ -1224,11 +1229,6 @@ class LotoEngine:
             if not ensemble:
                 return {}
             winner = ensemble[0][0]
-            logging.info(
-                "[ENGINE] bench-winner scoring: game=%s pool=%d -> %s%s",
-                game_key, _pool_hint, winner,
-                f" (+ ensemble x{len(ensemble)})" if len(ensemble) > 1 else "",
-            )
             contributions = []
             for name, fn, weight in ensemble:
                 try:
@@ -1244,6 +1244,16 @@ class LotoEngine:
             scores = combine_ensemble_scores(contributions, audit=_ens_audit)
             if not scores:
                 return {}
+            _active = _ens_audit.get("ensemble_active") or []
+            _n_act = len(_active) if _active else len(ensemble)
+            logging.info(
+                "[ENGINE] bench-winner scoring: game=%s pool=%d -> %s%s",
+                game_key, _pool_hint, winner,
+                (
+                    f" (+ ensemble {_n_act} activi / {len(ensemble)} nominali)"
+                    if len(ensemble) > 1 else ""
+                ),
+            )
             family = ""
             try:
                 from loto_enterprise.benchmark.methods import METHODS as _METHODS
@@ -1269,16 +1279,23 @@ class LotoEngine:
                     bench_winner_info["ensemble"] = [
                         {"method": n, "weight": round(w, 4)} for n, _raw, w in contributions if _raw
                     ]
-                _dropped = list(_ens_audit.get("ensemble_dropped_correlated") or [])
-                _dropped += [
-                    (d.get("method"), None, d.get("reason"))
-                    for d in (_ens_audit.get("ensemble_dropped") or [])
-                    if isinstance(d, dict)
-                ]
+                _dropped: list = []
+                for t in (_ens_audit.get("ensemble_dropped_correlated") or []):
+                    if isinstance(t, (tuple, list)) and t:
+                        _dropped.append((t[0], t[1] if len(t) > 1 else None,
+                                         t[2] if len(t) > 2 else "correlated"))
+                for d in (_ens_audit.get("ensemble_dropped") or []):
+                    if isinstance(d, dict):
+                        _dropped.append((d.get("method"), d.get("r"), d.get("reason")))
+                    else:
+                        _dropped.append((d, None, "flat_or_empty"))
                 if _dropped:
                     bench_winner_info["ensemble_dropped"] = [
                         {"method": t[0], "vs": t[2], "r": t[1]} for t in _dropped
                     ]
+            if game_key == "joker_urna2":
+                bench_winner_info["single_pick_unbenched"] = True
+                bench_winner_info["fallback"] = True
             self.audit.setdefault("bench_winner", {})[game_key] = bench_winner_info
             return {int(k): float(v) for k, v in scores.items()}
         except Exception as exc:
@@ -1298,6 +1315,25 @@ class LotoEngine:
             if scores:
                 return scores
             logging.warning("[ENGINE] bench-winner scoring returned empty — fallback frecvență")
+            if is_joker_drum:
+                _gk = "joker_urna2"
+                _ph = 1
+            elif self.game_type == "joker":
+                _gk = "joker_urna1"
+                _ph = int(getattr(self, "_winner_pool_hint", 11))
+            elif self.game_type == "5/40":
+                _gk = "loto_5_40"
+                _ph = int(getattr(self, "_winner_pool_hint", 11))
+            else:
+                _gk = "loto_6_49"
+                _ph = int(getattr(self, "_winner_pool_hint", 11))
+            self.audit.setdefault("bench_winner", {}).setdefault(_gk, {
+                "method": "frequency",
+                "fallback": True,
+                "reason": "bench-winner scoring empty",
+                "pool_hint": _ph,
+                "family": "baseline",
+            })
         return self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
 
     def _frequency_fallback_scores(self, is_joker_drum: bool = False) -> dict[int, float]:
@@ -1347,13 +1383,13 @@ class LotoEngine:
         if len(pool) < pool_size:
             logging.warning(f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). Se completează cu cele mai bune numere din blacklist.")
             
-            # Luăm numerele din blacklist, sortate după scor (cele mai bune dintre cele "rele")
-            blacklisted_nums = [(num, score) for num, score in scores.items() if num in blacklist and num not in pool]
-            sorted_blacklisted = sorted(blacklisted_nums, key=lambda x: x[1], reverse=True)
-            
+            bl_scores = {
+                int(num): float(score)
+                for num, score in scores.items()
+                if int(num) in blacklist and int(num) not in pool
+            }
             needed = pool_size - len(pool)
-            for num, _ in sorted_blacklisted[:needed]:
-                pool.append(num)
+            pool.extend(rank_by_score(bl_scores, needed))
                 
             # Dacă tot nu avem destule (e.g. scores e incomplet), fallback final pe frecvență globală
             if len(pool) < pool_size:
@@ -1361,14 +1397,13 @@ class LotoEngine:
                 freq = getattr(self, 'freq', None)
                 if freq is None:
                     freq = self.analyze_frequency()
-                
-                sorted_freq_indices = np.argsort(freq)[::-1]
-                for idx in sorted_freq_indices:
-                    num = int(idx) + 1
-                    if num not in pool:
-                        pool.append(num)
-                        if len(pool) >= pool_size:
-                            break
+                have = {int(n) for n in pool}
+                freq_scores = {
+                    int(i) + 1: float(freq[i])
+                    for i in range(len(freq))
+                    if (int(i) + 1) not in have
+                }
+                pool.extend(rank_by_score(freq_scores, pool_size - len(pool)))
 
         return sorted(pool[:pool_size])
 

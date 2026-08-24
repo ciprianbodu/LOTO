@@ -216,3 +216,14 @@ def test_decide_optimal_config_fallback_branch_has_single_member_ensemble():
 
     assert cfg["rationale"].startswith("FALLBACK")
     assert cfg["ensemble"] == [{"method": cfg["scorer"], "weight": 1.0}]
+
+
+def test_clamp_bench_hit_target_only_3_or_4():
+    assert decision.clamp_bench_hit_target(3) == 3
+    assert decision.clamp_bench_hit_target(4) == 4
+    assert decision.clamp_bench_hit_target("4") == 4
+    assert decision.clamp_bench_hit_target(5) == 3
+    assert decision.clamp_bench_hit_target(2) == 3
+    assert decision.clamp_bench_hit_target("nope") == 3
+    assert decision.clamp_bench_hit_target(None) == 3
+    assert decision.clamp_bench_hit_target(5, default=4) == 4

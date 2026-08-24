@@ -65,6 +65,39 @@ def _load_config(path: str | None = None) -> dict:
     return _CONFIG
 
 
+# Re-Bench sare joker_urna2 (single-pick: 1 număr → rata 4+ e 0). Engine-ul tot
+# cere un scorer pentru bila Joker — frequency e alegerea onestă, nu un WARNING
+# la fiecare Generate (era dublu: get_ensemble fallback + get_scorer_for_game).
+_UNBENCHED_SINGLE_PICK = frozenset({"joker_urna2"})
+
+
+def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
+    """Intrarea auto_pilot_per_pool[kN], cu fallback la cel mai apropiat k."""
+    if pool_size is None or not isinstance(g, dict):
+        return {}
+    apm = g.get("auto_pilot_per_pool") or {}
+    if not isinstance(apm, dict):
+        return {}
+    entry = apm.get(f"k{int(pool_size)}") or {}
+    if isinstance(entry, dict) and (entry.get("scorer") or entry.get("ensemble")):
+        return entry
+    avail = sorted(
+        int(k[1:]) for k in apm
+        if isinstance(k, str) and k.startswith("k") and k[1:].isdigit()
+    )
+    if not avail:
+        return entry if isinstance(entry, dict) else {}
+    nearest = min(avail, key=lambda k: abs(k - int(pool_size)))
+    cand = apm.get(f"k{nearest}") or {}
+    if isinstance(cand, dict) and (cand.get("scorer") or cand.get("ensemble")):
+        logger.info(
+            "[method_selector] pool k%d absent → folosesc k%d (cel mai apropiat decis)",
+            int(pool_size), nearest,
+        )
+        return cand
+    return entry if isinstance(entry, dict) else {}
+
+
 def get_winner_name(
     game_key: str,
     pool_size: int | None = None,
@@ -81,15 +114,17 @@ def get_winner_name(
       5. legacy v1 'winner' field
       6. 'frequency' baseline (last resort)
     """
+    if game_key in _UNBENCHED_SINGLE_PICK:
+        return "frequency"
+
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
 
     if pool_size is not None:
+        ap = _auto_pilot_entry(g, pool_size)
+        if ap.get("scorer"):
+            return ap["scorer"]
         key = f"k{pool_size}"
-        # v4: auto_pilot decision (consistent cu UI Auto-Pilot button)
-        apm = g.get("auto_pilot_per_pool", {})
-        if isinstance(apm, dict) and apm.get(key, {}).get("scorer"):
-            return apm[key]["scorer"]
         # v3 fallback: best of (no-bl, +bl)
         wpp_best = g.get("winners_per_pool_best", {})
         if isinstance(wpp_best, dict) and wpp_best.get(key, {}).get("winner"):
@@ -188,25 +223,19 @@ def get_ensemble_for_game(
     (get_winner_name + get_scorer_for_game, weight=1.0) — identic cu
     comportamentul dinaintea ensemble-ului.
     """
-    cfg = _load_config(config_path)
-    g = cfg.get("games", {}).get(game_key, {})
-    entry: dict = {}
-    if pool_size is not None:
-        apm = g.get("auto_pilot_per_pool", {})
-        if isinstance(apm, dict):
-            entry = apm.get(f"k{pool_size}", {}) or {}
-            if not entry.get("ensemble") and apm:
-                avail = sorted(int(k[1:]) for k in apm if k.startswith("k") and k[1:].isdigit())
-                if avail:
-                    nearest = min(avail, key=lambda k: abs(k - pool_size))
-                    cand = apm.get(f"k{nearest}", {}) or {}
-                    if cand.get("ensemble"):
-                        entry = cand
-
     def _single_fallback() -> list[tuple[str, Callable, float]]:
         name = get_winner_name(game_key, pool_size, config_path)
         fn = get_scorer_for_game(game_key, pool_size, config_path)
         return [(name, fn, 1.0)]
+
+    # Re-Bench sare single-pick (1 număr → rata 4+ e 0). Nu citi un ensemble
+    # vechi din best_methods.json — frequency e scorer-ul onest.
+    if game_key in _UNBENCHED_SINGLE_PICK:
+        return _single_fallback()
+
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    entry: dict = _auto_pilot_entry(g, pool_size) if pool_size is not None else {}
 
     raw_list = entry.get("ensemble") if isinstance(entry, dict) else None
     if not raw_list:
