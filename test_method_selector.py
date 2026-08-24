@@ -140,18 +140,50 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
                     "scorer": "frequency",
                     "ensemble": [
                         {"method": "frequency", "weight": 0.6},
-                        {"method": "random", "weight": 0.4},
+                        {"method": "recency", "weight": 0.4},
+                    ],
+                }
+            }
+        }
+    })
+    # `recency` poate fi blacklistat pe stație — dacă e interzis, rămâne frequency.
+    result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    names = {name for name, _fn, _w in result}
+    assert "frequency" in names
+    assert "random" not in names
+    assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
+
+
+def test_ensemble_skips_random_even_if_listed(temp_config):
+    """random e EXCLUDED_FROM_PRODUCTION — nu intră în blend chiar dacă e în JSON."""
+    cfg_path = temp_config({
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {
+                    "scorer": "frequency",
+                    "ensemble": [
+                        {"method": "frequency", "weight": 0.5},
+                        {"method": "random", "weight": 0.5},
                     ],
                 }
             }
         }
     })
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
-    names = {name for name, _fn, _w in result}
-    assert names == {"frequency", "random"}
-    weights = {name: w for name, _fn, w in result}
-    assert weights["frequency"] == pytest.approx(0.6)
-    assert weights["random"] == pytest.approx(0.4)
+    assert len(result) == 1
+    assert result[0][0] == "frequency"
+    assert result[0][2] == pytest.approx(1.0)
+
+
+def test_get_winner_rejects_random_scorer(temp_config):
+    cfg_path = temp_config({
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {"scorer": "random", "ensemble": [{"method": "random", "weight": 1.0}]},
+            }
+        }
+    })
+    assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
 
 
 def test_get_ensemble_skips_unknown_method_and_renormalizes(temp_config):

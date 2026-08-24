@@ -1228,7 +1228,6 @@ class LotoEngine:
             ensemble = get_ensemble_for_game(game_key, pool_size=_pool_hint)
             if not ensemble:
                 return {}
-            winner = ensemble[0][0]
             contributions = []
             for name, fn, weight in ensemble:
                 try:
@@ -1245,6 +1244,9 @@ class LotoEngine:
             if not scores:
                 return {}
             _active = _ens_audit.get("ensemble_active") or []
+            # Cap de listă = primul membru ACTIV (după filtrare), nu ensemble[0]
+            # nominal care putea fi sărit ca plat/corelat.
+            winner = (_active[0][0] if _active else ensemble[0][0])
             _n_act = len(_active) if _active else len(ensemble)
             logging.info(
                 "[ENGINE] bench-winner scoring: game=%s pool=%d -> %s%s",
@@ -1270,7 +1272,6 @@ class LotoEngine:
             if len(ensemble) > 1:
                 # Membrii EFECTIV folosiţi (ponderi renormalizate după eliminări),
                 # cu fallback la lista nominală dacă auditul lipseşte.
-                _active = _ens_audit.get("ensemble_active")
                 if _active:
                     bench_winner_info["ensemble"] = [
                         {"method": n, "weight": round(float(w), 4)} for n, w in _active
@@ -1282,17 +1283,24 @@ class LotoEngine:
                 _dropped: list = []
                 for t in (_ens_audit.get("ensemble_dropped_correlated") or []):
                     if isinstance(t, (tuple, list)) and t:
-                        _dropped.append((t[0], t[1] if len(t) > 1 else None,
-                                         t[2] if len(t) > 2 else "correlated"))
+                        _dropped.append({
+                            "method": t[0],
+                            "r": t[1] if len(t) > 1 else None,
+                            "vs": t[2] if len(t) > 2 else None,
+                            "reason": "correlated",
+                        })
                 for d in (_ens_audit.get("ensemble_dropped") or []):
                     if isinstance(d, dict):
-                        _dropped.append((d.get("method"), d.get("r"), d.get("reason")))
+                        _dropped.append({
+                            "method": d.get("method"),
+                            "r": d.get("r"),
+                            "vs": d.get("vs"),
+                            "reason": d.get("reason") or "flat_or_empty",
+                        })
                     else:
-                        _dropped.append((d, None, "flat_or_empty"))
+                        _dropped.append({"method": d, "r": None, "vs": None, "reason": "flat_or_empty"})
                 if _dropped:
-                    bench_winner_info["ensemble_dropped"] = [
-                        {"method": t[0], "vs": t[2], "r": t[1]} for t in _dropped
-                    ]
+                    bench_winner_info["ensemble_dropped"] = _dropped
             if game_key == "joker_urna2":
                 bench_winner_info["single_pick_unbenched"] = True
                 bench_winner_info["fallback"] = True

@@ -75,10 +75,16 @@ WF_TOTAL_BUDGET_S = 90 * 60
 WF_DEPTH_PERCENT = 30.0
 
 
-def _effective_lookback_pct() -> float:
-    """0 în UI = tot istoricul (100% pentru WF). Altfel clamp 1–100."""
+def _effective_lookback_pct(from_data: dict | None = None) -> float:
+    """Lookback pentru WF: preferă valoarea din rezultatul generat (job),
+    altfel slider-ul UI. 0 = tot istoricul (100%)."""
+    raw = None
+    if isinstance(from_data, dict) and "lookback" in from_data:
+        raw = from_data.get("lookback")
+    if raw is None:
+        raw = SETTINGS.get("lookback_val") or 0
     try:
-        v = int(SETTINGS.get("lookback_val") or 0)
+        v = int(raw or 0)
     except (TypeError, ValueError):
         v = 0
     if v <= 0:
@@ -686,7 +692,7 @@ def _start_walk_forward() -> None:
                         df_source=df_source, game_type=g_label,
                         pool_size=int(data.get("pool_size") or 10),
                         backtest_depth_percent=WF_DEPTH_PERCENT,
-                        lookback_percent=_effective_lookback_pct(),
+                        lookback_percent=_effective_lookback_pct(data),
                         use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
@@ -1891,10 +1897,13 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                 for d in _dropped:
                     if isinstance(d, dict):
                         nm = d.get("method") or "?"
+                        reason = d.get("reason") or ""
                         vs = d.get("vs")
                         r = d.get("r")
                         extra = ""
-                        if vs:
+                        if reason and reason not in ("correlated", "anticorrelated"):
+                            extra += f" ({reason})"
+                        elif vs:
                             extra += f" vs {vs}"
                         if r is not None:
                             try:
@@ -2159,13 +2168,15 @@ def _wilson_pooled_rate(grp, metric: str) -> float | None:
     return float(_wilson_lower_bound(successes, n_total))
 
 
-def _last_generation_bench_info(folds_game_key: str) -> dict:
+def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) -> dict:
     """Ensemble-ul EFECTIV din ultima generare (`audit.bench_winner`), dacă există.
 
     Clasamentul citea `get_ensemble_for_game` (nominal, înainte de decorelarea
     pe scoruri). Pool-ul e construit din membrii ACTIVI după combine — deci
     3 nominali puteau deveni 2 în panoul Nucleu dur. Preferăm auditul ultimei
     generări; `{}` dacă n-a rulat încă Generate.
+
+    Dacă `pool` e dat, preferăm intrarea cu `pool_hint` egal; altfel prima potrivire.
     """
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -2173,6 +2184,7 @@ def _last_generation_bench_info(folds_game_key: str) -> dict:
     bundle = results[0]
     if not bundle:
         return {}
+    fallback: dict = {}
     for _fname, outs in bundle:
         if not isinstance(outs, dict):
             continue
@@ -2184,9 +2196,19 @@ def _last_generation_bench_info(folds_game_key: str) -> dict:
                     continue
                 bw = (blob.get("audit") or {}).get("bench_winner") or {}
                 info = bw.get(folds_game_key)
-                if isinstance(info, dict) and (info.get("ensemble") or info.get("method")):
+                if not (isinstance(info, dict) and (info.get("ensemble") or info.get("method"))):
+                    continue
+                if pool is None:
                     return info
-    return {}
+                ph = info.get("pool_hint")
+                try:
+                    if ph is not None and int(ph) == int(pool):
+                        return info
+                except (TypeError, ValueError):
+                    pass
+                if not fallback:
+                    fallback = info
+    return fallback
 
 
 def _render_bench_leaderboard_slice(
@@ -2315,7 +2337,13 @@ def _render_bench_leaderboard_slice(
                 (r[7] if r[7] is not None else -1e18),
                 (r[8] if r[8] is not None else -1.0))
 
-    if _lift_ok:
+    def _sort_key_fallback(r):
+        # Ramura de fallback din decision.py: (Wilson, avg_hits) — fără lift.
+        return ((r[6] if r[6] is not None else -1.0), r[2], r[1])
+
+    if _lift_ok and _dec_low is True:
+        rows.sort(key=_sort_key_fallback, reverse=True)
+    elif _lift_ok:
         rows.sort(key=_sort_key_lift, reverse=True)
     else:
         rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
@@ -2361,7 +2389,9 @@ def _render_bench_leaderboard_slice(
     )
     # Eticheta spune EXACT cât face ordonarea: „ca decizia" doar când și tie-break-ul
     # secundar e cel al deciziei (lift + consistență), altfel nu promite identitate.
-    if _conf_ok and _lift_ok:
+    if _conf_ok and _lift_ok and _dec_low is True:
+        label += " · fallback (Wilson → medie hituri; nicio metodă n-a trecut poarta)"
+    elif _conf_ok and _lift_ok:
         if _gate_applied:
             label += (f" · sortat ca decizia (poartă ≥{_cons_pct}% vs random "
                       "→ Wilson → lift → consistență)")
@@ -2430,7 +2460,7 @@ def _render_bench_leaderboard_slice(
         # și îl etichetăm ca atare — nu mai pretindem că 3 membri = pool-ul.
         _ens_names: list[tuple[str, float]] = []
         _ens_source = ""
-        _gen_info = _last_generation_bench_info(folds_game_key)
+        _gen_info = _last_generation_bench_info(folds_game_key, pool)
         _gen_ens = _gen_info.get("ensemble") if isinstance(_gen_info, dict) else None
         _gen_dropped = (_gen_info.get("ensemble_dropped") if isinstance(_gen_info, dict) else None) or []
         if _gen_ens:
@@ -3624,7 +3654,24 @@ def main_page() -> None:
                 os.environ["LOTO_BENCH_TARGET"] = str(target)
                 if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():
                     decision.update_best_methods_with_auto_pilot()
-                    ui.notify(f"Decizia Auto-Pilot a fost actualizată pentru {target}+ hits!", type="info")
+                    _mismatch = False
+                    try:
+                        from loto_enterprise.core.method_selector import recommend_optimal_config
+                        for _gk in ("loto_6_49", "loto_5_40", "joker_urna1"):
+                            _c = recommend_optimal_config(_gk, int(SETTINGS["pool_size_val"]))
+                            if _c.get("rate_col_mismatch"):
+                                _mismatch = True
+                                break
+                    except Exception:  # noqa: BLE001
+                        pass
+                    if _mismatch:
+                        ui.notify(
+                            f"Decizie actualizată, DAR folds nu au coloane {target}+ "
+                            f"— s-a folosit 4+ (rate_col_mismatch). Rulează Re-Bench.",
+                            type="warning",
+                        )
+                    else:
+                        ui.notify(f"Decizia Auto-Pilot a fost actualizată pentru {target}+ hits!", type="info")
                     _refresh_status()
                     results_panel.refresh()
             except Exception as exc:

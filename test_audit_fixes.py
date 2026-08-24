@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+from loto_enterprise.core import method_selector as ms
 from loto_enterprise.core.wf_sig import ensemble_sig, lookback_pct
 
 
@@ -45,10 +46,20 @@ def test_lookback_pct_zero_means_all_history():
     assert lookback_pct(50) != lookback_pct(100)
 
 
+def test_combine_all_nan_returns_empty_not_poisoned_pool():
+    """Fallback pe dict cu NaN otrăvea rank_by_score — trebuie {} → frequency."""
+    audit: dict = {}
+    out = ms.combine_ensemble_scores(
+        [("bad", {1: float("nan"), 2: 1.0, 3: 0.0}, 1.0)],
+        audit=audit,
+    )
+    assert out == {}
+    assert audit.get("ensemble_fallback_empty") is True
+    assert audit.get("ensemble_active") == []
+
+
 def test_combine_dropped_is_list_of_names():
     """combine_ensemble_scores scrie ensemble_dropped ca listă de NUME (nu dicturi)."""
-    from loto_enterprise.core import method_selector as ms
-
     audit: dict = {}
     raw = {i: float(i) for i in range(1, 12)}
     ms.combine_ensemble_scores(

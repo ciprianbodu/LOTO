@@ -71,6 +71,45 @@ def _load_config(path: str | None = None) -> dict:
 _UNBENCHED_SINGLE_PICK = frozenset({"joker_urna2"})
 
 
+def _production_forbidden() -> frozenset[str]:
+    """Metode care NU au voie să scocheze pool-ul de producție.
+
+    = EXCLUDED_FROM_PRODUCTION (random) ∪ disabled_methods.json.
+    best_methods.json vechi/manual putea totuși să le numească — fără gardă
+    aici, pool-ul devenea nedeterminist sau reactiva o metodă legendată.
+    """
+    forbidden: set[str] = {"random"}
+    try:
+        from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+        forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from loto_enterprise.benchmark.disabled import load_disabled
+        forbidden |= {str(m) for m in load_disabled()}
+    except Exception:  # noqa: BLE001
+        pass
+    return frozenset(forbidden)
+
+
+def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
+    """None dacă numele e interzis pentru producție; altfel numele curat."""
+    if not name:
+        return None
+    try:
+        from loto_enterprise.benchmark.methods import resolve_method_name
+        name = resolve_method_name(str(name))
+    except Exception:  # noqa: BLE001
+        name = str(name)
+    if name in _production_forbidden():
+        logger.warning(
+            "[method_selector] %s %r interzis în producție (random/blacklist) — skip",
+            context, name,
+        )
+        return None
+    return name
+
+
 def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
     """Intrarea auto_pilot_per_pool[kN], cu fallback la cel mai apropiat k."""
     if pool_size is None or not isinstance(g, dict):
@@ -120,22 +159,33 @@ def get_winner_name(
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
 
+    def _ok(name) -> str | None:
+        return _sanitize_production_name(name, context="winner")
+
     if pool_size is not None:
         ap = _auto_pilot_entry(g, pool_size)
         if ap.get("scorer"):
-            return ap["scorer"]
+            n = _ok(ap["scorer"])
+            if n:
+                return n
         key = f"k{pool_size}"
         # v3 fallback: best of (no-bl, +bl)
         wpp_best = g.get("winners_per_pool_best", {})
         if isinstance(wpp_best, dict) and wpp_best.get(key, {}).get("winner"):
-            return wpp_best[key]["winner"]
+            n = _ok(wpp_best[key]["winner"])
+            if n:
+                return n
         wpp = g.get("winners_per_pool", {})
         if isinstance(wpp, dict) and wpp.get(key):
-            return wpp[key]
+            n = _ok(wpp[key])
+            if n:
+                return n
 
     for fld in ("overall_winner", "overall_winner_bl", "winner"):
         if g.get(fld):
-            return g[fld]
+            n = _ok(g[fld])
+            if n:
+                return n
     logger.warning("[method_selector] no winner for %s — defaulting to frequency", game_key)
     return "frequency"
 
@@ -189,8 +239,11 @@ def get_scorer_for_game(
         raise
 
     name = resolve_method_name(name)
-    if name not in METHODS:
-        logger.warning("[method_selector] unknown winner %r, falling back to frequency", name)
+    if name not in METHODS or name in _production_forbidden():
+        if name in _production_forbidden():
+            logger.warning("[method_selector] scorer %r interzis — falling back to frequency", name)
+        else:
+            logger.warning("[method_selector] unknown winner %r, falling back to frequency", name)
         name = "frequency"
     fn, _family, _train, _notes = METHODS[name]
     if getattr(fn, "_unavailable_reason", None):
@@ -253,7 +306,9 @@ def get_ensemble_for_game(
         weight = float(item.get("weight", 0.0)) if isinstance(item, dict) else 0.0
         if not name or weight <= 0:
             continue
-        name = resolve_method_name(name)
+        name = _sanitize_production_name(name, context="ensemble member")
+        if not name:
+            continue
         cache_key = f"{name}#{pool_size or 'overall'}"
         fn = _CACHE.get(cache_key)
         if fn is None:
@@ -715,14 +770,21 @@ def combine_ensemble_scores(
         audit["ensemble_dropped_correlated"] = [(n, r, vs) for n, r, vs in dropped_corr]
 
     if not active:
-        # fallback: primul nevid, chiar dacă e plat (mai bun decât pool gol);
-        # plat = toate valorile egale, deci scalarea nu ar schimba nimic în ranking
+        # Fallback doar pe scoruri FINITE și plate (toate egale). Un dict cu NaN
+        # otrăvea rank_by_score (tie-break pe număr nu intră niciodată) și apărea
+        # simultan în dropped ȘI active. Fără fallback finit → {} → frequency.
         for name, raw, w in contributions:
-            if raw:
+            if not raw:
+                continue
+            vals = [float(v) for v in raw.values()]
+            if vals and all(math.isfinite(v) for v in vals):
                 if audit is not None:
                     audit["ensemble_active"] = [(name, 1.0)]
                     audit["ensemble_fallback_flat"] = True
                 return {int(k): float(v) for k, v in raw.items()}
+        if audit is not None:
+            audit["ensemble_active"] = []
+            audit["ensemble_fallback_empty"] = True
         return {}
     if len(active) == 1:
         _name, raw, _w = active[0]

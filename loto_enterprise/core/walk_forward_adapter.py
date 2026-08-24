@@ -41,8 +41,11 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v16"
+CACHE_VERSION = "v17"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v17: `_csv_hash` pe TOATE rândurile numerice + `len(df)` (nu doar tail 500).
+#      Corecții/inserări mai vechi de 500, sau CSV mai lung la același tail,
+#      serveau cache vechi pe alte date de antrenare/validare.
 # v16: `_decision_sig` include lookback-ul efectiv (0 din UI = 100%) + serializare
 #      stabilă a ensemble-ului (listă {method, weight}, nu str(dict)). Fără lookback
 #      în cheie, un slider „ultimele X%” schimba pool-ul de producție dar WF
@@ -95,7 +98,12 @@ class WalkForwardResult:
 
 
 def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
-    """Stable MD5 hash al ultimelor 500 rânduri × coloanele de numere."""
+    """MD5 stabil pe lungime + TOATE rândurile coloanelor de numere.
+
+    Tail-only (500) lăsa corecții/inserări vechi și CSV-uri cu același coadă
+    dar lungimi diferite să partajeze cache-ul — WF valida alte date decât
+    cele pe care engine-ul antrenează (lookback 100%).
+    """
     cols_map = {
         "6/49":   ["n1", "n2", "n3", "n4", "n5", "n6"],
         "5/40":   ["n1", "n2", "n3", "n4", "n5"],
@@ -104,8 +112,8 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     cols = [c for c in cols_map.get(game_type, []) if c in df.columns]
     if not cols:
         return hashlib.md5(str(len(df)).encode()).hexdigest()[:12]
-    sub = df[cols].tail(500)
-    h = hashlib.md5(sub.to_csv(index=False, header=False).encode()).hexdigest()
+    body = df[cols].to_csv(index=False, header=False).encode()
+    h = hashlib.md5(f"{len(df)}|".encode() + body).hexdigest()
     return h[:12]
 
 
