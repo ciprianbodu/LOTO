@@ -382,7 +382,12 @@ def run_benchmark(
     import hashlib as _hl
     from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
     try:
-        from .bench_cache import compute_csv_hash, get_cached_fold, store_cached_fold
+        from .bench_cache import (
+            compute_csv_hash, get_cached_fold, store_cached_fold, set_cache_variant,
+        )
+        # block_size/seed intră în cheia de cache (doar la valori non-default) —
+        # altfel un `--block-size 1` / `--seed X` servea folduri stale de la default.
+        set_cache_variant(block_size, random_seed)
         _cache_ok = True
     except Exception as _cache_exc:  # noqa: BLE001
         logger.debug(f"[bench_cache] import failed: {_cache_exc}")

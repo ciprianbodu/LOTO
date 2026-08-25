@@ -129,6 +129,21 @@ DEFAULTS = {
 # Stare server-side (single-user local app → globală e suficient)
 # --------------------------------------------------------------------------- #
 SETTINGS: dict = dict(DEFAULTS)
+
+
+def _int_setting(key: str, default: int | None = None) -> int:
+    """SETTINGS[key] ca int, robust la câmp GOLIT în UI (ui.number → None).
+
+    _bind_save scrie None direct în SETTINGS; fără gardă, int(None) crăpa
+    submit-ul (Generează eșua tăcut) și randarea clasamentului. Fallback:
+    DEFAULTS[key] (sau `default` explicit)."""
+    try:
+        v = SETTINGS.get(key)
+        if v is None:
+            raise TypeError(key)
+        return int(v)
+    except (TypeError, ValueError):
+        return int(default if default is not None else DEFAULTS[key])
 STATE: dict = {
     "datasets": [],          # list[(fname, DataFrame)]
     "active_job_id": None,
@@ -265,13 +280,14 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         g_label = _game_label_for(fname)
         df_json = df.to_json(orient="split")
         # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
-        sd = int(sim_depth_per_game.get(g_label, SETTINGS["sim_depth_val"]))
+        _sd_pg = sim_depth_per_game.get(g_label)
+        sd = int(_sd_pg) if _sd_pg is not None else _int_setting("sim_depth_val")
         task = {
             "game_label": g_label,
-            "pool_size": int(SETTINGS["pool_size_val"]),
-            "guarantee": int(SETTINGS["guarantee_val"]),
-            "max_variants": int(SETTINGS["max_variants_val"]),
-            "lookback": int(SETTINGS["lookback_val"]),
+            "pool_size": _int_setting("pool_size_val"),
+            "guarantee": _int_setting("guarantee_val"),
+            "max_variants": _int_setting("max_variants_val"),
+            "lookback": _int_setting("lookback_val"),
             "filter_consecutives": False,
             "smart_reduction": False,
             "sim_depth_pct": sd,
@@ -329,7 +345,7 @@ def apply_autopilot_and_generate() -> None:
         for fname, _ in STATE["datasets"]:
             label = _game_label_for(fname)
             gk = _LABEL_TO_KEY.get(label, "loto_6_49")
-            cfg = recommend_optimal_config(gk, int(SETTINGS["pool_size_val"]))
+            cfg = recommend_optimal_config(gk, _int_setting("pool_size_val"))
             if cfg and not cfg.get("fallback"):
                 sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
                 per_game[label] = sd
@@ -592,6 +608,10 @@ def cancel_all() -> None:
     # generarea automat.
     STATE["bench_was_running"] = False
     STATE["bench_cancelled"] = True
+    # Oprește și WALK-FORWARD-ul (thread separat) și blochează _finalize_pipeline:
+    # altfel „Anulează TOT" lăsa WF să ruleze până la buget (până la 90 min), iar
+    # finally-ul lui declanșa mail/shutdown — PC-ul se putea ÎNCHIDE după un cancel.
+    STATE["wf_user_cancel"] = True
     unlock_engine()
     ui.notify("Proces anulat.", type="warning")
     _refresh_status()
@@ -609,6 +629,13 @@ def _start_walk_forward() -> None:
     results_bundle, _ = results
     # Walk-forward: doar Pool 1 (Pool 2 = inversare, fără validare istorică).
     _pfx = ""  # bench unic → fără prefix de secțiune
+
+    # Secvență de rulare: dacă între timp pornește ALT walk-forward (generare nouă
+    # cât rula validarea veche), thread-ul vechi devine stale — se oprește și NU mai
+    # scrie retro/status/finalize peste rularea nouă.
+    STATE["wf_user_cancel"] = False
+    my_seq = int(STATE.get("wf_seq") or 0) + 1
+    STATE["wf_seq"] = my_seq
 
     def _worker_wf() -> None:
         _wf_t0 = float(STATE.get("wf_start") or time.time())
@@ -635,7 +662,10 @@ def _start_walk_forward() -> None:
         _global_deadline()  # inițializează STATE["wf_deadline"] pt panou
 
         def _wf_cancel_all():
-            # Buget global depășit → oprire parțială walk-forward.
+            # Anulare explicită din UI sau rulare înlocuită (alt WF pornit) →
+            # oprire imediată; altfel buget global depășit → oprire parțială.
+            if STATE.get("wf_user_cancel") or STATE.get("wf_seq") != my_seq:
+                return True
             return time.time() > _global_deadline()
 
         try:
@@ -698,6 +728,10 @@ def _start_walk_forward() -> None:
                         should_cancel=_wf_should_cancel,
                         auto_invert=wf_invert,
                     )
+                    if STATE.get("wf_seq") != my_seq:
+                        # A pornit alt walk-forward: nu-i suprascriem retro/status.
+                        logger.info("[WF] rulare înlocuită de una nouă — mă opresc fără scriere.")
+                        break
                     if meta.get("partial"):
                         logger.warning("[WF] %s %s validat PARȚIAL: %s/%s extrageri "
                                        "(buget de timp / anulare) — acoperă extragerile RECENTE.",
@@ -738,28 +772,38 @@ def _start_walk_forward() -> None:
                     logger.error("walk-forward %s: %s", g_label, exc)
                 STATE["wf_progress"] = done / max(1, total)
                 if _wf_cancel_all():
-                    logger.warning("[WF] oprire walk-forward (buget global) după %d/%d jocuri.",
+                    logger.warning("[WF] oprire walk-forward (anulare/buget) după %d/%d jocuri.",
                                    done, total)
                     break
-            STATE["wf_status"] = ""
-            STATE["wf_progress"] = 1.0
+            if STATE.get("wf_seq") == my_seq and not STATE.get("wf_user_cancel"):
+                STATE["wf_status"] = ""
+                STATE["wf_progress"] = 1.0
         except Exception as exc:  # noqa: BLE001
             STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
         finally:
-            if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
-                STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
-            _save_report_file()  # rescriu raportul acum CU statisticile walk-forward
-            try:
-                results_panel.refresh()
-            except Exception:  # noqa: BLE001
-                pass
-            # Mail-ul a plecat deja imediat după generare (vezi status_panel).
-            # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
-            _finalize_pipeline()
-            try:
-                status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
-            except Exception:  # noqa: BLE001
-                pass
+            _stale = STATE.get("wf_seq") != my_seq
+            _user_cancelled = bool(STATE.get("wf_user_cancel"))
+            if not _stale:
+                if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
+                    STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
+                _save_report_file()  # rescriu raportul acum CU statisticile walk-forward
+                try:
+                    results_panel.refresh()
+                except Exception:  # noqa: BLE001
+                    pass
+                if _user_cancelled:
+                    # Anulare explicită: FĂRĂ finalizare (mail/shutdown) — utilizatorul
+                    # tocmai a oprit tot; un shutdown aici ar închide PC-ul după cancel.
+                    STATE["wf_status"] = "Walk-forward anulat (fără mail/oprire PC)."
+                    logger.info("[WF] finalizare sărită: anulare explicită din UI.")
+                else:
+                    # Mail-ul a plecat deja imediat după generare (vezi status_panel).
+                    # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
+                    _finalize_pipeline()
+                try:
+                    status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
+                except Exception:  # noqa: BLE001
+                    pass
 
     STATE["wf_progress"] = 0.0
     STATE["wf_start"] = time.time()  # pt ETA walk-forward
@@ -2334,8 +2378,13 @@ def _render_bench_leaderboard_slice(
                 _lift_ok = True
             except Exception:  # noqa: BLE001
                 w_lift = cons = None
+        # media pe coloana pool-ului (k{pool}) — EXACT cheia secundară a ramurii
+        # de fallback din decision.py (base_col), nu avg_hits_topk (K = draw_n).
+        _base_avg = (float(grp[_base_col].mean())
+                     if _base_col in grp.columns else avg)
         rows.append((m, score, avg, _method_library(m, fam),
-                     _rate_for(grp, 3), _rate_for(grp, 4), conf, w_lift, cons))
+                     _rate_for(grp, 3), _rate_for(grp, 4), conf, w_lift, cons,
+                     _base_avg))
     # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson
     # pooled pe n_test → lift mediu ponderat vs random → consistență). Fără
     # decision.py / fără coloana k{pool} / fără rândurile `random` → cădem pe
@@ -2352,8 +2401,11 @@ def _render_bench_leaderboard_slice(
                 (r[8] if r[8] is not None else -1.0))
 
     def _sort_key_fallback(r):
-        # Ramura de fallback din decision.py: (Wilson, avg_hits) — fără lift.
-        return ((r[6] if r[6] is not None else -1.0), r[2], r[1])
+        # Ramura de fallback din decision.py: (Wilson, media k{pool}) — fără lift.
+        # r[9] = media pe coloana pool-ului (base_col), aceeași cheie ca decizia;
+        # înainte se folosea r[2] (avg la K=draw_n) → la egalitate de Wilson
+        # ordinea afișată diverge de decizia reală.
+        return ((r[6] if r[6] is not None else -1.0), r[9], r[1])
 
     if _lift_ok and _dec_low is True:
         rows.sort(key=_sort_key_fallback, reverse=True)
@@ -2710,7 +2762,7 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
         return
     if df.empty or "method" not in df.columns or "game" not in df.columns:
         return
-    pool = int(SETTINGS.get("pool_size_val", 10))
+    pool = _int_setting("pool_size_val")
     if game_label == "joker":
         _render_bench_leaderboard_slice(df, "joker_urna1", pool, "Joker Urna 1 (5/45)", top_n=top_n)
         _render_urna2_unbenched_note()
@@ -2743,7 +2795,7 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
         return  # mid-flush / gol → reîncearcă la următorul tick
     if df.empty or "method" not in df.columns or "game" not in df.columns:
         return
-    pool = int(SETTINGS.get("pool_size_val", 10))
+    pool = _int_setting("pool_size_val")
     _done = progress is not None and float(progress) >= 1.0
     _title = ("🏆 Clasament COMPLET (teste 100% — se scrie decizia/raportul...)" if _done
               else "🏆 Clasament PARȚIAL (live — în timpul bench-ului)")
@@ -3259,11 +3311,16 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
             t"nu o predicție.</span>"
         ))
 
-    # Notificare transientă (pop-up) la randarea rezultatelor.
+    # Notificare transientă (pop-up) — O SINGURĂ DATĂ per set de alerte, nu la
+    # fiecare re-randare a panoului (toggle „Arată toate", schimbare țintă etc.
+    # re-declanșau pop-up-ul de 10s la nesfârșit).
     try:
         names = ", ".join(a[0].upper() for a in alerts)
-        ui.notify(f"🔔 Se apropie media de ≥{_T}: {names} — vezi alerta de sus.",
-                  type="warning", position="top", timeout=10000, close_button=True)
+        _sig = f"{_T}|{names}"
+        if STATE.get("due_alert_notified") != _sig:
+            STATE["due_alert_notified"] = _sig
+            ui.notify(f"🔔 Se apropie media de ≥{_T}: {names} — vezi alerta de sus.",
+                      type="warning", position="top", timeout=10000, close_button=True)
     except Exception:  # noqa: BLE001
         pass
 
@@ -3490,8 +3547,15 @@ def _new_draws_summary():
     return {"total": total, "per": per, "rec": rec, "any_bench": any_bench}
 
 
-@ui.refreshable
+# Panoul de istoric adaptiv folosea două nume NEDEFINITE (NameError la orice
+# apel). Fișierul canonic e cel scris de core.adaptive_feedback (rădăcina repo);
+# pool-urile acceptate de UI sunt 6..16 (clamp-ul din worker/încărcare).
+ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
+SUPPORTED_POOLS = range(6, 17)
+
+
 def _clean_stale_adaptive(stale_keys) -> None:
+    # NU e @ui.refreshable: e o ACȚIUNE de mutare (buton), nu funcție de randare.
     try:
         from ui_shared import file_lock
         with file_lock(ADAPTIVE_STATE_FILE):  # nu ne batem cu worker-ul pe RMW
@@ -3677,7 +3741,7 @@ def main_page() -> None:
                     try:
                         from loto_enterprise.core.method_selector import recommend_optimal_config
                         for _gk in ("loto_6_49", "loto_5_40", "joker_urna1"):
-                            _c = recommend_optimal_config(_gk, int(SETTINGS["pool_size_val"]))
+                            _c = recommend_optimal_config(_gk, _int_setting("pool_size_val"))
                             if _c.get("rate_col_mismatch"):
                                 _mismatch = True
                                 break
@@ -3721,7 +3785,6 @@ def main_page() -> None:
                   ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
 
         ui.separator()
-        _full_eta = _estimate_bench_eta(1280)
         ui.button("🔬 RE-BENCH", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
         _bt = _clamped_bench_target()

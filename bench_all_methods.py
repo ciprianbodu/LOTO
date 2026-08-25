@@ -127,6 +127,11 @@ def main() -> int:
                         help="Nu scrie best_methods.json (folosit la bench paralel pe faze: "
                              "fiecare faza scrie doar folds.csv in --out propriu; decizia "
                              "se ia separat dupa combinarea folds-urilor).")
+    parser.add_argument("--force-decision", action="store_true",
+                        help="Rescrie best_methods.json CHIAR ȘI cu set redus de metode "
+                             "(--quick/--methods). Implicit decizia e sărită la seturi "
+                             "reduse: un folds.csv cu 2 metode ar înlocui tăcut decizia "
+                             "de producție cu low_confidence/frequency peste tot.")
     args = parser.parse_args()
 
     # Benchmark exclusiv CPU → un singur log.
@@ -155,6 +160,11 @@ def main() -> int:
         else (args.methods.split(",") if args.methods else ALL_SPEC_METHODS)
     )
     methods = [m.strip() for m in methods if m.strip()]
+    # Aliasurile legacy (METHOD_ALIASES, ex. ml_catboost_cpu) sunt acceptate de tot
+    # stack-ul (method_meta/call_method) — rezolvă-le ÎNAINTE de verificarea unknown,
+    # altfel `--methods ml_catboost_cpu` era respins deși ar fi rulat corect.
+    from loto_enterprise.benchmark.methods import resolve_method_name as _resolve
+    methods = [_resolve(m) for m in methods]
     unknown = [m for m in methods if m not in METHODS]
     if unknown:
         print(f"Unknown methods: {unknown}", file=sys.stderr)
@@ -313,10 +323,21 @@ def main() -> int:
     out_path = Path(args.out)
     out_path.mkdir(exist_ok=True, parents=True)
 
-    if args.no_decision:
+    _skip_decision = bool(args.no_decision)
+    if not _skip_decision and _explicit and not args.force_decision:
+        # Gardă anti-footgun: un run cu set REDUS (--quick / --methods a,b) scrie un
+        # folds.csv redus (OVERWRITE) — dacă decizia rulează pe el, best_methods.json
+        # de producție e înlocuit tăcut (ex. --quick → low_confidence/frequency peste
+        # tot). UI-ul a scos Quick exact din motivul ăsta; CLI-ul cere acum opt-in.
+        _skip_decision = True
+        logging.warning("[bench] set redus de metode (--quick/--methods): NU rescriu "
+                        "best_methods.json. Forțează explicit cu --force-decision.")
+        console.print("[bold yellow]⚠ Set redus de metode — best_methods.json rămâne "
+                      "NEATINS (adaugă --force-decision ca să-l rescrii).[/bold yellow]")
+    if _skip_decision:
         # Bench paralel pe faze: scriem DOAR folds.csv in --out (deja scris de runner);
         # decizia (best_methods.json) se ia separat dupa combinarea folds-urilor.
-        logging.info("[bench] --no-decision: sar scrierea best_methods.json (faza paralela).")
+        logging.info("[bench] sar scrierea best_methods.json (no-decision/set redus).")
     else:
         from ui_shared import atomic_write_json
         atomic_write_json("best_methods.json", best)  # atomic: tmp+fsync+os.replace

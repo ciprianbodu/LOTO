@@ -19,6 +19,26 @@ import pytest
 
 from loto_enterprise.benchmark import decision
 
+# decision.decide_optimal_config_for_pool filtrează candidații pe registry-ul
+# METHODS (sare tombstone-urile/numele necunoscute din folds vechi). Numele
+# SINTETICE de mai jos nu există în registry → fără înregistrare temporară,
+# toate testele cădeau tăcut pe fallback-ul 'frequency' și nu mai verificau nimic.
+_SYNTHETIC_METHODS = [
+    "noisy_smallwindow", "robust_morevidence", "some_method", "weak_method",
+    *[f"method_{i}" for i in range(6)],
+]
+
+
+@pytest.fixture(autouse=True)
+def _register_synthetic_methods(monkeypatch):
+    from loto_enterprise.benchmark import methods as _mm
+    for _name in _SYNTHETIC_METHODS:
+        if _name not in _mm.METHODS:
+            monkeypatch.setitem(
+                _mm.METHODS, _name,
+                (lambda draws, max_num: {}, "test", False, "sintetic (doar teste)"),
+            )
+
 
 def test_wilson_lower_bound_zero_events_is_zero():
     assert decision._wilson_lower_bound(0, 100) == 0.0

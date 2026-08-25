@@ -291,7 +291,7 @@ class LotoBacktester:
         
         self._load_data()
     
-    def _get_game_params(self, game_type: str) -> Dict:
+    def _get_game_params(self, game_type: str) -> dict:
         """Parametrii pentru fiecare tip de joc.
 
         Pentru Joker, draw_n = 5 (urna 1, numere 1-45). Coloana `joker` (1-20,
@@ -631,7 +631,7 @@ class LotoBacktester:
         retro_predictions = []
         feedback_map: dict[int, float] = {}  # num -> multiplier
         # State adaptiv in-memory pentru backtest (NU atinge adaptive_state.json)
-        adaptive_history: list[Dict] = []
+        adaptive_history: list[dict] = []
         streak_zero = 0
         active_mode = "normal"
         reset_duration = 0

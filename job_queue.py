@@ -63,6 +63,7 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     
     last_exc = None
     for attempt in range(5):
+        conn = None
         try:
             conn = sqlite3.connect(str(p), timeout=30, check_same_thread=False)
             conn.row_factory = sqlite3.Row
@@ -83,6 +84,11 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
                 raise
             return conn
         except sqlite3.OperationalError as e:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
             last_exc = e
             if "disk I/O error" in str(e) or "database is locked" in str(e):
                 time.sleep(0.5 * (attempt + 1))
@@ -256,9 +262,9 @@ def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:
             -- naiv-UTC. Nu-l scrie din Python (ar fi local → vechime greșită).
             UPDATE jobs
             SET status = ?, progress_pct = 100, result_json = ?, completed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            WHERE id = ? AND status = ?
             """,
-            (JOB_COMPLETED, result_json, int(job_id)),
+            (JOB_COMPLETED, result_json, int(job_id), JOB_RUNNING),
         )
         conn.commit()
 
@@ -290,9 +296,9 @@ def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> None:
             """
             UPDATE jobs
             SET status = ?, result_json = ?, log_tail = ?
-            WHERE id = ?
+            WHERE id = ? AND status NOT IN (?, ?)
             """,
-            (JOB_FAILED, msg, msg[-6000:], int(job_id)),
+            (JOB_FAILED, msg, msg[-6000:], int(job_id), JOB_COMPLETED, JOB_CANCELLED),
         )
         conn.commit()
 
@@ -336,10 +342,17 @@ def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
 
 
 def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
-    """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker)."""
+    """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker).
+
+    Pragul e <= 1 (doar claim-uit, niciodată atins de worker): orice job cu pct >= 2
+    a fost deja preluat („Job preluat de worker.") și e PROPRIETATEA acelui worker —
+    un al doilea worker nu are voie să-l fure cât primul încarcă pandas/engine
+    (pct 2-5). Orfanii cu pct >= 2 se recuperează la următorul start de worker
+    (requeue_running_jobs), nu aici.
+    """
     return _claim_job(
         db_path,
-        where_sql="status = ? AND progress_pct <= 5",
+        where_sql="status = ? AND progress_pct <= 1",
         where_params=(JOB_RUNNING,),
         update_sql="UPDATE jobs SET progress_pct = 2 WHERE id = ?",
     )

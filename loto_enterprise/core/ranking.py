@@ -26,6 +26,7 @@ fără risc de import circular — iar funcția e simplă, la nivel de modul
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 
 
@@ -69,13 +70,19 @@ def rank_by_score(
     singuri; cei care vor doar apartenența fac ``set()`` (dar tie-break-ul
     decide APARTENENȚA la egalitate de scor, nu doar ordinea!). Filtrarea
     (blacklist, interval 1..max_num) rămâne responsabilitatea apelantului —
-    helperul nu filtrează nimic. Dict gol sau ``k <= 0`` -> [].
+    helperul nu filtrează nimic ÎN AFARA scorurilor nefinite: intrările cu
+    NaN/±inf sunt ELIMINATE înainte de sortare (comparația de tuple cu NaN
+    scurt-circuitează pe primul element și rezultatul devenea dependent de
+    ordinea de inserare în dict — nedeterminist). Pe scoruri toate-finite
+    (contractul oricărui scorer valid) output-ul e bit-identic cu înainte.
+    Dict gol, toate-nefinite sau ``k <= 0`` -> [].
     """
     if not scores or k <= 0:
         return []
     f = freq or {}
+    finite = [(n, s) for n, s in scores.items() if math.isfinite(s)]
     return [n for n, _ in sorted(
-        scores.items(),
+        finite,
         key=lambda kv: (kv[1], f.get(kv[0], 0.0), kv[0]),
         reverse=True,
     )[: int(k)]]

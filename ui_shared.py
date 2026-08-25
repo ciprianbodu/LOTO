@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import psutil
@@ -243,16 +244,26 @@ def decode_queue_result(result_json: str) -> object:
 # Scriere atomică (anti-corupere: crash/sleep/sync OneDrive la mijlocul scrierii)
 # --------------------------------------------------------------------------- #
 def atomic_write_text(path, text: str, encoding: str = "utf-8") -> None:
-    """Scrie în <file>.tmp (flush+fsync) apoi os.replace — atomic pe Win+POSIX.
-    Cititorii văd fie versiunea veche completă, fie cea nouă completă."""
+    """Scrie într-un tmp cu nume UNIC (flush+fsync) apoi os.replace — atomic pe
+    Win+POSIX. Cititorii văd fie versiunea veche completă, fie cea nouă completă.
+    Numele tmp e unic per scriere (pid+uuid): cu un ".tmp" fix, doi scriitori
+    concurenți pe același fișier își truncau reciproc tmp-ul și un torn file
+    putea fi promovat „atomic" (cauza istorică a erorilor de tracker din loto.log)."""
     p = Path(path)
-    tmp = p.with_name(p.name + ".tmp")
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(tmp, "w", encoding=encoding) as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, p)
+    try:
+        with open(tmp, "w", encoding=encoding) as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, p)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def atomic_write_json(path, obj, *, indent: int = 2, ensure_ascii: bool = False) -> None:
@@ -278,20 +289,34 @@ class file_lock:
                 return self
             except FileExistsError:
                 if time.time() - start > self.timeout:
-                    logger.debug("[file_lock] timeout pe %s — continui fără lock", self.lockpath)
+                    # Lock presupus STALE (deținătorul a crăpat fără unlink):
+                    # îl spargem noi și mai încercăm O dată; dacă tot nu merge,
+                    # continuăm fără lock (anti-deadlock, scrierea e oricum atomică).
+                    logger.debug("[file_lock] timeout pe %s — sparg lock-ul stale", self.lockpath)
+                    try:
+                        os.unlink(self.lockpath)
+                    except OSError:
+                        pass
+                    try:
+                        self._fd = os.open(self.lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    except OSError:
+                        self._fd = None
                     return self
                 time.sleep(0.05)
 
     def __exit__(self, *exc):
+        # Ștergem lock-file-ul DOAR dacă l-am creat noi (self._fd setat). Înainte,
+        # un intrat pe timeout (fără lock) ștergea la ieșire lock-ul VIU al
+        # deținătorului curent — mutual exclusion spartă pentru toți următorii.
         if self._fd is not None:
             try:
                 os.close(self._fd)
             except OSError:
                 pass
-        try:
-            os.unlink(self.lockpath)
-        except OSError:
-            pass
+            try:
+                os.unlink(self.lockpath)
+            except OSError:
+                pass
         return False
 
 
@@ -299,13 +324,16 @@ class file_lock:
 # Worker
 # --------------------------------------------------------------------------- #
 def is_worker_running() -> bool:
-    root = str(PROJECT_ROOT)
+    # normcase: pe Windows căile din cmdline pot diferi doar prin CASE
+    # (d:\_libraries vs D:\_LIBRARIES) — comparația case-sensitive rata worker-ul
+    # existent și spawn-a un DUPLICAT, al cărui requeue de startup fura jobul activ.
+    root = os.path.normcase(str(PROJECT_ROOT))
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             cmdline = proc.info.get("cmdline") or []
             if not cmdline:
                 continue
-            cmd = " ".join(str(p) for p in cmdline)
+            cmd = os.path.normcase(" ".join(str(p) for p in cmdline))
             if "worker.py" in cmd and root in cmd:
                 return True
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):

@@ -420,12 +420,24 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
         wheel = []
         for blk in design:
             mapped = [pool[i - 1] for i in blk if 1 <= i <= v]
-            if len(mapped) == pick:
+            # set(): o linie cu indici DUPLICAȚI ar produce bilet cu numere repetate
+            if len(mapped) == pick and len(set(mapped)) == pick:
                 wheel.append(sorted(mapped))
         if wheel:
-            if max_variants > 0 and len(wheel) > max_variants:
-                wheel = _order_by_scores(wheel, scores)[:max_variants]
-            return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
+            # VALIDARE înainte de folosire: un fișier trunchiat/corupt (OneDrive poate
+            # sincroniza parțial) trecea tăcut cu acoperire <100% deși UI-ul promite
+            # garanție plină. Design incomplet → fallback ILP/greedy, ca la fișier lipsă.
+            cov_full = _coverage_pct(wheel, pool, guarantee)
+            if cov_full < 100.0:
+                logger.warning(
+                    "[WHEEL-LaJolla] design C(%d,%d,%d) INCOMPLET (%.1f%% acoperire, %d blocuri) "
+                    "— fișier corupt/trunchiat? Fallback ILP/greedy.",
+                    v, pick, guarantee, cov_full, len(wheel),
+                )
+            else:
+                if max_variants > 0 and len(wheel) > max_variants:
+                    wheel = _order_by_scores(wheel, scores)[:max_variants]
+                return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
     # fără fișier → încearcă ILP exact (mic), altfel greedy
     logger.info("[WHEEL-LaJolla] fără design local pt C(%d,%d,%d) → ILP/greedy", v, pick, guarantee)
     return wheel_ilp(pool, pick, guarantee, max_variants, scores)

@@ -41,7 +41,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `loto_enterprise/benchmark/` | benchmark: `runner.py`, `decision.py`, `methods*.py`, `bench_cache.py` |
 | `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = `available` minus blacklist, apoi **∩ curated** (vezi „Curare de metode") |
 | `_ISTORIC/` | datele CSV cu extragerile (VERSIONATE în git) |
-| `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v14`), separat de cel din `bench_cache.py`; `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
+| `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v17`), separat de cel din `bench_cache.py`; `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
 | `best_methods.json` | decizia bench per joc/pool: winner + `ensemble` + `ensemble_dropped_redundant` (membri săriți ca redundanți: `{method, vs, r, reason:"perf_signature"}`) + `low_confidence` + sim_depth (gitignore). `ensemble_dropped_redundant` și `low_confidence` sunt chei NOI, scrise doar de decizia curentă — un fișier generat înainte nu le are; rescrie-l cu `update_best_methods_with_auto_pilot()`. `method_selector.recommend_optimal_config` le propagă pe listă albă (UI/Auto-Pilot); `ensemble_dropped_redundant` rămâne telemetrie de debug |
 | `disabled_methods.json` | tombstone metode eliminate din cod (74 incl. `omnius`); merge-only, **IREVERSIBIL** |
 | `curated_methods.json` | **curare REVERSIBILĂ**: `active` = 43 (bench); `per_game` = 20/20/20 (6/49, 5/40, Joker) pentru decizie+clasament. Șterge/golește `active` → revine la tot. Citit de `loto_enterprise/benchmark/curated.py` |
@@ -124,6 +124,9 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
   `qualifying` gol → `low_confidence` pe toate jocurile. Fără `random` gate-ul de
   consistență nu funcționează deloc.
 - **Override explicit**: `--methods a,b,c` și `--quick` ocolesc curarea (deliberat).
+  ⚠️ La set REDUS de metode, CLI-ul **sare implicit decizia** (best_methods.json rămâne
+  neatins — un folds.csv cu 2 metode l-ar înlocui tăcut cu low_confidence/frequency);
+  rescrierea cere explicit `--force-decision` (2026-08-25).
 - **Plase de siguranță** în `apply_curation`: nume necunoscute/blacklistate se sar cu
   WARNING; dacă lista nu lasă NICIO metodă validă, curarea e ignorată și rulează tot
   (mai bine tot decât bench gol). Telemetria ajunge în `best_methods.json._meta.curated`
@@ -184,7 +187,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - **Scoring producție**: bench-winner ensemble → fallback frecvență (fără TimesFM/torch).
 - **Tie-break canonic — `loto_enterprise/core/ranking.rank_by_score`** (sursă UNICĂ de adevăr).
   Regula: sortare DESCRESCĂTOARE după tripletul `(scor, freq, număr)`, unde `freq` e OPȚIONAL (toate call-site-urile actuale pasează `None` → 0.0 pentru toți). „Număr mare întâi" evită degenerarea „1,2,3…K" la scoruri egale.
-  ⚠️ **Precondiție: scoruri FINITE.** Regula nu se aplică deloc la `NaN`: comparația de tuple face scurt-circuit pe primul element, deci tie-break-ul pe număr nu mai intră niciodată, iar rezultatul devine dependent de ORDINEA DE INSERARE în dict (verificat: același conținut inserat în altă ordine dă alt top-3; la all-NaN, ordinea returnată e pur și simplu ordinea dictului). Nici `_normalize` din registry nu filtrează NaN — un singur NaN otrăvește tot dict-ul (`vmin`/`vmax` devin NaN). **Metodă nouă = garantează scoruri finite.**
+  ⚠️ **Scoruri NEFINITE (NaN/±inf): ELIMINATE de `rank_by_score` înainte de sortare** (2026-08-25; înainte un NaN făcea rezultatul dependent de ordinea de inserare în dict). Pe scoruri toate-finite output-ul e bit-identic cu înainte; all-NaN → `[]`. Garda e plasă de siguranță, NU licență: `_normalize` din registry tot nu filtrează NaN (un singur NaN otrăvește `vmin`/`vmax`), deci **metodă nouă = garantează în continuare scoruri finite.** Teste: `test_ranking.py`.
   Deleagă efectiv la ea: bench (`runner._top_k`) și producție (`pool_selection.select_pool_from_scores`) — singurele două căi ACTIVE (al treilea consumator istoric, `pick_omnius_ticket`, a dispărut odată cu `methods_omnius.py`). Înainte existau 3 tie-break-uri divergente → pool-ul VALIDAT de bench diferea de cel GENERAT (6/16 numere pe un scorer cu 2 nivele).
   ⚠️ **REGULĂ OBLIGATORIE pentru cod nou**: orice selecție „top-N după scor" (bench, engine, UI, analiză) apelează `rank_by_score` — **nu scrie `sorted(..., reverse=True)[:k]` propriu**. Path-ul principal de producție e migrat (vezi regula de aur 8). Modulul e pur stdlib (importabil din `benchmark/` și `core/`, picklabil pt ProcessPoolExecutor). Filtrarea (blacklist, interval `1..max_num`) rămâne la apelant.
   `pool_selection.select_pool_from_scores` = top-N pur, fără diversificare decade/paritate și fără tie-break pe frecvență (scoase 2026-07). `draw_matrix` a rămas în semnătură doar pt compat — NU influențează selecția.
@@ -210,7 +213,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 7. **Baseline-urile NU au voie să devină scorer de producție**: `random` (nedeterminist, fără sămânță) e REFERINȚĂ de comparație, nu candidat — vezi `decision.EXCLUDED_FROM_PRODUCTION = {"random"}`. Nu-l scoate din set și nu-l lăsa să ajungă în `best_methods.json`/`ensemble`, oricât de bine ar arăta pe folds. (`frequency` rămâne permis: e baseline DETERMINIST și e `SAFE_FALLBACK_SCORER`. `recency` a fost blacklistată și **eliminată din METHODS** — vezi regula 6.)
    - ⚠️ Corolar: `random` trebuie totuși să RULEZE în bench. E în `curated.REQUIRED_METHODS` — dacă îl scoți din `curated_methods.json`, gate-ul de consistență din `decision.py` se rupe complet (`low_confidence` pe toate jocurile), nu doar „lipsește o linie din clasament".
 8. **Top-N după scor** → în cod NOU, mereu `core.ranking.rank_by_score` (vezi „Tie-break canonic"); nu scrie sortare proprie.
-   Path-ul principal e migrat: trunchierea pool-ului, Urna 2 Joker și completarea pe `manual_blacklist` folosesc `rank_by_score`. Mai rămâne un `sorted(..., reverse=True)` activ în `_get_timesfm_pool` (completare defensivă din blacklist când pool-ul e incomplet) și unul în `generate_combinatorial_wheel` (ordonare pool pt wheel, nu top-N subset). Migrarea lor pe egalități schimbă output-ul → încalcă regula 1; de făcut într-un commit dedicat, nu în treacăt.
+   Path-ul principal e migrat: trunchierea pool-ului, Urna 2 Joker, completarea pe `manual_blacklist` ȘI `_get_timesfm_pool` folosesc `rank_by_score` (nota veche despre un `sorted` rămas acolo era stale). Mai rămâne un `sorted(..., reverse=True)` în `generate_combinatorial_wheel` (ordonare pool pt wheel, nu top-N subset) — migrarea lui pe egalități schimbă output-ul → încalcă regula 1; de făcut într-un commit dedicat.
 
 ## Verificare rapidă (mediu container fără sklearn by default)
 ```bash

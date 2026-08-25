@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import pickle
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -38,8 +39,23 @@ def pickle_store_path(path: Path, obj: Any) -> None:
 
 
 def pickle_store_path_atomic(path: Path, obj: Any) -> None:
-    """Scriere atomică tmp + os.replace (walk-forward cache)."""
+    """Scriere atomică tmp UNIC (+fsync) + os.replace (walk-forward cache).
+
+    Numele tmp e unic per scriere (pid+uuid): cu ".tmp" fix, doi scriitori
+    concurenți pe aceeași cheie își truncau reciproc tmp-ul (WF rulează ~25
+    procese). fsync înainte de replace: altfel un crash putea promova un
+    pickle parțial sub numele final."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_bytes(pickle_dump_bytes(obj))
-    os.replace(tmp, path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        with open(tmp, "wb") as f:
+            f.write(pickle_dump_bytes(obj))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise

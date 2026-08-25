@@ -92,8 +92,29 @@ def compute_csv_hash(draws_2d: np.ndarray) -> str:
     return hashlib.md5(body).hexdigest()[:16]
 
 
+# Parametrii de rulare care SCHIMBĂ rezultatul unui fold dar nu erau în cheie:
+# block_size (cadența de re-scoring din _evaluate_fold) și seed-ul (doar foldurile
+# is_random). Fără ei, `--block-size 1` sau `--seed X` primeau CACHE HIT pe
+# foldurile rulate cu valorile default — rezultate stale servite TĂCUT.
+# Cheile se schimbă DOAR la valori non-default, ca tot cache-ul istoric
+# (rulat mereu cu default-urile) să rămână valid.
+_DEFAULT_BLOCK_SIZE = 99999
+_DEFAULT_SEED = 1234
+_CACHE_VARIANT = {"block_size": _DEFAULT_BLOCK_SIZE, "seed": _DEFAULT_SEED}
+
+
+def set_cache_variant(block_size: int, random_seed: int) -> None:
+    """Setat de runner la începutul rulării (per proces principal)."""
+    _CACHE_VARIANT["block_size"] = int(block_size)
+    _CACHE_VARIANT["seed"] = int(random_seed)
+
+
 def _fold_key(csv_hash: str, method: str, percentile: int, game_key: str, is_random: bool) -> str:
     raw = f"{CACHE_VERSION}::{csv_hash}::{game_key}::{method}::{percentile}::{is_random}"
+    if _CACHE_VARIANT["block_size"] != _DEFAULT_BLOCK_SIZE:
+        raw += f"::bs{_CACHE_VARIANT['block_size']}"
+    if is_random and _CACHE_VARIANT["seed"] != _DEFAULT_SEED:
+        raw += f"::seed{_CACHE_VARIANT['seed']}"
     return hashlib.md5(raw.encode()).hexdigest()[:20]
 
 

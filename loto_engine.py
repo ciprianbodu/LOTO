@@ -793,12 +793,15 @@ class LotoEngine:
                         if (i + 1) not in mb and (i + 1) not in self.hard_core
                     }
                 needed = pool_size - len(self.hard_core)
-                for n in rank_by_score(clean_scores, needed):
-                    self.hard_core.append(int(n))
+                added_replacements = [int(n) for n in rank_by_score(clean_scores, needed)]
+                self.hard_core.extend(added_replacements)
                 self.hard_core = sorted(self.hard_core)
                 self.audit.setdefault("manual_inversion", {})["enforced_violations_fixed"] = {
                     "removed": sorted(violated),
-                    "added_replacements": [n for n in self.hard_core if n not in violated][-needed:] if needed > 0 else [],
+                    # numerele EFECTIV adăugate de rank_by_score — vechiul
+                    # „[-needed:] pe pool-ul sortat" raporta pur și simplu cele mai
+                    # mari valori din pool, nu înlocuirile reale.
+                    "added_replacements": sorted(added_replacements),
                 }
                 logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
 
@@ -1220,7 +1223,11 @@ class LotoEngine:
         if self._draw_matrix is None:
             return {}
         if is_joker_drum and self.data is not None and "joker" in self.data.columns:
-            draws_2d = self.data["joker"].to_numpy(dtype=np.int64).reshape(-1, 1)
+            # coerce+dropna: o singură celulă joker lipsă (NaN) făcea to_numpy(int64)
+            # să crape cu ValueError — și scoring-ul primar ȘI fallback-ul mureau.
+            # Pe date complete rezultatul e identic (dropna e no-op).
+            _jk = pd.to_numeric(self.data["joker"], errors="coerce").dropna()
+            draws_2d = _jk.to_numpy(dtype=np.int64).reshape(-1, 1)
         else:
             draws_2d = self._draw_matrix.astype(np.int64)
 
@@ -1301,6 +1308,12 @@ class LotoEngine:
                         _dropped.append({"method": d, "r": None, "vs": None, "reason": "flat_or_empty"})
                 if _dropped:
                     bench_winner_info["ensemble_dropped"] = _dropped
+            # Flagurile documentate în CLAUDE.md (ex. ensemble_single_active_normalized)
+            # se pierdeau: combine_ensemble_scores le scria doar în _ens_audit local.
+            for _flag in ("ensemble_single_active_normalized",
+                          "ensemble_fallback_flat", "ensemble_fallback_empty"):
+                if _ens_audit.get(_flag):
+                    bench_winner_info[_flag] = True
             if game_key == "joker_urna2":
                 bench_winner_info["single_pick_unbenched"] = True
                 bench_winner_info["fallback"] = True
@@ -1349,7 +1362,9 @@ class LotoEngine:
         frecvență recency-weighted (exp-decay) pe istoric, normalizată [0,1]."""
         max_num = 20 if is_joker_drum else int(self.params["max_n"])
         if is_joker_drum and self.data is not None and "joker" in self.data.columns:
-            draws_2d = self.data["joker"].to_numpy(dtype=np.int64).reshape(-1, 1)
+            # Aceeași gardă NaN ca în _scores_via_bench_winner (celulă joker lipsă).
+            _jk = pd.to_numeric(self.data["joker"], errors="coerce").dropna()
+            draws_2d = _jk.to_numpy(dtype=np.int64).reshape(-1, 1)
         elif self._draw_matrix is not None:
             draws_2d = self._draw_matrix.astype(np.int64)
         else:

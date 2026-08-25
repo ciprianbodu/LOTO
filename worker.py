@@ -102,6 +102,17 @@ def _pack_result_payload(payload: object) -> str:
     return pack_queue_result(payload)
 
 
+def _remove_temp_csv(temp_csv_path: str) -> None:
+    """Șterge CSV-ul temporar al unui dataset (best-effort). Apelat și pe căile
+    de EROARE/STOP — altfel fiecare job eșuat lăsa un CSV orfan (tot istoricul
+    de extrageri) în %TEMP%."""
+    if temp_csv_path and os.path.exists(temp_csv_path):
+        try:
+            os.remove(temp_csv_path)
+        except OSError as exc:
+            logging.warning("Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc)
+
+
 def _run_pipeline_job(job: dict) -> str:
     monitor = ResourceMonitor()
     monitor.start()
@@ -324,18 +335,15 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):
                     logging.info(f"[worker] Job {job_id} oprit la cerere (Stop Requested).")
+                    _remove_temp_csv(temp_csv_path)
                     return "{}"
                 logging.error(f"Eroare la procesarea task-ului {game_label}: {e}")
+                _remove_temp_csv(temp_csv_path)
                 raise
             finally:
                 step_idx += 1
 
-        if os.path.exists(temp_csv_path):
-            try:
-                os.remove(temp_csv_path)
-            except OSError as exc:
-                logging.warning("Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc)
-            
+        _remove_temp_csv(temp_csv_path)
         results_bundle.append((fname, outputs))
 
     update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI...")
@@ -372,6 +380,8 @@ def main() -> None:
     logging.info("[worker] Început loop principal - aștept job-uri...")
     
     while True:
+        job = None  # reset per iterație: altfel un fetch care crapă la iterația
+        # următoare vede jobul VECHI (deja COMPLETED) și fail_job i-ar distruge rezultatul
         try:
             job = fetch_pending_job()
             if not job:
@@ -410,7 +420,7 @@ def main() -> None:
         except Exception as exc:
             tb = traceback.format_exc()
             logging.error(f"[worker] Eroare în job: {exc}\n{tb}")
-            if "job" in locals() and isinstance(job, dict) and job.get("id"):
+            if isinstance(job, dict) and job.get("id"):
                 fail_job(int(job["id"]), f"{exc}\n{tb}")
             time.sleep(2)
 

@@ -308,7 +308,10 @@ def get_scorer_for_game(
         )
         fn = METHODS["frequency"][0]
         name = "frequency"
-    _CACHE[cache_key] = fn
+    # Cache DOAR sub numele FINAL (post-fallback). Sub numele ORIGINAL, un winner
+    # indisponibil otrăvea cache-ul: get_ensemble_for_game găsea "X#pool" → servea
+    # frequency ETICHETAT ca X în blend (ponderi/audit greșite), în loc să-l sară.
+    _CACHE[f"{name}#{pool_size or 'overall'}"] = fn
     return fn
 
 
