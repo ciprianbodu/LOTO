@@ -19,9 +19,9 @@ REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 >> "%LOGFILE%" echo Computer: %COMPUTERNAME%
 >> "%LOGFILE%" echo/
 
-REM ===== Auto-update din GitHub (best-effort; NU blocheaza daca esueaza) =====
+REM ===== Auto-update din GitHub, best-effort, nu blocheaza daca esueaza =====
 REM Aduce ultimele fix-uri de pe origin/main. best_methods.json / venv sunt
-REM gitignore; _ISTORIC E VERSIONAT (commit+push dupa update_csv).
+REM gitignore. _ISTORIC E VERSIONAT: commit+push dupa update_csv.
 where git >nul 2>&1
 if errorlevel 1 (
     echo [GIT] git negasit - sar peste auto-update.
@@ -30,16 +30,16 @@ if errorlevel 1 (
 )
 echo/
 
-REM ===== Auto-update CSV extrageri (best-effort, silent) =====
-REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC/ fara sa
-REM blocheze pornirea (exit 0 mereu, chiar si la eroare de retea).
+REM ===== Auto-update CSV extrageri, best-effort, silent =====
+REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC fara sa
+REM blocheze pornirea. Exit 0 mereu, chiar si la eroare de retea.
 if exist "%VENV_DIR%\Scripts\python.exe" (
     "%VENV_DIR%\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
 )
 
-REM ===== Auto-commit + push extrageri noi din _ISTORIC (best-effort) =====
-REM VIZIBIL in consola (nu doar in startup_8000.log). Push STRICT pe origin/main
-REM — `git push origin HEAD` pe alta ramura era pierdut la urmatorul reset.
+REM ===== Auto-commit + push extrageri noi din _ISTORIC, best-effort =====
+REM Vizibil in consola, nu doar in startup_8000.log. Push STRICT pe origin/main.
+REM git push origin HEAD pe alta ramura era pierdut la urmatorul reset.
 where git >nul 2>&1
 if not errorlevel 1 call :push_istoric
 

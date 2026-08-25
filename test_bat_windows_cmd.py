@@ -94,13 +94,16 @@ def test_bat_echo_has_no_dot_blank_and_no_parentheses():
     )
 
 
-def test_loto_git_sync_does_not_nest_merge_if_else():
-    """reset --hard trebuie să fie pe cale goto, nu în else-ul unui if cu echo ( )."""
+def test_loto_git_sync_avoids_delayed_expansion_and_paren_echo():
+    """main 03f5409: fara delayed expansion; echo/REM fara paranteze.
+
+    Varianta cu goto :au_need_reset de pe ramura PR e echivalenta ca intentie,
+    dar delayed expansion + echo cu paranteze a fost cauza 'Auto-update is not
+    recognized'. Pastram contractul de pe main.
+    """
     text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
-    assert "goto :au_need_reset" in text
-    assert "goto :au_merge_done" in text
+    assert "EnableDelayedExpansion" not in text
     assert "git reset --hard origin/main" in text
-    # Nu mai există echo cu (main) — ăsta a fost trigger-ul parse-ului stricat
     assert "^(main^)" not in text
     assert "(main)" not in text
     assert "(backup in stash" not in text
