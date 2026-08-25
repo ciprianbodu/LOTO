@@ -18,7 +18,7 @@ Usage
 -----
     python bench_all_methods.py                               # Full (toate metodele available)
     python bench_all_methods.py --percentiles 10,30,50,70,100
-    python bench_all_methods.py --methods random,frequency,recency
+    python bench_all_methods.py --methods random,frequency
     python bench_all_methods.py --block-size 50               # walk-forward più fine
 """
 
@@ -60,11 +60,8 @@ from loto_enterprise.benchmark.runner import discover_games, run_benchmark
 
 
 # Lista bench = TOATE metodele disponibile din registry (exclusiv CPU).
-# Pe date REALE (folds.csv): pe loterie (aleatoare), metodele simple (recency/frequency)
-# bat consistent restul, iar diferentele sunt zgomot statistic. Tot suportul GPU/neural
-# (torch/foundation/NeuralForecast) a fost eliminat — nu mai exista metode GPU.
-# Blacklist permanent (legendate de prune_methods.py pe baza rezultatelor bench).
-# Metodele de aici NU se mai rulează niciodată; cele noi nu sunt afectate.
+# Metodele din disabled_methods.json au fost ELIMINATE din cod (tombstone).
+# Pe loterie, diferențele dintre scorere sunt majoritar zgomot statistic.
 try:
     from loto_enterprise.benchmark.disabled import load_disabled as _load_disabled
     _DISABLED_METHODS = _load_disabled()
@@ -96,7 +93,7 @@ except Exception as _exc:  # noqa: BLE001
     def _log_curation(info):  # noqa: D103 — no-op dacă modulul lipsește
         return None
 
-QUICK_METHODS = ["random", "frequency", "recency"]
+QUICK_METHODS = ["random", "frequency"]
 
 
 def main() -> int:
@@ -118,7 +115,7 @@ def main() -> int:
                         help="Walk-forward re-score block; default = score-once-per-fold. "
                              "block_size=1 = true per-step walk-forward (foarte lent).")
     parser.add_argument("--quick", action="store_true",
-                        help="Quick: random + frequency + recency")
+                        help="Quick: random + frequency")
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--no-rich", action="store_true",
                         help="Plain-text output în loc de rich tables")

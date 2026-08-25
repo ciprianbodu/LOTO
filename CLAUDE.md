@@ -4,11 +4,12 @@
 App de optimizare pool-uri loto (6/49, 5/40, Joker) cu benchmark de metode de
 scoring **exclusiv CPU** (statistice/ML sklearn/geometrice/**graf-network**/coverage) +
 wheeling (set-cover) + walk-forward.
-Cifre reale (verificate 2026-08-09): **184 metode înregistrate** în `METHODS`, din care
-**73 blacklistate** (`disabled_methods.json`) → **111 candidate**, iar peste ele
-**curarea reversibilă** (`curated_methods.json`) lasă **16 efectiv rulate** de bench
-(`ALL_SPEC_METHODS`) — 15 de producție + `random` ca baseline.
-Nu cita din memorie „~130"/„108"/„102"/„107"/„180" — renumără (vezi „Curare de metode").
+Cifre reale (verificate 2026-08-25): **111 metode** în `METHODS` (73 blacklistate
+au fost **eliminate din cod**, tombstone în `disabled_methods.json` — NU le
+reintroduce). Peste ele **curarea reversibilă** (`curated_methods.json`) lasă
+**16 efectiv rulate** de bench (`ALL_SPEC_METHODS`) — 15 de producție + `random`
+ca baseline.
+Nu cita din memorie „184"/„~130"/„108"/„102"/„107"/„180" — renumără (vezi „Curare de metode").
 **Loteria e aleatoare** — e instrument de optimizare a acoperirii, nu predicție.
 Diferențele dintre metode sunt în mare parte ZGOMOT (câștigătorul e instabil) — vezi memoria.
 UI = **NiceGUI** (`app_nicegui.py`), pe port 8000. Lansator: `START_8000.bat`.
@@ -40,21 +41,21 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `_ISTORIC/` | datele CSV cu extragerile (VERSIONATE în git) |
 | `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v14`), separat de cel din `bench_cache.py`; `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
 | `best_methods.json` | decizia bench per joc/pool: winner + `ensemble` + `ensemble_dropped_redundant` (membri săriți ca redundanți: `{method, vs, r, reason:"perf_signature"}`) + `low_confidence` + sim_depth (gitignore). `ensemble_dropped_redundant` și `low_confidence` sunt chei NOI, scrise doar de decizia curentă — un fișier generat înainte nu le are; rescrie-l cu `update_best_methods_with_auto_pilot()`. Nu sunt propagate de `method_selector.recommend_optimal_config` (listă albă de chei) → azi sunt telemetrie pt debug, nu contract UI |
-| `disabled_methods.json` | blacklist metode (73 în acest moment); merge-only, **IREVERSIBIL** |
+| `disabled_methods.json` | tombstone 73 metode eliminate din cod; merge-only, **IREVERSIBIL** |
 | `curated_methods.json` | **curare REVERSIBILĂ** a setului rulat (16 în acest moment); versionat în git; șterge/golește `active` → revine la tot. Citit de `loto_enterprise/benchmark/curated.py` |
 | `bench_results/folds.csv` | output brut walk-forward al bench-ului (OVERWRITE la fiecare Re-Bench) |
 | `raport_complet.txt` | raport generat (gitignore) |
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
 
 ## Benchmark (cum funcționează)
-- **184 metode** în `METHODS`, **48 familii**. Compoziție (verificată 2026-08-09): 3 de bază
-  în `methods.py` + **7** module de extensii — `methods_classical` (49), `methods_ml` (34),
-  `methods_coverage` (13), **`methods_graph`** (31),
+- **111 metode** în `METHODS` (73 tombstone în `disabled_methods.json`, eliminate
+  din registry). Compoziție (verificată 2026-08-25): 2 de bază
+  în `methods.py` + **7** module de extensii — `methods_classical` (12), `methods_ml` (11),
+  `methods_coverage` (1), **`methods_graph`** (31),
   **`methods_search_649`** (29, `SEARCH_649_NEW`), **`methods_top649`** (20, `TOP649_METHODS`),
   **`methods_math_extra`** (5, `MATH_EXTRA_METHODS`).
   (`methods_omnius` a fost ELIMINAT — vezi nota OMNIUS de mai jos.)
-  Minus blacklist (73) → **111 candidate**; minus curare (`curated_methods.json`) → **16**
-  rulate efectiv (`ALL_SPEC_METHODS`).
+  Curare (`curated_methods.json`) → **16** rulate efectiv (`ALL_SPEC_METHODS`).
   Renumără cu: `python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"`
   și `python -c "import bench_all_methods as b; print(len(b.ALL_SPEC_METHODS), b.CURATION_INFO)"`.
 - Scorer = `fn(draws_2d, max_num) -> {nr: scor_normalizat}`. Registry: `"nume": (fn, "family", trained, "desc")`.

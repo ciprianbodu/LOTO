@@ -107,50 +107,6 @@ def _statsforecast_per_number(draws_2d, max_num, model_factory, context: int = 2
     return _normalize(scores, max_num)
 
 
-def score_arima_auto(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import AutoARIMA
-        return _statsforecast_per_number(draws_2d, max_num, lambda: AutoARIMA(season_length=1, max_p=2, max_q=2))
-    except Exception as exc:
-        logger.debug(f"[arima_auto] {exc}")
-        return {}
-
-
-def score_ets_auto(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import AutoETS
-        return _statsforecast_per_number(draws_2d, max_num, lambda: AutoETS(season_length=1))
-    except Exception as exc:
-        logger.debug(f"[ets_auto] {exc}")
-        return {}
-
-
-def score_theta_auto(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import AutoTheta
-        return _statsforecast_per_number(draws_2d, max_num, lambda: AutoTheta(season_length=1))
-    except Exception as exc:
-        logger.debug(f"[theta_auto] {exc}")
-        return {}
-
-
-def score_ces_auto(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import AutoCES
-        return _statsforecast_per_number(draws_2d, max_num, lambda: AutoCES(season_length=1))
-    except Exception as exc:
-        logger.debug(f"[ces_auto] {exc}")
-        return {}
-
-
 def score_croston_classic(draws_2d, max_num):
     if not _check_statsforecast():
         return {}
@@ -173,70 +129,6 @@ def score_croston_sba(draws_2d, max_num):
         return {}
 
 
-def score_croston_optimized(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import CrostonOptimized
-        return _statsforecast_per_number(draws_2d, max_num, lambda: CrostonOptimized())
-    except Exception as exc:
-        logger.debug(f"[croston_optimized] {exc}")
-        return {}
-
-
-def score_tsb(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import TSB
-        return _statsforecast_per_number(draws_2d, max_num, lambda: TSB(alpha_d=0.1, alpha_p=0.1))
-    except Exception as exc:
-        logger.debug(f"[tsb] {exc}")
-        return {}
-
-
-def score_adida(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import ADIDA
-        return _statsforecast_per_number(draws_2d, max_num, lambda: ADIDA())
-    except Exception as exc:
-        logger.debug(f"[adida] {exc}")
-        return {}
-
-
-def score_imapa(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import IMAPA
-        return _statsforecast_per_number(draws_2d, max_num, lambda: IMAPA())
-    except Exception as exc:
-        logger.debug(f"[imapa] {exc}")
-        return {}
-
-
-def score_ses(draws_2d, max_num):
-    if not _check_statsforecast():
-        return {}
-    try:
-        from statsforecast.models import SimpleExponentialSmoothing
-        return _statsforecast_per_number(draws_2d, max_num, lambda: SimpleExponentialSmoothing(alpha=0.3))
-    except Exception as exc:
-        logger.debug(f"[ses] {exc}")
-        return {}
-
-
-def score_naive(draws_2d, max_num):
-    """Naive: last known value (binary 0/1) — captures very-short persistence."""
-    binary = _build_binary(draws_2d, max_num)
-    if binary.shape[1] == 0:
-        return _normalize({n: 0.5 for n in range(1, max_num + 1)}, max_num)
-    last = binary[:, -1]
-    return _normalize({i + 1: float(last[i]) for i in range(max_num)}, max_num)
-
-
 def score_seasonal_naive_week(draws_2d, max_num):
     """Lottery extracts often weekly — value from N steps ago (default 1 week ≈ 1 draw)."""
     binary = _build_binary(draws_2d, max_num)
@@ -245,24 +137,6 @@ def score_seasonal_naive_week(draws_2d, max_num):
         return _normalize({n: 0.5 for n in range(1, max_num + 1)}, max_num)
     lag = min(7, n - 1)
     return _normalize({i + 1: float(binary[i, -lag]) for i in range(max_num)}, max_num)
-
-
-def score_drift(draws_2d, max_num):
-    """Linear extrapolation: avg + slope * 1."""
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 3:
-        return _normalize({n: 0.5 for n in range(1, max_num + 1)}, max_num)
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i, -min(50, n):]
-        if len(s) < 2:
-            scores[i + 1] = float(s.mean())
-            continue
-        xs = np.arange(len(s))
-        slope = float(np.polyfit(xs, s, 1)[0])
-        scores[i + 1] = float(s.mean() + slope * 1.0)
-    return _normalize(scores, max_num)
 
 
 # ===========================================================================
@@ -294,91 +168,9 @@ def _markov_score(draws_2d, max_num, order: int = 1, decay: float = 0.05) -> dic
     return _normalize(scores, max_num)
 
 
-def score_markov_1(draws_2d, max_num):
-    return _markov_score(draws_2d, max_num, order=1)
-
-
 def score_markov_2(draws_2d, max_num):
+    """Helper (NU în METHODS): folosit de blend-uri TOP649. `markov_2` blacklistat."""
     return _markov_score(draws_2d, max_num, order=2)
-
-
-def score_markov_3(draws_2d, max_num):
-    return _markov_score(draws_2d, max_num, order=3)
-
-
-def score_ngram_bigram(draws_2d, max_num):
-    """Laplace-smoothed bigram on per-number binary sequence."""
-    if draws_2d.shape[0] < 3:
-        return {}
-    binary = _build_binary(draws_2d, max_num)
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(int)
-        # Count (prev → next) transitions: P(1 | last)
-        last = s[-1]
-        # transitions where prev=last
-        prev = s[:-1]
-        nxt = s[1:]
-        mask = prev == last
-        if mask.sum() == 0:
-            scores[i + 1] = float(s.mean())
-        else:
-            count_1 = int(((nxt == 1) & mask).sum()) + 1  # Laplace
-            count_total = int(mask.sum()) + 2
-            scores[i + 1] = count_1 / count_total
-    return _normalize(scores, max_num)
-
-
-def score_ngram_trigram(draws_2d, max_num):
-    """Laplace-smoothed trigram (last 2 values → next)."""
-    if draws_2d.shape[0] < 4:
-        return {}
-    binary = _build_binary(draws_2d, max_num)
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(int)
-        last2 = (int(s[-2]), int(s[-1]))
-        # Find transitions matching last2 → next
-        num = 1  # Laplace
-        den = 2
-        for t in range(len(s) - 2):
-            if (int(s[t]), int(s[t + 1])) == last2:
-                den += 1
-                if s[t + 2] == 1:
-                    num += 1
-        scores[i + 1] = num / den
-    return _normalize(scores, max_num)
-
-
-def score_vlmm(draws_2d, max_num):
-    """Variable-length Markov: try orders 1..4 and weighted combine by frequency."""
-    if draws_2d.shape[0] < 5:
-        return {}
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(int)
-        weighted_p = 0.0
-        weight_sum = 0.0
-        for order in (1, 2, 3, 4):
-            if n < order + 2:
-                continue
-            state = tuple(int(x) for x in s[-order:])
-            matches = 0
-            hits = 0
-            for t in range(n - order):
-                if tuple(int(x) for x in s[t:t + order]) == state:
-                    matches += 1
-                    if s[t + order] == 1:
-                        hits += 1
-            if matches >= 2:
-                p = (hits + 1) / (matches + 2)  # Laplace
-                w = matches * order  # longer matches weight more
-                weighted_p += p * w
-                weight_sum += w
-        scores[i + 1] = (weighted_p / weight_sum) if weight_sum > 0 else float(s.mean())
-    return _normalize(scores, max_num)
 
 
 # ===========================================================================
@@ -386,7 +178,9 @@ def score_vlmm(draws_2d, max_num):
 # ===========================================================================
 
 def score_beta_binomial(draws_2d, max_num):
-    """Beta-Binomial conjugate: prior Beta(α,β), posterior mean (α+k)/(α+β+n).
+    """Helper (NU în METHODS): folosit de blend-uri TOP649. `beta_binomial` blacklistat.
+
+    Beta-Binomial conjugate: prior Beta(α,β), posterior mean (α+k)/(α+β+n).
     Uses recency-weighted observations."""
     if draws_2d.shape[0] == 0:
         return {}
@@ -403,24 +197,6 @@ def score_beta_binomial(draws_2d, max_num):
         eff_n = float(weights.sum() * len(s))
         eff_k = float((s * weights * len(s)).sum())
         scores[i + 1] = (alpha_0 + eff_k) / (alpha_0 + beta_0 + eff_n)
-    return _normalize(scores, max_num)
-
-
-def score_polya_urn(draws_2d, max_num):
-    """Pólya urn: success reinforces P(success_next). Captures hot-streaks."""
-    if draws_2d.shape[0] == 0:
-        return {}
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    # Recency weight for "draws" near the end
-    weights = np.exp(np.linspace(-1.5, 0.0, n))
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i]
-        # Pólya: counts of successes vs failures, weighted by recency
-        succ = float((s * weights).sum())
-        fail = float(((1 - s) * weights).sum())
-        scores[i + 1] = (succ + 1.0) / (succ + fail + 2.0)
     return _normalize(scores, max_num)
 
 
@@ -490,84 +266,6 @@ def score_fourier_top_k(draws_2d, max_num):
     return _normalize(scores, max_num)
 
 
-def score_wavelet_haar(draws_2d, max_num):
-    """Haar wavelet decomposition — extract trend from approximation coefficients."""
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 32:
-        return {}
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(np.float32)
-        # Single-level Haar: pairs of averages
-        pad = (len(s) // 2) * 2
-        s = s[:pad]
-        approx = (s[::2] + s[1::2]) / 2.0
-        # Trend = mean of last 10% of approx
-        tail = approx[-max(2, len(approx) // 10):]
-        scores[i + 1] = float(tail.mean())
-    return _normalize(scores, max_num)
-
-
-def score_stl_decompose(draws_2d, max_num):
-    """STL decomposition: seasonal + trend + residual, predict trend+seasonal."""
-    try:
-        from statsmodels.tsa.seasonal import STL
-    except Exception:
-        return {}
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 30:
-        return {}
-    scores: dict[int, float] = {}
-    period = max(2, min(7, n // 5))
-    for i in range(max_num):
-        s = binary[i].astype(np.float64)
-        if s.sum() < 3:
-            scores[i + 1] = float(s.mean())
-            continue
-        try:
-            stl = STL(s, period=period, robust=True).fit()
-            # Predict: trend[-1] + seasonal[-period]
-            seas = stl.seasonal[-period] if len(stl.seasonal) >= period else 0.0
-            trend = stl.trend[-1] if not np.isnan(stl.trend[-1]) else float(s.mean())
-            scores[i + 1] = float(trend + seas)
-        except Exception:
-            scores[i + 1] = float(s.mean())
-    return _normalize(scores, max_num)
-
-
-def score_ssa(draws_2d, max_num):
-    """Singular Spectrum Analysis: extract trend via SVD of trajectory matrix."""
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 30:
-        return {}
-    L = min(20, n // 3)
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(np.float64)
-        K = n - L + 1
-        # Trajectory matrix
-        X = np.column_stack([s[k:k + L] for k in range(K)])
-        try:
-            U, S, Vt = np.linalg.svd(X, full_matrices=False)
-            # Reconstruct from top-1 component (trend)
-            trend_matrix = (S[0] * U[:, :1]) @ Vt[:1, :]
-            # Average antidiagonals to get series-shape reconstruction
-            recon = np.zeros(n)
-            counts = np.zeros(n)
-            for a in range(L):
-                for b in range(K):
-                    recon[a + b] += trend_matrix[a, b]
-                    counts[a + b] += 1
-            recon /= np.maximum(counts, 1)
-            scores[i + 1] = float(recon[-1])
-        except Exception:
-            scores[i + 1] = float(s.mean())
-    return _normalize(scores, max_num)
-
-
 def score_dmd_basic(draws_2d, max_num):
     """Dynamic Mode Decomposition on stacked recent windows."""
     binary = _build_binary(draws_2d, max_num).astype(np.float64)  # (max_num, n)
@@ -603,39 +301,6 @@ def score_dmd_basic(draws_2d, max_num):
 
 
 # ===========================================================================
-# HMM (Hidden Markov Model) — hmmlearn
-# ===========================================================================
-
-def score_hmm_gaussian(draws_2d, max_num):
-    try:
-        from hmmlearn import hmm
-    except Exception:
-        return {}
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 30:
-        return {}
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(np.float64).reshape(-1, 1)
-        if s.sum() < 3:
-            scores[i + 1] = float(s.mean())
-            continue
-        try:
-            model = hmm.GaussianHMM(n_components=2, covariance_type="diag", n_iter=10, random_state=42)
-            model.fit(s)
-            # Next state probabilities given last hidden state
-            last_state = int(model.predict(s)[-1])
-            trans = model.transmat_[last_state]
-            # Expected next emission = sum(P(state) * mean[state])
-            next_emission = float((trans @ model.means_.ravel()))
-            scores[i + 1] = next_emission
-        except Exception:
-            scores[i + 1] = float(s.mean())
-    return _normalize(scores, max_num)
-
-
-# ===========================================================================
 # Holt-Winters fallback (statsmodels)
 # ===========================================================================
 
@@ -647,55 +312,6 @@ def _check_statsmodels() -> bool:
         return False
 
 
-def score_holtwinters_add(draws_2d, max_num):
-    if not _check_statsmodels():
-        return {}
-    from statsmodels.tsa.holtwinters import ExponentialSmoothing
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 20:
-        return {}
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(np.float64)
-        if s.sum() < 3:
-            scores[i + 1] = float(s.mean())
-            continue
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                m = ExponentialSmoothing(s, trend="add", initialization_method="estimated").fit(disp=False)
-            scores[i + 1] = float(m.forecast(1)[0])
-        except Exception:
-            scores[i + 1] = float(s.mean())
-    return _normalize(scores, max_num)
-
-
-def score_arima_statsmodels(draws_2d, max_num):
-    """ARIMA(2,0,2) via statsmodels — alternative to AutoARIMA."""
-    if not _check_statsmodels():
-        return {}
-    from statsmodels.tsa.arima.model import ARIMA
-    binary = _build_binary(draws_2d, max_num)
-    n = binary.shape[1]
-    if n < 20:
-        return {}
-    scores: dict[int, float] = {}
-    for i in range(max_num):
-        s = binary[i].astype(np.float64)
-        if s.sum() < 3:
-            scores[i + 1] = float(s.mean())
-            continue
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                m = ARIMA(s, order=(2, 0, 2)).fit()
-            scores[i + 1] = float(m.forecast(1)[0])
-        except Exception:
-            scores[i + 1] = float(s.mean())
-    return _normalize(scores, max_num)
-
-
 # ===========================================================================
 # Registry of new classical methods
 # ===========================================================================
@@ -703,7 +319,9 @@ def score_arima_statsmodels(draws_2d, max_num):
 # ===========================================================================
 
 def score_gap_poisson(draws_2d, max_num):
-    """Overdue prin model Poisson pe gap-uri: P(număr e 'datorat') ~ gap_curent/gap_mediu."""
+    """Helper (NU în METHODS): folosit de blend-uri TOP649. `gap_poisson` blacklistat.
+
+    Overdue prin model Poisson pe gap-uri: P(număr e 'datorat') ~ gap_curent/gap_mediu."""
     bm = _build_binary(draws_2d, max_num)
     n = bm.shape[1]
     scores = {}
@@ -719,24 +337,6 @@ def score_gap_poisson(draws_2d, max_num):
     return _normalize(scores, max_num)
 
 
-def score_entropy_window(draws_2d, max_num):
-    """Scor pe entropia aparițiilor: numere cu pattern regulat (entropie mică) → scor mai mare."""
-    bm = _build_binary(draws_2d, max_num)
-    n = bm.shape[1]
-    w = min(50, n)
-    scores = {}
-    for i in range(max_num):
-        seq = bm[i, -w:]
-        p = float(seq.mean())
-        if p <= 0 or p >= 1:
-            ent = 0.0
-        else:
-            ent = -(p * np.log2(p) + (1 - p) * np.log2(1 - p))
-        # regularitate (1-entropie) ponderată cu frecvența recentă
-        scores[i + 1] = (1.0 - ent) * 0.5 + p * 0.5
-    return _normalize(scores, max_num)
-
-
 def score_autocorr(draws_2d, max_num):
     """Autocorelație lag-1..5 pe seria binară: numere cu auto-corelație pozitivă (revin ciclic)."""
     bm = _build_binary(draws_2d, max_num)
@@ -749,19 +349,6 @@ def score_autocorr(draws_2d, max_num):
             if len(s) > lag:
                 ac += float((s[:-lag] * s[lag:]).sum()) / denom
         scores[i + 1] = ac
-    return _normalize(scores, max_num)
-
-
-def score_momentum(draws_2d, max_num):
-    """Momentum hot/cold: rata recentă (15) minus rata pe termen lung (60) → numere în creștere."""
-    bm = _build_binary(draws_2d, max_num)
-    n = bm.shape[1]
-    s_w, l_w = min(15, n), min(60, n)
-    scores = {}
-    for i in range(max_num):
-        short = float(bm[i, -s_w:].mean()) if s_w else 0.0
-        long = float(bm[i, -l_w:].mean()) if l_w else 0.0
-        scores[i + 1] = short - long  # >0 = în creștere recentă
     return _normalize(scores, max_num)
 
 
@@ -784,50 +371,6 @@ def score_pair_affinity(draws_2d, max_num):
     scores = {}
     for k in range(1, max_num + 1):
         scores[k] = float(sum(co[k, r] for r in recent))
-    return _normalize(scores, max_num)
-
-
-def score_centrality(draws_2d, max_num):
-    """Centralitate în graful de co-apariții (degree weighted) — numere 'hub' care leagă multe altele."""
-    n_draws = draws_2d.shape[0]
-    if n_draws < 5:
-        return {}
-    deg = np.zeros(max_num + 1, dtype=np.float64)
-    for row in draws_2d:
-        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
-        for a in nums:
-            deg[a] += len(nums) - 1
-    scores = {k: float(deg[k]) for k in range(1, max_num + 1)}
-    return _normalize(scores, max_num)
-
-
-def score_runs_test(draws_2d, max_num):
-    """Runs test: numere a căror serie de apariții se abate de la aleator (clustering/anti-clustering)."""
-    bm = _build_binary(draws_2d, max_num)
-    scores = {}
-    for i in range(max_num):
-        seq = bm[i].astype(int)
-        n1 = int(seq.sum()); n0 = len(seq) - n1
-        if n1 < 2 or n0 < 2:
-            scores[i + 1] = 0.5
-            continue
-        runs = 1 + int((seq[1:] != seq[:-1]).sum())
-        exp_runs = 1 + 2 * n1 * n0 / (n1 + n0)
-        # abatere normalizată (clustering recent = potențial overdue)
-        scores[i + 1] = abs(runs - exp_runs) / exp_runs
-    return _normalize(scores, max_num)
-
-
-def score_weighted_recent(draws_2d, max_num):
-    """Frecvență cu decay liniar pe poziție + boost pe ultimele 5 extrageri (geometric-temporal)."""
-    bm = _build_binary(draws_2d, max_num)
-    n = bm.shape[1]
-    weights = np.linspace(0.2, 1.0, n)  # recent = greutate mare
-    scores = {}
-    for i in range(max_num):
-        base = float((bm[i] * weights).sum())
-        boost = float(bm[i, -5:].sum()) * 2.0 if n >= 5 else 0.0
-        scores[i + 1] = base + boost
     return _normalize(scores, max_num)
 
 
@@ -888,40 +431,6 @@ def score_parity_balance(draws_2d, max_num):
     return _normalize(scores, max_num)
 
 
-def score_digit_root(draws_2d, max_num):
-    """Radacina digitala (number theory): scor pe frecventa radacinii digitale recente.
-    Radacina digitala = 1 + (n-1)%9. Numere cu radacina 'fierbinte' recent → scor mare."""
-    if draws_2d.shape[0] < 5:
-        return {}
-    def droot(n): return 1 + (n - 1) % 9 if n > 0 else 0
-    w = min(40, draws_2d.shape[0])
-    root_freq = np.zeros(10, dtype=np.float64)
-    for row in draws_2d[-w:]:
-        for v in row:
-            vi = int(v)
-            if vi > 0: root_freq[droot(vi)] += 1
-    scores = {k: float(root_freq[droot(k)]) for k in range(1, max_num + 1)}
-    return _normalize(scores, max_num)
-
-
-def score_modular(draws_2d, max_num):
-    """Reziduuri modulo (number theory): unele resturi mod 7/mod 10 ies mai des.
-    Combina semnalul mod 7 + mod 10 din istoric recent."""
-    if draws_2d.shape[0] < 5:
-        return {}
-    w = min(60, draws_2d.shape[0])
-    m7 = np.zeros(7, dtype=np.float64); m10 = np.zeros(10, dtype=np.float64)
-    for row in draws_2d[-w:]:
-        for v in row:
-            vi = int(v)
-            if vi > 0:
-                m7[vi % 7] += 1; m10[vi % 10] += 1
-    scores = {}
-    for k in range(1, max_num + 1):
-        scores[k] = float(m7[k % 7] + m10[k % 10])
-    return _normalize(scores, max_num)
-
-
 def score_prime_bias(draws_2d, max_num):
     """Bias prime/compuse + frecvență în clasă (tie-break).
 
@@ -961,156 +470,19 @@ def score_prime_bias(draws_2d, max_num):
     return _normalize(scores, max_num)
 
 
-def score_spread_position(draws_2d, max_num):
-    """Spread pozitional: scor pe baza pozitiei TIPICE a fiecarui numar in extragerea
-    sortata (numerele mici tind pe primele pozitii). Numere consistente pozitional."""
-    if draws_2d.shape[0] < 5:
-        return {}
-    draw_n = draws_2d.shape[1]
-    pos_sum = np.zeros(max_num + 1, dtype=np.float64)
-    pos_cnt = np.zeros(max_num + 1, dtype=np.float64)
-    for row in draws_2d:
-        srow = sorted(int(v) for v in row if v > 0)
-        for pos, vi in enumerate(srow):
-            if 1 <= vi <= max_num:
-                pos_sum[vi] += pos; pos_cnt[vi] += 1
-    scores = {}
-    for k in range(1, max_num + 1):
-        if pos_cnt[k] == 0:
-            scores[k] = 0.5
-        else:
-            # pozitia medie normalizata; consistenta (frecventa) ca pondere
-            scores[k] = (pos_cnt[k] / draws_2d.shape[0])
-    return _normalize(scores, max_num)
-
-
-def score_decade_balance(draws_2d, max_num):
-    """Echilibru pe decade: scoreaza numerele din decadele sub-reprezentate recent
-    (1-10, 11-20...) — geometric pe axa valorilor."""
-    if draws_2d.shape[0] < 5:
-        return {}
-    n_dec = (max_num + 9) // 10
-    w = min(20, draws_2d.shape[0])
-    dec_freq = np.zeros(n_dec, dtype=np.float64)
-    for row in draws_2d[-w:]:
-        for v in row:
-            vi = int(v)
-            if vi > 0: dec_freq[(vi - 1) // 10] += 1
-    # decade rare → scor mare (compensare)
-    inv = dec_freq.max() - dec_freq + 1.0
-    scores = {k: float(inv[(k - 1) // 10]) for k in range(1, max_num + 1)}
-    return _normalize(scores, max_num)
-
-
-# ===========================================================================
-# NISA: reguli de asociere + compresie (Kolmogorov) (numpy, CPU) 2026-05-31
-# ===========================================================================
-
-def score_assoc_rules(draws_2d, max_num):
-    """Reguli de asociere (apriori-lite): numere care apar des IMPREUNA cu numerele
-    din ultima extragere → 'daca a iesit X, tinde sa iasa Y'. Confidence-based."""
-    n = draws_2d.shape[0]
-    if n < 10:
-        return {}
-    # matrice de co-aparitii + frecvente individuale
-    co = np.zeros((max_num + 1, max_num + 1), dtype=np.float64)
-    freq = np.zeros(max_num + 1, dtype=np.float64)
-    for row in draws_2d:
-        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
-        for a in nums:
-            freq[a] += 1
-            for b in nums:
-                if a != b:
-                    co[a, b] += 1
-    last = [int(v) for v in draws_2d[-1] if 1 <= int(v) <= max_num]
-    scores = {}
-    for k in range(1, max_num + 1):
-        # confidence medie: P(k | x) pt fiecare x din ultima extragere
-        conf = 0.0
-        for x in last:
-            if freq[x] > 0:
-                conf += co[x, k] / freq[x]
-        scores[k] = conf / max(len(last), 1)
-    return _normalize(scores, max_num)
-
-
-def score_compression(draws_2d, max_num):
-    """Complexitate Kolmogorov-lite: numere a caror serie binara e mai PUTIN
-    compresibila (mai 'structurata'/non-aleatoare) primesc scor mai mare. Folosim
-    lungimea zlib ca proxy de complexitate, ponderata cu frecventa recenta."""
-    from compression import zlib
-    bm = _build_binary(draws_2d, max_num)
-    n = bm.shape[1]
-    w = min(80, n)
-    scores = {}
-    for i in range(max_num):
-        seq = bm[i, -w:].astype(np.uint8).tobytes()
-        comp_len = len(zlib.compress(seq, level=6))
-        ratio = comp_len / max(len(seq), 1)  # mare = mai putin compresibil = structura
-        recent = float(bm[i, -15:].mean()) if n >= 15 else float(bm[i].mean())
-        scores[i + 1] = ratio * 0.5 + recent * 0.5
-    return _normalize(scores, max_num)
-
-
 # ===========================================================================
 
 CLASSICAL_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
-    # === Nisa: reguli asociere + compresie (numpy, CPU) 2026-05-31 ===
-    "assoc_rules":     (score_assoc_rules,     "association",      False, "Reguli asociere (apriori-lite, confidence)"),
-    "compression":     (score_compression,     "info-theory",     False, "Complexitate Kolmogorov (zlib proxy)"),
-    # === Teoria numerelor + spread/sume pozitionale (numpy, CPU) 2026-05-31 ===
     "sum_affinity":    (score_sum_affinity,    "geometric-sum",   False, "Afinitate empirica cu suma tipica (nu gaussian pe axa 1..N)"),
     "parity_balance":  (score_parity_balance,  "geometric-parity", False, "Echilibru par/impar"),
-    "digit_root":      (score_digit_root,      "number-theory",   False, "Radacina digitala (1+(n-1)%9)"),
-    "modular":         (score_modular,         "number-theory",   False, "Reziduuri mod 7 + mod 10"),
     "prime_bias":      (score_prime_bias,      "number-theory",   False, "Bias prime vs compuse"),
-    "spread_position": (score_spread_position, "geometric-pos",   False, "Pozitia tipica in extragerea sortata"),
-    "decade_balance":  (score_decade_balance,  "geometric-decade", False, "Compensare decade sub-reprezentate"),
-    # === EXTRA matematice/geometrice (numpy, CPU, fără instalări) 2026-05-31 ===
-    "gap_poisson":     (score_gap_poisson,     "math-gap",       False, "Overdue Poisson pe gap-uri"),
-    "entropy_window":  (score_entropy_window,  "math-entropy",   False, "Entropie aparitii (regularitate)"),
     "autocorr":        (score_autocorr,        "math-autocorr",  False, "Autocorelatie lag 1-5"),
-    "momentum":        (score_momentum,        "math-momentum",  False, "Hot/cold momentum (15 vs 60)"),
     "pair_affinity":   (score_pair_affinity,   "geometric-graph", False, "Co-aparitie cu numerele recente"),
-    "centrality":      (score_centrality,      "geometric-graph", False, "Centralitate graf co-aparitii"),
-    "runs_test":       (score_runs_test,       "math-runs",      False, "Runs test (clustering serie)"),
-    "weighted_recent": (score_weighted_recent, "math-temporal",  False, "Frecventa cu decay + boost recent"),
-    # statsforecast family
-    "arima_auto":      (score_arima_auto,      "classical-arima",  False, "AutoARIMA per-number (statsforecast)"),
-    "ets_auto":        (score_ets_auto,        "classical-ets",    False, "AutoETS per-number"),
-    "theta_auto":      (score_theta_auto,      "classical-theta",  False, "AutoTheta per-number"),
-    "ces_auto":        (score_ces_auto,        "classical-ces",    False, "Complex Exponential Smoothing"),
     "croston_classic": (score_croston_classic, "classical-intermittent", False, "Croston Classic for intermittent demand"),
     "croston_sba":     (score_croston_sba,     "classical-intermittent", False, "Croston SBA variant"),
-    "croston_opt":     (score_croston_optimized, "classical-intermittent", False, "Croston Optimized"),
-    "tsb":             (score_tsb,             "classical-intermittent", False, "Teunter-Syntetos-Babai"),
-    "adida":           (score_adida,           "classical-intermittent", False, "ADIDA aggregate-disaggregate"),
-    "imapa":           (score_imapa,           "classical-intermittent", False, "IMAPA multi-aggregate"),
-    "ses":             (score_ses,             "classical-smoothing", False, "Simple Exponential Smoothing α=0.3"),
-    "naive_last":      (score_naive,           "classical-baseline", False, "Naive: last observed value"),
     "seasonal_naive":  (score_seasonal_naive_week, "classical-baseline", False, "Value from N=7 draws ago"),
-    "drift":           (score_drift,           "classical-baseline", False, "Linear drift extrapolation"),
-    # Markov & sequence
-    "markov_1":        (score_markov_1,        "markov",           False, "First-order Markov chain on binary"),
-    "markov_2":        (score_markov_2,        "markov",           False, "Second-order Markov chain"),
-    "markov_3":        (score_markov_3,        "markov",           False, "Third-order Markov chain"),
-    "ngram_bigram":    (score_ngram_bigram,    "markov",           False, "Laplace-smoothed bigram"),
-    "ngram_trigram":   (score_ngram_trigram,   "markov",           False, "Laplace-smoothed trigram"),
-    "vlmm":            (score_vlmm,            "markov",           False, "Variable-length Markov model"),
-    # Bayesian
-    "beta_binomial":   (score_beta_binomial,   "bayesian",         False, "Beta-Binomial conjugate posterior"),
-    "polya_urn":       (score_polya_urn,       "bayesian",         False, "Pólya urn reinforcement"),
     "bayes_poisson":   (score_bayesian_poisson, "bayesian",        False, "Bayesian Poisson rate"),
     "neg_binomial":    (score_negative_binomial, "bayesian",       False, "Negative Binomial overdispersion"),
-    # Spectral / decomposition
     "fourier":         (score_fourier_top_k,   "spectral",         False, "FFT top-K reconstruction"),
-    "wavelet_haar":    (score_wavelet_haar,    "spectral",         False, "Haar wavelet approximation"),
-    "stl":             (score_stl_decompose,   "spectral",         False, "STL seasonal-trend decomposition"),
-    "ssa":             (score_ssa,             "spectral",         False, "Singular Spectrum Analysis"),
     "dmd":             (score_dmd_basic,       "spectral",         False, "Dynamic Mode Decomposition"),
-    # HMM
-    "hmm_gaussian":    (score_hmm_gaussian,    "hmm",              False, "Gaussian HMM 2-state"),
-    # Holt-Winters / statsmodels ARIMA
-    "holt_winters":    (score_holtwinters_add, "classical-smoothing", False, "Holt-Winters additive trend"),
-    "arima_sm":        (score_arima_statsmodels, "classical-arima", False, "ARIMA(2,0,2) statsmodels"),
 }

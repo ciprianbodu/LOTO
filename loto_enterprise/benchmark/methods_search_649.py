@@ -431,9 +431,10 @@ BLEND_BASE_NAMES: list[str] = [
     "graph_pagerank", "graph_pagerank_recent", "graph_degree", "graph_degree_recent",
     "graph_eigenvector", "graph_rwr_recent", "graph_second_order", "graph_temporal_drift",
     "649_hazard_overdue", "649_wilson_lb", "649_gap_inverse", "649_ewma_20",
-    "649_mom_15_60", "649_rrf_graph",     "649_triple_graph_classic", "649_hmean_freq_rec",
-    "seasonal_naive", "prime_bias", "gap_poisson", "markov_1", "markov_2",
-    "beta_binomial", "frequency", "recency",
+    "649_mom_15_60", "649_rrf_graph", "649_triple_graph_classic", "649_hmean_freq_rec",
+    "seasonal_naive", "prime_bias", "frequency",
+    # gap_poisson / markov_* / beta_binomial / recency: scoase din METHODS (blacklist);
+    # rămân doar ca helperi pentru blend-urile TOP649 / search deja înregistrate.
 ]
 
 BLEND_WEIGHTS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85)

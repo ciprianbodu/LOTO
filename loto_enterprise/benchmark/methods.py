@@ -70,7 +70,10 @@ def score_frequency(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
 
 
 def score_recency(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
-    """Gap-based: longer time since last appearance → higher score (overdue)."""
+    """Helper (NU e în METHODS): folosit de blend-uri search-649.
+
+    Intrarea de registry `recency` a fost ELIMINATĂ (blacklist). Nu o reînregistra.
+    """
     n = draws_2d.shape[0]
     last_seen = np.full(max_num + 1, -1, dtype=np.int32)
     for i, row in enumerate(draws_2d):
@@ -93,10 +96,9 @@ def score_recency(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
 
 # Method tuple: (callable, family, requires_train, notes)
 METHODS: dict[str, tuple[Callable, str, bool, str]] = {
-    # Baselines
+    # Baselines (recency a fost blacklistată și scoasă din registry)
     "random":      (score_random,      "baseline",        False, "Pure-random scores; sanity floor"),
     "frequency":   (score_frequency,   "baseline",        False, "Exp-decay recency-weighted frequency"),
-    "recency":     (score_recency,     "baseline",        False, "Gap-since-last-seen ('overdue' heuristic)"),
 }
 
 
@@ -151,13 +153,26 @@ def _load_extra_methods() -> None:
         logger.debug(f"[methods] methods_math_extra not loaded: {exc}")
 
     added = 0
+    skipped_tombstone = 0
+    try:
+        from .disabled import load_disabled
+        tombstones = load_disabled()
+    except Exception:
+        tombstones = set()
     for modname, extra_dict in extensions:
         for name, tup in extra_dict.items():
+            if name in tombstones:
+                # Plasă: nume din disabled_methods.json NU se reînregistrează
+                # chiar dacă cineva le pune din greșeală înapoi în dict.
+                skipped_tombstone += 1
+                continue
             if name not in METHODS:
                 METHODS[name] = tup
                 added += 1
     if added > 0:
         logger.info(f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules).")
+    if skipped_tombstone:
+        logger.warning("[methods] skipped %d tombstoned (disabled) names at load", skipped_tombstone)
 
 
 # Alias-uri pentru nume vechi (înainte de eliminarea GPU: ml_*_cpu) și duplicate eliminate
@@ -165,10 +180,9 @@ def _load_extra_methods() -> None:
 # ensemble). Nu intră în bench (list_methods le exclude) — doar rezolvă best_methods.json /
 # folds.csv vechi până la re-bench.
 METHOD_ALIASES: dict[str, str] = {
-    "ml_xgb_cpu": "ml_xgb",
-    "ml_lgbm_cpu": "ml_lgbm",
     "ml_catboost_cpu": "ml_catboost",
     "649_top_autocorr": "autocorr",
+    # ml_xgb_cpu / ml_lgbm_cpu: țintele (ml_xgb, ml_lgbm) au fost eliminate (blacklist).
 }
 
 

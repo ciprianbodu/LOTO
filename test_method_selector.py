@@ -140,18 +140,22 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
                     "scorer": "frequency",
                     "ensemble": [
                         {"method": "frequency", "weight": 0.6},
-                        {"method": "recency", "weight": 0.4},
+                        {"method": "ml_logistic", "weight": 0.4},
                     ],
                 }
             }
         }
     })
-    # `recency` poate fi blacklistat pe stație — dacă e interzis, rămâne frequency.
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     names = {name for name, _fn, _w in result}
     assert "frequency" in names
     assert "random" not in names
+    # ml_logistic e în METHODS (nu e blacklistat); dacă import sklearn eșuează tot rămâne frequency
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
+    if "ml_logistic" in names:
+        weights = {name: w for name, _fn, w in result}
+        assert weights["frequency"] == pytest.approx(0.6)
+        assert weights["ml_logistic"] == pytest.approx(0.4)
 
 
 def test_ensemble_skips_random_even_if_listed(temp_config):

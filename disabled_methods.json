@@ -75,8 +75,8 @@
     "winslips"
   ],
   "_meta": {
-    "note": "Metode legendate — NU se mai rulează în bench și NU se reactivează. Merge-only. Metodele noi nu sunt afectate.",
-    "last_reason": "User: scos tot suportul GPU (metode neural/foundation/torch + TimesFM) — intrările GPU eliminate din denylist (03.07.2026)",
-    "count": 75
+    "note": "Tombstone: metode ELIMINATE din cod (METHODS). NU le reintroduce sub același nume. Merge-only. Loader-ul tot filtrează pe această listă ca plasă.",
+    "last_reason": "2026-08-25: scoase din registry + implementări orphan (73). Helperii folosiți de blend-uri curate (gap_poisson, beta_binomial, markov_2, recency) rămân neînregistrați.",
+    "count": 73
   }
 }

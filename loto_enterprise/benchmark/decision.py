@@ -104,7 +104,9 @@ ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 # RENUMĂRĂ după fiecare bench, nu se citează din memorie).
 # Rolul lui e DOAR de podea de sanitate în bench ("cât înseamnă pură șansă"),
 # niciodată de generator.
-# `frequency`/`recency` rămân permise ca scorer: sunt baseline-uri DETERMINISTE
+# `frequency` rămâne permisă ca scorer: e baseline DETERMINIST și SAFE_FALLBACK.
+# `recency` a fost blacklistată și ELIMINATĂ din METHODS (2026-08-25).
+# `random` e EXCLUS din producție (nedeterminist, fără sămânță).
 # (aceleași date → același scor), reproductibile și explicabile pentru
 # utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
 # "numere date cu zarul" nu.
