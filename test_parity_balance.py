@@ -55,22 +55,42 @@ def test_parity_balance_not_largest_ap2_on_joker():
     assert pool != _largest_ap2(45, 11, odd=False), pool
 
 
-def test_curated_top30_and_per_game_top10():
+def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.curated import (
         load_curated, load_per_game, REQUIRED_METHODS, apply_curation,
     )
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 30
+    assert len(cur) == 37
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
+    # +7 matematice CPU din testare externă WF 30% @ pool 11 (2026-08-25)
+    added = {
+        "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
+        "nmf_cooc", "fourier", "649_hazard_overdue", "pair_affinity",
+    }
+    assert added <= set(cur)
     pg = load_per_game()
-    for g in ("loto_6_49", "loto_5_40", "joker_urna1"):
+    expect_n = {"loto_6_49": 13, "loto_5_40": 12, "joker_urna1": 12}
+    expect_extra = {
+        "loto_6_49": ["pca_resid_surprise", "649_spectral_cooc", "cusum_appearance"],
+        "loto_5_40": ["nmf_cooc", "fourier"],
+        "joker_urna1": ["649_hazard_overdue", "pair_affinity"],
+    }
+    rejected = {
+        "circular_kernel", "649_sum_reversion", "649_mom_10_40",
+        "mi_lag_bag", "bayes_poisson", "neg_binomial", "649_beta_mean",
+        "649_wilson_lb",
+    }
+    for g, n in expect_n.items():
         assert g in pg
-        assert len(pg[g]) == 10
+        assert len(pg[g]) == n
         assert all(m in cur for m in pg[g])
         assert "random" not in pg[g]
+        for m in expect_extra[g]:
+            assert m in pg[g]
+        assert rejected.isdisjoint(pg[g])
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 30
-    assert info["per_game"]["loto_6_49"] == 10
+    assert len(kept) == 37
+    assert info["per_game"]["loto_6_49"] == 13

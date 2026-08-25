@@ -2311,7 +2311,7 @@ def _render_bench_leaderboard_slice(
         # (decizia le sare deja; UI trebuie să rămână aliniat).
         if _alive_methods is not None and str(m) not in _alive_methods:
             continue
-        # Clasament per joc = top 10 din curated per_game (plus baseline random).
+        # Clasament per joc = lista curated per_game (plus baseline random).
         if _pg_only and str(m) not in _pg_only and str(m) not in _BASE:
             continue
         score = float(grp[metric].mean())
@@ -3733,9 +3733,16 @@ def main_page() -> None:
         # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
         _cur = _curation_banner_info()
         if _cur is not None:
+            _pg = _cur.get("per_game") or {}
+            _pg_txt = "/".join(
+                str(int(_pg[g])) for g in ("loto_6_49", "loto_5_40", "joker_urna1") if g in _pg
+            )
+            _pg_bit = (f"clasament/decizie = {_pg_txt} per joc"
+                       if _pg_txt else "clasament/decizie = tot active")
+            _n_after = _cur["n_after"]
             ui.html(render_html_safe(
-                t"🎯 <b>Curare activă: {_cur['n_after']} metode din {_cur['n_before']}</b> "
-                t"(bench = top 30 overall; clasament/decizie = top 10 per joc)."
+                t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
+                t"(bench = {_n_after} overall; {_pg_bit})."
             )).classes("text-caption text-info")
             ui.label("Dezactivare (revine la toate metodele): șterge sau golește lista "
                      f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
