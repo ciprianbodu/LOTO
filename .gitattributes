@@ -1,0 +1,5 @@
+# CMD.EXE cere CRLF in .bat/.cmd. Cu LF:
+#   `for /f`  -> "'f' is not recognized as an internal or external command"
+#   `echo.`   -> "'ho.' is not recognized as an internal or external command"
+*.bat text eol=crlf
+*.cmd text eol=crlf

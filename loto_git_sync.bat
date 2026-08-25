@@ -4,6 +4,7 @@ REM loto_git_sync.bat - git helper for START_8000.bat and ACTUALIZARI.bat
 REM   loto_git_sync.bat autoupdate      fetch+merge origin/main
 REM   loto_git_sync.bat push_istoric    commit _ISTORIC, push origin/main
 REM ASCII only. No delayed expansion. No parens in echo or REM.
+REM CRLF required via .gitattributes. LF breaks for /f and echo.
 REM Bug: echo with escaped parens after delayed expansion left an open
 REM parenthesis, so the next REM Auto-update line ran as a command.
 REM ============================================================
