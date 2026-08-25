@@ -1,4 +1,5 @@
 @echo off
+setlocal DisableDelayedExpansion
 REM ============================================================
 REM loto_git_sync.bat - git helper for START_8000.bat and ACTUALIZARI.bat
 REM   loto_git_sync.bat autoupdate      fetch+merge origin/main

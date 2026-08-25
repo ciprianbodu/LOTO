@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM START_8000.bat — Launcher rapid + log silent in fundal.
+REM START_8000.bat - Launcher rapid + log silent in fundal.
 REM Pe success: nu mai vezi nimic despre log, pornesti direct NiceGUI (app_nicegui.py).
 REM Pe eroare: afisez log-ul automat si las fereastra deschisa.
 REM ============================================================
@@ -65,7 +65,7 @@ set "LAUNCH_RC=%ERRORLEVEL%"
 
 if not "%LAUNCH_RC%"=="0" (
     echo.
-    echo [EROARE] Launch esuat ^(RC=%LAUNCH_RC%^).
+    echo [EROARE] Launch esuat. RC=%LAUNCH_RC%.
     pause
     cmd /k
     exit /b %LAUNCH_RC%
@@ -75,7 +75,7 @@ exit /b 0
 
 
 REM ============================================================
-REM :verify_phase — verifica venv + importa core/benchmark (exclusiv CPU)
+REM :verify_phase - verifica venv + importa core/benchmark, exclusiv CPU
 REM ============================================================
 :verify_phase
 setlocal enabledelayedexpansion
@@ -105,7 +105,7 @@ echo [OK] nicegui prezent.
 set PYTHONUNBUFFERED=1
 
 echo.
-echo --- Verificare imports prin verify_imports.py ^(exclusiv CPU^) ---
+echo --- Verificare imports prin verify_imports.py, exclusiv CPU ---
 "%VENV_DIR%\Scripts\python.exe" -u "%~dp0verify_imports.py"
 set "VERIFY_PY_RC=!ERRORLEVEL!"
 
@@ -122,7 +122,7 @@ endlocal & exit /b 0
 
 
 REM ============================================================
-REM :launch_phase — porneste worker + NiceGUI
+REM :launch_phase - porneste worker + NiceGUI
 REM ============================================================
 :launch_phase
 setlocal enabledelayedexpansion
@@ -158,7 +158,7 @@ REM Deschidem browserul automat dupa 5s (timp ca serverul sa porneasca), intr-un
 REM proces paralel ca sa nu blocheze pornirea serverului.
 start "" /min cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:8000"
 set "LOTO_UI_PORT=8000"
-REM Sesiune noua: UI-ul NU reia un job vechi si NU afiseaza «Job în rulare»
+REM Sesiune noua: UI-ul NU reia un job vechi si NU afiseaza "Job in rulare"
 REM pana nu apesi Genereaza / Auto-Pilot. Worker-ul NU primeste flag-ul
 REM (trebuie sa preia joburile pe care le trimitI TU dupa pornire).
 set "LOTO_FRESH_START=1"
