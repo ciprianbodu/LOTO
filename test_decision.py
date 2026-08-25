@@ -18,6 +18,29 @@ import pandas as pd
 import pytest
 
 from loto_enterprise.benchmark import decision
+from loto_enterprise.benchmark import methods as methods_mod
+
+
+# Nume sintetice din fixture-uri. decide_optimal_config_for_pool păstrează
+# doar metode din METHODS minus tombstone (folds vechi cu omnius etc.) —
+# fără înregistrare, testele cadeau tăcut pe fallback-ul `frequency`.
+_SYNTHETIC_METHODS = (
+    "noisy_smallwindow",
+    "robust_morevidence",
+    "some_method",
+    "weak_method",
+    *(f"method_{i}" for i in range(6)),
+)
+
+
+@pytest.fixture(autouse=True)
+def _register_synthetic_methods(monkeypatch):
+    extra = {
+        n: (lambda *_a, **_k: {}, "test", False, "synthetic")
+        for n in _SYNTHETIC_METHODS
+    }
+    monkeypatch.setattr(methods_mod, "METHODS", {**methods_mod.METHODS, **extra})
+
 
 
 def test_wilson_lower_bound_zero_events_is_zero():

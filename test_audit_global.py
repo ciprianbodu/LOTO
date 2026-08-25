@@ -20,6 +20,7 @@ from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION, SAFE_FA
 from loto_enterprise.benchmark.disabled import load_disabled
 from loto_enterprise.benchmark.methods import METHODS, call_method, list_methods, method_meta
 from loto_enterprise.core.method_selector import MAX_MEMBER_CORR, _pair_corr
+from loto_enterprise.core.ranking import rank_by_score
 
 GAMES = {
     "loto_6_49": (Path("_ISTORIC/loto_6_49.csv"), ("n1", "n2", "n3", "n4", "n5", "n6"), 49),
@@ -97,3 +98,26 @@ def test_per_game_scores_finite_and_not_clones():
                 if r is not None and abs(r) >= MAX_MEMBER_CORR:
                     clones.append((a, b, float(r)))
         assert not clones, clones
+
+
+def test_rank_by_score_tie_breaks_on_number_not_insertion_order():
+    """Regula de aur 8: la scor egal, număr mare întâi (nu ordinea dictului)."""
+    a = rank_by_score({1: 0.5, 9: 0.5, 3: 0.9}, 3)
+    b = rank_by_score({9: 0.5, 3: 0.9, 1: 0.5}, 3)
+    assert a == b == [3, 9, 1]
+
+
+def test_runner_top_k_delegates_to_rank_by_score():
+    src = Path("loto_enterprise/benchmark/runner.py").read_text(encoding="utf-8")
+    assert "from loto_enterprise.core.ranking import rank_by_score" in src
+    assert "return rank_by_score(scores, k)" in src
+
+
+def test_pool_selection_uses_rank_by_score_for_membership():
+    src = Path("loto_enterprise/core/pool_selection.py").read_text(encoding="utf-8")
+    assert "ranked_all = rank_by_score(valid, len(valid))" in src
+    from loto_enterprise.core.pool_selection import select_pool_from_scores
+    scores = {1: 0.5, 9: 0.5, 3: 0.9, 2: 0.1}
+    pool = select_pool_from_scores(scores, 3, blacklist=set(), max_num=49)
+    # membership = top-3 via rank_by_score (3, 9, 1); return is sorted numeric
+    assert pool == [1, 3, 9]
