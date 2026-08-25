@@ -2,24 +2,52 @@
   "_meta": {
     "created": "2026-07-30",
     "updated": "2026-08-25",
-    "criterion": "top 30 overall + top 10 per joc din ultimul bench COMPLET (107 metode, commit 12e4663 folds), Wilson 4+ @ k11, poarta ≥60% vs random întâi, apoi |Spearman|<0.95 (fără clone Katz). NU blacklist. +7 matematice CPU (2026-08-25) din testare EXTERNĂ walk-forward 30% @ pool 11, doar dacă bat P(≥3) hipergeometric și nu sunt clone/degenerate.",
+    "criterion": "top 30 overall + top 10 per joc din ultimul bench COMPLET (107 metode, commit 12e4663 folds), Wilson 4+ @ k11, poarta ≥60% vs random întâi, apoi |Spearman|<0.95 (fără clone Katz). NU blacklist. +7 matematice CPU runda 1 +7 runda 2 (2026-08-25) din testare EXTERNĂ walk-forward 30% @ pool 11, doar dacă bat P(≥3) sau P(≥4) hipergeometric și nu sunt clone/degenerate.",
     "note": "gol/absent active = toate cele 111. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc.",
     "source_folds": "git:12e4663 bench_results/folds.csv (107 metode; omnius sărit)",
     "pool_ranked": 11,
     "metric": "rate_4plus_k11 Wilson_lb pooled; plus 2026-08-25: WF extern 3+/4+ vs hipergeometric",
-    "n_active": 37,
+    "n_active": 44,
     "external_math_2026_08_25": {
       "script": "analiza_math_external.py",
       "window": "ultimele 30% (ca UI WF), pool 11, block 8, rank_by_score",
       "tested_per_game": {
-        "loto_6_49": ["pca_resid_surprise", "cusum_appearance", "circular_kernel", "649_wilson_lb", "649_spectral_cooc"],
-        "loto_5_40": ["mi_lag_bag", "nmf_cooc", "bayes_poisson", "649_mom_10_40", "fourier"],
-        "joker_urna1": ["pair_affinity", "649_beta_mean", "649_hazard_overdue", "649_sum_reversion", "neg_binomial"]
+        "loto_6_49": [
+          "pca_resid_surprise",
+          "cusum_appearance",
+          "circular_kernel",
+          "649_wilson_lb",
+          "649_spectral_cooc"
+        ],
+        "loto_5_40": [
+          "mi_lag_bag",
+          "nmf_cooc",
+          "bayes_poisson",
+          "649_mom_10_40",
+          "fourier"
+        ],
+        "joker_urna1": [
+          "pair_affinity",
+          "649_beta_mean",
+          "649_hazard_overdue",
+          "649_sum_reversion",
+          "neg_binomial"
+        ]
       },
       "added": {
-        "loto_6_49": ["pca_resid_surprise", "649_spectral_cooc", "cusum_appearance"],
-        "loto_5_40": ["nmf_cooc", "fourier"],
-        "joker_urna1": ["649_hazard_overdue", "pair_affinity"]
+        "loto_6_49": [
+          "pca_resid_surprise",
+          "649_spectral_cooc",
+          "cusum_appearance"
+        ],
+        "loto_5_40": [
+          "nmf_cooc",
+          "fourier"
+        ],
+        "joker_urna1": [
+          "649_hazard_overdue",
+          "pair_affinity"
+        ]
       },
       "rejected": {
         "circular_kernel": "3+/4+ bune (14.1%/3.23%) dar consec_run=8/11 — degenerare kernel circular pe axa 1…N",
@@ -32,6 +60,59 @@
         "neg_binomial": "3+ și 4+ sub random"
       },
       "note": "NU e predicție. Re-Bench e necesar ca folds.csv/decizia să vadă metodele noi."
+    },
+    "external_math_round2_2026_08_25": {
+      "script": "analiza_math_external.py",
+      "window": "ultimele 30% (ca UI WF), pool 11, block 8, rank_by_score",
+      "tested_per_game": {
+        "loto_6_49": [
+          "parity_balance",
+          "prime_bias",
+          "649_mod7_hot",
+          "649_cold_rebound",
+          "649_volatility_low"
+        ],
+        "loto_5_40": [
+          "seasonal_naive",
+          "649_low_high_bal",
+          "649_mod10_hot",
+          "649_streak_boost",
+          "649_ewma_20"
+        ],
+        "joker_urna1": [
+          "649_parity_recent",
+          "649_gmean_freq_rec",
+          "649_gap_sqrt",
+          "649_consec_penalty",
+          "mi_lag_bag"
+        ]
+      },
+      "added": {
+        "loto_6_49": [
+          "parity_balance",
+          "prime_bias",
+          "649_volatility_low"
+        ],
+        "loto_5_40": [
+          "649_mod10_hot"
+        ],
+        "joker_urna1": [
+          "649_parity_recent",
+          "mi_lag_bag",
+          "649_gmean_freq_rec"
+        ]
+      },
+      "rejected": {
+        "649_mod7_hot": "3+ 10.35% < random 11.74%; 4+ sub random",
+        "649_cold_rebound": "sub random; consec_run=9; nuniq=4; pool 41…49",
+        "seasonal_naive": "sub random; nuniq=2; consec_run=8",
+        "649_low_high_bal": "3+ 10.23% < random 11.71%; 4+ sub random",
+        "649_streak_boost": "bate 3+ (12.55%) dar nuniq=4 și consec_run=7 — degenerare",
+        "649_ewma_20": "3+ sub random; 4+ doar +0.1pp (zgomot, nu +2 evenimente)",
+        "649_gap_sqrt": "sub random; |Spearman|=0.992 vs 649_hazard_overdue (clonă)",
+        "649_consec_penalty": "3+ 6.42% < random 8.53%; 4+ sub random"
+      },
+      "note": "NU e predicție. mi_lag_bag a picat pe 5/40 runda 1, a trecut pe Joker runda 2. Re-Bench necesar."
     }
   },
   "active": [
@@ -71,7 +152,14 @@
     "nmf_cooc",
     "fourier",
     "649_hazard_overdue",
-    "pair_affinity"
+    "pair_affinity",
+    "parity_balance",
+    "prime_bias",
+    "649_volatility_low",
+    "649_mod10_hot",
+    "649_parity_recent",
+    "mi_lag_bag",
+    "649_gmean_freq_rec"
   ],
   "per_game": {
     "loto_6_49": [
@@ -87,7 +175,10 @@
       "autocorr",
       "pca_resid_surprise",
       "649_spectral_cooc",
-      "cusum_appearance"
+      "cusum_appearance",
+      "parity_balance",
+      "prime_bias",
+      "649_volatility_low"
     ],
     "loto_5_40": [
       "frequency",
@@ -101,7 +192,8 @@
       "graph_katz_low",
       "graph_subgraph_centrality",
       "nmf_cooc",
-      "fourier"
+      "fourier",
+      "649_mod10_hot"
     ],
     "joker_urna1": [
       "ml_nearest_centroid",
@@ -115,7 +207,10 @@
       "graph_second_order",
       "graph_spectral_embed",
       "649_hazard_overdue",
-      "pair_affinity"
+      "pair_affinity",
+      "649_parity_recent",
+      "mi_lag_bag",
+      "649_gmean_freq_rec"
     ]
   }
 }

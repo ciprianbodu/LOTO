@@ -2,6 +2,7 @@
 
 Walk-forward onest pe ultimele 30% din CSV (aceeași fereastră ca UI WF),
 pool=11, rank_by_score. Compară rata 3+ / 4+ cu hipergeometric (random).
+Runda 2: înlocuiește `candidates` (nu retesta runda 1).
 Decorelare: |Spearman| < 0.95 vs per_game existent și între candidați.
 
 NU e predicție — loteria e aleatoare. Un candidat intra în curated DOAR dacă
@@ -51,12 +52,13 @@ GAMES = {
         "cols": ("n1", "n2", "n3", "n4", "n5", "n6"),
         "max_num": 49,
         "draw_n": 6,
+        # Runda 2 (2026-08-25): axe noi, nu retestăm runda 1.
         "candidates": [
-            "pca_resid_surprise",
-            "cusum_appearance",
-            "circular_kernel",
-            "649_wilson_lb",
-            "649_spectral_cooc",
+            "parity_balance",
+            "prime_bias",
+            "649_mod7_hot",
+            "649_cold_rebound",
+            "649_volatility_low",
         ],
     },
     "loto_5_40": {
@@ -65,11 +67,11 @@ GAMES = {
         "max_num": 40,
         "draw_n": 5,
         "candidates": [
-            "mi_lag_bag",
-            "nmf_cooc",
-            "bayes_poisson",
-            "649_mom_10_40",
-            "fourier",
+            "seasonal_naive",
+            "649_low_high_bal",
+            "649_mod10_hot",
+            "649_streak_boost",
+            "649_ewma_20",
         ],
     },
     "joker_urna1": {
@@ -78,11 +80,11 @@ GAMES = {
         "max_num": 45,
         "draw_n": 5,
         "candidates": [
-            "pair_affinity",
-            "649_beta_mean",
-            "649_hazard_overdue",
-            "649_sum_reversion",
-            "neg_binomial",
+            "649_parity_recent",
+            "649_gmean_freq_rec",
+            "649_gap_sqrt",
+            "649_consec_penalty",
+            "mi_lag_bag",
         ],
     },
 }
@@ -372,10 +374,10 @@ def main() -> None:
             for gk, picked in selected.items()
         },
     }
-    Path("/tmp/analiza_math_external.json").write_text(
+    Path("/tmp/analiza_math_external_round2.json").write_text(
         json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8",
     )
-    print("wrote /tmp/analiza_math_external.json")
+    print("wrote /tmp/analiza_math_external_round2.json")
     print("\n=== SELECTED (beat 3+ or 4+, |Spearman|<0.95, not degenerate) ===")
     for gk, picked in selected.items():
         print(f"  {gk}: {len(picked)}/{MAX_ADD} → {[p['method'] for p in picked]}")

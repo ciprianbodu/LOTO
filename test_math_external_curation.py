@@ -19,6 +19,14 @@ ADDED = (
     "fourier",
     "649_hazard_overdue",
     "pair_affinity",
+    # runda 2
+    "parity_balance",
+    "prime_bias",
+    "649_volatility_low",
+    "649_mod10_hot",
+    "649_parity_recent",
+    "mi_lag_bag",
+    "649_gmean_freq_rec",
 )
 
 
