@@ -18,8 +18,8 @@ REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 >> "%LOGFILE%" echo.
 
 REM ===== Auto-update din GitHub (best-effort; NU blocheaza daca esueaza) =====
-REM Aduce ultimele fix-uri automat la fiecare pornire. best_methods.json /
-REM _ISTORIC / venv sunt gitignore-uite -> fara divergenta -> fast-forward curat.
+REM Aduce ultimele fix-uri de pe origin/main. best_methods.json / venv sunt
+REM gitignore; _ISTORIC E VERSIONAT (commit+push dupa update_csv).
 where git >nul 2>&1
 if errorlevel 1 (
     echo [GIT] git negasit - sar peste auto-update.
@@ -36,10 +36,10 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
 )
 
 REM ===== Auto-commit + push extrageri noi din _ISTORIC (best-effort) =====
-REM Daca update_csv a adaugat extrageri noi, le urcam pe GitHub ca sa fie
-REM versionate si sincronizate pe orice masina (+ vizibile pentru analiza).
+REM VIZIBIL in consola (nu doar in startup_8000.log). Push STRICT pe origin/main
+REM — `git push origin HEAD` pe alta ramura era pierdut la urmatorul reset.
 where git >nul 2>&1
-if not errorlevel 1 call :push_istoric >> "%LOGFILE%" 2>&1
+if not errorlevel 1 call :push_istoric
 
 REM ===== Verify phase (silent, logat in fundal) =====
 call :verify_phase >> "%LOGFILE%" 2>&1
@@ -168,61 +168,11 @@ endlocal & exit /b %RC%
 
 
 :git_autoupdate
-REM ============================================================
-REM Auto-update ROBUST. Inainte: la orice esec al fast-forward-ului sarea TACIT
-REM update-ul -> ramaneai pe cod vechi fara sa stii de ce. Acum: arata cauza reala
-REM (git status) si SINCRONIZEAZA FORTAT cu GitHub (cu backup in stash).
-REM   - Datele tale (best_methods.json, _ISTORIC, pool_history, raport, venv)
-REM     sunt gitignore -> NU se pierd la reset.
-REM   - Modificarile locale la fisiere URMARITE sunt salvate in 'git stash list'.
-REM ============================================================
-echo [GIT] Verific actualizari de pe GitHub...
-REM OneDrive strica scrierea atomica in .git -> "update_ref failed / Invalid argument"
-REM la merge/reset. Dezactivam appendAtomically (leacul recomandat de git insusi).
-git config windows.appendAtomically false >nul 2>&1
-git fetch origin main --quiet 2>nul
-if errorlevel 1 (
-    echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
-    goto :eof
-)
-git merge --ff-only origin/main >nul 2>&1
-if not errorlevel 1 (
-    echo [GIT] Cod la zi cu GitHub.
-    goto :eof
-)
-echo [GIT] Fast-forward imposibil ^(divergenta sau modificari locale^). Stare:
-git status -sb
-echo [GIT] Sincronizez FORTAT cu GitHub ^(backup local in stash^)...
-git stash push -m "auto-backup START_8000" >nul 2>&1
-git reset --hard origin/main >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
-) else (
-    echo [GIT] Sincronizat la zi cu GitHub. Backup local: ruleaza 'git stash list'.
-)
+call "%~dp0loto_git_sync.bat" autoupdate
 goto :eof
 
 
 :push_istoric
-REM ============================================================
-REM Auto-commit + push al extragerilor noi din _ISTORIC/ (best-effort).
-REM Ruleaza DUPA update_csv.py. Daca nu sunt modificari -> nimic. Daca push-ul
-REM esueaza (offline) -> commit-ul ramane local si se reincearca data viitoare.
-REM ============================================================
-git config windows.appendAtomically false >nul 2>&1
-REM Exista modificari in _ISTORIC (fisiere noi/modificate)?
-git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] _ISTORIC fara modificari - nimic de comis.
-    goto :eof
-)
-echo [GIT] Extrageri noi in _ISTORIC - commit + push pe GitHub...
-git add _ISTORIC >nul 2>&1
-git commit -m "auto: update istoric extrageri (%DATE%)" >nul 2>&1
-git push origin HEAD >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] Push _ISTORIC esuat ^(offline?^) - se reincearca la urmatoarea pornire.
-) else (
-    echo [GIT] _ISTORIC pushat pe GitHub.
-)
+call "%~dp0loto_git_sync.bat" push_istoric
 goto :eof
+

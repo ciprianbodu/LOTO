@@ -223,58 +223,12 @@ exit /b 0
 
 
 :git_autoupdate
-REM ============================================================
-REM Auto-update ROBUST din main (acelasi pattern ca START_8000.bat).
-REM Datele tale (best_methods.json, _ISTORIC, venv) sunt
-REM gitignore -> NU se pierd la reset. Modificarile locale urmarite -> in stash.
-REM ============================================================
-echo [GIT] Verific actualizari cod de pe GitHub ^(main^)...
-REM OneDrive strica scrierea atomica in .git -> dezactivam appendAtomically.
-git config windows.appendAtomically false >nul 2>&1
-git fetch origin main --quiet 2>nul
-if errorlevel 1 (
-    echo [GIT] Offline / fetch esuat - continui cu codul curent.
-    goto :eof
-)
-git merge --ff-only origin/main >nul 2>&1
-if not errorlevel 1 (
-    echo [GIT] Cod la zi cu main.
-    goto :eof
-)
-echo [GIT] Fast-forward imposibil ^(divergenta / modificari locale^). Stare:
-git status -sb
-echo [GIT] Sincronizez FORTAT cu main ^(backup local in stash^)...
-git stash push -m "auto-backup ACTUALIZARI" >nul 2>&1
-git reset --hard origin/main >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] Sincronizare fortata esuata - continui cu codul curent.
-) else (
-    echo [GIT] Sincronizat la zi cu main. Backup local: ruleaza 'git stash list'.
-)
+call "%~dp0loto_git_sync.bat" autoupdate
 goto :eof
 
 
 :push_istoric
-REM ============================================================
-REM Auto-commit + push al extragerilor noi din _ISTORIC/ (best-effort).
-REM Ruleaza DUPA update_csv.py. Daca nu sunt modificari -> nimic. Daca push-ul
-REM esueaza (offline) -> commit-ul ramane local si se reincearca data viitoare.
-REM ============================================================
-git config windows.appendAtomically false >nul 2>&1
-git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] _ISTORIC fara modificari - nimic de comis.
-    goto :eof
-)
-echo [GIT] Extrageri noi in _ISTORIC - commit + push pe GitHub...
-git add _ISTORIC >nul 2>&1
-git commit -m "auto: update istoric extrageri (%DATE%)" >nul 2>&1
-git push origin HEAD >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] Push _ISTORIC esuat ^(offline?^) - se reincearca la urmatoarea rulare.
-) else (
-    echo [GIT] _ISTORIC pushat pe GitHub.
-)
+call "%~dp0loto_git_sync.bat" push_istoric
 goto :eof
 
 
