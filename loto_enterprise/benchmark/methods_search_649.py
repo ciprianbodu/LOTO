@@ -204,13 +204,22 @@ def score_649_decade_hot(draws_2d, max_num):
 
 
 def score_649_parity_recent(draws_2d, max_num):
+    """Paritate recentă + frecvență în clasă (tie-break).
+
+    Fără frecvență, 2 nivele → top-K = cele mai MARI pare/impare (rank_by_score).
+    """
     arr = np.asarray(draws_2d)
     w = min(30, arr.shape[0])
     recent = arr[-w:]
     odd = sum(1 for row in recent for v in row if int(v) % 2)
     even = sum(1 for row in recent for v in row if int(v) % 2 == 0)
     favor_odd = odd >= even
-    scores = {n: 1.0 if (n % 2 == 1) == favor_odd else 0.3 for n in range(1, max_num + 1)}
+    f = _freq(draws_2d, max_num)
+    fmax = float(f.max()) or 1.0
+    scores = {}
+    for n in range(1, max_num + 1):
+        base = 1.0 if (n % 2 == 1) == favor_odd else 0.3
+        scores[n] = base + 0.01 * (float(f[n - 1]) / fmax)
     return _normalize(scores, max_num)
 
 

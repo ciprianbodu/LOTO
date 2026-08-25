@@ -10,8 +10,9 @@
     "added_2026_08_25": {
       "649_last_neighbors": "Neighbors of last draw (math-649); max|Spearman|≈0.14 vs curated pe 6/49",
       "fourier": "FFT top-K reconstruction (spectral); max|r|≈0.17 — familie absentă din setul vechi",
-      "parity_balance": "Echilibru par/impar (geometric-parity); max|r|≈0.21 — familie absentă",
-      "autocorr": "Autocorelatie lag 1-5 (math-autocorr); max|r|≈0.22 — familie absentă"
+      "mi_lag_bag": "MI cu bag-ul extragerii anterioare (math-mi); max|r|≈0.36 vs curated; scoruri dense, fără bloc consecutiv/paritate-only",
+      "autocorr": "Autocorelatie lag 1-5 (math-autocorr); max|r|≈0.22 — familie absentă",
+      "parity_balance_removed": "SCOS din active: 2 nivele de scor → pool = cele mai MARI pare/impare (degenerare rank_by_score). Scorer-ul a primit tie-break pe frecvență, dar rămâne axă binară."
     },
     "n_scanned": 112,
     "n_passed_avg": 38,
@@ -39,7 +40,7 @@
     "ml_nearest_centroid",
     "649_last_neighbors",
     "fourier",
-    "parity_balance",
+    "mi_lag_bag",
     "autocorr"
   ]
 }

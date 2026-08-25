@@ -412,7 +412,13 @@ def score_sum_affinity(draws_2d, max_num):
 
 
 def score_parity_balance(draws_2d, max_num):
-    """Echilibru par/impar: scor pe baza raportului par/impar tipic + nevoia curenta."""
+    """Echilibru par/impar: clasa cerută + frecvență în clasă (tie-break).
+
+    Fără tie-break, scorul are doar 2 nivele → top-K degeneră în „cele mai
+    mari pare/impare" (rank_by_score: număr desc), nu un pool util. Același
+    pattern ca ``prime_bias``. Clasa rămâne axa principală; frecvența rupe
+    egalitățile din aceeași clasă.
+    """
     if draws_2d.shape[0] < 5:
         return {}
     # raport mediu de pare per extragere
@@ -424,10 +430,19 @@ def score_parity_balance(draws_2d, max_num):
     last = draws_2d[-1]
     last_even = sum(1 for v in last if int(v) % 2 == 0 and v > 0)
     need_even = target_even_ratio > (last_even / max(draw_n, 1))
+    freq = np.zeros(max_num + 1, dtype=np.float64)
+    for row in draws_2d:
+        for v in row:
+            vi = int(v)
+            if 1 <= vi <= max_num:
+                freq[vi] += 1.0
+    fmax = float(freq.max()) or 1.0
     scores = {}
     for k in range(1, max_num + 1):
         is_even = (k % 2 == 0)
-        scores[k] = 1.0 if (is_even == need_even) else 0.4
+        base = 1.0 if (is_even == need_even) else 0.4
+        # 0.01 << diferența de clasă (0.6) → clasa domină, frecvența rupe egalitățile.
+        scores[k] = base + 0.01 * (freq[k] / fmax)
     return _normalize(scores, max_num)
 
 

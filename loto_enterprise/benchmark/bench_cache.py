@@ -63,8 +63,10 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v11"
+CACHE_VERSION = "v12"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet):
+# v12: parity_balance + 649_parity_recent: tie-break pe frecvență (nu mai degenera
+#      la „cele mai MARI pare/impare" via rank_by_score pe 2 nivele).
 # v11: score_sum_affinity nu mai e gaussiană pe |k − medie/n| (Joker top-11 era
 #      MEREU 18–28 consecutiv). Scorul e masa de extrageri cu sumă tipică care
 #      conțin k — output-ul metodei se schimbă, cache-ul v10 e stale.
