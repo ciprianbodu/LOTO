@@ -2,49 +2,81 @@
   "_meta": {
     "created": "2026-07-30",
     "updated": "2026-08-25",
-    "criterion": "acoperire de semnal distinct (|Spearman|<0.95) + fără degenerare de pool (bloc consecutiv / paritate-only / 2 nivele). NU clasament. random+frequency obligatorii.",
-    "note": "gol/absent = toate metodele. NU e predicție — loteria e aleatoare. Metodele scoase rămân în METHODS (nu blacklist).",
-    "removed_2026_08_09": {
-      "omnius": "Meta-selector care isi ia candidatii direct din registry-ul METHODS, fara sa citeasca disabled_methods.json sau curated_methods.json."
-    },
-    "removed_from_active_2026_08_25": {
-      "autocorr": "nu trece poarta consistență ≥60% vs random (clasament UI); rămâne în METHODS",
-      "ml_nearest_centroid": "nu trece poarta; rămâne în METHODS",
-      "cover_positional_bands": "nu trece poarta; rămâne în METHODS (nu e blacklist)",
-      "ml_logistic": "nu trece poarta; rămâne în METHODS"
-    },
-    "added_2026_08_25": {
-      "649_last_neighbors": "Neighbors of last draw (math-649)",
-      "fourier": "FFT top-K reconstruction (spectral)",
-      "mi_lag_bag": "MI cu bag-ul extragerii anterioare (math-mi)",
-      "ml_passive_aggressive": "Passive-Aggressive sklearn (ml-linear); max|r|≈0.27 vs remaining curated",
-      "graph_temporal_drift": "Drift centralitate recent vs vechi (graph-walk); max|r|≈0.37",
-      "graph_spectral_embed": "Normă embedding spectral 3 vectori (graph-spectral); max|r|≈0.40",
-      "pca_resid_surprise": "Surpriză residuală după PCA dominant (math-pca); max|r|≈0.44"
-    },
-    "n_active": 20,
-    "threshold_spearman": 0.95
+    "criterion": "top 30 overall + top 10 per joc din ultimul bench COMPLET (107 metode, commit 12e4663 folds), Wilson 4+ @ k11, poarta ≥60% vs random întâi, apoi |Spearman|<0.95 (fără clone Katz). NU blacklist.",
+    "note": "gol/absent active = toate cele 111. random+frequency obligatorii în active (gate). per_game = lista de 10 pentru decizie/clasament pe acel joc.",
+    "source_folds": "git:12e4663 bench_results/folds.csv (107 metode; omnius sărit)",
+    "pool_ranked": 11,
+    "metric": "rate_4plus_k11 Wilson_lb pooled",
+    "n_active": 30
   },
   "active": [
-    "frequency",
     "random",
-    "sum_affinity",
-    "649_wilson_lb",
-    "649_katz25_gap75_b",
+    "frequency",
+    "649_katz85_second15",
     "649_decade_hot",
-    "nmf_cooc",
-    "649_mod7_hot",
-    "graph_community_strength",
-    "graph_neighbor_degree",
-    "649_mom_10_40",
+    "graph_assort_residual",
+    "graph_katz_low",
+    "649_triple_graph_classic",
+    "sum_affinity",
+    "649_gap_inverse",
     "649_katz75_prime25",
-    "ml_complement_nb",
+    "graph_community_strength",
+    "autocorr",
+    "dmd",
+    "649_hmean_freq_rec",
     "649_last_neighbors",
-    "fourier",
-    "mi_lag_bag",
+    "graph_eccentricity_inv",
+    "graph_closeness",
+    "cover_positional_bands",
+    "graph_degree_recent",
+    "graph_subgraph_centrality",
+    "ml_nearest_centroid",
+    "ml_decision_tree",
+    "649_rank_borda",
     "ml_passive_aggressive",
-    "graph_temporal_drift",
+    "graph_weighted_triangles",
+    "649_ewma_80",
+    "graph_second_order",
     "graph_spectral_embed",
-    "pca_resid_surprise"
-  ]
+    "649_katz25_gap75_b",
+    "ml_lda"
+  ],
+  "per_game": {
+    "loto_6_49": [
+      "649_katz85_second15",
+      "649_decade_hot",
+      "graph_assort_residual",
+      "graph_katz_low",
+      "649_triple_graph_classic",
+      "sum_affinity",
+      "649_gap_inverse",
+      "649_katz75_prime25",
+      "graph_community_strength",
+      "autocorr"
+    ],
+    "loto_5_40": [
+      "frequency",
+      "dmd",
+      "649_hmean_freq_rec",
+      "649_last_neighbors",
+      "graph_eccentricity_inv",
+      "graph_closeness",
+      "cover_positional_bands",
+      "graph_degree_recent",
+      "graph_katz_low",
+      "graph_subgraph_centrality"
+    ],
+    "joker_urna1": [
+      "ml_nearest_centroid",
+      "ml_decision_tree",
+      "649_rank_borda",
+      "graph_assort_residual",
+      "ml_passive_aggressive",
+      "graph_weighted_triangles",
+      "frequency",
+      "649_ewma_80",
+      "graph_second_order",
+      "graph_spectral_embed"
+    ]
+  }
 }

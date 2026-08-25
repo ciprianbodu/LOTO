@@ -55,26 +55,22 @@ def test_parity_balance_not_largest_ap2_on_joker():
     assert pool != _largest_ap2(45, 11, odd=False), pool
 
 
-def test_curated_plus4_has_mi_lag_bag_not_parity_balance():
-    from loto_enterprise.benchmark.curated import load_curated, REQUIRED_METHODS
+def test_curated_top30_and_per_game_top10():
+    from loto_enterprise.benchmark.curated import (
+        load_curated, load_per_game, REQUIRED_METHODS, apply_curation,
+    )
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    must = [
-        "frequency", "random", "sum_affinity", "649_wilson_lb",
-        "649_katz25_gap75_b", "649_decade_hot", "nmf_cooc", "649_mod7_hot",
-        "graph_community_strength", "graph_neighbor_degree", "649_mom_10_40",
-        "649_katz75_prime25", "ml_complement_nb", "649_last_neighbors",
-        "fourier", "mi_lag_bag",
-    ]
-    assert all(m in cur for m in must)
-    assert all(m in cur for m in REQUIRED_METHODS)
-    assert "parity_balance" not in cur
-    for gone in ("autocorr", "ml_nearest_centroid", "cover_positional_bands", "ml_logistic"):
-        assert gone not in cur
-    for added in ("ml_passive_aggressive", "graph_temporal_drift",
-                  "graph_spectral_embed", "pca_resid_surprise"):
-        assert added in cur
-        assert added in METHODS
-    assert len(cur) == 20
+    assert len(cur) == 30
     assert all(m in METHODS for m in cur)
+    assert all(m in cur for m in REQUIRED_METHODS)
+    pg = load_per_game()
+    for g in ("loto_6_49", "loto_5_40", "joker_urna1"):
+        assert g in pg
+        assert len(pg[g]) == 10
+        assert all(m in cur for m in pg[g])
+        assert "random" not in pg[g]
+    kept, info = apply_curation(list(METHODS))
+    assert len(kept) == 30
+    assert info["per_game"]["loto_6_49"] == 10

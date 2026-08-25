@@ -411,6 +411,17 @@ def decide_optimal_config_for_pool(
         if m not in EXCLUDED_FROM_PRODUCTION
         and (_alive is None or m in _alive)
     ]
+    try:
+        from loto_enterprise.benchmark.curated import load_per_game as _load_pg
+        _pg = [m for m in (_load_pg().get(game_key) or []) if m in methods]
+        if _pg:
+            methods = _pg
+            logger.info(
+                "[decision] %s k%d: candidați restrânși la per_game (%d metode)",
+                game_key, pool_size, len(methods),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[decision] per_game neaplicat: %s", exc)
 
     # Coloane candidate pt rata T+, în ordine de preferință; sare peste coloane
     # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.

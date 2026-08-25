@@ -93,6 +93,40 @@ def curated_meta() -> dict:
     return {}
 
 
+def load_per_game() -> dict[str, list[str]]:
+    """Top-N per joc din curated_methods.json ``per_game`` (dedup, ordine păstrată).
+
+    Chei așteptate: ``loto_6_49`` / ``loto_5_40`` / ``joker_urna1``.
+    Lipsă/invalid → {} (decizia folosește tot ``active``).
+    """
+    try:
+        if not _PATH.exists():
+            return {}
+        data = json.loads(_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[curated] citire per_game eșuată: %s", exc)
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    raw = data.get("per_game") or {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for game, names in raw.items():
+        if not isinstance(names, (list, tuple)):
+            continue
+        lst: list[str] = []
+        seen: set[str] = set()
+        for item in names:
+            name = str(item).strip()
+            if name and name not in seen:
+                seen.add(name)
+                lst.append(name)
+        if lst:
+            out[str(game)] = lst
+    return out
+
+
 def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
     """Filtrează `candidates` (available minus blacklist) prin lista curată.
 
@@ -116,6 +150,7 @@ def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
         "n_curated": len(curated),
         "missing": [],
         "missing_required": [],
+        "per_game": {g: len(v) for g, v in load_per_game().items()},
     }
     if not curated:
         return cand, info

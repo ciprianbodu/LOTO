@@ -2297,9 +2297,12 @@ def _render_bench_leaderboard_slice(
     try:
         from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
         from loto_enterprise.benchmark.disabled import load_disabled as _load_dis
+        from loto_enterprise.benchmark.curated import load_per_game as _load_pg
         _alive_methods = set(_METHODS_NOW) - _load_dis()
+        _pg_only = set(_load_pg().get(folds_game_key) or [])
     except Exception:  # noqa: BLE001
         _alive_methods = None
+        _pg_only = set()
     rows = []
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
     _lift_ok = False  # lift+consistență calculabile → tie-break identic cu decizia
@@ -2307,6 +2310,9 @@ def _render_bench_leaderboard_slice(
         # Folds vechi pot lista metode eliminate — nu le arăta în clasament
         # (decizia le sare deja; UI trebuie să rămână aliniat).
         if _alive_methods is not None and str(m) not in _alive_methods:
+            continue
+        # Clasament per joc = top 10 din curated per_game (plus baseline random).
+        if _pg_only and str(m) not in _pg_only and str(m) not in _BASE:
             continue
         score = float(grp[metric].mean())
         avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
@@ -3729,7 +3735,7 @@ def main_page() -> None:
         if _cur is not None:
             ui.html(render_html_safe(
                 t"🎯 <b>Curare activă: {_cur['n_after']} metode din {_cur['n_before']}</b> "
-                t"(criteriu: acoperire de semnal, nu clasament)."
+                t"(bench = top 30 overall; clasament/decizie = top 10 per joc)."
             )).classes("text-caption text-info")
             ui.label("Dezactivare (revine la toate metodele): șterge sau golește lista "
                      f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
