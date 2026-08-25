@@ -7,9 +7,9 @@ wheeling (set-cover) + walk-forward.
 Cifre reale (verificate 2026-08-25): **111 metode** în `METHODS` (73 blacklistate
 au fost **eliminate din cod** + tombstone `omnius` → **74** în `disabled_methods.json`
 — NU le reintroduce). Peste ele **curarea reversibilă** (`curated_methods.json`) lasă
-**37 efectiv rulate** de bench (`ALL_SPEC_METHODS`) — 36 de producție + `random`
-ca baseline; ``per_game`` = **13/12/12** (6/49, 5/40, Joker) pentru decizie + clasament
-(+7 matematice CPU din testare externă WF 30% @ pool 11, 2026-08-25).
+**43 efectiv rulate** de bench (`ALL_SPEC_METHODS`) — 42 de producție + `random`
+ca baseline; ``per_game`` = **15/12/15** (6/49, 5/40, Joker) pentru decizie + clasament
+(+14 matematice CPU din testare externă WF, două runde, minus 2 clone Spearman la auditul global 2026-08-25).
 Nu cita din memorie „184"/„~130"/„108"/„102"/„107"/„180" — renumără (vezi „Curare de metode").
 **Loteria e aleatoare** — e instrument de optimizare a acoperirii, nu predicție.
 Diferențele dintre metode sunt în mare parte ZGOMOT (câștigătorul e instabil) — vezi memoria.
@@ -40,10 +40,10 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `loto_enterprise/benchmark/` | benchmark: `runner.py`, `decision.py`, `methods*.py`, `bench_cache.py` |
 | `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = `available` minus blacklist, apoi **∩ curated** (vezi „Curare de metode") |
 | `_ISTORIC/` | datele CSV cu extragerile (VERSIONATE în git) |
-| `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v14`), separat de cel din `bench_cache.py`; `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
+| `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v17`), separat de cel din `bench_cache.py` (`v12`); `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
 | `best_methods.json` | decizia bench per joc/pool: winner + `ensemble` + `ensemble_dropped_redundant` (membri săriți ca redundanți: `{method, vs, r, reason:"perf_signature"}`) + `low_confidence` + sim_depth (gitignore). `ensemble_dropped_redundant` și `low_confidence` sunt chei NOI, scrise doar de decizia curentă — un fișier generat înainte nu le are; rescrie-l cu `update_best_methods_with_auto_pilot()`. `method_selector.recommend_optimal_config` le propagă pe listă albă (UI/Auto-Pilot); `ensemble_dropped_redundant` rămâne telemetrie de debug |
 | `disabled_methods.json` | tombstone metode eliminate din cod (74 incl. `omnius`); merge-only, **IREVERSIBIL** |
-| `curated_methods.json` | **curare REVERSIBILĂ**: `active` = 37 (bench); `per_game` = 13/12/12 (6/49, 5/40, Joker) pentru decizie+clasament. Șterge/golește `active` → revine la tot. Citit de `loto_enterprise/benchmark/curated.py` |
+| `curated_methods.json` | **curare REVERSIBILĂ**: `active` = 43 (bench); `per_game` = 15/12/15 (6/49, 5/40, Joker) pentru decizie+clasament. Șterge/golește `active` → revine la tot. Citit de `loto_enterprise/benchmark/curated.py` |
 | `bench_results/folds.csv` | output brut walk-forward al bench-ului (OVERWRITE la fiecare Re-Bench) |
 | `raport_complet.txt` | raport generat (gitignore) |
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
@@ -56,8 +56,8 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
   **`methods_search_649`** (29, `SEARCH_649_NEW`), **`methods_top649`** (20, `TOP649_METHODS`),
   **`methods_math_extra`** (5, `MATH_EXTRA_METHODS`).
   (`methods_omnius` a fost ELIMINAT — vezi nota OMNIUS de mai jos.)
-  Curare (`curated_methods.json`) → **37** rulate la bench; **13/12/12 per joc** în `per_game`
-  (după +7 matematice CPU, testare externă WF 2026-08-25).
+  Curare (`curated_methods.json`) → **43** rulate la bench; **15/12/15 per joc** în `per_game`
+  (după +14 matematice CPU în două runde WF, minus 2 clone Spearman la auditul global 2026-08-25).
   Renumără cu: `python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"`
   și `python -c "import bench_all_methods as b; print(len(b.ALL_SPEC_METHODS), b.CURATION_INFO)"`.
 - Scorer = `fn(draws_2d, max_num) -> {nr: scor_normalizat}`. Registry: `"nume": (fn, "family", trained, "desc")`.

@@ -62,10 +62,10 @@ def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 44
+    assert len(cur) == 43
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
-    # +7 runda 1 +7 runda 2, matematice CPU din WF extern 30% @ pool 11
+    # +7 runda 1 +7 runda 2, matematici CPU din WF extern 30% @ pool 11
     added = {
         "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
         "nmf_cooc", "fourier", "649_hazard_overdue", "pair_affinity",
@@ -75,7 +75,7 @@ def test_curated_active_and_per_game():
     }
     assert added <= set(cur)
     pg = load_per_game()
-    expect_n = {"loto_6_49": 16, "loto_5_40": 13, "joker_urna1": 15}
+    expect_n = {"loto_6_49": 15, "loto_5_40": 12, "joker_urna1": 15}
     expect_extra = {
         "loto_6_49": [
             "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
@@ -94,6 +94,7 @@ def test_curated_active_and_per_game():
         "649_mod7_hot", "649_cold_rebound", "seasonal_naive",
         "649_low_high_bal", "649_streak_boost", "649_ewma_20",
         "649_gap_sqrt", "649_consec_penalty",
+        "cover_positional_bands",  # clonă frequency pe 5/40, audit global
     }
     for g, n in expect_n.items():
         assert g in pg
@@ -106,6 +107,10 @@ def test_curated_active_and_per_game():
     # mi_lag_bag a picat pe 5/40 runda 1; e doar pe Joker runda 2
     assert "mi_lag_bag" not in pg["loto_5_40"]
     assert "mi_lag_bag" in pg["joker_urna1"]
+    # clone Spearman scoase la auditul global
+    assert "graph_katz_low" not in pg["loto_6_49"]
+    assert "graph_katz_low" in pg["loto_5_40"]
+    assert "cover_positional_bands" not in cur
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 44
-    assert info["per_game"]["loto_6_49"] == 16
+    assert len(kept) == 43
+    assert info["per_game"]["loto_6_49"] == 15

@@ -7,7 +7,7 @@
     "source_folds": "git:12e4663 bench_results/folds.csv (107 metode; omnius sărit)",
     "pool_ranked": 11,
     "metric": "rate_4plus_k11 Wilson_lb pooled; plus 2026-08-25: WF extern 3+/4+ vs hipergeometric",
-    "n_active": 44,
+    "n_active": 43,
     "external_math_2026_08_25": {
       "script": "analiza_math_external.py",
       "window": "ultimele 30% (ca UI WF), pool 11, block 8, rank_by_score",
@@ -113,6 +113,37 @@
         "649_consec_penalty": "3+ 6.42% < random 8.53%; 4+ sub random"
       },
       "note": "NU e predicție. mi_lag_bag a picat pe 5/40 runda 1, a trecut pe Joker runda 2. Re-Bench necesar."
+    },
+    "audit_global_2026_08_25": {
+      "removed_from_per_game": {
+        "loto_6_49": [
+          {
+            "method": "graph_katz_low",
+            "reason": "|Spearman|=0.979 vs 649_katz85_second15 (>=0.95)"
+          }
+        ],
+        "loto_5_40": [
+          {
+            "method": "cover_positional_bands",
+            "reason": "|Spearman|=0.960 vs frequency (>=0.95); scos și din active"
+          }
+        ]
+      },
+      "kept_by_design": {
+        "649_decade_hot": "pool pe decada fierbinte → consec_run lung e axa metodei, nu 1…N",
+        "649_last_neighbors": "nuniq mic: vecinii ultimei extrageri, puține nivele de scor"
+      },
+      "bats": "cherry-pick fix ACTUALIZARI/START_8000 parse trap (PR 76)",
+      "counts": {
+        "METHODS": 111,
+        "disabled": 74,
+        "active": 43,
+        "per_game": {
+          "loto_6_49": 15,
+          "loto_5_40": 12,
+          "joker_urna1": 15
+        }
+      }
     }
   },
   "active": [
@@ -133,7 +164,6 @@
     "649_last_neighbors",
     "graph_eccentricity_inv",
     "graph_closeness",
-    "cover_positional_bands",
     "graph_degree_recent",
     "graph_subgraph_centrality",
     "ml_nearest_centroid",
@@ -166,7 +196,6 @@
       "649_katz85_second15",
       "649_decade_hot",
       "graph_assort_residual",
-      "graph_katz_low",
       "649_triple_graph_classic",
       "sum_affinity",
       "649_gap_inverse",
@@ -187,7 +216,6 @@
       "649_last_neighbors",
       "graph_eccentricity_inv",
       "graph_closeness",
-      "cover_positional_bands",
       "graph_degree_recent",
       "graph_katz_low",
       "graph_subgraph_centrality",
