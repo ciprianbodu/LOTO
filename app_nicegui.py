@@ -1662,7 +1662,8 @@ def _build_report() -> str:
         if d.get("hard_core_joker"):
             out.append(f"{indent}Joker: " + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"])))
         if d.get("p10") is not None:
-            out.append(f"{indent}Interval p10–p90: {_fmt_num(d.get('p10'))} – {_fmt_num(d.get('p90'))} "
+            out.append(f"{indent}Interval p10–p90 (frecvențe pe tot universul, nu pe pool): "
+                       f"{_fmt_num(d.get('p10'))} – {_fmt_num(d.get('p90'))} "
                        f"(g_range={_fmt_g_range(d.get('g_range'))})")
         au = d.get("audit") or {}
         if au:
@@ -1926,10 +1927,22 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
     if data.get("hard_core_joker"):
         ui.label("Joker:").classes("text-bold mt-1")
         _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
+        # Auto-invert NU inversează Urna 2 (univers 1–20, scoring fără blacklist).
+        # Fără text, Pool 2 arată aceeași bilă Joker ca Pool 1 și pare un bug.
+        if (skey_suffix == "_p2"
+                and (data.get("audit") or {}).get("joker_urna2_inverted") is False):
+            ui.label(
+                "Urna 2 (bila Joker) NU e inversată — e același număr ca la Pool 1 "
+                "(univers 1–20; scoring-ul ignoră excluderea Pool 1). Urna 1 de mai sus "
+                "e cea inversată."
+            ).classes("text-caption text-warning")
 
     if data.get("p10") is not None:
-        ui.label(f"Interval p10–p90: {_fmt_num(data.get('p10'))} – {_fmt_num(data.get('p90'))} "
-                 f"(g_range={_fmt_g_range(data.get('g_range'))})").classes("text-caption")
+        ui.label(
+            f"Interval p10–p90 (frecvențe pe tot universul, nu pe pool): "
+            f"{_fmt_num(data.get('p10'))} – {_fmt_num(data.get('p90'))} "
+            f"(g_range={_fmt_g_range(data.get('g_range'))})"
+        ).classes("text-caption")
 
     audit = data.get("audit") or {}
     if audit:
