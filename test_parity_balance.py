@@ -60,19 +60,21 @@ def test_curated_plus4_has_mi_lag_bag_not_parity_balance():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    orig16 = [
-        "frequency", "random", "ml_logistic", "cover_positional_bands",
-        "sum_affinity", "649_wilson_lb", "649_katz25_gap75_b", "649_decade_hot",
-        "nmf_cooc", "649_mod7_hot", "graph_community_strength",
-        "graph_neighbor_degree", "649_mom_10_40", "649_katz75_prime25",
-        "ml_complement_nb", "ml_nearest_centroid",
+    must = [
+        "frequency", "random", "sum_affinity", "649_wilson_lb",
+        "649_katz25_gap75_b", "649_decade_hot", "nmf_cooc", "649_mod7_hot",
+        "graph_community_strength", "graph_neighbor_degree", "649_mom_10_40",
+        "649_katz75_prime25", "ml_complement_nb", "649_last_neighbors",
+        "fourier", "mi_lag_bag",
     ]
-    assert all(m in cur for m in orig16)
+    assert all(m in cur for m in must)
     assert all(m in cur for m in REQUIRED_METHODS)
     assert "parity_balance" not in cur
-    assert "mi_lag_bag" in cur
-    assert "649_last_neighbors" in cur
-    assert "fourier" in cur
-    assert "autocorr" in cur
+    for gone in ("autocorr", "ml_nearest_centroid", "cover_positional_bands", "ml_logistic"):
+        assert gone not in cur
+    for added in ("ml_passive_aggressive", "graph_temporal_drift",
+                  "graph_spectral_embed", "pca_resid_surprise"):
+        assert added in cur
+        assert added in METHODS
     assert len(cur) == 20
     assert all(m in METHODS for m in cur)

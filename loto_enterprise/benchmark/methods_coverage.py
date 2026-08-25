@@ -7,7 +7,8 @@ Onestitate: pe loterie aleatoare nu prezic — concurează în benchmark; dacă 
 bat random la 4+, decizia nu le alege.
 
 Metodele cover_* blacklistate (greedy, rarity, winslips, etc.) au fost
-ELIMINATE din cod — rămâne doar `cover_positional_bands` (curată / activă).
+ELIMINATE din cod — rămâne `cover_positional_bands` în METHODS (poate fi
+scoasă din curated fără a fi blacklistată).
 """
 from __future__ import annotations
 

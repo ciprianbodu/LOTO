@@ -2,30 +2,32 @@
   "_meta": {
     "created": "2026-07-30",
     "updated": "2026-08-25",
-    "criterion": "setul original 16 (6/49 medie/extragere + |Spearman|<0.94); +4 pe axa SCORURI: max |Spearman| vs curate pe ultimele 500 extrageri 6/49, familii distincte, prag <0.95",
-    "note": "gol/absent = toate metodele. random+frequency obligatorii (decision gate). NU e predicție — loteria e aleatoare; cele +4 adaugă semnal NECORELAT pentru ensemble, nu hit-uri.",
+    "criterion": "acoperire de semnal distinct (|Spearman|<0.95) + fără degenerare de pool (bloc consecutiv / paritate-only / 2 nivele). NU clasament. random+frequency obligatorii.",
+    "note": "gol/absent = toate metodele. NU e predicție — loteria e aleatoare. Metodele scoase rămân în METHODS (nu blacklist).",
     "removed_2026_08_09": {
-      "omnius": "Meta-selector care isi ia candidatii direct din registry-ul METHODS, fara sa citeasca disabled_methods.json sau curated_methods.json: pondera intern 149 de metode, din care 50 BLACKLISTATE (incalca regula de aur 6, reintroducea in pool metode legendate ca slabe) si doar 12 din setul curat. Performanta nu il justifica: locul 6/17 la joker k12, Wilson_lb 0.1052 = identic cu ml_logistic, dar 13.44 s/fereastra vs 0.15 (89% din timpul de bench pe joker, 26 din 29 s de generare)."
+      "omnius": "Meta-selector care isi ia candidatii direct din registry-ul METHODS, fara sa citeasca disabled_methods.json sau curated_methods.json."
+    },
+    "removed_from_active_2026_08_25": {
+      "autocorr": "nu trece poarta consistență ≥60% vs random (clasament UI); rămâne în METHODS",
+      "ml_nearest_centroid": "nu trece poarta; rămâne în METHODS",
+      "cover_positional_bands": "nu trece poarta; rămâne în METHODS (nu e blacklist)",
+      "ml_logistic": "nu trece poarta; rămâne în METHODS"
     },
     "added_2026_08_25": {
-      "649_last_neighbors": "Neighbors of last draw (math-649); max|Spearman|≈0.14 vs curated pe 6/49",
-      "fourier": "FFT top-K reconstruction (spectral); max|r|≈0.17 — familie absentă din setul vechi",
-      "mi_lag_bag": "MI cu bag-ul extragerii anterioare (math-mi); max|r|≈0.36 vs curated; scoruri dense, fără bloc consecutiv/paritate-only",
-      "autocorr": "Autocorelatie lag 1-5 (math-autocorr); max|r|≈0.22 — familie absentă",
-      "parity_balance_removed": "SCOS din active: 2 nivele de scor → pool = cele mai MARI pare/impare (degenerare rank_by_score). Scorer-ul a primit tie-break pe frecvență, dar rămâne axă binară."
+      "649_last_neighbors": "Neighbors of last draw (math-649)",
+      "fourier": "FFT top-K reconstruction (spectral)",
+      "mi_lag_bag": "MI cu bag-ul extragerii anterioare (math-mi)",
+      "ml_passive_aggressive": "Passive-Aggressive sklearn (ml-linear); max|r|≈0.27 vs remaining curated",
+      "graph_temporal_drift": "Drift centralitate recent vs vechi (graph-walk); max|r|≈0.37",
+      "graph_spectral_embed": "Normă embedding spectral 3 vectori (graph-spectral); max|r|≈0.40",
+      "pca_resid_surprise": "Surpriză residuală după PCA dominant (math-pca); max|r|≈0.44"
     },
-    "n_scanned": 112,
-    "n_passed_avg": 38,
     "n_active": 20,
-    "threshold_avg_hits": 0.75,
-    "threshold_spearman": 0.94,
-    "plus4_max_spearman_649": 0.22
+    "threshold_spearman": 0.95
   },
   "active": [
     "frequency",
     "random",
-    "ml_logistic",
-    "cover_positional_bands",
     "sum_affinity",
     "649_wilson_lb",
     "649_katz25_gap75_b",
@@ -37,10 +39,12 @@
     "649_mom_10_40",
     "649_katz75_prime25",
     "ml_complement_nb",
-    "ml_nearest_centroid",
     "649_last_neighbors",
     "fourier",
     "mi_lag_bag",
-    "autocorr"
+    "ml_passive_aggressive",
+    "graph_temporal_drift",
+    "graph_spectral_embed",
+    "pca_resid_surprise"
   ]
 }
