@@ -1,17 +1,24 @@
 {
   "_meta": {
     "created": "2026-07-30",
-    "updated": "2026-08-09",
-    "criterion": "6/49 medie/extragere >= 0.75 din ~112 metode CPU; apoi |Spearman| < 0.94",
-    "note": "gol/absent = toate metodele. random+frequency obligatorii (decision gate).",
+    "updated": "2026-08-25",
+    "criterion": "setul original 16 (6/49 medie/extragere + |Spearman|<0.94); +4 pe axa SCORURI: max |Spearman| vs curate pe ultimele 500 extrageri 6/49, familii distincte, prag <0.95",
+    "note": "gol/absent = toate metodele. random+frequency obligatorii (decision gate). NU e predicție — loteria e aleatoare; cele +4 adaugă semnal NECORELAT pentru ensemble, nu hit-uri.",
     "removed_2026_08_09": {
       "omnius": "Meta-selector care isi ia candidatii direct din registry-ul METHODS, fara sa citeasca disabled_methods.json sau curated_methods.json: pondera intern 149 de metode, din care 50 BLACKLISTATE (incalca regula de aur 6, reintroducea in pool metode legendate ca slabe) si doar 12 din setul curat. Performanta nu il justifica: locul 6/17 la joker k12, Wilson_lb 0.1052 = identic cu ml_logistic, dar 13.44 s/fereastra vs 0.15 (89% din timpul de bench pe joker, 26 din 29 s de generare)."
     },
+    "added_2026_08_25": {
+      "649_last_neighbors": "Neighbors of last draw (math-649); max|Spearman|≈0.14 vs curated pe 6/49",
+      "fourier": "FFT top-K reconstruction (spectral); max|r|≈0.17 — familie absentă din setul vechi",
+      "parity_balance": "Echilibru par/impar (geometric-parity); max|r|≈0.21 — familie absentă",
+      "autocorr": "Autocorelatie lag 1-5 (math-autocorr); max|r|≈0.22 — familie absentă"
+    },
     "n_scanned": 112,
     "n_passed_avg": 38,
-    "n_active": 16,
+    "n_active": 20,
     "threshold_avg_hits": 0.75,
-    "threshold_spearman": 0.94
+    "threshold_spearman": 0.94,
+    "plus4_max_spearman_649": 0.22
   },
   "active": [
     "frequency",
@@ -29,6 +36,10 @@
     "649_mom_10_40",
     "649_katz75_prime25",
     "ml_complement_nb",
-    "ml_nearest_centroid"
+    "ml_nearest_centroid",
+    "649_last_neighbors",
+    "fourier",
+    "parity_balance",
+    "autocorr"
   ]
 }
