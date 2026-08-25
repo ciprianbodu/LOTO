@@ -9,6 +9,13 @@ REM De ce exista: :push_istoric din START_8000 mergea in startup_8000.log
 REM (invizibil), inghitea erorile de commit (>nul) si facea `git push origin HEAD`
 REM — daca nu erai pe main, commit-ul NU ajungea pe origin/main, iar urmatorul
 REM `reset --hard origin/main` il stergea. _ISTORIC E VERSIONAT (nu e gitignore).
+REM
+REM CMD.EXE: CRLF obligatoriu (.gitattributes). LF rupe `for /f` ('f' is not
+REM recognized) si `echo.` ('ho.' is not recognized).
+REM In echo/REM din blocuri if (...): FARA paranteze rotunde. `^(text^)` NU
+REM protejeaza — caret-ul e consumat la parse-ul blocului, apoi (text) inchide
+REM if-ul. Urmare masurata: se executau TOATE ramurile, plus git stash / reset
+REM --hard neconditionat, plus fall-through in :push_istoric.
 REM ============================================================
 cd /d "%~dp0"
 git config windows.appendAtomically false >nul 2>&1
@@ -21,7 +28,7 @@ exit /b 2
 
 :autoupdate
 setlocal EnableExtensions EnableDelayedExpansion
-echo [GIT] Verific actualizari de pe GitHub ^(main^)...
+echo [GIT] Verific actualizari de pe GitHub - ramura main...
 git fetch origin main --quiet 2>nul
 if errorlevel 1 (
     echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
@@ -43,26 +50,30 @@ if not errorlevel 1 (
     xcopy /E /I /Y /Q "_ISTORIC" "!_IST_BAK!" >nul
 )
 
+REM goto in loc de if/else imbricat: un `)` din echo inchidea blocul prea devreme
+REM si rula reset --hard chiar cand fast-forward reusise.
 git merge --ff-only origin/main >nul 2>&1
+if errorlevel 1 goto :au_need_reset
+echo [GIT] Cod la zi cu GitHub - ramura main.
+goto :au_merge_done
+
+:au_need_reset
+echo [GIT] Fast-forward imposibil. Stare:
+git status -sb
+echo [GIT] Sincronizez FORTAT cu origin/main - backup in stash...
+git stash push -m "auto-backup START_8000" >nul 2>&1
+git reset --hard origin/main >nul 2>&1
 if errorlevel 1 (
-    echo [GIT] Fast-forward imposibil. Stare:
-    git status -sb
-    echo [GIT] Sincronizez FORTAT cu origin/main ^(backup in stash^)...
-    git stash push -m "auto-backup START_8000" >nul 2>&1
-    git reset --hard origin/main >nul 2>&1
-    if errorlevel 1 (
-        echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
-    ) else (
-        echo [GIT] Sincronizat la zi cu GitHub ^(main^). Backup: git stash list.
-    )
+    echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
 ) else (
-    echo [GIT] Cod la zi cu GitHub ^(main^).
+    echo [GIT] Sincronizat la zi cu GitHub. Backup: git stash list.
 )
 
+:au_merge_done
 if defined _IST_BAK (
     xcopy /E /I /Y /Q "!_IST_BAK!" "_ISTORIC" >nul
     rmdir /s /q "!_IST_BAK!" >nul 2>&1
-    echo [GIT] Restaurat _ISTORIC local (va fi commis de push_istoric daca e nou^).
+    echo [GIT] Restaurat _ISTORIC local - va fi commis de push_istoric daca e nou.
 )
 endlocal & exit /b 0
 
@@ -71,7 +82,7 @@ endlocal & exit /b 0
 REM Commit + push _ISTORIC STRICT pe origin/main (acolo trage START_8000).
 call :ensure_main
 if errorlevel 1 (
-    echo [GIT] Nu sunt pe main - NU comit _ISTORIC ^(altfel il sterge reset-ul la pornire^).
+    echo [GIT] Nu sunt pe main - NU comit _ISTORIC - altfel il sterge reset-ul la pornire.
     exit /b 1
 )
 
@@ -107,7 +118,7 @@ if errorlevel 1 (
     git push origin main
 )
 if errorlevel 1 (
-    echo [GIT] Push origin/main ESUAT ^(offline / auth / OneDrive?^).
+    echo [GIT] Push origin/main ESUAT - offline / auth / OneDrive?
     echo [GIT] Commit-ul e LOCAL pe main. Reincearca: git push origin main
     git status -sb
     exit /b 1
