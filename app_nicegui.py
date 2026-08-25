@@ -2044,7 +2044,7 @@ def _method_library(name: str, family: str = "") -> str:
         return ("gradient boosting (XGBoost/LightGBM/CatBoost)"
                 if any(b in n for b in ("xgb", "lgbm", "catboost", "boost", "gbm"))
                 else "scikit-learn")
-    if n in {"arima_auto", "ets_auto", "theta_auto", "holt_winters", "stl", "croston_classic"}:
+    if n in {"croston_classic", "croston_sba"}:
         return "statsmodels"
     return "independent (numpy)"
 
@@ -2276,10 +2276,20 @@ def _render_bench_leaderboard_slice(
             _lift_fn = _beat_fn = None
 
     _BASE = _baseline_methods()
+    try:
+        from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
+        from loto_enterprise.benchmark.disabled import load_disabled as _load_dis
+        _alive_methods = set(_METHODS_NOW) - _load_dis()
+    except Exception:  # noqa: BLE001
+        _alive_methods = None
     rows = []
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
     _lift_ok = False  # lift+consistență calculabile → tie-break identic cu decizia
     for m, grp in sub.groupby("method"):
+        # Folds vechi pot lista metode eliminate — nu le arăta în clasament
+        # (decizia le sare deja; UI trebuie să rămână aliniat).
+        if _alive_methods is not None and str(m) not in _alive_methods:
+            continue
         score = float(grp[metric].mean())
         avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
         fam = ""
@@ -2397,6 +2407,11 @@ def _render_bench_leaderboard_slice(
         chosen_name = get_winner_name(folds_game_key, pool)
     except Exception:  # noqa: BLE001
         chosen_name = winner[0]
+    # Dacă există generare recentă, 🏆 = membrul ACTIV din audit (nu scorer
+    # stale din best_methods.json eliminat din METHODS).
+    _gen_early = _last_generation_bench_info(folds_game_key, pool)
+    if isinstance(_gen_early, dict) and _gen_early.get("method"):
+        chosen_name = str(_gen_early["method"])
 
     def _row(i, rec):
         """`i=None` → rând de BASELINE (referință, fără rang și fără pretenția de candidat)."""
@@ -2440,7 +2455,7 @@ def _render_bench_leaderboard_slice(
         # și îl etichetăm ca atare — nu mai pretindem că 3 membri = pool-ul.
         _ens_names: list[tuple[str, float]] = []
         _ens_source = ""
-        _gen_info = _last_generation_bench_info(folds_game_key, pool)
+        _gen_info = _gen_early if isinstance(_gen_early, dict) else {}
         _gen_ens = _gen_info.get("ensemble") if isinstance(_gen_info, dict) else None
         _gen_dropped = (_gen_info.get("ensemble_dropped") if isinstance(_gen_info, dict) else None) or []
         if _gen_ens:

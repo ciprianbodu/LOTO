@@ -93,21 +93,74 @@ def _production_forbidden() -> frozenset[str]:
 
 
 def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
-    """None dacă numele e interzis pentru producție; altfel numele curat."""
+    """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
+
+    Respinge: random, tombstone (disabled), alias-uri moarte (ml_xgb_cpu),
+    orice nume care nu e în registry. Altfel UI/audit pretindea XGBoost când
+    rulează frequency.
+    """
     if not name:
         return None
     try:
-        from loto_enterprise.benchmark.methods import resolve_method_name
+        from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
         name = resolve_method_name(str(name))
     except Exception:  # noqa: BLE001
         name = str(name)
+        METHODS = {}
     if name in _production_forbidden():
         logger.warning(
             "[method_selector] %s %r interzis în producție (random/blacklist) — skip",
             context, name,
         )
         return None
+    if name not in METHODS:
+        logger.warning(
+            "[method_selector] %s %r necunoscut (eliminat din METHODS) — skip",
+            context, name,
+        )
+        return None
     return name
+
+
+def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
+    """Aliniază scorer + ensemble dintr-o intrare auto_pilot (sursă unică).
+
+    Returnează ``(scorer, clean_ensemble, scor_salvaged)``.
+    Dacă scorer-ul din JSON e mort dar ensemble-ul are membri vii → scorer =
+    primul membru (ca ``get_winner_name`` și engine-ul să spună același lucru).
+    ``scor_salvaged`` e True când numele scorer-ului s-a schimbat față de JSON
+    (UI poate marca fallback).
+    """
+    if not isinstance(entry, dict):
+        return None, [], True
+    raw_scorer = entry.get("scorer")
+    scorer = _sanitize_production_name(raw_scorer, context="ap scorer")
+    salvaged = bool(raw_scorer) and scorer is None
+
+    clean_ens: list[dict] = []
+    for item in entry.get("ensemble") or []:
+        if not isinstance(item, dict):
+            continue
+        nm = _sanitize_production_name(item.get("method"), context="ap ensemble")
+        if not nm:
+            continue
+        try:
+            wt = float(item.get("weight", 0) or 0)
+        except (TypeError, ValueError):
+            wt = 0.0
+        if wt <= 0:
+            continue
+        clean_ens.append({"method": nm, "weight": wt})
+    if clean_ens:
+        tw = sum(e["weight"] for e in clean_ens) or 1.0
+        clean_ens = [{"method": e["method"], "weight": e["weight"] / tw} for e in clean_ens]
+
+    if scorer is None and clean_ens:
+        scorer = clean_ens[0]["method"]
+        salvaged = True
+    if scorer is not None and not clean_ens:
+        clean_ens = [{"method": scorer, "weight": 1.0}]
+    return scorer, clean_ens, salvaged
 
 
 def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
@@ -164,8 +217,10 @@ def get_winner_name(
 
     if pool_size is not None:
         ap = _auto_pilot_entry(g, pool_size)
-        if ap.get("scorer"):
-            n = _ok(ap["scorer"])
+        # Scorer + ensemble din aceeași sanitizare — altfel un scorer mort +
+        # ensemble viu făcea get_winner_name→frequency dar engine→membru.
+        if ap:
+            n, _ens, _salv = _sanitize_ap_production(ap)
             if n:
                 return n
         key = f"k{pool_size}"
@@ -277,6 +332,7 @@ def get_ensemble_for_game(
     comportamentul dinaintea ensemble-ului.
     """
     def _single_fallback() -> list[tuple[str, Callable, float]]:
+        # Numele și callable-ul trebuie să coincidă (ambele după sanitizare).
         name = get_winner_name(game_key, pool_size, config_path)
         fn = get_scorer_for_game(game_key, pool_size, config_path)
         return [(name, fn, 1.0)]
@@ -882,26 +938,29 @@ def recommend_optimal_config(
                 entry = cand
 
     if entry and "scorer" in entry:
+        scorer, clean_ens, salvaged = _sanitize_ap_production(entry)
+        if not scorer:
+            scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
+            clean_ens = [{"method": scorer, "weight": 1.0}]
+            salvaged = True
+        rationale = entry.get("rationale", "") or ""
+        if salvaged:
+            rationale = (
+                (rationale + " | " if rationale else "")
+                + "scorer/ensemble sanitizat (nume eliminat din METHODS)"
+            ).strip(" |")
         return {
-            "scorer": entry["scorer"],
+            "scorer": scorer,
             "sim_depth_pct": int(entry.get("sim_depth_pct", 40)),
             "use_blacklist": bool(entry.get("use_blacklist", False)),
             "avg_hits": float(entry.get("avg_hits", 0.0)),
-            "rationale": entry.get("rationale", ""),
-            # membrii ensemble (nominali, din decizie) + semnalizarea fallback-ului
-            # de metrică (3+→4+) — altfel panoul de status din UI nu le poate afișa
-            "ensemble": entry.get("ensemble") or [],
+            "rationale": rationale,
+            "ensemble": clean_ens,
             "rate_col_used": entry.get("rate_col_used"),
             "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
-            # low_confidence = nicio metodă n-a bătut random consistent (decizia
-            # a căzut pe ramura de fallback din decision.py) → UI-ul NU are voie
-            # să afirme că metoda a trecut filtrul de consistență.
-            "low_confidence": bool(entry.get("low_confidence", False)),
-            # membrii săriți de decizie ca redundanți pe semnătura de performanță
-            # ({method, vs, r, reason:"perf_signature"}) — ca UI-ul să explice
-            # de ce un top-3 nominal are mai puțini membri
+            "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
             "ensemble_dropped_redundant": entry.get("ensemble_dropped_redundant") or [],
-            "fallback": False,
+            "fallback": salvaged,
         }
 
     scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
@@ -912,6 +971,7 @@ def recommend_optimal_config(
         "use_blacklist": use_bl,
         "avg_hits": 0.0,
         "rationale": "fallback: no auto_pilot_per_pool entry - using per-pool winner",
+        "ensemble": [{"method": scorer, "weight": 1.0}],
         # nu există intrare de decizie pentru (joc, pool) → alegerea nu e
         # susținută de nicio măsurătoare: un fallback E prin definiție low confidence
         "low_confidence": True,

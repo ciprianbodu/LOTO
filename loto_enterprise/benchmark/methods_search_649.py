@@ -96,6 +96,9 @@ def make_blend_scorer(parts: list[tuple[float, Callable]]) -> Callable:
 
 def register_blend(name: str, parts: list[tuple[float, Callable]], notes: str = "") -> None:
     from .methods import METHODS
+    from .disabled import load_disabled
+    if name in load_disabled():
+        return  # tombstone — nu reînregistra
     METHODS[name] = (make_blend_scorer(parts), "search-649-blend", False, notes or name)
 
 
@@ -509,13 +512,18 @@ def load_search_registry(include_existing: bool = True, max_blends: int = 420) -
     from .disabled import load_disabled
     disabled = load_disabled()
     for nm, tup in SEARCH_649_NEW.items():
+        if nm in disabled:
+            continue
         if nm not in METHODS:
             METHODS[nm] = tup
     blends = generate_blend_candidates(max_blends=max_blends)
     for nm, tup in blends.items():
+        if nm in disabled:
+            continue
         if nm not in METHODS:
             METHODS[nm] = tup
-    names: list[str] = list(SEARCH_649_NEW.keys()) + list(blends.keys())
+    names: list[str] = [n for n in list(SEARCH_649_NEW.keys()) + list(blends.keys())
+                        if n not in disabled]
     if include_existing:
         for nm in list_methods():
             if nm in disabled:
@@ -531,8 +539,12 @@ def load_search_registry(include_existing: bool = True, max_blends: int = 420) -
 def merge_search_into_methods() -> int:
     """Înregistrează SEARCH_649_NEW în METHODS (fără blend-uri efemere)."""
     from .methods import METHODS
+    from .disabled import load_disabled
+    disabled = load_disabled()
     added = 0
     for nm, tup in SEARCH_649_NEW.items():
+        if nm in disabled:
+            continue
         if nm not in METHODS:
             METHODS[nm] = tup
             added += 1

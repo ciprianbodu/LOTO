@@ -5,8 +5,8 @@ App de optimizare pool-uri loto (6/49, 5/40, Joker) cu benchmark de metode de
 scoring **exclusiv CPU** (statistice/ML sklearn/geometrice/**graf-network**/coverage) +
 wheeling (set-cover) + walk-forward.
 Cifre reale (verificate 2026-08-25): **111 metode** în `METHODS` (73 blacklistate
-au fost **eliminate din cod**, tombstone în `disabled_methods.json` — NU le
-reintroduce). Peste ele **curarea reversibilă** (`curated_methods.json`) lasă
+au fost **eliminate din cod** + tombstone `omnius` → **74** în `disabled_methods.json`
+— NU le reintroduce). Peste ele **curarea reversibilă** (`curated_methods.json`) lasă
 **16 efectiv rulate** de bench (`ALL_SPEC_METHODS`) — 15 de producție + `random`
 ca baseline.
 Nu cita din memorie „184"/„~130"/„108"/„102"/„107"/„180" — renumără (vezi „Curare de metode").
@@ -40,15 +40,15 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `bench_all_methods.py` | CLI bench; `ALL_SPEC_METHODS` = `available` minus blacklist, apoi **∩ curated** (vezi „Curare de metode") |
 | `_ISTORIC/` | datele CSV cu extragerile (VERSIONATE în git) |
 | `loto_enterprise/core/walk_forward_adapter.py` | walk-forward pt UI (`run_honest_walk_forward`); `CACHE_VERSION` PROPRIU (`v14`), separat de cel din `bench_cache.py`; `CACHE_DIR = Path("bench_results")` (relativ → ÎN repo/OneDrive) |
-| `best_methods.json` | decizia bench per joc/pool: winner + `ensemble` + `ensemble_dropped_redundant` (membri săriți ca redundanți: `{method, vs, r, reason:"perf_signature"}`) + `low_confidence` + sim_depth (gitignore). `ensemble_dropped_redundant` și `low_confidence` sunt chei NOI, scrise doar de decizia curentă — un fișier generat înainte nu le are; rescrie-l cu `update_best_methods_with_auto_pilot()`. Nu sunt propagate de `method_selector.recommend_optimal_config` (listă albă de chei) → azi sunt telemetrie pt debug, nu contract UI |
-| `disabled_methods.json` | tombstone 73 metode eliminate din cod; merge-only, **IREVERSIBIL** |
+| `best_methods.json` | decizia bench per joc/pool: winner + `ensemble` + `ensemble_dropped_redundant` (membri săriți ca redundanți: `{method, vs, r, reason:"perf_signature"}`) + `low_confidence` + sim_depth (gitignore). `ensemble_dropped_redundant` și `low_confidence` sunt chei NOI, scrise doar de decizia curentă — un fișier generat înainte nu le are; rescrie-l cu `update_best_methods_with_auto_pilot()`. `method_selector.recommend_optimal_config` le propagă pe listă albă (UI/Auto-Pilot); `ensemble_dropped_redundant` rămâne telemetrie de debug |
+| `disabled_methods.json` | tombstone metode eliminate din cod (74 incl. `omnius`); merge-only, **IREVERSIBIL** |
 | `curated_methods.json` | **curare REVERSIBILĂ** a setului rulat (16 în acest moment); versionat în git; șterge/golește `active` → revine la tot. Citit de `loto_enterprise/benchmark/curated.py` |
 | `bench_results/folds.csv` | output brut walk-forward al bench-ului (OVERWRITE la fiecare Re-Bench) |
 | `raport_complet.txt` | raport generat (gitignore) |
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
 
 ## Benchmark (cum funcționează)
-- **111 metode** în `METHODS` (73 tombstone în `disabled_methods.json`, eliminate
+- **111 metode** în `METHODS` (74 tombstone în `disabled_methods.json`, eliminate
   din registry). Compoziție (verificată 2026-08-25): 2 de bază
   în `methods.py` + **7** module de extensii — `methods_classical` (12), `methods_ml` (11),
   `methods_coverage` (1), **`methods_graph`** (31),
@@ -74,9 +74,9 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
   metode ireversibilă.
 - **ANULARE (cum revii la toate metodele)**: șterge `curated_methods.json` (sau golește
   lista `active` la `[]`), apoi rulează un **Re-Bench**. `ALL_SPEC_METHODS` redevine
-  automat cele 107. Nimic nu se pierde între timp: metodele tăiate rămân în `METHODS`,
-  nefolosite. Fără re-bench, `bench_results/folds.csv` și `best_methods.json` rămân cele
-  vechi — decizia continuă să aleagă din metodele DIN folds, nu din curare.
+  automat cele **111**. Nimic nu se pierde între timp: metodele tăiate de curare rămân
+  în `METHODS`, nefolosite. Fără re-bench, `bench_results/folds.csv` și `best_methods.json`
+  rămân cele vechi — decizia continuă să aleagă din metodele DIN folds, nu din curare.
 - ⚠️ **Criteriul e ACOPERIREA DE SEMNAL DISTINCT, NU clasamentul.** Tăierea pe performanță
   e ZGOMOT, măsurat pe datele reale: overlap top-15 între prima și a doua jumătate a
   ferestrelor = **13-20%** (joker 3/15, 5/40 3/15, 6/49 2/15) → „top 15" nu e o
@@ -195,10 +195,15 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 3. Scrieri JSON de stare → mereu `atomic_write_json`.
 4. Test minimal după orice edit: `python3 -m py_compile <fisier>` + (pt UI) pornește pe un port liber și verifică HTTP 200 (sleep ~15s, importurile sunt grele).
 5. Commit pe main cu mesaj clar; push; (pe web: creează PR draft dacă nu există).
-6. **Blacklist metode** (`disabled_methods.json`): metode LEGENDATE ca slabe. NU le reactiva, NU le re-introduce și NU le folosi — nici când adaugi metode NOI. Bench-ul le exclude automat (`bench_all_methods` filtrează prin `disabled.load_disabled()`). Populare: `python prune_methods.py --apply` (după un bench COMPLET). Merge-only.
+6. **Blacklist / tombstone** (`disabled_methods.json`): 74 metode LEGENDATE ca slabe
+   (73 scoase din registry + `omnius`), **ELIMINATE din `METHODS`**. NU le reactiva,
+   NU le re-introduce în registry și NU le folosi — nici când adaugi metode NOI.
+   Loader-ul + bench-ul filtrează încă pe listă ca plasă. Populare istorică:
+   `prune_methods.py --apply`. Merge-only. Helperii folosiți de blend-uri curate
+   (`score_gap_poisson` etc.) rămân neînregistrați — nu le reînregistra sub numele vechi.
    - ⚠️ **Tăierea pe performanță e ZGOMOT**: pe loto fiecare metodă câștigă vreo celulă joc×pool. `prune --top N` rankează după `max rate_4plus` peste pool-uri — metrică ≠ decizia reală (`rate_3plus` la pool-ul jocului) → poate dezactiva IREVERSIBIL câștigători reali. Măsurat: overlap top-15 între jumătățile de date = 13-20%, iar `random` câștigă 4 din 45 de celule.
    - ✅ **Vrei mai puține metode? Folosește `curated_methods.json`, NU blacklist-ul** (vezi „Curare de metode"): același efect pe bench, dar REVERSIBIL, iar criteriul e redundanța (|Spearman| ≥ 0.95), nu clasamentul.
-7. **Baseline-urile NU au voie să devină scorer de producție**: `random` (nedeterminist, fără sămânță) e REFERINȚĂ de comparație, nu candidat — vezi `decision.EXCLUDED_FROM_PRODUCTION = {"random"}`. Nu-l scoate din set și nu-l lăsa să ajungă în `best_methods.json`/`ensemble`, oricât de bine ar arăta pe folds. (`frequency` rămâne permis: e baseline DETERMINIST și e `SAFE_FALLBACK_SCORER`. `recency` e DETERMINIST dar e **blacklistat** în `disabled_methods.json` — deci nu e candidat, din regula 6, nu din regula asta.)
+7. **Baseline-urile NU au voie să devină scorer de producție**: `random` (nedeterminist, fără sămânță) e REFERINȚĂ de comparație, nu candidat — vezi `decision.EXCLUDED_FROM_PRODUCTION = {"random"}`. Nu-l scoate din set și nu-l lăsa să ajungă în `best_methods.json`/`ensemble`, oricât de bine ar arăta pe folds. (`frequency` rămâne permis: e baseline DETERMINIST și e `SAFE_FALLBACK_SCORER`. `recency` a fost blacklistată și **eliminată din METHODS** — vezi regula 6.)
    - ⚠️ Corolar: `random` trebuie totuși să RULEZE în bench. E în `curated.REQUIRED_METHODS` — dacă îl scoți din `curated_methods.json`, gate-ul de consistență din `decision.py` se rupe complet (`low_confidence` pe toate jocurile), nu doar „lipsește o linie din clasament".
 8. **Top-N după scor** → în cod NOU, mereu `core.ranking.rank_by_score` (vezi „Tie-break canonic"); nu scrie sortare proprie.
    Path-ul principal e migrat: trunchierea pool-ului, Urna 2 Joker și completarea pe `manual_blacklist` folosesc `rank_by_score`. Mai rămâne un `sorted(..., reverse=True)` activ în `_get_timesfm_pool` (completare defensivă din blacklist când pool-ul e incomplet) și unul în `generate_combinatorial_wheel` (ordonare pool pt wheel, nu top-N subset). Migrarea lor pe egalități schimbă output-ul → încalcă regula 1; de făcut într-un commit dedicat, nu în treacăt.

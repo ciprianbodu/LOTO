@@ -179,7 +179,33 @@ def test_ensemble_skips_random_even_if_listed(temp_config):
     assert result[0][2] == pytest.approx(1.0)
 
 
+def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
+    """Scorer mort + ensemble viu → winner/scorer/ensemble = același membru."""
+    cfg_path = temp_config({
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {
+                    "scorer": "recency",
+                    "ensemble": [
+                        {"method": "frequency", "weight": 0.6},
+                        {"method": "recency", "weight": 0.4},
+                    ],
+                }
+            }
+        }
+    })
+    assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
+    ens = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert len(ens) == 1
+    assert ens[0][0] == "frequency"
+    rec = ms.recommend_optimal_config("loto_6_49", 10, config_path=cfg_path)
+    assert rec["scorer"] == "frequency"
+    assert rec["fallback"] is True
+    assert all(e["method"] == "frequency" for e in rec["ensemble"])
+
+
 def test_get_winner_rejects_random_scorer(temp_config):
+    """random e EXCLUDED_FROM_PRODUCTION — scorer → frequency."""
     cfg_path = temp_config({
         "loto_6_49": {
             "auto_pilot_per_pool": {
@@ -188,6 +214,28 @@ def test_get_winner_rejects_random_scorer(temp_config):
         }
     })
     assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
+
+
+def test_unknown_legacy_alias_falls_back_to_frequency_named(temp_config):
+    """ml_xgb_cpu (alias mort) → frequency pe NUME și pe callable, nu nume fals."""
+    cfg_path = temp_config({
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {
+                    "scorer": "ml_xgb_cpu",
+                    "ensemble": [{"method": "ml_xgb_cpu", "weight": 1.0}],
+                }
+            }
+        }
+    })
+    assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
+    ens = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert len(ens) == 1
+    assert ens[0][0] == "frequency"
+    rec = ms.recommend_optimal_config("loto_6_49", 10, config_path=cfg_path)
+    assert rec["scorer"] == "frequency"
+    assert all(e.get("method") == "frequency" for e in (rec.get("ensemble") or []))
+    assert rec["scorer"] not in ("ml_xgb_cpu", "ml_xgb", "random")
 
 
 def test_get_ensemble_skips_unknown_method_and_renormalizes(temp_config):

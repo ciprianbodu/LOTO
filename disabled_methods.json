@@ -60,6 +60,7 @@
     "naive_last",
     "ngram_bigram",
     "ngram_trigram",
+    "omnius",
     "polya_urn",
     "recency",
     "runs_test",
@@ -75,8 +76,8 @@
     "winslips"
   ],
   "_meta": {
-    "note": "Tombstone: metode ELIMINATE din cod (METHODS). NU le reintroduce sub același nume. Merge-only. Loader-ul tot filtrează pe această listă ca plasă.",
-    "last_reason": "2026-08-25: scoase din registry + implementări orphan (73). Helperii folosiți de blend-uri curate (gap_poisson, beta_binomial, markov_2, recency) rămân neînregistrați.",
-    "count": 73
+    "note": "Tombstone: metode ELIMINATE din METHODS. NU le reintroduce. Merge-only.",
+    "last_reason": "2026-08-25 audit: omnius eliminat din METHODS dar lipsea din tombstone",
+    "count": 74
   }
 }

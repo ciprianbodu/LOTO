@@ -399,7 +399,18 @@ def decide_optimal_config_for_pool(
     # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
     # candidați — ca și restul baseline-urilor nedeterministe (vezi
     # EXCLUDED_FROM_PRODUCTION): nu au voie să ajungă scorer de producție.
-    methods = [m for m in sub["method"].unique() if m not in EXCLUDED_FROM_PRODUCTION]
+    # Plus: sare metodele eliminate din METHODS / tombstone (folds vechi).
+    try:
+        from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
+        from loto_enterprise.benchmark.disabled import load_disabled as _load_dis
+        _alive = set(_METHODS_NOW) - _load_dis()
+    except Exception:  # noqa: BLE001
+        _alive = None
+    methods = [
+        m for m in sub["method"].unique()
+        if m not in EXCLUDED_FROM_PRODUCTION
+        and (_alive is None or m in _alive)
+    ]
 
     # Coloane candidate pt rata T+, în ordine de preferință; sare peste coloane
     # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.

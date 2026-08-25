@@ -204,6 +204,15 @@ def list_methods() -> list[str]:
 
 def method_meta(name: str) -> dict:
     name = resolve_method_name(name)
+    if name not in METHODS:
+        return {
+            "name": name,
+            "family": "unknown",
+            "requires_train": False,
+            "notes": "eliminat din METHODS / necunoscut",
+            "available": False,
+            "unavailable_reason": "not_in_registry",
+        }
     fn, family, requires_train, notes = METHODS[name]
     available = not getattr(fn, "_unavailable_reason", None)
     meta = {
@@ -221,6 +230,9 @@ def method_meta(name: str) -> dict:
 
 def call_method(name: str, draws_2d: np.ndarray, max_num: int) -> tuple[dict[int, float], float]:
     """Call a registered method; returns (scores_dict, wall_time_sec)."""
+    name = resolve_method_name(name)
+    if name not in METHODS:
+        raise KeyError(f"method {name!r} not in METHODS (eliminat / necunoscut)")
     fn, _family, _train, _notes = METHODS[name]
     t0 = time.perf_counter()
     scores = fn(draws_2d, max_num)
