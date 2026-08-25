@@ -1,8 +1,13 @@
-"""Testare EXTERNĂ: 5 metode matematice CPU nefolosite, per joc.
+"""Testare EXTERNĂ: ~20 metode CPU nefolosite pe jocul respectiv.
 
 Walk-forward onest pe ultimele 30% din CSV (aceeași fereastră ca UI WF),
 pool=11, rank_by_score. Compară rata 3+ / 4+ cu hipergeometric (random).
 Decorelare: |Spearman| < 0.95 vs per_game existent și între candidați.
+
+Candidații = transfer din top-ul celorlalte jocuri (fără clone Katz) +
+familii noi numpy (pagerank/clustering/harmonic/parity/prime/cold_rebound).
+Fără ML (sklearn), fără croston/catboost, fără circular_kernel /
+649_sum_reversion (degenerate la testarea 2026-08-25).
 
 NU e predicție — loteria e aleatoare. Un candidat intra în curated DOAR dacă
 bate P(≥3) SAU P(≥4) hipergeometric (cel puțin +1 eveniment) ȘI nu e clonă.
@@ -52,11 +57,29 @@ GAMES = {
         "max_num": 49,
         "draw_n": 6,
         "candidates": [
-            "pca_resid_surprise",
-            "cusum_appearance",
-            "circular_kernel",
-            "649_wilson_lb",
-            "649_spectral_cooc",
+            # transfer 5/40
+            "fourier",
+            "dmd",
+            "nmf_cooc",
+            "cover_positional_bands",
+            "649_hmean_freq_rec",
+            "649_last_neighbors",
+            "graph_closeness",
+            # transfer joker (numpy; fără ML)
+            "graph_weighted_triangles",
+            "pair_affinity",
+            "649_hazard_overdue",
+            "649_rank_borda",
+            "649_ewma_80",
+            "graph_second_order",
+            "graph_spectral_embed",
+            # noi, nefolosite pe niciun joc (fără clone Katz / degenerate)
+            "graph_pagerank",
+            "graph_clustering",
+            "graph_harmonic",
+            "649_cold_rebound",
+            "parity_balance",
+            "prime_bias",
         ],
     },
     "loto_5_40": {
@@ -65,11 +88,29 @@ GAMES = {
         "max_num": 40,
         "draw_n": 5,
         "candidates": [
-            "mi_lag_bag",
-            "nmf_cooc",
-            "bayes_poisson",
-            "649_mom_10_40",
-            "fourier",
+            # transfer 6/49 (fără clone Katz)
+            "pca_resid_surprise",
+            "graph_community_strength",
+            "autocorr",
+            "649_gap_inverse",
+            "649_decade_hot",
+            "649_triple_graph_classic",
+            "sum_affinity",
+            "649_spectral_cooc",
+            "cusum_appearance",
+            "graph_assort_residual",
+            # transfer joker
+            "graph_weighted_triangles",
+            "pair_affinity",
+            "649_hazard_overdue",
+            "649_rank_borda",
+            "649_ewma_80",
+            "graph_second_order",
+            "graph_spectral_embed",
+            # noi
+            "graph_pagerank",
+            "graph_clustering",
+            "graph_harmonic",
         ],
     },
     "joker_urna1": {
@@ -78,11 +119,29 @@ GAMES = {
         "max_num": 45,
         "draw_n": 5,
         "candidates": [
-            "pair_affinity",
-            "649_beta_mean",
-            "649_hazard_overdue",
-            "649_sum_reversion",
-            "neg_binomial",
+            # transfer 6/49
+            "pca_resid_surprise",
+            "graph_community_strength",
+            "autocorr",
+            "649_gap_inverse",
+            "649_decade_hot",
+            "649_triple_graph_classic",
+            "sum_affinity",
+            "649_spectral_cooc",
+            "cusum_appearance",
+            # transfer 5/40
+            "fourier",
+            "dmd",
+            "nmf_cooc",
+            "cover_positional_bands",
+            "649_hmean_freq_rec",
+            "649_last_neighbors",
+            "graph_eccentricity_inv",
+            "graph_closeness",
+            "graph_degree_recent",
+            "graph_subgraph_centrality",
+            # noi
+            "graph_pagerank",
         ],
     },
 }
