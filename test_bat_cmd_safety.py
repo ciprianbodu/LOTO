@@ -52,8 +52,9 @@ def test_actualizari_delayed_expansion_only_in_clean_ghosts():
     rest = setlocals[1:]
     assert rest, "CleanGhosts must enable delayed expansion locally"
     assert all("enabledelayedexpansion" in s.lower().replace(" ", "") for s in rest)
-    assert ":CleanGhosts" in text
-    ghosts = text.split(":CleanGhosts", 1)[1]
+    marker = "\n:CleanGhosts"
+    assert marker in text, "missing :CleanGhosts label"
+    ghosts = text.split(marker, 1)[1]
     assert "EnableDelayedExpansion" in ghosts
     assert "endlocal" in ghosts.split("exit /b", 1)[0]
 
