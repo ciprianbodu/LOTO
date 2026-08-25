@@ -62,21 +62,32 @@ def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 37
+    assert len(cur) == 40
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
-    # +7 matematice CPU din testare externă WF 30% @ pool 11 (2026-08-25)
+    # +7 matematice CPU (runda 1) + 3 noi în active din runda 20/joc (2026-08-25)
     added = {
         "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
         "nmf_cooc", "fourier", "649_hazard_overdue", "pair_affinity",
+        "parity_balance", "graph_clustering", "prime_bias",
     }
     assert added <= set(cur)
     pg = load_per_game()
-    expect_n = {"loto_6_49": 13, "loto_5_40": 12, "joker_urna1": 12}
+    expect_n = {"loto_6_49": 18, "loto_5_40": 17, "joker_urna1": 17}
     expect_extra = {
-        "loto_6_49": ["pca_resid_surprise", "649_spectral_cooc", "cusum_appearance"],
-        "loto_5_40": ["nmf_cooc", "fourier"],
-        "joker_urna1": ["649_hazard_overdue", "pair_affinity"],
+        "loto_6_49": [
+            "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
+            "pair_affinity", "649_rank_borda", "parity_balance",
+            "graph_clustering", "prime_bias",
+        ],
+        "loto_5_40": [
+            "nmf_cooc", "fourier", "autocorr", "graph_spectral_embed",
+            "pca_resid_surprise", "cusum_appearance", "649_triple_graph_classic",
+        ],
+        "joker_urna1": [
+            "649_hazard_overdue", "pair_affinity", "cusum_appearance",
+            "autocorr", "fourier", "nmf_cooc", "649_hmean_freq_rec",
+        ],
     }
     rejected = {
         "circular_kernel", "649_sum_reversion", "649_mom_10_40",
@@ -92,5 +103,5 @@ def test_curated_active_and_per_game():
             assert m in pg[g]
         assert rejected.isdisjoint(pg[g])
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 37
-    assert info["per_game"]["loto_6_49"] == 13
+    assert len(kept) == 40
+    assert info["per_game"]["loto_6_49"] == 18

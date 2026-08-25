@@ -1,4 +1,4 @@
-"""Gărzi pentru cele 7 metode matematice adăugate din testarea externă WF."""
+"""Gărzi pentru metodele adăugate din testarea externă WF."""
 from __future__ import annotations
 
 import csv
@@ -12,6 +12,7 @@ from loto_enterprise.core.ranking import is_consecutive_block, rank_by_score
 CSV_649 = Path("_ISTORIC/loto_6_49.csv")
 
 ADDED = (
+    # runda 1 (2026-08-25 dimineață)
     "pca_resid_surprise",
     "649_spectral_cooc",
     "cusum_appearance",
@@ -19,6 +20,10 @@ ADDED = (
     "fourier",
     "649_hazard_overdue",
     "pair_affinity",
+    # runda 2 (20/joc) — doar cele NOI în active
+    "parity_balance",
+    "graph_clustering",
+    "prime_bias",
 )
 
 
