@@ -364,13 +364,31 @@ def run_benchmark(
 
     # GPU eliminat complet: toate metodele sunt CPU. Nu mai există clasificare
     # GPU/CPU, split de task-uri, env CUDA sau track GPU separat.
+    # Estimarea aplică ACEEAȘI regulă de skip ca pre-pass-ul (n_train < 80) —
+    # altfel numărătorul [N/M] și bara de progres nu ajungeau niciodată la M pe
+    # istorii scurte (ferestrele 90/100% sărite erau totuși numărate).
+    _n_by_game: dict[str, int] = {}
+    for game in games:
+        try:
+            _n_by_game[game.key] = len(load_draws(game))
+        except Exception:  # noqa: BLE001 — CSV-ul va eșua la fel și în pre-pass
+            pass
     total_folds_est = 0
     for game in games:
+        _n_g = _n_by_game.get(game.key)
+        if not _n_g:
+            continue
         for m in methods:
             meta = method_meta_map[m]
             if not meta["available"]:
                 continue
             for pct in percentiles:
+                n_test = max(1, int(math.ceil(_n_g * pct / 100.0)))
+                n_train = max(0, _n_g - n_test)
+                if pct >= 100:
+                    n_train = max(80, n_train)
+                if n_train < 80:
+                    continue
                 total_folds_est += 2  # real + random
     # Marker parsabil de UI: gpu=0 mereu (păstrat pt compatibilitate cu parsing-ul UI).
     logger.info("[BENCH-SPLIT] cpu=%d gpu=0 total=%d", total_folds_est, total_folds_est)
