@@ -348,7 +348,12 @@ def run_honest_walk_forward(
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
-    n_expected = max(1, int(len(df_source) * backtest_depth_percent / 100.0))
+    # Pe EXTRAGERILE VALIDE (bt.draws), nu pe rândurile brute ale CSV-ului: cu un
+    # rând invalid în CSV, backtester-ul simulează len(draws)*depth pași, deci un
+    # n_expected calculat din len(df_source) era de neatins → cache-ul rămânea
+    # marcat „partial" pentru totdeauna și se re-rula la fiecare Auto-Pilot.
+    _n_valid = len(bt.draws) if getattr(bt, "draws", None) else len(df_source)
+    n_expected = max(1, int(_n_valid * backtest_depth_percent / 100.0))
     flat = expand_predictions_to_flat(predictions, game_type)
     meta["n_predictions"] = len(predictions)
     meta["n_test_draws"] = len(set(p.draw_index for p in predictions))

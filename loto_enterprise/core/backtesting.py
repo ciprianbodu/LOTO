@@ -323,6 +323,7 @@ class LotoBacktester:
         logger.info(f"[BACKTEST] Coloane detectate: {num_cols}")
         
         # Extragem numerele și datele
+        valid_labels = []
         for idx, row in self.df.iterrows():
             numbers = []
             for col in num_cols:
@@ -332,9 +333,10 @@ class LotoBacktester:
                         numbers.append(num)
                     except (ValueError, TypeError):
                         continue
-            
+
             if len(numbers) >= self.params["draw_n"]:
                 self.draws.append(numbers)
+                valid_labels.append(idx)
                 # Încercăm să extragem data dacă există
                 date_val = None
                 for date_col in ["date", "data", "draw_date", "extragere", "Data"]:
@@ -342,7 +344,20 @@ class LotoBacktester:
                         date_val = str(row[date_col])
                         break
                 self.dates.append(date_val)
-        
+
+        # ALINIERE df ↔ draws: rândurile INVALIDE (NaN/non-numerice) intrau în df
+        # dar nu în draws, iar sim_idx indexează AMBELE (df.iloc[:sim_idx] ca
+        # istoric de antrenare, draws[sim_idx] ca țintă). Un singur rând murdar
+        # înainte de sim_idx deplasa fereastra de antrenare cu k rânduri și
+        # dezalinia sim_date/target_date. Pe CSV curat filtrarea e NO-OP
+        # (df rămâne identic → bit-identitate păstrată).
+        if len(valid_labels) != len(self.df):
+            logger.warning(
+                "[BACKTEST] %d rând(uri) invalide eliminate din df pentru aliniere cu draws.",
+                len(self.df) - len(valid_labels),
+            )
+            self.df = self.df.loc[valid_labels].reset_index(drop=True)
+
         logger.info(f"[BACKTEST] Extrageri valide procesate: {len(self.draws)}")
     
     def _detect_number_columns(self) -> list[str]:
