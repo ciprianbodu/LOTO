@@ -624,10 +624,24 @@ def cancel_all() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("kill bench pid: %s", exc)
     try:
-        root = str(PROJECT_ROOT)
+        # Plasa de siguranță cerea AMBELE substring-uri în linia de comandă:
+        # „bench_all_methods.py" ȘI PROJECT_ROOT. Nu se potrivea niciodată:
+        # `_launch_bench` pornea scriptul cu cale RELATIVĂ (cwd=PROJECT_ROOT), iar
+        # `sys.executable` e venv-ul din D:\_BUILD\_LOTO, deliberat în AFARA
+        # repo-ului — deci PROJECT_ROOT nu apărea nicăieri în cmdline. Cu
+        # `.bench_pid` lipsă sau reciclat, „Anulează TOT" raporta „Proces anulat."
+        # în timp ce bench-ul mergea mai departe și rescria folds.csv.
+        # Acum: potrivim pe numele scriptului și confirmăm prin CWD-ul procesului.
+        root = Path(PROJECT_ROOT).resolve()
         for p in psutil.process_iter(["cmdline"]):
             cl = " ".join(p.info.get("cmdline") or [])
-            if "bench_all_methods.py" in cl and root in cl:
+            if "bench_all_methods.py" not in cl:
+                continue
+            try:
+                same_cwd = Path(p.cwd()).resolve() == root
+            except Exception:  # noqa: BLE001 — AccessDenied / procesul a murit
+                same_cwd = root.as_posix() in cl.replace("\\", "/")
+            if same_cwd:
                 p.terminate()
     except Exception as exc:  # noqa: BLE001
         logger.warning("kill bench fallback: %s", exc)
@@ -2081,7 +2095,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 
 @ui.refreshable
 def wf_progress_panel() -> None:
-    """Progres walk-forward, SEPARAT de results_panel: tick-ul (2s) refreshează DOAR
+    """Progres walk-forward, SEPARAT de results_panel: tick-ul (1s) refreshează DOAR
     asta, nu tot bundle-ul de rezultate — altfel expansion-urile deschise de user
     (ex. 🏆 Clasament bench, Variante, Pipeline) s-ar reseta/închide la fiecare poll."""
     if not STATE.get("wf_status"):
@@ -2465,6 +2479,14 @@ def _render_bench_leaderboard_slice(
         rows.sort(key=_sort_key_lift, reverse=True)
     else:
         rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
+    # Ordinea PURĂ, ÎNAINTE de re-ordonarea pe poartă. Poziția raportată pentru
+    # baseline se calculează pe EA, nu pe `rows`: re-ordonarea de mai jos pune
+    # baseline-urile la COADĂ necondiționat (`_qual + _fail + _bases_r`), deci
+    # `random` ieșea mereu „locul N+1 din N+1" — adică „toate metodele bat
+    # hazardul", exact inversul mesajului pentru care panoul există.
+    # Măsurat pe folds.csv real: pe 5/40 k8 `random` e de fapt al 3-lea din 21
+    # după criteriul PROPRIU al panoului (Wilson_lb → lift ponderat → consistență).
+    _rows_ranked = list(rows)
     # Poarta de consistență CA LA DECIZIE: calificatele (bat random în ≥60%
     # ferestre) întâi. Fără asta, #1 din listă putea fi o metodă cu Wilson mare
     # care n-a trecut gate-ul, iar 🏆 era altcineva.
@@ -2702,10 +2724,10 @@ def _render_bench_leaderboard_slice(
         # Baseline-urile care NU au intrat în slice: spune unde ar cădea (informativ),
         # fără să pară competitor.
         _shown_names = {rec[0] for rec in top_rows}
-        for _bi, _brec in enumerate(rows):
+        for _bi, _brec in enumerate(_rows_ranked):
             if _brec[0] not in _BASE or _brec[0] in _shown_names:
                 continue
-            _better = sum(1 for r in rows[:_bi] if r[0] not in _BASE)
+            _better = sum(1 for r in _rows_ranked[:_bi] if r[0] not in _BASE)
             # Numitorul include și baseline-ul însuși (nu doar candidații) — altfel
             # poziția poate ajunge la N+1 „din N" (contradicție) când baseline-ul
             # e sub TOȚI candidații.
@@ -3885,7 +3907,7 @@ def main_page() -> None:
             status_panel.refresh()
         if STATE.get("wf_status"):
             # DOAR progresul WF — NU tot bundle-ul, ca expansion-urile deschise
-            # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 2s.
+            # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 1s.
             wf_progress_panel.refresh()
     ui.timer(1.0, _tick)
 
