@@ -846,10 +846,20 @@ class LotoBacktester:
                             if cancelled:
                                 break
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[BACKTEST] WF rapid indisponibil (%s) — fallback secvențial.", exc)
-                retro_predictions.clear()
+                # NU aruncăm ce s-a calculat deja. Un singur worker mort
+                # (BrokenProcessPool — OOM-kill, `ex.submit` pe un pool deja rupt,
+                # ieșirea din `with`) scapă din handler-ul per-future și ateriza
+                # aici, iar `retro_predictions.clear()` ștergea TOATE predicțiile
+                # din batch-urile anterioare, plus sonda. Pașii sunt stateless și
+                # independenți de ordine (chiar argumentul pe care se bazează
+                # paralelizarea), deci cei deja terminați rămân valizi — fallback-ul
+                # secvențial de mai jos îi SARE în loc să-i recalculeze.
+                logger.warning(
+                    "[BACKTEST] WF rapid indisponibil (%s) — fallback secvențial, "
+                    "păstrez cele %d predicții deja calculate.", exc, len(retro_predictions),
+                )
                 cancelled = False
-                done_count = 0
+                done_count = len(retro_predictions)
             else:
                 _mode = "secvențial" if go_serial else "paralel"
                 retro_predictions.sort(key=lambda p: p.draw_index)
@@ -863,8 +873,14 @@ class LotoBacktester:
                     )
                 return retro_predictions
 
-        # Iterăm prin fiecare punct de simulare (secvențial — feedback/inversiune sau fallback)
+        # Iterăm prin fiecare punct de simulare (secvențial — feedback/inversiune sau fallback).
+        # `_already_done` = pașii salvați de o rulare paralelă întreruptă: îi sărim,
+        # ca fallback-ul să CONTINUE, nu să reia de la zero.
+        _already_done = {int(p.draw_index) for p in retro_predictions
+                         if getattr(p, "draw_index", None) is not None}
         for sim_num, sim_idx in enumerate(sim_indices, 1):
+            if sim_idx in _already_done:
+                continue
 
             # Oprire timpurie (anulare manuală SAU buget de timp) — o metodă GPU grea
             # (ex. torch_wavenet_deep la Joker) reantrenează modelul la FIECARE pas, deci
