@@ -197,40 +197,79 @@ def _weighted_mean_lift(
     return weighted_sum / weight_total if weight_total > 0 else 0.0
 
 
-def pooled_wilson_distinct(frame: pd.DataFrame, rate_col: str) -> float | None:
-    """Agregarea CANONICĂ a limitei Wilson pentru o rată T+ pe ferestre sim_depth.
+def pooled_rate_and_neff(frame: pd.DataFrame, rate_col: str) -> tuple[float, float] | None:
+    """(rată pooled, n EFECTIV) pentru o rată T+ măsurată pe ferestre sim_depth.
 
-    Ferestrele sunt sufixe CUIBĂRITE (10% ⊂ 20% ⊂ … ⊂ 100%), deci Σ n peste
-    ferestre numără aceeași extragere de până la 10 ori (~5.5× n real). RATA
-    rămâne pooled pe toate ferestrele (Σ rate·n / Σ n — ponderare implicită pe
-    recență, deliberată, aceeași filozofie ca `_weighted_mean_lift`), dar DOVADA
-    din Wilson (n) = extragerile DISTINCTE = fereastra cea mai mare. Denominatorul
-    preferat e coloana `n_eval` (v13 — extrageri efectiv evaluate, exact
-    denominatorul ratelor); fallback `n_test` pe folds vechi.
+    Ferestrele sunt sufixe CUIBĂRITE (10% ⊂ 30% ⊂ 60% ⊂ 100% în configurația de
+    producție a UI-ului; 10%…100% la default-ul CLI), deci o extragere recentă
+    apare în MAI MULTE ferestre. Consecințe, tratate separat:
 
-    Sursă UNICĂ de adevăr: folosită și de decizie (`_rate_target_confidence`) și
-    de clasamentul UI (`app_nicegui._wilson_pooled_rate`) — nu re-implementa
-    agregarea în alt loc. None = incalculabil (fără coloane / rânduri valide).
+    • RATA rămâne pooled peste toate ferestrele (Σ rate·n / Σ n). Ponderarea
+      implicită pe recență e DELIBERATĂ (aceeași filozofie ca `_weighted_mean_lift`).
+    • DOVADA (n-ul dat lui Wilson) NU e Σ n — asta ar număra aceeași extragere de
+      mai multe ori (măsurat pe folds de producție: Σn/max ≈ 2.03 la 4 ferestre;
+      ~5.5 la default-ul CLI de 10 ferestre) → limite sistematic supraîncrezătoare.
+      Nici max(n) nu e corect: rata e o medie PONDERATĂ, deci n-ul corect e cel
+      EFECTIV (Kish) al ponderilor. Cu m_j = în câte ferestre intră extragerea j,
+      Var(phat) = p(1-p)·Σm² / (Σm)² ⟹ n_eff = (Σm)²/Σm². Pe ferestre-sufix
+      Σm = Σ n_i și Σm² = Σ_i Σ_k min(n_i, n_k), deci n_eff se calculează direct
+      din dimensiunile ferestrelor, fără să reconstruim multiplicitățile.
+
+    Calibrare verificată prin simulație (40k replici, n=2497, p=0.09, z=1, nominal
+    0.8413): acoperirea reală a limitei inferioare = 0.743 cu Σn (varianta veche),
+    0.814 cu max(n), 0.844 cu n_eff Kish. `n_eff ≈ 0.805 × n_max` pe ferestrele
+    de producție.
+
+    Denominatorul per RÂND: `n_eval` (v13 — extrageri efectiv evaluate, exact
+    denominatorul ratelor) cu fallback pe `n_test` FIECARE rând în parte. Alegerea
+    pe frame ar arunca tăcut rândurile vechi dintr-un folds.csv mixt (faze de bench
+    combinate peste un bump de versiune).
+
+    None = incalculabil (fără coloane / fără rânduri cu n > 0).
     """
-    n_col = "n_test"
-    if "n_eval" in frame.columns:
-        try:
-            if (pd.to_numeric(frame["n_eval"], errors="coerce") > 0).any():
-                n_col = "n_eval"
-        except Exception:  # noqa: BLE001
-            pass
-    if rate_col not in frame.columns or n_col not in frame.columns:
+    if rate_col not in frame.columns:
         return None
-    pairs = frame[[rate_col, n_col]].dropna()
-    pairs = pairs[pairs[n_col] > 0]
+    has_eval, has_test = "n_eval" in frame.columns, "n_test" in frame.columns
+    if not (has_eval or has_test):
+        return None
+    rate = pd.to_numeric(frame[rate_col], errors="coerce")
+    n_eval = pd.to_numeric(frame["n_eval"], errors="coerce") if has_eval else None
+    n_test = pd.to_numeric(frame["n_test"], errors="coerce") if has_test else None
+    # coalesce PE RÂND: n_eval dacă e valid și > 0, altfel n_test
+    if n_eval is None:
+        n = n_test
+    elif n_test is None:
+        n = n_eval
+    else:
+        n = n_eval.where(n_eval.notna() & (n_eval > 0), n_test)
+    pairs = pd.DataFrame({"r": rate, "n": n}).dropna()
+    pairs = pairs[pairs["n"] > 0]
     if pairs.empty:
         return None
-    n_pooled = float(pairs[n_col].sum())
+    sizes = pairs["n"].astype(float).to_numpy()
+    n_pooled = float(sizes.sum())
     if n_pooled <= 0:
         return None
-    phat = float((pairs[rate_col] * pairs[n_col]).sum()) / n_pooled
-    n_distinct = float(pairs[n_col].max())
-    return _wilson_lower_bound(phat * n_distinct, n_distinct)
+    phat = float((pairs["r"].astype(float).to_numpy() * sizes).sum()) / n_pooled
+    # Σ_i Σ_k min(n_i, n_k) — exact pentru ferestre-sufix (|W_i ∩ W_k| = min).
+    sum_m2 = float(np.minimum.outer(sizes, sizes).sum())
+    n_eff = (n_pooled ** 2) / sum_m2 if sum_m2 > 0 else n_pooled
+    return phat, float(n_eff)
+
+
+def pooled_wilson_distinct(frame: pd.DataFrame, rate_col: str) -> float | None:
+    """Limita inferioară Wilson pe rata pooled, cu n EFECTIV (Kish).
+
+    Sursă UNICĂ de adevăr pentru „cât de sigură e rata T+ a acestei metode":
+    folosită de decizie (`_rate_target_confidence`) ȘI de clasamentul UI
+    (`app_nicegui._wilson_pooled_rate`) — nu re-implementa agregarea în alt loc.
+    Detaliile agregării: vezi `pooled_rate_and_neff`.
+    """
+    got = pooled_rate_and_neff(frame, rate_col)
+    if got is None:
+        return None
+    phat, n_eff = got
+    return _wilson_lower_bound(phat * n_eff, n_eff)
 
 
 def _build_ensemble_weights(entries: list[tuple[str, float]]) -> list[dict]:
@@ -485,18 +524,27 @@ def decide_optimal_config_for_pool(
         return None
 
     def _rate_target_mean(frame: pd.DataFrame) -> float:
+        # Rata POOLED — ACELAȘI estimator punctual pe care se calculează Wilson
+        # (`pooled_rate_and_neff`). Înainte era media NEPONDERATĂ pe ferestre, deci
+        # rationale-ul putea tipări o limită INFERIOARĂ mai mare decât „rata" de
+        # lângă ea (măsurat: 86 de celule joc×pool×metodă). Cei doi estimatori
+        # trebuie să fie ai aceleiași mărimi. Fallback pe media brută doar dacă
+        # lipsesc coloanele de n (folds foarte vechi).
         c = _resolve_rate_col(frame)
         if c is None:
             return 0.0
+        got = pooled_rate_and_neff(frame, c)
+        if got is not None:
+            return float(got[0])
         v = float(frame[c].mean())
         return v if v == v else 0.0  # nu e NaN (NaN != NaN)
 
     def _rate_target_confidence(frame: pd.DataFrame) -> float:
         # Limită inferioară Wilson pe proporția agregată — mai robustă la zgomot
         # decât media brută pe evenimente rare (4+ hituri). Agregarea (rata pooled
-        # + n = extrageri DISTINCTE, nu suma ferestrelor cuibărite) e canonică în
-        # `pooled_wilson_distinct` — vezi docstring-ul ei; înainte n-ul era suma
-        # (~5.5× n real) → limite Wilson sistematic supraîncrezătoare.
+        # + n EFECTIV Kish, nu suma ferestrelor cuibărite) e canonică în
+        # `pooled_rate_and_neff` — vezi docstring-ul ei; înainte n-ul era suma
+        # (măsurat pe folds de producție: ≈2.03× n real) → limite supraîncrezătoare.
         c = _resolve_rate_col(frame)
         if c is None:
             return 0.0
@@ -641,13 +689,24 @@ def decide_optimal_config_for_pool(
         _mismatch_cols_used.add(base_col)
 
 
-    by_pct = real_chosen.groupby("percentile").agg(
+    # Poarta de stabilitate se aplică pe EXTRAGERILE EVALUATE (n_eval, cu fallback
+    # pe rând la n_test): `target_rate` și `avg_hits` sunt ambele denominate în
+    # n_eval de la v13, deci a filtra pe n_test ar valida o fereastră pe extrageri
+    # care poate n-au fost niciodată evaluate (scorer care întoarce {} pe blocuri).
+    _rc = real_chosen.copy()
+    _nt = pd.to_numeric(_rc["n_test"], errors="coerce") if "n_test" in _rc.columns else None
+    if "n_eval" in _rc.columns:
+        _ne = pd.to_numeric(_rc["n_eval"], errors="coerce")
+        _rc["_n_stab"] = _ne.where(_ne.notna() & (_ne > 0), _nt) if _nt is not None else _ne
+    else:
+        _rc["_n_stab"] = _nt
+    by_pct = _rc.groupby("percentile").agg(
         target_rate=(rate_col, "mean"),
         avg_hits=(base_col, "mean"),
-        n_test=("n_test", "mean"),
+        n_test=("_n_stab", "mean"),
         runtime=("runtime_sec", "mean"),
     )
-    # Filter to windows with enough test data
+    # Filter to windows with enough EVALUATED draws
     stable = by_pct[by_pct["n_test"] >= MIN_TEST_DRAWS_FOR_STABILITY]
     if stable.empty:
         stable = by_pct

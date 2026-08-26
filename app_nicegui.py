@@ -2190,10 +2190,10 @@ def _wilson_pooled_rate(grp, metric: str) -> float | None:
     """Limita inferioară Wilson: rata POOLED pe ferestre, dovada = extrageri DISTINCTE.
 
     ACEEAȘI metrică pe care decision.py alege câștigătorul: TOATĂ agregarea
-    (rata pooled Σ rate·n / Σ n + n = fereastra cea mai mare, ferestrele fiind
-    sufixe CUIBĂRITE — suma număra aceeași extragere de ~5.5×) e IMPORTATĂ din
-    `decision.pooled_wilson_distinct`, sursa unică de adevăr — nu re-implementa
-    aici. None = nu se poate calcula (fără coloane n / import eșuat)."""
+    (rata pooled Σ rate·n / Σ n + n EFECTIV Kish, ferestrele fiind sufixe
+    CUIBĂRITE) e IMPORTATĂ din `decision.pooled_wilson_distinct`, sursa unică de
+    adevăr — nu re-implementa aici. None = incalculabil (fără coloane n / import
+    eșuat)."""
     try:
         from loto_enterprise.benchmark.decision import pooled_wilson_distinct
     except Exception:  # noqa: BLE001
@@ -2289,7 +2289,7 @@ def _render_bench_leaderboard_slice(
     has_family = "family" in sub.columns
 
     def _rate_for(grp, n):
-        """Rata de ≥n pentru o metodă, POOLED pe n_test (preferă coloana pe pool).
+        """Rata de ≥n pentru o metodă, POOLED pe extragerile evaluate (coloana pe pool).
 
         Ponderarea e obligatorie, nu cosmetică: ferestrele sunt CUIBĂRITE (fiecare e
         ultimele P% din istoric — vezi `runner.run_benchmark`), deci au dimensiuni de
@@ -2297,24 +2297,24 @@ def _render_bench_leaderboard_slice(
         neponderată dă aceeași greutate ferestrei de 258 ca celei de 2492 și fabrică
         astfel „lift-uri" care nu există în datele pooled — exact metrica pe care se
         ia decizia (`_wilson_pooled_rate` / decision.py) e pooled pe același n.
-        Preferă n_eval (v13 — denominatorul REAL al ratelor); fallback n_test,
-        apoi media neponderată (folds foarte vechi), ca înainte."""
-        _n_col = "n_test"
-        if "n_eval" in grp.columns:
-            try:
-                if (pd.to_numeric(grp["n_eval"], errors="coerce") > 0).any():
-                    _n_col = "n_eval"
-            except Exception:  # noqa: BLE001
-                pass
+        Agregarea e IMPORTATĂ din `decision.pooled_rate_and_neff` (sursa unică):
+        n_eval per rând cu fallback pe n_test — o alegere pe FRAME ar arunca tăcut
+        rândurile vechi dintr-un folds.csv mixt. Fallback pe media neponderată doar
+        dacă lipsesc ambele coloane de n (folds foarte vechi), ca înainte."""
+        try:
+            from loto_enterprise.benchmark.decision import pooled_rate_and_neff as _prn
+        except Exception:  # noqa: BLE001
+            _prn = None
         for c in (f"rate_{n}plus_k{pool}", f"rate_{n}plus"):
             if c not in grp.columns:
                 continue
-            if _n_col in grp.columns:
-                pairs = grp[[c, _n_col]].dropna()
-                pairs = pairs[pairs[_n_col] > 0]
-                n_total = float(pairs[_n_col].sum()) if not pairs.empty else 0.0
-                if n_total > 0:
-                    return float((pairs[c] * pairs[_n_col]).sum() / n_total)
+            if _prn is not None:
+                try:
+                    got = _prn(grp, c)
+                except Exception:  # noqa: BLE001
+                    got = None
+                if got is not None:
+                    return float(got[0])
             v = float(grp[c].mean())
             if v == v:  # nu e NaN
                 return v
@@ -2389,8 +2389,8 @@ def _render_bench_leaderboard_slice(
         rows.append((m, score, avg, _method_library(m, fam),
                      _rate_for(grp, 3), _rate_for(grp, 4), conf, w_lift, cons,
                      _base_avg))
-    # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson
-    # pooled pe n_test → lift mediu ponderat vs random → consistență). Fără
+    # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson pe
+    # rata pooled cu n efectiv → lift mediu ponderat vs random → consistență). Fără
     # decision.py / fără coloana k{pool} / fără rândurile `random` → cădem pe
     # (Wilson, rată brută, avg_hits) și eticheta o spune explicit.
     _dec = _decision_entry(folds_game_key, pool)
@@ -2595,13 +2595,13 @@ def _render_bench_leaderboard_slice(
         if chosen_name != winner[0]:
             # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există.
             if _conf_ok and _lift_ok:
-                _ord = (f"aceleași chei ca decizia (limita Wilson a ratei {_shown_t}+ pooled pe "
-                        f"n_test → lift mediu vs random → consistență)")
+                _ord = (f"aceleași chei ca decizia (limita Wilson a ratei {_shown_t}+ pooled, pe "
+                        f"extrageri efective → lift mediu vs random → consistență)")
             elif _conf_ok:
-                _ord = (f"limita Wilson a ratei {_shown_t}+ (pooled pe n_test); tie-break-ul "
-                        f"secundar diferă de decizie (rată brută, nu lift)")
+                _ord = (f"limita Wilson a ratei {_shown_t}+ (pooled, pe extrageri efective); "
+                        f"tie-break-ul secundar diferă de decizie (rată brută, nu lift)")
             else:
-                _ord = f"rata brută {_shown_t}+ (n_test lipsă → fără Wilson)"
+                _ord = f"rata brută {_shown_t}+ (fără coloane n → fără Wilson)"
             if _dec_low is True:
                 _why = ("nicio metodă n-a bătut random consistent (≥"
                         f"{_cons_pct}% din ferestre) → decizia a căzut pe "

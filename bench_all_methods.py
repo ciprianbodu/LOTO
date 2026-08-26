@@ -349,10 +349,17 @@ def main() -> int:
         except Exception as _e:
             logging.warning(f"[freshness] failed to stamp signatures: {_e}")
 
-        # Build per-(game, pool) auto-pilot matrix from folds.csv
+        # Build per-(game, pool) auto-pilot matrix from folds.csv.
+        # ATENTIE: folds-ul rularii CURENTE, din --out (nu default-ul
+        # "bench_results/folds.csv"). Fara asta, `--out alt_folder` producea un
+        # best_methods.json HIBRID: winners din rularea noua, dar
+        # auto_pilot_per_pool (partea pe care o citeste PRODUCTIA) recalculat pe
+        # un folds.csv vechi/strain — inclusiv peste un bump de CACHE_VERSION.
+        _folds_now = str(out_path / "folds.csv")
         try:
             from loto_enterprise.benchmark.decision import update_best_methods_with_auto_pilot
-            update_best_methods_with_auto_pilot()
+            update_best_methods_with_auto_pilot(folds_csv_path=_folds_now)
+            logging.info("[auto-pilot] decizie construita din %s", _folds_now)
         except Exception as _e:
             logging.warning(f"[auto-pilot] failed to build decision matrix: {_e}")
 

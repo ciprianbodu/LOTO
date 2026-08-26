@@ -9,8 +9,12 @@ introdusă pentru rate_4plus (limita Wilson), parte din optimizarea "hits+4":
      doar datorită unei ferestre MICI/zgomotoase (10%) poate avea, agregat, mai
      PUȚINE evenimente 4+ totale decât o metodă cu rată brută mai mică dar mai
      multe evenimente pe volum mare de date. Media neponderată pe ferestre
-     (vechiul comportament) alege greșit metoda cu zgomot; Wilson (pooled pe
-     n_test real) alege corect metoda cu mai multe dovezi.
+     (vechiul comportament) alege greșit metoda cu zgomot; Wilson pe rata
+     pooled alege corect metoda cu mai multe dovezi.
+  3. `pooled_rate_and_neff` — agregarea canonică: rata rămâne pooled (ponderată
+     implicit pe recență), dar n-ul dat lui Wilson e cel EFECTIV (Kish), fiindcă
+     ferestrele sim_depth sunt sufixe CUIBĂRITE; plus fallback-ul n_eval→n_test
+     aplicat PE RÂND (folds mixte peste un bump de versiune).
 """
 from __future__ import annotations
 
@@ -239,39 +243,79 @@ def test_decide_optimal_config_fallback_branch_has_single_member_ensemble():
 
 
 # ---------------------------------------------------------------------------
-# pooled_wilson_distinct — ferestre CUIBĂRITE: dovada = extrageri distincte
+# pooled_rate_and_neff / pooled_wilson_distinct — ferestre CUIBARITE
 # ---------------------------------------------------------------------------
-def test_pooled_wilson_uses_distinct_draws_not_sum():
-    """Ferestrele sunt sufixe cuibărite → n-ul din Wilson trebuie să fie fereastra
-    cea mai mare, NU suma (care număra aceeași extragere de mai multe ori)."""
-    df = pd.DataFrame({"rate_4plus_k10": [0.04, 0.04], "n_test": [100, 500]})
-    v = decision.pooled_wilson_distinct(df, "rate_4plus_k10")
-    assert v == pytest.approx(decision._wilson_lower_bound(0.04 * 500, 500))
-    # strict sub valoarea VECHE (pooled pe suma 600 — supraîncrezătoare)
-    assert v < decision._wilson_lower_bound(0.04 * 600, 600)
+def _neff(sizes):
+    """n efectiv Kish pentru ferestre-sufix: (sum n)^2 / sum_ik min(n_i, n_k)."""
+    tot = float(sum(sizes))
+    return tot * tot / float(sum(min(a, b) for a in sizes for b in sizes))
 
 
-def test_pooled_wilson_rate_stays_recency_weighted():
-    """Rata rămâne pooled pe TOATE ferestrele (ponderare implicită pe recență),
-    doar n-ul devine distinct: phat = Σ rate·n / Σ n, n = max."""
+def test_neff_is_kish_not_sum_and_not_max():
+    """n-ul dat lui Wilson nu e nici suma (numara extrageri de mai multe ori),
+    nici max (rata e o medie PONDERATA) — e n efectiv Kish, intre cele doua."""
+    sizes = [258, 774, 1547, 2497]
+    df = pd.DataFrame({"r": [0.04] * 4, "n_test": sizes})
+    phat, n_eff = decision.pooled_rate_and_neff(df, "r")
+    assert phat == pytest.approx(0.04)
+    assert n_eff == pytest.approx(_neff(sizes), rel=1e-9)
+    assert max(sizes) * 0.75 < n_eff < max(sizes)      # ~0.805 x n_max
+    assert n_eff < sum(sizes)                          # strict sub varianta veche
+
+
+def test_pooled_wilson_below_old_sum_based_bound():
+    """Corectia trebuie sa fie CONSERVATOARE fata de formula veche (pooled pe suma)."""
+    sizes = [100, 500]
+    df = pd.DataFrame({"r": [0.04, 0.04], "n_test": sizes})
+    new = decision.pooled_wilson_distinct(df, "r")
+    old = decision._wilson_lower_bound(0.04 * sum(sizes), sum(sizes))
+    assert new < old
+    assert new == pytest.approx(
+        decision._wilson_lower_bound(0.04 * _neff(sizes), _neff(sizes))
+    )
+
+
+def test_pooled_rate_stays_recency_weighted():
+    """Rata ramane pooled pe TOATE ferestrele (ponderare implicita pe recenta)."""
     df = pd.DataFrame({"r": [0.10, 0.02], "n_test": [100, 400]})
-    phat = (0.10 * 100 + 0.02 * 400) / 500  # 0.036
-    v = decision.pooled_wilson_distinct(df, "r")
-    assert v == pytest.approx(decision._wilson_lower_bound(phat * 400, 400))
+    phat, _ = decision.pooled_rate_and_neff(df, "r")
+    assert phat == pytest.approx((0.10 * 100 + 0.02 * 400) / 500)
 
 
-def test_pooled_wilson_prefers_n_eval_and_skips_zero_rows():
-    """Cu coloana n_eval prezentă (v13), ea e denominatorul; ferestrele cu
-    n_eval=0 (nimic evaluat) sunt excluse din agregare."""
-    df = pd.DataFrame({"r": [0.5, 0.0], "n_test": [100, 100], "n_eval": [100, 0]})
-    v = decision.pooled_wilson_distinct(df, "r")
-    assert v == pytest.approx(decision._wilson_lower_bound(50, 100))
+def test_single_window_matches_plain_wilson():
+    """Cu o singura fereastra, agregarea degenereaza la Wilson clasic."""
+    df = pd.DataFrame({"r": [0.09], "n_test": [2497]})
+    assert decision.pooled_wilson_distinct(df, "r") == pytest.approx(
+        decision._wilson_lower_bound(0.09 * 2497, 2497)
+    )
 
 
-def test_pooled_wilson_none_on_missing_or_empty():
+def test_n_eval_fallback_is_PER_ROW_not_per_frame():
+    """Folds MIXT (unele randuri v13 cu n_eval, altele vechi fara): randurile vechi
+    trebuie sa cada pe n_test, NU sa fie aruncate din agregare."""
+    mixed = pd.DataFrame({
+        "r": [0.10, 0.02],
+        "n_test": [100, 400],
+        "n_eval": [float("nan"), 400],
+    })
+    clean = pd.DataFrame({"r": [0.10, 0.02], "n_test": [100, 400]})
+    assert decision.pooled_rate_and_neff(mixed, "r") == pytest.approx(
+        decision.pooled_rate_and_neff(clean, "r")
+    )
+
+
+def test_n_eval_preferred_and_zero_rows_dropped():
+    """n_eval e denominatorul cand e valid; o fereastra cu n_eval=0 si n_test=0
+    (nimic evaluat) nu are ce contribui."""
+    df = pd.DataFrame({"r": [0.5, 0.0], "n_test": [100, 0], "n_eval": [100, 0]})
+    phat, n_eff = decision.pooled_rate_and_neff(df, "r")
+    assert (phat, n_eff) == pytest.approx((0.5, 100.0))
+
+
+def test_pooled_none_on_missing_or_empty():
+    assert decision.pooled_rate_and_neff(pd.DataFrame({"x": [1]}), "r") is None
     assert decision.pooled_wilson_distinct(pd.DataFrame({"x": [1]}), "r") is None
-    df = pd.DataFrame({"r": [0.1], "n_test": [0]})
-    assert decision.pooled_wilson_distinct(df, "r") is None
+    assert decision.pooled_rate_and_neff(pd.DataFrame({"r": [0.1], "n_test": [0]}), "r") is None
 
 
 def test_clamp_bench_hit_target_only_3_or_4():
