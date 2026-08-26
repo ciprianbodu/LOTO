@@ -245,4 +245,5 @@ LOTO_UI_PORT=8099 python3 app_nicegui.py & # apoi curl localhost:8099 → 200
 E2e worker: init_job_queue → submit_job(_build_config_json) → fetch_pending_job → worker._run_pipeline_job → complete_job → decode_queue_result.
 
 ## Vezi și
-`INSTRUCTIUNI.md` = ghidul pentru UTILIZATOR (flux de folosire, în română).
+~~`INSTRUCTIUNI.md`~~ — **NU EXISTĂ** (nici în istoricul git). Referința era moartă;
+ghidul de utilizare a rămas doar în acest fișier.

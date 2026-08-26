@@ -20,7 +20,10 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        costul sistemului complet.
 
 Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34.
-Orice eșec/limită → fallback la greedy (sigur). Default = greedy (bit-identic).
+Orice eșec/limită → fallback la greedy (sigur). Default în `loto_engine`:
+**lajolla** când `max_variants == 0` (setarea implicită a UI-ului), greedy când
+există un cap de bilete. (Textul de dinainte, „Default = greedy (bit-identic)",
+descria comportamentul de dinaintea introducerii La Jolla.)
 """
 from __future__ import annotations
 

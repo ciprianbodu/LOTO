@@ -238,7 +238,15 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                         )
 
                 engine = LotoEngine(game_type=game_mapped)
-                engine.load_data(temp_csv_path)
+                # Valoarea de retur NU se ignoră: cu date necitibile/corupte
+                # pipeline-ul mergea până la capăt și scotea pool GOL / 0 bilete,
+                # iar jobul se încheia COMPLETED — „succes" fără niciun bilet și
+                # fără nicio eroare vizibilă.
+                if not engine.load_data(temp_csv_path):
+                    raise ValueError(
+                        f"Datele pentru {game_label} nu au putut fi încărcate "
+                        f"(fișier lipsă, corupt sau fără extrageri valide)."
+                    )
                 lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
                     progress_cb=progress_cb,
                     pool_size=p_size,

@@ -7,7 +7,8 @@
 
 # UI + utilitare
 nicegui                  # UI principal (app_nicegui.py)
-streamlit                # UI legacy (app.py)
+# streamlit: ELIMINAT. Era pentru „UI legacy (app.py)" — un fișier care nu
+# există în repo și nu apare nici în istoricul git.
 requests
 psutil
 matplotlib

@@ -273,9 +273,23 @@ class LotoEngine:
             self.audit["hash"] = hashlib.sha256(
                 pd.util.hash_pandas_object(self.data, index=True).values.tobytes()
             ).hexdigest()[:16]
+            # Un CSV care se PARSEAZĂ nu înseamnă date UTILIZABILE: pandas citește
+            # fericit un fișier de text arbitrar ca DataFrame cu 1 rând, iar
+            # `load_data` întorcea True. Pipeline-ul rula apoi până la capăt și
+            # producea POOL GOL / 0 bilete, iar jobul era marcat COMPLETED —
+            # utilizatorul vedea „gata" și niciun bilet, fără nicio eroare.
+            # Cerem cel puțin o extragere valid parsată (matricea de extrageri).
+            if self._draw_matrix is None or len(self._draw_matrix) == 0:
+                logging.error(
+                    "[LOAD] %s: nicio extragere validă după parsare (%s rânduri "
+                    "citite) — date inutilizabile pentru %s.",
+                    csv_path, len(self.data), self.game_type,
+                )
+                self.data = None
+                return False
             return True
         except Exception as e:
-            print(f"Eroare la încărcare date: {e}")
+            logging.error("[LOAD] Eroare la încărcare date din %s: %s", csv_path, e)
             return False
 
     def _extract_draw_at_index(self, idx: int) -> list[int] | None:
@@ -400,7 +414,10 @@ class LotoEngine:
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return [], 0.0
 
-        # Wheeling: implicit greedy (bit-identic). Alternative selectabile prin env
+        # Wheeling: implicit **lajolla** când max_variants == 0 (setarea implicită
+        # a UI-ului), altfel greedy. Comentariul de dinainte zicea „implicit greedy
+        # (bit-identic)", ceea ce contrazicea codul de 5 rânduri mai jos.
+        # Alternative selectabile prin env
         # LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34
         # (necunoscut → greedy). Lista completă: wheeling_methods.WHEEL_METHODS.
         _wheel_method_env = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
