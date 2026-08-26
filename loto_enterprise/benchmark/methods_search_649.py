@@ -48,6 +48,21 @@ def _indicator(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
         arr = arr.reshape(1, -1)
     T = arr.shape[0]
     M = np.zeros((max_num, T), dtype=np.float64)
+    if arr.size and arr.dtype.kind in "iuf":
+        # Cale RAPIDĂ pentru dtype numeric (cazul normal): scatter vectorizat.
+        # Bucla de dedesubt rămâne pentru dtype=object/string, unde `int(v)` cu
+        # try/except chiar e necesar — `astype(np.int64)` ar ARUNCA acolo, nu ar
+        # sări elementul. Pe float, NaN/inf sunt excluse ÎNAINTE de cast (castul
+        # lor dă gunoi, în timp ce `int(nan)` arunca și bucla îl sărea).
+        # Trunchierea e identică: `int(3.7)` și `astype(int64)` dau amândouă 3.
+        iv = arr.astype(np.int64, copy=False)
+        ok = (iv >= 1) & (iv <= max_num)
+        if arr.dtype.kind == "f":
+            ok &= np.isfinite(arr)
+        if ok.any():
+            tt = np.broadcast_to(np.arange(T)[:, None], iv.shape)
+            M[iv[ok] - 1, tt[ok]] = 1.0
+        return M
     for t in range(T):
         for v in arr[t]:
             try:
