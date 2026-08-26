@@ -683,7 +683,7 @@ class LotoBacktester:
         if _stateless and len(sim_indices) > 1:
             import os
             import pickle
-            from concurrent.futures import ProcessPoolExecutor, as_completed
+            from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
             n_workers = _wf_max_workers(auto_invert=auto_invert)
             n_steps = len(sim_indices)
@@ -789,21 +789,60 @@ class LotoBacktester:
                                 except Exception:  # noqa: BLE001
                                     pass
                             futures = {ex.submit(_wf_worker_step, a): a[0] for a in batch}
-                            for fut in as_completed(futures):
-                                try:
-                                    pred = fut.result(timeout=_WF_STEP_TIMEOUT_S)
-                                    if pred is not None:
-                                        retro_predictions.append(pred)
-                                except Exception as exc:  # noqa: BLE001
-                                    logger.error("[BACKTEST] WF future eșuat sim_idx=%s: %s",
-                                                 futures.get(fut), exc)
-                                done_count += 1
-                                _wf_report_progress(progress_cb, done_count, n_steps)
-                                pct = int(done_count * 100 / max(1, n_steps))
-                                if pct >= last_log_pct + 10:
-                                    last_log_pct = pct - (pct % 10)
-                                    logger.info("[BACKTEST] WF progres: %d/%d pași (%d%%)",
-                                                done_count, n_steps, pct)
+                            pending = set(futures)
+                            hung = False
+                            while pending:
+                                # Înainte: `as_completed(futures)` FĂRĂ timeout — nu putea
+                                # expira niciodată (timeout-ul de pe .result() se aplica
+                                # doar future-urilor DEJA terminate), deci un proces blocat
+                                # (milp/BLAS înțepenit) îngheța tot walk-forward-ul.
+                                # Acum: „niciun pas terminat în _WF_STEP_TIMEOUT_S" =
+                                # pool blocat → oprire cu validare PARȚIALĂ.
+                                done_set, pending = wait(pending, timeout=_WF_STEP_TIMEOUT_S,
+                                                         return_when=FIRST_COMPLETED)
+                                if not done_set:
+                                    hung = True
+                                    break
+                                for fut in done_set:
+                                    try:
+                                        pred = fut.result()
+                                        if pred is not None:
+                                            retro_predictions.append(pred)
+                                    except Exception as exc:  # noqa: BLE001
+                                        logger.error("[BACKTEST] WF future eșuat sim_idx=%s: %s",
+                                                     futures.get(fut), exc)
+                                    done_count += 1
+                                    _wf_report_progress(progress_cb, done_count, n_steps)
+                                    pct = int(done_count * 100 / max(1, n_steps))
+                                    if pct >= last_log_pct + 10:
+                                        last_log_pct = pct - (pct % 10)
+                                        logger.info("[BACKTEST] WF progres: %d/%d pași (%d%%)",
+                                                    done_count, n_steps, pct)
+                            if hung:
+                                cancelled = True
+                                logger.error(
+                                    "[BACKTEST] WF: NICIUN pas terminat în %.0fs — presupun "
+                                    "proces blocat. Sar %d pași în curs și opresc pool-ul → "
+                                    "validare PARȚIALĂ (restul extragerilor se acumulează la "
+                                    "următoarea rulare).", _WF_STEP_TIMEOUT_S, len(pending),
+                                )
+                                for _f in pending:
+                                    _f.cancel()
+                                # Fără kill pe procese, ieșirea din `with` ar face
+                                # shutdown(wait=True) = join pe procesul înțepenit —
+                                # exact hang-ul pe care îl evităm. ORDINEA contează:
+                                # lista de procese se ia ÎNAINTE de shutdown —
+                                # shutdown(wait=False) setează ex._processes = None,
+                                # iar `.values()` pe None crăpa → except-ul exterior
+                                # re-rula totul secvențial și copiii rămâneau ORFANI.
+                                _procs = list((getattr(ex, "_processes", None) or {}).values())
+                                ex.shutdown(wait=False, cancel_futures=True)
+                                for _proc in _procs:
+                                    try:
+                                        _proc.kill()
+                                    except Exception:  # noqa: BLE001
+                                        pass
+                                break
                             if cancelled:
                                 break
             except Exception as exc:  # noqa: BLE001

@@ -222,11 +222,12 @@ def _merge_partial_coverage(
 
     De ce reuniune şi nu „câştigă cel mai lung": acoperirea parţială NU e garantat
     un prefix contiguu al cozii recente. Paşii se lansează în ordine recent→vechi,
-    dar un pas care crapă sau depăşeşte `_WF_STEP_TIMEOUT_S` e SĂRIT
-    (`backtesting._wf_worker_step` loghează şi întoarce None), deci două rulări pot
-    avea GĂURI diferite: o rulare mai lungă în total poate rata extrageri pe care
-    cache-ul le avea. Regula veche („păstrez cache-ul dacă are mai multe extrageri")
-    arunca exact felia acoperită doar de cealaltă rulare.
+    dar un pas care CRAPĂ e sărit (worker-ul loghează şi întoarce None), iar un
+    pool fără NICIUN progres în `_WF_STEP_TIMEOUT_S` e oprit forţat cu validare
+    parţială (paşii în curs se pierd), deci două rulări pot avea GĂURI diferite:
+    o rulare mai lungă în total poate rata extrageri pe care cache-ul le avea.
+    Regula veche („păstrez cache-ul dacă are mai multe extrageri") arunca exact
+    felia acoperită doar de cealaltă rulare.
 
     Contract: cheia de cache fixează (csv_hash, joc, pool, depth, decizie), deci
     intrările pentru acelaşi `draw_index` sunt echivalente — la conflict păstrăm
