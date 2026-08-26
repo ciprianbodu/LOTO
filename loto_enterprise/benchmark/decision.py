@@ -55,6 +55,21 @@ logger = logging.getLogger(__name__)
 
 
 CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
+
+# Câte ferestre COMUNE (metodă ∩ random) trebuie să existe ca poarta de
+# consistență să însemne ceva. `_windows_method_beats_random` întoarce
+# dimensiunea INTERSECȚIEI de percentile; cu o singură fereastră comună,
+# „bate random în ≥60% din ferestre" degenerează într-o comparație unică —
+# adică 1/1 = 100%, deci poarta lasă să treacă orice.
+# Reproductibil: pe folds.csv real (loto_6_49 k12), ștergând rândurile `random`
+# de la 3 din 4 percentile, numărul de metode calificate sare de la 3 la 17
+# (random doar @100), 12 (@30) sau 4 cu ALT câștigător (@10) — și
+# `low_confidence` rămâne False în toate cazurile.
+# Nu e doar teoretic: `runner._flush_folds` rescrie folds.csv la fiecare ~100 de
+# folds terminate, iar future-urile se termină în altă ordine decât au fost
+# trimise, deci un bench întrerupt lasă un folds.csv în care `random` are 1-3
+# percentile, iar metodele de dinainte au 4.
+MIN_CONSISTENCY_WINDOWS = 3
 MIN_TEST_DRAWS_FOR_STABILITY = 30
 
 # Câte metode intră în ensemble-ul de scoring (blend ponderat), în plus față de
@@ -535,6 +550,7 @@ def decide_optimal_config_for_pool(
     # (măsurat pe date reale: 0.023 vs 0.154 la k12), deci erau îngropate tăcut.
     # Pe un folds.csv omogen (cazul normal) rezoluția e aceeași pentru toată
     # lumea, deci decizia rămâne neschimbată.
+    _thin_gate_warned: list[tuple[str, int]] = []  # rezumat, o SINGURĂ linie per (joc, pool)
     _all_real = sub[sub["is_random"] == False]  # noqa: E712
     _frame_rate_col = _resolve_rate_col(_all_real) if not _all_real.empty else None
 
@@ -580,7 +596,9 @@ def decide_optimal_config_for_pool(
         if real_m.empty:
             continue
         n_beat, n_total = _windows_method_beats_random(real_m, real_random, base_col)
-        if n_total == 0:
+        if 0 < n_total < MIN_CONSISTENCY_WINDOWS:
+            _thin_gate_warned.append((m, n_total))
+        if n_total < MIN_CONSISTENCY_WINDOWS:
             continue
         consistency = n_beat / n_total
         if consistency < CONSISTENCY_THRESHOLD:
@@ -595,6 +613,19 @@ def decide_optimal_config_for_pool(
     # Decizia e "low confidence" când nicio metodă nu a trecut pragul de
     # consistență față de random — alegem tot o metodă REALĂ (nu baseline-ul
     # nedeterminist), dar marcăm explicit că diferențele sunt zgomot.
+    if _thin_gate_warned:
+        _wmin = min(n for _, n in _thin_gate_warned)
+        _wmax = max(n for _, n in _thin_gate_warned)
+        logger.warning(
+            "[decision] %s k%d: %d metode au doar %s fereastră(e) comună(e) cu `random` "
+            "(prag %d) — poarta de consistență nu e concludentă, le sar. folds.csv pare "
+            "PARȚIAL (bench întrerupt?) — re-rulează bench-ul. Ex.: %s",
+            game_key, pool_size, len(_thin_gate_warned),
+            f"{_wmin}" if _wmin == _wmax else f"{_wmin}-{_wmax}",
+            MIN_CONSISTENCY_WINDOWS,
+            ", ".join(m for m, _ in _thin_gate_warned[:5]),
+        )
+
     low_confidence = False
     dropped_redundant: list[dict] = []
 
