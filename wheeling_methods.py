@@ -136,22 +136,42 @@ def _order_by_scores(wheel: list[list[int]], scores) -> list[list[int]]:
 _ILP_MAX_BLOCKS = 12000   # guard: peste asta, ILP devine prea greu → fallback
 _ILP_MAX_TARGETS = 6000
 
+# Cache de PROCES pentru coverul ILP, keyed pe (v, pick, guarantee).
+# De ce e legitim: obiectivul ILP-ului e `c=ones(nb)` — minimizează NUMĂRUL de
+# bilete — deci NU depinde de scoruri, iar matricea de constrângeri se
+# construiește pe POZIȚII (0..v-1), fiind identică pentru orice pool de aceeași
+# dimensiune. Coverul e deci invariant la reetichetare, exact ca un design
+# La Jolla (verificat: același cover pozițional pe `1..10`, pe `21..30`, pe un
+# set împrăștiat și pe același set CU scoruri).
+# Ce NU se cache-uiește: comparația cu greedy de mai jos — `generate_combinatorial_wheel`
+# ordonează țintele după SUMA SCORURILOR, deci depinde de scoruri și se reface la
+# fiecare apel (costă < 0.5 s măsurat, față de ~15 s cât ia solver-ul).
+# Motivul optimizării: fără el, fiecare pas de walk-forward (~1940/rulare) plătea
+# `time_limit` întreg (15 s) ca să re-deducă exact același cover.
+_ILP_COVER_CACHE: dict[tuple[int, int, int], list[tuple[int, ...]] | None] = {}
 
-def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
-              time_limit: float = 15.0):
-    pool = _sorted_pool(pool, scores)
-    v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
+
+def _ilp_cover_positions(v: int, pick: int, guarantee: int,
+                         time_limit: float) -> list[tuple[int, ...]] | None:
+    """Coverul ILP pentru C(v, pick, guarantee) ca POZIȚII 0..v-1 (memoizat).
+
+    None = ILP indisponibil pentru configurația asta (prea mare / fără soluție /
+    scipy lipsă) → apelantul cade pe greedy, ca înainte.
+    """
+    key = (int(v), int(pick), int(guarantee))
+    if key in _ILP_COVER_CACHE:
+        return _ILP_COVER_CACHE[key]
     nb, nt = _comb(v, pick), _comb(v, guarantee)
     if nb > _ILP_MAX_BLOCKS or nt > _ILP_MAX_TARGETS:
         logger.info("[WHEEL-ILP] prea mare (blocuri=%d ținte=%d) → greedy", nb, nt)
-        return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
+        _ILP_COVER_CACHE[key] = None
+        return None
     try:
         from scipy.optimize import milp, LinearConstraint, Bounds
         from scipy.sparse import lil_matrix
-        blocks = list(itertools.combinations(pool, pick))
-        targets = list(itertools.combinations(pool, guarantee))
+        idxs = range(v)
+        blocks = list(itertools.combinations(idxs, pick))
+        targets = list(itertools.combinations(idxs, guarantee))
         tidx = {t: i for i, t in enumerate(targets)}
         A = lil_matrix((nt, nb), dtype=np.float64)
         for j, b in enumerate(blocks):
@@ -166,8 +186,27 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
         )
         if res.x is None:
             logger.warning("[WHEEL-ILP] fără soluție → greedy")
-            return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
-        chosen = [list(blocks[j]) for j in range(nb) if res.x[j] > 0.5]
+            cover = None
+        else:
+            cover = [blocks[j] for j in range(nb) if res.x[j] > 0.5]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WHEEL-ILP] eșec (%s) → greedy", exc)
+        cover = None
+    _ILP_COVER_CACHE[key] = cover
+    return cover
+
+
+def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
+              time_limit: float = 15.0):
+    pool = _sorted_pool(pool, scores)
+    v = len(pool)
+    if v < pick:
+        return [list(pool)], 100.0
+    cover = _ilp_cover_positions(v, int(pick), int(guarantee), time_limit)
+    if cover is None:
+        return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
+    try:
+        chosen = [[pool[i] for i in blk] for blk in cover]
         # HiGHS poate returna o soluție feasibilă NEoptimă la limita de timp →
         # comparăm cu greedy. Criteriul e (ACOPERIRE, apoi bilete), nu doar numărul
         # de bilete: greedy-ul se oprește la 1000 de iterații
@@ -205,7 +244,16 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
     if v < pick:
         return [list(pool)], 100.0
     base, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)  # plecăm din greedy complet
-    targets = list(itertools.combinations(pool, guarantee))
+    # Țintele se enumeră pe pool-ul SORTAT NUMERIC, nu pe cel sortat după scor:
+    # `ticket_targets` caută cu `tuple(sorted(...))`, deci cheile trebuie să fie
+    # tot crescătoare. Cu scoruri (adică pe TOATE apelurile de producție)
+    # `_sorted_pool` reordonează după scor, cheile ieșeau în ordinea scorurilor și
+    # fiecare căutare arunca `KeyError` — metoda era 100% moartă cu
+    # LOTO_WHEEL_METHOD=annealing. Ordinea nu contează pentru acoperire (contează
+    # doar apartenența); ordinea după scor se aplică oricum la final prin
+    # `_order_by_scores`.
+    _pool_sorted = sorted(pool)
+    targets = list(itertools.combinations(_pool_sorted, guarantee))
     if not targets:
         return base, 100.0
     tidx = {t: i for i, t in enumerate(targets)}
@@ -243,7 +291,7 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
     # 2) Annealing: încearcă să înlocuiască un bilet cu altul aleator dacă scade
     #    redundanța (păstrând acoperirea completă) — relaxează spre minim local mai bun.
     if _comb(v, pick) <= 200000:
-        all_blocks = list(itertools.combinations(pool, pick))
+        all_blocks = list(itertools.combinations(_pool_sorted, pick))
     if all_blocks:
         T = 1.0
         for it in range(iters):
@@ -307,9 +355,15 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
     try:
         import numpy as np
         rng = np.random.default_rng(seed)
-        blocks = list(itertools.combinations(pool, pick))
+        # Ca la annealing: enumerăm pe pool-ul SORTAT NUMERIC, fiindcă sămânța de
+        # elitism caută cu `bidx[tuple(sorted(t))]`. Cu scoruri, `_sorted_pool`
+        # reordonează după scor, nicio cheie nu se potrivea, `g_idx` ieșea GOALĂ și
+        # GA-ul pornea complet aleator — de unde acoperire sub 100% acolo unde
+        # greedy dă 100% cu același număr de bilete (măsurat: 92.38% pe pool 10).
+        _pool_sorted = sorted(pool)
+        blocks = list(itertools.combinations(_pool_sorted, pick))
         bidx = {b: i for i, b in enumerate(blocks)}
-        targets = list(itertools.combinations(pool, guarantee))
+        targets = list(itertools.combinations(_pool_sorted, guarantee))
         tidx = {t: i for i, t in enumerate(targets)}
         # M[b, t] = 1 dacă blocul b acoperă ținta t (t ⊆ b)
         M = np.zeros((nb, nt), dtype=np.float32)
@@ -396,7 +450,11 @@ def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
         if f.exists():
             try:
                 blocks = []
-                for line in f.read_text().splitlines():
+                # encoding EXPLICIT: pe Windows default-ul e cp1252, iar un
+                # design cu BOM/octet non-ASCII ar arunca UnicodeDecodeError →
+                # prins de `except` de mai jos → designul se pierde TĂCUT și
+                # cădem pe ILP/greedy (măsurat: +34% bilete pe 6/49 pool 12 g4).
+                for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
                     nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
                     if len(nums) == pick:
                         blocks.append(nums)

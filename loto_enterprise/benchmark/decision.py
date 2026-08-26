@@ -507,7 +507,11 @@ def decide_optimal_config_for_pool(
     # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
     # fallback de metrică (ex. ținta 3+ dar folds.csv vechi are doar 4+) —
     # trebuie SEMNALIZAT (rate_col_mismatch + rationale), nu tăcut.
-    _target_cols = {rate_target_col, f"rate_{BENCH_HIT_TARGET}plus"}
+    # ATENȚIE la ce e „mismatch": `rate_{T}plus` FĂRĂ sufix `_kN` NU e rata
+    # pool-ului curent — `runner._evaluate_fold` o scrie ca rata la pool-ul de
+    # BAZĂ (K = draw_n). E deci un fallback de POOL, nu doar de țintă, și trebuie
+    # semnalizat la fel ca trecerea pe 4+.
+    _target_cols = {rate_target_col}
     _mismatch_cols_used: set[str] = set()
 
     def _resolve_rate_col(frame: pd.DataFrame) -> str | None:
@@ -516,11 +520,30 @@ def decide_optimal_config_for_pool(
                 if c not in _target_cols and c not in _mismatch_cols_used:
                     _mismatch_cols_used.add(c)  # log O DATĂ per (game, pool, coloană)
                     logger.warning(
-                        "[decision] %s k%d: coloanele rate_%dplus lipsesc/all-NaN în folds.csv — "
-                        "decizia cade pe %r (metrica 4+), deși ținta e %d+. Re-rulează bench-ul.",
-                        game_key, pool_size, BENCH_HIT_TARGET, c, BENCH_HIT_TARGET,
+                        "[decision] %s k%d: %r lipsește/e all-NaN în folds.csv — "
+                        "decizia cade pe %r. Ținta e %d+ @ k%d. Re-rulează bench-ul.",
+                        game_key, pool_size, rate_target_col, c, BENCH_HIT_TARGET, pool_size,
                     )
                 return c
+        return None
+
+    # Coloana se rezolvă O SINGURĂ DATĂ, pe TOT frame-ul (game, pool) — nu per
+    # metodă. Rezolvată per metodă, un folds.csv asamblat din două faze de bench
+    # (unele metode fără coloanele per-pool) făcea ca rânduri din ACELAȘI
+    # `qualifying.sort` să fie punctate pe coloane DIFERITE și incomparabile:
+    # metodele „vechi" cădeau pe rata pool-ului de bază, structural mai mică
+    # (măsurat pe date reale: 0.023 vs 0.154 la k12), deci erau îngropate tăcut.
+    # Pe un folds.csv omogen (cazul normal) rezoluția e aceeași pentru toată
+    # lumea, deci decizia rămâne neschimbată.
+    _all_real = sub[sub["is_random"] == False]  # noqa: E712
+    _frame_rate_col = _resolve_rate_col(_all_real) if not _all_real.empty else None
+
+    def _rate_col_for(frame: pd.DataFrame) -> str | None:
+        """Coloana comună dacă metoda are date în ea; altfel None (metoda e sărită)."""
+        if _frame_rate_col is None:
+            return None
+        if _frame_rate_col in frame.columns and frame[_frame_rate_col].notna().any():
+            return _frame_rate_col
         return None
 
     def _rate_target_mean(frame: pd.DataFrame) -> float:
@@ -530,7 +553,7 @@ def decide_optimal_config_for_pool(
         # lângă ea (măsurat: 86 de celule joc×pool×metodă). Cei doi estimatori
         # trebuie să fie ai aceleiași mărimi. Fallback pe media brută doar dacă
         # lipsesc coloanele de n (folds foarte vechi).
-        c = _resolve_rate_col(frame)
+        c = _rate_col_for(frame)
         if c is None:
             return 0.0
         got = pooled_rate_and_neff(frame, c)
@@ -545,7 +568,7 @@ def decide_optimal_config_for_pool(
         # + n EFECTIV Kish, nu suma ferestrelor cuibărite) e canonică în
         # `pooled_rate_and_neff` — vezi docstring-ul ei; înainte n-ul era suma
         # (măsurat pe folds de producție: ≈2.03× n real) → limite supraîncrezătoare.
-        c = _resolve_rate_col(frame)
+        c = _rate_col_for(frame)
         if c is None:
             return 0.0
         v = pooled_wilson_distinct(frame, c)
@@ -683,7 +706,7 @@ def decide_optimal_config_for_pool(
 
     # Pick the best sim_depth for the chosen scorer based on target hit rate (percentage of drawings)
     real_chosen = sub[(sub["method"] == scorer) & (sub["is_random"] == False)]  # noqa: E712
-    rate_col = _resolve_rate_col(real_chosen)
+    rate_col = _rate_col_for(real_chosen) or _resolve_rate_col(real_chosen)
     if rate_col is None:
         rate_col = base_col  # fallback to avg_hits — tot un fallback de metrică
         _mismatch_cols_used.add(base_col)

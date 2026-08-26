@@ -16,7 +16,9 @@ matplotlib
 pandas
 numpy
 scipy
-numba
+# numba: ELIMINAT. `loto_engine` importa `jit` fara sa-l foloseasca nicaieri
+# (un singur `jit` in tot fisierul: importul insusi) — costa ~424 ms per
+# proces la import si aducea numba+llvmlite ca dependinta HARD, degeaba.
 
 # Benchmark / lab utilitare
 rich

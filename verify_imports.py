@@ -47,7 +47,6 @@ def main() -> int:
         ("pandas",   True, "0-1"),
         ("numpy",    True, "0-1"),
         ("scipy",    True, "1-3"),
-        ("numba",    True, "1-5"),   # JIT folosit de loto_engine
         ("psutil",   True, "0-1"),
         ("requests", True, "0-1"),
         ("rich",     True, "0-1"),

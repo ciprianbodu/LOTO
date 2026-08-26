@@ -13,7 +13,6 @@ from datetime import datetime
 import itertools
 import numpy as np
 import pandas as pd
-from numba import jit
 import time
 import logging
 import os
@@ -264,8 +263,16 @@ class LotoEngine:
             self._build_draw_matrix()
             self.audit["rows_loaded"] = len(self.data)
             self.audit["game_detected"] = self.game_type
-            # Bug 1.6 Fix: hashlib.sha256 determinist în loc de hash() care variază între rulări
-            self.audit["hash"] = hashlib.sha256(self.data.values.tobytes()).hexdigest()[:16]
+            # Hash pe CONȚINUT, nu pe pointeri. `self.data.values` pe un DataFrame
+            # cu dtype-uri MIXTE (coloana `date` = str + n1..n6 = int64) dă un
+            # array `dtype=object`, iar `.tobytes()` serializează ADRESELE
+            # obiectelor Python, nu valorile — deci trei citiri ale ACELUIAȘI
+            # fișier dădeau trei hash-uri diferite (verificat), exact
+            # nedeterminismul pe care comentariul de dinainte pretindea că l-a
+            # rezolvat. `hash_pandas_object` hash-uiește valorile.
+            self.audit["hash"] = hashlib.sha256(
+                pd.util.hash_pandas_object(self.data, index=True).values.tobytes()
+            ).hexdigest()[:16]
             return True
         except Exception as e:
             print(f"Eroare la încărcare date: {e}")
@@ -469,6 +476,18 @@ class LotoEngine:
         logging.info(
             f"[PIPELINE] ▶ pool_size primit de la UI = {pool_size}, guarantee = {guarantee}"
         )
+
+        # Garanția nu poate depăși câte numere se extrag: `itertools.combinations`
+        # ar arunca „r must be non-negative" din adâncul wheel-ului, abortând tot
+        # jobul cu un mesaj care nu spune nimic despre cauză. Spinner-ul din UI e
+        # limitat la 5, dar `_int_setting` NU clampează o valoare tastată manual.
+        _draw_n = int(self.params["draw_n"])
+        if int(guarantee) > _draw_n:
+            logging.warning(
+                "[PIPELINE] Garanție %s > numere extrase (%s) — imposibil; "
+                "o limitez la %s.", guarantee, _draw_n, _draw_n,
+            )
+            guarantee = _draw_n
 
         # Garanția cerută în UI se respectă ÎNTOTDEAUNA — fără escaladare implicită.
         # (Istoric: pe pool=10 garanția era suprascrisă silențios cu draw_n → full

@@ -435,7 +435,16 @@ def score_graph_clustering(draws_2d, max_num):
         tri = np.diag(Aw @ Aw @ Aw)                  # triunghiuri ponderate
         deg = (A > 0).sum(axis=1).astype(np.float64)
         denom = deg * (deg - 1)
-        out = np.where(denom > 0, tri / denom, 0.0)
+        # `np.where(cond, tri / denom, 0.0)` evaluează împărțirea pentru TOATE
+        # elementele, inclusiv unde denom == 0 (nod izolat sau cu grad 1) →
+        # RuntimeWarning „invalid value encountered in divide". Rezultatul era
+        # deja corect (where alege 0.0 acolo), dar warning-ul e real: scorerul
+        # e învelit într-un `except Exception` iar `Warning` E subclasă de
+        # `Exception`, deci sub `-W error` metoda ar cădea tăcut pe dict gol.
+        # `np.divide(..., where=)` nu evaluează deloc ramura exclusă. Valorile
+        # rezultate sunt IDENTICE.
+        out = np.divide(tri, denom, out=np.zeros_like(tri, dtype=np.float64),
+                        where=denom > 0)
         return _vec(out, max_num)
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)

@@ -414,8 +414,29 @@ def main() -> None:
                 logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
                 continue
 
-            complete_job(job_id, result_json)
-            logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
+            if complete_job(job_id, result_json):
+                logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
+            else:
+                # UPDATE-ul cere status = RUNNING. Dacă un al doilea worker a rulat
+                # între timp `requeue_running_jobs()`, jobul e din nou PENDING și
+                # rezultatul NU se scrie. Înainte logam „completat cu succes"
+                # oricum — o rulare de 90 de minute dispărea tăcut. Salvăm
+                # rezultatul pe disc ca să nu fie pierdut definitiv.
+                _dump = os.path.join(
+                    tempfile.gettempdir(), f"loto_orphan_result_{job_id}.txt"
+                )
+                try:
+                    with open(_dump, "w", encoding="utf-8") as _fh:
+                        _fh.write(result_json)
+                    logging.error(
+                        "[worker] Job %s: rezultatul NU a putut fi scris în coadă "
+                        "(jobul nu mai era RUNNING). L-am salvat în %s", job_id, _dump,
+                    )
+                except OSError as _exc:
+                    logging.error(
+                        "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING) și "
+                        "nici salvarea în %s n-a mers: %s", job_id, _dump, _exc,
+                    )
             
         except Exception as exc:
             tb = traceback.format_exc()
