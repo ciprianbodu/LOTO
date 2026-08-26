@@ -64,15 +64,15 @@ def _resolve_cache_dir() -> Path:
 
 CACHE_DIR = _resolve_cache_dir()
 CACHE_VERSION = "v13"
-# Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet):
-# v12: parity_balance + 649_parity_recent: tie-break pe frecvență (nu mai degenera
-#      la „cele mai MARI pare/impare" via rank_by_score pe 2 nivele).
+# Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
+# ⚠️ De la v13 numele fișierului începe cu versiunea (`v13_<hash>.pkl`) → straturile
+# vechi pot fi curățate selectiv cu `purge_stale_fold_cache()`.
 # v13: denominatori UNIFICAȚI în _evaluate_fold — hits_per_pool[_bl]/avg_hits_topk
 #      împart la n_eval (extrageri efectiv evaluate), nu la n_test; + câmp nou
-#      FoldResult.n_eval (folosit de Wilson-ul din decision/UI ca număr de
-#      extrageri distincte). Valorile din folds se schimbă la metode parțial
-#      eșuate → cache-ul v12 e stale.
-# v12: (istoric) versiunea de dinaintea unificării denominatorilor.
+#      FoldResult.n_eval (folosit de Wilson-ul din decision/UI). Valorile din folds
+#      se schimbă la metode parțial eșuate → cache-ul v12 e stale.
+# v12: parity_balance + 649_parity_recent: tie-break pe frecvență (nu mai degenera
+#      la „cele mai MARI pare/impare" via rank_by_score pe 2 nivele).
 # v11: score_sum_affinity nu mai e gaussiană pe |k − medie/n| (Joker top-11 era
 #      MEREU 18–28 consecutiv). Scorul e masa de extrageri cu sumă tipică care
 #      conțin k — output-ul metodei se schimbă, cache-ul v10 e stale.
@@ -121,7 +121,12 @@ def _fold_key(csv_hash: str, method: str, percentile: int, game_key: str, is_ran
         raw += f"::bs{_CACHE_VARIANT['block_size']}"
     if is_random and _CACHE_VARIANT["seed"] != _DEFAULT_SEED:
         raw += f"::seed{_CACHE_VARIANT['seed']}"
-    return hashlib.md5(raw.encode()).hexdigest()[:20]
+    # Prefixul de VERSIUNE in NUMELE fisierului (nu doar in hash): altfel
+    # fisierele unei versiuni vechi devin permanent inaccesibile la un bump, dar
+    # raman pe disc la nesfarsit si nimic nu le poate identifica selectiv (numele
+    # era un hash opac). Masurat inainte de schimbare: 47.889 fisiere / 49 MB in
+    # .bench_cache, din care doar 1.032 apartineau versiunii curente.
+    return f"{CACHE_VERSION}_{hashlib.md5(raw.encode()).hexdigest()[:20]}"
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +188,45 @@ def cache_stats() -> dict[str, int]:
         "n_folds_cached": len(files),
         "size_mb": round(total_bytes / 1024 / 1024, 2),
     }
+
+
+def purge_stale_fold_cache(dry_run: bool = True) -> dict:
+    """Sterge foldurile cache-uite ale ALTOR versiuni decat `CACHE_VERSION`.
+
+    La un bump de versiune, fisierele vechi devin PERMANENT inaccesibile
+    (`_fold_key` include versiunea), dar ramaneau pe disc — un strat nou la
+    fiecare bump. Analogul lui `walk_forward_adapter.purge_stale_wf_cache`.
+    Fisierele versiunii CURENTE nu sunt atinse niciodata; cele fara prefix de
+    versiune sunt de dinaintea acestei scheme, deci si ele inaccesibile.
+
+    dry_run=True (implicit) doar raporteaza. Returneaza
+    {'version', 'kept', 'stale', 'stale_mb', 'deleted'}.
+    """
+    _ensure_cache_dir()
+    prefix = f"{CACHE_VERSION}_"
+    kept = stale = deleted = 0
+    stale_bytes = 0
+    for f in CACHE_DIR.glob("*.pkl"):
+        if f.name.startswith(prefix):
+            kept += 1
+            continue
+        stale += 1
+        try:
+            stale_bytes += f.stat().st_size
+        except OSError:
+            pass
+        if not dry_run:
+            try:
+                f.unlink()
+                deleted += 1
+            except OSError as exc:
+                logger.debug("[bench_cache] nu pot sterge %s: %s", f.name, exc)
+    logger.info("[bench_cache] purge %s: %d fisiere ale versiunii %s pastrate, "
+                "%d stale (%.1f MB)%s", "(dry-run)" if dry_run else "",
+                kept, CACHE_VERSION, stale, stale_bytes / 1048576,
+                "" if dry_run else f", {deleted} sterse")
+    return {"version": CACHE_VERSION, "kept": kept, "stale": stale,
+            "stale_mb": round(stale_bytes / 1048576, 1), "deleted": deleted}
 
 
 def clear_cache(older_than_days: int | None = None) -> int:

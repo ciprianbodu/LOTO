@@ -327,3 +327,26 @@ def test_clamp_bench_hit_target_only_3_or_4():
     assert decision.clamp_bench_hit_target("nope") == 3
     assert decision.clamp_bench_hit_target(None) == 3
     assert decision.clamp_bench_hit_target(5, default=4) == 4
+
+
+# ---------------------------------------------------------------------------
+# bench_cache: numele fisierelor poarta versiunea -> curatare selectiva posibila
+# ---------------------------------------------------------------------------
+def test_fold_cache_key_carries_version_prefix():
+    from loto_enterprise.benchmark import bench_cache as bc
+    key = bc._fold_key("deadbeef", "frequency", 30, "loto_6_49", False)
+    assert key.startswith(bc.CACHE_VERSION + "_")
+
+
+def test_purge_stale_fold_cache_keeps_current_version(tmp_path, monkeypatch):
+    from loto_enterprise.benchmark import bench_cache as bc
+    monkeypatch.setattr(bc, "CACHE_DIR", tmp_path)
+    (tmp_path / f"{bc.CACHE_VERSION}_aaa.pkl").write_bytes(b"x")
+    (tmp_path / "v11_bbb.pkl").write_bytes(b"y")
+    (tmp_path / "legacy_no_prefix.pkl").write_bytes(b"z")  # dinainte de schema
+    info = bc.purge_stale_fold_cache(dry_run=True)
+    assert (info["kept"], info["stale"], info["deleted"]) == (1, 2, 0)
+    assert len(list(tmp_path.glob("*.pkl"))) == 3  # dry-run nu sterge nimic
+    info = bc.purge_stale_fold_cache(dry_run=False)
+    assert (info["kept"], info["stale"], info["deleted"]) == (1, 2, 2)
+    assert [f.name for f in tmp_path.glob("*.pkl")] == [f"{bc.CACHE_VERSION}_aaa.pkl"]
