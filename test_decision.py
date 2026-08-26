@@ -238,6 +238,42 @@ def test_decide_optimal_config_fallback_branch_has_single_member_ensemble():
     assert cfg["ensemble"] == [{"method": cfg["scorer"], "weight": 1.0}]
 
 
+# ---------------------------------------------------------------------------
+# pooled_wilson_distinct — ferestre CUIBĂRITE: dovada = extrageri distincte
+# ---------------------------------------------------------------------------
+def test_pooled_wilson_uses_distinct_draws_not_sum():
+    """Ferestrele sunt sufixe cuibărite → n-ul din Wilson trebuie să fie fereastra
+    cea mai mare, NU suma (care număra aceeași extragere de mai multe ori)."""
+    df = pd.DataFrame({"rate_4plus_k10": [0.04, 0.04], "n_test": [100, 500]})
+    v = decision.pooled_wilson_distinct(df, "rate_4plus_k10")
+    assert v == pytest.approx(decision._wilson_lower_bound(0.04 * 500, 500))
+    # strict sub valoarea VECHE (pooled pe suma 600 — supraîncrezătoare)
+    assert v < decision._wilson_lower_bound(0.04 * 600, 600)
+
+
+def test_pooled_wilson_rate_stays_recency_weighted():
+    """Rata rămâne pooled pe TOATE ferestrele (ponderare implicită pe recență),
+    doar n-ul devine distinct: phat = Σ rate·n / Σ n, n = max."""
+    df = pd.DataFrame({"r": [0.10, 0.02], "n_test": [100, 400]})
+    phat = (0.10 * 100 + 0.02 * 400) / 500  # 0.036
+    v = decision.pooled_wilson_distinct(df, "r")
+    assert v == pytest.approx(decision._wilson_lower_bound(phat * 400, 400))
+
+
+def test_pooled_wilson_prefers_n_eval_and_skips_zero_rows():
+    """Cu coloana n_eval prezentă (v13), ea e denominatorul; ferestrele cu
+    n_eval=0 (nimic evaluat) sunt excluse din agregare."""
+    df = pd.DataFrame({"r": [0.5, 0.0], "n_test": [100, 100], "n_eval": [100, 0]})
+    v = decision.pooled_wilson_distinct(df, "r")
+    assert v == pytest.approx(decision._wilson_lower_bound(50, 100))
+
+
+def test_pooled_wilson_none_on_missing_or_empty():
+    assert decision.pooled_wilson_distinct(pd.DataFrame({"x": [1]}), "r") is None
+    df = pd.DataFrame({"r": [0.1], "n_test": [0]})
+    assert decision.pooled_wilson_distinct(df, "r") is None
+
+
 def test_clamp_bench_hit_target_only_3_or_4():
     assert decision.clamp_bench_hit_target(3) == 3
     assert decision.clamp_bench_hit_target(4) == 4

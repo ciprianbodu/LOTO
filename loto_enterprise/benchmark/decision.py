@@ -197,6 +197,42 @@ def _weighted_mean_lift(
     return weighted_sum / weight_total if weight_total > 0 else 0.0
 
 
+def pooled_wilson_distinct(frame: pd.DataFrame, rate_col: str) -> float | None:
+    """Agregarea CANONICĂ a limitei Wilson pentru o rată T+ pe ferestre sim_depth.
+
+    Ferestrele sunt sufixe CUIBĂRITE (10% ⊂ 20% ⊂ … ⊂ 100%), deci Σ n peste
+    ferestre numără aceeași extragere de până la 10 ori (~5.5× n real). RATA
+    rămâne pooled pe toate ferestrele (Σ rate·n / Σ n — ponderare implicită pe
+    recență, deliberată, aceeași filozofie ca `_weighted_mean_lift`), dar DOVADA
+    din Wilson (n) = extragerile DISTINCTE = fereastra cea mai mare. Denominatorul
+    preferat e coloana `n_eval` (v13 — extrageri efectiv evaluate, exact
+    denominatorul ratelor); fallback `n_test` pe folds vechi.
+
+    Sursă UNICĂ de adevăr: folosită și de decizie (`_rate_target_confidence`) și
+    de clasamentul UI (`app_nicegui._wilson_pooled_rate`) — nu re-implementa
+    agregarea în alt loc. None = incalculabil (fără coloane / rânduri valide).
+    """
+    n_col = "n_test"
+    if "n_eval" in frame.columns:
+        try:
+            if (pd.to_numeric(frame["n_eval"], errors="coerce") > 0).any():
+                n_col = "n_eval"
+        except Exception:  # noqa: BLE001
+            pass
+    if rate_col not in frame.columns or n_col not in frame.columns:
+        return None
+    pairs = frame[[rate_col, n_col]].dropna()
+    pairs = pairs[pairs[n_col] > 0]
+    if pairs.empty:
+        return None
+    n_pooled = float(pairs[n_col].sum())
+    if n_pooled <= 0:
+        return None
+    phat = float((pairs[rate_col] * pairs[n_col]).sum()) / n_pooled
+    n_distinct = float(pairs[n_col].max())
+    return _wilson_lower_bound(phat * n_distinct, n_distinct)
+
+
 def _build_ensemble_weights(entries: list[tuple[str, float]]) -> list[dict]:
     """Transformă [(method, confidence), ...] (deja ordonate, top-K) în
     [{"method": m, "weight": w}, ...] cu ponderi proporționale cu confidence
@@ -456,18 +492,16 @@ def decide_optimal_config_for_pool(
         return v if v == v else 0.0  # nu e NaN (NaN != NaN)
 
     def _rate_target_confidence(frame: pd.DataFrame) -> float:
-        # Limită inferioară Wilson pe proporția AGREGATĂ (evenimente totale /
-        # extrageri totale testate, pooled peste toate ferestrele sim_depth) —
-        # mai robustă la zgomot decât media brută pe evenimente rare (4+ hituri).
+        # Limită inferioară Wilson pe proporția agregată — mai robustă la zgomot
+        # decât media brută pe evenimente rare (4+ hituri). Agregarea (rata pooled
+        # + n = extrageri DISTINCTE, nu suma ferestrelor cuibărite) e canonică în
+        # `pooled_wilson_distinct` — vezi docstring-ul ei; înainte n-ul era suma
+        # (~5.5× n real) → limite Wilson sistematic supraîncrezătoare.
         c = _resolve_rate_col(frame)
-        if c is None or "n_test" not in frame.columns:
+        if c is None:
             return 0.0
-        pairs = frame[[c, "n_test"]].dropna()
-        if pairs.empty:
-            return 0.0
-        successes = float((pairs[c] * pairs["n_test"]).sum())
-        n_total = float(pairs["n_test"].sum())
-        return _wilson_lower_bound(successes, n_total)
+        v = pooled_wilson_distinct(frame, c)
+        return float(v) if v is not None else 0.0
 
     qualifying: list[tuple[str, float, int, int, float, float]] = []
     for m in methods:

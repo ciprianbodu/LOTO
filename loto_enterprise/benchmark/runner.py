@@ -159,6 +159,11 @@ class FoldResult:
     n_train: int
     n_test: int
     runtime_sec: float
+    # Extrageri efectiv EVALUATE (n_test minus blocurile în care scorerul a întors
+    # {} și au fost sărite). Denominatorul UNIC pentru hits ȘI rate (v13); înainte
+    # hits împărțea la n_test iar ratele la n_eval → axe inconsistente la metode
+    # parțial eșuate. 0 doar pe folds vechi/failed — consumatorii cad pe n_test.
+    n_eval: int = 0
     # Hit rates per pool size: keys "k6", "k7", "k8", ... "kN" (NO blacklist)
     hits_per_pool: dict[str, float] = field(default_factory=dict)
     # Hit rates per pool size WITH blacklist applied (bottom 25% excluded)
@@ -291,10 +296,15 @@ def _evaluate_fold(
                 f"{blocks} blocks (likely missing CUDA/dep or scorer error)"
             )
 
-        # Aggregate per-pool average (both conditions)
+        # Aggregate per-pool average (both conditions).
+        # v13: TOATE mediile/ratele împart la n_eval (extrageri efectiv evaluate),
+        # nu la n_test — la scorer care întoarce {} pe UNELE blocuri, hits trata
+        # extragerile sărite ca 0 hituri (deflata avg_hits/gate-ul de consistență)
+        # în timp ce ratele foloseau corect n_eval → decizia compara axe diferite.
+        fr.n_eval = n_eval
         for k in pool_sizes:
-            fr.hits_per_pool[f"k{k}"] = per_pool_totals[k] / max(n_test, 1)
-            fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_test, 1)
+            fr.hits_per_pool[f"k{k}"] = per_pool_totals[k] / max(n_eval, 1)
+            fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_eval, 1)
             fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
             fr.rates_3plus_per_pool[f"k{k}"] = per_pool_3plus[k] / max(n_eval, 1)
         fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.draw_n}", 0.0)

@@ -2187,27 +2187,22 @@ def _consistency_pct(entry: dict) -> int:
 
 
 def _wilson_pooled_rate(grp, metric: str) -> float | None:
-    """Limita inferioară Wilson pe rata POOLED (Σ rate·n_test / Σ n_test).
+    """Limita inferioară Wilson: rata POOLED pe ferestre, dovada = extrageri DISTINCTE.
 
-    ACEEAȘI metrică pe care decision.py alege câștigătorul (`_rate_target_confidence`):
-    formula Wilson e IMPORTATĂ din decision.py (nu duplicată); aici doar agregăm
-    pooled pe n_test, ca ordinea din clasament să coincidă cu ordinea deciziei.
-    (`_rate_target_confidence` e closure intern în decide_optimal_config_for_pool,
-    deci neimportabil ca atare.) None = nu se poate calcula (fără n_test / import)."""
+    ACEEAȘI metrică pe care decision.py alege câștigătorul: TOATĂ agregarea
+    (rata pooled Σ rate·n / Σ n + n = fereastra cea mai mare, ferestrele fiind
+    sufixe CUIBĂRITE — suma număra aceeași extragere de ~5.5×) e IMPORTATĂ din
+    `decision.pooled_wilson_distinct`, sursa unică de adevăr — nu re-implementa
+    aici. None = nu se poate calcula (fără coloane n / import eșuat)."""
     try:
-        from loto_enterprise.benchmark.decision import _wilson_lower_bound
+        from loto_enterprise.benchmark.decision import pooled_wilson_distinct
     except Exception:  # noqa: BLE001
         return None
-    if metric not in grp.columns or "n_test" not in grp.columns:
+    try:
+        v = pooled_wilson_distinct(grp, metric)
+    except Exception:  # noqa: BLE001
         return None
-    pairs = grp[[metric, "n_test"]].dropna()
-    if pairs.empty:
-        return None
-    successes = float((pairs[metric] * pairs["n_test"]).sum())
-    n_total = float(pairs["n_test"].sum())
-    if n_total <= 0:
-        return None
-    return float(_wilson_lower_bound(successes, n_total))
+    return float(v) if v is not None else None
 
 
 def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) -> dict:
@@ -2301,16 +2296,25 @@ def _render_bench_leaderboard_slice(
         ordine de mărime diferite (6/49: 258 / 772 / 1544 / 2492 extrageri). O medie
         neponderată dă aceeași greutate ferestrei de 258 ca celei de 2492 și fabrică
         astfel „lift-uri" care nu există în datele pooled — exact metrica pe care se
-        ia decizia (`_wilson_pooled_rate` / decision.py) e pooled pe n_test.
-        Fără `n_test` (folds vechi) cădem pe media neponderată, ca înainte."""
+        ia decizia (`_wilson_pooled_rate` / decision.py) e pooled pe același n.
+        Preferă n_eval (v13 — denominatorul REAL al ratelor); fallback n_test,
+        apoi media neponderată (folds foarte vechi), ca înainte."""
+        _n_col = "n_test"
+        if "n_eval" in grp.columns:
+            try:
+                if (pd.to_numeric(grp["n_eval"], errors="coerce") > 0).any():
+                    _n_col = "n_eval"
+            except Exception:  # noqa: BLE001
+                pass
         for c in (f"rate_{n}plus_k{pool}", f"rate_{n}plus"):
             if c not in grp.columns:
                 continue
-            if "n_test" in grp.columns:
-                pairs = grp[[c, "n_test"]].dropna()
-                n_total = float(pairs["n_test"].sum()) if not pairs.empty else 0.0
+            if _n_col in grp.columns:
+                pairs = grp[[c, _n_col]].dropna()
+                pairs = pairs[pairs[_n_col] > 0]
+                n_total = float(pairs[_n_col].sum()) if not pairs.empty else 0.0
                 if n_total > 0:
-                    return float((pairs[c] * pairs["n_test"]).sum() / n_total)
+                    return float((pairs[c] * pairs[_n_col]).sum() / n_total)
             v = float(grp[c].mean())
             if v == v:  # nu e NaN
                 return v

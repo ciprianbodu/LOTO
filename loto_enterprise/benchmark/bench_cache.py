@@ -63,10 +63,16 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v12"
+CACHE_VERSION = "v13"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet):
 # v12: parity_balance + 649_parity_recent: tie-break pe frecvență (nu mai degenera
 #      la „cele mai MARI pare/impare" via rank_by_score pe 2 nivele).
+# v13: denominatori UNIFICAȚI în _evaluate_fold — hits_per_pool[_bl]/avg_hits_topk
+#      împart la n_eval (extrageri efectiv evaluate), nu la n_test; + câmp nou
+#      FoldResult.n_eval (folosit de Wilson-ul din decision/UI ca număr de
+#      extrageri distincte). Valorile din folds se schimbă la metode parțial
+#      eșuate → cache-ul v12 e stale.
+# v12: (istoric) versiunea de dinaintea unificării denominatorilor.
 # v11: score_sum_affinity nu mai e gaussiană pe |k − medie/n| (Joker top-11 era
 #      MEREU 18–28 consecutiv). Scorul e masa de extrageri cu sumă tipică care
 #      conțin k — output-ul metodei se schimbă, cache-ul v10 e stale.
