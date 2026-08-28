@@ -2996,6 +2996,13 @@ def _n_extrageri(n: int) -> str:
     return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
 
 
+def _n_zile(n: int) -> str:
+    """„1 zi" / „N zile". Tabelul de istoric face deja acordul (`_render_hits_4plus`);
+    linia de sumar și alerta îl scriau hardcodat „zile" → «acum 1 zile» chiar
+    deasupra unui tabel care zicea «acum 1 zi»."""
+    return "1 zi" if int(n) == 1 else f"{int(n)} zile"
+
+
 def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
 
@@ -3096,9 +3103,10 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             col, lvl = "#86efac", "🟢 recent"
         _avg_d = f"{st['avg']:.0f}"
         _ratio_pct = f"{st['ratio'] * 100:.0f}"
+        _zile_since = _n_zile(st["days_since"])
         ui.html(render_html_safe(
             t"<span style='font-size:.85em'>📈 Media între hituri ≥{_TT} (pool): "
-            t"<b>{_avg_d}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
+            t"<b>{_avg_d}</b> zile · ultimul acum <b>{_zile_since}</b> "
             t"(<b style='color:{col}'>{_ratio_pct}%</b> din interval · "
             t"<span style='color:{col}'>{lvl}</span>)</span>"
         )).classes("mt-1")
@@ -3368,9 +3376,10 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
             )
             _avg_d = f"{st['avg']:.0f}"
             _ratio_pct = f"{st['ratio'] * 100:.0f}"
+            _zile_alert = _n_zile(st["days_since"])
             ui.html(render_html_safe(
                 t"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
-                t"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥{_T} "
+                t"au trecut <b>{_zile_alert}</b> de la ultimul ≥{_T} "
                 t"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{_avg_d}</b> zile "
                 t"(<b>{_ratio_pct}%</b> din interval).{_pnote}"
             ))
