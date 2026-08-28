@@ -208,3 +208,31 @@ def test_ensure_pool_numbers_swaps_duplicates_only() -> None:
     assert len(out) == 2
     # numerele care erau unice (3,4,5,6) nu au voie să dispară
     assert {3, 4, 5, 6}.issubset(union)
+    # scanare de la coadă: T1 (cel mai bine punctat) rămâne intact
+    assert out[0] == [1, 2, 3, 4]
+
+
+def test_capped_wheel_keeps_first_ticket_strongest() -> None:
+    """Măsurat: pool 16 / pick 6 / g4 / cap 3. Scanarea de la capăt rescria
+    T1=[11..16] → [2,3,4,11,12,13]. De la coadă T1 rămâne cele 6 tari,
+    acoperirea e aceeași, 0 numere lipsă."""
+    from unittest.mock import patch
+
+    pool = list(range(1, 17))
+    scores = {n: float(n) for n in pool}
+    kwargs = dict(pick=6, guarantee=4, max_variants=3, scores=scores)
+    with patch(
+        "wheeling_methods.ensure_pool_numbers_on_tickets",
+        side_effect=lambda w, p, k: [list(t) for t in w],
+    ):
+        raw, raw_cov = generate_combinatorial_wheel(pool, **kwargs)
+    packed, packed_cov = generate_combinatorial_wheel(pool, **kwargs)
+
+    assert len(packed) == len(raw) == 3
+    assert raw[0] == packed[0] == [11, 12, 13, 14, 15, 16]
+    raw_union = {n for t in raw for n in t}
+    packed_union = {n for t in packed for n in t}
+    assert set(pool) - raw_union, "fără packing, trunchierea lexicografică pierde numere"
+    assert packed_union == set(pool)
+    assert packed_cov == raw_cov
+    assert 0.0 < packed_cov < 100.0

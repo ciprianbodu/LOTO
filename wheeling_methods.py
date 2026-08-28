@@ -83,10 +83,11 @@ def ensure_pool_numbers_on_tickets(
 
     Trunchierea lexicografică pe pool-ul sortat după scor lăsa numerele slabe
     pe dinafară — pool-ul VALIDAT nu mai era pe bilete. Punem un număr lipsă
-    în locul unui număr care apare deja pe alt bilet (duplicat). Nu înlocuim
-    un număr unic: un cap de 1 bilet ar fi schimbat tot biletul pe numerele
-    slabe. Dacă toate numerele de pe bilete sunt unice, capacitatea e epuizată
-    (`len(wheel)*pick < len(pool)`) și ne oprim.
+    în locul unui număr care apare deja pe alt bilet (duplicat). Scanăm de la
+    COADĂ, ca T1 (cel mai bine punctat) să rămână intact — nu doar la cap=1.
+    Nu înlocuim un număr unic: un cap de 1 bilet n-are duplicate, deci cele
+    `pick` numere tari rămân. Dacă toate numerele de pe bilete sunt unice,
+    capacitatea e epuizată (`len(wheel)*pick < len(pool)`) și ne oprim.
     """
     if not wheel or not pool:
         return [list(t) for t in wheel] if wheel else wheel
@@ -107,7 +108,10 @@ def ensure_pool_numbers_on_tickets(
     for miss in missing:
         counts = _counts()
         placed = False
-        for ti, t in enumerate(out):
+        # Coada întâi: T1 e cel mai bine punctat; îl atingem doar dacă
+        # biletele slabe n-au niciun duplicat de evacuat.
+        for ti in range(len(out) - 1, -1, -1):
+            t = out[ti]
             for j, n in enumerate(t):
                 if counts[int(n)] >= 2:
                     new_t = list(t)
