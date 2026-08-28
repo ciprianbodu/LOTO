@@ -29,6 +29,7 @@ import logging
 import math
 import os
 import time
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -73,6 +74,50 @@ def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int
     post-wheeling (ex. anomaly filter) care pot elimina bilete fără să
     actualizeze procentul de acoperire raportat inițial de wheeling."""
     return _coverage_pct(wheel, pool, guarantee)
+
+
+def ensure_pool_numbers_on_tickets(
+    wheel: list[list[int]], pool: list[int], pick: int,
+) -> list[list[int]]:
+    """După un cap de bilete, fiecare număr din pool pe ≥1 bilet dacă încape.
+
+    Trunchierea lexicografică pe pool-ul sortat după scor lăsa numerele slabe
+    pe dinafară — pool-ul VALIDAT nu mai era pe bilete. Punem un număr lipsă
+    în locul unui număr care apare deja pe alt bilet (duplicat). Nu înlocuim
+    un număr unic: un cap de 1 bilet ar fi schimbat tot biletul pe numerele
+    slabe. Dacă toate numerele de pe bilete sunt unice, capacitatea e epuizată
+    (`len(wheel)*pick < len(pool)`) și ne oprim.
+    """
+    if not wheel or not pool:
+        return [list(t) for t in wheel] if wheel else wheel
+    pick = int(pick)
+    if pick < 1:
+        return [list(t) for t in wheel]
+    out = [sorted(int(x) for x in t) for t in wheel]
+    pool_list = [int(n) for n in pool]
+
+    def _counts() -> Counter:
+        c: Counter = Counter()
+        for t in out:
+            for n in t:
+                c[int(n)] += 1
+        return c
+
+    missing = [n for n in pool_list if _counts()[n] == 0]
+    for miss in missing:
+        counts = _counts()
+        placed = False
+        for ti, t in enumerate(out):
+            for j, n in enumerate(t):
+                if counts[int(n)] >= 2:
+                    new_t = list(t)
+                    new_t[j] = miss
+                    out[ti] = sorted(int(x) for x in new_t)
+                    placed = True
+                    break
+            if placed:
+                break
+    return out
 
 
 def filter_preserving_coverage(
@@ -508,5 +553,10 @@ def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=No
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic."""
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if fn is None:
-        return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
-    return fn(pool, pick, guarantee, max_variants, scores)
+        wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)
+    else:
+        wheel, cov = fn(pool, pick, guarantee, max_variants, scores)
+    if int(max_variants or 0) > 0:
+        wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+        cov = _coverage_pct(wheel, pool, guarantee)
+    return wheel, cov

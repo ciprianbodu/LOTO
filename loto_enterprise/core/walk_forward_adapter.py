@@ -46,7 +46,9 @@ CACHE_VERSION = "v18"
 # v18: `hits_union` = hit-uri de POOL (hard_core ∩ extragere), nu uniunea
 #      numerelor de pe bilete. Un wheel incomplet omitea numere din pool și
 #      WF raporta 3+ mai mic decât pool-ul real (UI/CLAUDE: Nucleu Dur).
-#      `hits` (max pe un bilet) e neschimbat.
+#      `hits` (max pe un bilet) e neschimbat. WF nu persistă coverage_pct:
+#      la acoperire 100% și g≥3, 3+ pool ⇔ 3+ bilet; sub 100% hits_union
+#      supra-numără vs bilete; 5+/6 rămân plafon (g intern = max 4).
 # v17: `_csv_hash` pe TOATE rândurile numerice + `len(df)` (nu doar tail 500).
 #      Corecții/inserări mai vechi de 500, sau CSV mai lung la același tail,
 #      serveau cache vechi pe alte date de antrenare/validare.
@@ -93,7 +95,7 @@ class WalkForwardResult:
     draw_date: str | None
     variant: list[int]
     hits: int
-    hits_union: int  # cât din POOL (hard_core) a nimerit per extragere
+    hits_union: int  # POOL ∩ extragere (plafon pt 5+ când g=4; peste acoperire <100% e plafon vs bilete)
     target_draw_date: str | None = None  # alias pt RetroactivePrediction
 
     def __post_init__(self):
@@ -154,8 +156,8 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
 
     DE CE intră în cheia de cache: numărul de BILETE per extragere depinde exclusiv de
     algoritmul de wheeling, iar din el se calculează costul, câștigul net și ROI-ul din
-    raport. Fără wheel în cheie, schimbarea ILP → La Jolla (6/49 pool 12: ~54 → 41
-    bilete) a servit în continuare cache vechi, iar raportul arăta costuri umflate cu
+    raport. Fără wheel în cheie,     schimbarea ILP → La Jolla (doar 6/49 pool 12 / g4: ~54 → 41
+    bilete; covering_designs/ are doar C_12_6_4 și C_12_5_4) a servit în continuare cache vechi, iar raportul arăta costuri umflate cu
     ~32% pentru Pool 1, lângă un Pool 2 recalculat cu wheel-ul nou.
     """
     method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
