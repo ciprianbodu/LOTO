@@ -1519,6 +1519,9 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                      "(pipeline-ul regenerează pool-ul la fiecare extragere folosind acest scorer).").classes(
                 "text-caption text-positive")
         ui.label(f"{n} predicții pe {len(uniq)} extrageri").classes("text-caption")
+        _cn = _wf_coverage_note(flat)
+        if _cn:
+            ui.label(_cn[1]).classes(_cn[0])
         if is_invert:
             ui.label("ℹ️ Validare FAZA 1 (pool normal, pre-inversare) — pool-ul afișat mai sus "
                      "este cel INVERSAT (Faza 2). Aceste cifre arată cum s-ar fi comportat istoric "
@@ -1685,8 +1688,22 @@ def _wf_summary(flat) -> str | None:
     av = sum(getattr(p, "hits", 0) for p in flat) / nn
     bp = max(getattr(p, "hits_union", 0) for p in flat)
     bv = max(getattr(p, "hits", 0) for p in flat)
+    try:
+        from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
+        cov = wheel_coverage_summary(flat)
+    except Exception:  # noqa: BLE001
+        cov = None
+    if not cov or not cov["known"]:
+        cov_txt = " | acoperire wheel: necunoscută (cache WF vechi)"
+    elif cov["below_100"]:
+        cov_txt = (f" | ⚠️ wheel INCOMPLET la {cov['below_100']}/{cov['known']} extrageri "
+                   f"(min {cov['min']:.1f}%) → cifrele de pool sunt un PLAFON")
+    elif cov["unknown"]:
+        cov_txt = f" | acoperire wheel: 100% pe {cov['known']}/{cov['n_draws']} extrageri (restul necunoscute)"
+    else:
+        cov_txt = " | acoperire wheel: 100%"
     return (f"{nn} predicții | avg pool={ap:.2f} | avg variantă={av:.2f} "
-            f"| best pool={bp} | best variantă={bv}")
+            f"| best pool={bp} | best variantă={bv}{cov_txt}")
 
 
 def _build_report() -> str:
@@ -2970,11 +2987,45 @@ def _ensure_retrospective_pool2_flat(
             game,
             list(data.get("hard_core") or []),
             list(data.get("variants") or []),
+            wheel_coverage=(data.get("context") or {}).get("coverage_pct"),
         )
         STATE["retro"][rk] = flat_p2
         STATE.setdefault("retro_meta", {})[rk] = meta_p2
     except Exception as exc:  # noqa: BLE001
         logger.warning("retrospectiv Pool 2 lazy %s: %s", game, exc)
+
+
+def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
+    """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
+
+    `hits_union` numără numere din pool ieșite la extragere. Cât timp wheel-ul
+    acoperă 100% din țintele de garanție (iar garanția internă a WF e ≥ 4, vezi
+    `walk_forward_adapter._wf_guarantee`), „3 în pool" ⇔ „3 pe cel puțin un bilet":
+    orice 3-submulțime e conținută într-o 4-submulțime, care e pe un bilet. Sub
+    100% cifra de pool devine un PLAFON — de aici avertismentul.
+    None = nimic de semnalat (tot ce se știe e la 100%).
+    """
+    try:
+        from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
+        cov = wheel_coverage_summary(flat)
+    except Exception:  # noqa: BLE001
+        return None
+    _sfx = f" ({label})" if label else ""
+    if cov["below_100"]:
+        return ("text-warning text-caption text-bold",
+                f"⚠️ Wheel INCOMPLET{_sfx}: {cov['below_100']} din {cov['known']} extrageri "
+                f"sub 100% acoperire (minim {cov['min']:.1f}%) — cifrele de POOL sunt un "
+                "PLAFON, nu ce prinde un bilet. «Variante maxime» = 0 dă garanție completă.")
+    if cov["unknown"] and not cov["known"]:
+        return ("text-caption text-grey",
+                f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} (cache WF scris înainte de măsurarea ei) "
+                "— cifrele de POOL sunt egale cu hiturile de bilet doar dacă wheel-ul a fost "
+                "complet. Se completează la următorul walk-forward.")
+    if cov["unknown"]:
+        return ("text-caption text-grey",
+                f"ℹ️ Acoperire wheel{_sfx}: 100% pe {cov['known']} extrageri, necunoscută pe "
+                f"{cov['unknown']} (cache WF mai vechi).")
+    return None
 
 
 def _wf_per_draw_stats(flat) -> dict:
@@ -3018,6 +3069,10 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         return f"{k} ({k / denom * 100:.0f}%)" if denom else "—"
 
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
+    for _f, _lbl in ((flat, "Pool 1"), (flat_p2, "Pool 2")):
+        _cn = _wf_coverage_note(_f, _lbl) if _f else None
+        if _cn:
+            ui.label(_cn[1]).classes(_cn[0])
     for _m, _lbl in ((meta, "Pool 1"), (meta_p2, "Pool 2")):
         if _m and _m.get("partial"):
             ui.label(f"⚠️ Validare PARȚIALĂ ({_lbl}): {_m.get('n_test_draws')} din "

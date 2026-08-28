@@ -165,3 +165,33 @@ def test_complete_system_guarantee_equals_pick_is_full_cover():
     )
     assert len(wheel_cap) == 10
     assert cov_cap < 100.0
+
+
+def test_complete_system_tickets_are_sorted_ascending():
+    """Numerele DIN bilet ies crescător, ca pe ramura greedy.
+
+    Cu `scores`, pool-ul e sortat DESCRESCĂTOR după scor înainte de
+    `itertools.combinations`, deci fără sortare explicită biletele ieșeau în
+    ordinea scorului — singurele din tot modulul. Ordinea BILETELOR trebuie însă
+    să rămână cea dată de scor (trunchierea la `max_variants` păstrează numerele
+    tari), deci testul verifică ambele proprietăți deodată.
+    """
+    from loto_engine import generate_combinatorial_wheel
+
+    pool = [7, 3, 40, 12, 25, 9]
+    ranking = [40, 25, 12, 9, 7, 3]  # 40 = cel mai tare
+    scores = {n: 1.0 / (i + 1) for i, n in enumerate(ranking)}
+
+    wheel, cov = generate_combinatorial_wheel(pool, pick=5, guarantee=5,
+                                              max_variants=0, scores=scores)
+    assert cov == 100.0
+    assert all(t == sorted(t) for t in wheel), "numerele din bilet nu sunt crescătoare"
+    assert {tuple(sorted(t)) for t in wheel} == set(combinations(sorted(pool), 5))
+    # primul bilet = cele mai bine punctate `pick` numere (ordinea biletelor = scor)
+    assert wheel[0] == sorted(ranking[:5])
+
+    capped, cov_capped = generate_combinatorial_wheel(pool, pick=5, guarantee=5,
+                                                      max_variants=3, scores=scores)
+    assert len(capped) == 3 and cov_capped < 100.0
+    assert all(t == sorted(t) for t in capped)
+    assert capped[0] == sorted(ranking[:5])
