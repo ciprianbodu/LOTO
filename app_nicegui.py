@@ -2991,6 +2991,11 @@ def _ensure_retrospective_pool2_flat(
         logger.warning("retrospectiv Pool 2 lazy %s: %s", game, exc)
 
 
+def _n_extrageri(n: int) -> str:
+    """„1 extragere" / „2 extrageri" — acordul românesc, nu «1 extrageri»."""
+    return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
+
+
 def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
 
@@ -3009,17 +3014,17 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     _sfx = f" ({label})" if label else ""
     if cov["below_100"]:
         return ("text-warning text-caption text-bold",
-                f"⚠️ Wheel INCOMPLET{_sfx}: {cov['below_100']} din {cov['known']} extrageri "
+                f"⚠️ Wheel INCOMPLET{_sfx}: {cov['below_100']} din {_n_extrageri(cov['known'])} "
                 f"sub 100% acoperire (minim {cov['min']:.1f}%) — cifrele de POOL sunt un "
                 "PLAFON, nu ce prinde un bilet. «Variante maxime» = 0 dă garanție completă.")
     if cov["unknown"] and not cov["known"]:
         return ("text-caption text-grey",
-                f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} (cache WF scris înainte de măsurarea ei) "
-                "— cifrele de POOL sunt egale cu hiturile de bilet doar dacă wheel-ul a fost "
+                f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} — cache WF scris înainte de măsurarea ei. "
+                "Cifrele de POOL sunt egale cu hiturile de bilet doar dacă wheel-ul a fost "
                 "complet. Se completează la următorul walk-forward.")
     if cov["unknown"]:
         return ("text-caption text-grey",
-                f"ℹ️ Acoperire wheel{_sfx}: 100% pe {cov['known']} extrageri, necunoscută pe "
+                f"ℹ️ Acoperire wheel{_sfx}: 100% pe {_n_extrageri(cov['known'])}, necunoscută pe "
                 f"{cov['unknown']} (cache WF mai vechi).")
     return None
 
