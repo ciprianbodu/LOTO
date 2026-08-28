@@ -158,10 +158,7 @@ def _retroactive_step_stateless(
         if h > max_hits:
             max_hits = h
 
-    predicted_union = set().union(
-        *(scored_variant_numbers(v, game_type) for v in lines)
-    ) if lines else set()
-    hits_union = len(predicted_union & actual_set)
+    hits_union = pool_draw_hits(engine.hard_core, actual_set)
 
     return RetroactivePrediction(
         simulation_date=str(sim_date),
@@ -215,6 +212,18 @@ def scored_variant_numbers(variant: list[int], game_type: str) -> list[int]:
     return vals
 
 
+def pool_draw_hits(hard_core, actual) -> int:
+    """Câte numere din POOL (hard_core) coincid cu extragerea.
+
+    NU e uniunea numerelor de pe bilete: un wheel incomplet poate omite numere
+    din pool, iar UI-ul / CLAUDE.md numesc `hits_union` hit-urile de pool.
+    `hits` (max pe un bilet) rămâne metrica de ticket.
+    """
+    if not hard_core:
+        return 0
+    return len({int(x) for x in hard_core} & {int(x) for x in actual})
+
+
 @dataclass
 class BacktestResult:
     """Rezultatul unei singure comparări variantă vs extragere."""
@@ -258,7 +267,7 @@ class RetroactivePrediction:
     guarantee: int  # Garanția folosită
     game_type: str  # Tipul jocului
     draw_index: int = 0  # Indexul extragerii
-    hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union)
+    hits_union: int = 0  # Câte numere din POOL (hard_core) coincid cu extragerea
 
 
 class LotoBacktester:
@@ -955,10 +964,7 @@ class LotoBacktester:
                     if h > max_hits:
                         max_hits = h
 
-                predicted_union = set().union(
-                    *(self._scored_variant_numbers(v) for v in lines)
-                ) if lines else set()
-                hits_union = len(predicted_union & set(actual_draw))
+                hits_union = pool_draw_hits(engine.hard_core, actual_draw)
 
                 retro_pred = RetroactivePrediction(
                     simulation_date=str(sim_date),

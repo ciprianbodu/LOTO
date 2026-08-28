@@ -147,3 +147,21 @@ def test_filter_preserving_coverage_keeps_guarantee():
     assert removed >= 0
     assert len(filtered) == len(wheel) - removed
     assert _covers_all(filtered, pool, 3), "filtrarea a spart garanția"
+
+
+def test_complete_system_guarantee_equals_pick_is_full_cover():
+    """guarantee==pick nu mai trece prin greedy-ul cu cap 1000 iterații."""
+    from math import comb
+    from loto_engine import generate_combinatorial_wheel
+
+    pool = list(range(1, 9))  # 8 numere, pick=5 → C(8,5)=56
+    wheel, cov = generate_combinatorial_wheel(pool, pick=5, guarantee=5, max_variants=0)
+    assert cov == 100.0
+    assert len(wheel) == comb(8, 5)
+    assert _covers_all(wheel, pool, 5)
+    # cu cap de bilete: acoperire parțială, dar fără timeout-ul de 1000
+    wheel_cap, cov_cap = generate_combinatorial_wheel(
+        pool, pick=5, guarantee=5, max_variants=10,
+    )
+    assert len(wheel_cap) == 10
+    assert cov_cap < 100.0
