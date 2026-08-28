@@ -1,0 +1,149 @@
+"""Teste pentru wheeling — zona asta nu avea niciun test, iar garanția de acoperire
+e singura proprietate pe care app-ul o PROMITE explicit utilizatorului (UI afișează
+„✅ Acoperire garanție: 100%"). Dacă se sparge, utilizatorul plătește bilete care nu
+mai garantează nimic, fără niciun semnal.
+
+Invariantul central verificat peste tot: orice submulțime de `guarantee` numere din
+pool trebuie să apară integral pe cel puțin un bilet.
+"""
+from __future__ import annotations
+
+from itertools import combinations
+from pathlib import Path
+
+import pytest
+
+from wheeling_methods import (
+    WHEEL_METHODS,
+    compute_coverage_pct,
+    filter_preserving_coverage,
+    generate_wheel,
+    wheel_lajolla,
+)
+
+DESIGN_DIR = Path(__file__).parent / "covering_designs"
+
+
+def _covers_all(wheel: list[list[int]], pool: list[int], guarantee: int) -> bool:
+    """Verificare independentă de codul aplicației (nu folosim compute_coverage_pct,
+    ca testul să nu valideze bug-ul cu el însuși)."""
+    covered = set()
+    for ticket in wheel:
+        covered.update(combinations(sorted(ticket), guarantee))
+    return covered.issuperset(combinations(sorted(pool), guarantee))
+
+
+# --------------------------------------------------------------------------- #
+# Design-urile de acoperire instalate local (La Jolla)
+# --------------------------------------------------------------------------- #
+def _installed_designs() -> list[Path]:
+    return sorted(DESIGN_DIR.glob("C_*.txt")) if DESIGN_DIR.is_dir() else []
+
+
+@pytest.mark.parametrize("design_file", _installed_designs(), ids=lambda p: p.stem)
+def test_design_file_covers_completely(design_file: Path):
+    """Un design instalat care NU acoperă complet e mai rău decât lipsa lui: e folosit
+    preferențial față de ILP/greedy și ar raporta o garanție pe care n-o are."""
+    v, pick, guarantee = (int(x) for x in design_file.stem.split("_")[1:])
+    blocks = [[int(x) for x in ln.split()] for ln in
+              design_file.read_text().splitlines() if ln.strip()]
+    pool = list(range(1, v + 1))
+
+    assert blocks, f"{design_file.name} e gol"
+    assert all(len(b) == pick for b in blocks), "bloc cu dimensiune greșită"
+    assert all(1 <= x <= v for b in blocks for x in b), "număr în afara intervalului 1..v"
+    assert len({tuple(sorted(b)) for b in blocks}) == len(blocks), "blocuri duplicate"
+    assert _covers_all(blocks, pool, guarantee), "design-ul NU acoperă toate țintele"
+
+
+@pytest.mark.parametrize("design_file", _installed_designs(), ids=lambda p: p.stem)
+def test_design_not_worse_than_greedy(design_file: Path):
+    """Rostul design-urilor e să coste mai puțin. Dacă un design ajunge să aibă mai
+    multe bilete decât greedy, instalarea lui e o regresie de preț, nu o optimizare."""
+    v, pick, guarantee = (int(x) for x in design_file.stem.split("_")[1:])
+    pool = list(range(1, v + 1))
+    lajolla, _ = wheel_lajolla(pool, pick, guarantee, 0, None)
+    greedy, _ = generate_wheel("greedy", pool, pick, guarantee, 0, None)
+    assert len(lajolla) <= len(greedy), (
+        f"design {design_file.name}: {len(lajolla)} bilete > greedy {len(greedy)}"
+    )
+
+
+def test_lajolla_uses_installed_design_for_current_config():
+    """Configurația reală din UI (pool 12, garanție 4). Blochează regresia în care
+    design-ul e ignorat tăcut și se cade pe ILP/greedy — aceeași garanție, dar
+    mai scump, fără niciun mesaj de eroare."""
+    pool = list(range(1, 13))
+    for pick, expected in ((6, 41), (5, 113)):
+        if not (DESIGN_DIR / f"C_12_{pick}_4.txt").exists():
+            pytest.skip(f"design C(12,{pick},4) neinstalat")
+        wheel, _ = wheel_lajolla(pool, pick, 4, 0, None)
+        assert len(wheel) == expected, f"C(12,{pick},4): {len(wheel)} bilete, aștept {expected}"
+        assert _covers_all(wheel, pool, 4)
+
+
+# --------------------------------------------------------------------------- #
+# Contractul comun al tuturor algoritmilor de wheeling
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("method", ["greedy", "lajolla", "ilp", "necunoscut_cade_pe_greedy"])
+@pytest.mark.parametrize("pick,guarantee", [(6, 4), (5, 4), (6, 3)])
+def test_full_guarantee_when_no_ticket_cap(method: str, pick: int, guarantee: int):
+    """Fără plafon de bilete (max_variants=0) garanția trebuie să fie REALĂ, la orice
+    algoritm — inclusiv pe numele necunoscute, care trebuie să cadă pe greedy, nu să crape."""
+    pool = [3, 7, 11, 12, 19, 23, 28, 31, 35, 40]
+    wheel, coverage = generate_wheel(method, pool, pick, guarantee, 0, None)
+
+    assert wheel, "wheel gol"
+    assert all(len(t) == pick for t in wheel), "bilet cu dimensiune greșită"
+    assert all(x in pool for t in wheel for x in t), "număr din afara pool-ului"
+    assert len({tuple(sorted(t)) for t in wheel}) == len(wheel), "bilete duplicate"
+    assert _covers_all(wheel, pool, guarantee), f"{method}: garanția {guarantee} nu e acoperită"
+    assert coverage == pytest.approx(100.0), f"{method}: raportează {coverage}%, dar acoperă tot"
+
+
+@pytest.mark.parametrize("method", sorted(WHEEL_METHODS) + ["greedy"])
+def test_ticket_cap_is_respected(method: str):
+    """Cu plafon de bilete garanția se poate rupe (e acceptat), dar plafonul NU are voie
+    să fie depășit — altfel utilizatorul plătește mai mult decât a cerut explicit."""
+    pool = list(range(1, 13))
+    cap = 10
+    wheel, coverage = generate_wheel(method, pool, 6, 4, cap, None)
+    assert len(wheel) <= cap, f"{method}: {len(wheel)} bilete > plafon {cap}"
+    assert coverage <= 100.0
+
+
+def test_coverage_pct_matches_independent_count():
+    """compute_coverage_pct e folosit ca sursă a procentului afișat în UI —
+    dacă minte, utilizatorul crede că are garanție când n-are."""
+    pool = list(range(1, 9))
+    full, _ = generate_wheel("greedy", pool, 4, 3, 0, None)
+    assert compute_coverage_pct(full, pool, 3) == pytest.approx(100.0)
+
+    partial = full[: max(1, len(full) // 3)]
+    pct = compute_coverage_pct(partial, pool, 3)
+    targets = list(combinations(sorted(pool), 3))
+    covered = set()
+    for t in partial:
+        covered.update(combinations(sorted(t), 3))
+    assert pct == pytest.approx(len(covered) / len(targets) * 100, abs=0.01)
+    assert pct < 100.0, "un subset strict n-ar trebui să acopere tot"
+
+
+def test_pool_smaller_than_ticket_does_not_crash():
+    """Pool sub dimensiunea biletului e o stare degenerată reală (pool trunchiat);
+    nu trebuie să arunce excepție în mijlocul pipeline-ului."""
+    wheel, coverage = generate_wheel("lajolla", [4, 8, 15], 6, 4, 0, None)
+    assert wheel and coverage == pytest.approx(100.0)
+
+
+def test_filter_preserving_coverage_keeps_guarantee():
+    """Helperul există ca plasă de siguranță dacă se reactivează vreun filtru
+    post-wheel. Dacă el însuși sparge garanția, e o capcană, nu o plasă."""
+    pool = list(range(1, 11))
+    wheel, _ = generate_wheel("greedy", pool, 5, 3, 0, None)
+    filtered, removed = filter_preserving_coverage(
+        wheel, pool, 3, removal_priority=list(range(len(wheel)))
+    )
+    assert removed >= 0
+    assert len(filtered) == len(wheel) - removed
+    assert _covers_all(filtered, pool, 3), "filtrarea a spart garanția"

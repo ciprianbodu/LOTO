@@ -1,0 +1,74 @@
+.venv*/
+.venv311/
+venv/
+ENV/
+env/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+.ipynb_checkpoints/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+*.db
+*.db-shm
+*.db-wal
+jurnal_data.sqlite
+email_config.json
+jurnal_*.json
+*.nbi
+*.nbc
+.numba_cache/
+.loto_cache/
+venv_timesfm/
+.claude/
+backtest_results.json
+scratch/*_log.txt
+*.backup_overnight
+adaptive_state.json
+
+# Runtime artefacts (heavy, regenerated on demand)
+lightning_logs/
+# NOTĂ: _ISTORIC/ NU mai e ignorat — CSV-urile cu extragerile sunt versionate
+# (sursa de adevăr pentru bench/analiză). Le comiți din local cu:
+#   git add _ISTORIC && git commit -m "update istoric" && git push
+# bench_results: ignorăm tot FOLDER-ul, dar permitem folds.csv + report.json
+# (le comiți manual ca să le pot analiza). .pkl-urile grele rămân ignorate.
+bench_results/*
+!bench_results/folds.csv
+!bench_results/report.json
+*.pre_autopilot
+
+# Per-machine runtime state (regenerated each pipeline run)
+pool_history.json
+
+# Auto-Pilot runtime flags
+.bench_pid
+.regenerate_after_bench
+.shutdown_pending.flag
+.auto_invert.flag
+.ui_state.json
+bench_full.log
+
+# Runtime / machine-specific (nu se versioneaza)
+.button_press_ts
+.machine_profile
+best_methods.json.pre_*
+predictie_*.json
+
+# NiceGUI runtime (app_nicegui.py)
+uploaded_data/
+.nicegui/
+*.bak
+*.tmp
+.bench_cache/
+raport_complet.txt
+best_methods.json
+mail_config.json
+bench_results_gpu/
