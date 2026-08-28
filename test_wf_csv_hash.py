@@ -25,4 +25,4 @@ def test_csv_hash_stable_on_identical_history():
 
 
 def test_cache_version_bumped_for_full_history_hash():
-    assert CACHE_VERSION == "v17"
+    assert CACHE_VERSION == "v18"

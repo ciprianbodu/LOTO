@@ -11,6 +11,7 @@ import functools
 from datetime import datetime
 
 import itertools
+import math
 import numpy as np
 import pandas as pd
 from numba import jit
@@ -67,6 +68,26 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
         pool = sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
     else:
         pool = sorted(list(pool))
+
+    # Sistem complet (guarantee == pick): fiecare bilet e o țintă. Greedy-ul
+    # se oprește la 1000 de iterații → acoperire ~33% (5/40 pool 15 = 1001
+    # bilete din C(15,5)=3003). Combinările directe = 100% fără cap de bilete.
+    if int(guarantee) == int(pick):
+        wheel = [list(c) for c in itertools.combinations(pool, pick)]
+        n_full = math.comb(pool_len, pick)
+        if max_variants > 0 and len(wheel) > max_variants:
+            logging.warning(
+                "[WHEEL] guarantee==pick cu max_variants=%d < C(%d,%d)=%d — "
+                "acoperirea NU poate fi 100%% (sistem incomplet).",
+                max_variants, pool_len, pick, n_full,
+            )
+            wheel = wheel[:max_variants]
+        coverage_pct = 100.0 if len(wheel) >= n_full else round(100.0 * len(wheel) / max(n_full, 1), 2)
+        logging.info(
+            "[WHEEL] Sistem complet C(%d,%d): %d bilete, acoperire %.2f%% în %.2fs.",
+            pool_len, pick, len(wheel), coverage_pct, time.time() - start_time,
+        )
+        return wheel, coverage_pct
 
     # Generăm toate combinațiile de garanție ca ținte, dar le sortăm numeric
     # pentru a fi consistente cu rezultatul numeric al wheeling-ului.
@@ -1385,10 +1406,7 @@ class LotoEngine:
         return {i: float((raw[i] - vmin) / rng) for i in range(1, max_num + 1)}
 
     def _get_timesfm_pool(self, scores: dict[int, float], pool_size: int, blacklist: set[int]) -> list[int]:
-        """
-        Metoda principală de selecție a numerelor (Pool) bazată pe TimesFM v3.
-        Folosește selecție diversificată pe zone (low/mid/high) pentru maximizarea hit-urilor.
-        """
+        """Selectează top-N după scor (aliniat bench). Numele e istoric (TimesFM)."""
         if not scores:
             # Fallback pe frecvență dacă TimesFM e indisponibil
             freq = self.analyze_frequency()
@@ -1402,21 +1420,32 @@ class LotoEngine:
             max_num=max_num, draw_matrix=self._draw_matrix,
         )
         
-        # Garanție pool complet: Dacă filtrele/blacklist-ul au fost prea agresive, completăm
+        # Garanție pool complet: dacă blacklist-ul a tăiat prea mult, completăm
+        # DOAR din numere NE-excluse. Completarea din blacklist reintroducea
+        # Pool 1 în Pool 2 (auto-invert) înainte de enforcement.
         if len(pool) < pool_size:
-            logging.warning(f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). Se completează cu cele mai bune numere din blacklist.")
-            
-            bl_scores = {
+            logging.warning(
+                f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). "
+                "Completez din numere ne-excluse (nu din blacklist)."
+            )
+            have = {int(n) for n in pool}
+            invert_bl = set(getattr(self, "_manual_blacklist_set", None) or ())
+            blocked = set(int(n) for n in blacklist) | invert_bl
+            extra_scores = {
                 int(num): float(score)
                 for num, score in scores.items()
-                if int(num) in blacklist and int(num) not in pool
+                if int(num) not in have
+                and int(num) not in blocked
+                and 1 <= int(num) <= max_num
             }
             needed = pool_size - len(pool)
-            pool.extend(rank_by_score(bl_scores, needed))
-                
-            # Dacă tot nu avem destule (e.g. scores e incomplet), fallback final pe frecvență globală
+            pool.extend(rank_by_score(extra_scores, needed))
+
             if len(pool) < pool_size:
-                logging.warning(f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). Fallback final pe frecvență globală.")
+                logging.warning(
+                    f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). "
+                    "Fallback frecvență, tot fără blacklist."
+                )
                 freq = getattr(self, 'freq', None)
                 if freq is None:
                     freq = self.analyze_frequency()
@@ -1424,9 +1453,14 @@ class LotoEngine:
                 freq_scores = {
                     int(i) + 1: float(freq[i])
                     for i in range(len(freq))
-                    if (int(i) + 1) not in have
+                    if (int(i) + 1) not in have and (int(i) + 1) not in blocked
                 }
                 pool.extend(rank_by_score(freq_scores, pool_size - len(pool)))
+            if len(pool) < pool_size:
+                logging.warning(
+                    f"[TIMESFM] Pool final {len(pool)}/{pool_size} — universul "
+                    "rămas nu acoperă pool_size (blacklist prea mare)."
+                )
 
         return sorted(pool[:pool_size])
 

@@ -718,9 +718,18 @@ def _start_walk_forward() -> None:
                     return _wf_cancel_all() or time.time() > _gd
 
                 try:
+                    _wf_src = data
+                    if data.get("auto_invert") and data.get("phase1"):
+                        _wf_src = data["phase1"]
+                    _wf_pool = int(
+                        _wf_src.get("pool_size_requested")
+                        or _wf_src.get("pool_size")
+                        or data.get("pool_size")
+                        or 10
+                    )
                     flat, meta = run_honest_walk_forward(
                         df_source=df_source, game_type=g_label,
-                        pool_size=int(data.get("pool_size") or 10),
+                        pool_size=_wf_pool,
                         backtest_depth_percent=WF_DEPTH_PERCENT,
                         lookback_percent=_effective_lookback_pct(data),
                         use_cache=True,
