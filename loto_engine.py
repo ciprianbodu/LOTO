@@ -51,6 +51,7 @@ logging.basicConfig(
 VERSION = "1.1.2"
 warnings.filterwarnings("ignore")
 
+
 def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scores=None):
     """
     Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
@@ -76,7 +77,8 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
         # Numerele DIN bilet sortate crescător (ca `tuple(sorted(...))` pe ramura
         # greedy) — altfel, cu `scores`, biletele ieșeau în ordinea SCORULUI, doar
         # ele din tot modulul. ORDINEA BILETELOR rămâne dată de pool-ul sortat după
-        # scor, deci trunchierea la `max_variants` păstrează numerele tari.
+        # scor (trunchierea la `max_variants` ia întâi combinațiile numerelor tari,
+        # apoi `ensure_pool_numbers_on_tickets` readuce numerele rămase pe dinafară).
         wheel = [sorted(c) for c in itertools.combinations(pool, pick)]
         n_full = math.comb(pool_len, pick)
         if max_variants > 0 and len(wheel) > max_variants:
@@ -86,6 +88,9 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
                 max_variants, pool_len, pick, n_full,
             )
             wheel = wheel[:max_variants]
+        if max_variants > 0:
+            from wheeling_methods import ensure_pool_numbers_on_tickets
+            wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         coverage_pct = 100.0 if len(wheel) >= n_full else round(100.0 * len(wheel) / max(n_full, 1), 2)
         logging.info(
             "[WHEEL] Sistem complet C(%d,%d): %d bilete, acoperire %.2f%% în %.2fs.",
@@ -172,7 +177,22 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
             logging.warning(f"[WHEEL] TIMEOUT: 1000 iterații.")
             break
             
-    coverage_pct = 100.0 if total_targets == 0 else round((len(covered_targets) / total_targets) * 100, 2)
+    if max_variants > 0:
+        from wheeling_methods import ensure_pool_numbers_on_tickets
+        wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+        target_set = set(all_targets_list)
+        covered_targets = set()
+        g = int(guarantee)
+        for t in wheel:
+            covered_targets.update(
+                itertools.combinations(tuple(sorted(int(x) for x in t)), g)
+            )
+        coverage_pct = (
+            100.0 if not target_set
+            else round(100.0 * len(covered_targets & target_set) / len(target_set), 2)
+        )
+    else:
+        coverage_pct = 100.0 if total_targets == 0 else round((len(covered_targets) / total_targets) * 100, 2)
     logging.info(f"[WHEEL] Generare completă în {time.time() - start_time:.2f}s. Total variante: {len(wheel)}. Acoperire: {coverage_pct}%")
     return wheel, coverage_pct
 
@@ -427,14 +447,14 @@ class LotoEngine:
             _wheel_method = _wheel_method_env
         elif max_variants == 0:
             # Implicit, fără cap de bilete ("garanție completă"): design de acoperire
-            # CUNOSCUT-OPTIM din covering_designs/ (La Jolla) când există pt
-            # C(pool, pick, guarantee); altfel cade automat pe ILP, iar ILP pe greedy.
-            # Lanțul e monoton: niciodată mai multe bilete decât înainte, aceeași
-            # garanție 100%. Măsurat pe pool 12/garanție 4: 6/49 54→41 bilete,
-            # 5/40+Joker 123→113 (ILP la 15s nici nu atingea aceste valori).
+            # CUNOSCUT-OPTIM din covering_designs/ — DOAR v=12 (C_12_6_4, C_12_5_4).
+            # Orice pool ≠ 12 cade pe ILP, iar ILP pe greedy. Câștigul 54→41 bilete
+            # e doar 6/49 pool 12 / g4; 5/40+Joker pool 12 / g4: 123→113.
             _wheel_method = "lajolla"
         else:
-            # Buget de bilete fix (max_variants>0): păstrăm greedy (neschimbat).
+            # Buget de bilete fix (max_variants>0): greedy + packing numere
+            # din pool pe bilete (ensure_pool_numbers_on_tickets). Default
+            # max_variants=0 e neschimbat.
             _wheel_method = "greedy"
         if _wheel_method and _wheel_method != "greedy":
             from wheeling_methods import generate_wheel

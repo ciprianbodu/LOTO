@@ -718,12 +718,8 @@ def _start_walk_forward() -> None:
                     return _wf_cancel_all() or time.time() > _gd
 
                 try:
-                    _wf_src = data
-                    if data.get("auto_invert") and data.get("phase1"):
-                        _wf_src = data["phase1"]
                     _wf_pool = int(
-                        _wf_src.get("pool_size_requested")
-                        or _wf_src.get("pool_size")
+                        data.get("pool_size_requested")
                         or data.get("pool_size")
                         or 10
                     )
