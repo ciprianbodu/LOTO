@@ -61,7 +61,14 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
 
     if pool_len < pick:
-        return [list(pool)], 100.0
+        # Biletul e nevalid (mai puține numere decât se joacă). Acoperirea 100%
+        # era o minciună de afișaj: C(v,g) pe un „bilet" prea scurt e vacuă, iar
+        # UI-ul arăta verde „✅ 100%" pe variante de neplătit.
+        logging.warning(
+            "[WHEEL] pool=%d < pick=%d — bilet nevalid; acoperire raportată 0%%",
+            pool_len, pick,
+        )
+        return [list(pool)], 0.0
 
     # Sortăm pool-ul după scoruri pentru a favoriza numerele puternice
     if scores:
@@ -899,6 +906,17 @@ class LotoEngine:
         # Contract cu UI: garanția EFECTIV folosită la wheel (identică cu cea cerută
         # în UI — nu mai există nicio escaladare pe drum). UI-ul o afișează ca atare.
         self.audit["wheel_guarantee_used"] = int(guarantee)
+        _pick = int(self.params["draw_n"])
+        if len(self.hard_core) < _pick:
+            self.audit["wheel_degenerate"] = {
+                "reason": "pool_smaller_than_pick",
+                "pool_len": len(self.hard_core),
+                "pick": _pick,
+            }
+            logging.error(
+                "[PIPELINE] Pool (%d) < bilet (%d) — biletele nu sunt jucabile.",
+                len(self.hard_core), _pick,
+            )
         lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
         
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar
@@ -1277,7 +1295,11 @@ class LotoEngine:
         so the caller falls back to TimesFM.
         """
         try:
-            from loto_enterprise.core.method_selector import get_ensemble_for_game, combine_ensemble_scores
+            from loto_enterprise.core.method_selector import (
+                get_ensemble_for_game,
+                combine_ensemble_scores,
+                recommend_optimal_config,
+            )
         except Exception as exc:
             logging.warning("[ENGINE] method_selector import failed: %s", exc)
             return {}
@@ -1359,6 +1381,18 @@ class LotoEngine:
                 "pool_hint": _pool_hint,
                 "family": family,
             }
+            # #91 a marcat substituirea doar în toast-ul Auto-Pilot. Scoring-ul
+            # de producție (Generează inclus) trecea tot pe nearest-k, dar
+            # `pool_hint` rămânea pool-ul CERUT → 🏆 tipărea „pool 16" pe
+            # cifre măsurate la k12. Alegerea de scorer NU se schimbă.
+            if not is_joker_drum:
+                try:
+                    _rec = recommend_optimal_config(game_key, _pool_hint)
+                    _sub = (_rec or {}).get("pool_substituted")
+                    if _sub:
+                        bench_winner_info["pool_substituted"] = _sub
+                except Exception as _exc_sub:
+                    logging.debug("[ENGINE] pool_substituted lookup: %s", _exc_sub)
             if len(ensemble) > 1:
                 # Membrii EFECTIV folosiţi (ponderi renormalizate după eliminări),
                 # cu fallback la lista nominală dacă auditul lipseşte.

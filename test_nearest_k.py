@@ -52,3 +52,42 @@ def test_key_present_on_the_no_decision_fallback(tmp_path):
     p.write_text(json.dumps({"games": {"loto_6_49": {}}}), encoding="utf-8")
     c = recommend_optimal_config("loto_6_49", 12, config_path=str(p))
     assert "pool_substituted" in c and c["pool_substituted"] is None
+
+
+def test_ensemble_only_entry_is_not_collapsed(tmp_path):
+    """O intrare doar-ensemble (fără `scorer`) trebuie onorată, nu redusă la 1.
+
+    `get_ensemble_for_game` accepta deja `ensemble`; `recommend_optimal_config`
+    cerea `"scorer" in entry` și cădea pe fallback cu un singur membru — UI/WF
+    vedeau alt blend decât engine-ul.
+    """
+    cfg = {"games": {"loto_6_49": {"auto_pilot_per_pool": {
+        "k10": {
+            "ensemble": [
+                {"method": "frequency", "weight": 0.6},
+                {"method": "fourier", "weight": 0.4},
+            ],
+            "rationale": "ensemble-only, fără cheia scorer",
+            "sim_depth_pct": 30,
+        },
+    }}}}
+    p = tmp_path / "ens.json"
+    p.write_text(json.dumps(cfg), encoding="utf-8")
+    c = recommend_optimal_config("loto_6_49", 10, config_path=str(p))
+    names = [e["method"] for e in (c.get("ensemble") or [])]
+    assert names == ["frequency", "fourier"]
+    assert c.get("scorer") == "frequency"
+    assert c.get("pool_substituted") is None
+
+
+def test_auto_pilot_entry_marks_substitution():
+    """Producția (`get_ensemble_for_game`) trece prin `_auto_pilot_entry`,
+    nu prin `recommend_optimal_config`. Marca trebuie să fie pe ambele căi."""
+    from loto_enterprise.core.method_selector import _auto_pilot_entry
+
+    g = _CFG["games"]["loto_6_49"]
+    exact = _auto_pilot_entry(g, 10)
+    assert "_pool_substituted" not in exact
+    sub = _auto_pilot_entry(g, 16)
+    assert sub.get("_pool_substituted") == {"requested": 16, "used": 12}
+    assert sub.get("scorer") == "fourier"

@@ -133,9 +133,14 @@ def test_coverage_pct_matches_independent_count():
 
 def test_pool_smaller_than_ticket_does_not_crash():
     """Pool sub dimensiunea biletului e o stare degenerată reală (pool trunchiat);
-    nu trebuie să arunce excepție în mijlocul pipeline-ului."""
+    nu trebuie să arunce excepție, dar nici să pretindă acoperire 100% pe
+    bilete nevalidabile (UI-ul arăta verde „✅ 100%")."""
     wheel, coverage = generate_wheel("lajolla", [4, 8, 15], 6, 4, 0, None)
-    assert wheel and coverage == pytest.approx(100.0)
+    assert wheel
+    assert coverage == pytest.approx(0.0)
+    assert all(len(t) < 6 for t in wheel)
+    greedy, gcov = generate_combinatorial_wheel([4, 8, 15], pick=6, guarantee=4)
+    assert greedy and gcov == pytest.approx(0.0)
 
 
 def test_filter_preserving_coverage_keeps_guarantee():
