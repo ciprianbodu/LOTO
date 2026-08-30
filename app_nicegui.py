@@ -879,7 +879,9 @@ _UNSTARTED_WORKER_WAIT_S = 45.0
 def _abandon_unstarted_ui_job(reason: str) -> None:
     """Scoate de pe ecran un job pe care worker-ul nu l-a preluat (0%, fără log)."""
     try:
-        cancel_pending_running_jobs(reason)
+        jid = STATE.get("active_job_id")
+        if jid is not None:
+            cancel_pending_running_jobs(reason, job_ids=[int(jid)])
     except Exception as exc:  # noqa: BLE001
         logger.warning("abandon unstarted: %s", exc)
     STATE["active_job_id"] = None
@@ -989,6 +991,7 @@ def status_panel() -> None:
                 ui.label("Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot.").classes("text-caption")
                 return
             waited = time.time() - float(t0)
+            ensure_worker_running()
             if waited > _UNSTARTED_WORKER_WAIT_S:
                 _abandon_unstarted_ui_job(
                     "Worker-ul nu a preluat jobul în 45s."
@@ -1008,6 +1011,9 @@ def status_panel() -> None:
             elapsed_txt = ""
             if STATE.get("job_start_time"):
                 elapsed_txt = f" · scurs {_fmt_dur(time.time() - STATE['job_start_time'])}"
+            # Worker mort (kill -9 / crash) lăsa jobul RUNNING la infinit:
+            # reatașarea de la startup cheamă ensure o dată; _tick nu o refăcea.
+            ensure_worker_running()
             ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%{elapsed_txt}").classes("text-bold")
             ui.linear_progress(value=pct / 100.0, show_value=False).props("instant-feedback")
             ui.label(f"➡️ {current}").classes("text-caption text-info")
@@ -1100,8 +1106,16 @@ def _build_mail_body() -> str:
                      + (f"  | joker: {_nums(jk1)}" if jk1 else ""))
         if inv:
             jk2 = sorted(int(x) for x in (d.get("hard_core_joker") or []))
-            lines.append("POOL 2:   " + _nums(d.get("hard_core") or [])
+            p2 = d.get("hard_core") or []
+            lines.append("POOL 2:   " + _nums(p2)
                          + (f"  | joker: {_nums(jk2)}" if jk2 else ""))
+            p1s = set(int(x) for x in (p1.get("hard_core") or []))
+            p2s = set(int(x) for x in p2)
+            skipped = bool(((d.get("audit") or {}).get("manual_inversion") or {}).get("skipped"))
+            if skipped or p1s == p2s:
+                lines.append(
+                    "⚠️ INVERSARE NEAPLICATĂ — Pool 2 identic cu Pool 1, nu e alternativă."
+                )
         lines.append("")
     return "\n".join(lines).strip()
 
