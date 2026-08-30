@@ -186,7 +186,15 @@ def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
             "[method_selector] pool k%d absent → folosesc k%d (cel mai apropiat decis)",
             int(pool_size), nearest,
         )
-        return cand
+        # Copie: nu mutăm dict-ul din best_methods.json. Engine-ul și
+        # recommend_optimal_config citesc `_pool_substituted` ca să nu mai
+        # afișeze cifrele Wilson ale pool-ului N ca și cum ar fi ale lui K.
+        out = dict(cand)
+        out["_pool_substituted"] = {
+            "requested": int(pool_size),
+            "used": int(nearest),
+        }
+        return out
     return entry if isinstance(entry, dict) else {}
 
 
@@ -938,30 +946,24 @@ def recommend_optimal_config(
     """
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
-    apm = g.get("auto_pilot_per_pool", {})
-    entry = apm.get(f"k{pool_size}", {})
+    # Aceeași rezolvare ca producția (`get_ensemble_for_game` → `_auto_pilot_entry`):
+    # acceptă și o intrare doar-ensemble (fără cheia `scorer`). Duplicarea de
+    # dinainte cerea `"scorer" in entry` → cădea pe fallback cu un singur membru
+    # și cheia WF se semna pe alt ensemble decât cel rulat de engine.
+    entry = _auto_pilot_entry(g, pool_size) if isinstance(g, dict) else {}
     pool_substituted: dict | None = None
+    if isinstance(entry, dict):
+        sub = entry.get("_pool_substituted")
+        if isinstance(sub, dict):
+            try:
+                pool_substituted = {
+                    "requested": int(sub["requested"]),
+                    "used": int(sub["used"]),
+                }
+            except (KeyError, TypeError, ValueError):
+                pool_substituted = None
 
-    # Pool cerut în afara gamei decise de bench (ex. k24, dar bench-ul a evaluat
-    # doar k6..k20) → folosim cel mai APROPIAT pool decis, în loc de fallback.
-    if not (entry and "scorer" in entry) and apm:
-        avail = sorted(int(k[1:]) for k in apm if k.startswith("k") and k[1:].isdigit())
-        if avail:
-            nearest = min(avail, key=lambda k: abs(k - pool_size))
-            cand = apm.get(f"k{nearest}", {})
-            if cand and "scorer" in cand:
-                logger.info("[method_selector] %s: pool k%d absent → folosesc k%d (cel mai apropiat decis)",
-                            game_key, pool_size, nearest)
-                entry = cand
-                # Substituirea era TĂCUTĂ în valoarea de retur: doar un log INFO,
-                # iar `rationale` se copia VERBATIM din intrarea substituită. UI-ul
-                # îl afișează lângă 🏆, deci tipărea cifrele Wilson măsurate la k12
-                # ca și cum ar fi ale pool-ului k16 cerut — nu „lipsește o notă",
-                # ci o afirmație numerică falsă. Marcăm substituția în dict ca UI-ul
-                # și raportul să o poată spune. Alegerea de scorer NU se schimbă.
-                pool_substituted = {"requested": int(pool_size), "used": int(nearest)}
-
-    if entry and "scorer" in entry:
+    if isinstance(entry, dict) and (entry.get("scorer") or entry.get("ensemble")):
         scorer, clean_ens, salvaged = _sanitize_ap_production(entry)
         if not scorer:
             scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)

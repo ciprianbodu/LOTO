@@ -59,10 +59,19 @@ def _sorted_pool(pool, scores) -> list[int]:
     return sorted(list(pool))
 
 
+def _unplayable_small_pool(pool, pick) -> tuple[list[list[int]], float]:
+    """Pool < pick: biletele nu sunt jucabile. 100% era o minciună de afișaj."""
+    logger.warning(
+        "[WHEEL] pool=%d < pick=%d — bilet nevalid; acoperire raportată 0%%",
+        len(pool), pick,
+    )
+    return [list(pool)], 0.0
+
+
 def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
     targets = set(itertools.combinations(sorted(pool), guarantee))
     if not targets:
-        return 100.0
+        return 0.0
     covered = set()
     for t in wheel:
         for sub in itertools.combinations(sorted(t), guarantee):
@@ -261,7 +270,7 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
-        return [list(pool)], 100.0
+        return _unplayable_small_pool(pool, pick)
     cover = _ilp_cover_positions(v, int(pick), int(guarantee), time_limit)
     if cover is None:
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -302,7 +311,7 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
-        return [list(pool)], 100.0
+        return _unplayable_small_pool(pool, pick)
     base, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)  # plecăm din greedy complet
     # ⚠️ Cheile ȚINTELOR se construiesc pe pool-ul sortat NUMERIC, fiindcă
     # `ticket_targets` caută cu `tuple(sorted(...))`. `_sorted_pool` reordonează
@@ -313,7 +322,7 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
     _pool_sorted = sorted(pool)
     targets = list(itertools.combinations(_pool_sorted, guarantee))
     if not targets:
-        return base, 100.0
+        return base, 0.0
     tidx = {t: i for i, t in enumerate(targets)}
     nt = len(targets)
 
@@ -401,7 +410,7 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
-        return [list(pool)], 100.0
+        return _unplayable_small_pool(pool, pick)
     nb, nt = _comb(v, pick), _comb(v, guarantee)
     if nb > _GA_MAX_BLOCKS:
         logger.info("[WHEEL-GA] univers prea mare (blocuri=%d) → greedy", nb)
@@ -528,7 +537,7 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
-        return [list(pool)], 100.0
+        return _unplayable_small_pool(pool, pick)
     design = _load_lajolla(v, pick, guarantee)
     if design is not None:
         # mapăm indicii 1..v ai design-ului pe pool-ul sortat după scor (numerele bune
@@ -598,7 +607,7 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
-        return [list(pool)], 100.0
+        return _unplayable_small_pool(pool, pick)
     if guarantee > 4:
         logger.warning("[WHEEL-U34] guarantee=%d > 4 — metoda e gândită pentru ținte 3/4; "
                        "componentele rămân 3∪4, acoperirea e raportată pe %d",
@@ -646,4 +655,6 @@ def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=No
     if int(max_variants or 0) > 0:
         wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         cov = _coverage_pct(wheel, pool, guarantee)
+    if len(pool) < int(pick):
+        cov = 0.0
     return wheel, cov
