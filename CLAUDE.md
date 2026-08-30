@@ -50,7 +50,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `raport_complet.txt` | raport generat (gitignore) |
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
 | `requirements_snapshot.txt` | ⚠️ **ARHIVĂ, NU INSTALA** — mai are torch+cu128/neuralforecast/nvidia-ml-py/streamlit (mediul de dinainte de eliminarea GPU). Are banner explicit în cap |
-| `scripts/analysis/` | măsurători manuale, NU producție (nimeni nu le importă). Azi: cele 3 scripturi de tipare — vezi „Tipare / reducerea bazei" |
+| `scripts/analysis/` | măsurători manuale, NU producție (nimeni nu le importă). 3 scripturi de tipare statice + `joker_complex_base_reduction.py` (măști adaptive, doar Joker) — vezi „Tipare / reducerea bazei" |
 
 ## Benchmark (cum funcționează)
 - **111 metode** în `METHODS` (74 tombstone în `disabled_methods.json`, eliminate
@@ -238,6 +238,11 @@ tăia baza?" a fost testată pe datele reale din `_ISTORIC/`. Scripturi + cifre:
    istoricul 6/49, K = 10: univers complet 9.03%, ≤40 → 9.19%, ≤35 → 9.23%, doar pare
    → 9.19%, >10 → 8.80%. Toate = hipergeometricul. `P(≥3 | pool K)` depinde de **K**,
    nu de care numere-s în pool.
+4. **Joker, măști adaptive (pasul 4, 2026-08-30).** 195 atomice + 66 AND pe urna 1,
+   80 pe urna 2; descoperire 70% + confirmare WF 30%. **0** supraviețuitori Bonferroni.
+   Pe confirmare urna 1: clone de `frequency` sau pierdere la 3+. Urna 2: `u2_hot_W5`
+   bate frequency la hit@1 (+7/655) dar rămâne **sub random** (4.27% vs 5%) — recency,
+   nu tipar (`p_disc=0.38`). Script: `scripts/analysis/joker_complex_base_reduction.py`.
 
 ⚠️ Deci **nu scrie un scorer pe tiparele astea** și nu reactiva filtrele post-scoring
 „ca să reduci baza" (`audit.filters_disabled`, cerere deliberată 2026-07-08): o

@@ -5,9 +5,11 @@ se rulează manual, din rădăcina repo-ului, când vrei să reverifici concluzi
 pe date noi (`_ISTORIC/` crește la fiecare `update_csv.py`).
 
 ```bash
-python scripts/analysis/pattern_constraints.py      # pasul 1
-python scripts/analysis/pattern_predictability.py   # pasul 2
-python scripts/analysis/pattern_base_reduction.py   # pasul 3
+python scripts/analysis/pattern_constraints.py              # pasul 1
+python scripts/analysis/pattern_predictability.py           # pasul 2
+python scripts/analysis/pattern_base_reduction.py           # pasul 3
+python scripts/analysis/joker_complex_base_reduction.py     # pasul 4 (doar Joker)
+python scripts/analysis/joker_complex_base_reduction.py --smoke
 ```
 
 ## Întrebarea
@@ -59,9 +61,33 @@ depinde doar de K și de joc, nu de CARE numere sunt în pool** — numerele tal
 sunt K din 49 indiferent din ce submulțime le-ai ales. Reducerea bazei nu e o
 pârghie; e o etichetă pusă pe aceeași probabilitate.
 
+## Pasul 4 — `joker_complex_base_reduction.py`: Joker, măști adaptive
+
+Pașii 1–3 sunt constrângeri STATICE (bază fixă ≤40, doar pare, …). Pasul 4
+caută reduceri care **depind de ultimele W extrageri**, doar pe Joker:
+
+- urna 1 (5/45) și urna 2 (1/20)
+- 195 măști atomice (cap/floor/anvelopă/paritate/decade/cifre/mod/vecini/
+  hot-union/drop-last/overdue/recent, W=1..8) + AND între top-12
+- descoperire pe primele 70% (lift de acoperire vs |M|/N, test de permutare,
+  Bonferroni)
+- confirmare walk-forward pe ultimele 30%: frequency **în mască** vs
+  frequency, pool 11, `rank_by_score`
+
+Rezultat (2026-08-30, n=2181, disc=1526, confirm=655):
+
+| | Bonferroni | confirmare vs frequency |
+|---|---|---|
+| Urna 1 | 0 / 261 (α=0.00019) | top-ul e clonă (`|ρ|=1.00`) sau **pierde** la 3+ |
+| Urna 2 | 0 / 80 (α=0.00063) | `u2_hot_W5` +7 hit@1 vs frequency, dar 4.27% **< 5% random**; hit@3 = 15.3% = 3/20; p_disc=0.38. E recency pe ultimele 5, nu un tipar. |
+
+Niciun scorer. Capcana `u2_hot_W5`: frequency pe urna 2 e sub random, deci
+„bate frequency" ≠ „are semnal".
+
 ## De ce nu există o metodă care să facă asta
 
-Nu s-a scris niciun scorer pe tiparele astea fiindcă pasul 2 dă zero semnal —
+Nu s-a scris niciun scorer pe tiparele astea fiindcă pasul 2 dă zero semnal,
+iar pasul 4 (Joker, adaptive) tot zero după corecție de teste multiple —
 un scorer construit pe ele ar fi zgomot cu nume. Mai rău: o constrângere chiar
 aplicată taie universul, deci în cazurile în care extragerea o încalcă (70.75%
 din timp pentru „toate ≤ 40" pe 6/49) pool-ul are **zero** șanse la premiul
