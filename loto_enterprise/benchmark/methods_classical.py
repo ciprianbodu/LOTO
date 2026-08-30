@@ -357,13 +357,20 @@ def score_pair_affinity(draws_2d, max_num):
     n_draws = draws_2d.shape[0]
     if n_draws < 5:
         return {}
-    co = np.zeros((max_num + 1, max_num + 1), dtype=np.float64)
-    for row in draws_2d:
-        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
-        for a in nums:
-            for b in nums:
-                if a != b:
-                    co[a, b] += 1.0
+    # Co-ocurență prin produs matriceal în loc de buclă Python O(n_draws × draw_n²).
+    # `C[t, v]` = de câte ori apare v în extragerea t (NU 0/1): bucla itera peste
+    # LISTA `nums`, deci un număr repetat într-un rând contribuia de mai multe ori.
+    # Cu numărători, `Cᵀ·C` reproduce exact acel produs, iar diagonala (a == b) se
+    # anulează la fel ca `if a != b`. Sumele sunt întregi mici în float64, deci
+    # acumularea e EXACTĂ — rezultat bit-identic cu bucla.
+    _iv = np.asarray(draws_2d).astype(np.int64, copy=False)
+    _ok = (_iv >= 1) & (_iv <= max_num)
+    C = np.zeros((_iv.shape[0], max_num + 1), dtype=np.float64)
+    if _ok.any():
+        _rows = np.broadcast_to(np.arange(_iv.shape[0])[:, None], _iv.shape)
+        np.add.at(C, (_rows[_ok], _iv[_ok]), 1.0)
+    co = C.T @ C
+    np.fill_diagonal(co, 0.0)
     # numere recente (ultima fereastră)
     recent = set()
     for row in draws_2d[-10:]:

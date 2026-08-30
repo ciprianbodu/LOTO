@@ -31,6 +31,43 @@ except Exception:  # noqa: BLE001
     DB = "loto_jobs.db"
 
 
+def _clear_last_finalized_job_id() -> bool:
+    """Zerează `last_finalized_job_id` din .ui_state.json. Întoarce True dacă a schimbat ceva.
+
+    OBLIGATORIU pe ramura de golire COMPLETĂ: `id INTEGER PRIMARY KEY` fără
+    AUTOINCREMENT înseamnă că după `DELETE FROM jobs` numerotarea reîncepe de la
+    1 (chiar asta promite mesajul „Următorul job va fi #1"), în timp ce markerul
+    din .ui_state.json supraviețuiește între sesiuni. Cele două lifetime-uri sunt
+    independente, deci un job NOU putea primi exact id-ul deja marcat ca
+    finalizat → `_recover_completed_job` ieșea pe `jid == already` și un rezultat
+    REAL nu mai era nici afișat, nici trecut prin mail/shutdown, fără nicio linie
+    de log care să explice de ce. Golirea tabelei face markerul lipsit de sens,
+    deci îl ștergem odată cu ea.
+    """
+    f = Path(__file__).resolve().parent / ".ui_state.json"
+    try:
+        if not f.exists():
+            return False
+        data = json.loads(f.read_text(encoding="utf-8"))
+        if not int(data.get("last_finalized_job_id", 0) or 0):
+            return False
+        data["last_finalized_job_id"] = 0
+        try:
+            from ui_shared import atomic_write_json  # scriere atomică (regula de aur 3)
+            atomic_write_json(f, data)
+        except Exception:  # noqa: BLE001 — ui_shared indisponibil: tmp+replace local
+            tmp = f.with_name(f"{f.name}.{os.getpid()}.reset.tmp")
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, f)
+        return True
+    except Exception as exc:  # noqa: BLE001 — pornirea NU trebuie blocată de asta
+        print(f"⚠️  Nu am putut reseta last_finalized_job_id: {exc}")
+        return False
+
+
 def _last_finalized_job_id() -> int:
     """Ultimul job dus prin finalize (mail/shutdown) de UI, din .ui_state.json.
     Un job COMPLETED cu id ≠ ăsta = încă neprocesat → îl păstrăm pentru recuperare."""
@@ -85,7 +122,10 @@ def main() -> int:
             con.execute("DELETE FROM jobs")
             con.commit()
             con.execute("VACUUM")  # recuperează spațiu + următorul job devine #1
-            print(f"✅ Șterse {total} joburi din coadă. Următorul job va fi #1.")
+            _cleared = _clear_last_finalized_job_id()
+            print(f"✅ Șterse {total} joburi din coadă. Următorul job va fi #1."
+                  + ("  (am resetat și last_finalized_job_id — id-urile reîncep de la 1)"
+                     if _cleared else ""))
         return 0
     finally:
         con.close()

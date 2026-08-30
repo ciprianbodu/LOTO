@@ -160,13 +160,41 @@ def send_email(cfg, subject, body, attachments=None):
 # --------------------------------------------------------------------------- #
 # Loguri
 # --------------------------------------------------------------------------- #
+# Cât citim de la COADA fișierului ca să acoperim `n_lines`. O linie de log are
+# ~100-150 octeți, deci 256 KB acoperă ~2000 de linii — de peste 10× n_lines-ul
+# maxim cerut de UI (120).
+_LOG_TAIL_BYTES = 256 * 1024
+
+
+def read_tail_lines(path: str, n_lines: int, block: int = _LOG_TAIL_BYTES) -> list[str]:
+    """Ultimele `n_lines` linii, citind DOAR coada fișierului.
+
+    `f.readlines()` citea TOT fișierul ca să păstreze ultimele n linii, iar
+    `loto.log` nu e rotit niciodată (worker.py: FileHandler mode="a") și stă în
+    OneDrive. Măsurat: 241 ms/apel la 50 MB, 24.7 ms la 5 MB — de la un tick de
+    UI care rulează la fiecare secundă. Cu seek pe coadă: ~0.6-1 ms, indiferent
+    de dimensiune. Rezultatul e IDENTIC cât timp blocul acoperă n_lines (vezi
+    `_LOG_TAIL_BYTES`); dacă nu, întoarce câte linii încap — degradare grațioasă,
+    nu eroare.
+    """
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(max(0, size - block))
+        data = f.read()
+    if size > block:
+        # prima linie e aproape sigur tăiată la mijloc → o aruncăm
+        nl = data.find(b"\n")
+        if nl != -1:
+            data = data[nl + 1:]
+    return data.decode("utf-8", errors="replace").splitlines(keepends=True)[-n_lines:]
+
+
 def read_logs_filtered(n_lines: int = 50) -> str:
     if not os.path.exists(LOG_FILE):
         return "Nu există log-uri încă."
     try:
-        with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-        recent = lines[-n_lines:]
+        recent = read_tail_lines(LOG_FILE, n_lines)
         filtered: list[str] = []
         pattern = re.compile(r"Iteratia \d+: Acoperite \d+/\d+")
         similar = 0

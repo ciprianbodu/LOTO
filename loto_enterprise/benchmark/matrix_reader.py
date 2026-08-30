@@ -1,6 +1,12 @@
 """Citește folds.csv (output bench) şi construieşte tabele per (joc, fereastră, model).
 
-Folosit de UI pentru a afişa matricea walk-forward onest, fără re-compute.
+⚠️ MODUL NEFOLOSIT în acest moment. Docstring-ul zicea „Folosit de UI pentru a
+afişa matricea walk-forward onest" — fals: `grep -rn matrix_reader --include=*.py`
+nu găsește NICIUN importator în afara acestui fișier. UI-ul își construiește
+singur clasamentul (`app_nicegui._render_bench_leaderboard_slice`), direct din
+folds.csv. Îl păstrăm ca utilitar de analiză ad-hoc; dacă îl repui în UI,
+verifică întâi că metrica lui (`avg_hits` la k) e cea pe care vrei s-o arăți —
+decizia de producție rulează pe ratele T+ cu limită Wilson, nu pe avg_hits.
 """
 
 from __future__ import annotations

@@ -52,6 +52,7 @@ from ui_shared import (
     ensure_worker_running,
     load_mail_config,
     read_logs_filtered,
+    read_tail_lines,
     render_html_safe,
     send_email,
     html_escape,
@@ -364,13 +365,45 @@ def apply_autopilot_and_generate() -> None:
 # Bench (subprocess) + status
 # --------------------------------------------------------------------------- #
 def _bench_running() -> bool:
+    """True doar dacă PID-ul din `.bench_pid` e CHIAR bench-ul pe care l-am pornit.
+
+    `psutil.pid_exists()` singur nu ajunge: nimic nu șterge `.bench_pid` la
+    terminarea normală a bench-ului, deci fișierul supraviețuiește cu un PID mort,
+    iar Windows reciclează PID-urile. Un proces străin care nimerea acel PID
+    bloca la nesfârșit „Un bench rulează deja.", ascundea panoul de rezultate, iar
+    la ieșirea lui `_tick` declanșa `_on_bench_finished()` → o generare Auto-Pilot
+    NECERUTĂ (și, cu shutdown-ul bifat, o oprire a PC-ului).
+
+    Verificăm identitatea, nu doar existența: `create_time` față de timestamp-ul
+    scris la lansare (`pid|ts`) și `bench_all_methods.py` în linia de comandă.
+    Fișierul stale e șters ca să nu mai fie reevaluat.
+    """
     if not BENCH_PID_FILE.exists():
         return False
     try:
         import psutil
-        raw = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0]
-        return psutil.pid_exists(int(raw))
+        parts = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
+        pid = int(parts[0])
+        started = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+        proc = psutil.Process(pid)          # NoSuchProcess → stale
+        if proc.status() == getattr(psutil, "STATUS_ZOMBIE", "zombie"):
+            raise psutil.NoSuchProcess(pid)
+        # Identitate: fereastră generoasă (ceasul de pornire poate diferi cu
+        # câteva secunde de `int(time.time())` scris de noi).
+        if started is not None and abs(proc.create_time() - started) > 60:
+            raise psutil.NoSuchProcess(pid)
+        try:
+            if "bench_all_methods.py" not in " ".join(proc.cmdline() or []):
+                raise psutil.NoSuchProcess(pid)
+        except (psutil.AccessDenied, psutil.ZombieProcess):
+            pass  # nu putem citi cmdline (elevat) → ne bazăm pe create_time
+        return True
     except Exception:  # noqa: BLE001
+        # PID mort / reciclat / fișier corupt → curățăm ca să nu blocheze UI-ul.
+        try:
+            BENCH_PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
         return False
 
 def _launch_bench(args: list[str], label: str) -> None:
@@ -591,10 +624,24 @@ def cancel_all() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("kill bench pid: %s", exc)
     try:
-        root = str(PROJECT_ROOT)
+        # Plasa de siguranță cerea AMBELE substring-uri în linia de comandă:
+        # „bench_all_methods.py" ȘI PROJECT_ROOT. Nu se potrivea niciodată:
+        # `_launch_bench` pornea scriptul cu cale RELATIVĂ (cwd=PROJECT_ROOT), iar
+        # `sys.executable` e venv-ul din D:\_BUILD\_LOTO, deliberat în AFARA
+        # repo-ului — deci PROJECT_ROOT nu apărea nicăieri în cmdline. Cu
+        # `.bench_pid` lipsă sau reciclat, „Anulează TOT" raporta „Proces anulat."
+        # în timp ce bench-ul mergea mai departe și rescria folds.csv.
+        # Acum: potrivim pe numele scriptului și confirmăm prin CWD-ul procesului.
+        root = Path(PROJECT_ROOT).resolve()
         for p in psutil.process_iter(["cmdline"]):
             cl = " ".join(p.info.get("cmdline") or [])
-            if "bench_all_methods.py" in cl and root in cl:
+            if "bench_all_methods.py" not in cl:
+                continue
+            try:
+                same_cwd = Path(p.cwd()).resolve() == root
+            except Exception:  # noqa: BLE001 — AccessDenied / procesul a murit
+                same_cwd = root.as_posix() in cl.replace("\\", "/")
+            if same_cwd:
                 p.terminate()
     except Exception as exc:  # noqa: BLE001
         logger.warning("kill bench fallback: %s", exc)
@@ -1139,8 +1186,12 @@ def _read_bench_log_tail(n: int = 50) -> str:
     if not BENCH_LOG_FILE.exists():
         return ""
     try:
-        lines = BENCH_LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
-        return "\n".join(lines[-n:]).strip()
+        # Coada, nu tot fișierul: `logs_panel` se re-randează la fiecare tick cât
+        # timp rulează un bench, iar bench_full.log crește pe toată durata lui.
+        # `read_tail_lines` întoarce exact aceleași linii (verificat pe fișier
+        # gol / fără newline final / 18 MB).
+        lines = read_tail_lines(str(BENCH_LOG_FILE), n)
+        return "".join(lines).strip()
     except Exception as exc:  # noqa: BLE001
         return f"(eroare citire bench_full.log: {exc})"
 
@@ -1302,12 +1353,21 @@ def _render_stages(audit: dict) -> None:
                 ))
             chips_html = "".join(chips)
             delta = f" (Δ: +{len(added)}, −{len(removed)})" if prev is not None else ""
-            ui.html(render_html_safe(
-                t"<div style='margin-top:8px;padding:8px;background:rgba(255,255,255,0.03);border-left:3px solid {color};border-radius:4px;'>"
-                t"<div style='font-weight:700;color:{color};'>{title}{delta}</div>"
-                t"<div style='font-size:0.85em;color:#94a3b8;margin:2px 0 6px 0;'>{desc}</div>"
-                t"<div>{chips_html}</div></div>"
-            ))
+            # `chips_html` e HTML DEJA randat (fiecare chip a trecut prin
+            # render_html_safe). Interpolat într-un t-string ar fi escape-uit A
+            # DOUA OARĂ → utilizatorul vedea textul literal
+            # "<span style='...'>12</span>" în loc de chips colorate. Îl
+            # concatenăm în AFARA t-string-ului, ca în restul fișierului.
+            ui.html(
+                render_html_safe(
+                    t"<div style='margin-top:8px;padding:8px;background:rgba(255,255,255,0.03);border-left:3px solid {color};border-radius:4px;'>"
+                    t"<div style='font-weight:700;color:{color};'>{title}{delta}</div>"
+                    t"<div style='font-size:0.85em;color:#94a3b8;margin:2px 0 6px 0;'>{desc}</div>"
+                    t"<div>"
+                )
+                + chips_html
+                + "</div></div>"
+            )
             prev = pool_set
 
 
@@ -1436,7 +1496,9 @@ def _render_adaptive(audit: dict) -> None:
         ext = render_html_safe(t"Ultima extragere: <strong>{ast.get('last_hits')}</strong> hituri în pool")
         if baseline:
             ext += render_html_safe(t" <small style='color:#888;'>(baseline aleator: {baseline})</small>")
-        parts.append(render_html_safe(t"<div>{ext}</div>"))
+        # `ext` e HTML deja randat (<strong>/<small>) — concatenare, NU
+        # interpolare, altfel render_html_safe îl escape-uiește a doua oară.
+        parts.append("<div>" + ext + "</div>")
     if ast.get("streak_zero", 0) >= 1:
         parts.append(render_html_safe(
             t"<div>Streak catastrofe consecutive: <strong>{ast['streak_zero']}</strong></div>"
@@ -2055,7 +2117,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
 
 @ui.refreshable
 def wf_progress_panel() -> None:
-    """Progres walk-forward, SEPARAT de results_panel: tick-ul (2s) refreshează DOAR
+    """Progres walk-forward, SEPARAT de results_panel: tick-ul (1s) refreshează DOAR
     asta, nu tot bundle-ul de rezultate — altfel expansion-urile deschise de user
     (ex. 🏆 Clasament bench, Variante, Pipeline) s-ar reseta/închide la fiecare poll."""
     if not STATE.get("wf_status"):
@@ -3778,8 +3840,17 @@ def main_page() -> None:
                         ui.notify(f"Decizia Auto-Pilot a fost actualizată pentru {target}+ hits!", type="info")
                     _refresh_status()
                     results_panel.refresh()
+            except FileNotFoundError:
+                # best_methods.json e gitignored: pe un clone proaspăt (sau după
+                # ștergere) nu există, iar `update_best_methods_with_auto_pilot`
+                # aruncă ÎNAINTE de `ui.notify`/`_refresh_status`, deci utilizatorul
+                # schimba ținta și nu vedea absolut nimic — nici succes, nici
+                # eroare — deși decizia NU fusese recalculată.
+                ui.notify("Nu există încă best_methods.json — rulează un Re-Bench "
+                          "ca ținta să fie aplicată.", type="warning")
             except Exception as exc:
                 logger.warning("Eroare la schimbarea țintei de hituri: %s", exc)
+                ui.notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
 
         ui.select(
             {3: "3+ Hits", 4: "4+ Hits"},
@@ -3911,7 +3982,7 @@ def main_page() -> None:
             status_panel.refresh()
         if STATE.get("wf_status"):
             # DOAR progresul WF — NU tot bundle-ul, ca expansion-urile deschise
-            # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 2s.
+            # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 1s.
             wf_progress_panel.refresh()
     ui.timer(1.0, _tick)
 
@@ -4027,8 +4098,12 @@ def _startup() -> None:
             active = get_active_job()
             if active and is_unstarted_job(active):
                 jid = int(active["id"])
+                # DOAR jobul orfan identificat, nu tot ce e în zbor: fără
+                # `job_ids` UPDATE-ul prindea orice PENDING/RUNNING, deci un job
+                # aflat în lucru era anulat împreună cu orfanul.
                 cancel_pending_running_jobs(
-                    f"Job orfan #{jid} anulat la pornirea UI (0%, fără log)."
+                    f"Job orfan #{jid} anulat la pornirea UI (0%, fără log).",
+                    job_ids=[jid],
                 )
                 logger.warning(
                     "[STARTUP] job #%s nepornit → anulat (nu reatașez).", jid,

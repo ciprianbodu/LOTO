@@ -1,7 +1,7 @@
 """Verifică + actualizează mediul aplicației LOTO (exclusiv CPU).
 
 Acoperă:
-    • Librării standard sigure (nicegui, pandas, numpy, numba, ...)
+    • Librării standard sigure (nicegui, pandas, numpy, scipy, ...)
     • Metode statistice / ML CPU (scikit-learn, statsmodels, statsforecast,
       hmmlearn, xgboost, lightgbm, catboost)
     • Verificare freshness a `best_methods.json` și a istoricului CSV
@@ -18,7 +18,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version as dist_version
 
 # Librarii standard care pot fi actualizate automat in siguranta.
-# Am exclus intentionat pandas / numpy / numba (Python C-extensions; wheel-uri
+# Am exclus intentionat pandas / numpy / scipy (Python C-extensions; wheel-uri
 # specifice per versiune de Python — upgrade nesigur poate cere build din sursa).
 SAFE_UPGRADE_PACKAGES = [
     "nicegui",

@@ -352,6 +352,18 @@ def _eval_fold_worker(args):
 # Sweep
 # ---------------------------------------------------------------------------
 
+def _expected_pool_keys(game) -> set[str]:
+    """Cheile `kN` pe care `_evaluate_fold` le produce pentru acest GameDef.
+
+    Aceeași formulă ca în `_evaluate_fold`. Se dă lui `get_cached_fold` ca să
+    respingă un fold cache-uit cu ALTĂ geometrie (`pool_extra` diferit): cheia de
+    cache nu conține geometria, deci altfel era servit trunchiat.
+    """
+    pool_sizes = ([game.draw_n] if game.is_single_pick
+                  else [game.draw_n + i for i in range(game.pool_extra + 1)])
+    return {f"k{k}" for k in pool_sizes}
+
+
 def run_benchmark(
     games: list[GameDef],
     methods: list[str],
@@ -361,11 +373,23 @@ def run_benchmark(
     out_dir: str = "bench_results",
     progress_cb=None,
     use_cache: bool = True,
+    shuffled_control: bool = True,
 ) -> dict:
     """`use_cache=False` -> skip disk cache lookup/store. Folosit cand:
        - utilizatorul forteaza rebench (vrea masuratori proaspete)
        - schimbarea de hardware (CPU->GPU) invalideaza datele cache-uite
-         (cache-ul nu include hardware/torch version in key)."""
+         (cache-ul nu include hardware/torch version in key).
+
+    `shuffled_control=False` -> NU mai rulează folds-urile `is_random=True`
+    (aceeași metodă pe extrageri AMESTECATE, ca test de nul). Măsurat pe
+    `bench_results/folds.csv`: acele folds sunt **50.1% din tot runtime-ul
+    bench-ului**. Ce se PIERDE dacă le oprești (deci default-ul rămâne True):
+      • `lift_vs_shuffle` / `avg_hits_shuffled` din report.json (diagnostic);
+      • tie-break-ul SECUNDAR al `winners_per_pool` (`ranked.sort` pe
+        `(avg_hits_real, lift_vs_shuffle)`) — dar acela e doar cale LEGACY:
+        producția citește `auto_pilot_per_pool`, construit de `decision.py`,
+        care filtrează peste tot `is_random == False`.
+    Nu se pierde nimic din decizia de producție."""
     out_path = Path(out_dir)
     out_path.mkdir(exist_ok=True, parents=True)
 
@@ -512,12 +536,13 @@ def run_benchmark(
                     logger.info("[%s/%s/%d%%] skip — train too small (%d)",
                                 game.key, method, pct, n_train)
                     continue
-                for is_random in (False, True):
+                for is_random in ((False, True) if shuffled_control else (False,)):
                     # Cache lookup instant; doar cache-miss-urile intră la calcul.
                     cached = None
                     if use_cache and _cache_ok and csv_hash_game is not None:
                         try:
-                            cached = get_cached_fold(csv_hash_game, method, pct, game.key, is_random)
+                            cached = get_cached_fold(csv_hash_game, method, pct, game.key, is_random,
+                                                 _expected_pool_keys(game))
                         except Exception:  # noqa: BLE001
                             pass
                     if cached is not None:
@@ -578,8 +603,13 @@ def run_benchmark(
             fr, _ = _evaluate_fold(method, train, test, game, bs)
             fr.percentile = pct
             fr.is_random = is_random
-            if _cache_ok and csv_hash is not None:
+            # idem calea paralelă: un fold EȘUAT nu se persistă (altfel un eșec
+            # tranzitoriu devine cache hit permanent — vezi nota de mai sus).
+            if _cache_ok and csv_hash is not None and not getattr(fr, "failed", False):
                 store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
+            elif getattr(fr, "failed", False):
+                logger.warning("[%s/%s] fold EȘUAT (secvential) — NU îl cache-uiesc (%s)",
+                               game.key, method, getattr(fr, "error", "") or "?")
             _handle_result(game, method, pct, is_random, fr, False, "cpu")
         except Exception as e2:  # noqa: BLE001
             logger.error("[%s/%s] secvential failed: %s", game.key, method, e2)
@@ -628,12 +658,23 @@ def run_benchmark(
                     if err or fr is None:
                         logger.error("[%s/%s] task failed: %s", game.key, method, err)
                         continue
-                    # cache store în procesul principal (subprocesul de calcul nu-l face)
-                    if _cache_ok and csv_hash is not None:
+                    # cache store în procesul principal (subprocesul de calcul nu-l face).
+                    # NU cache-uim folds EȘUATE: `_evaluate_fold` prinde intern orice
+                    # excepție și întoarce un FoldResult cu failed=True (deci err e
+                    # None și garda de mai sus nu se declanșează). Persistat, un
+                    # eșec TRANZITORIU — dependință opțională lipsă, worker OOM-ucis,
+                    # scorer care crapă o dată — devine CACHE HIT pentru totdeauna:
+                    # metoda dispare din agregate și din decizie (ambele filtrează
+                    # failed==True) până la un bump de CACHE_VERSION sau --no-cache,
+                    # fără nicio linie în log care să spună că e un eșec cache-uit.
+                    if _cache_ok and csv_hash is not None and not getattr(fr, "failed", False):
                         try:
                             store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
                         except Exception:  # noqa: BLE001
                             pass
+                    elif getattr(fr, "failed", False):
+                        logger.warning("[%s/%s] fold EȘUAT — NU îl cache-uiesc (%s)",
+                                       game.key, method, getattr(fr, "error", "") or "?")
                     _handle_result(game, method, pct, is_random, fr, False, "cpu")
         finally:
             # La hang: NU asteptam workerii blocati — anulam si abandonam procesele.
