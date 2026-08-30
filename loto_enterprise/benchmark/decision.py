@@ -5,14 +5,21 @@ Selection rules (in priority order):
     1. Method must BEAT the random baseline consistently — at least 60% of
        sim_depth windows must show lift > 0 over the random baseline at the
        same (game, pool, window).
-    2. Among qualifying methods, pick the one with HIGHEST mean lift across
-       all sim_depth windows (averaged with double-weight on larger windows
-       since they exercise more historical data).
+    2. Among qualifying methods, sort by the POOLED WILSON LOWER BOUND of the
+       T+ rate first; mean lift vs random is only the SECOND key and window
+       consistency the third (`qualifying.sort` — vezi `pooled_wilson_distinct`
+       și `_weighted_mean_lift`). ⚠️ Regula asta spunea până acum „highest mean
+       lift", ceea ce NU mai e ce face codul din 2026-08: cine „repară" sortarea
+       după docstring strică exact garda statistică. Clasamentul din UI importă
+       ACELEAȘI chei, deliberat.
     3. For the chosen method, pick the optimal sim_depth window — the one
        that maximises avg_hits AND has at least 30 test draws (statistical
-       stability). Prefer larger windows on ties.
+       stability). Prefer larger windows on ties. ⚠️ `sim_depth` e TELEMETRIE:
+       producția taie istoricul doar cu `lookback`, nu cu fereastra asta.
     4. Use blacklist if the +BL variant beats the no-BL variant at that
-       chosen (method, window).
+       chosen (method, window). ⚠️ Bit-ul e la fel de INERT în producție:
+       `loto_engine` face `blacklist = set()` (filtre oprite deliberat,
+       2026-07-08). Vezi `method_selector.should_use_blacklist`.
 
 The output is written to best_methods.json under `auto_pilot_per_pool[gk][kN]`
 with full traceability (rationale + supporting numbers).

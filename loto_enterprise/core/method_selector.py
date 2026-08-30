@@ -250,12 +250,25 @@ def should_use_blacklist(
     pool_size: int | None = None,
     config_path: str | None = None,
 ) -> bool:
-    """Return True if the benchmark says blacklist helps for this (game, pool).
+    """Ce spune bench-ul despre blacklist pentru acest (joc, pool).
 
-    Priority (consistent with get_winner_name):
+    ⚠️ **VALOAREA ASTA NU SE APLICĂ ÎN PRODUCȚIE.** `loto_engine` face
+    `blacklist = set()` necondiționat și scrie `audit["filters_disabled"] = True`
+    — filtrele post-scoring au fost oprite DELIBERAT (cerere utilizator,
+    2026-07-08): scoring → top-N → wheel, fără nimic între. Deci bit-ul e
+    TELEMETRIE de bench, exact ca `sim_depth_pct`, nu un buton de configurare.
+    Docstring-ul de dinainte pretindea invers („production rulează blacklist-ul
+    oricum") și era pur și simplu fals.
+
+    Cine vrea să-l RECONECTEZE: locul e `pool_selection.select_pool_from_scores`
+    (filtrarea rămâne la apelant, vezi „Tie-break canonic" din CLAUDE.md), și
+    cere bump de `CACHE_VERSION` în `walk_forward_adapter` — altfel WF-ul servește
+    pool-uri vechi, nefiltrate, sub o cheie care pretinde că include bit-ul.
+
+    Prioritate (consistentă cu get_winner_name):
       1. auto_pilot_per_pool[kN].use_blacklist  (v4 — preferat)
       2. winners_per_pool_best[kN].use_blacklist  (v3 fallback)
-      3. default True (safe — production rulează blacklist-ul oricum)
+      3. default True (valoarea istorică; fără efect, vezi mai sus)
     """
     if pool_size is None:
         return True

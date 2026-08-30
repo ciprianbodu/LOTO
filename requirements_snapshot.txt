@@ -1,3 +1,14 @@
+# ⚠️⚠️  NU INSTALA ACEST FIȘIER  ⚠️⚠️
+#
+#   pip install -r requirements_snapshot.txt  ==  STRICĂ POLITICA „EXCLUSIV CPU".
+#
+# E o ARHIVĂ a mediului de dinainte de eliminarea GPU/neural (2026-07): conține
+# încă torch+cu128, torchaudio, pytorch-lightning, neuralforecast, nvidia-ml-py
+# și streamlit (UI-ul legacy `app.py`, fișier care nu mai există). Toate au fost
+# scoase DELIBERAT din aplicație.
+#
+# Mediul REAL se instalează din `requirements_base.txt` (via ACTUALIZARI.bat).
+# Fișierul ăsta există doar ca să se poată reconstitui ce era instalat atunci.
 adagio==0.2.6
 aiofiles==25.1.0
 aiohappyeyeballs==2.6.2

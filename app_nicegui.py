@@ -274,8 +274,11 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
               "auto_invert_val", "sim_depth_val", "bench_hit_target"):
         h.update(str(SETTINGS[k]).encode("utf-8"))
     h.update(str(sorted(sim_depth_per_game.items())).encode("utf-8"))  # adâncime per joc → cache key
-    pure = bool(STATE.get("pure_bench"))
-    h.update(str(pure).encode("utf-8"))
+    # `pure_bench` NU intră în hash: taskul emite `"pure_bench_mode": True`
+    # NECONDIȚIONAT (mai jos), iar `loto_engine` scrie `audit["pure_bench_mode"] = True`
+    # indiferent de argument — deci „pure" vs „normal" produce EXACT aceleași bilete.
+    # Cât era în hash, cele două variante primeau chei de cache diferite pentru un
+    # rezultat identic: cache ratat degeaba dacă `use_cache` ar fi True.
     datasets_cfg = []
     for fname, df in STATE["datasets"]:
         g_label = _game_label_for(fname)
@@ -290,8 +293,10 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "max_variants": _int_setting("max_variants_val"),
             "lookback": _int_setting("lookback_val"),
             "filter_consecutives": False,
-            "smart_reduction": False,
-            "sim_depth_pct": sd,
+            "smart_reduction": False,   # neaplicat pe path-ul principal (filters_disabled)
+            "sim_depth_pct": sd,        # TELEMETRIE de bench, nu taie istoricul (vezi CLAUDE.md)
+            # Mereu True: singurul mod de generare care există azi (scoring → top-N →
+            # wheel, fără filtre). Rămâne în contractul worker↔UI (regula de aur 2).
             "pure_bench_mode": True,
             "auto_invert": bool(SETTINGS["auto_invert_val"]),
             "bench_hit_target": _clamped_bench_target(),
@@ -866,6 +871,8 @@ def _start_walk_forward() -> None:
 # --------------------------------------------------------------------------- #
 # UI — randare
 # --------------------------------------------------------------------------- #
+# Mesajul de FAILED vine din `result_json`; îl trunchiem ca să nu inunde panoul.
+_FAIL_MSG_MAX_CHARS = 800
 _UNSTARTED_WORKER_WAIT_S = 45.0
 
 
@@ -896,6 +903,25 @@ def status_panel() -> None:
         state = str(stt.get("status") or "")
         if state == "COMPLETED":
             payload = decode_queue_result(str(stt.get("result_json") or "{}"))
+            if not (isinstance(payload, tuple) and len(payload) == 2):
+                # Payload gol/corupt (cursă cu cancel, pickle rupt, worker ucis între
+                # `complete_job` și scriere). ACEEAȘI gardă ca `_recover_completed_job`
+                # — până acum ramura LIVE n-o avea și mergea mai departe cu `None`:
+                # `STATE["results"] = None`, dar mail trimis, walk-forward pornit și
+                # `last_finalized_job_id` setat, deci jobul nu se mai putea relua.
+                # Marcăm văzut (altfel ecranul reintră aici la fiecare tick), dar
+                # FĂRĂ mail / WF / shutdown, și spunem de ce.
+                with STATE_LOCK:
+                    STATE["active_job_id"] = None
+                    SETTINGS["last_finalized_job_id"] = int(job_id)
+                _save_settings()
+                unlock_engine()
+                logger.error("[JOB] #%s COMPLETED cu payload invalid (%r) — "
+                             "fără mail/walk-forward/shutdown.", job_id, type(payload).__name__)
+                ui.label(f"⚠️ Job #{job_id} s-a terminat, dar rezultatul e ilizibil "
+                         "(payload gol sau corupt). Nu s-a trimis mail și nu s-a rulat "
+                         "walk-forward. Vezi loto.log și regenerează.").classes("text-negative")
+                return
             # Claim ATOMIC: un SINGUR renderer duce jobul în finalize. Dacă două
             # taburi/reconnect-uri intră aproape simultan în ramura COMPLETED, doar cel
             # care încă vede active_job_id == job_id procesează (mail/shutdown o dată);
@@ -939,7 +965,16 @@ def status_panel() -> None:
         if state in ("FAILED", "CANCELLED"):
             STATE["active_job_id"] = None
             unlock_engine()
-            ui.label(f"Job {state}: {stt.get('error_msg') or ''}").classes("text-negative")
+            # Mesajul de eroare NU e o coloană proprie: `job_queue.fail_job` îl scrie
+            # în `result_json` (întreg) și în `log_tail` (ultimii 6000 de octeți).
+            # `stt.get("error_msg")` era o cheie INEXISTENTĂ în schema `jobs` → panoul
+            # arăta mereu „Job FAILED:" și nimic, exact când utilizatorul are cea mai
+            # mare nevoie de motiv (CSV corupt, worker mort la import, disc plin).
+            _err = str(stt.get("result_json") or stt.get("log_tail") or "").strip()
+            if len(_err) > _FAIL_MSG_MAX_CHARS:
+                _err = _err[-_FAIL_MSG_MAX_CHARS:]
+            ui.label(f"Job {state}: {_err or 'fără mesaj în coadă (vezi loto.log)'}").classes(
+                "text-negative")
             return
         # 0% + fără log = worker-ul NU a preluat jobul. Nu ținem ecranul blocat
         # pe «se inițializează...» la infinit. Leftover la boot (fără job_start_time)
