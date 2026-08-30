@@ -1869,6 +1869,7 @@ _METHOD_DESC = {
     "nmf_cooc": "NMF pe co-apariții recente · matematic",
     "cusum_appearance": "CUSUM pe reziduuri de apariție (regim) · matematic",
     "circular_kernel": "kernel densitate pe topologia circulară 1…N · matematic",
+    "draw_shape_reversion": "reumplere de formă (capete/clase sub-reprezentate) · matematic",
     "649_katz12_gap88": "12% KatzCommunity + 88% gap_poisson (search winner, +21.7% 4+ @ k16)",
     "649_katz15_gap85": "15% KatzCommunity + 85% gap_poisson (search blend)",
     "graph_649_katz_community": "60% KatzHigh + 40% community strength (graf)",

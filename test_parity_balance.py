@@ -62,7 +62,8 @@ def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 43
+    assert len(cur) == 44
+    assert "draw_shape_reversion" in cur
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
     # Rebuild TOP 20/joc din 97 metode CPU math (2026-08-25 r3).
@@ -109,7 +110,7 @@ def test_curated_active_and_per_game():
     # frequency e REQUIRED în active; pe Joker e clonă Katz → nu e în per_game
     assert "frequency" not in pg["joker_urna1"]
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 43
+    assert len(kept) == 44
     assert info["per_game"]["loto_6_49"] == 20
     assert info["per_game"]["loto_5_40"] == 20
     assert info["per_game"]["joker_urna1"] == 20

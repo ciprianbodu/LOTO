@@ -5,7 +5,8 @@ Contract (ca restul registry-ului):
 
 Scorurile se normalizează în [0,1]. Exclusiv numpy (+ sklearn NMF dacă e disponibil).
 Nu clonează frequency/graph/gap deja din curated — țintesc axe lipsă:
-PCA-residual, MI pe lag, NMF pe co-apariții, CUSUM, topologie circulară.
+PCA-residual, MI pe lag, NMF pe co-apariții, CUSUM, topologie circulară,
+reumplere de formă (`draw_shape_reversion`).
 """
 from __future__ import annotations
 
@@ -294,6 +295,129 @@ def score_circular_kernel(draws_2d: np.ndarray, max_num: int) -> dict[int, float
     return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
 
 
+# ---------------------------------------------------------------------------
+# 6) Reumplere de formă (anvelopă / clase) — NU tăiere de bază
+# ---------------------------------------------------------------------------
+
+def score_draw_shape_reversion(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
+    """Boost la capete și clase sub-reprezentate față de forma tipică.
+
+    Măsurat pe ``_ISTORIC`` (walk-forward): tăierea urnei după cutia sau
+    „reciile” ultimelor extrageri RATEAZĂ des (cutie W=5 ține ~78% doar când
+    tai 2 numere; 14 reci din 10 extrageri → 85% din următoarele conțin ≥1
+    „nefolosit”). Găurile de formă se UMPLU. Metoda face inversul unui filtru
+    de bază: nu pune 0 pe 46–49, ci le ridică când anvelopa recentă e strâmtă.
+
+    Axe (toate pe fereastra scurtă vs mediana lungă, nu pe gap-ul lui k):
+      • anvelopă min/max/span — restore capete când fereastra e comprimată;
+      • paritate medie în fereastră vs lung;
+      • cifră finală / decadă sub așteptarea uniformă (găuri care se umplu).
+    Frecvența e doar tie-break (0.04), ca la ``parity_balance``, ca pool-ul
+    să nu degenereze la „cele mai mari numere”.
+
+    Nu e ``recency`` / ``decade_balance`` / ``modular`` (tombstone): nu
+    scorează cât de vechi e k, ci deficitul de OCUPARE al clasei lui.
+    """
+    arr = _safe_draws(draws_2d)
+    if arr is None:
+        return {}
+    max_num = int(max_num)
+    if max_num < 10:
+        return {}
+
+    cleaned: list[list[int]] = []
+    freq = np.zeros(max_num + 1, dtype=np.float64)
+    for row in arr:
+        good: list[int] = []
+        for v in row:
+            try:
+                vi = int(v)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= vi <= max_num:
+                good.append(vi)
+                freq[vi] += 1.0
+        if len(good) >= 2:
+            cleaned.append(good)
+    n = len(cleaned)
+    if n < 12:
+        return {}
+
+    mins = np.array([min(r) for r in cleaned], dtype=np.float64)
+    maxs = np.array([max(r) for r in cleaned], dtype=np.float64)
+    spans = maxs - mins
+    evens = np.array(
+        [sum(1 for x in r if x % 2 == 0) for r in cleaned], dtype=np.float64
+    )
+    draw_n = float(np.median([len(r) for r in cleaned]))
+
+    W = min(8, n)
+    long_med_min = float(np.median(mins))
+    long_med_max = float(np.median(maxs))
+    long_med_span = float(np.median(spans))
+    long_med_even = float(np.median(evens))
+
+    wmin = float(mins[-W:].min())
+    wmax = float(maxs[-W:].max())
+    wspan = wmax - wmin
+    weven = float(evens[-W:].mean())
+    window_flat = np.fromiter(
+        (x for r in cleaned[-W:] for x in r), dtype=np.int64
+    )
+
+    nums = np.arange(1, max_num + 1, dtype=np.int64)
+    scores = np.zeros(max_num, dtype=np.float64)
+    pos = (nums.astype(np.float64) - 1.0) / max(max_num - 1, 1)
+
+    # Capete: dacă max-ul ferestrei e sub mediana lungă → boost numere MARI.
+    dh = max(0.0, (long_med_max - wmax) / max(max_num, 1))
+    dl = max(0.0, (wmin - long_med_min) / max(max_num, 1))
+    ds = max(0.0, (long_med_span - wspan) / max(max_num, 1))
+    scores += 1.25 * dh * pos
+    scores += 1.25 * dl * (1.0 - pos)
+
+    # Span comprimat: boost ÎNAFARA cutiei recente (găurile de anvelopă se umplu).
+    dist_lo = np.maximum(wmin - nums, 0.0)
+    dist_hi = np.maximum(nums - wmax, 0.0)
+    dist_out = dist_lo + dist_hi
+    outside = dist_out > 0
+    scores += ds * (
+        0.90 * outside.astype(np.float64) * np.exp(-dist_out / 6.0)
+        + 0.10 * (~outside).astype(np.float64)
+    )
+
+    # Paritate: fereastra vs mediana lungă (nu ultima extragere vs tot istoricul).
+    parity_gap = (long_med_even - weven) / max(draw_n, 1.0)
+    is_even = (nums % 2 == 0).astype(np.float64)
+    if parity_gap > 0.06:
+        scores += 0.45 * is_even
+    elif parity_gap < -0.06:
+        scores += 0.45 * (1.0 - is_even)
+
+    # Cifre finale sub așteptarea uniformă (ponderată cu câți candidați au cifra).
+    digit_card = np.bincount(nums % 10, minlength=10).astype(np.float64)
+    digit_obs = np.bincount(window_flat % 10, minlength=10).astype(np.float64)
+    exp_digit = (len(window_flat) * digit_card) / max(max_num, 1)
+    def_digit = np.maximum(0.0, exp_digit - digit_obs) / np.maximum(exp_digit, 1e-9)
+    scores += 0.65 * def_digit[nums % 10]
+
+    # Decade sub așteptare — aceeași logică de gaură, nu „hot decade”.
+    dec = (nums - 1) // 10
+    n_dec = int(dec.max()) + 1
+    dec_card = np.bincount(dec, minlength=n_dec).astype(np.float64)
+    dec_obs = np.bincount((window_flat - 1) // 10, minlength=n_dec).astype(np.float64)
+    exp_dec = (len(window_flat) * dec_card) / max(max_num, 1)
+    def_dec = np.maximum(0.0, exp_dec - dec_obs) / np.maximum(exp_dec, 1e-9)
+    scores += 0.55 * def_dec[dec]
+
+    fmax = float(freq[1:].max()) or 1.0
+    scores += 0.04 * (freq[1:] / fmax)
+
+    scores = np.nan_to_num(scores, nan=0.0, posinf=0.0, neginf=0.0)
+    raw = {int(k): float(scores[k - 1]) for k in nums}
+    return _normalize(raw, max_num)
+
+
 MATH_EXTRA_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     "pca_resid_surprise": (
         score_pca_resid_surprise,
@@ -324,5 +448,11 @@ MATH_EXTRA_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
         "math-circular",
         False,
         "Kernel densitate pe topologia circulară 1…N",
+    ),
+    "draw_shape_reversion": (
+        score_draw_shape_reversion,
+        "math-shape",
+        False,
+        "Reumplere de formă: capete/clase sub-reprezentate în fereastra scurtă",
     ),
 }

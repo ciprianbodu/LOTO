@@ -1,13 +1,13 @@
 {
   "_meta": {
     "created": "2026-07-30",
-    "updated": "2026-08-25",
+    "updated": "2026-08-30",
     "criterion": "top 30 overall + top 10 per joc din ultimul bench COMPLET (107 metode, commit 12e4663 folds), Wilson 4+ @ k11, poarta ≥60% vs random întâi, apoi |Spearman|<0.95 (fără clone Katz). NU blacklist. +7 matematice CPU (2026-08-25 dimineață) +15 din runda 20/joc, apoi REBUILD TOP 20/joc din 97 metode matematice CPU (runda 100/joc, 2026-08-25) — WF extern 30% @ pool 11, greedy pe rata 3+ apoi 4+, doar dacă bat P(≥3) hipergeometric (sau 4+ cu +2 evenimente) și nu sunt clone/degenerate. `random`+`frequency` rămân în active (gate/fallback); `random` nu e în per_game.",
-    "note": "gol/absent active = toate cele 111. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc.",
+    "note": "gol/absent active = toate metodele din METHODS. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc. 2026-08-30: +draw_shape_reversion în active (nu în per_game — nu e încă în decizia de producție).",
     "source_folds": "git:12e4663 bench_results/folds.csv (107 metode; omnius sărit)",
     "pool_ranked": 11,
     "metric": "rate_4plus_k11 Wilson_lb pooled; plus 2026-08-25: WF extern 3+/4+ vs hipergeometric (3 runde; runda 3 = rebuild TOP 20 din 97 CPU math)",
-    "n_active": 43,
+    "n_active": 44,
     "external_math_2026_08_25": {
       "script": "analiza_math_external.py",
       "window": "ultimele 30% (ca UI WF), pool 11, block 8, rank_by_score",
@@ -483,7 +483,8 @@
     "graph_personalized_pr",
     "cover_positional_bands",
     "649_ewma_80",
-    "nmf_cooc"
+    "nmf_cooc",
+    "draw_shape_reversion"
   ],
   "per_game": {
     "loto_6_49": [
