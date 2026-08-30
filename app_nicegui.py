@@ -765,9 +765,14 @@ def _start_walk_forward() -> None:
                     return _wf_cancel_all() or time.time() > _gd
 
                 try:
+                    _wf_pool = int(
+                        data.get("pool_size_requested")
+                        or data.get("pool_size")
+                        or 10
+                    )
                     flat, meta = run_honest_walk_forward(
                         df_source=df_source, game_type=g_label,
-                        pool_size=int(data.get("pool_size") or 10),
+                        pool_size=_wf_pool,
                         backtest_depth_percent=WF_DEPTH_PERCENT,
                         lookback_percent=_effective_lookback_pct(data),
                         use_cache=True,
@@ -1572,6 +1577,9 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                      "(pipeline-ul regenerează pool-ul la fiecare extragere folosind acest scorer).").classes(
                 "text-caption text-positive")
         ui.label(f"{n} predicții pe {len(uniq)} extrageri").classes("text-caption")
+        _cn = _wf_coverage_note(flat)
+        if _cn:
+            ui.label(_cn[1]).classes(_cn[0])
         if is_invert:
             ui.label("ℹ️ Validare FAZA 1 (pool normal, pre-inversare) — pool-ul afișat mai sus "
                      "este cel INVERSAT (Faza 2). Aceste cifre arată cum s-ar fi comportat istoric "
@@ -1738,8 +1746,22 @@ def _wf_summary(flat) -> str | None:
     av = sum(getattr(p, "hits", 0) for p in flat) / nn
     bp = max(getattr(p, "hits_union", 0) for p in flat)
     bv = max(getattr(p, "hits", 0) for p in flat)
+    try:
+        from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
+        cov = wheel_coverage_summary(flat)
+    except Exception:  # noqa: BLE001
+        cov = None
+    if not cov or not cov["known"]:
+        cov_txt = " | acoperire wheel: necunoscută (cache WF vechi)"
+    elif cov["below_100"]:
+        cov_txt = (f" | ⚠️ wheel INCOMPLET la {cov['below_100']}/{cov['known']} extrageri "
+                   f"(min {cov['min']:.1f}%) → cifrele de pool sunt un PLAFON")
+    elif cov["unknown"]:
+        cov_txt = f" | acoperire wheel: 100% pe {cov['known']}/{cov['n_draws']} extrageri (restul necunoscute)"
+    else:
+        cov_txt = " | acoperire wheel: 100%"
     return (f"{nn} predicții | avg pool={ap:.2f} | avg variantă={av:.2f} "
-            f"| best pool={bp} | best variantă={bv}")
+            f"| best pool={bp} | best variantă={bv}{cov_txt}")
 
 
 def _build_report() -> str:
@@ -2479,14 +2501,12 @@ def _render_bench_leaderboard_slice(
         rows.sort(key=_sort_key_lift, reverse=True)
     else:
         rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
-    # Ordinea PURĂ, ÎNAINTE de re-ordonarea pe poartă. Poziția raportată pentru
-    # baseline se calculează pe EA, nu pe `rows`: re-ordonarea de mai jos pune
-    # baseline-urile la COADĂ necondiționat (`_qual + _fail + _bases_r`), deci
-    # `random` ieșea mereu „locul N+1 din N+1" — adică „toate metodele bat
-    # hazardul", exact inversul mesajului pentru care panoul există.
-    # Măsurat pe folds.csv real: pe 5/40 k8 `random` e de fapt al 3-lea din 21
-    # după criteriul PROPRIU al panoului (Wilson_lb → lift ponderat → consistență).
-    _rows_ranked = list(rows)
+    # Ordinea PE SCOR, înainte ca poarta de consistență să rearanjeze lista.
+    # Poziția baseline-ului se calculează pe ASTA: reordonarea de mai jos pune
+    # baseline-urile la coadă NECONDIȚIONAT, deci calculată pe lista rearanjată
+    # ieșea mereu „ultimul din N+1", indiferent de cât de bine punctase random —
+    # exact invers față de mesajul pentru care există rândul ăla.
+    rows_by_score = list(rows)
     # Poarta de consistență CA LA DECIZIE: calificatele (bat random în ≥60%
     # ferestre) întâi. Fără asta, #1 din listă putea fi o metodă cu Wilson mare
     # care n-a trecut gate-ul, iar 🏆 era altcineva.
@@ -2724,17 +2744,20 @@ def _render_bench_leaderboard_slice(
         # Baseline-urile care NU au intrat în slice: spune unde ar cădea (informativ),
         # fără să pară competitor.
         _shown_names = {rec[0] for rec in top_rows}
-        for _bi, _brec in enumerate(_rows_ranked):
+        for _bi, _brec in enumerate(rows_by_score):
             if _brec[0] not in _BASE or _brec[0] in _shown_names:
                 continue
-            _better = sum(1 for r in _rows_ranked[:_bi] if r[0] not in _BASE)
+            # PE `rows_by_score` (ordinea Wilson), nu pe `rows`: acolo baseline-ul
+            # e împins la coadă de poarta de consistență, deci ieșea mereu ultimul.
+            _better = sum(1 for r in rows_by_score[:_bi] if r[0] not in _BASE)
+            _worse = len(competitors) - _better
             # Numitorul include și baseline-ul însuși (nu doar candidații) — altfel
             # poziția poate ajunge la N+1 „din N" (contradicție) când baseline-ul
             # e sub TOȚI candidații.
-            ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — ar cădea pe locul "
-                     f"{_better + 1} din {len(competitors) + 1} "
-                     f"({len(competitors)} metode candidate + acest baseline).").classes(
-                "text-caption text-grey")
+            ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — locul "
+                     f"{_better + 1} din {len(competitors) + 1} după Wilson "
+                     f"({_worse} metode candidate sub hazard).").classes(
+                "text-caption text-grey" if _worse == 0 else "text-caption text-amber-400")
         # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
         # slice, spune unde cade. Altfel 🏆 lipsește complet din listă, fără niciun
         # indiciu — exact metoda despre care utilizatorul vrea să știe cel mai mult.
@@ -3031,11 +3054,57 @@ def _ensure_retrospective_pool2_flat(
             game,
             list(data.get("hard_core") or []),
             list(data.get("variants") or []),
+            wheel_coverage=(data.get("context") or {}).get("coverage_pct"),
         )
         STATE["retro"][rk] = flat_p2
         STATE.setdefault("retro_meta", {})[rk] = meta_p2
     except Exception as exc:  # noqa: BLE001
         logger.warning("retrospectiv Pool 2 lazy %s: %s", game, exc)
+
+
+def _n_extrageri(n: int) -> str:
+    """„1 extragere" / „2 extrageri" — acordul românesc, nu «1 extrageri»."""
+    return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
+
+
+def _n_zile(n: int) -> str:
+    """„1 zi" / „N zile". Tabelul de istoric face deja acordul (`_render_hits_4plus`);
+    linia de sumar și alerta îl scriau hardcodat „zile" → «acum 1 zile» chiar
+    deasupra unui tabel care zicea «acum 1 zi»."""
+    return "1 zi" if int(n) == 1 else f"{int(n)} zile"
+
+
+def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
+    """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
+
+    `hits_union` numără numere din pool ieșite la extragere. Cât timp wheel-ul
+    acoperă 100% din țintele de garanție (iar garanția internă a WF e ≥ 4, vezi
+    `walk_forward_adapter._wf_guarantee`), „3 în pool" ⇔ „3 pe cel puțin un bilet":
+    orice 3-submulțime e conținută într-o 4-submulțime, care e pe un bilet. Sub
+    100% cifra de pool devine un PLAFON — de aici avertismentul.
+    None = nimic de semnalat (tot ce se știe e la 100%).
+    """
+    try:
+        from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
+        cov = wheel_coverage_summary(flat)
+    except Exception:  # noqa: BLE001
+        return None
+    _sfx = f" ({label})" if label else ""
+    if cov["below_100"]:
+        return ("text-warning text-caption text-bold",
+                f"⚠️ Wheel INCOMPLET{_sfx}: {cov['below_100']} din {_n_extrageri(cov['known'])} "
+                f"sub 100% acoperire (minim {cov['min']:.1f}%) — cifrele de POOL sunt un "
+                "PLAFON, nu ce prinde un bilet. «Variante maxime» = 0 dă garanție completă.")
+    if cov["unknown"] and not cov["known"]:
+        return ("text-caption text-grey",
+                f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} — cache WF scris înainte de măsurarea ei. "
+                "Cifrele de POOL sunt egale cu hiturile de bilet doar dacă wheel-ul a fost "
+                "complet. Se completează la următorul walk-forward.")
+    if cov["unknown"]:
+        return ("text-caption text-grey",
+                f"ℹ️ Acoperire wheel{_sfx}: 100% pe {_n_extrageri(cov['known'])}, necunoscută pe "
+                f"{cov['unknown']} (cache WF mai vechi).")
+    return None
 
 
 def _wf_per_draw_stats(flat) -> dict:
@@ -3079,6 +3148,10 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         return f"{k} ({k / denom * 100:.0f}%)" if denom else "—"
 
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
+    for _f, _lbl in ((flat, "Pool 1"), (flat_p2, "Pool 2")):
+        _cn = _wf_coverage_note(_f, _lbl) if _f else None
+        if _cn:
+            ui.label(_cn[1]).classes(_cn[0])
     for _m, _lbl in ((meta, "Pool 1"), (meta_p2, "Pool 2")):
         if _m and _m.get("partial"):
             ui.label(f"⚠️ Validare PARȚIALĂ ({_lbl}): {_m.get('n_test_draws')} din "
@@ -3101,9 +3174,10 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             col, lvl = "#86efac", "🟢 recent"
         _avg_d = f"{st['avg']:.0f}"
         _ratio_pct = f"{st['ratio'] * 100:.0f}"
+        _zile_since = _n_zile(st["days_since"])
         ui.html(render_html_safe(
             t"<span style='font-size:.85em'>📈 Media între hituri ≥{_TT} (pool): "
-            t"<b>{_avg_d}</b> zile · ultimul acum <b>{st['days_since']}</b> zile "
+            t"<b>{_avg_d}</b> zile · ultimul acum <b>{_zile_since}</b> "
             t"(<b style='color:{col}'>{_ratio_pct}%</b> din interval · "
             t"<span style='color:{col}'>{lvl}</span>)</span>"
         )).classes("mt-1")
@@ -3373,9 +3447,10 @@ def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
             )
             _avg_d = f"{st['avg']:.0f}"
             _ratio_pct = f"{st['ratio'] * 100:.0f}"
+            _zile_alert = _n_zile(st["days_since"])
             ui.html(render_html_safe(
                 t"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
-                t"au trecut <b>{st['days_since']}</b> zile de la ultimul ≥{_T} "
+                t"au trecut <b>{_zile_alert}</b> de la ultimul ≥{_T} "
                 t"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{_avg_d}</b> zile "
                 t"(<b>{_ratio_pct}%</b> din interval).{_pnote}"
             ))

@@ -27,7 +27,7 @@ import hashlib
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -41,8 +41,20 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v17"
+CACHE_VERSION = "v18"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# (v18, ADITIV — FĂRĂ bump): câmpul `wheel_coverage` pe `WalkForwardResult`.
+#      E o ADĂUGIRE cu default, nu o schimbare de semantică a câmpurilor vechi:
+#      înregistrările deja pe disc rămân corecte, doar că nu ştiu acoperirea
+#      (→ `None` = necunoscut, raportat ca atare, NU 100%). Un bump ar fi aruncat
+#      acoperirea WF acumulată între sesiuni pentru zero câştig.
+# v18: `hits_union` = hit-uri de POOL (hard_core ∩ extragere), nu uniunea
+#      numerelor de pe bilete. Un wheel incomplet omitea numere din pool și
+#      WF raporta 3+ mai mic decât pool-ul real (UI/CLAUDE: Nucleu Dur).
+#      `hits` (max pe un bilet) e neschimbat. La acoperire 100% și g≥3,
+#      3+ pool ⇔ 3+ bilet; sub 100% hits_union supra-numără vs bilete;
+#      5+/6 rămân plafon (g intern = max 4). (Acoperirea e persistată de
+#      intrarea ADITIVĂ de mai sus — la scrierea acestei linii nu era.)
 # v17: `_csv_hash` pe TOATE rândurile numerice + `len(df)` (nu doar tail 500).
 #      Corecții/inserări mai vechi de 500, sau CSV mai lung la același tail,
 #      serveau cache vechi pe alte date de antrenare/validare.
@@ -89,12 +101,72 @@ class WalkForwardResult:
     draw_date: str | None
     variant: list[int]
     hits: int
-    hits_union: int  # cât din pool a nimerit per extragere
+    hits_union: int  # POOL ∩ extragere (plafon pt 5+ când g=4; peste acoperire <100% e plafon vs bilete)
     target_draw_date: str | None = None  # alias pt RetroactivePrediction
+    # % din ţintele de garanţie acoperite de biletele pasului. None = NECUNOSCUT
+    # (înregistrare dintr-un cache scris înainte de introducerea câmpului), NU 0.
+    # Contează fiindcă `hits_union` e hit de POOL: „3 în pool" ⇔ „3 pe un bilet"
+    # doar la 100% acoperire (şi guarantee ≥ 3); sub 100% e un PLAFON.
+    wheel_coverage: float | None = None
 
     def __post_init__(self):
         if self.target_draw_date is None:
             self.target_draw_date = self.draw_date
+
+
+def _backfill_new_fields(records) -> None:
+    """Completează IN-PLACE câmpurile adăugate în dataclass DUPĂ scrierea cache-ului.
+
+    Unpickle-ul restaurează `__dict__`-ul obiectului vechi FĂRĂ să treacă prin
+    `__init__`/`__post_init__`, deci un câmp nou lipseşte din instanţă.
+
+    ⚠️ Pentru un câmp cu default SIMPLU (cazul lui `wheel_coverage: float | None =
+    None`) CITIREA merge şi fără asta — cade pe atributul de CLASĂ, iar `hasattr`
+    e deja True, deci bucla de mai jos îl SARE: pe câmpul de azi funcţia e un
+    no-op deliberat. Ea contează pentru câmpurile care NU au atribut de clasă —
+    `default_factory` sau fără default — unde accesul chiar ar da AttributeError.
+    E plasa care ţine un câmp ADITIV departe de un bump de `CACHE_VERSION` (care
+    ar arunca acoperirea WF acumulată). Acelaşi tipar ca în
+    `benchmark/bench_cache.get_cached_fold`.
+    """
+    for obj in records or ():
+        if not is_dataclass(obj):
+            continue
+        for fld in fields(obj):
+            if hasattr(obj, fld.name):
+                continue
+            if fld.default is not MISSING:
+                setattr(obj, fld.name, fld.default)
+            elif fld.default_factory is not MISSING:  # type: ignore[misc]
+                setattr(obj, fld.name, fld.default_factory())  # type: ignore[misc]
+            else:
+                setattr(obj, fld.name, None)
+
+
+def wheel_coverage_summary(flat) -> dict:
+    """Acoperirea wheel-ului peste paşii walk-forward, dedusă per EXTRAGERE.
+
+    `flat` are o intrare per (extragere × bilet), iar acoperirea e o proprietate a
+    PASULUI, nu a biletului → dedup pe `draw_index`, altfel paşii cu multe bilete
+    ar domina numărătoarea.
+
+    Întoarce `{n_draws, known, unknown, min, below_100}`. `min`/`below_100` se
+    calculează DOAR pe paşii cu acoperire cunoscută; `unknown > 0` înseamnă
+    înregistrări dintr-un cache mai vechi decât câmpul — necunoscut, nu 100%.
+    """
+    per: dict = {}
+    for p in flat or ():
+        di = int(getattr(p, "draw_index", 0) or 0)
+        if di not in per:
+            per[di] = getattr(p, "wheel_coverage", None)
+    known = [float(v) for v in per.values() if v is not None]
+    return {
+        "n_draws": len(per),
+        "known": len(known),
+        "unknown": len(per) - len(known),
+        "min": min(known) if known else None,
+        "below_100": sum(1 for v in known if v < 100.0),
+    }
 
 
 def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
@@ -150,9 +222,10 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
 
     DE CE intră în cheia de cache: numărul de BILETE per extragere depinde exclusiv de
     algoritmul de wheeling, iar din el se calculează costul, câștigul net și ROI-ul din
-    raport. Fără wheel în cheie, schimbarea ILP → La Jolla (6/49 pool 12: ~54 → 41
-    bilete) a servit în continuare cache vechi, iar raportul arăta costuri umflate cu
-    ~32% pentru Pool 1, lângă un Pool 2 recalculat cu wheel-ul nou.
+    raport. Fără wheel în cheie, schimbarea ILP → La Jolla (doar 6/49 pool 12 / g4:
+    ~54 → 41 bilete; `covering_designs/` are doar C_12_6_4 și C_12_5_4) a servit în
+    continuare cache vechi, iar raportul arăta costuri umflate cu ~32% pentru Pool 1,
+    lângă un Pool 2 recalculat cu wheel-ul nou.
     """
     method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
     return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}"
@@ -209,6 +282,7 @@ def expand_predictions_to_flat(
                 hits=hits,
                 hits_union=p.hits_union,
                 target_draw_date=p.target_draw_date,
+                wheel_coverage=getattr(p, "wheel_coverage", None),
             ))
     return flat
 
@@ -296,6 +370,9 @@ def run_honest_walk_forward(
     if use_cache and not force_refresh and cache_file.exists():
         try:
             cached = pickle_load_path(cache_file)
+            # Obiectele scrise înainte de un câmp ADITIV nu-l au deloc (unpickle-ul
+            # nu trece prin __init__) → completează-l acum, o singură dată.
+            _backfill_new_fields(cached.get("flat"))
             if not cached.get("partial", False):
                 # COMPLET → servim direct (fast path neschimbat).
                 meta["from_cache"] = True
@@ -303,6 +380,7 @@ def run_honest_walk_forward(
                 meta["n_test_draws"] = cached["n_test_draws"]
                 meta["n_expected"] = cached.get("n_expected", cached["n_test_draws"])
                 meta["partial"] = False
+                meta["wheel_coverage"] = wheel_coverage_summary(cached["flat"])
                 logger.info(
                     f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
                     f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
@@ -367,6 +445,24 @@ def run_honest_walk_forward(
     if cached is not None:
         flat, meta = _merge_partial_coverage(cached, flat, meta)
 
+    # Acoperirea wheel-ului pe paşii validaţi. Se calculează DUPĂ reuniune, ca să
+    # acopere şi paşii veniţi din cache. Sub 100% (sau necunoscută), `hits_union`
+    # (hit de POOL) nu mai e egal cu „hit pe un bilet" — UI-ul avertizează.
+    meta["wheel_coverage"] = wheel_coverage_summary(flat)
+    _cov_sum = meta["wheel_coverage"]
+    if _cov_sum["below_100"]:
+        logger.warning(
+            "[WALK-FWD] %s pool=%s: wheel INCOMPLET la %d/%d paşi (min %.2f%%) — "
+            "hiturile de POOL (3+/4+) sunt un PLAFON, nu ce prinde un bilet.",
+            game_type, pool_size, _cov_sum["below_100"], _cov_sum["known"], _cov_sum["min"],
+        )
+    elif _cov_sum["unknown"]:
+        logger.info(
+            "[WALK-FWD] %s pool=%s: acoperire necunoscută la %d/%d paşi "
+            "(cache scris înainte de câmpul `wheel_coverage`).",
+            game_type, pool_size, _cov_sum["unknown"], _cov_sum["n_draws"],
+        )
+
     # Save cache (rezultatul reunit ⊇ cache → suprascriem; scriere atomică anti-corupere
     # la UI-restart în mijlocul pickle.dump — un cache trunchiat ar crăpa la load).
     try:
@@ -384,6 +480,7 @@ def build_retrospective_pool_hits_flat(
     game_type: str,
     pool_numbers: list[int],
     variants: list,
+    wheel_coverage: float | None = None,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Istoric hits Pool 2 fără walk-forward onest.
 
@@ -396,6 +493,13 @@ def build_retrospective_pool_hits_flat(
     if not flat_reference or not pool_numbers:
         return [], {"retrospective": True, "n_test_draws": 0, "partial": False}
 
+    # Aici wheel-ul NU se regenerează: `variants` e wheel-ul de PRODUCŢIE, deci
+    # acoperirea lui e cea din `context["coverage_pct"]` al jobului (pasată de UI),
+    # aceeaşi pentru toate extragerile replayate.
+    try:
+        _cov = None if wheel_coverage is None else float(wheel_coverage)
+    except (TypeError, ValueError):
+        _cov = None
     bt = LotoBacktester(df_source, game_type=game_type)
     draw_n = int({"6/49": 6, "5/40": 5, "joker": 5}.get(game_type, 6))
     pool_set = {int(x) for x in pool_numbers}
@@ -424,6 +528,7 @@ def build_retrospective_pool_hits_flat(
                     hits=len(vset & actual),
                     hits_union=hits_union,
                     target_draw_date=str(dd) if dd else None,
+                    wheel_coverage=_cov,
                 ))
         else:
             flat_out.append(WalkForwardResult(
@@ -433,10 +538,12 @@ def build_retrospective_pool_hits_flat(
                 hits=hits_union,
                 hits_union=hits_union,
                 target_draw_date=str(dd) if dd else None,
+                wheel_coverage=_cov,
             ))
 
     meta = {
         "retrospective": True,
+        "wheel_coverage": wheel_coverage_summary(flat_out),
         "n_test_draws": n_draws,
         "n_expected": n_draws,
         "partial": False,

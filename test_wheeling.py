@@ -13,9 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from loto_engine import generate_combinatorial_wheel
 from wheeling_methods import (
     WHEEL_METHODS,
     compute_coverage_pct,
+    ensure_pool_numbers_on_tickets,
     filter_preserving_coverage,
     generate_wheel,
     wheel_lajolla,
@@ -147,3 +149,121 @@ def test_filter_preserving_coverage_keeps_guarantee():
     assert removed >= 0
     assert len(filtered) == len(wheel) - removed
     assert _covers_all(filtered, pool, 3), "filtrarea a spart garanția"
+
+
+def test_complete_system_guarantee_equals_pick_is_full_cover():
+    """guarantee==pick nu mai trece prin greedy-ul cu cap 1000 iterații."""
+    from math import comb
+
+    pool = list(range(1, 9))  # 8 numere, pick=5 → C(8,5)=56
+    wheel, cov = generate_combinatorial_wheel(pool, pick=5, guarantee=5, max_variants=0)
+    assert cov == 100.0
+    assert len(wheel) == comb(8, 5)
+    assert _covers_all(wheel, pool, 5)
+    for t in wheel:
+        assert t == sorted(t), "bilet nesortat (afișare Joker v[:5])"
+    # cu cap de bilete: acoperire parțială, dar fără timeout-ul de 1000
+    wheel_cap, cov_cap = generate_combinatorial_wheel(
+        pool, pick=5, guarantee=5, max_variants=10,
+    )
+    assert len(wheel_cap) == 10
+    assert cov_cap < 100.0
+    for t in wheel_cap:
+        assert t == sorted(t)
+    # 10 bilete × 5 ≥ 8 numere în pool → fiecare număr din pool e pe ≥1 bilet
+    assert {n for t in wheel_cap for n in t} == set(pool)
+
+
+def test_capped_wheel_keeps_weak_pool_numbers() -> None:
+    """max_variants > 0 trunchia lexicografic — numerele slabe din pool nu apăreau
+    pe niciun bilet. Acum un lipsă înlocuiește un duplicat (cât încape pick*cap)."""
+    pool = list(range(1, 13))  # 12 numere
+    scores = {n: float(n) for n in pool}  # 12 e cel mai tare, 1 cel mai slab
+    tickets, _ = generate_combinatorial_wheel(
+        pool, pick=6, guarantee=4, max_variants=2, scores=scores,
+    )
+    assert len(tickets) == 2
+    union_nums = {n for t in tickets for n in t}
+    assert union_nums == set(pool), f"lipsesc din bilete: {set(pool) - union_nums}"
+
+
+def test_single_ticket_cap_does_not_drop_unique_numbers() -> None:
+    """Un cap de 1 bilet nu poate acoperi 12 numere. Nu înlocuim tot biletul
+    cu numerele slabe — rămân cele 6 tari (unici pe wheel)."""
+    pool = list(range(1, 13))
+    scores = {n: float(n) for n in pool}
+    tickets, _ = generate_combinatorial_wheel(
+        pool, pick=6, guarantee=4, max_variants=1, scores=scores,
+    )
+    assert len(tickets) == 1
+    assert set(tickets[0]) == {7, 8, 9, 10, 11, 12}
+
+
+def test_ensure_pool_numbers_swaps_duplicates_only() -> None:
+    wheel = [[1, 2, 3, 4], [1, 2, 5, 6]]  # 1,2 duplicate; lipsesc 7,8 din pool 1-8
+    pool = list(range(1, 9))
+    out = ensure_pool_numbers_on_tickets(wheel, pool, pick=4)
+    union = {n for t in out for n in t}
+    assert {7, 8}.issubset(union)
+    assert len(out) == 2
+    # numerele care erau unice (3,4,5,6) nu au voie să dispară
+    assert {3, 4, 5, 6}.issubset(union)
+    # scanare de la coadă: T1 (cel mai bine punctat) rămâne intact
+    assert out[0] == [1, 2, 3, 4]
+
+
+def test_capped_wheel_keeps_first_ticket_strongest() -> None:
+    """Măsurat: pool 16 / pick 6 / g4 / cap 3. Scanarea de la capăt rescria
+    T1=[11..16] → [2,3,4,11,12,13]. De la coadă T1 rămâne cele 6 tari,
+    acoperirea e aceeași, 0 numere lipsă."""
+    from unittest.mock import patch
+
+    pool = list(range(1, 17))
+    scores = {n: float(n) for n in pool}
+    kwargs = dict(pick=6, guarantee=4, max_variants=3, scores=scores)
+    with patch(
+        "wheeling_methods.ensure_pool_numbers_on_tickets",
+        side_effect=lambda w, p, k: [list(t) for t in w],
+    ):
+        raw, raw_cov = generate_combinatorial_wheel(pool, **kwargs)
+    packed, packed_cov = generate_combinatorial_wheel(pool, **kwargs)
+
+    assert len(packed) == len(raw) == 3
+    assert raw[0] == packed[0] == [11, 12, 13, 14, 15, 16]
+    raw_union = {n for t in raw for n in t}
+    packed_union = {n for t in packed for n in t}
+    assert set(pool) - raw_union, "fără packing, trunchierea lexicografică pierde numere"
+    assert packed_union == set(pool)
+    assert packed_cov == raw_cov
+    assert 0.0 < packed_cov < 100.0
+
+
+def test_complete_system_tickets_are_sorted_ascending():
+    """Numerele DIN bilet ies crescător, ca pe ramura greedy.
+
+    Cu `scores`, pool-ul e sortat DESCRESCĂTOR după scor înainte de
+    `itertools.combinations`, deci fără sortare explicită biletele ieșeau în
+    ordinea scorului — singurele din tot modulul. Ordinea BILETELOR trebuie însă
+    să rămână cea dată de scor, deci testul verifică ambele proprietăți deodată.
+    Pool-ul e ales exact `pick + 1`, ca trunchierea să nu lase niciun număr pe
+    dinafară (altfel `ensure_pool_numbers_on_tickets` ar rescrie primul bilet).
+    """
+    from loto_engine import generate_combinatorial_wheel
+
+    pool = [7, 3, 40, 12, 25, 9]
+    ranking = [40, 25, 12, 9, 7, 3]  # 40 = cel mai tare
+    scores = {n: 1.0 / (i + 1) for i, n in enumerate(ranking)}
+
+    wheel, cov = generate_combinatorial_wheel(pool, pick=5, guarantee=5,
+                                              max_variants=0, scores=scores)
+    assert cov == 100.0
+    assert all(t == sorted(t) for t in wheel), "numerele din bilet nu sunt crescătoare"
+    assert {tuple(sorted(t)) for t in wheel} == set(combinations(sorted(pool), 5))
+    # primul bilet = cele mai bine punctate `pick` numere (ordinea biletelor = scor)
+    assert wheel[0] == sorted(ranking[:5])
+
+    capped, cov_capped = generate_combinatorial_wheel(pool, pick=5, guarantee=5,
+                                                      max_variants=3, scores=scores)
+    assert len(capped) == 3 and cov_capped < 100.0
+    assert all(t == sorted(t) for t in capped)
+    assert capped[0] == sorted(ranking[:5])

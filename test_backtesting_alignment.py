@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from loto_enterprise.core.backtesting import LotoBacktester
+from loto_enterprise.core.backtesting import LotoBacktester, pool_draw_hits
 
 COLS = ["n1", "n2", "n3", "n4", "n5", "n6"]
 
@@ -52,3 +52,14 @@ def test_dates_stay_aligned_with_draws():
     assert len(bt.dates) == len(bt.draws) == len(bt.df)
     for k in (0, 3, 10):
         assert bt.dates[k] == str(bt.df.iloc[k]["date"])
+
+
+def test_pool_draw_hits_uses_hard_core_not_ticket_union():
+    """WF hits_union = pool ∩ extragere, chiar dacă biletele omit un număr din pool."""
+    pool = [1, 2, 3, 4, 5, 10]
+    actual = [1, 2, 3, 20, 21, 22]
+    assert pool_draw_hits(pool, actual) == 3
+    # uniunea biletelor ar fi 2 dacă 3 nu e pe niciun ticket
+    tickets_union = {1, 2, 10}
+    assert len(tickets_union & set(actual)) == 2
+    assert pool_draw_hits(pool, actual) > len(tickets_union & set(actual))

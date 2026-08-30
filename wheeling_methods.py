@@ -32,6 +32,7 @@ import logging
 import math
 import os
 import time
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -76,6 +77,54 @@ def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int
     post-wheeling (ex. anomaly filter) care pot elimina bilete fără să
     actualizeze procentul de acoperire raportat inițial de wheeling."""
     return _coverage_pct(wheel, pool, guarantee)
+
+
+def ensure_pool_numbers_on_tickets(
+    wheel: list[list[int]], pool: list[int], pick: int,
+) -> list[list[int]]:
+    """După un cap de bilete, fiecare număr din pool pe ≥1 bilet dacă încape.
+
+    Trunchierea lexicografică pe pool-ul sortat după scor lăsa numerele slabe
+    pe dinafară — pool-ul VALIDAT nu mai era pe bilete. Punem un număr lipsă
+    în locul unui număr care apare deja pe alt bilet (duplicat). Scanăm de la
+    COADĂ, ca T1 (cel mai bine punctat) să rămână intact — nu doar la cap=1.
+    Nu înlocuim un număr unic: un cap de 1 bilet n-are duplicate, deci cele
+    `pick` numere tari rămân. Dacă toate numerele de pe bilete sunt unice,
+    capacitatea e epuizată (`len(wheel)*pick < len(pool)`) și ne oprim.
+    """
+    if not wheel or not pool:
+        return [list(t) for t in wheel] if wheel else wheel
+    pick = int(pick)
+    if pick < 1:
+        return [list(t) for t in wheel]
+    out = [sorted(int(x) for x in t) for t in wheel]
+    pool_list = [int(n) for n in pool]
+
+    def _counts() -> Counter:
+        c: Counter = Counter()
+        for t in out:
+            for n in t:
+                c[int(n)] += 1
+        return c
+
+    missing = [n for n in pool_list if _counts()[n] == 0]
+    for miss in missing:
+        counts = _counts()
+        placed = False
+        # Coada întâi: T1 e cel mai bine punctat; îl atingem doar dacă
+        # biletele slabe n-au niciun duplicat de evacuat.
+        for ti in range(len(out) - 1, -1, -1):
+            t = out[ti]
+            for j, n in enumerate(t):
+                if counts[int(n)] >= 2:
+                    new_t = list(t)
+                    new_t[j] = miss
+                    out[ti] = sorted(int(x) for x in new_t)
+                    placed = True
+                    break
+            if placed:
+                break
+    return out
 
 
 def filter_preserving_coverage(
@@ -247,14 +296,12 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
     if v < pick:
         return [list(pool)], 100.0
     base, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)  # plecăm din greedy complet
-    # Țintele se enumeră pe pool-ul SORTAT NUMERIC, nu pe cel sortat după scor:
-    # `ticket_targets` caută cu `tuple(sorted(...))`, deci cheile trebuie să fie
-    # tot crescătoare. Cu scoruri (adică pe TOATE apelurile de producție)
-    # `_sorted_pool` reordonează după scor, cheile ieșeau în ordinea scorurilor și
-    # fiecare căutare arunca `KeyError` — metoda era 100% moartă cu
-    # LOTO_WHEEL_METHOD=annealing. Ordinea nu contează pentru acoperire (contează
-    # doar apartenența); ordinea după scor se aplică oricum la final prin
-    # `_order_by_scores`.
+    # ⚠️ Cheile ȚINTELOR se construiesc pe pool-ul sortat NUMERIC, fiindcă
+    # `ticket_targets` caută cu `tuple(sorted(...))`. `_sorted_pool` reordonează
+    # după SCOR, deci pe apelul de producție (care pasează mereu scoruri) cheile
+    # ieșeau în ordinea scorurilor și fiecare căutare dădea KeyError — funcția era
+    # moartă în producție, iar `test_wheeling.py` n-o prindea fiindcă testează
+    # FĂRĂ scoruri, caz în care cele două ordini coincid.
     _pool_sorted = sorted(pool)
     targets = list(itertools.combinations(_pool_sorted, guarantee))
     if not targets:
@@ -358,15 +405,15 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
     try:
         import numpy as np
         rng = np.random.default_rng(seed)
-        # Ca la annealing: enumerăm pe pool-ul SORTAT NUMERIC, fiindcă sămânța de
-        # elitism caută cu `bidx[tuple(sorted(t))]`. Cu scoruri, `_sorted_pool`
-        # reordonează după scor, nicio cheie nu se potrivea, `g_idx` ieșea GOALĂ și
-        # GA-ul pornea complet aleator — de unde acoperire sub 100% acolo unde
-        # greedy dă 100% cu același număr de bilete (măsurat: 92.38% pe pool 10).
-        _pool_sorted = sorted(pool)
-        blocks = list(itertools.combinations(_pool_sorted, pick))
-        bidx = {b: i for i, b in enumerate(blocks)}
-        targets = list(itertools.combinations(_pool_sorted, guarantee))
+        blocks = list(itertools.combinations(pool, pick))
+        # ⚠️ Cheile pe tuple SORTAT NUMERIC: elitismul de mai jos caută cu
+        # `bidx[tuple(sorted(t))]`, iar `pool` e în ordinea SCORULUI. Cu scoruri
+        # (cazul de producție) nicio cheie nu se potrivea → sămânța greedy se
+        # pierdea tăcut, GA pornea aleator și întorcea sub 100% acoperire acolo
+        # unde greedy dă 100% cu același număr de bilete. Valorile rămân indici
+        # în `blocks`, deci M/`P` nu se schimbă.
+        bidx = {tuple(sorted(b)): i for i, b in enumerate(blocks)}
+        targets = list(itertools.combinations(pool, guarantee))
         tidx = {t: i for i, t in enumerate(targets)}
         # M[b, t] = 1 dacă blocul b acoperă ținta t (t ⊆ b)
         M = np.zeros((nb, nt), dtype=np.float32)
@@ -569,5 +616,10 @@ def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=No
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic."""
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if fn is None:
-        return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
-    return fn(pool, pick, guarantee, max_variants, scores)
+        wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)
+    else:
+        wheel, cov = fn(pool, pick, guarantee, max_variants, scores)
+    if int(max_variants or 0) > 0:
+        wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+        cov = _coverage_pct(wheel, pool, guarantee)
+    return wheel, cov

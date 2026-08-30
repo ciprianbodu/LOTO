@@ -131,7 +131,7 @@ def _retroactive_step_stateless(
         eng._adaptive_mode = "normal"
         eng._adaptive_event = None
         eng._temp_blacklist = set()
-        out_lines, _, _, _, _, _audit = eng.run_institutional_pipeline(
+        out_lines, _, _, _, _ctx, _audit = eng.run_institutional_pipeline(
             progress_cb=None,
             pool_size=pool_size,
             guarantee=guarantee,
@@ -143,12 +143,12 @@ def _retroactive_step_stateless(
             manual_blacklist=manual_blacklist,
             track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
         )
-        return eng, out_lines
+        return eng, out_lines, (_ctx or {})
 
-    engine, lines = _run_pipeline()
+    engine, lines, ctx = _run_pipeline()
     if auto_invert:
         pool1 = list(engine.hard_core)
-        engine, lines = _run_pipeline(manual_blacklist=pool1)
+        engine, lines, ctx = _run_pipeline(manual_blacklist=pool1)
 
     actual_draw = draws[sim_idx]
     actual_set = set(actual_draw)
@@ -158,10 +158,7 @@ def _retroactive_step_stateless(
         if h > max_hits:
             max_hits = h
 
-    predicted_union = set().union(
-        *(scored_variant_numbers(v, game_type) for v in lines)
-    ) if lines else set()
-    hits_union = len(predicted_union & actual_set)
+    hits_union = pool_draw_hits(engine.hard_core, actual_set)
 
     return RetroactivePrediction(
         simulation_date=str(sim_date),
@@ -175,6 +172,7 @@ def _retroactive_step_stateless(
         guarantee=guarantee,
         game_type=game_type,
         draw_index=sim_idx,
+        wheel_coverage=coverage_from_context(ctx),
     )
 
 
@@ -213,6 +211,39 @@ def scored_variant_numbers(variant: list[int], game_type: str) -> list[int]:
     if game_type == "joker":
         return vals[:draw_n]
     return vals
+
+
+def coverage_from_context(context) -> float | None:
+    """`context["coverage_pct"]` al pasului, ca float — sau None dacă lipsește.
+
+    Acoperirea NU e cosmetică pe path-ul de backtest: `hits_union` numără hituri
+    de POOL, iar „hit de pool" ⇔ „hit pe un bilet" DOAR cât timp wheel-ul acoperă
+    100% din țintele de garanție (orice t-submulțime cu t ≤ guarantee e conținută
+    într-o țintă acoperită, deci într-un bilet). Sub 100% cifra de pool devine un
+    PLAFON, nu ce plătește biletul — deci o ducem mai departe ca s-o semnalăm.
+    """
+    try:
+        cov = (context or {}).get("coverage_pct")
+    except AttributeError:
+        return None
+    if cov is None:
+        return None
+    try:
+        return float(cov)
+    except (TypeError, ValueError):
+        return None
+
+
+def pool_draw_hits(hard_core, actual) -> int:
+    """Câte numere din POOL (hard_core) coincid cu extragerea.
+
+    NU e uniunea numerelor de pe bilete: un wheel incomplet poate omite numere
+    din pool, iar UI-ul / CLAUDE.md numesc `hits_union` hit-urile de pool.
+    `hits` (max pe un bilet) rămâne metrica de ticket.
+    """
+    if not hard_core:
+        return 0
+    return len({int(x) for x in hard_core} & {int(x) for x in actual})
 
 
 @dataclass
@@ -258,7 +289,10 @@ class RetroactivePrediction:
     guarantee: int  # Garanția folosită
     game_type: str  # Tipul jocului
     draw_index: int = 0  # Indexul extragerii
-    hits_union: int = 0  # Câte numere s-au potrivit în întregul pool (union)
+    hits_union: int = 0  # Câte numere din POOL (hard_core) coincid cu extragerea
+    # % din țintele de garanție acoperite de biletele pasului (None = necunoscut,
+    # ex. înregistrare dintr-un cache scris înainte de introducerea câmpului).
+    wheel_coverage: float | None = None
 
 
 class LotoBacktester:
@@ -950,7 +984,7 @@ class LotoBacktester:
                     engine._temp_blacklist = set()
 
                 # Rulăm pipeline-ul instituțional (fără persistență — backtest in-memory)
-                lines, _, _, _, _, audit = engine.run_institutional_pipeline(
+                lines, _, _, _, ctx_step, audit = engine.run_institutional_pipeline(
                     progress_cb=None,
                     pool_size=pool_size,
                     guarantee=guarantee,
@@ -971,10 +1005,7 @@ class LotoBacktester:
                     if h > max_hits:
                         max_hits = h
 
-                predicted_union = set().union(
-                    *(self._scored_variant_numbers(v) for v in lines)
-                ) if lines else set()
-                hits_union = len(predicted_union & set(actual_draw))
+                hits_union = pool_draw_hits(engine.hard_core, actual_draw)
 
                 retro_pred = RetroactivePrediction(
                     simulation_date=str(sim_date),
@@ -988,6 +1019,7 @@ class LotoBacktester:
                     guarantee=guarantee,
                     game_type=self.game_type,
                     draw_index=sim_idx,
+                    wheel_coverage=coverage_from_context(ctx_step),
                 )
 
                 retro_predictions.append(retro_pred)
