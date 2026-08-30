@@ -1976,11 +1976,12 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
         # pe cel puțin un bilet. Niciun filtru nu mai elimină bilete DUPĂ wheeling
         # (a doua ramură, pe `audit.anomaly_filter`, nu se mai executa niciodată —
-        # engine-ul nu mai scrie cheia), deci rămân DOUĂ cauze pentru <100%:
+        # engine-ul nu mai scrie cheia), deci rămân TREI cauze pentru <100%:
         #   1. limita «Variante maxime»;
         #   2. garanția = câte numere se extrag (cerere degenerată: singurul cover
         #      100% e sistemul complet — 5/40 pool 15 → C(15,5) = 3003 bilete —, iar
-        #      greedy-ul se oprește la 1000 de iterații → 1001 bilete la 33%).
+        #      greedy-ul se oprește la 1000 de iterații → 1001 bilete la 33%);
+        #   3. pool < pick (bilete nevalidabile — `audit.wheel_degenerate`).
         # Mesajul de dinainte atribuia MEREU cauza 1, inclusiv când «Variante
         # maxime» era deja 0, și sfătuia „pune 0 = nelimitat" fără efect.
         _cov = (data.get("context") or {}).get("coverage_pct")
@@ -1992,7 +1993,13 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     _mv = int((data.get("context") or {}).get("max_variants") or 0)
                 except (TypeError, ValueError):
                     _mv = 0
-                if _mv > 0:
+                _deg = (data.get("audit") or {}).get("wheel_degenerate") or {}
+                if _deg:
+                    reason = (
+                        f"pool ({_deg.get('pool_len')}) e mai mic decât biletul "
+                        f"({_deg.get('pick')}) — biletele nu sunt jucabile"
+                    )
+                elif _mv > 0:
                     reason = (
                         "limita «Variante maxime» a tăiat garanția — "
                         "pune 0 = nelimitat pentru garanție completă"
@@ -2031,6 +2038,14 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             meta = ", ".join(x for x in [fam, (f"pool {ph}" if ph else "")] if x)
             if meta:
                 tail += render_html_safe(t" <span style='opacity:.45'>[{meta}]</span>")
+            _sub = info.get("pool_substituted") or {}
+            if isinstance(_sub, dict) and _sub.get("used") is not None:
+                _su, _sr = _sub.get("used"), _sub.get("requested")
+                tail += render_html_safe(
+                    t"<br><span style='color:#f59e0b;font-size:.85em'>"
+                    t"⚠ măsurat la pool {_su}, nu la {_sr} "
+                    t"(bench-ul n-a evaluat pool-ul cerut)</span>"
+                )
             _ens = info.get("ensemble") or []
             _n_ens = len(_ens)
             if _n_ens > 1:
@@ -3633,6 +3648,13 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                         _p1 = set(int(x) for x in (data["phase1"].get("hard_core") or []))
                         _p2 = set(int(x) for x in (data.get("hard_core") or []))
                         _mi = (data.get("audit") or {}).get("manual_inversion") or {}
+                        _clamp = (data.get("audit") or {}).get("pool_clamp_for_invert") or {}
+                        if _clamp:
+                            ui.label(
+                                f"⚠️ Pool redus de la {_clamp.get('requested')} la "
+                                f"{_clamp.get('clamped_to')} ca inversarea să aibă loc "
+                                f"(univers {_clamp.get('max_num')})."
+                            ).classes("text-caption text-warning")
                         if _p2 == _p1 or _mi.get("skipped"):
                             pmax = _mi.get("pool_max_pentru_inversare")
                             ui.label("⚠️ INVERSARE NEAPLICATĂ — Pool 2 e identic cu Pool 1!").classes(
@@ -4093,7 +4115,28 @@ def _recover_completed_job() -> None:
     except (TypeError, ValueError):
         already = 0
     if jid == already:
-        return  # deja dus prin finalize într-o sesiune anterioară
+        # Finalizat deja → FĂRĂ mail / WF / shutdown. Dar STATE["results"] e
+        # doar în memorie: după restart UI e gol, iar ecranul zicea „Gata de
+        # lucru" deși SQLite încă ține payload-ul valid. Reafișăm, marcat
+        # recuperat — ca pe ramura VECHE, nu ca pe o finalizare nouă.
+        if isinstance(STATE.get("results"), tuple) and len(STATE["results"]) == 2:
+            return
+        payload = decode_queue_result(str(last.get("result_json") or "{}"))
+        if not (isinstance(payload, tuple) and len(payload) == 2):
+            return
+        when = str(last.get("completed_at") or "")[:16] or "sesiune anterioară"
+        with STATE_LOCK:
+            STATE["results"] = payload
+            STATE["results_recovered"] = f"job #{jid} · {when}"
+        try:
+            _save_report_file()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[RECOVERY] raport: %s", exc)
+        logger.warning(
+            "[RECOVERY] job #%s deja finalizat — reafișez rezultatele "
+            "(fără mail/walk-forward/shutdown).", jid,
+        )
+        return
 
     payload = decode_queue_result(str(last.get("result_json") or "{}"))
     if not (isinstance(payload, tuple) and len(payload) == 2):

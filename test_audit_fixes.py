@@ -218,3 +218,40 @@ def test_wf_decision_sig_omits_inert_use_blacklist():
     assert 'bool(c.get(\'use_blacklist\'' not in body
     assert "BENCH_HIT_TARGET" in body
 
+
+def test_recovery_redisplays_already_finalized_job():
+    """`last_finalized_job_id` nu are voie să ascundă rezultatele după restart.
+
+    Înainte: `if jid == already: return` — ecranul zicea „Gata de lucru" deși
+    SQLite încă ținea payload-ul COMPLETED. Acum ramura reafișează, marcat
+    recuperat, fără mail/WF/shutdown.
+    """
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    start = src.index("def _recover_completed_job")
+    end = src.index("def _startup", start)
+    body = src[start:end]
+    already = body.index("jid == already")
+    after = body[already:]
+    assert "results_recovered" in after
+    assert "STATE[\"results\"]" in after
+    assert "fără mail" in after or "fara mail" in after.lower()
+    # nu mai e un `return` gol imediat după already
+    first_lines = after.splitlines()[:3]
+    assert not any(ln.strip() == "return" for ln in first_lines)
+
+
+def test_engine_writes_pool_substituted_into_audit():
+    """🏆 din rezultate citește audit.bench_winner, nu recommend_optimal_config."""
+    src = open("loto_engine.py", encoding="utf-8").read()
+    start = src.index("def _scores_via_bench_winner")
+    body = src[start:start + 8000]
+    assert "pool_substituted" in body
+    assert "recommend_optimal_config" in body
+
+
+def test_coverage_empty_targets_is_zero():
+    """C(v,g) gol (guarantee > pool) nu e 100% acoperire."""
+    from wheeling_methods import compute_coverage_pct
+
+    assert compute_coverage_pct([], [1, 2], 4) == 0.0
+
