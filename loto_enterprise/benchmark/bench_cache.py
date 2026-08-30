@@ -138,8 +138,17 @@ def _ensure_cache_dir():
 
 
 def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
-                    is_random: bool = False) -> Any | None:
-    """Return cached FoldResult or None."""
+                    is_random: bool = False,
+                    expected_pools: "set[str] | None" = None) -> Any | None:
+    """Return cached FoldResult or None.
+
+    `expected_pools` = mulțimea de chei `kN` pe care GameDef-ul CURENT le cere
+    (derivate din draw_n + pool_extra). Cheia de cache NU conține geometria
+    jocului, deci un fold calculat cu alt `pool_extra` se potrivea pe cheie și
+    era servit TRUNCHIAT — de acolo coloanele all-NaN `k5`/`k20` într-un
+    folds.csv asamblat din faze de bench diferite. Validăm la CITIRE (nu prin
+    cheie) tocmai ca să prindem și intrările vechi deja otrăvite, fără să
+    invalidăm tot cache-ul existent."""
     _ensure_cache_dir()
     key = _fold_key(csv_hash, method, percentile, game_key, is_random)
     f = CACHE_DIR / f"{key}.pkl"
@@ -158,6 +167,18 @@ def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
                         setattr(obj, fld.name, fld.default_factory())  # type: ignore[misc]
                     else:
                         setattr(obj, fld.name, None)
+        # Validare de GEOMETRIE: dacă fold-ul cache-uit nu acoperă exact pool-urile
+        # cerute de GameDef-ul curent, e dintr-o altă configurație → cache MISS
+        # (recalculăm) în loc să scriem un rând trunchiat în folds.csv.
+        if expected_pools:
+            got = set((getattr(obj, "hits_per_pool", None) or {}).keys())
+            if got and got != set(expected_pools):
+                logger.warning(
+                    "[bench_cache] %s/%s pct=%s: fold cache-uit are pool-urile %s, "
+                    "dar jocul cere %s — îl ignor și recalculez.",
+                    game_key, method, percentile, sorted(got), sorted(expected_pools),
+                )
+                return None
         return obj
     except Exception as exc:
         logger.debug(f"[bench_cache] failed to load {f.name}: {exc}")

@@ -14,7 +14,6 @@ import itertools
 import math
 import numpy as np
 import pandas as pd
-from numba import jit
 import time
 import logging
 import os
@@ -309,11 +308,33 @@ class LotoEngine:
             self._build_draw_matrix()
             self.audit["rows_loaded"] = len(self.data)
             self.audit["game_detected"] = self.game_type
-            # Bug 1.6 Fix: hashlib.sha256 determinist în loc de hash() care variază între rulări
-            self.audit["hash"] = hashlib.sha256(self.data.values.tobytes()).hexdigest()[:16]
+            # Hash pe CONȚINUT, nu pe pointeri. `self.data.values` pe un DataFrame
+            # cu dtype-uri MIXTE (coloana `date` = str + n1..n6 = int64) dă un
+            # array `dtype=object`, iar `.tobytes()` serializează ADRESELE
+            # obiectelor Python, nu valorile — deci trei citiri ale ACELUIAȘI
+            # fișier dădeau trei hash-uri diferite (verificat), exact
+            # nedeterminismul pe care comentariul de dinainte pretindea că l-a
+            # rezolvat. `hash_pandas_object` hash-uiește valorile.
+            self.audit["hash"] = hashlib.sha256(
+                pd.util.hash_pandas_object(self.data, index=True).values.tobytes()
+            ).hexdigest()[:16]
+            # Un CSV care se PARSEAZĂ nu înseamnă date UTILIZABILE: pandas citește
+            # fericit un fișier de text arbitrar ca DataFrame cu 1 rând, iar
+            # `load_data` întorcea True. Pipeline-ul rula apoi până la capăt și
+            # producea POOL GOL / 0 bilete, iar jobul era marcat COMPLETED —
+            # utilizatorul vedea „gata" și niciun bilet, fără nicio eroare.
+            # Cerem cel puțin o extragere valid parsată (matricea de extrageri).
+            if self._draw_matrix is None or len(self._draw_matrix) == 0:
+                logging.error(
+                    "[LOAD] %s: nicio extragere validă după parsare (%s rânduri "
+                    "citite) — date inutilizabile pentru %s.",
+                    csv_path, len(self.data), self.game_type,
+                )
+                self.data = None
+                return False
             return True
         except Exception as e:
-            print(f"Eroare la încărcare date: {e}")
+            logging.error("[LOAD] Eroare la încărcare date din %s: %s", csv_path, e)
             return False
 
     def _extract_draw_at_index(self, idx: int) -> list[int] | None:
@@ -438,7 +459,10 @@ class LotoEngine:
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return [], 0.0
 
-        # Wheeling: implicit greedy (bit-identic). Alternative selectabile prin env
+        # Wheeling: implicit **lajolla** când max_variants == 0 (setarea implicită
+        # a UI-ului), altfel greedy. Comentariul de dinainte zicea „implicit greedy
+        # (bit-identic)", ceea ce contrazicea codul de 5 rânduri mai jos.
+        # Alternative selectabile prin env
         # LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34
         # (necunoscut → greedy). Lista completă: wheeling_methods.WHEEL_METHODS.
         _wheel_method_env = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
@@ -514,6 +538,18 @@ class LotoEngine:
         logging.info(
             f"[PIPELINE] ▶ pool_size primit de la UI = {pool_size}, guarantee = {guarantee}"
         )
+
+        # Garanția nu poate depăși câte numere se extrag: `itertools.combinations`
+        # ar arunca „r must be non-negative" din adâncul wheel-ului, abortând tot
+        # jobul cu un mesaj care nu spune nimic despre cauză. Spinner-ul din UI e
+        # limitat la 5, dar `_int_setting` NU clampează o valoare tastată manual.
+        _draw_n = int(self.params["draw_n"])
+        if int(guarantee) > _draw_n:
+            logging.warning(
+                "[PIPELINE] Garanție %s > numere extrase (%s) — imposibil; "
+                "o limitez la %s.", guarantee, _draw_n, _draw_n,
+            )
+            guarantee = _draw_n
 
         # Garanția cerută în UI se respectă ÎNTOTDEAUNA — fără escaladare implicită.
         # (Istoric: pe pool=10 garanția era suprascrisă silențios cu draw_n → full
@@ -1378,6 +1414,21 @@ class LotoEngine:
         """
         if self.use_bench_winner:
             scores = self._scores_via_bench_winner(is_joker_drum=is_joker_drum)
+            # Un dict NEVID dar PLAT (toate scorurile egale) nu e un rezultat, e un
+            # eșec deghizat: `methods_graph` semnalează eroarea internă cu
+            # `_normalize({}, max_num)`, care întoarce {n: 0.0 …} — TRUTHY, deci
+            # trecea de `if scores`. Tie-break-ul canonic e „număr mare întâi", așa
+            # că pool-ul devenea [49, 48, 47, …]: cele mai mari numere, pur artefact,
+            # fără niciun avertisment pentru utilizator. Tratăm platul ca pe gol →
+            # cade pe fallback-ul determinist de frecvență.
+            if scores and len(set(round(float(v), 12) for v in scores.values())) <= 1:
+                logging.warning(
+                    "[ENGINE] bench-winner a întors scoruri PLATE (%d numere, o "
+                    "singură valoare distinctă) — le tratez ca eșec și cad pe frecvență.",
+                    len(scores),
+                )
+                self.audit["bench_winner_flat_scores"] = True
+                scores = {}
             if scores:
                 return scores
             logging.warning("[ENGINE] bench-winner scoring returned empty — fallback frecvență")

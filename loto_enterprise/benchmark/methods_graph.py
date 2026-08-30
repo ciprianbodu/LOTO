@@ -52,6 +52,21 @@ def _indicator(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
         arr = arr.reshape(1, -1)
     T = arr.shape[0]
     M = np.zeros((max_num, T), dtype=np.float64)
+    if arr.size and arr.dtype.kind in "iuf":
+        # Cale RAPIDĂ pentru dtype numeric (cazul normal): scatter vectorizat.
+        # Bucla de dedesubt rămâne pentru dtype=object/string, unde `int(v)` cu
+        # try/except chiar e necesar — `astype(np.int64)` ar ARUNCA acolo, nu ar
+        # sări elementul. Pe float, NaN/inf sunt excluse ÎNAINTE de cast (castul
+        # lor dă gunoi, în timp ce `int(nan)` arunca și bucla îl sărea).
+        # Trunchierea e identică: `int(3.7)` și `astype(int64)` dau amândouă 3.
+        iv = arr.astype(np.int64, copy=False)
+        ok = (iv >= 1) & (iv <= max_num)
+        if arr.dtype.kind == "f":
+            ok &= np.isfinite(arr)
+        if ok.any():
+            tt = np.broadcast_to(np.arange(T)[:, None], iv.shape)
+            M[iv[ok] - 1, tt[ok]] = 1.0
+        return M
     for t in range(T):
         for v in arr[t]:
             try:
@@ -435,7 +450,16 @@ def score_graph_clustering(draws_2d, max_num):
         tri = np.diag(Aw @ Aw @ Aw)                  # triunghiuri ponderate
         deg = (A > 0).sum(axis=1).astype(np.float64)
         denom = deg * (deg - 1)
-        out = np.where(denom > 0, tri / denom, 0.0)
+        # `np.where(cond, tri / denom, 0.0)` evaluează împărțirea pentru TOATE
+        # elementele, inclusiv unde denom == 0 (nod izolat sau cu grad 1) →
+        # RuntimeWarning „invalid value encountered in divide". Rezultatul era
+        # deja corect (where alege 0.0 acolo), dar warning-ul e real: scorerul
+        # e învelit într-un `except Exception` iar `Warning` E subclasă de
+        # `Exception`, deci sub `-W error` metoda ar cădea tăcut pe dict gol.
+        # `np.divide(..., where=)` nu evaluează deloc ramura exclusă. Valorile
+        # rezultate sunt IDENTICE.
+        out = np.divide(tri, denom, out=np.zeros_like(tri, dtype=np.float64),
+                        where=denom > 0)
         return _vec(out, max_num)
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)

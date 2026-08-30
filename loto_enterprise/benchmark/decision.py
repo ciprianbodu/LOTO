@@ -55,6 +55,21 @@ logger = logging.getLogger(__name__)
 
 
 CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
+
+# Câte ferestre COMUNE (metodă ∩ random) trebuie să existe ca poarta de
+# consistență să însemne ceva. `_windows_method_beats_random` întoarce
+# dimensiunea INTERSECȚIEI de percentile; cu o singură fereastră comună,
+# „bate random în ≥60% din ferestre" degenerează într-o comparație unică —
+# adică 1/1 = 100%, deci poarta lasă să treacă orice.
+# Reproductibil: pe folds.csv real (loto_6_49 k12), ștergând rândurile `random`
+# de la 3 din 4 percentile, numărul de metode calificate sare de la 3 la 17
+# (random doar @100), 12 (@30) sau 4 cu ALT câștigător (@10) — și
+# `low_confidence` rămâne False în toate cazurile.
+# Nu e doar teoretic: `runner._flush_folds` rescrie folds.csv la fiecare ~100 de
+# folds terminate, iar future-urile se termină în altă ordine decât au fost
+# trimise, deci un bench întrerupt lasă un folds.csv în care `random` are 1-3
+# percentile, iar metodele de dinainte au 4.
+MIN_CONSISTENCY_WINDOWS = 3
 MIN_TEST_DRAWS_FOR_STABILITY = 30
 
 # Câte metode intră în ensemble-ul de scoring (blend ponderat), în plus față de
@@ -507,7 +522,11 @@ def decide_optimal_config_for_pool(
     # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
     # fallback de metrică (ex. ținta 3+ dar folds.csv vechi are doar 4+) —
     # trebuie SEMNALIZAT (rate_col_mismatch + rationale), nu tăcut.
-    _target_cols = {rate_target_col, f"rate_{BENCH_HIT_TARGET}plus"}
+    # ATENȚIE la ce e „mismatch": `rate_{T}plus` FĂRĂ sufix `_kN` NU e rata
+    # pool-ului curent — `runner._evaluate_fold` o scrie ca rata la pool-ul de
+    # BAZĂ (K = draw_n). E deci un fallback de POOL, nu doar de țintă, și trebuie
+    # semnalizat la fel ca trecerea pe 4+.
+    _target_cols = {rate_target_col}
     _mismatch_cols_used: set[str] = set()
 
     def _resolve_rate_col(frame: pd.DataFrame) -> str | None:
@@ -516,11 +535,31 @@ def decide_optimal_config_for_pool(
                 if c not in _target_cols and c not in _mismatch_cols_used:
                     _mismatch_cols_used.add(c)  # log O DATĂ per (game, pool, coloană)
                     logger.warning(
-                        "[decision] %s k%d: coloanele rate_%dplus lipsesc/all-NaN în folds.csv — "
-                        "decizia cade pe %r (metrica 4+), deși ținta e %d+. Re-rulează bench-ul.",
-                        game_key, pool_size, BENCH_HIT_TARGET, c, BENCH_HIT_TARGET,
+                        "[decision] %s k%d: %r lipsește/e all-NaN în folds.csv — "
+                        "decizia cade pe %r. Ținta e %d+ @ k%d. Re-rulează bench-ul.",
+                        game_key, pool_size, rate_target_col, c, BENCH_HIT_TARGET, pool_size,
                     )
                 return c
+        return None
+
+    # Coloana se rezolvă O SINGURĂ DATĂ, pe TOT frame-ul (game, pool) — nu per
+    # metodă. Rezolvată per metodă, un folds.csv asamblat din două faze de bench
+    # (unele metode fără coloanele per-pool) făcea ca rânduri din ACELAȘI
+    # `qualifying.sort` să fie punctate pe coloane DIFERITE și incomparabile:
+    # metodele „vechi" cădeau pe rata pool-ului de bază, structural mai mică
+    # (măsurat pe date reale: 0.023 vs 0.154 la k12), deci erau îngropate tăcut.
+    # Pe un folds.csv omogen (cazul normal) rezoluția e aceeași pentru toată
+    # lumea, deci decizia rămâne neschimbată.
+    _thin_gate_warned: list[tuple[str, int]] = []  # rezumat, o SINGURĂ linie per (joc, pool)
+    _all_real = sub[sub["is_random"] == False]  # noqa: E712
+    _frame_rate_col = _resolve_rate_col(_all_real) if not _all_real.empty else None
+
+    def _rate_col_for(frame: pd.DataFrame) -> str | None:
+        """Coloana comună dacă metoda are date în ea; altfel None (metoda e sărită)."""
+        if _frame_rate_col is None:
+            return None
+        if _frame_rate_col in frame.columns and frame[_frame_rate_col].notna().any():
+            return _frame_rate_col
         return None
 
     def _rate_target_mean(frame: pd.DataFrame) -> float:
@@ -530,7 +569,7 @@ def decide_optimal_config_for_pool(
         # lângă ea (măsurat: 86 de celule joc×pool×metodă). Cei doi estimatori
         # trebuie să fie ai aceleiași mărimi. Fallback pe media brută doar dacă
         # lipsesc coloanele de n (folds foarte vechi).
-        c = _resolve_rate_col(frame)
+        c = _rate_col_for(frame)
         if c is None:
             return 0.0
         got = pooled_rate_and_neff(frame, c)
@@ -545,7 +584,7 @@ def decide_optimal_config_for_pool(
         # + n EFECTIV Kish, nu suma ferestrelor cuibărite) e canonică în
         # `pooled_rate_and_neff` — vezi docstring-ul ei; înainte n-ul era suma
         # (măsurat pe folds de producție: ≈2.03× n real) → limite supraîncrezătoare.
-        c = _resolve_rate_col(frame)
+        c = _rate_col_for(frame)
         if c is None:
             return 0.0
         v = pooled_wilson_distinct(frame, c)
@@ -557,7 +596,9 @@ def decide_optimal_config_for_pool(
         if real_m.empty:
             continue
         n_beat, n_total = _windows_method_beats_random(real_m, real_random, base_col)
-        if n_total == 0:
+        if 0 < n_total < MIN_CONSISTENCY_WINDOWS:
+            _thin_gate_warned.append((m, n_total))
+        if n_total < MIN_CONSISTENCY_WINDOWS:
             continue
         consistency = n_beat / n_total
         if consistency < CONSISTENCY_THRESHOLD:
@@ -572,6 +613,19 @@ def decide_optimal_config_for_pool(
     # Decizia e "low confidence" când nicio metodă nu a trecut pragul de
     # consistență față de random — alegem tot o metodă REALĂ (nu baseline-ul
     # nedeterminist), dar marcăm explicit că diferențele sunt zgomot.
+    if _thin_gate_warned:
+        _wmin = min(n for _, n in _thin_gate_warned)
+        _wmax = max(n for _, n in _thin_gate_warned)
+        logger.warning(
+            "[decision] %s k%d: %d metode au doar %s fereastră(e) comună(e) cu `random` "
+            "(prag %d) — poarta de consistență nu e concludentă, le sar. folds.csv pare "
+            "PARȚIAL (bench întrerupt?) — re-rulează bench-ul. Ex.: %s",
+            game_key, pool_size, len(_thin_gate_warned),
+            f"{_wmin}" if _wmin == _wmax else f"{_wmin}-{_wmax}",
+            MIN_CONSISTENCY_WINDOWS,
+            ", ".join(m for m, _ in _thin_gate_warned[:5]),
+        )
+
     low_confidence = False
     dropped_redundant: list[dict] = []
 
@@ -683,7 +737,7 @@ def decide_optimal_config_for_pool(
 
     # Pick the best sim_depth for the chosen scorer based on target hit rate (percentage of drawings)
     real_chosen = sub[(sub["method"] == scorer) & (sub["is_random"] == False)]  # noqa: E712
-    rate_col = _resolve_rate_col(real_chosen)
+    rate_col = _rate_col_for(real_chosen) or _resolve_rate_col(real_chosen)
     if rate_col is None:
         rate_col = base_col  # fallback to avg_hits — tot un fallback de metrică
         _mismatch_cols_used.add(base_col)

@@ -163,8 +163,10 @@ def render_regressive_table(console: Console, folds_df: pd.DataFrame, game_key: 
     pcts = sorted(sub["percentile"].unique())
     methods = sorted(sub["method"].unique())
 
-    # Anchor row: random baseline at each percentile
-    rnd_sub = folds_df[(folds_df["game"] == game_key) & (folds_df["is_random"] == True) & (folds_df["method"] == "random")]  # noqa: E712
+    # (Aici exista un `rnd_sub` — rândul-ancoră `random` pe extrageri amestecate —
+    # calculat și NICIODATĂ folosit mai jos. Era singurul cititor de
+    # `is_random == True` din tot repo-ul. Șters: tabelul se construiește
+    # exclusiv din `sub` (is_random == False).)
 
     t = Table(
         title=f"[{game_label}] Regressive walk-forward — avg hits @ K={draw_n} per percentile window",

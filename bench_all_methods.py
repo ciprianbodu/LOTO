@@ -105,7 +105,7 @@ def main() -> int:
     parser.add_argument("--out", default="bench_results")
     parser.add_argument(
         "--methods", default=None,
-        help="Comma-sep list; default = toate 21 metode din spec",
+        help="Comma-sep list; default = setul curat (curated_methods.json) peste registry minus blacklist — renumără cu bench_all_methods.ALL_SPEC_METHODS",
     )
     parser.add_argument(
         "--percentiles", default="10,20,30,40,50,60,70,80,90,100",
@@ -127,6 +127,13 @@ def main() -> int:
                         help="Nu scrie best_methods.json (folosit la bench paralel pe faze: "
                              "fiecare faza scrie doar folds.csv in --out propriu; decizia "
                              "se ia separat dupa combinarea folds-urilor).")
+    parser.add_argument("--no-shuffled-control", action="store_true",
+                        help="Nu rula folds-urile de control pe extrageri AMESTECATE "
+                             "(is_random=True). Injumatateste bench-ul (masurat: 50.1%% "
+                             "din runtime) si NU afecteaza decizia de productie "
+                             "(decision.py filtreaza is_random==False). Pierzi doar "
+                             "lift_vs_shuffle din report.json si tie-break-ul secundar "
+                             "al winners_per_pool (cale legacy).")
     parser.add_argument("--force-decision", action="store_true",
                         help="Rescrie best_methods.json CHIAR ȘI cu set redus de metode "
                              "(--quick/--methods). Implicit decizia e sărită la seturi "
@@ -267,6 +274,7 @@ def main() -> int:
             out_dir=args.out,
             progress_cb=_cb,
             use_cache=not args.no_cache,
+            shuffled_control=not args.no_shuffled_control,
         )
 
     # ─── Console reports ────────────────────────────────────────────────────
@@ -395,13 +403,24 @@ def main() -> int:
         lines.append(
             f"  [dim]overall: no-BL={gd.get('overall_winner')}  |  +BL={gd.get('overall_winner_bl')}[/dim]"
         )
-    console.print(Panel("\n".join(lines), title="[bold]best_methods.json[/bold]", border_style="green"))
+    # Titlul + lista „Saved" trebuie să spună ADEVĂRUL despre ce s-a scris:
+    # cu `--quick` / `--methods` (fără `--force-decision`) sau cu `--no-decision`
+    # garda de mai sus SARE scrierea, dar panoul raporta oricum
+    # „Saved: • best_methods.json", adică exact fișierul rămas neatins.
+    _panel_title = ("[bold]câștigător per pool (NU s-a scris best_methods.json)[/bold]"
+                    if _skip_decision else "[bold]best_methods.json[/bold]")
+    console.print(Panel("\n".join(lines), title=_panel_title,
+                        border_style="yellow" if _skip_decision else "green"))
 
     console.print()
     console.print(f"[dim]Saved:[/dim]")
     console.print(f"  • [cyan]{out_path / 'folds.csv'}[/cyan]")
     console.print(f"  • [cyan]{out_path / 'report.json'}[/cyan]")
-    console.print(f"  • [cyan]best_methods.json[/cyan]  (consumed by method_selector)")
+    if _skip_decision:
+        console.print("  • [yellow]best_methods.json NU a fost rescris[/yellow] "
+                      "(set redus de metode / --no-decision; forțează cu --force-decision)")
+    else:
+        console.print(f"  • [cyan]best_methods.json[/cyan]  (consumed by method_selector)")
     console.print()
     return 0
 

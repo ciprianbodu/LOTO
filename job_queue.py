@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import sqlite3
@@ -100,6 +101,25 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     raise sqlite3.OperationalError("Could not connect to database after multiple retries")
 
 
+@contextlib.contextmanager
+def _conn(db_path: str = DB_PATH):
+    """`_connect` + ÎNCHIDERE garantată.
+
+    `with sqlite3.connect(...) as conn:` gestionează doar TRANZACȚIA (commit /
+    rollback) — NU închide conexiunea. Cu UI-ul care face poll la fiecare tick și
+    worker-ul care scrie progres continuu, conexiunile se adunau până le prindea
+    GC-ul generațional (măsurat: 5 → 406 descriptori după 200 de `get_job_status`,
+    reveniți la 5 doar după `gc.collect()`). Pe Windows fiecare conexiune deschisă
+    ține handle-uri pe `-wal`/`-shm` și blochează checkpoint-ul WAL.
+    """
+    conn = _connect(db_path)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
 # Cache pentru DB-urile deja inițializate în acest proces — evităm CREATE TABLE
 # redundant la fiecare apel get_job_status/update_job_progress/etc.
 _INITIALIZED_DBS: set[str] = set()
@@ -108,7 +128,7 @@ _INITIALIZED_DBS: set[str] = set()
 def init_job_queue(db_path: str = DB_PATH) -> None:
     if db_path in _INITIALIZED_DBS:
         return
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS jobs (
@@ -156,7 +176,7 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
 
 def submit_job(task_type: str, config_json: str, db_path: str = DB_PATH) -> int:
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         cur = conn.execute(
             """
             INSERT INTO jobs (task_type, status, config_json, result_json, progress_pct, log_tail)
@@ -170,7 +190,7 @@ def submit_job(task_type: str, config_json: str, db_path: str = DB_PATH) -> int:
 
 def get_job_status(job_id: int, db_path: str = DB_PATH) -> dict[str, Any] | None:
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (int(job_id),)).fetchone()
     return dict(row) if row else None
 
@@ -181,7 +201,7 @@ def get_active_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     Folosit de UI ca să se re-ataşeze la un job în curs după un reload/restart —
     altfel active_job_id se pierde și rezultatul rămâne orfan în DB."""
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM jobs WHERE status IN (?, ?) ORDER BY id DESC LIMIT 1",
             (JOB_PENDING, JOB_RUNNING),
@@ -232,7 +252,7 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
         return False
     ts = datetime.now().strftime("%H:%M:%S")
     stamped = f"[{ts}] {line}"
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         current = conn.execute(
             "SELECT log_tail FROM jobs WHERE id = ?",
             (int(job_id),),
@@ -252,10 +272,19 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
     return bool(is_job_cancelled(job_id, db_path=db_path))
 
 
-def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:
+def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> bool:
+    """Scrie rezultatul jobului. Întoarce True dacă rândul a fost ACTUALIZAT.
+
+    UPDATE-ul e condiționat de `status = RUNNING`. Dacă între timp altcineva a
+    schimbat starea (tipic: `requeue_running_jobs()` al unui al doilea worker
+    pornit peste primul → RUNNING revine la PENDING), UPDATE-ul prinde 0 rânduri
+    și rezultatul se PIERDE. Înainte întorceam None și nimeni nu verifica
+    rowcount, iar worker-ul loga „Job N completat cu succes" chiar și atunci —
+    un job de 90 de minute dispărea fără nicio urmă în log.
+    """
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
-        conn.execute(
+    with _conn(db_path) as conn:
+        cur = conn.execute(
             """
             -- completed_at TREBUIE să rămână text UTC din CURRENT_TIMESTAMP
             -- ('YYYY-MM-DD HH:MM:SS'): UI-ul (_completed_age_seconds) îl parsează ca
@@ -267,6 +296,13 @@ def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> None:
             (JOB_COMPLETED, result_json, int(job_id), JOB_RUNNING),
         )
         conn.commit()
+        ok = cur.rowcount > 0
+    if not ok:
+        logger.error(
+            "[job_queue] complete_job(%s): 0 rânduri actualizate — jobul nu mai era "
+            "RUNNING (requeue concurent?). REZULTATUL S-A PIERDUT.", job_id,
+        )
+    return ok
 
 
 def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
@@ -277,7 +313,7 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     (și mail-ul/shutdown-ul de la final) ar rămâne orfan. UI-ul decide pe baza
     vechimii (completed_at) dacă mai declanșează mail/shutdown sau doar afișează."""
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         # După completed_at (cea mai recentă finalizare reală), cu id ca tie-break.
         # NULLS LAST: joburile vechi fără completed_at nu „bat" unul proaspăt.
         row = conn.execute(
@@ -288,11 +324,13 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> None:
+def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> bool:
+    """Marchează jobul ca FAILED. Întoarce True dacă rândul a fost actualizat
+    (vezi nota din `complete_job` — aceeași cursă de stare)."""
     init_job_queue(db_path)
     msg = str(error_msg or "Unknown worker error")
-    with _connect(db_path) as conn:
-        conn.execute(
+    with _conn(db_path) as conn:
+        cur = conn.execute(
             """
             UPDATE jobs
             SET status = ?, result_json = ?, log_tail = ?
@@ -301,6 +339,13 @@ def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> None:
             (JOB_FAILED, msg, msg[-6000:], int(job_id), JOB_COMPLETED, JOB_CANCELLED),
         )
         conn.commit()
+        ok = cur.rowcount > 0
+    if not ok:
+        logger.warning(
+            "[job_queue] fail_job(%s): 0 rânduri actualizate (jobul era deja "
+            "COMPLETED/CANCELLED).", job_id,
+        )
+    return ok
 
 
 def _claim_job(
@@ -316,7 +361,7 @@ def _claim_job(
     setat în _connect, asigură serializare corectă între workeri concurenți.
     """
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             f"SELECT * FROM jobs WHERE {where_sql} ORDER BY id ASC LIMIT 1",
@@ -358,21 +403,35 @@ def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     )
 
 
-def cancel_pending_running_jobs(reason: str = "Oprit de utilizator", db_path: str = DB_PATH) -> int:
-    """Soft cancel: mark PENDING/RUNNING jobs as CANCELLED instead of DELETE."""
+def cancel_pending_running_jobs(reason: str = "Oprit de utilizator", db_path: str = DB_PATH,
+                                job_ids: "list[int] | tuple[int, ...] | None" = None) -> int:
+    """Soft cancel: marchează joburile PENDING/RUNNING drept CANCELLED (fără DELETE).
+
+    `job_ids` restrânge anularea la ID-urile date. FĂRĂ el se anulează TOT ce e
+    în zbor — corect pentru „sesiune nouă" (LOTO_FRESH_START), dar GREȘIT pentru
+    calea de la pornirea UI-ului care voia să anuleze UN SINGUR job orfan:
+    mesajul numea un id anume, dar UPDATE-ul nu avea filtru, deci un job aflat
+    la 60% era anulat împreună cu orfanul.
+    """
     init_job_queue(db_path)
     msg = str(reason or "Oprit de utilizator")
-    with _connect(db_path) as conn:
+    ids = [int(j) for j in (job_ids or [])]
+    where = "status IN (?, ?)"
+    params: tuple = (JOB_CANCELLED, msg, msg, msg, JOB_PENDING, JOB_RUNNING)
+    if ids:
+        where += f" AND id IN ({','.join('?' * len(ids))})"
+        params = params + tuple(ids)
+    with _conn(db_path) as conn:
         cur = conn.execute(
-            """
+            f"""
             UPDATE jobs
             SET status = ?, result_json = ?, log_tail = CASE
                 WHEN log_tail IS NULL OR log_tail = '' THEN ?
                 ELSE substr(log_tail || char(10) || ?, -6000)
             END
-            WHERE status IN (?, ?)
+            WHERE {where}
             """,
-            (JOB_CANCELLED, msg, msg, msg, JOB_PENDING, JOB_RUNNING),
+            params,
         )
         conn.commit()
         return cur.rowcount
@@ -381,7 +440,7 @@ def cancel_pending_running_jobs(reason: str = "Oprit de utilizator", db_path: st
 def is_job_cancelled(job_id: int, db_path: str = DB_PATH) -> bool:
     """Check if a specific job has been cancelled."""
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         row = conn.execute(
             "SELECT status FROM jobs WHERE id = ?",
             (int(job_id),),
@@ -399,7 +458,7 @@ def reset_job_queue(db_path: str = DB_PATH) -> None:
     wait_s = 0.15
     for _ in range(8):
         try:
-            with _connect(db_path) as conn:
+            with _conn(db_path) as conn:
                 conn.execute("BEGIN IMMEDIATE")
                 conn.execute("DELETE FROM jobs")
                 try:
@@ -420,7 +479,7 @@ def reset_job_queue(db_path: str = DB_PATH) -> None:
 def clear_pipeline_cache(db_path: str = DB_PATH) -> None:
     """Clear cached pipeline results."""
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         conn.execute("DELETE FROM pipeline_cache")
         conn.commit()
 
@@ -428,7 +487,7 @@ def clear_pipeline_cache(db_path: str = DB_PATH) -> None:
 def requeue_running_jobs(db_path: str = DB_PATH) -> int:
     """Move orphan RUNNING jobs back to PENDING (useful after worker restarts/crashes)."""
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         cur = conn.execute(
             """
             UPDATE jobs
@@ -495,7 +554,7 @@ def get_pipeline_cache(input_hash: str, db_path: str = DB_PATH) -> str | None:
     if not key:
         return None
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         row = conn.execute(
             "SELECT result_json FROM pipeline_cache WHERE input_hash = ?",
             (key,),
@@ -516,7 +575,7 @@ def put_pipeline_cache(input_hash: str, result_json: str, db_path: str = DB_PATH
     if not key:
         return
     init_job_queue(db_path)
-    with _connect(db_path) as conn:
+    with _conn(db_path) as conn:
         conn.execute(
             """
             INSERT INTO pipeline_cache (input_hash, result_json, created_at, last_used_at)
