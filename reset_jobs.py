@@ -87,7 +87,15 @@ def main() -> int:
         return 0
 
     force = "--force" in sys.argv
-    con = sqlite3.connect(DB)
+    # `busy_timeout` + WAL, ca în `job_queue._conn`: scriptul rulează din
+    # START_8000.bat exact când UI-ul/worker-ul pot avea încă DB-ul deschis, iar un
+    # `sqlite3.connect` gol iese instant cu „database is locked" în loc să aștepte.
+    con = sqlite3.connect(DB, timeout=30.0)
+    try:
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA busy_timeout=30000")
+    except sqlite3.Error:
+        pass  # DB nou/read-only: mergem mai departe ca înainte
     try:
         running = con.execute(
             "SELECT COUNT(*) FROM jobs WHERE status = 'RUNNING'"
