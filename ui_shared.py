@@ -369,9 +369,20 @@ def is_worker_running() -> bool:
     return False
 
 
+# Cooldown: _tick cheamă ensure o dată pe secundă; fără pauză, un spawn lent
+# produce un al doilea worker al cărui requeue de startup fură jobul RUNNING.
+_WORKER_SPAWN_TS = 0.0
+_WORKER_SPAWN_COOLDOWN_S = 15.0
+
+
 def ensure_worker_running() -> None:
+    global _WORKER_SPAWN_TS
     if is_worker_running():
         return
+    now = time.time()
+    if now - _WORKER_SPAWN_TS < _WORKER_SPAWN_COOLDOWN_S:
+        return
+    _WORKER_SPAWN_TS = now
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
         subprocess.Popen(

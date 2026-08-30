@@ -294,7 +294,13 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     )
                     # Re-load data (pipeline-ul tail-uieste la lookback, deci reincarcam curat)
                     engine = LotoEngine(game_type=game_mapped)
-                    engine.load_data(temp_csv_path)
+                    # Aceeași gardă ca pass 1: fără ea, CSV corupt pe pass 2 marca
+                    # jobul COMPLETED cu Pool 2 gol/greșit și trimitea mailul.
+                    if not engine.load_data(temp_csv_path):
+                        raise ValueError(
+                            f"Datele pentru {game_label} nu au putut fi încărcate la "
+                            f"Auto-Invert pass 2 (fișier lipsă, corupt sau fără extrageri)."
+                        )
                     lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
                         progress_cb=progress_cb,
                         pool_size=p_size,
