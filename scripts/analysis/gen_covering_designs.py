@@ -13,7 +13,10 @@ citește fără cod nou și îl VALIDEAZĂ la 100% acoperire înainte de folosir
 """
 import itertools, os, sys, time
 from math import comb
-sys.path.insert(0,"/home/user/LOTO"); os.chdir("/home/user/LOTO")
+from pathlib import Path
+_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)
 import wheeling_methods as wm
 
 BUDGET = float(os.environ.get("GEN_BUDGET", "90"))
@@ -28,8 +31,10 @@ def coverage(blocks, v, g):
     return 100.0 * (1 - len(need)/max(1, comb(v,g)))
 
 rows=[]
+# v de la pick (nu pick+1): C(6,6,g) e un singur bilet — fără el, 6/49
+# pool 6 cădea pe ILP (nedeterminist), exact gaura pe care o închide setul.
 geos=[(v,pick,g) for pick in (5,6) for g in ([3,4] if pick==5 else [3,4,5])
-      for v in range(pick+1, 17)]
+      for v in range(pick, 17)]
 print(f"{len(geos)} geometrii, buget {BUDGET}s fiecare\n", flush=True)
 for i,(v,pick,g) in enumerate(geos,1):
     pool = list(range(1, v+1))
