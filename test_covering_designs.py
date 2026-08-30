@@ -37,6 +37,35 @@ def test_designs_exist():
     assert DESIGNS, "niciun design în covering_designs/"
 
 
+def test_every_ui_geometry_has_a_design():
+    """Calea implicită (max_variants=0 → lajolla) nu are voie să cadă pe ILP
+    pentru nicio geometrie din UI (pool 6-16, pick 5/6, g 3..pick-1).
+
+    #93 a sărit C(6,6,*) (`v in range(pick+1, 17)`). 6/49 pool 6 rămânea pe
+    ILP — exact sursa de nedeterminism pe care o închidea setul.
+    """
+    have = {p.name for p in DESIGNS}
+    missing = []
+    for v in range(6, 17):
+        for pick in (5, 6):
+            if v < pick:
+                continue
+            for g in range(3, pick):
+                name = f"C_{v}_{pick}_{g}.txt"
+                if name not in have:
+                    missing.append(name)
+    assert missing == [], f"designuri lipsă (cad pe ILP): {missing}"
+
+
+def test_pool_equals_pick_is_one_ticket():
+    """C(6,6,g) = un singur bilet (tot pool-ul)."""
+    for g in (3, 4, 5):
+        w, cov = generate_wheel("lajolla", list(range(1, 7)), 6, g, 0, None)
+        assert cov == 100.0
+        assert len(w) == 1
+        assert sorted(w[0]) == [1, 2, 3, 4, 5, 6]
+
+
 @pytest.mark.parametrize("path", DESIGNS, ids=lambda p: p.name)
 def test_design_is_wellformed_and_complete(path: Path):
     v, pick, g = _parse(path.name)
