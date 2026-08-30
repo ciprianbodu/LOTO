@@ -551,6 +551,22 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                     v, pick, guarantee, cov_full, len(wheel),
                 )
             else:
+                # Designul e valid (100%). Îl comparăm totuși cu greedy și luăm
+                # MINIMUL de bilete. Motivul: `_greedy_fallback` folosește
+                # VALORILE scorurilor, nu doar ordinea, deci pe pool-uri reale
+                # nimerește uneori un cover mai mic decât designul neutru de pe
+                # disc (măsurat: C(16,5,4) → 458 pe joker, 467 pe 5/40, 467 în
+                # design). Ambele ramuri sunt DETERMINISTE — singura sursă de
+                # nedeterminism era ILP-ul pe `time_limit`, care nu mai e
+                # consultat aici. Deci: același rezultat la fiecare rulare, și
+                # niciodată mai multe bilete decât înainte.
+                _gw, _gc = _greedy_fallback(pool, pick, guarantee, 0, scores)
+                if _gc >= 100.0 and len(_gw) < len(wheel):
+                    logger.info(
+                        "[WHEEL-LaJolla] greedy bate designul C(%d,%d,%d): %d < %d bilete",
+                        v, pick, guarantee, len(_gw), len(wheel),
+                    )
+                    wheel = [sorted(int(x) for x in t) for t in _gw]
                 if max_variants > 0 and len(wheel) > max_variants:
                     wheel = _order_by_scores(wheel, scores)[:max_variants]
                 return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
