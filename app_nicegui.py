@@ -356,7 +356,14 @@ def apply_autopilot_and_generate() -> None:
                 sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
                 per_game[label] = sd
                 low = " · low_confidence" if cfg.get("low_confidence") else ""
-                recs.append(f"{gk}: {cfg.get('scorer')}{low}")
+                # Substituirea nearest-k: bench-ul n-a evaluat pool-ul cerut, deci
+                # scorer-ul (și cifrele lui) vin de la ALT pool. Până acum se vedea
+                # doar ca linie INFO în loto.log, iar notificarea îl prezenta ca și
+                # cum ar fi fost măsurat la pool-ul de pe slider.
+                _sub = cfg.get("pool_substituted") or {}
+                sub = (f" · ⚠ măsurat la pool {_sub['used']}, nu {_sub['requested']}"
+                       if _sub else "")
+                recs.append(f"{gk}: {cfg.get('scorer')}{low}{sub}")
         if recs:
             ui.notify("Auto-Pilot (scorer per joc, din Re-Bench): " + " | ".join(recs), type="info")
         else:

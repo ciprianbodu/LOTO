@@ -940,6 +940,7 @@ def recommend_optimal_config(
     g = cfg.get("games", {}).get(game_key, {})
     apm = g.get("auto_pilot_per_pool", {})
     entry = apm.get(f"k{pool_size}", {})
+    pool_substituted: dict | None = None
 
     # Pool cerut în afara gamei decise de bench (ex. k24, dar bench-ul a evaluat
     # doar k6..k20) → folosim cel mai APROPIAT pool decis, în loc de fallback.
@@ -952,6 +953,13 @@ def recommend_optimal_config(
                 logger.info("[method_selector] %s: pool k%d absent → folosesc k%d (cel mai apropiat decis)",
                             game_key, pool_size, nearest)
                 entry = cand
+                # Substituirea era TĂCUTĂ în valoarea de retur: doar un log INFO,
+                # iar `rationale` se copia VERBATIM din intrarea substituită. UI-ul
+                # îl afișează lângă 🏆, deci tipărea cifrele Wilson măsurate la k12
+                # ca și cum ar fi ale pool-ului k16 cerut — nu „lipsește o notă",
+                # ci o afirmație numerică falsă. Marcăm substituția în dict ca UI-ul
+                # și raportul să o poată spune. Alegerea de scorer NU se schimbă.
+                pool_substituted = {"requested": int(pool_size), "used": int(nearest)}
 
     if entry and "scorer" in entry:
         scorer, clean_ens, salvaged = _sanitize_ap_production(entry)
@@ -960,6 +968,12 @@ def recommend_optimal_config(
             clean_ens = [{"method": scorer, "weight": 1.0}]
             salvaged = True
         rationale = entry.get("rationale", "") or ""
+        if pool_substituted:
+            rationale = (
+                f"⚠ măsurat la pool {pool_substituted['used']}, nu la "
+                f"{pool_substituted['requested']} (bench-ul n-a evaluat pool-ul cerut)"
+                + (f" | {rationale}" if rationale else "")
+            )
         if salvaged:
             rationale = (
                 (rationale + " | " if rationale else "")
@@ -972,6 +986,7 @@ def recommend_optimal_config(
             "avg_hits": float(entry.get("avg_hits", 0.0)),
             "rationale": rationale,
             "ensemble": clean_ens,
+            "pool_substituted": pool_substituted,
             "rate_col_used": entry.get("rate_col_used"),
             "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
             "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
@@ -987,6 +1002,7 @@ def recommend_optimal_config(
         "use_blacklist": use_bl,
         "avg_hits": 0.0,
         "rationale": "fallback: no auto_pilot_per_pool entry - using per-pool winner",
+        "pool_substituted": None,
         "ensemble": [{"method": scorer, "weight": 1.0}],
         # nu există intrare de decizie pentru (joc, pool) → alegerea nu e
         # susținută de nicio măsurătoare: un fallback E prin definiție low confidence
