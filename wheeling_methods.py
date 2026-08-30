@@ -254,7 +254,14 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
     if v < pick:
         return [list(pool)], 100.0
     base, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)  # plecăm din greedy complet
-    targets = list(itertools.combinations(pool, guarantee))
+    # ⚠️ Cheile ȚINTELOR se construiesc pe pool-ul sortat NUMERIC, fiindcă
+    # `ticket_targets` caută cu `tuple(sorted(...))`. `_sorted_pool` reordonează
+    # după SCOR, deci pe apelul de producție (care pasează mereu scoruri) cheile
+    # ieșeau în ordinea scorurilor și fiecare căutare dădea KeyError — funcția era
+    # moartă în producție, iar `test_wheeling.py` n-o prindea fiindcă testează
+    # FĂRĂ scoruri, caz în care cele două ordini coincid.
+    _pool_sorted = sorted(pool)
+    targets = list(itertools.combinations(_pool_sorted, guarantee))
     if not targets:
         return base, 100.0
     tidx = {t: i for i, t in enumerate(targets)}
@@ -357,7 +364,13 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
         import numpy as np
         rng = np.random.default_rng(seed)
         blocks = list(itertools.combinations(pool, pick))
-        bidx = {b: i for i, b in enumerate(blocks)}
+        # ⚠️ Cheile pe tuple SORTAT NUMERIC: elitismul de mai jos caută cu
+        # `bidx[tuple(sorted(t))]`, iar `pool` e în ordinea SCORULUI. Cu scoruri
+        # (cazul de producție) nicio cheie nu se potrivea → sămânța greedy se
+        # pierdea tăcut, GA pornea aleator și întorcea sub 100% acoperire acolo
+        # unde greedy dă 100% cu același număr de bilete. Valorile rămân indici
+        # în `blocks`, deci M/`P` nu se schimbă.
+        bidx = {tuple(sorted(b)): i for i, b in enumerate(blocks)}
         targets = list(itertools.combinations(pool, guarantee))
         tidx = {t: i for i, t in enumerate(targets)}
         # M[b, t] = 1 dacă blocul b acoperă ținta t (t ⊆ b)

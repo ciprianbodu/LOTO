@@ -74,6 +74,11 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     # se oprește la 1000 de iterații → acoperire ~33% (5/40 pool 15 = 1001
     # bilete din C(15,5)=3003). Combinările directe = 100% fără cap de bilete.
     if int(guarantee) == int(pick):
+        # Numerele DIN bilet sortate crescător (ca `tuple(sorted(...))` pe ramura
+        # greedy) — altfel, cu `scores`, biletele ieșeau în ordinea SCORULUI, doar
+        # ele din tot modulul. ORDINEA BILETELOR rămâne dată de pool-ul sortat după
+        # scor (trunchierea la `max_variants` ia întâi combinațiile numerelor tari,
+        # apoi `ensure_pool_numbers_on_tickets` readuce numerele rămase pe dinafară).
         wheel = [sorted(c) for c in itertools.combinations(pool, pick)]
         n_full = math.comb(pool_len, pick)
         if max_variants > 0 and len(wheel) > max_variants:
