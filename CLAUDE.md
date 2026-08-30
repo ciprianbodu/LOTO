@@ -49,6 +49,8 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 | `bench_results/folds.csv` | output brut walk-forward al bench-ului (OVERWRITE la fiecare Re-Bench) |
 | `raport_complet.txt` | raport generat (gitignore) |
 | `requirements_base.txt` | dependențe venv (exclusiv CPU) — instalat de `ACTUALIZARI.bat` |
+| `requirements_snapshot.txt` | ⚠️ **ARHIVĂ, NU INSTALA** — mai are torch+cu128/neuralforecast/nvidia-ml-py/streamlit (mediul de dinainte de eliminarea GPU). Are banner explicit în cap |
+| `scripts/analysis/` | măsurători manuale, NU producție (nimeni nu le importă). Azi: cele 3 scripturi de tipare — vezi „Tipare / reducerea bazei" |
 
 ## Benchmark (cum funcționează)
 - **111 metode** în `METHODS` (74 tombstone în `disabled_methods.json`, eliminate
@@ -219,6 +221,29 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - **Recuperare job la pornire** (`_recover_completed_job`): job terminat cât UI-ul era jos (get_active_job vede doar PENDING/RUNNING). `completed_at` (job_queue) + fereastră 10min → finalizare completă; mai vechi → doar afișare marcată „recuperat". `last_finalized_job_id` (persistat) = finalizare O SINGURĂ DATĂ.
 - **Doar Re-Bench Full** (Quick scos — suprascria decizia cu doar 4 metode).
 - `_METHOD_DESC` (app_nicegui) = descrieri lizibile pt metode la afișarea 🏆. `_method_library` = categorie în clasament.
+
+## Tipare / reducerea bazei de numere — MĂSURAT, nu presupus (2026-08-30)
+
+Întrebarea „au fost ultimele extrageri numai sub 40 / numai pare / peste 10, pot
+tăia baza?" a fost testată pe datele reale din `_ISTORIC/`. Scripturi + cifre:
+`scripts/analysis/README.md`. Pe scurt, ca să nu se re-deschidă din memorie:
+
+1. **Frecvențele se lipesc de teorie.** 27 de constrângeri × 3 jocuri: cel mai mare
+   |z| = **2.70**, iar maximul așteptat din hazard pur la 27 de teste e ~2.5.
+2. **Nu sunt prezicibile.** Autocorelație lag 1/2/3 pe 6 trăsături (sumă, maxim,
+   minim, amplitudine, câte pare, câte sub mijloc) × 3 jocuri, cu test de permutare:
+   **0 din 18** sub p < 0.05, unde hazardul ar fi dat ~1. Cel mai „bun": joker/maxim
+   r = −0.036, p = 0.108.
+3. **Chiar aplicată, reducerea bazei nu schimbă rata.** 400 de pool-uri × tot
+   istoricul 6/49, K = 10: univers complet 9.03%, ≤40 → 9.19%, ≤35 → 9.23%, doar pare
+   → 9.19%, >10 → 8.80%. Toate = hipergeometricul. `P(≥3 | pool K)` depinde de **K**,
+   nu de care numere-s în pool.
+
+⚠️ Deci **nu scrie un scorer pe tiparele astea** și nu reactiva filtrele post-scoring
+„ca să reduci baza" (`audit.filters_disabled`, cerere deliberată 2026-07-08): o
+constrângere chiar aplicată taie universul, deci când extragerea o încalcă (70.75%
+din timp pentru „toate ≤ 40" pe 6/49) pool-ul are **zero** șanse, nu doar mai mici.
+Re-rulează scripturile pe date noi înainte de a re-deschide subiectul.
 
 ## Reguli de aur (NU strica)
 1. **Bit-identitate engine**: orice modificare în `loto_engine.py` pe path-ul de generare → verifică pool+variante IDENTICE cu un baseline (rulează pipeline pe un CSV din `_ISTORIC/` înainte/după).
