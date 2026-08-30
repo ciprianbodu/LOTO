@@ -157,7 +157,11 @@ def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
 
     if scorer is None and clean_ens:
         scorer = clean_ens[0]["method"]
-        salvaged = True
+        # Scorer inventat dintr-un ensemble VIU: salvage doar dacă JSON-ul
+        # avea un scorer MORT. Intrare doar-ensemble = schemă incompletă,
+        # nu fallback — altfel Auto-Pilot ignora decizia (`if not fallback`).
+        if raw_scorer:
+            salvaged = True
     if scorer is not None and not clean_ens:
         clean_ens = [{"method": scorer, "weight": 1.0}]
     return scorer, clean_ens, salvaged
