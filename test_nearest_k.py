@@ -78,6 +78,7 @@ def test_ensemble_only_entry_is_not_collapsed(tmp_path):
     assert names == ["frequency", "fourier"]
     assert c.get("scorer") == "frequency"
     assert c.get("pool_substituted") is None
+    assert not c.get("fallback"), "ensemble-only valid nu e fallback"
 
 
 def test_auto_pilot_entry_marks_substitution():
