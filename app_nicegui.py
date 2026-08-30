@@ -2439,6 +2439,12 @@ def _render_bench_leaderboard_slice(
         rows.sort(key=_sort_key_lift, reverse=True)
     else:
         rows.sort(key=lambda r: ((r[6] if r[6] is not None else -1.0), r[1], r[2]), reverse=True)
+    # Ordinea PE SCOR, înainte ca poarta de consistență să rearanjeze lista.
+    # Poziția baseline-ului se calculează pe ASTA: reordonarea de mai jos pune
+    # baseline-urile la coadă NECONDIȚIONAT, deci calculată pe lista rearanjată
+    # ieșea mereu „ultimul din N+1", indiferent de cât de bine punctase random —
+    # exact invers față de mesajul pentru care există rândul ăla.
+    rows_by_score = list(rows)
     # Poarta de consistență CA LA DECIZIE: calificatele (bat random în ≥60%
     # ferestre) întâi. Fără asta, #1 din listă putea fi o metodă cu Wilson mare
     # care n-a trecut gate-ul, iar 🏆 era altcineva.
@@ -2676,17 +2682,20 @@ def _render_bench_leaderboard_slice(
         # Baseline-urile care NU au intrat în slice: spune unde ar cădea (informativ),
         # fără să pară competitor.
         _shown_names = {rec[0] for rec in top_rows}
-        for _bi, _brec in enumerate(rows):
+        for _bi, _brec in enumerate(rows_by_score):
             if _brec[0] not in _BASE or _brec[0] in _shown_names:
                 continue
-            _better = sum(1 for r in rows[:_bi] if r[0] not in _BASE)
+            # PE `rows_by_score` (ordinea Wilson), nu pe `rows`: acolo baseline-ul
+            # e împins la coadă de poarta de consistență, deci ieșea mereu ultimul.
+            _better = sum(1 for r in rows_by_score[:_bi] if r[0] not in _BASE)
+            _worse = len(competitors) - _better
             # Numitorul include și baseline-ul însuși (nu doar candidații) — altfel
             # poziția poate ajunge la N+1 „din N" (contradicție) când baseline-ul
             # e sub TOȚI candidații.
-            ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — ar cădea pe locul "
-                     f"{_better + 1} din {len(competitors) + 1} "
-                     f"({len(competitors)} metode candidate + acest baseline).").classes(
-                "text-caption text-grey")
+            ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — locul "
+                     f"{_better + 1} din {len(competitors) + 1} după Wilson "
+                     f"({_worse} metode candidate sub hazard).").classes(
+                "text-caption text-grey" if _worse == 0 else "text-caption text-amber-400")
         # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
         # slice, spune unde cade. Altfel 🏆 lipsește complet din listă, fără niciun
         # indiciu — exact metoda despre care utilizatorul vrea să știe cel mai mult.
