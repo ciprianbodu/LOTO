@@ -34,7 +34,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 |---|---|
 | `app_nicegui.py` | TOT UI-ul + orchestrare (submit, autopilot, render rezultate, raport). Fișierul principal de editat. |
 | `worker.py` | daemon care consumă joburi; handler SIGTERM→requeue; LOG_FILE="loto.log" |
-| `loto_engine.py` | engine-ul de generare (`run_institutional_pipeline`); ~1350 linii; NU strica bit-identitatea |
+| `loto_engine.py` | engine-ul de generare (`run_institutional_pipeline`); ~1540 linii; NU strica bit-identitatea |
 | `wheeling_methods.py` | (în RĂDĂCINA repo, NU în `loto_enterprise/core/`) algoritmi de wheeling alternativi: `wheel_ilp`, `wheel_annealing`, `wheel_genetic`, `wheel_lajolla`, `wheel_union34` + `generate_wheel` (dispatcher) |
 | `loto_enterprise/core/ranking.py` | `rank_by_score` — tie-break CANONIC „top-N după scor" (sursă unică de adevăr) |
 | `job_queue.py` | coadă SQLite; `DB_PATH="loto_jobs.db"` |
@@ -108,7 +108,7 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
   corelații înainte de a te baza pe „ensemble plin".
 - **Ce schimbă real**: (1) ensemble-ul nu mai e no-op în general — dar vezi avertismentul
   de mai sus: pe setul de 43 unele top-3-uri POT colapsa la decorelare; (2) clasamentul UI devine
-  citibil (16 rânduri în loc de 107); (3) bench mai rapid.
+  citibil (20 de rânduri per joc în loc de 107 — cifra veche „16 rânduri" era de pe setul de 16 metode din 2026-07); (3) bench mai rapid.
 - **MĂSURAT după primul re-bench cu curare (2026-07-27, 384 folduri)** — nu predicție:
   5/40 = ensemble de 3 membri pe toate cele 15 pool-uri; 6/49 = 3 membri pe 12/15
   pool-uri, 1 membru pe 3; joker_urna1 = 3 membri pe 5/15, 2 pe 6/15, 1 pe 4/15 și

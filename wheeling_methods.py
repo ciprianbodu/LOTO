@@ -237,13 +237,21 @@ def _ilp_cover_positions(v: int, pick: int, guarantee: int,
             options={"time_limit": time_limit},
         )
         if res.x is None:
-            logger.warning("[WHEEL-ILP] fără soluție → greedy")
-            cover = None
-        else:
-            cover = [blocks[j] for j in range(nb) if res.x[j] > 0.5]
+            # TIMEOUT / infeasible raportat de solver. NU memoiza: `time_limit` e o
+            # limită de CEAS, nu o proprietate a geometriei — o mașină încărcată o
+            # ratează o dată și o prinde data viitoare. Memoizat, un singur timeout
+            # dezactiva ILP-ul pentru TOT restul procesului (adică tot walk-forward-ul,
+            # ~1940 de pași) și trecea tăcut pe greedy, cu bilete mai multe.
+            logger.warning("[WHEEL-ILP] fără soluție în %.1fs → greedy "
+                           "(NU memoizez: e limită de timp, nu geometrie)", time_limit)
+            return None
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[WHEEL-ILP] eșec (%s) → greedy", exc)
-        cover = None
+        # Idem: scipy lipsă, MemoryError, orice excepție = eșec de MEDIU, nu de
+        # geometrie. Singurul „nu se poate niciodată" memoizabil e pragul de
+        # dimensiune de mai sus (`_ILP_MAX_BLOCKS` / `_ILP_MAX_TARGETS`).
+        logger.warning("[WHEEL-ILP] eșec (%s) → greedy (NU memoizez)", exc)
+        return None
+    cover = [blocks[j] for j in range(nb) if res.x[j] > 0.5]
     _ILP_COVER_CACHE[key] = cover
     return cover
 
