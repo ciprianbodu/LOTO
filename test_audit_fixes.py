@@ -136,3 +136,85 @@ def test_engine_really_ignores_blacklist():
     src = open("loto_engine.py", encoding="utf-8").read()
     assert "blacklist = set()" in src
     assert 'self.audit["filters_disabled"] = True' in src
+    # Logul NU mai pretinde că exclude numerele (filtrul e mort).
+    assert "excludem temporar" not in src
+    assert "NU se aplică" in src
+
+
+# --------------------------------------------------------------------------
+# 5. Audit 2026-08-30: pass 2, abandon, mail, NaN, worker spawn
+# --------------------------------------------------------------------------
+def test_auto_invert_pass2_checks_load_data():
+    """Pass 2 ignora return-ul lui load_data → COMPLETED cu Pool 2 gol."""
+    src = open("worker.py", encoding="utf-8").read()
+    i = src.index("Auto-Invert ACTIV")
+    body = src[i:src.index("effective_pool", i)]
+    assert "if not engine.load_data(temp_csv_path):" in body
+    assert "pass 2" in body.lower() or "Auto-Invert pass 2" in body
+
+
+def test_abandon_unstarted_scopes_to_active_job():
+    """Abandonul de 0% nu anulează un job aflat în lucru."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("def _abandon_unstarted_ui_job")
+    body = src[i:src.index("def status_panel", i)]
+    assert "job_ids=" in body
+    assert "job_ids=[int(jid)]" in body.replace(" ", "")
+
+
+def test_mail_body_warns_when_pool2_equals_pool1():
+    """Mail-ul trebuie să spună același lucru ca UI-ul când inversarea e sărită."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("def _build_mail_body")
+    body = src[i:src.index("def _send_test_email", i)]
+    assert "INVERSARE NEAPLICATĂ" in body
+    assert "identic cu Pool 1" in body
+
+
+def test_normalize_nan_does_not_poison_all_scores():
+    """Un singur NaN nu mai face tot dict-ul NaN (min/max otrăvite)."""
+    from loto_enterprise.benchmark.methods import _normalize
+    import math
+
+    out = _normalize({1: 0.0, 2: 1.0, 3: float("nan")}, 3)
+    assert all(math.isfinite(v) for v in out.values())
+    assert out[1] == 0.0
+    assert out[2] == 1.0
+    assert out[3] == 0.0
+
+
+def test_normalize_all_finite_bit_identical():
+    """Pe scoruri finite, garda NaN nu schimbă output-ul."""
+    from loto_enterprise.benchmark.methods import _normalize
+
+    raw = {1: 2.0, 2: 4.0, 3: 6.0}
+    out = _normalize(raw, 3)
+    assert out[1] == 0.0
+    assert out[2] == 0.5
+    assert out[3] == 1.0
+
+
+def test_fail_running_jobs_closes_connection():
+    """fail_running_jobs folosește `_conn` (închide), nu `_connect` gol."""
+    src = open("job_queue.py", encoding="utf-8").read()
+    i = src.index("def fail_running_jobs")
+    body = src[i:src.index("def get_pipeline_cache", i)]
+    assert "with _conn(" in body
+    assert "conn_context = _connect" not in body
+
+
+def test_worker_spawn_has_cooldown():
+    src = open("ui_shared.py", encoding="utf-8").read()
+    assert "_WORKER_SPAWN_TS" in src
+    assert "_WORKER_SPAWN_COOLDOWN_S" in src
+    assert "now - _WORKER_SPAWN_TS" in src
+
+
+def test_wf_decision_sig_omits_inert_use_blacklist():
+    src = open("loto_enterprise/core/walk_forward_adapter.py", encoding="utf-8").read()
+    i = src.index("def _decision_sig")
+    body = src[i:src.index("def _cache_path", i)]
+    assert "use_blacklist" not in body or "INERT" in body
+    assert 'bool(c.get(\'use_blacklist\'' not in body
+    assert "BENCH_HIT_TARGET" in body
+

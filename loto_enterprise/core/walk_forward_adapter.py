@@ -243,8 +243,11 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
         c = recommend_optimal_config(gk, int(pool_size))
         _ens_sig = _ensemble_sig(c.get("ensemble") or [])
         lb = lookback_pct(lookback_percent)
+        # `use_blacklist` e INERT în producție (engine: blacklist=set()) — nu
+        # intra în cheie, altfel un toggle de telemetrie invalida tot cache-ul WF
+        # fără să schimbe pool-ul sau wheel-ul.
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-               f"{bool(c.get('use_blacklist', False))}|{BENCH_HIT_TARGET}|{_ens_sig}|"
+               f"{BENCH_HIT_TARGET}|{_ens_sig}|"
                f"{_wheel_sig(pool_size, game_type)}|lb{lb}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:

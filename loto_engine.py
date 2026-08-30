@@ -633,8 +633,10 @@ class LotoEngine:
                     )
                     if self._temp_blacklist:
                         logging.warning(
-                            f"[HARD-INVERSION] Catastrofă detectată — excludem temporar "
-                            f"{sorted(self._temp_blacklist)} din pool-ul următor."
+                            "[HARD-INVERSION] Catastrofă detectată — blacklist temporar "
+                            "%s calculat dar NU se aplică (filtre oprite 2026-07-08; "
+                            "audit only). Pool-ul rămâne top-scor pur.",
+                            sorted(self._temp_blacklist),
                         )
                 except Exception as _e_inv:
                     logging.error(f"[HARD-INVERSION] Eroare la calcul temp_blacklist: {_e_inv}")

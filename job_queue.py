@@ -513,15 +513,7 @@ def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: st
     try:
         init_job_queue(db_path)
         msg = str(reason or "Job oprit automat la startup.")
-        # Wrap connection in a way that handles initial connection failures
-        try:
-            conn_context = _connect(db_path)
-        except Exception as e:
-            import logging
-            logging.warning(f"fail_running_jobs: nu se poate conecta la baza de date {db_path}: {e}")
-            return 0
-            
-        with conn_context as conn:
+        with _conn(db_path) as conn:
             cur = conn.execute(
                 """
                 UPDATE jobs
@@ -540,9 +532,8 @@ def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: st
                 ),
             )
             conn.commit()
-            return cur.rowcount
+            return int(getattr(cur, "rowcount", 0) or 0)
     except Exception as e:
-        # Protecție pentru disk I/O error și alte erori de startup
         import logging
         logging.warning(f"fail_running_jobs: eroare în timpul procesării {db_path}: {e}")
         return 0

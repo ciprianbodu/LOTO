@@ -13,8 +13,9 @@ Selection rules (in priority order):
        după docstring strică exact garda statistică. Clasamentul din UI importă
        ACELEAȘI chei, deliberat.
     3. For the chosen method, pick the optimal sim_depth window — the one
-       that maximises avg_hits AND has at least 30 test draws (statistical
-       stability). Prefer larger windows on ties. ⚠️ `sim_depth` e TELEMETRIE:
+       that maximises the **target T+ rate**, then avg_hits, among windows
+       with at least 30 evaluated draws (`MIN_TEST_DRAWS_FOR_STABILITY`).
+       Nu există tie-break pe fereastra mai lungă. ⚠️ `sim_depth` e TELEMETRIE:
        producția taie istoricul doar cu `lookback`, nu cu fereastra asta.
     4. Use blacklist if the +BL variant beats the no-BL variant at that
        chosen (method, window). ⚠️ Bit-ul e la fel de INERT în producție:
