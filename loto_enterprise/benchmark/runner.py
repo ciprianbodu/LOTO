@@ -705,8 +705,22 @@ def run_benchmark(
 
     # ----- Aggregate per (game, pool) → winner -----
     report = _aggregate(df, games, methods, method_meta_map, pool_keys_per_game)
-    with open(out_path / "report.json", "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2, ensure_ascii=False)
+    # Scriere atomică (tmp per-PID + fsync + rename) — OneDrive-safe, ca folds.csv.
+    import uuid as _uuid
+    _rjson = out_path / "report.json"
+    _rjson_tmp = _rjson.with_name(f"report.{os.getpid()}.{_uuid.uuid4().hex[:8]}.json.tmp")
+    try:
+        with open(_rjson_tmp, "w", encoding="utf-8") as _f:
+            json.dump(report, _f, indent=2, ensure_ascii=False)
+            _f.flush()
+            os.fsync(_f.fileno())
+        _rjson_tmp.replace(_rjson)
+    except BaseException:
+        try:
+            _rjson_tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return report
 
 
