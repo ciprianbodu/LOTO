@@ -1,6 +1,6 @@
 # =============================================================================
 # requirements_base.txt — TOATE dependențele aplicației (exclusiv CPU).
-# Python țintă: 3.14.6 (py -3.14, venv D:\_BUILD\_LOTO\.venv).
+# Python țintă: ultimul 3.14.x stabil (py -3.14, venv D:\_BUILD\_LOTO\.venv).
 # Instalate de ACTUALIZARI.bat. Suportul GPU/neural (torch / TimesFM / Chronos /
 # NeuralForecast / foundation models) a fost ELIMINAT complet din aplicație.
 # =============================================================================

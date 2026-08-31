@@ -107,3 +107,39 @@ def test_loto_git_sync_avoids_delayed_expansion_and_paren_echo():
     assert "^(main^)" not in text
     assert "(main)" not in text
     assert "(backup in stash" not in text
+
+
+def test_updates_installs_latest_python314_without_hardcoded_patch():
+    """Fallback-ul fără winget detectează online patch-ul; nu îmbătrânește în cod."""
+    text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    compact = text.replace(" ", "").lower()
+
+    assert "call :ensure_latest_python314" in text
+    assert text.index("call :ensure_latest_python314") < text.index(
+        'if not exist "%VENV_PY%"'
+    ), "Python trebuie instalat înainte de prima creare a venv-ului"
+    assert "winget upgrade -e --id Python.Python.3.14" in text
+    assert "winget install -e --id Python.Python.3.14" in text
+    assert "https://www.python.org/ftp/python/" in text
+    assert r"3\.14\.\d+/" in text
+    assert "python-!py_latest!-amd64.exe" in compact
+    assert "python-3.14.6" not in text
+    assert "choice /C YN" not in text, "migrarea venv-ului trebuie să fie automată"
+
+
+def test_updates_integrity_check_matches_cpu_requirements():
+    """Updater-ul nu mai verifică dependențe eliminate precum numba/streamlit."""
+    text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    active = "\n".join(
+        line for line in text.splitlines()
+        if line.strip() and not line.lstrip().upper().startswith("REM")
+    ).lower()
+    assert "import numpy,pandas,scipy,sklearn,statsmodels,nicegui" in active
+    assert "import numpy,pandas,scipy,numba" not in active
+    assert "taskkill /f /t /im streamlit.exe" not in active
+
+
+def test_python_version_check_has_no_stale_patch_constant():
+    text = (ROOT / "ui_shared.py").read_text(encoding="utf-8")
+    assert "PYTHON_TARGET_PATCH" not in text
+    assert "ultimul patch stabil 3.14.x" in text
