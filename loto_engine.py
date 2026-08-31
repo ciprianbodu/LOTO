@@ -202,8 +202,11 @@ def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws
     recomandă pool-ul minim necesar pentru a vedea ≥3 evenimente pe ținta
     principală (3+) și pe 4+/5+.
 
-    Baseline matematic — orice engine trebuie să bată cel puțin P(3+) random
-    ca să fie util. Pe 4+ / 5+ la pool mic evenimentele așteptate sunt rare.
+    Baseline matematic de CALIBRARE, nu prag predictiv: într-o loterie aleatoare,
+    orice pool fix de aceeași mărime are aceeași probabilitate teoretică. Un
+    scorer poate devia pe eșantionul istoric doar prin zgomot; pârghiile reale
+    pentru P(3+) sunt mărimea pool-ului și acoperirea pool→bilete. Pe 4+/5+ la
+    pool mic evenimentele așteptate sunt rare.
 
     Returns dict cu:
         - random_baseline.P(k+)% per k=1..draw_n

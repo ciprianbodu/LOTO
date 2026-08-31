@@ -3,8 +3,10 @@
 
 Selection rules (in priority order):
     1. Method must BEAT the random baseline consistently — at least 60% of
-       sim_depth windows must show lift > 0 over the random baseline at the
-       same (game, pool, window).
+       sim_depth windows must show lift > 0 on the SAME T+ target used to
+       choose the winner, at the same (game, pool, window). Using mean hits
+       here would allow extra 2-hit draws to qualify a method that loses to
+       random exactly on the requested 3+/4+ event.
     2. Among qualifying methods, sort by the POOLED WILSON LOWER BOUND of the
        T+ rate first; mean lift vs random is only the SECOND key and window
        consistency the third (`qualifying.sort` — vezi `pooled_wilson_distinct`
@@ -64,9 +66,9 @@ logger = logging.getLogger(__name__)
 
 CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 
-# Câte ferestre COMUNE (metodă ∩ random) trebuie să existe ca poarta de
-# consistență să însemne ceva. `_windows_method_beats_random` întoarce
-# dimensiunea INTERSECȚIEI de percentile; cu o singură fereastră comună,
+# Câte ferestre COMUNE cu date finite (metodă ∩ random) trebuie să existe ca
+# poarta de consistență să însemne ceva. `_windows_method_beats_random`
+# întoarce dimensiunea INTERSECȚIEI de percentile; cu o singură fereastră comună,
 # „bate random în ≥60% din ferestre" degenerează într-o comparație unică —
 # adică 1/1 = 100%, deci poarta lasă să treacă orice.
 # Reproductibil: pe folds.csv real (loto_6_49 k12), ștergând rândurile `random`
@@ -110,10 +112,11 @@ ENSEMBLE_MAX_CORR = 0.99
 # metode benchuite) numărul de metode CALIFICATE per pool scade la 2-4 → sub prag
 # → dedup-ul pe semnătura de performanță e SĂRIT sistematic (vezi log-ul
 # "[decision] dedup ensemble dezactivat"). Consecință: `ensemble_dropped_redundant`
-# rămâne gol. NU e o regresie: curarea garantează deja că niciun membru nu e
-# redundant pe axa SCORURI (|Spearman| < 0.95), iar decorelarea de la runtime
-# (`method_selector._select_decorrelated`) rămâne activă — dedup-ul de aici nu mai
-# are ce să taie. Dacă se revine la toate metodele, garda redevine inertă singură.
+# rămâne gol. Setul curent de 43 NU mai garantează decorelare totală (măsurat
+# 2026-08-26: există perechi cu |Spearman| ≥ 0.95), deci filtrul runtime
+# `method_selector._select_decorrelated` rămâne obligatoriu și poate reduce
+# ensemble-ul nominal. Dacă se revine la toate metodele, garda de aici redevine
+# inertă singură.
 ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 
 # Baseline-uri care NU au voie să devină NICIODATĂ scorer de producție.
@@ -180,13 +183,29 @@ def _wilson_lower_bound(successes: float, n: float, z: float = 1.0) -> float:
 def _windows_method_beats_random(
     sub_real_method: pd.DataFrame,
     sub_real_random: pd.DataFrame,
-    base_col: str,
+    metric_col: str,
 ) -> tuple[int, int]:
-    """Return (n_windows_beat, n_windows_total) for method vs random baseline."""
+    """Return (n_windows_beat, n_windows_total) on the requested metric.
+
+    Only windows with finite data on BOTH sides count. A partial/mixed folds.csv
+    must not turn a missing rate into an implicit loss while still increasing
+    the denominator of the consistency gate.
+    """
     if sub_real_method.empty or sub_real_random.empty:
         return 0, 0
-    method_by_pct = sub_real_method.groupby("percentile")[base_col].mean()
-    random_by_pct = sub_real_random.groupby("percentile")[base_col].mean()
+    if (
+        "percentile" not in sub_real_method.columns
+        or "percentile" not in sub_real_random.columns
+        or metric_col not in sub_real_method.columns
+        or metric_col not in sub_real_random.columns
+    ):
+        return 0, 0
+    method_by_pct = pd.to_numeric(
+        sub_real_method[metric_col], errors="coerce"
+    ).groupby(sub_real_method["percentile"]).mean().dropna()
+    random_by_pct = pd.to_numeric(
+        sub_real_random[metric_col], errors="coerce"
+    ).groupby(sub_real_random["percentile"]).mean().dropna()
     common_pcts = sorted(set(method_by_pct.index) & set(random_by_pct.index))
     if not common_pcts:
         return 0, 0
@@ -200,13 +219,24 @@ def _windows_method_beats_random(
 def _weighted_mean_lift(
     sub_real_method: pd.DataFrame,
     sub_real_random: pd.DataFrame,
-    base_col: str,
+    metric_col: str,
 ) -> float:
-    """Compute mean lift weighted by sim_depth (larger windows weight more)."""
+    """Compute metric lift weighted by sim_depth (larger windows weigh more)."""
     if sub_real_method.empty or sub_real_random.empty:
         return 0.0
-    method_by_pct = sub_real_method.groupby("percentile")[base_col].mean()
-    random_by_pct = sub_real_random.groupby("percentile")[base_col].mean()
+    if (
+        "percentile" not in sub_real_method.columns
+        or "percentile" not in sub_real_random.columns
+        or metric_col not in sub_real_method.columns
+        or metric_col not in sub_real_random.columns
+    ):
+        return 0.0
+    method_by_pct = pd.to_numeric(
+        sub_real_method[metric_col], errors="coerce"
+    ).groupby(sub_real_method["percentile"]).mean().dropna()
+    random_by_pct = pd.to_numeric(
+        sub_real_random[metric_col], errors="coerce"
+    ).groupby(sub_real_random["percentile"]).mean().dropna()
     common_pcts = sorted(set(method_by_pct.index) & set(random_by_pct.index))
     if not common_pcts:
         return 0.0
@@ -523,10 +553,17 @@ def decide_optimal_config_for_pool(
 
     # Coloane candidate pt rata T+, în ordine de preferință; sare peste coloane
     # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.
-    _rate_target_candidate_cols = (
-        rate_target_col, f"rate_{BENCH_HIT_TARGET}plus",
-        f"rate_4plus_k{pool_size}", "rate_4plus",
-    )
+    # Coloana FĂRĂ `_kN` reprezintă EXCLUSIV pool-ul de bază (K=draw_n), deci
+    # este validă doar când decidem chiar acea geometrie. Folosită la k12, de
+    # exemplu, ar puncta toate metodele pe k5/k6 și ar produce un câștigător
+    # pentru alt pool decât cel cerut.
+    _candidate_cols = [rate_target_col]
+    if int(pool_size) == int(draw_n):
+        _candidate_cols.append(f"rate_{BENCH_HIT_TARGET}plus")
+    _candidate_cols.append(f"rate_4plus_k{pool_size}")
+    if int(pool_size) == int(draw_n):
+        _candidate_cols.append("rate_4plus")
+    _rate_target_candidate_cols = tuple(dict.fromkeys(_candidate_cols))
     # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
     # fallback de metrică (ex. ținta 3+ dar folds.csv vechi are doar 4+) —
     # trebuie SEMNALIZAT (rate_col_mismatch + rationale), nu tăcut.
@@ -535,6 +572,8 @@ def decide_optimal_config_for_pool(
     # BAZĂ (K = draw_n). E deci un fallback de POOL, nu doar de țintă, și trebuie
     # semnalizat la fel ca trecerea pe 4+.
     _target_cols = {rate_target_col}
+    if int(pool_size) == int(draw_n):
+        _target_cols.add(f"rate_{BENCH_HIT_TARGET}plus")
     _mismatch_cols_used: set[str] = set()
 
     def _resolve_rate_col(frame: pd.DataFrame) -> str | None:
@@ -561,6 +600,14 @@ def decide_optimal_config_for_pool(
     _thin_gate_warned: list[tuple[str, int]] = []  # rezumat, o SINGURĂ linie per (joc, pool)
     _all_real = sub[sub["is_random"] == False]  # noqa: E712
     _frame_rate_col = _resolve_rate_col(_all_real) if not _all_real.empty else None
+    if _frame_rate_col is None:
+        _missing_marker = f"missing:{rate_target_col}"
+        _mismatch_cols_used.add(_missing_marker)
+        logger.warning(
+            "[decision] %s k%d: nicio coloană de rată compatibilă cu pool-ul "
+            "cerut; metodele fără T+ nu intră în decizie.",
+            game_key, pool_size,
+        )
 
     def _rate_col_for(frame: pd.DataFrame) -> str | None:
         """Coloana comună dacă metoda are date în ea; altfel None (metoda e sărită)."""
@@ -603,7 +650,14 @@ def decide_optimal_config_for_pool(
         real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
         if real_m.empty:
             continue
-        n_beat, n_total = _windows_method_beats_random(real_m, real_random, base_col)
+        # Poarta și sortarea trebuie să măsoare ACEEAȘI țintă. Înainte gate-ul
+        # compara media de hituri (`kN`), apoi alegea câștigătorul după rata T+:
+        # o metodă putea trece cu mai multe extrageri de 2 hituri, deși pierdea
+        # față de random exact la 3+/4+, adică metrica cerută de utilizator.
+        gate_col = _rate_col_for(real_m)
+        if gate_col is None:
+            continue
+        n_beat, n_total = _windows_method_beats_random(real_m, real_random, gate_col)
         if 0 < n_total < MIN_CONSISTENCY_WINDOWS:
             _thin_gate_warned.append((m, n_total))
         if n_total < MIN_CONSISTENCY_WINDOWS:
@@ -611,7 +665,7 @@ def decide_optimal_config_for_pool(
         consistency = n_beat / n_total
         if consistency < CONSISTENCY_THRESHOLD:
             continue
-        w_lift = _weighted_mean_lift(real_m, real_random, base_col)
+        w_lift = _weighted_mean_lift(real_m, real_random, gate_col)
         # REGULA T+: rata medie de extrageri cu >=BENCH_HIT_TARGET numere ghicite
         # (r4 = rată brută, doar pt afișare) + r4_conf (limită Wilson, pt sortare).
         r4 = _rate_target_mean(real_m)
@@ -649,6 +703,10 @@ def decide_optimal_config_for_pool(
             real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
             if real_m.empty:
                 continue
+            # O metodă fără date pe coloana comună nu poate câștiga cu Wilson=0
+            # doar fiindcă e singura candidată rămasă într-un folds parțial.
+            if _rate_col_for(real_m) is None:
+                continue
             r4 = _rate_target_mean(real_m)
             r4_conf = _rate_target_confidence(real_m)
             ranked.append((m, r4_conf, r4, float(real_m[base_col].mean())))
@@ -658,7 +716,8 @@ def decide_optimal_config_for_pool(
             # DETERMINIST, niciodată pe `random`. Nu mai putem calcula sim_depth
             # (nu există rânduri pt scorer) → valori implicite + low_confidence.
             logger.warning(
-                "[decision] %s k%d: nicio metodă reală în folds.csv — fallback determinist %r",
+                "[decision] %s k%d: nicio metodă reală cu rată T+ utilizabilă "
+                "în folds.csv — fallback determinist %r",
                 game_key, pool_size, SAFE_FALLBACK_SCORER,
             )
             return {
@@ -682,7 +741,8 @@ def decide_optimal_config_for_pool(
                 "avg_hits": 0.0,
                 "avg_hits_with_blacklist": 0.0,
                 "rationale": (
-                    f"FALLBACK: nicio metodă reală în folds.csv pentru k{pool_size}; "
+                    f"FALLBACK: nicio metodă reală cu rată T+ utilizabilă în "
+                    f"folds.csv pentru k{pool_size}; "
                     f"selecție conservatoare pe baseline-ul DETERMINIST "
                     f"{SAFE_FALLBACK_SCORER} (baseline-urile nedeterministe "
                     f"{sorted(EXCLUDED_FROM_PRODUCTION)} nu pot fi scorer de producție)"
@@ -716,7 +776,8 @@ def decide_optimal_config_for_pool(
         rationale = (
             f"{scorer}: rată {BENCH_HIT_TARGET}+ @ k{pool_size} = {qualifying[0][4]:.3f} "
             f"(Wilson_lb={qualifying[0][5]:.3f}), beat random in "
-            f"{qualifying[0][2]}/{qualifying[0][3]} windows (lift {qualifying[0][1]:+.4f}); "
+            f"{qualifying[0][2]}/{qualifying[0][3]} windows on the same "
+            f"{BENCH_HIT_TARGET}+ target (lift {qualifying[0][1]:+.4f}); "
             f"din {len(qualifying)} metode calificate [prioritate: {BENCH_HIT_TARGET}+ numere ghicite, robust]"
         )
         # Ensemble: top ENSEMBLE_MAX_METHODS calificate, ponderate cu limita
@@ -820,9 +881,9 @@ def decide_optimal_config_for_pool(
         # fiindcă nu strică nimic (JSON aditiv) și fiindcă un consumator viitor
         # le poate citi; până atunci NU te baza pe ele pentru afișare.
         #
-        # True = nicio metodă nu bate random consistent → alegerea e conservatoare,
-        # diferențele dintre metode sunt zgomot. Pe folds.csv curent semnalul NU
-        # e validat pe nicio celulă reală (0 din 46 de celule ies low_confidence).
+        # True = nicio metodă nu bate random consistent pe aceeași rată T+ →
+        # alegerea e conservatoare, iar diferențele dintre metode sunt zgomot.
+        # Numărul de celule afectate se renumără după fiecare Re-Bench.
         "low_confidence": low_confidence,
         # Membri săriți de la ensemble fiindcă erau cvasi-identici cu unul deja
         # păstrat (decorelare pe RATE; decorelarea pe SCORURI e în method_selector).
