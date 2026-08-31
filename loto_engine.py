@@ -478,9 +478,15 @@ class LotoEngine:
             _wheel_method = _wheel_method_env
         elif max_variants == 0:
             # Implicit, fără cap de bilete ("garanție completă"): design de acoperire
-            # CUNOSCUT-OPTIM din covering_designs/ — DOAR v=12 (C_12_6_4, C_12_5_4).
-            # Orice pool ≠ 12 cade pe ILP, iar ILP pe greedy. Câștigul 54→41 bilete
-            # e doar 6/49 pool 12 / g4; 5/40+Joker pool 12 / g4: 123→113.
+            # PRECALCULAT din covering_designs/ — 55 de fișiere (#93 + optimizare
+            # locală ruin-and-recreate 2026-08-30), toate geometriile din UI:
+            # pool 6-16 × pick 5/6 × garanție 3..pick-1 (+ C(6,6,*) = 1 bilet).
+            # Ce nu are fișier (v>16 sau geometrie neacoperită) cade pe ILP, iar
+            # ILP pe greedy. Câștigul inițial 54→41 bilete a fost doar 6/49 pool
+            # 12/g4 (v. CLAUDE.md); optimizarea ulterioară a scos ~317 bilete
+            # redundante pe toate cele 55, 18 fiind acum la limita Schönheim
+            # (provabil optime). Lanț monoton: niciodată mai multe bilete decât
+            # designul precedent, aceeași garanție 100%.
             _wheel_method = "lajolla"
         else:
             # Buget de bilete fix (max_variants>0): greedy + packing numere
