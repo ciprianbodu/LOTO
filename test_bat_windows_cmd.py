@@ -107,3 +107,6 @@ def test_loto_git_sync_avoids_delayed_expansion_and_paren_echo():
     assert "^(main^)" not in text
     assert "(main)" not in text
     assert "(backup in stash" not in text
+    # OneDrive + auto-gc after history rewrite: interactive
+    # "Deletion of directory .git/objects/00 failed" hung START_8000.
+    assert "gc.auto 0" in text or "gc.auto=0" in text

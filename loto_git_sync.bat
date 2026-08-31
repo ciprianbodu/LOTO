@@ -10,6 +10,11 @@ REM parenthesis, so the next REM Auto-update line ran as a command.
 REM ============================================================
 cd /d "%~dp0"
 git config windows.appendAtomically false >nul 2>&1
+REM OneDrive lock on .git/objects/NN: after a history rewrite, auto-gc packs
+REM thousands of dangling objects then asks y/n to retry rmdir. That prompt
+REM hung START_8000.bat. Disable auto-gc for this repo; prune by hand with
+REM OneDrive paused if the object store grows too much.
+git config gc.auto 0 >nul 2>&1
 
 if /I "%~1"=="autoupdate" goto autoupdate
 if /I "%~1"=="push_istoric" goto push_istoric
@@ -19,7 +24,7 @@ exit /b 2
 
 :autoupdate
 echo [GIT] Verific actualizari de pe GitHub...
-git fetch origin main --quiet 2>nul
+git -c gc.auto=0 fetch origin main --quiet 2>nul
 if errorlevel 1 (
     echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
     exit /b 0
@@ -89,18 +94,18 @@ if not errorlevel 1 (
     exit /b 0
 )
 
-git commit -m "auto: update istoric extrageri (%DATE%)"
+git -c gc.auto=0 commit -m "auto: update istoric extrageri (%DATE%)"
 if errorlevel 1 (
     echo [GIT] git commit _ISTORIC a esuat. Verifica git config user.name / user.email.
     git status -sb
     exit /b 1
 )
 
-git push origin main
+git -c gc.auto=0 push origin main
 if errorlevel 1 (
     echo [GIT] Push esuat - incerc git pull --ff-only origin main apoi push...
-    git pull --ff-only origin main
-    git push origin main
+    git -c gc.auto=0 pull --ff-only origin main
+    git -c gc.auto=0 push origin main
 )
 if errorlevel 1 (
     echo [GIT] Push origin/main ESUAT. Commit-ul e LOCAL pe main.
