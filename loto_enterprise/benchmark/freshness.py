@@ -88,13 +88,19 @@ def write_signatures_to_best_methods(best_methods_path: str = "best_methods.json
     bm = Path(best_methods_path)
     if not bm.exists():
         return {}
-    cfg = json.loads(bm.read_text(encoding="utf-8"))
-    sigs: dict[str, dict] = {}
-    for gk in GAMES_CSV_MAP:
-        path, h, n = compute_csv_signature(gk)
-        sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
-    cfg.setdefault("_meta", {})["csv_signatures"] = sigs
-    bm.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    from ui_shared import atomic_write_json, file_lock
+
+    # Read-modify-write protejat: decision.py și UI pot actualiza același fișier,
+    # iar OneDrive nu tolerează bine scrieri parțiale. Versiunea veche făcea
+    # `write_text` direct și putea trunchia tocmai decizia scrisă atomic anterior.
+    with file_lock(bm):
+        cfg = json.loads(bm.read_text(encoding="utf-8"))
+        sigs: dict[str, dict] = {}
+        for gk in GAMES_CSV_MAP:
+            path, h, n = compute_csv_signature(gk)
+            sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
+        cfg.setdefault("_meta", {})["csv_signatures"] = sigs
+        atomic_write_json(bm, cfg)
     return sigs
 
 

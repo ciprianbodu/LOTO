@@ -5,9 +5,9 @@ Test pentru `reset_jobs.py` — START_8000.bat omoară worker-ul, apoi --force:
      job devine #1.
   2. PENDING/RUNNING rămase după kill NU se păstrează (sunt cadavre; altfel UI-ul
      arată «Job în rulare (#1) — 0% / se inițializează...» la o pornire goală).
-  3. Ultimul job COMPLETED NU a fost încă finalizat de UI (`last_finalized_job_id`
-     diferit) → e PĂSTRAT, ca `_recover_completed_job` din app_nicegui.py să
-     poată încă trimite mail/shutdown pentru el.
+  3. Ultimul job COMPLETED NU a fost încă procesat de UI (`last_finalized_job_id`
+     diferit) → e PĂSTRAT, ca `_recover_completed_job` să-l poată afișa.
+     START_8000 îl recuperează display-only; restartul direct al UI poate finaliza.
 
 Plus: fără --force, refuză ștergerea dacă există joburi RUNNING.
 """
