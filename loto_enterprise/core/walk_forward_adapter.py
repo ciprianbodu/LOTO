@@ -504,7 +504,7 @@ def build_retrospective_pool_hits_flat(
     except (TypeError, ValueError):
         _cov = None
     bt = LotoBacktester(df_source, game_type=game_type)
-    draw_n = int({"6/49": 6, "5/40": 5, "joker": 5}.get(game_type, 6))
+    draw_n = int(_WF_PICK.get(game_type, 6))
     pool_set = {int(x) for x in pool_numbers}
     variants = variants or []
 
