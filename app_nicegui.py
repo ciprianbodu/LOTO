@@ -237,14 +237,6 @@ def _ordered_game_items(outs):
     )
 
 
-def _ordered_wf_game_items(outs):
-    """Ordine walk-forward: Joker → 5/40 → 6/49 (6/49 ultim = mai mult timp rămas)."""
-    return sorted(
-        outs.items(),
-        key=lambda kv: _WF_GAME_ORDER.get(_game_label_for(str(kv[0])), 99),
-    )
-
-
 def _iter_wf_jobs(results_bundle):
     """(fname, game_label, data, auto_invert) — doar Pool 1.
 
