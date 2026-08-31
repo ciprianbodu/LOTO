@@ -41,8 +41,13 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v18"
+CACHE_VERSION = "v19"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v19: #93 — 55 designuri precalculate (pool 6-16, incl. C(6,6,*)) + min(design, greedy)
+#      pe calea lajolla.
+#      `_wheel_sig` rămâne `lajolla|gN`, deci fără bump WF servea cache-ul
+#      vechi (mai multe bilete / alt cover) lângă un raport cu costuri umflate.
+#      Același defect ca la trecerea ILP→La Jolla, documentat în `_wheel_sig`.
 # (v18, ADITIV — FĂRĂ bump): câmpul `wheel_coverage` pe `WalkForwardResult`.
 #      E o ADĂUGIRE cu default, nu o schimbare de semantică a câmpurilor vechi:
 #      înregistrările deja pe disc rămân corecte, doar că nu ştiu acoperirea
@@ -222,10 +227,11 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
 
     DE CE intră în cheia de cache: numărul de BILETE per extragere depinde exclusiv de
     algoritmul de wheeling, iar din el se calculează costul, câștigul net și ROI-ul din
-    raport. Fără wheel în cheie, schimbarea ILP → La Jolla (doar 6/49 pool 12 / g4:
-    ~54 → 41 bilete; `covering_designs/` are doar C_12_6_4 și C_12_5_4) a servit în
-    continuare cache vechi, iar raportul arăta costuri umflate cu ~32% pentru Pool 1,
-    lângă un Pool 2 recalculat cu wheel-ul nou.
+    raport. Fără wheel în cheie, schimbarea ILP → La Jolla a servit cache vechi, iar
+    raportul arăta costuri umflate. `covering_designs/` acoperă acum toate geometriile
+    UI (pool 6-16 × pick 5/6 × g 3..pick-1, plus C(6,6,*)). Un set nou de designuri
+    care schimbă numărul de bilete cere bump `CACHE_VERSION` — `_wheel_sig` nu
+    include conținutul fișierelor.
     """
     method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
     return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}"

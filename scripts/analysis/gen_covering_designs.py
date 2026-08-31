@@ -13,12 +13,15 @@ citește fără cod nou și îl VALIDEAZĂ la 100% acoperire înainte de folosir
 """
 import itertools, os, sys, time
 from math import comb
-sys.path.insert(0,"/home/user/LOTO"); os.chdir("/home/user/LOTO")
+from pathlib import Path
+_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)
 import wheeling_methods as wm
 
 BUDGET = float(os.environ.get("GEN_BUDGET", "90"))
-OUT = "covering_designs"
-os.makedirs(OUT, exist_ok=True)
+OUT = _ROOT / "covering_designs"
+OUT.mkdir(parents=True, exist_ok=True)
 
 def coverage(blocks, v, g):
     need = set(itertools.combinations(range(v), g))
@@ -28,8 +31,10 @@ def coverage(blocks, v, g):
     return 100.0 * (1 - len(need)/max(1, comb(v,g)))
 
 rows=[]
+# v de la pick (nu pick+1): C(6,6,g) e un singur bilet — fără el, 6/49
+# pool 6 cădea pe ILP (nedeterminist), exact gaura pe care o închide setul.
 geos=[(v,pick,g) for pick in (5,6) for g in ([3,4] if pick==5 else [3,4,5])
-      for v in range(pick+1, 17)]
+      for v in range(pick, 17)]
 print(f"{len(geos)} geometrii, buget {BUDGET}s fiecare\n", flush=True)
 for i,(v,pick,g) in enumerate(geos,1):
     pool = list(range(1, v+1))
@@ -46,10 +51,10 @@ for i,(v,pick,g) in enumerate(geos,1):
         blocks = [sorted(b) for b in gw]
         best, src = blocks, "greedy"
     assert coverage([[x-1 for x in b] for b in best], v, g) >= 100.0, f"C({v},{pick},{g}) NU e 100%"
-    path = os.path.join(OUT, f"C_{v}_{pick}_{g}.txt")
-    existed = os.path.exists(path)
+    path = OUT / f"C_{v}_{pick}_{g}.txt"
+    existed = path.exists()
     if existed:
-        prev = [l.split() for l in open(path).read().splitlines() if l.strip()]
+        prev = [l.split() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
         if len(prev) and len(prev) <= len(best):
             print(f"[{i:2}/{len(geos)}] C({v},{pick},{g}): PASTREZ fisierul existent "
                   f"({len(prev)} <= {len(best)})", flush=True)

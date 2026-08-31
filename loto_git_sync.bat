@@ -10,6 +10,11 @@ REM parenthesis, so the next REM Auto-update line ran as a command.
 REM ============================================================
 cd /d "%~dp0"
 git config windows.appendAtomically false >nul 2>&1
+REM OneDrive lock on .git/objects/NN: after a history rewrite, auto-gc packs
+REM thousands of dangling objects then asks y/n to retry rmdir. That prompt
+REM hung START_8000.bat. Disable auto-gc for this repo; prune by hand with
+REM OneDrive paused if the object store grows too much.
+git config gc.auto 0 >nul 2>&1
 
 if /I "%~1"=="autoupdate" goto autoupdate
 if /I "%~1"=="push_istoric" goto push_istoric
@@ -19,7 +24,7 @@ exit /b 2
 
 :autoupdate
 echo [GIT] Verific actualizari de pe GitHub...
-git fetch origin main --quiet 2>nul
+git -c gc.auto=0 fetch origin main --quiet <nul 2>nul
 if errorlevel 1 (
     echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
     exit /b 0
@@ -40,13 +45,13 @@ if "%_IST_DIRTY%"=="1" (
     xcopy /E /I /Y /Q "_ISTORIC" "%_IST_BAK%" >nul
 )
 
-git merge --ff-only origin/main >nul 2>&1
+git merge --ff-only origin/main <nul >nul 2>&1
 if errorlevel 1 (
     echo [GIT] Fast-forward imposibil. Stare:
     git status -sb
     echo [GIT] Sincronizez FORTAT cu origin/main. Backup in stash.
-    git stash push -m "auto-backup START_8000" >nul 2>&1
-    git reset --hard origin/main >nul 2>&1
+    git stash push -m "auto-backup START_8000" <nul >nul 2>&1
+    git reset --hard origin/main <nul >nul 2>&1
     if errorlevel 1 (
         echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
     ) else (
@@ -89,18 +94,18 @@ if not errorlevel 1 (
     exit /b 0
 )
 
-git commit -m "auto: update istoric extrageri (%DATE%)"
+git -c gc.auto=0 commit -m "auto: update istoric extrageri (%DATE%)" <nul
 if errorlevel 1 (
     echo [GIT] git commit _ISTORIC a esuat. Verifica git config user.name / user.email.
     git status -sb
     exit /b 1
 )
 
-git push origin main
+git -c gc.auto=0 push origin main <nul
 if errorlevel 1 (
     echo [GIT] Push esuat - incerc git pull --ff-only origin main apoi push...
-    git pull --ff-only origin main
-    git push origin main
+    git -c gc.auto=0 pull --ff-only origin main <nul
+    git -c gc.auto=0 push origin main <nul
 )
 if errorlevel 1 (
     echo [GIT] Push origin/main ESUAT. Commit-ul e LOCAL pe main.
@@ -116,7 +121,7 @@ exit /b 0
 for /f "delims=" %%b in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "_BR=%%b"
 if /I "%_BR%"=="main" exit /b 0
 echo [GIT] Ramura curenta e %_BR%, nu main. Checkout main...
-git checkout main
+git checkout main <nul
 if errorlevel 1 (
     echo [GIT] Checkout main esuat.
     exit /b 1

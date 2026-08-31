@@ -218,3 +218,113 @@ def test_wf_decision_sig_omits_inert_use_blacklist():
     assert 'bool(c.get(\'use_blacklist\'' not in body
     assert "BENCH_HIT_TARGET" in body
 
+
+def test_recovery_redisplays_already_finalized_job():
+    """`last_finalized_job_id` nu are voie să ascundă rezultatele după restart.
+
+    Înainte: `if jid == already: return` — ecranul zicea „Gata de lucru" deși
+    SQLite încă ținea payload-ul COMPLETED. Acum ramura reafișează, marcat
+    recuperat, fără mail/WF/shutdown.
+    """
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    start = src.index("def _recover_completed_job")
+    end = src.index("def _startup", start)
+    body = src[start:end]
+    already = body.index("jid == already")
+    after = body[already:]
+    assert "results_recovered" in after
+    assert "STATE[\"results\"]" in after
+    assert "fără mail" in after or "fara mail" in after.lower()
+    # nu mai e un `return` gol imediat după already
+    first_lines = after.splitlines()[:3]
+    assert not any(ln.strip() == "return" for ln in first_lines)
+
+
+def test_engine_writes_pool_substituted_into_audit():
+    """🏆 din rezultate citește audit.bench_winner, nu recommend_optimal_config."""
+    src = open("loto_engine.py", encoding="utf-8").read()
+    start = src.index("def _scores_via_bench_winner")
+    body = src[start:start + 8000]
+    assert "pool_substituted" in body
+    assert "recommend_optimal_config" in body
+
+
+def test_coverage_empty_targets_is_zero():
+    """C(v,g) gol (guarantee > pool) nu e 100% acoperire."""
+    from wheeling_methods import compute_coverage_pct
+
+    assert compute_coverage_pct([], [1, 2], 4) == 0.0
+
+
+# --------------------------------------------------------------------------
+# 6. Audit 2026-08-31: WF stale la generare nouă, invert, urna2 onest
+# --------------------------------------------------------------------------
+def test_submit_generation_invalidates_running_wf():
+    """Generate/Auto-Pilot cât WF rulează nu are voie să lase finally-ul vechi
+    să shutdown-uiască PC-ul (active_job_id e deja None după COMPLETED)."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    submit = src[src.index("def submit_generation"):src.index("def apply_autopilot_and_generate")]
+    assert "_invalidate_stale_wf(" in submit
+    helper = src[src.index("def _invalidate_stale_wf"):src.index("def submit_generation")]
+    assert "wf_user_cancel" in helper
+    assert "wf_seq" in helper
+
+
+def test_wf_finally_rechecks_seq_before_shutdown():
+    """Cursă: finally citește not-stale, apoi o generare nouă invalidează, apoi
+    shutdown tot pornea. Re-check imediat înainte de _finalize_pipeline."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("def _start_walk_forward")
+    body = src[i:src.index("def _abandon_unstarted_ui_job")]
+    assert "_still_mine" in body
+    assert "rulare înlocuită între timp" in body
+    # Pool 2 retrospectiv din thread-ul WF trebuie să-și cară acoperirea
+    assert 'wheel_coverage=(data.get("context") or {}).get("coverage_pct")' in body
+
+
+def test_invert_skip_allows_exact_complement():
+    """remaining == pool_size e valid (Pool 2 = complement). `>=` sărea tăcut."""
+    src = open("loto_engine.py", encoding="utf-8").read()
+    i = src.index("if manual_set:")
+    body = src[i:src.index("self.hard_core = self._get_timesfm_pool", i)]
+    assert "if len(combined) > max_n_safe - pool_size:" in body
+    assert "if len(combined) >= max_n_safe - pool_size:" not in body
+
+
+def test_worker_invert_clamp_is_half_universe():
+    """`max_n // 2 - 1` respingea un complement exact (ex. 5/40 pool 20)."""
+    src = open("worker.py", encoding="utf-8").read()
+    assert "pool_max_safe = _max_num // 2" in src
+    assert "pool_max_safe = _max_num // 2 - 1" not in src
+    assert 'audit["pool_clamp_for_invert"] = pool_clamp_info' in src
+    assert 'audit["auto_invert_applied"] = False' in src
+
+
+def test_pool2_title_not_inverted_when_skipped():
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("_invert_skipped")
+    body = src[i:src.index("_render_pool_body(fname, game, data, skey_suffix=\"_p2\"", i)]
+    assert "POOL 2 — neaplicat" in body
+    else_i = body.index("else:")
+    assert "POOL 2 — inversat" in body[else_i:]
+    assert "POOL 2 — inversat" not in body[:else_i]
+
+
+def test_urna2_is_not_marked_fallback():
+    """frequency pe urna2 e scorer-ul onest, nu o degradare — 🏆 arăta 'fallback'."""
+    src = open("loto_engine.py", encoding="utf-8").read()
+    i = src.index('if game_key == "joker_urna2":')
+    body = src[i:i + 400]
+    assert "single_pick_unbenched" in body
+    assert 'bench_winner_info["fallback"] = True' not in body
+    urna2_log = src.split("if self.game_type == \"joker\":")[1].split("if progress_cb:")[0]
+    assert "TimesFM" not in urna2_log
+
+
+def test_initial_hard_core_includes_never_drawn():
+    src = open("loto_engine.py", encoding="utf-8").read()
+    i = src.index("def _get_initial_hard_core")
+    body = src[i:src.index("def _apply_consecutive_filter")]
+    assert "freq[i] > 0" not in body
+
+
