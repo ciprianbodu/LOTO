@@ -138,6 +138,17 @@ def test_pool_smaller_than_ticket_does_not_crash():
     assert wheel and coverage == pytest.approx(100.0)
 
 
+def test_engine_rejects_degenerate_zero_guarantee_before_wheeling():
+    """API-ul direct nu poate raporta 100% pentru cover-ul mulțimii vide."""
+    # Verificare de contract la nivel de sursă: clamp-ul trebuie să fie înainte
+    # de generarea wheel-ului, fără a porni un pipeline complet cu CSV real.
+    source = open("loto_engine.py", encoding="utf-8").read()
+    start = source.index("def run_institutional_pipeline")
+    body = source[start:source.index("# === ADAPTIVE FEEDBACK PRE-RUN", start)]
+    assert "if int(guarantee) < 1:" in body
+    assert "guarantee = 1" in body
+
+
 def test_filter_preserving_coverage_keeps_guarantee():
     """Helperul există ca plasă de siguranță dacă se reactivează vreun filtru
     post-wheel. Dacă el însuși sparge garanția, e o capcană, nu o plasă."""

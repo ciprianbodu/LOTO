@@ -105,3 +105,13 @@ def test_union34_honors_a_guarantee_above_four():
     assert got == expected
     assert coverage == expected_coverage == 100.0
     assert _coverage(got, 10, 5) == 100.0
+
+
+def test_union34_reports_coverage_for_requested_guarantee_when_capped():
+    """API-ul direct raportează 3-din-3, nu internul 4-din-4, sub plafon."""
+    pool = list(range(1, 11))
+    wheel, coverage = wheel_union34(pool, 6, 3, max_variants=4)
+
+    assert len(wheel) == 4
+    assert coverage == _coverage(wheel, 10, 3)
+    assert coverage != _coverage(wheel, 10, 4)

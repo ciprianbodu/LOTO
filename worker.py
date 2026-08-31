@@ -167,11 +167,29 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
 
         for task in ds.get("tasks", []):
             game_label = str(task["game_label"])
+            game_mapped = "6/49"
+            if "5/40" in game_label.lower():
+                game_mapped = "5/40"
+            elif "joker" in game_label.lower():
+                game_mapped = "joker"
+            draw_n = 6 if game_mapped == "6/49" else 5
             p_size = int(task.get("pool_size", 12))
             p_size = max(6, min(16, p_size))  # aliniat cu UI (pool_size_val max 16)
-            guar = int(task.get("guarantee", 4))
-            max_var = int(task.get("max_variants", 0))
-            lookback = int(task.get("lookback", 0))
+            raw_guar = int(task.get("guarantee", 4))
+            # UI-ul permite 3..5; workerul poate primi însă joburi vechi sau
+            # externe. O garanție 0 generează semantic un cover al mulțimii vide,
+            # iar una peste draw_n nu e realizabilă pentru jocul respectiv.
+            guar = max(3, min(draw_n, raw_guar))
+            raw_max_var = int(task.get("max_variants", 0))
+            max_var = max(0, raw_max_var)
+            raw_lookback = int(task.get("lookback", 0))
+            lookback = max(0, min(100, raw_lookback))
+            if (guar, max_var, lookback) != (raw_guar, raw_max_var, raw_lookback):
+                logging.warning(
+                    "[worker] Task normalizat %s: guarantee %s→%s, max_variants %s→%s, "
+                    "lookback %s→%s",
+                    game_label, raw_guar, guar, raw_max_var, max_var, raw_lookback, lookback,
+                )
             filter_cons = bool(task.get("filter_consecutives", False))
             smart_red = bool(task.get("smart_reduction", False))
             sim_depth = int(task.get("sim_depth_pct", 10))
@@ -208,12 +226,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                 if is_job_cancelled(job_id):
                     logging.info(f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire.")
                     return "{}"
-
-                game_mapped = "6/49"
-                if "5/40" in game_label.lower():
-                    game_mapped = "5/40"
-                elif "joker" in game_label.lower():
-                    game_mapped = "joker"
 
                 # Auto-clamp pool_size cand auto_invert e ON.
                 # Reguli matematice: cu inversare, dupa primul pool excludem P numere

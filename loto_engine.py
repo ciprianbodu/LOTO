@@ -543,11 +543,16 @@ class LotoEngine:
             f"[PIPELINE] ▶ pool_size primit de la UI = {pool_size}, guarantee = {guarantee}"
         )
 
-        # Garanția nu poate depăși câte numere se extrag: `itertools.combinations`
-        # ar arunca „r must be non-negative" din adâncul wheel-ului, abortând tot
-        # jobul cu un mesaj care nu spune nimic despre cauză. Spinner-ul din UI e
-        # limitat la 5, dar `_int_setting` NU clampează o valoare tastată manual.
+        # Garanția trebuie să fie în 1..draw_n. Workerul normalizează contractul
+        # UI la 3..draw_n, însă engine-ul rămâne API public și apără inclusiv
+        # apelurile directe: guarantee=0 ar acoperi formal doar mulțimea vidă și
+        # ar raporta absurd 100%.
         _draw_n = int(self.params["draw_n"])
+        if int(guarantee) < 1:
+            logging.warning(
+                "[PIPELINE] Garanție %s < 1 — imposibilă; o limitez la 1.", guarantee,
+            )
+            guarantee = 1
         if int(guarantee) > _draw_n:
             logging.warning(
                 "[PIPELINE] Garanție %s > numere extrase (%s) — imposibil; "

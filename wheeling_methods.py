@@ -604,14 +604,17 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
     """
     del time_limit  # păstrat în semnătură pentru apelanți existenți.
     target_guarantee = 4 if int(guarantee) <= 4 else int(guarantee)
-    wheel, coverage = wheel_lajolla(
+    wheel, _coverage_for_target = wheel_lajolla(
         pool, pick, target_guarantee, max_variants=max_variants, scores=scores,
     )
     logger.info(
         "[WHEEL-U34] cover g%d = %d bilete (pool=%d, pick=%d; 3+/4+ acoperite când g=4)",
         target_guarantee, len(wheel), len(pool), pick,
     )
-    return wheel, coverage
+    # Contractul comun al modulelor de wheeling: procentul raportat corespunde
+    # garanției CERUTE de apelant. La un cap de bilete, C(v,pick,4) poate avea
+    # altă acoperire decât C(v,pick,3), chiar dacă fără cap ambele sunt 100%.
+    return wheel, compute_coverage_pct(wheel, pool, guarantee)
 
 
 # ===========================================================================
