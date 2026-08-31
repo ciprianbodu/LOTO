@@ -1,6 +1,50 @@
 @echo off
+setlocal DisableDelayedExpansion
+
+REM Git poate inlocui chiar acest .bat. CMD reia un CALL la offsetul vechi din
+REM fisierul nou si executa fragmente de linie ca comenzi. De aceea sincronizarea
+REM ruleaza din copii IMUTABILE in TEMP, apoi transfera controlul la scriptul nou.
+if /I "%~1"=="--bootstrap-sync" goto :bootstrap_sync
+if /I "%~1"=="--post-sync" goto :post_sync
+
+set "PROJECT_DIR=%~dp0"
+set "BOOT_DIR=%TEMP%\loto-update-%RANDOM%-%RANDOM%"
+mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
+copy /Y "%~f0" "%BOOT_DIR%\ACTUALIZARI.bat" >nul || goto :bootstrap_failed
+copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\loto_git_sync.bat" >nul || goto :bootstrap_failed
+REM FARA CALL: contextul fisierului din repo trebuie abandonat inainte de git reset.
+"%BOOT_DIR%\ACTUALIZARI.bat" --bootstrap-sync "%PROJECT_DIR%" "%BOOT_DIR%"
+exit /b 99
+
+:bootstrap_failed
+echo [GIT] Nu pot crea bootstrap-ul temporar - continui fara auto-update.
+if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
+goto :main
+
+:bootstrap_sync
+set "PROJECT_DIR=%~2"
+set "BOOT_DIR=%~3"
+cd /d "%PROJECT_DIR%"
+where git >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] git negasit - sar peste auto-update cod.
+) else (
+    call "%BOOT_DIR%\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"
+)
+REM FARA CALL: ruleaza versiunea NOUA descarcata, nu copia veche din TEMP.
+"%PROJECT_DIR%ACTUALIZARI.bat" --post-sync "%PROJECT_DIR%" "%BOOT_DIR%"
+exit /b 98
+
+:post_sync
+set "PROJECT_DIR=%~2"
+set "BOOT_DIR=%~3"
+cd /d "%PROJECT_DIR%"
+if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
+
+:main
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+cd /d "%PROJECT_DIR%"
 setlocal enabledelayedexpansion
-cd /d "%~dp0"
 
 set VENV_DIR=D:\_BUILD\_LOTO\.venv
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
@@ -24,16 +68,6 @@ for /d %%D in (".venv_ALF-LUPTATORI_backup" ".venv_backup" ".venv_ALF-LUPTATORI"
         rmdir /s /q "%%D" >nul 2>&1
     )
 )
-
-REM ===== Auto-update COD din GitHub (main) inainte de a actualiza mediul =====
-REM Asa, cand dai ACTUALIZARI.bat primesti si ultimul cod, si ultimele librarii.
-where git >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] git negasit - sar peste auto-update cod.
-) else (
-    call :git_autoupdate
-)
-echo/
 
 REM Asigura ULTIMUL patch stabil Python 3.14.x inainte de a crea/compara venv-ul.
 REM Detectia online vine de pe python.org; winget face upgrade-ul cand e disponibil,
@@ -222,11 +256,6 @@ echo/
 pause
 endlocal
 exit /b 0
-
-
-:git_autoupdate
-call "%~dp0loto_git_sync.bat" autoupdate
-goto :eof
 
 
 :push_istoric
