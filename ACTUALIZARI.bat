@@ -35,6 +35,16 @@ if errorlevel 1 (
 )
 echo/
 
+REM Asigura ULTIMUL patch stabil Python 3.14.x inainte de a crea/compara venv-ul.
+REM Detectia online vine de pe python.org; winget face upgrade-ul cand e disponibil,
+REM iar fallback-ul descarca dinamic installer-ul acelei versiuni (fara patch hardcodat).
+call :ensure_latest_python314
+if "%SYS_VER%"=="" (
+    echo [EROARE] Python 3.14 nu poate fi instalat/detectat. Oprire.
+    pause
+    exit /b 1
+)
+
 if not exist "%VENV_PY%" (
     echo [INFO] Venv lipsa la %VENV_DIR% — il creez acum cu py -3.14...
     if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
@@ -48,14 +58,12 @@ if not exist "%VENV_PY%" (
 )
 
 REM ============================================================
-REM [-1/4] Detectie Python: daca exista un 3.14.x mai nou decat
-REM cel din venv, oferim upgrade. Skip altfel.
+REM [-1/4] Detectie Python: daca patch-ul de sistem (actualizat mai sus la
+REM ultimul 3.14.x disponibil) difera de venv, recream venv-ul automat.
 REM ============================================================
 echo [-1/4] Detectie versiune Python venv vs sistem...
 for /f "tokens=2 delims= " %%V in ('"%VENV_PY%" --version 2^>^&1') do set VENV_VER=%%V
 for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set SYS_VER=%%V
-REM Daca interpretorul 3.14 lipseste de pe sistem, il INSTALAM automat (winget/python.org).
-if "%SYS_VER%"=="" call :ensure_python314
 if "%SYS_VER%"=="" goto :skip_python_upgrade
 echo   Venv:    %VENV_VER%
 echo   Sistem:  %SYS_VER%
@@ -67,18 +75,13 @@ if "%VENV_VER%"=="%SYS_VER%" (
 )
 
 echo/
-echo   [INFO] Versiune Python diferita detectata pe sistem.
-echo          Doresti sa migrezi venv-ul de la %VENV_VER% la %SYS_VER%?
+echo   [INFO] Versiune Python noua detectata pe sistem.
+echo          Migrez automat venv-ul de la %VENV_VER% la %SYS_VER%.
 echo          Recreeaza venv-ul + reinstaleaza CURAT din requirements; FARA backup venv.
-echo/
-choice /C YN /M "Upgrade Python venv "
-if errorlevel 2 goto :skip_python_upgrade
-
 echo/
 echo   Migrare in curs ...
 
 REM Kill TOATE procesele care folosesc venv-ul vechi
-taskkill /F /T /IM streamlit.exe >nul 2>&1
 powershell -NoProfile -Command "$venv='%VENV_DIR%'; Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -like \"*$venv*\") } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 timeout /t 3 /nobreak >nul
 
@@ -118,8 +121,7 @@ echo/
 REM ============================================================
 REM [0/4] Kill procese venv + cleanup
 REM ============================================================
-echo [0/4] KILL Streamlit + worker + python.exe din venv...
-taskkill /F /T /IM streamlit.exe >nul 2>&1
+echo [0/4] KILL worker/UI + python.exe din venv...
 powershell -NoProfile -Command "$venv='%VENV_DIR%'; Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -like \"*$venv*\") } | ForEach-Object { Write-Host ('  - {0} PID {1} oprit' -f $_.Name, $_.ProcessId); Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo/
@@ -208,8 +210,8 @@ call :CleanGhosts
 echo/
 
 echo ------------------------------------------------------------
-echo  Python: ACTUALIZARI.bat instaleaza/migreaza automat la 3.14 - winget sau
-echo    installer python.org. Daca instalarea auto esueaza, ia-l manual de la
+echo  Python: ACTUALIZARI.bat instaleaza/migreaza automat la ultimul 3.14.x stabil
+echo    prin winget sau installer python.org. Daca instalarea auto esueaza, ia-l de la
 echo    https://www.python.org/downloads/  - bifeaza Add to PATH - si reruleaza.
 echo/
 echo  Daca freshness recomanda re-bench:
@@ -268,54 +270,111 @@ if errorlevel 1 (
     echo   [OK] Dependinte coerente.
 )
 echo   - smoke test import librarii critice - CPU...
-"%VENV_PY%" -c "import numpy,pandas,scipy,numba,nicegui" 2>nul
+"%VENV_PY%" -c "import numpy,pandas,scipy,sklearn,statsmodels,nicegui" 2>nul
 if errorlevel 1 (
     echo   [ATENTIE] O librarie critica NU se importa - posibil corupta OneDrive
     echo            SAU prima instalare - normal, se instaleaza la pasii [1b]+.
     echo            Daca persista dupa install: %VENV_PY% -m pip install --force-reinstall ^<pachet^>
 ) else (
-    echo   [OK] Librarii critice importate curat - numpy/pandas/scipy/numba/nicegui.
+    echo   [OK] Librarii critice importate curat - numpy/pandas/scipy/sklearn/statsmodels/nicegui.
 )
 goto :eof
 
 
-:ensure_python314
+:ensure_latest_python314
 REM ============================================================
-REM Instaleaza AUTOMAT interpretorul Python 3.14 daca "py -3.14" lipseste.
-REM Intai winget (Windows 10 1709+/11); daca nu exista, descarca installer-ul
-REM oficial python.org si il ruleaza silentios (user-scope, Add to PATH, py launcher).
-REM La final re-detecteaza si seteaza SYS_VER (vizibil in fluxul principal).
+REM Instaleaza/actualizeaza AUTOMAT la ultimul patch stabil Python 3.14.x.
+REM  1. python.org/ftp este sursa versiunii curente (fara patch hardcodat).
+REM  2. winget instaleaza/actualizeaza pachetul cand este disponibil.
+REM  3. Daca winget lipseste sau nu gestioneaza instalarea existenta, descarcam
+REM     dinamic installer-ul oficial al versiunii detectate.
+REM Offline: pastreaza runtime-ul existent; o instalare noua necesita retea.
+REM La final seteaza SYS_VER pentru fluxul principal.
 REM ============================================================
 echo/
-echo   [INFO] Python 3.14 nu e instalat pe sistem - py -3.14 indisponibil.
-echo          Incerc instalare automata...
-where winget >nul 2>&1
-if errorlevel 1 goto :ep_download
-echo   winget install -e --id Python.Python.3.14 --silent ...
-winget install -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
-goto :ep_verify
-
-:ep_download
-echo   winget indisponibil — descarc installer-ul oficial python.org 3.14.6...
-set "PY_URL=https://www.python.org/ftp/python/3.14.6/python-3.14.6-amd64.exe"
-set "PY_EXE=%TEMP%\python-3.14.6-amd64.exe"
-powershell -NoProfile -Command "try { Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' -UseBasicParsing } catch { exit 1 }"
-if not exist "%PY_EXE%" (
-    echo   [EROARE] Descarcare installer esuata - verifica conexiunea.
-    goto :ep_verify
-)
-echo   Instalare silentioasa - user-scope, PrependPath, py launcher...
-"%PY_EXE%" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
-del "%PY_EXE%" >nul 2>&1
-
-:ep_verify
 set "SYS_VER="
-for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set SYS_VER=%%V
-if "%SYS_VER%"=="" (
-    echo   [EROARE] py -3.14 inca indisponibil dupa instalare.
-    echo           Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat, sau
-    echo           instaleaza manual de la https://www.python.org/downloads/ - bifeaza Add to PATH.
+for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set "SYS_VER=%%V"
+set "PY_LATEST="
+set "PY_VER_FILE=%TEMP%\loto-python-3.14-latest.version"
+del "%PY_VER_FILE%" >nul 2>&1
+
+echo   [PYTHON] Verific ultimul patch stabil 3.14.x pe python.org...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "$r=Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/' -UseBasicParsing;" ^
+  "$v=[regex]::Matches($r.Content,'3\.14\.\d+/') ^| ForEach-Object {$_.Value.TrimEnd('/')} ^| Sort-Object {[version]$_} -Descending -Unique ^| Select-Object -First 1;" ^
+  "if(-not $v){throw 'Nu am gasit nicio versiune 3.14.x'};" ^
+  "Set-Content -LiteralPath '%PY_VER_FILE%' -Value $v -NoNewline -Encoding ascii" >nul 2>&1
+if exist "%PY_VER_FILE%" set /p PY_LATEST=<"%PY_VER_FILE%"
+del "%PY_VER_FILE%" >nul 2>&1
+
+if not "!PY_LATEST!"=="" (
+    echo   [PYTHON] Sistem: !SYS_VER! ^| online: !PY_LATEST!
+    if "!SYS_VER!"=="!PY_LATEST!" (
+        echo   [OK] Python !SYS_VER! este deja ultimul 3.14.x stabil.
+        goto :eof
+    )
 ) else (
-    echo   [OK] Python instalat: %SYS_VER%
+    echo   [ATENTIE] Nu pot determina versiunea online. Incerc winget.
+)
+
+REM Oprim doar procesele venv-ului proiectului inainte de upgrade-ul runtime.
+powershell -NoProfile -Command "$venv='%VENV_DIR%'; Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -like \"*$venv*\") } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+timeout /t 2 /nobreak >nul
+
+where winget >nul 2>&1
+if errorlevel 1 goto :ep_download_latest
+if "!SYS_VER!"=="" (
+    echo   [PYTHON] winget install Python.Python.3.14...
+    winget install -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
+) else (
+    echo   [PYTHON] winget upgrade Python.Python.3.14...
+    winget upgrade -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
+)
+set "SYS_VER="
+for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set "SYS_VER=%%V"
+if "!PY_LATEST!"=="" (
+    if not "!SYS_VER!"=="" (
+        echo   [OK] Python disponibil dupa winget: !SYS_VER!
+        goto :eof
+    )
+)
+if "!SYS_VER!"=="!PY_LATEST!" (
+    echo   [OK] Python actualizat prin winget: !SYS_VER!
+    goto :eof
+)
+
+:ep_download_latest
+if "!PY_LATEST!"=="" (
+    if not "!SYS_VER!"=="" (
+        echo   [ATENTIE] Raman pe Python !SYS_VER! - versiunea online nu poate fi verificata.
+        goto :eof
+    )
+    echo   [EROARE] Fara winget si fara versiune online; Python 3.14 nu poate fi instalat.
+    goto :eof
+)
+set "PY_URL=https://www.python.org/ftp/python/!PY_LATEST!/python-!PY_LATEST!-amd64.exe"
+set "PY_EXE=%TEMP%\python-!PY_LATEST!-amd64.exe"
+echo   [PYTHON] Descarc installer-ul oficial !PY_LATEST!...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri '!PY_URL!' -OutFile '!PY_EXE!' -UseBasicParsing } catch { exit 1 }"
+if not exist "!PY_EXE!" (
+    echo   [EROARE] Descarcare installer esuata - verifica conexiunea.
+    goto :ep_verify_latest
+)
+echo   [PYTHON] Instalare silentioasa !PY_LATEST! - user-scope + py launcher...
+"!PY_EXE!" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_test=0 SimpleInstall=1
+del "!PY_EXE!" >nul 2>&1
+
+:ep_verify_latest
+set "SYS_VER="
+for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set "SYS_VER=%%V"
+if "!SYS_VER!"=="" (
+    echo   [EROARE] py -3.14 inca indisponibil dupa instalare.
+    echo           Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat.
+) else if not "!SYS_VER!"=="!PY_LATEST!" (
+    echo   [ATENTIE] Python detectat !SYS_VER!, dar online este !PY_LATEST!.
+    echo              Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat.
+) else (
+    echo   [OK] Python instalat/actualizat: !SYS_VER!
 )
 goto :eof

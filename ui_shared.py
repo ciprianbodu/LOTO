@@ -27,28 +27,30 @@ LOG_FILE = "loto.log"
 
 # Versiune Python țintă (ALF-LUPTATORI). ACTUALIZARI.bat / START_8000.bat folosesc py -3.14.
 PYTHON_MIN = (3, 14)
-PYTHON_TARGET_PATCH = 6  # 3.14.6 — versiunea instalată de ACTUALIZARI.bat
 
 
 def check_python_version(*, strict: bool = False) -> tuple[bool, str]:
-    """Verifică că interpretorul e Python 3.14+ (țintă de producție 3.14.6).
+    """Verifică Python 3.14+; patch-ul curent este gestionat de ACTUALIZARI.bat.
 
-    Returns (ok, message). strict=True → eșuează dacă patch-ul e sub țintă.
+    Nu hardcodăm patch-ul aici: updater-ul interoghează python.org și instalează
+    ultimul 3.14.x stabil. `strict=True` respinge doar build-urile pre-release.
     """
     vi = sys.version_info
     if vi < PYTHON_MIN:
         return False, (
             f"Python {vi.major}.{vi.minor}.{vi.micro} detectat — necesar "
             f">= {PYTHON_MIN[0]}.{PYTHON_MIN[1]}. "
-            f"Ruleaza ACTUALIZARI.bat (py -3.14) sau instaleaza Python 3.14.6."
+            "Ruleaza ACTUALIZARI.bat pentru ultimul Python 3.14.x stabil."
         )
-    if strict and (vi.major, vi.minor, vi.micro) < (*PYTHON_MIN, PYTHON_TARGET_PATCH):
+    if strict and vi.releaselevel != "final":
         return False, (
-            f"Python {vi.major}.{vi.minor}.{vi.micro} — recomandat "
-            f"{PYTHON_MIN[0]}.{PYTHON_MIN[1]}.{PYTHON_TARGET_PATCH}. "
-            f"Ruleaza ACTUALIZARI.bat pentru upgrade venv."
+            f"Python {vi.major}.{vi.minor}.{vi.micro} {vi.releaselevel} — "
+            "este necesar un release stabil. Ruleaza ACTUALIZARI.bat."
         )
-    return True, f"Python {vi.major}.{vi.minor}.{vi.micro} OK (tinta 3.14.{PYTHON_TARGET_PATCH})"
+    return True, (
+        f"Python {vi.major}.{vi.minor}.{vi.micro} OK "
+        "(ACTUALIZARI.bat menține ultimul patch stabil 3.14.x)"
+    )
 
 
 def require_python_version(*, strict: bool = False) -> None:

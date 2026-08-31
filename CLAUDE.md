@@ -174,13 +174,13 @@ worker.py (proces SEPARAT, daemon)  ──fetch───────────
 - **Alias metode legacy**: `METHOD_ALIASES` în methods.py (`ml_catboost_cpu` → `ml_catboost` etc.) — compatibilitate best_methods.json vechi până la re-bench.
 
 ## Convenții / mediu
-- **O singură stație: ALF-LUPTATORI**. **Python 3.14.6** (`py -3.14`). venv hardcodat `D:\_BUILD\_LOTO\.venv` (în afara OneDrive). Fără logică multi-stație.
+- **O singură stație: ALF-LUPTATORI**. **Ultimul Python 3.14.x stabil** (`py -3.14`), detectat online și actualizat automat de `ACTUALIZARI.bat` (**NU hardcoda patch-ul**). venv hardcodat `D:\_BUILD\_LOTO\.venv` (în afara OneDrive). Când patch-ul sistemului diferă, updater-ul recreează automat venv-ul și reinstalează din `requirements_base.txt`. Fără logică multi-stație.
 - **Scrieri atomice** (`ui_shared.atomic_write_json`, tmp+fsync+os.replace) pt toate fișierele de stare JSON (OneDrive poate corupe la scriere parțială).
 - **Git: totul pe `main`.** Eu (asistent) push pe main; `START_8000.bat` face `git pull` automat la pornire. `best_methods.json`/`pool_history.json`/`raport_complet.txt` sunt gitignore. **`_ISTORIC/` E VERSIONAT** (sursă de adevăr pt bench/analiză); `START_8000.bat`+`ACTUALIZARI.bat` apelează `loto_git_sync.bat` (checkout **main**, commit `_ISTORIC`, **`git push origin main`**, mesaje în consolă — nu `HEAD` pe altă ramură, nu `>nul`).
 - ⚠️ Repo-ul e în OneDrive → `.git` poate fi corupt de sync. Recuperare: `git reset --hard HEAD && git pull origin main --no-edit`.
 - Loguri: `loto.log` (engine/worker), `bench_full.log` (bench, scris de bench însuși). Vizibile în consola DEBUG din UI.
 - **Mediu venv**: `ACTUALIZARI.bat` instalează din `requirements_base.txt` (nicegui, pandas, sklearn, statsmodels, xgboost, lightgbm, catboost etc.) — **fără torch/CUDA/neural**.
-- **Python 3.14.6 API**: cache pickle → `compression.zstd` (`py314_io.py`); job worker → `pack_queue_result`/`decode_queue_result`; UI HTML → t-strings PEP 750 (`render_html_safe`); tipuri `list[str]`/`X | None`; WF paralel → `itertools.batched`; compresie scor → `compression.zlib`.
+- **Python 3.14.x API**: cache pickle → `compression.zstd` (`py314_io.py`); job worker → `pack_queue_result`/`decode_queue_result`; UI HTML → t-strings PEP 750 (`render_html_safe`); tipuri `list[str]`/`X | None`; WF paralel → `itertools.batched`; compresie scor → `compression.zlib`.
 
 ## Decizii/feature-uri importante (acumulate)
 - **Pool max 16** (UI input + clamp la load) — ca inversarea să meargă pe toate jocurile (univers mic la 5/40=40, joker=45).
