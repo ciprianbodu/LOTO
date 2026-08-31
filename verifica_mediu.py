@@ -17,6 +17,13 @@ import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version as dist_version
 
+# Consola Windows e cp1252 by default -> diacriticele (ă, ț) arunca UnicodeEncodeError.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Librarii standard care pot fi actualizate automat in siguranta.
 # Am exclus intentionat pandas / numpy / scipy (Python C-extensions; wheel-uri
 # specifice per versiune de Python — upgrade nesigur poate cere build din sursa).
