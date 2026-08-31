@@ -1,14 +1,16 @@
 @echo off
 REM ============================================================
 REM loto_git_sync.bat - git helper for START_8000.bat and ACTUALIZARI.bat
-REM   loto_git_sync.bat autoupdate      fetch+merge origin/main
+REM   loto_git_sync.bat autoupdate [root]  fetch+merge origin/main
 REM   loto_git_sync.bat push_istoric    commit _ISTORIC, push origin/main
 REM ASCII only. No delayed expansion. No parens in echo or REM.
 REM CRLF required via .gitattributes. LF breaks for /f and echo.
 REM Bug: echo with escaped parens after delayed expansion left an open
 REM parenthesis, so the next REM Auto-update line ran as a command.
 REM ============================================================
-cd /d "%~dp0"
+set "_ROOT=%~2"
+if "%_ROOT%"=="" set "_ROOT=%~dp0"
+cd /d "%_ROOT%"
 git config windows.appendAtomically false >nul 2>&1
 
 if /I "%~1"=="autoupdate" goto autoupdate
@@ -44,14 +46,8 @@ git merge --ff-only origin/main >nul 2>&1
 if errorlevel 1 (
     echo [GIT] Fast-forward imposibil. Stare:
     git status -sb
-    echo [GIT] Sincronizez FORTAT cu origin/main. Backup in stash.
-    git stash push -m "auto-backup START_8000" >nul 2>&1
-    git reset --hard origin/main >nul 2>&1
-    if errorlevel 1 (
-        echo [GIT] Sincronizare fortata esuata - pornesc cu codul curent.
-    ) else (
-        echo [GIT] Sincronizat la zi cu GitHub. Backup: git stash list.
-    )
+    call :force_sync
+    if errorlevel 1 exit /b 1
 ) else (
     echo [GIT] Cod la zi cu GitHub.
 )
@@ -61,6 +57,35 @@ if "%_IST_DIRTY%"=="1" (
     rmdir /s /q "%_IST_BAK%" >nul 2>&1
     echo [GIT] Restaurat _ISTORIC local.
 )
+exit /b 0
+
+
+:force_sync
+REM Stash protejeaza doar modificarile tracked, NU commit-urile locale ahead.
+REM Branch-ul backup pastreaza HEAD-ul complet inainte de reset.
+set "_HEAD_SHORT=unknown"
+for /f "delims=" %%h in ('git rev-parse --short HEAD 2^>nul') do set "_HEAD_SHORT=%%h"
+set "_BACKUP_BRANCH=backup/auto-sync-%_HEAD_SHORT%-%RANDOM%"
+git branch "%_BACKUP_BRANCH%" HEAD >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Nu pot crea branch backup - ANULEZ resetul fortat.
+    exit /b 1
+)
+echo [GIT] Backup commit local: %_BACKUP_BRANCH%
+git stash push -m "auto-backup before forced sync" >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Stash esuat - ANULEZ resetul fortat. Branch-ul backup ramane.
+    exit /b 1
+)
+echo [GIT] Sincronizez FORTAT cu origin/main. Modificarile tracked sunt in stash.
+git reset --hard origin/main >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] Sincronizare fortata esuata - branch-ul backup ramane disponibil.
+    exit /b 1
+)
+echo [GIT] Sincronizat la zi cu GitHub.
+echo [GIT] Recuperare commit: git switch %_BACKUP_BRANCH%
+echo [GIT] Recuperare modificari: git stash list
 exit /b 0
 
 

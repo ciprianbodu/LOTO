@@ -11,6 +11,9 @@ Cauze:
   2. Paranteze rotunde în `echo` DINĂUNTRUL unui bloc `if (` / `for (` —
      chiar și `^(main^)`: caret-ul e consumat la parse-ul blocului, apoi
      `(main)` închide if-ul. Urmare: stash/reset --hard necondiționat.
+  3. Un launcher face `CALL` la helper, iar helperul rulează `git reset` care
+     înlocuiește launcherul încă activ. CMD revine la același offset de byte în
+     fișierul NOU și execută un fragment de linie (`----------------...`).
 
 Nu putem rula cmd.exe în containerul Linux; testăm contractul care previne
 regresia: .gitattributes + CRLF + echo fără paranteze + fără `echo.`.
@@ -19,6 +22,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent
 
@@ -143,3 +148,52 @@ def test_python_version_check_has_no_stale_patch_constant():
     text = (ROOT / "ui_shared.py").read_text(encoding="utf-8")
     assert "PYTHON_TARGET_PATCH" not in text
     assert "ultimul patch stabil 3.14.x" in text
+
+
+@pytest.mark.parametrize("launcher", ["ACTUALIZARI.bat", "START_8000.bat"])
+def test_self_updating_launchers_sync_from_immutable_temp_copy(launcher):
+    """Niciun context .bat din repo nu rămâne pe stack în timpul git reset."""
+    text = (ROOT / launcher).read_text(encoding="utf-8")
+    bootstrap_label = text.index("\n:bootstrap_sync\n")
+    post_label = text.index("\n:post_sync\n")
+    main_label = text.index("\n:main\n")
+    normal = text[:bootstrap_label]
+    bootstrap = text[bootstrap_label:post_label]
+    post = text[post_label:main_label]
+
+    assert f'copy /Y "%~f0" "%BOOT_DIR%\\{launcher}" >nul || goto :bootstrap_failed' in normal
+    assert (
+        'copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\\loto_git_sync.bat" '
+        '>nul || goto :bootstrap_failed'
+    ) in normal
+    transfer = f'"%BOOT_DIR%\\{launcher}" --bootstrap-sync'
+    assert transfer in normal
+    assert f"call {transfer}".lower() not in normal.lower()
+
+    assert 'call "%BOOT_DIR%\\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"' in bootstrap
+    resume = f'"%PROJECT_DIR%{launcher}" --post-sync'
+    assert resume in bootstrap
+    assert f"call {resume}".lower() not in bootstrap.lower()
+    assert 'rmdir /s /q "%BOOT_DIR%"' in post
+
+
+def test_forced_sync_preserves_ahead_commit_and_tracked_changes():
+    """Stash-ul singur nu salvează commit-ul local `ahead`; trebuie branch backup."""
+    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
+    force = text[text.index(":force_sync"):text.index(":push_istoric")]
+
+    assert 'backup/auto-sync-' in force
+    assert 'git branch "%_BACKUP_BRANCH%" HEAD' in force
+    assert 'git stash push -m "auto-backup before forced sync"' in force
+    assert force.index('git branch "%_BACKUP_BRANCH%" HEAD') < force.index(
+        "git reset --hard origin/main"
+    )
+    assert force.index('git stash push -m "auto-backup before forced sync"') < force.index(
+        "git reset --hard origin/main"
+    )
+
+
+def test_temp_git_helper_accepts_explicit_repository_root():
+    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
+    assert 'set "_ROOT=%~2"' in text
+    assert 'cd /d "%_ROOT%"' in text

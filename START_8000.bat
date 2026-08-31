@@ -1,4 +1,5 @@
 @echo off
+setlocal DisableDelayedExpansion
 REM ============================================================
 REM START_8000.bat — Launcher rapid + log silent in fundal.
 REM Pe success: nu mai vezi nimic despre log, pornesti direct NiceGUI (app_nicegui.py).
@@ -6,8 +7,47 @@ REM Pe eroare: afisez log-ul automat si las fereastra deschisa.
 REM CRLF obligatoriu (.gitattributes). Linie goala = echo/ nu echo.
 REM In echo din blocuri if (...): fara paranteze rotunde.
 REM ============================================================
-cd /d "%~dp0"
-set "LOGFILE=%~dp0startup_8000.log"
+if /I "%~1"=="--bootstrap-sync" goto :bootstrap_sync
+if /I "%~1"=="--post-sync" goto :post_sync
+
+set "PROJECT_DIR=%~dp0"
+set "BOOT_DIR=%TEMP%\loto-start-%RANDOM%-%RANDOM%"
+mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
+copy /Y "%~f0" "%BOOT_DIR%\START_8000.bat" >nul || goto :bootstrap_failed
+copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\loto_git_sync.bat" >nul || goto :bootstrap_failed
+REM FARA CALL: fisierul din repo poate fi inlocuit in siguranta de git reset.
+"%BOOT_DIR%\START_8000.bat" --bootstrap-sync "%PROJECT_DIR%" "%BOOT_DIR%"
+exit /b 99
+
+:bootstrap_failed
+echo [GIT] Nu pot crea bootstrap-ul temporar - continui fara auto-update.
+if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
+goto :main
+
+:bootstrap_sync
+set "PROJECT_DIR=%~2"
+set "BOOT_DIR=%~3"
+cd /d "%PROJECT_DIR%"
+where git >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] git negasit - sar peste auto-update.
+) else (
+    call "%BOOT_DIR%\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"
+)
+REM Ruleaza launcherul NOU din repo; nu continua copia veche.
+"%PROJECT_DIR%START_8000.bat" --post-sync "%PROJECT_DIR%" "%BOOT_DIR%"
+exit /b 98
+
+:post_sync
+set "PROJECT_DIR=%~2"
+set "BOOT_DIR=%~3"
+cd /d "%PROJECT_DIR%"
+if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
+
+:main
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+cd /d "%PROJECT_DIR%"
+set "LOGFILE=%PROJECT_DIR%startup_8000.log"
 
 REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
 set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
@@ -19,22 +59,11 @@ REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 >> "%LOGFILE%" echo Computer: %COMPUTERNAME%
 >> "%LOGFILE%" echo/
 
-REM ===== Auto-update din GitHub, best-effort, nu blocheaza daca esueaza =====
-REM Aduce ultimele fix-uri de pe origin/main. best_methods.json / venv sunt
-REM gitignore. _ISTORIC E VERSIONAT: commit+push dupa update_csv.
-where git >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] git negasit - sar peste auto-update.
-) else (
-    call :git_autoupdate
-)
-echo/
-
 REM ===== Auto-update CSV extrageri, best-effort, silent =====
 REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC fara sa
 REM blocheze pornirea. Exit 0 mereu, chiar si la eroare de retea.
 if exist "%VENV_DIR%\Scripts\python.exe" (
-    "%VENV_DIR%\Scripts\python.exe" "%~dp0update_csv.py" >> "%LOGFILE%" 2>&1
+    "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%update_csv.py" >> "%LOGFILE%" 2>&1
 )
 
 REM ===== Auto-commit + push extrageri noi din _ISTORIC, best-effort =====
@@ -167,11 +196,6 @@ set "LOTO_FRESH_START=1"
 "%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
 set "RC=!ERRORLEVEL!"
 endlocal & exit /b %RC%
-
-
-:git_autoupdate
-call "%~dp0loto_git_sync.bat" autoupdate
-goto :eof
 
 
 :push_istoric
