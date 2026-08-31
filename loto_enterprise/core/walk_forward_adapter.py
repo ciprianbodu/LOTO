@@ -41,8 +41,11 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v18"
+CACHE_VERSION = "v19"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v19: `wheel_union34` nu mai unește două covere redundante; pentru 3+/4+
+#      folosește un singur C(v, pick, 4). Se schimbă lista de bilete, costul și
+#      rezultatele `hits` per bilet, deci cache-ul v18 ar valida un wheel vechi.
 # (v18, ADITIV — FĂRĂ bump): câmpul `wheel_coverage` pe `WalkForwardResult`.
 #      E o ADĂUGIRE cu default, nu o schimbare de semantică a câmpurilor vechi:
 #      înregistrările deja pe disc rămân corecte, doar că nu ştiu acoperirea

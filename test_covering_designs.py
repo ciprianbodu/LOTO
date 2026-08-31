@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from wheeling_methods import _load_lajolla, generate_wheel
+from wheeling_methods import _load_lajolla, generate_wheel, wheel_lajolla, wheel_union34
 
 DESIGNS = sorted(Path("covering_designs").glob("C_*_*_*.txt"))
 
@@ -58,6 +58,15 @@ def test_loader_accepts_the_design(path: Path):
     assert _load_lajolla(v, pick, g) is not None
 
 
+def test_loader_rejects_incomplete_design(tmp_path, monkeypatch):
+    """Un fișier OneDrive trunchiat trebuie să cadă pe fallback, nu să fie folosit."""
+    import wheeling_methods as wm
+
+    (tmp_path / "C_6_5_3.txt").write_text("1 2 3 4 5\n", encoding="utf-8")
+    monkeypatch.setattr(wm, "_LAJOLLA_DIRS", [tmp_path])
+    assert _load_lajolla(6, 5, 3) is None
+
+
 @pytest.mark.parametrize("v,pick,g", [(12, 5, 3), (12, 6, 3), (12, 6, 4), (10, 5, 4)])
 def test_wheel_is_deterministic_across_runs(v, pick, g):
     """Regresia pe care o blochează: același apel, de două ori, același rezultat.
@@ -72,3 +81,27 @@ def test_wheel_is_deterministic_across_runs(v, pick, g):
                               max_variants=0, scores=scores)
     assert a == b, f"C({v},{pick},{g}): două apeluri, două rezultate"
     assert cov_a == cov_b == 100.0
+
+
+@pytest.mark.parametrize("pick", [5, 6])
+@pytest.mark.parametrize("guarantee", [3, 4])
+def test_union34_is_the_single_four_cover(pick: int, guarantee: int):
+    """C(10,pick,4) acoperă deja și orice 3-submulțime, fără uniune redundantă."""
+    pool = list(range(1, 11))
+    got, coverage = wheel_union34(pool, pick, guarantee, max_variants=0)
+    expected, expected_coverage = wheel_lajolla(pool, pick, 4, max_variants=0)
+
+    assert got == expected
+    assert coverage == expected_coverage == 100.0
+    assert _coverage(got, 10, 3) == _coverage(got, 10, 4) == 100.0
+
+
+def test_union34_honors_a_guarantee_above_four():
+    """Compatibilitatea 3+/4+ nu trebuie să pretindă acoperire pentru 5+."""
+    pool = list(range(1, 11))
+    got, coverage = wheel_union34(pool, 6, 5, max_variants=0)
+    expected, expected_coverage = wheel_lajolla(pool, 6, 5, max_variants=0)
+
+    assert got == expected
+    assert coverage == expected_coverage == 100.0
+    assert _coverage(got, 10, 5) == 100.0

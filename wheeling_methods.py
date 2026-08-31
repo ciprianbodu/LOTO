@@ -15,9 +15,9 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        acoperirea (ponderată pe scoruri). Fitness pe CPU (numpy).
   • wheel_lajolla    — designuri optime cunoscute (fișiere covering_designs/);
                        altfel cade pe ILP exact (mic) → greedy. „Best-known".
-  • wheel_union34    — UNIUNEA coverelor ILP pt guarantee=3 ȘI guarantee=4:
-                       garantează SIMULTAN 3-din-3 și 4-din-4 la o fracție din
-                       costul sistemului complet.
+  • wheel_union34    — alias compatibil pentru un cover guarantee=4: un cover
+                       complet 4-din-4 acoperă implicit şi orice 3-din-3, fără
+                       biletele redundante ale vechii uniuni 3∪4.
 
 Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34.
 Orice eșec/limită → fallback la greedy (sigur). Default în `loto_engine`:
@@ -501,26 +501,37 @@ _LAJOLLA_DIRS = [
 
 
 def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
-    """Citește un design C(v, pick, guarantee) dintr-un fișier local dacă există.
-    Format La Jolla: fiecare linie = un bloc de `pick` numere (1-based, 1..v)."""
+    """Citește și validează un design C(v, pick, guarantee) local.
+
+    Format La Jolla: fiecare linie = un bloc de ``pick`` poziții 1-based din
+    ``1..v``. Un fișier invalid sau incomplet nu este un design disponibil:
+    continuăm căutarea, apoi callerul poate cădea pe ILP/greedy.
+    """
     for d in _LAJOLLA_DIRS:
         f = d / f"C_{v}_{pick}_{guarantee}.txt"
         if f.exists():
             try:
-                blocks = []
-                # encoding EXPLICIT: pe Windows default-ul e cp1252, iar un
-                # design cu BOM/octet non-ASCII ar arunca UnicodeDecodeError →
-                # prins de `except` de mai jos → designul se pierde TĂCUT și
-                # cădem pe ILP/greedy (măsurat: +34% bilete pe 6/49 pool 12 g4).
-                for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+                blocks: list[list[int]] = []
+                # `utf-8-sig` acceptă BOM, dar păstrează erorile de decodare
+                # vizibile; `errors="replace"` ar putea transforma corupția
+                # OneDrive într-un design parțial acceptat tăcut.
+                for line in f.read_text(encoding="utf-8-sig").splitlines():
+                    if not line.strip():
+                        continue
                     nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
-                    if len(nums) == pick:
-                        blocks.append(nums)
-                if blocks:
-                    logger.info("[WHEEL-LaJolla] folosesc design cunoscut %s (%d blocuri)", f, len(blocks))
-                    return blocks
+                    if (len(nums) != pick or len(set(nums)) != pick
+                            or any(n < 1 or n > v for n in nums)):
+                        raise ValueError(f"bloc invalid: {nums}")
+                    blocks.append(nums)
+                if not blocks:
+                    raise ValueError("fișier gol")
+                coverage = _coverage_pct(blocks, list(range(1, v + 1)), guarantee)
+                if coverage < 100.0:
+                    raise ValueError(f"acoperire incompletă: {coverage:.2f}%")
+                logger.info("[WHEEL-LaJolla] folosesc design valid %s (%d blocuri)", f, len(blocks))
+                return blocks
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[WHEEL-LaJolla] citire %s eșuată: %s", f, exc)
+                logger.warning("[WHEEL-LaJolla] ignor design invalid %s: %s", f, exc)
     return None
 
 
@@ -576,52 +587,31 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
 
 
 # ===========================================================================
-# 5) UNIUNE 3∪4 — garanție SIMULTANĂ 3-din-3 ȘI 4-din-4 (uniune de covere ILP)
+# 5) COMPATIBILITATE UNION34 — un cover 4-din-4 implică deja 3-din-3
 # ===========================================================================
 def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
                   time_limit: float = 15.0):
-    """Cover UNIUNE 3∪4: garantează SIMULTAN că ORICE 3-subset ȘI ORICE 4-subset
-    din pool sunt conținute în cel puțin un bilet (3-din-3 și 4-din-4).
+    """Alias istoric pentru acoperire simultană 3+/4+.
 
-    Motivație: ținta bench e 3+, dar premiile 4+ contează — uniunea convertește
-    AMBELE tipuri de evenimente pool→bilet la o fracție din costul sistemului
-    complet. Empiric (venv): pool 10, bilet 6 → uniune = 30 bilete (vs 210
-    complet); pool 10, bilet 5 → 63 bilete (vs 252 complet).
+    Orice 3-submulțime a unui pool cu cel puțin patru numere poate fi extinsă la
+    o 4-submulțime. Dacă fiecare 4-submulțime este pe un bilet, extensia și deci
+    3-submulțimea inițială sunt deja pe un bilet. Vechea uniune dintre două
+    covere complete adăuga, așadar, bilete fără să adauge vreo garanție.
 
-    Construiește coverul ILP pentru guarantee=3 și separat pentru guarantee=4
-    (refolosește wheel_ilp, cu guard-urile și fallback-urile lui), face UNIUNEA
-    cu dedup pe tuple sortate și ordonează după scoruri. `coverage_pct` raportat
-    = pe guarantee-ul CERUT de apelant (compute_coverage_pct). Parametrul
-    `guarantee` NU schimbă componentele uniunii (mereu 3 și 4) — la guarantee>4
-    doar se loghează WARNING (metoda e gândită pentru ținte 3/4).
+    Pentru cereri 3 sau 4 folosim un singur C(v, pick, 4), preferând designurile
+    precalculate. Pentru o garanție mai mare delegăm exact cererea, nu pretindem
+    că un cover 4-din-4 garantează 5+.
     """
-    pool = _sorted_pool(pool, scores)
-    v = len(pool)
-    if v < pick:
-        return [list(pool)], 100.0
-    if guarantee > 4:
-        logger.warning("[WHEEL-U34] guarantee=%d > 4 — metoda e gândită pentru ținte 3/4; "
-                       "componentele rămân 3∪4, acoperirea e raportată pe %d",
-                       guarantee, guarantee)
-    seen: set[tuple[int, ...]] = set()
-    union: list[list[int]] = []
-    for g in (3, 4):
-        if g > pick:
-            continue  # bilet prea mic ca să conțină un g-subset → componentă imposibilă
-        comp, _ = wheel_ilp(pool, pick, g, 0, scores, time_limit=time_limit)
-        for t in comp:
-            key = tuple(sorted(t))
-            if key not in seen:
-                seen.add(key)
-                union.append(list(key))
-    union = _order_by_scores(union, scores)
-    if max_variants > 0 and len(union) > max_variants:
-        # consecvent cu wheel_ilp: tăiem DUPĂ ordonarea pe scoruri, dar garanția pică
-        logger.warning("[WHEEL-U34] max_variants=%d < uniune=%d — tai după scoruri, "
-                       "garanția 3∪4 NU mai e 100%%", max_variants, len(union))
-        union = union[:max_variants]
-    logger.info("[WHEEL-U34] uniune 3∪4 = %d bilete (pool=%d, pick=%d)", len(union), v, pick)
-    return union, compute_coverage_pct(union, pool, guarantee)
+    del time_limit  # păstrat în semnătură pentru apelanți existenți.
+    target_guarantee = 4 if int(guarantee) <= 4 else int(guarantee)
+    wheel, coverage = wheel_lajolla(
+        pool, pick, target_guarantee, max_variants=max_variants, scores=scores,
+    )
+    logger.info(
+        "[WHEEL-U34] cover g%d = %d bilete (pool=%d, pick=%d; 3+/4+ acoperite când g=4)",
+        target_guarantee, len(wheel), len(pool), pick,
+    )
+    return wheel, coverage
 
 
 # ===========================================================================

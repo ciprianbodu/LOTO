@@ -11,14 +11,21 @@ de-atunci încolo e și determinist, și mai bun.
 Scrie în formatul La Jolla (1-based, un bloc pe linie), deci `_load_lajolla` îl
 citește fără cod nou și îl VALIDEAZĂ la 100% acoperire înainte de folosire.
 """
-import itertools, os, sys, time
+import itertools
+import os
+import sys
+import time
 from math import comb
-sys.path.insert(0,"/home/user/LOTO"); os.chdir("/home/user/LOTO")
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
 import wheeling_methods as wm
 
 BUDGET = float(os.environ.get("GEN_BUDGET", "90"))
-OUT = "covering_designs"
-os.makedirs(OUT, exist_ok=True)
+OUT = PROJECT_ROOT / "covering_designs"
+OUT.mkdir(exist_ok=True)
 
 def coverage(blocks, v, g):
     need = set(itertools.combinations(range(v), g))
@@ -26,6 +33,25 @@ def coverage(blocks, v, g):
         for s in itertools.combinations(sorted(b), g):
             need.discard(s)
     return 100.0 * (1 - len(need)/max(1, comb(v,g)))
+
+
+def read_valid_design(path: Path, v: int, pick: int, g: int):
+    """Returnează designul existent numai dacă încă respectă contractul complet."""
+    try:
+        blocks = [
+            [int(x) for x in line.split()]
+            for line in path.read_text(encoding="utf-8-sig").splitlines()
+            if line.strip()
+        ]
+    except (OSError, UnicodeError, ValueError):
+        return None
+    if not blocks or any(
+        len(block) != pick or len(set(block)) != pick
+        or any(n < 1 or n > v for n in block)
+        for block in blocks
+    ):
+        return None
+    return blocks if coverage([[n - 1 for n in block] for block in blocks], v, g) == 100.0 else None
 
 rows=[]
 geos=[(v,pick,g) for pick in (5,6) for g in ([3,4] if pick==5 else [3,4,5])
@@ -46,16 +72,16 @@ for i,(v,pick,g) in enumerate(geos,1):
         blocks = [sorted(b) for b in gw]
         best, src = blocks, "greedy"
     assert coverage([[x-1 for x in b] for b in best], v, g) >= 100.0, f"C({v},{pick},{g}) NU e 100%"
-    path = os.path.join(OUT, f"C_{v}_{pick}_{g}.txt")
-    existed = os.path.exists(path)
-    if existed:
-        prev = [l.split() for l in open(path).read().splitlines() if l.strip()]
-        if len(prev) and len(prev) <= len(best):
+    path = OUT / f"C_{v}_{pick}_{g}.txt"
+    prev = read_valid_design(path, v, pick, g) if path.exists() else None
+    if prev is not None:
+        if len(prev) <= len(best):
             print(f"[{i:2}/{len(geos)}] C({v},{pick},{g}): PASTREZ fisierul existent "
                   f"({len(prev)} <= {len(best)})", flush=True)
             rows.append((v,pick,g,n_greedy,len(prev),"existent")); continue
-    with open(path,"w",encoding="utf-8") as fh:
-        fh.write("\n".join(" ".join(str(x) for x in b) for b in best) + "\n")
+    if path.exists() and prev is None:
+        print(f"[{i:2}/{len(geos)}] C({v},{pick},{g}): inlocuiesc design invalid", flush=True)
+    path.write_text("\n".join(" ".join(str(x) for x in b) for b in best) + "\n", encoding="utf-8")
     print(f"[{i:2}/{len(geos)}] C({v},{pick},{g}): greedy={n_greedy:4}  ->  {len(best):4} ({src}) "
           f"{'*** -' + str(n_greedy-len(best)) if len(best)<n_greedy else ''}  [{t_ilp:.0f}s]", flush=True)
     rows.append((v,pick,g,n_greedy,len(best),src))

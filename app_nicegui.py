@@ -1976,13 +1976,14 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
         # pe cel puțin un bilet. Niciun filtru nu mai elimină bilete DUPĂ wheeling
         # (a doua ramură, pe `audit.anomaly_filter`, nu se mai executa niciodată —
-        # engine-ul nu mai scrie cheia), deci rămân DOUĂ cauze pentru <100%:
+        # engine-ul nu mai scrie cheia), deci cauzele uzuale pentru <100% sunt:
         #   1. limita «Variante maxime»;
         #   2. garanția = câte numere se extrag (cerere degenerată: singurul cover
         #      100% e sistemul complet — 5/40 pool 15 → C(15,5) = 3003 bilete —, iar
-        #      greedy-ul se oprește la 1000 de iterații → 1001 bilete la 33%).
-        # Mesajul de dinainte atribuia MEREU cauza 1, inclusiv când «Variante
-        # maxime» era deja 0, și sfătuia „pune 0 = nelimitat" fără efect.
+        #      un algoritm/fallback poate rămâne fără cover complet).
+        #   3. un override de metodă de wheeling care nu găsește cover complet.
+        # Nu deducem garanția din «Variante maxime»: 0 scoate plafonul de cost,
+        # dar procentul MĂSURAT rămâne sursa de adevăr.
         _cov = (data.get("context") or {}).get("coverage_pct")
         if _cov is not None:
             if float(_cov) >= 100.0:
@@ -1999,8 +2000,8 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     )
                 else:
                     reason = (
-                        f"garanția {_g_used} e prea mare pentru pool-ul ales — "
-                        "acoperirea 100% ar cere sistemul complet; scade garanția cu 1"
+                        f"wheel-ul nu a acoperit toate țintele pentru garanția {_g_used} — "
+                        "folosește metoda implicită La Jolla sau redu garanția"
                     )
                 ui.html(render_html_safe(
                     t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
@@ -3197,7 +3198,8 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
         return ("text-warning text-caption text-bold",
                 f"⚠️ Wheel INCOMPLET{_sfx}: {cov['below_100']} din {_n_extrageri(cov['known'])} "
                 f"sub 100% acoperire (minim {cov['min']:.1f}%) — cifrele de POOL sunt un "
-                "PLAFON, nu ce prinde un bilet. «Variante maxime» = 0 dă garanție completă.")
+                "PLAFON, nu ce prinde un bilet. «Variante maxime» = 0 scoate doar plafonul; "
+                "procentul măsurat rămâne decisiv.")
     if cov["unknown"] and not cov["known"]:
         return ("text-caption text-grey",
                 f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} — cache WF scris înainte de măsurarea ei. "
