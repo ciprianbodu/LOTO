@@ -27,6 +27,8 @@ import math
 from pathlib import Path
 from typing import Callable
 
+from loto_enterprise.core.score_validation import has_usable_score_variance
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
@@ -63,12 +65,6 @@ def _load_config(path: str | None = None) -> dict:
         logger.error("[method_selector] failed to parse %s: %s", cfg_path, exc)
         _CONFIG = {"games": {}}
     return _CONFIG
-
-
-# Re-Bench sare joker_urna2 (single-pick: 1 număr → rata 4+ e 0). Engine-ul tot
-# cere un scorer pentru bila Joker — frequency e alegerea onestă, nu un WARNING
-# la fiecare Generate (era dublu: get_ensemble fallback + get_scorer_for_game).
-_UNBENCHED_SINGLE_PICK = frozenset({"joker_urna2"})
 
 
 def _production_forbidden() -> frozenset[str]:
@@ -206,11 +202,13 @@ def get_winner_name(
       5. legacy v1 'winner' field
       6. 'frequency' baseline (last resort)
     """
-    if game_key in _UNBENCHED_SINGLE_PICK:
-        return "frequency"
-
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
+    # Înainte de primul Re-Bench compatibil, Urna 2 nu are încă o decizie
+    # stocată. Frequency rămâne fallback deterministic, fără warning recurent.
+    if game_key == "joker_urna2" and not g:
+        logger.info("[method_selector] joker_urna2 fără benchmark top-1 — frequency fallback")
+        return "frequency"
 
     def _ok(name) -> str | None:
         return _sanitize_production_name(name, context="winner")
@@ -333,7 +331,7 @@ def get_ensemble_for_game(
     max_methods: int = 3,
 ) -> list[tuple[str, Callable, float]]:
     """Return [(method_name, scorer_fn, weight), ...] — pondere ∝ limita Wilson
-    a ratei T+ (scrisă de decision.py în auto_pilot_per_pool[kN].ensemble).
+    a ratei țintei din decizie (+3/+4, iar Urna 2 top-1).
 
     Variance-reduction: combină scorurile mai multor metode CALIFICATE (nu doar
     câștigătorul unic) — loteria e aleatoare, diferența dintre metode e majoritar
@@ -350,11 +348,6 @@ def get_ensemble_for_game(
         name = get_winner_name(game_key, pool_size, config_path)
         fn = get_scorer_for_game(game_key, pool_size, config_path)
         return [(name, fn, 1.0)]
-
-    # Re-Bench sare single-pick (1 număr → rata 4+ e 0). Nu citi un ensemble
-    # vechi din best_methods.json — frequency e scorer-ul onest.
-    if game_key in _UNBENCHED_SINGLE_PICK:
-        return _single_fallback()
 
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
@@ -414,12 +407,7 @@ def _has_variance(raw: dict) -> bool:
     NaN. Un membru cu scoruri ne-finite = metodă DEFECTĂ, nu semnal slab → afară
     din blend, la fel ca unul plat (același motiv raportat: „flat").
     """
-    vals = [float(v) for v in raw.values()]
-    if len(vals) < 2:
-        return False
-    if not all(math.isfinite(v) for v in vals):
-        return False
-    return (max(vals) - min(vals)) > 1e-12
+    return has_usable_score_variance(raw)
 
 
 # --- Decorelare membri ensemble -------------------------------------------
@@ -977,6 +965,19 @@ def recommend_optimal_config(
                 (rationale + " | " if rationale else "")
                 + "scorer/ensemble sanitizat (nume eliminat din METHODS)"
             ).strip(" |")
+        # Urna 2 are mereu contract top-1; nu lăsăm un JSON vechi/manual cu
+        # `hit_target: 3` să o prezinte drept aceeași metrică a pool-urilor.
+        if game_key == "joker_urna2":
+            hit_target = 1
+            target_label = "top-1 (1/1)"
+        else:
+            try:
+                hit_target = int(entry.get("hit_target", 3))
+            except (TypeError, ValueError):
+                hit_target = 3
+            if hit_target not in (3, 4):
+                hit_target = 3
+            target_label = str(entry.get("target_label") or f"{hit_target}+")
         return {
             "scorer": scorer,
             "sim_depth_pct": int(entry.get("sim_depth_pct", 40)),
@@ -987,6 +988,8 @@ def recommend_optimal_config(
             "pool_substituted": pool_substituted,
             "rate_col_used": entry.get("rate_col_used"),
             "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
+            "hit_target": hit_target,
+            "target_label": target_label,
             "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
             "ensemble_dropped_redundant": entry.get("ensemble_dropped_redundant") or [],
             "fallback": salvaged,
@@ -1002,6 +1005,8 @@ def recommend_optimal_config(
         "rationale": "fallback: no auto_pilot_per_pool entry - using per-pool winner",
         "pool_substituted": None,
         "ensemble": [{"method": scorer, "weight": 1.0}],
+        "hit_target": 1 if game_key == "joker_urna2" else 3,
+        "target_label": "top-1 (1/1)" if game_key == "joker_urna2" else "3+",
         # nu există intrare de decizie pentru (joc, pool) → alegerea nu e
         # susținută de nicio măsurătoare: un fallback E prin definiție low confidence
         "low_confidence": True,

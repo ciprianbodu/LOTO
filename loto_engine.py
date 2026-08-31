@@ -24,6 +24,7 @@ import sys
 # Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.draw_validation import valid_draw_matrix
+from loto_enterprise.core.score_validation import has_usable_score_variance
 # Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
@@ -1483,8 +1484,8 @@ class LotoEngine:
                 if _ens_audit.get(_flag):
                     bench_winner_info[_flag] = True
             if game_key == "joker_urna2":
-                bench_winner_info["single_pick_unbenched"] = True
-                bench_winner_info["fallback"] = True
+                bench_winner_info["single_pick"] = True
+                bench_winner_info["target_metric"] = "rate_1plus_k1"
             self.audit.setdefault("bench_winner", {})[game_key] = bench_winner_info
             return {int(k): float(v) for k, v in scores.items()}
         except Exception as exc:
@@ -1508,13 +1509,14 @@ class LotoEngine:
             # că pool-ul devenea [49, 48, 47, …]: cele mai mari numere, pur artefact,
             # fără niciun avertisment pentru utilizator. Tratăm platul ca pe gol →
             # cade pe fallback-ul determinist de frecvență.
-            if scores and len(set(round(float(v), 12) for v in scores.values())) <= 1:
+            if scores and not has_usable_score_variance(scores):
                 logging.warning(
-                    "[ENGINE] bench-winner a întors scoruri PLATE (%d numere, o "
-                    "singură valoare distinctă) — le tratez ca eșec și cad pe frecvență.",
+                    "[ENGINE] bench-winner a întors scoruri inutilizabile (%d numere; "
+                    "plate, ne-numerice sau ne-finite) — cad pe frecvență.",
                     len(scores),
                 )
                 self.audit["bench_winner_flat_scores"] = True
+                self.audit["bench_winner_unusable_scores"] = True
                 scores = {}
             if scores:
                 return scores

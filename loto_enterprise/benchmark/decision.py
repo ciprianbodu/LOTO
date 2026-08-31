@@ -147,9 +147,10 @@ DEFAULT_SIM_DEPTH_PCT = 40  # identic cu default-ul din method_selector
 # ≥ acest număr de numere ghicite). Implicit 3 (rată mai densă → selecție mai stabilă).
 # NU schimbă șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul.
 # Reversibil: schimbă aici, sau setează LOTO_BENCH_TARGET=4.
-# Doar 3 sau 4: runner-ul emite exclusiv rate_3plus_* / rate_4plus_*. Orice
-# altă valoare făcea `_resolve_rate_col` să cadă TĂCUT pe 4+ (doar WARNING
-# în log) — decizia se lua pe altă țintă decât cea cerută.
+# Pentru jocurile de pool sunt acceptate doar 3 sau 4; Urna 2 suprascrie local
+# ținta la top-1 și consumă `rate_1plus_k1`. Orice altă valoare globală făcea
+# `_resolve_rate_col` să cadă TĂCUT pe 4+ (doar WARNING în log) — decizia se lua
+# pe altă țintă decât cea cerută.
 # `clamp_bench_hit_target` e importat din `hit_target` (stdlib) — re-exportat aici.
 
 BENCH_HIT_TARGET = clamp_bench_hit_target(os.environ.get("LOTO_BENCH_TARGET", "3"))
@@ -514,7 +515,12 @@ def decide_optimal_config_for_pool(
     """
     base_col = f"k{pool_size}"
     base_col_bl = f"k{pool_size}_bl"
-    rate_target_col = f"rate_{BENCH_HIT_TARGET}plus_k{pool_size}"
+    # Urna 2 Joker este un joc categoric single-pick: +3/+4 sunt imposibile.
+    # O evaluăm separat pe singura întrebare semnificativă, top-1 (1/1). Celelalte
+    # jocuri păstrează ținta globală +3 sau +4, fără a dilua benchmark-ul de cover.
+    target = 1 if int(draw_n) == 1 else BENCH_HIT_TARGET
+    target_label = "top-1 (1/1)" if target == 1 else f"{target}+"
+    rate_target_col = f"rate_{target}plus_k{pool_size}"
 
     if base_col not in folds_df.columns:
         return {"error": f"column {base_col} missing in folds.csv"}
@@ -551,7 +557,7 @@ def decide_optimal_config_for_pool(
     except Exception as exc:  # noqa: BLE001
         logger.debug("[decision] per_game neaplicat: %s", exc)
 
-    # Coloane candidate pt rata T+, în ordine de preferință; sare peste coloane
+    # Coloane candidate pt rata țintei, în ordine de preferință; sare peste coloane
     # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.
     # Coloana FĂRĂ `_kN` reprezintă EXCLUSIV pool-ul de bază (K=draw_n), deci
     # este validă doar când decidem chiar acea geometrie. Folosită la k12, de
@@ -559,10 +565,14 @@ def decide_optimal_config_for_pool(
     # pentru alt pool decât cel cerut.
     _candidate_cols = [rate_target_col]
     if int(pool_size) == int(draw_n):
-        _candidate_cols.append(f"rate_{BENCH_HIT_TARGET}plus")
-    _candidate_cols.append(f"rate_4plus_k{pool_size}")
-    if int(pool_size) == int(draw_n):
-        _candidate_cols.append("rate_4plus")
+        _candidate_cols.append(f"rate_{target}plus")
+    # Pentru 3+/4+ păstrăm fallback-ul compatibil cu folds vechi. Pentru top-1
+    # nu există o metrică echivalentă în cache vechi: cădem explicit pe frequency
+    # cu low_confidence, nu pretindem că rate_4plus=0 e dovadă.
+    if target != 1:
+        _candidate_cols.append(f"rate_4plus_k{pool_size}")
+        if int(pool_size) == int(draw_n):
+            _candidate_cols.append("rate_4plus")
     _rate_target_candidate_cols = tuple(dict.fromkeys(_candidate_cols))
     # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
     # fallback de metrică (ex. ținta 3+ dar folds.csv vechi are doar 4+) —
@@ -573,7 +583,7 @@ def decide_optimal_config_for_pool(
     # semnalizat la fel ca trecerea pe 4+.
     _target_cols = {rate_target_col}
     if int(pool_size) == int(draw_n):
-        _target_cols.add(f"rate_{BENCH_HIT_TARGET}plus")
+        _target_cols.add(f"rate_{target}plus")
     _mismatch_cols_used: set[str] = set()
 
     def _resolve_rate_col(frame: pd.DataFrame) -> str | None:
@@ -583,8 +593,8 @@ def decide_optimal_config_for_pool(
                     _mismatch_cols_used.add(c)  # log O DATĂ per (game, pool, coloană)
                     logger.warning(
                         "[decision] %s k%d: %r lipsește/e all-NaN în folds.csv — "
-                        "decizia cade pe %r. Ținta e %d+ @ k%d. Re-rulează bench-ul.",
-                        game_key, pool_size, rate_target_col, c, BENCH_HIT_TARGET, pool_size,
+                        "decizia cade pe %r. Ținta e %s @ k%d. Re-rulează bench-ul.",
+                        game_key, pool_size, rate_target_col, c, target_label, pool_size,
                     )
                 return c
         return None
@@ -605,8 +615,8 @@ def decide_optimal_config_for_pool(
         _mismatch_cols_used.add(_missing_marker)
         logger.warning(
             "[decision] %s k%d: nicio coloană de rată compatibilă cu pool-ul "
-            "cerut; metodele fără T+ nu intră în decizie.",
-            game_key, pool_size,
+            "cerut; metodele fără %s nu intră în decizie.",
+            game_key, pool_size, target_label,
         )
 
     def _rate_col_for(frame: pd.DataFrame) -> str | None:
@@ -666,8 +676,8 @@ def decide_optimal_config_for_pool(
         if consistency < CONSISTENCY_THRESHOLD:
             continue
         w_lift = _weighted_mean_lift(real_m, real_random, gate_col)
-        # REGULA T+: rata medie de extrageri cu >=BENCH_HIT_TARGET numere ghicite
-        # (r4 = rată brută, doar pt afișare) + r4_conf (limită Wilson, pt sortare).
+        # Rata țintei: +3/+4 pentru pool-uri, top-1 pentru Urna 2.
+        # `target_conf` (Wilson) decide, rata brută e doar pentru afișare.
         r4 = _rate_target_mean(real_m)
         r4_conf = _rate_target_confidence(real_m)
         qualifying.append((m, w_lift, n_beat, n_total, r4, r4_conf))
@@ -716,9 +726,9 @@ def decide_optimal_config_for_pool(
             # DETERMINIST, niciodată pe `random`. Nu mai putem calcula sim_depth
             # (nu există rânduri pt scorer) → valori implicite + low_confidence.
             logger.warning(
-                "[decision] %s k%d: nicio metodă reală cu rată T+ utilizabilă "
+                "[decision] %s k%d: nicio metodă reală cu rată %s utilizabilă "
                 "în folds.csv — fallback determinist %r",
-                game_key, pool_size, SAFE_FALLBACK_SCORER,
+                game_key, pool_size, target_label, SAFE_FALLBACK_SCORER,
             )
             return {
                 "scorer": SAFE_FALLBACK_SCORER,
@@ -741,7 +751,7 @@ def decide_optimal_config_for_pool(
                 "avg_hits": 0.0,
                 "avg_hits_with_blacklist": 0.0,
                 "rationale": (
-                    f"FALLBACK: nicio metodă reală cu rată T+ utilizabilă în "
+                    f"FALLBACK: nicio metodă reală cu rată {target_label} utilizabilă în "
                     f"folds.csv pentru k{pool_size}; "
                     f"selecție conservatoare pe baseline-ul DETERMINIST "
                     f"{SAFE_FALLBACK_SCORER} (baseline-urile nedeterministe "
@@ -749,6 +759,8 @@ def decide_optimal_config_for_pool(
                 ),
                 "rate_col_used": None,
                 "rate_col_mismatch": bool(_mismatch_cols_used),
+                "hit_target": target,
+                "target_label": target_label,
                 "qualifying_methods": 0,
                 "consistency_threshold": CONSISTENCY_THRESHOLD,
                 "low_confidence": True,
@@ -758,7 +770,7 @@ def decide_optimal_config_for_pool(
         rationale = (
             f"FALLBACK: no method consistently beat random "
             f"(≥{int(CONSISTENCY_THRESHOLD*100)}% of windows); "
-            f"picked highest {BENCH_HIT_TARGET}+ rate (raw={ranked[0][2]:.3f}, "
+            f"picked highest {target_label} rate (raw={ranked[0][2]:.3f}, "
             f"Wilson_lb={ranked[0][1]:.3f}) + avg_hits "
             f"[nicio metodă nu bate random; selecție conservatoare, "
             f"diferențele sunt zgomot]"
@@ -767,18 +779,18 @@ def decide_optimal_config_for_pool(
         # singur membru (nu combinăm metode neconfirmate statistic).
         ensemble = _build_ensemble_weights([(scorer, 1.0)])
     else:
-        # REGULA T+: sortăm întâi după limita Wilson a ratei BENCH_HIT_TARGET+
+        # Sortăm întâi după limita Wilson a ratei țintei (+3/+4 sau top-1)
         # (robustă la evenimente rare/zgomot — nu doar rata brută), apoi după
         # lift mediu, apoi consistență. Metoda care prinde T+ cel mai des ȘI cu
         # dovezi suficiente câștigă, nu cea cu 1 eveniment norocos.
         qualifying.sort(key=lambda r: (r[5], r[1], r[2] / max(r[3], 1)), reverse=True)
         scorer = qualifying[0][0]
         rationale = (
-            f"{scorer}: rată {BENCH_HIT_TARGET}+ @ k{pool_size} = {qualifying[0][4]:.3f} "
+            f"{scorer}: rată {target_label} @ k{pool_size} = {qualifying[0][4]:.3f} "
             f"(Wilson_lb={qualifying[0][5]:.3f}), beat random in "
             f"{qualifying[0][2]}/{qualifying[0][3]} windows on the same "
-            f"{BENCH_HIT_TARGET}+ target (lift {qualifying[0][1]:+.4f}); "
-            f"din {len(qualifying)} metode calificate [prioritate: {BENCH_HIT_TARGET}+ numere ghicite, robust]"
+            f"{target_label} target (lift {qualifying[0][1]:+.4f}); "
+            f"din {len(qualifying)} metode calificate [prioritate: {target_label}, robust]"
         )
         # Ensemble: top ENSEMBLE_MAX_METHODS calificate, ponderate cu limita
         # Wilson a ratei T+ (r[5]) — variance-reduction, NU o pretenție de
@@ -791,7 +803,7 @@ def decide_optimal_config_for_pool(
         sig = _perf_signature_frame(
             sub[sub["is_random"] == False],  # noqa: E712
             [m for m, _ in ordered],
-            BENCH_HIT_TARGET,
+            target,
         )
         members, dropped_redundant = _select_ensemble_members(
             ordered, sig, ENSEMBLE_MAX_METHODS, ENSEMBLE_MAX_CORR,
@@ -857,7 +869,7 @@ def decide_optimal_config_for_pool(
     rate_col_mismatch = bool(_mismatch_cols_used)
     if rate_col_mismatch:
         rationale += (
-            f" [ATENȚIE: metrica {BENCH_HIT_TARGET}+ indisponibilă în folds.csv — "
+            f" [ATENȚIE: metrica {target_label} indisponibilă în folds.csv — "
             f"decizie luată pe {', '.join(sorted(_mismatch_cols_used))}; re-rulează bench-ul]"
         )
 
@@ -871,6 +883,8 @@ def decide_optimal_config_for_pool(
         "rationale": rationale,
         "rate_col_used": rate_col,
         "rate_col_mismatch": rate_col_mismatch,
+        "hit_target": target,
+        "target_label": target_label,
         "qualifying_methods": len(qualifying),
         "consistency_threshold": CONSISTENCY_THRESHOLD,
         # ATENȚIE: următoarele două chei sunt TELEMETRIE ADITIVĂ în

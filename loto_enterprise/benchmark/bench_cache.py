@@ -63,8 +63,12 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v14"
+CACHE_VERSION = "v16"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
+# v16: benchmark-ul respinge scorurile plate/ne-numerice/ne-finite la fel ca
+#      selectorul si engine-ul; fold-urile v15 puteau evalua un tie-break fictiv.
+# v15: FoldResult scrie rate_1plus[_k1] şi Urna 2 intră în benchmark cu
+#      metrica top-1. Cache-urile v14 nu au coloana cerută de decizie.
 # ⚠️ De la v13 numele fișierului începe cu versiunea (`v13_<hash>.pkl`) → straturile
 # vechi pot fi curățate selectiv cu `purge_stale_fold_cache()`.
 # v14: toate traseele (engine, WF, bench) validează identic o extragere: exact

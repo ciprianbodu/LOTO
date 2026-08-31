@@ -7,7 +7,8 @@ For every (game, urn, method, percentile_window, real|random) fold we:
        single training per fold (fast). For block_size = 1 you get true
        per-step walk-forward (very slow for trainable nets).
     3. For each draw in the test window evaluate hits AT MULTIPLE POOL SIZES
-       draw_n .. draw_n + 14. For Urna 2 the pool is fixed = draw_n.
+       draw_n .. draw_n + 14. For Urna 2 the pool is fixed = draw_n and the
+       decision metric is exact top-1 accuracy (rate_1plus_k1).
     4. Capture CPU% and RAM peak via a background sampler thread.
 
 Output:
@@ -40,6 +41,7 @@ from .hardware import (
 from .hw_sampler import HwSampler, HwSnapshot
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.draw_validation import valid_draw_matrix
+from loto_enterprise.core.score_validation import has_usable_score_variance
 
 logger = logging.getLogger(__name__)
 
@@ -168,9 +170,9 @@ class FoldResult:
     n_test: int
     runtime_sec: float
     # Extrageri efectiv EVALUATE (n_test minus blocurile în care scorerul a întors
-    # {} și au fost sărite). Denominatorul UNIC pentru hits ȘI rate (v13); înainte
-    # hits împărțea la n_test iar ratele la n_eval → axe inconsistente la metode
-    # parțial eșuate. 0 doar pe folds vechi/failed — consumatorii cad pe n_test.
+    # scoruri inutilizabile și au fost sărite). Denominatorul UNIC pentru hits ȘI
+    # rate (v13); înainte hits împărțea la n_test iar ratele la n_eval → axe
+    # inconsistente la metode parțial eșuate. 0 doar pe folds vechi/failed.
     n_eval: int = 0
     # Hit rates per pool size: keys "k6", "k7", "k8", ... "kN" (NO blacklist)
     hits_per_pool: dict[str, float] = field(default_factory=dict)
@@ -183,6 +185,11 @@ class FoldResult:
     rates_4plus_per_pool: dict[str, float] = field(default_factory=dict)
     rate_3plus: float = 0.0             # rata extragerilor cu >=3 numere ghicite (regula 3+)
     rates_3plus_per_pool: dict[str, float] = field(default_factory=dict)
+    # Urna 2 e single-pick (1/20): metrică proprie, exactă, de top-1. Se scrie
+    # și pentru celelalte jocuri ca telemetrie uniformă, dar doar decizia cu
+    # draw_n=1 o consumă.
+    rate_1plus: float = 0.0
+    rates_1plus_per_pool: dict[str, float] = field(default_factory=dict)
     blacklist_size: int = 0             # how many numbers were blacklisted per score round
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
@@ -225,6 +232,7 @@ def _evaluate_fold(
         hits_per_pool_bl={f"k{k}": 0.0 for k in pool_sizes},
         rates_4plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         rates_3plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
+        rates_1plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
     )
 
     sampler = HwSampler(interval=0.1).start()
@@ -235,9 +243,10 @@ def _evaluate_fold(
         per_pool_max = {k: 0 for k in pool_sizes}
         per_pool_4plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=4 numere ghicite
         per_pool_3plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=3 numere ghicite
+        per_pool_1plus = {k: 0 for k in pool_sizes}   # top-1 exact pentru Urna 2
         n_eval = 0                                     # nr. total extrageri evaluate
         blocks = 0
-        empty_blocks = 0  # Count blocks where call_method returned {} (silent failure)
+        unusable_blocks = 0  # Empty/flat/non-finite scorer output (silent failure)
         bl_sizes_seen: list[int] = []
         history = train_draws
         pos = 0
@@ -246,14 +255,12 @@ def _evaluate_fold(
             scores, _t = call_method(method_name, history, game.max_num)
             blocks += 1
 
-            if not scores:
-                # Method returned empty scores — track but continue.
-                # Daca TOATE block-urile returneaza {} (metoda complet broken
-                # pe configuratia curenta, ex. NF model fara CUDA), o sa marcam
-                # fold-ul ca failed la finalul loop-ului prin raise. Asta scoate
-                # fold-ul din mediile calculate de _aggregate si previne ca
-                # baseline-urile sa "castige" doar pentru ca rivalii au 0.000.
-                empty_blocks += 1
+            if not has_usable_score_variance(scores):
+                # Benchmark-ul si productia trebuie sa accepte exact aceleasi
+                # scoruri. Un dict plat ori cu NaN/inf nu contine informatie de
+                # ranking; tie-break-ul l-ar transforma intr-un rezultat aparent
+                # valid, desi engine-ul cade apoi pe fallback-ul de frecventa.
+                unusable_blocks += 1
                 history = np.concatenate([history, test_draws[pos:end]], axis=0)
                 pos = end
                 continue
@@ -289,37 +296,39 @@ def _evaluate_fold(
                         per_pool_4plus[k] += 1
                     if h >= 3:                       # regula 3+ (prag alternativ, configurabil)
                         per_pool_3plus[k] += 1
+                    if h >= 1:
+                        per_pool_1plus[k] += 1
                     if h > per_pool_max[k]:
                         per_pool_max[k] = h
             history = np.concatenate([history, test_draws[pos:end]], axis=0)
             pos = end
 
-        # Daca TOATE block-urile au returnat {} -> metoda nu a produs niciun
-        # scor real pe fold-ul asta. Marcam ca failed cu un mesaj clar.
-        # Cel mai frecvent caz: model neural fara CUDA, dep lipsa, sau exceptie
-        # interna in scorer prinsa de wrapper-ul lui call_method().
-        if blocks > 0 and empty_blocks == blocks:
+        # Daca TOATE blocurile sunt inutilizabile, metoda nu a produs niciun
+        # ranking real pe fold si trebuie exclusa din agregare/decizie.
+        if blocks > 0 and unusable_blocks == blocks:
             raise RuntimeError(
-                f"method '{method_name}' returned empty scores on all "
-                f"{blocks} blocks (likely missing CUDA/dep or scorer error)"
+                f"method '{method_name}' returned unusable scores on all "
+                f"{blocks} blocks (empty, flat, non-numeric or non-finite)"
             )
 
         # Aggregate per-pool average (both conditions).
         # v13: TOATE mediile/ratele împart la n_eval (extrageri efectiv evaluate),
-        # nu la n_test — la scorer care întoarce {} pe UNELE blocuri, hits trata
-        # extragerile sărite ca 0 hituri (deflata avg_hits/gate-ul de consistență)
-        # în timp ce ratele foloseau corect n_eval → decizia compara axe diferite.
+        # nu la n_test — la scorer inutilizabil pe UNELE blocuri, hits trata
+        # extragerile sărite ca 0 (deflata avg_hits/gate-ul de consistență), iar
+        # ratele foloseau n_eval → decizia compara axe diferite.
         fr.n_eval = n_eval
         for k in pool_sizes:
             fr.hits_per_pool[f"k{k}"] = per_pool_totals[k] / max(n_eval, 1)
             fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_eval, 1)
             fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
             fr.rates_3plus_per_pool[f"k{k}"] = per_pool_3plus[k] / max(n_eval, 1)
+            fr.rates_1plus_per_pool[f"k{k}"] = per_pool_1plus[k] / max(n_eval, 1)
         fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.max_hits_topk = per_pool_max[game.draw_n]
         # Regula 4+: rata de extrageri cu >=4 numere ghicite la pool-ul de bază (draw_n)
         fr.rate_4plus = fr.rates_4plus_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.rate_3plus = fr.rates_3plus_per_pool.get(f"k{game.draw_n}", 0.0)
+        fr.rate_1plus = fr.rates_1plus_per_pool.get(f"k{game.draw_n}", 0.0)
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
     except Exception as exc:
@@ -470,6 +479,8 @@ def run_benchmark(
                 row[f"rate_4plus_{k}"] = v
             for k, v in row.pop("rates_3plus_per_pool", {}).items():
                 row[f"rate_3plus_{k}"] = v
+            for k, v in row.pop("rates_1plus_per_pool", {}).items():
+                row[f"rate_1plus_{k}"] = v
             rows.append(row)
         _df = pd.DataFrame(rows)
         import uuid as _uuid

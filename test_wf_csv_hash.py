@@ -37,5 +37,29 @@ def test_cache_version_tracks_covering_design_signature(monkeypatch, tmp_path):
     design.write_text("1 2 3 4 5 7\n", encoding="utf-8")
     after = _wheel_sig(12, "6/49")
 
-    assert CACHE_VERSION == "v20"
+    assert CACHE_VERSION == "v22"
+    assert before != after
+
+
+def test_joker_wf_signature_includes_urna2_decision(monkeypatch):
+    """Schimbarea bilei Joker trebuie să invalideze WF-ul, nu doar Urna 1."""
+    import loto_enterprise.core.method_selector as selector
+    import loto_enterprise.core.walk_forward_adapter as wf
+
+    decisions = {
+        "joker_urna1": {"scorer": "frequency", "sim_depth_pct": 40,
+                         "ensemble": [{"method": "frequency", "weight": 1.0}]},
+        "joker_urna2": {"scorer": "frequency", "hit_target": 1,
+                         "ensemble": [{"method": "frequency", "weight": 1.0}]},
+    }
+    monkeypatch.setattr(selector, "recommend_optimal_config", lambda key, _pool: decisions[key])
+    monkeypatch.setattr(wf, "_wheel_sig", lambda *_args: "wheel")
+
+    before = wf._decision_sig("joker", 10)
+    decisions["joker_urna2"] = {
+        "scorer": "autocorr", "hit_target": 1,
+        "ensemble": [{"method": "autocorr", "weight": 1.0}],
+    }
+    after = wf._decision_sig("joker", 10)
+
     assert before != after

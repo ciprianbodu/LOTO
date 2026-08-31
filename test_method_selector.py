@@ -295,29 +295,26 @@ def test_get_winner_name_nearest_pool(temp_config):
     assert ms.get_winner_name("loto_6_49", pool_size=11, config_path=cfg_path) == "frequency"
 
 
-def test_joker_urna2_is_frequency_without_warning(temp_config, caplog):
-    """Re-Bench sare Urna 2 — production scorer e frequency, fără «no winner» WARNING.
-
-    Un best_methods.json vechi care totuși are ensemble pe joker_urna2 trebuie IGNORAT.
-    """
-    import logging
+def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
+    """Urna 2 citește propria decizie top-1, nu mai este blocată pe frequency."""
     cfg_path = temp_config({
         "joker_urna2": {
             "auto_pilot_per_pool": {
                 "k1": {
-                    "scorer": "frequency",
+                    "scorer": "autocorr",
+                    "hit_target": 1,
+                    "target_label": "top-1 (1/1)",
                     "ensemble": [
-                        {"method": "frequency", "weight": 0.5},
-                        {"method": "random", "weight": 0.5},
+                        {"method": "autocorr", "weight": 0.7},
+                        {"method": "frequency", "weight": 0.3},
                     ],
                 }
             }
         }
     })
-    with caplog.at_level(logging.WARNING):
-        assert ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path) == "frequency"
-        result = ms.get_ensemble_for_game("joker_urna2", pool_size=1, config_path=cfg_path)
-    assert len(result) == 1
-    assert result[0][0] == "frequency"
-    assert result[0][2] == 1.0
-    assert not any("no winner" in r.message for r in caplog.records)
+    assert ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path) == "autocorr"
+    result = ms.get_ensemble_for_game("joker_urna2", pool_size=1, config_path=cfg_path)
+    assert [name for name, _fn, _weight in result] == ["autocorr", "frequency"]
+    assert sum(weight for _name, _fn, weight in result) == pytest.approx(1.0)
+    cfg = ms.recommend_optimal_config("joker_urna2", 1, config_path=cfg_path)
+    assert (cfg["hit_target"], cfg["target_label"]) == (1, "top-1 (1/1)")

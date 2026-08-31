@@ -1500,7 +1500,8 @@ def _render_cost(game: str, data: dict) -> None:
 def _hypergeo_params(game: str) -> tuple[int, int] | None:
     """(n numere extrase, M univers) pentru baseline-ul random hipergeometric.
     Acceptă etichete UI ("6/49", "5/40", "joker") și chei folds ("loto_6_49",
-    "joker_urna1"). Urna 2 Joker (1/20) → None (baseline-ul 3+/4+ e irelevant)."""
+    "joker_urna1"). Urna 2 Joker are baseline exact separat în
+    `_random_rate_hypergeo` (top-1 = 1/20)."""
     g = str(game).lower()
     if "6" in g and "49" in g:
         return (6, 49)
@@ -1520,6 +1521,11 @@ def _random_rate_hypergeo(game: str, k_pool: int, t_min: int) -> float | None:
     Baseline-ul onest al hazardului — orice rată WF/bench trebuie comparată cu el
     (nu inventăm cifre: totul iese din parametrii jocului). None dacă jocul e
     necunoscut sau K invalid."""
+    # Urna 2 Joker are o singură bilă în universul 1..20. Nu o trimitem prin
+    # formula hipergeometrică pentru jocurile de pool: baseline-ul top-1 este
+    # exact 1/20, iar 3+/4+ sunt imposibile.
+    if "urna2" in str(game).lower():
+        return 1.0 / 20.0 if int(k_pool) == 1 and int(t_min) <= 1 else 0.0
     import math
     params = _hypergeo_params(game)
     if not params:
@@ -2049,10 +2055,10 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                 head = render_html_safe(
                     t"{gkey} → <b style='color:#ff4d4f;font-size:1.05em'>{m}</b>"
                 )
-            if info.get("single_pick_unbenched"):
+            if info.get("single_pick"):
                 tail += render_html_safe(
-                    t"<br><span style='opacity:.7;font-size:.85em'>Urna 2: fără Re-Bench "
-                    t"(1 număr → rata 4+ e 0). Scorer: frequency.</span>"
+                    t"<br><span style='opacity:.7;font-size:.85em'>Urna 2: benchmark separat "
+                    t"top-1 (1/1), cu baseline random 5%.</span>"
                 )
             elif info.get("fallback"):
                 _why = info.get("reason") or "fallback"
@@ -2412,12 +2418,15 @@ def _render_bench_leaderboard_slice(
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
         _T = 3
-    # Preferă pragul configurat (3+); cere coloană cu DATE (nu all-NaN din cache
-    # vechi); fallback la 4+ apoi avg_hits. Coloana fără `_kN` este rata
-    # pool-ului de bază și nu e comparabilă cu un alt pool.
+    # Urna 2 este strict top-1, separat de ținta configurabilă 3+/4+ pentru
+    # jocurile de pool. Coloana fără `_kN` este rata pool-ului de bază și nu e
+    # comparabilă cu un alt pool.
     def _has(c):
         return c in sub.columns and sub[c].notna().any()
     _draw_n = _BENCH_DRAW_N.get(folds_game_key)
+    _is_single_pick = _draw_n == 1
+    if _is_single_pick:
+        _T = 1
     _shown_t, metric = _T, None
     _target_candidates = [f"rate_{_T}plus_k{pool}"]
     if _draw_n is not None and int(pool) == int(_draw_n):
@@ -2426,7 +2435,7 @@ def _render_bench_leaderboard_slice(
         if _has(_c):
             metric = _c
             break
-    if metric is None:
+    if metric is None and not _is_single_pick:
         _fallback_candidates = [f"rate_4plus_k{pool}"]
         if _draw_n is not None and int(pool) == int(_draw_n):
             _fallback_candidates.append("rate_4plus")
@@ -2434,7 +2443,7 @@ def _render_bench_leaderboard_slice(
             if _has(_c):
                 _shown_t, metric = 4, _c
                 break
-    has_4plus = metric is not None
+    has_target_rate = metric is not None
     if metric is None:
         metric = "avg_hits_topk"
     if metric not in sub.columns:
@@ -2484,7 +2493,7 @@ def _render_bench_leaderboard_slice(
     # altfel o metodă cu mai multe 2-hit-uri putea fi declarată „consistentă”
     # deși pierdea față de random exact la pragul 3+/4+ configurat.
     _base_col = f"k{pool}"
-    _gate_col = metric if has_4plus else None
+    _gate_col = metric if has_target_rate else None
     _lift_fn = _beat_fn = None
     _rnd_frame = None
     if _gate_col is not None:
@@ -2528,7 +2537,7 @@ def _render_bench_leaderboard_slice(
             fam = _f.iloc[0] if not _f.empty else ""
         # Wilson doar pe RATE (proporții). Când metrica e fallback-ul avg_hits_topk
         # (folds vechi fără coloane rate_*), nu e proporție → nu are sens.
-        conf = _wilson_pooled_rate(grp, metric) if has_4plus else None
+        conf = _wilson_pooled_rate(grp, metric) if has_target_rate else None
         if conf is not None:
             _conf_ok = True
         w_lift = cons = None
@@ -2546,7 +2555,7 @@ def _render_bench_leaderboard_slice(
         _base_avg = (float(grp[_base_col].mean())
                      if _base_col in grp.columns else avg)
         rows.append((m, score, avg, _method_library(m, fam),
-                     _rate_for(grp, 3), _rate_for(grp, 4), conf, w_lift, cons,
+                     _rate_for(grp, _shown_t if _is_single_pick else 3), _rate_for(grp, 4), conf, w_lift, cons,
                      _base_avg))
     # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson pe
     # rata pooled cu n efectiv → lift mediu ponderat vs random → consistență). Fără
@@ -2618,8 +2627,9 @@ def _render_bench_leaderboard_slice(
     top_rows = [rows[i] for i in top_idx]
     _n_shown = _n_comp
     label = (
-        f"rata {_shown_t}+ @ pool {pool}" if has_4plus and metric.endswith(f"_k{pool}")
-        else f"rata {_shown_t}+ numere ghicite" if has_4plus
+        "rata top-1 (1/1)" if _is_single_pick and has_target_rate
+        else f"rata {_shown_t}+ @ pool {pool}" if has_target_rate and metric.endswith(f"_k{pool}")
+        else f"rata {_shown_t}+ numere ghicite" if has_target_rate
         else "medie hituri / extragere"
     )
     # Eticheta spune EXACT cât face ordonarea: „ca decizia" doar când și tie-break-ul
@@ -2639,10 +2649,10 @@ def _render_bench_leaderboard_slice(
     # Baseline-ul PUR aleator (hipergeometric) la acest pool — afișat O DATĂ în titlu
     # + multiplicator pe fiecare rată. Onestitate: „3+: 10%" pare edge, dar hazardul
     # singur dă ~9% la pool 10 pe 6/49 → diferența reală e mică (zgomot).
-    _rnd3 = _random_rate_hypergeo(folds_game_key, pool, 3)
+    _rnd3 = _random_rate_hypergeo(folds_game_key, pool, _shown_t if _is_single_pick else 3)
     _rnd4 = _random_rate_hypergeo(folds_game_key, pool, 4)
     _rnd_t = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
-    if has_4plus and _rnd_t is not None:
+    if has_target_rate and _rnd_t is not None:
         label += f" · baseline random = {_rnd_t * 100:.2f}%"
     winner = competitors[0]  # capul clasamentului (doar candidați, baseline-urile excluse)
     # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1 din
@@ -2662,13 +2672,16 @@ def _render_bench_leaderboard_slice(
         """`i=None` → rând de BASELINE (referință, fără rang și fără pretenția de candidat)."""
         m, score, avg, lib = rec[:4]
         r3, r4, conf = rec[4], rec[5], rec[6]
-        if has_4plus:
+        if has_target_rate:
             parts = []
             # Primul = criteriul REAL de ordonare/decizie (Wilson pooled); ratele brute
             # rămân ca informație secundară.
             if conf is not None:
-                parts.append(f"Wilson {_shown_t}+: {conf*100:.2f}%")
-            if r3 is not None:
+                parts.append(f"Wilson {'top-1' if _is_single_pick else f'{_shown_t}+'}: {conf*100:.2f}%")
+            if _is_single_pick and r3 is not None:
+                _m1 = f" ({r3 / _rnd3:.2f}x random)" if _rnd3 else ""
+                parts.append(f"brut top-1: {r3*100:.1f}%{_m1}")
+            elif r3 is not None:
                 _m3 = f" ({r3 / _rnd3:.2f}x random)" if _rnd3 else ""
                 parts.append(f"brut 3+: {r3*100:.1f}%{_m3}")
             if r4 is not None:
@@ -2908,16 +2921,17 @@ def _render_last_csv_draw(fname: str) -> None:
         ui.label(txt).classes("text-bold text-info")
 
 
-def _render_urna2_unbenched_note() -> None:
-    """Joker Urna 2 nu are clasament folds — Re-Bench sare single-pick."""
+def _render_urna2_benchmark_note() -> None:
+    """Explică metrica dedicată Urnei 2, fără a o confunda cu hiturile +3/+4."""
     with ui.expansion("🏆 Clasament bench — Joker Urna 2 (1/20)", value=True).classes("w-full"):
         ui.label(
-            "Re-Bench NU evaluează Urna 2: e un singur număr (1/20), deci rata 4+ e 0 "
-            "pe orice metodă — un clasament ar fi zgomot pur."
+            "Urna 2 este evaluată separat top-1 (1/1): o predicție este hit doar când "
+            "bila aleasă coincide exact cu cea extrasă. Baseline aleator: 1/20 = 5%."
         ).classes("text-caption")
         ui.label(
-            "În producție bila Joker (Urna 2) e scorată cu frequency (fallback determinist). "
-            "Nu e inversată pe Pool 2."
+            "Re-Bench compară metodele CPU pe ferestre walk-forward, cu aceeași poartă "
+            "de consistență și limită Wilson. Dacă nu există semnal peste random, aplicația "
+            "marchează low confidence și păstrează fallback-ul determinist frequency."
         ).classes("text-caption text-grey")
 
 
@@ -2926,7 +2940,7 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
         if game_label == "joker":
-            _render_urna2_unbenched_note()
+            _render_urna2_benchmark_note()
         return
     try:
         df = pd.read_csv(fp)
@@ -2937,7 +2951,8 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
     pool = _int_setting("pool_size_val")
     if game_label == "joker":
         _render_bench_leaderboard_slice(df, "joker_urna1", pool, "Joker Urna 1 (5/45)", top_n=top_n)
-        _render_urna2_unbenched_note()
+        _render_bench_leaderboard_slice(df, "joker_urna2", 1, "Joker Urna 2 (1/20)", top_n=top_n)
+        _render_urna2_benchmark_note()
         return
     folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
     _render_bench_leaderboard_slice(df, folds_key, pool, game_label.upper(), top_n=top_n)

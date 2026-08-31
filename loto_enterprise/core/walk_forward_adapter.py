@@ -41,8 +41,10 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v21"
+CACHE_VERSION = "v22"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v22: Joker Urna 2 are decizie top-1 separată; semnătura WF include acum şi
+#      scorerul/ensemble-ul ei, deoarece el schimbă numărul ataşat variantelor.
 # v21: Urna 2 Joker validează strict valori întregi 1..20 şi nu mai ataşează o
 #      bilă arbitrară când nu are observaţii valide. Lista `variant` din flat se
 #      poate schimba pentru CSV-uri corupte, deci v20 nu mai este sigur.
@@ -282,8 +284,9 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
 
 
 def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0) -> str:
-    """Semnătură scurtă a deciziei bench (scorer + sim_depth + blacklist + target +
-    ensemble + wheel + lookback) pentru (joc, pool).
+    """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
+    lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
+    este ataşată fiecărei variante şi îi poate schimba evaluarea retrospectivă.
     """
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
@@ -292,12 +295,19 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
               "joker": "joker_urna1"}.get(game_type, "loto_6_49")
         c = recommend_optimal_config(gk, int(pool_size))
         _ens_sig = _ensemble_sig(c.get("ensemble") or [])
+        urna2_sig = ""
+        if game_type == "joker":
+            c2 = recommend_optimal_config("joker_urna2", 1)
+            urna2_sig = (
+                f"|u2:{c2.get('scorer', '?')}:{c2.get('hit_target', 1)}:"
+                f"{_ensemble_sig(c2.get('ensemble') or [])}"
+            )
         lb = lookback_pct(lookback_percent)
         # `use_blacklist` e INERT în producție (engine: blacklist=set()) — nu
         # intra în cheie, altfel un toggle de telemetrie invalida tot cache-ul WF
         # fără să schimbe pool-ul sau wheel-ul.
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-               f"{BENCH_HIT_TARGET}|{_ens_sig}|"
+               f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
                f"{_wheel_sig(pool_size, game_type)}|lb{lb}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:

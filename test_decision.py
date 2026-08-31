@@ -29,7 +29,7 @@ from loto_enterprise.benchmark import decision
 # toate testele cădeau tăcut pe fallback-ul 'frequency' și nu mai verificau nimic.
 _SYNTHETIC_METHODS = [
     "noisy_smallwindow", "robust_morevidence", "some_method", "weak_method",
-    "avg_only_trap", "target_rate_winner", "missing_rate_method",
+    "avg_only_trap", "target_rate_winner", "missing_rate_method", "single_pick_winner",
     *[f"method_{i}" for i in range(6)],
 ]
 
@@ -274,6 +274,29 @@ def test_consistency_gate_uses_same_target_rate_as_winner(monkeypatch):
     assert cfg["scorer"] == "target_rate_winner"
     assert cfg["qualifying_methods"] == 1
     assert "same 3+ target" in cfg["rationale"]
+
+
+def test_single_pick_uses_top1_rate_not_the_global_3plus_target():
+    """Urna 2 trebuie decisă pe 1/1 chiar dacă UI-ul are ținta globală +3/+4."""
+    rows = []
+    for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_make_folds_row(
+            "joker_urna2", "random", pct, n_test, "k1", 0.05,
+            "rate_1plus_k1", 0.05,
+        ))
+        rows.append(_make_folds_row(
+            "joker_urna2", "single_pick_winner", pct, n_test, "k1", 0.09,
+            "rate_1plus_k1", 0.09,
+        ))
+
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), game_key="joker_urna2", pool_size=1, draw_n=1,
+    )
+
+    assert cfg["scorer"] == "single_pick_winner"
+    assert cfg["rate_col_used"] == "rate_1plus_k1"
+    assert cfg["hit_target"] == 1
+    assert cfg["target_label"] == "top-1 (1/1)"
 
 
 def test_unsuffixed_rate_is_not_used_for_a_different_pool(monkeypatch):

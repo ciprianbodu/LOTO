@@ -5,8 +5,8 @@ Specul:
     • teste pe FIECARE joc: 6/49, 5/40, Joker (Urna 1 = 5/45, Urna 2 = 1/20)
     • toate metodele din registry (cele instalate rulează; restul N/A cu motiv)
     • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
-    • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 14 (Urna 1)
-      sau DRAW_SIZE (Urna 2)
+    • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 14 (Urna 1), plus
+      rata țintei +3/+4; Urna 2 este evaluată separat top-1 (1/20)
     • telemetrie: CPU% peak/avg, RAM peak
     • output în consolă cu tabele `rich`
     • la final scrie best_methods.json (per-pool winner per joc)
@@ -197,22 +197,16 @@ def main() -> int:
     console.print()
 
     games = discover_games(args.istoric)
-    # joker_urna2 trage 1 SINGUR număr (single-pick) → backtesting-ul și regula 4+ n-au
-    # sens (nu poți ghici „4+" cu 1 număr; rate_4plus mereu 0). Îl scoatem complet din
-    # bench. La generare, engine-ul folosește scorerul default pentru numărul de joker
-    # (oricum random — nicio metodă nu bate șansa pe 1 număr).
-    _n_before = len(games)
-    games = [g for g in games if not g.is_single_pick]
-    if len(games) < _n_before:
-        console.print(f"[dim]Sar {_n_before - len(games)} joc single-pick (ex. joker_urna2) "
-                      f"— backtesting irelevant pe 1 număr.[/dim]")
     console.rule("[bold]Jocuri detectate[/bold]")
     for g in games:
         console.print(
             f"  • [bold]{g.label}[/bold]  "
             f"CSV=[cyan]{g.csv_path}[/cyan]  max_num={g.max_num} draw_n={g.draw_n}  "
-            f"pool_range = {g.draw_n}..{g.draw_n + g.pool_extra}"
-            + (" [italic dim](single-pick → pool = draw_n)[/italic dim]" if g.is_single_pick else "")
+            + (
+                "metrică = top-1 (1/1), pool = 1 [italic dim](single-pick)[/italic dim]"
+                if g.is_single_pick
+                else f"pool_range = {g.draw_n}..{g.draw_n + g.pool_extra}"
+            )
         )
     console.print()
 

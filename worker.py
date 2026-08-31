@@ -22,7 +22,7 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v2"
+PIPELINE_CACHE_VERSION = "v3"
 
 LOG_FILE = "loto.log"
 
