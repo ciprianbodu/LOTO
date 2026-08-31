@@ -275,11 +275,9 @@ def should_use_blacklist(
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
     # v4: auto_pilot decision (consistent cu UI)
-    apm = g.get("auto_pilot_per_pool", {})
-    if isinstance(apm, dict):
-        entry = apm.get(f"k{pool_size}", {})
-        if "use_blacklist" in entry:
-            return bool(entry["use_blacklist"])
+    entry = _auto_pilot_entry(g, pool_size)
+    if "use_blacklist" in entry:
+        return bool(entry["use_blacklist"])
     # v3 fallback
     wpp_best = g.get("winners_per_pool_best", {})
     if not isinstance(wpp_best, dict):
@@ -924,8 +922,8 @@ def recommend_optimal_config(
 
     Consumed by the auto-pilot - reads `auto_pilot_per_pool[kN]` from
     best_methods.json. The decision algorithm guarantees:
-        - scorer beats random baseline in >=60% of regressive windows
-        - sim_depth_pct is the window where avg_hits peaks (>=30 test draws)
+        - scorer beats random on the selected 3+/4+ rate in >=60% of windows
+        - sim_depth_pct is the window where that target rate peaks (>=30 evaluated draws)
         - use_blacklist = True only if +BL outperforms no-BL at that window
 
     Returns dict with keys: scorer, sim_depth_pct, use_blacklist, avg_hits,

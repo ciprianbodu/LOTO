@@ -218,3 +218,127 @@ def test_wf_decision_sig_omits_inert_use_blacklist():
     assert 'bool(c.get(\'use_blacklist\'' not in body
     assert "BENCH_HIT_TARGET" in body
 
+
+# --------------------------------------------------------------------------
+# 6. Audit 2026-08-31: I/O live, recovery fresh-start, scrieri atomice
+# --------------------------------------------------------------------------
+def test_bench_progress_reads_only_log_tail(tmp_path, monkeypatch):
+    """Logul de zeci de MB nu este recitit integral la fiecare tick UI."""
+    import app_nicegui as app_ui
+    from pathlib import Path
+
+    log = tmp_path / "bench_full.log"
+    log.write_text(
+        ("x" * (1024 * 1024))
+        + "\n[50/100] [loto_6_49/frequency/60%/REAL/CPU] gata\n",
+        encoding="utf-8",
+    )
+
+    def _full_read_forbidden(*_args, **_kwargs):
+        raise AssertionError("Path.read_text ar citi integral bench_full.log")
+
+    monkeypatch.setattr(Path, "read_text", _full_read_forbidden)
+    frac, text = app_ui._bench_progress_from(log)
+    assert frac == pytest.approx(0.5)
+    assert "50/100" in text
+    assert "frequency" in text
+
+
+def test_live_folds_reader_caches_unchanged_file(tmp_path, monkeypatch):
+    """Între două flush-uri ale bench-ului, folds.csv este parsată o singură dată."""
+    import app_nicegui as app_ui
+
+    folds = tmp_path / "folds.csv"
+    folds.write_text("game,method\nloto_6_49,frequency\n", encoding="utf-8")
+    app_ui._BENCH_FOLDS_CACHE.update({"signature": None, "df": None})
+
+    real_read_csv = app_ui.pd.read_csv
+    calls = []
+
+    def _counted_read_csv(*args, **kwargs):
+        calls.append(args[0])
+        return real_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(app_ui.pd, "read_csv", _counted_read_csv)
+    first = app_ui._read_bench_folds_cached(folds)
+    second = app_ui._read_bench_folds_cached(folds)
+
+    assert len(calls) == 1
+    assert second is first
+
+
+def test_target_data_ready_fails_closed(tmp_path, monkeypatch):
+    """Un folds corupt/blocat nu produce bannerul fals «cache rapid»."""
+    import app_nicegui as app_ui
+
+    bench_dir = tmp_path / "bench_results"
+    bench_dir.mkdir()
+    (bench_dir / "folds.csv").write_text("corupt", encoding="utf-8")
+    monkeypatch.setattr(app_ui, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        app_ui.pd, "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("locked")),
+    )
+
+    assert app_ui._target_data_ready() is False
+
+
+def test_fresh_start_recovery_is_display_only(monkeypatch):
+    """START_8000 nu finalizează automat jobul recent (mail/WF/shutdown)."""
+    import app_nicegui as app_ui
+
+    monkeypatch.setattr(app_ui, "get_latest_completed_job", lambda: {
+        "id": 77, "result_json": "payload", "completed_at": "2026-08-31 10:00:00",
+    })
+    monkeypatch.setattr(app_ui, "decode_queue_result", lambda _raw: ([], 0))
+    monkeypatch.setattr(app_ui, "_save_settings", lambda: None)
+    monkeypatch.setattr(app_ui, "_save_report_file", lambda: None)
+    monkeypatch.setitem(app_ui.SETTINGS, "last_finalized_job_id", 0)
+    monkeypatch.setitem(app_ui.STATE, "active_job_id", None)
+    monkeypatch.setitem(app_ui.STATE, "results", None)
+    monkeypatch.setitem(app_ui.STATE, "results_recovered", None)
+
+    app_ui._recover_completed_job(allow_finalize=False)
+
+    assert app_ui.STATE["active_job_id"] is None
+    assert app_ui.STATE["results"] == ([], 0)
+    assert "job #77" in app_ui.STATE["results_recovered"]
+    assert app_ui.SETTINGS["last_finalized_job_id"] == 77
+
+
+def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):
+    """Stampila CSV nu rescrie best_methods.json prin Path.write_text."""
+    import json
+    import ui_shared
+    from loto_enterprise.benchmark import freshness
+
+    bm = tmp_path / "best_methods.json"
+    bm.write_text(json.dumps({"auto_pilot_per_pool": {}}), encoding="utf-8")
+    monkeypatch.setattr(
+        freshness, "compute_csv_signature",
+        lambda gk: (f"{gk}.csv", "abc123", 10),
+    )
+    real_atomic = ui_shared.atomic_write_json
+    calls = []
+
+    def _counted_atomic(path, obj, **kwargs):
+        calls.append(path)
+        return real_atomic(path, obj, **kwargs)
+
+    monkeypatch.setattr(ui_shared, "atomic_write_json", _counted_atomic)
+    freshness.write_signatures_to_best_methods(str(bm))
+
+    assert calls == [bm]
+    saved = json.loads(bm.read_text(encoding="utf-8"))
+    assert saved["_meta"]["csv_signatures"]["loto_6_49"]["hash"] == "abc123"
+
+
+def test_requirements_txt_delegates_to_authoritative_cpu_list():
+    text = open("requirements.txt", encoding="utf-8").read()
+    assert "-r requirements_base.txt" in text
+    active = "\n".join(
+        line for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")
+    )
+    assert "streamlit" not in active
+    assert "numba" not in active
+

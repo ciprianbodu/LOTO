@@ -9,13 +9,18 @@ import json
 
 import pytest
 
-from loto_enterprise.core.method_selector import recommend_optimal_config
+from loto_enterprise.core.method_selector import (
+    recommend_optimal_config,
+    should_use_blacklist,
+)
 
 _CFG = {"games": {"loto_6_49": {"auto_pilot_per_pool": {
     "k10": {"scorer": "frequency", "sim_depth_pct": 30, "avg_hits": 1.1,
+            "use_blacklist": False,
             "rationale": "Wilson_lb=0.0903 la pool 10",
             "ensemble": [{"method": "frequency", "weight": 1.0}]},
     "k12": {"scorer": "fourier", "sim_depth_pct": 60, "avg_hits": 1.3,
+            "use_blacklist": True,
             "rationale": "Wilson_lb=0.1102 la pool 12",
             "ensemble": [{"method": "fourier", "weight": 1.0}]},
 }}}}
@@ -52,3 +57,10 @@ def test_key_present_on_the_no_decision_fallback(tmp_path):
     p.write_text(json.dumps({"games": {"loto_6_49": {}}}), encoding="utf-8")
     c = recommend_optimal_config("loto_6_49", 12, config_path=str(p))
     assert "pool_substituted" in c and c["pool_substituted"] is None
+
+
+@pytest.mark.parametrize("asked,expected", [(11, False), (16, True), (6, False)])
+def test_blacklist_telemetry_uses_same_nearest_pool(cfg_path, asked, expected):
+    assert should_use_blacklist(
+        "loto_6_49", asked, config_path=cfg_path,
+    ) is expected

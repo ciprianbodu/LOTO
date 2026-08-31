@@ -29,6 +29,7 @@ from loto_enterprise.benchmark import decision
 # toate testele cădeau tăcut pe fallback-ul 'frequency' și nu mai verificau nimic.
 _SYNTHETIC_METHODS = [
     "noisy_smallwindow", "robust_morevidence", "some_method", "weak_method",
+    "avg_only_trap", "target_rate_winner", "missing_rate_method",
     *[f"method_{i}" for i in range(6)],
 ]
 
@@ -240,6 +241,85 @@ def test_decide_optimal_config_fallback_branch_has_single_member_ensemble():
 
     assert cfg["rationale"].startswith("FALLBACK")
     assert cfg["ensemble"] == [{"method": cfg["scorer"], "weight": 1.0}]
+
+
+def test_consistency_gate_uses_same_target_rate_as_winner(monkeypatch):
+    """Mai multe hituri MEDII nu califică o metodă care pierde la ținta 3+.
+
+    Tiparul advers: `avg_only_trap` produce mai multe 2-hit-uri, deci bate
+    random pe media k10 în toate ferestrele, dar pierde la 3+ în toate.
+    `target_rate_winner` are media puțin mai mică decât random, însă îl bate
+    exact pe rata 3+ cerută. Gate-ul trebuie să aleagă a doua metodă.
+    """
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    rows = []
+    for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_make_folds_row(
+            "target_gate", "random", pct, n_test, "k10", 1.0,
+            "rate_3plus_k10", 0.10,
+        ))
+        rows.append(_make_folds_row(
+            "target_gate", "avg_only_trap", pct, n_test, "k10", 1.4,
+            "rate_3plus_k10", 0.09,
+        ))
+        rows.append(_make_folds_row(
+            "target_gate", "target_rate_winner", pct, n_test, "k10", 0.9,
+            "rate_3plus_k10", 0.12,
+        ))
+
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), game_key="target_gate", pool_size=10, draw_n=6,
+    )
+
+    assert cfg["scorer"] == "target_rate_winner"
+    assert cfg["qualifying_methods"] == 1
+    assert "same 3+ target" in cfg["rationale"]
+
+
+def test_unsuffixed_rate_is_not_used_for_a_different_pool(monkeypatch):
+    """`rate_3plus` este k=draw_n și nu poate decide o celulă k10."""
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    rows = []
+    for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_make_folds_row(
+            "wrong_pool_rate", "random", pct, n_test, "k10", 1.0,
+            "rate_3plus", 0.01,
+        ))
+        rows.append(_make_folds_row(
+            "wrong_pool_rate", "some_method", pct, n_test, "k10", 1.5,
+            "rate_3plus", 0.20,
+        ))
+
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), game_key="wrong_pool_rate", pool_size=10, draw_n=6,
+    )
+
+    assert cfg["scorer"] == decision.SAFE_FALLBACK_SCORER
+    assert cfg["low_confidence"] is True
+    assert cfg["rate_col_used"] is None
+    assert cfg["rate_col_mismatch"] is True
+
+
+def test_method_without_common_rate_data_cannot_win(monkeypatch):
+    """Un rând parțial cu avg_hits mare, dar rată T+ NaN, este sărit."""
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    rows = []
+    for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_make_folds_row(
+            "partial_rate", "random", pct, n_test, "k10", 1.0,
+            "rate_3plus_k10", 0.10,
+        ))
+        rows.append(_make_folds_row(
+            "partial_rate", "missing_rate_method", pct, n_test, "k10", 9.0,
+            "rate_3plus_k10", float("nan"),
+        ))
+
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), game_key="partial_rate", pool_size=10, draw_n=6,
+    )
+
+    assert cfg["scorer"] == decision.SAFE_FALLBACK_SCORER
+    assert cfg["low_confidence"] is True
 
 
 # ---------------------------------------------------------------------------

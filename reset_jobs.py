@@ -8,9 +8,11 @@ PENDING/RUNNING rămase sunt cadavre (procesele au fost deja omorâte) — dacă
 păstrăm, noul worker le reia singur, iar UI-ul arată la o pornire goală:
   «⏳ Job în rulare (#1) — 0% / se inițializează...».
 Păstrăm DOAR cel mai recent job COMPLETED dacă NU a fost încă finalizat de UI
-(id ≠ `last_finalized_job_id` din .ui_state.json) — altfel mail/shutdown de la
-`_recover_completed_job` s-ar pierde. Dacă nimic nu califică (cazul normal la
-început de sesiune) → golire COMPLETĂ + VACUUM → următorul job e #1.
+(id ≠ `last_finalized_job_id` din .ui_state.json), ca rezultatul să nu se piardă.
+Pe START_8000 recovery-ul e display-only (fără mail/WF/shutdown); finalizarea
+automată rămâne permisă doar la restart direct al UI-ului, fără fresh-start.
+Dacă nimic nu califică (cazul normal la început de sesiune) → golire COMPLETĂ +
+VACUUM → următorul job e #1.
 
 Rulare:
     .venv\\Scripts\\python reset_jobs.py            # refuză dacă există RUNNING

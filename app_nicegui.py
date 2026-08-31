@@ -425,7 +425,7 @@ def _launch_bench(args: list[str], label: str) -> None:
         # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
         # există acum și pe Windows, vizibil în consola DEBUG.
         proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=flags, env=env)
-        BENCH_PID_FILE.write_text(f"{proc.pid}|{int(time.time())}", encoding="utf-8")
+        atomic_write_text(BENCH_PID_FILE, f"{proc.pid}|{int(time.time())}")
         ui.notify(f"{label} pornit (PID {proc.pid}).", type="positive")
     except Exception as exc:  # noqa: BLE001
         ui.notify(f"Nu pot porni bench-ul: {exc}", type="negative")
@@ -530,7 +530,10 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
     last_now = ""
     try:
         import re
-        txt = log_path.read_text(encoding="utf-8", errors="replace")
+        # Bench-ul poate produce zeci de MB, pe OneDrive. Citirea integrală la
+        # fiecare tick de 1s bloca inutil I/O + event-loop-ul. Ultimul progres
+        # este suficient și se află în coada logului.
+        txt = "".join(read_tail_lines(log_path, 3000, block=512 * 1024))
         # Ultima linie de progres: [1048/2568] [loto_5_40/ml_svm_rbf/60%/REAL/CPU]
         matches = re.findall(r"\[(\d+)/(\d+)\]\s*\[([^\]]+)\]", txt)
         if matches:
@@ -2249,6 +2252,12 @@ _LABEL_TO_FOLDS_GAME = {
     "5/40": "loto_5_40",
     "joker": "joker_urna1",
 }
+_BENCH_DRAW_N = {
+    "loto_6_49": 6,
+    "loto_5_40": 5,
+    "joker_urna1": 5,
+    "joker_urna2": 1,
+}
 
 
 def _baseline_methods() -> frozenset[str]:
@@ -2269,12 +2278,13 @@ def _baseline_methods() -> frozenset[str]:
 def _decision_entry(folds_game_key: str, pool: int) -> dict:
     """Intrarea deciziei pentru (joc, pool) din best_methods.json (`auto_pilot_per_pool[kN]`).
 
-    `{}` dacă lipsește fișierul/cheia. Folosim `_load_config` din method_selector
-    (cache invalidat pe mtime → vede un Re-Bench fără restart de UI)."""
+    Folosește aceeași substituire nearest-k ca producția; altfel scorerul venea
+    de la k10, dar badge-urile low_confidence/consistency din UI căutau exact k11
+    și afișau metadate goale. `_load_config` invalidează cache-ul pe mtime."""
     try:
-        from loto_enterprise.core.method_selector import _load_config
+        from loto_enterprise.core.method_selector import _auto_pilot_entry, _load_config
         g = (_load_config().get("games") or {}).get(folds_game_key) or {}
-        e = (g.get("auto_pilot_per_pool") or {}).get(f"k{int(pool)}")
+        e = _auto_pilot_entry(g, int(pool))
         return e if isinstance(e, dict) else {}
     except Exception:  # noqa: BLE001
         return {}
@@ -2399,17 +2409,25 @@ def _render_bench_leaderboard_slice(
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
         _T = 3
-    # preferă pragul configurat (3+); cere coloană cu DATE (nu all-NaN din cache vechi);
-    # fallback la 4+ apoi avg_hits.
+    # Preferă pragul configurat (3+); cere coloană cu DATE (nu all-NaN din cache
+    # vechi); fallback la 4+ apoi avg_hits. Coloana fără `_kN` este rata
+    # pool-ului de bază și nu e comparabilă cu un alt pool.
     def _has(c):
         return c in sub.columns and sub[c].notna().any()
+    _draw_n = _BENCH_DRAW_N.get(folds_game_key)
     _shown_t, metric = _T, None
-    for _c in (f"rate_{_T}plus_k{pool}", f"rate_{_T}plus"):
+    _target_candidates = [f"rate_{_T}plus_k{pool}"]
+    if _draw_n is not None and int(pool) == int(_draw_n):
+        _target_candidates.append(f"rate_{_T}plus")
+    for _c in _target_candidates:
         if _has(_c):
             metric = _c
             break
     if metric is None:
-        for _c in (f"rate_4plus_k{pool}", "rate_4plus"):
+        _fallback_candidates = [f"rate_4plus_k{pool}"]
+        if _draw_n is not None and int(pool) == int(_draw_n):
+            _fallback_candidates.append("rate_4plus")
+        for _c in _fallback_candidates:
             if _has(_c):
                 _shown_t, metric = 4, _c
                 break
@@ -2437,7 +2455,10 @@ def _render_bench_leaderboard_slice(
             from loto_enterprise.benchmark.decision import pooled_rate_and_neff as _prn
         except Exception:  # noqa: BLE001
             _prn = None
-        for c in (f"rate_{n}plus_k{pool}", f"rate_{n}plus"):
+        candidates = [f"rate_{n}plus_k{pool}"]
+        if _draw_n is not None and int(pool) == int(_draw_n):
+            candidates.append(f"rate_{n}plus")
+        for c in candidates:
             if c not in grp.columns:
                 continue
             if _prn is not None:
@@ -2456,12 +2477,14 @@ def _render_bench_leaderboard_slice(
     # w_lift, consistență))`). Egalitățile EXACTE pe Wilson sunt masive (succesele
     # sunt întregi → multe metode au aceeași proporție pooled), deci fără aceleași
     # chei secundare ordinea din UI ar diverge de decizie pe ~un sfert din poziții.
-    # `base_col` = media de hituri la pool (k{pool}) — exact coloana pe care
-    # decizia calculează lift-ul vs `random` și consistența pe ferestre.
+    # Gate-ul folosește chiar rata T+ care produce Wilson-ul, nu media kN:
+    # altfel o metodă cu mai multe 2-hit-uri putea fi declarată „consistentă”
+    # deși pierdea față de random exact la pragul 3+/4+ configurat.
     _base_col = f"k{pool}"
+    _gate_col = metric if has_4plus else None
     _lift_fn = _beat_fn = None
     _rnd_frame = None
-    if _base_col in sub.columns:
+    if _gate_col is not None:
         try:
             from loto_enterprise.benchmark.decision import (
                 _weighted_mean_lift as _lift_fn,
@@ -2508,10 +2531,11 @@ def _render_bench_leaderboard_slice(
         w_lift = cons = None
         if _lift_fn is not None:
             try:
-                w_lift = float(_lift_fn(grp, _rnd_frame, _base_col))
-                _nb, _nt = _beat_fn(grp, _rnd_frame, _base_col)
-                cons = _nb / max(_nt, 1)
-                _lift_ok = True
+                _nb, _nt = _beat_fn(grp, _rnd_frame, _gate_col)
+                if _nt > 0:
+                    w_lift = float(_lift_fn(grp, _rnd_frame, _gate_col))
+                    cons = _nb / _nt
+                    _lift_ok = True
             except Exception:  # noqa: BLE001
                 w_lift = cons = None
         # media pe coloana pool-ului (k{pool}) — EXACT cheia secundară a ramurii
@@ -2602,9 +2626,9 @@ def _render_bench_leaderboard_slice(
     elif _conf_ok and _lift_ok:
         if _gate_applied:
             label += (f" · sortat ca decizia (poartă ≥{_cons_pct}% vs random "
-                      "→ Wilson → lift → consistență)")
+                      "pe aceeași rată T+ → Wilson → lift T+ → consistență)")
         else:
-            label += " · sortat ca decizia (Wilson → lift → consistență)"
+            label += " · sortat ca decizia (Wilson → lift T+ → consistență)"
     elif _conf_ok:
         label += " · sortat după Wilson (tie-break ≠ decizia: rată brută, nu lift)"
     else:
@@ -2916,6 +2940,30 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 10) -> None:
     _render_bench_leaderboard_slice(df, folds_key, pool, game_label.upper(), top_n=top_n)
 
 
+_BENCH_FOLDS_CACHE: dict[str, object] = {"signature": None, "df": None}
+
+
+def _read_bench_folds_cached(path: Path) -> pd.DataFrame:
+    """Citește folds.csv doar când fișierul atomic a fost înlocuit.
+
+    Tick-ul UI rulează la 1s, dar benchmark-ul face flush mult mai rar. Fără
+    cache, aceeași mie de rânduri era reparsată de zeci de ori între două
+    flush-uri. Semnătura include mtime_ns + size; dacă fișierul se schimbă chiar
+    în timpul citirii, rezultatul este folosit o dată dar nu cache-uit.
+    """
+    before = path.stat()
+    signature = (before.st_mtime_ns, before.st_size)
+    cached = _BENCH_FOLDS_CACHE.get("df")
+    if _BENCH_FOLDS_CACHE.get("signature") == signature and isinstance(cached, pd.DataFrame):
+        return cached
+    df = pd.read_csv(path)
+    after = path.stat()
+    if signature == (after.st_mtime_ns, after.st_size):
+        _BENCH_FOLDS_CACHE["signature"] = signature
+        _BENCH_FOLDS_CACHE["df"] = df
+    return df
+
+
 def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
     """Clasament PARȚIAL în timpul bench-ului — din folds.csv (flush-uit periodic la
     ~100 rezultate). Metodele apar pe măsură ce TERMINĂ. Câștigătorul final + Auto-Pilot
@@ -2935,7 +2983,7 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
         except Exception:  # noqa: BLE001
             pass
     try:
-        df = pd.read_csv(fp)
+        df = _read_bench_folds_cached(fp)
     except Exception:  # noqa: BLE001
         return  # mid-flush / gol → reîncearcă la următorul tick
     if df.empty or "method" not in df.columns or "game" not in df.columns:
@@ -3075,7 +3123,9 @@ def _target_data_ready() -> bool:
         # fracția rândurilor cu măcar o valoare reală pentru prag (folduri calculate în schema curentă)
         return float(df.notna().any(axis=1).mean()) >= 0.9
     except Exception:  # noqa: BLE001
-        return True  # la dubiu, nu speria utilizatorul
+        # Fișier corupt/blocat/înlocuit în timpul citirii nu dovedește că schema
+        # țintei există. True afișa fals bannerul verde „cache rapid”.
+        return False
 
 
 def _ensure_retrospective_pool2_flat(
@@ -4068,13 +4118,15 @@ def _completed_age_seconds(job: dict) -> float | None:
         return None
 
 
-def _recover_completed_job() -> None:
+def _recover_completed_job(*, allow_finalize: bool = True) -> None:
     """get_active_job() vede DOAR PENDING/RUNNING. Dacă worker-ul a terminat un job
     cât UI-ul era complet jos, rezultatul (+ mail/shutdown de la final) ar rămâne
     orfan. Îl readucem în flux O SINGURĂ DATĂ:
-      • PROASPĂT (în fereastră)  → flux COMPLET prin status_panel: afișare +
+      • PROASPĂT (în fereastră și allow_finalize) → flux COMPLET: afișare +
         walk-forward + mail + shutdown (ca o finalizare normală pe care UI-ul a ratat-o);
       • VECHI / fără completed_at → DOAR afișare (fără shutdown-surpriză, fără mail vechi).
+      • START_8000 (`allow_finalize=False`) → DOAR afișare chiar dacă e proaspăt:
+        „sesiune nouă, fără job automat” nu are voie să trimită mail sau să oprească PC-ul.
     `last_finalized_job_id` (persistat) împiedică re-procesarea la următoarea repornire."""
     last = get_latest_completed_job()
     if not last:
@@ -4095,7 +4147,7 @@ def _recover_completed_job() -> None:
         return
 
     age = _completed_age_seconds(last)
-    if age is not None and age <= RECOVERY_FINALIZE_WINDOW_S:
+    if allow_finalize and age is not None and age <= RECOVERY_FINALIZE_WINDOW_S:
         # Proaspăt → status_panel îl preia exact ca pe o finalizare normală (decode +
         # STATE["results"] + walk-forward + mail + shutdown) și setează last_finalized.
         # NU pornim worker-ul (jobul e gata).
@@ -4116,8 +4168,10 @@ def _recover_completed_job() -> None:
             _save_report_file()
         except Exception as exc:  # noqa: BLE001
             logger.warning("[RECOVERY] raport: %s", exc)
-        logger.warning("[RECOVERY] job #%s prea vechi (%s) → doar afișez, fără mail/shutdown.",
-                       jid, "necunoscut" if age is None else f"{int(age)}s")
+        _why = ("START_8000 fresh" if not allow_finalize else
+                "necunoscut" if age is None else f"{int(age)}s")
+        logger.warning("[RECOVERY] job #%s display-only (%s) → fără mail/shutdown.",
+                       jid, _why)
 
 
 # --------------------------------------------------------------------------- #
@@ -4133,8 +4187,9 @@ def _startup() -> None:
     # fără log e leftover — dacă îl reatașăm, ecranul rămâne pe
     # «⏳ Job în rulare (#1) — 0% / se inițializează...» la infinit
     # (worker-ul nu l-a preluat). START_8000 anulează TOATE leftover-urile.
+    fresh_start = is_fresh_ui_start()
     try:
-        if is_fresh_ui_start():
+        if fresh_start:
             n = cancel_pending_running_jobs(
                 "Pornire START_8000: sesiune nouă, fără job automat."
             )
@@ -4165,7 +4220,7 @@ def _startup() -> None:
     # → altfel rezultatul + mail/shutdown rămân orfane. Doar dacă nu avem deja unul activ.
     try:
         if not STATE.get("active_job_id"):
-            _recover_completed_job()
+            _recover_completed_job(allow_finalize=not fresh_start)
     except Exception as exc:  # noqa: BLE001
         logger.warning("recover completed job startup: %s", exc)
 

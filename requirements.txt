@@ -1,33 +1,4 @@
-# =============================================================================
-# requirements.txt — set unificat de dependențe (exclusiv CPU).
-#
-# ACTUALIZARI.bat instalează din requirements_base.txt (sursa autoritară).
-# Acest fișier rămâne DOAR ca referință rapidă a stack-ului complet.
-#
-# Suportul GPU/neural (torch / TimesFM / Chronos / MOMENT / NeuralForecast /
-# transformers / nvidia-ml-py) a fost ELIMINAT complet din aplicație — benchmark
-# și engine rulează exclusiv pe CPU (numpy / sklearn / statsmodels).
-# =============================================================================
-
-# Core app + UI
-nicegui
-streamlit
-pandas
-numpy
-requests
-psutil
-numba
-scipy
-matplotlib
-
-# Benchmark / lab
-rich
-
-# Metode statistice / ML (CPU)
-scikit-learn
-statsmodels
-statsforecast
-hmmlearn
-xgboost
-lightgbm
-catboost
+# Compatibilitate pentru `pip install -r requirements.txt`.
+# Sursa UNICĂ este requirements_base.txt (CPU-only). Folosirea directă a
+# fișierului vechi reinstala din greșeală streamlit + numba, eliminate din cod.
+-r requirements_base.txt

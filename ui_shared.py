@@ -27,11 +27,11 @@ LOG_FILE = "loto.log"
 
 # Versiune Python țintă (ALF-LUPTATORI). ACTUALIZARI.bat / START_8000.bat folosesc py -3.14.
 PYTHON_MIN = (3, 14)
-PYTHON_TARGET_PATCH = 7  # 3.14.7 — informativ în mesaje
+PYTHON_TARGET_PATCH = 6  # 3.14.6 — versiunea instalată de ACTUALIZARI.bat
 
 
 def check_python_version(*, strict: bool = False) -> tuple[bool, str]:
-    """Verifică că interpretorul e Python 3.14+ (recomandat 3.14.6).
+    """Verifică că interpretorul e Python 3.14+ (țintă de producție 3.14.6).
 
     Returns (ok, message). strict=True → eșuează dacă patch-ul e sub țintă.
     """
