@@ -43,7 +43,8 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = Path("bench_results")
 CACHE_VERSION = "v19"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
-# v19: #93 — 52 designuri precalculate + min(design, greedy) pe calea lajolla.
+# v19: #93 — 55 designuri precalculate (pool 6-16, incl. C(6,6,*)) + min(design, greedy)
+#      pe calea lajolla.
 #      `_wheel_sig` rămâne `lajolla|gN`, deci fără bump WF servea cache-ul
 #      vechi (mai multe bilete / alt cover) lângă un raport cu costuri umflate.
 #      Același defect ca la trecerea ILP→La Jolla, documentat în `_wheel_sig`.

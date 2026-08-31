@@ -10,8 +10,9 @@ dată), deci se calculează o dată și se citește de pe disc.
 
 Optimizare (`scripts/analysis/optimize_covering_designs.py`, ruin-and-recreate
 local search pornind de la designurile lui #93): 5454 → 5137 bilete (−5.8%),
-18/55 la limita matematică Schönheim (provabil optime). Golul rămas față de
-Schönheim = 14.3% — limita nu e mereu atinsă de un covering design real (nu
+18/55 la limita matematică Schönheim (provabil optime). Golul rămas: 737 bilete
+peste Schönheim (14.3% din cele 5137 actuale; 16.8% peste limită) — limita nu e
+mereu atinsă de un covering design real (nu
 orice v/k/t are un sistem Steiner exact), deci nu e ținta finală, doar un
 plafon inferior de verificare.
 """

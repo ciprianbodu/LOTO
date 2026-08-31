@@ -15,9 +15,9 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        acoperirea (ponderată pe scoruri). Fitness pe CPU (numpy).
   • wheel_lajolla    — designuri optime cunoscute (fișiere covering_designs/);
                        altfel cade pe ILP exact (mic) → greedy. „Best-known".
-  • wheel_union34    — UNIUNEA coverelor ILP pt guarantee=3 ȘI guarantee=4:
-                       garantează SIMULTAN 3-din-3 și 4-din-4 la o fracție din
-                       costul sistemului complet.
+  • wheel_union34    — UNIUNEA coverelor La Jolla (fallback ILP) pt guarantee=3
+                       ȘI guarantee=4: garantează SIMULTAN 3-din-3 și 4-din-4
+                       la o fracție din costul sistemului complet.
 
 Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34.
 Orice eșec/limită → fallback la greedy (sigur). Default în `loto_engine`:
@@ -271,6 +271,10 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
     v = len(pool)
     if v < pick:
         return _unplayable_small_pool(pool, pick)
+    if int(guarantee) == int(pick):
+        # Unicul cover 100% = sistemul complet. ILP pe C(v,pick) ținte e
+        # risipă (și nedeterminist pe time_limit); greedy-ul emite combinațiile.
+        return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
     cover = _ilp_cover_positions(v, int(pick), int(guarantee), time_limit)
     if cover is None:
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -538,6 +542,10 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
     v = len(pool)
     if v < pick:
         return _unplayable_small_pool(pool, pick)
+    # Sistem complet: unicul cover 100% e C(v, pick). Sărim ILP-ul (scump și
+    # nedeterminist pe time_limit) — greedy-ul canonic emite combinațiile direct.
+    if int(guarantee) == int(pick):
+        return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
     design = _load_lajolla(v, pick, guarantee)
     if design is not None:
         # mapăm indicii 1..v ai design-ului pe pool-ul sortat după scor (numerele bune
@@ -559,6 +567,7 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                     "— fișier corupt/trunchiat? Fallback ILP/greedy.",
                     v, pick, guarantee, cov_full, len(wheel),
                 )
+                return wheel_ilp(pool, pick, guarantee, max_variants, scores)
             else:
                 # Designul e valid (100%). Îl comparăm totuși cu greedy și luăm
                 # MINIMUL de bilete. Motivul: `_greedy_fallback` folosește
@@ -585,7 +594,7 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
 
 
 # ===========================================================================
-# 5) UNIUNE 3∪4 — garanție SIMULTANĂ 3-din-3 ȘI 4-din-4 (uniune de covere ILP)
+# 5) UNIUNE 3∪4 — garanție SIMULTANĂ 3-din-3 ȘI 4-din-4
 # ===========================================================================
 def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
                   time_limit: float = 15.0):
@@ -597,12 +606,15 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
     complet. Empiric (venv): pool 10, bilet 6 → uniune = 30 bilete (vs 210
     complet); pool 10, bilet 5 → 63 bilete (vs 252 complet).
 
-    Construiește coverul ILP pentru guarantee=3 și separat pentru guarantee=4
-    (refolosește wheel_ilp, cu guard-urile și fallback-urile lui), face UNIUNEA
-    cu dedup pe tuple sortate și ordonează după scoruri. `coverage_pct` raportat
-    = pe guarantee-ul CERUT de apelant (compute_coverage_pct). Parametrul
-    `guarantee` NU schimbă componentele uniunii (mereu 3 și 4) — la guarantee>4
-    doar se loghează WARNING (metoda e gândită pentru ținte 3/4).
+    Construiește coverul La Jolla (design pe disc, fallback ILP/greedy) pentru
+    guarantee=3 și separat pentru guarantee=4, face UNIUNEA cu dedup pe tuple
+    sortate și ordonează după scoruri. `coverage_pct` raportat = pe guarantee-ul
+    CERUT de apelant (compute_coverage_pct). Parametrul `guarantee` NU schimbă
+    componentele uniunii (mereu 3 și 4) — la guarantee>4 doar se loghează
+    WARNING (metoda e gândită pentru ținte 3/4).
+
+    `time_limit` e păstrat pentru compatibilitatea semnăturii; pe calea La Jolla
+    nu e folosit (ILP-ul din fallback-ul unui design lipsă își are propriul buget).
     """
     pool = _sorted_pool(pool, scores)
     v = len(pool)
@@ -617,7 +629,13 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
     for g in (3, 4):
         if g > pick:
             continue  # bilet prea mic ca să conțină un g-subset → componentă imposibilă
-        comp, _ = wheel_ilp(pool, pick, g, 0, scores, time_limit=time_limit)
+        # Design precalculat (determinist) în loc de ILP pe ceas — altfel
+        # LOTO_WHEEL_METHOD=union34 reintroducea nedeterminismul pe care
+        # covering_designs/ îl închide pe calea default lajolla.
+        if g == pick:
+            comp, _ = _greedy_fallback(pool, pick, g, 0, scores)
+        else:
+            comp, _ = wheel_lajolla(pool, pick, g, 0, scores)
         for t in comp:
             key = tuple(sorted(t))
             if key not in seen:

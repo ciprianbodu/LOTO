@@ -25,13 +25,21 @@ import itertools
 import random
 import sys
 import time
-from math import comb
+from math import ceil, comb
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 DESIGN_DIR = ROOT / "covering_designs"
+
+
+def _schonheim(v: int, k: int, t: int) -> int:
+    def rec(vv: int, kk: int, tt: int) -> int:
+        if tt == 1:
+            return ceil(vv / kk)
+        return ceil(vv / kk * rec(vv - 1, kk - 1, tt - 1))
+    return rec(v, k, t)
 
 
 def load_design(path: Path) -> list[tuple[int, ...]]:
@@ -177,7 +185,7 @@ def main() -> None:
     ap.add_argument("--budget", type=float, default=60.0, help="secunde per geometrie")
     ap.add_argument("--only", type=str, default="", help="ex. 16_6_5,15_6_5")
     ap.add_argument("--min-gap-pct", type=float, default=5.0,
-                     help="sări geometriile cu gol < X%% față de gen_covering_designs (deja bune)")
+                     help="sări geometriile cu gol < X%% față de Schönheim (deja aproape de limită)")
     args = ap.parse_args()
 
     only = {tuple(int(x) for x in s.split("_")) for s in args.only.split(",") if s}
@@ -188,14 +196,22 @@ def main() -> None:
         v, k, t = (int(x) for x in p.stem.replace("C_", "").split("_"))
         if only and (v, k, t) not in only:
             continue
-        n = sum(1 for ln in p.read_text().splitlines() if ln.strip())
+        n = sum(1 for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip())
         rows.append((n, v, k, t, p))
     rows.sort(reverse=True)  # cele mai mari (probabil cel mai mult gol) primele
 
     total_before = total_after = 0
+    skipped = 0
     for n, v, k, t, p in rows:
         if v == k:
             continue  # C(v,v,t) = 1 bilet, deja optim (limita triviala)
+        lb = _schonheim(v, k, t)
+        gap_pct = 100.0 * (n - lb) / max(n, 1)
+        if n <= lb or gap_pct < args.min_gap_pct:
+            skipped += 1
+            print(f"  skip C({v},{k},{t}): {n} bilete, Schönheim {lb}, "
+                  f"gol {gap_pct:.1f}% < {args.min_gap_pct:g}%", flush=True)
+            continue
         design = load_design(p)
         assert coverage_ok(design, v, t), f"{p.name}: designul EXISTENT nu e 100%% — stop"
         improved = optimize(v, k, t, design, args.budget)
@@ -207,7 +223,8 @@ def main() -> None:
                 write_design(p, improved)
                 print(f"    scris {p.name}: {len(design)} -> {len(improved)}", flush=True)
     print(f"\nTOTAL: {total_before} -> {total_after} "
-          f"({'scris' if args.apply else 'DRY-RUN, nescris'})")
+          f"({'scris' if args.apply else 'DRY-RUN, nescris'}); "
+          f"sărite {skipped} (gol < {args.min_gap_pct:g}% vs Schönheim)")
 
 
 if __name__ == "__main__":

@@ -761,7 +761,7 @@ class LotoEngine:
             if manual_set:
                 max_n_safe = int(self.params.get("max_n", 49))
                 combined = blacklist | manual_set
-                if len(combined) >= max_n_safe - pool_size:
+                if len(combined) > max_n_safe - pool_size:
                     logging.warning(
                         f"[MANUAL-INVERSION] Manual ({len(manual_set)}) + auto ({len(blacklist)}) "
                         f"= {len(combined)} blocheaza prea mult din univers ({max_n_safe}). "
@@ -826,16 +826,17 @@ class LotoEngine:
         self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
         
         if self.game_type == "joker":
-            logging.info(f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)...")
+            logging.info("[PIPELINE] Scoring Urna 2 (Joker — frequency, fără Re-Bench)...")
             j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
             # joker_urna2 e single-pick (pool 1) în TOT lanțul bench→decizie→UI
             # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
             # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.
             # Candidații alternativi rămân disponibili în audit['joker_predictions'].
             if j_scores:
-                # Tie-break CANONIC (rank_by_score), NU sortare proprie: bench-ul
-                # validează joker_urna2 prin `runner._top_k` → aceeași regulă, altfel
-                # la scoruri egale engine-ul ar alege alt număr decât cel validat.
+                # Tie-break CANONIC (rank_by_score), NU sortare proprie — aceeași
+                # regulă ca restul pipeline-ului. Re-Bench SARE urna2 (single-pick:
+                # rata 4+ e 0 pe orice metodă), deci ăsta NU e un pick „validat
+                # de bench"; frequency e scorer-ul onest (method_selector).
                 ranked_j = rank_by_score(j_scores, 5)
                 self.hard_core_joker = [int(ranked_j[0])]
                 logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
@@ -843,10 +844,12 @@ class LotoEngine:
             else:
                 freq_joker = self.analyze_joker_frequency()
                 self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
-                # Candidați informativi (top-5 după frecvență) și pe fallback,
-                # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
+                # Candidați informativi (top-5) — aceeași regulă rank_by_score,
+                # nu np.argsort (tie-break-ul numpy e index mic întâi).
+                _jmap = {int(i) + 1: float(freq_joker[i]) for i in range(len(freq_joker))}
+                ranked_j = rank_by_score(_jmap, 5)
                 self.audit['joker_predictions'] = {
-                    int(i) + 1: int(freq_joker[i]) for i in np.argsort(freq_joker)[-5:][::-1]
+                    int(n): int(freq_joker[n - 1]) for n in ranked_j
                 }
                 logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
             # Auto-invert (Pool 2) NU inversează Urna 2: univers mic (1-20), iar
@@ -1097,11 +1100,14 @@ class LotoEngine:
         if blacklist is None:
             blacklist = set()
         
-        # Luăm top cele mai frecvente numere ca punct de plecare
+        # Toate numerele din 1..max_n, inclusiv cele cu frecvență 0 (niciodată
+        # extrase în fereastră). Fără ele, un lookback scurt lăsa pool-ul scurt
+        # — `score_frequency` + `rank_by_score` includ zerourile și sparg
+        # egalitățile pe număr mare. Filtrăm doar blacklist-ul.
         freq_scores = {
             int(i) + 1: float(freq[i])
             for i in range(len(freq))
-            if freq[i] > 0 and (int(i) + 1) not in blacklist
+            if (int(i) + 1) not in blacklist
         }
         pool = rank_by_score(freq_scores, pool_size)
         
@@ -1298,7 +1304,7 @@ class LotoEngine:
             self.game_type "joker" → "joker_urna2" if is_joker_drum else "joker_urna1"
 
         Reads best_methods.json via method_selector. Returns {} on any failure
-        so the caller falls back to TimesFM.
+        so the caller falls back to recency-weighted frequency.
         """
         try:
             from loto_enterprise.core.method_selector import (
@@ -1438,8 +1444,9 @@ class LotoEngine:
                 if _ens_audit.get(_flag):
                     bench_winner_info[_flag] = True
             if game_key == "joker_urna2":
+                # frequency e scorer-ul ONEST (Re-Bench sare single-pick), nu o
+                # degradare — UI-ul arată `single_pick_unbenched`, nu „fallback".
                 bench_winner_info["single_pick_unbenched"] = True
-                bench_winner_info["fallback"] = True
             self.audit.setdefault("bench_winner", {})[game_key] = bench_winner_info
             return {int(k): float(v) for k, v in scores.items()}
         except Exception as exc:
@@ -1525,7 +1532,7 @@ class LotoEngine:
     def _get_timesfm_pool(self, scores: dict[int, float], pool_size: int, blacklist: set[int]) -> list[int]:
         """Selectează top-N după scor (aliniat bench). Numele e istoric (TimesFM)."""
         if not scores:
-            # Fallback pe frecvență dacă TimesFM e indisponibil
+            # Fallback pe frecvență dacă scorer-ul bench n-a produs scoruri.
             freq = self.analyze_frequency()
             return self._get_initial_hard_core(freq, pool_size=pool_size, blacklist=blacklist)
 

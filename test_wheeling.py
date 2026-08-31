@@ -272,3 +272,60 @@ def test_complete_system_tickets_are_sorted_ascending():
     assert len(capped) == 3 and cov_capped < 100.0
     assert all(t == sorted(t) for t in capped)
     assert capped[0] == sorted(ranking[:5])
+
+
+def test_union34_covers_3_and_4_from_designs(monkeypatch):
+    """LOTO_WHEEL_METHOD=union34 nu are voie să reintroducă ILP pe ceas când
+    există designuri C(v,k,3) și C(v,k,4) pe disc."""
+    import wheeling_methods as wm
+
+    ilp_calls: list = []
+    real_ilp = wm.wheel_ilp
+
+    def spy(*a, **k):
+        ilp_calls.append(1)
+        return real_ilp(*a, **k)
+
+    monkeypatch.setattr(wm, "wheel_ilp", spy)
+    pool = list(range(1, 11))
+    wheel, _ = generate_wheel("union34", pool, pick=6, guarantee=4, max_variants=0)
+    assert _covers_all(wheel, pool, 3)
+    assert _covers_all(wheel, pool, 4)
+    assert ilp_calls == [], "union34 a căzut pe ILP deși designurile există"
+    # C_10_6_3=10 + C_10_6_4=20, uniune ≤ 30
+    assert len(wheel) <= 30
+
+
+def test_lajolla_guarantee_equals_pick_skips_ilp(monkeypatch):
+    """g == pick = sistem complet. ILP pe C(v,pick) ținte e risipă + nedeterminist."""
+    import math
+    import wheeling_methods as wm
+
+    called: list = []
+    monkeypatch.setattr(wm, "wheel_ilp", lambda *a, **k: called.append(1) or ([], 0.0))
+    wheel, cov = wm.wheel_lajolla(list(range(1, 11)), 5, 5, 0, None)
+    assert called == []
+    assert cov == 100.0
+    assert len(wheel) == math.comb(10, 5)
+
+
+def test_incomplete_design_does_not_claim_missing(monkeypatch, caplog):
+    """Un design trunchiat loghează INCOMPLET, nu „fără design local"."""
+    import logging
+    import wheeling_methods as wm
+
+    monkeypatch.setattr(wm, "_load_lajolla", lambda v, pick, g: [[1, 2, 3, 4, 5, 6]])
+    ilp_called = {}
+
+    def fake_ilp(pool, pick, guarantee, max_variants=0, scores=None, time_limit=15.0):
+        ilp_called["yes"] = True
+        from loto_engine import generate_combinatorial_wheel
+        return generate_combinatorial_wheel(pool, pick, guarantee, max_variants, scores)
+
+    monkeypatch.setattr(wm, "wheel_ilp", fake_ilp)
+    with caplog.at_level(logging.INFO):
+        wm.wheel_lajolla(list(range(1, 11)), 6, 3, 0, None)
+    assert ilp_called.get("yes")
+    assert "INCOMPLET" in caplog.text
+    assert "fără design local" not in caplog.text
+

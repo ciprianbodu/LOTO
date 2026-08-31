@@ -311,6 +311,21 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     return json.dumps({"input_hash": h.hexdigest(), "use_cache": False, "datasets": datasets_cfg})
 
 
+def _invalidate_stale_wf(reason: str) -> None:
+    """O generare nouă face stale walk-forward-ul vechi.
+
+    După COMPLETED, `active_job_id` e None — Generate / Auto-Pilot (inclusiv
+    cel pornit automat după Re-Bench) pot porni un job nou cât WF-ul vechi
+    încă rulează. Fără invalidare, `finally`-ul vechi cheamă
+    `_finalize_pipeline()` → shutdown PC în timpul jobului nou, și rescrie
+    retro/raport peste rezultatele noi. Același mecanism ca „Anulează TOT”.
+    """
+    with STATE_LOCK:
+        STATE["wf_user_cancel"] = True
+        STATE["wf_seq"] = int(STATE.get("wf_seq") or 0) + 1
+    logger.info("[WF] rulare veche invalidată (%s) — fără shutdown din finally-ul ei.", reason)
+
+
 def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None) -> None:
     if not STATE["datasets"]:
         ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
@@ -318,6 +333,7 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
     if STATE["active_job_id"]:
         ui.notify("Există deja un job în rulare.", type="warning")
         return
+    _invalidate_stale_wf("generare nouă")
     STATE["pure_bench"] = pure
     STATE["results"] = None
     STATE["retro"] = {}
@@ -691,10 +707,12 @@ def _start_walk_forward() -> None:
 
     # Secvență de rulare: dacă între timp pornește ALT walk-forward (generare nouă
     # cât rula validarea veche), thread-ul vechi devine stale — se oprește și NU mai
-    # scrie retro/status/finalize peste rularea nouă.
-    STATE["wf_user_cancel"] = False
-    my_seq = int(STATE.get("wf_seq") or 0) + 1
-    STATE["wf_seq"] = my_seq
+    # scrie retro/status/finalize peste rularea nouă. Sub STATE_LOCK ca
+    # `_invalidate_stale_wf` / `finally` să vadă aceeași pereche (seq, cancel).
+    with STATE_LOCK:
+        STATE["wf_user_cancel"] = False
+        my_seq = int(STATE.get("wf_seq") or 0) + 1
+        STATE["wf_seq"] = my_seq
 
     def _worker_wf() -> None:
         _wf_t0 = float(STATE.get("wf_start") or time.time())
@@ -826,6 +844,7 @@ def _start_walk_forward() -> None:
                                 g_label,
                                 list(data.get("hard_core") or []),
                                 list(data.get("variants") or []),
+                                wheel_coverage=(data.get("context") or {}).get("coverage_pct"),
                             )
                             with STATE_LOCK:
                                 STATE["retro"][_p2rk] = _flat_p2
@@ -845,8 +864,9 @@ def _start_walk_forward() -> None:
         except Exception as exc:  # noqa: BLE001
             STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
         finally:
-            _stale = STATE.get("wf_seq") != my_seq
-            _user_cancelled = bool(STATE.get("wf_user_cancel"))
+            with STATE_LOCK:
+                _stale = STATE.get("wf_seq") != my_seq
+                _user_cancelled = bool(STATE.get("wf_user_cancel"))
             if not _stale:
                 if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
                     STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
@@ -861,9 +881,19 @@ def _start_walk_forward() -> None:
                     STATE["wf_status"] = "Walk-forward anulat (fără mail/oprire PC)."
                     logger.info("[WF] finalizare sărită: anulare explicită din UI.")
                 else:
-                    # Mail-ul a plecat deja imediat după generare (vezi status_panel).
-                    # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
-                    _finalize_pipeline()
+                    # Re-check sub lock: o generare nouă poate invalida între citirea
+                    # de mai sus și shutdown (altfel PC-ul se oprește pe jobul nou).
+                    with STATE_LOCK:
+                        _still_mine = (
+                            STATE.get("wf_seq") == my_seq
+                            and not STATE.get("wf_user_cancel")
+                        )
+                    if _still_mine:
+                        # Mail-ul a plecat deja imediat după generare (vezi status_panel).
+                        # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
+                        _finalize_pipeline()
+                    else:
+                        logger.info("[WF] finalizare sărită: rulare înlocuită între timp.")
                 try:
                     status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
                 except Exception:  # noqa: BLE001
@@ -1135,7 +1165,7 @@ def _send_test_email() -> None:
         return
     body = ("Test e-mail Loto Enterprise — configurarea funcționează ✅\n"
             f"Următoarea extragere: {_next_draw_date()}\n"
-            "La finalul bench-ului vei primi: data + Pool 1 / Pool 2.")
+            "După generare vei primi: data + Pool 1 / Pool 2 (fără stats walk-forward).")
     try:
         send_email(cfg, "🎰 Loto — mail de test", body)
         ui.notify(f"📧 Mail de test trimis la {cfg['mail_to']}. Verifică inbox-ul.", type="positive")
@@ -1146,9 +1176,9 @@ def _send_test_email() -> None:
 
 
 def _maybe_send_results_email() -> None:
-    """Trimite rezultatele pe mail la finalul pipeline-ului, dacă e bifat
-    'mail_on_complete' ȘI SMTP-ul e configurat (mail_config.json / env). Best-effort:
-    orice eroare e logată, NU oprește restul (shutdown etc.)."""
+    """Trimite Pool 1/Pool 2 pe mail IMEDIAT după generare (nu după walk-forward),
+    dacă e bifat 'mail_on_complete' ȘI SMTP-ul e configurat. Best-effort:
+    orice eroare e logată, NU oprește restul (WF / shutdown)."""
     if not SETTINGS.get("mail_on_complete"):
         return
     cfg = load_mail_config(PROJECT_ROOT)
@@ -1439,7 +1469,7 @@ def _render_cost(game: str, data: dict) -> None:
     # Motiv (verificat în `loto_engine.generate_predictions`): jokerul se atașează
     # CICLIC — `assigned_joker = jokers[idx % len(jokers)]`, un singur număr per
     # variantă, NU produsul cartezian variante × jokeri. În plus nucleul Urnei 2 e
-    # single-pick (`sorted_j[:1]` / `_get_hard_core_joker(pool_size=1)`, aliniat
+    # single-pick (`rank_by_score` top-1 / `_get_hard_core_joker(pool_size=1)`, aliniat
     # bench), deci lista are oricum 1 element. Concluzie: nr. BILETE = nr. VARIANTE,
     # pe toate cele patru formule (scheme oficiale, sistem complet, bilete simple,
     # wheel) → toate se citesc pe ACEEAȘI bază.
@@ -3655,7 +3685,8 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                                 f"{_clamp.get('clamped_to')} ca inversarea să aibă loc "
                                 f"(univers {_clamp.get('max_num')})."
                             ).classes("text-caption text-warning")
-                        if _p2 == _p1 or _mi.get("skipped"):
+                        _invert_skipped = _p2 == _p1 or _mi.get("skipped")
+                        if _invert_skipped:
                             pmax = _mi.get("pool_max_pentru_inversare")
                             ui.label("⚠️ INVERSARE NEAPLICATĂ — Pool 2 e identic cu Pool 1!").classes(
                                 "text-bold text-negative text-lg")
@@ -3665,10 +3696,14 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
                                 + (f" Reduceți pool-ul la ≤{pmax} pentru acest joc ca să meargă inversarea." if pmax else "")
                                 + " Momentan Pool 2 NU e o alternativă reală."
                             ).classes("text-caption text-negative")
-                        ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
-                            "text-bold text-warning text-lg")
-                        ui.label("Plasă de siguranță — istoric retrospectiv Pool 2 "
-                                 "în 📊 Analiză (fără WF dublu).").classes("text-caption")
+                            ui.label("🔄 POOL 2 — neaplicat (același ca Pool 1)").classes(
+                                "text-bold text-grey text-lg")
+                            ui.label("Nu e o plasă de siguranță — aceleași numere ca Pool 1.").classes("text-caption")
+                        else:
+                            ui.label("🔄 POOL 2 — inversat (numerele EXCLUSE din Pool 1)").classes(
+                                "text-bold text-warning text-lg")
+                            ui.label("Plasă de siguranță — istoric retrospectiv Pool 2 "
+                                     "în 📊 Analiză (fără WF dublu).").classes("text-caption")
                         _render_pool_body(fname, game, data, skey_suffix="_p2", with_wf=False, res_prefix=res_prefix)
                     else:
                         _render_pool_body(fname, game, data, with_wf=False, res_prefix=res_prefix)
@@ -3942,7 +3977,7 @@ def main_page() -> None:
                  ).classes("text-caption text-grey")
         _bind_save(ui.checkbox("🔄 Inversare automată"), "auto_invert_val")
         _bind_save(ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete")
-        _bind_save(ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete")
+        _bind_save(ui.checkbox("📧 Trimite rezultatele pe mail imediat după generare"), "mail_on_complete")
         ui.button("📧 Trimite mail de test", on_click=_send_test_email).props("outline no-caps size=sm").classes("text-caption")
 
         ui.separator()

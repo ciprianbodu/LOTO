@@ -217,12 +217,13 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
 
                 # Auto-clamp pool_size cand auto_invert e ON.
                 # Reguli matematice: cu inversare, dupa primul pool excludem P numere
-                # si trebuie sa umplem inca P din ce ramane. Deci P <= (max_n - buffer) / 2.
+                # si trebuie sa umplem inca P din ce ramane. Deci P <= max_n / 2
+                # (remaining == P e valid: Pool 2 = complementul exact).
                 _max_num_per_game = {"6/49": 49, "5/40": 40, "joker": 45}
                 _max_num = _max_num_per_game.get(game_mapped, 49)
                 pool_clamp_info = None
                 if auto_invert:
-                    pool_max_safe = _max_num // 2 - 1   # 6/49→23, joker→21, 5/40→19
+                    pool_max_safe = _max_num // 2   # 6/49→24, joker→22, 5/40→20
                     if p_size > pool_max_safe:
                         original_p = p_size
                         p_size = pool_max_safe
@@ -314,11 +315,19 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                         pure_bench_mode=pure_bench,
                         manual_blacklist=first_pool,
                     )
-                    audit["auto_invert_applied"] = {
-                        "excluded_pool": sorted(int(n) for n in first_pool),
-                        "n_excluded": len(first_pool),
-                        "first_pass_variants_count": len(first_variants),
-                    }
+                    if pool_clamp_info is not None:
+                        # Pass 2 înlocuiește `audit`; fără copiere, banner-ul UI
+                        # (citește audit-ul de pe Pool 2) nu vedea nicodată clamp-ul.
+                        audit["pool_clamp_for_invert"] = pool_clamp_info
+                    _skipped = bool((audit.get("manual_inversion") or {}).get("skipped"))
+                    if _skipped:
+                        audit["auto_invert_applied"] = False
+                    else:
+                        audit["auto_invert_applied"] = {
+                            "excluded_pool": sorted(int(n) for n in first_pool),
+                            "n_excluded": len(first_pool),
+                            "first_pass_variants_count": len(first_variants),
+                        }
 
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {

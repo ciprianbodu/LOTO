@@ -20,8 +20,8 @@ os.chdir(_ROOT)
 import wheeling_methods as wm
 
 BUDGET = float(os.environ.get("GEN_BUDGET", "90"))
-OUT = "covering_designs"
-os.makedirs(OUT, exist_ok=True)
+OUT = _ROOT / "covering_designs"
+OUT.mkdir(parents=True, exist_ok=True)
 
 def coverage(blocks, v, g):
     need = set(itertools.combinations(range(v), g))
@@ -51,10 +51,10 @@ for i,(v,pick,g) in enumerate(geos,1):
         blocks = [sorted(b) for b in gw]
         best, src = blocks, "greedy"
     assert coverage([[x-1 for x in b] for b in best], v, g) >= 100.0, f"C({v},{pick},{g}) NU e 100%"
-    path = os.path.join(OUT, f"C_{v}_{pick}_{g}.txt")
-    existed = os.path.exists(path)
+    path = OUT / f"C_{v}_{pick}_{g}.txt"
+    existed = path.exists()
     if existed:
-        prev = [l.split() for l in open(path).read().splitlines() if l.strip()]
+        prev = [l.split() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
         if len(prev) and len(prev) <= len(best):
             print(f"[{i:2}/{len(geos)}] C({v},{pick},{g}): PASTREZ fisierul existent "
                   f"({len(prev)} <= {len(best)})", flush=True)
