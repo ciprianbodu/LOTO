@@ -43,6 +43,7 @@ from job_queue import (
     submit_job,
 )
 from cancel import lock_engine, unlock_engine
+from official_schemes import format_official_block
 from ui_shared import (
     PROJECT_ROOT,
     atomic_write_json,
@@ -1352,15 +1353,7 @@ def _badges(numbers, stats: dict | None = None):
 # Randare detaliată rezultate (audit, pipeline stages, financiar)
 # --------------------------------------------------------------------------- #
 PRICES = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}  # Lei/variantă (fallback loto.ro)
-
-# Scheme reduse oficiale Loteria Română: (cod, n_variante) per (joc, pool_size)
-LR_SCHEMES = {
-    "6/49": {9: [("Cod 48", 12)], 10: [("Cod 49", 15), ("Cod 50", 30)],
-             11: [("Cod 56", 66)], 12: [("Cod 57", 22), ("Cod 58", 132)], 16: [("Cod 59", 112)]},
-    "5/40": {7: [("Cod 15", 9)], 8: [("Cod 16", 21)], 9: [("Cod 17", 30)], 10: [("Cod 18", 51)]},
-    "joker": {7: [("Cod 45", 5)], 8: [("Cod 35", 6)], 9: [("Cod 34", 9)], 10: [("Cod 24", 14)],
-              11: [("Cod 15", 22)], 12: [("Cod 14", 38)]},
-}
+# Scheme reduse oficiale: official_schemes.py (loto.ro Tabelul 1 + index Cod 48).
 STAGE_META = [
     ("1_nqi_raw", "1. NQI Raw (scorer)", "#60a5fa",
      "Pool brut din scorer (bench winner CPU / frecvență): top-K după scor de probabilitate."),
@@ -1479,32 +1472,24 @@ def _render_cost(game: str, data: dict) -> None:
     # de acoperire — e exhaustiv). NU confunda cu „wheel-ul nostru" de mai jos, care e
     # un cover MINIM la garanția cerută (de ~10x mai ieftin).
     _full_lbl = f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} ≈ {full_cost:,.0f} Lei"
-    if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
-        parts = []
-        for code, base in LR_SCHEMES[gk][pool_used]:
-            parts.append(f"**{code}** ({base} var.{_jk_txt} ≈ {base*price:,.0f} Lei)")
-        ui.markdown(f"💡 **Scheme reduse oficiale la agenție** ({pool_used} nr.): " + " sau ".join(parts) +
-                    f"\n\n*({_full_lbl} — toate combinațiile, exhaustiv)*").classes("text-info")
-        # Garanția schemelor „Cod NN" NU e documentată nicăieri în proiect (doar codul
-        # și numărul de variante) → nu o putem afirma. Fără avertisment, utilizatorul
-        # poate crede că cele 15 variante de la „Cod 49" au aceeași garanție ca cele
-        # 21 ale wheel-ului nostru (care ESTE verificată — vezi „Acoperire garanție").
-        ui.markdown("⚠️ **Garanția schemelor oficiale nu e documentată în app** (avem doar "
-                    "codul + numărul de variante). NU presupune că e aceeași cu garanția "
-                    "configurată aici — verific-o la agenție înainte să compari numărul de "
-                    "variante cu wheel-ul nostru de mai jos.").classes("text-caption text-orange")
-    else:
-        ui.markdown(f"💡 **Cost la agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
-                    f"{game.upper()}. **{_full_lbl}** (toate combinațiile, exhaustiv).").classes("text-info")
-
     variants = data.get("variants") or []
+    # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
+    # schemele oficiale; fallback pe cea cerută din setări.
+    _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
+    if _g_used is None:
+        _g_used = data.get("guarantee")
+    ui.markdown(format_official_block(
+        gk, pool_used,
+        price=price,
+        pick=draw_n,
+        full_lbl=_full_lbl,
+        joker_note=_jk_txt,
+        our_guarantee=_g_used,
+        our_n_tickets=len(variants) or None,
+    )).classes("text-info")
+
     if variants:
         n_simple = min(10, len(variants))
-        # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
-        # schemele oficiale de mai sus; fallback pe cea cerută din setări.
-        _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
-        if _g_used is None:
-            _g_used = data.get("guarantee")
         _g_txt = f"garanție {_g_used}" if _g_used is not None else "garanția configurată"
         ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
                     f"{n_simple*price:,.0f} Lei "
