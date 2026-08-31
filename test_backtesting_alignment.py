@@ -101,3 +101,50 @@ def test_engine_rejects_a_dataset_with_no_valid_draws(tmp_path):
     assert engine.data is None
     assert engine.audit["rows_loaded"] == 10
     assert engine.audit["rows_valid"] == 0
+
+
+def test_joker_urna2_rejects_decimal_out_of_range_and_missing_values(tmp_path):
+    """Urna 2 are propria validare 1..20; 4.7 nu devine tăcut bila 4."""
+    from loto_engine import LotoEngine
+
+    rows = []
+    joker_values = [1, 4.7, 21, np.nan, 4, 20]
+    for i, joker in enumerate(joker_values):
+        base = i * 5 + 1
+        rows.append({
+            "date": f"{i + 1:02d}-01-2026",
+            "n1": base, "n2": base + 1, "n3": base + 2,
+            "n4": base + 3, "n5": base + 4,
+            "joker": joker,
+        })
+    path = tmp_path / "joker.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    engine = LotoEngine("joker")
+    assert engine.load_data(str(path))
+
+    assert engine._valid_joker_values().tolist() == [1, 4, 20]
+    assert engine.audit["joker_urna2_rows_total"] == 6
+    assert engine.audit["joker_urna2_rows_valid"] == 3
+    assert engine.audit["joker_urna2_invalid_rows_dropped"] == 3
+    freq = engine.analyze_joker_frequency()
+    assert freq[0] == freq[3] == freq[19] == 1
+    assert int(freq.sum()) == 3
+
+
+def test_joker_urna2_without_valid_values_has_no_arbitrary_frequency_fallback(tmp_path):
+    """Lipsa Urnei 2 nu trebuie să dea un clasament plat și bila 20 din tie-break."""
+    from loto_engine import LotoEngine
+
+    df = pd.DataFrame([
+        {"date": f"{i + 1:02d}-01-2026", "n1": 1, "n2": 2, "n3": 3,
+         "n4": 4, "n5": 5, "joker": value}
+        for i, value in enumerate([0, 20.2, np.nan, 21, "bad"])
+    ])
+    path = tmp_path / "joker_invalid_urna2.csv"
+    df.to_csv(path, index=False)
+
+    engine = LotoEngine("joker")
+    assert engine.load_data(str(path))
+    assert engine.analyze_joker_frequency().sum() == 0
+    assert engine._frequency_fallback_scores(is_joker_drum=True) == {}

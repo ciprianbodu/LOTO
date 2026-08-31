@@ -1315,9 +1315,12 @@ def _badges(numbers, stats: dict | None = None):
 
 
 # --------------------------------------------------------------------------- #
-# Randare detaliată rezultate (audit, pipeline stages, financiar)
+# Randare detaliată rezultate (audit, pipeline stages, cost variante)
 # --------------------------------------------------------------------------- #
-PRICES = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}  # Lei/variantă (fallback loto.ro)
+# Lei/variantă simplă. Taxa pe biletul fizic nu intră aici: depinde de câte
+# variante sunt depuse împreună pe același bilet, deci nu poate fi dedusă din
+# lista de variante generată de aplicație.
+PRICES = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
 
 # Scheme reduse oficiale Loteria Română: (cod, n_variante) per (joc, pool_size)
 LR_SCHEMES = {
@@ -1366,6 +1369,19 @@ def _render_audit(audit: dict) -> None:
         rm = ", ".join(str(n) for n in mi.get("removed", [])) or "(none)"
         ad = ", ".join(str(n) for n in mi.get("added_replacements", [])) or "(none)"
         ui.markdown(f"🛡️ **Hard Enforcement Inversare:** scoase {rm}; înlocuite cu {ad}.").classes("text-info")
+
+    _jk_invalid = int(audit.get("joker_urna2_invalid_rows_dropped") or 0)
+    if audit.get("joker_urna2_unavailable"):
+        ui.markdown(
+            "⚠️ **Joker Urna 2 indisponibilă:** nu există valori valide 1–20; "
+            "biletele nu includ un număr Joker arbitrar."
+        ).classes("text-warning")
+    elif _jk_invalid:
+        _jk_total = int(audit.get("joker_urna2_rows_total") or 0)
+        ui.markdown(
+            f"⚠️ **Joker Urna 2:** {_jk_invalid} valori invalide din {_jk_total} au fost ignorate "
+            "(sunt acceptați doar întregi 1–20)."
+        ).classes("text-warning")
 
     cf = audit.get("consecutive_filter")
     if cf:
@@ -1444,11 +1460,12 @@ def _render_cost(game: str, data: dict) -> None:
     # „Sistem complet" = TOATE combinațiile C(pool, draw_n) de la agenție (fără garanție
     # de acoperire — e exhaustiv). NU confunda cu „wheel-ul nostru" de mai jos, care e
     # un cover MINIM la garanția cerută (de ~10x mai ieftin).
-    _full_lbl = f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} ≈ {full_cost:,.0f} Lei"
+    _full_lbl = (f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} "
+                 f"≈ {full_cost:,.0f} Lei în variante")
     if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
         parts = []
         for code, base in LR_SCHEMES[gk][pool_used]:
-            parts.append(f"**{code}** ({base} var.{_jk_txt} ≈ {base*price:,.0f} Lei)")
+            parts.append(f"**{code}** ({base} var.{_jk_txt} ≈ {base*price:,.0f} Lei în variante)")
         ui.markdown(f"💡 **Scheme reduse oficiale la agenție** ({pool_used} nr.): " + " sau ".join(parts) +
                     f"\n\n*({_full_lbl} — toate combinațiile, exhaustiv)*").classes("text-info")
         # Garanția schemelor „Cod NN" NU e documentată nicăieri în proiect (doar codul
@@ -1473,16 +1490,11 @@ def _render_cost(game: str, data: dict) -> None:
             _g_used = data.get("guarantee")
         _g_txt = f"garanție {_g_used}" if _g_used is not None else "garanția configurată"
         ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
-                    f"{n_simple*price:,.0f} Lei "
+                    f"{n_simple*price:,.0f} Lei în variante "
                     f"| **Wheel-ul nostru** ({_g_txt}, cover minim): {len(variants)} var.{_jk_txt} ≈ "
-                    f"{len(variants)*price:,.0f} Lei.").classes("text-caption")
-
-
-PRIZE_MAP = {
-    "6/49": {3: 30, 4: 300, 5: 30000, 6: 1000000},
-    "5/40": {3: 50, 4: 500, 5: 50000, 6: 0},
-    "joker": {3: 60, 4: 600, 5: 60000, 6: 1000000},
-}
+                    f"{len(variants)*price:,.0f} Lei în variante.").classes("text-caption")
+        ui.label("Taxa fizică pe bilet nu este inclusă: ea depinde de gruparea variantelor la depunere.").classes(
+            "text-caption text-grey")
 
 
 def _hypergeo_params(game: str) -> tuple[int, int] | None:
@@ -1750,12 +1762,11 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                               {"name": "hits", "label": "Numere în Nucleu", "field": "hits", "align": "left"}],
                      rows=rows_pool).classes("w-full").props("dense")
 
-        # Tabel variante ≥4 — AGREGAT pe extragere. (Înainte: o linie per variantă →
+        # Tabel bilete ≥T — AGREGAT pe extragere. (Înainte: o linie per variantă →
         # aceeași dată apărea de zeci de ori, fiindcă ~zeci de variante prind 4 pe
         # aceeași extragere. Ilizibil.) Acum: o linie per (extragere, hits) + nr. bilete.
         highs = [p for p in flat if getattr(p, "hits", 0) >= _T]
         if highs:
-            pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
             agg: dict = {}
             for p in highs:
                 dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
@@ -1764,32 +1775,18 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                 agg[key] = agg.get(key, 0) + 1
             rows_v = []
             for (draw, h), cnt in sorted(agg.items(), key=lambda kv: (kv[0][1], kv[1]), reverse=True):
-                prize = pm.get(h, 0)
-                rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete",
-                               "prize": f"~{prize:,} Lei/bilet"})
-            n_draws_won = len({d for d, _ in agg})
-            ui.label(f"🎯 Istoric Câștiguri Variante (≥{_T} numere) — {n_draws_won} extrageri câștigătoare, agregat:").classes(
+                rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete"})
+            n_draws_hit = len({d for d, _ in agg})
+            ui.label(f"🎯 Istoric Bilete cu ≥{_T} numere — {n_draws_hit} extrageri, agregat:").classes(
                 "text-bold text-caption mt-2")
             ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
                               {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
-                              {"name": "n", "label": "Bilete câștigătoare", "field": "n", "align": "center"},
-                              {"name": "prize", "label": "Est. Premiu", "field": "prize", "align": "right"}],
+                              {"name": "n", "label": "Bilete", "field": "n", "align": "center"}],
                      rows=rows_v, pagination=15).classes("w-full").props("dense")
-
-            # Analiză financiară ONESTĂ: fiecare entry din flat = UN bilet (extragere ×
-            # variantă) jucat. cost = nr. bilete × preț; premii = suma premiilor reale.
-            # (Înainte: total_variants_unice × preț × nr_extrageri → cost umflat de ~100×.)
-            total_prize = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)
-            cost = len(flat) * PRICES.get(gk, 8.0)
-            profit = total_prize - cost
-            roi = (profit / cost * 100) if cost > 0 else 0
-            rc = "text-positive" if profit >= 0 else "text-negative"
-            ui.label(f"Analiză financiară backtest (full wheel la fiecare din {len(uniq)} extrageri = "
-                     f"{len(flat):,} bilete): cost ≈ {cost:,.0f} Lei | premii ≈ {total_prize:,.0f} Lei "
-                     f"| ROI: {'+' if profit >= 0 else ''}{roi:.1f}%").classes(rc)
-            ui.label("ℹ️ Pe loterie ALEATOARE ROI-ul e mereu puternic negativ dacă joci tot wheel-ul la "
-                     "fiecare extragere — scopul aplicației e ACOPERIREA (3+), nu profitul.").classes(
-                "text-caption text-grey")
+            ui.label(
+                "Premiile și ROI-ul nu sunt calculate: fișierele de intrare nu conțin "
+                "clasa și valoarea istorică a premiului, iar la Joker contează și Urna 2."
+            ).classes("text-caption text-grey")
 
 
 def _wf_summary(flat) -> str | None:
@@ -3171,13 +3168,6 @@ def _n_extrageri(n: int) -> str:
     return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
 
 
-def _n_zile(n: int) -> str:
-    """„1 zi" / „N zile". Tabelul de istoric face deja acordul (`_render_hits_4plus`);
-    linia de sumar și alerta îl scriau hardcodat „zile" → «acum 1 zile» chiar
-    deasupra unui tabel care zicea «acum 1 zi»."""
-    return "1 zi" if int(n) == 1 else f"{int(n)} zile"
-
-
 def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
 
@@ -3267,56 +3257,16 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
                 "ℹ️ Pool 2: istoric RETROSPECTIV (pool + wheel de azi pe aceleași "
                 f"extrageri ca WF Pool 1) — nu e walk-forward onest; doar informativ."
             ).classes("text-caption text-grey")
-    # Memento „întârziat": media intervalului între hituri ≥TARGET pe POOL + cât a trecut.
+    # (1) Sumar comparabil: +3 / +4 pe pool, baseline hipergeometric și volumul
+    # real de variante din WF. Premiile nu pot fi deduse din hiturile Urnei 1.
     _TT = _bench_target()
-    st = _due_status(flat)
-    if st:
-        if st["ratio"] >= 1.0:
-            col, lvl = "#fca5a5", "🔴 ÎNTÂRZIAT"
-        elif st["ratio"] >= _DUE_WARN_RATIO:
-            col, lvl = "#fde68a", "🟡 SE APROPIE"
-        else:
-            col, lvl = "#86efac", "🟢 recent"
-        _avg_d = f"{st['avg']:.0f}"
-        _ratio_pct = f"{st['ratio'] * 100:.0f}"
-        _zile_since = _n_zile(st["days_since"])
-        ui.html(render_html_safe(
-            t"<span style='font-size:.85em'>📈 Media între hituri ≥{_TT} (pool): "
-            t"<b>{_avg_d}</b> zile · ultimul acum <b>{_zile_since}</b> "
-            t"(<b style='color:{col}'>{_ratio_pct}%</b> din interval · "
-            t"<span style='color:{col}'>{lvl}</span>)</span>"
-        )).classes("mt-1")
-    # (1) SUMAR: +3 / +4 pe pool + câștig BRUT estimat din istoricul WF.
-    # Pool = wheel-ul COMPLET (Σ premiu pe TOATE variantele câștigătoare).
     gk = _game_label_for(game)
-    pm = PRIZE_MAP.get(gk, PRIZE_MAP["6/49"])
-    price = PRICES.get(gk, 8.0)
     # Pool-ul REAL (nu string fix „din 16"): meta WF (salvat la rulare) are prioritate,
     # apoi rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
     _pn1 = int((meta or {}).get("pool_size") or pool_n or 0)
     _pn2 = int((meta_p2 or {}).get("pool_size") or pool_n_p2 or _pn1 or 0)
-    pool_gross = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat)        # toate variantele
-    # BAZA DE COST = numărul REAL de bilete: o intrare din `flat` = 1 bilet la 1 extragere
-    # (același set de obiecte peste care s-a sumat brutul → formula e corectă aritmetic).
-    # DE CE diferă bazele celor două pool-uri (verificat pe cache-urile WF de pe disc, nu
-    # presupus): Pool 2 replayează exact `draw_index`-ii din Pool 1 (n2 ≤ n, egale în
-    # practică), deci diferența vine în esență din BILETE/EXTRAGERE. Cauza reală e că cele
-    # două wheel-uri se generează cu PARAMETRI DIFERIȚI:
-    #   • Pool 1 = walk-forward, care își impune propriile setări în
-    #     `run_honest_walk_forward` (`guarantee=max(4, pool_size//3)`, `max_variants=0`);
-    #   • Pool 2 = retrospectiv → replayează wheel-ul de AZI, generat cu garanția și
-    #     capul de bilete configurate în UI → exact n2 × len(variante_azi).
-    # Variația cover-ului între pașii WF e SECUNDARĂ, nu cauza (măsurat pe cache-urile
-    # pool 10: 6/49 → 21 bilete la toate cele 769 extrageri, constant; 5/40 → 52 la 486
-    # extrageri și 51 la 29; joker → 52 la 636 și 51 la 14).
-    # De aceea afișăm EXPLICIT biletele + costul fiecăruia și ROI (brut/cost), singura
-    # metrică adimensională, independentă de câte bilete se joacă.
     n_tick_1 = len(flat)
-    cost_1 = n_tick_1 * price
-    pool_net = pool_gross - cost_1
     tick_avg_1 = (n_tick_1 / n) if n else 0.0
-    roi_1 = (pool_gross / cost_1) if cost_1 else 0.0
-    net_draw_1 = (pool_net / n) if n else 0.0
 
     # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
     def _bcell(K):
@@ -3325,72 +3275,42 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             return "—"
         return f"{b3 * 100:.1f}% / {b4 * 100:.2f}%"
 
-    def _tick_cell(n_tick, avg, cost):
-        return f"{n_tick:,} ({avg:.2f}/extr.) · {cost:,.0f} Lei"
-
-    def _net_cell(net, roi):
-        return f"{net:,.0f} Lei (ROI {roi:.2f})"
+    def _tick_cell(n_tick, avg):
+        return f"{n_tick:,} ({avg:.2f}/extr.)"
 
     rows = [{"src": f"🔥 Pool 1 (din {_pn1})" if _pn1 else "🔥 Pool 1",
              "p3": _cell(pool3, n), "p4": _cell(pool4, n),
-             "rnd": _bcell(_pn1), "tick": _tick_cell(n_tick_1, tick_avg_1, cost_1),
-             "win": f"~{pool_gross:,.0f} Lei", "net": _net_cell(pool_net, roi_1)}]
+             "rnd": _bcell(_pn1), "tick": _tick_cell(n_tick_1, tick_avg_1)}]
     if per2:
-        pool_gross_2 = sum(pm.get(int(getattr(p, "hits", 0)), 0) for p in flat_p2)
         n_tick_2 = len(flat_p2)
-        cost_2 = n_tick_2 * price
-        pool_net_2 = pool_gross_2 - cost_2
         tick_avg_2 = (n_tick_2 / n2) if n2 else 0.0
-        roi_2 = (pool_gross_2 / cost_2) if cost_2 else 0.0
-        net_draw_2 = (pool_net_2 / n2) if n2 else 0.0
         rows.append(
             {"src": f"🔄 Pool 2 (din {_pn2}, retrospectiv)" if _pn2 else "🔄 Pool 2 (retrospectiv)",
              "p3": _cell(pool3_2, n2), "p4": _cell(pool4_2, n2),
-             "rnd": _bcell(_pn2), "tick": _tick_cell(n_tick_2, tick_avg_2, cost_2),
-             "win": f"~{pool_gross_2:,.0f} Lei", "net": _net_cell(pool_net_2, roi_2)},
+             "rnd": _bcell(_pn2), "tick": _tick_cell(n_tick_2, tick_avg_2)},
         )
     ui.table(
         columns=[{"name": "src", "label": "Sursă", "field": "src", "align": "left"},
                  {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
                  {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
                  {"name": "rnd", "label": "🎲 random (3+ / 4+)", "field": "rnd", "align": "center"},
-                 {"name": "tick", "label": "🎟️ Bilete jucate (cost)", "field": "tick", "align": "center"},
-                 {"name": "win", "label": "💰 Câștig brut (WF)", "field": "win", "align": "right"},
-                 {"name": "net", "label": "📉 NET (ROI)", "field": "net", "align": "right"}],
+                 {"name": "tick", "label": "🎟️ Variante WF", "field": "tick", "align": "center"}],
         rows=rows,
     ).classes("w-full").props("dense")
-    _cap = ("💰 = câștig BRUT din premiile istoricului WF (fără costul biletelor). "
-            "🎟️ = biletele efectiv jucate (o intrare walk-forward = 1 bilet la 1 extragere) "
-            "și costul lor. NET = brut − cost (de regulă NEGATIV — loteria e aleatoare); "
-            "ROI = brut / cost (lei câștigați per leu jucat). "
+    _cap = ("🎟️ = variantele efectiv evaluate (o intrare walk-forward = o variantă la o extragere). "
             "🎲 = baseline PUR aleator (hipergeometric, calculat din parametrii jocului și "
-            "mărimea pool-ului) — pragul față de care trebuie citite coloanele +3 / +4. "
-            "+3 / +4 = extrageri cu ≥3 / ≥4 nimerite.")
+            "mărimea pool-ului). +3 / +4 = extrageri cu ≥3 / ≥4 numere nimerite. "
+            "Premiile și ROI-ul nu sunt afișate: ele cer valorile istorice pe categorie, "
+            "iar Joker cere și validarea Urnei 2.")
     if per2:
-        # NET/extragere NU e o metrică normalizată: NET/extr = (bilete/extragere) × preț ×
-        # (ROI − 1), deci scalează liniar cu câte bilete se joacă. E comparabil DOAR când
-        # cele două baze de bilete/extragere coincid. Singura mărime adimensională e ROI.
-        _same_base = abs(tick_avg_1 - tick_avg_2) <= 0.01 * max(tick_avg_1, tick_avg_2, 1e-9)
         _draws_txt = (f"aceleași {n} extrageri" if n == n2
                       else f"{n} vs {n2} extrageri")
         _cap += (
-            f" {'ℹ️' if _same_base else '⚠️'} Bazele de cost "
-            f"({_draws_txt}, bilete/extragere {tick_avg_1:.2f} vs {tick_avg_2:.2f}): "
-            f"Pool 1 = {n_tick_1:,} bilete (wheel regenerat de walk-forward cu garanția LUI "
-            f"internă, fără cap de bilete), Pool 2 = {n_tick_2:,} bilete (retrospectiv, ACELAȘI "
-            f"wheel de azi, cu garanția/capul din setări, pe toate extragerile). "
-            f"Comparabil direct e ROI ({roi_1:.2f} vs {roi_2:.2f}) — e adimensional. "
+            f" Pool 1 / Pool 2 folosesc {_draws_txt}: {n_tick_1:,} / {n_tick_2:,} variante "
+            f"({tick_avg_1:.2f} / {tick_avg_2:.2f} per extragere)."
         )
-        if _same_base:
-            _cap += (f"Aici bazele coincid, deci și NET/extragere se poate compara "
-                     f"({net_draw_1:,.1f} vs {net_draw_2:,.1f} Lei).")
-        else:
-            _cap += (f"NET/extragere ({net_draw_1:,.1f} vs {net_draw_2:,.1f} Lei) NU se compară "
-                     f"aici: NET/extragere = bilete/extragere × preț × (ROI − 1), deci scalează "
-                     f"cu numărul de bilete, nu cu calitatea pool-ului.")
     else:
-        _cap += (f" Pool 1 = {n_tick_1:,} bilete ({tick_avg_1:.2f}/extragere) · "
-                 f"NET/extragere ≈ {net_draw_1:,.1f} Lei.")
+        _cap += f" Pool 1 = {n_tick_1:,} variante ({tick_avg_1:.2f}/extragere)."
     ui.label(_cap).classes("text-caption text-grey")
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
@@ -3484,101 +3404,6 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
                         lambda d: d["pool"] >= _TT)
 
 
-# Pragul de la care considerăm că „se apropie media" (% din intervalul mediu).
-_DUE_WARN_RATIO = 0.8
-
-
-def _due_status(flat) -> dict | None:
-    """Status 'due' pentru hit-urile ≥BENCH_HIT_TARGET pe POOL ale unui joc.
-
-    Întoarce dict cu: avg (interval mediu zile), last (data ultimului ≥T),
-    days_since (zile de la ultimul ≥T până AZI), ratio (days_since/avg), n (nr hituri).
-    None dacă nu sunt destule date (<2 hituri ≥T cu dată validă)."""
-    _T = _bench_target()
-    dates = sorted({
-        _parse_draw_date(getattr(p, "draw_date", getattr(p, "target_draw_date", None)))
-        for p in flat if int(getattr(p, "hits_union", 0)) >= _T
-    } - {None})
-    if len(dates) < 2:
-        return None
-    gaps = [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
-    avg = sum(gaps) / len(gaps)
-    last = dates[-1]
-    days_since = (_dt.now().date() - last).days
-    ratio = (days_since / avg) if avg > 0 else 0.0
-    return {"avg": avg, "last": last, "days_since": days_since, "ratio": ratio, "n": len(dates)}
-
-
-def _render_due_alerts(results_bundle, res_prefix: str = "") -> None:
-    """Banner + notificare când timpul de la ultimul ≥4 se apropie/depășește media.
-    Memento informativ — NU schimbă șansele (loteria e aleatoare)."""
-    flat_games = [
-        (fname, game, data)
-        for fname, outs in results_bundle
-        for game, data in outs.items()
-    ]
-    flat_games.sort(key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99))
-
-    alerts = []
-    for fname, game, _data in flat_games:
-        flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-        if not flat:
-            continue
-        st = _due_status(flat)
-        if st and st["ratio"] >= _DUE_WARN_RATIO:
-            _m = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-            alerts.append((game, st, bool(_m.get("partial")), _m.get("n_test_draws")))
-
-    if not alerts:
-        return
-
-    _T = _bench_target()
-    with ui.card().classes("w-full").style("background:#3b0764;border:1px solid #f59e0b"):
-        ui.html(render_html_safe(t"🔔 <b style='color:#fbbf24;font-size:1.05em'>Alertă — se apropie media de ≥{_T}</b>"))
-        for game, st, _partial, _n_part in alerts:
-            if st["ratio"] >= 1.0:
-                lvl, col = "🔴 ÎNTÂRZIAT", "#fca5a5"
-            else:
-                lvl, col = "🟡 SE APROPIE", "#fde68a"
-            # Validare parțială → media/intervalul vin din PUȚINE extrageri → alerta
-            # e orientativă; spunem explicit (altfel „media ~18 zile" din 23 simulări
-            # pare la fel de solidă ca una din 1082).
-            _pnote = (
-                render_html_safe(
-                    t" <span style='opacity:.6'>(⚠️ validare PARȚIALĂ — doar {_n_part} "
-                    t"extrageri simulate; medie orientativă)</span>"
-                )
-                if _partial else ""
-            )
-            _avg_d = f"{st['avg']:.0f}"
-            _ratio_pct = f"{st['ratio'] * 100:.0f}"
-            _zile_alert = _n_zile(st["days_since"])
-            ui.html(render_html_safe(
-                t"<span style='color:{col}'>{lvl}</span> — <b>{game.upper()}</b>: "
-                t"au trecut <b>{_zile_alert}</b> de la ultimul ≥{_T} "
-                t"({st['last'].strftime('%d-%m-%Y')}); media e ~<b>{_avg_d}</b> zile "
-                t"(<b>{_ratio_pct}%</b> din interval).{_pnote}"
-            ))
-        ui.html(render_html_safe(
-            t"<span style='opacity:.6;font-size:.8em'>⚠️ Loteria e aleatoare — "
-            t"„întârzierea\" NU crește șansele. E doar un memento de acoperire, "
-            t"nu o predicție.</span>"
-        ))
-
-    # Notificare transientă (pop-up) — O SINGURĂ DATĂ per set de alerte, nu la
-    # fiecare re-randare a panoului (toggle „Arată toate", schimbare țintă etc.
-    # re-declanșau pop-up-ul de 10s la nesfârșit).
-    try:
-        names = ", ".join(a[0].upper() for a in alerts)
-        _sig = f"{_T}|{names}"
-        if STATE.get("due_alert_notified") != _sig:
-            STATE["due_alert_notified"] = _sig
-            ui.notify(f"🔔 Se apropie media de ≥{_T}: {names} — vezi alerta de sus.",
-                      type="warning", position="top", timeout=10000, close_button=True)
-    except Exception:  # noqa: BLE001
-        pass
-
-
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
     """Meniu global: metoda câștigătoare + istoric ≥4 hits per joc. Închis implicit."""
     has_folds = (PROJECT_ROOT / "bench_results" / "folds.csv").exists()
@@ -3650,9 +3475,6 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
 
 
 def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
-    # 0) Alertă „se apropie media de ≥4" — sus de tot, vizibilă imediat.
-    _render_due_alerts(results_bundle, res_prefix)
-
     # 1) Meniu global analiză — sus, închis implicit.
     _render_analysis_menu(results_bundle, res_prefix)
 

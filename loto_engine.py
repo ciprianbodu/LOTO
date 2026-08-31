@@ -483,15 +483,45 @@ class LotoEngine:
 
     def analyze_joker_frequency(self) -> np.ndarray:
         """Analiză frecvență pentru Urna 2 la Joker (1-20)."""
-        if self.data is None or "joker" not in self.data.columns:
-            return np.zeros(20, dtype=np.int64)
-            
-        joker_vals = pd.to_numeric(self.data["joker"], errors="coerce").dropna().astype(np.int64)
-        joker_vals = joker_vals[(joker_vals >= 1) & (joker_vals <= 20)]
-        if joker_vals.empty:
+        joker_vals = self._valid_joker_values()
+        if joker_vals.size == 0:
             return np.zeros(20, dtype=np.int64)
         freq = np.bincount(joker_vals, minlength=21)
         return freq[1:21]
+
+    def _valid_joker_values(self) -> np.ndarray:
+        """Valorile valide din Urna 2, fără conversii tăcute de zecimale.
+
+        Urna 1 este deja validată prin ``_build_draw_matrix``. Pentru Joker,
+        coloana separată ``joker`` trebuie să respecte același contract strict:
+        întreg finit în intervalul 1..20. Un ``4.7`` nu este bila 4, iar un
+        câmp lipsă sau 21 nu trebuie să ajungă într-un scorer.
+        """
+        if self.data is None or "joker" not in self.data.columns:
+            return np.empty(0, dtype=np.int64)
+        try:
+            matrix, valid_mask = valid_draw_matrix(
+                self.data, ["joker"], draw_n=1, max_num=20,
+            )
+        except ValueError as exc:
+            logging.warning("[JOKER] Urna 2 nu poate fi validată: %s", exc)
+            self.audit["joker_urna2_validation_error"] = str(exc)
+            return np.empty(0, dtype=np.int64)
+
+        total = len(self.data)
+        valid = int(valid_mask.sum())
+        dropped = total - valid
+        self.audit["joker_urna2_rows_total"] = total
+        self.audit["joker_urna2_rows_valid"] = valid
+        self.audit["joker_urna2_invalid_rows_dropped"] = dropped
+        if dropped and not self.audit.get("joker_urna2_invalid_warning_logged"):
+            logging.warning(
+                "[JOKER] ignor %d valoare(i) Urna 2 invalidă(e) din %d "
+                "(accept doar întregi 1..20).",
+                dropped, total,
+            )
+            self.audit["joker_urna2_invalid_warning_logged"] = True
+        return matrix[:, 0].astype(np.int64, copy=False)
 
     def generate_predictions(self, guarantee=4, max_variants=0, scores=None):
         """Generează predicții bazate pe analiză."""
@@ -874,13 +904,24 @@ class LotoEngine:
                 self.audit['joker_predictions'] = {int(n): round(float(j_scores[n]), 4) for n in ranked_j}
             else:
                 freq_joker = self.analyze_joker_frequency()
-                self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
-                # Candidați informativi (top-5 după frecvență) și pe fallback,
-                # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
-                self.audit['joker_predictions'] = {
-                    int(i) + 1: int(freq_joker[i]) for i in np.argsort(freq_joker)[-5:][::-1]
-                }
-                logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
+                if int(freq_joker.sum()) == 0:
+                    # Nu există o observație validă în Urna 2. Alegerea unui număr
+                    # dintr-un vector de zerouri ar fi doar tie-break arbitrar.
+                    self.hard_core_joker = []
+                    self.audit['joker_urna2_unavailable'] = True
+                    self.audit['joker_predictions'] = {}
+                    logging.warning(
+                        "[PIPELINE] Urna 2 Joker nu are valori valide (1..20) — "
+                        "nu atașez un număr Joker arbitrar pe bilete."
+                    )
+                else:
+                    self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
+                    # Candidați informativi (top-5 după frecvență) și pe fallback,
+                    # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
+                    self.audit['joker_predictions'] = {
+                        int(i) + 1: int(freq_joker[i]) for i in np.argsort(freq_joker)[-5:][::-1]
+                    }
+                    logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
             # Auto-invert (Pool 2) NU inversează Urna 2: univers mic (1-20), iar
             # scoring-ul urna2 ignoră manual_blacklist → pass 2 recalculează pe
             # aceleași date și obține ACELAȘI joker la ambele pool-uri. Cheie de
@@ -1351,11 +1392,10 @@ class LotoEngine:
         if self._draw_matrix is None:
             return {}
         if is_joker_drum and self.data is not None and "joker" in self.data.columns:
-            # coerce+dropna: o singură celulă joker lipsă (NaN) făcea to_numpy(int64)
-            # să crape cu ValueError — și scoring-ul primar ȘI fallback-ul mureau.
-            # Pe date complete rezultatul e identic (dropna e no-op).
-            _jk = pd.to_numeric(self.data["joker"], errors="coerce").dropna()
-            draws_2d = _jk.to_numpy(dtype=np.int64).reshape(-1, 1)
+            _jk = self._valid_joker_values()
+            if _jk.size == 0:
+                return {}
+            draws_2d = _jk.reshape(-1, 1)
         else:
             draws_2d = self._draw_matrix.astype(np.int64)
 
@@ -1505,9 +1545,13 @@ class LotoEngine:
         frecvență recency-weighted (exp-decay) pe istoric, normalizată [0,1]."""
         max_num = 20 if is_joker_drum else int(self.params["max_n"])
         if is_joker_drum and self.data is not None and "joker" in self.data.columns:
-            # Aceeași gardă NaN ca în _scores_via_bench_winner (celulă joker lipsă).
-            _jk = pd.to_numeric(self.data["joker"], errors="coerce").dropna()
-            draws_2d = _jk.to_numpy(dtype=np.int64).reshape(-1, 1)
+            _jk = self._valid_joker_values()
+            if _jk.size == 0:
+                # Nu fabricăm un clasament plat / o bilă arbitrară când Urna 2
+                # lipsește sau e complet invalidă. Callerul o semnalizează și
+                # lasă biletul fără al șaselea număr.
+                return {}
+            draws_2d = _jk.reshape(-1, 1)
         elif self._draw_matrix is not None:
             draws_2d = self._draw_matrix.astype(np.int64)
         else:

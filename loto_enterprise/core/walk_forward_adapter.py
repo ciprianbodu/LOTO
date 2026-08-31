@@ -13,8 +13,8 @@ Cache:
       dec_sig = semnătura deciziei (scorer/sim_depth/blacklist/ensemble/target) PLUS
       wheel-ul efectiv (algoritm + garanţia internă a WF) → un Re-Bench care schimbă
       câştigătorul, sau o schimbare de algoritm de wheeling, invalidează automat
-      cache-ul. Wheel-ul contează pentru că din numărul de BILETE ies costul şi ROI-ul
-      raportate; fără el, raportul afişa cifre calculate pe un wheel care nu mai exista.
+      cache-ul. Wheel-ul contează pentru că determină numărul de variante, acoperirea
+      şi hiturile per bilet; fără el, raportul ar evalua un wheel care nu mai există.
     - Un bump de CACHE_VERSION doar schimbă NUMELE fişierului: pickle-urile vechi
       rămân pe disc la nesfârşit. `purge_stale_wf_cache()` le inventariază (implicit
       dry-run) şi le poate şterge; `clear_walk_forward_cache()` şterge TOT, inclusiv
@@ -41,8 +41,11 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v20"
+CACHE_VERSION = "v21"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v21: Urna 2 Joker validează strict valori întregi 1..20 şi nu mai ataşează o
+#      bilă arbitrară când nu are observaţii valide. Lista `variant` din flat se
+#      poate schimba pentru CSV-uri corupte, deci v20 nu mai este sigur.
 # v20: cheia wheel include hash-ul fișierului covering-design folosit de La Jolla
 #      (și union34). Un design actualizat schimbă lista de bilete, costul și
 #      hiturile per bilet; cache-urile v19 nu îl puteau observa automat.
@@ -74,8 +77,9 @@ CACHE_VERSION = "v20"
 # v14: `_decision_sig` include acum WHEEL-ul efectiv (algoritm + garanția internă a WF).
 #      Cheia veche fixa doar scorer/ensemble/target, deci trecerea wheeling-ului de la
 #      ILP la designurile La Jolla (6/49 pool 12: ~54 → 41 bilete) NU a invalidat nimic:
-#      raportul continua să afișeze COSTURI și ROI calculate pe wheel-ul vechi, alături
-#      de un Pool 2 regenerat cu cel nou (41.819 bilete vs 31.611 pe aceleași extrageri).
+#      raportul continua să afișeze număr de variante și hituri pe wheel-ul vechi,
+#      alături de un Pool 2 regenerat cu cel nou (41.819 bilete vs 31.611 pe aceleași
+#      extrageri).
 #      Bump-ul de VERSIUNE (peste schimbarea de sig, care ar fi invalidat oricum) e ca
 #      pickle-urile v13 să devină vizibile pentru `purge_stale_wf_cache`, altfel ar fi
 #      rămas orfane la nesfârșit sub aceeași versiune.
@@ -250,12 +254,12 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     (`loto_engine.generate_predictions`): override explicit din env `LOTO_WHEEL_METHOD`
     dacă e setat, altfel `lajolla`.
 
-    DE CE intră în cheia de cache: numărul de BILETE per extragere depinde exclusiv de
-    algoritmul de wheeling, iar din el se calculează costul, câștigul net și ROI-ul din
-    raport. Fără wheel în cheie, schimbarea ILP → La Jolla (doar 6/49 pool 12 / g4:
+    DE CE intră în cheia de cache: numărul de BILETE, acoperirea şi hiturile per bilet
+    depind de algoritmul de wheeling. Fără wheel în cheie, schimbarea ILP → La Jolla
+    (doar 6/49 pool 12 / g4:
     ~54 → 41 bilete; `covering_designs/` are doar C_12_6_4 și C_12_5_4) a servit în
-    continuare cache vechi, iar raportul arăta costuri umflate cu ~32% pentru Pool 1,
-    lângă un Pool 2 recalculat cu wheel-ul nou.
+    continuare cache vechi, iar raportul arăta mai multe variante pentru Pool 1 decât
+    pe wheel-ul regenerat în Pool 2.
     """
     requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
     try:

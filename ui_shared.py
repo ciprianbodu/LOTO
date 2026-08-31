@@ -231,11 +231,23 @@ ENCODING_PICKLE_ZSTD_B64 = "pickle+zstd+b64"
 
 
 def pack_queue_result(payload: object) -> str:
-    """Serializează rezultatul jobului: pickle → zstd (PEP 784) → base64."""
-    from compression import zstd
+    """Serializează rezultatul jobului, preferând zstd din Python 3.14.
 
+    Worker-ul și UI-ul rulează normal pe 3.14, dar o defecțiune a modulului
+    opțional de compresie nu trebuie să transforme un job calculat corect într-un
+    rezultat imposibil de citit. Formatul legacy ``pickle+b64`` rămâne acceptat
+    de decoder tocmai pentru această cale de continuitate.
+    """
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    compressed = zstd.compress(raw, 3)
+    try:
+        from compression import zstd
+        compressed = zstd.compress(raw, 3)
+    except (ImportError, ModuleNotFoundError, AttributeError) as exc:
+        logger.warning("zstd indisponibil pentru rezultatul jobului; folosesc pickle+b64: %s", exc)
+        return json.dumps({
+            "encoding": ENCODING_PICKLE_B64,
+            "payload": base64.b64encode(raw).decode("ascii"),
+        })
     return json.dumps({
         "encoding": ENCODING_PICKLE_ZSTD_B64,
         "payload": base64.b64encode(compressed).decode("ascii"),

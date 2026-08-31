@@ -698,7 +698,7 @@ class LotoBacktester:
         # Iterăm atunci de la RECENT spre VECHI, ca o oprire timpurie (buget de
         # timp / anulare) să acopere extragerile RECENTE (relevante la validare),
         # nu coada veche a ferestrei. (Bug văzut: WF 6/49 tăiat la 51 simulări,
-        # toate din 2014 → „istoric hits" și alerta ÎNTÂRZIAT deveneau absurde.)
+        # toate din 2014 → istoricul afișat nu mai descria fereastra actuală.)
         # Cu feedback/inversiune activă (stare secvențială) păstrăm vechi→recent.
         _stateless = (not use_feedback) and (not enable_hard_inversion)
         sim_indices = list(range(start_idx, n_draws, simulation_step))

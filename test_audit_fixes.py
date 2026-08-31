@@ -122,6 +122,14 @@ def test_pure_bench_mode_not_in_input_hash():
     assert 'h.update(str(pure)' not in body
 
 
+def test_ui_does_not_turn_urna1_hits_into_fixed_prizes_or_due_alerts():
+    """Premiile depind de categoria istorică/Joker, iar „due" e eroarea jucătorului."""
+    source = open("app_nicegui.py", encoding="utf-8").read()
+    assert "PRIZE_MAP" not in source
+    assert "Câștig brut (WF)" not in source
+    assert "_render_due_alerts" not in source
+
+
 def test_should_use_blacklist_docstring_is_truthful():
     """Docstring-ul nu mai are voie să pretindă că producția aplică blacklist-ul."""
     from loto_enterprise.core.method_selector import should_use_blacklist

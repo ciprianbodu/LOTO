@@ -19,6 +19,11 @@ from ui_shared import pack_queue_result, require_python_version
 
 require_python_version()
 
+# Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
+# activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
+# un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
+PIPELINE_CACHE_VERSION = "v2"
+
 LOG_FILE = "loto.log"
 
 # LOTO_DEBUG=1 → loguri DEBUG (mai mult detaliu despre ce face engine-ul DUPA
@@ -124,6 +129,7 @@ def _run_pipeline_job(job: dict) -> str:
 def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     cfg = json.loads(job["config_json"])
     input_hash = str(cfg.get("input_hash", "") or "").strip()
+    cache_key = f"{PIPELINE_CACHE_VERSION}:{input_hash}" if input_hash else ""
     use_cache = bool(cfg.get("use_cache", True))
     datasets_cfg = list(cfg.get("datasets", []))
     job_id = int(job["id"])
@@ -142,8 +148,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     step_idx = 0
     results_bundle = []
 
-    if use_cache and input_hash:
-        cached = get_pipeline_cache(input_hash)
+    if use_cache and cache_key:
+        cached = get_pipeline_cache(cache_key)
         if cached:
             update_job_progress(job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic).")
             return str(cached)
@@ -375,8 +381,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI...")
     persistent = (results_bundle, len(results_bundle))
     packed = _pack_result_payload(persistent)
-    if use_cache and input_hash:
-        put_pipeline_cache(input_hash, packed)
+    if use_cache and cache_key:
+        put_pipeline_cache(cache_key, packed)
     return packed
 
 
