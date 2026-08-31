@@ -1611,24 +1611,26 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
         return
     gk = _game_label_for(game)
     draw_n = 6 if gk == "6/49" else 5
-    n = len(flat)
-    uniq = {getattr(p, "draw_index", i) for i, p in enumerate(flat)}
-    avg_var = sum(getattr(p, "hits", 0) for p in flat) / n
-    avg_pool = sum(getattr(p, "hits_union", 0) for p in flat) / n
-    best_var = max(getattr(p, "hits", 0) for p in flat)
-    best_pool = max(getattr(p, "hits_union", 0) for p in flat)
+    from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
+    per_draw_summary = per_draw_hit_summary(flat)
+    n_draws = len(per_draw_summary)
+    n_tickets = len(flat)
+    avg_var = sum(row["best_ticket"] for row in per_draw_summary.values()) / max(n_draws, 1)
+    avg_pool = sum(row["pool"] for row in per_draw_summary.values()) / max(n_draws, 1)
+    best_var = max(row["best_ticket"] for row in per_draw_summary.values())
+    best_pool = max(row["pool"] for row in per_draw_summary.values())
     avg_rate = (avg_var / draw_n) * 100
 
     _mtxt = f" · metodă: {method}" if method else ""
     _title = (f"📊 Walk-forward{' (Faza 1)' if is_invert else ''}{_mtxt}: rată {avg_rate:.1f}% · "
-              f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n} predicții  "
+              f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n_draws} extrageri  "
               f"▶ CLICK pt istoric hits per extragere + distribuții")
     with ui.expansion(_title, value=False).classes("w-full mt-2"):
         if method:
             ui.label(f"✅ Validat pe metoda câștigătoare a bench-ului: {method} "
                      "(pipeline-ul regenerează pool-ul la fiecare extragere folosind acest scorer).").classes(
                 "text-caption text-positive")
-        ui.label(f"{n} predicții pe {len(uniq)} extrageri").classes("text-caption")
+        ui.label(f"{n_tickets} bilete pe {n_draws} extrageri").classes("text-caption")
         _cn = _wf_coverage_note(flat)
         if _cn:
             ui.label(_cn[1]).classes(_cn[0])
@@ -1637,8 +1639,8 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
                      "este cel INVERSAT (Faza 2). Aceste cifre arată cum s-ar fi comportat istoric "
                      "pool-ul normal pe care se bazează inversarea.").classes("text-caption text-amber-400")
         with ui.row().classes("gap-8"):
-            for lbl, val in [("Medie/variantă", f"{avg_var:.2f}"), ("Medie/pool", f"{avg_pool:.2f}"),
-                             ("Rată medie", f"{avg_rate:.1f}%"), ("Max variantă", best_var), ("Max pool", best_pool)]:
+            for lbl, val in [("Medie/best bilet", f"{avg_var:.2f}"), ("Medie/pool", f"{avg_pool:.2f}"),
+                             ("Rată medie best bilet", f"{avg_rate:.1f}%"), ("Max bilet", best_var), ("Max pool", best_pool)]:
                 with ui.column().classes("items-center gap-0"):
                     ui.label(lbl).classes("text-caption")
                     ui.label(str(val)).classes("text-h6")
@@ -1722,7 +1724,7 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
             c = var_dist[h]
             if c == 0 and h > 3:
                 continue
-            pct = (c / n * 100) if n else 0
+            pct = (c / n_tickets * 100) if n_tickets else 0
             color = "#28a745" if h >= 3 else ("#17a2b8" if h >= 1 else "#666")
             ui.html(render_html_safe(
                 t"<div style='display:flex;align-items:center;gap:8px;'>"
@@ -1793,11 +1795,13 @@ def _render_walk_forward(flat, game: str, is_invert: bool = False, method: str =
 def _wf_summary(flat) -> str | None:
     if not flat:
         return None
-    nn = len(flat)
-    ap = sum(getattr(p, "hits_union", 0) for p in flat) / nn
-    av = sum(getattr(p, "hits", 0) for p in flat) / nn
-    bp = max(getattr(p, "hits_union", 0) for p in flat)
-    bv = max(getattr(p, "hits", 0) for p in flat)
+    from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
+    per_draw = per_draw_hit_summary(flat)
+    nn = len(per_draw)
+    ap = sum(row["pool"] for row in per_draw.values()) / max(nn, 1)
+    av = sum(row["best_ticket"] for row in per_draw.values()) / max(nn, 1)
+    bp = max(row["pool"] for row in per_draw.values())
+    bv = max(row["best_ticket"] for row in per_draw.values())
     try:
         from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
         cov = wheel_coverage_summary(flat)
@@ -1812,8 +1816,8 @@ def _wf_summary(flat) -> str | None:
         cov_txt = f" | acoperire wheel: 100% pe {cov['known']}/{cov['n_draws']} extrageri (restul necunoscute)"
     else:
         cov_txt = " | acoperire wheel: 100%"
-    return (f"{nn} predicții | avg pool={ap:.2f} | avg variantă={av:.2f} "
-            f"| best pool={bp} | best variantă={bv}{cov_txt}")
+    return (f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
+            f"| best pool={bp} | best bilet={bv}{cov_txt}")
 
 
 def _build_report() -> str:

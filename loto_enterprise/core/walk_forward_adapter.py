@@ -169,6 +169,30 @@ def wheel_coverage_summary(flat) -> dict:
     }
 
 
+def per_draw_hit_summary(flat) -> dict:
+    """Agregă rezultatele WF o singură dată pentru fiecare extragere.
+
+    Lista ``flat`` conține o intrare pentru fiecare bilet jucat la o extragere.
+    ``hits_union`` este identic pe acele intrări, iar metrica de bilet utilă
+    pentru 3+/4+ este maximul pe biletele acelei extrageri. A face media direct
+    pe ``flat`` ar pondera artificial extragerile cu wheel-uri mai mari.
+    """
+    per: dict = {}
+    for p in flat or ():
+        draw_index = int(getattr(p, "draw_index", 0) or 0)
+        row = per.get(draw_index)
+        if row is None:
+            per[draw_index] = {
+                "pool": int(getattr(p, "hits_union", 0) or 0),
+                "best_ticket": int(getattr(p, "hits", 0) or 0),
+            }
+        else:
+            row["best_ticket"] = max(
+                int(row["best_ticket"]), int(getattr(p, "hits", 0) or 0)
+            )
+    return per
+
+
 def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     """MD5 stabil pe lungime + TOATE rândurile coloanelor de numere.
 

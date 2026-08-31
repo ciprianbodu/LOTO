@@ -19,6 +19,7 @@ from loto_enterprise.core.walk_forward_adapter import (
     _backfill_new_fields,
     build_retrospective_pool_hits_flat,
     expand_predictions_to_flat,
+    per_draw_hit_summary,
     wheel_coverage_summary,
 )
 
@@ -65,6 +66,21 @@ def test_summary_reports_unknown_separately_from_100():
 def test_summary_on_empty_flat():
     assert wheel_coverage_summary([])["n_draws"] == 0
     assert wheel_coverage_summary(None)["min"] is None
+
+
+def test_per_draw_hits_do_not_weight_larger_wheels_more_heavily():
+    """O extragere cu 50 bilete contează o dată, nu de 50 de ori."""
+    many_tickets = [_rec(1, 100.0) for _ in range(50)]
+    many_tickets[0].hits = 4
+    one_ticket = _rec(2, 100.0)
+    one_ticket.hits = 1
+    one_ticket.hits_union = 2
+
+    per = per_draw_hit_summary(many_tickets + [one_ticket])
+
+    assert len(per) == 2
+    assert per[1] == {"pool": 3, "best_ticket": 4}
+    assert per[2] == {"pool": 2, "best_ticket": 1}
 
 
 # --------------------------------------------------------------------------- #
