@@ -197,3 +197,20 @@ def test_temp_git_helper_accepts_explicit_repository_root():
     text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
     assert 'set "_ROOT=%~2"' in text
     assert 'cd /d "%_ROOT%"' in text
+
+
+def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
+    """Bench-ul UI e pornit relativ; filtrul `CommandLine like %~dp0` nu-l vedea.
+
+    Copiii ProcessPool trebuie omorâți explicit (taskkill /T / Python tree-kill):
+    pe Windows uciderea părintelui NU omoară descendenții.
+    """
+    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    launch = text[text.index("\n:launch_phase"):text.index("\n:push_istoric")]
+    assert "cleanup_old_processes.py" in launch
+    assert "--venv" in launch
+    assert "CommandLine -like '*%~dp0*'" not in launch
+    assert "Stop-Process" not in launch
+    compact = " ".join(launch.lower().split())
+    assert "taskkill /f /t /pid" in compact
+    assert 'findstr /c:":8000 "' in compact
