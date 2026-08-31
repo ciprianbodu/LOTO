@@ -3,7 +3,8 @@
 Numerotarea joburilor (#1, #2, …) e `id INTEGER PRIMARY KEY` în SQLite. Golind
 tabela, următorul job inserat primește din nou id = 1.
 
-START_8000.bat omoară UI + worker + bench, APOI rulează ăsta cu `--force`.
+START_8000.bat omoară UI + worker + bench + copiii ProcessPool
+(`cleanup_old_processes.py`), APOI rulează ăsta cu `--force`.
 PENDING/RUNNING rămase sunt cadavre (procesele au fost deja omorâte) — dacă le
 păstrăm, noul worker le reia singur, iar UI-ul arată la o pornire goală:
   «⏳ Job în rulare (#1) — 0% / se inițializează...».

@@ -161,15 +161,18 @@ set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
 set PYTHONUNBUFFERED=1
 
 echo [2/4] Eliberare resurse - port 8000, UI + worker + bench vechi
-REM Omoara procesele python ale ACESTUI proiect din sesiunea anterioara: app_nicegui.py
-REM (UI care tine portul 8000), worker.py, SI bench_all_methods.py (bench-ul ruleaza in
-REM CMD propriu, CREATE_NEW_CONSOLE -> ramanea deschis dupa restart si putea rula in
-REM paralel cu un bench nou = doua procese scriu folds.csv = corupere). Omorand parintele
-REM bench, copiii din ProcessPool ies singuri (pipe rupt).
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*app_nicegui.py*' -or $_.CommandLine -like '*worker.py*' -or $_.CommandLine -like '*bench_all_methods.py*') -and $_.CommandLine -like '*%~dp0*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host ('[CLEANUP] Oprit PID ' + $_.ProcessId) }"
-REM Fallback: orice mai asculta pe 8000 (LISTENING)
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr ":8000" 2^>nul') do (
-    if NOT "%%a"=="0" taskkill /f /pid %%a >nul 2>&1
+REM Omoara UI + worker + bench + copiii ProcessPool din sesiunea anterioara.
+REM NU filtra pe calea proiectului in CommandLine: bench-ul din UI e pornit cu
+REM cale RELATIVA, exe-ul e venv-ul din D:\_BUILD\_LOTO (in AFARA repo-ului),
+REM deci %~dp0 nu apare pe cmdline — acelasi bug ca in cancel_all din UI.
+REM Python face tree-kill: pe Windows uciderea parintelui NU omoara copiii.
+"%VENV_DIR%\Scripts\python.exe" "%~dp0cleanup_old_processes.py" --venv "%VENV_DIR%" --port 8000
+REM Fallback: orice mai asculta pe 8000. /C:":8000 " evita :80001; /T = arborele.
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr /C:":8000 " 2^>nul') do (
+    if NOT "%%a"=="0" (
+        echo [CLEANUP] Port 8000 inca ocupat de PID %%a
+        taskkill /f /t /pid %%a >nul 2>&1
+    )
 )
 timeout /t 3 /nobreak >nul 2>&1
 
