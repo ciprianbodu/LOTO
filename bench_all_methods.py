@@ -1,11 +1,11 @@
-"""LOTO time-series benchmark laboratory (CLI, 100% pure-laboratorul).
+"""LOTO time-series benchmark laboratory (CLI, 100% CPU).
 
 Specul:
     • auto-detect ISTORIC/ (sau _LOTO/istoric/) cu CSV-uri per joc
     • teste pe FIECARE joc: 6/49, 5/40, Joker (Urna 1 = 5/45, Urna 2 = 1/20)
     • toate metodele din registry (cele instalate rulează; restul N/A cu motiv)
     • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
-    • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 6 (Urna 1)
+    • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 14 (Urna 1)
       sau DRAW_SIZE (Urna 2)
     • telemetrie: CPU% peak/avg, RAM peak
     • output în consolă cu tabele `rich`

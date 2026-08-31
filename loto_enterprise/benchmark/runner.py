@@ -464,11 +464,22 @@ def run_benchmark(
                 row[f"rate_3plus_{k}"] = v
             rows.append(row)
         _df = pd.DataFrame(rows)
+        import uuid as _uuid
+        _target = out_path / "folds.csv"
+        _tmp = _target.with_name(
+            f"{_target.name}.{os.getpid()}.{_uuid.uuid4().hex[:8]}.tmp"
+        )
         try:
-            _tmp = out_path / "folds.csv.tmp"
-            _df.to_csv(_tmp, index=False)
-            _tmp.replace(out_path / "folds.csv")  # atomic (OneDrive-safe)
+            with open(_tmp, "w", encoding="utf-8", newline="") as _fh:
+                _df.to_csv(_fh, index=False)
+                _fh.flush()
+                os.fsync(_fh.fileno())
+            os.replace(_tmp, _target)  # atomic (OneDrive-safe)
         except Exception as exc:  # noqa: BLE001
+            try:
+                _tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
             logger.debug("[bench] flush folds.csv esuat: %s", exc)
         return _df
 

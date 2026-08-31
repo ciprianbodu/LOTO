@@ -821,6 +821,7 @@ def _start_walk_forward() -> None:
                                 g_label,
                                 list(data.get("hard_core") or []),
                                 list(data.get("variants") or []),
+                                wheel_coverage=(data.get("context") or {}).get("coverage_pct"),
                             )
                             with STATE_LOCK:
                                 STATE["retro"][_p2rk] = _flat_p2
@@ -4228,7 +4229,7 @@ def _startup() -> None:
 app.on_startup(_startup)
 
 if __name__ in {"__main__", "__mp_main__"}:
-    _port = int(os.environ.get("LOTO_UI_PORT", "8080"))
+    _port = int(os.environ.get("LOTO_UI_PORT", "8000"))
     # show=False: browserul e deschis de START_8000.bat (mai fiabil pe Windows).
     # reconnect_timeout mărit: cât rulează bench/walk-forward, event-loop-ul poate fi
     # ocupat (citiri loguri OneDrive) → fără timeout generos, WebSocket pica 'connection lost'.
