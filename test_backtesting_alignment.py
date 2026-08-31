@@ -63,3 +63,41 @@ def test_pool_draw_hits_uses_hard_core_not_ticket_union():
     tickets_union = {1, 2, 10}
     assert len(tickets_union & set(actual)) == 2
     assert pool_draw_hits(pool, actual) > len(tickets_union & set(actual))
+
+
+def test_invalid_out_of_range_duplicate_and_decimal_rows_are_excluded_everywhere(tmp_path):
+    """Engine, WF și benchmark trebuie să vadă aceeași istorie validă."""
+    from loto_engine import LotoEngine
+    from loto_enterprise.benchmark.runner import GameDef, load_draws
+
+    df = _clean_df(12)
+    df.loc[2, "n1"] = 0
+    df.loc[4, "n2"] = df.loc[4, "n1"]
+    df["n3"] = df["n3"].astype(float)
+    df.loc[7, "n3"] = 3.5
+    path = tmp_path / "loto_6_49.csv"
+    df.to_csv(path, index=False)
+
+    game = GameDef("loto_6_49", "Loto 6/49", str(path), COLS, 49, 6)
+    bench_draws = load_draws(game)
+    backtester = LotoBacktester(df, game_type="6/49")
+    engine = LotoEngine("6/49")
+
+    assert engine.load_data(str(path))
+    assert len(bench_draws) == len(backtester.draws) == len(engine.data) == len(df) - 3
+    assert engine.audit["invalid_draw_rows_dropped"] == 3
+
+
+def test_engine_rejects_a_dataset_with_no_valid_draws(tmp_path):
+    from loto_engine import LotoEngine
+
+    df = _clean_df(10)
+    df["n1"] = 0
+    path = tmp_path / "all_invalid.csv"
+    df.to_csv(path, index=False)
+
+    engine = LotoEngine("6/49")
+    assert not engine.load_data(str(path))
+    assert engine.data is None
+    assert engine.audit["rows_loaded"] == 10
+    assert engine.audit["rows_valid"] == 0

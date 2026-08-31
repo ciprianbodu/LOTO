@@ -63,10 +63,13 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v13"
+CACHE_VERSION = "v14"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
 # ⚠️ De la v13 numele fișierului începe cu versiunea (`v13_<hash>.pkl`) → straturile
 # vechi pot fi curățate selectiv cu `purge_stale_fold_cache()`.
+# v14: toate traseele (engine, WF, bench) validează identic o extragere: exact
+#      draw_n întregi distincți în interval. Un istoric corupt nu mai poate fi
+#      evaluat diferit de producție, deci fold-urile v13 pot fi stale.
 # v13: denominatori UNIFICAȚI în _evaluate_fold — hits_per_pool[_bl]/avg_hits_topk
 #      împart la n_eval (extrageri efectiv evaluate), nu la n_test; + câmp nou
 #      FoldResult.n_eval (folosit de Wilson-ul din decision/UI). Valorile din folds

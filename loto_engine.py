@@ -23,6 +23,7 @@ import sys
 # Tot suportul GPU/neural (TimesFM/torch/foundation) a fost eliminat din aplicație.
 # Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
 from loto_enterprise.core.pool_selection import select_pool_from_scores
+from loto_enterprise.core.draw_validation import valid_draw_matrix
 # Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
@@ -308,8 +309,9 @@ class LotoEngine:
         """Încarcă date din CSV."""
         try:
             self.data = pd.read_csv(csv_path)
+            raw_rows = len(self.data)
             self._build_draw_matrix()
-            self.audit["rows_loaded"] = len(self.data)
+            self.audit["rows_loaded"] = raw_rows
             self.audit["game_detected"] = self.game_type
             # Hash pe CONȚINUT, nu pe pointeri. `self.data.values` pe un DataFrame
             # cu dtype-uri MIXTE (coloana `date` = str + n1..n6 = int64) dă un
@@ -328,6 +330,7 @@ class LotoEngine:
             # utilizatorul vedea „gata" și niciun bilet, fără nicio eroare.
             # Cerem cel puțin o extragere valid parsată (matricea de extrageri).
             if self._draw_matrix is None or len(self._draw_matrix) == 0:
+                self.audit["rows_valid"] = 0
                 logging.error(
                     "[LOAD] %s: nicio extragere validă după parsare (%s rânduri "
                     "citite) — date inutilizabile pentru %s.",
@@ -335,6 +338,7 @@ class LotoEngine:
                 )
                 self.data = None
                 return False
+            self.audit["rows_valid"] = len(self.data)
             return True
         except Exception as e:
             logging.error("[LOAD] Eroare la încărcare date din %s: %s", csv_path, e)
@@ -384,7 +388,11 @@ class LotoEngine:
         return None
 
     def _build_draw_matrix(self) -> None:
-        """Construiește o dată matrice (rows x draw_n) de numere întregi — fără split pe string în buclă."""
+        """Construiește matricea validă ``rows x draw_n`` pentru scorere.
+
+        Rândurile invalide se elimină împreună din ``data`` și matrice: fără
+        asta indecșii din walk-forward ar antrena pe un rând și ar evalua altul.
+        """
         if self.data is None:
             self._draw_matrix = None
             return
@@ -392,15 +400,43 @@ class LotoEngine:
         if "numbers" in df.columns:
             self._draw_matrix = None
             return
-        n_cols = [c for c in df.columns if str(c).lower().startswith("n")]
+        n_cols = [
+            c for c in df.columns
+            if str(c).lower().startswith("n") and str(c).lower() != "numbers"
+        ]
         n_cols = sorted(n_cols, key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"))[
             : int(self.params["draw_n"])
         ]
-        if not n_cols:
+        draw_n = int(self.params["draw_n"])
+        if len(n_cols) != draw_n:
+            logging.error(
+                "[LOAD] %s: sunt necesare %d coloane n1..n%d, găsite %s.",
+                self.game_type, draw_n, draw_n, [str(c) for c in n_cols],
+            )
             self._draw_matrix = None
             return
-        raw = df[n_cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
-        self._draw_matrix = np.nan_to_num(raw, nan=0.0).astype(np.int32)
+        try:
+            matrix, valid_mask = valid_draw_matrix(
+                df, n_cols, draw_n=draw_n, max_num=int(self.params["max_n"]),
+            )
+        except ValueError as exc:
+            logging.error("[LOAD] %s: validare extrageri eșuată: %s", self.game_type, exc)
+            self._draw_matrix = None
+            return
+
+        rejected = int(len(df) - int(valid_mask.sum()))
+        if rejected:
+            logging.warning(
+                "[LOAD] %s: elimin %d rând(uri) invalide (numere lipsă, duplicate, "
+                "zecimale sau în afara intervalului).",
+                self.game_type, rejected,
+            )
+            self.data = df.loc[valid_mask].reset_index(drop=True)
+        self._draw_matrix = matrix.astype(np.int32, copy=False)
+        self.audit["draw_number_columns"] = [str(c) for c in n_cols]
+        self.audit["invalid_draw_rows_dropped"] = int(
+            self.audit.get("invalid_draw_rows_dropped", 0)
+        ) + rejected
 
     def analyze_frequency(self) -> np.ndarray:
         """Analiză frecvență numerelor (vectorizat pe matrice sau coloana numbers)."""

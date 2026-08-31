@@ -24,5 +24,18 @@ def test_csv_hash_stable_on_identical_history():
     assert _csv_hash(df_a, "6/49") == _csv_hash(df_b, "6/49")
 
 
-def test_cache_version_bumped_for_full_history_hash():
-    assert CACHE_VERSION == "v18"
+def test_cache_version_tracks_covering_design_signature(monkeypatch, tmp_path):
+    import wheeling_methods as wm
+    from loto_enterprise.core.walk_forward_adapter import _wheel_sig
+
+    design = tmp_path / "C_12_6_4.txt"
+    design.write_text("1 2 3 4 5 6\n", encoding="utf-8")
+    monkeypatch.setattr(wm, "_LAJOLLA_DIRS", [tmp_path])
+    monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
+
+    before = _wheel_sig(12, "6/49")
+    design.write_text("1 2 3 4 5 7\n", encoding="utf-8")
+    after = _wheel_sig(12, "6/49")
+
+    assert CACHE_VERSION == "v20"
+    assert before != after

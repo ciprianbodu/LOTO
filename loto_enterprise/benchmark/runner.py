@@ -39,6 +39,7 @@ from .hardware import (
 )
 from .hw_sampler import HwSampler, HwSnapshot
 from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.draw_validation import valid_draw_matrix
 
 logger = logging.getLogger(__name__)
 
@@ -138,12 +139,19 @@ def discover_games(istoric_dir: str | None = None) -> list[GameDef]:
 
 def load_draws(game: GameDef) -> np.ndarray:
     df = pd.read_csv(game.csv_path)
-    missing = [c for c in game.cols if c not in df.columns]
-    if missing:
-        raise ValueError(f"{game.csv_path}: lipsesc coloanele {missing}")
-    arr = df[game.cols].to_numpy(dtype=np.int64)
-    mask = np.all((arr >= 1) & (arr <= game.max_num), axis=1)
-    return arr[mask]
+    try:
+        draws, valid_mask = valid_draw_matrix(
+            df, game.cols, draw_n=game.draw_n, max_num=game.max_num,
+        )
+    except ValueError as exc:
+        raise ValueError(f"{game.csv_path}: {exc}") from exc
+    rejected = int(len(df) - int(valid_mask.sum()))
+    if rejected:
+        logger.warning(
+            "[bench] %s: ignor %d extrageri invalide (aceeași regulă ca engine/WF).",
+            game.csv_path, rejected,
+        )
+    return draws
 
 
 # ---------------------------------------------------------------------------

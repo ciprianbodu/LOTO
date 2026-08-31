@@ -3900,7 +3900,11 @@ def main_page() -> None:
             return widget
 
         _bind_save(ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=16, step=1).classes("w-full"), "pool_size_val")
-        _bind_save(ui.number("Garanție minimă (Set Cover)", min=3, max=5, step=1).classes("w-full"), "guarantee_val")
+        _bind_save(ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1).classes("w-full"), "guarantee_val")
+        ui.label(
+            "6 este sistem complet pentru 6/49; la 5/40 și Joker garanția efectivă "
+            "este plafonată la 5 numere extrase."
+        ).classes("text-caption text-grey")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number(

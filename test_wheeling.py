@@ -185,6 +185,13 @@ def test_complete_system_guarantee_equals_pick_is_full_cover():
     assert {n for t in wheel_cap for n in t} == set(pool)
 
 
+def test_ui_exposes_the_valid_six_number_guarantee_for_649():
+    """6/49 poate cere deliberat guarantee==pick (sistem complet)."""
+    source = Path("app_nicegui.py").read_text(encoding="utf-8")
+    marker = 'ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1)'
+    assert marker in source
+
+
 def test_capped_wheel_keeps_weak_pool_numbers() -> None:
     """max_variants > 0 trunchia lexicografic — numerele slabe din pool nu apăreau
     pe niciun bilet. Acum un lipsă înlocuiește un duplicat (cât încape pick*cap)."""

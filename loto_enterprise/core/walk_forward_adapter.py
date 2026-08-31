@@ -41,8 +41,11 @@ from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("bench_results")
-CACHE_VERSION = "v19"
+CACHE_VERSION = "v20"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v20: cheia wheel include hash-ul fișierului covering-design folosit de La Jolla
+#      (și union34). Un design actualizat schimbă lista de bilete, costul și
+#      hiturile per bilet; cache-urile v19 nu îl puteau observa automat.
 # v19: `wheel_union34` nu mai unește două covere redundante; pentru 3+/4+
 #      folosește un singur C(v, pick, 4). Se schimbă lista de bilete, costul și
 #      rezultatele `hits` per bilet, deci cache-ul v18 ar valida un wheel vechi.
@@ -254,8 +257,24 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     continuare cache vechi, iar raportul arăta costuri umflate cu ~32% pentru Pool 1,
     lângă un Pool 2 recalculat cu wheel-ul nou.
     """
-    method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "lajolla"
-    return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}"
+    requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
+    try:
+        from wheeling_methods import WHEEL_METHODS, covering_design_source_signature
+        method = requested if requested in WHEEL_METHODS or requested == "greedy" else "greedy"
+        if not requested:
+            method = "lajolla"
+        guarantee = _wf_guarantee(pool_size, _WF_PICK.get(game_type))
+        if method in {"lajolla", "union34"}:
+            design_guarantee = 4 if method == "union34" and guarantee <= 4 else guarantee
+            design_sig = covering_design_source_signature(
+                int(pool_size), int(_WF_PICK.get(game_type) or 6), design_guarantee,
+            )
+            return f"{method}|g{guarantee}|cd{design_sig}"
+        return f"{method}|g{guarantee}"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)
+        method = requested or "lajolla"
+        return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}|cd-error"
 
 
 def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0) -> str:

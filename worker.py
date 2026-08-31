@@ -176,7 +176,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             p_size = int(task.get("pool_size", 12))
             p_size = max(6, min(16, p_size))  # aliniat cu UI (pool_size_val max 16)
             raw_guar = int(task.get("guarantee", 4))
-            # UI-ul permite 3..5; workerul poate primi însă joburi vechi sau
+            # UI-ul permite 3..6; workerul poate primi însă joburi vechi sau
             # externe. O garanție 0 generează semantic un cover al mulțimii vide,
             # iar una peste draw_n nu e realizabilă pentru jocul respectiv.
             guar = max(3, min(draw_n, raw_guar))

@@ -25,6 +25,7 @@ import pandas as pd
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from loto_engine import LotoEngine
+from loto_enterprise.core.draw_validation import valid_draw_matrix
 
 logger = logging.getLogger(__name__)
 
@@ -356,41 +357,32 @@ class LotoBacktester:
         
         logger.info(f"[BACKTEST] Coloane detectate: {num_cols}")
         
-        # Extragem numerele și datele
-        valid_labels = []
-        for idx, row in self.df.iterrows():
-            numbers = []
-            for col in num_cols:
-                if col in row and pd.notna(row[col]):
-                    try:
-                        num = int(row[col])
-                        numbers.append(num)
-                    except (ValueError, TypeError):
-                        continue
+        try:
+            matrix, valid_mask = valid_draw_matrix(
+                self.df,
+                num_cols,
+                draw_n=int(self.params["draw_n"]),
+                max_num=int(self.params["max_n"]),
+            )
+        except ValueError as exc:
+            raise ValueError(f"Extrageri invalide pentru {self.game_type}: {exc}") from exc
 
-            if len(numbers) >= self.params["draw_n"]:
-                self.draws.append(numbers)
-                valid_labels.append(idx)
-                # Încercăm să extragem data dacă există
-                date_val = None
-                for date_col in ["date", "data", "draw_date", "extragere", "Data"]:
-                    if date_col in row:
-                        date_val = str(row[date_col])
-                        break
-                self.dates.append(date_val)
-
-        # ALINIERE df ↔ draws: rândurile INVALIDE (NaN/non-numerice) intrau în df
-        # dar nu în draws, iar sim_idx indexează AMBELE (df.iloc[:sim_idx] ca
-        # istoric de antrenare, draws[sim_idx] ca țintă). Un singur rând murdar
-        # înainte de sim_idx deplasa fereastra de antrenare cu k rânduri și
-        # dezalinia sim_date/target_date. Pe CSV curat filtrarea e NO-OP
-        # (df rămâne identic → bit-identitate păstrată).
-        if len(valid_labels) != len(self.df):
+        # ALINIERE df ↔ draws: folosim exact aceeași validare ca engine-ul și
+        # runner-ul de bench. Fără filtrarea df-ului, sim_idx indexa două axe
+        # diferite: istoricul pentru antrenare și extragerea țintă.
+        if not bool(valid_mask.all()):
             logger.warning(
                 "[BACKTEST] %d rând(uri) invalide eliminate din df pentru aliniere cu draws.",
-                len(self.df) - len(valid_labels),
+                len(self.df) - int(valid_mask.sum()),
             )
-            self.df = self.df.loc[valid_labels].reset_index(drop=True)
+            self.df = self.df.loc[valid_mask].reset_index(drop=True)
+
+        self.draws = [list(row) for row in matrix]
+        date_col = next(
+            (c for c in ["date", "data", "draw_date", "extragere", "Data"] if c in self.df.columns),
+            None,
+        )
+        self.dates = [str(v) if pd.notna(v) else None for v in self.df[date_col]] if date_col else [None] * len(self.df)
 
         logger.info(f"[BACKTEST] Extrageri valide procesate: {len(self.draws)}")
     
