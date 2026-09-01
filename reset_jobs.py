@@ -27,11 +27,20 @@ import sqlite3
 import sys
 from pathlib import Path
 
+# Consola CMD poate rămâne cp1252; mesajele românești și simbolurile de status
+# nu trebuie să transforme un reset reușit într-un exit 1.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+
 # Sursa unică pentru calea DB (în afara OneDrive — vezi job_queue._default_db_path).
 try:
-    from job_queue import DB_PATH as DB
+    from job_queue import DB_PATH as DB, init_job_queue as _init_job_queue
 except Exception:  # noqa: BLE001
     DB = "loto_jobs.db"
+    _init_job_queue = None
 
 
 def _clear_last_finalized_job_id() -> bool:
@@ -88,6 +97,13 @@ def main() -> int:
     if not os.path.exists(DB):
         print(f"Nu există {DB} — coada e deja goală. Următorul job va fi #1.")
         return 0
+
+    # `reset_jobs.py` citește direct `completed_at`, deci trebuie să aplice
+    # aceeași migrare aditivă ca UI-ul/worker-ul înainte de primul SELECT.
+    # Altfel o bază creată de o versiune veche oprește fresh-start-ul exact când
+    # launcherul încearcă s-o repare.
+    if _init_job_queue is not None:
+        _init_job_queue(DB)
 
     force = "--force" in sys.argv
     # `busy_timeout` + WAL, ca în `job_queue._conn`: scriptul rulează din

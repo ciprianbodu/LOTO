@@ -58,5 +58,5 @@ def test_decode_empty_payload():
 def test_worker_pipeline_cache_key_is_versioned():
     """Un payload de engine vechi nu poate deveni cache hit după o corecție."""
     source = open("worker.py", encoding="utf-8").read()
-    assert 'PIPELINE_CACHE_VERSION = "v2"' in source
+    assert 'PIPELINE_CACHE_VERSION = "v3"' in source
     assert 'cache_key = f"{PIPELINE_CACHE_VERSION}:{input_hash}"' in source

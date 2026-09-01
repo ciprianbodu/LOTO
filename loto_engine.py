@@ -541,7 +541,7 @@ class LotoEngine:
             _wheel_method = _wheel_method_env
         elif max_variants == 0:
             # Implicit, fără cap de bilete ("garanție completă"): design de acoperire
-            # CUNOSCUT-OPTIM din covering_designs/ pentru geometriile UI: pool 6-16,
+            # PRECALCULAT și validat 100% din covering_designs/ pentru geometriile UI: pool 6-16,
             # pick 5/6 și garanție 3..pick-1. Orice geometrie fără fișier cade pe
             # ILP, apoi pe greedy. Exemplu: 6/49 pool 12 / g4, 54→41 bilete;
             # 5/40+Joker pool 12 / g4, 123→113.

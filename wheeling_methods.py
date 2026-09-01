@@ -13,8 +13,9 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        + swap) prin simulated annealing, păstrând acoperirea.
   • wheel_genetic    — buget FIX de bilete; algoritm genetic care MAXIMIZEAZĂ
                        acoperirea (ponderată pe scoruri). Fitness pe CPU (numpy).
-  • wheel_lajolla    — designuri optime cunoscute (fișiere covering_designs/);
-                       altfel cade pe ILP exact (mic) → greedy. „Best-known".
+  • wheel_lajolla    — designuri precalculate și validate 100% (fișiere
+                       covering_designs/); altfel cade pe ILP → greedy.
+                       Sunt incumbente deterministe, nu dovezi de optimalitate.
   • wheel_union34    — alias compatibil pentru un cover guarantee=4: un cover
                        complet 4-din-4 acoperă implicit şi orice 3-din-3, fără
                        biletele redundante ale vechii uniuni 3∪4.
@@ -486,7 +487,7 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
 
 
 # ===========================================================================
-# 4) La Jolla — designuri optime cunoscute (fișiere) → ILP → greedy
+# 4) La Jolla — designuri precalculate validate (fișiere) → ILP → greedy
 # ===========================================================================
 # Ancorate la MODUL, nu la directorul de lucru. Căile relative rămân pe listă (ca
 # override), dar nu mai sunt singura sursă: cu ele singure, orice apel cu alt CWD

@@ -255,12 +255,14 @@ Instalarea canonica este:
 `requirements_snapshot.txt` este arhiva si nu se instaleaza. Stack-ul este CPU;
 nu adauga Torch, CUDA, TimesFM, NeuralForecast sau Streamlit.
 
-Pe statia curenta, auditul din 2026-08-31 a gasit o inregistrare Chocolatey
-Python 3.14.3 cu shim spre `C:\Python314\python.exe`, dar executabilul si venv-ul
-proiectului lipseau. Repararea se face prin `ACTUALIZARI.bat`, apoi:
+Pe statia curenta, auditul din 2026-09-01 a eliminat dependenta de shim-ul
+Chocolatey ramas spre `C:\Python314\python.exe`. Python 3.14.7 este instalat in
+`%LOCALAPPDATA%\Programs\Python\Python314`, iar venv-ul proiectului este functional.
+`ACTUALIZARI.bat` detecteaza executabilul real chiar daca launcherul `py` lipseste.
+Verificarea canonica este:
 
 ```powershell
-py -3.14 --version
+%LOCALAPPDATA%\Programs\Python\Python314\python.exe --version
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe --version
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe -m pip check
 ```
@@ -307,8 +309,10 @@ submit -> worker -> rezultat. Nu considera simplul import suficient.
 
 ### P0 - restaurare operationala
 
-- [ ] Ruleaza `ACTUALIZARI.bat` si repara instalarea Python 3.14 plus venv-ul.
-- [ ] Ruleaza `pip check`, `verify_imports.py` si intreaga suita pytest.
+- [x] Instaleaza Python 3.14.7 si recreeaza venv-ul CPU din requirements.
+- [x] Ruleaza `pip check` si `verify_imports.py`: toate modulele sunt verzi.
+- [x] Intareste `ACTUALIZARI.bat`: detector fara `py`, semnatura installer,
+  erori fatale la pip/import si snapshot extern arhivei versionate.
 - [ ] Porneste UI + worker si executa un job E2E pe fiecare tip de joc.
 
 Criteriu de iesire: Python 3.14 si venv functionale, toate importurile obligatorii
@@ -316,12 +320,17 @@ verzi, pytest verde, UI HTTP 200 si payload worker decodat corect.
 
 ### P0 - recalibrare dupa Urna 2 top-1
 
-- [ ] Ruleaza un Re-Bench complet cu cache `v16` pe toate cele 43 metode curate.
-- [ ] Genereaza `rate_1plus_k1` si decizia `joker_urna2.k1`.
-- [ ] Verifica daca vreo metoda depaseste random 5% prin poarta de consistenta si
+- [x] Ruleaza Re-Bench pe toate cele 43 metode curate si cele patru jocuri.
+- [x] Genereaza 344 folduri Urna 2, `rate_1plus_k1` si decizia `joker_urna2.k1`.
+- [x] Verifica daca vreo metoda depaseste random 5% prin poarta de consistenta si
   Wilson; pastreaza `low_confidence` daca dovada nu exista.
-- [ ] Revizuieste `folds.csv`, `report.json` si `best_methods.json` impreuna,
+- [x] Revizuieste `folds.csv`, `report.json` si `best_methods.json` impreuna,
   apoi comite numai output-urile complete care trebuie versionate.
+
+Rezultat 2026-09-01: productia foloseste `autocorr`, `sim_depth=30%`, ensemble
+nominal cu un membru si `low_confidence=true`; nicio metoda nu a trecut poarta de
+consistenta de 60%. Cele 14 metode plate pe geometria single-pick sunt marcate
+failed si excluse, nu transformate artificial in ranking prin tie-break.
 
 Criteriu de iesire: toate cele patru jocuri au folduri curente, nicio metoda cu
 scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisata.

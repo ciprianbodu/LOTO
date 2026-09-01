@@ -49,7 +49,8 @@ setlocal enabledelayedexpansion
 set VENV_DIR=D:\_BUILD\_LOTO\.venv
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%VENV_DIR%\Lib\site-packages
-set REQ_SNAPSHOT=requirements_snapshot.txt
+set "REQ_SNAPSHOT=D:\_BUILD\_LOTO\requirements_before_upgrade.txt"
+set "PY314_EXE="
 
 echo ============================================================
 echo   ACTUALIZARE MEDIU LOTO ENTERPRISE
@@ -80,11 +81,11 @@ if "%SYS_VER%"=="" (
 )
 
 if not exist "%VENV_PY%" (
-    echo [INFO] Venv lipsa la %VENV_DIR% — il creez acum cu py -3.14...
+    echo [INFO] Venv lipsa la %VENV_DIR% — il creez cu Python %SYS_VER%...
     if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
-    py -3.14 -m venv "%VENV_DIR%"
+    "%PY314_EXE%" -m venv "%VENV_DIR%"
     if errorlevel 1 (
-        echo [EROARE] Creare venv esuata. Verifica ca Python 3.14 e instalat: py -3.14 --version.
+        echo [EROARE] Creare venv esuata cu %PY314_EXE%.
         pause
         exit /b 1
     )
@@ -97,7 +98,7 @@ REM ultimul 3.14.x disponibil) difera de venv, recream venv-ul automat.
 REM ============================================================
 echo [-1/4] Detectie versiune Python venv vs sistem...
 for /f "tokens=2 delims= " %%V in ('"%VENV_PY%" --version 2^>^&1') do set VENV_VER=%%V
-for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set SYS_VER=%%V
+call :detect_python314
 if "%SYS_VER%"=="" goto :skip_python_upgrade
 echo   Venv:    %VENV_VER%
 echo   Sistem:  %SYS_VER%
@@ -133,7 +134,7 @@ if exist "%VENV_DIR%" (
 )
 
 REM Creez venv nou cu cea mai noua 3.14.x
-py -3.14 -m venv "%VENV_DIR%"
+"%PY314_EXE%" -m venv "%VENV_DIR%"
 if errorlevel 1 (
     echo   [EROARE] Creare venv nou esuata. Ruleaza din nou ACTUALIZARI.bat.
     goto :skip_python_upgrade
@@ -176,20 +177,23 @@ echo/
 
 echo [1/4] Pip upgrade + pachete benchmark...
 "%VENV_PY%" -m pip install --upgrade pip --quiet
+if errorlevel 1 (
+    echo   [EROARE] Upgrade pip esuat.
+    goto :fatal_setup
+)
 echo/
 
 echo [1b] Install pachete din requirements_base.txt - exclusiv CPU...
 if not exist "requirements_base.txt" (
-    echo   [WARN] requirements_base.txt lipseste — sar peste.
-) else (
-    "%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed -r requirements_base.txt
-    if errorlevel 1 (
-        echo   [ATENTIE] Install partial a esuat. Continui.
-        echo/
-    ) else (
-        echo   [OK] Pachete instalate / actualizate.
-    )
+    echo   [EROARE] requirements_base.txt lipseste.
+    goto :fatal_setup
 )
+"%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed -r requirements_base.txt
+if errorlevel 1 (
+    echo   [EROARE] Instalarea dependentelor obligatorii a esuat.
+    goto :fatal_setup
+)
+echo   [OK] Pachete instalate / actualizate.
 
 echo/
 echo [1c] Curatare ghost-uri post-install - 3 runde cu wait...
@@ -202,7 +206,16 @@ call :CleanGhosts
 echo/
 
 echo [2/4] Verificare mediu CPU: metode statistice/ML + assets benchmark...
-"%VENV_PY%" verifica_mediu.py
+"%VENV_PY%" -u "%~dp0verify_imports.py"
+if errorlevel 1 (
+    echo   [EROARE] Verificarea importurilor obligatorii a esuat.
+    goto :fatal_setup
+)
+"%VENV_PY%" "%~dp0verifica_mediu.py"
+if errorlevel 1 (
+    echo   [EROARE] Verificarea mediului a esuat.
+    goto :fatal_setup
+)
 echo/
 
 echo [2b/4] Descarcare extrageri noi din loto49.ro...
@@ -256,6 +269,14 @@ echo/
 pause
 endlocal
 exit /b 0
+
+
+:fatal_setup
+echo/
+echo [EROARE] Actualizarea mediului s-a oprit. Corecteaza eroarea de mai sus si reruleaza ACTUALIZARI.bat.
+pause
+endlocal
+exit /b 1
 
 
 :push_istoric
@@ -321,8 +342,7 @@ REM Offline: pastreaza runtime-ul existent; o instalare noua necesita retea.
 REM La final seteaza SYS_VER pentru fluxul principal.
 REM ============================================================
 echo/
-set "SYS_VER="
-for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set "SYS_VER=%%V"
+call :detect_python314
 set "PY_LATEST="
 set "PY_VER_FILE=%TEMP%\loto-python-3.14-latest.version"
 del "%PY_VER_FILE%" >nul 2>&1
@@ -355,18 +375,18 @@ where winget >nul 2>&1
 if errorlevel 1 goto :ep_download_latest
 if "!SYS_VER!"=="" (
     echo   [PYTHON] winget install Python.Python.3.14...
-    winget install -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
+    winget install -e --id Python.Python.3.14 --source winget --silent --accept-package-agreements --accept-source-agreements
 ) else (
     echo   [PYTHON] winget upgrade Python.Python.3.14...
-    winget upgrade -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
+    winget upgrade -e --id Python.Python.3.14 --source winget --silent --accept-package-agreements --accept-source-agreements
 )
-set "SYS_VER="
-for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set "SYS_VER=%%V"
+call :detect_python314
 if "!PY_LATEST!"=="" (
     if not "!SYS_VER!"=="" (
         echo   [OK] Python disponibil dupa winget: !SYS_VER!
         goto :eof
     )
+    goto :ep_download_latest
 )
 if "!SYS_VER!"=="!PY_LATEST!" (
     echo   [OK] Python actualizat prin winget: !SYS_VER!
@@ -385,25 +405,50 @@ if "!PY_LATEST!"=="" (
 set "PY_URL=https://www.python.org/ftp/python/!PY_LATEST!/python-!PY_LATEST!-amd64.exe"
 set "PY_EXE=%TEMP%\python-!PY_LATEST!-amd64.exe"
 echo   [PYTHON] Descarc installer-ul oficial !PY_LATEST!...
+del "!PY_EXE!" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri '!PY_URL!' -OutFile '!PY_EXE!' -UseBasicParsing } catch { exit 1 }"
-if not exist "!PY_EXE!" (
+if errorlevel 1 (
     echo   [EROARE] Descarcare installer esuata - verifica conexiunea.
+    goto :ep_verify_latest
+)
+if not exist "!PY_EXE!" (
+    echo   [EROARE] Installer-ul descarcat lipseste.
+    goto :ep_verify_latest
+)
+echo   [PYTHON] Verific semnatura digitala a installer-ului...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=Get-AuthenticodeSignature -LiteralPath '!PY_EXE!'; if($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Python Software Foundation'){exit 1}"
+if errorlevel 1 (
+    echo   [EROARE] Semnatura installer-ului Python nu este valida.
+    del "!PY_EXE!" >nul 2>&1
     goto :ep_verify_latest
 )
 echo   [PYTHON] Instalare silentioasa !PY_LATEST! - user-scope + py launcher...
 "!PY_EXE!" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_test=0 SimpleInstall=1
+set "PY_INSTALL_RC=!ERRORLEVEL!"
 del "!PY_EXE!" >nul 2>&1
+if not "!PY_INSTALL_RC!"=="0" if not "!PY_INSTALL_RC!"=="3010" (
+    echo   [EROARE] Installer-ul Python a esuat cu RC=!PY_INSTALL_RC!.
+    goto :ep_verify_latest
+)
 
 :ep_verify_latest
-set "SYS_VER="
-for /f "tokens=2 delims= " %%V in ('py -3.14 --version 2^>^&1') do set "SYS_VER=%%V"
+call :detect_python314
 if "!SYS_VER!"=="" (
-    echo   [EROARE] py -3.14 inca indisponibil dupa instalare.
-    echo           Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat.
+    echo   [EROARE] Python 3.14 este indisponibil dupa instalare.
 ) else if not "!SYS_VER!"=="!PY_LATEST!" (
     echo   [ATENTIE] Python detectat !SYS_VER!, dar online este !PY_LATEST!.
     echo              Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat.
 ) else (
     echo   [OK] Python instalat/actualizat: !SYS_VER!
+)
+goto :eof
+
+
+:detect_python314
+set "PY314_EXE="
+set "SYS_VER="
+for /f "tokens=1,2 delims=|" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\find_python314.ps1" 2^>nul') do (
+    set "PY314_EXE=%%P"
+    set "SYS_VER=%%Q"
 )
 goto :eof

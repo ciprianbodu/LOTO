@@ -440,7 +440,7 @@ def run_benchmark(
                     n_train = max(80, n_train)
                 if n_train < 80:
                     continue
-                total_folds_est += 2  # real + random
+                total_folds_est += 2 if shuffled_control else 1
     # Marker parsabil de UI: gpu=0 mereu (păstrat pt compatibilitate cu parsing-ul UI).
     logger.info("[BENCH-SPLIT] cpu=%d gpu=0 total=%d", total_folds_est, total_folds_est)
     done_global = 0

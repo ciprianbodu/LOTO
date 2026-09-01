@@ -191,6 +191,26 @@ def test_no_db_file_returns_zero_without_touching_anything(tmp_path, monkeypatch
     assert rc == 0
 
 
+def test_old_schema_is_migrated_before_completed_query(tmp_path, monkeypatch):
+    """Fresh-start trebuie să repare DB-ul vechi înainte să citească completed_at."""
+    db_path = str(tmp_path / "old_schema.db")
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            "CREATE TABLE jobs (id INTEGER PRIMARY KEY, task_type TEXT NOT NULL, "
+            "status TEXT NOT NULL, config_json TEXT NOT NULL, result_json TEXT, "
+            "progress_pct INTEGER NOT NULL DEFAULT 0, log_tail TEXT NOT NULL DEFAULT '', "
+            "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+    job_queue._INITIALIZED_DBS.discard(db_path)
+    monkeypatch.setattr(reset_jobs, "DB", db_path)
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+
+    assert reset_jobs.main() == 0
+    with sqlite3.connect(db_path) as con:
+        cols = {row[1] for row in con.execute("PRAGMA table_info(jobs)")}
+    assert "completed_at" in cols
+
+
 # --------------------------------------------------------------------------- #
 # is_stale_unstarted_job — garda din _startup
 # --------------------------------------------------------------------------- #

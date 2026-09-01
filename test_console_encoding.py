@@ -32,6 +32,6 @@ def test_utf8_reconfigure_allows_romanian_on_cp1252_backed_stream():
 
 
 def test_startup_scripts_reconfigure_console_streams():
-    for name in ("verify_imports.py", "verifica_mediu.py", "update_csv.py"):
+    for name in ("verify_imports.py", "verifica_mediu.py", "update_csv.py", "reset_jobs.py"):
         text = Path(name).read_text(encoding="utf-8")
         assert 'reconfigure(encoding="utf-8"' in text, f"{name} lipseste reconfigure UTF-8"

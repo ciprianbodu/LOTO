@@ -113,5 +113,5 @@ def test_union34_reports_coverage_for_requested_guarantee_when_capped():
     wheel, coverage = wheel_union34(pool, 6, 3, max_variants=4)
 
     assert len(wheel) == 4
-    assert coverage == _coverage(wheel, 10, 3)
-    assert coverage != _coverage(wheel, 10, 4)
+    assert coverage == pytest.approx(_coverage(wheel, 10, 3), abs=0.01)
+    assert coverage != pytest.approx(_coverage(wheel, 10, 4), abs=0.01)

@@ -134,13 +134,13 @@ def check_bench_assets():
     else:
         print("-> [LIPSA] best_methods.json — ruleaza `python bench_all_methods.py` macar o data")
 
-    istoric = Path("ISTORIC")
+    istoric = Path("_ISTORIC")
     if istoric.exists():
         csvs = list(istoric.glob("*.csv"))
-        print(f"-> [OK] folderul ISTORIC contine {len(csvs)} CSV-uri: "
+        print(f"-> [OK] folderul _ISTORIC contine {len(csvs)} CSV-uri: "
               f"{[p.name for p in csvs]}")
     else:
-        print("-> [LIPSA] folderul ISTORIC — benchmark-ul nu poate rula fara el")
+        print("-> [LIPSA] folderul _ISTORIC — benchmark-ul nu poate rula fara el")
 
 
 def _is_in_venv() -> bool:

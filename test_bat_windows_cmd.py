@@ -123,13 +123,67 @@ def test_updates_installs_latest_python314_without_hardcoded_patch():
     assert text.index("call :ensure_latest_python314") < text.index(
         'if not exist "%VENV_PY%"'
     ), "Python trebuie instalat înainte de prima creare a venv-ului"
-    assert "winget upgrade -e --id Python.Python.3.14" in text
-    assert "winget install -e --id Python.Python.3.14" in text
+    assert "winget upgrade -e --id Python.Python.3.14 --source winget" in text
+    assert "winget install -e --id Python.Python.3.14 --source winget" in text
     assert "https://www.python.org/ftp/python/" in text
     assert r"3\.14\.\d+/" in text
     assert "python-!py_latest!-amd64.exe" in compact
     assert "python-3.14.6" not in text
     assert "choice /C YN" not in text, "migrarea venv-ului trebuie să fie automată"
+
+
+def test_python314_detection_validates_the_real_interpreter():
+    """Textul de eroare al launcherului nu poate deveni o versiune fictivă."""
+    updater = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    detector = (ROOT / "scripts" / "find_python314.ps1").read_text(encoding="utf-8")
+
+    assert "call :detect_python314" in updater
+    assert "py -3.14 --version 2^>^&1" not in updater
+    assert "py -3.14 -m venv" not in updater
+    assert '"%PY314_EXE%" -m venv' in updater
+    assert "sys.version_info[:2] == (3, 14)" in detector
+    assert "sys.executable + '|' + sys.version.split()[0]" in detector
+    assert "Python314\\python.exe" in detector
+
+
+def test_updates_preserves_archival_requirements_snapshot_and_checks_installer():
+    text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    assert "requirements_before_upgrade.txt" in text
+    assert "set REQ_SNAPSHOT=requirements_snapshot.txt" not in text
+    assert "Get-AuthenticodeSignature" in text
+    assert "Python Software Foundation" in text
+    assert "PY_INSTALL_RC" in text
+
+
+def test_updates_cannot_treat_two_missing_versions_as_success():
+    text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    start = text.index('if "!PY_LATEST!"=="" (', text.index("winget install"))
+    end = text.index('if "!SYS_VER!"=="!PY_LATEST!"', start)
+    no_online = text[start:end]
+    assert "goto :ep_download_latest" in no_online
+
+
+def test_start_requires_prepared_venv_instead_of_creating_an_empty_one():
+    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    verify = text[text.index("\n:verify_phase"):text.index("\n:launch_phase")]
+    assert "-m venv" not in verify
+    assert "ACTUALIZARI.bat" in verify
+
+
+def test_start_stops_when_queue_reset_fails():
+    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    launch = text[text.index("\n:launch_phase"):text.index("\n:push_istoric")]
+    reset_pos = launch.index('reset_jobs.py" --force')
+    failure_guard = launch.index("if errorlevel 1", reset_pos)
+    worker_pos = launch.index('start "LOTO WORKER"')
+    assert reset_pos < failure_guard < worker_pos
+    assert "exit /b 30" in launch[failure_guard:worker_pos]
+
+
+def test_environment_check_uses_canonical_history_directory():
+    text = (ROOT / "verifica_mediu.py").read_text(encoding="utf-8")
+    assert 'Path("_ISTORIC")' in text
+    assert 'Path("ISTORIC")' not in text
 
 
 def test_updates_integrity_check_matches_cpu_requirements():

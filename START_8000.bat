@@ -114,13 +114,9 @@ set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
 echo [1/4] Verificare Mediu Proiect - %VENV_DIR%
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo [INFO] Creare mediu nou: %VENV_DIR%
-    if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
-    py -3.14 -m venv "%VENV_DIR%"
-    if not !ERRORLEVEL!==0 (
-        echo [EROARE] Creare venv esuata. Verifica Python 3.14 si permisiunile.
-        endlocal & exit /b 10
-    )
+    echo [EROARE] Mediul aplicației lipseste: %VENV_DIR%
+    echo Solutie: ruleaza ACTUALIZARI.bat, apoi reincearca START_8000.bat.
+    endlocal & exit /b 10
 )
 
 echo/
@@ -181,6 +177,10 @@ REM reziduale care se reiau singure (procesele vechi sunt deja omorate la [2/4],
 REM deci putem reseta in siguranta). Numerotarea reincepe de la #1.
 echo [2b/4] Golire coada de joburi - fresh start
 "%VENV_DIR%\Scripts\python.exe" "%~dp0reset_jobs.py" --force
+if errorlevel 1 (
+    echo [EROARE] Resetarea cozii de joburi a esuat. Nu pornesc worker-ul peste o baza inconsistenta.
+    endlocal & exit /b 30
+)
 
 echo [3/4] Pornire Worker
 start "LOTO WORKER" /min "%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
