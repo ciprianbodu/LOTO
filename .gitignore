@@ -52,7 +52,6 @@ pool_history.json
 .bench_pid
 .regenerate_after_bench
 .shutdown_pending.flag
-.auto_invert.flag
 .ui_state.json
 bench_full.log
 

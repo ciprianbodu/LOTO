@@ -80,8 +80,7 @@ CACHE_VERSION = "v22"
 #      Cheia veche fixa doar scorer/ensemble/target, deci trecerea wheeling-ului de la
 #      ILP la designurile La Jolla (6/49 pool 12: ~54 → 41 bilete) NU a invalidat nimic:
 #      raportul continua să afișeze număr de variante și hituri pe wheel-ul vechi,
-#      alături de un Pool 2 regenerat cu cel nou (41.819 bilete vs 31.611 pe aceleași
-#      extrageri).
+#      alături de rezultate regenerate cu wheel-ul nou.
 #      Bump-ul de VERSIUNE (peste schimbarea de sig, care ar fi invalidat oricum) e ca
 #      pickle-urile v13 să devină vizibile pentru `purge_stale_wf_cache`, altfel ar fi
 #      rămas orfane la nesfârșit sub aceeași versiune.
@@ -99,7 +98,7 @@ CACHE_VERSION = "v22"
 # v9:  pool top-N pur + OMNIUS top-N (optimizare hits 3+).
 # v8:  649_katz12_gap88 scorer 6/49 k16.
 # v7:  nefolosită (sărită).
-# v6:  sufix _inv.pkl pentru cache-ul Pool 2 (auto-invert).
+# v6:  sufix legacy pentru cache-ul celei de-a doua treceri (funcție eliminată).
 # v5:  iterare recent→vechi la oprire parțială (buget) — cache-urile v4 parțiale acopereau felia veche.
 # v4:  flat-ul include omnius_hits/omnius_ticket per extragere.
 # v3:  cheia include semnătura deciziei bench (scorer/sim_depth/blacklist).
@@ -260,8 +259,8 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     depind de algoritmul de wheeling. Fără wheel în cheie, schimbarea ILP → La Jolla
     (doar 6/49 pool 12 / g4:
     ~54 → 41 bilete; `covering_designs/` are doar C_12_6_4 și C_12_5_4) a servit în
-    continuare cache vechi, iar raportul arăta mai multe variante pentru Pool 1 decât
-    pe wheel-ul regenerat în Pool 2.
+    continuare cache vechi, iar raportul amesteca numărul vechi de variante cu
+    rezultate regenerate pe wheel-ul nou.
     """
     requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
     try:
@@ -316,12 +315,10 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
         return "nd" + hashlib.md5(_wheel_sig(pool_size, game_type).encode()).hexdigest()[:6]
 
 
-def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str,
-                auto_invert: bool = False) -> Path:
+def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str) -> Path:
     safe = game_type.replace("/", "_")
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
-    inv = "_inv" if auto_invert else ""
-    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}{inv}.pkl"
+    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}.pkl"
 
 
 def expand_predictions_to_flat(
@@ -405,7 +402,6 @@ def run_honest_walk_forward(
     force_refresh: bool = False,
     progress_cb=None,
     should_cancel=None,
-    auto_invert: bool = False,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -416,8 +412,7 @@ def run_honest_walk_forward(
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
     dec_sig = _decision_sig(game_type, pool_size, lookback_percent)
-    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig,
-                            auto_invert=auto_invert)
+    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig)
     meta = {
         "csv_hash": csv_hash,
         "decision_sig": dec_sig,
@@ -426,7 +421,6 @@ def run_honest_walk_forward(
         "game_type": game_type,
         "pool_size": pool_size,
         "backtest_depth_percent": backtest_depth_percent,
-        "auto_invert": bool(auto_invert),
     }
 
     cached = None
@@ -470,7 +464,6 @@ def run_honest_walk_forward(
     logger.info(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
-        f"{' (Pool 2 / inversare)' if auto_invert else ''}"
     )
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
@@ -486,7 +479,6 @@ def run_honest_walk_forward(
         smart_reduction=False,
         progress_cb=progress_cb,      # frac 0..1 per simulare → bară de progres în UI
         should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
-        auto_invert=auto_invert,
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
@@ -535,89 +527,6 @@ def run_honest_walk_forward(
         logger.warning(f"[WALK-FWD] Cache save failed: {exc}")
 
     return flat, meta
-
-
-def build_retrospective_pool_hits_flat(
-    flat_reference: list[WalkForwardResult],
-    df_source: pd.DataFrame,
-    game_type: str,
-    pool_numbers: list[int],
-    variants: list,
-    wheel_coverage: float | None = None,
-) -> tuple[list[WalkForwardResult], dict]:
-    """Istoric hits Pool 2 fără walk-forward onest.
-
-    Folosește ACELEAȘI extrageri ca WF Pool 1, dar pool-ul + wheel-ul CURENT
-    (generat azi). Rapid (secunde): nu regenerează pipeline-ul la fiecare pas.
-    Informativ pentru plasa de siguranță — NU înlocuiește validarea WF Pool 1.
-    """
-    from loto_enterprise.core.backtesting import LotoBacktester
-
-    if not flat_reference or not pool_numbers:
-        return [], {"retrospective": True, "n_test_draws": 0, "partial": False}
-
-    # Aici wheel-ul NU se regenerează: `variants` e wheel-ul de PRODUCŢIE, deci
-    # acoperirea lui e cea din `context["coverage_pct"]` al jobului (pasată de UI),
-    # aceeaşi pentru toate extragerile replayate.
-    try:
-        _cov = None if wheel_coverage is None else float(wheel_coverage)
-    except (TypeError, ValueError):
-        _cov = None
-    bt = LotoBacktester(df_source, game_type=game_type)
-    draw_n = int(_WF_PICK.get(game_type, 6))
-    pool_set = {int(x) for x in pool_numbers}
-    variants = variants or []
-
-    draw_indices = sorted({int(getattr(p, "draw_index", -1)) for p in flat_reference} - {-1})
-    flat_out: list[WalkForwardResult] = []
-    n_draws = 0
-
-    for di in draw_indices:
-        if di < 0 or di >= len(bt.draws):
-            continue
-        raw = bt.draws[di]
-        actual = set(int(x) for x in raw[:draw_n])
-        dd = bt.dates[di] if di < len(bt.dates) else None
-        hits_union = len(pool_set & actual)
-        n_draws += 1
-
-        if variants:
-            for v in variants:
-                vset = set(scored_variant_numbers(v, game_type))
-                flat_out.append(WalkForwardResult(
-                    draw_index=di,
-                    draw_date=str(dd) if dd else None,
-                    variant=list(v),
-                    hits=len(vset & actual),
-                    hits_union=hits_union,
-                    target_draw_date=str(dd) if dd else None,
-                    wheel_coverage=_cov,
-                ))
-        else:
-            flat_out.append(WalkForwardResult(
-                draw_index=di,
-                draw_date=str(dd) if dd else None,
-                variant=[],
-                hits=hits_union,
-                hits_union=hits_union,
-                target_draw_date=str(dd) if dd else None,
-                wheel_coverage=_cov,
-            ))
-
-    meta = {
-        "retrospective": True,
-        "wheel_coverage": wheel_coverage_summary(flat_out),
-        "n_test_draws": n_draws,
-        "n_expected": n_draws,
-        "partial": False,
-        "from_cache": False,
-        "auto_invert": True,
-    }
-    logger.info(
-        "[WALK-FWD] Retrospectiv Pool 2 %s: %d extrageri, %d intrări flat (fără WF)",
-        game_type, n_draws, len(flat_out),
-    )
-    return flat_out, meta
 
 
 def _stale_wf_cache_files() -> list[Path]:

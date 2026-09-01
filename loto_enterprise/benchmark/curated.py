@@ -9,13 +9,11 @@ Diferența față de `disabled.py` (blacklist):
       fișierul (sau golești lista `active`) și bench-ul revine instantaneu la
       toate metodele available minus blacklist. Nimic nu se pierde.
 
-Criteriul de selecție NU e clasamentul (vezi CLAUDE.md — tăierea pe performanță
-e zgomot: overlap top-15 între jumătățile de date = 13-20%, iar baseline-ul
-`random` câștigă 4 din 45 de celule joc×pool). Criteriul e ACOPERIREA DE SEMNAL
-DISTINCT: păstrăm metode ale căror scoruri sunt necorelate între ele
-(|Spearman| < 0.95, sub pragul `method_selector.MAX_MEMBER_CORR`) și eliminăm
-clonele. Efect: mai puține metode, bench mai rapid, iar ensemble-ul chiar rămâne
-cu membri distincți (nu mai colapsează la runtime prin decorelare).
+Criteriul curent combină avantajul observat față de baseline pe fereastra
+externă cu ACOPERIREA DE SEMNAL DISTINCT: păstrăm numai metode peste random,
+nedegenerate, apoi eliminăm clonele cu |Spearman| >= 0.95. Este o selecție
+reversibilă pe istoric, nu o afirmație că loteria a devenit predictibilă;
+gate-ul oficial din `decision.py` rămâne obligatoriu la fiecare Re-Bench.
 
 Cele două filtre se COMPUN: curated ∩ (available minus disabled).
 """
@@ -96,7 +94,8 @@ def curated_meta() -> dict:
 def load_per_game() -> dict[str, list[str]]:
     """Top-N per joc din curated_methods.json ``per_game`` (dedup, ordine păstrată).
 
-    Chei așteptate: ``loto_6_49`` / ``loto_5_40`` / ``joker_urna1``.
+    Chei așteptate: ``loto_6_49`` / ``loto_5_40`` / ``joker_urna1`` /
+    ``joker_urna2``.
     Lipsă/invalid → {} (decizia folosește tot ``active``).
     """
     try:
@@ -185,8 +184,9 @@ def log_curation(info: dict) -> None:
         )
         return
     logger.info(
-        "[curated] curated: %d din %d metode (criteriu: acoperire de semnal distinct, "
-        "NU clasament). Anulare: șterge sau golește %s + re-bench.",
+        "[curated] curated: %d din %d metode (criteriu: peste baseline + semnal "
+        "distinct; selecție istorică reversibilă). Anulare: șterge sau golește "
+        "%s + re-bench.",
         info.get("n_after", 0), info.get("n_before", 0), _PATH,
     )
     if info.get("missing"):

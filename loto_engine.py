@@ -583,20 +583,15 @@ class LotoEngine:
 
         return variants, coverage_pct
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, manual_blacklist=None, track_pool_variation=True):
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, track_pool_variation=True):
         """Rulează pipeline-ul complet de analiză.
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
             Backtester-ul îl lasă False (își gestionează propriul state in-memory).
 
-        manual_blacklist: Set/listă de numere pe care utilizatorul vrea să le
-            excludă din selecție (ex: butonul "Inverseaza Pool" din UI care
-            tratează pool-ul anterior ca blacklist). Se combină cu blacklist-ul
-            calculat automat de motor, cu safety check anti-saturare.
-
         track_pool_variation: Dacă True (implicit — producție), compară pool-ul
-            cu ultimul pool salvat pentru același joc+dimensiune+trecere și
+            cu ultimul pool salvat pentru același joc+dimensiune și
             rescrie pool_history.json. Pașii de walk-forward/backtest îl lasă
             False: scriu pe aceeași cheie ca producția, deci ar suprascrie
             pool-ul real. NU folosi enable_adaptive_persistence ca poartă —
@@ -807,53 +802,7 @@ class LotoEngine:
             'sim_depth_pct': sim_depth_pct,
             'disabled_by_user': True,
         }
-        logging.info("[PIPELINE] Filtre dezactivate — pool = top-scor pur; singura excepție: auto-invert (manual_blacklist).")
-
-        # === Manual Inversion (utilizator: butonul "Inverseaza Pool") ===
-        # Userul a apăsat butonul de inversare după ce pool-ul anterior n-a ieșit
-        # bine în extragerile reale. Tratăm pool-ul anterior ca blacklist explicit.
-        # Stocam pe instanta ca atribut pentru a fi RESPECTAT STRICT pana la final
-        # (fallback-ul de completare a pool-ului poate altfel sa-l incalce).
-        self._manual_blacklist_set: set[int] = set()
-        if manual_blacklist:
-            try:
-                manual_set = set(int(n) for n in manual_blacklist if int(n) > 0)
-            except (TypeError, ValueError):
-                manual_set = set()
-                logging.warning("[MANUAL-INVERSION] manual_blacklist invalid, ignor.")
-            if manual_set:
-                max_n_safe = int(self.params.get("max_n", 49))
-                combined = blacklist | manual_set
-                if len(combined) >= max_n_safe - pool_size:
-                    logging.warning(
-                        f"[MANUAL-INVERSION] Manual ({len(manual_set)}) + auto ({len(blacklist)}) "
-                        f"= {len(combined)} blocheaza prea mult din univers ({max_n_safe}). "
-                        f"Pool_size cerut: {pool_size}. Skip pentru a evita pool gol."
-                    )
-                    # Marcam in audit ca inversarea NU s-a aplicat (pool prea mare pt joc)
-                    # -> UI poate avertiza in loc sa arate Pool 2 identic cu Pool 1.
-                    self.audit["manual_inversion"] = {
-                        "skipped": True,
-                        "reason": "pool prea mare pentru inversare",
-                        "n_requested_exclude": len(manual_set),
-                        "n_auto_blacklist": len(blacklist),
-                        "max_num": max_n_safe,
-                        "pool_size": pool_size,
-                        "pool_max_pentru_inversare": max(1, (max_n_safe - len(blacklist)) // 2),
-                    }
-                else:
-                    blacklist = combined
-                    self._manual_blacklist_set = set(manual_set)  # STRICT
-                    self.audit["manual_inversion"] = {
-                        "trigger": "user_invert_button",
-                        "excluded": sorted(manual_set),
-                        "n_excluded": len(manual_set),
-                        "scope": "single_run",
-                    }
-                    logging.info(
-                        f"[MANUAL-INVERSION] User a cerut excluderea a {len(manual_set)} numere "
-                        f"(pool anterior). Blacklist total: {len(blacklist)} din {max_n_safe}."
-                    )
+        logging.info("[PIPELINE] Filtre dezactivate — pool = top-scor pur.")
 
         self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
 
@@ -870,7 +819,6 @@ class LotoEngine:
 
         # Flow minimal (cerere user 2026-07-08): scoring → pool top-N → wheel.
         # Fără POST-HOC, anti-secvență, anomaly filter sau alte rafinări.
-        # Singura „inversare": manual_blacklist (auto-invert Pool 2).
         self.audit["pure_bench_mode"] = True
         self.audit["filters_disabled"] = True
         if len(self.hard_core) > pool_size:
@@ -923,62 +871,8 @@ class LotoEngine:
                         int(i) + 1: int(freq_joker[i]) for i in np.argsort(freq_joker)[-5:][::-1]
                     }
                     logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
-            # Auto-invert (Pool 2) NU inversează Urna 2: univers mic (1-20), iar
-            # scoring-ul urna2 ignoră manual_blacklist → pass 2 recalculează pe
-            # aceleași date și obține ACELAȘI joker la ambele pool-uri. Cheie de
-            # audit explicită ca UI-ul să poată avertiza, nu să afirme implicit
-            # că Pool 2 conține numere excluse din Pool 1.
-            self.audit['joker_urna2_inverted'] = False
-
         if progress_cb:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
-
-        # === STRICT MANUAL BLACKLIST ENFORCEMENT ===
-        # Filtrul anti-secventa si fallback-ul de completare a pool-ului pot
-        # reintroduce numere din manual_blacklist. Aplicam un filtru HARD aici,
-        # imediat inainte de wheeling, ca sa garantam ca pool-ul final NU
-        # contine niciun numar exclus de user.
-        if getattr(self, "_manual_blacklist_set", None):
-            mb = set(self._manual_blacklist_set)
-            violated = [n for n in self.hard_core if n in mb]
-            if violated:
-                logging.warning(
-                    f"[MANUAL-BLACKLIST] {len(violated)} numere din pool-ul exclus au fost "
-                    f"reintroduse de pipeline ({sorted(violated)}). Le elimin si completez."
-                )
-                # Elimin violarile
-                self.hard_core = [n for n in self.hard_core if n not in mb]
-                # Completez cu top-scoring numere care NU sunt in manual_blacklist.
-                # Selecția trece prin rank_by_score (regula canonică): filtrarea
-                # (blacklist manual + numerele deja în pool) rămâne la apelant,
-                # conform contractului modulului.
-                if tfm_scores:
-                    clean_scores = {
-                        int(n): float(s) for n, s in tfm_scores.items()
-                        if n not in mb and n not in self.hard_core
-                    }
-                else:
-                    clean_scores = {
-                        i + 1: float(f) for i, f in enumerate(freq)
-                        if (i + 1) not in mb and (i + 1) not in self.hard_core
-                    }
-                needed = pool_size - len(self.hard_core)
-                added_replacements = [int(n) for n in rank_by_score(clean_scores, needed)]
-                self.hard_core.extend(added_replacements)
-                self.hard_core = sorted(self.hard_core)
-                self.audit.setdefault("manual_inversion", {})["enforced_violations_fixed"] = {
-                    "removed": sorted(violated),
-                    # numerele EFECTIV adăugate de rank_by_score — vechiul
-                    # „[-needed:] pe pool-ul sortat" raporta pur și simplu cele mai
-                    # mari valori din pool, nu înlocuirile reale.
-                    "added_replacements": sorted(added_replacements),
-                }
-                logging.info(f"[MANUAL-BLACKLIST] Pool final dupa enforcement: {self.hard_core}")
-
-            else:
-                logging.info(f"[MANUAL-BLACKLIST] Pool curat ({len(self.hard_core)} numere, niciun violator).")
-            if 'pipeline_stages' in self.audit:
-                self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
@@ -1040,7 +934,7 @@ class LotoEngine:
 
         # --- TRACK POOL VARIATION ---
         # Pașii de walk-forward / backtest NU au voie să scrie aici: cheia e
-        # `{joc}_{pool}_{pass}` — EXACT cheia de producție. Cei ~1940 de pași ai
+        # `{joc}_{pool}` — EXACT cheia de producție. Cei ~1940 de pași ai
         # unui ciclu WF suprascriau intrarea reală, iar `pool_variation` din raport
         # compara pool-ul curent cu un pool dintr-un punct istoric arbitrar. În plus,
         # cele ~25 de procese WF scriau concurent același `.tmp` (nume fix în
@@ -1068,19 +962,16 @@ class LotoEngine:
                         logging.warning("[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.", exc)
                         history = {}
             
-                # Cheia SEPARĂ Pool 1 de Pool 2. Fără sufix, auto-inversarea (care rulează
-                # pipeline-ul de două ori pe același joc+pool) scria ambele pool-uri sub
-                # aceeași cheie: ultima trecere câștiga, iar la rularea următoare Pool 1 se
-                # compara cu Pool 2 al rulării precedente. Cum Pool 2 e prin construcție
-                # DISJUNCT de Pool 1, tracker-ul raporta mereu schimbare totală
-                # (toate numerele „added", toate „removed") — informație fără conținut.
-                _pass = "p2" if getattr(self, "_manual_blacklist_set", None) else "p1"
-                hist_key = f"{self.game_type}_{pool_size}_{_pass}"
-                # Cheile în formatul vechi (fără sufix) nu mai sunt citite de nimeni și ar
-                # rămâne în fișier la nesfârșit; le eliminăm la prima scriere.
-                history = {k: v for k, v in history.items()
-                           if k.endswith("_p1") or k.endswith("_p2")}
-                last_pool = history.get(hist_key, {}).get("pool", [])
+                hist_key = f"{self.game_type}_{pool_size}"
+                legacy_key = f"{hist_key}_p1"
+                last_pool = (history.get(hist_key, {}) or {}).get("pool", [])
+                if not last_pool:
+                    last_pool = (history.get(legacy_key, {}) or {}).get("pool", [])
+                # Migrare unică: elimină intrările vechi cu sufix de fază.
+                history = {
+                    k: v for k, v in history.items()
+                    if not (str(k).endswith("_p1") or str(k).endswith("_p2"))
+                }
             
                 pool_variation = {}
                 if last_pool:
@@ -1588,17 +1479,15 @@ class LotoEngine:
             max_num=max_num, draw_matrix=self._draw_matrix,
         )
         
-        # Garanție pool complet: dacă blacklist-ul a tăiat prea mult, completăm
-        # DOAR din numere NE-excluse. Completarea din blacklist reintroducea
-        # Pool 1 în Pool 2 (auto-invert) înainte de enforcement.
+        # Gardă defensivă: dacă selectorul întoarce prea puține numere,
+        # completăm numai din candidații ne-excluși.
         if len(pool) < pool_size:
             logging.warning(
                 f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). "
                 "Completez din numere ne-excluse (nu din blacklist)."
             )
             have = {int(n) for n in pool}
-            invert_bl = set(getattr(self, "_manual_blacklist_set", None) or ())
-            blocked = set(int(n) for n in blacklist) | invert_bl
+            blocked = set(int(n) for n in blacklist)
             extra_scores = {
                 int(num): float(score)
                 for num, score in scores.items()

@@ -74,8 +74,8 @@ _AVAILABLE_METHODS = [
 ]
 
 # Al DOILEA filtru, REVERSIBIL: curated_methods.json (rădăcina repo). Dacă fișierul
-# există și are `active` nevidă, bench-ul rulează DOAR acel subset (criteriu:
-# acoperire de semnal distinct, nu clasament). Absent/gol → comportamentul de
+# există și are `active` nevidă, bench-ul rulează DOAR acel subset (criteriu
+# curent: peste baseline + semnal distinct). Absent/gol → comportamentul de
 # dinainte (toate metodele available minus blacklist). Cele două filtre se compun:
 # curated ∩ (available minus disabled). Log-ul se emite în main(), după
 # logging.basicConfig() (aici, la import, handler-ele încă nu există).
@@ -191,7 +191,7 @@ def main() -> int:
         console.print(
             f"[bold yellow]🎯 Curare activă:[/bold yellow] {CURATION_INFO['n_after']} metode "
             f"din {CURATION_INFO['n_before']} "
-            f"[dim](criteriu: acoperire de semnal, nu clasament — "
+            f"[dim](criteriu: peste baseline + semnal distinct — "
             f"anulare: șterge/golește curated_methods.json + re-bench)[/dim]"
         )
     console.print()

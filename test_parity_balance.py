@@ -62,41 +62,46 @@ def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 43
+    assert len(cur) == 56
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
-    # Rebuild TOP 20/joc din 97 metode CPU math (2026-08-25 r3).
+    # Rebuild TOP 20/joc din metodele CPU + selecția top-1 pentru Urna 2
+    # (2026-09-01). Urna 2 are numai 16 semnale distincte peste baseline;
+    # lista nu este umplută artificial cu pierzători sau clone.
     added = {
         "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
-        "nmf_cooc", "fourier", "649_hazard_overdue", "pair_affinity",
+        "nmf_cooc", "fourier", "pair_affinity", "dmd", "649_gap_sqrt",
         "parity_balance", "graph_clustering", "prime_bias",
         "649_katz15_beta85", "graph_eigenvector", "mi_lag_bag",
-        "neg_binomial", "graph_anti_community", "649_rrf_graph",
-        "649_mom_20_80", "graph_personalized_pr",
+        "graph_anti_community", "649_rrf_graph", "649_gmean_freq_rec",
+        "649_mom_20_80", "graph_personalized_pr", "ml_knn_5",
+        "circular_kernel", "649_katz12_gap88", "bayes_poisson",
     }
     assert added <= set(cur)
     pg = load_per_game()
-    expect_n = {"loto_6_49": 20, "loto_5_40": 20, "joker_urna1": 20}
+    expect_n = {
+        "loto_6_49": 20,
+        "loto_5_40": 20,
+        "joker_urna1": 20,
+        "joker_urna2": 16,
+    }
     expect_extra = {
         "loto_6_49": [
-            "pair_affinity", "649_katz15_beta85", "649_rank_borda",
-            "pca_resid_surprise", "mi_lag_bag", "neg_binomial",
+            "649_rank_borda", "649_katz25_gap75_b", "dmd",
+            "pair_affinity", "graph_degree_recent", "graph_personalized_pr",
         ],
         "loto_5_40": [
-            "graph_anti_community", "autocorr", "649_rrf_graph",
-            "frequency", "graph_rwr_recent", "parity_balance",
+            "649_rank_borda", "649_rrf_graph", "autocorr",
+            "graph_anti_community", "649_gap_sqrt", "graph_commute",
         ],
         "joker_urna1": [
-            "649_mom_20_80", "649_katz15_beta85", "graph_anti_community",
-            "cusum_appearance", "prime_bias", "nmf_cooc",
+            "dmd", "frequency", "649_mom_20_80",
+            "cusum_appearance", "649_parity_recent", "nmf_cooc",
         ],
-    }
-    rejected = {
-        "circular_kernel", "649_sum_reversion", "649_mom_10_40",
-        "bayes_poisson", "649_beta_mean", "649_wilson_lb",
-        "649_last_neighbors", "649_decade_hot",
-        "ml_decision_tree", "ml_nearest_centroid", "ml_passive_aggressive",
-        "ml_lda",
+        "joker_urna2": [
+            "circular_kernel", "649_last_neighbors", "649_decade_hot",
+            "ml_knn_5", "autocorr", "bayes_poisson",
+        ],
     }
     for g, n in expect_n.items():
         assert g in pg
@@ -105,11 +110,13 @@ def test_curated_active_and_per_game():
         assert "random" not in pg[g]
         for m in expect_extra[g]:
             assert m in pg[g]
-        assert rejected.isdisjoint(pg[g])
-    # frequency e REQUIRED în active; pe Joker e clonă Katz → nu e în per_game
-    assert "frequency" not in pg["joker_urna1"]
+        assert "ml_decision_tree" not in pg[g]
+        assert "ml_nearest_centroid" not in pg[g]
+    # frequency rămâne fallback structural și a trecut gate-ul extern pe Joker.
+    assert "frequency" in pg["joker_urna1"]
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 43
+    assert len(kept) == 56
     assert info["per_game"]["loto_6_49"] == 20
     assert info["per_game"]["loto_5_40"] == 20
     assert info["per_game"]["joker_urna1"] == 20
+    assert info["per_game"]["joker_urna2"] == 16

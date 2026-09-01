@@ -11,9 +11,10 @@ from loto_enterprise.benchmark.methods import METHODS, call_method
 from loto_enterprise.core.ranking import is_consecutive_block, rank_by_score
 
 GAMES = {
-    "loto_6_49": (Path("_ISTORIC/loto_6_49.csv"), ("n1", "n2", "n3", "n4", "n5", "n6"), 49),
-    "loto_5_40": (Path("_ISTORIC/loto_5_40.csv"), ("n1", "n2", "n3", "n4", "n5"), 40),
-    "joker_urna1": (Path("_ISTORIC/joker.csv"), ("n1", "n2", "n3", "n4", "n5"), 45),
+    "loto_6_49": (Path("_ISTORIC/loto_6_49.csv"), ("n1", "n2", "n3", "n4", "n5", "n6"), 49, 11),
+    "loto_5_40": (Path("_ISTORIC/loto_5_40.csv"), ("n1", "n2", "n3", "n4", "n5"), 40, 11),
+    "joker_urna1": (Path("_ISTORIC/joker.csv"), ("n1", "n2", "n3", "n4", "n5"), 45, 11),
+    "joker_urna2": (Path("_ISTORIC/joker.csv"), ("joker",), 20, 1),
 }
 
 ADDED = (
@@ -50,6 +51,18 @@ ADDED = (
     "649_ewma_20",
     "graph_fiedler",
     "graph_personalized_pr",
+    # 2026-09-01 — selecția top-1 separată pentru Joker Urna 2
+    "circular_kernel",
+    "649_katz12_gap88",
+    "649_cold_rebound",
+    "sum_affinity",
+    "649_volatility_low",
+    "649_consec_penalty",
+    "bayes_poisson",
+    "649_low_high_bal",
+    "649_last_neighbors",
+    "649_decade_hot",
+    "ml_knn_5",
 )
 
 
@@ -65,9 +78,9 @@ def _load(path: Path, cols: tuple[str, ...]) -> np.ndarray:
 def test_added_math_methods_finite_not_consecutive_block():
     """Pe jocul (jocurile) din per_game, nu forțat pe 6/49 — degenerarea e per univers."""
     pg = load_per_game()
-    hist: dict[str, tuple[np.ndarray, int]] = {}
-    for gk, (path, cols, max_num) in GAMES.items():
-        hist[gk] = (_load(path, cols)[:-1], max_num)
+    hist: dict[str, tuple[np.ndarray, int, int]] = {}
+    for gk, (path, cols, max_num, pool_size) in GAMES.items():
+        hist[gk] = (_load(path, cols)[:-1], max_num, pool_size)
 
     for name in ADDED:
         assert name in METHODS, name
@@ -75,10 +88,12 @@ def test_added_math_methods_finite_not_consecutive_block():
         if not games:
             games = ["loto_6_49"]
         for gk in games:
-            draws, max_num = hist[gk]
+            draws, max_num, pool_size = hist[gk]
             scores, _dt = call_method(name, draws, max_num)
             assert scores, (name, gk)
             assert all(np.isfinite(v) for v in scores.values()), (name, gk)
-            pool = rank_by_score(scores, 11)
-            assert len(pool) == 11, (name, gk, pool)
-            assert not is_consecutive_block(pool, min_size=6), (name, gk, sorted(pool))
+            assert len({round(float(v), 12) for v in scores.values()}) >= 2, (name, gk)
+            pool = rank_by_score(scores, pool_size)
+            assert len(pool) == pool_size, (name, gk, pool)
+            if pool_size > 1:
+                assert not is_consecutive_block(pool, min_size=6), (name, gk, sorted(pool))

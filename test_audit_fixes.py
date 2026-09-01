@@ -150,15 +150,14 @@ def test_engine_really_ignores_blacklist():
 
 
 # --------------------------------------------------------------------------
-# 5. Audit 2026-08-30: pass 2, abandon, mail, NaN, worker spawn
+# 5. Audit 2026-09-01: pool unic, abandon, mail, NaN, worker spawn
 # --------------------------------------------------------------------------
-def test_auto_invert_pass2_checks_load_data():
-    """Pass 2 ignora return-ul lui load_data → COMPLETED cu Pool 2 gol."""
-    src = open("worker.py", encoding="utf-8").read()
-    i = src.index("Auto-Invert ACTIV")
-    body = src[i:src.index("effective_pool", i)]
-    assert "if not engine.load_data(temp_csv_path):" in body
-    assert "pass 2" in body.lower() or "Auto-Invert pass 2" in body
+def test_worker_and_ui_no_longer_offer_second_pool():
+    worker = open("worker.py", encoding="utf-8").read()
+    ui_src = open("app_nicegui.py", encoding="utf-8").read()
+    assert "auto_invert" not in worker
+    assert "auto_invert_val" not in ui_src
+    assert "Inversare automată" not in ui_src
 
 
 def test_abandon_unstarted_scopes_to_active_job():
@@ -170,13 +169,12 @@ def test_abandon_unstarted_scopes_to_active_job():
     assert "job_ids=[int(jid)]" in body.replace(" ", "")
 
 
-def test_mail_body_warns_when_pool2_equals_pool1():
-    """Mail-ul trebuie să spună același lucru ca UI-ul când inversarea e sărită."""
+def test_mail_body_contains_only_one_pool_per_game():
     src = open("app_nicegui.py", encoding="utf-8").read()
     i = src.index("def _build_mail_body")
     body = src[i:src.index("def _send_test_email", i)]
-    assert "INVERSARE NEAPLICATĂ" in body
-    assert "identic cu Pool 1" in body
+    assert 'lines.append("POOL:   "' in body
+    assert "POOL 2" not in body
 
 
 def test_normalize_nan_does_not_poison_all_scores():

@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 # ── Walk-forward paralel (stateless): ~80% nuclee CPU, ca la bench ─────────────
 _WF_CPU_FRACTION = float(__import__("os").environ.get("LOTO_WF_CPU_FRAC", "0.80"))
 _WF_PER_PROC_GB = 0.8  # engine + wheeling per proces
-_WF_PER_PROC_GB_INVERT = 1.4  # Pool 2: 2× pipeline / pas
 _WF_STEP_TIMEOUT_S = float(__import__("os").environ.get("LOTO_WF_STEP_TIMEOUT_S", "900"))
 # Sondă de cost: pornirea a ~25 de procese are o rampă de câteva secunde (primul
 # rezultat la ~7.9 s, regim staționar abia după ~10 batch-uri). Când pasul e ieftin
@@ -52,10 +51,10 @@ _WF_PROBE_BUDGET_S = float(__import__("os").environ.get("LOTO_WF_PROBE_BUDGET_S"
 _WF_SHARED: dict = {}
 
 
-def _wf_max_workers(auto_invert: bool = False) -> int:
+def _wf_max_workers() -> int:
     """Procese WF: min(80% nuclee, buget RAM) — evită oversubscription BLAS."""
     import os
-    per_proc = _WF_PER_PROC_GB_INVERT if auto_invert else _WF_PER_PROC_GB
+    per_proc = _WF_PER_PROC_GB
     try:
         import psutil
         avail_gb = psutil.virtual_memory().available / (1024 ** 3)
@@ -109,12 +108,8 @@ def _retroactive_step_stateless(
     lookback_percent: float,
     filter_consecutives: bool,
     smart_reduction: bool,
-    auto_invert: bool = False,
 ) -> RetroactivePrediction | None:
-    """Un pas walk-forward stateless (fără feedback / inversiune între pași).
-
-  auto_invert=True: Faza 1 (pool normal) → Faza 2 (manual_blacklist=Pool1), ca în UI.
-    """
+    """Un pas walk-forward stateless (fără feedback / inversiune între pași)."""
     if sim_idx >= len(draws) or sim_idx < 1:
         return None
     historical_df = df.iloc[:sim_idx].copy()
@@ -124,7 +119,7 @@ def _retroactive_step_stateless(
     target_date = dates[sim_idx] if sim_idx < len(dates) else f"Draw_{sim_idx}"
     sim_date = dates[sim_idx - 1] if sim_idx > 0 else "Start"
 
-    def _run_pipeline(manual_blacklist=None):
+    def _run_pipeline():
         eng = LotoEngine(game_type)
         eng.data = historical_df
         eng._build_draw_matrix()
@@ -141,15 +136,11 @@ def _retroactive_step_stateless(
             filter_consecutives=filter_consecutives,
             smart_reduction=smart_reduction,
             enable_adaptive_persistence=False,
-            manual_blacklist=manual_blacklist,
             track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
         )
         return eng, out_lines, (_ctx or {})
 
     engine, lines, ctx = _run_pipeline()
-    if auto_invert:
-        pool1 = list(engine.hard_core)
-        engine, lines, ctx = _run_pipeline(manual_blacklist=pool1)
 
     actual_draw = draws[sim_idx]
     actual_set = set(actual_draw)
@@ -178,16 +169,15 @@ def _retroactive_step_stateless(
 
 
 def _wf_worker_step(args):
-    """Worker picklable: (sim_idx, pool_size, guarantee, max_variants, lookback, filter_consec, smart_red, auto_invert)."""
+    """Worker picklable: (sim_idx, pool_size, guarantee, max_variants, lookback, filter_consec, smart_red)."""
     (sim_idx, pool_size, guarantee, max_variants, lookback_percent,
-     filter_consecutives, smart_reduction, auto_invert) = args
+     filter_consecutives, smart_reduction) = args
     shared = _WF_SHARED
     try:
         return _retroactive_step_stateless(
             shared["df"], shared["draws"], shared["dates"], shared["game_type"],
             sim_idx, pool_size, guarantee, max_variants,
             lookback_percent, filter_consecutives, smart_reduction,
-            auto_invert=bool(auto_invert),
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("[BACKTEST] WF worker sim_idx=%s: %s", sim_idx, exc)
@@ -640,8 +630,7 @@ class LotoBacktester:
                                   enable_hard_inversion: bool = True,
                                   smart_reduction: bool = False,
                                   progress_cb=None,
-                                  should_cancel=None,
-                                  auto_invert: bool = False) -> list[RetroactivePrediction]:
+                                  should_cancel=None) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
         
@@ -711,15 +700,14 @@ class LotoBacktester:
             import pickle
             from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
-            n_workers = _wf_max_workers(auto_invert=auto_invert)
+            n_workers = _wf_max_workers()
             n_steps = len(sim_indices)
-            inv_note = " (Pool 2: 2× pipeline/pas)" if auto_invert else ""
             for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
                 os.environ.setdefault(_tv, "1")
 
             task_args = [
                 (sim_idx, pool_size, guarantee, max_variants,
-                 lookback_percent, filter_consecutives, smart_reduction, auto_invert)
+                 lookback_percent, filter_consecutives, smart_reduction)
                 for sim_idx in sim_indices
             ]
             df_pickle = pickle.dumps(self.df, protocol=pickle.HIGHEST_PROTOCOL)
@@ -734,7 +722,6 @@ class LotoBacktester:
                 return _retroactive_step_stateless(
                     self.df, self.draws, self.dates, self.game_type,
                     a[0], a[1], a[2], a[3], a[4], a[5], a[6],
-                    auto_invert=bool(a[7]),
                 )
 
             try:
@@ -760,10 +747,10 @@ class LotoBacktester:
                 go_serial = ms_per_step < _WF_SERIAL_MAX_MS
 
                 logger.info(
-                    "[BACKTEST] WF sondă: %.1f ms/pas pe %d pași → %s (prag %.0f ms)%s",
+                    "[BACKTEST] WF sondă: %.1f ms/pas pe %d pași → %s (prag %.0f ms)",
                     ms_per_step, probe_done,
                     "SECVENȚIAL" if go_serial else f"PARALEL pe {n_workers} procese",
-                    _WF_SERIAL_MAX_MS, inv_note,
+                    _WF_SERIAL_MAX_MS,
                 )
 
                 if go_serial:

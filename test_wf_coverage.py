@@ -10,14 +10,12 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-import pandas as pd
 import pytest
 
 from loto_enterprise.core.backtesting import RetroactivePrediction, coverage_from_context
 from loto_enterprise.core.walk_forward_adapter import (
     WalkForwardResult,
     _backfill_new_fields,
-    build_retrospective_pool_hits_flat,
     expand_predictions_to_flat,
     per_draw_hit_summary,
     wheel_coverage_summary,
@@ -66,7 +64,6 @@ def test_summary_reports_unknown_separately_from_100():
 def test_summary_on_empty_flat():
     assert wheel_coverage_summary([])["n_draws"] == 0
     assert wheel_coverage_summary(None)["min"] is None
-
 
 def test_per_draw_hits_do_not_weight_larger_wheels_more_heavily():
     """O extragere cu 50 bilete contează o dată, nu de 50 de ori."""
@@ -142,7 +139,7 @@ def test_backfill_ignores_non_dataclasses():
 
 
 # --------------------------------------------------------------------------- #
-# Propagare pas → flat → retrospectiv
+# Propagare pas → flat
 # --------------------------------------------------------------------------- #
 def test_expand_predictions_propagates_coverage():
     pred = RetroactivePrediction(
@@ -157,32 +154,3 @@ def test_expand_predictions_propagates_coverage():
     assert len(flat) == 2
     assert all(r.wheel_coverage == 62.5 for r in flat)
     assert wheel_coverage_summary(flat)["below_100"] == 1
-
-
-def _df(n: int = 30) -> pd.DataFrame:
-    cols = ["n1", "n2", "n3", "n4", "n5", "n6"]
-    return pd.DataFrame([
-        {"date": f"{(i % 28) + 1:02d}-01-2026",
-         **{c: ((i * 7) % 40) + j + 1 for j, c in enumerate(cols)}}
-        for i in range(n)
-    ])
-
-
-def test_retrospective_carries_production_coverage():
-    """Pool 2 nu regenerează wheel-ul → acoperirea e cea a wheel-ului de producție."""
-    df = _df()
-    ref = [_rec(10), _rec(11)]
-    flat, meta = build_retrospective_pool_hits_flat(
-        ref, df, "6/49", [1, 2, 3, 4, 5, 6, 7], [[1, 2, 3, 4, 5, 6]],
-        wheel_coverage=88.0,
-    )
-    assert flat and all(r.wheel_coverage == 88.0 for r in flat)
-    assert meta["wheel_coverage"]["below_100"] == meta["wheel_coverage"]["known"] > 0
-
-
-def test_retrospective_without_coverage_is_unknown():
-    flat, meta = build_retrospective_pool_hits_flat(
-        [_rec(10)], _df(), "6/49", [1, 2, 3, 4, 5, 6, 7], [[1, 2, 3, 4, 5, 6]],
-    )
-    assert all(r.wheel_coverage is None for r in flat)
-    assert meta["wheel_coverage"]["unknown"] == meta["wheel_coverage"]["n_draws"]

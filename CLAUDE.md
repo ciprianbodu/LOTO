@@ -19,15 +19,16 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-08-31:
+Snapshot verificat la 2026-09-01:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py`, port 8000;
 - runtime tinta: ultimul Python 3.14.x stabil;
 - venv: `D:\_BUILD\_LOTO\.venv`, in afara OneDrive;
 - registry: 111 metode CPU in `METHODS`;
-- curare reversibila: 43 metode in `curated_methods.json`;
-- selectie per joc: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1;
+- curare reversibila: 56 metode in `curated_methods.json`;
+- selectie: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
+  distincte peste baseline pentru Joker Urna 2;
 - tombstone permanent: 74 nume in `disabled_methods.json`;
 - covering designs locale: 52 fisiere, toate validate la 100% la ultimul audit;
 - cache benchmark: `v16`;
@@ -67,7 +68,7 @@ UI-ul face polling la o secunda, fara reload complet.
 | `app_nicegui.py` | UI, configurare, submit, polling, randare, raport si orchestrare WF |
 | `worker.py` | consumator SQLite, executie pipeline, cache rezultat, requeue la oprire |
 | `job_queue.py` | contractul persistent UI-worker |
-| `loto_engine.py` | validare productie, scoring, pool, auto-invert si audit |
+| `loto_engine.py` | validare productie, scoring, pool unic, wheeling si audit |
 | `wheeling_methods.py` | algoritmi de covering design si dispatcher |
 | `ui_shared.py` | I/O atomic, lock-uri, payload queue, worker si loguri |
 | `loto_enterprise/benchmark/runner.py` | folduri walk-forward si metrici per pool |
@@ -104,8 +105,8 @@ UI-ul face polling la o secunda, fara reload complet.
 - Nu reintroduce `omnius`, metode GPU/neural sau alte tombstone-uri.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului.
 - `random` si `frequency` trebuie sa ramana in lista activa.
-- Curarea se face dupa utilitate si diversitatea semnalului, nu dupa un clasament
-  instabil pe o singura perioada.
+- Curarea curenta cere avantaj observat fata de baseline si diversitatea
+  semnalului. Este selectie reversibila pe istoric, nu garantie predictiva.
 - Un run CLI cu `--quick` sau `--methods` nu trebuie sa rescrie decizia de
   productie fara `--force-decision`.
 
@@ -166,21 +167,19 @@ in `best_methods.json`; auditul trebuie sa arate membrii pastrati si eliminati.
 ### Joker Urna 2
 
 Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar.
-Pe setul curat verificat, 29 de metode au produs scoruri utile pe istoricul
-complet, iar 14 au fost plate. Aceste cifre sunt diagnostic, nu selectie
-permanenta; foldurile si datele noi pot schimba lista. Urna 2 nu se inverseaza in
-Pool 2, deoarece o singura excludere nu reprezinta acelasi contract ca
-inversarea pool-ului Urnei 1.
+Pre-screeningul din 2026-09-01 a verificat toate cele 111 metode: `ml_knn_5` a
+bătut controlul în 3/4 ferestre, iar `649_decade_hot` în 2/3 ferestre comune.
+Decizia recalibrată nu mai este `low_confidence`. Cifrele sunt diagnostic pe
+istoric, nu selecție permanentă; datele noi pot schimba rezultatul.
 
-## 6. Pool si auto-invert
+## 6. Pool unic
 
 - Pool-ul UI este limitat la 6..16.
 - Selectia este top-N pura dupa scorul validat.
-- `auto_invert=False` implicit.
-- Cand auto-invert este activ, Pool 2 reruleaza aceeasi decizie cu Pool 1 exclus
-  strict prin `manual_blacklist`.
-- Daca geometria nu permite inversarea, engine-ul o marcheaza ca `skipped`; UI
-  nu trebuie sa prezinte un Pool 2 identic ca inversare reusita.
+- Fiecare joc genereaza si afiseaza un singur pool; configuratia, worker-ul,
+  raportul, emailul si walk-forward-ul nu mai au Pool 2/auto-invert.
+- Payload-urile vechi cu doua faze sunt citite compatibil folosind numai pool-ul
+  normal din prima faza.
 - Nu reactiva filtre post-scoring pe paritate, decade, sume sau tipare recente.
   Analizele din `scripts/analysis/` nu au demonstrat predictibilitate.
 
@@ -216,8 +215,7 @@ partiala, hitul de pool este doar plafon pentru hitul pe bilet.
 ## 8. Walk-forward
 
 - WF foloseste numai date anterioare extragerii validate.
-- UI valideaza Pool 1 onest.
-- Pool 2 din UI este retrospectiv pe pool-ul curent, nu un al doilea WF complet.
+- UI valideaza onest pool-ul unic.
 - `hits` = maximul pe un singur bilet.
 - `hits_union` = intersectia pool-ului cu extragerea.
 - `wheel_coverage=None` inseamna necunoscut, nu 100%.
@@ -320,25 +318,26 @@ verzi, pytest verde, UI HTTP 200 si payload worker decodat corect.
 
 ### P0 - recalibrare dupa Urna 2 top-1
 
-- [x] Ruleaza Re-Bench pe toate cele 43 metode curate si cele patru jocuri.
-- [x] Genereaza 344 folduri Urna 2, `rate_1plus_k1` si decizia `joker_urna2.k1`.
+- [x] Ruleaza Re-Bench pe toate cele 56 metode curate si cele patru jocuri.
+- [x] Genereaza 448 folduri Urna 2 (real + shuffled), `rate_1plus_k1` si decizia
+  `joker_urna2.k1`.
 - [x] Verifica daca vreo metoda depaseste random 5% prin poarta de consistenta si
   Wilson; pastreaza `low_confidence` daca dovada nu exista.
 - [x] Revizuieste `folds.csv`, `report.json` si `best_methods.json` impreuna,
   apoi comite numai output-urile complete care trebuie versionate.
 
-Rezultat 2026-09-01: productia foloseste `autocorr`, `sim_depth=30%`, ensemble
-nominal cu un membru si `low_confidence=true`; nicio metoda nu a trecut poarta de
-consistenta de 60%. Cele 14 metode plate pe geometria single-pick sunt marcate
-failed si excluse, nu transformate artificial in ranking prin tie-break.
+Rezultat 2026-09-01: Urna 2 are doua metode calificate în decizia robustă,
+`649_decade_hot` si `ml_knn_5`, ensemble nominal cu doi membri si
+`low_confidence=false`. Metodele plate pe geometria single-pick rămân `failed`
+si excluse, nu sunt transformate artificial în ranking prin tie-break.
 
 Criteriu de iesire: toate cele patru jocuri au folduri curente, nicio metoda cu
 scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisata.
 
 ### P1 - selectie Urna 2 si paritate bench/productie
 
-- [ ] Adauga o lista `per_game.joker_urna2` numai dupa masurarea scorurilor pe
-  folduri; selecteaza dupa validitate si diversitate, nu dupa un singur top.
+- [x] Adauga `per_game.joker_urna2` dupa test extern si pre-screening oficial pe
+  toate cele 111 metode; pastreaza numai semnale peste baseline si distincte.
 - [ ] Automatizeaza testul care ruleaza fiecare metoda activa pe toate geometriile
   si compara acceptarea benchmarkului cu acceptarea engine-ului.
 - [ ] Raporteaza separat metodele unavailable, failed, plate si corelate.

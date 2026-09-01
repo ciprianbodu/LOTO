@@ -200,9 +200,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             smart_red = bool(task.get("smart_reduction", False))
             sim_depth = int(task.get("sim_depth_pct", 10))
             pure_bench = bool(task.get("pure_bench_mode", False))
-            # Auto-Invert: ruleaza pipeline-ul de DOUA ori — primul pool e
-            # considerat "excluded" si reluam cu el ca blacklist, returnam pool B.
-            auto_invert = bool(task.get("auto_invert", False))
             try:
                 from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
                 bench_hit_target = clamp_bench_hit_target(task.get("bench_hit_target", 3))
@@ -233,28 +230,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     logging.info(f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire.")
                     return "{}"
 
-                # Auto-clamp pool_size cand auto_invert e ON.
-                # Reguli matematice: cu inversare, dupa primul pool excludem P numere
-                # si trebuie sa umplem inca P din ce ramane. Deci P <= (max_n - buffer) / 2.
-                _max_num_per_game = {"6/49": 49, "5/40": 40, "joker": 45}
-                _max_num = _max_num_per_game.get(game_mapped, 49)
-                pool_clamp_info = None
-                if auto_invert:
-                    pool_max_safe = _max_num // 2 - 1   # 6/49→23, joker→21, 5/40→19
-                    if p_size > pool_max_safe:
-                        original_p = p_size
-                        p_size = pool_max_safe
-                        pool_clamp_info = {
-                            "requested": original_p,
-                            "clamped_to": p_size,
-                            "max_num": _max_num,
-                            "reason": "auto_invert requires max_num >= 2*pool_size",
-                        }
-                        logging.warning(
-                            f"[worker] Auto-Invert {game_label}: pool_size {original_p} "
-                            f"prea mare pentru max_num={_max_num}. Clamp la {p_size}."
-                        )
-
                 engine = LotoEngine(game_type=game_mapped)
                 # Valoarea de retur NU se ignoră: cu date necitibile/corupte
                 # pipeline-ul mergea până la capăt și scotea pool GOL / 0 bilete,
@@ -277,67 +252,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     enable_adaptive_persistence=False,
                     pure_bench_mode=pure_bench,
                 )
-                if pool_clamp_info is not None:
-                    audit["pool_clamp_for_invert"] = pool_clamp_info
-
-                # Salvam pool-ul initial (pass 1) pentru auditare/afisare
-                first_pool = list(engine.hard_core or [])
-                first_variants = list(lines or [])
-
-                phase1_data = None
-                if auto_invert and first_pool:
-                    # Capturam Faza 1 COMPLET inainte ca Pass 2 sa suprascrie
-                    # variabilele (altfel pool-ul normal + variantele lui se pierd).
-                    phase1_data = {
-                        "total_draws": len(engine.data) if engine.data is not None else 0,
-                        "hard_core": list(engine.hard_core or []),
-                        "hard_core_stats": dict(getattr(engine, 'hard_core_stats', {}) or {}),
-                        "hard_core_joker": list(getattr(engine, 'hard_core_joker', []) or []),
-                        "hard_core_joker_stats": dict(getattr(engine, 'hard_core_joker_stats', {}) or {}),
-                        "variants": list(first_variants),
-                        "pool_size": len(first_pool),
-                        "pool_size_requested": p_size,
-                        "guarantee": guar,
-                        "lookback": lookback,
-                        "audit": audit,
-                        "p10": p10,
-                        "p90": p90,
-                        "g_range": g_range,
-                        "context": context,
-                    }
-                    # === Pass 2: rerulam excluzand pool-ul initial ===
-                    logging.info(
-                        f"[worker] Auto-Invert ACTIV pentru {game_label}: rerulez "
-                        f"pipeline-ul excluzand pool-ul initial {sorted(first_pool)}"
-                    )
-                    # Re-load data (pipeline-ul tail-uieste la lookback, deci reincarcam curat)
-                    engine = LotoEngine(game_type=game_mapped)
-                    # Aceeași gardă ca pass 1: fără ea, CSV corupt pe pass 2 marca
-                    # jobul COMPLETED cu Pool 2 gol/greșit și trimitea mailul.
-                    if not engine.load_data(temp_csv_path):
-                        raise ValueError(
-                            f"Datele pentru {game_label} nu au putut fi încărcate la "
-                            f"Auto-Invert pass 2 (fișier lipsă, corupt sau fără extrageri)."
-                        )
-                    lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
-                        progress_cb=progress_cb,
-                        pool_size=p_size,
-                        guarantee=guar,
-                        max_variants=max_var,
-                        lookback=lookback,
-                        filter_consecutives=filter_cons,
-                        smart_reduction=smart_red,
-                        sim_depth_pct=sim_depth,
-                        enable_adaptive_persistence=False,  # pe pass 2 nu mai persistam state
-                        pure_bench_mode=pure_bench,
-                        manual_blacklist=first_pool,
-                    )
-                    audit["auto_invert_applied"] = {
-                        "excluded_pool": sorted(int(n) for n in first_pool),
-                        "n_excluded": len(first_pool),
-                        "first_pass_variants_count": len(first_variants),
-                    }
-
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {
                     "total_draws": len(engine.data) if engine.data is not None else 0,
@@ -356,13 +270,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "p90": p90,
                     "g_range": g_range,
                     "context": context,
-                    # Doar pentru auto_invert: pool-ul initial (pre-inversare) pentru
-                    # afisare ca "ce-am exclus" in UI.
-                    "auto_invert": auto_invert,
-                    "first_pool_excluded": sorted(int(n) for n in first_pool) if auto_invert else [],
-                    # Faza 1 COMPLETA (pool normal + variante) cand auto_invert e ON,
-                    # ca UI-ul sa afiseze AMBELE pool-uri (Faza 1 normal + Faza 2 inversat).
-                    "phase1": phase1_data,
                 }
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):
