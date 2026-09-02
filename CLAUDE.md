@@ -163,7 +163,14 @@ Pentru fiecare joc si pool:
 6. incertitudinea este evaluata prin limita Wilson cu n efectiv Kish;
 7. metodele calificate sunt ordonate dupa Wilson, lift, consistenta si nume,
    deci decizia nu depinde de ordinea randurilor din `folds.csv`;
-8. ensemble-ul nominal are maximum trei membri;
+8. productia foloseste doar castigatorul unic (`ENSEMBLE_MAX_METHODS = 1`):
+   ratele individuale din `folds.csv` nu dovedesc performanta unui blend
+   nevalidat separat. Masurat pe Joker k11 (Re-Bench walk-forward real, 654
+   extrageri): membri calificati separat, combinati, au dat 6.73% sub random
+   8.53%, desi primul membru bătea random clar (11.16%). Schema `ensemble`
+   din `best_methods.json` ramane cu un singur element, pentru compatibilitate
+   engine/UI/cache — plafonul creste numai daca benchmarkul ajunge sa evalueze
+   blendul direct (scoruri/pool per pas), nu doar ratele individuale;
 9. lipsa metricei sau lipsa metodelor calificate produce `low_confidence` si
    fallback conservator, nu o afirmatie de avantaj statistic.
 
@@ -172,8 +179,34 @@ Pentru fiecare joc si pool:
 - In `decision.py`: Pearson semnat pe semnaturi de performanta, prag 0.99.
 - La runtime: Spearman in modul pe vectorii de scor, prag 0.95.
 
-Ele masoara lucruri diferite. Ensemble-ul activ poate fi mai mic decat cel scris
-in `best_methods.json`; auditul trebuie sa arate membrii pastrati si eliminati.
+Ele masoara lucruri diferite. Cu productia limitata la un singur castigator
+(punctul 8 de mai sus), niciun filtru nu mai are ce elimina in practica; raman
+in cod pentru cazul in care plafonul creste pe baza unei dovezi ca un blend
+evaluat direct bate castigatorul unic.
+
+### Re-Bench onest (per extragere)
+
+Re-Bench-ul din UI ruleaza implicit cu `--block-size 1`: scorerul se
+recalculeaza inaintea FIECAREI extrageri testate, la fel ca validarea
+walk-forward afisata dupa generare. Varianta veche (`block_size=99999`, un
+singur scor per fereastra) putea alege un castigator care trecea poarta din
+bench dar pierdea fata de random in WF real — cazul masurat mai sus la punctul
+8. Costul e un Re-Bench mult mai lent; ETA-ul din UI se auto-calibreaza din
+`runtime_sec`-ul ultimei rulari, deci prima estimare dupa schimbarea de
+default e optimista.
+
+Controlul pe istoric amestecat (`is_random=True`, ~50% din timpul de bench)
+este sarit implicit in UI (`--no-shuffled-control`): alimenteaza doar
+diagnosticul `lift_vs_shuffle` si tie-break-ul legacy `winners_per_pool`, nu
+decizia de productie (`decision.py` filtreaza peste tot `is_random == False`).
+Baseline-ul `random` (metoda, nu controlul amestecat) ramane obligatoriu si
+prezent in folds.
+
+Cheia de cache a foldurilor primeste sufixul `bs1` de indata ce `block_size`
+difera de sentinel-ul istoric (99999) — care ramane in cod ca valoare implicita
+a cheii, desi runner-ul si CLI-ul folosesc acum implicit 1. Niciun fold
+cache-uit sub schema veche (score-once-per-fold) nu poate fi servit tacit sub
+noua semantica.
 
 ### Joker Urna 2
 
@@ -343,10 +376,13 @@ verzi, pytest verde, UI HTTP 200 si payload worker decodat corect.
 - [x] Revizuieste `folds.csv`, `report.json` si `best_methods.json` impreuna,
   apoi comite numai output-urile complete care trebuie versionate.
 
-Rezultat 2026-09-01: Urna 2 are doua metode calificate în decizia robustă,
-`649_decade_hot` si `ml_knn_5`, ensemble nominal cu doi membri si
-`low_confidence=false`. Metodele plate pe geometria single-pick rămân `failed`
-si excluse, nu sunt transformate artificial în ranking prin tie-break.
+Rezultat 2026-09-01: la acel Re-Bench, Urna 2 avea doua metode calificate în
+decizia robustă, `649_decade_hot` si `ml_knn_5`, cu `low_confidence=false`.
+Metodele plate pe geometria single-pick rămân `failed` si excluse, nu sunt
+transformate artificial în ranking prin tie-break. De la introducerea
+`ENSEMBLE_MAX_METHODS = 1` (vezi §5, „productia foloseste doar castigatorul
+unic"), productia Urnei 2 foloseste — la fel ca toate jocurile — un singur
+castigator validat direct, nu un blend cu doi membri.
 
 Criteriu de iesire: toate cele patru jocuri au folduri curente, nicio metoda cu
 scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisata.
