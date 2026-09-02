@@ -3627,11 +3627,21 @@ def main_page() -> None:
         _cur = _curation_banner_info()
         if _cur is not None:
             _pg = _cur.get("per_game") or {}
-            _pg_txt = "/".join(
+            _main_pg_txt = "/".join(
                 str(int(_pg[g])) for g in ("loto_6_49", "loto_5_40", "joker_urna1") if g in _pg
             )
-            _pg_bit = (f"clasament/decizie = {_pg_txt} per joc"
-                       if _pg_txt else "clasament/decizie = tot active")
+            _urna2_n = _pg.get("joker_urna2")
+            if _main_pg_txt and _urna2_n is not None:
+                _pg_bit = (
+                    f"clasament/decizie = {_main_pg_txt} jocuri principale "
+                    f"+ {int(_urna2_n)} Urna 2"
+                )
+            elif _main_pg_txt:
+                _pg_bit = f"clasament/decizie = {_main_pg_txt} per joc"
+            elif _urna2_n is not None:
+                _pg_bit = f"clasament/decizie = {int(_urna2_n)} Urna 2"
+            else:
+                _pg_bit = "clasament/decizie = tot active"
             _n_after = _cur["n_after"]
             ui.html(render_html_safe(
                 t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
