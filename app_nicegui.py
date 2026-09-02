@@ -50,6 +50,7 @@ from ui_shared import (
     clear_logs,
     decode_queue_result,
     ensure_worker_running,
+    is_worker_running,
     load_mail_config,
     read_logs_filtered,
     read_tail_lines,
@@ -828,10 +829,9 @@ def _start_walk_forward() -> None:
                 if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
                     STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
                 _save_report_file()  # rescriu raportul acum CU statisticile walk-forward
-                try:
-                    results_panel.refresh()
-                except Exception:  # noqa: BLE001
-                    pass
+                # Refresh-ul UI se face DOAR pe event-loop (în _tick), nu din thread:
+                # elementele NiceGUI nu sunt thread-safe.
+                STATE["results_dirty"] = True
                 if _user_cancelled:
                     # Anulare explicită: FĂRĂ finalizare (mail/shutdown) — utilizatorul
                     # tocmai a oprit tot; un shutdown aici ar închide PC-ul după cancel.
@@ -841,14 +841,15 @@ def _start_walk_forward() -> None:
                     # Mail-ul a plecat deja imediat după generare (vezi status_panel).
                     # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
                     _finalize_pipeline()
-                try:
-                    status_panel.refresh()  # ca banner-ul de oprire (anulabil) să apară imediat
-                except Exception:  # noqa: BLE001
-                    pass
+                STATE["results_dirty"] = True  # banner-ul de oprire apare la următorul tick
+                # Textul din wf_status („anulat"/„eșuat") rămâne vizibil, dar WF NU
+                # mai rulează: flag-ul separat oprește refresh-ul de 1s și bara de progres.
+                STATE["wf_running"] = False
 
     STATE["wf_progress"] = 0.0
     STATE["wf_start"] = time.time()  # pt ETA walk-forward
     STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU)..."
+    STATE["wf_running"] = True
     threading.Thread(target=_worker_wf, daemon=True).start()
 
 
@@ -933,10 +934,14 @@ def status_panel() -> None:
             # Mail-ul conține doar pool-ul generat (fără stats WF, vezi _build_mail_body) →
             # numerele sunt deja fixate acum; nu are rost să aștepte walk-forward-ul de
             # raportare (poate dura minute/ore). Trimis o singură dată (claimed == True mai sus).
-            try:
-                _maybe_send_results_email()
-            except Exception as exc:  # noqa: BLE001
-                logger.error("[MAIL] trimitere imediată eșuată: %s", exc)
+            # SMTP (connect + STARTTLS + login, timeout 30s fiecare) NU pe event-loop:
+            # un server lent bloca UI-ul >60s → «connection lost».
+            def _mail_bg():
+                try:
+                    _maybe_send_results_email()
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("[MAIL] trimitere imediată eșuată: %s", exc)
+            threading.Thread(target=_mail_bg, name="mail-results", daemon=True).start()
             _start_walk_forward()  # async; oprirea PC se face la FINALUL walk-forward-ului
             results_panel.refresh()
             try:
@@ -977,12 +982,20 @@ def status_panel() -> None:
             waited = time.time() - float(t0)
             ensure_worker_running()
             if waited > _UNSTARTED_WORKER_WAIT_S:
-                _abandon_unstarted_ui_job(
-                    "Worker-ul nu a preluat jobul în 45s."
-                )
-                ui.label("Worker-ul nu a pornit. Reîncearcă Generează.").classes("text-negative")
-                return
-            current = "aștept worker-ul..."
+                # Worker-ul e SECVENȚIAL și observă anularea doar în progress_cb:
+                # după «Anulează TOT» în timpul wheeling-ului, procesul mai calculează
+                # minute întregi jobul vechi, iar jobul nou stă PENDING legitim.
+                # Abandonăm doar când procesul chiar nu există.
+                if is_worker_running():
+                    current = "worker-ul termină jobul anterior; aștept..."
+                else:
+                    _abandon_unstarted_ui_job(
+                        "Worker-ul nu a preluat jobul în 45s."
+                    )
+                    ui.label("Worker-ul nu a pornit. Reîncearcă Generează.").classes("text-negative")
+                    return
+            else:
+                current = "aștept worker-ul..."
             elapsed_txt = f" · scurs {_fmt_dur(waited)}"
             ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%{elapsed_txt}").classes("text-bold")
             ui.linear_progress(value=0, show_value=False).props("instant-feedback")
@@ -1960,6 +1973,13 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
                     t"<span style='opacity:.7'>({reason})</span>"
                 ))
+        else:
+            # Necunoscut ≠ 100%: un rezultat vechi (payload fără coverage_pct) nu
+            # trebuie să pară acoperit complet doar fiindcă rândul lipsește.
+            ui.html(render_html_safe(
+                t"<b style='color:#f59e0b'>⚠️ Acoperire garanție: necunoscută</b> "
+                t"<span style='opacity:.7'>(rezultat fără măsurătoare; regenerează)</span>"
+            ))
         ui.label(f"Extrageri: {data.get('total_draws')}")
         # Timp de scoring (CPU — GPU eliminat complet).
         _au = data.get("audit") or {}
@@ -2141,6 +2161,10 @@ def wf_progress_panel() -> None:
                 _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
         else:
             _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
+    if not STATE.get("wf_running"):
+        # Text final („anulat"/„eșuat") fără bară și ETA: WF nu mai rulează.
+        ui.label(STATE["wf_status"]).classes("text-warning")
+        return
     ui.label(STATE["wf_status"] + _eta).classes("text-info")
     ui.linear_progress(value=_wfp, show_value=False).props("instant-feedback rounded").classes("w-full")
     ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
@@ -2159,7 +2183,7 @@ def results_panel() -> None:
         elapsed = f" (generare: {_fmt_dur(STATE['job_elapsed'])}"
         if STATE.get("wf_elapsed") is not None:
             elapsed += f" · total cu walk-forward: {_fmt_dur(STATE['wf_elapsed'])}"
-        elif STATE.get("wf_status"):
+        elif STATE.get("wf_running"):
             elapsed += " · walk-forward încă rulează"
         elapsed += ")"
     with ui.row().classes("items-center gap-3 mt-2"):
@@ -2435,6 +2459,9 @@ def _render_bench_leaderboard_slice(
     _gate_col = metric if has_target_rate else None
     _lift_fn = _beat_fn = None
     _rnd_frame = None
+    # Referința porții = ACEEAȘI ca în decision.py: rata așteptată hipergeometric
+    # a unui pool aleator (determinist), nu realizarea `random` din folds.csv.
+    _gate_baseline = None
     if _gate_col is not None:
         try:
             from loto_enterprise.benchmark.decision import (
@@ -2442,7 +2469,8 @@ def _render_bench_leaderboard_slice(
                 _windows_method_beats_random as _beat_fn,
             )
             _rnd_frame = sub[sub["method"] == "random"]
-            if _rnd_frame.empty:
+            _gate_baseline = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
+            if _rnd_frame.empty and _gate_baseline is None:
                 _lift_fn = _beat_fn = None
         except Exception:  # noqa: BLE001
             _lift_fn = _beat_fn = None
@@ -2460,42 +2488,58 @@ def _render_bench_leaderboard_slice(
     rows = []
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
     _lift_ok = False  # lift+consistență calculabile → tie-break identic cu decizia
-    for m, grp in sub.groupby("method"):
-        # Folds vechi pot lista metode eliminate — nu le arăta în clasament
-        # (decizia le sare deja; UI trebuie să rămână aliniat).
-        if _alive_methods is not None and str(m) not in _alive_methods:
-            continue
-        # Clasament per joc = lista curated per_game (plus baseline random).
-        if _pg_only and str(m) not in _pg_only and str(m) not in _BASE:
-            continue
-        score = float(grp[metric].mean())
-        avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
-        fam = ""
-        if has_family:
-            _f = grp["family"].dropna().astype(str)
-            fam = _f.iloc[0] if not _f.empty else ""
-        # Wilson doar pe RATE (proporții). Când metrica e fallback-ul avg_hits_topk
-        # (folds vechi fără coloane rate_*), nu e proporție → nu are sens.
-        conf = _wilson_pooled_rate(grp, metric) if has_target_rate else None
-        if conf is not None:
-            _conf_ok = True
-        w_lift = cons = None
-        if _lift_fn is not None:
-            try:
-                _nb, _nt = _beat_fn(grp, _rnd_frame, _gate_col)
-                if _nt > 0:
-                    w_lift = float(_lift_fn(grp, _rnd_frame, _gate_col))
-                    cons = _nb / _nt
-                    _lift_ok = True
-            except Exception:  # noqa: BLE001
-                w_lift = cons = None
-        # media pe coloana pool-ului (k{pool}) — EXACT cheia secundară a ramurii
-        # de fallback din decision.py (base_col), nu avg_hits_topk (K = draw_n).
-        _base_avg = (float(grp[_base_col].mean())
-                     if _base_col in grp.columns else avg)
-        rows.append((m, score, avg, _method_library(m, fam),
-                     _rate_for(grp, _shown_t if _is_single_pick else 3), _rate_for(grp, 4), conf, w_lift, cons,
-                     _base_avg))
+    # Rândurile (Wilson, lift, consistență per metodă) se recalculează DOAR când
+    # folds.csv s-a schimbat: tick-ul de 1s re-randa clasamentul în timpul
+    # bench-ului și refăcea ~0,6 s de pandas pe event-loop la fiecare secundă.
+    _memo_key = (
+        _BENCH_FOLDS_CACHE.get("signature"), folds_game_key, int(pool), metric,
+        _shown_t, int(len(sub)),
+    )
+    _memo = _LB_ROWS_MEMO.get(_memo_key) if _memo_key[0] is not None else None
+    if _memo is not None:
+        rows, _conf_ok, _lift_ok = list(_memo[0]), _memo[1], _memo[2]
+    else:
+        for m, grp in sub.groupby("method"):
+            # Folds vechi pot lista metode eliminate — nu le arăta în clasament
+            # (decizia le sare deja; UI trebuie să rămână aliniat).
+            if _alive_methods is not None and str(m) not in _alive_methods:
+                continue
+            # Clasament per joc = lista curated per_game (plus baseline random).
+            if _pg_only and str(m) not in _pg_only and str(m) not in _BASE:
+                continue
+            score = float(grp[metric].mean())
+            avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
+            fam = ""
+            if has_family:
+                _f = grp["family"].dropna().astype(str)
+                fam = _f.iloc[0] if not _f.empty else ""
+            # Wilson doar pe RATE (proporții). Când metrica e fallback-ul avg_hits_topk
+            # (folds vechi fără coloane rate_*), nu e proporție → nu are sens.
+            conf = _wilson_pooled_rate(grp, metric) if has_target_rate else None
+            if conf is not None:
+                _conf_ok = True
+            w_lift = cons = None
+            if _lift_fn is not None:
+                try:
+                    _nb, _nt = _beat_fn(grp, _rnd_frame, _gate_col, _gate_baseline)
+                    if _nt > 0:
+                        w_lift = float(_lift_fn(grp, _rnd_frame, _gate_col, _gate_baseline))
+                        cons = _nb / _nt
+                        _lift_ok = True
+                except Exception:  # noqa: BLE001
+                    w_lift = cons = None
+            # media pe coloana pool-ului (k{pool}) — EXACT cheia secundară a ramurii
+            # de fallback din decision.py (base_col), nu avg_hits_topk (K = draw_n).
+            _base_avg = (float(grp[_base_col].mean())
+                         if _base_col in grp.columns else avg)
+            rows.append((m, score, avg, _method_library(m, fam),
+                         _rate_for(grp, _shown_t if _is_single_pick else 3), _rate_for(grp, 4), conf, w_lift, cons,
+                         _base_avg))
+        if _memo_key[0] is not None:
+            # Doar semnătura curentă a fișierului rămâne în memo (3 felii × pool).
+            for _k in [k for k in _LB_ROWS_MEMO if k[0] != _memo_key[0]]:
+                _LB_ROWS_MEMO.pop(_k, None)
+            _LB_ROWS_MEMO[_memo_key] = (list(rows), _conf_ok, _lift_ok)
     # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson pe
     # rata pooled cu n efectiv → lift mediu ponderat vs random → consistență). Fără
     # decision.py / fără coloana k{pool} / fără rândurile `random` → cădem pe
@@ -2898,6 +2942,9 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 20) -> None:
 
 
 _BENCH_FOLDS_CACHE: dict[str, object] = {"signature": None, "df": None}
+
+
+_LB_ROWS_MEMO: dict = {}  # (semnătură folds.csv, joc, pool, metrică, T, n) → rânduri clasament
 
 
 def _read_bench_folds_cached(path: Path) -> pd.DataFrame:
@@ -3705,7 +3752,14 @@ def main_page() -> None:
         except Exception:  # noqa: BLE001
             bench_now = False
 
-        _active = bool(STATE.get("active_job_id") or bench_now or STATE.get("wf_status"))
+        _active = bool(STATE.get("active_job_id") or bench_now or STATE.get("wf_running"))
+        if STATE.pop("results_dirty", False):
+            # Cerut din thread-ul WF: refresh-ul se execută AICI, pe event-loop.
+            try:
+                results_panel.refresh()
+                status_panel.refresh()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[tick] refresh după walk-forward eșuat: %s", exc)
         # Re-Bench terminat → Auto-Pilot automat
         if STATE.get("bench_was_running") and not bench_now:
             STATE["bench_was_running"] = False
@@ -3718,7 +3772,7 @@ def main_page() -> None:
         if _active:
             logs_panel.refresh()
             status_panel.refresh()
-        if STATE.get("wf_status"):
+        if STATE.get("wf_running"):
             # DOAR progresul WF — NU tot bundle-ul, ca expansion-urile deschise
             # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 1s.
             wf_progress_panel.refresh()

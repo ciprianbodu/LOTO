@@ -190,6 +190,11 @@ class FoldResult:
     # draw_n=1 o consumă.
     rate_1plus: float = 0.0
     rates_1plus_per_pool: dict[str, float] = field(default_factory=dict)
+    # Fractia blocurilor in care taietura top-K a cazut intr-un grup de scoruri
+    # EGALE (scorul de pe pozitia K == scorul de pe pozitia K+1): pool-ul a fost
+    # decis de regula de tie-break, nu de scor. Decizia exclude metodele cu
+    # fractie >= decision.TIEBREAK_MAX_FRACTION. Coloane `tiebreak_kN` (v17).
+    tiebreak_per_pool: dict[str, float] = field(default_factory=dict)
     blacklist_size: int = 0             # how many numbers were blacklisted per score round
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
@@ -233,6 +238,7 @@ def _evaluate_fold(
         rates_4plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         rates_3plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         rates_1plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
+        tiebreak_per_pool={f"k{k}": 0.0 for k in pool_sizes},
     )
 
     sampler = HwSampler(interval=0.1).start()
@@ -244,6 +250,7 @@ def _evaluate_fold(
         per_pool_4plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=4 numere ghicite
         per_pool_3plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=3 numere ghicite
         per_pool_1plus = {k: 0 for k in pool_sizes}   # top-1 exact pentru Urna 2
+        per_pool_tie = {k: 0 for k in pool_sizes}     # blocuri cu taietura top-K in grup de egalitate
         n_eval = 0                                     # nr. total extrageri evaluate
         blocks = 0
         unusable_blocks = 0  # Empty/flat/non-finite scorer output (silent failure)
@@ -267,6 +274,12 @@ def _evaluate_fold(
 
             # Pre-compute top-K WITHOUT blacklist
             top_sets = {k: set(_top_k(scores, k)) for k in pool_sizes}
+            # Taietura top-K cade intr-un grup de scoruri egale? Atunci membrii
+            # de la granita au fost alesi de tie-break („numarul mare intai").
+            _sorted_vals = sorted((float(v) for v in scores.values()), reverse=True)
+            for k in pool_sizes:
+                if len(_sorted_vals) > k and _sorted_vals[k - 1] == _sorted_vals[k]:
+                    per_pool_tie[k] += 1
 
             # Blacklist = numere "moarte" (absente din ultimele K extrageri).
             # Semnal INDEPENDENT de scorerul curent — analog produsului de
@@ -317,7 +330,9 @@ def _evaluate_fold(
         # extragerile sărite ca 0 (deflata avg_hits/gate-ul de consistență), iar
         # ratele foloseau n_eval → decizia compara axe diferite.
         fr.n_eval = n_eval
+        _usable_blocks = max(blocks - unusable_blocks, 1)
         for k in pool_sizes:
+            fr.tiebreak_per_pool[f"k{k}"] = per_pool_tie[k] / _usable_blocks
             fr.hits_per_pool[f"k{k}"] = per_pool_totals[k] / max(n_eval, 1)
             fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_eval, 1)
             fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
@@ -481,8 +496,17 @@ def run_benchmark(
                 row[f"rate_3plus_{k}"] = v
             for k, v in row.pop("rates_1plus_per_pool", {}).items():
                 row[f"rate_1plus_{k}"] = v
+            for k, v in (row.pop("tiebreak_per_pool", {}) or {}).items():
+                row[f"tiebreak_{k}"] = v
             rows.append(row)
         _df = pd.DataFrame(rows)
+        # Ordine CANONICA a randurilor: future-urile se termina in alta ordine
+        # decat au fost trimise, iar decizia/clasamentul citesc metodele in
+        # ordinea randurilor — egalitatile exacte s-ar rupe altfel dupa
+        # ordinea de terminare a proceselor.
+        _sort_cols = [c for c in ("game", "method", "percentile", "is_random") if c in _df.columns]
+        if _sort_cols:
+            _df = _df.sort_values(_sort_cols, kind="stable").reset_index(drop=True)
         import uuid as _uuid
         _target = out_path / "folds.csv"
         _tmp = _target.with_name(

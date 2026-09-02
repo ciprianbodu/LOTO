@@ -63,7 +63,7 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v16"
+CACHE_VERSION = "v17"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
 # v16: benchmark-ul respinge scorurile plate/ne-numerice/ne-finite la fel ca
 #      selectorul si engine-ul; fold-urile v15 puteau evalua un tie-break fictiv.

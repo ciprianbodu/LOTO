@@ -318,3 +318,28 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
     assert sum(weight for _name, _fn, weight in result) == pytest.approx(1.0)
     cfg = ms.recommend_optimal_config("joker_urna2", 1, config_path=cfg_path)
     assert (cfg["hit_target"], cfg["target_label"]) == (1, "top-1 (1/1)")
+
+
+def test_ensemble_cap_applies_after_sanitization(temp_config):
+    """`random`/ponderi invalide în primele poziții nu consumă locuri din plafon."""
+    cfg_path = temp_config({
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {
+                    "scorer": "frequency",
+                    "ensemble": [
+                        {"method": "random", "weight": 0.4},
+                        {"method": "frequency", "weight": "abc"},
+                        {"method": "frequency", "weight": 0.2},
+                        {"method": "autocorr", "weight": 0.2},
+                        {"method": "pair_affinity", "weight": 0.2},
+                    ],
+                }
+            }
+        }
+    })
+    result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    names = [name for name, _fn, _w in result]
+    assert "random" not in names
+    assert names == ["frequency", "autocorr", "pair_affinity"]
+    assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9

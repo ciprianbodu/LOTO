@@ -228,6 +228,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                 # Verificăm dacă job-ul a fost anulat între timp
                 if is_job_cancelled(job_id):
                     logging.info(f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire.")
+                    _remove_temp_csv(temp_csv_path)  # altfel istoricul rămâne în %TEMP% la fiecare anulare
                     return "{}"
 
                 engine = LotoEngine(game_type=game_mapped)

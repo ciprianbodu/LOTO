@@ -326,6 +326,20 @@ def main() -> int:
     out_path.mkdir(exist_ok=True, parents=True)
 
     _skip_decision = bool(args.no_decision)
+    # Un run cu prea putine ferestre (sub MIN_CONSISTENCY_WINDOWS) sau pe alt
+    # istoric decat cel de productie este tot un run REDUS: decizia ar iesi
+    # low_confidence peste tot / pe alte date si ar rescrie best_methods.json.
+    try:
+        from loto_enterprise.benchmark.decision import MIN_CONSISTENCY_WINDOWS as _MIN_WIN
+    except Exception:  # noqa: BLE001
+        _MIN_WIN = 3
+    _reduced_windows = len(pcts) < _MIN_WIN
+    _other_istoric = bool(args.istoric)
+    if not _skip_decision and (_reduced_windows or _other_istoric) and not args.force_decision:
+        _skip_decision = True
+        logging.warning("[bench] run redus (%s): NU rescriu best_methods.json; "
+                        "foloseste --force-decision daca vrei asta explicit.",
+                        "sub %d ferestre" % _MIN_WIN if _reduced_windows else "--istoric explicit")
     if not _skip_decision and _explicit and not args.force_decision:
         # Gardă anti-footgun: un run cu set REDUS (--quick / --methods a,b) scrie un
         # folds.csv redus (OVERWRITE) — dacă decizia rulează pe el, best_methods.json

@@ -630,9 +630,14 @@ class LotoBacktester:
                                   enable_hard_inversion: bool = True,
                                   smart_reduction: bool = False,
                                   progress_cb=None,
-                                  should_cancel=None) -> list[RetroactivePrediction]:
+                                  should_cancel=None,
+                                  skip_indices=None) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
+
+        skip_indices: indici de extragere deja validați (cache parțial) — sunt
+            săriți, ca rularea să EXTINDĂ acoperirea în loc să refacă aceiași pași
+            și să se oprească la același buget în același loc.
         
         Args:
             pool_size: Dimensiunea pool-ului pentru wheeling
@@ -693,6 +698,14 @@ class LotoBacktester:
         sim_indices = list(range(start_idx, n_draws, simulation_step))
         if _stateless:
             sim_indices = sim_indices[::-1]
+        if skip_indices:
+            _skip = {int(i) for i in skip_indices}
+            _before = len(sim_indices)
+            sim_indices = [i for i in sim_indices if i not in _skip]
+            logger.info("[BACKTEST RETROACTIV] Sar %d pași deja validați (cache parțial); rămân %d.",
+                        _before - len(sim_indices), len(sim_indices))
+            if not sim_indices:
+                return []
 
         # ── Paralel pe ~80% nuclee când pașii sunt independenți (walk-forward UI) ──
         if _stateless and len(sim_indices) > 1:

@@ -479,6 +479,13 @@ def run_honest_walk_forward(
         smart_reduction=False,
         progress_cb=progress_cb,      # frac 0..1 per simulare → bară de progres în UI
         should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
+        # Pașii deja validați în cache-ul PARȚIAL se sar: altfel rularea nouă
+        # refăcea aceiași pași recent→vechi, se oprea la același buget în același
+        # loc și reuniunea nu aducea nimic — bugetul WF se consuma fără câștig.
+        skip_indices=(
+            {int(getattr(r, "draw_index", -1)) for r in (cached.get("flat") or [])}
+            if cached is not None else None
+        ),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).

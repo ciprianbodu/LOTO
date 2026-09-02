@@ -31,7 +31,7 @@ Snapshot verificat la 2026-09-01:
   distincte peste baseline pentru Joker Urna 2;
 - tombstone permanent: 74 nume in `disabled_methods.json`;
 - covering designs locale: 52 fisiere, toate validate la 100% la ultimul audit;
-- cache benchmark: `v16`;
+- cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
 - teste: 26 fisiere `test_*.py`.
@@ -107,8 +107,9 @@ UI-ul face polling la o secunda, fara reload complet.
 - `random` si `frequency` trebuie sa ramana in lista activa.
 - Curarea curenta cere avantaj observat fata de baseline si diversitatea
   semnalului. Este selectie reversibila pe istoric, nu garantie predictiva.
-- Un run CLI cu `--quick` sau `--methods` nu trebuie sa rescrie decizia de
-  productie fara `--force-decision`.
+- Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`)
+  sau pe alt `--istoric` nu trebuie sa rescrie decizia de productie fara
+  `--force-decision`.
 
 ### 4.4 Persistenta si concurenta
 
@@ -147,13 +148,23 @@ aleator exact este 5%.
 Pentru fiecare joc si pool:
 
 1. se folosesc numai folduri reale, valide si metode existente;
-2. metoda trebuie sa bata `random` in cel putin 60% din ferestre pe aceeasi
-   rata folosita la decizie;
-3. rata este pooled pe `n_eval`, cu fallback per rand pe `n_test`;
-4. incertitudinea este evaluata prin limita Wilson cu n efectiv Kish;
-5. metodele calificate sunt ordonate dupa Wilson, lift si consistenta;
-6. ensemble-ul nominal are maximum trei membri;
-7. lipsa metricei sau lipsa metodelor calificate produce `low_confidence` si
+2. toti candidatii se judeca pe acelasi set de ferestre; o metoda cu o fereastra
+   lipsa (fold `failed`) iese din decizie si apare in `incomplete_methods`;
+3. o metoda a carei taietura top-K cade intr-un grup de scoruri egale in cel
+   putin 50% din blocuri (`tiebreak_kN`, bench v17) este exclusa ca dependenta
+   de tie-break si apare in `tiebreak_dependent`; pe folds vechi fara coloana,
+   poarta nu se aplica si `tiebreak_gate_applied` este `false`;
+4. metoda trebuie sa bata referinta in cel putin 60% din ferestre pe aceeasi
+   rata folosita la decizie; referinta este rata asteptata hipergeometric a
+   unui pool aleator (`expected_random_rate`, 5% pentru Urna 2), nu o singura
+   realizare `random`; randul `random` ramane in folds ca verificare de
+   sanitate (`random_empirical_rate`) si este seedat determinist din istoric;
+5. rata este pooled pe `n_eval`, cu fallback per rand pe `n_test`;
+6. incertitudinea este evaluata prin limita Wilson cu n efectiv Kish;
+7. metodele calificate sunt ordonate dupa Wilson, lift, consistenta si nume,
+   deci decizia nu depinde de ordinea randurilor din `folds.csv`;
+8. ensemble-ul nominal are maximum trei membri;
+9. lipsa metricei sau lipsa metodelor calificate produce `low_confidence` si
    fallback conservator, nu o afirmatie de avantaj statistic.
 
 ### Doua filtre de redundanta
@@ -170,7 +181,11 @@ Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar.
 Pre-screeningul din 2026-09-01 a verificat toate cele 111 metode: `ml_knn_5` a
 bătut controlul în 3/4 ferestre, iar `649_decade_hot` în 2/3 ferestre comune.
 Decizia recalibrată nu mai este `low_confidence`. Cifrele sunt diagnostic pe
-istoric, nu selecție permanentă; datele noi pot schimba rezultatul.
+istoric, nu selecție permanentă; datele noi pot schimba rezultatul. Scanarea din
+2026-09-02 arata ca `649_decade_hot` are doar doua niveluri de scor pe 1..20 si
+alege mereu 20 sau 10 prin tie-break; dupa un Re-Bench cu `tiebreak_k1` poarta
+din decizie o exclude, iar `ml_knn_5` (tie la granita in ~65% din blocuri) este
+la randul ei candidata la excludere.
 
 ## 6. Pool unic
 
@@ -220,7 +235,9 @@ partiala, hitul de pool este doar plafon pentru hitul pe bilet.
 - `hits_union` = intersectia pool-ului cu extragerea.
 - `wheel_coverage=None` inseamna necunoscut, nu 100%.
 - Adancimea UI este 30% din istoric.
-- Bugetul implicit este 90 minute si permite rezultat partial.
+- Bugetul implicit este 90 minute si permite rezultat partial; la urmatoarea
+  rulare pasii deja validati din cache-ul partial sunt sariti (`skip_indices`),
+  deci acoperirea creste in loc sa se refaca de la zero.
 - Ordinea jocurilor este Joker, 5/40, 6/49.
 - Paralelizarea foloseste aproximativ 80% din nuclee, cu BLAS single-thread per
   proces.
@@ -233,7 +250,7 @@ pentru Joker, decizia Urnei 2.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v16` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| benchmark fold | `v17` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v22` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
 | worker pipeline | `v3` | se schimba rezultatul serializat al pipeline-ului |
 
@@ -340,7 +357,8 @@ scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisa
   toate cele 111 metode; pastreaza numai semnale peste baseline si distincte.
 - [ ] Automatizeaza testul care ruleaza fiecare metoda activa pe toate geometriile
   si compara acceptarea benchmarkului cu acceptarea engine-ului.
-- [ ] Raporteaza separat metodele unavailable, failed, plate si corelate.
+- [x] Raporteaza separat metodele incomplete (fereastra lipsa) si dependente de
+  tie-break in decizie; raman de raportat unavailable, plate si corelate.
 - [ ] Adauga un test de regresie pentru fallback-ul top-1 fara coloana
   `rate_1plus_k1`.
 

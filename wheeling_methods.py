@@ -663,6 +663,12 @@ WHEEL_METHODS = {
 
 def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=None):
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic."""
+    if int(guarantee) > int(pick):
+        # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
+        # `ValueError: r must be non-negative` din itertools, fara context.
+        raise ValueError(
+            f"guarantee={guarantee} > pick={pick}: garanția nu poate depăși numerele extrase"
+        )
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if fn is None:
         wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)

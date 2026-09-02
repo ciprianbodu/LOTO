@@ -363,14 +363,16 @@ def get_ensemble_for_game(
         logger.error("[method_selector] benchmark.methods import failed: %s", exc)
         raise
 
+    # Plafonul de membri se aplica DUPA sanitizare (aceeasi lista pe care o
+    # vede get_winner_name/UI), altfel un membru interzis sau cu pondere
+    # invalida in primele pozitii consuma un loc si blend-ul ramane cu mai
+    # putini membri decat afiseaza UI-ul.
+    _, clean_list, _ = _sanitize_ap_production(entry)
     out: list[tuple[str, Callable, float]] = []
-    for item in raw_list[:max_methods]:
-        name = item.get("method") if isinstance(item, dict) else None
-        weight = float(item.get("weight", 0.0)) if isinstance(item, dict) else 0.0
-        if not name or weight <= 0:
-            continue
-        name = _sanitize_production_name(name, context="ensemble member")
-        if not name:
+    for item in clean_list[:max_methods]:
+        name = item["method"]
+        weight = float(item["weight"])
+        if weight <= 0:
             continue
         cache_key = f"{name}#{pool_size or 'overall'}"
         fn = _CACHE.get(cache_key)

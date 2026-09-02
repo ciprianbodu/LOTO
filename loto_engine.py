@@ -58,6 +58,10 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
     Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
     Optimizat pentru hit-uri de 4 și 5 numere prin prioritizarea scorurilor NQI/Frecvență.
     """
+    if int(guarantee) > int(pick):
+        raise ValueError(
+            f"guarantee={guarantee} > pick={pick}: garanția nu poate depăși numerele extrase"
+        )
     start_time = time.time()
     pool_len = len(pool)
     logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
@@ -732,6 +736,10 @@ class LotoEngine:
 
         logging.info(f"[PIPELINE] Inițializare scoring (câștigător bench CPU) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
         
+        # Numarul de randuri INAINTE de trunchierea pe lookback: feedback-ul
+        # adaptiv compara acest numar cu lungimea completa a CSV-ului la rularea
+        # urmatoare, deci trebuie sa fie tot lungimea completa.
+        full_rows = int(len(self.data)) if self.data is not None else 0
         if lookback > 0 and self.data is not None and not self.data.empty:
             effective_rows = int(len(self.data) * (lookback / 100.0))
             effective_rows = max(effective_rows, 1)
@@ -1001,7 +1009,7 @@ class LotoEngine:
                     game_type=self.game_type,
                     pool_size=pool_size,
                     pool=self.hard_core,
-                    data_rows=int(len(self.data)) if self.data is not None else 0,
+                    data_rows=full_rows,
                 )
                 summary = get_state_summary(self.game_type, pool_size)
                 self.audit["adaptive_state"] = {
@@ -1283,7 +1291,10 @@ class LotoEngine:
 
         if self._draw_matrix is None:
             return {}
-        if is_joker_drum and self.data is not None and "joker" in self.data.columns:
+        if is_joker_drum:
+            # Urna 2 se scoreaza NUMAI pe coloana `joker` validata (1..20). Fara
+            # coloana, cazul cade pe {} si callerul marcheaza Urna 2 indisponibila;
+            # altfel numerele Urnei 1 (1..45) ar fi scorate ca bile 1..20.
             _jk = self._valid_joker_values()
             if _jk.size == 0:
                 return {}
@@ -1408,6 +1419,9 @@ class LotoEngine:
                 )
                 self.audit["bench_winner_flat_scores"] = True
                 self.audit["bench_winner_unusable_scores"] = True
+                self._bench_winner_unusable_attempt = (
+                    self.audit.get("bench_winner", {}) or {}
+                ).get(self._bench_game_key(is_joker_drum), {}).get("method")
                 scores = {}
             if scores:
                 return scores
@@ -1424,20 +1438,36 @@ class LotoEngine:
             else:
                 _gk = "loto_6_49"
                 _ph = int(getattr(self, "_winner_pool_hint", 11))
-            self.audit.setdefault("bench_winner", {}).setdefault(_gk, {
+            # Suprascriem (nu setdefault): pe scoruri inutilizabile intrarea a fost
+            # deja scrisa cu numele metodei moarte, iar UI-ul ar fi afisat-o ca
+            # activa desi pool-ul vine din frecventa.
+            _attempted = getattr(self, "_bench_winner_unusable_attempt", None)
+            self._bench_winner_unusable_attempt = None
+            _fb_info = {
                 "method": "frequency",
                 "fallback": True,
-                "reason": "bench-winner scoring empty",
+                "reason": ("bench-winner scoring unusable" if _attempted
+                           else "bench-winner scoring empty"),
                 "pool_hint": _ph,
                 "family": "baseline",
-            })
+            }
+            if _attempted:
+                _fb_info["attempted"] = _attempted
+            self.audit.setdefault("bench_winner", {})[_gk] = _fb_info
         return self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
+
+    def _bench_game_key(self, is_joker_drum: bool = False) -> str:
+        """Cheia de joc din best_methods.json pentru (game_type, is_joker_drum)."""
+        if is_joker_drum:
+            return "joker_urna2"
+        return {"6/49": "loto_6_49", "5/40": "loto_5_40",
+                "joker": "joker_urna1"}.get(self.game_type, "loto_6_49")
 
     def _frequency_fallback_scores(self, is_joker_drum: bool = False) -> dict[int, float]:
         """Fallback determinist când câștigătorul bench nu produce scoruri:
         frecvență recency-weighted (exp-decay) pe istoric, normalizată [0,1]."""
         max_num = 20 if is_joker_drum else int(self.params["max_n"])
-        if is_joker_drum and self.data is not None and "joker" in self.data.columns:
+        if is_joker_drum:
             _jk = self._valid_joker_values()
             if _jk.size == 0:
                 # Nu fabricăm un clasament plat / o bilă arbitrară când Urna 2

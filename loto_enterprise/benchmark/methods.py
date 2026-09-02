@@ -54,7 +54,17 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
 # ---------------------------------------------------------------------------
 
 def score_random(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
-    rng = np.random.default_rng()
+    """Baseline structural: scoruri uniforme, INDEPENDENTE de istoric ca semnal.
+
+    Seed derivat determinist din istoric + univers: aceeasi fereastra da mereu
+    aceeasi realizare, deci randul `random` din folds.csv este reproductibil
+    intre rulari si nu depinde de ce realizare a fost cache-uita prima.
+    Fiecare bloc primeste alt istoric, deci alta realizare.
+    """
+    import hashlib as _hashlib
+    _body = np.ascontiguousarray(np.asarray(draws_2d)).tobytes() if draws_2d is not None else b""
+    _digest = _hashlib.blake2b(_body + int(max_num).to_bytes(4, "little"), digest_size=8).digest()
+    rng = np.random.default_rng(int.from_bytes(_digest, "little"))
     return _normalize({n: float(rng.random()) for n in range(1, max_num + 1)}, max_num)
 
 
