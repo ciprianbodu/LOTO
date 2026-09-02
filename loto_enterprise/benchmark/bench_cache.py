@@ -111,6 +111,10 @@ def compute_csv_hash(draws_2d: np.ndarray) -> str:
 # foldurile rulate cu valorile default — rezultate stale servite TĂCUT.
 # Cheile se schimbă DOAR la valori non-default, ca tot cache-ul istoric
 # (rulat mereu cu default-urile) să rămână valid.
+# Valoarea de bază ISTORICĂ a cheii (bench-urile vechi score-once-per-fold au
+# fost stocate fără sufix). O păstrăm ca sentinel de compatibilitate chiar dacă
+# runner/CLI folosesc acum implicit block_size=1: acesta primește sufixul ``bs1``
+# și nu poate primi accidental cache-ul vechi, nealiniat cu walk-forward-ul UI.
 _DEFAULT_BLOCK_SIZE = 99999
 _DEFAULT_SEED = 1234
 _CACHE_VARIANT = {"block_size": _DEFAULT_BLOCK_SIZE, "seed": _DEFAULT_SEED}

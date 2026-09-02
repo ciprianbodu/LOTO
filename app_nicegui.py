@@ -462,8 +462,17 @@ def _istoric_has_data() -> bool:
 
 
 def run_rebench() -> None:
-    """Re-Bench UNIC: un singur proces testează TOATE metodele. Intern, runner.py
-    paralelizează metodele CPU pe toate nucleele (ProcessPool)."""
+    """Re-Bench UNIC, aliniat cu walk-forward-ul de producție.
+
+    ``block-size=1`` recalculează scorul înaintea FIECĂREI extrageri testate,
+    exact ca validarea afișată după generare. Varianta rapidă istorică
+    (score-once-per-fold, block=99999) putea alege un câștigător care trecea
+    poarta din bench, dar pierdea față de random în walk-forward-ul real.
+
+    Controlul pe istoricul amestecat este sărit: dubla timpul și nu participă
+    la decizia de producție (``decision.py`` folosește doar ``is_random=False``).
+    Baseline-ul scorerului ``random`` rămâne prezent și obligatoriu.
+    """
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
@@ -476,8 +485,18 @@ def run_rebench() -> None:
         ui.notify("⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
                   "de după NU va putea genera pool-uri. Încarcă fișierele la pasul 1.",
                   type="warning", timeout=8000)
-    # un singur bench, fără --methods (= TOATE), scrie best_methods.json (decizie 3+)
-    _launch_bench(["--no-rich", "--percentiles", _PCTS], "Re-Bench (toate metodele)")
+    # Un singur bench, fără --methods (= TOATE), scrie best_methods.json.
+    # Re-score per extragere: selecția și avertismentul de onestitate măsoară
+    # aceeași procedură, nu un pool înghețat la începutul întregului fold.
+    _launch_bench(
+        [
+            "--no-rich",
+            "--percentiles", _PCTS,
+            "--block-size", "1",
+            "--no-shuffled-control",
+        ],
+        "Re-Bench walk-forward real (toate metodele)",
+    )
 
 
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
