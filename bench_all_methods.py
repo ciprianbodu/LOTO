@@ -111,9 +111,10 @@ def main() -> int:
         "--percentiles", default="10,20,30,40,50,60,70,80,90,100",
         help="Ferestre walk-forward, default 10..100 cu pas 10",
     )
-    parser.add_argument("--block-size", type=int, default=99999,
-                        help="Walk-forward re-score block; default = score-once-per-fold. "
-                             "block_size=1 = true per-step walk-forward (foarte lent).")
+    parser.add_argument("--block-size", type=int, default=1,
+                        help="Walk-forward re-score block; default = 1 (re-score înaintea "
+                             "fiecărei extrageri, identic cu validarea din UI). Valori mai "
+                             "mari sunt aproximări mai rapide, nu decizii de producție.")
     parser.add_argument("--quick", action="store_true",
                         help="Quick: random + frequency")
     parser.add_argument("--seed", type=int, default=1234)

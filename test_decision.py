@@ -201,18 +201,18 @@ def test_decide_optimal_config_includes_ensemble_field(noisy_vs_robust_folds):
     assert cfg["ensemble"][0]["method"] == cfg["scorer"]
 
 
-def test_decide_optimal_config_ensemble_capped_at_max_methods():
-    """Cu mai multe metode calificate decât ENSEMBLE_MAX_METHODS, ensemble-ul
-    nu trebuie să depășească limita."""
+def test_decide_optimal_config_uses_only_directly_validated_winner(monkeypatch):
+    """Ratele individuale nu validează blendul: producția păstrează top-1."""
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
     game = "many_methods_game"
     pool = 6
     k_col = f"k{pool}"
-    rate_col = f"rate_4plus_k{pool}"
+    rate_col = f"rate_3plus_k{pool}"
     rows = []
-    windows = [(10, 50), (100, 500)]
+    windows = [(10, 50), (30, 150), (60, 300), (100, 500)]
     for pct, n_test in windows:
         rows.append(_make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.01))
-        for i in range(6):  # mai multe metode calificate decât ENSEMBLE_MAX_METHODS (3)
+        for i in range(6):  # mai multe metode calificate decât limita de producție
             rate = 0.02 + i * 0.001
             rows.append(_make_folds_row(game, f"method_{i}", pct, n_test, k_col, 1.2 + i * 0.01,
                                          rate_col, rate))
@@ -220,7 +220,10 @@ def test_decide_optimal_config_ensemble_capped_at_max_methods():
 
     cfg = decision.decide_optimal_config_for_pool(df, game_key=game, pool_size=pool, draw_n=6)
 
-    assert len(cfg["ensemble"]) <= decision.ENSEMBLE_MAX_METHODS
+    assert decision.ENSEMBLE_MAX_METHODS == 1
+    assert cfg["qualifying_methods"] == 6
+    assert cfg["low_confidence"] is False
+    assert cfg["ensemble"] == [{"method": cfg["scorer"], "weight": 1.0}]
 
 
 def test_decide_optimal_config_fallback_branch_has_single_member_ensemble():

@@ -463,8 +463,17 @@ def _istoric_has_data() -> bool:
 
 
 def run_rebench() -> None:
-    """Re-Bench UNIC: un singur proces testează TOATE metodele. Intern, runner.py
-    paralelizează metodele CPU pe toate nucleele (ProcessPool)."""
+    """Re-Bench UNIC, aliniat cu walk-forward-ul de producție.
+
+    ``block-size=1`` recalculează scorul înaintea FIECĂREI extrageri testate,
+    exact ca validarea afișată după generare. Varianta rapidă istorică
+    (score-once-per-fold, block=99999) putea alege un câștigător care trecea
+    poarta din bench, dar pierdea față de random în walk-forward-ul real.
+
+    Controlul pe istoricul amestecat este sărit: dubla timpul și nu participă
+    la decizia de producție (``decision.py`` folosește doar ``is_random=False``).
+    Baseline-ul scorerului ``random`` rămâne prezent și obligatoriu.
+    """
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
@@ -477,8 +486,18 @@ def run_rebench() -> None:
         ui.notify("⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
                   "de după NU va putea genera pool-uri. Încarcă fișierele la pasul 1.",
                   type="warning", timeout=8000)
-    # un singur bench, fără --methods (= TOATE), scrie best_methods.json (decizie 3+)
-    _launch_bench(["--no-rich", "--percentiles", _PCTS], "Re-Bench (toate metodele)")
+    # Un singur bench, fără --methods (= TOATE), scrie best_methods.json.
+    # Re-score per extragere: selecția și avertismentul de onestitate măsoară
+    # aceeași procedură, nu un pool înghețat la începutul întregului fold.
+    _launch_bench(
+        [
+            "--no-rich",
+            "--percentiles", _PCTS,
+            "--block-size", "1",
+            "--no-shuffled-control",
+        ],
+        "Re-Bench walk-forward real (toate metodele)",
+    )
 
 
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
@@ -3674,11 +3693,21 @@ def main_page() -> None:
         _cur = _curation_banner_info()
         if _cur is not None:
             _pg = _cur.get("per_game") or {}
-            _pg_txt = "/".join(
+            _main_pg_txt = "/".join(
                 str(int(_pg[g])) for g in ("loto_6_49", "loto_5_40", "joker_urna1") if g in _pg
             )
-            _pg_bit = (f"clasament/decizie = {_pg_txt} per joc"
-                       if _pg_txt else "clasament/decizie = tot active")
+            _urna2_n = _pg.get("joker_urna2")
+            if _main_pg_txt and _urna2_n is not None:
+                _pg_bit = (
+                    f"clasament/decizie = {_main_pg_txt} jocuri principale "
+                    f"+ {int(_urna2_n)} Urna 2"
+                )
+            elif _main_pg_txt:
+                _pg_bit = f"clasament/decizie = {_main_pg_txt} per joc"
+            elif _urna2_n is not None:
+                _pg_bit = f"clasament/decizie = {int(_urna2_n)} Urna 2"
+            else:
+                _pg_bit = "clasament/decizie = tot active"
             _n_after = _cur["n_after"]
             ui.html(render_html_safe(
                 t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "

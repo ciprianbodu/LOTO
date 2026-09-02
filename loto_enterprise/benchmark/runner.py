@@ -400,14 +400,16 @@ def run_benchmark(
     games: list[GameDef],
     methods: list[str],
     percentiles: list[int],
-    block_size: int = 99999,
+    block_size: int = 1,
     random_seed: int = 1234,
     out_dir: str = "bench_results",
     progress_cb=None,
     use_cache: bool = True,
     shuffled_control: bool = True,
 ) -> dict:
-    """`use_cache=False` -> skip disk cache lookup/store. Folosit cand:
+    """Rulează implicit walk-forward real (re-score la fiecare extragere).
+
+    ``use_cache=False`` -> skip disk cache lookup/store. Folosit cand:
        - utilizatorul forteaza rebench (vrea masuratori proaspete)
        - schimbarea de hardware (CPU->GPU) invalideaza datele cache-uite
          (cache-ul nu include hardware/torch version in key).

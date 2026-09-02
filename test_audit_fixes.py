@@ -160,6 +160,16 @@ def test_worker_and_ui_no_longer_offer_second_pool():
     assert "Inversare automată" not in ui_src
 
 
+def test_curation_banner_includes_joker_urna2_quota():
+    """Bannerul nu trebuie să raporteze doar cele trei urne principale."""
+    ui_src = open("app_nicegui.py", encoding="utf-8").read()
+    marker = '            _pg = _cur.get("per_game") or {}'
+    start = ui_src.index(marker)
+    body = ui_src[start:ui_src.index("            if _cur[\"missing_required\"]", start)]
+    assert '_pg.get("joker_urna2")' in body
+    assert "Urna 2" in body
+
+
 def test_abandon_unstarted_scopes_to_active_job():
     """Abandonul de 0% nu anulează un job aflat în lucru."""
     src = open("app_nicegui.py", encoding="utf-8").read()

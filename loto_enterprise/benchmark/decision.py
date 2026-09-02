@@ -31,9 +31,10 @@ Invarianți (NU strica):
     * Baseline-urile NEDETERMINISTE (`EXCLUDED_FROM_PRODUCTION`, adică `random`)
       sunt doar REFERINȚĂ de comparație — nu pot deveni niciodată scorer de
       producție, nici pe ramura de fallback.
-    * Ensemble-ul nu e simplă feliere top-K: membrii cu semnătură de performanță
-      cvasi-identică sunt săriți (`ENSEMBLE_MAX_CORR`), altfel eticheta
-      "variance-reduction" ar fi falsă.
+    * Producția folosește câștigătorul unic evaluat direct. Ratele individuale
+      din folds.csv NU permit reconstruirea performanței pool-ului obținut prin
+      blend; un ensemble nevalidat poate pierde chiar dacă fiecare membru a
+      trecut separat poarta față de random.
 
 Cât prinde EFECTIV stratul de decorelare de aici (ca să nu pară mai puternic
 decât e): semnătura se măsoară pe RATE din folds.csv, CENTRATE pe coloane, deci
@@ -82,15 +83,18 @@ CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 MIN_CONSISTENCY_WINDOWS = 3
 MIN_TEST_DRAWS_FOR_STABILITY = 30
 
-# Câte metode intră în ensemble-ul de scoring (blend ponderat), în plus față de
-# câștigătorul unic `scorer` (păstrat pt compatibilitate/afișare). Loteria e
-# aleatoare — diferențele dintre metodele calificate sunt în mare parte zgomot
-# statistic (vezi CLAUDE.md); combinarea top-K reduce riscul ca o singură
-# metodă "norocoasă" pe date de test să domine complet pool-ul, în loc să
-# pretindă că am găsit "cea mai bună" metodă. Cu 1 metodă calificată, ensemble
-# degenerează la un singur membru (weight=1.0) — bit-identic cu comportamentul
-# vechi (fără normalizare/combinare în loto_engine.py).
-ENSEMBLE_MAX_METHODS = 3
+# Doar metoda câștigătoare intră în producție. folds.csv conține ratele
+# INDIVIDUALE, nu scorurile/pool-urile fiecărui pas necesare ca să validăm un
+# blend. Măsurat pe Joker k11 (02.09.2026, walk-forward real, 654 extrageri):
+# membrii aleși separat treceau benchmarkul rapid, dar blendul lor obținea
+# 44/654 = 6.73%, sub random 8.53%; un alt blend de trei candidați care bat
+# separat baseline-ul (mom_15_60 + ewma_40 + mod7_hot) cobora la 48/654 = 7.34%,
+# deși primul membru avea 73/654 = 11.16%.
+#
+# Păstrăm schema `ensemble` cu un singur membru pentru compatibilitate cu
+# engine/UI/cache. Dacă pe viitor benchmarkul persistă scorurile per pas și
+# evaluează DIRECT combinația, limita poate fi mărită pe baza acelei dovezi.
+ENSEMBLE_MAX_METHODS = 1
 
 # Corelația maximă acceptată între semnăturile de performanță a doi membri de
 # ensemble. Peste prag => membrii sunt redundanți (aceeași serie de rate pe
@@ -935,13 +939,10 @@ def decide_optimal_config_for_pool(
             f"{target_label} target (lift {qualifying[0][1]:+.4f}); "
             f"din {len(qualifying)} metode calificate [prioritate: {target_label}, robust]"
         )
-        # Ensemble: top ENSEMBLE_MAX_METHODS calificate, ponderate cu limita
-        # Wilson a ratei T+ (r[5]) — variance-reduction, NU o pretenție de
-        # "predicție mai bună" (loteria e aleatoare; diferențele dintre
-        # metodele calificate sunt majoritar zgomot statistic). Cu o singură
-        # metodă calificată, degenerează la ensemble cu 1 membru (weight=1.0).
-        # NU e simplă feliere top-K: metodele cvasi-identice (aceeași semnătură
-        # de performanță pe folduri) sunt sărite — vezi _select_ensemble_members.
+        # Configurația păstrează schema `ensemble`, dar limita de producție este
+        # 1: numai scorerul pe care folds.csv l-a evaluat DIRECT. Agregatele de
+        # rată ale membrilor nu dovedesc performanța rankingului rezultat prin
+        # min-max blend; vezi ENSEMBLE_MAX_METHODS.
         ordered = [(m, r4_conf) for m, _, _, _, _, r4_conf in qualifying]
         sig = _perf_signature_frame(
             sub[sub["is_random"] == False],  # noqa: E712
