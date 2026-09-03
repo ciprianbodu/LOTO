@@ -108,11 +108,16 @@ def _clamped_bench_target(value=None) -> int:
 
 UI_PERSIST_KEYS = [
     "pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
+    "wheel_condition_val", "recent_penalty_draws_val", "recent_penalty_factor_val",
     "shutdown_on_complete", "sim_depth_val", "autopilot_after_bench", "mail_on_complete",
     "last_finalized_job_id", "wf_budget_min", "bench_hit_target",
 ]
 DEFAULTS = {
     "pool_size_val": 10, "guarantee_val": 4, "max_variants_val": 0,
+    # Lotto design „garanție dacă condiție": 0 = cover clasic (condiție = garanție).
+    "wheel_condition_val": 0,
+    # Penalizare numere extrase în ultimele N extrageri (0 = oprit), scor × factor^aparitii.
+    "recent_penalty_draws_val": 3, "recent_penalty_factor_val": 0.5,
     "lookback_val": 0, "shutdown_on_complete": False,
     "sim_depth_val": 40, "autopilot_after_bench": True,
     "mail_on_complete": False,
@@ -130,6 +135,17 @@ DEFAULTS = {
 # Stare server-side (single-user local app → globală e suficient)
 # --------------------------------------------------------------------------- #
 SETTINGS: dict = dict(DEFAULTS)
+
+
+def _float_setting(key: str, default: float | None = None) -> float:
+    """SETTINGS[key] ca float, robust la câmp golit (None) — ca `_int_setting`."""
+    try:
+        v = SETTINGS.get(key)
+        if v is None:
+            v = DEFAULTS.get(key) if default is None else default
+        return float(v)
+    except (TypeError, ValueError):
+        return float(DEFAULTS.get(key, 0.0) if default is None else default)
 
 
 def _int_setting(key: str, default: int | None = None) -> int:
@@ -270,8 +286,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
     h = hashlib.sha256()
     for k in ("pool_size_val", "guarantee_val", "max_variants_val", "lookback_val",
-              "sim_depth_val", "bench_hit_target"):
-        h.update(str(SETTINGS[k]).encode("utf-8"))
+              "sim_depth_val", "bench_hit_target", "wheel_condition_val",
+              "recent_penalty_draws_val", "recent_penalty_factor_val"):
+        h.update(str(SETTINGS.get(k, DEFAULTS.get(k))).encode("utf-8"))
     h.update(str(sorted(sim_depth_per_game.items())).encode("utf-8"))  # adâncime per joc → cache key
     # `pure_bench` NU intră în hash: taskul emite `"pure_bench_mode": True`
     # NECONDIȚIONAT (mai jos), iar `loto_engine` scrie `audit["pure_bench_mode"] = True`
@@ -290,6 +307,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "pool_size": _int_setting("pool_size_val"),
             "guarantee": _int_setting("guarantee_val"),
             "max_variants": _int_setting("max_variants_val"),
+            "wheel_condition": _int_setting("wheel_condition_val"),
+            "recent_penalty_draws": _int_setting("recent_penalty_draws_val"),
+            "recent_penalty_factor": _float_setting("recent_penalty_factor_val"),
             "lookback": _int_setting("lookback_val"),
             "filter_consecutives": False,
             "smart_reduction": False,   # neaplicat pe path-ul principal (filters_disabled)
@@ -809,6 +829,9 @@ def _start_walk_forward() -> None:
                         use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
+                        # Aceeași penalizare ca la generare: WF validează pool-ul JUCAT.
+                        recent_penalty_draws=int(data.get("recent_penalty_draws") or 0),
+                        recent_penalty_factor=float(data.get("recent_penalty_factor") or 0.5),
                     )
                     if STATE.get("wf_seq") != my_seq:
                         # A pornit alt walk-forward: nu-i suprascriem retro/status.
@@ -1481,7 +1504,12 @@ def _render_cost(game: str, data: dict) -> None:
         _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
         if _g_used is None:
             _g_used = data.get("guarantee")
-        _g_txt = f"garanție {_g_used}" if _g_used is not None else "garanția configurată"
+        _wc_top = (data.get("audit") or {}).get("wheel_condition_used") or data.get("wheel_condition")
+        try:
+            _wc_top_txt = f" dacă {int(_wc_top)}" if _wc_top is not None and _g_used is not None and int(_wc_top) != int(_g_used) else ""
+        except (TypeError, ValueError):
+            _wc_top_txt = ""
+        _g_txt = f"garanție {_g_used}{_wc_top_txt}" if _g_used is not None else "garanția configurată"
         ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
                     f"{n_simple*price:,.0f} Lei în variante "
                     f"| **Wheel-ul nostru** ({_g_txt}, cover minim): {len(variants)} var.{_jk_txt} ≈ "
@@ -1828,8 +1856,16 @@ def _build_report() -> str:
         eff, req = d.get("pool_size"), d.get("pool_size_requested")
         out.append(f"{indent}Pool efectiv: {eff}"
                    + (f" (cerut {req})" if req and req != eff else "")
-                   + f" | Garanție: {d.get('guarantee')} | Variante simple: {len(d.get('variants') or [])}"
+                   + f" | Garanție: {d.get('guarantee')}"
+                   + (f" dacă {d.get('wheel_condition')}"
+                      if d.get('wheel_condition') and int(d.get('wheel_condition')) != int(d.get('guarantee') or 0) else "")
+                   + f" | Variante simple: {len(d.get('variants') or [])}"
                    + f" | Extrageri: {d.get('total_draws')}")
+        _rp = (d.get("audit") or {}).get("recent_penalty") or {}
+        if int(_rp.get("draws") or 0) > 0:
+            out.append(f"{indent}Penalizare recentă: ultimele {int(_rp['draws'])} extrageri × "
+                       f"{float(_rp.get('factor', 0.5)):.2f}; numere penalizate: "
+                       + (", ".join(str(k) for k in sorted(int(x) for x in (_rp.get('penalized') or {}))) or "niciunul"))
         out.append(f"{indent}Nucleu dur (nr(frecvență)): "
                    + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool))
         _cw = _consecutive_pool_warning(pool)
@@ -1955,8 +1991,20 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
             _g_diff = _g_req is not None and int(_g_used) != int(_g_req)
         except (TypeError, ValueError):
             _g_diff = _g_used != _g_req
-        ui.label(f"Garanție: {_g_used}" + (f" (cerută: {_g_req})" if _g_diff else ""))
+        _wc = (data.get("audit") or {}).get("wheel_condition_used") or data.get("wheel_condition")
+        try:
+            _wc_txt = f" dacă {int(_wc)}" if _wc is not None and int(_wc) != int(_g_used) else ""
+        except (TypeError, ValueError):
+            _wc_txt = ""
+        ui.label(f"Garanție: {_g_used}{_wc_txt}" + (f" (cerută: {_g_req})" if _g_diff else ""))
         ui.label(f"Variante simple: {len(variants)}")
+        _rp = (data.get("audit") or {}).get("recent_penalty") or {}
+        if int(_rp.get("draws") or 0) > 0:
+            _pen = _rp.get("penalized") or {}
+            ui.label(
+                f"Penalizare recentă: ultimele {int(_rp['draws'])} extrageri × {float(_rp.get('factor', 0.5)):.2f}"
+                f" ({len(_pen)} numere: {', '.join(str(k) for k in sorted(int(x) for x in _pen))})"
+            ).classes("text-caption")
         # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
         # pe cel puțin un bilet. Niciun filtru nu mai elimină bilete DUPĂ wheeling
@@ -1970,6 +2018,11 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         # Nu deducem garanția din «Variante maxime»: 0 scoate plafonul de cost,
         # dar procentul MĂSURAT rămâne sursa de adevăr.
         _cov = (data.get("context") or {}).get("coverage_pct")
+        if _wc_txt:
+            ui.label(
+                f"Lotto design „{_g_used}{_wc_txt}”: garanția se aplică doar când cad "
+                f"{int(_wc)} numere din pool; cu {int(_g_used)} numere prinse, hitul pe bilet nu e garantat."
+            ).classes("text-caption text-warning")
         if _cov is not None:
             if float(_cov) >= 100.0:
                 ui.html(render_html_safe(t"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>"))
@@ -3601,7 +3654,18 @@ def main_page() -> None:
             "6 este sistem complet pentru 6/49; la 5/40 și Joker garanția efectivă "
             "este plafonată la 5 numere extrase."
         ).classes("text-caption text-grey")
+        _bind_save(ui.number("Garanția se aplică dacă în pool cad (0 = câte cere garanția)", min=0, max=6, step=1).classes("w-full"), "wheel_condition_val")
+        ui.label(
+            "Lotto design „t dacă p”: de exemplu garanție 3 cu 4 = un bilet cu 3 numere garantat "
+            "doar când cad 4 numere din pool, cu de două ori mai puține bilete decât „3 dacă 3”."
+        ).classes("text-caption text-grey")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
+        _bind_save(ui.number("Penalizare numere extrase în ultimele N extrageri (0 = oprit)", min=0, max=50, step=1).classes("w-full"), "recent_penalty_draws_val")
+        _bind_save(ui.number("Factor penalizare per apariție (0..0.99)", min=0, max=0.99, step=0.05).classes("w-full"), "recent_penalty_factor_val")
+        ui.label(
+            "Scorul unui număr extras de k ori în ultimele N extrageri se înmulțește cu factor^k. "
+            "Preferință de compoziție, neutră ca valoare așteptată; se aplică identic în walk-forward."
+        ).classes("text-caption text-grey")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number(
             "Fereastră bench (telemetrie, nu schimbă pool-ul) (%)",

@@ -188,6 +188,22 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
             guar = max(3, min(draw_n, raw_guar))
             raw_max_var = int(task.get("max_variants", 0))
             max_var = max(0, raw_max_var)
+            # Lotto design „guarantee dacă condition": lipsă/0 = cover clasic.
+            try:
+                raw_cond = int(task.get("wheel_condition") or 0)
+            except (TypeError, ValueError):
+                raw_cond = 0
+            wheel_cond = guar if raw_cond <= 0 else max(guar, min(draw_n, raw_cond))
+            # Penalizare după ultimele extrageri (0 = oprit); factor în [0, 1).
+            try:
+                rp_draws = max(0, min(50, int(task.get("recent_penalty_draws") or 0)))
+            except (TypeError, ValueError):
+                rp_draws = 0
+            try:
+                rp_factor = float(task.get("recent_penalty_factor", 0.5))
+            except (TypeError, ValueError):
+                rp_factor = 0.5
+            rp_factor = max(0.0, min(0.99, rp_factor))
             raw_lookback = int(task.get("lookback", 0))
             lookback = max(0, min(100, raw_lookback))
             if (guar, max_var, lookback) != (raw_guar, raw_max_var, raw_lookback):
@@ -246,6 +262,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     pool_size=p_size,
                     guarantee=guar,
                     max_variants=max_var,
+                    wheel_condition=wheel_cond,
+                    recent_penalty_draws=rp_draws,
+                    recent_penalty_factor=rp_factor,
                     lookback=lookback,
                     filter_consecutives=filter_cons,
                     smart_reduction=smart_red,
@@ -264,6 +283,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
                     "pool_size": effective_pool,
                     "pool_size_requested": p_size,
                     "guarantee": guar,
+                    "wheel_condition": wheel_cond,
+                    "recent_penalty_draws": rp_draws,
+                    "recent_penalty_factor": rp_factor,
                     "lookback": lookback,
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),

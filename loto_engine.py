@@ -528,10 +528,29 @@ class LotoEngine:
             self.audit["joker_urna2_invalid_warning_logged"] = True
         return matrix[:, 0].astype(np.int64, copy=False)
 
-    def generate_predictions(self, guarantee=4, max_variants=0, scores=None):
-        """Generează predicții bazate pe analiză."""
+    def generate_predictions(self, guarantee=4, max_variants=0, scores=None, condition=None):
+        """Generează predicții bazate pe analiză.
+
+        `condition` (> guarantee) = lotto design „guarantee dacă condition": garanția
+        se aplică numai când cad `condition` numere din pool, cu mult mai puține
+        bilete. None sau egal cu garanția = cover clasic (comportament neschimbat).
+        """
         if not hasattr(self, 'hard_core') or not self.hard_core:
             return [], 0.0
+        _cond = int(condition) if condition is not None else int(guarantee)
+        if _cond != int(guarantee):
+            from wheeling_methods import generate_wheel
+            variants, coverage_pct = generate_wheel(
+                "lotto",
+                pool=self.hard_core,
+                pick=self.params["draw_n"],
+                guarantee=guarantee,
+                max_variants=max_variants,
+                scores=scores,
+                condition=_cond,
+            )
+            self._attach_joker(variants)
+            return variants, coverage_pct
 
         # Wheeling: implicit **lajolla** când max_variants == 0 (setarea implicită
         # a UI-ului), altfel greedy. Comentariul de dinainte zicea „implicit greedy
@@ -574,7 +593,11 @@ class LotoEngine:
                 scores=scores
             )
         
-        # Atașăm Joker din nucleul dur de Joker dacă e cazul
+        self._attach_joker(variants)
+        return variants, coverage_pct
+
+    def _attach_joker(self, variants: list) -> None:
+        """Atașează Joker-ul din nucleul dur de Urna 2 pe fiecare variantă (in place)."""
         if self.game_type == "joker" and hasattr(self, 'hard_core_joker') and self.hard_core_joker:
             # Atașăm jokerul favorit pe fiecare variantă de Urna 1. Codul rămâne
             # ciclic (generic pe lungimea listei), dar cu urna2 single-pick
@@ -585,10 +608,50 @@ class LotoEngine:
                 assigned_joker = jokers[idx % joker_pool_size]
                 variant.append(assigned_joker)  # Elementul 6 este Joker-ul
 
-        return variants, coverage_pct
+    @staticmethod
+    def apply_recent_penalty(scores: dict, draws_2d, n_draws: int, factor: float,
+                             max_num: int) -> tuple[dict, dict]:
+        """Penalizează numerele extrase în ultimele `n_draws` extrageri.
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, track_pool_variation=True):
+        Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri se
+        înmulțește cu `factor**k`. Preferință a utilizatorului, neutră ca
+        valoare așteptată (vezi CLAUDE.md §6): nu schimbă probabilitatea
+        extragerii, doar compoziția pool-ului. Întoarce (scoruri_noi,
+        {numar: aparitii}) — al doilea dict conține doar numerele penalizate.
+        """
+        n = int(n_draws or 0)
+        try:
+            f = float(factor)
+        except (TypeError, ValueError):
+            f = 0.5
+        if n <= 0 or not scores or draws_2d is None or len(draws_2d) == 0 or f >= 1.0:
+            return dict(scores), {}
+        f = max(0.0, f)
+        recent = np.asarray(draws_2d)[-n:]
+        counts: dict[int, int] = {}
+        for row in recent:
+            for v in row:
+                vi = int(v)
+                if 1 <= vi <= int(max_num):
+                    counts[vi] = counts.get(vi, 0) + 1
+        out = {}
+        for num, sc in scores.items():
+            k = counts.get(int(num), 0)
+            out[num] = float(sc) * (f ** k) if k else float(sc)
+        return out, {k_: v_ for k_, v_ in sorted(counts.items())}
+
+    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, track_pool_variation=True, wheel_condition=None, recent_penalty_draws=0, recent_penalty_factor=0.5):
         """Rulează pipeline-ul complet de analiză.
+
+        recent_penalty_draws / recent_penalty_factor: penalizare pe numerele
+            extrase în ultimele N extrageri (scor × factor^aparitii). 0 = oprit.
+            Se aplică identic în producție și în walk-forward, deci validarea
+            măsoară exact pool-ul jucat.
+
+        wheel_condition: numărul de numere din pool care trebuie să cadă pentru
+            ca garanția să se aplice (lotto design „guarantee dacă condition").
+            None, 0 sau egal cu garanția = cover clasic „guarantee dacă guarantee".
+            Se limitează la [guarantee, draw_n].
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
@@ -625,6 +688,20 @@ class LotoEngine:
                 "o limitez la %s.", guarantee, _draw_n, _draw_n,
             )
             guarantee = _draw_n
+        # Condiția lotto design: în [guarantee, draw_n]; lipsă/0 = cover clasic.
+        try:
+            _wc = int(wheel_condition) if wheel_condition is not None else 0
+        except (TypeError, ValueError):
+            _wc = 0
+        if _wc <= 0:
+            _wc = int(guarantee)
+        if _wc < int(guarantee) or _wc > _draw_n:
+            logging.warning(
+                "[PIPELINE] Condiția wheel %s în afara [%s, %s] — o limitez.",
+                wheel_condition, guarantee, _draw_n,
+            )
+            _wc = max(int(guarantee), min(_draw_n, _wc))
+        wheel_condition = _wc
 
         # Garanția cerută în UI se respectă ÎNTOTDEAUNA — fără escaladare implicită.
         # (Istoric: pe pool=10 garanția era suprascrisă silențios cu draw_n → full
@@ -791,6 +868,26 @@ class LotoEngine:
             self._tfm_window_cb = None  # Cleanup ca să nu polueze apeluri viitoare
         score_time = (time.perf_counter() - start_score) * 1000
 
+        # Penalizare după ultimele extrageri (opțiune UI; neutră ca valoare
+        # așteptată). Aplicată ÎNAINTE de top-N, pe scorurile validate.
+        _rp_n = int(recent_penalty_draws or 0)
+        self.audit["recent_penalty"] = {
+            "draws": _rp_n, "factor": float(recent_penalty_factor), "penalized": {},
+        }
+        if _rp_n > 0 and tfm_scores:
+            tfm_scores, _pen = self.apply_recent_penalty(
+                tfm_scores, self._draw_matrix, _rp_n, recent_penalty_factor,
+                int(self.params["max_n"]),
+            )
+            if not has_usable_score_variance(tfm_scores):
+                logging.warning("[PIPELINE] Penalizarea recentă a aplatizat scorurile — o ignor.")
+                tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+                self.audit["recent_penalty"]["skipped_flat"] = True
+            else:
+                self.audit["recent_penalty"]["penalized"] = {int(k): int(v) for k, v in _pen.items()}
+                logging.info("[PIPELINE] Penalizare recentă: ultimele %d extrageri × %.2f → %d numere afectate.",
+                             _rp_n, float(recent_penalty_factor), len(_pen))
+
         if progress_cb:
             progress_cb(f"{_score_lbl} complet ({score_time/1000:.1f}s). Construiesc pool...", 45)
 
@@ -847,6 +944,15 @@ class LotoEngine:
         if self.game_type == "joker":
             logging.info(f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)...")
             j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
+            if _rp_n > 0 and j_scores:
+                _jk_hist = self._valid_joker_values()
+                _j_pen, _jp = self.apply_recent_penalty(
+                    j_scores, _jk_hist.reshape(-1, 1) if _jk_hist.size else None,
+                    _rp_n, recent_penalty_factor, 20,
+                )
+                if has_usable_score_variance(_j_pen):
+                    j_scores = _j_pen
+                    self.audit["recent_penalty"]["penalized_urna2"] = {int(k): int(v) for k, v in _jp.items()}
             # joker_urna2 e single-pick (pool 1) în TOT lanțul bench→decizie→UI
             # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
             # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.
@@ -888,7 +994,14 @@ class LotoEngine:
         # Contract cu UI: garanția EFECTIV folosită la wheel (identică cu cea cerută
         # în UI — nu mai există nicio escaladare pe drum). UI-ul o afișează ca atare.
         self.audit["wheel_guarantee_used"] = int(guarantee)
-        lines, coverage_pct = self.generate_predictions(guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores)
+        # Condiția EFECTIV folosită: egală cu garanția = cover clasic; mai mare =
+        # lotto design „guarantee dacă condition" (mai puține bilete, garanție
+        # declanșată doar când cad `condition` numere din pool).
+        self.audit["wheel_condition_used"] = int(wheel_condition)
+        lines, coverage_pct = self.generate_predictions(
+            guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores,
+            condition=wheel_condition,
+        )
         
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar
         # putea sparge garanția de acoperire. Dacă vreodată se reintroduce unul,
@@ -932,6 +1045,8 @@ class LotoEngine:
             context["last_3"] = extract_draws(self.data.tail(3))
             
         context["coverage_pct"] = coverage_pct
+        context["wheel_condition"] = int(wheel_condition)
+        context["recent_penalty"] = {"draws": _rp_n, "factor": float(recent_penalty_factor)}
         # Necesar UI-ului ca să atribuie corect cauza unei acoperiri <100%: limita
         # de variante SAU garanție degenerată. Fără el, mesajul acuza mereu limita,
         # inclusiv când era deja 0 (nelimitat), și sfătuia „pune 0" fără efect.

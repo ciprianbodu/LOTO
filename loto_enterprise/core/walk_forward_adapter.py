@@ -282,7 +282,16 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
         return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}|cd-error"
 
 
-def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0) -> str:
+def _penalty_sig(recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5) -> str:
+    """Sufix de cheie pentru penalizarea recentă; gol când e oprită (chei vechi valide)."""
+    n = int(recent_penalty_draws or 0)
+    if n <= 0:
+        return ""
+    return f"|rp{n}:{float(recent_penalty_factor):.3f}"
+
+
+def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0,
+                  recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
     este ataşată fiecărei variante şi îi poate schimba evaluarea retrospectivă.
@@ -307,12 +316,16 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
         # fără să schimbe pool-ul sau wheel-ul.
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
                f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
-               f"{_wheel_sig(pool_size, game_type)}|lb{lb}")
+               f"{_wheel_sig(pool_size, game_type)}|lb{lb}"
+               f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
                        f"semnătură doar pe wheel")
-        return "nd" + hashlib.md5(_wheel_sig(pool_size, game_type).encode()).hexdigest()[:6]
+        return "nd" + hashlib.md5(
+            (_wheel_sig(pool_size, game_type)
+             + _penalty_sig(recent_penalty_draws, recent_penalty_factor)).encode()
+        ).hexdigest()[:6]
 
 
 def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str) -> Path:
@@ -402,8 +415,13 @@ def run_honest_walk_forward(
     force_refresh: bool = False,
     progress_cb=None,
     should_cancel=None,
+    recent_penalty_draws: int = 0,
+    recent_penalty_factor: float = 0.5,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
+
+    recent_penalty_*: aceeași penalizare după ultimele extrageri ca în producție;
+    intră în cheia de cache doar când e activă.
 
     Returns:
         (flat_results, meta_dict)
@@ -411,7 +429,8 @@ def run_honest_walk_forward(
     """
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
-    dec_sig = _decision_sig(game_type, pool_size, lookback_percent)
+    dec_sig = _decision_sig(game_type, pool_size, lookback_percent,
+                            recent_penalty_draws, recent_penalty_factor)
     cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig)
     meta = {
         "csv_hash": csv_hash,
@@ -486,6 +505,8 @@ def run_honest_walk_forward(
             {int(getattr(r, "draw_index", -1)) for r in (cached.get("flat") or [])}
             if cached is not None else None
         ),
+        recent_penalty_draws=int(recent_penalty_draws or 0),
+        recent_penalty_factor=float(recent_penalty_factor),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).

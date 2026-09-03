@@ -20,6 +20,16 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        complet 4-din-4 acoperă implicit şi orice 3-din-3, fără
                        biletele redundante ale vechii uniuni 3∪4.
 
+  • wheel_lotto      — LOTTO DESIGN „t dacă p" (condition > guarantee): orice
+                       submulțime de `condition` numere din pool are cel puțin
+                       `guarantee` numere pe un bilet. Mult mai ieftin decât
+                       coverul complet (Joker pool 11: 3-dacă-4 ≈ 11 bilete
+                       față de 20 pentru 3-dacă-3), cu prețul că garanția se
+                       declanșează doar când cad `condition` numere din pool.
+                       Greedy pozițional determinist + eliminare redundanțe,
+                       ILP exact pe geometrii mici. Ales automat de
+                       `generate_wheel(..., condition=p)` când p > guarantee.
+
 Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34.
 Orice eșec/limită → fallback la greedy (sigur). Default în `loto_engine`:
 **lajolla** când `max_variants == 0` (setarea implicită a UI-ului), greedy când
@@ -72,12 +82,42 @@ def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> fl
     return round(len(covered & targets) / len(targets) * 100.0, 2)
 
 
-def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
+def lotto_coverage_pct(wheel: list[list[int]], pool: list[int],
+                       guarantee: int, condition: int) -> float:
+    """Acoperirea unui lotto design „guarantee dacă condition".
+
+    Țintele sunt submulțimile de `condition` numere din pool; o țintă e acoperită
+    dacă un bilet are cel puțin `guarantee` numere comune cu ea. Pentru
+    `condition == guarantee` coincide exact cu `_coverage_pct`.
+    """
+    g, c = int(guarantee), int(condition)
+    if c == g:
+        return _coverage_pct(wheel, pool, g)
+    if c < g:
+        raise ValueError(f"condition={c} < guarantee={g}")
+    pool_sorted = sorted(int(x) for x in pool)
+    targets = list(itertools.combinations(pool_sorted, c))
+    if not targets:
+        return 100.0
+    tickets = [set(int(x) for x in t) for t in wheel]
+    covered = 0
+    for tg in targets:
+        tg_set = set(tg)
+        if any(len(tk & tg_set) >= g for tk in tickets):
+            covered += 1
+    return round(covered / len(targets) * 100.0, 2)
+
+
+def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int,
+                         condition: int | None = None) -> float:
     """API publică pt recalcularea acoperirii garanției pe un set de bilete DAT.
 
     Folosit din loto_engine.py pentru a revalida `coverage_pct` DUPĂ filtre
     post-wheeling (ex. anomaly filter) care pot elimina bilete fără să
-    actualizeze procentul de acoperire raportat inițial de wheeling."""
+    actualizeze procentul de acoperire raportat inițial de wheeling.
+    `condition` (> guarantee) comută pe semantica lotto design „t dacă p"."""
+    if condition is not None and int(condition) != int(guarantee):
+        return lotto_coverage_pct(wheel, pool, guarantee, condition)
     return _coverage_pct(wheel, pool, guarantee)
 
 
@@ -650,6 +690,186 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
 
 
 # ===========================================================================
+# 6) LOTTO DESIGN „t dacă p" — greedy pozițional + ILP exact pe geometrii mici
+# ===========================================================================
+_LOTTO_MAX_BLOCKS = 12000     # C(v, pick) peste care nici greedy-ul exhaustiv nu merită
+_LOTTO_ILP_MAX_BLOCKS = 4000  # ILP doar pe geometrii mici (timp de solver)
+_LOTTO_ILP_MAX_TARGETS = 4000
+_LOTTO_COVER_CACHE: dict[tuple[int, int, int, int], list[tuple[int, ...]]] = {}
+
+
+def _lotto_cover_positions(v: int, pick: int, guarantee: int, condition: int,
+                           time_limit: float = 10.0) -> list[tuple[int, ...]]:
+    """Cover „guarantee dacă condition" pe POZIȚII 0..v-1, determinist, memoizat.
+
+    Obiectivul e numărul de bilete, deci coverul nu depinde de scoruri și e
+    invariant la reetichetare (ca la ILP-ul clasic). Greedy: la fiecare pas
+    biletul care acoperă cele mai multe ținte noi, cu tie-break lexicografic;
+    apoi eliminarea biletelor devenite redundante. Pe geometrii mici încearcă
+    și ILP-ul exact și păstrează varianta cu mai puține bilete.
+    """
+    key = (int(v), int(pick), int(guarantee), int(condition))
+    if key in _LOTTO_COVER_CACHE:
+        return _LOTTO_COVER_CACHE[key]
+    g, c = int(guarantee), int(condition)
+    idxs = range(int(v))
+    blocks = list(itertools.combinations(idxs, int(pick)))
+    targets = list(itertools.combinations(idxs, c))
+    nt = len(targets)
+    if len(blocks) > _LOTTO_MAX_BLOCKS:
+        raise ValueError(f"lotto design prea mare: C({v},{pick})={len(blocks)} blocuri")
+    # Bitmask-uri: ținta t acoperită de blocul b dacă |b ∩ t| >= g.
+    block_masks: list[int] = []
+    target_sets = [frozenset(t) for t in targets]
+    for b in blocks:
+        bs = set(b)
+        m = 0
+        for ti, ts in enumerate(target_sets):
+            if len(bs & ts) >= g:
+                m |= 1 << ti
+        block_masks.append(m)
+    full = (1 << nt) - 1
+
+    # Greedy determinist.
+    covered = 0
+    chosen: list[int] = []
+    while covered != full:
+        best_j, best_gain = -1, 0
+        for j, m in enumerate(block_masks):
+            gain = bin(m & ~covered).count("1")
+            if gain > best_gain:
+                best_j, best_gain = j, gain
+        if best_j < 0:
+            break
+        chosen.append(best_j)
+        covered |= block_masks[best_j]
+    # Eliminare redundanțe: un bilet iese dacă țintele lui rămân acoperite.
+    changed = True
+    while changed:
+        changed = False
+        for pos in range(len(chosen) - 1, -1, -1):
+            others = 0
+            for q, j in enumerate(chosen):
+                if q != pos:
+                    others |= block_masks[j]
+            if others == full:
+                chosen.pop(pos)
+                changed = True
+                break
+    best = [blocks[j] for j in chosen]
+
+    # ILP exact pe geometrii mici: acelasi obiectiv, solutie posibil mai mica.
+    if len(blocks) <= _LOTTO_ILP_MAX_BLOCKS and nt <= _LOTTO_ILP_MAX_TARGETS:
+        try:
+            from scipy.optimize import milp, LinearConstraint, Bounds
+            from scipy.sparse import lil_matrix
+            A = lil_matrix((nt, len(blocks)), dtype=np.float64)
+            for j, m in enumerate(block_masks):
+                mm = m
+                ti = 0
+                while mm:
+                    if mm & 1:
+                        A[ti, j] = 1.0
+                    mm >>= 1
+                    ti += 1
+            res = milp(
+                c=np.ones(len(blocks)),
+                constraints=LinearConstraint(A.tocsr(), lb=1, ub=np.inf),
+                integrality=np.ones(len(blocks)),
+                bounds=Bounds(0, 1),
+                options={"time_limit": time_limit},
+            )
+            if res.x is not None:
+                ilp = [blocks[j] for j in range(len(blocks)) if res.x[j] > 0.5]
+                ilp_cov = 0
+                for j in range(len(blocks)):
+                    if res.x[j] > 0.5:
+                        ilp_cov |= block_masks[j]
+                if ilp_cov == full and len(ilp) < len(best):
+                    logger.info("[WHEEL-LOTTO] ILP %d < greedy %d bilete pentru L(%d,%d,%d,%d)",
+                                len(ilp), len(best), v, pick, c, g)
+                    best = ilp
+        except Exception as exc:  # noqa: BLE001
+            logger.info("[WHEEL-LOTTO] ILP indisponibil (%s) — păstrez greedy", exc)
+    _LOTTO_COVER_CACHE[key] = best
+    return best
+
+
+def lotto_design_path(v: int, pick: int, guarantee: int, condition: int) -> str:
+    """Numele fișierului local pentru lotto design L(v, pick, condition, guarantee)."""
+    return f"L_{int(v)}_{int(pick)}_{int(condition)}_{int(guarantee)}.txt"
+
+
+def _load_lotto_design(v: int, pick: int, guarantee: int,
+                       condition: int) -> list[tuple[int, ...]] | None:
+    """Citește și validează un lotto design local (același format ca La Jolla:
+    un bloc de `pick` poziții 1-based pe linie). Întoarce POZIȚII 0-based sau
+    None dacă fișierul lipsește ori nu acoperă 100%."""
+    name = lotto_design_path(v, pick, guarantee, condition)
+    for d in _LAJOLLA_DIRS:
+        f = d / name
+        if not f.exists():
+            continue
+        try:
+            blocks: list[tuple[int, ...]] = []
+            for line in f.read_text(encoding="utf-8-sig").splitlines():
+                if not line.strip():
+                    continue
+                nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
+                if (len(nums) != pick or len(set(nums)) != pick
+                        or any(n < 1 or n > v for n in nums)):
+                    raise ValueError(f"bloc invalid: {nums}")
+                blocks.append(tuple(n - 1 for n in nums))
+            if not blocks:
+                raise ValueError("fișier gol")
+            cov = lotto_coverage_pct([list(b) for b in blocks], list(range(v)), guarantee, condition)
+            if cov < 100.0:
+                raise ValueError(f"acoperire incompletă: {cov:.2f}%")
+            logger.info("[WHEEL-LOTTO] folosesc design valid %s (%d blocuri)", f, len(blocks))
+            return blocks
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[WHEEL-LOTTO] ignor design invalid %s: %s", f, exc)
+    return None
+
+
+def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):
+    """Lotto design „guarantee dacă condition" pe pool-ul dat.
+
+    Returnează (bilete, acoperire_pct) cu ACEEAȘI semantică de acoperire ca
+    `lotto_coverage_pct`. Pozițiile designului se mapează pe pool-ul sortat după
+    scor, ca numerele tari să apară mai des pe bilete. Cu `max_variants > 0`
+    biletele se trunchiază după scor, numerele din pool se readuc pe bilete
+    (`ensure_pool_numbers_on_tickets`) și acoperirea se recalculează.
+    """
+    g, c, pk = int(guarantee), int(condition), int(pick)
+    if c < g:
+        raise ValueError(f"condition={c} < guarantee={g}")
+    if g > pk:
+        raise ValueError(f"guarantee={g} > pick={pk}")
+    pool = _sorted_pool(pool, scores)
+    v = len(pool)
+    if v < pk:
+        return [list(pool)], 100.0
+    if c > v:
+        # Nu există nicio submulțime de `condition` numere în pool: garanția e vidă.
+        c = v
+    if c == g:
+        return generate_wheel("lajolla", pool, pk, g, max_variants, scores)
+    # Design local precalculat (validat 100%) → altfel greedy + ILP la cerere.
+    cover = _load_lotto_design(v, pk, g, c)
+    if cover is None:
+        cover = _lotto_cover_positions(v, pk, g, c)
+    wheel = [sorted(pool[i] for i in blk) for blk in cover]
+    wheel = _order_by_scores(wheel, scores)
+    if max_variants > 0 and len(wheel) > max_variants:
+        wheel = wheel[:max_variants]
+        wheel = ensure_pool_numbers_on_tickets(wheel, pool, pk)
+    cov = lotto_coverage_pct(wheel, pool, g, c)
+    logger.info("[WHEEL-LOTTO] L(%d,%d,%d,%d): %d bilete, acoperire %.2f%%", v, pk, c, g, len(wheel), cov)
+    return wheel, cov
+
+
+# ===========================================================================
 # Dispatcher
 # ===========================================================================
 WHEEL_METHODS = {
@@ -661,14 +881,25 @@ WHEEL_METHODS = {
 }
 
 
-def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=None):
-    """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic."""
+def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=None,
+                   condition: int | None = None):
+    """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic.
+
+    `condition` (numărul de numere din pool care trebuie să cadă ca garanția să
+    se aplice) > `guarantee` comută pe lotto design „t dacă p" (`wheel_lotto`),
+    indiferent de `method`: designurile locale și coverele clasice există doar
+    pentru p == t. `condition` None sau egal cu garanția = comportamentul vechi.
+    """
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
         # `ValueError: r must be non-negative` din itertools, fara context.
         raise ValueError(
             f"guarantee={guarantee} > pick={pick}: garanția nu poate depăși numerele extrase"
         )
+    if condition is not None and int(condition) != int(guarantee):
+        if int(condition) < int(guarantee):
+            raise ValueError(f"condition={condition} < guarantee={guarantee}")
+        return wheel_lotto(pool, pick, guarantee, int(condition), max_variants, scores)
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if fn is None:
         wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)

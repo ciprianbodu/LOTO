@@ -228,8 +228,15 @@ la randul ei candidata la excludere.
   raportul, emailul si walk-forward-ul nu mai au Pool 2/auto-invert.
 - Payload-urile vechi cu doua faze sunt citite compatibil folosind numai pool-ul
   normal din prima faza.
-- Nu reactiva filtre post-scoring pe paritate, decade, sume sau tipare recente.
-  Analizele din `scripts/analysis/` nu au demonstrat predictibilitate.
+- Penalizarea dupa ultimele extrageri este o OPTIUNE de utilizator
+  (`recent_penalty_draws`, `recent_penalty_factor`, implicit 3 extrageri si
+  0.5): scorul unui numar extras de k ori in ultimele N extrageri se inmulteste
+  cu factor^k, inainte de top-N. Se aplica identic in productie si in
+  walk-forward (intra in cheia de cache WF cand e activa) si este raportata in
+  `audit.recent_penalty`. Este o preferinta de compozitie a pool-ului, neutra ca
+  valoare asteptata: analizele din `scripts/analysis/` nu au demonstrat
+  predictibilitate pentru paritate, decade, sume sau tipare recente, iar
+  penalizarea nu trebuie prezentata drept avantaj statistic.
 
 ## 7. Wheeling si covering design
 
@@ -251,6 +258,13 @@ Reguli:
 - fallback: La Jolla -> ILP -> greedy;
 - `guarantee == pick` inseamna sistem complet, nu trebuie clampat;
 - `union34` foloseste un singur cover g4: acoperirea 4-din-4 implica 3-din-3;
+- lotto design „t daca p" (`wheel_condition` > garantie): orice p numere din pool
+  au cel putin t pe un bilet; mult mai ieftin (Joker pool 11: 3-daca-4 in 10
+  bilete fata de 20), dar garantia se declanseaza doar cand cad p numere din
+  pool. Designuri locale `L_v_pick_p_t.txt` validate la 100% inainte de
+  folosire, altfel greedy pozitional + ILP; regenerare offline cu
+  `scripts/analysis/gen_lotto_designs.py`. Walk-forward-ul ramane pe coverul
+  clasic intern; hiturile de pool nu depind de wheel;
 - nu compara algoritmi numai dupa numarul de bilete; ordinea este acoperire,
   apoi cost;
 - orice filtru post-wheel trebuie sa foloseasca
