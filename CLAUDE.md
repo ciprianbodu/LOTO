@@ -30,7 +30,9 @@ Snapshot verificat la 2026-09-01:
 - selectie: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
   distincte peste baseline pentru Joker Urna 2;
 - tombstone permanent: 74 nume in `disabled_methods.json`;
-- covering designs locale: 52 fisiere, toate validate la 100% la ultimul audit;
+- covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
+  designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
+  la ultimul audit;
 - cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
