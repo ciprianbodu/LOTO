@@ -1645,173 +1645,6 @@ def _render_adaptive(audit: dict) -> None:
     )
 
 
-def _render_walk_forward(flat, game: str, method: str = "") -> None:
-    if not flat:
-        return
-    gk = _game_label_for(game)
-    draw_n = 6 if gk == "6/49" else 5
-    from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
-    per_draw_summary = per_draw_hit_summary(flat)
-    n_draws = len(per_draw_summary)
-    n_tickets = len(flat)
-    avg_var = sum(row["best_ticket"] for row in per_draw_summary.values()) / max(n_draws, 1)
-    avg_pool = sum(row["pool"] for row in per_draw_summary.values()) / max(n_draws, 1)
-    best_var = max(row["best_ticket"] for row in per_draw_summary.values())
-    best_pool = max(row["pool"] for row in per_draw_summary.values())
-    avg_rate = (avg_var / draw_n) * 100
-
-    _mtxt = f" · metodă: {method}" if method else ""
-    _title = (f"📊 Walk-forward{_mtxt}: rată {avg_rate:.1f}% · "
-              f"medie/pool {avg_pool:.2f} · max pool {best_pool} · {n_draws} extrageri  "
-              f"▶ CLICK pt istoric hits per extragere + distribuții")
-    with ui.expansion(_title, value=False).classes("w-full mt-2"):
-        if method:
-            ui.label(f"✅ Validat pe metoda câștigătoare a bench-ului: {method} "
-                     "(pipeline-ul regenerează pool-ul la fiecare extragere folosind acest scorer).").classes(
-                "text-caption text-positive")
-        ui.label(f"{n_tickets} bilete pe {n_draws} extrageri").classes("text-caption")
-        _cn = _wf_coverage_note(flat)
-        if _cn:
-            ui.label(_cn[1]).classes(_cn[0])
-        with ui.row().classes("gap-8"):
-            for lbl, val in [("Medie/best bilet", f"{avg_var:.2f}"), ("Medie/pool", f"{avg_pool:.2f}"),
-                             ("Rată medie best bilet", f"{avg_rate:.1f}%"), ("Max bilet", best_var), ("Max pool", best_pool)]:
-                with ui.column().classes("items-center gap-0"):
-                    ui.label(lbl).classes("text-caption")
-                    ui.label(str(val)).classes("text-h6")
-
-        # 📜 ISTORIC COMPLET hits per extragere (toate extragerile, cronologic) —
-        # ce caută userul: nu doar ≥4, ci FIECARE extragere testată în walk-forward,
-        # cu câte numere a prins pool-ul + cel mai bun bilet.
-        per_draw: dict = {}
-        for p in flat:
-            di = getattr(p, "draw_index", id(p))
-            d = per_draw.get(di)
-            if d is None:
-                dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-                d = per_draw[di] = {"date": dd, "pool": getattr(p, "hits_union", 0), "best": 0}
-            d["best"] = max(d["best"], getattr(p, "hits", 0))
-
-        # Badge-urile urmează ținta bench (nu 4 fix) — la țintă 3 orice ≥3 e 🔥.
-        _TT = _bench_target()
-
-        def _hit_badge(h: int) -> str:
-            ic = "🔥" if h >= _TT else ("⭐" if h >= 3 else ("🔹" if h >= 1 else "·"))
-            return f"{ic} {h}"
-
-        rows_hist = []
-        for di in sorted(per_draw, reverse=True):  # cele mai recente extrageri sus
-            d = per_draw[di]
-            dd = d["date"]
-            rows_hist.append({
-                "draw": str(dd) if dd and str(dd) != "None" else f"#{di}",
-                "pool": _hit_badge(int(d["pool"])),
-                "best": _hit_badge(int(d["best"])),
-            })
-        if rows_hist:
-            ui.label(f"📜 Istoric hits per extragere ({len(rows_hist)} extrageri, cronologic — cele mai recente sus):").classes(
-                "text-bold text-caption mt-3")
-            # Legendă corelată cu ținta bench: la țintă 3 nu există ⭐ (orice ≥3 e 🔥).
-            _star = ("⭐=3 · " if _TT == 4 else f"⭐=3–{_TT - 1} · ") if _TT > 3 else ""
-            ui.label("Pentru fiecare extragere reală testată: câte numere a prins Nucleul Dur (pool) "
-                     f"și cel mai bun bilet generat. 🔥={_TT}+ · {_star}🔹=1-2 · ·=0").classes("text-caption text-grey")
-            ui.table(
-                columns=[
-                    {"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
-                    {"name": "pool", "label": "În Nucleu (pool)", "field": "pool", "align": "center"},
-                    {"name": "best", "label": "Cel mai bun bilet", "field": "best", "align": "center"},
-                ],
-                rows=rows_hist, pagination=15,
-            ).classes("w-full").props("dense")
-
-        # Distribuție Nucleu Dur (hits_union per extragere unică)
-        seen, pool_dist = set(), {}
-        for p in flat:
-            di = getattr(p, "draw_index", id(p))
-            if di in seen:
-                continue
-            seen.add(di)
-            hu = getattr(p, "hits_union", 0)
-            pool_dist[hu] = pool_dist.get(hu, 0) + 1
-        tot = len(seen)
-        ui.label("Distribuție Nucleu Dur (câte numere au fost în pool):").classes("text-bold text-caption mt-2")
-        for h in sorted(pool_dist, reverse=True):
-            c = pool_dist[h]
-            if c == 0 and h > 3:
-                continue
-            pct = (c / tot * 100) if tot else 0
-            color = "#f4a261" if h >= 4 else ("#e9c46a" if h >= 3 else "#666")
-            ui.html(render_html_safe(
-                t"<div style='display:flex;align-items:center;gap:8px;'>"
-                t"<div style='width:110px;font-size:0.85em;'>{h} numere</div>"
-                t"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:12px;'>"
-                t"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
-                t"<div style='width:120px;text-align:right;font-size:0.85em;'>{c} extrageri ({pct:.0f}%)</div></div>"
-            ))
-
-        # Distribuție performanță variante (bilete) — din .hits
-        var_dist = {}
-        for p in flat:
-            h = getattr(p, "hits", 0)
-            var_dist[h] = var_dist.get(h, 0) + 1
-        ui.label("Distribuție performanță variante (bilete):").classes("text-bold text-caption mt-2")
-        for h in sorted(var_dist, reverse=True):
-            c = var_dist[h]
-            if c == 0 and h > 3:
-                continue
-            pct = (c / n_tickets * 100) if n_tickets else 0
-            color = "#28a745" if h >= 3 else ("#17a2b8" if h >= 1 else "#666")
-            ui.html(render_html_safe(
-                t"<div style='display:flex;align-items:center;gap:8px;'>"
-                t"<div style='width:110px;font-size:0.85em;'>{h} ghicite</div>"
-                t"<div style='flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:10px;'>"
-                t"<div style='background:{color};width:{pct}%;height:100%;border-radius:4px;'></div></div>"
-                t"<div style='width:90px;text-align:right;font-size:0.85em;'>{pct:.1f}%</div></div>"
-            ))
-
-        # Tabel pool ≥T (urmează ținta bench-ului: ≥3 sau ≥4)
-        _T = _bench_target()
-        rows_pool, seen2 = [], set()
-        for p in sorted(flat, key=lambda x: (getattr(x, "hits_union", 0), getattr(x, "draw_index", 0)), reverse=True):
-            hu = getattr(p, "hits_union", 0)
-            di = getattr(p, "draw_index", 0)
-            if hu >= _T and di not in seen2:
-                seen2.add(di)
-                dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-                rows_pool.append({"draw": str(dd) if dd and str(dd) != "None" else f"#{di}", "hits": f"🔥 {hu}"})
-        if rows_pool:
-            ui.label(f"🎯 Istoric Pool (≥{_T} numere):").classes("text-bold text-caption mt-2")
-            ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
-                              {"name": "hits", "label": "Numere în Nucleu", "field": "hits", "align": "left"}],
-                     rows=rows_pool).classes("w-full").props("dense")
-
-        # Tabel bilete ≥T — AGREGAT pe extragere. (Înainte: o linie per variantă →
-        # aceeași dată apărea de zeci de ori, fiindcă ~zeci de variante prind 4 pe
-        # aceeași extragere. Ilizibil.) Acum: o linie per (extragere, hits) + nr. bilete.
-        highs = [p for p in flat if getattr(p, "hits", 0) >= _T]
-        if highs:
-            agg: dict = {}
-            for p in highs:
-                dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
-                lbl = str(dd) if dd and str(dd) != "None" else f"#{getattr(p, 'draw_index', 0)}"
-                key = (lbl, int(p.hits))
-                agg[key] = agg.get(key, 0) + 1
-            rows_v = []
-            for (draw, h), cnt in sorted(agg.items(), key=lambda kv: (kv[0][1], kv[1]), reverse=True):
-                rows_v.append({"draw": draw, "hits": f"⭐ {h}", "n": f"{cnt} bilete"})
-            n_draws_hit = len({d for d, _ in agg})
-            ui.label(f"🎯 Istoric Bilete cu ≥{_T} numere — {n_draws_hit} extrageri, agregat:").classes(
-                "text-bold text-caption mt-2")
-            ui.table(columns=[{"name": "draw", "label": "Data/Extragere", "field": "draw", "align": "left"},
-                              {"name": "hits", "label": "Hits", "field": "hits", "align": "center"},
-                              {"name": "n", "label": "Bilete", "field": "n", "align": "center"}],
-                     rows=rows_v, pagination=15).classes("w-full").props("dense")
-            ui.label(
-                "Premiile și ROI-ul nu sunt calculate: fișierele de intrare nu conțin "
-                "clasa și valoarea istorică a premiului, iar la Joker contează și Urna 2."
-            ).classes("text-caption text-grey")
-
-
 def _wf_summary(flat) -> str | None:
     if not flat:
         return None
@@ -1970,9 +1803,11 @@ def _consecutive_pool_warning(pool) -> str | None:
     )
 
 
-def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "",
-                      with_wf: bool = True, res_prefix: str = "") -> None:
-    """Randează pool-ul unic (badges, p10/p90, audit, cost, WF, variante, stages)."""
+def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "") -> None:
+    """Randează pool-ul unic (badges, p10/p90, audit, cost, variante, stages).
+
+    Walk-forward-ul NU se randează aici: statisticile lui apar o singură dată, în
+    „📊 Analiză & Clasament" (`_render_analysis_menu` → `_render_hits_4plus`)."""
     pool = data.get("hard_core") or []
     stats = data.get("hard_core_stats") or {}
     eff = data.get("pool_size")
@@ -2172,13 +2007,6 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         _render_adaptive(audit)
 
     _render_cost(game, data)
-
-    if with_wf:
-        flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-        if flat:
-            _bw = (data.get("audit") or {}).get("bench_winner") or {}
-            _wm = next((info.get("method") for info in _bw.values() if info.get("method")), "")
-            _render_walk_forward(flat, game, method=_wm)
 
     if variants:
         is_jk = "joker" in game.lower()
@@ -3473,7 +3301,7 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
             for game, raw_data in _ordered_game_items(outs):
                 data = _primary_pool_data(raw_data)
                 with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
-                    _render_pool_body(fname, game, data, with_wf=False, res_prefix=res_prefix)
+                    _render_pool_body(fname, game, data)
 
 
 
