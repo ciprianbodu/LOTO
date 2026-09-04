@@ -102,6 +102,34 @@ def test_missing_job_signals_stop_not_crash(db):
     assert jq.update_job_progress(999_999, 50, "x", db_path=db) is True
 
 
+def test_progress_cannot_overwrite_a_cancelled_job(db):
+    """Cancelul câștigă cursa: progresul tardiv nu-i rescrie procentul sau logul."""
+    jid = jq.submit_job("pipeline", "{}", db_path=db)
+    jq.fetch_pending_job(db_path=db)
+    jq.update_job_progress(jid, 25, "lucrez", db_path=db)
+    jq.cancel_pending_running_jobs("stop acum", db_path=db, job_ids=[jid])
+    cancelled = jq.get_job_status(jid, db_path=db)
+
+    assert jq.update_job_progress(jid, 80, "mesaj tardiv", db_path=db) is True
+    after = jq.get_job_status(jid, db_path=db)
+    assert after["status"] == "CANCELLED"
+    assert after["progress_pct"] == cancelled["progress_pct"] == 25
+    assert after["log_tail"] == cancelled["log_tail"]
+    assert "stop acum" in after["log_tail"]
+    assert "mesaj tardiv" not in after["log_tail"]
+
+
+def test_progress_stops_when_job_was_requeued(db):
+    jid = jq.submit_job("pipeline", "{}", db_path=db)
+    jq.fetch_pending_job(db_path=db)
+    assert jq.requeue_running_jobs(db_path=db) == 1
+    assert jq.update_job_progress(jid, 50, "worker vechi", db_path=db) is True
+    after = jq.get_job_status(jid, db_path=db)
+    assert after["status"] == "PENDING"
+    assert after["progress_pct"] == 1
+    assert "worker vechi" not in after["log_tail"]
+
+
 # --- worker: date inutilizabile nu produc „succes" ------------------------------
 def test_worker_marks_job_failed_when_config_has_no_datasets(db):
     import worker

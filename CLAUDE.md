@@ -38,7 +38,7 @@ Snapshot verificat la 2026-09-04:
 - cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
-- teste: 31 fisiere `test_*.py`, 501 teste trecute la auditul global.
+- teste: 31 fisiere `test_*.py`, 504 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -118,6 +118,9 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.4 Persistenta si concurenta
 
 - JSON-urile de stare se scriu numai atomic, prin `ui_shared`.
+- Progresul cozii se actualizeaza numai pentru un job `RUNNING`, printr-un
+  singur UPDATE atomic; `CANCELLED`, `PENDING` reprogramat sau jobul disparut
+  cer workerului sa se opreasca si nu au voie sa-si piarda logul de stare.
 - Nu scrie `pool_history.json` din pasi WF/backtest.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.

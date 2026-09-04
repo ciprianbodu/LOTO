@@ -244,32 +244,40 @@ def is_fresh_ui_start() -> bool:
 
 
 def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
-    """Actualizează progresul unui job și întoarce True dacă jobul a fost anulat între timp."""
+    """Actualizează atomic progresul; True cere workerului să se oprească.
+
+    Scriem numai cât timp jobul este ``RUNNING``. Vechiul SELECT + UPDATE lăsa
+    o fereastră în care anularea putea fi comisă între ele, iar UPDATE-ul
+    workerului suprascria apoi logul de anulare și procentul jobului CANCELLED.
+    """
     init_job_queue(db_path)
     pct_i = max(0, min(100, int(pct)))
     line = str(log_msg or "").strip()
     if not line:
-        return False
+        state = get_job_status(job_id, db_path=db_path)
+        return state is None or state.get("status") != JOB_RUNNING
     ts = datetime.now().strftime("%H:%M:%S")
     stamped = f"[{ts}] {line}"
     with _conn(db_path) as conn:
-        current = conn.execute(
-            "SELECT log_tail FROM jobs WHERE id = ?",
-            (int(job_id),),
-        ).fetchone()
-        prev_tail = (current["log_tail"] if current else "") if current else ""
-        merged = (prev_tail + ("\n" if prev_tail else "") + stamped).strip()
-        # keep tail compact to avoid unbounded growth
-        if len(merged) > 6000:
-            merged = merged[-6000:]
-        conn.execute(
-            "UPDATE jobs SET progress_pct = ?, log_tail = ? WHERE id = ?",
-            (pct_i, merged, int(job_id)),
+        cur = conn.execute(
+            """
+            UPDATE jobs
+            SET progress_pct = ?, log_tail = CASE
+                WHEN log_tail IS NULL OR log_tail = '' THEN ?
+                ELSE substr(log_tail || char(10) || ?, -6000)
+            END
+            WHERE id = ? AND status = ?
+            """,
+            (pct_i, stamped, stamped, int(job_id), JOB_RUNNING),
         )
         conn.commit()
+        updated = cur.rowcount > 0
 
-    # Verificăm statusul după update pentru a semnaliza oprirea dacă e cazul
-    return bool(is_job_cancelled(job_id, db_path=db_path))
+    if not updated:
+        return True
+    # Prinde și o anulare/reprogramare comisă imediat după tranzacția noastră.
+    state = get_job_status(job_id, db_path=db_path)
+    return state is None or state.get("status") != JOB_RUNNING
 
 
 def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> bool:
