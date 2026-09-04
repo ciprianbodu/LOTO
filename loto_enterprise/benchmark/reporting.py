@@ -8,6 +8,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich import box
 
+from .decision import pooled_mean
+
 
 def _fmt(v, prec=3):
     if v is None:
@@ -176,7 +178,8 @@ def render_regressive_table(console: Console, folds_df: pd.DataFrame, game_key: 
     for p in pcts:
         t.add_column(f"{p}%", justify="right")
     t.add_column("mean", justify="right", style="bold")
-    # Compute mean per method
+    # Celulele rămân mediile ferestrei respective; totalul folosește numărul
+    # real de extrageri din fiecare fereastră, la fel ca decizia și report.json.
     rows: list[tuple] = []
     for m in methods:
         cells = []
@@ -189,7 +192,9 @@ def render_regressive_table(console: Console, folds_df: pd.DataFrame, game_key: 
                 v = float(r[base_col].mean())
                 cells.append(f"{v:.3f}")
                 vals.append(v)
-        mean = sum(vals) / len(vals) if vals else 0.0
+        method_rows = sub[sub["method"] == m]
+        pooled = pooled_mean(method_rows, base_col)
+        mean = pooled if pooled is not None else (sum(vals) / len(vals) if vals else 0.0)
         rows.append((m, cells, mean))
     rows.sort(key=lambda r: r[2], reverse=True)
     for m, cells, mean in rows:

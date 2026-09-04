@@ -204,7 +204,9 @@ este sarit implicit in UI (`--no-shuffled-control`): alimenteaza doar
 diagnosticul `lift_vs_shuffle` si tie-break-ul legacy `winners_per_pool`, nu
 decizia de productie (`decision.py` filtreaza peste tot `is_random == False`).
 Baseline-ul `random` (metoda, nu controlul amestecat) ramane obligatoriu si
-prezent in folds.
+prezent in folds. Cand controlul amestecat lipseste, campurile lui din raport
+sunt `null` (indisponibile), nu zero; mediile agregate sunt ponderate cu
+`n_eval`/`n_test`, identic cu decizia si clasamentul UI.
 
 Lista `active` este uniunea semnalelor tuturor jocurilor, nu o cerere de a rula
 toate cele 56 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de

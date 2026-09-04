@@ -138,7 +138,7 @@ def main() -> int:
                              "(is_random=True). Injumatateste bench-ul (masurat: 50.1%% "
                              "din runtime) si NU afecteaza decizia de productie "
                              "(decision.py filtreaza is_random==False). Pierzi doar "
-                             "lift_vs_shuffle din report.json si tie-break-ul secundar "
+                             "lift_vs_shuffle din report.json (ramane null) si tie-break-ul secundar "
                              "al winners_per_pool (cale legacy).")
     parser.add_argument("--force-decision", action="store_true",
                         help="Rescrie best_methods.json CHIAR ȘI cu set redus de metode "

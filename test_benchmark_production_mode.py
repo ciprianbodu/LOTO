@@ -68,3 +68,60 @@ def test_per_draw_cache_never_reuses_static_fold(monkeypatch):
     static_key = bench_cache._fold_key(*args)
     bench_cache.set_cache_variant(1, 1234)
     assert bench_cache._fold_key(*args) != static_key
+
+
+def test_aggregate_weights_windows_and_does_not_invent_shuffled_lift():
+    import pandas as pd
+
+    from loto_enterprise.benchmark.runner import GameDef, _aggregate
+
+    game = GameDef("game", "Game", "unused.csv", ["n1"], 40, 5)
+    common = {
+        "game": "game",
+        "method": "signal",
+        "is_random": False,
+        "failed": False,
+        "runtime_sec": 1.0,
+        "cpu_pct_peak": 2.0,
+        "cpu_pct_avg": 1.0,
+        "ram_gb_peak": 0.1,
+        "gpu_pct_peak": 0.0,
+        "gpu_pct_avg": 0.0,
+        "vram_mb_peak": 0.0,
+    }
+    real_rows = [
+        {**common, "percentile": 10, "n_eval": 100, "k10": 1.0, "k10_bl": 0.8},
+        {**common, "percentile": 40, "n_eval": 400, "k10": 3.0, "k10_bl": 2.8},
+    ]
+    meta = {
+        "signal": {
+            "available": True,
+            "family": "test",
+            "requires_train": False,
+        }
+    }
+
+    without_control = _aggregate(
+        pd.DataFrame(real_rows), [game], ["signal"], meta, {"game": ["k10"]}
+    )
+    stats = without_control["games"]["game"]["per_method"]["signal"]["per_pool"]["k10"]
+    assert stats["avg_hits_real"] == 2.6
+    assert stats["avg_hits_real_bl"] == 2.4
+    assert stats["avg_hits_shuffled"] is None
+    assert stats["lift_vs_shuffle"] is None
+    assert without_control["games"]["game"]["winners_per_pool"]["k10"]["lift_vs_shuffle"] is None
+
+    shuffled_rows = [
+        {**real_rows[0], "is_random": True, "k10": 0.5, "k10_bl": 0.4},
+        {**real_rows[1], "is_random": True, "k10": 1.5, "k10_bl": 1.4},
+    ]
+    with_control = _aggregate(
+        pd.DataFrame(real_rows + shuffled_rows),
+        [game],
+        ["signal"],
+        meta,
+        {"game": ["k10"]},
+    )
+    stats = with_control["games"]["game"]["per_method"]["signal"]["per_pool"]["k10"]
+    assert stats["avg_hits_shuffled"] == 1.3
+    assert stats["lift_vs_shuffle"] == 1.3
