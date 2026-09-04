@@ -1,6 +1,6 @@
 """Walk-forward / regressive benchmark runner — v2 (spec-compliant).
 
-For every (game, urn, method, percentile_window, real|random) fold we:
+For every selected (game, urn, method, percentile_window, real|random) fold we:
     1. Train on the first (1 - P/100) of draws.
     2. Score numbers using a block-walk-forward (re-score every BLOCK_SIZE
        test draws, expanding history). For block_size = 99999 this is a
@@ -396,6 +396,25 @@ def _expected_pool_keys(game) -> set[str]:
     return {f"k{k}" for k in pool_sizes}
 
 
+def _methods_for_game(
+    methods: list[str],
+    methods_per_game: dict[str, list[str]] | None,
+    game_key: str,
+) -> list[str]:
+    """Metodele efectiv rulate pentru joc, deduplicate și validate în ``methods``.
+
+    Fără matrice sau fără cheia jocului păstrăm comportamentul compatibil: toate
+    metodele. O cheie prezentă reprezintă o selecție explicită, inclusiv dacă
+    lista este goală.
+    """
+    if methods_per_game is None or game_key not in methods_per_game:
+        return list(methods)
+    allowed = set(methods)
+    return list(dict.fromkeys(
+        m for m in methods_per_game[game_key] if m in allowed
+    ))
+
+
 def run_benchmark(
     games: list[GameDef],
     methods: list[str],
@@ -406,6 +425,7 @@ def run_benchmark(
     progress_cb=None,
     use_cache: bool = True,
     shuffled_control: bool = True,
+    methods_per_game: dict[str, list[str]] | None = None,
 ) -> dict:
     """Rulează implicit walk-forward real (re-score la fiecare extragere).
 
@@ -423,6 +443,11 @@ def run_benchmark(
         `(avg_hits_real, lift_vs_shuffle)`) — dar acela e doar cale LEGACY:
         producția citește `auto_pilot_per_pool`, construit de `decision.py`,
         care filtrează peste tot `is_random == False`.
+    `methods_per_game` restrânge matricea de calcul fără să schimbe registry-ul:
+    este folosit de curarea de producție pentru a nu evalua uniunea tuturor
+    semnalelor pe jocuri în care decizia le-ar ignora oricum. Lipsa unei chei
+    păstrează toate metodele, pentru compatibilitate și siguranță.
+
     Nu se pierde nimic din decizia de producție."""
     out_path = Path(out_dir)
     out_path.mkdir(exist_ok=True, parents=True)
@@ -446,7 +471,7 @@ def run_benchmark(
         _n_g = _n_by_game.get(game.key)
         if not _n_g:
             continue
-        for m in methods:
+        for m in _methods_for_game(methods, methods_per_game, game.key):
             meta = method_meta_map[m]
             if not meta["available"]:
                 continue
@@ -576,7 +601,7 @@ def run_benchmark(
             except Exception as _e:  # noqa: BLE001
                 logger.debug(f"[bench_cache] hash failed: {_e}")
 
-        for method in methods:
+        for method in _methods_for_game(methods, methods_per_game, game.key):
             meta = method_meta_map[method]
             if not meta["available"]:
                 logger.info("[%s/%s] SKIP (unavailable: %s)",
@@ -761,6 +786,10 @@ def run_benchmark(
 
     # ----- Aggregate per (game, pool) → winner -----
     report = _aggregate(df, games, methods, method_meta_map, pool_keys_per_game)
+    report["methods_per_game"] = {
+        g.key: _methods_for_game(methods, methods_per_game, g.key)
+        for g in games
+    }
     # Scriere atomică (tmp per-PID + fsync + rename) — OneDrive-safe, ca folds.csv.
     import uuid as _uuid
     _rjson = out_path / "report.json"

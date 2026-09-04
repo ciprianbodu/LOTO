@@ -19,14 +19,16 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-01:
+Snapshot verificat la 2026-09-04:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py`, port 8000;
 - runtime tinta: ultimul Python 3.14.x stabil;
 - venv: `D:\_BUILD\_LOTO\.venv`, in afara OneDrive;
 - registry: 111 metode CPU in `METHODS`;
-- curare reversibila: 56 metode in `curated_methods.json`;
+- curare reversibila: 56 metode eligibile in uniunea `active`; Re-Bench ruleaza
+  matricea efectiva 20/20/20/16 per joc, plus `random` si `frequency` unde nu
+  sunt deja prezente;
 - selectie: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
   distincte peste baseline pentru Joker Urna 2;
 - tombstone permanent: 74 nume in `disabled_methods.json`;
@@ -36,7 +38,7 @@ Snapshot verificat la 2026-09-01:
 - cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
-- teste: 26 fisiere `test_*.py`.
+- teste: 31 fisiere `test_*.py`, 501 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -203,6 +205,14 @@ diagnosticul `lift_vs_shuffle` si tie-break-ul legacy `winners_per_pool`, nu
 decizia de productie (`decision.py` filtreaza peste tot `is_random == False`).
 Baseline-ul `random` (metoda, nu controlul amestecat) ramane obligatoriu si
 prezent in folds.
+
+Lista `active` este uniunea semnalelor tuturor jocurilor, nu o cerere de a rula
+toate cele 56 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
+construirea task-urilor si adauga baseline-urile structurale. La configuratia
+curenta, cu patru ferestre si fara controlul amestecat, matricea scade de la
+56 × 4 × 4 = 896 la (22 + 22 + 21 + 18) × 4 = 332 folduri. Override-urile
+explicite `--methods` si `--quick` continua sa ruleze metodele cerute pe toate
+jocurile.
 
 Cheia de cache a foldurilor primeste sufixul `bs1` de indata ce `block_size`
 difera de sentinel-ul istoric (99999) — care ramane in cod ca valoare implicita

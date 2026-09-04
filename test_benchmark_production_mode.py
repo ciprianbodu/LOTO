@@ -31,6 +31,35 @@ def test_runner_defaults_to_per_draw_scoring():
     assert inspect.signature(run_benchmark).parameters["block_size"].default == 1
 
 
+def test_curated_benchmark_runs_only_relevant_methods_per_game():
+    from loto_enterprise.benchmark.curated import load_curated, resolve_methods_per_game
+
+    games = ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
+    matrix = resolve_methods_per_game(load_curated(), games)
+
+    # 20/20/20/16 semnale; random+frequency sunt adăugate dacă nu erau deja.
+    assert {g: len(matrix[g]) for g in games} == {
+        "loto_6_49": 22,
+        "loto_5_40": 22,
+        "joker_urna1": 21,  # frequency este deja unul dintre cele 20
+        "joker_urna2": 18,
+    }
+    assert sum(map(len, matrix.values())) == 83
+    for selected in matrix.values():
+        assert "random" in selected
+        assert "frequency" in selected
+
+
+def test_runner_method_matrix_is_safe_and_deduplicated():
+    from loto_enterprise.benchmark.runner import _methods_for_game
+
+    methods = ["random", "frequency", "signal_a", "signal_b"]
+    matrix = {"game_a": ["signal_b", "random", "signal_b", "unknown"]}
+    assert _methods_for_game(methods, matrix, "game_a") == ["signal_b", "random"]
+    assert _methods_for_game(methods, matrix, "game_without_config") == methods
+    assert _methods_for_game(methods, None, "game_a") == methods
+
+
 def test_per_draw_cache_never_reuses_static_fold(monkeypatch):
     from loto_enterprise.benchmark import bench_cache
 

@@ -375,6 +375,24 @@ def pooled_rate_and_neff(frame: pd.DataFrame, rate_col: str) -> tuple[float, flo
     return phat, float(n_eff)
 
 
+def pooled_mean(frame: pd.DataFrame, value_col: str) -> float | None:
+    """Media per extragere, ponderată cu denominatorul real al fiecărei ferestre.
+
+    Coloanele ``kN`` și ``avg_hits_topk`` sunt medii per extragere, exact ca
+    ratele T+. Prin urmare agregarea corectă peste ferestre cu dimensiuni diferite
+    este aceeași ``Σ medie·n / Σn`` din :func:`pooled_rate_and_neff`. Dacă un
+    folds.csv foarte vechi nu are ``n_eval``/``n_test``, păstrăm fallback-ul pe
+    media simplă, în loc să pierdem complet telemetria.
+    """
+    got = pooled_rate_and_neff(frame, value_col)
+    if got is not None:
+        return float(got[0])
+    if value_col not in frame.columns:
+        return None
+    values = pd.to_numeric(frame[value_col], errors="coerce").dropna()
+    return float(values.mean()) if not values.empty else None
+
+
 def pooled_wilson_distinct(frame: pd.DataFrame, rate_col: str) -> float | None:
     """Limita inferioară Wilson pe rata pooled, cu n EFECTIV (Kish).
 
@@ -851,7 +869,11 @@ def decide_optimal_config_for_pool(
                 continue
             r4 = _rate_target_mean(real_m)
             r4_conf = _rate_target_confidence(real_m)
-            ranked.append((m, r4_conf, r4, float(real_m[base_col].mean())))
+            _avg_hits = pooled_mean(real_m, base_col)
+            ranked.append((
+                m, r4_conf, r4,
+                float(_avg_hits if _avg_hits is not None else 0.0),
+            ))
         # Numele ca ULTIM criteriu: egalitatile exacte pe Wilson sunt frecvente
         # si altfel ordinea depindea de ordinea randurilor din folds.csv, adica
         # de ordinea in care s-au terminat procesele bench-ului.

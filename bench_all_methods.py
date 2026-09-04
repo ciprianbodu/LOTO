@@ -3,7 +3,8 @@
 Specul:
     • auto-detect ISTORIC/ (sau _LOTO/istoric/) cu CSV-uri per joc
     • teste pe FIECARE joc: 6/49, 5/40, Joker (Urna 1 = 5/45, Urna 2 = 1/20)
-    • toate metodele din registry (cele instalate rulează; restul N/A cu motiv)
+    • metodele eligibile din registry; cu curare activă rulează matricea
+      `per_game` + baseline-urile structurale, nu uniunea completă pe fiecare joc
     • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
     • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 14 (Urna 1), plus
       rata țintei +3/+4; Urna 2 este evaluată separat top-1 (1/20)
@@ -16,7 +17,7 @@ exclusiv CPU (numpy/sklearn/statsmodels).
 
 Usage
 -----
-    python bench_all_methods.py                               # Full (toate metodele available)
+    python bench_all_methods.py                               # Full (curare per-game dacă e activă)
     python bench_all_methods.py --percentiles 10,30,50,70,100
     python bench_all_methods.py --methods random,frequency
     python bench_all_methods.py --block-size 50               # walk-forward più fine
@@ -83,6 +84,7 @@ try:
     from loto_enterprise.benchmark.curated import (
         apply_curation as _apply_curation,
         log_curation as _log_curation,
+        resolve_methods_per_game as _resolve_methods_per_game,
     )
     ALL_SPEC_METHODS, CURATION_INFO = _apply_curation(_AVAILABLE_METHODS)
 except Exception as _exc:  # noqa: BLE001
@@ -92,6 +94,9 @@ except Exception as _exc:  # noqa: BLE001
 
     def _log_curation(info):  # noqa: D103 — no-op dacă modulul lipsește
         return None
+
+    def _resolve_methods_per_game(candidates, game_keys):  # noqa: D103
+        return {}
 
 QUICK_METHODS = ["random", "frequency"]
 
@@ -198,6 +203,20 @@ def main() -> int:
     console.print()
 
     games = discover_games(args.istoric)
+    # `active` este uniunea tuturor jocurilor. În producție rulăm numai lista
+    # `per_game` relevantă (+ baseline-urile structurale adăugate de resolver),
+    # fiindcă decizia și UI-ul ignoră oricum restul uniunii pentru acel joc.
+    # Override-urile explicite păstrează comportamentul cerut: fiecare metodă
+    # indicată rulează pe fiecare joc.
+    methods_per_game = (
+        _resolve_methods_per_game(methods, (g.key for g in games))
+        if CURATION_INFO.get("active") and not _explicit else {}
+    )
+    if methods_per_game:
+        _matrix = ", ".join(f"{g.key}={len(methods_per_game.get(g.key, methods))}"
+                            for g in games)
+        logging.info("[curated] matrice Re-Bench per joc: %s", _matrix)
+        console.print(f"[dim]Matrice efectivă Re-Bench (+ baseline-uri): {_matrix}[/dim]")
     console.rule("[bold]Jocuri detectate[/bold]")
     for g in games:
         console.print(
@@ -213,7 +232,10 @@ def main() -> int:
 
     # Progress bar over folds
     available_methods = [m for m in methods if meta_map[m]["available"]]
-    total_est = len(games) * len(available_methods) * len(pcts) * 2
+    _control_factor = 1 if args.no_shuffled_control else 2
+    total_est = sum(
+        len(methods_per_game.get(g.key, available_methods)) for g in games
+    ) * len(pcts) * _control_factor
 
     console.rule(f"[bold]Sweep start — est. {total_est} folds[/bold]")
 
@@ -270,6 +292,7 @@ def main() -> int:
             progress_cb=_cb,
             use_cache=not args.no_cache,
             shuffled_control=not args.no_shuffled_control,
+            methods_per_game=methods_per_game or None,
         )
 
     # ─── Console reports ────────────────────────────────────────────────────
@@ -295,6 +318,7 @@ def main() -> int:
             "block_size": args.block_size,
             "percentiles": pcts,
             "methods_tested": methods,
+            "methods_tested_per_game": report.get("methods_per_game", {}),
             # Telemetrie de curare: ca să se vadă în best_methods.json că bench-ul
             # a rulat un SUBSET (și de ce clasamentul are mai puține rânduri).
             "curated": dict(CURATION_INFO),
