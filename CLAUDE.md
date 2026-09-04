@@ -25,6 +25,9 @@ Snapshot verificat la 2026-09-04:
 - UI: NiceGUI, `app_nicegui.py`, port 8000;
 - runtime tinta: ultimul Python 3.14.x stabil;
 - venv: `D:\_BUILD\_LOTO\.venv`, in afara OneDrive;
+- runtime scris frecvent: `D:\_BUILD\_LOTO` (`.wf_cache`, `loto.log`,
+  `bench_full.log`, `startup_8000.log`), cu override prin `LOTO_RUNTIME_DIR` si
+  `LOTO_WF_CACHE_DIR`;
 - registry: 111 metode CPU in `METHODS`;
 - curare reversibila: 56 metode eligibile in uniunea `active`; Re-Bench ruleaza
   matricea efectiva 20/20/20/16 per joc, plus `random` si `frequency` unde nu
@@ -38,7 +41,7 @@ Snapshot verificat la 2026-09-04:
 - cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
-- teste: 31 fisiere `test_*.py`, 504 teste trecute la auditul global.
+- teste: 32 fisiere `test_*.py`, 509 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -306,9 +309,11 @@ partiala, hitul de pool este doar plafon pentru hitul pe bilet.
 - Paralelizarea foloseste aproximativ 80% din nuclee, cu BLAS single-thread per
   proces.
 
-Cache-ul WF sta momentan in `bench_results/`, deci in OneDrive. Cheia include
-istoricul complet, lookback, scorer, ensemble, tinta, wheel, hash-ul designului si,
-pentru Joker, decizia Urnei 2.
+Cache-ul WF sta in `D:\_BUILD\_LOTO\.wf_cache`, in afara OneDrive; override-ul
+este `LOTO_WF_CACHE_DIR`. `ACTUALIZARI.bat` migreaza idempotent fisierele legacy
+`bench_results/walk_forward_*.pkl`, fara sa suprascrie o destinatie existenta.
+Cheia include istoricul complet, lookback, scorer, ensemble, tinta, wheel,
+hash-ul designului si, pentru Joker, decizia Urnei 2.
 
 ## 9. Cache si invalidare
 
@@ -449,7 +454,7 @@ reproductibila, iar UI nu confunda pool-hit cu ticket-hit.
 ### P2 - reproductibilitate si operare
 
 - [ ] Adauga CI Windows pe Python 3.14 cu pytest si smoke test NiceGUI.
-- [ ] Muta cache-ul WF in `D:\_BUILD\_LOTO` sau adauga override prin env,
+- [x] Muta cache-ul WF in `D:\_BUILD\_LOTO` si adauga override prin env,
   cu migrare si inventariere a cache-urilor vechi.
 - [ ] Adauga o comanda unica de diagnostic pentru versiuni, metode, curare,
   cache-uri, designuri si dependinte.

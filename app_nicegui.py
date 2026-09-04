@@ -43,6 +43,7 @@ from job_queue import (
     submit_job,
 )
 from cancel import lock_engine, unlock_engine
+from runtime_paths import BENCH_LOG_FILE
 from ui_shared import (
     PROJECT_ROOT,
     atomic_write_json,
@@ -67,7 +68,6 @@ logger = logging.getLogger("app_nicegui")
 # --------------------------------------------------------------------------- #
 UI_STATE_FILE = PROJECT_ROOT / ".ui_state.json"
 BENCH_PID_FILE = PROJECT_ROOT / ".bench_pid"
-BENCH_LOG_FILE = PROJECT_ROOT / "bench_full.log"
 REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 
 # Buget de timp TOTAL pentru walk-forward (toate jocurile). Peste buget, validarea

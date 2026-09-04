@@ -6,9 +6,9 @@ folosind DOAR datele < t. Asta elimină recency bias şi reflectă cu acuratețe
 puterea predictivă reală.
 
 Cache:
-    - Pe disc: bench_results/walk_forward_<ver>_<game>_<csv_hash>_pool<N>_d<depth>_<dec_sig>.pkl
-      (CACHE_DIR e o cale RELATIVĂ, deci cache-ul stă ÎN repo/OneDrive — spre
-      deosebire de cache-ul de bench, care e mutat în afara OneDrive.)
+    - Pe disc: D:\\_BUILD\\_LOTO\\.wf_cache\\walk_forward_<ver>_<game>_<csv_hash>
+      _pool<N>_d<depth>_<dec_sig>.pkl. Override: ``LOTO_WF_CACHE_DIR``; pe un
+      sistem fără directorul runtime Windows există fallback local ``.wf_cache``.
     - Reutilizat la următorul Auto-Pilot dacă (csv_hash, pool_size, decizie bench) match.
       dec_sig = semnătura deciziei (scorer/sim_depth/blacklist/ensemble/target) PLUS
       wheel-ul efectiv (algoritm + garanţia internă a WF) → un Re-Bench care schimbă
@@ -27,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -37,10 +38,12 @@ import pandas as pd
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
 from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_pct
+from runtime_paths import PROJECT_ROOT, WF_CACHE_DIR
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = Path("bench_results")
+CACHE_DIR = WF_CACHE_DIR
+LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
 CACHE_VERSION = "v22"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
 # v22: Joker Urna 2 are decizie top-1 separată; semnătura WF include acum şi
@@ -328,6 +331,49 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
         ).hexdigest()[:6]
 
 
+def migrate_legacy_wf_cache() -> dict:
+    """Mută cache-urile WF vechi din ``bench_results`` în directorul runtime.
+
+    Operația este idempotentă și restrânsă la ``walk_forward_*.pkl``. Dacă un
+    nume există deja la destinație, ambele copii sunt păstrate: cea legacy este
+    raportată ca ``skipped``, fără suprascriere sau pierdere de acoperire parțială.
+    """
+    source = LEGACY_CACHE_DIR
+    target = CACHE_DIR
+    result = {
+        "source": str(source),
+        "target": str(target),
+        "found": 0,
+        "moved": 0,
+        "skipped": 0,
+        "errors": [],
+        "files": [],
+    }
+    try:
+        if source.resolve() == target.resolve() or not source.exists():
+            return result
+    except OSError:
+        return result
+
+    files = sorted(source.glob("walk_forward_*.pkl"))
+    result["found"] = len(files)
+    if not files:
+        return result
+    target.mkdir(exist_ok=True, parents=True)
+    for old_path in files:
+        new_path = target / old_path.name
+        if new_path.exists():
+            result["skipped"] += 1
+            continue
+        try:
+            shutil.move(str(old_path), str(new_path))
+            result["moved"] += 1
+            result["files"].append(old_path.name)
+        except OSError as exc:
+            result["errors"].append(f"{old_path.name}: {exc}")
+    return result
+
+
 def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str) -> Path:
     safe = game_type.replace("/", "_")
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
@@ -572,10 +618,9 @@ def purge_stale_wf_cache(dry_run: bool = True) -> dict:
     """Inventariază (şi opţional şterge) cache-urile WF de la versiuni VECHI.
 
     Un bump de CACHE_VERSION schimbă doar NUMELE fişierului de cache: pickle-urile
-    versiunilor anterioare rămân pe disc la nesfârşit, permanent inaccesibile — iar
-    `CACHE_DIR` fiind o cale relativă (`bench_results/`, deci ÎN repo/OneDrive), se
-    şi sincronizează. Funcţia e DRY-RUN implicit: doar LISTEAZĂ şi însumează, ca
-    decizia de ştergere să rămână a utilizatorului.
+    versiunilor anterioare rămân pe disc la nesfârşit, permanent inaccesibile.
+    Funcţia e DRY-RUN implicit: doar LISTEAZĂ şi însumează, ca decizia de ştergere
+    să rămână a utilizatorului.
 
     Spre deosebire de `clear_walk_forward_cache()`, NU atinge versiunea curentă.
 

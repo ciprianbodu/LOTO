@@ -58,6 +58,7 @@ from loto_enterprise.benchmark.reporting import (
     render_regressive_table,
 )
 from loto_enterprise.benchmark.runner import discover_games, run_benchmark
+from runtime_paths import BENCH_LOG_FILE
 
 
 # Lista bench = TOATE metodele disponibile din registry (exclusiv CPU).
@@ -148,7 +149,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # Benchmark exclusiv CPU → un singur log.
-    _log_name = "bench_full.log"
+    _log_name = str(BENCH_LOG_FILE)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="[%(asctime)s] %(levelname)s %(name)s | %(message)s",

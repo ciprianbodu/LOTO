@@ -21,9 +21,11 @@ from pathlib import Path
 
 import psutil
 
+from runtime_paths import ENGINE_LOG_FILE, PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-LOG_FILE = "loto.log"
+LOG_FILE = str(ENGINE_LOG_FILE)
 
 # Versiune Python țintă (ALF-LUPTATORI). ACTUALIZARI.bat / START_8000.bat folosesc py -3.14.
 PYTHON_MIN = (3, 14)
@@ -91,7 +93,6 @@ def html_escape(value: object) -> str:
     """Escape HTML pentru fragmente asamblate manual (ex. heatmap, chips)."""
     return _html_module.escape(str(value), quote=True)
 
-PROJECT_ROOT = Path(__file__).resolve().parent
 WORKER_PATH = PROJECT_ROOT / "worker.py"
 
 
@@ -171,10 +172,9 @@ _LOG_TAIL_BYTES = 256 * 1024
 def read_tail_lines(path: str, n_lines: int, block: int = _LOG_TAIL_BYTES) -> list[str]:
     """Ultimele `n_lines` linii, citind DOAR coada fișierului.
 
-    `f.readlines()` citea TOT fișierul ca să păstreze ultimele n linii, iar
-    `loto.log` nu e rotit niciodată (worker.py: FileHandler mode="a") și stă în
-    OneDrive. Măsurat: 241 ms/apel la 50 MB, 24.7 ms la 5 MB — de la un tick de
-    UI care rulează la fiecare secundă. Cu seek pe coadă: ~0.6-1 ms, indiferent
+    `f.readlines()` citea TOT fișierul ca să păstreze ultimele n linii. Înainte
+    de mutarea logului din OneDrive, măsuram 241 ms/apel la 50 MB și 24.7 ms la
+    5 MB, de la un tick UI pe secundă. Cu seek pe coadă: ~0.6-1 ms, indiferent
     de dimensiune. Rezultatul e IDENTIC cât timp blocul acoperă n_lines (vezi
     `_LOG_TAIL_BYTES`); dacă nu, întoarce câte linii încap — degradare grațioasă,
     nu eroare.

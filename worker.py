@@ -15,6 +15,7 @@ import traceback
 import tempfile
 import os
 
+from runtime_paths import ENGINE_LOG_FILE
 from ui_shared import pack_queue_result, require_python_version
 
 require_python_version()
@@ -24,7 +25,7 @@ require_python_version()
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
 PIPELINE_CACHE_VERSION = "v3"
 
-LOG_FILE = "loto.log"
+LOG_FILE = str(ENGINE_LOG_FILE)
 
 # LOTO_DEBUG=1 → loguri DEBUG (mai mult detaliu despre ce face engine-ul DUPA
 # bench: selectie metoda, scoring, POST-HOC, walk-forward). Vizibile in consola UI.
