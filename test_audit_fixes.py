@@ -6,6 +6,7 @@ ce face codul de azi.
 import os
 import tempfile
 
+import pandas as pd
 import pytest
 
 
@@ -233,6 +234,39 @@ def test_wf_decision_sig_omits_inert_use_blacklist():
     assert "use_blacklist" not in body or "INERT" in body
     assert 'bool(c.get(\'use_blacklist\'' not in body
     assert "BENCH_HIT_TARGET" in body
+
+
+def test_leaderboard_excludes_tiebreak_dependent_methods_like_decision():
+    """Un Wilson bun nu poate promova un ranking dictat de egalități."""
+    import app_nicegui as app_ui
+
+    grp = pd.DataFrame({
+        "percentile": [10, 30, 60, 100],
+        "rate_3plus_k11": [0.10, 0.11, 0.10, 0.10],
+        "tiebreak_k11": [0.50, 0.60, 0.55, 0.562],
+    })
+    reason = app_ui._bench_structural_exclusion(
+        grp, "rate_3plus_k11", 11, {10, 30, 60, 100},
+    )
+
+    assert "EXCLUS" not in reason  # helperul întoarce motivul, UI adaugă eticheta
+    assert "55.3%" in reason
+    assert "maxim admis < 50%" in reason
+
+
+def test_leaderboard_reports_missing_benchmark_windows():
+    import app_nicegui as app_ui
+
+    grp = pd.DataFrame({
+        "percentile": [10, 30, 100],
+        "rate_3plus_k11": [0.10, 0.11, 0.10],
+        "tiebreak_k11": [0.0, 0.0, 0.0],
+    })
+
+    reason = app_ui._bench_structural_exclusion(
+        grp, "rate_3plus_k11", 11, {10, 30, 60, 100},
+    )
+    assert reason == "ferestre lipsă: 60%"
 
 
 # --------------------------------------------------------------------------

@@ -486,6 +486,11 @@ def run_honest_walk_forward(
         "game_type": game_type,
         "pool_size": pool_size,
         "backtest_depth_percent": backtest_depth_percent,
+        # Geometria internă WF poate diferi de garanția/bugetul producției.
+        # Adăugare de metadate; calculată și pe cache-hit din aceeași cheie.
+        "wheel_guarantee": _wf_guarantee(pool_size, _WF_PICK.get(game_type)),
+        "wheel_condition": _wf_guarantee(pool_size, _WF_PICK.get(game_type)),
+        "max_variants": 0,
     }
 
     cached = None

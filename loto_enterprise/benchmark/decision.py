@@ -919,6 +919,7 @@ def decide_optimal_config_for_pool(
                 "hit_target": target,
                 "target_label": target_label,
                 "qualifying_methods": 0,
+                "ranked_methods": [],
                 "consistency_threshold": CONSISTENCY_THRESHOLD,
                 "low_confidence": True,
                 "ensemble_dropped_redundant": [],
@@ -1052,6 +1053,9 @@ def decide_optimal_config_for_pool(
         "hit_target": target,
         "target_label": target_label,
         "qualifying_methods": len(qualifying),
+        # Ordinea eligibilă este expusă UI-ului, inclusiv fallback-ul. Astfel
+        # clasamentul nu reconstruiește aproximativ porțile deciziei.
+        "ranked_methods": [r[0] for r in (ranked if low_confidence else qualifying)],
         "consistency_threshold": CONSISTENCY_THRESHOLD,
         # ATENȚIE: următoarele două chei sunt TELEMETRIE ADITIVĂ în
         # best_methods.json (debug / inspecție manuală), NU un contract de UI.

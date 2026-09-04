@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-04:
 - cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
-- teste: 32 fisiere `test_*.py`, 509 teste trecute la auditul global.
+- teste: 33 fisiere `test_*.py`, 517 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -183,6 +183,32 @@ Pentru fiecare joc si pool:
    blendul direct (scoruri/pool per pas), nu doar ratele individuale;
 9. lipsa metricei sau lipsa metodelor calificate produce `low_confidence` si
    fallback conservator, nu o afirmatie de avantaj statistic.
+
+### Coerenta outputului
+
+- Clasamentul preia `ranked_methods` din decizia recalculata pe snapshot-ul
+  afisat. Metodele excluse pentru egalitati la limita top-K sau ferestre lipsa
+  raman vizibile cu motiv, fara rang. Trofeul arata primul eligibil; tinta arata
+  metoda din ultima generare (numai la acelasi pool) sau din decizia salvata.
+- Analiza foloseste pool-ul rezultatului afisat, chiar daca setarea pentru
+  generarea urmatoare s-a schimbat. Urna 2 arata doar top-1, fara coloana 4+.
+- Penalizarea recenta/lookback-ul sunt explicate separat: bench-ul masoara
+  scorerul brut, WF masoara configuratia ajustata. Scorurile nu sunt
+  probabilitati de castig.
+- WF afiseaza distinct hiturile pool-ului si extragerile cu cel putin un bilet
+  care atinge 3+/4+. Metadatele indica geometria interna WF, care poate diferi
+  de garantia/bugetul productiei; adaugarea nu invalideaza cache-ul.
+- Costurile folosesc tarife standard (sursa loto.ro/info-loto/preturi, verificata
+  2026-09-04). Primele 10 variante nu mostenesc garantia intregului wheel;
+  minimalitatea numarului de bilete nu este afirmata fara dovada.
+- Raportul afiseaza acoperirea productiei si foloseste `ranking_scores_top25`
+  pentru cheia istorica `timesfm_predictions`, fara a modifica payload-ul.
+
+Audit reproductibil read-only, cu randare capturata din functiile NiceGUI:
+`python scripts/analysis/audit_output.py` (92 clasamente la tintele 3/4, variante
+si acoperire, hituri WF recalculate direct din CSV). `--report CALE` salveaza
+explicit o copie randata a raportului. Ultima verificare: 103734 intrari WF,
+zero discrepante de hituri, pool-uri k11 cu 34/66/66 variante si acoperire 100%.
 
 ### Doua filtre de redundanta
 
