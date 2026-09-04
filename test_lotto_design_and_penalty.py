@@ -142,3 +142,28 @@ def test_all_local_lotto_designs_are_valid_and_complete():
         blocks = _load_lotto_design(v, pick, g, c)
         assert blocks is not None, f.name
         assert _lotto_ok([list(b) for b in blocks], list(range(v)), g, c), f.name
+
+
+def test_csv_last_date_reads_the_last_row_and_tolerates_missing_column():
+    import app_nicegui as ui_mod
+
+    df = pd.DataFrame({
+        "date": ["20-08-2026", "23-08-2026", "30-08-2026"],
+        "n1": [1, 2, 3], "n2": [4, 5, 6],
+    })
+    assert ui_mod._csv_last_date(df) == "30-08-2026"
+    assert ui_mod._csv_last_date(df.drop(columns=["date"])) == ""
+    assert ui_mod._csv_last_date(df.iloc[0:0]) == ""
+    assert ui_mod._csv_last_date(None) == ""
+    nan_df = df.copy()
+    nan_df.loc[2, "date"] = np.nan
+    assert ui_mod._csv_last_date(nan_df) == ""
+
+
+def test_score_time_shows_milliseconds_under_a_tenth_of_a_second():
+    import app_nicegui as ui_mod
+
+    assert ui_mod._fmt_score_time(4.2) == "4ms"
+    assert ui_mod._fmt_score_time(99) == "99ms"
+    assert ui_mod._fmt_score_time(2500) == "2.5s"
+    assert ui_mod._fmt_score_time(None) == "?"

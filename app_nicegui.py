@@ -2059,7 +2059,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
         if _sms is not None:
             ui.html(render_html_safe(
                 t"<b style='color:#f97316'>🖥️ CPU</b> "
-                t"<span style='opacity:.6'>({float(_sms) / 1000:.1f}s)</span>"
+                t"<span style='opacity:.6'>({_fmt_score_time(_sms)})</span>"
             ))
 
     # Metoda câștigătoare folosită de scorer (din bench/best_methods.json)
@@ -2960,6 +2960,32 @@ def _last_csv_draw(fname: str):
     return (date_str, nums, joker)
 
 
+def _fmt_score_time(ms) -> str:
+    """Timp de scoring lizibil: sub 100 ms afișăm milisecunde, nu «0.0s»."""
+    try:
+        v = float(ms)
+    except (TypeError, ValueError):
+        return "?"
+    return f"{v:.0f}ms" if v < 100 else f"{v / 1000:.1f}s"
+
+
+def _csv_last_date(df) -> str:
+    """Data ultimei extrageri dintr-un DataFrame încărcat (ultimul rând, aceeași
+    convenție ca `_last_csv_draw`: CSV-urile sunt cronologice, ultimul rând e cel
+    mai recent). Șir gol dacă nu există coloană de dată."""
+    if df is None or len(df) == 0:
+        return ""
+    cols = [str(c) for c in df.columns]
+    for dc in ("date", "Data", "data", "Date"):
+        if dc in cols:
+            try:
+                val = str(df.iloc[-1][dc]).strip()
+            except Exception:  # noqa: BLE001
+                return ""
+            return "" if val.lower() in ("", "nan", "nat", "none") else val
+    return ""
+
+
 def _render_last_csv_draw(fname: str) -> None:
     """Reper lângă clasament: ULTIMA extragere reală din CSV-ul încărcat (data + numere
     + joker dacă există)."""
@@ -3635,7 +3661,11 @@ def main_page() -> None:
                 ui.label("Încărcate: " + ", ".join(fn for fn, _ in STATE["datasets"])).classes("text-caption text-positive")
                 with ui.expansion("📅 Istoric CSV", value=False).classes("w-full"):
                     for fn, df in STATE["datasets"]:
-                        ui.label(f"{fn}: {len(df)} extrageri × {len(df.columns)} coloane").classes("text-caption")
+                        _last = _csv_last_date(df)
+                        ui.label(
+                            f"{fn}: {len(df)} extrageri × {len(df.columns)} coloane"
+                            + (f" (ultima: {_last})" if _last else "")
+                        ).classes("text-caption")
             else:
                 ui.label("Niciun CSV încărcat.").classes("text-caption text-warning")
         datasets_label()
