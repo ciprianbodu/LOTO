@@ -44,8 +44,10 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v22"
+CACHE_VERSION = "v23"
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
+# v23: UI validează garanția, condiția lotto și bugetul producției; factorul 0
+#      rămâne 0. Cheia include geometria efectivă și conținutul designurilor L.
 # v22: Joker Urna 2 are decizie top-1 separată; semnătura WF include acum şi
 #      scorerul/ensemble-ul ei, deoarece el schimbă numărul ataşat variantelor.
 # v21: Urna 2 Joker validează strict valori întregi 1..20 şi nu mai ataşează o
@@ -251,12 +253,21 @@ def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
     return max(1, g)
 
 
-def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
+def _wf_geometry(pool_size, game_type, guarantee=None, wheel_condition=None, max_variants=0):
+    """Geometria cerută; apelurile vechi păstrează garanția internă implicită."""
+    pick = int(_WF_PICK.get(game_type) or 6)
+    g = (_wf_guarantee(pool_size, pick) if guarantee is None
+         else max(1, min(pick, int(guarantee))))
+    c = int(wheel_condition or 0)
+    return g, (g if c <= 0 else max(g, min(pick, c))), max(0, int(max_variants or 0))
+
+
+def _wheel_sig(pool_size: int, game_type: str | None = None, guarantee=None,
+               wheel_condition=None, max_variants=0) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
-    WF rulează mereu cu `max_variants=0`, deci rezolvă aceeași ramură ca engine-ul
-    (`loto_engine.generate_predictions`): override explicit din env `LOTO_WHEEL_METHOD`
-    dacă e setat, altfel `lajolla`.
+    Aceeași ramură ca engine-ul: lotto la condiție > garanție; altfel override
+    din env, sau La Jolla fără plafon / greedy cu plafon.
 
     DE CE intră în cheia de cache: numărul de BILETE, acoperirea şi hiturile per bilet
     depind de algoritmul de wheeling. Fără wheel în cheie, schimbarea ILP → La Jolla
@@ -266,23 +277,29 @@ def _wheel_sig(pool_size: int, game_type: str | None = None) -> str:
     rezultate regenerate pe wheel-ul nou.
     """
     requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
+    g, condition, cap = _wf_geometry(pool_size, game_type, guarantee, wheel_condition, max_variants)
+    geometry = f"g{g}|c{condition}|cap{cap}"
     try:
         from wheeling_methods import WHEEL_METHODS, covering_design_source_signature
         method = requested if requested in WHEEL_METHODS or requested == "greedy" else "greedy"
         if not requested:
-            method = "lajolla"
-        guarantee = _wf_guarantee(pool_size, _WF_PICK.get(game_type))
+            method = "lajolla" if cap == 0 else "greedy"
+        if condition > g:
+            design_sig = covering_design_source_signature(
+                int(pool_size), int(_WF_PICK.get(game_type) or 6), g, condition,
+            )
+            return f"lotto|{geometry}|cd{design_sig}"
         if method in {"lajolla", "union34"}:
-            design_guarantee = 4 if method == "union34" and guarantee <= 4 else guarantee
+            design_guarantee = 4 if method == "union34" and g <= 4 else g
             design_sig = covering_design_source_signature(
                 int(pool_size), int(_WF_PICK.get(game_type) or 6), design_guarantee,
             )
-            return f"{method}|g{guarantee}|cd{design_sig}"
-        return f"{method}|g{guarantee}"
+            return f"{method}|{geometry}|cd{design_sig}"
+        return f"{method}|{geometry}"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)
-        method = requested or "lajolla"
-        return f"{method}|g{_wf_guarantee(pool_size, _WF_PICK.get(game_type))}|cd-error"
+        method = "lotto" if condition > g else requested or ("lajolla" if cap == 0 else "greedy")
+        return f"{method}|{geometry}|cd-error"
 
 
 def _penalty_sig(recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5) -> str:
@@ -290,11 +307,14 @@ def _penalty_sig(recent_penalty_draws: int = 0, recent_penalty_factor: float = 0
     n = int(recent_penalty_draws or 0)
     if n <= 0:
         return ""
-    return f"|rp{n}:{float(recent_penalty_factor):.3f}"
+    # Factorul UI poate avea mai mult de 3 zecimale: 0.5001 și 0.5002 nu sunt
+    # aceeași penalizare și nu trebuie să citească același rezultat cached.
+    return f"|rp{n}:{float(recent_penalty_factor).hex()}"
 
 
 def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0,
-                  recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5) -> str:
+                  recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5,
+                  guarantee=None, wheel_condition=None, max_variants=0) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
     este ataşată fiecărei variante şi îi poate schimba evaluarea retrospectivă.
@@ -319,14 +339,15 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
         # fără să schimbe pool-ul sau wheel-ul.
         raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
                f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
-               f"{_wheel_sig(pool_size, game_type)}|lb{lb}"
+               f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
                f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}")
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
         logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
                        f"semnătură doar pe wheel")
         return "nd" + hashlib.md5(
-            (_wheel_sig(pool_size, game_type)
+            (_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)
+             + f"|lb{lookback_pct(lookback_percent)}"
              + _penalty_sig(recent_penalty_draws, recent_penalty_factor)).encode()
         ).hexdigest()[:6]
 
@@ -463,11 +484,16 @@ def run_honest_walk_forward(
     should_cancel=None,
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
+    guarantee: int | None = None,
+    wheel_condition: int | None = None,
+    max_variants: int = 0,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
     recent_penalty_*: aceeași penalizare după ultimele extrageri ca în producție;
     intră în cheia de cache doar când e activă.
+    guarantee/wheel_condition/max_variants: setările rezultatului generat.
+    Fără guarantee explicită se păstrează geometria internă istorică a API-ului.
 
     Returns:
         (flat_results, meta_dict)
@@ -476,7 +502,9 @@ def run_honest_walk_forward(
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
     dec_sig = _decision_sig(game_type, pool_size, lookback_percent,
-                            recent_penalty_draws, recent_penalty_factor)
+                            recent_penalty_draws, recent_penalty_factor,
+                            guarantee, wheel_condition, max_variants)
+    g, condition, cap = _wf_geometry(pool_size, game_type, guarantee, wheel_condition, max_variants)
     cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig)
     meta = {
         "csv_hash": csv_hash,
@@ -486,11 +514,9 @@ def run_honest_walk_forward(
         "game_type": game_type,
         "pool_size": pool_size,
         "backtest_depth_percent": backtest_depth_percent,
-        # Geometria internă WF poate diferi de garanția/bugetul producției.
-        # Adăugare de metadate; calculată și pe cache-hit din aceeași cheie.
-        "wheel_guarantee": _wf_guarantee(pool_size, _WF_PICK.get(game_type)),
-        "wheel_condition": _wf_guarantee(pool_size, _WF_PICK.get(game_type)),
-        "max_variants": 0,
+        "wheel_guarantee": g,
+        "wheel_condition": condition,
+        "max_variants": cap,
     }
 
     cached = None
@@ -538,11 +564,12 @@ def run_honest_walk_forward(
     bt = LotoBacktester(df_source, game_type=game_type)
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
-        guarantee=_wf_guarantee(pool_size, _WF_PICK.get(game_type)),
+        guarantee=g,
+        wheel_condition=condition,
         lookback_percent=lookback_percent,
         backtest_depth_percent=backtest_depth_percent,
         filter_consecutives=False,
-        max_variants=0,
+        max_variants=cap,
         simulation_step=1,
         use_feedback=False,           # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem

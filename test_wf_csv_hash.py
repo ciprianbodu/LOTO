@@ -37,7 +37,7 @@ def test_cache_version_tracks_covering_design_signature(monkeypatch, tmp_path):
     design.write_text("1 2 3 4 5 7\n", encoding="utf-8")
     after = _wheel_sig(12, "6/49")
 
-    assert CACHE_VERSION == "v22"
+    assert CACHE_VERSION == "v23"
     assert before != after
 
 

@@ -94,6 +94,20 @@ def _effective_lookback_pct(from_data: dict | None = None) -> float:
     return float(max(1, min(100, v)))
 
 
+def _wf_generation_options(data: dict) -> dict:
+    """Validează configurația rezultatului, inclusiv factorul legitim 0."""
+    audit = data.get("audit") or {}
+    context = data.get("context") or {}
+    factor = data.get("recent_penalty_factor", 0.5)
+    return {
+        "recent_penalty_draws": int(data.get("recent_penalty_draws") or 0),
+        "recent_penalty_factor": 0.5 if factor is None else float(factor),
+        "guarantee": audit.get("wheel_guarantee_used") or data.get("guarantee"),
+        "wheel_condition": audit.get("wheel_condition_used") or data.get("wheel_condition"),
+        "max_variants": int(data.get("max_variants", context.get("max_variants")) or 0),
+    }
+
+
 def _clamped_bench_target(value=None) -> int:
     raw = SETTINGS.get("bench_hit_target", 3) if value is None else value
     try:
@@ -830,9 +844,7 @@ def _start_walk_forward() -> None:
                         use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
-                        # Aceeași penalizare ca la generare: WF validează pool-ul JUCAT.
-                        recent_penalty_draws=int(data.get("recent_penalty_draws") or 0),
-                        recent_penalty_factor=float(data.get("recent_penalty_factor") or 0.5),
+                        **_wf_generation_options(data),
                     )
                     if STATE.get("wf_seq") != my_seq:
                         # A pornit alt walk-forward: nu-i suprascriem retro/status.
@@ -3247,12 +3259,10 @@ def _n_extrageri(n: int) -> str:
 def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
 
-    `hits_union` numără numere din pool ieșite la extragere. Cât timp wheel-ul
-    acoperă 100% din țintele de garanție (iar garanția internă a WF e ≥ 4, vezi
-    `walk_forward_adapter._wf_guarantee`), „3 în pool" ⇔ „3 pe cel puțin un bilet":
-    orice 3-submulțime e conținută într-o 4-submulțime, care e pe un bilet. Sub
-    100% cifra de pool devine un PLAFON — de aici avertismentul.
-    None = nimic de semnalat (tot ce se știe e la 100%).
+    `hits_union` numără numere din pool ieșite la extragere. O acoperire sub
+    100% nu garantează ținta cerută. La designurile condiționale, nici 100% nu
+    echivalează hiturile de pool cu cele de bilet sub condiția cerută.
+    None = fără avertisment de acoperire, nu dovadă că hiturile coincid.
     """
     try:
         from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
@@ -3269,8 +3279,8 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     if cov["unknown"] and not cov["known"]:
         return ("text-caption text-grey",
                 f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} — cache WF scris înainte de măsurarea ei. "
-                "Cifrele de POOL sunt egale cu hiturile de bilet doar dacă wheel-ul a fost "
-                "complet. Se completează la următorul walk-forward.")
+                "Comparați hiturile de POOL cu cele de BILET; egalitatea depinde de garanția "
+                "și condiția wheel-ului. Acoperirea se completează la următorul walk-forward.")
     if cov["unknown"]:
         return ("text-caption text-grey",
                 f"ℹ️ Acoperire wheel{_sfx}: 100% pe {_n_extrageri(cov['known'])}, necunoscută pe "
@@ -3318,10 +3328,17 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     _wg = (meta or {}).get("wheel_guarantee")
     if _wg is not None:
         _wc = (meta or {}).get("wheel_condition") or _wg
+        _cap = int((meta or {}).get("max_variants") or 0)
+        _cap_note = f"plafon {_cap} variante" if _cap else "fără plafon de variante"
         ui.label(
             f"Wheel evaluat în WF: garanție {_wg} dacă {_wc} numere sunt în pool, "
-            "fără plafon de variante. Setările wheel-ului generat pot fi diferite."
+            f"{_cap_note}."
         ).classes("text-caption text-grey")
+        if int(_wc) > int(_wg):
+            ui.label(
+                f"Acoperirea de 100% garantează {_wg} pe un bilet numai de la {_wc} "
+                "numere în pool. Pentru rezultate, urmăriți rândul BILET."
+            ).classes("text-caption text-warning")
     _cn = _wf_coverage_note(flat)
     if _cn:
         ui.label(_cn[1]).classes(_cn[0])
@@ -3714,14 +3731,16 @@ def main_page() -> None:
         _bind_save(ui.number("Garanția se aplică dacă în pool cad (0 = câte cere garanția)", min=0, max=6, step=1).classes("w-full"), "wheel_condition_val")
         ui.label(
             "Lotto design „t dacă p”: de exemplu garanție 3 cu 4 = un bilet cu 3 numere garantat "
-            "doar când cad 4 numere din pool, cu de două ori mai puține bilete decât „3 dacă 3”."
+            "doar când cad 4 numere din pool. Economia de bilete depinde de dimensiunea pool-ului."
         ).classes("text-caption text-grey")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Penalizare numere extrase în ultimele N extrageri (0 = oprit)", min=0, max=50, step=1).classes("w-full"), "recent_penalty_draws_val")
         _bind_save(ui.number("Factor penalizare per apariție (0..0.99)", min=0, max=0.99, step=0.05).classes("w-full"), "recent_penalty_factor_val")
         ui.label(
             "Scorul unui număr extras de k ori în ultimele N extrageri se înmulțește cu factor^k. "
-            "Preferință de compoziție, neutră ca valoare așteptată; se aplică identic în walk-forward."
+            "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
+            "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
+            "Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number(
