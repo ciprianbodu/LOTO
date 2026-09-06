@@ -231,10 +231,12 @@ la randul ei candidata la excludere.
 - Payload-urile vechi cu doua faze sunt citite compatibil folosind numai pool-ul
   normal din prima faza.
 - Penalizarea dupa ultimele extrageri este o OPTIUNE de utilizator
-  (`recent_penalty_draws`, `recent_penalty_factor`, implicit 3 extrageri si
-  0.5): scorul unui numar extras de k ori in ultimele N extrageri se inmulteste
-  cu factor^k, inainte de top-N. Se aplica identic in productie si in
-  walk-forward (intra in cheia de cache WF cand e activa) si este raportata in
+  (`recent_penalty_draws`, `recent_penalty_factor`), implicit OPRITA
+  (`recent_penalty_draws_val = 0` in UI) — nu schimba pool-ul fara nicio actiune
+  a utilizatorului. Odata setat un numar de extrageri > 0 (factor implicit 0.5),
+  scorul unui numar extras de k ori in ultimele N extrageri se inmulteste cu
+  factor^k, inainte de top-N. Se aplica identic in productie si in walk-forward
+  (intra in cheia de cache WF cand e activa) si este raportata in
   `audit.recent_penalty`. Este o preferinta de compozitie a pool-ului, neutra ca
   valoare asteptata: analizele din `scripts/analysis/` nu au demonstrat
   predictibilitate pentru paritate, decade, sume sau tipare recente, iar

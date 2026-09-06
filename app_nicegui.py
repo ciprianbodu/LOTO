@@ -117,7 +117,9 @@ DEFAULTS = {
     # Lotto design „garanție dacă condiție": 0 = cover clasic (condiție = garanție).
     "wheel_condition_val": 0,
     # Penalizare numere extrase în ultimele N extrageri (0 = oprit), scor × factor^aparitii.
-    "recent_penalty_draws_val": 3, "recent_penalty_factor_val": 0.5,
+    # Implicit OPRITĂ: schimbă pool-ul fără nicio acțiune din partea utilizatorului
+    # dacă e pornită din start — utilizatorul decide explicit din UI dacă o vrea.
+    "recent_penalty_draws_val": 0, "recent_penalty_factor_val": 0.5,
     "lookback_val": 0, "shutdown_on_complete": False,
     "sim_depth_val": 40, "autopilot_after_bench": True,
     "mail_on_complete": False,
