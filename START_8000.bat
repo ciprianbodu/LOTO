@@ -47,7 +47,10 @@ if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
-set "LOGFILE=%PROJECT_DIR%startup_8000.log"
+set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"
+if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
+if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
+set "LOGFILE=%RUNTIME_DIR%\startup_8000.log"
 
 REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
 set "VENV_DIR=D:\_BUILD\_LOTO\.venv"

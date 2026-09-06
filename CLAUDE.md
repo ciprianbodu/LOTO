@@ -19,14 +19,19 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-01:
+Snapshot verificat la 2026-09-04:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py`, port 8000;
 - runtime tinta: ultimul Python 3.14.x stabil;
 - venv: `D:\_BUILD\_LOTO\.venv`, in afara OneDrive;
+- runtime scris frecvent: `D:\_BUILD\_LOTO` (`.wf_cache`, `loto.log`,
+  `bench_full.log`, `startup_8000.log`), cu override prin `LOTO_RUNTIME_DIR` si
+  `LOTO_WF_CACHE_DIR`;
 - registry: 111 metode CPU in `METHODS`;
-- curare reversibila: 56 metode in `curated_methods.json`;
+- curare reversibila: 56 metode eligibile in uniunea `active`; Re-Bench ruleaza
+  matricea efectiva 20/20/20/16 per joc, plus `random` si `frequency` unde nu
+  sunt deja prezente;
 - selectie: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
   distincte peste baseline pentru Joker Urna 2;
 - tombstone permanent: 74 nume in `disabled_methods.json`;
@@ -36,7 +41,7 @@ Snapshot verificat la 2026-09-01:
 - cache benchmark: `v17`;
 - cache walk-forward: `v22`;
 - cache rezultat worker: `v3`;
-- teste: 26 fisiere `test_*.py`.
+- teste: 33 fisiere `test_*.py`, 517 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -116,6 +121,9 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.4 Persistenta si concurenta
 
 - JSON-urile de stare se scriu numai atomic, prin `ui_shared`.
+- Progresul cozii se actualizeaza numai pentru un job `RUNNING`, printr-un
+  singur UPDATE atomic; `CANCELLED`, `PENDING` reprogramat sau jobul disparut
+  cer workerului sa se opreasca si nu au voie sa-si piarda logul de stare.
 - Nu scrie `pool_history.json` din pasi WF/backtest.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.
@@ -176,6 +184,32 @@ Pentru fiecare joc si pool:
 9. lipsa metricei sau lipsa metodelor calificate produce `low_confidence` si
    fallback conservator, nu o afirmatie de avantaj statistic.
 
+### Coerenta outputului
+
+- Clasamentul preia `ranked_methods` din decizia recalculata pe snapshot-ul
+  afisat. Metodele excluse pentru egalitati la limita top-K sau ferestre lipsa
+  raman vizibile cu motiv, fara rang. Trofeul arata primul eligibil; tinta arata
+  metoda din ultima generare (numai la acelasi pool) sau din decizia salvata.
+- Analiza foloseste pool-ul rezultatului afisat, chiar daca setarea pentru
+  generarea urmatoare s-a schimbat. Urna 2 arata doar top-1, fara coloana 4+.
+- Penalizarea recenta/lookback-ul sunt explicate separat: bench-ul masoara
+  scorerul brut, WF masoara configuratia ajustata. Scorurile nu sunt
+  probabilitati de castig.
+- WF afiseaza distinct hiturile pool-ului si extragerile cu cel putin un bilet
+  care atinge 3+/4+. Metadatele indica geometria interna WF, care poate diferi
+  de garantia/bugetul productiei; adaugarea nu invalideaza cache-ul.
+- Costurile folosesc tarife standard (sursa loto.ro/info-loto/preturi, verificata
+  2026-09-04). Primele 10 variante nu mostenesc garantia intregului wheel;
+  minimalitatea numarului de bilete nu este afirmata fara dovada.
+- Raportul afiseaza acoperirea productiei si foloseste `ranking_scores_top25`
+  pentru cheia istorica `timesfm_predictions`, fara a modifica payload-ul.
+
+Audit reproductibil read-only, cu randare capturata din functiile NiceGUI:
+`python scripts/analysis/audit_output.py` (92 clasamente la tintele 3/4, variante
+si acoperire, hituri WF recalculate direct din CSV). `--report CALE` salveaza
+explicit o copie randata a raportului. Ultima verificare: 103734 intrari WF,
+zero discrepante de hituri, pool-uri k11 cu 34/66/66 variante si acoperire 100%.
+
 ### Doua filtre de redundanta
 
 - In `decision.py`: Pearson semnat pe semnaturi de performanta, prag 0.99.
@@ -202,7 +236,17 @@ este sarit implicit in UI (`--no-shuffled-control`): alimenteaza doar
 diagnosticul `lift_vs_shuffle` si tie-break-ul legacy `winners_per_pool`, nu
 decizia de productie (`decision.py` filtreaza peste tot `is_random == False`).
 Baseline-ul `random` (metoda, nu controlul amestecat) ramane obligatoriu si
-prezent in folds.
+prezent in folds. Cand controlul amestecat lipseste, campurile lui din raport
+sunt `null` (indisponibile), nu zero; mediile agregate sunt ponderate cu
+`n_eval`/`n_test`, identic cu decizia si clasamentul UI.
+
+Lista `active` este uniunea semnalelor tuturor jocurilor, nu o cerere de a rula
+toate cele 56 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
+construirea task-urilor si adauga baseline-urile structurale. La configuratia
+curenta, cu patru ferestre si fara controlul amestecat, matricea scade de la
+56 × 4 × 4 = 896 la (22 + 22 + 21 + 18) × 4 = 332 folduri. Override-urile
+explicite `--methods` si `--quick` continua sa ruleze metodele cerute pe toate
+jocurile.
 
 Cheia de cache a foldurilor primeste sufixul `bs1` de indata ce `block_size`
 difera de sentinel-ul istoric (99999) — care ramane in cod ca valoare implicita
@@ -293,9 +337,11 @@ partiala, hitul de pool este doar plafon pentru hitul pe bilet.
 - Paralelizarea foloseste aproximativ 80% din nuclee, cu BLAS single-thread per
   proces.
 
-Cache-ul WF sta momentan in `bench_results/`, deci in OneDrive. Cheia include
-istoricul complet, lookback, scorer, ensemble, tinta, wheel, hash-ul designului si,
-pentru Joker, decizia Urnei 2.
+Cache-ul WF sta in `D:\_BUILD\_LOTO\.wf_cache`, in afara OneDrive; override-ul
+este `LOTO_WF_CACHE_DIR`. `ACTUALIZARI.bat` migreaza idempotent fisierele legacy
+`bench_results/walk_forward_*.pkl`, fara sa suprascrie o destinatie existenta.
+Cheia include istoricul complet, lookback, scorer, ensemble, tinta, wheel,
+hash-ul designului si, pentru Joker, decizia Urnei 2.
 
 ## 9. Cache si invalidare
 
@@ -436,7 +482,7 @@ reproductibila, iar UI nu confunda pool-hit cu ticket-hit.
 ### P2 - reproductibilitate si operare
 
 - [ ] Adauga CI Windows pe Python 3.14 cu pytest si smoke test NiceGUI.
-- [ ] Muta cache-ul WF in `D:\_BUILD\_LOTO` sau adauga override prin env,
+- [x] Muta cache-ul WF in `D:\_BUILD\_LOTO` si adauga override prin env,
   cu migrare si inventariere a cache-urilor vechi.
 - [ ] Adauga o comanda unica de diagnostic pentru versiuni, metode, curare,
   cache-uri, designuri si dependinte.

@@ -542,7 +542,8 @@ _LAJOLLA_DIRS = [
 ]
 
 
-def covering_design_source_signature(v: int, pick: int, guarantee: int) -> str:
+def covering_design_source_signature(v: int, pick: int, guarantee: int,
+                                     condition: int | None = None) -> str:
     """Amprentă a fișierelor de design candidate pentru cheia cache-ului WF.
 
     Un design se poate îmbunătăți fără să se schimbe numele metodei sau
@@ -552,8 +553,11 @@ def covering_design_source_signature(v: int, pick: int, guarantee: int) -> str:
     digest = hashlib.sha256(f"C({v},{pick},{guarantee})".encode("ascii"))
     found = False
     seen: set[str] = set()
+    name = (lotto_design_path(v, pick, guarantee, condition)
+            if condition is not None and int(condition) > int(guarantee)
+            else f"C_{v}_{pick}_{guarantee}.txt")
     for directory in _LAJOLLA_DIRS:
-        path = directory / f"C_{v}_{pick}_{guarantee}.txt"
+        path = directory / name
         try:
             key = str(path.resolve())
         except OSError:

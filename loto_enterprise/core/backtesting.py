@@ -110,6 +110,7 @@ def _retroactive_step_stateless(
     smart_reduction: bool,
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
+    wheel_condition: int | None = None,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward stateless (fără feedback / inversiune între pași)."""
     if sim_idx >= len(draws) or sim_idx < 1:
@@ -141,6 +142,7 @@ def _retroactive_step_stateless(
             track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
             recent_penalty_draws=recent_penalty_draws,
             recent_penalty_factor=recent_penalty_factor,
+            wheel_condition=wheel_condition,
         )
         return eng, out_lines, (_ctx or {})
 
@@ -173,16 +175,16 @@ def _retroactive_step_stateless(
 
 
 def _wf_worker_step(args):
-    """Worker picklable: (sim_idx, pool_size, guarantee, max_variants, lookback, filter_consec, smart_red)."""
+    """Worker picklable: pas + geometrie + penalizare, încărcate din task_args."""
     (sim_idx, pool_size, guarantee, max_variants, lookback_percent,
-     filter_consecutives, smart_reduction, rp_draws, rp_factor) = args
+     filter_consecutives, smart_reduction, rp_draws, rp_factor, wheel_condition) = args
     shared = _WF_SHARED
     try:
         return _retroactive_step_stateless(
             shared["df"], shared["draws"], shared["dates"], shared["game_type"],
             sim_idx, pool_size, guarantee, max_variants,
             lookback_percent, filter_consecutives, smart_reduction,
-            rp_draws, rp_factor,
+            rp_draws, rp_factor, wheel_condition,
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("[BACKTEST] WF worker sim_idx=%s: %s", sim_idx, exc)
@@ -638,7 +640,8 @@ class LotoBacktester:
                                   should_cancel=None,
                                   skip_indices=None,
                                   recent_penalty_draws: int = 0,
-                                  recent_penalty_factor: float = 0.5) -> list[RetroactivePrediction]:
+                                  recent_penalty_factor: float = 0.5,
+                                  wheel_condition: int | None = None) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
 
@@ -728,7 +731,7 @@ class LotoBacktester:
             task_args = [
                 (sim_idx, pool_size, guarantee, max_variants,
                  lookback_percent, filter_consecutives, smart_reduction,
-                 int(recent_penalty_draws or 0), float(recent_penalty_factor))
+                 int(recent_penalty_draws or 0), float(recent_penalty_factor), wheel_condition)
                 for sim_idx in sim_indices
             ]
             df_pickle = pickle.dumps(self.df, protocol=pickle.HIGHEST_PROTOCOL)
@@ -742,7 +745,7 @@ class LotoBacktester:
                 """Același pas ca `_wf_worker_step`, dar în procesul curent."""
                 return _retroactive_step_stateless(
                     self.df, self.draws, self.dates, self.game_type,
-                    a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8],
+                    a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9],
                 )
 
             try:
@@ -996,6 +999,7 @@ class LotoBacktester:
                     track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
                     recent_penalty_draws=recent_penalty_draws,
                     recent_penalty_factor=recent_penalty_factor,
+                    wheel_condition=wheel_condition,
                 )
 
                 # Evaluăm rezultatul contra extragerii reale

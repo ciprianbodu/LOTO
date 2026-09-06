@@ -388,6 +388,14 @@ def test_pooled_rate_stays_recency_weighted():
     assert phat == pytest.approx((0.10 * 100 + 0.02 * 400) / 500)
 
 
+def test_pooled_mean_uses_pool_draw_denominators_not_plain_window_mean():
+    """Media hiturilor la pool-ul ales trebuie ponderată cu extragerile evaluate."""
+    df = pd.DataFrame({"k11": [1.0, 3.0], "n_eval": [100, 400]})
+    assert decision.pooled_mean(df, "k11") == pytest.approx(2.6)
+    assert decision.pooled_mean(df.drop(columns="n_eval"), "k11") == pytest.approx(2.0)
+    assert decision.pooled_mean(df, "missing") is None
+
+
 def test_single_window_matches_plain_wilson():
     """Cu o singura fereastra, agregarea degenereaza la Wilson clasic."""
     df = pd.DataFrame({"r": [0.09], "n_test": [2497]})

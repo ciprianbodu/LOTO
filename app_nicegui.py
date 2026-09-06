@@ -43,6 +43,7 @@ from job_queue import (
     submit_job,
 )
 from cancel import lock_engine, unlock_engine
+from runtime_paths import BENCH_LOG_FILE
 from ui_shared import (
     PROJECT_ROOT,
     atomic_write_json,
@@ -67,7 +68,6 @@ logger = logging.getLogger("app_nicegui")
 # --------------------------------------------------------------------------- #
 UI_STATE_FILE = PROJECT_ROOT / ".ui_state.json"
 BENCH_PID_FILE = PROJECT_ROOT / ".bench_pid"
-BENCH_LOG_FILE = PROJECT_ROOT / "bench_full.log"
 REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 
 # Buget de timp TOTAL pentru walk-forward (toate jocurile). Peste buget, validarea
@@ -92,6 +92,20 @@ def _effective_lookback_pct(from_data: dict | None = None) -> float:
     if v <= 0:
         return 100.0
     return float(max(1, min(100, v)))
+
+
+def _wf_generation_options(data: dict) -> dict:
+    """Validează configurația rezultatului, inclusiv factorul legitim 0."""
+    audit = data.get("audit") or {}
+    context = data.get("context") or {}
+    factor = data.get("recent_penalty_factor", 0.5)
+    return {
+        "recent_penalty_draws": int(data.get("recent_penalty_draws") or 0),
+        "recent_penalty_factor": 0.5 if factor is None else float(factor),
+        "guarantee": audit.get("wheel_guarantee_used") or data.get("guarantee"),
+        "wheel_condition": audit.get("wheel_condition_used") or data.get("wheel_condition"),
+        "max_variants": int(data.get("max_variants", context.get("max_variants")) or 0),
+    }
 
 
 def _clamped_bench_target(value=None) -> int:
@@ -508,7 +522,8 @@ def run_rebench() -> None:
         ui.notify("⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
                   "de după NU va putea genera pool-uri. Încarcă fișierele la pasul 1.",
                   type="warning", timeout=8000)
-    # Un singur bench, fără --methods (= TOATE), scrie best_methods.json.
+    # Un singur bench, fără --methods (= curarea per-game din producție), scrie
+    # best_methods.json. Dacă curarea este inactivă, CLI-ul revine la TOATE.
     # Re-score per extragere: selecția și avertismentul de onestitate măsoară
     # aceeași procedură, nu un pool înghețat la începutul întregului fold.
     _launch_bench(
@@ -518,7 +533,7 @@ def run_rebench() -> None:
             "--block-size", "1",
             "--no-shuffled-control",
         ],
-        "Re-Bench walk-forward real (toate metodele)",
+        "Re-Bench walk-forward real (metodele fiecărui joc)",
     )
 
 
@@ -831,9 +846,7 @@ def _start_walk_forward() -> None:
                         use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
-                        # Aceeași penalizare ca la generare: WF validează pool-ul JUCAT.
-                        recent_penalty_draws=int(data.get("recent_penalty_draws") or 0),
-                        recent_penalty_factor=float(data.get("recent_penalty_factor") or 0.5),
+                        **_wf_generation_options(data),
                     )
                     if STATE.get("wf_seq") != my_seq:
                         # A pornit alt walk-forward: nu-i suprascriem retro/status.
@@ -853,6 +866,9 @@ def _start_walk_forward() -> None:
                             "from_cache": bool(meta.get("from_cache")),
                             # pool-ul REAL cu care a rulat WF (pt afișare corectă în istoric)
                             "pool_size": meta.get("pool_size"),
+                            "wheel_guarantee": meta.get("wheel_guarantee"),
+                            "wheel_condition": meta.get("wheel_condition"),
+                            "max_variants": meta.get("max_variants"),
                         }
                 except Exception as exc:  # noqa: BLE001
                     logger.error("walk-forward %s: %s", g_label, exc)
@@ -1355,8 +1371,8 @@ LR_SCHEMES = {
               11: [("Cod 15", 22)], 12: [("Cod 14", 38)]},
 }
 STAGE_META = [
-    ("1_nqi_raw", "1. NQI Raw (scorer)", "#60a5fa",
-     "Pool brut din scorer (bench winner CPU / frecvență): top-K după scor de probabilitate."),
+    ("1_nqi_raw", "1. Pool după scor", "#60a5fa",
+     "Top-K după scorul de clasare, inclusiv penalizarea recentă dacă este activă. Scorul nu este o probabilitate de câștig."),
     ("2_smart_selector", "2. Pool brut (fără rafinare)", "#a78bfa",
      "Smart Selector ELIMINAT — pool-ul rămâne decizia PURĂ a scorerului câștigător "
      "(fără rafinare hibridă). Etapă păstrată doar pentru numerotare (Δ mereu 0)."),
@@ -1477,7 +1493,7 @@ def _render_cost(game: str, data: dict) -> None:
 
     # „Sistem complet" = TOATE combinațiile C(pool, draw_n) de la agenție (fără garanție
     # de acoperire — e exhaustiv). NU confunda cu „wheel-ul nostru" de mai jos, care e
-    # un cover MINIM la garanția cerută (de ~10x mai ieftin).
+    # un cover la garanția cerută; minimalitatea nu este demonstrată în general.
     _full_lbl = (f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} "
                  f"≈ {full_cost:,.0f} Lei în variante")
     if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
@@ -1514,9 +1530,11 @@ def _render_cost(game: str, data: dict) -> None:
         _g_txt = f"garanție {_g_used}{_wc_top_txt}" if _g_used is not None else "garanția configurată"
         ui.markdown(f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
                     f"{n_simple*price:,.0f} Lei în variante "
-                    f"| **Wheel-ul nostru** ({_g_txt}, cover minim): {len(variants)} var.{_jk_txt} ≈ "
+                    f"| **Wheel-ul nostru** ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
                     f"{len(variants)*price:,.0f} Lei în variante.").classes("text-caption")
-        ui.label("Taxa fizică pe bilet nu este inclusă: ea depinde de gruparea variantelor la depunere.").classes(
+        if n_simple < len(variants):
+            ui.label("Primele 10 variante sunt doar un subset; garanția afișată se referă la întregul wheel.").classes("text-caption text-grey")
+        ui.label(f"Estimare la tariful standard {price:g} lei/variantă; tragerile speciale pot avea alt tarif. Taxa fizică pe bilet nu este inclusă.").classes(
             "text-caption text-grey")
 
 
@@ -1647,6 +1665,22 @@ def _render_adaptive(audit: dict) -> None:
     )
 
 
+def _bench_transform_note(data: dict) -> str:
+    """Precizează când ratele scorerului brut nu descriu configurația generată."""
+    audit = data.get("audit") or {}
+    rp = audit.get("recent_penalty") or {}
+    changes = []
+    if int(rp.get("draws") or 0) > 0 and (rp.get("penalized") or rp.get("penalized_urna2")):
+        changes.append(f"penalizarea ultimelor {int(rp['draws'])} extrageri")
+    if 0 < float(audit.get("lookback_pct") or 0) < 100:
+        changes.append(f"istoric limitat la {float(audit['lookback_pct']):g}%")
+    if not changes:
+        return ""
+    return ("Configurația generată include " + " și ".join(changes) + ". "
+            "Clasamentul bench măsoară scorerul fără aceste ajustări; "
+            "rezultatele configurației ajustate se verifică în walk-forward.")
+
+
 def _wf_summary(flat) -> str | None:
     if not flat:
         return None
@@ -1671,8 +1705,13 @@ def _wf_summary(flat) -> str | None:
         cov_txt = f" | acoperire wheel: 100% pe {cov['known']}/{cov['n_draws']} extrageri (restul necunoscute)"
     else:
         cov_txt = " | acoperire wheel: 100%"
+    p3 = sum(row["pool"] >= 3 for row in per_draw.values())
+    p4 = sum(row["pool"] >= 4 for row in per_draw.values())
+    b3 = sum(row["best_ticket"] >= 3 for row in per_draw.values())
+    b4 = sum(row["best_ticket"] >= 4 for row in per_draw.values())
     return (f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
-            f"| best pool={bp} | best bilet={bv}{cov_txt}")
+            f"| best pool={bp} | best bilet={bv} "
+            f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4}{cov_txt}")
 
 
 def _build_report() -> str:
@@ -1696,6 +1735,12 @@ def _build_report() -> str:
                       if d.get('wheel_condition') and int(d.get('wheel_condition')) != int(d.get('guarantee') or 0) else "")
                    + f" | Variante simple: {len(d.get('variants') or [])}"
                    + f" | Extrageri: {d.get('total_draws')}")
+        cov = (d.get("context") or {}).get("coverage_pct")
+        out.append(f"{indent}Acoperire garanție (wheel generat): "
+                   + (f"{float(cov):.2f}%" if cov is not None else "necunoscută"))
+        transform_note = _bench_transform_note(d)
+        if transform_note:
+            out.append(f"{indent}{transform_note}")
         _rp = (d.get("audit") or {}).get("recent_penalty") or {}
         if int(_rp.get("draws") or 0) > 0:
             out.append(f"{indent}Penalizare recentă: ultimele {int(_rp['draws'])} extrageri × "
@@ -1712,7 +1757,19 @@ def _build_report() -> str:
             out.append(f"{indent}Interval p10–p90 (frecvențe pe tot universul, nu pe pool): "
                        f"{_fmt_num(d.get('p10'))} – {_fmt_num(d.get('p90'))} "
                        f"(g_range={_fmt_g_range(d.get('g_range'))})")
-        au = d.get("audit") or {}
+        au = dict(d.get("audit") or {})
+        # Alias de afișare pentru payload-urile istorice: aplicația nu rulează
+        # TimesFM; valorile sunt scorurile metodei CPU consemnate în bench_winner.
+        if "timesfm_predictions" in au:
+            au["ranking_scores_top25"] = au.pop("timesfm_predictions")
+        au.pop("pure_bench_mode", None)  # flag legacy: nu descrie penalizarea recentă
+        if "pool_selection_note" in au:
+            au["pool_selection_note"] = "top-N după scorul final, cu departajarea canonică"
+        if isinstance(au.get("hit_forecast"), dict):
+            forecast = dict(au["hit_forecast"])
+            forecast["note"] = ("Baseline matematic pentru orizontul n_draws. Mărimile teoretice "
+                                "de pool pot depăși limita UI; 3 evenimente în medie nu sunt o garanție.")
+            au["hit_forecast"] = forecast
         if au:
             out.append(f"{indent}--- Audit complet (JSON) ---")
             for line in json.dumps(au, indent=2, ensure_ascii=False, default=str).splitlines():
@@ -1870,8 +1927,8 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     _mv = 0
                 if _mv > 0:
                     reason = (
-                        "limita «Variante maxime» a tăiat garanția — "
-                        "pune 0 = nelimitat pentru garanție completă"
+                        "este activă o limită de variante; 0 elimină plafonul, "
+                        "iar acoperirea trebuie reverificată după generare"
                     )
                 else:
                     reason = (
@@ -1927,7 +1984,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                 # Cu ensemble >1, pool-ul NU vine dintr-o singură metodă →
                 # eticheta onestă e „cap de listă", nu „metoda folosită".
                 head = render_html_safe(
-                    t"{gkey} → metoda CAP DE LISTĂ (cea mai stabilă): "
+                    t"{gkey} → primul membru al ensemble-ului activ: "
                     t"<b style='color:#ff4d4f;font-size:1.05em'>{m}</b>"
                 )
             else:
@@ -1972,7 +2029,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                 )
             parts.append(head + tail)
         ui.html(
-            render_html_safe(t"🏆 Metodă câștigătoare (bench): ")
+            render_html_safe(t"🎯 Metodă folosită la generare: ")
             + "<br>".join(parts)
         ).classes("text-caption")
         _gk_pool = _LABEL_TO_FOLDS_GAME.get(_game_label_for(game), "")
@@ -1984,7 +2041,7 @@ def _render_pool_body(fname: str, game: str, data: dict, *, skey_suffix: str = "
                     "pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
                 ).classes("text-caption text-warning")
     else:
-        ui.label("🏆 Metodă scorer: fallback implicit (fără decizie bench disponibilă)").classes(
+        ui.label("🎯 Metodă scorer: fallback implicit (fără decizie bench disponibilă)").classes(
             "text-caption text-grey")
 
     ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
@@ -2204,6 +2261,46 @@ def _consistency_pct(entry: dict) -> int:
         return 60
 
 
+def _bench_structural_exclusion(
+    grp: pd.DataFrame,
+    metric: str,
+    pool: int,
+    expected_pcts: set[int],
+) -> str:
+    """Motivul pentru care o metodă măsurată nu este candidat de decizie.
+
+    Oglindește cele două porți structurale din ``decision.py``: toate ferestrele
+    comune trebuie să existe, iar top-K nu trebuie să fie ales preponderent de
+    tie-break-ul numeric. Returnează text gol când metoda rămâne eligibilă.
+    """
+    reasons: list[str] = []
+    if expected_pcts and "percentile" in grp.columns and metric in grp.columns:
+        valid = grp[pd.to_numeric(grp[metric], errors="coerce").notna()]
+        have = {
+            int(p) for p in pd.to_numeric(valid["percentile"], errors="coerce").dropna()
+        }
+        missing = sorted(expected_pcts - have)
+        if missing:
+            reasons.append("ferestre lipsă: " + ", ".join(f"{p}%" for p in missing))
+
+    tie_col = f"tiebreak_k{int(pool)}"
+    if tie_col in grp.columns:
+        vals = pd.to_numeric(grp[tie_col], errors="coerce").dropna()
+        if not vals.empty:
+            frac = float(vals.mean())
+            try:
+                from loto_enterprise.benchmark.decision import TIEBREAK_MAX_FRACTION
+                limit = float(TIEBREAK_MAX_FRACTION)
+            except Exception:  # noqa: BLE001
+                limit = 0.5
+            if frac >= limit:
+                reasons.append(
+                    f"scoruri egale la limita top-{int(pool)}: {frac * 100:.1f}% "
+                    f"blocuri, în medie pe ferestre (maxim admis < {limit * 100:.0f}%)"
+                )
+    return "; ".join(reasons)
+
+
 def _wilson_pooled_rate(grp, metric: str) -> float | None:
     """Limita inferioară Wilson: rata POOLED pe ferestre, dovada = extrageri DISTINCTE.
 
@@ -2231,7 +2328,7 @@ def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) ->
     3 nominali puteau deveni 2 în panoul Nucleu dur. Preferăm auditul ultimei
     generări; `{}` dacă n-a rulat încă Generate.
 
-    Dacă `pool` e dat, preferăm intrarea cu `pool_hint` egal; altfel prima potrivire.
+    Dacă `pool` e dat, acceptăm numai aceeași geometrie; altfel prima potrivire.
     """
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -2239,7 +2336,6 @@ def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) ->
     bundle = results[0]
     if not bundle:
         return {}
-    fallback: dict = {}
     for _fname, outs in bundle:
         if not isinstance(outs, dict):
             continue
@@ -2254,14 +2350,14 @@ def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) ->
             if pool is None:
                 return info
             ph = info.get("pool_hint")
+            if ph is None:
+                ph = 1 if folds_game_key == "joker_urna2" else blob.get("pool_size")
             try:
                 if ph is not None and int(ph) == int(pool):
                     return info
             except (TypeError, ValueError):
                 pass
-            if not fallback:
-                fallback = info
-    return fallback
+    return {}
 
 
 def _render_bench_leaderboard_slice(
@@ -2360,6 +2456,7 @@ def _render_bench_leaderboard_slice(
     _base_col = f"k{pool}"
     _gate_col = metric if has_target_rate else None
     _lift_fn = _beat_fn = None
+    _pooled_mean_fn = None
     _rnd_frame = None
     # Referința porții = ACEEAȘI ca în decision.py: rata așteptată hipergeometric
     # a unui pool aleator (determinist), nu realizarea `random` din folds.csv.
@@ -2369,6 +2466,7 @@ def _render_bench_leaderboard_slice(
             from loto_enterprise.benchmark.decision import (
                 _weighted_mean_lift as _lift_fn,
                 _windows_method_beats_random as _beat_fn,
+                pooled_mean as _pooled_mean_fn,
             )
             _rnd_frame = sub[sub["method"] == "random"]
             _gate_baseline = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
@@ -2388,18 +2486,27 @@ def _render_bench_leaderboard_slice(
         _alive_methods = None
         _pg_only = set()
     rows = []
+    _expected_pcts: set[int] = set()
+    if has_target_rate and "percentile" in sub.columns:
+        _valid_target = sub[pd.to_numeric(sub[metric], errors="coerce").notna()]
+        _expected_pcts = {
+            int(p)
+            for p in pd.to_numeric(_valid_target["percentile"], errors="coerce").dropna()
+        }
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
     _lift_ok = False  # lift+consistență calculabile → tie-break identic cu decizia
+    _current_dec = {}
     # Rândurile (Wilson, lift, consistență per metodă) se recalculează DOAR când
     # folds.csv s-a schimbat: tick-ul de 1s re-randa clasamentul în timpul
     # bench-ului și refăcea ~0,6 s de pandas pe event-loop la fiecare secundă.
     _memo_key = (
         _BENCH_FOLDS_CACHE.get("signature"), folds_game_key, int(pool), metric,
         _shown_t, int(len(sub)),
+        tuple(sorted(_alive_methods or ())), tuple(sorted(_pg_only)),
     )
     _memo = _LB_ROWS_MEMO.get(_memo_key) if _memo_key[0] is not None else None
     if _memo is not None:
-        rows, _conf_ok, _lift_ok = list(_memo[0]), _memo[1], _memo[2]
+        rows, _conf_ok, _lift_ok, _current_dec = list(_memo[0]), _memo[1], _memo[2], _memo[3]
     else:
         for m, grp in sub.groupby("method"):
             # Folds vechi pot lista metode eliminate — nu le arăta în clasament
@@ -2410,7 +2517,16 @@ def _render_bench_leaderboard_slice(
             if _pg_only and str(m) not in _pg_only and str(m) not in _BASE:
                 continue
             score = float(grp[metric].mean())
-            avg = float(grp["avg_hits_topk"].mean()) if "avg_hits_topk" in grp.columns else score
+            # Afișăm media la pool-ul CERUT (k{pool}), nu `avg_hits_topk`, care
+            # este mereu pool-ul de bază k5/k6. Ferestrele au dimensiuni diferite,
+            # deci media este pooled pe n_eval, ca ratele și decizia.
+            _avg_pool = (_pooled_mean_fn(grp, _base_col)
+                         if _pooled_mean_fn is not None else None)
+            if _avg_pool is None:
+                _avg_pool = (float(grp[_base_col].mean()) if _base_col in grp.columns
+                             else float(grp["avg_hits_topk"].mean())
+                             if "avg_hits_topk" in grp.columns else score)
+            avg = float(_avg_pool)
             fam = ""
             if has_family:
                 _f = grp["family"].dropna().astype(str)
@@ -2432,24 +2548,35 @@ def _render_bench_leaderboard_slice(
                     w_lift = cons = None
             # media pe coloana pool-ului (k{pool}) — EXACT cheia secundară a ramurii
             # de fallback din decision.py (base_col), nu avg_hits_topk (K = draw_n).
-            _base_avg = (float(grp[_base_col].mean())
-                         if _base_col in grp.columns else avg)
+            _base_avg = avg
+            _structural_reason = _bench_structural_exclusion(
+                grp, metric, pool, _expected_pcts,
+            )
             rows.append((m, score, avg, _method_library(m, fam),
                          _rate_for(grp, _shown_t if _is_single_pick else 3), _rate_for(grp, 4), conf, w_lift, cons,
-                         _base_avg))
+                         _base_avg, _structural_reason))
+        if _draw_n is not None and _base_col in sub.columns:
+            try:
+                from loto_enterprise.benchmark.decision import decide_optimal_config_for_pool
+                _current_dec = decide_optimal_config_for_pool(
+                    sub, folds_game_key, pool, _draw_n,
+                )
+            except Exception:  # noqa: BLE001
+                _current_dec = {}
         if _memo_key[0] is not None:
             # Doar semnătura curentă a fișierului rămâne în memo (3 felii × pool).
             for _k in [k for k in _LB_ROWS_MEMO if k[0] != _memo_key[0]]:
                 _LB_ROWS_MEMO.pop(_k, None)
-            _LB_ROWS_MEMO[_memo_key] = (list(rows), _conf_ok, _lift_ok)
+            _LB_ROWS_MEMO[_memo_key] = (list(rows), _conf_ok, _lift_ok, _current_dec)
     # ORDONARE = ACEEAȘI metrică ȘI aceleași chei secundare ca decizia (Wilson pe
     # rata pooled cu n efectiv → lift mediu ponderat vs random → consistență). Fără
     # decision.py / fără coloana k{pool} / fără rândurile `random` → cădem pe
     # (Wilson, rată brută, avg_hits) și eticheta o spune explicit.
-    _dec = _decision_entry(folds_game_key, pool)
+    _dec = _current_dec or _decision_entry(folds_game_key, pool)
     _dec_low = _decision_low_confidence(_dec)
     _cons_pct = _consistency_pct(_dec)
     _fail_gate: set[str] = set()
+    _structural_fail = {str(r[0]): str(r[10]) for r in rows if r[10] and r[0] not in _BASE}
     _gate_applied = False
 
     def _sort_key_lift(r):
@@ -2462,7 +2589,7 @@ def _render_bench_leaderboard_slice(
         # r[9] = media pe coloana pool-ului (base_col), aceeași cheie ca decizia;
         # înainte se folosea r[2] (avg la K=draw_n) → la egalitate de Wilson
         # ordinea afișată diverge de decizia reală.
-        return ((r[6] if r[6] is not None else -1.0), r[9], r[1])
+        return ((r[6] if r[6] is not None else -1.0), r[9])
 
     if _lift_ok and _dec_low is True:
         rows.sort(key=_sort_key_fallback, reverse=True)
@@ -2476,29 +2603,55 @@ def _render_bench_leaderboard_slice(
     # ieșea mereu „ultimul din N+1", indiferent de cât de bine punctase random —
     # exact invers față de mesajul pentru care există rândul ăla.
     rows_by_score = list(rows)
+    # Porțile STRUCTURALE preced poarta de consistență și sortarea în decizie.
+    # O metodă cu Wilson mare, dar cu ferestre lipsă ori cu ≥50% tăieturi top-K
+    # în scoruri egale, rămâne vizibilă ca diagnostic, însă nu primește rang și
+    # nu poate deveni capul clasamentului eligibil.
+    _bases_r = [r for r in rows if r[0] in _BASE]
+    _eligible_r = [r for r in rows if r[0] not in _BASE and r[0] not in _structural_fail]
+    _structural_r = [r for r in rows if r[0] not in _BASE and r[0] in _structural_fail]
     # Poarta de consistență CA LA DECIZIE: calificatele (bat random în ≥60%
     # ferestre) întâi. Fără asta, #1 din listă putea fi o metodă cu Wilson mare
     # care n-a trecut gate-ul, iar 🏆 era altcineva.
     if _lift_ok and _dec_low is not True:
         _thresh = float(_cons_pct) / 100.0
-        _bases_r = [r for r in rows if r[0] in _BASE]
-        _qual = [r for r in rows if r[0] not in _BASE
-                 and r[8] is not None and r[8] >= _thresh]
-        _fail = [r for r in rows if r[0] not in _BASE
-                 and (r[8] is None or r[8] < _thresh)]
+        _qual = [r for r in _eligible_r if r[8] is not None and r[8] >= _thresh]
+        _fail = [r for r in _eligible_r if r[8] is None or r[8] < _thresh]
         if _qual:
             _qual.sort(key=_sort_key_lift, reverse=True)
             _fail.sort(key=_sort_key_lift, reverse=True)
+            _structural_r.sort(key=_sort_key_lift, reverse=True)
             _bases_r.sort(key=_sort_key_lift, reverse=True)
-            rows = _qual + _fail + _bases_r
+            rows = _qual + _fail + _structural_r + _bases_r
             _fail_gate = {r[0] for r in _fail}
             _gate_applied = True
+        else:
+            rows = _eligible_r + _structural_r + _bases_r
+    else:
+        # Inclusiv ramura low-confidence: fallback-ul din decision.py sare
+        # aceleași metode structural invalide înainte să aleagă după Wilson.
+        rows = _eligible_r + _structural_r + _bases_r
+    if "ranked_methods" in _current_dec:
+        # Sursa de adevăr pentru eligibilitate și ordonare este chiar decizia
+        # pe snapshot-ul afișat, nu best_methods.json dintr-un bench anterior.
+        _positions = {m: i for i, m in enumerate(_current_dec["ranked_methods"])}
+        _ranked = sorted((r for r in _eligible_r if r[0] in _positions),
+                         key=lambda r: _positions[r[0]])
+        _unqualified = [r for r in _eligible_r if r[0] not in _positions]
+        rows = _ranked + _unqualified + _structural_r + _bases_r
+        _fail_gate = {r[0] for r in _unqualified}
+        _gate_applied = True
     if not rows:
         return
     # Baseline-urile („random") NU sunt candidați: rămân vizibile ca reper, dar nu
     # primesc rang și nu intră în „Top N din M metode".
-    competitors = [r for r in rows if r[0] not in _BASE]
+    competitors = [r for r in rows if r[0] not in _BASE and r[0] not in _structural_fail]
+    measured_methods = [r for r in rows if r[0] not in _BASE]
     if not competitors:
+        with ui.expansion(f"Clasament bench — {section_label}", value=True).classes("w-full"):
+            ui.label("Nicio metodă eligibilă în acest snapshot; decizia folosește fallback.").classes("text-warning")
+            for r in measured_methods[:top_n]:
+                ui.label(f"⛔ {r[0]}: {_structural_fail[r[0]]}").classes("text-caption")
         return
     # Slice afișat: primele `top_n` CANDIDATE + baseline-urile care cad printre ele.
     top_idx: list[int] = []
@@ -2520,13 +2673,16 @@ def _render_bench_leaderboard_slice(
     # Eticheta spune EXACT cât face ordonarea: „ca decizia" doar când și tie-break-ul
     # secundar e cel al deciziei (lift + consistență), altfel nu promite identitate.
     if _conf_ok and _lift_ok and _dec_low is True:
-        label += " · fallback (Wilson → medie hituri; nicio metodă n-a trecut poarta)"
+        label += (" · fallback ca decizia (eligibilitate structurală → Wilson → "
+                  "medie hituri; nicio metodă n-a trecut poarta)")
     elif _conf_ok and _lift_ok:
         if _gate_applied:
-            label += (f" · sortat ca decizia (poartă ≥{_cons_pct}% vs random "
-                      "pe aceeași rată T+ → Wilson → lift T+ → consistență)")
+            label += (f" · sortat ca decizia (eligibilitate structurală → poartă "
+                      f"≥{_cons_pct}% vs random pe aceeași rată T+ → Wilson → "
+                      "lift T+ → consistență)")
         else:
-            label += " · sortat ca decizia (Wilson → lift T+ → consistență)"
+            label += (" · sortat ca decizia (eligibilitate structurală → Wilson → "
+                      "lift T+ → consistență)")
     elif _conf_ok:
         label += " · sortat după Wilson (tie-break ≠ decizia: rată brută, nu lift)"
     else:
@@ -2539,6 +2695,8 @@ def _render_bench_leaderboard_slice(
     _rnd_t = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
     if has_target_rate and _rnd_t is not None:
         label += f" · baseline random = {_rnd_t * 100:.2f}%"
+    if _structural_fail:
+        label += f" · {len(_structural_fail)} excluse structural"
     winner = competitors[0]  # capul clasamentului (doar candidați, baseline-urile excluse)
     # Metoda EFECTIV aleasă pentru pool (best_methods.json) — poate diferi de #1 din
     # mai multe motive (ramura de fallback, decizie mai veche decât folds.csv).
@@ -2547,11 +2705,12 @@ def _render_bench_leaderboard_slice(
         chosen_name = get_winner_name(folds_game_key, pool)
     except Exception:  # noqa: BLE001
         chosen_name = winner[0]
-    # Dacă există generare recentă, 🏆 = membrul ACTIV din audit (nu scorer
+    # Dacă există generare recentă, 🎯 = membrul ACTIV din audit (nu scorer
     # stale din best_methods.json eliminat din METHODS).
     _gen_early = _last_generation_bench_info(folds_game_key, pool)
     if isinstance(_gen_early, dict) and _gen_early.get("method"):
         chosen_name = str(_gen_early["method"])
+    _chosen_caption = "Metoda din ultima generare" if _gen_early else "Metoda din decizia salvată"
 
     def _row(i, rec):
         """`i=None` → rând de BASELINE (referință, fără rang și fără pretenția de candidat)."""
@@ -2569,28 +2728,36 @@ def _render_bench_leaderboard_slice(
             elif r3 is not None:
                 _m3 = f" ({r3 / _rnd3:.2f}x random)" if _rnd3 else ""
                 parts.append(f"brut 3+: {r3*100:.1f}%{_m3}")
-            if r4 is not None:
+            if r4 is not None and not _is_single_pick:
                 _m4 = f" ({r4 / _rnd4:.2f}x random)" if _rnd4 else ""
                 parts.append(f"brut 4+: {r4*100:.1f}%{_m4}")
             sc_txt = " · ".join(parts) if parts else f"medie: {score:.3f}"
         else:
             sc_txt = f"medie: {score:.3f}"
-        is_base = i is None
+        is_base = m in _BASE
+        is_excluded = (not is_base) and m in _structural_fail
         is_chosen = (not is_base) and (m == chosen_name)
         _gate_txt = ""
-        if (not is_base) and m in _fail_gate:
-            _gate_txt = f" · nu trece poarta (≥{_cons_pct}% ferestre vs random)"
+        if is_excluded:
+            _gate_txt = f" · EXCLUSĂ din decizie: {_structural_fail[m]}"
+        elif (not is_base) and m in _fail_gate:
+            _gate_txt = f" · necalificată (minimum 3 ferestre; ≥{_cons_pct}% peste random)"
         with ui.row().classes("items-center gap-2 w-full"):
-            ui.label("🎲" if is_base else f"{i}.").classes("text-bold text-grey w-6")
-            ui.label(("🏆 " + m) if is_chosen else m).classes(
+            _rank_badge = "🎲" if is_base else "⛔" if is_excluded else "🏆" if i == 1 else f"{i}."
+            ui.label(_rank_badge).classes("text-bold text-grey w-6")
+            ui.label(("🎯 " + m) if is_chosen else m).classes(
                 "text-bold text-positive" if is_chosen
-                else "text-bold text-orange" if is_base else "text-bold")
+                else "text-bold text-orange" if is_base
+                else "text-bold text-grey" if is_excluded else "text-bold")
             _pref = "baseline (referință, NU e candidat) · " if is_base else ""
             ui.label(f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg:.2f}{_gate_txt}").classes(
                 "text-caption text-grey")
 
     title = f"🏆 Clasament bench — {section_label} ({label})"
     with ui.expansion(title, value=True).classes("w-full"):
+        ui.label("🏆 = primul în clasamentul eligibil; 🎯 = metoda din ultima generare sau decizia salvată.").classes("text-caption text-grey")
+        if _is_single_pick:
+            ui.label("Urna 2: potrivire exactă a unei bile din 20; random = 5%.").classes("text-caption text-grey")
         _chosen_lib = next((r[3] for r in rows if r[0] == chosen_name), "")
         _chosen_suffix = f" · {_chosen_lib}" if _chosen_lib else ""
         # Ensemble: preferă membrii ACTIVI din ultima generare (după decorelare
@@ -2619,7 +2786,7 @@ def _render_bench_leaderboard_slice(
             _n_ens = len(_ens_names)
             _ens_str = " + ".join(f"{nm} ({wt * 100:.0f}%)" for nm, wt in _ens_names)
             ui.html(render_html_safe(
-                t"🏆 <b style='color:#22c55e'>Metoda CAP DE LISTĂ (cea mai stabilă): {chosen_name}</b>"
+                t"🎯 <b style='color:#22c55e'>{_chosen_caption}: {chosen_name}</b>"
                 t"{_chosen_suffix} <span style='opacity:.75'>— pool-ul folosește "
                 t"ensemble-ul de {_n_ens} metode de mai jos ({_ens_source})</span>"
             )).classes("text-caption")
@@ -2628,7 +2795,7 @@ def _render_bench_leaderboard_slice(
             )).classes("text-caption")
         else:
             ui.html(render_html_safe(
-                t"🏆 <b style='color:#22c55e'>Metoda ALEASĂ (folosită la pool): {chosen_name}</b>{_chosen_suffix}"
+                t"🎯 <b style='color:#22c55e'>{_chosen_caption}: {chosen_name}</b>{_chosen_suffix}"
             )).classes("text-caption")
         if _gen_dropped:
             _dparts = []
@@ -2665,7 +2832,10 @@ def _render_bench_leaderboard_slice(
                         f"tie-break-ul secundar diferă de decizie (rată brută, nu lift)")
             else:
                 _ord = f"rata brută {_shown_t}+ (fără coloane n → fără Wilson)"
-            if _dec_low is True:
+            if chosen_name in _structural_fail:
+                _why = (f"selecția folosită provine dintr-o decizie anterioară, iar bench-ul curent "
+                        f"o exclude structural: {_structural_fail[chosen_name]}")
+            elif _dec_low is True:
                 _why = ("nicio metodă n-a bătut random consistent (≥"
                         f"{_cons_pct}% din ferestre) → decizia a căzut pe "
                         "ramura CONSERVATOARE de fallback: alegerea nu e o dovadă de "
@@ -2683,7 +2853,7 @@ def _render_bench_leaderboard_slice(
                         "de o versiune veche) — poate fi filtrul de consistență, ramura de "
                         "fallback sau pur și simplu o decizie mai veche decât folds.csv")
             ui.label(f"ℹ️ Lista e sortată după {_ord}; cap: {winner[0]}. Metoda ALEASĂ "
-                     f"({chosen_name}, marcată 🏆) diferă fiindcă {_why}.").classes(
+                     f"({chosen_name}, marcată 🎯) diferă fiindcă {_why}.").classes(
                 "text-caption text-grey")
         elif _dec_low is True:
             # Chiar și când ALEASĂ == #1, ramura de fallback trebuie spusă: „câștigătorul"
@@ -2699,18 +2869,24 @@ def _render_bench_leaderboard_slice(
         _n_fail = len(_fail_gate)
         if _gate_applied and _n_fail:
             ui.label(
-                f"Top {_n_shown} din {len(competitors)} metode candidate "
-                f"({_n_qual} calificate, {_n_fail} sub poarta de consistență)"
+                f"Top {_n_shown} din {len(measured_methods)} metode măsurate "
+                f"({_n_qual} calificate, {_n_fail} sub poarta de consistență, "
+                f"{len(_structural_fail)} excluse structural)"
             ).classes("text-bold text-blue mt-2")
         else:
-            ui.label(f"Top {_n_shown} din {len(competitors)} metode candidate").classes("text-bold text-blue mt-2")
-        _cats = sorted({rec[3] for rec in competitors if rec[3]})  # categorii REALE (din folds)
+            ui.label(
+                f"Top {_n_shown} din {len(measured_methods)} metode măsurate "
+                f"({len(competitors)} eligibile, {len(_structural_fail)} excluse structural)"
+            ).classes("text-bold text-blue mt-2")
+        _cats = sorted({rec[3] for rec in measured_methods if rec[3]})  # categorii REALE (din folds)
         if _cats:
             ui.label("Categorii: " + " · ".join(_cats)).classes("text-caption text-grey")
         _rank = 0
         for rec in top_rows:
             if rec[0] in _BASE:
                 _row(None, rec)          # baseline: vizibil ca reper, fără rang
+            elif rec[0] in _structural_fail:
+                _row(None, rec)          # diagnostic structural, fără rang
             else:
                 _rank += 1
                 _row(_rank, rec)
@@ -2723,26 +2899,41 @@ def _render_bench_leaderboard_slice(
             # PE `rows_by_score` (ordinea Wilson), nu pe `rows`: acolo baseline-ul
             # e împins la coadă de poarta de consistență, deci ieșea mereu ultimul.
             _better = sum(1 for r in rows_by_score[:_bi] if r[0] not in _BASE)
-            _worse = len(competitors) - _better
-            # Numitorul include și baseline-ul însuși (nu doar candidații) — altfel
+            # Numitorul include toate metodele măsurate și baseline-ul însuși — altfel
             # poziția poate ajunge la N+1 „din N" (contradicție) când baseline-ul
             # e sub TOȚI candidații.
-            ui.label(f"🎲 baseline «{_brec[0]}» (referință, NU e candidat) — locul "
-                     f"{_better + 1} din {len(competitors) + 1} după Wilson "
-                     f"({_worse} metode candidate sub hazard).").classes(
-                "text-caption text-grey" if _worse == 0 else "text-caption text-amber-400")
+            # Poziția rândului `random` este o REALIZARE empirică a scorerului,
+            # nu baseline-ul teoretic din titlu. Numărul „sub hazard” calculat
+            # anterior din această poziție amesteca cele două referințe.
+            _target_idx = 4 if _shown_t in (1, 3) else 5
+            _below_theory = None
+            if _rnd_t is not None:
+                _below_theory = sum(
+                    1 for r in competitors
+                    if r[_target_idx] is not None and float(r[_target_idx]) <= float(_rnd_t)
+                )
+            _theory_txt = (
+                f" Față de pragul teoretic din titlu: {_below_theory} metode eligibile au "
+                f"rata brută ≤ {_rnd_t * 100:.2f}%."
+                if _below_theory is not None else ""
+            )
+            ui.label(f"🎲 baseline «{_brec[0]}» (realizare empirică, NU candidat) — locul "
+                     f"{_better + 1} din {len(measured_methods) + 1} după Wilson."
+                     f"{_theory_txt}").classes("text-caption text-grey")
         # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
-        # slice, spune unde cade. Altfel 🏆 lipsește complet din listă, fără niciun
+        # slice, spune unde cade. Altfel 🎯 lipsește complet din listă, fără niciun
         # indiciu — exact metoda despre care utilizatorul vrea să știe cel mai mult.
         if chosen_name and chosen_name not in _shown_names:
             _ci = next((i for i, r in enumerate(rows) if r[0] == chosen_name), None)
             if _ci is None:
-                ui.label(f"🏆 metoda ALEASĂ «{chosen_name}» nu apare în folds.csv pentru acest "
+                ui.label(f"🎯 metoda ALEASĂ «{chosen_name}» nu apare în folds.csv pentru acest "
                          f"(joc, pool) — decizia e mai veche decât bench-ul curent.").classes(
                     "text-caption text-orange")
+            elif chosen_name in _structural_fail:
+                ui.label(f"🎯 «{chosen_name}» este exclusă: {_structural_fail[chosen_name]}").classes("text-warning text-caption")
             else:
-                _cbetter = sum(1 for r in rows[:_ci] if r[0] not in _BASE)
-                ui.label(f"🏆 metoda ALEASĂ «{chosen_name}» — locul {_cbetter + 1} din "
+                _cbetter = sum(1 for r in rows[:_ci] if r[0] not in _BASE and r[0] not in _structural_fail)
+                ui.label(f"🎯 metoda ALEASĂ «{chosen_name}» — locul {_cbetter + 1} din "
                          f"{len(competitors)} metode candidate (în afara top-{top_n} afișat)."
                          ).classes("text-caption text-positive")
 
@@ -2834,7 +3025,7 @@ def _render_last_csv_draw(fname: str) -> None:
 
 def _render_urna2_benchmark_note() -> None:
     """Explică metrica dedicată Urnei 2, fără a o confunda cu hiturile +3/+4."""
-    with ui.expansion("🏆 Clasament bench — Joker Urna 2 (1/20)", value=True).classes("w-full"):
+    with ui.expansion("Despre benchmark — Joker Urna 2 (1/20)", value=True).classes("w-full"):
         ui.label(
             "Urna 2 este evaluată separat top-1 (1/1): o predicție este hit doar când "
             "bila aleasă coincide exact cu cea extrasă. Baseline aleator: 1/20 = 5%."
@@ -2842,11 +3033,12 @@ def _render_urna2_benchmark_note() -> None:
         ui.label(
             "Re-Bench compară metodele CPU pe ferestre walk-forward, cu aceeași poartă "
             "de consistență și limită Wilson. Dacă nu există semnal peste random, aplicația "
-            "marchează low confidence și păstrează fallback-ul determinist frequency."
+            "marchează low confidence și alege conservator dintre metodele eligibile; "
+            "frequency rămâne fallback-ul dacă nu există date utilizabile."
         ).classes("text-caption text-grey")
 
 
-def _render_bench_leaderboard(game_label: str, top_n: int = 20) -> None:
+def _render_bench_leaderboard(game_label: str, top_n: int = 20, pool_size: int | None = None) -> None:
     """Top-N metode din ULTIMUL bench pentru acest joc (folds.csv). Joker = urne separate."""
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
@@ -2854,16 +3046,17 @@ def _render_bench_leaderboard(game_label: str, top_n: int = 20) -> None:
             _render_urna2_benchmark_note()
         return
     try:
-        df = pd.read_csv(fp)
+        df = _read_bench_folds_cached(fp)
     except Exception:  # noqa: BLE001
         return
     if df.empty or "method" not in df.columns or "game" not in df.columns:
         return
-    pool = _int_setting("pool_size_val")
+    pool = int(pool_size) if pool_size is not None else _int_setting("pool_size_val")
     if game_label == "joker":
         _render_bench_leaderboard_slice(df, "joker_urna1", pool, "Joker Urna 1 (5/45)", top_n=top_n)
         _render_bench_leaderboard_slice(df, "joker_urna2", 1, "Joker Urna 2 (1/20)", top_n=top_n)
-        _render_urna2_benchmark_note()
+        if not (df["game"].astype(str) == "joker_urna2").any():
+            _render_urna2_benchmark_note()
         return
     folds_key = _LABEL_TO_FOLDS_GAME.get(game_label, game_label)
     _render_bench_leaderboard_slice(df, folds_key, pool, game_label.upper(), top_n=top_n)
@@ -3068,12 +3261,10 @@ def _n_extrageri(n: int) -> str:
 def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
 
-    `hits_union` numără numere din pool ieșite la extragere. Cât timp wheel-ul
-    acoperă 100% din țintele de garanție (iar garanția internă a WF e ≥ 4, vezi
-    `walk_forward_adapter._wf_guarantee`), „3 în pool" ⇔ „3 pe cel puțin un bilet":
-    orice 3-submulțime e conținută într-o 4-submulțime, care e pe un bilet. Sub
-    100% cifra de pool devine un PLAFON — de aici avertismentul.
-    None = nimic de semnalat (tot ce se știe e la 100%).
+    `hits_union` numără numere din pool ieșite la extragere. O acoperire sub
+    100% nu garantează ținta cerută. La designurile condiționale, nici 100% nu
+    echivalează hiturile de pool cu cele de bilet sub condiția cerută.
+    None = fără avertisment de acoperire, nu dovadă că hiturile coincid.
     """
     try:
         from loto_enterprise.core.walk_forward_adapter import wheel_coverage_summary
@@ -3090,8 +3281,8 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     if cov["unknown"] and not cov["known"]:
         return ("text-caption text-grey",
                 f"ℹ️ Acoperire wheel NECUNOSCUTĂ{_sfx} — cache WF scris înainte de măsurarea ei. "
-                "Cifrele de POOL sunt egale cu hiturile de bilet doar dacă wheel-ul a fost "
-                "complet. Se completează la următorul walk-forward.")
+                "Comparați hiturile de POOL cu cele de BILET; egalitatea depinde de garanția "
+                "și condiția wheel-ului. Acoperirea se completează la următorul walk-forward.")
     if cov["unknown"]:
         return ("text-caption text-grey",
                 f"ℹ️ Acoperire wheel{_sfx}: 100% pe {_n_extrageri(cov['known'])}, necunoscută pe "
@@ -3106,12 +3297,14 @@ def _wf_per_draw_stats(flat) -> dict:
     intrare per extragere, fiindcă `hits_union` (câte numere din POOL au ieșit)
     e identic pentru toate variantele aceleiași extrageri."""
     per: dict = {}
+    from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
+    hits = per_draw_hit_summary(flat)
     for p in flat:
         di = getattr(p, "draw_index", 0)
         if di not in per:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
             per[di] = {"label": str(dd) if dd and str(dd) != "None" else f"#{di}",
-                       "pool": int(getattr(p, "hits_union", 0))}
+                       **hits[int(di)]}
     return per
 
 
@@ -3127,11 +3320,27 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
         return
     pool3 = sum(1 for d in per.values() if d["pool"] >= 3)
     pool4 = sum(1 for d in per.values() if d["pool"] >= 4)
+    ticket3 = sum(1 for d in per.values() if d["best_ticket"] >= 3)
+    ticket4 = sum(1 for d in per.values() if d["best_ticket"] >= 4)
 
     def _cell(k, denom):
-        return f"{k} ({k / denom * 100:.0f}%)" if denom else "—"
+        return f"{k} ({k / denom * 100:.2f}%)" if denom else "—"
 
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes("text-bold text-caption mt-2")
+    _wg = (meta or {}).get("wheel_guarantee")
+    if _wg is not None:
+        _wc = (meta or {}).get("wheel_condition") or _wg
+        _cap = int((meta or {}).get("max_variants") or 0)
+        _cap_note = f"plafon {_cap} variante" if _cap else "fără plafon de variante"
+        ui.label(
+            f"Wheel evaluat în WF: garanție {_wg} dacă {_wc} numere sunt în pool, "
+            f"{_cap_note}."
+        ).classes("text-caption text-grey")
+        if int(_wc) > int(_wg):
+            ui.label(
+                f"Acoperirea de 100% garantează {_wg} pe un bilet numai de la {_wc} "
+                "numere în pool. Pentru rezultate, urmăriți rândul BILET."
+            ).classes("text-caption text-warning")
     _cn = _wf_coverage_note(flat)
     if _cn:
         ui.label(_cn[1]).classes(_cn[0])
@@ -3161,7 +3370,9 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
 
     rows = [{"src": f"🎯 Pool (din {_pn})" if _pn else "🎯 Pool",
              "p3": _cell(pool3, n), "p4": _cell(pool4, n),
-             "rnd": _bcell(_pn), "tick": _tick_cell(n_tick, tick_avg)}]
+             "rnd": _bcell(_pn), "tick": _tick_cell(n_tick, tick_avg)},
+            {"src": "🎟️ Cel puțin un bilet WF", "p3": _cell(ticket3, n),
+             "p4": _cell(ticket4, n), "rnd": "—", "tick": "același wheel"}]
     ui.table(
         columns=[{"name": "src", "label": "Sursă", "field": "src", "align": "left"},
                  {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
@@ -3176,6 +3387,7 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
             "Premiile și ROI-ul nu sunt afișate: ele cer valorile istorice pe categorie, "
             "iar Joker cere și validarea Urnei 2.")
     _cap += f" Pool = {n_tick:,} variante ({tick_avg:.2f}/extragere)."
+    _cap += " Rândul de bilete numără extrageri cu cel puțin un bilet care atinge pragul; baseline-ul de pool nu este un baseline separat pentru bilete."
     ui.label(_cap).classes("text-caption text-grey")
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
@@ -3227,8 +3439,8 @@ def _render_hits_4plus(flat, game: str, meta: dict | None = None,
     _star_leg = ("⭐ = exact 3; " if _TT == 4 else f"⭐ = 3–{_TT - 1}; ") if _TT > 3 else ""
     ui.label(
         f"🗓️ Istoric: extrageri cu ≥3 în pool. 🔥 = target bench (≥{_TT}); "
-        f"{_star_leg}Δ pe primul rând = „acum X zile” (de la ultimul hit până azi); "
-        f"pe rest = zile până la hit-ul următor mai recent."
+        f"{_star_leg}Δ pe cel mai recent rând care atinge ținta = „acum X zile”; "
+        f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent."
     ).classes("text-caption text-grey mt-2")
     _dates_table("🗓️ POOL", lambda d: d["pool"] >= 3, _pool_badge,
                  "Pool-ul n-a prins ≥3 în istoricul walk-forward.",
@@ -3265,12 +3477,16 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # Reper: ultima extragere reală din CSV (deasupra clasamentului).
                 _render_last_csv_draw(fname)
 
-                # --- Top-10 metode ---
-                _render_bench_leaderboard(game)
+                # Pool-ul din rezultatul afișat rămâne reperul și dacă utilizatorul
+                # a schimbat între timp setarea pentru următoarea generare.
+                _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
+                _render_bench_leaderboard(game, pool_size=_pn or None)
+                _penalty_note = _bench_transform_note(data)
+                if _penalty_note:
+                    ui.label(_penalty_note).classes("text-caption text-warning")
 
                 # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
                 # Pool-ul EFECTIV din REZULTAT, nu din setarea care se poate schimba ulterior.
-                _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
                 if flat:
                     # Deschis implicit (apare după ce termină walk-forward), dar pliabil
@@ -3517,14 +3733,16 @@ def main_page() -> None:
         _bind_save(ui.number("Garanția se aplică dacă în pool cad (0 = câte cere garanția)", min=0, max=6, step=1).classes("w-full"), "wheel_condition_val")
         ui.label(
             "Lotto design „t dacă p”: de exemplu garanție 3 cu 4 = un bilet cu 3 numere garantat "
-            "doar când cad 4 numere din pool, cu de două ori mai puține bilete decât „3 dacă 3”."
+            "doar când cad 4 numere din pool. Economia de bilete depinde de dimensiunea pool-ului."
         ).classes("text-caption text-grey")
         _bind_save(ui.number("Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10).classes("w-full"), "max_variants_val")
         _bind_save(ui.number("Penalizare numere extrase în ultimele N extrageri (0 = oprit)", min=0, max=50, step=1).classes("w-full"), "recent_penalty_draws_val")
         _bind_save(ui.number("Factor penalizare per apariție (0..0.99)", min=0, max=0.99, step=0.05).classes("w-full"), "recent_penalty_factor_val")
         ui.label(
             "Scorul unui număr extras de k ori în ultimele N extrageri se înmulțește cu factor^k. "
-            "Preferință de compoziție, neutră ca valoare așteptată; se aplică identic în walk-forward."
+            "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
+            "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
+            "Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
         _bind_save(ui.number("Analizează doar ultimele X% extrageri", min=0, max=100, step=5).classes("w-full"), "lookback_val")
         _bind_save(ui.number(
@@ -3608,8 +3826,8 @@ def main_page() -> None:
         ui.button("🔬 RE-BENCH", on_click=run_rebench
                   ).props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
         _bt = _clamped_bench_target()
-        ui.label("Un singur bench testează metodele active (exclusiv CPU), pe toate nucleele "
-                 "(în paralel). Toate concurează în "
+        ui.label("Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
+                 "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
                  f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
                  "Vezi clasamentul complet la 🏆 Clasament bench.").classes("text-caption")
         # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
@@ -3623,19 +3841,19 @@ def main_page() -> None:
             _urna2_n = _pg.get("joker_urna2")
             if _main_pg_txt and _urna2_n is not None:
                 _pg_bit = (
-                    f"clasament/decizie = {_main_pg_txt} jocuri principale "
-                    f"+ {int(_urna2_n)} Urna 2"
+                    f"matrice Re-Bench = {_main_pg_txt} jocuri principale "
+                    f"+ {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
                 )
             elif _main_pg_txt:
-                _pg_bit = f"clasament/decizie = {_main_pg_txt} per joc"
+                _pg_bit = f"matrice Re-Bench = {_main_pg_txt} per joc, plus baseline-urile structurale"
             elif _urna2_n is not None:
-                _pg_bit = f"clasament/decizie = {int(_urna2_n)} Urna 2"
+                _pg_bit = f"matrice Re-Bench = {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
             else:
-                _pg_bit = "clasament/decizie = tot active"
+                _pg_bit = "matrice Re-Bench = tot setul activ"
             _n_after = _cur["n_after"]
             ui.html(render_html_safe(
                 t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
-                t"(bench = {_n_after} overall; {_pg_bit})."
+                t"(uniune eligibilă; {_pg_bit})."
             )).classes("text-caption text-info")
             ui.label("Dezactivare (revine la toate metodele): șterge sau golește lista "
                      f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "

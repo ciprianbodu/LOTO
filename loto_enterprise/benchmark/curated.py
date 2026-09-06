@@ -126,6 +126,53 @@ def load_per_game() -> dict[str, list[str]]:
     return out
 
 
+def resolve_methods_per_game(
+    candidates: Iterable[str],
+    game_keys: Iterable[str],
+) -> dict[str, list[str]]:
+    """Construiește matricea efectivă joc -> metode pentru Re-Bench.
+
+    ``active`` este uniunea reversibilă a semnalelor păstrate pentru toate
+    jocurile. A rula întreaga uniune pe FIECARE joc este însă muncă inutilă:
+    decizia și clasamentul restrâng deja candidații la ``per_game``. Pentru
+    fiecare cheie configurată păstrăm exact lista acelui joc și adăugăm
+    baseline-urile structurale disponibile (``random`` + ``frequency``).
+
+    O cheie absentă sau o listă fără nicio metodă validă este omisă din rezultat;
+    ``runner.run_benchmark`` interpretează lipsa cheii drept fallback sigur la
+    toate metodele candidate. Astfel un JSON incomplet nu poate produce tăcut un
+    joc fără folduri.
+    """
+    ordered = list(dict.fromkeys(str(m).strip() for m in candidates if str(m).strip()))
+    allowed = set(ordered)
+    configured = load_per_game()
+    out: dict[str, list[str]] = {}
+    for game_key in dict.fromkeys(str(g) for g in game_keys):
+        requested = configured.get(game_key)
+        if not requested:
+            continue
+        selected = [m for m in requested if m in allowed]
+        missing = [m for m in requested if m not in allowed]
+        if missing:
+            logger.warning(
+                "[curated] %s: %d metode per_game nu sunt candidate valide și "
+                "au fost sărite: %s",
+                game_key, len(missing), missing,
+            )
+        if not selected:
+            logger.error(
+                "[curated] %s: lista per_game nu conține metode valide — "
+                "runner-ul va folosi toate metodele active pentru acest joc.",
+                game_key,
+            )
+            continue
+        for required in REQUIRED_METHODS:
+            if required in allowed and required not in selected:
+                selected.append(required)
+        out[game_key] = selected
+    return out
+
+
 def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
     """Filtrează `candidates` (available minus blacklist) prin lista curată.
 

@@ -15,6 +15,7 @@ import traceback
 import tempfile
 import os
 
+from runtime_paths import ENGINE_LOG_FILE
 from ui_shared import pack_queue_result, require_python_version
 
 require_python_version()
@@ -24,7 +25,7 @@ require_python_version()
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
 PIPELINE_CACHE_VERSION = "v3"
 
-LOG_FILE = "loto.log"
+LOG_FILE = str(ENGINE_LOG_FILE)
 
 # LOTO_DEBUG=1 → loguri DEBUG (mai mult detaliu despre ce face engine-ul DUPA
 # bench: selectie metoda, scoring, POST-HOC, walk-forward). Vizibile in consola UI.
@@ -118,7 +119,7 @@ def _remove_temp_csv(temp_csv_path: str) -> None:
             logging.warning("Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc)
 
 
-def _run_pipeline_job(job: dict) -> str:
+def _run_pipeline_job(job: dict) -> str | None:
     monitor = ResourceMonitor()
     monitor.start()
     try:
@@ -126,7 +127,7 @@ def _run_pipeline_job(job: dict) -> str:
     finally:
         monitor.stop()
 
-def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
+def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     cfg = json.loads(job["config_json"])
     input_hash = str(cfg.get("input_hash", "") or "").strip()
     cache_key = f"{PIPELINE_CACHE_VERSION}:{input_hash}" if input_hash else ""
@@ -138,7 +139,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
         fail_job(job_id, "Job fără CSV — nimic de generat.")
         return None
 
-    update_job_progress(job_id, 3, "Încarc motorul de generare...")
+    if update_job_progress(job_id, 3, "Încarc motorul de generare..."):
+        logging.info("[worker] Job %s nu mai este RUNNING; opresc înainte de engine.", job_id)
+        return None
     # Import GREU după ce jobul e deja preluat (altfel UI stă pe 0% /
     # «se inițializează...» cât se încarcă pandas+engine).
     import pandas as pd
@@ -151,7 +154,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
     if use_cache and cache_key:
         cached = get_pipeline_cache(cache_key)
         if cached:
-            update_job_progress(job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic).")
+            if update_job_progress(job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic)."):
+                logging.info("[worker] Job %s a pierdut starea RUNNING la cache hit.", job_id)
+                return None
             return str(cached)
 
     for ds in datasets_cfg:
@@ -308,7 +313,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str:
         _remove_temp_csv(temp_csv_path)
         results_bundle.append((fname, outputs))
 
-    update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI...")
+    if update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI..."):
+        logging.info("[worker] Job %s nu mai este RUNNING înainte de serializare.", job_id)
+        return None
     persistent = (results_bundle, len(results_bundle))
     packed = _pack_result_payload(persistent)
     if use_cache and cache_key:
@@ -357,7 +364,12 @@ def main() -> None:
                 
             task_type = str(job.get("task_type") or "")
             job_id = int(job["id"])
-            update_job_progress(job_id, 2, "Job preluat de worker.")
+            if update_job_progress(job_id, 2, "Job preluat de worker."):
+                logging.info(
+                    "[worker] Job %s nu mai este RUNNING imediat după claim; sarim.",
+                    job_id,
+                )
+                continue
 
             if is_job_cancelled(job_id):
                 logging.info(f"[worker] Job {job_id} a fost anulat (CANCELLED), sarim.")

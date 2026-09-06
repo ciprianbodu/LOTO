@@ -170,6 +170,14 @@ def test_start_requires_prepared_venv_instead_of_creating_an_empty_one():
     assert "ACTUALIZARI.bat" in verify
 
 
+def test_startup_log_uses_external_runtime_dir():
+    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    assert 'set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"' in text
+    assert 'set "RUNTIME_DIR=D:\\_BUILD\\_LOTO"' in text
+    assert 'set "LOGFILE=%RUNTIME_DIR%\\startup_8000.log"' in text
+    assert 'set "LOGFILE=%PROJECT_DIR%startup_8000.log"' not in text
+
+
 def test_start_stops_when_queue_reset_fails():
     text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
     launch = text[text.index("\n:launch_phase"):text.index("\n:push_istoric")]
@@ -196,6 +204,13 @@ def test_updates_integrity_check_matches_cpu_requirements():
     assert "import numpy,pandas,scipy,sklearn,statsmodels,nicegui" in active
     assert "import numpy,pandas,scipy,numba" not in active
     assert "taskkill /f /t /im streamlit.exe" not in active
+
+
+def test_updates_migrates_wf_cache_out_of_onedrive():
+    text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    assert "migrate_legacy_wf_cache" in text
+    assert "purge_stale_wf_cache(dry_run=False)" in text
+    assert text.index("migrate_legacy_wf_cache") < text.index("purge_stale_wf_cache(dry_run=False)")
 
 
 def test_python_version_check_has_no_stale_patch_constant():

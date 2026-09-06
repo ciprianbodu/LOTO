@@ -1,5 +1,18 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Audit nou, 05.09.2026:** [tipare de calendar, penalizări și designuri](raport_patternuri_cover_penalizari_2026-09-05.md).
+Experiment cronologic 50/20/30 la pool 11; nicio regulă nouă confirmată după
+corecția comparațiilor multiple. 151 designuri verificate; 7 blocuri redundante
+eliminate din 4 fișiere, cu aceeași garanție. WF validează acum geometria jucată.
+
+```bash
+python scripts/analysis/audit_patterns_and_designs.py
+```
+
+Comanda nu schimbă registry-ul sau deciziile. JSON-ul este scris în
+`bench_results/pattern_design_audit.json`. Numai opțiunea explicită
+`--prune-redundant` modifică designurile, după reverificarea garanției.
+
 Scripturi de MĂSURĂTOARE, nu de producție. Nu sunt importate de nicăieri;
 se rulează manual, din rădăcina repo-ului, când vrei să reverifici concluzia
 pe date noi (`_ISTORIC/` crește la fiecare `update_csv.py`).

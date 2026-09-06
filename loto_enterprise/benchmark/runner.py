@@ -1,6 +1,6 @@
 """Walk-forward / regressive benchmark runner — v2 (spec-compliant).
 
-For every (game, urn, method, percentile_window, real|random) fold we:
+For every selected (game, urn, method, percentile_window, real|random) fold we:
     1. Train on the first (1 - P/100) of draws.
     2. Score numbers using a block-walk-forward (re-score every BLOCK_SIZE
        test draws, expanding history). For block_size = 99999 this is a
@@ -396,6 +396,25 @@ def _expected_pool_keys(game) -> set[str]:
     return {f"k{k}" for k in pool_sizes}
 
 
+def _methods_for_game(
+    methods: list[str],
+    methods_per_game: dict[str, list[str]] | None,
+    game_key: str,
+) -> list[str]:
+    """Metodele efectiv rulate pentru joc, deduplicate și validate în ``methods``.
+
+    Fără matrice sau fără cheia jocului păstrăm comportamentul compatibil: toate
+    metodele. O cheie prezentă reprezintă o selecție explicită, inclusiv dacă
+    lista este goală.
+    """
+    if methods_per_game is None or game_key not in methods_per_game:
+        return list(methods)
+    allowed = set(methods)
+    return list(dict.fromkeys(
+        m for m in methods_per_game[game_key] if m in allowed
+    ))
+
+
 def run_benchmark(
     games: list[GameDef],
     methods: list[str],
@@ -406,6 +425,7 @@ def run_benchmark(
     progress_cb=None,
     use_cache: bool = True,
     shuffled_control: bool = True,
+    methods_per_game: dict[str, list[str]] | None = None,
 ) -> dict:
     """Rulează implicit walk-forward real (re-score la fiecare extragere).
 
@@ -418,11 +438,17 @@ def run_benchmark(
     (aceeași metodă pe extrageri AMESTECATE, ca test de nul). Măsurat pe
     `bench_results/folds.csv`: acele folds sunt **50.1% din tot runtime-ul
     bench-ului**. Ce se PIERDE dacă le oprești (deci default-ul rămâne True):
-      • `lift_vs_shuffle` / `avg_hits_shuffled` din report.json (diagnostic);
+      • `lift_vs_shuffle` / `avg_hits_shuffled` din report.json (diagnostic;
+        sunt scrise ca ``null``, nu ca un zero inventat);
       • tie-break-ul SECUNDAR al `winners_per_pool` (`ranked.sort` pe
         `(avg_hits_real, lift_vs_shuffle)`) — dar acela e doar cale LEGACY:
         producția citește `auto_pilot_per_pool`, construit de `decision.py`,
         care filtrează peste tot `is_random == False`.
+    `methods_per_game` restrânge matricea de calcul fără să schimbe registry-ul:
+    este folosit de curarea de producție pentru a nu evalua uniunea tuturor
+    semnalelor pe jocuri în care decizia le-ar ignora oricum. Lipsa unei chei
+    păstrează toate metodele, pentru compatibilitate și siguranță.
+
     Nu se pierde nimic din decizia de producție."""
     out_path = Path(out_dir)
     out_path.mkdir(exist_ok=True, parents=True)
@@ -446,7 +472,7 @@ def run_benchmark(
         _n_g = _n_by_game.get(game.key)
         if not _n_g:
             continue
-        for m in methods:
+        for m in _methods_for_game(methods, methods_per_game, game.key):
             meta = method_meta_map[m]
             if not meta["available"]:
                 continue
@@ -576,7 +602,7 @@ def run_benchmark(
             except Exception as _e:  # noqa: BLE001
                 logger.debug(f"[bench_cache] hash failed: {_e}")
 
-        for method in methods:
+        for method in _methods_for_game(methods, methods_per_game, game.key):
             meta = method_meta_map[method]
             if not meta["available"]:
                 logger.info("[%s/%s] SKIP (unavailable: %s)",
@@ -761,6 +787,10 @@ def run_benchmark(
 
     # ----- Aggregate per (game, pool) → winner -----
     report = _aggregate(df, games, methods, method_meta_map, pool_keys_per_game)
+    report["methods_per_game"] = {
+        g.key: _methods_for_game(methods, methods_per_game, g.key)
+        for g in games
+    }
     # Scriere atomică (tmp per-PID + fsync + rename) — OneDrive-safe, ca folds.csv.
     import uuid as _uuid
     _rjson = out_path / "report.json"
@@ -787,6 +817,22 @@ def _aggregate(
     method_meta_map: dict[str, dict],
     pool_keys_per_game: dict[str, list[str]],
 ) -> dict:
+    # Ferestrele walk-forward au dimensiuni diferite (10/30/60/100%). O medie
+    # simplă le-ar acorda aceeași greutate și ar supra-pondera ferestrele mici.
+    # Folosim aceeași agregare canonică pe n_eval/n_test ca decizia și UI-ul.
+    from .decision import pooled_mean
+
+    def _pool_mean(frame: pd.DataFrame, column: str) -> float | None:
+        if frame.empty or column not in frame.columns:
+            return None
+        return pooled_mean(frame, column)
+
+    def _rank_key(row: tuple[str, float, float | None]) -> tuple[float, float, str]:
+        # Fără shuffled-control, lift-ul este indisponibil (None), nu zero.
+        # Numele face tie-break-ul final determinist între scoruri identice.
+        method, avg_hits, lift = row
+        return (-avg_hits, -(lift if lift is not None else -math.inf), method)
+
     report: dict = {
         "games": {},
         "method_meta": method_meta_map,
@@ -832,22 +878,31 @@ def _aggregate(
             for k in pool_keys:
                 if k not in real.columns:
                     continue
-                real_mean = float(real[k].mean())
-                rnd_mean = float(rnd[k].mean()) if (not rnd.empty and k in rnd.columns) else 0.0
+                real_mean = _pool_mean(real, k)
+                if real_mean is None:
+                    continue
+                rnd_mean = _pool_mean(rnd, k)
                 # WITH blacklist column has _bl suffix
                 bl_col = f"{k}_bl"
-                real_mean_bl = float(real[bl_col].mean()) if bl_col in real.columns else 0.0
-                rnd_mean_bl = float(rnd[bl_col].mean()) if (not rnd.empty and bl_col in rnd.columns) else 0.0
+                real_mean_bl = _pool_mean(real, bl_col)
+                rnd_mean_bl = _pool_mean(rnd, bl_col)
                 entry["per_pool"][k] = {
                     "avg_hits_real": real_mean,
                     "avg_hits_shuffled": rnd_mean,
-                    "lift_vs_shuffle": real_mean - rnd_mean,
+                    "lift_vs_shuffle": real_mean - rnd_mean if rnd_mean is not None else None,
                     "hit_rate_real": real_mean / game.draw_n,
                     # WITH blacklist
                     "avg_hits_real_bl": real_mean_bl,
                     "avg_hits_shuffled_bl": rnd_mean_bl,
-                    "lift_vs_shuffle_bl": real_mean_bl - rnd_mean_bl,
-                    "blacklist_helps": real_mean_bl - real_mean,  # positive = blacklist improves
+                    "lift_vs_shuffle_bl": (
+                        real_mean_bl - rnd_mean_bl
+                        if real_mean_bl is not None and rnd_mean_bl is not None
+                        else None
+                    ),
+                    # positive = blacklist improves
+                    "blacklist_helps": (
+                        real_mean_bl - real_mean if real_mean_bl is not None else None
+                    ),
                 }
             per_method[method] = entry
 
@@ -865,9 +920,10 @@ def _aggregate(
                 if not stats:
                     continue
                 ranked_nobl.append((m, stats["avg_hits_real"], stats["lift_vs_shuffle"]))
-                ranked_bl.append((m, stats["avg_hits_real_bl"], stats["lift_vs_shuffle_bl"]))
-            ranked_nobl.sort(key=lambda r: (r[1], r[2]), reverse=True)
-            ranked_bl.sort(key=lambda r: (r[1], r[2]), reverse=True)
+                if stats["avg_hits_real_bl"] is not None:
+                    ranked_bl.append((m, stats["avg_hits_real_bl"], stats["lift_vs_shuffle_bl"]))
+            ranked_nobl.sort(key=_rank_key)
+            ranked_bl.sort(key=_rank_key)
             if ranked_nobl:
                 winners_per_pool[k] = {
                     "winner": ranked_nobl[0][0],
@@ -906,8 +962,10 @@ def _aggregate(
                 pools = d.get("per_pool", {})
                 if not pools:
                     continue
-                tmp[m] = float(np.mean([s[score_key] for s in pools.values()]))
-            return sorted(tmp.items(), key=lambda kv: kv[1], reverse=True)
+                scores = [s[score_key] for s in pools.values() if s.get(score_key) is not None]
+                if scores:
+                    tmp[m] = float(np.mean(scores))
+            return sorted(tmp.items(), key=lambda kv: (-kv[1], kv[0]))
         ranked_overall = _overall("avg_hits_real")
         ranked_overall_bl = _overall("avg_hits_real_bl")
 

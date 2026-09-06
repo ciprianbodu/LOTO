@@ -67,6 +67,7 @@ uploaded_data/
 *.bak
 *.tmp
 .bench_cache/
+.wf_cache/
 raport_complet.txt
 best_methods.json
 mail_config.json
