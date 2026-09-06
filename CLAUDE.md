@@ -39,7 +39,7 @@ Snapshot verificat la 2026-09-04:
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
 - cache benchmark: `v17`;
-- cache walk-forward: `v22`;
+- cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
 - teste: 33 fisiere `test_*.py`, 517 teste trecute la auditul global.
 
@@ -348,7 +348,7 @@ hash-ul designului si, pentru Joker, decizia Urnei 2.
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
 | benchmark fold | `v17` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v22` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| walk-forward | `v23` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
 | worker pipeline | `v3` | se schimba rezultatul serializat al pipeline-ului |
 
 Un bump WF schimba numele fisierului, dar nu sterge cache-urile vechi. Foloseste
