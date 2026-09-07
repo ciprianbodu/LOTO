@@ -29,11 +29,15 @@ logger = logging.getLogger(__name__)
 _PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
 
 # Metode fără care mecanica deciziei se rupe — le verificăm, nu le impunem tăcut.
-#   • `random`   = baseline STRUCTURAL: decision._windows_method_beats_random()
-#     întoarce (0, 0) dacă rândul `random` lipsește din folds.csv → n_total == 0 →
-#     `continue` pe TOATE metodele → `qualifying` gol → low_confidence pe toate
-#     jocurile. Fără el gate-ul de consistență nu funcționează deloc.
-#     (Rămâne interzis ca scorer de producție: decision.EXCLUDED_FROM_PRODUCTION.)
+#   • `random`   = baseline STRUCTURAL. Pentru cele 4 jocuri cunoscute
+#     (decision.KNOWN_GAME_MAX_NUM), poarta de consistență și lift-ul se judecă
+#     față de rata hipergeometrică EXACTĂ (decision.expected_random_rate), nu mai
+#     depind de rândul `random` din folds.csv — un Re-Bench fără el tot decide
+#     corect pe acele jocuri. Rândul `random` rămâne totuși necesar: e singura
+#     referință pentru un joc NECUNOSCUT (`baseline_source="empirical_random"`,
+#     fallback pe `real_random`) și alimentează `random_empirical_rate`, verificarea
+#     de sanitate afișată lângă rata hipergeometrică. (Rămâne interzis ca scorer
+#     de producție: decision.EXCLUDED_FROM_PRODUCTION.)
 #   • `frequency` = decision.SAFE_FALLBACK_SCORER, folosit pe ramura fără metode
 #     calificate. Baseline DETERMINIST, deci permis în producție (regula de aur 7).
 REQUIRED_METHODS = ("random", "frequency")

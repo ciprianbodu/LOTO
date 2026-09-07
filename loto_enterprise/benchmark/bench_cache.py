@@ -65,6 +65,11 @@ def _resolve_cache_dir() -> Path:
 CACHE_DIR = _resolve_cache_dir()
 CACHE_VERSION = "v17"
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
+# v17: FoldResult scrie tiebreak_kN (fracția blocurilor în care tăietura top-K
+#      cade într-un grup de scoruri egale); decizia exclude metodele cu fracție
+#      ≥ decision.TIEBREAK_MAX_FRACTION ca dependente de tie-break, nu de scor.
+#      Fold-urile v16 nu au coloana → poarta nu se aplică pe folds.csv vechi
+#      (decision.tiebreak_gate_applied = False), nu e o eroare.
 # v16: benchmark-ul respinge scorurile plate/ne-numerice/ne-finite la fel ca
 #      selectorul si engine-ul; fold-urile v15 puteau evalua un tie-break fictiv.
 # v15: FoldResult scrie rate_1plus[_k1] şi Urna 2 intră în benchmark cu

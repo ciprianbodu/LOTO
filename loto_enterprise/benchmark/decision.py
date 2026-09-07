@@ -124,19 +124,24 @@ ENSEMBLE_MAX_CORR = 0.99
 ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 
 # Baseline-uri care NU au voie să devină NICIODATĂ scorer de producție.
-# `random` (methods.py: `np.random.default_rng()` FĂRĂ sămânță) e nedeterminist:
-# două rulări pe aceleași date dau pool-uri diferite => decizia nu e nici
-# reproductibilă, nici auditabilă, iar poziția lui în clasament e pur zgomot
-# (pe folds.csv din 20.07.2026, cu metrica PROPRIE a deciziei — Wilson-lb pe
-# `rate_3plus_k{K}`, pooled pe n_test — `random` urcă până la #6/107 pe
-# loto_5_40 k5, #14/107 pe joker_urna1 k15, #40/107 pe loto_6_49 k20; exact
-# dovada că diferențele dintre metode sunt zgomot, nu semnal. Cifrele se
-# RENUMĂRĂ după fiecare bench, nu se citează din memorie).
+# `random` (methods.py: `np.random.default_rng(seed)`, seed derivat prin
+# blake2b din `draws_2d` + `max_num`) e SEEDAT determinist din istoric: pe
+# ACELAȘI istoric, două rulări dau ACELAȘI pool (necesar ca folds.csv să nu
+# depindă de care realizare a fost cache-uită prima — vezi CACHE_VERSION).
+# Nu asta îl face permis ca scorer: la fiecare extragere nouă, istoricul (deci
+# seed-ul) se schimbă complet, deci pool-ul rămâne la fel de imprevizibil în
+# timp ca înainte de seed — doar reproductibil PE UN SNAPSHOT fix, nu STABIL
+# între snapshot-uri. Poziția lui în clasament e pur zgomot (pe folds.csv din
+# 20.07.2026, cu metrica PROPRIE a deciziei — Wilson-lb pe `rate_3plus_k{K}`,
+# pooled pe n_test — `random` urca până la #6/107 pe loto_5_40 k5, #14/107 pe
+# joker_urna1 k15, #40/107 pe loto_6_49 k20; exact dovada că diferențele dintre
+# metode sunt zgomot, nu semnal. Cifrele se RENUMĂRĂ după fiecare bench, nu se
+# citează din memorie).
 # Rolul lui e DOAR de podea de sanitate în bench ("cât înseamnă pură șansă"),
 # niciodată de generator.
 # `frequency` rămâne permisă ca scorer: e baseline DETERMINIST și SAFE_FALLBACK.
 # `recency` a fost blacklistată și ELIMINATĂ din METHODS (2026-08-25).
-# `random` e EXCLUS din producție (nedeterminist, fără sămânță).
+# `random` e EXCLUS din producție (fără semnal real, seed instabil în timp).
 # (aceleași date → același scor), reproductibile și explicabile pentru
 # utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
 # "numere date cu zarul" nu.
@@ -626,8 +631,8 @@ def decide_optimal_config_for_pool(
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
-    # candidați — ca și restul baseline-urilor nedeterministe (vezi
-    # EXCLUDED_FROM_PRODUCTION): nu au voie să ajungă scorer de producție.
+    # candidați (vezi EXCLUDED_FROM_PRODUCTION, în prezent doar `random`): nu
+    # are voie să ajungă scorer de producție.
     # Plus: sare metodele eliminate din METHODS / tombstone (folds vechi).
     try:
         from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
