@@ -768,6 +768,21 @@ def decide_optimal_config_for_pool(
     incomplete_methods: list[dict] = []
     tiebreak_dependent: list[dict] = []
     tiebreak_gate_applied = tiebreak_col in sub.columns
+    # Metode cu rânduri (real_m non-empty) dar FĂRĂ nicio valoare utilizabilă pe
+    # coloana de rată rezolvată la nivel de cadru (`_frame_rate_col`), deși alte
+    # metode din ACELAȘI (joc, pool) au date pe ea. Înainte, `gate_col is None`
+    # dădea `continue` fără nicio urmă — metoda dispărea din `qualifying`,
+    # `incomplete_methods` și `ranked_methods` deopotrivă, contrazicând regula
+    # „metodele excluse rămân vizibile cu motiv" (CLAUDE.md §5, coerența
+    # output-ului). `_rate_missing_seen` deduplichează între ramura calificată
+    # și cea de fallback, care iterează ambele peste `methods`.
+    rate_data_missing: list[dict] = []
+    _rate_missing_seen: set[str] = set()
+
+    def _flag_rate_missing(m: str) -> None:
+        if _frame_rate_col is not None and m not in _rate_missing_seen:
+            _rate_missing_seen.add(m)
+            rate_data_missing.append({"method": m})
 
     def _complete_windows(m: str, real_m: pd.DataFrame, gate_col: str) -> bool:
         if not _expected_pcts:
@@ -785,7 +800,16 @@ def decide_optimal_config_for_pool(
             return True
         frac = pd.to_numeric(real_m[tiebreak_col], errors="coerce").dropna()
         if frac.empty:
-            return True
+            # Poarta e activă la nivel de cadru (alte metode au coloana), dar
+            # ACEASTĂ metodă n-are nicio valoare `tiebreak_kN` — de regulă
+            # rânduri dintr-un bench mai vechi decât v17, ne-re-rulat de
+            # atunci. Tratăm ca date lipsă, NU ca „poarta nu se aplică":
+            # altfel o metodă lăsată ne-re-benchată ar ocoli PERMANENT
+            # verificarea de dependență de tie-break, exact opusul motivului
+            # pentru care poarta există. `tiebreak_fraction: None` o
+            # deosebește de cazul confirmat (fracție numerică ≥ prag).
+            tiebreak_dependent.append({"method": m, "tiebreak_fraction": None})
+            return False
         f = float(frac.mean())
         if f >= TIEBREAK_MAX_FRACTION:
             tiebreak_dependent.append({"method": m, "tiebreak_fraction": round(f, 3)})
@@ -809,6 +833,7 @@ def decide_optimal_config_for_pool(
         # față de random exact la 3+/4+, adică metrica cerută de utilizator.
         gate_col = _rate_col_for(real_m)
         if gate_col is None:
+            _flag_rate_missing(m)
             continue
         if not _complete_windows(m, real_m, gate_col):
             continue
@@ -864,6 +889,7 @@ def decide_optimal_config_for_pool(
             # doar fiindcă e singura candidată rămasă într-un folds parțial.
             _gc = _rate_col_for(real_m)
             if _gc is None:
+                _flag_rate_missing(m)
                 continue
             # Aceleasi doua porti structurale ca pe ramura calificata: fara ele
             # fallback-ul ar promova exact metodele incomplete/degenerate pe care
@@ -933,6 +959,7 @@ def decide_optimal_config_for_pool(
                 "random_empirical_rate": _random_empirical_rate(),
                 "expected_windows": sorted(_expected_pcts),
                 "incomplete_methods": incomplete_methods,
+                "rate_data_missing": rate_data_missing,
                 "tiebreak_gate_applied": tiebreak_gate_applied,
                 "tiebreak_dependent": tiebreak_dependent,
             }
@@ -1086,6 +1113,9 @@ def decide_optimal_config_for_pool(
         # Ferestrele pe care s-au judecat TOTI candidatii + cine a lipsit.
         "expected_windows": sorted(_expected_pcts),
         "incomplete_methods": incomplete_methods,
+        # Metode cu randuri dar fara nicio valoare pe coloana de rata rezolvata
+        # la nivel de (joc, pool), desi alte metode din acelasi cadru au date.
+        "rate_data_missing": rate_data_missing,
         # Metode a caror selectie top-K a fost dictata de tie-break, nu de scor.
         "tiebreak_gate_applied": tiebreak_gate_applied,
         "tiebreak_dependent": tiebreak_dependent,

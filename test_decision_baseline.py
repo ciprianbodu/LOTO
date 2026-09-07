@@ -7,7 +7,7 @@ import pytest
 
 from loto_enterprise.benchmark import decision, methods, runner
 
-_SYNTH = ["m_alpha", "m_beta", "m_gamma", "m_incomplete", "m_tiebreak", "m_signal"]
+_SYNTH = ["m_alpha", "m_beta", "m_gamma", "m_incomplete", "m_tiebreak", "m_signal", "m_no_rate"]
 
 
 @pytest.fixture(autouse=True)
@@ -95,6 +95,49 @@ def test_tiebreak_dependent_method_is_excluded_only_when_column_exists(monkeypat
     cfg_old = decision.decide_optimal_config_for_pool(df_old, "loto_6_49", 10, 6)
     assert cfg_old["tiebreak_gate_applied"] is False
     assert cfg_old["scorer"] == "m_tiebreak"
+
+
+def test_tiebreak_unknown_method_is_excluded_not_silently_passed(monkeypatch):
+    """O metoda cu rata completa dar FARA nicio valoare tiebreak_k10 (randuri
+    dintr-un bench mai vechi decat v17, ne-re-rulat de atunci) nu mai trece
+    automat poarta doar fiindca ii lipsesc datele -- e exclusa si raportata,
+    la fel ca o metoda confirmat dependenta de tie-break. Altfel o metoda
+    lasata ne-re-benchata ar ocoli PERMANENT verificarea."""
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    base = decision.expected_random_rate(49, 6, 10, 3)
+    rows = []
+    for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_row("loto_6_49", "random", pct, n, base, tiebreak_k10=0.0))
+        rows.append(_row("loto_6_49", "m_alpha", pct, n, base + 0.01, tiebreak_k10=0.2))
+        # m_beta: rata mult mai mare, dar NICIO valoare tiebreak_k10 (coloana
+        # ramane NaN pentru randurile ei -- nu e trecuta in **extra).
+        rows.append(_row("loto_6_49", "m_beta", pct, n, base + 0.50))
+    cfg = decision.decide_optimal_config_for_pool(pd.DataFrame(rows), "loto_6_49", 10, 6)
+    assert cfg["tiebreak_gate_applied"] is True
+    # Daca m_beta ar fi trecut poarta, ar fi castigat cu o rata mult mai mare
+    # decat m_alpha -- scorer-ul ramas confirma ca a fost exclusa, nu promovata.
+    assert cfg["scorer"] == "m_alpha"
+    assert {"method": "m_beta", "tiebreak_fraction": None} in cfg["tiebreak_dependent"]
+    assert "m_beta" not in cfg["ranked_methods"]
+
+
+def test_method_with_no_usable_rate_data_is_reported_not_vanished(monkeypatch):
+    """O metoda cu randuri in folds.csv dar fara nicio valoare pe coloana de
+    rata rezolvata la nivel de (joc, pool) nu mai dispare tacut din toate
+    iesirile -- apare explicit in rate_data_missing, nu doar in log."""
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    base = decision.expected_random_rate(49, 6, 10, 3)
+    rows = []
+    for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_row("loto_6_49", "random", pct, n, base))
+        rows.append(_row("loto_6_49", "m_alpha", pct, n, base + 0.01))
+        # m_no_rate: rata scrisa pe o coloana NEUTILIZATA de decizie -- rezultat
+        # echivalent cu "nicio valoare pe rate_3plus_k10" pentru aceasta metoda.
+        rows.append(_row("loto_6_49", "m_no_rate", pct, n, base + 0.99, rate_col="junk_col_unused"))
+    cfg = decision.decide_optimal_config_for_pool(pd.DataFrame(rows), "loto_6_49", 10, 6)
+    assert cfg["scorer"] == "m_alpha"
+    assert cfg["rate_data_missing"] == [{"method": "m_no_rate"}]
+    assert "m_no_rate" not in cfg["ranked_methods"]
 
 
 def test_exact_ties_are_broken_by_name_regardless_of_row_order(monkeypatch):
