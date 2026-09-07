@@ -156,7 +156,7 @@ def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
             continue
         try:
             wt = float(item.get("weight", 0) or 0)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             wt = 0.0
         if wt <= 0:
             continue
@@ -1048,7 +1048,7 @@ def recommend_optimal_config(
         else:
             try:
                 hit_target = int(entry.get("hit_target", 3))
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 hit_target = 3
             if hit_target not in (3, 4):
                 hit_target = 3
@@ -1068,6 +1068,11 @@ def recommend_optimal_config(
             "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
             "ensemble_dropped_redundant": entry.get("ensemble_dropped_redundant") or [],
             "fallback": salvaged,
+            # Aditive (decision.py) — metode excluse cu motiv, vizibile UI-ului
+            # in loc sa dispara tacut intre best_methods.json si audit_output.py.
+            "rate_data_missing": entry.get("rate_data_missing") or [],
+            "tiebreak_dependent": entry.get("tiebreak_dependent") or [],
+            "incomplete_methods": entry.get("incomplete_methods") or [],
         }
 
     scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
@@ -1089,6 +1094,9 @@ def recommend_optimal_config(
         "low_confidence": True,
         "ensemble_dropped_redundant": [],
         "fallback": True,
+        "rate_data_missing": [],
+        "tiebreak_dependent": [],
+        "incomplete_methods": [],
     }
 
 

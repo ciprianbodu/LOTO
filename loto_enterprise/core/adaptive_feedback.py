@@ -287,12 +287,6 @@ def record_predicted_pool(
     save_adaptive_state(game_type, pool_size, state)
 
 
-def get_active_mode(game_type: str, pool_size: int) -> str:
-    """Returnează modul activ ("normal" | "reset") pentru engine-ul TimesFM."""
-    state = load_adaptive_state(game_type, pool_size)
-    return state.get("regime_state", {}).get("active_mode", "normal")
-
-
 def compute_temp_blacklist(
     last_pool: list[int],
     last_event: str | None,

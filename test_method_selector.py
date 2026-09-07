@@ -399,3 +399,47 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
     assert "random" not in names
     assert names == ["frequency", "autocorr", "pair_affinity"]
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
+
+
+def test_recommend_optimal_config_surfaces_decision_transparency_fields(temp_config):
+    """`rate_data_missing`/`tiebreak_dependent`/`incomplete_methods` sunt scrise
+    de decision.py in best_methods.json, dar `recommend_optimal_config` e o
+    lista ALBA de chei — un camp nou acolo dar absent aici ramanea invizibil
+    pentru UI, desi exista in fisier (vezi audit_output.py, care le citeste
+    direct din decizie, nu prin acest API)."""
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "rate_data_missing": [{"method": "m_no_rate"}],
+                        "tiebreak_dependent": [{"method": "m_tiebreak", "tiebreak_fraction": None}],
+                        "incomplete_methods": [{"method": "m_incomplete", "missing_windows": [60]}],
+                    }
+                }
+            }
+        }
+    )
+    out = ms.recommend_optimal_config("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert out["rate_data_missing"] == [{"method": "m_no_rate"}]
+    assert out["tiebreak_dependent"] == [{"method": "m_tiebreak", "tiebreak_fraction": None}]
+    assert out["incomplete_methods"] == [{"method": "m_incomplete", "missing_windows": [60]}]
+
+
+def test_recommend_optimal_config_transparency_fields_default_empty(temp_config):
+    """Fara aceste chei in JSON (folds vechi) sau fara nicio intrare deloc
+    (fallback) -> liste goale, nu KeyError/None."""
+    cfg_path = temp_config({"loto_6_49": {"auto_pilot_per_pool": {"k10": {"scorer": "frequency"}}}})
+    out = ms.recommend_optimal_config("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert out["rate_data_missing"] == []
+    assert out["tiebreak_dependent"] == []
+    assert out["incomplete_methods"] == []
+
+    cfg_path_empty = temp_config({})
+    out_fallback = ms.recommend_optimal_config(
+        "loto_6_49", pool_size=10, config_path=cfg_path_empty
+    )
+    assert out_fallback["rate_data_missing"] == []
+    assert out_fallback["tiebreak_dependent"] == []
+    assert out_fallback["incomplete_methods"] == []

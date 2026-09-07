@@ -314,3 +314,18 @@ def test_complete_system_tickets_are_sorted_ascending():
     assert len(capped) == 3 and cov_capped < 100.0
     assert all(t == sorted(t) for t in capped)
     assert capped[0] == sorted(ranking[:5])
+
+
+@pytest.mark.parametrize("method_name", sorted(WHEEL_METHODS))
+def test_direct_call_with_max_variants_never_drops_a_pool_number(method_name):
+    """Fiecare algoritm din WHEEL_METHODS, apelat DIRECT (nu prin generate_wheel)
+    cu un buget care trunchiază, trebuia să garanteze acoperirea pool-ului pe
+    bilete — doar `generate_wheel` aplica `ensure_pool_numbers_on_tickets`, deci
+    un apel direct (ca cel de mai jos) putea scăpa numere slabe complet de pe
+    bilete. Pool mare + max_variants mic garantează trunchiere efectivă."""
+    fn = WHEEL_METHODS[method_name]
+    pool = list(range(1, 13))  # 12 numere
+    wheel, _coverage = fn(pool, pick=5, guarantee=4, max_variants=3)
+    on_tickets = {n for ticket in wheel for n in ticket}
+    missing = set(pool) - on_tickets
+    assert not missing, f"{method_name}: numerele {missing} nu apar pe niciun bilet"

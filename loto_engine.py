@@ -417,7 +417,7 @@ class LotoEngine:
                 if c in row and pd.notna(row[c]):
                     try:
                         nums.append(int(row[c]))
-                    except ValueError, TypeError:
+                    except (ValueError, TypeError):
                         continue
             return nums if nums else None
         except Exception:
@@ -694,7 +694,7 @@ class LotoEngine:
         n = int(n_draws or 0)
         try:
             f = float(factor)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             f = 0.5
         if n <= 0 or not scores or draws_2d is None or len(draws_2d) == 0 or f >= 1.0:
             return dict(scores), {}
@@ -783,7 +783,7 @@ class LotoEngine:
         # Condiția lotto design: în [guarantee, draw_n]; lipsă/0 = cover clasic.
         try:
             _wc = int(wheel_condition) if wheel_condition is not None else 0
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _wc = 0
         if _wc <= 0:
             _wc = int(guarantee)
@@ -1354,8 +1354,6 @@ class LotoEngine:
                     "streak_zero": summary.get("streak_zero"),
                     "rolling_avg": summary.get("rolling_avg"),
                     "baseline": round(summary.get("baseline", 0.0), 3),
-                    "boosts": summary.get("boosts", []),
-                    "penalties": summary.get("penalties", []),
                     "missed": (adaptive_info.get("missed") if adaptive_info else []),
                     "false_positives": (
                         adaptive_info.get("false_positives") if adaptive_info else []

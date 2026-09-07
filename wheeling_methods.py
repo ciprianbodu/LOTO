@@ -358,7 +358,13 @@ def wheel_ilp(
             )
         if max_variants > 0 and len(chosen) > max_variants:
             chosen = _order_by_scores(chosen, scores)[:max_variants]
-        return _order_by_scores(chosen, scores), _coverage_pct(chosen, pool, guarantee)
+        ordered = _order_by_scores(chosen, scores)
+        if max_variants > 0:
+            # Trunchierea la buget poate scoate numere slabe complet de pe
+            # bilete — completăm ca la `generate_wheel`, ca proprietatea să
+            # fie garantată și la apel direct, nu doar prin dispatcher.
+            ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+        return ordered, _coverage_pct(ordered, pool, guarantee)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WHEEL-ILP] eșec (%s) → greedy", exc)
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -469,7 +475,10 @@ def wheel_annealing(
     if max_variants > 0 and len(wheel) > max_variants:
         wheel = _order_by_scores(wheel, scores)[:max_variants]
     logger.info("[WHEEL-SA] %d bilete (din %d greedy)", len(wheel), len(base))
-    return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
+    ordered = _order_by_scores(wheel, scores)
+    if max_variants > 0:
+        ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+    return ordered, _coverage_pct(ordered, pool, guarantee)
 
 
 # ===========================================================================
@@ -578,7 +587,10 @@ def wheel_genetic(
             len(wheel),
             best_fit,
         )
-        return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
+        ordered = _order_by_scores(wheel, scores)
+        if max_variants > 0:
+            ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+        return ordered, _coverage_pct(ordered, pool, guarantee)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WHEEL-GA] eșec (%s) → greedy", exc)
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -732,9 +744,10 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                     wheel = [sorted(int(x) for x in t) for t in _gw]
                 if max_variants > 0 and len(wheel) > max_variants:
                     wheel = _order_by_scores(wheel, scores)[:max_variants]
-                return _order_by_scores(wheel, scores), _coverage_pct(
-                    wheel, pool, guarantee
-                )
+                ordered = _order_by_scores(wheel, scores)
+                if max_variants > 0:
+                    ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+                return ordered, _coverage_pct(ordered, pool, guarantee)
     # fără fișier → încearcă ILP exact (mic), altfel greedy
     logger.info(
         "[WHEEL-LaJolla] fără design local pt C(%d,%d,%d) → ILP/greedy",
