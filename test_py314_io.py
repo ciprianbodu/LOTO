@@ -1,5 +1,6 @@
 """Teste pentru py314_io.py — pickle_store_path() scria neatomic; acum
 delega la pickle_store_path_atomic (tmp unic + fsync + os.replace)."""
+
 from __future__ import annotations
 
 from loto_enterprise.core.py314_io import (

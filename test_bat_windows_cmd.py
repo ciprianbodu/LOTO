@@ -18,6 +18,7 @@ Cauze:
 Nu putem rula cmd.exe în containerul Linux; testăm contractul care previne
 regresia: .gitattributes + CRLF + echo fără paranteze + fără `echo.`.
 """
+
 from __future__ import annotations
 
 import re
@@ -94,8 +95,7 @@ def test_bat_echo_has_no_dot_blank_and_no_parentheses():
     )
     assert not offenders_paren, (
         "scoate parantezele rotunde din echo — în bloc if ( ) CMD le tratează "
-        "ca delimitatori de bloc, chiar și cu ^ :\n"
-        + "\n".join(offenders_paren)
+        "ca delimitatori de bloc, chiar și cu ^ :\n" + "\n".join(offenders_paren)
     )
 
 
@@ -262,7 +262,7 @@ def test_updates_cannot_treat_two_missing_versions_as_success():
 
 def test_start_requires_prepared_venv_instead_of_creating_an_empty_one():
     text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
-    verify = text[text.index("\n:verify_phase"):text.index("\n:launch_phase")]
+    verify = text[text.index("\n:verify_phase") : text.index("\n:launch_phase")]
     assert "-m venv" not in verify
     assert "ACTUALIZARI.bat" in verify
 
@@ -277,7 +277,7 @@ def test_startup_log_uses_external_runtime_dir():
 
 def test_start_stops_when_queue_reset_fails():
     text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
-    launch = text[text.index("\n:launch_phase"):text.index("\n:push_istoric")]
+    launch = text[text.index("\n:launch_phase") : text.index("\n:push_istoric")]
     reset_pos = launch.index('reset_jobs.py" --force')
     failure_guard = launch.index("if errorlevel 1", reset_pos)
     worker_pos = launch.index('start "LOTO WORKER"')
@@ -295,7 +295,8 @@ def test_updates_integrity_check_matches_cpu_requirements():
     """Updater-ul nu mai verifică dependențe eliminate precum numba/streamlit."""
     text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
     active = "\n".join(
-        line for line in text.splitlines()
+        line
+        for line in text.splitlines()
         if line.strip() and not line.lstrip().upper().startswith("REM")
     ).lower()
     assert "import numpy,pandas,scipy,sklearn,statsmodels,nicegui" in active
@@ -307,7 +308,9 @@ def test_updates_migrates_wf_cache_out_of_onedrive():
     text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
     assert "migrate_legacy_wf_cache" in text
     assert "purge_stale_wf_cache(dry_run=False)" in text
-    assert text.index("migrate_legacy_wf_cache") < text.index("purge_stale_wf_cache(dry_run=False)")
+    assert text.index("migrate_legacy_wf_cache") < text.index(
+        "purge_stale_wf_cache(dry_run=False)"
+    )
 
 
 def test_python_version_check_has_no_stale_patch_constant():
@@ -327,16 +330,21 @@ def test_self_updating_launchers_sync_from_immutable_temp_copy(launcher):
     bootstrap = text[bootstrap_label:post_label]
     post = text[post_label:main_label]
 
-    assert f'copy /Y "%~f0" "%BOOT_DIR%\\{launcher}" >nul || goto :bootstrap_failed' in normal
+    assert (
+        f'copy /Y "%~f0" "%BOOT_DIR%\\{launcher}" >nul || goto :bootstrap_failed'
+        in normal
+    )
     assert (
         'copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\\loto_git_sync.bat" '
-        '>nul || goto :bootstrap_failed'
+        ">nul || goto :bootstrap_failed"
     ) in normal
     transfer = f'"%BOOT_DIR%\\{launcher}" --bootstrap-sync'
     assert transfer in normal
     assert f"call {transfer}".lower() not in normal.lower()
 
-    assert 'call "%BOOT_DIR%\\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"' in bootstrap
+    assert (
+        'call "%BOOT_DIR%\\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"' in bootstrap
+    )
     resume = f'"%PROJECT_DIR%{launcher}" --post-sync'
     assert resume in bootstrap
     assert f"call {resume}".lower() not in bootstrap.lower()
@@ -346,17 +354,17 @@ def test_self_updating_launchers_sync_from_immutable_temp_copy(launcher):
 def test_forced_sync_preserves_ahead_commit_and_tracked_changes():
     """Stash-ul singur nu salvează commit-ul local `ahead`; trebuie branch backup."""
     text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
-    force = text[text.index(":force_sync"):text.index(":push_istoric")]
+    force = text[text.index(":force_sync") : text.index(":push_istoric")]
 
-    assert 'backup/auto-sync-' in force
+    assert "backup/auto-sync-" in force
     assert 'git branch "%_BACKUP_BRANCH%" HEAD' in force
     assert 'git stash push -m "auto-backup before forced sync"' in force
     assert force.index('git branch "%_BACKUP_BRANCH%" HEAD') < force.index(
         "git reset --hard origin/main"
     )
-    assert force.index('git stash push -m "auto-backup before forced sync"') < force.index(
-        "git reset --hard origin/main"
-    )
+    assert force.index(
+        'git stash push -m "auto-backup before forced sync"'
+    ) < force.index("git reset --hard origin/main")
 
 
 def test_temp_git_helper_accepts_explicit_repository_root():
@@ -372,7 +380,7 @@ def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
     pe Windows uciderea părintelui NU omoară descendenții.
     """
     text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
-    launch = text[text.index("\n:launch_phase"):text.index("\n:push_istoric")]
+    launch = text[text.index("\n:launch_phase") : text.index("\n:push_istoric")]
     assert "cleanup_old_processes.py" in launch
     assert "--venv" in launch
     assert "CommandLine -like '*%~dp0*'" not in launch

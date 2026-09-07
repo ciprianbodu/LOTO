@@ -1,5 +1,6 @@
 """Teste pentru prune_methods.py — scrie in disabled_methods.json, merge-only
 si ireversibil (§4.3)."""
+
 from __future__ import annotations
 
 import json
@@ -17,18 +18,22 @@ def test_method_score_averages_across_rows_not_global_max():
     dintr-un joc/fereastra), ci media maximelor PE RAND (peste jocuri/ferestre).
     Randul 1: cel mai bun pool e 0.30. Randul 2: cel mai bun pool e 0.10.
     Media asteptata: 0.20 — NU 0.30 (vechiul comportament, nanmax global)."""
-    sub = pd.DataFrame({
-        "rate_4plus_k11": [0.05, 0.10],
-        "rate_4plus_k16": [0.30, 0.02],
-    })
+    sub = pd.DataFrame(
+        {
+            "rate_4plus_k11": [0.05, 0.10],
+            "rate_4plus_k16": [0.30, 0.02],
+        }
+    )
     assert pm._method_score(sub) == pytest.approx(0.20)
 
 
 def test_method_score_ignores_nan_within_a_row():
-    sub = pd.DataFrame({
-        "rate_4plus_k11": [np.nan, 0.10],
-        "rate_4plus_k16": [0.30, np.nan],
-    })
+    sub = pd.DataFrame(
+        {
+            "rate_4plus_k11": [np.nan, 0.10],
+            "rate_4plus_k16": [0.30, np.nan],
+        }
+    )
     # rand 1: doar k16=0.30 valid -> max 0.30. rand 2: doar k11=0.10 -> max 0.10.
     assert pm._method_score(sub) == pytest.approx(0.20)
 
@@ -46,8 +51,12 @@ def test_method_score_empty_returns_zero():
 def _write_folds(path, games):
     rows = []
     for g in games:
-        rows.append({"method": "m1", "game": g, "is_random": False, "rate_4plus_k11": 0.15})
-        rows.append({"method": "m2", "game": g, "is_random": False, "rate_4plus_k11": 0.05})
+        rows.append(
+            {"method": "m1", "game": g, "is_random": False, "rate_4plus_k11": 0.15}
+        )
+        rows.append(
+            {"method": "m2", "game": g, "is_random": False, "rate_4plus_k11": 0.05}
+        )
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
@@ -61,11 +70,16 @@ def test_apply_refuses_on_incomplete_games_without_force(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(
         "loto_enterprise.benchmark.runner.discover_games",
-        lambda: [_FakeGame(k) for k in ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")],
+        lambda: [
+            _FakeGame(k)
+            for k in ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
+        ],
     )
     disabled_path = tmp_path / "disabled_methods.json"
     monkeypatch.setattr(disabled_mod, "_PATH", disabled_path)
-    monkeypatch.setattr("sys.argv", ["prune_methods.py", "--folds", str(folds), "--apply"])
+    monkeypatch.setattr(
+        "sys.argv", ["prune_methods.py", "--folds", str(folds), "--apply"]
+    )
 
     rc = pm.main()
     assert rc == 2
@@ -84,7 +98,10 @@ def test_apply_proceeds_with_force_incomplete(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "loto_enterprise.benchmark.runner.discover_games",
-        lambda: [_FakeGame(k) for k in ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")],
+        lambda: [
+            _FakeGame(k)
+            for k in ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
+        ],
     )
     disabled_path = tmp_path / "disabled_methods.json"
     monkeypatch.setattr(disabled_mod, "_PATH", disabled_path)
@@ -115,7 +132,9 @@ def test_apply_proceeds_when_all_games_present(tmp_path, monkeypatch):
     )
     disabled_path = tmp_path / "disabled_methods.json"
     monkeypatch.setattr(disabled_mod, "_PATH", disabled_path)
-    monkeypatch.setattr("sys.argv", ["prune_methods.py", "--folds", str(folds), "--apply"])
+    monkeypatch.setattr(
+        "sys.argv", ["prune_methods.py", "--folds", str(folds), "--apply"]
+    )
 
     rc = pm.main()
     assert rc == 0

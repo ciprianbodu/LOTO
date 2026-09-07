@@ -9,6 +9,7 @@ rezultat (`n - 80`) putea fi 0 sau negativ, iar fold-ul NU era marcat `failed` �
 `_evaluate_fold` primea n_test<=0, bucla nu executa nimic, iar rezultatul era o
 rată fabricată 0.0 tratată ca fereastră completă la poarta de consistență 60%.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -35,13 +36,22 @@ def test_pct100_window_skipped_on_short_history_not_fabricated(tmp_path):
     csv_path = tmp_path / "loto_6_49.csv"
     _tiny_649_csv(csv_path, n_rows=50)
     game = runner.GameDef(
-        key="loto_6_49", label="Loto 6/49", csv_path=str(csv_path),
-        cols=["n1", "n2", "n3", "n4", "n5", "n6"], max_num=49, draw_n=6, pool_extra=0,
+        key="loto_6_49",
+        label="Loto 6/49",
+        csv_path=str(csv_path),
+        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
+        max_num=49,
+        draw_n=6,
+        pool_extra=0,
     )
     out_dir = tmp_path / "bench_out"
     runner.run_benchmark(
-        games=[game], methods=["frequency"], percentiles=[100],
-        use_cache=False, shuffled_control=False, out_dir=str(out_dir),
+        games=[game],
+        methods=["frequency"],
+        percentiles=[100],
+        use_cache=False,
+        shuffled_control=False,
+        out_dir=str(out_dir),
     )
     folds_path = out_dir / "folds.csv"
     # Cu zero fold-uri, run_benchmark nici nu scrie folds.csv — la fel de valid
@@ -60,13 +70,22 @@ def test_pct100_window_runs_on_sufficient_history(tmp_path):
     csv_path = tmp_path / "loto_6_49.csv"
     _tiny_649_csv(csv_path, n_rows=90)
     game = runner.GameDef(
-        key="loto_6_49", label="Loto 6/49", csv_path=str(csv_path),
-        cols=["n1", "n2", "n3", "n4", "n5", "n6"], max_num=49, draw_n=6, pool_extra=0,
+        key="loto_6_49",
+        label="Loto 6/49",
+        csv_path=str(csv_path),
+        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
+        max_num=49,
+        draw_n=6,
+        pool_extra=0,
     )
     out_dir = tmp_path / "bench_out"
     runner.run_benchmark(
-        games=[game], methods=["frequency"], percentiles=[100],
-        use_cache=False, shuffled_control=False, out_dir=str(out_dir),
+        games=[game],
+        methods=["frequency"],
+        percentiles=[100],
+        use_cache=False,
+        shuffled_control=False,
+        out_dir=str(out_dir),
     )
     folds = pd.read_csv(out_dir / "folds.csv")
     assert len(folds) == 1

@@ -4,6 +4,7 @@ Extrase din `walk_forward_adapter` ca să fie testabile în mediul container
 fără sklearn/pandas, și ca serializarea ensemble-ului să aibă o singură
 implementare.
 """
+
 from __future__ import annotations
 
 
@@ -20,7 +21,9 @@ def ensemble_sig(ensemble) -> str:
         parts = []
         for item in ensemble:
             if isinstance(item, dict):
-                parts.append(f"{item.get('method')}:{float(item.get('weight', 0) or 0).hex()}")
+                parts.append(
+                    f"{item.get('method')}:{float(item.get('weight', 0) or 0).hex()}"
+                )
             else:
                 parts.append(str(item))
         return ",".join(sorted(parts))
@@ -33,5 +36,5 @@ def lookback_pct(lookback_percent) -> int:
         return 100
     try:
         return int(round(float(lookback_percent)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 100

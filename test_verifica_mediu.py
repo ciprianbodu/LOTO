@@ -1,17 +1,22 @@
 """Teste pentru verifica_mediu.py — main() ieșea mereu cu exit 0, chiar și
 cu `_ISTORIC/` lipsa; ACTUALIZARI.bat citea asta ca "mediu OK"."""
+
 from __future__ import annotations
 
 import verifica_mediu as vm
 
 
-def test_check_bench_assets_returns_false_when_istoric_missing(tmp_path, monkeypatch, capsys):
+def test_check_bench_assets_returns_false_when_istoric_missing(
+    tmp_path, monkeypatch, capsys
+):
     monkeypatch.chdir(tmp_path)
     ok = vm.check_bench_assets()
     assert ok is False
 
 
-def test_check_bench_assets_returns_true_when_istoric_present(tmp_path, monkeypatch, capsys):
+def test_check_bench_assets_returns_true_when_istoric_present(
+    tmp_path, monkeypatch, capsys
+):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "_ISTORIC").mkdir()
     ok = vm.check_bench_assets()

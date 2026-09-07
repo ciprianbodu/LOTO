@@ -1,6 +1,7 @@
 """Teste pentru analiza_patterns_last10.py — K se detecta din coloanele
 completate, nu din geometria reala; loto_5_40.csv (6 coloane) rula gresit
 ca "6/40". Fix: geometria se recunoaste din numele fisierului."""
+
 from __future__ import annotations
 
 import re
@@ -16,7 +17,9 @@ SCRIPT = Path(__file__).resolve().parent / "analiza_patterns_last10.py"
 def _run(csv_path: Path) -> str:
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), str(csv_path), "20"],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
     return proc.stdout
@@ -35,11 +38,17 @@ def _write_5_40_csv(path: Path, n_rows: int = 60) -> None:
     rows = []
     for i in range(n_rows):
         base = (i % 35) + 1
-        rows.append({
-            "date": f"01-01-{2000 + i}",
-            "n1": base, "n2": base + 1, "n3": base + 2,
-            "n4": base + 3, "n5": base + 4, "n6": base + 5,
-        })
+        rows.append(
+            {
+                "date": f"01-01-{2000 + i}",
+                "n1": base,
+                "n2": base + 1,
+                "n3": base + 2,
+                "n4": base + 3,
+                "n5": base + 4,
+                "n6": base + 5,
+            }
+        )
     pd.DataFrame(rows).to_csv(path, index=False)
 
 

@@ -1,4 +1,5 @@
 """Walk-forward cache key must change when history outside the recent tail changes."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -55,7 +56,9 @@ def test_ensemble_sig_distinguishes_weights_beyond_four_decimals():
     assert ensemble_sig(a_dict) != ensemble_sig(b_dict)
 
     # Aceeasi pondere exacta -> aceeasi semnatura (determinist, indiferent de tip).
-    assert ensemble_sig([{"method": "m1", "weight": 0.5}]) == ensemble_sig([{"method": "m1", "weight": 0.5}])
+    assert ensemble_sig([{"method": "m1", "weight": 0.5}]) == ensemble_sig(
+        [{"method": "m1", "weight": 0.5}]
+    )
 
 
 def test_joker_wf_signature_includes_urna2_decision(monkeypatch):
@@ -64,17 +67,26 @@ def test_joker_wf_signature_includes_urna2_decision(monkeypatch):
     import loto_enterprise.core.walk_forward_adapter as wf
 
     decisions = {
-        "joker_urna1": {"scorer": "frequency", "sim_depth_pct": 40,
-                         "ensemble": [{"method": "frequency", "weight": 1.0}]},
-        "joker_urna2": {"scorer": "frequency", "hit_target": 1,
-                         "ensemble": [{"method": "frequency", "weight": 1.0}]},
+        "joker_urna1": {
+            "scorer": "frequency",
+            "sim_depth_pct": 40,
+            "ensemble": [{"method": "frequency", "weight": 1.0}],
+        },
+        "joker_urna2": {
+            "scorer": "frequency",
+            "hit_target": 1,
+            "ensemble": [{"method": "frequency", "weight": 1.0}],
+        },
     }
-    monkeypatch.setattr(selector, "recommend_optimal_config", lambda key, _pool: decisions[key])
+    monkeypatch.setattr(
+        selector, "recommend_optimal_config", lambda key, _pool: decisions[key]
+    )
     monkeypatch.setattr(wf, "_wheel_sig", lambda *_args: "wheel")
 
     before = wf._decision_sig("joker", 10)
     decisions["joker_urna2"] = {
-        "scorer": "autocorr", "hit_target": 1,
+        "scorer": "autocorr",
+        "hit_target": 1,
         "ensemble": [{"method": "autocorr", "weight": 1.0}],
     }
     after = wf._decision_sig("joker", 10)

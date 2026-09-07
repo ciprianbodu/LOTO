@@ -56,7 +56,9 @@ def _load_config(path: str | None = None) -> dict:
     _CONFIG_PATH_USED = cfg_path
     _CONFIG_MTIME = mtime
     if not cfg_path.exists():
-        logger.warning("[method_selector] %s missing — using frequency baseline", cfg_path)
+        logger.warning(
+            "[method_selector] %s missing — using frequency baseline", cfg_path
+        )
         _CONFIG = {"games": {}}
         return _CONFIG
     try:
@@ -77,6 +79,7 @@ def _production_forbidden() -> frozenset[str]:
     forbidden: set[str] = {"random"}
     try:
         from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+
         forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
     except Exception as exc:  # noqa: BLE001
         # "random" (hardcodat mai sus) tot blochează — dar cei 74 de tombstone din
@@ -85,10 +88,14 @@ def _production_forbidden() -> frozenset[str]:
         logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)
     try:
         from loto_enterprise.benchmark.disabled import load_disabled
+
         forbidden |= {str(m) for m in load_disabled()}
     except Exception as exc:  # noqa: BLE001
-        logger.error("[method_selector] disabled_methods.json indisponibil — "
-                     "tombstone-urile NU sunt aplicate în această revenire: %s", exc)
+        logger.error(
+            "[method_selector] disabled_methods.json indisponibil — "
+            "tombstone-urile NU sunt aplicate în această revenire: %s",
+            exc,
+        )
     return frozenset(forbidden)
 
 
@@ -103,6 +110,7 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
         return None
     try:
         from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
+
         name = resolve_method_name(str(name))
     except Exception:  # noqa: BLE001
         name = str(name)
@@ -110,13 +118,15 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
     if name in _production_forbidden():
         logger.warning(
             "[method_selector] %s %r interzis în producție (random/blacklist) — skip",
-            context, name,
+            context,
+            name,
         )
         return None
     if name not in METHODS:
         logger.warning(
             "[method_selector] %s %r necunoscut (eliminat din METHODS) — skip",
-            context, name,
+            context,
+            name,
         )
         return None
     return name
@@ -146,14 +156,16 @@ def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
             continue
         try:
             wt = float(item.get("weight", 0) or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             wt = 0.0
         if wt <= 0:
             continue
         clean_ens.append({"method": nm, "weight": wt})
     if clean_ens:
         tw = sum(e["weight"] for e in clean_ens) or 1.0
-        clean_ens = [{"method": e["method"], "weight": e["weight"] / tw} for e in clean_ens]
+        clean_ens = [
+            {"method": e["method"], "weight": e["weight"] / tw} for e in clean_ens
+        ]
 
     if scorer is None and clean_ens:
         scorer = clean_ens[0]["method"]
@@ -174,7 +186,8 @@ def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
     if isinstance(entry, dict) and (entry.get("scorer") or entry.get("ensemble")):
         return entry
     avail = sorted(
-        int(k[1:]) for k in apm
+        int(k[1:])
+        for k in apm
         if isinstance(k, str) and k.startswith("k") and k[1:].isdigit()
     )
     if not avail:
@@ -184,7 +197,8 @@ def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
     if isinstance(cand, dict) and (cand.get("scorer") or cand.get("ensemble")):
         logger.info(
             "[method_selector] pool k%d absent → folosesc k%d (cel mai apropiat decis)",
-            int(pool_size), nearest,
+            int(pool_size),
+            nearest,
         )
         return cand
     return entry if isinstance(entry, dict) else {}
@@ -211,7 +225,9 @@ def get_winner_name(
     # Înainte de primul Re-Bench compatibil, Urna 2 nu are încă o decizie
     # stocată. Frequency rămâne fallback deterministic, fără warning recurent.
     if game_key == "joker_urna2" and not g:
-        logger.info("[method_selector] joker_urna2 fără benchmark top-1 — frequency fallback")
+        logger.info(
+            "[method_selector] joker_urna2 fără benchmark top-1 — frequency fallback"
+        )
         return "frequency"
 
     def _ok(name) -> str | None:
@@ -243,7 +259,9 @@ def get_winner_name(
             n = _ok(g[fld])
             if n:
                 return n
-    logger.warning("[method_selector] no winner for %s — defaulting to frequency", game_key)
+    logger.warning(
+        "[method_selector] no winner for %s — defaulting to frequency", game_key
+    )
     return "frequency"
 
 
@@ -309,15 +327,20 @@ def get_scorer_for_game(
     name = resolve_method_name(name)
     if name not in METHODS or name in _production_forbidden():
         if name in _production_forbidden():
-            logger.warning("[method_selector] scorer %r interzis — falling back to frequency", name)
+            logger.warning(
+                "[method_selector] scorer %r interzis — falling back to frequency", name
+            )
         else:
-            logger.warning("[method_selector] unknown winner %r, falling back to frequency", name)
+            logger.warning(
+                "[method_selector] unknown winner %r, falling back to frequency", name
+            )
         name = "frequency"
     fn, _family, _train, _notes = METHODS[name]
     if getattr(fn, "_unavailable_reason", None):
         logger.warning(
             "[method_selector] winner %r unavailable (%s) — falling back to frequency",
-            name, fn._unavailable_reason,
+            name,
+            fn._unavailable_reason,
         )
         fn = METHODS["frequency"][0]
         name = "frequency"
@@ -347,6 +370,7 @@ def get_ensemble_for_game(
     (get_winner_name + get_scorer_for_game, weight=1.0) — identic cu
     comportamentul dinaintea ensemble-ului.
     """
+
     def _single_fallback() -> list[tuple[str, Callable, float]]:
         # Numele și callable-ul trebuie să coincidă (ambele după sanitizare).
         name = get_winner_name(game_key, pool_size, config_path)
@@ -383,19 +407,26 @@ def get_ensemble_for_game(
         if fn is None:
             meta = METHODS.get(name)
             if meta is None:
-                logger.warning("[method_selector] ensemble member %r unknown — skip", name)
+                logger.warning(
+                    "[method_selector] ensemble member %r unknown — skip", name
+                )
                 continue
             fn = meta[0]
             if getattr(fn, "_unavailable_reason", None):
-                logger.warning("[method_selector] ensemble member %r unavailable (%s) — skip",
-                               name, fn._unavailable_reason)
+                logger.warning(
+                    "[method_selector] ensemble member %r unavailable (%s) — skip",
+                    name,
+                    fn._unavailable_reason,
+                )
                 continue
             _CACHE[cache_key] = fn
         out.append((name, fn, weight))
 
     if not out:
-        logger.warning("[method_selector] toate metodele din ensemble %s indisponibile — fallback winner unic",
-                        game_key)
+        logger.warning(
+            "[method_selector] toate metodele din ensemble %s indisponibile — fallback winner unic",
+            game_key,
+        )
         return _single_fallback()
 
     total_w = sum(w for _, _, w in out)
@@ -449,9 +480,13 @@ def _get_spearman() -> Callable | None:
         _SPEARMAN_TRIED = True
         try:
             from scipy.stats import spearmanr
+
             _SPEARMAN_FN = spearmanr
         except Exception as exc:
-            logger.debug("[method_selector] scipy.stats indisponibil (%s) — Spearman pe numpy", exc)
+            logger.debug(
+                "[method_selector] scipy.stats indisponibil (%s) — Spearman pe numpy",
+                exc,
+            )
             _SPEARMAN_FN = None
     return _SPEARMAN_FN
 
@@ -481,6 +516,7 @@ def _spearman_numpy(a: list[float], b: list[float]) -> float | None:
     ra, rb = _rank_avg(a), _rank_avg(b)
     try:
         import numpy as _np
+
         x = _np.asarray(ra, dtype=float)
         y = _np.asarray(rb, dtype=float)
         xc = x - x.mean()
@@ -527,7 +563,10 @@ def _pair_corr(raw_a: dict, raw_b: dict) -> float | None:
     # diferă doar printr-un NaN) care ar justifica o eliminare reală. Un scor
     # ne-finit înseamnă „metodă defectă", nu „membru redundant".
     if not all(math.isfinite(v) for v in a) or not all(math.isfinite(v) for v in b):
-        logger.debug("[method_selector] corelație sărită: scoruri ne-finite pe %d numere comune", len(common))
+        logger.debug(
+            "[method_selector] corelație sărită: scoruri ne-finite pe %d numere comune",
+            len(common),
+        )
         return None
     sp = _get_spearman()
     if sp is not None:
@@ -540,7 +579,9 @@ def _pair_corr(raw_a: dict, raw_b: dict) -> float | None:
             if r == r:  # nu NaN
                 return r
         except Exception as exc:
-            logger.debug("[method_selector] spearmanr a eșuat (%s) — fallback numpy", exc)
+            logger.debug(
+                "[method_selector] spearmanr a eșuat (%s) — fallback numpy", exc
+            )
     r = _spearman_numpy(a, b)
     if r is None or r != r:
         return None
@@ -650,7 +691,11 @@ def _memo_key(contributions: list[tuple[str, dict[int, float], float]]):
     """
     try:
         return tuple(
-            (str(n), float(w), tuple(sorted((int(k), float(v)) for k, v in raw.items())))
+            (
+                str(n),
+                float(w),
+                tuple(sorted((int(k), float(v)) for k, v in raw.items())),
+            )
             for n, raw, w in contributions
         )
     except Exception:
@@ -670,20 +715,28 @@ def _log_decorrelation(dropped_corr: list[tuple[str, float, str]]) -> None:
                 "[method_selector] ensemble: %r ANTI-corelat cu %r (Spearman=%.4f) — "
                 "EXCLUS (blend-ul devine monoton în celălalt membru; la ponderi "
                 "egale → scor constant / pool degenerat)",
-                name, vs, r,
+                name,
+                vs,
+                r,
             )
         else:
             log = logger.info if first else logger.debug
             log(
                 "[method_selector] ensemble: %r redundant cu %r (Spearman=%.4f) — exclus",
-                name, vs, r,
+                name,
+                vs,
+                r,
             )
 
 
 def _resolve_members(
     contributions: list[tuple[str, dict[int, float], float]],
     log: bool = True,
-) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]], list[tuple[str, float, str]]]:
+) -> tuple[
+    list[tuple[str, dict[int, float], float]],
+    list[tuple[str, str]],
+    list[tuple[str, float, str]],
+]:
     """Pipeline-ul COMPLET de selecție a membrilor: varianță → decorelare.
 
     Sursa UNICĂ de adevăr pentru combine_ensemble_scores și describe_ensemble
@@ -769,7 +822,10 @@ def describe_ensemble(
         # schemă uniformă: „empty"/„flat" primesc r/vs = None (nu s-a calculat
         # nicio corelație pentru ele), ca `dropped` să fie iterabilă uniform
         "dropped": (
-            [{"method": n, "reason": reason, "r": None, "vs": None} for n, reason in dropped]
+            [
+                {"method": n, "reason": reason, "r": None, "vs": None}
+                for n, reason in dropped
+            ]
             + corr_out
         ),
         "dropped_correlated": corr_out,
@@ -877,21 +933,28 @@ def combine_ensemble_scores(
     return combined
 
 
-def summary_line(game_key: str, pool_size: int | None = None,
-                 config_path: str | None = None) -> str:
+def summary_line(
+    game_key: str, pool_size: int | None = None, config_path: str | None = None
+) -> str:
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
     label = g.get("label", game_key)
     if pool_size is not None:
         winner = get_winner_name(game_key, pool_size, config_path)
         details = g.get("winner_details", {}).get(f"k{pool_size}", {})
-        suffix = f" (bench avg_hits={details['avg_hits']:.3f})" if "avg_hits" in details else ""
+        suffix = (
+            f" (bench avg_hits={details['avg_hits']:.3f})"
+            if "avg_hits" in details
+            else ""
+        )
         return f"[{label} · pool K={pool_size}] scorer = {winner}{suffix}"
     winner = get_winner_name(game_key, config_path=config_path)
     return f"[{label}] overall scorer = {winner}"
 
 
-def all_per_pool_winners(game_key: str, config_path: str | None = None) -> dict[int, str]:
+def all_per_pool_winners(
+    game_key: str, config_path: str | None = None
+) -> dict[int, str]:
     """Map pool_size_int -> winner_method_name for this game."""
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
@@ -942,8 +1005,12 @@ def recommend_optimal_config(
             nearest = min(avail, key=lambda k: abs(k - pool_size))
             cand = apm.get(f"k{nearest}", {})
             if cand and "scorer" in cand:
-                logger.info("[method_selector] %s: pool k%d absent → folosesc k%d (cel mai apropiat decis)",
-                            game_key, pool_size, nearest)
+                logger.info(
+                    "[method_selector] %s: pool k%d absent → folosesc k%d (cel mai apropiat decis)",
+                    game_key,
+                    pool_size,
+                    nearest,
+                )
                 entry = cand
                 # Substituirea era TĂCUTĂ în valoarea de retur: doar un log INFO,
                 # iar `rationale` se copia VERBATIM din intrarea substituită. UI-ul
@@ -956,7 +1023,9 @@ def recommend_optimal_config(
     if entry and "scorer" in entry:
         scorer, clean_ens, salvaged = _sanitize_ap_production(entry)
         if not scorer:
-            scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
+            scorer = get_winner_name(
+                game_key, pool_size=pool_size, config_path=config_path
+            )
             clean_ens = [{"method": scorer, "weight": 1.0}]
             salvaged = True
         rationale = entry.get("rationale", "") or ""
@@ -979,7 +1048,7 @@ def recommend_optimal_config(
         else:
             try:
                 hit_target = int(entry.get("hit_target", 3))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 hit_target = 3
             if hit_target not in (3, 4):
                 hit_target = 3
@@ -1002,7 +1071,9 @@ def recommend_optimal_config(
         }
 
     scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
-    use_bl = should_use_blacklist(game_key, pool_size=pool_size, config_path=config_path)
+    use_bl = should_use_blacklist(
+        game_key, pool_size=pool_size, config_path=config_path
+    )
     return {
         "scorer": scorer,
         "sim_depth_pct": 40,

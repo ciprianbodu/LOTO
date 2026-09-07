@@ -209,7 +209,9 @@ def _wilson_lower_bound(successes: float, n: float, z: float = 1.0) -> float:
     return max(0.0, (center - margin) / denom)
 
 
-def expected_random_rate(max_num: int, draw_n: int, pool_size: int, target: int) -> float:
+def expected_random_rate(
+    max_num: int, draw_n: int, pool_size: int, target: int
+) -> float:
     """P(|pool ∩ extragere| >= target) pentru un pool ALEATOR de `pool_size` numere.
 
     Distributie hipergeometrica exacta: pool-ul fixat (K din N), extragerea
@@ -248,11 +250,17 @@ def _reference_by_pct(
         return pd.Series({p: float(baseline_rate) for p in method_pcts}, dtype=float)
     if sub_real_random is None or sub_real_random.empty:
         return None
-    if "percentile" not in sub_real_random.columns or metric_col not in sub_real_random.columns:
+    if (
+        "percentile" not in sub_real_random.columns
+        or metric_col not in sub_real_random.columns
+    ):
         return None
-    return pd.to_numeric(
-        sub_real_random[metric_col], errors="coerce"
-    ).groupby(sub_real_random["percentile"]).mean().dropna()
+    return (
+        pd.to_numeric(sub_real_random[metric_col], errors="coerce")
+        .groupby(sub_real_random["percentile"])
+        .mean()
+        .dropna()
+    )
 
 
 def _windows_method_beats_random(
@@ -272,12 +280,20 @@ def _windows_method_beats_random(
     """
     if sub_real_method.empty:
         return 0, 0
-    if "percentile" not in sub_real_method.columns or metric_col not in sub_real_method.columns:
+    if (
+        "percentile" not in sub_real_method.columns
+        or metric_col not in sub_real_method.columns
+    ):
         return 0, 0
-    method_by_pct = pd.to_numeric(
-        sub_real_method[metric_col], errors="coerce"
-    ).groupby(sub_real_method["percentile"]).mean().dropna()
-    ref_by_pct = _reference_by_pct(sub_real_random, metric_col, baseline_rate, method_by_pct.index)
+    method_by_pct = (
+        pd.to_numeric(sub_real_method[metric_col], errors="coerce")
+        .groupby(sub_real_method["percentile"])
+        .mean()
+        .dropna()
+    )
+    ref_by_pct = _reference_by_pct(
+        sub_real_random, metric_col, baseline_rate, method_by_pct.index
+    )
     if ref_by_pct is None:
         return 0, 0
     common_pcts = sorted(set(method_by_pct.index) & set(ref_by_pct.index))
@@ -299,12 +315,20 @@ def _weighted_mean_lift(
     """Compute metric lift weighted by sim_depth (larger windows weigh more)."""
     if sub_real_method.empty:
         return 0.0
-    if "percentile" not in sub_real_method.columns or metric_col not in sub_real_method.columns:
+    if (
+        "percentile" not in sub_real_method.columns
+        or metric_col not in sub_real_method.columns
+    ):
         return 0.0
-    method_by_pct = pd.to_numeric(
-        sub_real_method[metric_col], errors="coerce"
-    ).groupby(sub_real_method["percentile"]).mean().dropna()
-    ref_by_pct = _reference_by_pct(sub_real_random, metric_col, baseline_rate, method_by_pct.index)
+    method_by_pct = (
+        pd.to_numeric(sub_real_method[metric_col], errors="coerce")
+        .groupby(sub_real_method["percentile"])
+        .mean()
+        .dropna()
+    )
+    ref_by_pct = _reference_by_pct(
+        sub_real_random, metric_col, baseline_rate, method_by_pct.index
+    )
     if ref_by_pct is None:
         return 0.0
     common_pcts = sorted(set(method_by_pct.index) & set(ref_by_pct.index))
@@ -320,7 +344,9 @@ def _weighted_mean_lift(
     return weighted_sum / weight_total if weight_total > 0 else 0.0
 
 
-def pooled_rate_and_neff(frame: pd.DataFrame, rate_col: str) -> tuple[float, float] | None:
+def pooled_rate_and_neff(
+    frame: pd.DataFrame, rate_col: str
+) -> tuple[float, float] | None:
     """(rată pooled, n EFECTIV) pentru o rată T+ măsurată pe ferestre sim_depth.
 
     Ferestrele sunt sufixe CUIBĂRITE (10% ⊂ 30% ⊂ 60% ⊂ 100% în configurația de
@@ -376,7 +402,7 @@ def pooled_rate_and_neff(frame: pd.DataFrame, rate_col: str) -> tuple[float, flo
     phat = float((pairs["r"].astype(float).to_numpy() * sizes).sum()) / n_pooled
     # Σ_i Σ_k min(n_i, n_k) — exact pentru ferestre-sufix (|W_i ∩ W_k| = min).
     sum_m2 = float(np.minimum.outer(sizes, sizes).sum())
-    n_eff = (n_pooled ** 2) / sum_m2 if sum_m2 > 0 else n_pooled
+    n_eff = (n_pooled**2) / sum_m2 if sum_m2 > 0 else n_pooled
     return phat, float(n_eff)
 
 
@@ -463,12 +489,14 @@ def _perf_signature_frame(
     (fără coloane de rată, sub 2 puncte pe metodă) → dedup dezactivat.
     """
     rate_cols = [
-        c for c in sub_real.columns
+        c
+        for c in sub_real.columns
         if c.startswith(f"rate_{target}plus_k") and sub_real[c].notna().any()
     ]
     if not rate_cols:  # folds.csv vechi (doar 4+) — vezi _resolve_rate_col
         rate_cols = [
-            c for c in sub_real.columns
+            c
+            for c in sub_real.columns
             if c.startswith("rate_4plus_k") and sub_real[c].notna().any()
         ]
     if not rate_cols:
@@ -478,7 +506,10 @@ def _perf_signature_frame(
         return None
     try:
         piv = frame.pivot_table(
-            index="method", columns="percentile", values=rate_cols, aggfunc="mean",
+            index="method",
+            columns="percentile",
+            values=rate_cols,
+            aggfunc="mean",
         )
     except Exception as exc:  # date malformate — dedup e best-effort, nu blocant
         logger.warning("[decision] semnătura de performanță indisponibilă: %s", exc)
@@ -561,7 +592,8 @@ def _select_ensemble_members(
         logger.info(
             "[decision] dedup ensemble dezactivat: semnătură prea mică %s "
             "(prag %d pe ambele axe) — corelația ar fi nefiabilă",
-            tuple(sig.shape), ENSEMBLE_MIN_SIGNATURE_POINTS,
+            tuple(sig.shape),
+            ENSEMBLE_MIN_SIGNATURE_POINTS,
         )
         sig = None
     for m, conf in ordered:
@@ -581,12 +613,14 @@ def _select_ensemble_members(
         if redundant_with is None:
             kept.append((m, conf))
         else:
-            dropped.append({
-                "method": m,
-                "vs": redundant_with,
-                "r": round(float(redundant_r), 4),
-                "reason": "perf_signature",
-            })
+            dropped.append(
+                {
+                    "method": m,
+                    "vs": redundant_with,
+                    "r": round(float(redundant_r), 4),
+                    "reason": "perf_signature",
+                }
+            )
     return kept, dropped
 
 
@@ -619,8 +653,12 @@ def decide_optimal_config_for_pool(
         max_num = KNOWN_GAME_MAX_NUM.get(game_key)
     baseline_rate: float | None = None
     if max_num is not None and int(max_num) >= int(pool_size):
-        baseline_rate = expected_random_rate(int(max_num), int(draw_n), int(pool_size), target)
-    baseline_source = "hypergeometric" if baseline_rate is not None else "empirical_random"
+        baseline_rate = expected_random_rate(
+            int(max_num), int(draw_n), int(pool_size), target
+        )
+    baseline_source = (
+        "hypergeometric" if baseline_rate is not None else "empirical_random"
+    )
 
     if base_col not in folds_df.columns:
         return {"error": f"column {base_col} missing in folds.csv"}
@@ -637,22 +675,26 @@ def decide_optimal_config_for_pool(
     try:
         from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
         from loto_enterprise.benchmark.disabled import load_disabled as _load_dis
+
         _alive = set(_METHODS_NOW) - _load_dis()
     except Exception:  # noqa: BLE001
         _alive = None
     methods = [
-        m for m in sub["method"].unique()
-        if m not in EXCLUDED_FROM_PRODUCTION
-        and (_alive is None or m in _alive)
+        m
+        for m in sub["method"].unique()
+        if m not in EXCLUDED_FROM_PRODUCTION and (_alive is None or m in _alive)
     ]
     try:
         from loto_enterprise.benchmark.curated import load_per_game as _load_pg
+
         _pg = [m for m in (_load_pg().get(game_key) or []) if m in methods]
         if _pg:
             methods = _pg
             logger.info(
                 "[decision] %s k%d: candidați restrânși la per_game (%d metode)",
-                game_key, pool_size, len(methods),
+                game_key,
+                pool_size,
+                len(methods),
             )
     except Exception as exc:  # noqa: BLE001
         logger.debug("[decision] per_game neaplicat: %s", exc)
@@ -694,7 +736,12 @@ def decide_optimal_config_for_pool(
                     logger.warning(
                         "[decision] %s k%d: %r lipsește/e all-NaN în folds.csv — "
                         "decizia cade pe %r. Ținta e %s @ k%d. Re-rulează bench-ul.",
-                        game_key, pool_size, rate_target_col, c, target_label, pool_size,
+                        game_key,
+                        pool_size,
+                        rate_target_col,
+                        c,
+                        target_label,
+                        pool_size,
                     )
                 return c
         return None
@@ -707,7 +754,9 @@ def decide_optimal_config_for_pool(
     # (măsurat pe date reale: 0.023 vs 0.154 la k12), deci erau îngropate tăcut.
     # Pe un folds.csv omogen (cazul normal) rezoluția e aceeași pentru toată
     # lumea, deci decizia rămâne neschimbată.
-    _thin_gate_warned: list[tuple[str, int]] = []  # rezumat, o SINGURĂ linie per (joc, pool)
+    _thin_gate_warned: list[
+        tuple[str, int]
+    ] = []  # rezumat, o SINGURĂ linie per (joc, pool)
     _all_real = sub[sub["is_random"] == False]  # noqa: E712
     _frame_rate_col = _resolve_rate_col(_all_real) if not _all_real.empty else None
     if _frame_rate_col is None:
@@ -716,7 +765,9 @@ def decide_optimal_config_for_pool(
         logger.warning(
             "[decision] %s k%d: nicio coloană de rată compatibilă cu pool-ul "
             "cerut; metodele fără %s nu intră în decizie.",
-            game_key, pool_size, target_label,
+            game_key,
+            pool_size,
+            target_label,
         )
 
     def _rate_col_for(frame: pd.DataFrame) -> str | None:
@@ -763,8 +814,13 @@ def decide_optimal_config_for_pool(
     # este raportata in `incomplete_methods`.
     _expected_pcts: set[int] = set()
     if "percentile" in _all_real.columns and _frame_rate_col is not None:
-        _ok_rows = _all_real[pd.to_numeric(_all_real[_frame_rate_col], errors="coerce").notna()]
-        _expected_pcts = {int(p) for p in pd.to_numeric(_ok_rows["percentile"], errors="coerce").dropna()}
+        _ok_rows = _all_real[
+            pd.to_numeric(_all_real[_frame_rate_col], errors="coerce").notna()
+        ]
+        _expected_pcts = {
+            int(p)
+            for p in pd.to_numeric(_ok_rows["percentile"], errors="coerce").dropna()
+        }
     incomplete_methods: list[dict] = []
     tiebreak_dependent: list[dict] = []
     tiebreak_gate_applied = tiebreak_col in sub.columns
@@ -784,7 +840,9 @@ def decide_optimal_config_for_pool(
         if not _expected_pcts:
             return True
         _have = real_m[pd.to_numeric(real_m[gate_col], errors="coerce").notna()]
-        have_pcts = {int(p) for p in pd.to_numeric(_have["percentile"], errors="coerce").dropna()}
+        have_pcts = {
+            int(p) for p in pd.to_numeric(_have["percentile"], errors="coerce").dropna()
+        }
         missing = sorted(_expected_pcts - have_pcts)
         if missing:
             incomplete_methods.append({"method": m, "missing_windows": missing})
@@ -830,7 +888,9 @@ def decide_optimal_config_for_pool(
             continue
         if not _tiebreak_ok(m, real_m):
             continue
-        n_beat, n_total = _windows_method_beats_random(real_m, real_random, gate_col, baseline_rate)
+        n_beat, n_total = _windows_method_beats_random(
+            real_m, real_random, gate_col, baseline_rate
+        )
         if 0 < n_total < MIN_CONSISTENCY_WINDOWS:
             _thin_gate_warned.append((m, n_total))
         if n_total < MIN_CONSISTENCY_WINDOWS:
@@ -855,7 +915,9 @@ def decide_optimal_config_for_pool(
             "[decision] %s k%d: %d metode au doar %s fereastră(e) comună(e) cu `random` "
             "(prag %d) — poarta de consistență nu e concludentă, le sar. folds.csv pare "
             "PARȚIAL (bench întrerupt?) — re-rulează bench-ul. Ex.: %s",
-            game_key, pool_size, len(_thin_gate_warned),
+            game_key,
+            pool_size,
+            len(_thin_gate_warned),
             f"{_wmin}" if _wmin == _wmax else f"{_wmin}-{_wmax}",
             MIN_CONSISTENCY_WINDOWS,
             ", ".join(m for m, _ in _thin_gate_warned[:5]),
@@ -885,17 +947,23 @@ def decide_optimal_config_for_pool(
             # Aceleasi doua porti structurale ca pe ramura calificata: fara ele
             # fallback-ul ar promova exact metodele incomplete/degenerate pe care
             # poarta principala le-a scos.
-            if m in {d["method"] for d in incomplete_methods} or m in {d["method"] for d in tiebreak_dependent}:
+            if m in {d["method"] for d in incomplete_methods} or m in {
+                d["method"] for d in tiebreak_dependent
+            }:
                 continue
             if not _complete_windows(m, real_m, _gc) or not _tiebreak_ok(m, real_m):
                 continue
             r4 = _rate_target_mean(real_m)
             r4_conf = _rate_target_confidence(real_m)
             _avg_hits = pooled_mean(real_m, base_col)
-            ranked.append((
-                m, r4_conf, r4,
-                float(_avg_hits if _avg_hits is not None else 0.0),
-            ))
+            ranked.append(
+                (
+                    m,
+                    r4_conf,
+                    r4,
+                    float(_avg_hits if _avg_hits is not None else 0.0),
+                )
+            )
         # Numele ca ULTIM criteriu: egalitatile exacte pe Wilson sunt frecvente
         # si altfel ordinea depindea de ordinea randurilor din folds.csv, adica
         # de ordinea in care s-au terminat procesele bench-ului.
@@ -907,7 +975,10 @@ def decide_optimal_config_for_pool(
             logger.warning(
                 "[decision] %s k%d: nicio metodă reală cu rată %s utilizabilă "
                 "în folds.csv — fallback determinist %r",
-                game_key, pool_size, target_label, SAFE_FALLBACK_SCORER,
+                game_key,
+                pool_size,
+                target_label,
+                SAFE_FALLBACK_SCORER,
             )
             return {
                 "scorer": SAFE_FALLBACK_SCORER,
@@ -957,7 +1028,7 @@ def decide_optimal_config_for_pool(
         scorer = ranked[0][0]
         rationale = (
             f"FALLBACK: no method consistently beat random "
-            f"(≥{int(CONSISTENCY_THRESHOLD*100)}% of windows); "
+            f"(≥{int(CONSISTENCY_THRESHOLD * 100)}% of windows); "
             f"picked highest {target_label} rate (raw={ranked[0][2]:.3f}, "
             f"Wilson_lb={ranked[0][1]:.3f}) + avg_hits "
             f"[nicio metodă nu bate random; selecție conservatoare, "
@@ -975,7 +1046,8 @@ def decide_optimal_config_for_pool(
         qualifying.sort(key=lambda r: (-r[5], -r[1], -(r[2] / max(r[3], 1)), r[0]))
         scorer = qualifying[0][0]
         _ref_txt = (
-            f"random (hipergeometric {baseline_rate:.4f})" if baseline_rate is not None
+            f"random (hipergeometric {baseline_rate:.4f})"
+            if baseline_rate is not None
             else "random (empiric, folds.csv)"
         )
         rationale = (
@@ -996,12 +1068,18 @@ def decide_optimal_config_for_pool(
             target,
         )
         members, dropped_redundant = _select_ensemble_members(
-            ordered, sig, ENSEMBLE_MAX_METHODS, ENSEMBLE_MAX_CORR,
+            ordered,
+            sig,
+            ENSEMBLE_MAX_METHODS,
+            ENSEMBLE_MAX_CORR,
         )
         if dropped_redundant:
             logger.info(
                 "[decision] %s k%d: %d membri ensemble eliminați ca redundanți (r≥%.2f): %s",
-                game_key, pool_size, len(dropped_redundant), ENSEMBLE_MAX_CORR,
+                game_key,
+                pool_size,
+                len(dropped_redundant),
+                ENSEMBLE_MAX_CORR,
                 ", ".join(f"{d['method']}~{d['vs']}" for d in dropped_redundant),
             )
         ensemble = _build_ensemble_weights(members)
@@ -1013,16 +1091,21 @@ def decide_optimal_config_for_pool(
         rate_col = base_col  # fallback to avg_hits — tot un fallback de metrică
         _mismatch_cols_used.add(base_col)
 
-
     # Poarta de stabilitate se aplică pe EXTRAGERILE EVALUATE (n_eval, cu fallback
     # pe rând la n_test): `target_rate` și `avg_hits` sunt ambele denominate în
     # n_eval de la v13, deci a filtra pe n_test ar valida o fereastră pe extrageri
     # care poate n-au fost niciodată evaluate (scorer care întoarce {} pe blocuri).
     _rc = real_chosen.copy()
-    _nt = pd.to_numeric(_rc["n_test"], errors="coerce") if "n_test" in _rc.columns else None
+    _nt = (
+        pd.to_numeric(_rc["n_test"], errors="coerce")
+        if "n_test" in _rc.columns
+        else None
+    )
     if "n_eval" in _rc.columns:
         _ne = pd.to_numeric(_rc["n_eval"], errors="coerce")
-        _rc["_n_stab"] = _ne.where(_ne.notna() & (_ne > 0), _nt) if _nt is not None else _ne
+        _rc["_n_stab"] = (
+            _ne.where(_ne.notna() & (_ne > 0), _nt) if _nt is not None else _ne
+        )
     else:
         _rc["_n_stab"] = _nt
     by_pct = _rc.groupby("percentile").agg(
@@ -1134,7 +1217,10 @@ def build_auto_pilot_matrix(
         matrix[gk] = {}
         for k in meta["pool_range"]:
             cfg = decide_optimal_config_for_pool(
-                df, gk, pool_size=k, draw_n=meta["draw_n"],
+                df,
+                gk,
+                pool_size=k,
+                draw_n=meta["draw_n"],
                 max_num=meta.get("max_num"),
             )
             matrix[gk][f"k{k}"] = cfg

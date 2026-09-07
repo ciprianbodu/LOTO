@@ -29,10 +29,14 @@ def render_hardware(console: Console, hw_snap: dict) -> None:
         f"[bold]RAM[/bold]    : {ram.get('total_gb', '?')} GB total "
         f"({ram.get('used_gb', '?')} used | {ram.get('available_gb', '?')} free)",
     ]
-    console.print(Panel("\n".join(body), title="[bold]HARDWARE[/bold]", border_style="cyan"))
+    console.print(
+        Panel("\n".join(body), title="[bold]HARDWARE[/bold]", border_style="cyan")
+    )
 
 
-def render_methods_table(console: Console, methods: list[str], method_meta_map: dict) -> None:
+def render_methods_table(
+    console: Console, methods: list[str], method_meta_map: dict
+) -> None:
     t = Table(title="Methods to test", box=box.SIMPLE_HEAD)
     t.add_column("#", justify="right", style="dim")
     t.add_column("Method")
@@ -44,7 +48,9 @@ def render_methods_table(console: Console, methods: list[str], method_meta_map: 
         meta = method_meta_map[m]
         status = "[red]N/A[/red]" if not meta["available"] else "[green]OK[/green]"
         t.add_row(
-            str(i), m, meta["family"],
+            str(i),
+            m,
+            meta["family"],
             "yes" if meta["requires_train"] else "no",
             status,
             (meta.get("unavailable_reason") or meta.get("notes") or "")[:80],
@@ -62,8 +68,10 @@ def render_per_game(console: Console, report: dict) -> None:
         per_method = data["per_method"]
 
         # Table 1: avg_hits per pool size, per method
-        t1 = Table(title=f"avg hits per draw at pool top-K  (K = {', '.join(k[1:] for k in pool_keys)})",
-                   box=box.MINIMAL_HEAVY_HEAD)
+        t1 = Table(
+            title=f"avg hits per draw at pool top-K  (K = {', '.join(k[1:] for k in pool_keys)})",
+            box=box.MINIMAL_HEAVY_HEAD,
+        )
         t1.add_column("Method")
         t1.add_column("Family", style="dim")
         for k in pool_keys:
@@ -71,7 +79,11 @@ def render_per_game(console: Console, report: dict) -> None:
         t1.add_column("vs Random*", justify="right")
         # Order: by overall ranking
         ordered = [r["method"] for r in data["overall_ranking"]]
-        skipped = [m for m, d in per_method.items() if d.get("skipped") and d.get("available") is False]
+        skipped = [
+            m
+            for m, d in per_method.items()
+            if d.get("skipped") and d.get("available") is False
+        ]
         for m in ordered:
             d = per_method[m]
             row = [m, d.get("family", "-")]
@@ -84,16 +96,24 @@ def render_per_game(console: Console, report: dict) -> None:
             base_k = pool_keys[0]
             random_stat = per_method.get("random", {}).get("per_pool", {}).get(base_k)
             if random_stat and d.get("per_pool", {}).get(base_k):
-                lift = d["per_pool"][base_k]["avg_hits_real"] - random_stat["avg_hits_real"]
-                color = "green" if lift > 0 else ("yellow" if abs(lift) < 1e-3 else "red")
+                lift = (
+                    d["per_pool"][base_k]["avg_hits_real"]
+                    - random_stat["avg_hits_real"]
+                )
+                color = (
+                    "green" if lift > 0 else ("yellow" if abs(lift) < 1e-3 else "red")
+                )
                 row.append(f"[{color}]{lift:+.3f}[/{color}]")
             else:
                 row.append("-")
             t1.add_row(*row)
         for m in skipped:
             d = per_method[m]
-            t1.add_row(f"[dim]{m}[/dim]", d.get("family", "-") or "-",
-                       *(["[dim]skip[/dim]"] * (len(pool_keys) + 1)))
+            t1.add_row(
+                f"[dim]{m}[/dim]",
+                d.get("family", "-") or "-",
+                *(["[dim]skip[/dim]"] * (len(pool_keys) + 1)),
+            )
         console.print(t1)
 
         # Table 2: walk-forward regressive — avg_hits at base K (= draw_n) per percentile.
@@ -124,8 +144,11 @@ def render_per_game(console: Console, report: dict) -> None:
         winners_bl = data.get("winners_per_pool_bl", {})
         winners_best = data.get("winners_per_pool_best", {})
         if winners_nobl or winners_bl:
-            t4 = Table(title="Winner per pool size (NO blacklist  vs  WITH blacklist  vs  BEST)",
-                       box=box.HEAVY_EDGE, style="bold green")
+            t4 = Table(
+                title="Winner per pool size (NO blacklist  vs  WITH blacklist  vs  BEST)",
+                box=box.HEAVY_EDGE,
+                style="bold green",
+            )
             t4.add_column("Pool K")
             t4.add_column("Winner NO-BL")
             t4.add_column("avg", justify="right")
@@ -140,9 +163,17 @@ def render_per_game(console: Console, report: dict) -> None:
                 wbest = winners_best.get(k, {})
                 if not wn and not wb:
                     continue
-                delta = wbest.get("delta_vs_no_bl") if wbest.get("use_blacklist") else wbest.get("delta_vs_with_bl")
+                delta = (
+                    wbest.get("delta_vs_no_bl")
+                    if wbest.get("use_blacklist")
+                    else wbest.get("delta_vs_with_bl")
+                )
                 use_bl = "YES" if wbest.get("use_blacklist") else "no"
-                use_color = "[green]YES[/green]" if wbest.get("use_blacklist") else "[yellow]no[/yellow]"
+                use_color = (
+                    "[green]YES[/green]"
+                    if wbest.get("use_blacklist")
+                    else "[yellow]no[/yellow]"
+                )
                 t4.add_row(
                     k[1:],
                     wn.get("winner", "-"),
@@ -156,10 +187,20 @@ def render_per_game(console: Console, report: dict) -> None:
             console.print(t4)
 
 
-def render_regressive_table(console: Console, folds_df: pd.DataFrame, game_key: str, game_label: str, draw_n: int) -> None:
+def render_regressive_table(
+    console: Console,
+    folds_df: pd.DataFrame,
+    game_key: str,
+    game_label: str,
+    draw_n: int,
+) -> None:
     """Per-percentile breakdown for the base pool K=draw_n (real data only)."""
     base_col = f"k{draw_n}"
-    sub = folds_df[(folds_df["game"] == game_key) & (folds_df["is_random"] == False) & (folds_df.get("failed", False) == False)]  # noqa: E712
+    sub = folds_df[
+        (folds_df["game"] == game_key)
+        & (folds_df["is_random"] == False)
+        & (folds_df.get("failed", False) == False)
+    ]  # noqa: E712
     if sub.empty or base_col not in sub.columns:
         return
     pcts = sorted(sub["percentile"].unique())
@@ -194,7 +235,9 @@ def render_regressive_table(console: Console, folds_df: pd.DataFrame, game_key: 
                 vals.append(v)
         method_rows = sub[sub["method"] == m]
         pooled = pooled_mean(method_rows, base_col)
-        mean = pooled if pooled is not None else (sum(vals) / len(vals) if vals else 0.0)
+        mean = (
+            pooled if pooled is not None else (sum(vals) / len(vals) if vals else 0.0)
+        )
         rows.append((m, cells, mean))
     rows.sort(key=lambda r: r[2], reverse=True)
     for m, cells, mean in rows:

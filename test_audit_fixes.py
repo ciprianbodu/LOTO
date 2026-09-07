@@ -3,6 +3,7 @@
 Fiecare test e scris ca să PICE pe codul de dinainte de fix — nu ca să confirme
 ce face codul de azi.
 """
+
 import os
 import tempfile
 
@@ -40,10 +41,13 @@ def test_ui_failed_label_uses_existing_columns():
     """Sursa UI-ului nu mai are voie să citească `error_msg` pe ramura FAILED."""
     # doar codul, fără comentarii (comentariul explică tocmai bug-ul reparat)
     code = "\n".join(
-        ln for ln in open("app_nicegui.py", encoding="utf-8").read().splitlines()
+        ln
+        for ln in open("app_nicegui.py", encoding="utf-8").read().splitlines()
         if not ln.lstrip().startswith("#")
     )
-    assert "error_msg" not in code, "UI-ul citește iar o cheie inexistentă în schema `jobs`"
+    assert "error_msg" not in code, (
+        "UI-ul citește iar o cheie inexistentă în schema `jobs`"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -62,7 +66,8 @@ def test_ilp_does_not_memoize_timeout():
     # time_limit ridicol de mic → solver-ul nu apucă să întoarcă o soluție
     wm._ilp_cover_positions(*key, time_limit=1e-9)
     assert key not in wm._ILP_COVER_CACHE, (
-        "timeout-ul a fost memoizat — ILP rămâne mort pentru tot procesul")
+        "timeout-ul a fost memoizat — ILP rămâne mort pentru tot procesul"
+    )
 
 
 def test_ilp_still_memoizes_too_big_geometry():
@@ -87,7 +92,9 @@ def test_ilp_success_is_memoized():
     if cover is None:
         pytest.skip("solver-ul n-a găsit soluție în buget pe mașina asta")
     assert wm._ILP_COVER_CACHE[key] == cover
-    assert wm._ilp_cover_positions(*key, time_limit=30.0) is cover  # al doilea apel = cache
+    assert (
+        wm._ilp_cover_positions(*key, time_limit=30.0) is cover
+    )  # al doilea apel = cache
 
 
 # --------------------------------------------------------------------------
@@ -109,7 +116,8 @@ def test_completed_branch_guards_payload():
     j = src.index("_maybe_send_results_email()", i)
     head = src[i:j]
     assert "isinstance(payload, tuple) and len(payload) == 2" in head, (
-        "garda de payload lipsește sau e după trimiterea mailului")
+        "garda de payload lipsește sau e după trimiterea mailului"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -119,8 +127,8 @@ def test_pure_bench_mode_not_in_input_hash():
     """`pure` nu schimbă biletele → nu are ce căuta în `input_hash`."""
     src = open("app_nicegui.py", encoding="utf-8").read()
     i = src.index("def _build_config_json")
-    body = src[i:src.index("def submit_generation", i)]
-    assert 'h.update(str(pure)' not in body
+    body = src[i : src.index("def submit_generation", i)]
+    assert "h.update(str(pure)" not in body
 
 
 def test_ui_does_not_turn_urna1_hits_into_fixed_prizes_or_due_alerts():
@@ -166,7 +174,9 @@ def test_curation_banner_includes_joker_urna2_quota():
     ui_src = open("app_nicegui.py", encoding="utf-8").read()
     marker = '            _pg = _cur.get("per_game") or {}'
     start = ui_src.index(marker)
-    body = ui_src[start:ui_src.index("            if _cur[\"missing_required\"]", start)]
+    body = ui_src[
+        start : ui_src.index('            if _cur["missing_required"]', start)
+    ]
     assert '_pg.get("joker_urna2")' in body
     assert "Urna 2" in body
 
@@ -175,7 +185,7 @@ def test_abandon_unstarted_scopes_to_active_job():
     """Abandonul de 0% nu anulează un job aflat în lucru."""
     src = open("app_nicegui.py", encoding="utf-8").read()
     i = src.index("def _abandon_unstarted_ui_job")
-    body = src[i:src.index("def status_panel", i)]
+    body = src[i : src.index("def status_panel", i)]
     assert "job_ids=" in body
     assert "job_ids=[int(jid)]" in body.replace(" ", "")
 
@@ -183,8 +193,10 @@ def test_abandon_unstarted_scopes_to_active_job():
 def test_mail_body_contains_only_one_pool_per_game():
     src = open("app_nicegui.py", encoding="utf-8").read()
     i = src.index("def _build_mail_body")
-    body = src[i:src.index("def _send_test_email", i)]
-    assert 'lines.append("POOL:   "' in body
+    body = src[i : src.index("def _send_test_email", i)]
+    # Substringul, nu neapărat lipit de `lines.append(` — formatarea poate
+    # rupe apelul pe mai multe linii fără să schimbe comportamentul.
+    assert '"POOL:   "' in body
     assert "POOL 2" not in body
 
 
@@ -215,7 +227,7 @@ def test_fail_running_jobs_closes_connection():
     """fail_running_jobs folosește `_conn` (închide), nu `_connect` gol."""
     src = open("job_queue.py", encoding="utf-8").read()
     i = src.index("def fail_running_jobs")
-    body = src[i:src.index("def get_pipeline_cache", i)]
+    body = src[i : src.index("def get_pipeline_cache", i)]
     assert "with _conn(" in body
     assert "conn_context = _connect" not in body
 
@@ -230,9 +242,9 @@ def test_worker_spawn_has_cooldown():
 def test_wf_decision_sig_omits_inert_use_blacklist():
     src = open("loto_enterprise/core/walk_forward_adapter.py", encoding="utf-8").read()
     i = src.index("def _decision_sig")
-    body = src[i:src.index("def _cache_path", i)]
+    body = src[i : src.index("def _cache_path", i)]
     assert "use_blacklist" not in body or "INERT" in body
-    assert 'bool(c.get(\'use_blacklist\'' not in body
+    assert "bool(c.get('use_blacklist'" not in body
     assert "BENCH_HIT_TARGET" in body
 
 
@@ -240,13 +252,18 @@ def test_leaderboard_excludes_tiebreak_dependent_methods_like_decision():
     """Un Wilson bun nu poate promova un ranking dictat de egalități."""
     import app_nicegui as app_ui
 
-    grp = pd.DataFrame({
-        "percentile": [10, 30, 60, 100],
-        "rate_3plus_k11": [0.10, 0.11, 0.10, 0.10],
-        "tiebreak_k11": [0.50, 0.60, 0.55, 0.562],
-    })
+    grp = pd.DataFrame(
+        {
+            "percentile": [10, 30, 60, 100],
+            "rate_3plus_k11": [0.10, 0.11, 0.10, 0.10],
+            "tiebreak_k11": [0.50, 0.60, 0.55, 0.562],
+        }
+    )
     reason = app_ui._bench_structural_exclusion(
-        grp, "rate_3plus_k11", 11, {10, 30, 60, 100},
+        grp,
+        "rate_3plus_k11",
+        11,
+        {10, 30, 60, 100},
     )
 
     assert "EXCLUS" not in reason  # helperul întoarce motivul, UI adaugă eticheta
@@ -257,14 +274,19 @@ def test_leaderboard_excludes_tiebreak_dependent_methods_like_decision():
 def test_leaderboard_reports_missing_benchmark_windows():
     import app_nicegui as app_ui
 
-    grp = pd.DataFrame({
-        "percentile": [10, 30, 100],
-        "rate_3plus_k11": [0.10, 0.11, 0.10],
-        "tiebreak_k11": [0.0, 0.0, 0.0],
-    })
+    grp = pd.DataFrame(
+        {
+            "percentile": [10, 30, 100],
+            "rate_3plus_k11": [0.10, 0.11, 0.10],
+            "tiebreak_k11": [0.0, 0.0, 0.0],
+        }
+    )
 
     reason = app_ui._bench_structural_exclusion(
-        grp, "rate_3plus_k11", 11, {10, 30, 60, 100},
+        grp,
+        "rate_3plus_k11",
+        11,
+        {10, 30, 60, 100},
     )
     assert reason == "ferestre lipsă: 60%"
 
@@ -279,8 +301,7 @@ def test_bench_progress_reads_only_log_tail(tmp_path, monkeypatch):
 
     log = tmp_path / "bench_full.log"
     log.write_text(
-        ("x" * (1024 * 1024))
-        + "\n[50/100] [loto_6_49/frequency/60%/REAL/CPU] gata\n",
+        ("x" * (1024 * 1024)) + "\n[50/100] [loto_6_49/frequency/60%/REAL/CPU] gata\n",
         encoding="utf-8",
     )
 
@@ -326,7 +347,8 @@ def test_target_data_ready_fails_closed(tmp_path, monkeypatch):
     (bench_dir / "folds.csv").write_text("corupt", encoding="utf-8")
     monkeypatch.setattr(app_ui, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(
-        app_ui.pd, "read_csv",
+        app_ui.pd,
+        "read_csv",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("locked")),
     )
 
@@ -337,9 +359,15 @@ def test_fresh_start_recovery_is_display_only(monkeypatch):
     """START_8000 nu finalizează automat jobul recent (mail/WF/shutdown)."""
     import app_nicegui as app_ui
 
-    monkeypatch.setattr(app_ui, "get_latest_completed_job", lambda: {
-        "id": 77, "result_json": "payload", "completed_at": "2026-08-31 10:00:00",
-    })
+    monkeypatch.setattr(
+        app_ui,
+        "get_latest_completed_job",
+        lambda: {
+            "id": 77,
+            "result_json": "payload",
+            "completed_at": "2026-08-31 10:00:00",
+        },
+    )
     monkeypatch.setattr(app_ui, "decode_queue_result", lambda _raw: ([], 0))
     monkeypatch.setattr(app_ui, "_save_settings", lambda: None)
     monkeypatch.setattr(app_ui, "_save_report_file", lambda: None)
@@ -365,7 +393,8 @@ def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):
     bm = tmp_path / "best_methods.json"
     bm.write_text(json.dumps({"auto_pilot_per_pool": {}}), encoding="utf-8")
     monkeypatch.setattr(
-        freshness, "compute_csv_signature",
+        freshness,
+        "compute_csv_signature",
         lambda gk: (f"{gk}.csv", "abc123", 10),
     )
     real_atomic = ui_shared.atomic_write_json
@@ -383,7 +412,9 @@ def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):
     assert saved["_meta"]["csv_signatures"]["loto_6_49"]["hash"] == "abc123"
 
 
-def test_freshness_hash_mismatch_with_unchanged_row_count_never_says_use_cache(tmp_path, monkeypatch):
+def test_freshness_hash_mismatch_with_unchanged_row_count_never_says_use_cache(
+    tmp_path, monkeypatch
+):
     """O extragere istorica corectata IN LOC (fara sa schimbe numarul de randuri)
     schimba hash-ul, dar delta_pct al randurilor ramane 0 — vechea logica
     raporta "slight_drift"/use_cache (cache-ul e OK), contrazicand exact ce
@@ -393,11 +424,22 @@ def test_freshness_hash_mismatch_with_unchanged_row_count_never_says_use_cache(t
     from loto_enterprise.benchmark import freshness
 
     bm = tmp_path / "best_methods.json"
-    bm.write_text(json.dumps({
-        "_meta": {"csv_signatures": {
-            "loto_6_49": {"csv_path": "x.csv", "hash": "old_hash", "rows": 1000},
-        }},
-    }), encoding="utf-8")
+    bm.write_text(
+        json.dumps(
+            {
+                "_meta": {
+                    "csv_signatures": {
+                        "loto_6_49": {
+                            "csv_path": "x.csv",
+                            "hash": "old_hash",
+                            "rows": 1000,
+                        },
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     def _fake_sig(gk):
         # Acelasi numar de randuri, hash DIFERIT — extragere corectata in loc.
@@ -417,8 +459,9 @@ def test_requirements_txt_delegates_to_authoritative_cpu_list():
     text = open("requirements.txt", encoding="utf-8").read()
     assert "-r requirements_base.txt" in text
     active = "\n".join(
-        line for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")
+        line
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
     )
     assert "streamlit" not in active
     assert "numba" not in active
-

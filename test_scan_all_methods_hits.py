@@ -1,5 +1,6 @@
 """Teste pentru scan_all_methods_hits.py — _print_top() calcula lift-ul fata
 de o realizare empirica `random`, nu fata de baseline-ul teoretic."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -14,9 +15,27 @@ def _game(key="loto_6_49", max_num=49, draw_n=6):
 def test_print_top_accepts_gamedef_and_filters_by_key(capsys):
     game = _game()
     rows = [
-        {"method": "a", "game": "loto_6_49", "failed": False, "rate_4plus_k16": 0.02, "rate_3plus_k16": 0.10},
-        {"method": "b", "game": "loto_5_40", "failed": False, "rate_4plus_k16": 0.99, "rate_3plus_k16": 0.99},
-        {"method": "c", "game": "loto_6_49", "failed": True, "rate_4plus_k16": 0.50, "rate_3plus_k16": 0.50},
+        {
+            "method": "a",
+            "game": "loto_6_49",
+            "failed": False,
+            "rate_4plus_k16": 0.02,
+            "rate_3plus_k16": 0.10,
+        },
+        {
+            "method": "b",
+            "game": "loto_5_40",
+            "failed": False,
+            "rate_4plus_k16": 0.99,
+            "rate_3plus_k16": 0.99,
+        },
+        {
+            "method": "c",
+            "game": "loto_6_49",
+            "failed": True,
+            "rate_4plus_k16": 0.50,
+            "rate_3plus_k16": 0.50,
+        },
     ]
     sah._print_top(rows, game, 16, "rate_4plus", n=5)
     out = capsys.readouterr().out
@@ -27,7 +46,9 @@ def test_print_top_accepts_gamedef_and_filters_by_key(capsys):
     assert f"{'c':32s}" not in out
 
 
-def test_print_top_lift_uses_theoretical_baseline_not_empirical_random(capsys, monkeypatch):
+def test_print_top_lift_uses_theoretical_baseline_not_empirical_random(
+    capsys, monkeypatch
+):
     game = _game()
     captured = {}
 
@@ -40,8 +61,20 @@ def test_print_top_lift_uses_theoretical_baseline_not_empirical_random(capsys, m
         fake_expected_random_rate,
     )
     rows = [
-        {"method": "random", "game": "loto_6_49", "failed": False, "rate_4plus_k16": 0.30, "rate_3plus_k16": 0.30},
-        {"method": "m1", "game": "loto_6_49", "failed": False, "rate_4plus_k16": 0.20, "rate_3plus_k16": 0.20},
+        {
+            "method": "random",
+            "game": "loto_6_49",
+            "failed": False,
+            "rate_4plus_k16": 0.30,
+            "rate_3plus_k16": 0.30,
+        },
+        {
+            "method": "m1",
+            "game": "loto_6_49",
+            "failed": False,
+            "rate_4plus_k16": 0.20,
+            "rate_3plus_k16": 0.20,
+        },
     ]
     sah._print_top(rows, game, 16, "rate_4plus", n=5)
 
@@ -58,7 +91,15 @@ def test_print_top_handles_missing_baseline_gracefully(capsys, monkeypatch):
         "loto_enterprise.benchmark.decision.expected_random_rate",
         lambda *a, **k: 0.0,
     )
-    rows = [{"method": "m1", "game": "loto_6_49", "failed": False, "rate_4plus_k16": 0.20, "rate_3plus_k16": 0.20}]
+    rows = [
+        {
+            "method": "m1",
+            "game": "loto_6_49",
+            "failed": False,
+            "rate_4plus_k16": 0.20,
+            "rate_3plus_k16": 0.20,
+        }
+    ]
     sah._print_top(rows, game, 16, "rate_4plus", n=5)
     out = capsys.readouterr().out
     assert "vs random teoretic" not in out

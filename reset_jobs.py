@@ -19,6 +19,7 @@ Rulare:
     .venv\\Scripts\\python reset_jobs.py            # refuză dacă există RUNNING
     .venv\\Scripts\\python reset_jobs.py --force     # șterge și RUNNING (după kill)
 """
+
 from __future__ import annotations
 
 import json
@@ -66,6 +67,7 @@ def _clear_last_finalized_job_id() -> bool:
         data["last_finalized_job_id"] = 0
         try:
             from ui_shared import atomic_write_json  # scriere atomică (regula de aur 3)
+
             atomic_write_json(f, data)
         except Exception:  # noqa: BLE001 — ui_shared indisponibil: tmp+replace local
             tmp = f.with_name(f"{f.name}.{os.getpid()}.reset.tmp")
@@ -120,8 +122,10 @@ def main() -> int:
             "SELECT COUNT(*) FROM jobs WHERE status = 'RUNNING'"
         ).fetchone()[0]
         if running and not force:
-            print(f"⚠️  {running} job(uri) RUNNING. Oprește-le întâi (butonul "
-                  f"'🔴 Anulează TOT Procesul') sau rulează cu --force.")
+            print(
+                f"⚠️  {running} job(uri) RUNNING. Oprește-le întâi (butonul "
+                f"'🔴 Anulează TOT Procesul') sau rulează cu --force."
+            )
             return 1
 
         total = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
@@ -136,15 +140,22 @@ def main() -> int:
             "ORDER BY (completed_at IS NULL), completed_at DESC, id DESC LIMIT 1"
         ).fetchone()
         if row and int(row[0]) != last_fin:
-            keep.add(int(row[0]))  # terminat, neprocesat de UI → recuperarea are nevoie de el
+            keep.add(
+                int(row[0])
+            )  # terminat, neprocesat de UI → recuperarea are nevoie de el
 
         if keep:
             placeholders = ",".join("?" * len(keep))
-            con.execute(f"DELETE FROM jobs WHERE id NOT IN ({placeholders})", tuple(sorted(keep)))
+            con.execute(
+                f"DELETE FROM jobs WHERE id NOT IN ({placeholders})",
+                tuple(sorted(keep)),
+            )
             con.commit()
-            print(f"✅ Șterse {total - len(keep)} joburi; PĂSTRAT {len(keep)} "
-                  f"rezultat nefinalizat: {sorted(keep)}. "
-                  f"(Nu resetez numerotarea — recuperarea UI are nevoie de id-ul ăsta.)")
+            print(
+                f"✅ Șterse {total - len(keep)} joburi; PĂSTRAT {len(keep)} "
+                f"rezultat nefinalizat: {sorted(keep)}. "
+                f"(Nu resetez numerotarea — recuperarea UI are nevoie de id-ul ăsta.)"
+            )
         else:
             con.execute("DELETE FROM jobs")
             con.commit()
@@ -161,14 +172,18 @@ def main() -> int:
                 con.execute("VACUUM")
             except sqlite3.Error as exc:
                 next_is_one = False
-                print(f"⚠️  VACUUM eșuat ({exc}) — coada e golită oricum; "
-                      "numerotarea job-urilor s-ar putea sa nu reînceapă de la 1.")
+                print(
+                    f"⚠️  VACUUM eșuat ({exc}) — coada e golită oricum; "
+                    "numerotarea job-urilor s-ar putea sa nu reînceapă de la 1."
+                )
             _cleared = _clear_last_finalized_job_id()
             msg = f"✅ Șterse {total} joburi din coadă."
             if next_is_one:
                 msg += " Următorul job va fi #1."
             if _cleared:
-                msg += "  (am resetat și last_finalized_job_id — id-urile reîncep de la 1)"
+                msg += (
+                    "  (am resetat și last_finalized_job_id — id-urile reîncep de la 1)"
+                )
             print(msg)
         return 0
     finally:

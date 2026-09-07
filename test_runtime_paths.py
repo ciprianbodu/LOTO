@@ -26,7 +26,11 @@ def test_active_log_paths_share_runtime_root():
     assert paths.BENCH_LOG_FILE.parent == paths.RUNTIME_ROOT
     assert paths.STARTUP_LOG_FILE.parent == paths.RUNTIME_ROOT
     configured = os.environ.get("LOTO_WF_CACHE_DIR", "").strip()
-    expected_wf = Path(configured).expanduser() if configured else paths.RUNTIME_ROOT / ".wf_cache"
+    expected_wf = (
+        Path(configured).expanduser()
+        if configured
+        else paths.RUNTIME_ROOT / ".wf_cache"
+    )
     assert paths.WF_CACHE_DIR == expected_wf
 
 
@@ -46,7 +50,12 @@ def test_legacy_wf_migration_is_scoped_and_collision_safe(monkeypatch, tmp_path)
     monkeypatch.setattr(wf, "CACHE_DIR", target)
 
     info = wf.migrate_legacy_wf_cache()
-    assert (info["found"], info["moved"], info["skipped"], info["errors"]) == (3, 2, 1, [])
+    assert (info["found"], info["moved"], info["skipped"], info["errors"]) == (
+        3,
+        2,
+        1,
+        [],
+    )
     assert (target / "walk_forward_v22_a.pkl").read_bytes() == b"current"
     assert (target / "walk_forward_v21_b.pkl").read_bytes() == b"stale"
     assert (target / "walk_forward_v22_collision.pkl").read_bytes() == b"target"

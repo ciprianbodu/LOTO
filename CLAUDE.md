@@ -379,6 +379,10 @@ D:\_BUILD\_LOTO\.venv\Scripts\python.exe --version
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe -m pip check
 ```
 
+Stilul de cod e uniformizat cu `ruff format` (config in `pyproject.toml`,
+`line-length = 88`); nu e instalat in venv-ul de productie, ruleaza separat,
+doar la nevoie: `ruff format .`.
+
 ## 11. Verificare obligatorie
 
 ### Pentru orice schimbare

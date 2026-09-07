@@ -6,6 +6,7 @@ egalitate alege numărul mare → top-12 pe 6/49 era 27,29,…,49 sau 28,30,…,
 Fix: aceeași clasă + 0.01 * frecvență (ca prime_bias). Clasa rămâne axa
 principală; APARTENENȚA în top-K nu mai e „cel mai mare număr din clasă".
 """
+
 from __future__ import annotations
 
 import csv
@@ -57,7 +58,10 @@ def test_parity_balance_not_largest_ap2_on_joker():
 
 def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.curated import (
-        load_curated, load_per_game, REQUIRED_METHODS, apply_curation,
+        load_curated,
+        load_per_game,
+        REQUIRED_METHODS,
+        apply_curation,
     )
     from loto_enterprise.benchmark.methods import METHODS
 
@@ -69,13 +73,29 @@ def test_curated_active_and_per_game():
     # (2026-09-01). Urna 2 are numai 16 semnale distincte peste baseline;
     # lista nu este umplută artificial cu pierzători sau clone.
     added = {
-        "pca_resid_surprise", "649_spectral_cooc", "cusum_appearance",
-        "nmf_cooc", "fourier", "pair_affinity", "dmd", "649_gap_sqrt",
-        "parity_balance", "graph_clustering", "prime_bias",
-        "649_katz15_beta85", "graph_eigenvector", "mi_lag_bag",
-        "graph_anti_community", "649_rrf_graph", "649_gmean_freq_rec",
-        "649_mom_20_80", "graph_personalized_pr", "ml_knn_5",
-        "circular_kernel", "649_katz12_gap88", "bayes_poisson",
+        "pca_resid_surprise",
+        "649_spectral_cooc",
+        "cusum_appearance",
+        "nmf_cooc",
+        "fourier",
+        "pair_affinity",
+        "dmd",
+        "649_gap_sqrt",
+        "parity_balance",
+        "graph_clustering",
+        "prime_bias",
+        "649_katz15_beta85",
+        "graph_eigenvector",
+        "mi_lag_bag",
+        "graph_anti_community",
+        "649_rrf_graph",
+        "649_gmean_freq_rec",
+        "649_mom_20_80",
+        "graph_personalized_pr",
+        "ml_knn_5",
+        "circular_kernel",
+        "649_katz12_gap88",
+        "bayes_poisson",
     }
     assert added <= set(cur)
     pg = load_per_game()
@@ -87,20 +107,36 @@ def test_curated_active_and_per_game():
     }
     expect_extra = {
         "loto_6_49": [
-            "649_rank_borda", "649_katz25_gap75_b", "dmd",
-            "pair_affinity", "graph_degree_recent", "graph_personalized_pr",
+            "649_rank_borda",
+            "649_katz25_gap75_b",
+            "dmd",
+            "pair_affinity",
+            "graph_degree_recent",
+            "graph_personalized_pr",
         ],
         "loto_5_40": [
-            "649_rank_borda", "649_rrf_graph", "autocorr",
-            "graph_anti_community", "649_gap_sqrt", "graph_commute",
+            "649_rank_borda",
+            "649_rrf_graph",
+            "autocorr",
+            "graph_anti_community",
+            "649_gap_sqrt",
+            "graph_commute",
         ],
         "joker_urna1": [
-            "dmd", "frequency", "649_mom_20_80",
-            "cusum_appearance", "649_parity_recent", "nmf_cooc",
+            "dmd",
+            "frequency",
+            "649_mom_20_80",
+            "cusum_appearance",
+            "649_parity_recent",
+            "nmf_cooc",
         ],
         "joker_urna2": [
-            "circular_kernel", "649_last_neighbors", "649_decade_hot",
-            "ml_knn_5", "autocorr", "bayes_poisson",
+            "circular_kernel",
+            "649_last_neighbors",
+            "649_decade_hot",
+            "ml_knn_5",
+            "autocorr",
+            "bayes_poisson",
         ],
     }
     for g, n in expect_n.items():

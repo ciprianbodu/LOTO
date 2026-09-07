@@ -6,6 +6,7 @@ mai garantează nimic, fără niciun semnal.
 Invariantul central verificat peste tot: orice submulțime de `guarantee` numere din
 pool trebuie să apară integral pe cel puțin un bilet.
 """
+
 from __future__ import annotations
 
 from itertools import combinations
@@ -47,13 +48,18 @@ def test_design_file_covers_completely(design_file: Path):
     """Un design instalat care NU acoperă complet e mai rău decât lipsa lui: e folosit
     preferențial față de ILP/greedy și ar raporta o garanție pe care n-o are."""
     v, pick, guarantee = (int(x) for x in design_file.stem.split("_")[1:])
-    blocks = [[int(x) for x in ln.split()] for ln in
-              design_file.read_text().splitlines() if ln.strip()]
+    blocks = [
+        [int(x) for x in ln.split()]
+        for ln in design_file.read_text().splitlines()
+        if ln.strip()
+    ]
     pool = list(range(1, v + 1))
 
     assert blocks, f"{design_file.name} e gol"
     assert all(len(b) == pick for b in blocks), "bloc cu dimensiune greșită"
-    assert all(1 <= x <= v for b in blocks for x in b), "număr în afara intervalului 1..v"
+    assert all(1 <= x <= v for b in blocks for x in b), (
+        "număr în afara intervalului 1..v"
+    )
     assert len({tuple(sorted(b)) for b in blocks}) == len(blocks), "blocuri duplicate"
     assert _covers_all(blocks, pool, guarantee), "design-ul NU acoperă toate țintele"
 
@@ -80,14 +86,18 @@ def test_lajolla_uses_installed_design_for_current_config():
         if not (DESIGN_DIR / f"C_12_{pick}_4.txt").exists():
             pytest.skip(f"design C(12,{pick},4) neinstalat")
         wheel, _ = wheel_lajolla(pool, pick, 4, 0, None)
-        assert len(wheel) == expected, f"C(12,{pick},4): {len(wheel)} bilete, aștept {expected}"
+        assert len(wheel) == expected, (
+            f"C(12,{pick},4): {len(wheel)} bilete, aștept {expected}"
+        )
         assert _covers_all(wheel, pool, 4)
 
 
 # --------------------------------------------------------------------------- #
 # Contractul comun al tuturor algoritmilor de wheeling
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("method", ["greedy", "lajolla", "ilp", "necunoscut_cade_pe_greedy"])
+@pytest.mark.parametrize(
+    "method", ["greedy", "lajolla", "ilp", "necunoscut_cade_pe_greedy"]
+)
 @pytest.mark.parametrize("pick,guarantee", [(6, 4), (5, 4), (6, 3)])
 def test_full_guarantee_when_no_ticket_cap(method: str, pick: int, guarantee: int):
     """Fără plafon de bilete (max_variants=0) garanția trebuie să fie REALĂ, la orice
@@ -99,8 +109,12 @@ def test_full_guarantee_when_no_ticket_cap(method: str, pick: int, guarantee: in
     assert all(len(t) == pick for t in wheel), "bilet cu dimensiune greșită"
     assert all(x in pool for t in wheel for x in t), "număr din afara pool-ului"
     assert len({tuple(sorted(t)) for t in wheel}) == len(wheel), "bilete duplicate"
-    assert _covers_all(wheel, pool, guarantee), f"{method}: garanția {guarantee} nu e acoperită"
-    assert coverage == pytest.approx(100.0), f"{method}: raportează {coverage}%, dar acoperă tot"
+    assert _covers_all(wheel, pool, guarantee), (
+        f"{method}: garanția {guarantee} nu e acoperită"
+    )
+    assert coverage == pytest.approx(100.0), (
+        f"{method}: raportează {coverage}%, dar acoperă tot"
+    )
 
 
 @pytest.mark.parametrize("method", sorted(WHEEL_METHODS) + ["greedy"])
@@ -144,7 +158,7 @@ def test_engine_rejects_degenerate_zero_guarantee_before_wheeling():
     # de generarea wheel-ului, fără a porni un pipeline complet cu CSV real.
     source = open("loto_engine.py", encoding="utf-8").read()
     start = source.index("def run_institutional_pipeline")
-    body = source[start:source.index("# === ADAPTIVE FEEDBACK PRE-RUN", start)]
+    body = source[start : source.index("# === ADAPTIVE FEEDBACK PRE-RUN", start)]
     assert "if int(guarantee) < 1:" in body
     assert "guarantee = 1" in body
 
@@ -175,7 +189,10 @@ def test_complete_system_guarantee_equals_pick_is_full_cover():
         assert t == sorted(t), "bilet nesortat (afișare Joker v[:5])"
     # cu cap de bilete: acoperire parțială, dar fără timeout-ul de 1000
     wheel_cap, cov_cap = generate_combinatorial_wheel(
-        pool, pick=5, guarantee=5, max_variants=10,
+        pool,
+        pick=5,
+        guarantee=5,
+        max_variants=10,
     )
     assert len(wheel_cap) == 10
     assert cov_cap < 100.0
@@ -198,7 +215,11 @@ def test_capped_wheel_keeps_weak_pool_numbers() -> None:
     pool = list(range(1, 13))  # 12 numere
     scores = {n: float(n) for n in pool}  # 12 e cel mai tare, 1 cel mai slab
     tickets, _ = generate_combinatorial_wheel(
-        pool, pick=6, guarantee=4, max_variants=2, scores=scores,
+        pool,
+        pick=6,
+        guarantee=4,
+        max_variants=2,
+        scores=scores,
     )
     assert len(tickets) == 2
     union_nums = {n for t in tickets for n in t}
@@ -211,7 +232,11 @@ def test_single_ticket_cap_does_not_drop_unique_numbers() -> None:
     pool = list(range(1, 13))
     scores = {n: float(n) for n in pool}
     tickets, _ = generate_combinatorial_wheel(
-        pool, pick=6, guarantee=4, max_variants=1, scores=scores,
+        pool,
+        pick=6,
+        guarantee=4,
+        max_variants=1,
+        scores=scores,
     )
     assert len(tickets) == 1
     assert set(tickets[0]) == {7, 8, 9, 10, 11, 12}
@@ -250,7 +275,9 @@ def test_capped_wheel_keeps_first_ticket_strongest() -> None:
     assert raw[0] == packed[0] == [11, 12, 13, 14, 15, 16]
     raw_union = {n for t in raw for n in t}
     packed_union = {n for t in packed for n in t}
-    assert set(pool) - raw_union, "fără packing, trunchierea lexicografică pierde numere"
+    assert set(pool) - raw_union, (
+        "fără packing, trunchierea lexicografică pierde numere"
+    )
     assert packed_union == set(pool)
     assert packed_cov == raw_cov
     assert 0.0 < packed_cov < 100.0
@@ -272,16 +299,18 @@ def test_complete_system_tickets_are_sorted_ascending():
     ranking = [40, 25, 12, 9, 7, 3]  # 40 = cel mai tare
     scores = {n: 1.0 / (i + 1) for i, n in enumerate(ranking)}
 
-    wheel, cov = generate_combinatorial_wheel(pool, pick=5, guarantee=5,
-                                              max_variants=0, scores=scores)
+    wheel, cov = generate_combinatorial_wheel(
+        pool, pick=5, guarantee=5, max_variants=0, scores=scores
+    )
     assert cov == 100.0
     assert all(t == sorted(t) for t in wheel), "numerele din bilet nu sunt crescătoare"
     assert {tuple(sorted(t)) for t in wheel} == set(combinations(sorted(pool), 5))
     # primul bilet = cele mai bine punctate `pick` numere (ordinea biletelor = scor)
     assert wheel[0] == sorted(ranking[:5])
 
-    capped, cov_capped = generate_combinatorial_wheel(pool, pick=5, guarantee=5,
-                                                      max_variants=3, scores=scores)
+    capped, cov_capped = generate_combinatorial_wheel(
+        pool, pick=5, guarantee=5, max_variants=3, scores=scores
+    )
     assert len(capped) == 3 and cov_capped < 100.0
     assert all(t == sorted(t) for t in capped)
     assert capped[0] == sorted(ranking[:5])

@@ -54,10 +54,12 @@ def test_path_is_under_accepts_windows_separators_on_linux():
 
 
 def test_cmdline_script_names_uses_basename():
-    names = cmdline_script_names([
-        r"D:\_BUILD\_LOTO\.venv\Scripts\python.exe",
-        r"D:\_LIBRARIES\OneDrive\_CODING\_LOTO\worker.py",
-    ])
+    names = cmdline_script_names(
+        [
+            r"D:\_BUILD\_LOTO\.venv\Scripts\python.exe",
+            r"D:\_LIBRARIES\OneDrive\_CODING\_LOTO\worker.py",
+        ]
+    )
     assert "worker.py" in names
     assert "python.exe" in names
 
@@ -90,15 +92,19 @@ def test_process_pool_child_without_script_name_is_stale_via_venv():
 
 def test_old_filter_would_miss_bench_and_pool_child():
     """Documentează de ce filtrul vechi (script AND %~dp0 pe CommandLine) e greșit."""
-    bench_cmd = " ".join([
-        r"D:\_BUILD\_LOTO\.venv\Scripts\python.exe",
-        "bench_all_methods.py",
-    ])
-    pool_cmd = " ".join([
-        r"D:\_BUILD\_LOTO\.venv\Scripts\python.exe",
-        "-c",
-        "from multiprocessing.spawn import spawn_main; spawn_main()",
-    ])
+    bench_cmd = " ".join(
+        [
+            r"D:\_BUILD\_LOTO\.venv\Scripts\python.exe",
+            "bench_all_methods.py",
+        ]
+    )
+    pool_cmd = " ".join(
+        [
+            r"D:\_BUILD\_LOTO\.venv\Scripts\python.exe",
+            "-c",
+            "from multiprocessing.spawn import spawn_main; spawn_main()",
+        ]
+    )
     assert ROOT.lower() not in bench_cmd.lower()
     assert ROOT.lower() not in pool_cmd.lower()
     assert "bench_all_methods.py" in bench_cmd
@@ -219,7 +225,7 @@ def test_non_python_not_matched_unless_listening():
 
 def test_start8000_calls_python_cleanup_and_tree_kills_port():
     text = Path("START_8000.bat").read_text(encoding="utf-8")
-    launch = text[text.index("\n:launch_phase"):text.index("\n:push_istoric")]
+    launch = text[text.index("\n:launch_phase") : text.index("\n:push_istoric")]
     assert "cleanup_old_processes.py" in launch
     assert "--venv" in launch
     assert "CommandLine -like '*%~dp0*'" not in launch
@@ -287,6 +293,7 @@ def test_kill_pid_tree_kills_the_whole_tree(tmp_path):
         assert child_pid_line, "copilul nu și-a raportat PID-ul"
         child_pid = int(child_pid_line)
         import psutil
+
         assert psutil.pid_exists(child_pid)
 
         acted = kill_pid_tree(parent.pid)

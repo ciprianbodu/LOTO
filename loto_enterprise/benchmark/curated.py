@@ -17,6 +17,7 @@ gate-ul oficial din `decision.py` rămâne obligatoriu la fiecare Re-Bench.
 
 Cele două filtre se COMPUN: curated ∩ (available minus disabled).
 """
+
 from __future__ import annotations
 
 import json
@@ -59,10 +60,14 @@ def load_curated() -> list[str]:
             return []
         data = json.loads(_PATH.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[curated] citire %s eșuată: %s — rulez TOATE metodele.", _PATH, exc)
+        logger.warning(
+            "[curated] citire %s eșuată: %s — rulez TOATE metodele.", _PATH, exc
+        )
         return []
     if not isinstance(data, dict):
-        logger.warning("[curated] %s nu conține un obiect JSON — rulez TOATE metodele.", _PATH)
+        logger.warning(
+            "[curated] %s nu conține un obiect JSON — rulez TOATE metodele.", _PATH
+        )
         return []
     raw = data.get("active") or []
     if not isinstance(raw, (list, tuple)):
@@ -161,7 +166,9 @@ def resolve_methods_per_game(
             logger.warning(
                 "[curated] %s: %d metode per_game nu sunt candidate valide și "
                 "au fost sărite: %s",
-                game_key, len(missing), missing,
+                game_key,
+                len(missing),
+                missing,
             )
         if not selected:
             logger.error(
@@ -217,7 +224,9 @@ def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
         logger.error(
             "[curated] lista 'active' din %s nu conține NICIO metodă validă "
             "(%s) — ignor curarea și rulez toate cele %d metode.",
-            _PATH, info["missing"], len(cand),
+            _PATH,
+            info["missing"],
+            len(cand),
         )
         info["active"] = False
         info["n_after"] = len(cand)
@@ -231,20 +240,24 @@ def log_curation(info: dict) -> None:
     if not info.get("active"):
         logger.info(
             "[curated] fără curare (curated_methods.json absent/gol) — rulez toate "
-            "cele %d metode active.", info.get("n_after", 0),
+            "cele %d metode active.",
+            info.get("n_after", 0),
         )
         return
     logger.info(
         "[curated] curated: %d din %d metode (criteriu: peste baseline + semnal "
         "distinct; selecție istorică reversibilă). Anulare: șterge sau golește "
         "%s + re-bench.",
-        info.get("n_after", 0), info.get("n_before", 0), _PATH,
+        info.get("n_after", 0),
+        info.get("n_before", 0),
+        _PATH,
     )
     if info.get("missing"):
         logger.warning(
             "[curated] %d nume din 'active' nu-s candidate valide (inexistente, "
             "unavailable sau blacklistate) și au fost sărite: %s",
-            len(info["missing"]), info["missing"],
+            len(info["missing"]),
+            info["missing"],
         )
     if info.get("missing_required"):
         logger.warning(

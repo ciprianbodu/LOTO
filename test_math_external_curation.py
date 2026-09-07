@@ -1,4 +1,5 @@
 """Gărzi pentru metodele adăugate din testarea externă WF."""
+
 from __future__ import annotations
 
 import csv
@@ -11,8 +12,18 @@ from loto_enterprise.benchmark.methods import METHODS, call_method
 from loto_enterprise.core.ranking import is_consecutive_block, rank_by_score
 
 GAMES = {
-    "loto_6_49": (Path("_ISTORIC/loto_6_49.csv"), ("n1", "n2", "n3", "n4", "n5", "n6"), 49, 11),
-    "loto_5_40": (Path("_ISTORIC/loto_5_40.csv"), ("n1", "n2", "n3", "n4", "n5"), 40, 11),
+    "loto_6_49": (
+        Path("_ISTORIC/loto_6_49.csv"),
+        ("n1", "n2", "n3", "n4", "n5", "n6"),
+        49,
+        11,
+    ),
+    "loto_5_40": (
+        Path("_ISTORIC/loto_5_40.csv"),
+        ("n1", "n2", "n3", "n4", "n5"),
+        40,
+        11,
+    ),
     "joker_urna1": (Path("_ISTORIC/joker.csv"), ("n1", "n2", "n3", "n4", "n5"), 45, 11),
     "joker_urna2": (Path("_ISTORIC/joker.csv"), ("joker",), 20, 1),
 }
@@ -96,4 +107,8 @@ def test_added_math_methods_finite_not_consecutive_block():
             pool = rank_by_score(scores, pool_size)
             assert len(pool) == pool_size, (name, gk, pool)
             if pool_size > 1:
-                assert not is_consecutive_block(pool, min_size=6), (name, gk, sorted(pool))
+                assert not is_consecutive_block(pool, min_size=6), (
+                    name,
+                    gk,
+                    sorted(pool),
+                )

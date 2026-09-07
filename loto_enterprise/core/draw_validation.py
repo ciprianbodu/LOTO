@@ -36,7 +36,9 @@ def valid_draw_matrix(
     if missing:
         raise ValueError(f"lipsesc coloanele de numere: {missing}")
 
-    raw = df.loc[:, cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
+    raw = (
+        df.loc[:, cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
+    )
     finite = np.isfinite(raw)
     whole = finite & (raw == np.floor(raw))
     integers = np.where(whole, raw, 0.0).astype(np.int64)

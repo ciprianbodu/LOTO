@@ -1,4 +1,5 @@
 """Regresii pe scoring-ul Urnei 2 și pe auditul fallback-ului din engine."""
+
 import numpy as np
 import pandas as pd
 
@@ -81,7 +82,9 @@ def test_unusable_bench_scores_audit_names_frequency_fallback(monkeypatch):
 
     def _flat(self, is_joker_drum=False):
         self.audit.setdefault("bench_winner", {})["loto_6_49"] = {
-            "method": "zz_flat", "pool_hint": 11, "family": "x",
+            "method": "zz_flat",
+            "pool_hint": 11,
+            "family": "x",
         }
         return {n: 0.5 for n in range(1, 50)}
 

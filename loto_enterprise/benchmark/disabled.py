@@ -6,6 +6,7 @@ Metodele NOI (neînregistrate aici) nu sunt afectate.
 
 Populat de prune_methods.py pe baza ultimelor rezultate din benchmark.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,7 +36,9 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, indent=2, ensure_ascii=False)
-    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    fd, tmp = tempfile.mkstemp(
+        prefix=path.name + ".", suffix=".tmp", dir=str(path.parent)
+    )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
@@ -65,7 +68,12 @@ def add_disabled(names: Iterable[str], reason: str = "") -> set[str]:
     }
     try:
         _atomic_write_json(_PATH, payload)
-        logger.info("[disabled] %d metode legendate (+%d). Fișier: %s", len(cur), len(cur) - before, _PATH)
+        logger.info(
+            "[disabled] %d metode legendate (+%d). Fișier: %s",
+            len(cur),
+            len(cur) - before,
+            _PATH,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("[disabled] scriere %s eșuată: %s", _PATH, exc)
     return cur

@@ -1,6 +1,7 @@
 """Teste pentru verify_imports.py — verificarea de mediu pe care START_8000.bat
 o ruleaza la FIECARE pornire si al carei exit code decide daca aplicatia
 lanseaza sau nu (verificare globala 2026-09-07)."""
+
 from __future__ import annotations
 
 import sys

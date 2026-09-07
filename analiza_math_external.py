@@ -15,6 +15,7 @@ Urna 2 pe toate cele 111 metode. Exclude croston (statsforecast) și `random`
 
 NU e predicție — loteria e aleatoare.
 """
+
 from __future__ import annotations
 
 import json
@@ -123,6 +124,7 @@ def hyper_p_ge(k: int, universe: int, draw_n: int, pool: int) -> float:
     Delega la `decision.expected_random_rate`, sursa unica — era reimplementata
     aici separat (risc de divergenta tacuta)."""
     from loto_enterprise.benchmark.decision import expected_random_rate
+
     return expected_random_rate(universe, draw_n, pool, k)
 
 
@@ -150,7 +152,9 @@ def _eval_one(args: tuple) -> dict:
             scores, _dt = call_method(method, history, max_num)
         except Exception as exc:  # noqa: BLE001
             return {
-                "game": game_key, "method": method, "ok": False,
+                "game": game_key,
+                "method": method,
+                "ok": False,
                 "error": f"call_method: {exc}",
             }
         blocks += 1
@@ -174,7 +178,9 @@ def _eval_one(args: tuple) -> dict:
     runtime = time.perf_counter() - t0
     if n_eval == 0:
         return {
-            "game": game_key, "method": method, "ok": False,
+            "game": game_key,
+            "method": method,
+            "ok": False,
             "error": f"empty scores on all {blocks} blocks",
         }
 
@@ -268,7 +274,9 @@ def _eval_one(args: tuple) -> dict:
     }
 
 
-def _max_abs_spearman(cand_scores: dict, others: list[tuple[str, dict]]) -> tuple[float, str]:
+def _max_abs_spearman(
+    cand_scores: dict, others: list[tuple[str, dict]]
+) -> tuple[float, str]:
     worst = 0.0
     vs = ""
     for name, sc in others:
@@ -284,20 +292,31 @@ def _max_abs_spearman(cand_scores: dict, others: list[tuple[str, dict]]) -> tupl
 
 
 def main() -> None:
-    sys.stdout.reconfigure(line_buffering=True, errors="replace") if hasattr(sys.stdout, "reconfigure") else None
+    sys.stdout.reconfigure(line_buffering=True, errors="replace") if hasattr(
+        sys.stdout, "reconfigure"
+    ) else None
     candidates = _cpu_math_candidates()
     print(f"cpu_math_candidates={len(candidates)} cap={MAX_TEST_PER_GAME}")
     jobs = []
     for gk, spec in GAMES.items():
         for m in candidates:
-            jobs.append((
-                gk, m, str(spec["csv"]), spec["cols"],
-                spec["max_num"], spec["draw_n"], spec["pool"],
-            ))
+            jobs.append(
+                (
+                    gk,
+                    m,
+                    str(spec["csv"]),
+                    spec["cols"],
+                    spec["max_num"],
+                    spec["draw_n"],
+                    spec["pool"],
+                )
+            )
 
     n_cpu = max(1, int((os.cpu_count() or 2) * 0.8))
     pools = ",".join(f"{g}={s['pool']}" for g, s in GAMES.items())
-    print(f"jobs={len(jobs)} workers={n_cpu} pools={pools} wf={WF_PCT}% block={BLOCK} top={TOP_N}")
+    print(
+        f"jobs={len(jobs)} workers={n_cpu} pools={pools} wf={WF_PCT}% block={BLOCK} top={TOP_N}"
+    )
     results: list[dict] = []
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=n_cpu) as ex:
@@ -308,15 +327,18 @@ def main() -> None:
             results.append(rec)
             done += 1
             if not rec.get("ok"):
-                print(f"[{done}/{len(jobs)}] FAIL {rec.get('game')}/{rec.get('method')}: {rec.get('error')}", flush=True)
+                print(
+                    f"[{done}/{len(jobs)}] FAIL {rec.get('game')}/{rec.get('method')}: {rec.get('error')}",
+                    flush=True,
+                )
             else:
                 flag = "YES" if rec["beats"] else "no "
                 target = int(rec["hit_target"])
                 print(
                     f"[{done}/{len(jobs)}] {flag} {rec['game']:13s} {rec['method']:28s} "
-                    f"{target}+ {rec[f'rate{target}']*100:5.2f}% "
-                    f"(rnd {rec[f'p{target}']*100:5.2f}%)  "
-                    f"4+ {rec['rate4']*100:5.2f}%  {rec['runtime_sec']:.1f}s",
+                    f"{target}+ {rec[f'rate{target}'] * 100:5.2f}% "
+                    f"(rnd {rec[f'p{target}'] * 100:5.2f}%)  "
+                    f"4+ {rec['rate4'] * 100:5.2f}%  {rec['runtime_sec']:.1f}s",
                     flush=True,
                 )
     print(f"eval {time.perf_counter() - t0:.1f}s", flush=True)
@@ -410,17 +432,24 @@ def main() -> None:
     }
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(
-        json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8",
+        json.dumps(out, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
     print(f"wrote {OUTPUT_PATH}", flush=True)
-    print(f"\n=== TOP {TOP_N} (beat target random, |Spearman|<{MAX_MEMBER_CORR}, not degenerate) ===", flush=True)
+    print(
+        f"\n=== TOP {TOP_N} (beat target random, |Spearman|<{MAX_MEMBER_CORR}, not degenerate) ===",
+        flush=True,
+    )
     for gk, picked in selected.items():
-        print(f"  {gk}: {len(picked)}/{TOP_N} -> {[p['method'] for p in picked]}", flush=True)
+        print(
+            f"  {gk}: {len(picked)}/{TOP_N} -> {[p['method'] for p in picked]}",
+            flush=True,
+        )
         for p in picked:
             target = int(p["hit_target"])
             print(
-                f"      {p['method']:28s}  {target}+={p[f'rate{target}']*100:.2f}%  "
-                f"4+={p['rate4']*100:.2f}%  "
+                f"      {p['method']:28s}  {target}+={p[f'rate{target}'] * 100:.2f}%  "
+                f"4+={p['rate4'] * 100:.2f}%  "
                 f"|r|={abs(p.get('spearman_vs_picked') or 0):.3f} vs {p.get('spearman_vs_name') or '-'}",
                 flush=True,
             )

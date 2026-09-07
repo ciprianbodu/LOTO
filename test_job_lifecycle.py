@@ -9,6 +9,7 @@ joburi străine). Fiecare test merge pe o RAMURĂ, nu pe calea fericită.
 `job_queue.DB_PATH` NU redirecționează apelurile deja legate. De aceea testele
 pasează `db_path` explicit, iar cele pe `worker` leagă funcțiile cu partial.
 """
+
 import functools
 import json
 
@@ -24,7 +25,9 @@ def db(tmp_path):
 
 
 def _payload():
-    return pack_queue_result(([("f.csv", {"6/49": {"variants": [[1, 2, 3, 4, 5, 6]]}})], 1))
+    return pack_queue_result(
+        ([("f.csv", {"6/49": {"variants": [[1, 2, 3, 4, 5, 6]]}})], 1)
+    )
 
 
 # --- calea fericită, ca ancoră -------------------------------------------------
@@ -51,7 +54,7 @@ def test_running_job_not_stolen_by_second_worker(db):
     jq.submit_job("pipeline", "{}", db_path=db)
     jq.fetch_pending_job(db_path=db)
     jq.requeue_running_jobs(db_path=db)
-    jq.fetch_pending_job(db_path=db)      # claim → progress 1
+    jq.fetch_pending_job(db_path=db)  # claim → progress 1
     a = jq.fetch_running_job(db_path=db)
     b = jq.fetch_running_job(db_path=db)
     assert not (a and b and a["id"] == b["id"])
@@ -171,7 +174,10 @@ def test_complete_job_with_stale_worker_token_does_not_clobber_reclaimed_job(db)
     assert after_a["result_json"] is None
 
     # B, proprietarul curent, termină legitim.
-    assert jq.complete_job(jid, '{"real":"B"}', db_path=db, worker_token="worker-B") is True
+    assert (
+        jq.complete_job(jid, '{"real":"B"}', db_path=db, worker_token="worker-B")
+        is True
+    )
     after_b = jq.get_job_status(jid, db_path=db)
     assert after_b["status"] == "COMPLETED"
     assert after_b["result_json"] == '{"real":"B"}'
@@ -185,8 +191,12 @@ def test_fail_job_with_stale_worker_token_does_not_clobber_reclaimed_job(db):
     jq.requeue_running_jobs(db_path=db)
     jq.fetch_pending_job(db_path=db, worker_token="worker-B")
 
-    ok = jq.fail_job(jid, "worker A a crăpat, fără legătură cu rularea B",
-                     db_path=db, worker_token="worker-A")
+    ok = jq.fail_job(
+        jid,
+        "worker A a crăpat, fără legătură cu rularea B",
+        db_path=db,
+        worker_token="worker-A",
+    )
     assert ok is False
     after = jq.get_job_status(jid, db_path=db)
     assert after["status"] == "RUNNING"  # B rămâne neatins
@@ -199,13 +209,21 @@ def test_update_job_progress_with_stale_worker_token_is_noop(db):
     jq.fetch_pending_job(db_path=db, worker_token="worker-B")
 
     # True = "oprește-te" (semantica pentru un caller care nu mai deține jobul).
-    assert jq.update_job_progress(jid, 50, "progres stale de la A", db_path=db,
-                                  worker_token="worker-A") is True
+    assert (
+        jq.update_job_progress(
+            jid, 50, "progres stale de la A", db_path=db, worker_token="worker-A"
+        )
+        is True
+    )
     after = jq.get_job_status(jid, db_path=db)
     assert "progres stale de la A" not in (after["log_tail"] or "")
 
-    assert jq.update_job_progress(jid, 50, "progres real de la B", db_path=db,
-                                  worker_token="worker-B") is False
+    assert (
+        jq.update_job_progress(
+            jid, 50, "progres real de la B", db_path=db, worker_token="worker-B"
+        )
+        is False
+    )
     after = jq.get_job_status(jid, db_path=db)
     assert "progres real de la B" in after["log_tail"]
 

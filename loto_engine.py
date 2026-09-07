@@ -25,6 +25,7 @@ import sys
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.score_validation import has_usable_score_variance
+
 # Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
@@ -39,6 +40,7 @@ try:
         record_predicted_pool,
         get_state_summary,
     )
+
     _HAS_ADAPTIVE = True
 except ImportError:
     _HAS_ADAPTIVE = False
@@ -47,13 +49,15 @@ except ImportError:
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 VERSION = "1.1.2"
 warnings.filterwarnings("ignore")
 
 
-def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scores=None):
+def generate_combinatorial_wheel(
+    pool, pick=6, guarantee=4, max_variants=0, scores=None
+):
     """
     Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
     Optimizat pentru hit-uri de 4 și 5 numere prin prioritizarea scorurilor NQI/Frecvență.
@@ -64,7 +68,9 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
         )
     start_time = time.time()
     pool_len = len(pool)
-    logging.info(f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}.")
+    logging.info(
+        f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}."
+    )
 
     if pool_len < pick:
         return [list(pool)], 100.0
@@ -90,32 +96,48 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
             logging.warning(
                 "[WHEEL] guarantee==pick cu max_variants=%d < C(%d,%d)=%d — "
                 "acoperirea NU poate fi 100%% (sistem incomplet).",
-                max_variants, pool_len, pick, n_full,
+                max_variants,
+                pool_len,
+                pick,
+                n_full,
             )
             wheel = wheel[:max_variants]
         if max_variants > 0:
             from wheeling_methods import ensure_pool_numbers_on_tickets
+
             wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
-        coverage_pct = 100.0 if len(wheel) >= n_full else round(100.0 * len(wheel) / max(n_full, 1), 2)
+        coverage_pct = (
+            100.0
+            if len(wheel) >= n_full
+            else round(100.0 * len(wheel) / max(n_full, 1), 2)
+        )
         logging.info(
             "[WHEEL] Sistem complet C(%d,%d): %d bilete, acoperire %.2f%% în %.2fs.",
-            pool_len, pick, len(wheel), coverage_pct, time.time() - start_time,
+            pool_len,
+            pick,
+            len(wheel),
+            coverage_pct,
+            time.time() - start_time,
         )
         return wheel, coverage_pct
 
     # Generăm toate combinațiile de garanție ca ținte, dar le sortăm numeric
     # pentru a fi consistente cu rezultatul numeric al wheeling-ului.
     # Folosim o listă pentru ordinea greedy și un set pentru lookup rapid.
-    all_targets_list = [tuple(sorted(t)) for t in itertools.combinations(pool, guarantee)]
+    all_targets_list = [
+        tuple(sorted(t)) for t in itertools.combinations(pool, guarantee)
+    ]
 
     # Dacă avem scoruri, sortăm țintele pentru a le acoperi întâi pe cele mai probabile
     if scores:
-        all_targets_list.sort(key=lambda t: sum(scores.get(n, 0) for n in t), reverse=True)
-        
+        all_targets_list.sort(
+            key=lambda t: sum(scores.get(n, 0) for n in t), reverse=True
+        )
+
     total_targets = len(all_targets_list)
     covered_targets = set()
     wheel = []
-    
+
     iteration = 0
     max_search_per_iter = 10000 if pool_len <= 15 else 50000
 
@@ -125,14 +147,16 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
 
     while len(covered_targets) < total_targets:
         if max_variants > 0 and len(wheel) >= max_variants:
-            logging.info(f"[WHEEL] S-a atins limita maxima cerută de variante: {max_variants}.")
+            logging.info(
+                f"[WHEEL] S-a atins limita maxima cerută de variante: {max_variants}."
+            )
             break
-            
+
         iteration += 1
         best_ticket = None
         best_coverage = -1
         best_targets_covered = set()
-        
+
         # Găsim prima țintă neacoperită (cea mai valoroasă datorită sortării)
         target_to_cover = None
         for t in all_targets_list:
@@ -145,7 +169,7 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
         base_ticket = set(target_to_cover)
         # remaining_pool păstrează ordinea sortată după scor
         remaining_pool = [n for n in pool if n not in base_ticket]
-        
+
         search_count = 0
         if len(remaining_pool) >= (pick - guarantee):
             # itertools.combinations pe un pool sortat va genera combinații
@@ -159,31 +183,36 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
                     ticket_targets = set(itertools.combinations(ticket, guarantee))
                     _tt_cache[ticket] = ticket_targets
                 new_coverage = ticket_targets - covered_targets
-                
+
                 if len(new_coverage) > best_coverage:
                     best_coverage = len(new_coverage)
                     best_ticket = ticket
                     best_targets_covered = ticket_targets
-                
+
                 search_count += 1
                 if search_count > max_search_per_iter:
                     break
-        
+
         if best_ticket:
             wheel.append(list(best_ticket))
             covered_targets.update(best_targets_covered)
             if iteration % 20 == 0 or len(covered_targets) == total_targets:
-                logging.info(f"[WHEEL] Progres {iteration}: Acoperite {len(covered_targets)}/{total_targets} ținte. Bilete: {len(wheel)}")
+                logging.info(
+                    f"[WHEEL] Progres {iteration}: Acoperite {len(covered_targets)}/{total_targets} ținte. Bilete: {len(wheel)}"
+                )
         else:
-            logging.warning("[WHEEL] Nu am găsit acoperire suplimentară, oprire timpurie.")
+            logging.warning(
+                "[WHEEL] Nu am găsit acoperire suplimentară, oprire timpurie."
+            )
             break
-            
+
         if iteration > 1000:  # Timeout extins pt pool-uri mari, dar mult mai rapid
             logging.warning(f"[WHEEL] TIMEOUT: 1000 iterații.")
             break
-            
+
     if max_variants > 0:
         from wheeling_methods import ensure_pool_numbers_on_tickets
+
         wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         target_set = set(all_targets_list)
         covered_targets = set()
@@ -193,16 +222,25 @@ def generate_combinatorial_wheel(pool, pick=6, guarantee=4, max_variants=0, scor
                 itertools.combinations(tuple(sorted(int(x) for x in t)), g)
             )
         coverage_pct = (
-            100.0 if not target_set
+            100.0
+            if not target_set
             else round(100.0 * len(covered_targets & target_set) / len(target_set), 2)
         )
     else:
-        coverage_pct = 100.0 if total_targets == 0 else round((len(covered_targets) / total_targets) * 100, 2)
-    logging.info(f"[WHEEL] Generare completă în {time.time() - start_time:.2f}s. Total variante: {len(wheel)}. Acoperire: {coverage_pct}%")
+        coverage_pct = (
+            100.0
+            if total_targets == 0
+            else round((len(covered_targets) / total_targets) * 100, 2)
+        )
+    logging.info(
+        f"[WHEEL] Generare completă în {time.time() - start_time:.2f}s. Total variante: {len(wheel)}. Acoperire: {coverage_pct}%"
+    )
     return wheel, coverage_pct
 
 
-def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws: int = 127) -> dict:
+def hypergeometric_hit_forecast(
+    pool_size: int, draw_n: int, max_n: int, n_draws: int = 127
+) -> dict:
     """
     Calculează probabilitatea teoretică P(k+ hits) pentru un pool RANDOM și
     recomandă pool-ul minim necesar pentru a vedea ≥3 evenimente pe ținta
@@ -247,7 +285,9 @@ def hypergeometric_hit_forecast(pool_size: int, draw_n: int, max_n: int, n_draws
         rec_pool = None
         for trial_pool in range(pool_size, min(max_n, pool_size + 20) + 1):
             p_k = sum(
-                comb(trial_pool, j) * comb(max_n - trial_pool, draw_n - j) / total_combos
+                comb(trial_pool, j)
+                * comb(max_n - trial_pool, draw_n - j)
+                / total_combos
                 for j in range(target_k, draw_n + 1)
             )
             if p_k * n_draws >= target_events:
@@ -304,7 +344,7 @@ class LotoEngine:
                 "play_n": 5,
                 "scheme": "2-2-1",
                 "lookback": 15,
-                "max_joker": 20
+                "max_joker": 20,
             },
         }
         return params.get(game_type, params["6/49"])
@@ -338,7 +378,9 @@ class LotoEngine:
                 logging.error(
                     "[LOAD] %s: nicio extragere validă după parsare (%s rânduri "
                     "citite) — date inutilizabile pentru %s.",
-                    csv_path, len(self.data), self.game_type,
+                    csv_path,
+                    len(self.data),
+                    self.game_type,
                 )
                 self.data = None
                 return False
@@ -363,8 +405,11 @@ class LotoEngine:
         try:
             row = self.data.iloc[idx]
             n_cols = sorted(
-                [c for c in self.data.columns
-                 if str(c).lower().startswith("n") and str(c).lower() != "numbers"],
+                [
+                    c
+                    for c in self.data.columns
+                    if str(c).lower().startswith("n") and str(c).lower() != "numbers"
+                ],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
             )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I), nu toate 6
             nums = []
@@ -372,7 +417,7 @@ class LotoEngine:
                 if c in row and pd.notna(row[c]):
                     try:
                         nums.append(int(row[c]))
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         continue
             return nums if nums else None
         except Exception:
@@ -405,26 +450,36 @@ class LotoEngine:
             self._draw_matrix = None
             return
         n_cols = [
-            c for c in df.columns
+            c
+            for c in df.columns
             if str(c).lower().startswith("n") and str(c).lower() != "numbers"
         ]
-        n_cols = sorted(n_cols, key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"))[
-            : int(self.params["draw_n"])
-        ]
+        n_cols = sorted(
+            n_cols,
+            key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
+        )[: int(self.params["draw_n"])]
         draw_n = int(self.params["draw_n"])
         if len(n_cols) != draw_n:
             logging.error(
                 "[LOAD] %s: sunt necesare %d coloane n1..n%d, găsite %s.",
-                self.game_type, draw_n, draw_n, [str(c) for c in n_cols],
+                self.game_type,
+                draw_n,
+                draw_n,
+                [str(c) for c in n_cols],
             )
             self._draw_matrix = None
             return
         try:
             matrix, valid_mask = valid_draw_matrix(
-                df, n_cols, draw_n=draw_n, max_num=int(self.params["max_n"]),
+                df,
+                n_cols,
+                draw_n=draw_n,
+                max_num=int(self.params["max_n"]),
             )
         except ValueError as exc:
-            logging.error("[LOAD] %s: validare extrageri eșuată: %s", self.game_type, exc)
+            logging.error(
+                "[LOAD] %s: validare extrageri eșuată: %s", self.game_type, exc
+            )
             self._draw_matrix = None
             return
 
@@ -433,14 +488,15 @@ class LotoEngine:
             logging.warning(
                 "[LOAD] %s: elimin %d rând(uri) invalide (numere lipsă, duplicate, "
                 "zecimale sau în afara intervalului).",
-                self.game_type, rejected,
+                self.game_type,
+                rejected,
             )
             self.data = df.loc[valid_mask].reset_index(drop=True)
         self._draw_matrix = matrix.astype(np.int32, copy=False)
         self.audit["draw_number_columns"] = [str(c) for c in n_cols]
-        self.audit["invalid_draw_rows_dropped"] = int(
-            self.audit.get("invalid_draw_rows_dropped", 0)
-        ) + rejected
+        self.audit["invalid_draw_rows_dropped"] = (
+            int(self.audit.get("invalid_draw_rows_dropped", 0)) + rejected
+        )
 
     def analyze_frequency(self) -> np.ndarray:
         """Analiză frecvență numerelor (vectorizat pe matrice sau coloana numbers)."""
@@ -462,7 +518,7 @@ class LotoEngine:
         all_numbers = []
         if self.data is not None:
             n_cols = sorted(
-                [c for c in self.data.columns if str(c).lower().startswith('n')],
+                [c for c in self.data.columns if str(c).lower().startswith("n")],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
             )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
             if n_cols:
@@ -471,15 +527,19 @@ class LotoEngine:
             elif "numbers" in self.data.columns:
                 for _, row in self.data.iterrows():
                     try:
-                        nums = [int(x) for x in str(row["numbers"]).split(",") if str(x).strip().isdigit()]
+                        nums = [
+                            int(x)
+                            for x in str(row["numbers"]).split(",")
+                            if str(x).strip().isdigit()
+                        ]
                         all_numbers.extend(nums)
                     except (ValueError, TypeError) as exc:
                         logging.debug("analyze_frequency: skip row (parse): %s", exc)
                         continue
-        
+
         if not all_numbers:
             return np.zeros(max_n, dtype=np.int64)
-            
+
         arr = np.asarray(all_numbers, dtype=np.int64)
         arr = arr[(arr >= 1) & (arr <= max_n)]
         freq = np.bincount(arr, minlength=max_n + 1)
@@ -505,7 +565,10 @@ class LotoEngine:
             return np.empty(0, dtype=np.int64)
         try:
             matrix, valid_mask = valid_draw_matrix(
-                self.data, ["joker"], draw_n=1, max_num=20,
+                self.data,
+                ["joker"],
+                draw_n=1,
+                max_num=20,
             )
         except ValueError as exc:
             logging.warning("[JOKER] Urna 2 nu poate fi validată: %s", exc)
@@ -522,23 +585,27 @@ class LotoEngine:
             logging.warning(
                 "[JOKER] ignor %d valoare(i) Urna 2 invalidă(e) din %d "
                 "(accept doar întregi 1..20).",
-                dropped, total,
+                dropped,
+                total,
             )
             self.audit["joker_urna2_invalid_warning_logged"] = True
         return matrix[:, 0].astype(np.int64, copy=False)
 
-    def generate_predictions(self, guarantee=4, max_variants=0, scores=None, condition=None):
+    def generate_predictions(
+        self, guarantee=4, max_variants=0, scores=None, condition=None
+    ):
         """Generează predicții bazate pe analiză.
 
         `condition` (> guarantee) = lotto design „guarantee dacă condition": garanția
         se aplică numai când cad `condition` numere din pool, cu mult mai puține
         bilete. None sau egal cu garanția = cover clasic (comportament neschimbat).
         """
-        if not hasattr(self, 'hard_core') or not self.hard_core:
+        if not hasattr(self, "hard_core") or not self.hard_core:
             return [], 0.0
         _cond = int(condition) if condition is not None else int(guarantee)
         if _cond != int(guarantee):
             from wheeling_methods import generate_wheel
+
             variants, coverage_pct = generate_wheel(
                 "lotto",
                 pool=self.hard_core,
@@ -575,6 +642,7 @@ class LotoEngine:
             _wheel_method = "greedy"
         if _wheel_method and _wheel_method != "greedy":
             from wheeling_methods import generate_wheel
+
             variants, coverage_pct = generate_wheel(
                 _wheel_method,
                 pool=self.hard_core,
@@ -589,15 +657,19 @@ class LotoEngine:
                 pick=self.params["draw_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
-                scores=scores
+                scores=scores,
             )
-        
+
         self._attach_joker(variants)
         return variants, coverage_pct
 
     def _attach_joker(self, variants: list) -> None:
         """Atașează Joker-ul din nucleul dur de Urna 2 pe fiecare variantă (in place)."""
-        if self.game_type == "joker" and hasattr(self, 'hard_core_joker') and self.hard_core_joker:
+        if (
+            self.game_type == "joker"
+            and hasattr(self, "hard_core_joker")
+            and self.hard_core_joker
+        ):
             # Atașăm jokerul favorit pe fiecare variantă de Urna 1. Codul rămâne
             # ciclic (generic pe lungimea listei), dar cu urna2 single-pick
             # (pool 1, aliniat bench) toate variantele primesc ACELAȘI joker.
@@ -608,8 +680,9 @@ class LotoEngine:
                 variant.append(assigned_joker)  # Elementul 6 este Joker-ul
 
     @staticmethod
-    def apply_recent_penalty(scores: dict, draws_2d, n_draws: int, factor: float,
-                             max_num: int) -> tuple[dict, dict]:
+    def apply_recent_penalty(
+        scores: dict, draws_2d, n_draws: int, factor: float, max_num: int
+    ) -> tuple[dict, dict]:
         """Penalizează numerele extrase în ultimele `n_draws` extrageri.
 
         Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri se
@@ -621,7 +694,7 @@ class LotoEngine:
         n = int(n_draws or 0)
         try:
             f = float(factor)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             f = 0.5
         if n <= 0 or not scores or draws_2d is None or len(draws_2d) == 0 or f >= 1.0:
             return dict(scores), {}
@@ -636,10 +709,26 @@ class LotoEngine:
         out = {}
         for num, sc in scores.items():
             k = counts.get(int(num), 0)
-            out[num] = float(sc) * (f ** k) if k else float(sc)
+            out[num] = float(sc) * (f**k) if k else float(sc)
         return out, {k_: v_ for k_, v_ in sorted(counts.items())}
 
-    def run_institutional_pipeline(self, progress_cb=None, pool_size=12, guarantee=4, max_variants=0, lookback=0, filter_consecutives=False, smart_reduction=False, sim_depth_pct=10, enable_adaptive_persistence=False, pure_bench_mode=False, track_pool_variation=True, wheel_condition=None, recent_penalty_draws=0, recent_penalty_factor=0.5):
+    def run_institutional_pipeline(
+        self,
+        progress_cb=None,
+        pool_size=12,
+        guarantee=4,
+        max_variants=0,
+        lookback=0,
+        filter_consecutives=False,
+        smart_reduction=False,
+        sim_depth_pct=10,
+        enable_adaptive_persistence=False,
+        pure_bench_mode=False,
+        track_pool_variation=True,
+        wheel_condition=None,
+        recent_penalty_draws=0,
+        recent_penalty_factor=0.5,
+    ):
         """Rulează pipeline-ul complet de analiză.
 
         recent_penalty_draws / recent_penalty_factor: penalizare pe numerele
@@ -678,26 +767,32 @@ class LotoEngine:
         _draw_n = int(self.params["draw_n"])
         if int(guarantee) < 1:
             logging.warning(
-                "[PIPELINE] Garanție %s < 1 — imposibilă; o limitez la 1.", guarantee,
+                "[PIPELINE] Garanție %s < 1 — imposibilă; o limitez la 1.",
+                guarantee,
             )
             guarantee = 1
         if int(guarantee) > _draw_n:
             logging.warning(
                 "[PIPELINE] Garanție %s > numere extrase (%s) — imposibil; "
-                "o limitez la %s.", guarantee, _draw_n, _draw_n,
+                "o limitez la %s.",
+                guarantee,
+                _draw_n,
+                _draw_n,
             )
             guarantee = _draw_n
         # Condiția lotto design: în [guarantee, draw_n]; lipsă/0 = cover clasic.
         try:
             _wc = int(wheel_condition) if wheel_condition is not None else 0
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             _wc = 0
         if _wc <= 0:
             _wc = int(guarantee)
         if _wc < int(guarantee) or _wc > _draw_n:
             logging.warning(
                 "[PIPELINE] Condiția wheel %s în afara [%s, %s] — o limitez.",
-                wheel_condition, guarantee, _draw_n,
+                wheel_condition,
+                guarantee,
+                _draw_n,
             )
             _wc = max(int(guarantee), min(_draw_n, _wc))
         wheel_condition = _wc
@@ -737,22 +832,31 @@ class LotoEngine:
                         )
                         # Persistăm istoricul actualizat
                         history = list(state.get("history", []))
-                        history.append({
-                            "date": self._extract_date_at_index(last_rows),
-                            "pool_hits": int(adaptive_info["pool_hits"]),
-                            "actual": [int(n) for n in new_actual],
-                            "event": adaptive_event,
-                        })
+                        history.append(
+                            {
+                                "date": self._extract_date_at_index(last_rows),
+                                "pool_hits": int(adaptive_info["pool_hits"]),
+                                "actual": [int(n) for n in new_actual],
+                                "event": adaptive_event,
+                            }
+                        )
                         state["history"] = history[-50:]
                         state["regime_state"] = {
                             "streak_zero": int(adaptive_info["streak_zero"]),
-                            "rolling_avg": (float(adaptive_info["rolling_avg"])
-                                            if adaptive_info.get("rolling_avg") is not None else None),
-                            "last_reset": (self._extract_date_at_index(last_rows)
-                                           if adaptive_info["active_mode"] == "reset"
-                                           else state.get("regime_state", {}).get("last_reset")),
+                            "rolling_avg": (
+                                float(adaptive_info["rolling_avg"])
+                                if adaptive_info.get("rolling_avg") is not None
+                                else None
+                            ),
+                            "last_reset": (
+                                self._extract_date_at_index(last_rows)
+                                if adaptive_info["active_mode"] == "reset"
+                                else state.get("regime_state", {}).get("last_reset")
+                            ),
                             "active_mode": adaptive_info["active_mode"],
-                            "reset_duration": int(adaptive_info.get("reset_duration", 0)),
+                            "reset_duration": int(
+                                adaptive_info.get("reset_duration", 0)
+                            ),
                         }
                         save_adaptive_state(self.game_type, pool_size, state)
                         logging.info(
@@ -764,14 +868,22 @@ class LotoEngine:
                 self._adaptive_event = adaptive_event
                 self._adaptive_info = adaptive_info
                 self._adaptive_mode = (
-                    adaptive_info["active_mode"] if adaptive_info else
-                    state.get("regime_state", {}).get("active_mode", "normal")
+                    adaptive_info["active_mode"]
+                    if adaptive_info
+                    else state.get("regime_state", {}).get("active_mode", "normal")
                 )
                 # Hard Inversion Temporară: dacă tocmai am avut catastrofă,
                 # excludem pool-ul ratat la următoarea selecție (1 extragere).
                 try:
-                    from loto_enterprise.core.adaptive_feedback import compute_temp_blacklist as _compute_temp_bl
-                    evaluated = (adaptive_info or {}).get("evaluated_pool") if adaptive_info else None
+                    from loto_enterprise.core.adaptive_feedback import (
+                        compute_temp_blacklist as _compute_temp_bl,
+                    )
+
+                    evaluated = (
+                        (adaptive_info or {}).get("evaluated_pool")
+                        if adaptive_info
+                        else None
+                    )
                     if evaluated is None:
                         evaluated = state.get("last_pool", [])
                     self._temp_blacklist = _compute_temp_bl(
@@ -789,7 +901,9 @@ class LotoEngine:
                             sorted(self._temp_blacklist),
                         )
                 except Exception as _e_inv:
-                    logging.error(f"[HARD-INVERSION] Eroare la calcul temp_blacklist: {_e_inv}")
+                    logging.error(
+                        f"[HARD-INVERSION] Eroare la calcul temp_blacklist: {_e_inv}"
+                    )
                     self._temp_blacklist = set()
             except Exception as e:
                 logging.error(f"[ADAPTIVE] Eroare la procesarea feedback-ului: {e}")
@@ -809,8 +923,10 @@ class LotoEngine:
             if not hasattr(self, "_temp_blacklist"):
                 self._temp_blacklist = set()
 
-        logging.info(f"[PIPELINE] Inițializare scoring (câștigător bench CPU) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]...")
-        
+        logging.info(
+            f"[PIPELINE] Inițializare scoring (câștigător bench CPU) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]..."
+        )
+
         # Numarul de randuri INAINTE de trunchierea pe lookback: feedback-ul
         # adaptiv compara acest numar cu lungimea completa a CSV-ului la rularea
         # urmatoare, deci trebuie sa fie tot lungimea completa.
@@ -820,11 +936,13 @@ class LotoEngine:
             effective_rows = max(effective_rows, 1)
             actual_lookback = effective_rows
             if effective_rows == 0:
-                actual_lookback = 1 # Măcar o extragere
-            logging.info(f"[PIPELINE] Aplic limită de istoric: Ultimele {lookback}% ({actual_lookback} extrageri).")
+                actual_lookback = 1  # Măcar o extragere
+            logging.info(
+                f"[PIPELINE] Aplic limită de istoric: Ultimele {lookback}% ({actual_lookback} extrageri)."
+            )
             self.data = self.data.tail(effective_rows).copy()
             self._build_draw_matrix()
-            
+
         if progress_cb:
             progress_cb("Inițializare motor...", 10)
 
@@ -847,9 +965,15 @@ class LotoEngine:
         if self.use_bench_winner:
             try:
                 from loto_enterprise.core.method_selector import get_winner_name
-                _gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
-                       "joker": "joker_urna1"}.get(self.game_type, "loto_6_49")
-                _wn = get_winner_name(_gk, pool_size=int(getattr(self, "_winner_pool_hint", 16)))
+
+                _gk = {
+                    "6/49": "loto_6_49",
+                    "5/40": "loto_5_40",
+                    "joker": "joker_urna1",
+                }.get(self.game_type, "loto_6_49")
+                _wn = get_winner_name(
+                    _gk, pool_size=int(getattr(self, "_winner_pool_hint", 16))
+                )
                 if _wn:
                     _score_lbl = _wn
             except Exception:  # noqa: BLE001
@@ -870,44 +994,62 @@ class LotoEngine:
         # așteptată). Aplicată ÎNAINTE de top-N, pe scorurile validate.
         _rp_n = int(recent_penalty_draws or 0)
         self.audit["recent_penalty"] = {
-            "draws": _rp_n, "factor": float(recent_penalty_factor), "penalized": {},
+            "draws": _rp_n,
+            "factor": float(recent_penalty_factor),
+            "penalized": {},
         }
         if _rp_n > 0 and tfm_scores:
             tfm_scores, _pen = self.apply_recent_penalty(
-                tfm_scores, self._draw_matrix, _rp_n, recent_penalty_factor,
+                tfm_scores,
+                self._draw_matrix,
+                _rp_n,
+                recent_penalty_factor,
                 int(self.params["max_n"]),
             )
             if not has_usable_score_variance(tfm_scores):
-                logging.warning("[PIPELINE] Penalizarea recentă a aplatizat scorurile — o ignor.")
+                logging.warning(
+                    "[PIPELINE] Penalizarea recentă a aplatizat scorurile — o ignor."
+                )
                 tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
                 self.audit["recent_penalty"]["skipped_flat"] = True
             else:
-                self.audit["recent_penalty"]["penalized"] = {int(k): int(v) for k, v in _pen.items()}
-                logging.info("[PIPELINE] Penalizare recentă: ultimele %d extrageri × %.2f → %d numere afectate.",
-                             _rp_n, float(recent_penalty_factor), len(_pen))
+                self.audit["recent_penalty"]["penalized"] = {
+                    int(k): int(v) for k, v in _pen.items()
+                }
+                logging.info(
+                    "[PIPELINE] Penalizare recentă: ultimele %d extrageri × %.2f → %d numere afectate.",
+                    _rp_n,
+                    float(recent_penalty_factor),
+                    len(_pen),
+                )
 
         if progress_cb:
-            progress_cb(f"{_score_lbl} complet ({score_time/1000:.1f}s). Construiesc pool...", 45)
+            progress_cb(
+                f"{_score_lbl} complet ({score_time / 1000:.1f}s). Construiesc pool...",
+                45,
+            )
 
-        if 'performance' not in self.audit:
-            self.audit['performance'] = {}
-        self.audit['performance']['score_time_ms'] = round(score_time, 2)
+        if "performance" not in self.audit:
+            self.audit["performance"] = {}
+        self.audit["performance"]["score_time_ms"] = round(score_time, 2)
         logging.info(f"[PIPELINE] Scoring ({_score_lbl}) timp: {score_time:.2f}ms")
 
         # Feedback adaptiv pe scoruri — DEZACTIVAT (cerere user: fără filtre).
         # Pool-ul = scor pur al metodei câștigătoare / ensemble.
         blacklist = set()
         self.audit["sim_depth_pct"] = sim_depth_pct
-        self.audit['reduction_filter'] = {
-            'combined_blacklist': [],
-            'total_blocked': 0,
-            'model_used': 'DISABLED_ALL_FILTERS',
-            'sim_depth_pct': sim_depth_pct,
-            'disabled_by_user': True,
+        self.audit["reduction_filter"] = {
+            "combined_blacklist": [],
+            "total_blocked": 0,
+            "model_used": "DISABLED_ALL_FILTERS",
+            "sim_depth_pct": sim_depth_pct,
+            "disabled_by_user": True,
         }
         logging.info("[PIPELINE] Filtre dezactivate — pool = top-scor pur.")
 
-        self.hard_core = self._get_timesfm_pool(tfm_scores, pool_size=pool_size, blacklist=blacklist)
+        self.hard_core = self._get_timesfm_pool(
+            tfm_scores, pool_size=pool_size, blacklist=blacklist
+        )
 
         # Biletul OMNIUS a fost eliminat din UI și din walk-forward → snapshot-ul
         # de scoruri (`_last_pool_scores`) și audit['omnius_pool_scores'] nu mai au
@@ -916,7 +1058,7 @@ class LotoEngine:
 
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
-        self.audit['pipeline_stages'] = {
+        self.audit["pipeline_stages"] = {
             "1_nqi_raw": sorted(self.hard_core.copy()),
         }
 
@@ -925,34 +1067,58 @@ class LotoEngine:
         self.audit["pure_bench_mode"] = True
         self.audit["filters_disabled"] = True
         if len(self.hard_core) > pool_size:
-            logging.warning(f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor.")
+            logging.warning(
+                f"[PIPELINE] Nucleul dur avea {len(self.hard_core)} numere. Trunchiere la {pool_size} după scor."
+            )
             # Trunchiere prin regula canonică (nu sortare proprie): la scoruri egale
             # decide numărul mare, exact ca bench-ul. Ramură defensivă — selectorul
             # întoarce deja cel mult pool_size numere.
-            ranked = rank_by_score({int(n): float(tfm_scores.get(n, 0.0)) for n in self.hard_core}, pool_size)
+            ranked = rank_by_score(
+                {int(n): float(tfm_scores.get(n, 0.0)) for n in self.hard_core},
+                pool_size,
+            )
             self.hard_core = sorted(ranked)
         elif len(self.hard_core) < pool_size:
-            logging.warning(f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}.")
-        logging.info(f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}")
+            logging.warning(
+                f"[PIPELINE] Nucleul dur avea doar {len(self.hard_core)} numere. Pool_size solicitat: {pool_size}."
+            )
+        logging.info(
+            f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}"
+        )
         self._consecutive_filter_applied = False
-        self.audit['pipeline_stages']["2_smart_selector"] = sorted(self.hard_core.copy())
-        self.audit['pipeline_stages']["3_anti_sequence"] = sorted(self.hard_core.copy())
-        self.audit['pipeline_stages']["4_post_hoc_final"] = sorted(self.hard_core.copy())
-        
+        self.audit["pipeline_stages"]["2_smart_selector"] = sorted(
+            self.hard_core.copy()
+        )
+        self.audit["pipeline_stages"]["3_anti_sequence"] = sorted(self.hard_core.copy())
+        self.audit["pipeline_stages"]["4_post_hoc_final"] = sorted(
+            self.hard_core.copy()
+        )
+
         if self.game_type == "joker":
-            logging.info(f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)...")
-            j_scores = self._get_timesfm_scores(is_joker_drum=True, context_len=actual_lookback)
+            logging.info(
+                f"[PIPELINE] Scoring Urna 2 (Joker — câștigător bench / TimesFM)..."
+            )
+            j_scores = self._get_timesfm_scores(
+                is_joker_drum=True, context_len=actual_lookback
+            )
             if _rp_n > 0 and j_scores:
                 _jk_hist = self._valid_joker_values()
                 _j_pen, _jp = self.apply_recent_penalty(
-                    j_scores, _jk_hist.reshape(-1, 1) if _jk_hist.size else None,
-                    _rp_n, recent_penalty_factor, 20,
+                    j_scores,
+                    _jk_hist.reshape(-1, 1) if _jk_hist.size else None,
+                    _rp_n,
+                    recent_penalty_factor,
+                    20,
                 )
                 if has_usable_score_variance(_j_pen):
                     j_scores = _j_pen
-                    self.audit["recent_penalty"]["penalized_urna2"] = {int(k): int(v) for k, v in _jp.items()}
+                    self.audit["recent_penalty"]["penalized_urna2"] = {
+                        int(k): int(v) for k, v in _jp.items()
+                    }
                 else:
-                    logging.warning("[PIPELINE] Penalizarea recentă a aplatizat scorurile Urnei 2 — o ignor.")
+                    logging.warning(
+                        "[PIPELINE] Penalizarea recentă a aplatizat scorurile Urnei 2 — o ignor."
+                    )
                     self.audit["recent_penalty"]["skipped_flat_urna2"] = True
             # joker_urna2 e single-pick (pool 1) în TOT lanțul bench→decizie→UI
             # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
@@ -964,34 +1130,45 @@ class LotoEngine:
                 # la scoruri egale engine-ul ar alege alt număr decât cel validat.
                 ranked_j = rank_by_score(j_scores, 5)
                 self.hard_core_joker = [int(ranked_j[0])]
-                logging.info(f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}")
-                self.audit['joker_predictions'] = {int(n): round(float(j_scores[n]), 4) for n in ranked_j}
+                logging.info(
+                    f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}"
+                )
+                self.audit["joker_predictions"] = {
+                    int(n): round(float(j_scores[n]), 4) for n in ranked_j
+                }
             else:
                 freq_joker = self.analyze_joker_frequency()
                 if int(freq_joker.sum()) == 0:
                     # Nu există o observație validă în Urna 2. Alegerea unui număr
                     # dintr-un vector de zerouri ar fi doar tie-break arbitrar.
                     self.hard_core_joker = []
-                    self.audit['joker_urna2_unavailable'] = True
-                    self.audit['joker_predictions'] = {}
+                    self.audit["joker_urna2_unavailable"] = True
+                    self.audit["joker_predictions"] = {}
                     logging.warning(
                         "[PIPELINE] Urna 2 Joker nu are valori valide (1..20) — "
                         "nu atașez un număr Joker arbitrar pe bilete."
                     )
                 else:
-                    self.hard_core_joker = self._get_hard_core_joker(freq_joker, pool_size=1)
+                    self.hard_core_joker = self._get_hard_core_joker(
+                        freq_joker, pool_size=1
+                    )
                     # Candidați informativi (top-5 după frecvență) și pe fallback,
                     # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
-                    self.audit['joker_predictions'] = {
-                        int(i) + 1: int(freq_joker[i]) for i in np.argsort(freq_joker)[-5:][::-1]
+                    self.audit["joker_predictions"] = {
+                        int(i) + 1: int(freq_joker[i])
+                        for i in np.argsort(freq_joker)[-5:][::-1]
                     }
-                    logging.info(f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}")
+                    logging.info(
+                        f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}"
+                    )
         if progress_cb:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
 
         logging.info("[PIPELINE] Începe generarea predicțiilor (Wheeling Set Cover)...")
         # Folosim tfm_scores dacă sunt disponibile, altfel fallback pe frecvență pentru wheeling
-        wheeling_scores = tfm_scores if tfm_scores else {i+1: float(f) for i, f in enumerate(freq)}
+        wheeling_scores = (
+            tfm_scores if tfm_scores else {i + 1: float(f) for i, f in enumerate(freq)}
+        )
         # Contract cu UI: garanția EFECTIV folosită la wheel (identică cu cea cerută
         # în UI — nu mai există nicio escaladare pe drum). UI-ul o afișează ca atare.
         self.audit["wheel_guarantee_used"] = int(guarantee)
@@ -1000,41 +1177,69 @@ class LotoEngine:
         # declanșată doar când cad `condition` numere din pool).
         self.audit["wheel_condition_used"] = int(wheel_condition)
         lines, coverage_pct = self.generate_predictions(
-            guarantee=guarantee, max_variants=max_variants, scores=wheeling_scores,
+            guarantee=guarantee,
+            max_variants=max_variants,
+            scores=wheeling_scores,
             condition=wheel_condition,
         )
-        
+
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar
         # putea sparge garanția de acoperire. Dacă vreodată se reintroduce unul,
         # foloseşte `wheeling_methods.filter_preserving_coverage` (scoate bilete doar
         # dacă rămân redundante) şi revalidează cu `compute_coverage_pct`.
-        logging.info(f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%")
+        logging.info(
+            f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%"
+        )
 
         if progress_cb:
             progress_cb("Validare rezultate...", 90)
 
         # Recalculăm statisticile pentru afișare corectă în UI (procente)
         final_freq = self.analyze_frequency()
-        self.hard_core_stats = {int(num): int(final_freq[num-1]) for num in self.hard_core if num-1 < len(final_freq)}
-        
+        self.hard_core_stats = {
+            int(num): int(final_freq[num - 1])
+            for num in self.hard_core
+            if num - 1 < len(final_freq)
+        }
+
         if self.game_type == "joker":
             final_j_freq = self.analyze_joker_frequency()
-            self.hard_core_joker_stats = {int(num): int(final_j_freq[num-1]) for num in self.hard_core_joker if num-1 < len(final_j_freq)}
+            self.hard_core_joker_stats = {
+                int(num): int(final_j_freq[num - 1])
+                for num in self.hard_core_joker
+                if num - 1 < len(final_j_freq)
+            }
 
-        p10, p90 = np.percentile(final_freq, [10, 90]) if final_freq.size else (0.0, 0.0)
+        p10, p90 = (
+            np.percentile(final_freq, [10, 90]) if final_freq.size else (0.0, 0.0)
+        )
         g_range = [p10 * self.params["draw_n"], p90 * self.params["draw_n"]]
 
-        context = {
-            "first_3": [],
-            "last_3": []
-        }
+        context = {"first_3": [], "last_3": []}
         if self.data is not None and not self.data.empty:
             draw_n = int(self.params.get("draw_n", 6))
+
             def extract_draws(df_subset):
                 draws = []
                 for _, row in df_subset.iterrows():
-                    d = {"date": str(row.get("date", "")).split()[0] if "date" in row else "N/A", "numbers": [], "joker": None}
-                    n_cols = sorted([c for c in df_subset.columns if str(c).lower().startswith("n") and str(c).lower() != "numbers"], key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"))
+                    d = {
+                        "date": str(row.get("date", "")).split()[0]
+                        if "date" in row
+                        else "N/A",
+                        "numbers": [],
+                        "joker": None,
+                    }
+                    n_cols = sorted(
+                        [
+                            c
+                            for c in df_subset.columns
+                            if str(c).lower().startswith("n")
+                            and str(c).lower() != "numbers"
+                        ],
+                        key=lambda x: int(
+                            "".join(ch for ch in str(x) if ch.isdigit()) or "0"
+                        ),
+                    )
                     nums = [row[c] for c in n_cols if pd.notna(row.get(c))]
                     d["numbers"] = [int(x) for x in nums][:draw_n]
                     if "joker" in df_subset.columns and pd.notna(row.get("joker")):
@@ -1044,15 +1249,18 @@ class LotoEngine:
 
             context["first_3"] = extract_draws(self.data.head(3))
             context["last_3"] = extract_draws(self.data.tail(3))
-            
+
         context["coverage_pct"] = coverage_pct
         context["wheel_condition"] = int(wheel_condition)
-        context["recent_penalty"] = {"draws": _rp_n, "factor": float(recent_penalty_factor)}
+        context["recent_penalty"] = {
+            "draws": _rp_n,
+            "factor": float(recent_penalty_factor),
+        }
         # Necesar UI-ului ca să atribuie corect cauza unei acoperiri <100%: limita
         # de variante SAU garanție degenerată. Fără el, mesajul acuza mereu limita,
         # inclusiv când era deja 0 (nelimitat), și sfătuia „pune 0" fără efect.
         context["max_variants"] = int(max_variants)
-            
+
         if progress_cb:
             progress_cb("Pipeline complet!", 100)
 
@@ -1069,7 +1277,7 @@ class LotoEngine:
                 import json
                 from pathlib import Path
                 from datetime import datetime
-            
+
                 history_file = Path("pool_history.json")
                 history = {}
                 if history_file.exists():
@@ -1081,11 +1289,20 @@ class LotoEngine:
                         with open(history_file, "r", encoding="utf-8") as f:
                             history = json.load(f)
                         if not isinstance(history, dict):
-                            raise ValueError(f"structură neașteptată: {type(history).__name__}")
-                    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
-                        logging.warning("[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.", exc)
+                            raise ValueError(
+                                f"structură neașteptată: {type(history).__name__}"
+                            )
+                    except (
+                        json.JSONDecodeError,
+                        ValueError,
+                        UnicodeDecodeError,
+                    ) as exc:
+                        logging.warning(
+                            "[PIPELINE] pool_history.json corupt (%s) → îl reconstruiesc.",
+                            exc,
+                        )
                         history = {}
-            
+
                 hist_key = f"{self.game_type}_{pool_size}"
                 legacy_key = f"{hist_key}_p1"
                 last_pool = (history.get(hist_key, {}) or {}).get("pool", [])
@@ -1093,10 +1310,11 @@ class LotoEngine:
                     last_pool = (history.get(legacy_key, {}) or {}).get("pool", [])
                 # Migrare unică: elimină intrările vechi cu sufix de fază.
                 history = {
-                    k: v for k, v in history.items()
+                    k: v
+                    for k, v in history.items()
                     if not (str(k).endswith("_p1") or str(k).endswith("_p2"))
                 }
-            
+
                 pool_variation = {}
                 if last_pool:
                     added = sorted(list(set(self.hard_core) - set(last_pool)))
@@ -1104,16 +1322,17 @@ class LotoEngine:
                     pool_variation = {
                         "added": added,
                         "removed": removed,
-                        "changed": bool(added or removed)
+                        "changed": bool(added or removed),
                     }
-            
+
                 history[hist_key] = {
                     "pool": self.hard_core,
-                    "date": datetime.now().isoformat()
+                    "date": datetime.now().isoformat(),
                 }
                 from ui_shared import atomic_write_json
+
                 atomic_write_json(history_file, history)  # atomic: tmp+fsync+os.replace
-                
+
                 self.audit["pool_variation"] = pool_variation
             except Exception as e:
                 logging.error(f"[PIPELINE] Eroare la tracker-ul de variație: {e}")
@@ -1138,7 +1357,9 @@ class LotoEngine:
                     "boosts": summary.get("boosts", []),
                     "penalties": summary.get("penalties", []),
                     "missed": (adaptive_info.get("missed") if adaptive_info else []),
-                    "false_positives": (adaptive_info.get("false_positives") if adaptive_info else []),
+                    "false_positives": (
+                        adaptive_info.get("false_positives") if adaptive_info else []
+                    ),
                 }
             except Exception as e:
                 logging.error(f"[ADAPTIVE] Eroare la persistarea pool-ului: {e}")
@@ -1147,7 +1368,9 @@ class LotoEngine:
         # Calculează P(k+ hits) pentru pool RANDOM și recomandă pool minim
         # pentru ≥3 evenimente 3+/4+/5+. UI-ul citește audit.hit_forecast.
         try:
-            n_recent_for_forecast = max(int(len(self.data) * 0.05), 1) if self.data is not None else 100
+            n_recent_for_forecast = (
+                max(int(len(self.data) * 0.05), 1) if self.data is not None else 100
+            )
             forecast = hypergeometric_hit_forecast(
                 pool_size=len(self.hard_core) if self.hard_core else int(pool_size),
                 draw_n=int(self.params["draw_n"]),
@@ -1162,7 +1385,9 @@ class LotoEngine:
         logging.info("[PIPELINE] Pipeline completat cu succes.")
         return lines, p10, p90, g_range, context, self.audit
 
-    def _get_initial_hard_core(self, freq: np.ndarray, pool_size=12, filter_consecutives=False, blacklist=None) -> list:
+    def _get_initial_hard_core(
+        self, freq: np.ndarray, pool_size=12, filter_consecutives=False, blacklist=None
+    ) -> list:
         """Selectează nucleul dur inițial bazat pe top frecvență.
 
         FALLBACK: se folosește doar când scorerul n-a produs niciun scor
@@ -1170,11 +1395,11 @@ class LotoEngine:
         `select_pool_from_scores`.
         """
         logging.info(f"[INIT] Generare nucleu inițial de {pool_size} numere...")
-        
+
         # Inițializăm blacklist dacă nu e furnizat
         if blacklist is None:
             blacklist = set()
-        
+
         # Luăm top cele mai frecvente numere ca punct de plecare
         freq_scores = {
             int(i) + 1: float(freq[i])
@@ -1182,20 +1407,27 @@ class LotoEngine:
             if freq[i] > 0 and (int(i) + 1) not in blacklist
         }
         pool = rank_by_score(freq_scores, pool_size)
-        
+
         if filter_consecutives:
             pool = self._apply_consecutive_filter(pool, freq)
             self._consecutive_filter_applied = True
         else:
             self._consecutive_filter_applied = False
-            
+
         # Salvăm statisticile inițiale
-        self.hard_core_stats = {int(num): int(freq[num - 1]) for num in pool if num - 1 < len(freq)}
+        self.hard_core_stats = {
+            int(num): int(freq[num - 1]) for num in pool if num - 1 < len(freq)
+        }
         logging.info(f"[INIT] Nucleu inițial: {pool}")
         return pool
 
-    def _apply_consecutive_filter(self, pool: list, freq: np.ndarray, scores: dict | None = None,
-                                  avoid: set | None = None) -> list:
+    def _apply_consecutive_filter(
+        self,
+        pool: list,
+        freq: np.ndarray,
+        scores: dict | None = None,
+        avoid: set | None = None,
+    ) -> list:
         """STRICT (cerință utilizator): NU păstrăm NICIO pereche de numere consecutive
         în pool (nici 9-10, nici 38-39). Pentru fiecare adiacență (run de 2+): scoatem
         cel mai slab număr (după frecvență) și punem cea mai bine cotată rezervă care NU
@@ -1206,7 +1438,7 @@ class LotoEngine:
         """
         if self.data is None or len(pool) < 2:
             return pool
-            
+
         draw_sets = []
         if self._draw_matrix is not None and self._draw_matrix.size:
             draw_sets = [set(row) for row in self._draw_matrix]
@@ -1214,16 +1446,32 @@ class LotoEngine:
             # Robust columns detection
             df = self.data
             n_cols = sorted(
-                [c for c in df.columns if str(c).lower().startswith('n') and str(c).lower() != 'numbers'],
+                [
+                    c
+                    for c in df.columns
+                    if str(c).lower().startswith("n") and str(c).lower() != "numbers"
+                ],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
             )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
             if n_cols:
                 for _, row in df.iterrows():
-                    draw_sets.append(set(pd.to_numeric(row[n_cols], errors='coerce').dropna().astype(int)))
+                    draw_sets.append(
+                        set(
+                            pd.to_numeric(row[n_cols], errors="coerce")
+                            .dropna()
+                            .astype(int)
+                        )
+                    )
             elif "numbers" in df.columns:
                 for _, row in df.iterrows():
                     try:
-                        draw_sets.append(set(int(x) for x in str(row["numbers"]).split(",") if str(x).strip().isdigit()))
+                        draw_sets.append(
+                            set(
+                                int(x)
+                                for x in str(row["numbers"]).split(",")
+                                if str(x).strip().isdigit()
+                            )
+                        )
                     except (ValueError, TypeError) as exc:
                         logging.debug("anti-sequence: skip row (parse): %s", exc)
                         continue
@@ -1238,7 +1486,9 @@ class LotoEngine:
                 reverse=True,
             )
             # Convertim la indici 0-based pentru compatibilitate cu codul existent
-            all_sorted_indices = np.array([n - 1 for n in ranked_reserves], dtype=np.int64)
+            all_sorted_indices = np.array(
+                [n - 1 for n in ranked_reserves], dtype=np.int64
+            )
             _replacement_signal = "bench-winner scores"
         else:
             all_sorted_indices = np.argsort(freq)[::-1]
@@ -1282,10 +1532,10 @@ class LotoEngine:
                 if len(consecutive_nums) >= 2:
                     found_sequence = tuple(consecutive_nums)
                     break
-            
+
             if not found_sequence:
                 break
-                
+
             # STRICT (cerință utilizator): NU păstrăm NICIO pereche consecutivă în pool
             # (nici 2 adiacente). Spargem orice consecutiv găsit.
             seq_set = set(found_sequence)
@@ -1315,7 +1565,8 @@ class LotoEngine:
                 logging.warning(
                     "[ANTI-SEQ] Nicio rezervă disponibilă (pool epuizat) — opresc filtrul cu "
                     "%d numere în pool (cerut %d); posibil consecutive rămase.",
-                    len(current_pool), len(pool),
+                    len(current_pool),
+                    len(pool),
                 )
                 break  # nu mai există rezerve (improbabil) — oprim
             if chosen is None:
@@ -1325,7 +1576,8 @@ class LotoEngine:
                 logging.warning(
                     "[ANTI-SEQ] Fallback chosen_any pentru secvența %s: nicio rezervă neadiacentă "
                     "disponibilă, aleg %d (poate reintroduce o adiacență).",
-                    found_sequence, pick,
+                    found_sequence,
+                    pick,
                 )
             current_pool.append(pick)
             modifications.append(
@@ -1334,9 +1586,9 @@ class LotoEngine:
                 f"(frecvență {int(freq[pick - 1])})"
             )
             current_pool = sorted(current_pool)
-            
+
         if modifications:
-            self.audit['consecutive_filter'] = modifications
+            self.audit["consecutive_filter"] = modifications
             logging.info(f"[FILTER] Modificări anti-secvență: {modifications}")
 
         # Verificare finală (doar audit/log — nu schimbă pool-ul): garanția "zero
@@ -1345,7 +1597,7 @@ class LotoEngine:
             (a, b) for a, b in zip(current_pool, current_pool[1:]) if b == a + 1
         ]
         if fallback_any_count or guard_triggered or remaining_adjacent:
-            self.audit['consecutive_filter_warnings'] = {
+            self.audit["consecutive_filter_warnings"] = {
                 "fallback_any_count": fallback_any_count,
                 "iter_guard_triggered": guard_triggered,
                 "remaining_adjacent_pairs": remaining_adjacent,
@@ -1353,11 +1605,13 @@ class LotoEngine:
             logging.warning(
                 "[ANTI-SEQ] Garanție posibil incompletă: fallback_any=%d, iter_guard=%s, "
                 "perechi adiacente rămase=%s",
-                fallback_any_count, guard_triggered, remaining_adjacent,
+                fallback_any_count,
+                guard_triggered,
+                remaining_adjacent,
             )
 
         return current_pool
-        
+
     def _get_hard_core_joker(self, freq: np.ndarray, pool_size=3) -> list:
         """Selectează nucleul dur pentru Joker (1-based) și salvează statisticile."""
         freq_scores = {int(i) + 1: float(freq[i]) for i in range(len(freq))}
@@ -1379,7 +1633,10 @@ class LotoEngine:
         so the caller falls back to TimesFM.
         """
         try:
-            from loto_enterprise.core.method_selector import get_ensemble_for_game, combine_ensemble_scores
+            from loto_enterprise.core.method_selector import (
+                get_ensemble_for_game,
+                combine_ensemble_scores,
+            )
             from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
         except Exception as exc:
             logging.warning("[ENGINE] method_selector import failed: %s", exc)
@@ -1428,8 +1685,9 @@ class LotoEngine:
             # backup vechi sau scris de o regresie viitoare cu >1 membri ar fi fost
             # blendat tăcut aici — exact regresia măsurată în §5 pct. 8 (Joker k11:
             # blend 6.73% sub random 8.53%, față de 11.16% pentru câștigătorul unic).
-            ensemble = get_ensemble_for_game(game_key, pool_size=_pool_hint,
-                                             max_methods=ENSEMBLE_MAX_METHODS)
+            ensemble = get_ensemble_for_game(
+                game_key, pool_size=_pool_hint, max_methods=ENSEMBLE_MAX_METHODS
+            )
             if not ensemble:
                 return {}
             contributions = []
@@ -1437,7 +1695,11 @@ class LotoEngine:
                 try:
                     raw = fn(draws_2d, max_num)
                 except Exception as exc_m:
-                    logging.warning("[ENGINE] ensemble member %s a eșuat: %s — sar peste", name, exc_m)
+                    logging.warning(
+                        "[ENGINE] ensemble member %s a eșuat: %s — sar peste",
+                        name,
+                        exc_m,
+                    )
                     raw = {}
                 contributions.append((name, raw, weight))
             # Auditul primeşte compoziţia EFECTIVĂ (după filtrul de varianţă şi
@@ -1450,24 +1712,30 @@ class LotoEngine:
             _active = _ens_audit.get("ensemble_active") or []
             # Cap de listă = primul membru ACTIV (după filtrare), nu ensemble[0]
             # nominal care putea fi sărit ca plat/corelat.
-            winner = (_active[0][0] if _active else ensemble[0][0])
+            winner = _active[0][0] if _active else ensemble[0][0]
             _n_act = len(_active) if _active else len(ensemble)
             logging.info(
                 "[ENGINE] bench-winner scoring: game=%s pool=%d -> %s%s",
-                game_key, _pool_hint, winner,
+                game_key,
+                _pool_hint,
+                winner,
                 (
                     f" (+ ensemble {_n_act} activi / {len(ensemble)} nominali)"
-                    if len(ensemble) > 1 else ""
+                    if len(ensemble) > 1
+                    else ""
                 ),
             )
             family = ""
             try:
                 from loto_enterprise.benchmark.methods import METHODS as _METHODS
+
                 meta = _METHODS.get(winner)
                 if meta:
                     family = meta[1]
             except Exception as _exc_fam:
-                logging.debug("[ENGINE] family lookup pt %s eșuat: %s", winner, _exc_fam)
+                logging.debug(
+                    "[ENGINE] family lookup pt %s eșuat: %s", winner, _exc_fam
+                )
             bench_winner_info = {
                 "method": winner,
                 "pool_hint": _pool_hint,
@@ -1482,33 +1750,49 @@ class LotoEngine:
                     ]
                 else:
                     bench_winner_info["ensemble"] = [
-                        {"method": n, "weight": round(w, 4)} for n, _raw, w in contributions if _raw
+                        {"method": n, "weight": round(w, 4)}
+                        for n, _raw, w in contributions
+                        if _raw
                     ]
                 _dropped: list = []
-                for t in (_ens_audit.get("ensemble_dropped_correlated") or []):
+                for t in _ens_audit.get("ensemble_dropped_correlated") or []:
                     if isinstance(t, (tuple, list)) and t:
-                        _dropped.append({
-                            "method": t[0],
-                            "r": t[1] if len(t) > 1 else None,
-                            "vs": t[2] if len(t) > 2 else None,
-                            "reason": "correlated",
-                        })
-                for d in (_ens_audit.get("ensemble_dropped") or []):
+                        _dropped.append(
+                            {
+                                "method": t[0],
+                                "r": t[1] if len(t) > 1 else None,
+                                "vs": t[2] if len(t) > 2 else None,
+                                "reason": "correlated",
+                            }
+                        )
+                for d in _ens_audit.get("ensemble_dropped") or []:
                     if isinstance(d, dict):
-                        _dropped.append({
-                            "method": d.get("method"),
-                            "r": d.get("r"),
-                            "vs": d.get("vs"),
-                            "reason": d.get("reason") or "flat_or_empty",
-                        })
+                        _dropped.append(
+                            {
+                                "method": d.get("method"),
+                                "r": d.get("r"),
+                                "vs": d.get("vs"),
+                                "reason": d.get("reason") or "flat_or_empty",
+                            }
+                        )
                     else:
-                        _dropped.append({"method": d, "r": None, "vs": None, "reason": "flat_or_empty"})
+                        _dropped.append(
+                            {
+                                "method": d,
+                                "r": None,
+                                "vs": None,
+                                "reason": "flat_or_empty",
+                            }
+                        )
                 if _dropped:
                     bench_winner_info["ensemble_dropped"] = _dropped
             # Flagurile documentate în CLAUDE.md (ex. ensemble_single_active_normalized)
             # se pierdeau: combine_ensemble_scores le scria doar în _ens_audit local.
-            for _flag in ("ensemble_single_active_normalized",
-                          "ensemble_fallback_flat", "ensemble_fallback_empty"):
+            for _flag in (
+                "ensemble_single_active_normalized",
+                "ensemble_fallback_flat",
+                "ensemble_fallback_empty",
+            ):
                 if _ens_audit.get(_flag):
                     bench_winner_info[_flag] = True
             if game_key == "joker_urna2":
@@ -1520,7 +1804,9 @@ class LotoEngine:
             logging.warning("[ENGINE] bench-winner scoring failed: %s", exc)
             return {}
 
-    def _get_timesfm_scores(self, is_joker_drum: bool = False, context_len: int = 4096) -> dict[int, float]:
+    def _get_timesfm_scores(
+        self, is_joker_drum: bool = False, context_len: int = 4096
+    ) -> dict[int, float]:
         """Scoruri per număr pentru selecția pool-ului.
 
         Sursă: metoda câștigătoare din benchmark pentru jocul/pool-ul curent
@@ -1546,12 +1832,16 @@ class LotoEngine:
                 self.audit["bench_winner_flat_scores"] = True
                 self.audit["bench_winner_unusable_scores"] = True
                 self._bench_winner_unusable_attempt = (
-                    self.audit.get("bench_winner", {}) or {}
-                ).get(self._bench_game_key(is_joker_drum), {}).get("method")
+                    (self.audit.get("bench_winner", {}) or {})
+                    .get(self._bench_game_key(is_joker_drum), {})
+                    .get("method")
+                )
                 scores = {}
             if scores:
                 return scores
-            logging.warning("[ENGINE] bench-winner scoring returned empty — fallback frecvență")
+            logging.warning(
+                "[ENGINE] bench-winner scoring returned empty — fallback frecvență"
+            )
             if is_joker_drum:
                 _gk = "joker_urna2"
                 _ph = 1
@@ -1572,8 +1862,11 @@ class LotoEngine:
             _fb_info = {
                 "method": "frequency",
                 "fallback": True,
-                "reason": ("bench-winner scoring unusable" if _attempted
-                           else "bench-winner scoring empty"),
+                "reason": (
+                    "bench-winner scoring unusable"
+                    if _attempted
+                    else "bench-winner scoring empty"
+                ),
                 "pool_hint": _ph,
                 "family": "baseline",
             }
@@ -1586,10 +1879,13 @@ class LotoEngine:
         """Cheia de joc din best_methods.json pentru (game_type, is_joker_drum)."""
         if is_joker_drum:
             return "joker_urna2"
-        return {"6/49": "loto_6_49", "5/40": "loto_5_40",
-                "joker": "joker_urna1"}.get(self.game_type, "loto_6_49")
+        return {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}.get(
+            self.game_type, "loto_6_49"
+        )
 
-    def _frequency_fallback_scores(self, is_joker_drum: bool = False) -> dict[int, float]:
+    def _frequency_fallback_scores(
+        self, is_joker_drum: bool = False
+    ) -> dict[int, float]:
         """Fallback determinist când câștigătorul bench nu produce scoruri:
         frecvență recency-weighted (exp-decay) pe istoric, normalizată [0,1]."""
         max_num = 20 if is_joker_drum else int(self.params["max_n"])
@@ -1620,21 +1916,29 @@ class LotoEngine:
         rng = max(vmax - vmin, 1e-12)
         return {i: float((raw[i] - vmin) / rng) for i in range(1, max_num + 1)}
 
-    def _get_timesfm_pool(self, scores: dict[int, float], pool_size: int, blacklist: set[int]) -> list[int]:
+    def _get_timesfm_pool(
+        self, scores: dict[int, float], pool_size: int, blacklist: set[int]
+    ) -> list[int]:
         """Selectează top-N după scor (aliniat bench). Numele e istoric (TimesFM)."""
         if not scores:
             # Fallback pe frecvență dacă TimesFM e indisponibil
             freq = self.analyze_frequency()
-            return self._get_initial_hard_core(freq, pool_size=pool_size, blacklist=blacklist)
+            return self._get_initial_hard_core(
+                freq, pool_size=pool_size, blacklist=blacklist
+            )
 
         max_num = int(self.params.get("max_n", 49))
 
         # Selector top-N după scor (aliniat bench / țintă 3+) — logică pură CPU.
         pool = select_pool_from_scores(
-            scores, pool_size, blacklist, self.audit,
-            max_num=max_num, draw_matrix=self._draw_matrix,
+            scores,
+            pool_size,
+            blacklist,
+            self.audit,
+            max_num=max_num,
+            draw_matrix=self._draw_matrix,
         )
-        
+
         # Gardă defensivă: dacă selectorul întoarce prea puține numere,
         # completăm numai din candidații ne-excluși.
         if len(pool) < pool_size:
@@ -1659,7 +1963,7 @@ class LotoEngine:
                     f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). "
                     "Fallback frecvență, tot fără blacklist."
                 )
-                freq = getattr(self, 'freq', None)
+                freq = getattr(self, "freq", None)
                 if freq is None:
                     freq = self.analyze_frequency()
                 have = {int(n) for n in pool}
@@ -1676,4 +1980,3 @@ class LotoEngine:
                 )
 
         return sorted(pool[:pool_size])
-

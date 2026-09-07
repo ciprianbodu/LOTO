@@ -6,6 +6,7 @@ Each scorer respects the same interface as methods.py:
 All methods here are CPU-friendly (no GPU required). Lazy imports — if a
 library is missing, the scorer returns {} and the method is marked unavailable.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Shared helpers (copy of utilities so this module is self-contained)
 # ---------------------------------------------------------------------------
 
+
 def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
@@ -31,8 +33,10 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vmin, vmax = float(finite.min()), float(finite.max())
     rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
-           for k, v in scores.items()}
+    out = {
+        int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
+        for k, v in scores.items()
+    }
     for n in range(1, max_num + 1):
         out.setdefault(n, 0.0)
     return out
@@ -53,6 +57,7 @@ def _build_binary(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
 def _unavailable(reason: str) -> Callable:
     def _score(draws_2d, max_num):
         return {}
+
     _score._unavailable_reason = reason  # type: ignore[attr-defined]
     return _score
 
@@ -72,6 +77,7 @@ def _check_statsforecast() -> bool:
     try:
         import statsforecast  # noqa: F401
         from statsforecast import StatsForecast  # noqa: F401
+
         _STATSF_OK = True
     except Exception as exc:
         _STATSF_OK = False
@@ -79,7 +85,9 @@ def _check_statsforecast() -> bool:
     return _STATSF_OK
 
 
-def _statsforecast_per_number(draws_2d, max_num, model_factory, context: int = 256) -> dict[int, float]:
+def _statsforecast_per_number(
+    draws_2d, max_num, model_factory, context: int = 256
+) -> dict[int, float]:
     """Run a statsforecast model per number on its binary indicator series.
 
     `model_factory` is a callable returning a fresh model instance per series.
@@ -116,6 +124,7 @@ def score_croston_classic(draws_2d, max_num):
         return {}
     try:
         from statsforecast.models import CrostonClassic
+
         return _statsforecast_per_number(draws_2d, max_num, lambda: CrostonClassic())
     except Exception as exc:
         logger.debug(f"[croston_classic] {exc}")
@@ -127,6 +136,7 @@ def score_croston_sba(draws_2d, max_num):
         return {}
     try:
         from statsforecast.models import CrostonSBA
+
         return _statsforecast_per_number(draws_2d, max_num, lambda: CrostonSBA())
     except Exception as exc:
         logger.debug(f"[croston_sba] {exc}")
@@ -147,7 +157,10 @@ def score_seasonal_naive_week(draws_2d, max_num):
 # MARKOV CHAINS & N-GRAMS — sequence models
 # ===========================================================================
 
-def _markov_score(draws_2d, max_num, order: int = 1, decay: float = 0.05) -> dict[int, float]:
+
+def _markov_score(
+    draws_2d, max_num, order: int = 1, decay: float = 0.05
+) -> dict[int, float]:
     """K-th order Markov chain on binary appearance: P(num appears | last K draws)."""
     if draws_2d.shape[0] <= order:
         return {}
@@ -164,7 +177,7 @@ def _markov_score(draws_2d, max_num, order: int = 1, decay: float = 0.05) -> dic
         num = 0.0
         den = 0.0
         for t in range(n - order):
-            state = tuple(int(x) for x in s[t:t + order])
+            state = tuple(int(x) for x in s[t : t + order])
             if state == cur_state:
                 den += weights[t]
                 num += weights[t] * float(s[t + order])
@@ -180,6 +193,7 @@ def score_markov_2(draws_2d, max_num):
 # ===========================================================================
 # BAYESIAN PRIORS
 # ===========================================================================
+
 
 def score_beta_binomial(draws_2d, max_num):
     """Helper (NU în METHODS): folosit de blend-uri TOP649. `beta_binomial` blacklistat.
@@ -245,6 +259,7 @@ def score_negative_binomial(draws_2d, max_num):
 # SPECTRAL / DECOMPOSITION
 # ===========================================================================
 
+
 def score_fourier_top_k(draws_2d, max_num):
     """FFT top-K frequencies — reconstruct signal, predict next step."""
     binary = _build_binary(draws_2d, max_num)
@@ -278,7 +293,9 @@ def score_dmd_basic(draws_2d, max_num):
         return {}
     L = min(10, n // 4)
     # Build snapshot matrices X (cols = past), Y (cols = next)
-    snaps = np.stack([binary[:, k:k + L] for k in range(n - L)], axis=-1)  # (max_num, L, K)
+    snaps = np.stack(
+        [binary[:, k : k + L] for k in range(n - L)], axis=-1
+    )  # (max_num, L, K)
     X = snaps.reshape(max_num * L, -1)[:, :-1]
     Y = snaps.reshape(max_num * L, -1)[:, 1:]
     try:
@@ -308,9 +325,11 @@ def score_dmd_basic(draws_2d, max_num):
 # Holt-Winters fallback (statsmodels)
 # ===========================================================================
 
+
 def _check_statsmodels() -> bool:
     try:
         import statsmodels  # noqa: F401
+
         return True
     except Exception:
         return False
@@ -321,6 +340,7 @@ def _check_statsmodels() -> bool:
 # ===========================================================================
 # EXTRA matematice / geometrice (numpy pur, CPU, fără librării noi) 2026-05-31
 # ===========================================================================
+
 
 def score_gap_poisson(draws_2d, max_num):
     """Helper (NU în METHODS): folosit de blend-uri TOP649. `gap_poisson` blacklistat.
@@ -389,6 +409,7 @@ def score_pair_affinity(draws_2d, max_num):
 # TEORIA NUMERELOR + SPREAD/SUME POZITIONALE (numpy, CPU) 2026-05-31
 # ===========================================================================
 
+
 def _draw_sums(draws_2d) -> np.ndarray:
     """Suma fiecărei extrageri (ignoră padding 0)."""
     return np.array(
@@ -450,7 +471,7 @@ def score_parity_balance(draws_2d, max_num):
     fmax = float(freq.max()) or 1.0
     scores = {}
     for k in range(1, max_num + 1):
-        is_even = (k % 2 == 0)
+        is_even = k % 2 == 0
         base = 1.0 if (is_even == need_even) else 0.4
         # 0.01 << diferența de clasă (0.6) → clasa domină, frecvența rupe egalitățile.
         scores[k] = base + 0.01 * (freq[k] / fmax)
@@ -465,11 +486,15 @@ def score_prime_bias(draws_2d, max_num):
     """
     if draws_2d.shape[0] < 5:
         return {}
+
     def is_prime(n):
-        if n < 2: return False
-        for d in range(2, int(n ** 0.5) + 1):
-            if n % d == 0: return False
+        if n < 2:
+            return False
+        for d in range(2, int(n**0.5) + 1):
+            if n % d == 0:
+                return False
         return True
+
     primes = {k for k in range(1, max_num + 1) if is_prime(k)}
     w = min(40, draws_2d.shape[0])
     p_hits = c_hits = 0
@@ -477,8 +502,10 @@ def score_prime_bias(draws_2d, max_num):
         for v in row:
             vi = int(v)
             if vi > 0:
-                if vi in primes: p_hits += 1
-                else: c_hits += 1
+                if vi in primes:
+                    p_hits += 1
+                else:
+                    c_hits += 1
     prime_rate = p_hits / max(p_hits + c_hits, 1)
     freq = np.zeros(max_num + 1, dtype=np.float64)
     for row in draws_2d:
@@ -499,16 +526,56 @@ def score_prime_bias(draws_2d, max_num):
 # ===========================================================================
 
 CLASSICAL_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
-    "sum_affinity":    (score_sum_affinity,    "geometric-sum",   False, "Afinitate empirica cu suma tipica (nu gaussian pe axa 1..N)"),
-    "parity_balance":  (score_parity_balance,  "geometric-parity", False, "Echilibru par/impar"),
-    "prime_bias":      (score_prime_bias,      "number-theory",   False, "Bias prime vs compuse"),
-    "autocorr":        (score_autocorr,        "math-autocorr",  False, "Autocorelatie lag 1-5"),
-    "pair_affinity":   (score_pair_affinity,   "geometric-graph", False, "Co-aparitie cu numerele recente"),
-    "croston_classic": (score_croston_classic, "classical-intermittent", False, "Croston Classic for intermittent demand"),
-    "croston_sba":     (score_croston_sba,     "classical-intermittent", False, "Croston SBA variant"),
-    "seasonal_naive":  (score_seasonal_naive_week, "classical-baseline", False, "Value from N=7 draws ago"),
-    "bayes_poisson":   (score_bayesian_poisson, "bayesian",        False, "Bayesian Poisson rate"),
-    "neg_binomial":    (score_negative_binomial, "bayesian",       False, "Negative Binomial overdispersion"),
-    "fourier":         (score_fourier_top_k,   "spectral",         False, "FFT top-K reconstruction"),
-    "dmd":             (score_dmd_basic,       "spectral",         False, "Dynamic Mode Decomposition"),
+    "sum_affinity": (
+        score_sum_affinity,
+        "geometric-sum",
+        False,
+        "Afinitate empirica cu suma tipica (nu gaussian pe axa 1..N)",
+    ),
+    "parity_balance": (
+        score_parity_balance,
+        "geometric-parity",
+        False,
+        "Echilibru par/impar",
+    ),
+    "prime_bias": (score_prime_bias, "number-theory", False, "Bias prime vs compuse"),
+    "autocorr": (score_autocorr, "math-autocorr", False, "Autocorelatie lag 1-5"),
+    "pair_affinity": (
+        score_pair_affinity,
+        "geometric-graph",
+        False,
+        "Co-aparitie cu numerele recente",
+    ),
+    "croston_classic": (
+        score_croston_classic,
+        "classical-intermittent",
+        False,
+        "Croston Classic for intermittent demand",
+    ),
+    "croston_sba": (
+        score_croston_sba,
+        "classical-intermittent",
+        False,
+        "Croston SBA variant",
+    ),
+    "seasonal_naive": (
+        score_seasonal_naive_week,
+        "classical-baseline",
+        False,
+        "Value from N=7 draws ago",
+    ),
+    "bayes_poisson": (
+        score_bayesian_poisson,
+        "bayesian",
+        False,
+        "Bayesian Poisson rate",
+    ),
+    "neg_binomial": (
+        score_negative_binomial,
+        "bayesian",
+        False,
+        "Negative Binomial overdispersion",
+    ),
+    "fourier": (score_fourier_top_k, "spectral", False, "FFT top-K reconstruction"),
+    "dmd": (score_dmd_basic, "spectral", False, "Dynamic Mode Decomposition"),
 }

@@ -8,6 +8,7 @@ actualizează best_methods.json (k16) + methods_top649.py.
 Usage:
     python search_649_methods.py [--max-methods 500] [--workers 8] [--apply]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -52,17 +53,20 @@ def _load_draws(csv_path: Path) -> np.ndarray:
 
 def _worker_init(train_pickle: bytes, test_pickle: bytes, game_pickle: bytes) -> None:
     import pickle
+
     global _G_TRAIN, _G_TEST, _G_GAME
     _G_TRAIN = pickle.loads(train_pickle)
     _G_TEST = pickle.loads(test_pickle)
     _G_GAME = pickle.loads(game_pickle)
     # Fiecare proces copil trebuie să aibă METHODS complet (blend-uri incluse).
     from loto_enterprise.benchmark.methods_search_649 import load_search_registry
+
     load_search_registry(include_existing=True, max_blends=420)
 
 
 def _eval_one(method_name: str) -> tuple[str, float, bool, str]:
     from loto_enterprise.benchmark.runner import _evaluate_fold
+
     assert _G_TRAIN is not None and _G_TEST is not None and _G_GAME is not None
     try:
         fr, _ = _evaluate_fold(method_name, _G_TRAIN, _G_TEST, _G_GAME, BLOCK)
@@ -94,11 +98,20 @@ def run_search(max_methods: int, workers: int) -> list[SearchResult]:
     n_test = max(1, int(math.ceil(n * PCT / 100.0)))
     n_train = n - n_test
     train = draws[:n_train]
-    test = draws[n_train:n_train + n_test]
-    logger.info("Draws=%d train=%d test=%d (%.0f%%) pool=k%d block=%d",
-                n, n_train, n_test, PCT, POOL_K, BLOCK)
+    test = draws[n_train : n_train + n_test]
+    logger.info(
+        "Draws=%d train=%d test=%d (%.0f%%) pool=k%d block=%d",
+        n,
+        n_train,
+        n_test,
+        PCT,
+        POOL_K,
+        BLOCK,
+    )
 
-    names = load_search_registry(include_existing=True, max_blends=max(0, max_methods - 50))
+    names = load_search_registry(
+        include_existing=True, max_blends=max(0, max_methods - 50)
+    )
     names = names[:max_methods]
     logger.info("Metode de evaluat: %d", len(names))
 
@@ -126,15 +139,30 @@ def run_search(max_methods: int, workers: int) -> list[SearchResult]:
             results.append(SearchResult(nm, rate, 0.0, failed))
 
     baseline_name = "seasonal_naive"
-    baseline = next((r.rate_4plus_k16 for r in results if r.method == baseline_name and not r.failed), None)
+    baseline = next(
+        (
+            r.rate_4plus_k16
+            for r in results
+            if r.method == baseline_name and not r.failed
+        ),
+        None,
+    )
     if baseline is None:
         from loto_enterprise.benchmark.runner import _evaluate_fold
+
         fr, _ = _evaluate_fold(baseline_name, train, test, game, BLOCK)
         baseline = float(fr.rates_4plus_per_pool.get(f"k{POOL_K}", 0.0))
-    logger.info("Baseline %s: rate_4plus_k16=%.4f (%.2f%%)", baseline_name, baseline, baseline * 100)
+    logger.info(
+        "Baseline %s: rate_4plus_k16=%.4f (%.2f%%)",
+        baseline_name,
+        baseline,
+        baseline * 100,
+    )
 
     target = baseline * (1.0 + IMPROVE_MIN)
-    logger.info("Target +%.0f%%: >= %.4f (%.2f%%)", IMPROVE_MIN * 100, target, target * 100)
+    logger.info(
+        "Target +%.0f%%: >= %.4f (%.2f%%)", IMPROVE_MIN * 100, target, target * 100
+    )
 
     for r in results:
         if baseline > 0 and not r.failed:
@@ -148,16 +176,27 @@ def run_search(max_methods: int, workers: int) -> list[SearchResult]:
 def write_results(top: list[SearchResult], baseline: float, target: float) -> None:
     RESULTS_JSON.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "protocol": {"pool_k": POOL_K, "percentile": PCT, "block_size": BLOCK, "improve_min_pct": IMPROVE_MIN * 100},
+        "protocol": {
+            "pool_k": POOL_K,
+            "percentile": PCT,
+            "block_size": BLOCK,
+            "improve_min_pct": IMPROVE_MIN * 100,
+        },
         "baseline": {"method": "seasonal_naive", "rate_4plus_k16": baseline},
         "target_rate": target,
         "top20": [
-            {"rank": i + 1, "method": r.method, "rate_4plus_k16": r.rate_4plus_k16,
-             "lift_pct": round(r.lift_vs_baseline * 100, 2)}
+            {
+                "rank": i + 1,
+                "method": r.method,
+                "rate_4plus_k16": r.rate_4plus_k16,
+                "lift_pct": round(r.lift_vs_baseline * 100, 2),
+            }
             for i, r in enumerate(top[:TOP_N])
         ],
     }
-    RESULTS_JSON.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    RESULTS_JSON.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     logger.info("Rezultate → %s", RESULTS_JSON)
 
 
@@ -184,7 +223,9 @@ def generate_methods_top649(top: list[SearchResult]) -> None:
     for i, r in enumerate(top[:TOP_N]):
         alias = _top649_alias(r.method, i)
         # Forward: reutilizăm scorer-ul din registry (deja în METHODS după search)
-        lines.append(f'    "{alias}": METHODS["{r.method}"],  # {r.rate_4plus_k16*100:.2f}% 4+')
+        lines.append(
+            f'    "{alias}": METHODS["{r.method}"],  # {r.rate_4plus_k16 * 100:.2f}% 4+'
+        )
     lines.append("}")
     lines.append("")
     path = ROOT / "loto_enterprise" / "benchmark" / "methods_top649.py"
@@ -200,6 +241,7 @@ def patch_best_methods(top: list[SearchResult], baseline: float) -> None:
     pct. 8). `scorer`/`ensemble` folosesc ALIASUL din methods_top649.py, nu
     numele brut, care nu se rezolvă în METHODS după restart."""
     from ui_shared import atomic_write_json, file_lock
+
     bm_path = ROOT / "best_methods.json"
     if not bm_path.exists():
         logger.warning("best_methods.json lipsă — sar patch")
@@ -225,7 +267,7 @@ def patch_best_methods(top: list[SearchResult], baseline: float) -> None:
             "avg_hits": 0.0,
             "rationale": (
                 f"search_649: {winner.method} rate_4plus_k16={winner.rate_4plus_k16:.3f} "
-                f"(+{winner.lift_vs_baseline*100:.1f}% vs seasonal_naive {baseline:.3f})"
+                f"(+{winner.lift_vs_baseline * 100:.1f}% vs seasonal_naive {baseline:.3f})"
             ),
             "qualifying_methods": len(top),
         }
@@ -237,7 +279,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Search 6/49 methods for rate_4plus @ k16")
     ap.add_argument("--max-methods", type=int, default=500)
     ap.add_argument("--workers", type=int, default=max(2, (os.cpu_count() or 4) - 1))
-    ap.add_argument("--apply", action="store_true", help="Scrie methods_top649.py + patch best_methods.json")
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="Scrie methods_top649.py + patch best_methods.json",
+    )
     args = ap.parse_args()
 
     ok, baseline, target = run_search(args.max_methods, args.workers)
@@ -245,9 +291,17 @@ def main() -> int:
     logger.info("--- TOP 25 (rate_4plus_k16) ---")
     for i, r in enumerate(ok[:25]):
         mark = "✓" if r.rate_4plus_k16 >= target else " "
-        logger.info("%2d. [%s] %s  %.2f%%  (+%.1f%% vs baseline)",
-                    i + 1, mark, r.method, r.rate_4plus_k16 * 100, r.lift_vs_baseline * 100)
-    logger.info("Calificate (≥+%d%%): %d / %d", int(IMPROVE_MIN * 100), len(qualified), len(ok))
+        logger.info(
+            "%2d. [%s] %s  %.2f%%  (+%.1f%% vs baseline)",
+            i + 1,
+            mark,
+            r.method,
+            r.rate_4plus_k16 * 100,
+            r.lift_vs_baseline * 100,
+        )
+    logger.info(
+        "Calificate (≥+%d%%): %d / %d", int(IMPROVE_MIN * 100), len(qualified), len(ok)
+    )
 
     top20 = qualified[:TOP_N] if len(qualified) >= TOP_N else ok[:TOP_N]
     write_results(top20, baseline, target)
@@ -255,8 +309,11 @@ def main() -> int:
         generate_methods_top649(top20)
         patch_best_methods(top20, baseline)
         # Înregistrează metodele noi permanent
-        from loto_enterprise.benchmark.methods_search_649 import merge_search_into_methods
+        from loto_enterprise.benchmark.methods_search_649 import (
+            merge_search_into_methods,
+        )
         from loto_enterprise.benchmark import methods as methods_mod
+
         merge_search_into_methods()
         # Reload top649 in methods.py requires restart; user runs ACTUALIZARI or restart
         logger.info("Rulează restart UI/worker pentru a încărca methods_top649.py")

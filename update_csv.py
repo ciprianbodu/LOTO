@@ -10,6 +10,7 @@ Rulare:
 
 Exit code: 0 mereu (best-effort) — eroare de rețea / parsing nu blochează pornirea.
 """
+
 from __future__ import annotations
 
 import csv
@@ -32,7 +33,7 @@ from pathlib import Path
 # Config
 # ---------------------------------------------------------------------------
 
-_FORCE   = "--force"   in sys.argv
+_FORCE = "--force" in sys.argv
 _VERBOSE = "--verbose" in sys.argv
 
 # URL-ul RECENT (primul) e de ajuns pentru update — extrage ultimele luni.
@@ -65,6 +66,7 @@ TIMEOUT_S = 12  # secunde per request — nu blocăm pornirea dacă site-ul e le
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _find_istoric_dir() -> Path | None:
     root = Path(__file__).parent
@@ -120,12 +122,14 @@ def _last_date_in_csv(csv_path: Path) -> date | None:
 
 def _get_page_text(url: str) -> str:
     import urllib.request
+
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
         raw = resp.read()
     # BeautifulSoup opțional — dacă nu e instalat, facem strip HTML de bază
     try:
         from bs4 import BeautifulSoup
+
         return BeautifulSoup(raw, "html.parser").get_text(" ")
     except ImportError:
         # fallback: strip taguri HTML cu regex
@@ -136,14 +140,14 @@ def _extract_draws(text: str, num_main: int, has_joker: bool, after: date | None
     """Extrage extrageri din textul paginii. Returnează doar cele > after."""
     if has_joker:
         pattern = re.compile(
-            r'\b(\d{4}-\d{1,2}-\d{1,2})\b'
-            r'((?:\s+\d{1,2}){' + str(num_main) + r'})'
-            r'\s*\+?\s*(\d{1,2})'
+            r"\b(\d{4}-\d{1,2}-\d{1,2})\b"
+            r"((?:\s+\d{1,2}){" + str(num_main) + r"})"
+            r"\s*\+?\s*(\d{1,2})"
         )
     else:
         pattern = re.compile(
-            r'\b(\d{4}-\d{1,2}-\d{1,2})\b'
-            r'((?:\s+\d{1,2}){' + str(num_main) + r'})'
+            r"\b(\d{4}-\d{1,2}-\d{1,2})\b"
+            r"((?:\s+\d{1,2}){" + str(num_main) + r"})"
         )
 
     today = date.today()
@@ -176,7 +180,9 @@ def _extract_draws(text: str, num_main: int, has_joker: bool, after: date | None
     return results
 
 
-def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_main: int) -> int:
+def _append_rows_atomic(
+    csv_path: Path, new_rows: list, has_joker: bool, num_main: int
+) -> int:
     """Citește CSV existent, adaugă rândurile noi, rescrie atomic (tmp + rename).
     Întoarce numărul de rânduri EFECTIV scrise (poate fi mai mic decât
     len(new_rows) dacă unele aveau deja o dată prezentă în CSV — vezi garda
@@ -193,7 +199,7 @@ def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_mai
             existing = rows[1:]
 
     if header is None:
-        header = ["date"] + [f"n{i+1}" for i in range(num_main)]
+        header = ["date"] + [f"n{i + 1}" for i in range(num_main)]
         if has_joker:
             header.append("joker")
 
@@ -237,9 +243,11 @@ def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_mai
 # Main
 # ---------------------------------------------------------------------------
 
+
 def update_all() -> int:
     """Verifică și actualizează toate jocurile. Returnează numărul total de rânduri adăugate."""
     from datetime import timedelta
+
     istoric_dir = _find_istoric_dir()
     if not istoric_dir:
         print("[UPDATE-CSV] Folderul _ISTORIC/ nu există — skip.")
@@ -262,8 +270,10 @@ def update_all() -> int:
             # site e nou" ar rescrie CSV-ul cu doar cateva luni de istoric — si
             # `loto_git_sync.bat push_istoric` ar face auto-commit + push pe
             # origin/main la urmatoarea pornire, fara niciun avertisment.
-            print(f"  {cfg['display_name']:<12}: CSV EXISTA dar fara nicio data valida — "
-                  "pare trunchiat/corupt. SAR peste (nu tratez ca prima rulare).")
+            print(
+                f"  {cfg['display_name']:<12}: CSV EXISTA dar fara nicio data valida — "
+                "pare trunchiat/corupt. SAR peste (nu tratez ca prima rulare)."
+            )
             continue
 
         # Fetch MEREU site-ul ca să raportăm ultima extragere reală (best-effort).
@@ -271,13 +281,17 @@ def update_all() -> int:
         new_draws = []
         try:
             text = _get_page_text(cfg["recent_url"])
-            all_draws = _extract_draws(text, cfg["num_main"], cfg["has_joker"], after=None)
+            all_draws = _extract_draws(
+                text, cfg["num_main"], cfg["has_joker"], after=None
+            )
             if all_draws:
                 site_last = all_draws[-1]["date"]
             # Doar extragerile mai noi decât CSV-ul nostru
             new_draws = [d for d in all_draws if (last is None or d["date"] > last)]
         except Exception as exc:
-            print(f"  {cfg['display_name']:<12}: CSV={last_str} | site=EROARE ({type(exc).__name__}) — continuă cu datele existente.")
+            print(
+                f"  {cfg['display_name']:<12}: CSV={last_str} | site=EROARE ({type(exc).__name__}) — continuă cu datele existente."
+            )
             continue
 
         site_str = site_last.strftime("%d-%m-%Y") if site_last else "N/A"
@@ -285,17 +299,27 @@ def update_all() -> int:
         gap_str = f"{gap} zile în urmă" if gap is not None else "?"
 
         if new_draws:
-            written = _append_rows_atomic(csv_path, new_draws, cfg["has_joker"], cfg["num_main"])
+            written = _append_rows_atomic(
+                csv_path, new_draws, cfg["has_joker"], cfg["num_main"]
+            )
             dates_str = ", ".join(r["date"].strftime("%d-%m-%Y") for r in new_draws)
-            print(f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} (azi: {gap_str}) | +{written} extrageri noi: {dates_str}")
+            print(
+                f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} (azi: {gap_str}) | +{written} extrageri noi: {dates_str}"
+            )
             total_added += written
         else:
-            print(f"  {cfg['display_name']:<12}: CSV={last_str} | site={site_str} (azi: {gap_str}) | la zi.")
+            print(
+                f"  {cfg['display_name']:<12}: CSV={last_str} | site={site_str} (azi: {gap_str}) | la zi."
+            )
 
     if total_added > 0:
-        print(f"[UPDATE-CSV] Total adăugate: {total_added} extrageri noi. CSV-urile din _ISTORIC/ sunt la zi.")
+        print(
+            f"[UPDATE-CSV] Total adăugate: {total_added} extrageri noi. CSV-urile din _ISTORIC/ sunt la zi."
+        )
     else:
-        print("[UPDATE-CSV] Toate jocurile sunt la zi (nicio extragere nouă pe loto49.ro).")
+        print(
+            "[UPDATE-CSV] Toate jocurile sunt la zi (nicio extragere nouă pe loto49.ro)."
+        )
 
     return total_added
 

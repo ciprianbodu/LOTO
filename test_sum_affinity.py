@@ -5,6 +5,7 @@ istoricul lui k. Pe Joker 5/45 vârful e ~23 → top-11 = 18–28 MEREU.
 
 Fix: scorul e masa de extrageri cu SUMĂ tipică care conțin k.
 """
+
 from __future__ import annotations
 
 import csv
@@ -97,10 +98,14 @@ def test_select_pool_flags_consecutive_block():
     # scoruri unimodale artificiale → pool 18–28
     scores = {k: float(np.exp(-((k - 23) ** 2) / 8.0)) for k in range(1, 46)}
     audit: dict = {}
-    pool = select_pool_from_scores(scores, POOL_N, blacklist=set(), audit=audit, max_num=45)
+    pool = select_pool_from_scores(
+        scores, POOL_N, blacklist=set(), audit=audit, max_num=45
+    )
     assert is_consecutive_block(pool, min_size=6)
     assert audit.get("pool_is_consecutive_block") is True
-    assert "18" in audit.get("pool_consecutive_warning", "") or "18" in str(sorted(pool))
+    assert "18" in audit.get("pool_consecutive_warning", "") or "18" in str(
+        sorted(pool)
+    )
 
 
 def test_longest_consecutive_run_helpers():

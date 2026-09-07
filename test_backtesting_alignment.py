@@ -1,10 +1,11 @@
-﻿"""Aliniere df ↔ draws în LotoBacktester._load_data.
+"""Aliniere df ↔ draws în LotoBacktester._load_data.
 
 Rândurile invalide (NaN/non-numerice) intră în CSV dar nu în `draws`; fără
 filtrarea df-ului, `sim_idx` indexa două axe diferite: `df.iloc[:sim_idx]`
 (istoric de antrenare) și `draws[sim_idx]` (ținta) — un singur rând murdar
 deplasa fereastra. Pe CSV curat filtrarea trebuie să fie NO-OP.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -19,8 +20,12 @@ def _clean_df(n: int = 30) -> pd.DataFrame:
     rows = []
     for i in range(n):
         base = (i * 7) % 40
-        rows.append({"date": f"{(i % 28) + 1:02d}-01-2026",
-                     **{c: base + j + 1 for j, c in enumerate(COLS)}})
+        rows.append(
+            {
+                "date": f"{(i % 28) + 1:02d}-01-2026",
+                **{c: base + j + 1 for j, c in enumerate(COLS)},
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -65,7 +70,9 @@ def test_pool_draw_hits_uses_hard_core_not_ticket_union():
     assert pool_draw_hits(pool, actual) > len(tickets_union & set(actual))
 
 
-def test_invalid_out_of_range_duplicate_and_decimal_rows_are_excluded_everywhere(tmp_path):
+def test_invalid_out_of_range_duplicate_and_decimal_rows_are_excluded_everywhere(
+    tmp_path,
+):
     """Engine, WF și benchmark trebuie să vadă aceeași istorie validă."""
     from loto_engine import LotoEngine
     from loto_enterprise.benchmark.runner import GameDef, load_draws
@@ -111,12 +118,17 @@ def test_joker_urna2_rejects_decimal_out_of_range_and_missing_values(tmp_path):
     joker_values = [1, 4.7, 21, np.nan, 4, 20]
     for i, joker in enumerate(joker_values):
         base = i * 5 + 1
-        rows.append({
-            "date": f"{i + 1:02d}-01-2026",
-            "n1": base, "n2": base + 1, "n3": base + 2,
-            "n4": base + 3, "n5": base + 4,
-            "joker": joker,
-        })
+        rows.append(
+            {
+                "date": f"{i + 1:02d}-01-2026",
+                "n1": base,
+                "n2": base + 1,
+                "n3": base + 2,
+                "n4": base + 3,
+                "n5": base + 4,
+                "joker": joker,
+            }
+        )
     path = tmp_path / "joker.csv"
     pd.DataFrame(rows).to_csv(path, index=False)
 
@@ -136,11 +148,20 @@ def test_joker_urna2_without_valid_values_has_no_arbitrary_frequency_fallback(tm
     """Lipsa Urnei 2 nu trebuie să dea un clasament plat și bila 20 din tie-break."""
     from loto_engine import LotoEngine
 
-    df = pd.DataFrame([
-        {"date": f"{i + 1:02d}-01-2026", "n1": 1, "n2": 2, "n3": 3,
-         "n4": 4, "n5": 5, "joker": value}
-        for i, value in enumerate([0, 20.2, np.nan, 21, "bad"])
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "date": f"{i + 1:02d}-01-2026",
+                "n1": 1,
+                "n2": 2,
+                "n3": 3,
+                "n4": 4,
+                "n5": 5,
+                "joker": value,
+            }
+            for i, value in enumerate([0, 20.2, np.nan, 21, "bad"])
+        ]
+    )
     path = tmp_path / "joker_invalid_urna2.csv"
     df.to_csv(path, index=False)
 

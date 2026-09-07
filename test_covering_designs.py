@@ -8,6 +8,7 @@ consecutive: 5/40 pool 12 / g3 → 33 de bilete, apoi 30; joker pool 12 / g3 →
 apoi 30. Un cover e o constantă matematică (nu depinde de pool, de scoruri sau de
 dată), deci se calculează o dată și se citește de pe disc.
 """
+
 import itertools
 from math import comb
 from pathlib import Path
@@ -40,8 +41,11 @@ def test_designs_exist():
 @pytest.mark.parametrize("path", DESIGNS, ids=lambda p: p.name)
 def test_design_is_wellformed_and_complete(path: Path):
     v, pick, g = _parse(path.name)
-    blocks = [[int(x) for x in ln.split()]
-              for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    blocks = [
+        [int(x) for x in ln.split()]
+        for ln in path.read_text(encoding="utf-8").splitlines()
+        if ln.strip()
+    ]
     assert blocks, f"{path.name} gol"
     for b in blocks:
         assert len(b) == pick, f"{path.name}: bloc de {len(b)} numere, nu {pick}"
@@ -75,10 +79,12 @@ def test_wheel_is_deterministic_across_runs(v, pick, g):
     """
     pool = list(range(1, v + 1))
     scores = {n: float(v - n) for n in pool}  # scoruri ca în producție
-    a, cov_a = generate_wheel("lajolla", pool=pool, pick=pick, guarantee=g,
-                              max_variants=0, scores=scores)
-    b, cov_b = generate_wheel("lajolla", pool=pool, pick=pick, guarantee=g,
-                              max_variants=0, scores=scores)
+    a, cov_a = generate_wheel(
+        "lajolla", pool=pool, pick=pick, guarantee=g, max_variants=0, scores=scores
+    )
+    b, cov_b = generate_wheel(
+        "lajolla", pool=pool, pick=pick, guarantee=g, max_variants=0, scores=scores
+    )
     assert a == b, f"C({v},{pick},{g}): două apeluri, două rezultate"
     assert cov_a == cov_b == 100.0
 

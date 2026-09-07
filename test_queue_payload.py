@@ -1,4 +1,5 @@
 """Teste pack/decode rezultat job (pickle+zstd+b64 + fallback legacy)."""
+
 from __future__ import annotations
 
 import base64
@@ -25,10 +26,12 @@ def test_pack_decode_zstd_roundtrip():
 def test_decode_legacy_pickle_b64():
     obj = {"ok": True, "n": 7}
     blob = pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
-    legacy = json.dumps({
-        "encoding": ENCODING_PICKLE_B64,
-        "payload": base64.b64encode(blob).decode("ascii"),
-    })
+    legacy = json.dumps(
+        {
+            "encoding": ENCODING_PICKLE_B64,
+            "payload": base64.b64encode(blob).decode("ascii"),
+        }
+    )
     assert decode_queue_result(legacy) == obj
 
 

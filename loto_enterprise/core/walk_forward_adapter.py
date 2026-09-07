@@ -113,6 +113,7 @@ CACHE_VERSION = "v23"
 @dataclass
 class WalkForwardResult:
     """Per (draw, variant) entry — drop-in pentru UI care aşteaptă lista flat."""
+
     draw_index: int
     draw_date: str | None
     variant: list[int]
@@ -217,9 +218,9 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     cele pe care engine-ul antrenează (lookback 100%).
     """
     cols_map = {
-        "6/49":   ["n1", "n2", "n3", "n4", "n5", "n6"],
-        "5/40":   ["n1", "n2", "n3", "n4", "n5"],
-        "joker":  ["n1", "n2", "n3", "n4", "n5", "joker"],
+        "6/49": ["n1", "n2", "n3", "n4", "n5", "n6"],
+        "5/40": ["n1", "n2", "n3", "n4", "n5"],
+        "joker": ["n1", "n2", "n3", "n4", "n5", "joker"],
     }
     cols = [c for c in cols_map.get(game_type, []) if c in df.columns]
     if not cols:
@@ -253,17 +254,27 @@ def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
     return max(1, g)
 
 
-def _wf_geometry(pool_size, game_type, guarantee=None, wheel_condition=None, max_variants=0):
+def _wf_geometry(
+    pool_size, game_type, guarantee=None, wheel_condition=None, max_variants=0
+):
     """Geometria cerută; apelurile vechi păstrează garanția internă implicită."""
     pick = int(_WF_PICK.get(game_type) or 6)
-    g = (_wf_guarantee(pool_size, pick) if guarantee is None
-         else max(1, min(pick, int(guarantee))))
+    g = (
+        _wf_guarantee(pool_size, pick)
+        if guarantee is None
+        else max(1, min(pick, int(guarantee)))
+    )
     c = int(wheel_condition or 0)
     return g, (g if c <= 0 else max(g, min(pick, c))), max(0, int(max_variants or 0))
 
 
-def _wheel_sig(pool_size: int, game_type: str | None = None, guarantee=None,
-               wheel_condition=None, max_variants=0) -> str:
+def _wheel_sig(
+    pool_size: int,
+    game_type: str | None = None,
+    guarantee=None,
+    wheel_condition=None,
+    max_variants=0,
+) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
     Aceeași ramură ca engine-ul: lotto la condiție > garanție; altfel override
@@ -277,32 +288,50 @@ def _wheel_sig(pool_size: int, game_type: str | None = None, guarantee=None,
     rezultate regenerate pe wheel-ul nou.
     """
     requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
-    g, condition, cap = _wf_geometry(pool_size, game_type, guarantee, wheel_condition, max_variants)
+    g, condition, cap = _wf_geometry(
+        pool_size, game_type, guarantee, wheel_condition, max_variants
+    )
     geometry = f"g{g}|c{condition}|cap{cap}"
     try:
         from wheeling_methods import WHEEL_METHODS, covering_design_source_signature
-        method = requested if requested in WHEEL_METHODS or requested == "greedy" else "greedy"
+
+        method = (
+            requested
+            if requested in WHEEL_METHODS or requested == "greedy"
+            else "greedy"
+        )
         if not requested:
             method = "lajolla" if cap == 0 else "greedy"
         if condition > g:
             design_sig = covering_design_source_signature(
-                int(pool_size), int(_WF_PICK.get(game_type) or 6), g, condition,
+                int(pool_size),
+                int(_WF_PICK.get(game_type) or 6),
+                g,
+                condition,
             )
             return f"lotto|{geometry}|cd{design_sig}"
         if method in {"lajolla", "union34"}:
             design_guarantee = 4 if method == "union34" and g <= 4 else g
             design_sig = covering_design_source_signature(
-                int(pool_size), int(_WF_PICK.get(game_type) or 6), design_guarantee,
+                int(pool_size),
+                int(_WF_PICK.get(game_type) or 6),
+                design_guarantee,
             )
             return f"{method}|{geometry}|cd{design_sig}"
         return f"{method}|{geometry}"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)
-        method = "lotto" if condition > g else requested or ("lajolla" if cap == 0 else "greedy")
+        method = (
+            "lotto"
+            if condition > g
+            else requested or ("lajolla" if cap == 0 else "greedy")
+        )
         return f"{method}|{geometry}|cd-error"
 
 
-def _penalty_sig(recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5) -> str:
+def _penalty_sig(
+    recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5
+) -> str:
     """Sufix de cheie pentru penalizarea recentă; gol când e oprită (chei vechi valide)."""
     n = int(recent_penalty_draws or 0)
     if n <= 0:
@@ -312,9 +341,16 @@ def _penalty_sig(recent_penalty_draws: int = 0, recent_penalty_factor: float = 0
     return f"|rp{n}:{float(recent_penalty_factor).hex()}"
 
 
-def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.0,
-                  recent_penalty_draws: int = 0, recent_penalty_factor: float = 0.5,
-                  guarantee=None, wheel_condition=None, max_variants=0) -> str:
+def _decision_sig(
+    game_type: str,
+    pool_size: int,
+    lookback_percent: float = 100.0,
+    recent_penalty_draws: int = 0,
+    recent_penalty_factor: float = 0.5,
+    guarantee=None,
+    wheel_condition=None,
+    max_variants=0,
+) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
     este ataşată fiecărei variante şi îi poate schimba evaluarea retrospectivă.
@@ -322,8 +358,10 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
-        gk = {"6/49": "loto_6_49", "5/40": "loto_5_40",
-              "joker": "joker_urna1"}.get(game_type, "loto_6_49")
+
+        gk = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}.get(
+            game_type, "loto_6_49"
+        )
         c = recommend_optimal_config(gk, int(pool_size))
         _ens_sig = _ensemble_sig(c.get("ensemble") or [])
         urna2_sig = ""
@@ -337,19 +375,29 @@ def _decision_sig(game_type: str, pool_size: int, lookback_percent: float = 100.
         # `use_blacklist` e INERT în producție (engine: blacklist=set()) — nu
         # intra în cheie, altfel un toggle de telemetrie invalida tot cache-ul WF
         # fără să schimbe pool-ul sau wheel-ul.
-        raw = (f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-               f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
-               f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
-               f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}")
+        raw = (
+            f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
+            f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
+            f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
+            f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
+        )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
-        logger.warning(f"[WALK-FWD] decizie bench indisponibilă ({exc}) — "
-                       f"semnătură doar pe wheel")
-        return "nd" + hashlib.md5(
-            (_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)
-             + f"|lb{lookback_pct(lookback_percent)}"
-             + _penalty_sig(recent_penalty_draws, recent_penalty_factor)).encode()
-        ).hexdigest()[:6]
+        logger.warning(
+            f"[WALK-FWD] decizie bench indisponibilă ({exc}) — semnătură doar pe wheel"
+        )
+        return (
+            "nd"
+            + hashlib.md5(
+                (
+                    _wheel_sig(
+                        pool_size, game_type, guarantee, wheel_condition, max_variants
+                    )
+                    + f"|lb{lookback_pct(lookback_percent)}"
+                    + _penalty_sig(recent_penalty_draws, recent_penalty_factor)
+                ).encode()
+            ).hexdigest()[:6]
+        )
 
 
 def migrate_legacy_wf_cache() -> dict:
@@ -395,10 +443,15 @@ def migrate_legacy_wf_cache() -> dict:
     return result
 
 
-def _cache_path(game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str) -> Path:
+def _cache_path(
+    game_type: str, csv_hash: str, pool_size: int, depth: int, dec_sig: str
+) -> Path:
     safe = game_type.replace("/", "_")
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
-    return CACHE_DIR / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}.pkl"
+    return (
+        CACHE_DIR
+        / f"walk_forward_{CACHE_VERSION}_{safe}_{csv_hash}_pool{pool_size}_d{depth}_{dec_sig}.pkl"
+    )
 
 
 def expand_predictions_to_flat(
@@ -415,15 +468,17 @@ def expand_predictions_to_flat(
         for variant in p.variants:
             vset = set(scored_variant_numbers(variant, game_type))
             hits = len(vset & actual)
-            flat.append(WalkForwardResult(
-                draw_index=p.draw_index,
-                draw_date=p.target_draw_date,
-                variant=list(variant),
-                hits=hits,
-                hits_union=p.hits_union,
-                target_draw_date=p.target_draw_date,
-                wheel_coverage=getattr(p, "wheel_coverage", None),
-            ))
+            flat.append(
+                WalkForwardResult(
+                    draw_index=p.draw_index,
+                    draw_date=p.target_draw_date,
+                    variant=list(variant),
+                    hits=hits,
+                    hits_union=p.hits_union,
+                    target_draw_date=p.target_draw_date,
+                    wheel_coverage=getattr(p, "wheel_coverage", None),
+                )
+            )
     return flat
 
 
@@ -467,7 +522,9 @@ def _merge_partial_coverage(
     meta["from_cache"] = not flat_new
     logger.info(
         "[WALK-FWD] Reuniune cu cache-ul parţial: +%d extrageri din cache → %d/%d.",
-        len(extra_idx), meta["n_test_draws"], meta.get("n_expected"),
+        len(extra_idx),
+        meta["n_test_draws"],
+        meta.get("n_expected"),
     )
     return merged, meta
 
@@ -513,11 +570,22 @@ def run_honest_walk_forward(
     """
     _log_stale_wf_cache_once()
     csv_hash = _csv_hash(df_source, game_type)
-    dec_sig = _decision_sig(game_type, pool_size, lookback_percent,
-                            recent_penalty_draws, recent_penalty_factor,
-                            guarantee, wheel_condition, max_variants)
-    g, condition, cap = _wf_geometry(pool_size, game_type, guarantee, wheel_condition, max_variants)
-    cache_file = _cache_path(game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig)
+    dec_sig = _decision_sig(
+        game_type,
+        pool_size,
+        lookback_percent,
+        recent_penalty_draws,
+        recent_penalty_factor,
+        guarantee,
+        wheel_condition,
+        max_variants,
+    )
+    g, condition, cap = _wf_geometry(
+        pool_size, game_type, guarantee, wheel_condition, max_variants
+    )
+    cache_file = _cache_path(
+        game_type, csv_hash, pool_size, int(backtest_depth_percent), dec_sig
+    )
     meta = {
         "csv_hash": csv_hash,
         "decision_sig": dec_sig,
@@ -569,6 +637,7 @@ def run_honest_walk_forward(
 
     # Cache miss → rulează walk-forward genuin
     from loto_enterprise.core.backtesting import LotoBacktester
+
     logger.info(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
@@ -583,17 +652,18 @@ def run_honest_walk_forward(
         filter_consecutives=False,
         max_variants=cap,
         simulation_step=1,
-        use_feedback=False,           # decuplat pentru a măsura PUR ce face engine-ul
+        use_feedback=False,  # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem
         smart_reduction=False,
-        progress_cb=progress_cb,      # frac 0..1 per simulare → bară de progres în UI
+        progress_cb=progress_cb,  # frac 0..1 per simulare → bară de progres în UI
         should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
         # Pașii deja validați în cache-ul PARȚIAL se sar: altfel rularea nouă
         # refăcea aceiași pași recent→vechi, se oprea la același buget în același
         # loc și reuniunea nu aducea nimic — bugetul WF se consuma fără câștig.
         skip_indices=(
             {int(getattr(r, "draw_index", -1)) for r in (cached.get("flat") or [])}
-            if cached is not None else None
+            if cached is not None
+            else None
         ),
         recent_penalty_draws=int(recent_penalty_draws or 0),
         recent_penalty_factor=float(recent_penalty_factor),
@@ -627,13 +697,20 @@ def run_honest_walk_forward(
         logger.warning(
             "[WALK-FWD] %s pool=%s: wheel INCOMPLET la %d/%d paşi (min %.2f%%) — "
             "hiturile de POOL (3+/4+) sunt un PLAFON, nu ce prinde un bilet.",
-            game_type, pool_size, _cov_sum["below_100"], _cov_sum["known"], _cov_sum["min"],
+            game_type,
+            pool_size,
+            _cov_sum["below_100"],
+            _cov_sum["known"],
+            _cov_sum["min"],
         )
     elif _cov_sum["unknown"]:
         logger.info(
             "[WALK-FWD] %s pool=%s: acoperire necunoscută la %d/%d paşi "
             "(cache scris înainte de câmpul `wheel_coverage`).",
-            game_type, pool_size, _cov_sum["unknown"], _cov_sum["n_draws"],
+            game_type,
+            pool_size,
+            _cov_sum["unknown"],
+            _cov_sum["n_draws"],
         )
 
     # Save cache (rezultatul reunit ⊇ cache → suprascriem; scriere atomică anti-corupere
@@ -659,7 +736,8 @@ def _stale_wf_cache_files() -> list[Path]:
         return []
     prefix_now = f"walk_forward_{CACHE_VERSION}_"
     return sorted(
-        f for f in CACHE_DIR.glob("walk_forward_*.pkl")
+        f
+        for f in CACHE_DIR.glob("walk_forward_*.pkl")
         if not f.name.startswith(prefix_now)
     )
 
@@ -727,7 +805,10 @@ def _log_stale_wf_cache_once() -> None:
                 "[WALK-FWD] %d cache-uri WF de la versiuni vechi (≠%s) ocupă %.1f MB în "
                 "%s/ — inaccesibile. Curăţare opţională: "
                 "walk_forward_adapter.purge_stale_wf_cache(dry_run=False).",
-                info["n_files"], CACHE_VERSION, info["mb"], CACHE_DIR,
+                info["n_files"],
+                CACHE_VERSION,
+                info["mb"],
+                CACHE_DIR,
             )
     except Exception as exc:  # noqa: BLE001
         logger.debug("[WALK-FWD] inventar cache vechi eşuat: %s", exc)

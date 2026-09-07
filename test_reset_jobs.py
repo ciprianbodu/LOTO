@@ -11,6 +11,7 @@ Test pentru `reset_jobs.py` — START_8000.bat omoară worker-ul, apoi --force:
 
 Plus: fără --force, refuză ștergerea dacă există joburi RUNNING.
 """
+
 from __future__ import annotations
 
 import json
@@ -54,6 +55,7 @@ def _job_ids(db_path: str) -> set[int]:
 # --------------------------------------------------------------------------- #
 # Scenariul 1: sesiune curată → golire completă + VACUUM
 # --------------------------------------------------------------------------- #
+
 
 def test_force_clean_session_deletes_everything(isolated_db, monkeypatch):
     monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", lambda: 1)
@@ -114,6 +116,7 @@ def test_force_survives_vacuum_failure_queue_still_cleared(isolated_db, monkeypa
 # Scenariul 2: leftover PENDING/RUNNING după kill → ȘTERSE (nu reapar la pornire)
 # --------------------------------------------------------------------------- #
 
+
 def test_force_deletes_pending_and_running_jobs(isolated_db, monkeypatch):
     """START_8000 a omorât worker-ul: PENDING/RUNNING sunt cadavre, nu muncă în curs."""
     pending_id = _insert_job(isolated_db, "PENDING")
@@ -158,6 +161,7 @@ def test_without_force_succeeds_when_no_running(isolated_db, monkeypatch):
 # Scenariul 3: ultimul COMPLETED nefinalizat de UI → păstrat pentru recuperare
 # --------------------------------------------------------------------------- #
 
+
 def test_force_keeps_latest_completed_job_if_not_finalized(isolated_db, monkeypatch):
     old_id = _insert_job(isolated_db, "COMPLETED", completed=True)
     fresh_id = _insert_job(isolated_db, "COMPLETED", completed=True)
@@ -169,7 +173,9 @@ def test_force_keeps_latest_completed_job_if_not_finalized(isolated_db, monkeypa
 
     assert rc == 0
     remaining = _job_ids(isolated_db)
-    assert fresh_id in remaining, "job COMPLETED nefinalizat trebuie păstrat pentru recuperare"
+    assert fresh_id in remaining, (
+        "job COMPLETED nefinalizat trebuie păstrat pentru recuperare"
+    )
     assert old_id not in remaining
 
 
@@ -245,6 +251,7 @@ def test_old_schema_is_migrated_before_completed_query(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 # is_stale_unstarted_job — garda din _startup
 # --------------------------------------------------------------------------- #
+
 
 def test_stale_unstarted_pending_without_worker():
     job = {"status": "PENDING", "progress_pct": 0, "log_tail": ""}

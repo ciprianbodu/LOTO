@@ -6,13 +6,17 @@ pool e un PLAFON (oglinda bug-ului vechi, în care uniunea biletelor SUB-număra
 Testele de aici verifică lanțul care face diferența vizibilă: context → pas →
 înregistrare flat → sumar → meta.
 """
+
 from __future__ import annotations
 
 from dataclasses import fields
 
 import pytest
 
-from loto_enterprise.core.backtesting import RetroactivePrediction, coverage_from_context
+from loto_enterprise.core.backtesting import (
+    RetroactivePrediction,
+    coverage_from_context,
+)
 from loto_enterprise.core.walk_forward_adapter import (
     WalkForwardResult,
     _backfill_new_fields,
@@ -23,9 +27,14 @@ from loto_enterprise.core.walk_forward_adapter import (
 
 
 def _rec(draw_index: int, cov=None) -> WalkForwardResult:
-    return WalkForwardResult(draw_index=draw_index, draw_date="01-01-2026",
-                             variant=[1, 2, 3, 4, 5, 6], hits=2, hits_union=3,
-                             wheel_coverage=cov)
+    return WalkForwardResult(
+        draw_index=draw_index,
+        draw_date="01-01-2026",
+        variant=[1, 2, 3, 4, 5, 6],
+        hits=2,
+        hits_union=3,
+        wheel_coverage=cov,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -65,6 +74,7 @@ def test_summary_on_empty_flat():
     assert wheel_coverage_summary([])["n_draws"] == 0
     assert wheel_coverage_summary(None)["min"] is None
 
+
 def test_per_draw_hits_do_not_weight_larger_wheels_more_heavily():
     """O extragere cu 50 bilete contează o dată, nu de 50 de ori."""
     many_tickets = [_rec(1, 100.0) for _ in range(50)]
@@ -89,8 +99,14 @@ def _old_record() -> WalkForwardResult:
     Unpickle-ul restaurează `__dict__` fără să treacă prin `__init__`.
     """
     obj = object.__new__(WalkForwardResult)
-    obj.__dict__.update(draw_index=7, draw_date="01-01-2026", variant=[1, 2],
-                        hits=1, hits_union=2, target_draw_date="01-01-2026")
+    obj.__dict__.update(
+        draw_index=7,
+        draw_date="01-01-2026",
+        variant=[1, 2],
+        hits=1,
+        hits_union=2,
+        target_draw_date="01-01-2026",
+    )
     return obj
 
 
@@ -143,12 +159,18 @@ def test_backfill_ignores_non_dataclasses():
 # --------------------------------------------------------------------------- #
 def test_expand_predictions_propagates_coverage():
     pred = RetroactivePrediction(
-        simulation_date="01-01-2026", target_draw_date="02-01-2026",
+        simulation_date="01-01-2026",
+        target_draw_date="02-01-2026",
         variants=[[1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 7]],
         predicted_numbers={1, 2, 3, 4, 5, 6, 7},
         actual_numbers=[1, 2, 3, 8, 9, 10],
-        hits=3, pool_size=7, guarantee=4, game_type="6/49",
-        draw_index=5, hits_union=3, wheel_coverage=62.5,
+        hits=3,
+        pool_size=7,
+        guarantee=4,
+        game_type="6/49",
+        draw_index=5,
+        hits_union=3,
+        wheel_coverage=62.5,
     )
     flat = expand_predictions_to_flat([pred], "6/49")
     assert len(flat) == 2

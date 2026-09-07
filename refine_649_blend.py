@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Rafinare fină blend graph_649_katz_community + gap_poisson (+ triple-uri)."""
+
 from __future__ import annotations
 
 import math
@@ -32,7 +33,10 @@ def main() -> None:
             METHODS[nm] = tup
 
     from loto_enterprise.benchmark.methods_graph import score_graph_649_katz_community
-    from loto_enterprise.benchmark.methods_classical import score_gap_poisson, score_prime_bias
+    from loto_enterprise.benchmark.methods_classical import (
+        score_gap_poisson,
+        score_prime_bias,
+    )
 
     katz = score_graph_649_katz_community
     gap = score_gap_poisson
@@ -43,7 +47,7 @@ def main() -> None:
     candidates: dict[str, object] = {}
     for w in [i / 100 for i in range(5, 96, 1)]:  # 5%..95% step 1%
         w2 = 1.0 - w
-        nm = f"649_refine_katz_gap_{int(w*100)}"
+        nm = f"649_refine_katz_gap_{int(w * 100)}"
         candidates[nm] = make_blend_scorer([(w, katz), (w2, gap)])
 
     # Triple-uri în jurul optimului ~15%
@@ -53,7 +57,7 @@ def main() -> None:
             if w3 < 0.05:
                 continue
             for tag, f3 in [("haz", hazard), ("wil", wilson), ("pri", prime)]:
-                nm = f"649_tri_kg_{int(w1*100)}_{int(w2*100)}_{tag}"
+                nm = f"649_tri_kg_{int(w1 * 100)}_{int(w2 * 100)}_{tag}"
                 candidates[nm] = make_blend_scorer([(w1, katz), (w2, gap), (w3, f3)])
 
     for nm, fn in candidates.items():
@@ -70,7 +74,9 @@ def main() -> None:
     baseline_fr, _ = _evaluate_fold("seasonal_naive", train, test, game, BLOCK)
     baseline = float(baseline_fr.rates_4plus_per_pool.get(f"k{POOL_K}", 0))
     target = baseline * 1.20
-    print(f"Baseline seasonal_naive: {baseline*100:.2f}%  target +20%: {target*100:.2f}%")
+    print(
+        f"Baseline seasonal_naive: {baseline * 100:.2f}%  target +20%: {target * 100:.2f}%"
+    )
     print(f"Evaluating {len(candidates)} refined candidates...")
 
     results = []
@@ -80,14 +86,18 @@ def main() -> None:
         lift = (rate - baseline) / baseline if baseline else 0
         results.append((nm, rate, lift))
         if (i + 1) % 30 == 0:
-            print(f"  {i+1}/{len(candidates)}")
+            print(f"  {i + 1}/{len(candidates)}")
 
     results.sort(key=lambda x: x[1], reverse=True)
     import json
     import sys
+
     out_path = ROOT / "bench_results" / "refine_649_results.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = [{"method": nm, "rate": rate, "lift_pct": round(lift * 100, 2)} for nm, rate, lift in results]
+    payload = [
+        {"method": nm, "rate": rate, "lift_pct": round(lift * 100, 2)}
+        for nm, rate, lift in results
+    ]
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     print("\n--- TOP 15 REFINED ---")
@@ -97,21 +107,33 @@ def main() -> None:
         if ok:
             qualified += 1
         mark = "OK" if ok else "--"
-        print(f"{i+1:2d}. [{mark}] {nm}: {rate*100:.2f}% (+{lift*100:.1f}%)")
-    print(f"\nCalificate +20%: {sum(1 for _, r, _ in results if r >= target)} / {len(results)}")
+        print(f"{i + 1:2d}. [{mark}] {nm}: {rate * 100:.2f}% (+{lift * 100:.1f}%)")
+    print(
+        f"\nCalificate +20%: {sum(1 for _, r, _ in results if r >= target)} / {len(results)}"
+    )
 
     best_nm, best_rate, best_lift = results[0]
-    print(f"\nBEST: {best_nm} = {best_rate*100:.2f}% (+{best_lift*100:.1f}%)")
+    print(f"\nBEST: {best_nm} = {best_rate * 100:.2f}% (+{best_lift * 100:.1f}%)")
 
     # Doar în memoria acestui proces — nu se scrie nimic pe disc.
     winner_fn = candidates[best_nm]
     from loto_enterprise.benchmark.methods_search_649 import SEARCH_649_NEW as S
+
     perm_name = "649_katz_gap_opt"
-    S[perm_name] = (winner_fn, "math-649", False, f"Optimizat search: {best_nm} @ {best_rate*100:.2f}% 4+")
+    S[perm_name] = (
+        winner_fn,
+        "math-649",
+        False,
+        f"Optimizat search: {best_nm} @ {best_rate * 100:.2f}% 4+",
+    )
     METHODS[perm_name] = S[perm_name]
 
-    print(f"Metodă înregistrată DOAR în memoria acestui proces (efemeră, NU scrisă pe disc): {perm_name}")
-    print("Pentru persistență: adaugă manual intrarea de mai sus în methods_search_649.py.")
+    print(
+        f"Metodă înregistrată DOAR în memoria acestui proces (efemeră, NU scrisă pe disc): {perm_name}"
+    )
+    print(
+        "Pentru persistență: adaugă manual intrarea de mai sus în methods_search_649.py."
+    )
 
 
 if __name__ == "__main__":

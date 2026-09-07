@@ -5,6 +5,7 @@ Bench-ul evaluează un set fix de pool-uri. Dacă UI-ul cere unul din afara lui,
 `rationale` copiat VERBATIM din acea intrare. UI-ul îl afișează lângă 🏆, deci
 tipărea cifrele măsurate la k12 ca și cum ar fi ale pool-ului k16 cerut.
 """
+
 import json
 
 import pytest
@@ -14,16 +15,30 @@ from loto_enterprise.core.method_selector import (
     should_use_blacklist,
 )
 
-_CFG = {"games": {"loto_6_49": {"auto_pilot_per_pool": {
-    "k10": {"scorer": "frequency", "sim_depth_pct": 30, "avg_hits": 1.1,
-            "use_blacklist": False,
-            "rationale": "Wilson_lb=0.0903 la pool 10",
-            "ensemble": [{"method": "frequency", "weight": 1.0}]},
-    "k12": {"scorer": "fourier", "sim_depth_pct": 60, "avg_hits": 1.3,
-            "use_blacklist": True,
-            "rationale": "Wilson_lb=0.1102 la pool 12",
-            "ensemble": [{"method": "fourier", "weight": 1.0}]},
-}}}}
+_CFG = {
+    "games": {
+        "loto_6_49": {
+            "auto_pilot_per_pool": {
+                "k10": {
+                    "scorer": "frequency",
+                    "sim_depth_pct": 30,
+                    "avg_hits": 1.1,
+                    "use_blacklist": False,
+                    "rationale": "Wilson_lb=0.0903 la pool 10",
+                    "ensemble": [{"method": "frequency", "weight": 1.0}],
+                },
+                "k12": {
+                    "scorer": "fourier",
+                    "sim_depth_pct": 60,
+                    "avg_hits": 1.3,
+                    "use_blacklist": True,
+                    "rationale": "Wilson_lb=0.1102 la pool 12",
+                    "ensemble": [{"method": "fourier", "weight": 1.0}],
+                },
+            }
+        }
+    }
+}
 
 
 @pytest.fixture()
@@ -47,8 +62,10 @@ def test_substituted_pool_is_flagged(cfg_path, asked, expected_k):
     assert sub == {"requested": asked, "used": expected_k}
     # și rationale-ul spune de unde vin cifrele, ca UI-ul să nu le atribuie greșit
     assert f"măsurat la pool {expected_k}" in c["rationale"]
-    assert _CFG["games"]["loto_6_49"]["auto_pilot_per_pool"][f"k{expected_k}"][
-        "rationale"] in c["rationale"]
+    assert (
+        _CFG["games"]["loto_6_49"]["auto_pilot_per_pool"][f"k{expected_k}"]["rationale"]
+        in c["rationale"]
+    )
 
 
 def test_key_present_on_the_no_decision_fallback(tmp_path):
@@ -61,6 +78,11 @@ def test_key_present_on_the_no_decision_fallback(tmp_path):
 
 @pytest.mark.parametrize("asked,expected", [(11, False), (16, True), (6, False)])
 def test_blacklist_telemetry_uses_same_nearest_pool(cfg_path, asked, expected):
-    assert should_use_blacklist(
-        "loto_6_49", asked, config_path=cfg_path,
-    ) is expected
+    assert (
+        should_use_blacklist(
+            "loto_6_49",
+            asked,
+            config_path=cfg_path,
+        )
+        is expected
+    )

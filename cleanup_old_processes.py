@@ -11,6 +11,7 @@ De ce NU e suficient PowerShell + CommandLine like %~dp0:
   lasă copiii ProcessPool în viață: pe Windows uciderea părintelui NU omoară
   descendenții.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,15 +27,23 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-SCRIPT_MARKERS = frozenset({
-    "app_nicegui.py",
-    "worker.py",
-    "bench_all_methods.py",
-})
-_PYTHON_NAMES = frozenset({
-    "python", "python.exe", "pythonw", "pythonw.exe",
-    "python3", "python3.exe",
-})
+SCRIPT_MARKERS = frozenset(
+    {
+        "app_nicegui.py",
+        "worker.py",
+        "bench_all_methods.py",
+    }
+)
+_PYTHON_NAMES = frozenset(
+    {
+        "python",
+        "python.exe",
+        "pythonw",
+        "pythonw.exe",
+        "python3",
+        "python3.exe",
+    }
+)
 _SYSTEM_PIDS = frozenset({0, 4})
 
 
@@ -44,7 +53,9 @@ def _norm(path: str | os.PathLike[str] | None) -> str:
     return os.path.normcase(str(path)).replace("\\", "/").rstrip("/")
 
 
-def path_is_under(path: str | os.PathLike[str] | None, root: str | os.PathLike[str]) -> bool:
+def path_is_under(
+    path: str | os.PathLike[str] | None, root: str | os.PathLike[str]
+) -> bool:
     """True dacă `path` e `root` sau un fiu al lui. Acceptă / și \\, case-insensitive."""
     npath = _norm(path)
     nroot = _norm(root)
@@ -139,10 +150,16 @@ def select_stale_pids(
     stale = {
         p.pid
         for p in procs
-        if is_stale_proc(p, venv_dir=venv_dir, project_root=project_root, keep_pids=keep_pids)
+        if is_stale_proc(
+            p, venv_dir=venv_dir, project_root=project_root, keep_pids=keep_pids
+        )
     }
     if listen_pids:
-        stale.update(pid for pid in listen_pids if pid not in keep_pids and pid not in _SYSTEM_PIDS)
+        stale.update(
+            pid
+            for pid in listen_pids
+            if pid not in keep_pids and pid not in _SYSTEM_PIDS
+        )
     return expand_descendants(stale, procs) - keep_pids - _SYSTEM_PIDS
 
 
@@ -150,6 +167,7 @@ def _keep_pids() -> set[int]:
     keep = {os.getpid(), 0}
     try:
         import psutil
+
         keep.update(p.pid for p in psutil.Process().parents())
     except Exception:
         try:
@@ -161,13 +179,14 @@ def _keep_pids() -> set[int]:
 
 def _snapshot() -> list[ProcView]:
     import psutil
+
     views: list[ProcView] = []
     for proc in psutil.process_iter(["pid", "name", "exe", "cmdline", "ppid"]):
         info = proc.info
         cwd: str | None = None
         try:
             cwd = proc.cwd()
-        except (psutil.Error, OSError):
+        except psutil.Error, OSError:
             cwd = None
         cmdline = info.get("cmdline") or []
         views.append(
@@ -187,10 +206,11 @@ def _listen_pids(port: int) -> set[int]:
     if port <= 0:
         return set()
     import psutil
+
     pids: set[int] = set()
     try:
         conns = psutil.net_connections(kind="inet")
-    except (psutil.Error, OSError):
+    except psutil.Error, OSError:
         return pids
     for conn in conns:
         try:
@@ -200,17 +220,18 @@ def _listen_pids(port: int) -> set[int]:
                 continue
             if conn.pid:
                 pids.add(int(conn.pid))
-        except (TypeError, ValueError, AttributeError):
+        except TypeError, ValueError, AttributeError:
             continue
     return pids
 
 
 def _kill_pid(pid: int) -> bool:
     import psutil
+
     try:
         psutil.Process(pid).kill()
         return True
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+    except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError:
         return False
 
 

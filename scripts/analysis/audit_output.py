@@ -4,6 +4,7 @@ Rulează din rădăcina repo cu Python-ul aplicației. Nu generează joburi, nu
 rescrie istoricul și nu trimite email. --report permite salvarea unei copii
 a raportului randat cu codul curent, într-o cale explicită.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,6 +31,7 @@ from wheeling_methods import compute_coverage_pct
 
 class CaptureUI:
     """Capturează arborele randat de aceleași funcții care servesc NiceGUI."""
+
     def __init__(self):
         self.nodes = []
         self.stack = []
@@ -52,6 +54,7 @@ class CaptureUI:
                     return lambda *a, **kw: self
 
             return Element()
+
         return make
 
     def walk(self):
@@ -59,6 +62,7 @@ class CaptureUI:
             for node in nodes:
                 yield node
                 yield from visit(node["children"])
+
         return visit(self.nodes)
 
     def text(self):
@@ -69,8 +73,11 @@ class CaptureUI:
         for node in self.walk():
             if node["kind"] != "row":
                 continue
-            labels = [n["args"][0] for n in node["children"]
-                      if n["kind"] == "label" and n["args"]]
+            labels = [
+                n["args"][0]
+                for n in node["children"]
+                if n["kind"] == "label" and n["args"]
+            ]
             if len(labels) >= 2 and (labels[0] == "🏆" or str(labels[0]).endswith(".")):
                 result.append(str(labels[1]).removeprefix("🎯 "))
         return result
@@ -92,15 +99,25 @@ def audit_rankings(df):
                     continue
                 pools = [1] if draw_n == 1 else range(draw_n, draw_n + 15)
                 for pool in pools:
-                    cfg = decision.decide_optimal_config_for_pool(df, game, pool, draw_n)
+                    cfg = decision.decide_optimal_config_for_pool(
+                        df, game, pool, draw_n
+                    )
                     if "error" in cfg:
                         continue
                     app_ui._LB_ROWS_MEMO.clear()
                     with capture_ui() as ui:
-                        app_ui._render_bench_leaderboard_slice(df, game, pool, game, top_n=20)
+                        app_ui._render_bench_leaderboard_slice(
+                            df, game, pool, game, top_n=20
+                        )
                     ranked = ui.ranking()
                     expected = cfg["ranked_methods"]
-                    assert ranked[:len(expected)] == expected[:len(ranked)], (game, pool, target, ranked, expected)
+                    assert ranked[: len(expected)] == expected[: len(ranked)], (
+                        game,
+                        pool,
+                        target,
+                        ranked,
+                        expected,
+                    )
                     for excluded in cfg.get("tiebreak_dependent", []):
                         assert excluded["method"] not in ranked, (game, pool, excluded)
                     if draw_n == 1:
@@ -147,33 +164,58 @@ def audit_bundle(bundle):
             # pe un cache care exista, sau — mai rau — citeste tacit cache-ul
             # unei geometrii NEPOTRIVITE (default guarantee=guarantee).
             max_variants = int(
-                data.get("max_variants", (data.get("context") or {}).get("max_variants")) or 0
+                data.get(
+                    "max_variants", (data.get("context") or {}).get("max_variants")
+                )
+                or 0
             )
-            sig = wf._decision_sig(game, len(pool), audit.get("lookback_pct") or 100,
-                                   rp.get("draws") or 0, rp.get("factor", 0.5),
-                                   guarantee=guarantee, wheel_condition=condition,
-                                   max_variants=max_variants)
+            sig = wf._decision_sig(
+                game,
+                len(pool),
+                audit.get("lookback_pct") or 100,
+                rp.get("draws") or 0,
+                rp.get("factor", 0.5),
+                guarantee=guarantee,
+                wheel_condition=condition,
+                max_variants=max_variants,
+            )
             cache = wf._cache_path(game, wf._csv_hash(source, game), len(pool), 30, sig)
-            item = {"game": game, "pool": len(pool), "variants": len(variants), "coverage": cov}
+            item = {
+                "game": game,
+                "pool": len(pool),
+                "variants": len(variants),
+                "coverage": cov,
+            }
             if cache.exists():
                 cached = pickle_load_path(cache)
                 flat = cached["flat"]
                 per = wf.per_draw_hit_summary(flat)
-                assert all(0 <= r["best_ticket"] <= r["pool"] <= (6 if game == "6/49" else 5)
-                           for r in per.values())
+                assert all(
+                    0 <= r["best_ticket"] <= r["pool"] <= (6 if game == "6/49" else 5)
+                    for r in per.values()
+                )
                 assert len(per) == cached["n_test_draws"]
                 # Recalculăm fiecare hit de bilet direct din extragerea CSV;
                 # la cover complet, reuniunea numerelor de pe bilete e pool-ul.
                 draw_n = 6 if game == "6/49" else 5
-                actual = {i: set(int(row[f"n{j}"]) for j in range(1, draw_n + 1))
-                          for i, row in source.iterrows()}
+                actual = {
+                    i: set(int(row[f"n{j}"]) for j in range(1, draw_n + 1))
+                    for i, row in source.iterrows()
+                }
                 unions = {}
                 for p in flat:
                     nums = set(p.variant[:draw_n])
-                    assert p.hits == len(nums & actual[p.draw_index]), (game, p.draw_index, p.hits)
+                    assert p.hits == len(nums & actual[p.draw_index]), (
+                        game,
+                        p.draw_index,
+                        p.hits,
+                    )
                     unions.setdefault(p.draw_index, set()).update(nums)
                 if all(p.wheel_coverage == 100.0 for p in flat):
-                    assert all(len(nums & actual[i]) == per[i]["pool"] for i, nums in unions.items())
+                    assert all(
+                        len(nums & actual[i]) == per[i]["pool"]
+                        for i, nums in unions.items()
+                    )
                 app_ui.STATE["retro"][f"{fname}_{game}"] = flat
                 app_ui.STATE["retro_meta"][f"{fname}_{game}"] = cached
                 with capture_ui() as ui:
@@ -195,6 +237,7 @@ def main():
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     import logging
+
     logging.getLogger().setLevel(logging.WARNING)
     df = pd.read_csv(ROOT / "bench_results" / "folds.csv")
     n = audit_rankings(df)
@@ -206,9 +249,18 @@ def main():
     assert "pure_bench_mode" not in report
     if args.report:
         atomic_write_text(args.report, report)
-    print(json.dumps({"rankings_verified": n, "job": row["id"],
-                      "completed_at": row["completed_at"], "games": summary},
-                     ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "rankings_verified": n,
+                "job": row["id"],
+                "completed_at": row["completed_at"],
+                "games": summary,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -81,8 +81,11 @@ def rank_by_score(
         return []
     f = freq or {}
     finite = [(n, s) for n, s in scores.items() if math.isfinite(s)]
-    return [n for n, _ in sorted(
-        finite,
-        key=lambda kv: (kv[1], f.get(kv[0], 0.0), kv[0]),
-        reverse=True,
-    )[: int(k)]]
+    return [
+        n
+        for n, _ in sorted(
+            finite,
+            key=lambda kv: (kv[1], f.get(kv[0], 0.0), kv[0]),
+            reverse=True,
+        )[: int(k)]
+    ]
