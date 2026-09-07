@@ -126,7 +126,6 @@ def _retroactive_step_stateless(
         eng = LotoEngine(game_type)
         eng.data = historical_df
         eng._build_draw_matrix()
-        eng.error_correction_map = {}
         eng._adaptive_mode = "normal"
         eng._adaptive_event = None
         eng._temp_blacklist = set()
@@ -674,7 +673,6 @@ class LotoBacktester:
         logger.info(f"[BACKTEST RETROACTIV] Simulăm pentru {n_simulate} extrageri din {n_draws}")
         
         retro_predictions = []
-        feedback_map: dict[int, float] = {}  # num -> multiplier
         # State adaptiv in-memory pentru backtest (NU atinge adaptive_state.json)
         adaptive_history: list[dict] = []
         streak_zero = 0
@@ -685,7 +683,6 @@ class LotoBacktester:
         prev_pool_for_inversion: list[int] = []
         prev_event_for_inversion: str | None = None
 
-        # Importăm noul modul; fallback la logica veche dacă lipsește
         try:
             from loto_enterprise.core.adaptive_feedback import (
                 compute_post_draw_feedback,
@@ -694,7 +691,7 @@ class LotoBacktester:
             _has_adaptive = True
         except ImportError:
             _has_adaptive = False
-            logger.warning("[BACKTEST] adaptive_feedback indisponibil — folosesc legacy feedback.")
+            logger.warning("[BACKTEST] adaptive_feedback indisponibil — fără telemetrie de regim în acest backtest.")
 
         # Ordinea de iterare. FĂRĂ stare între pași (use_feedback=False ȘI
         # enable_hard_inversion=False — exact cum apelează walk-forward-ul), pașii
@@ -960,8 +957,6 @@ class LotoBacktester:
                 engine.data = historical_df
                 engine._build_draw_matrix()
 
-                # Aplicăm feedback-ul acumulat din pașii anteriori (BEFORE pipeline)
-                engine.error_correction_map = feedback_map.copy()
                 # Inject regime mode pentru ca TimesFM să folosească ponderi reactive
                 # dacă suntem în reset (catastrofe consecutive în istoric)
                 engine._adaptive_mode = active_mode
@@ -1032,45 +1027,32 @@ class LotoBacktester:
 
                 logger.info(f"[BACKTEST RETROACTIV] Rezultat: {max_hits} numere ghicite (Max dintr-o varianta), pool_hits={hits_union}")
 
-                if use_feedback:
-                    if _has_adaptive:
-                        # Folosim feedback-ul diferențiat (catastrophe-aware) din modulul nou
-                        new_map, event, info = compute_post_draw_feedback(
-                            last_pool=list(engine.hard_core),
-                            actual_draw=list(actual_draw),
-                            current_map=feedback_map,
-                            history=adaptive_history,
-                            game_type=self.game_type,
-                            pool_size=pool_size,
-                            streak_zero=streak_zero,
-                            prev_mode=active_mode,
-                            reset_duration=reset_duration,
-                        )
-                        feedback_map = new_map
-                        streak_zero = int(info["streak_zero"])
-                        active_mode = info["active_mode"]
-                        reset_duration = int(info.get("reset_duration", 0))
-                        adaptive_history.append({
-                            "date": str(target_date),
-                            "pool_hits": int(info["pool_hits"]),
-                            "event": event,
-                        })
-                        # Limităm istoricul (backtest poate fi lung)
-                        adaptive_history = adaptive_history[-50:]
-                        # Setăm starea pentru hard inversion la următoarea iterație
-                        prev_event_for_inversion = event
-                        prev_pool_for_inversion = list(engine.hard_core)
-                    else:
-                        # Fallback legacy (status quo dinaintea adaptive_feedback)
-                        actual_set = set(actual_draw)
-                        predicted_set = set(engine.hard_core)
-                        for m in actual_set - predicted_set:
-                            feedback_map[m] = feedback_map.get(m, 1.0) + 0.1
-                        for fp in predicted_set - actual_set:
-                            feedback_map[fp] = feedback_map.get(fp, 1.0) - 0.05
-                        for k in list(feedback_map.keys()):
-                            feedback_map[k] = max(0.5, min(2.0, feedback_map[k]))
-                            feedback_map[k] = 1.0 + (feedback_map[k] - 1.0) * 0.8
+                if use_feedback and _has_adaptive:
+                    # Telemetrie de regim (catastrophe-aware) din modulul nou — nu mai
+                    # întoarce un multiplicator de scor (vezi adaptive_feedback.py).
+                    event, info = compute_post_draw_feedback(
+                        last_pool=list(engine.hard_core),
+                        actual_draw=list(actual_draw),
+                        history=adaptive_history,
+                        game_type=self.game_type,
+                        pool_size=pool_size,
+                        streak_zero=streak_zero,
+                        prev_mode=active_mode,
+                        reset_duration=reset_duration,
+                    )
+                    streak_zero = int(info["streak_zero"])
+                    active_mode = info["active_mode"]
+                    reset_duration = int(info.get("reset_duration", 0))
+                    adaptive_history.append({
+                        "date": str(target_date),
+                        "pool_hits": int(info["pool_hits"]),
+                        "event": event,
+                    })
+                    # Limităm istoricul (backtest poate fi lung)
+                    adaptive_history = adaptive_history[-50:]
+                    # Setăm starea pentru hard inversion la următoarea iterație
+                    prev_event_for_inversion = event
+                    prev_pool_for_inversion = list(engine.hard_core)
 
             except Exception as e:
                 logger.error(f"[BACKTEST RETROACTIV] Eroare la simulare {sim_num}: {e}")

@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-07:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 35 fisiere `test_*.py`, 550 teste trecute la auditul global.
+- teste: 35 fisiere `test_*.py`, 549 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 

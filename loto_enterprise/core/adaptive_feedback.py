@@ -1,10 +1,13 @@
 """
-Adaptive Feedback Engine — învățare persistentă post-extragere.
+Adaptive Feedback Engine — telemetrie persistentă post-extragere.
 
 Sistemul detectează catastrofe (0 hituri din pool), sub-performanță (1 hit) și
-regime mismatch (sub-performanță susținută în fereastră rolling) pentru a
-amplifica diferențiat feedback-ul aplicat asupra scorurilor TimesFM la
-următoarea predicție live.
+regime mismatch (sub-performanță susținută în fereastră rolling) — evenimente
+și mod (`active_mode`) afișate în audit/UI ca istoric, fără să ajusteze scorul
+vreunui număr. (Până la eliminarea lui — verificare globală 2026-09-07 — modulul
+calcula și un `error_correction_map`, un multiplicator per număr menit să
+amplifice/penalizeze scorul la predicția următoare; nu era însă niciodată citit
+de pipeline-ul de scoring, deci n-a influențat vreodată vreun pool generat.)
 
 State persistat în `adaptive_state.json` (la rădăcina proiectului), keyed pe
 `{game_type}_{pool_size}` — consistent cu `pool_history.json`.
@@ -14,8 +17,8 @@ Evenimente clasificate:
     * "underperf"     — exact 1 hit (sub baseline)
     * "catastrophe"   — 0 hituri (pierdere totală — semnal de regim greșit)
     * "regime_reset"  — fereastră rolling sub baseline aleator pentru >=N
-                        extrageri => regimul curent al modelului e nepotrivit;
-                        clamp + schimbare ponderi NQI la nivel de engine.
+                        extrageri => regimul curent al modelului e nepotrivit
+                        (raportat ca `active_mode = "reset"`, telemetrie).
 """
 
 from __future__ import annotations
@@ -31,15 +34,6 @@ logger = logging.getLogger(__name__)
 # Locația fișierului de stare. Rădăcina proiectului = trei niveluri mai sus față
 # de acest modul (loto_enterprise/core/adaptive_feedback.py -> .. -> .. -> root)
 _STATE_FILE = Path(__file__).resolve().parent.parent.parent / "adaptive_state.json"
-
-# Limitele globale pentru error_correction_map
-_FEEDBACK_MIN = 0.5
-_FEEDBACK_MAX = 2.0
-_FEEDBACK_DECAY = 0.8  # decay per pas spre 1.0 (memorie scurtă)
-
-# Clamp-uri în mod regime_reset (mai conservator)
-_RESET_MIN = 0.7
-_RESET_MAX = 1.4
 
 # Lungimea ferestrei rolling pentru detecția regime mismatch
 _ROLLING_WINDOW = 5
@@ -59,13 +53,6 @@ _REGIME_STREAK_THRESHOLD = 3
 # reset când acesta nu produce îmbunătățiri (descoperit empiric: reset
 # performa mai prost decât normal pe ferestre lungi).
 _REGIME_MAX_DURATION = 5
-
-# Magnitudini de feedback per eveniment (missed +X, false_positive -Y)
-_MAGNITUDES: dict[str, tuple[float, float]] = {
-    "normal":      (0.10, 0.05),
-    "underperf":   (0.15, 0.10),
-    "catastrophe": (0.30, 0.20),
-}
 
 # Lungimea istoricului păstrat per cheie (rolling buffer)
 _HISTORY_MAXLEN = 50
@@ -95,7 +82,6 @@ def _empty_entry() -> dict:
         "last_pool_date": None,       # ISO timestamp al momentului predicției
         "last_data_rows": 0,          # nr. rânduri din CSV când s-a făcut predicția
         "history": [],                # listă dict {date, pool_hits, actual, event}
-        "error_correction_map": {},   # str(num) -> multiplier
         "regime_state": {
             "streak_zero": 0,
             "rolling_avg": None,
@@ -124,9 +110,6 @@ def load_adaptive_state(game_type: str, pool_size: int) -> dict:
     base = _empty_entry()
     base.update(entry)
     base["regime_state"] = {**base["regime_state"], **entry.get("regime_state", {})}
-    base["error_correction_map"] = {
-        int(k): float(v) for k, v in base.get("error_correction_map", {}).items()
-    }
     return base
 
 
@@ -138,10 +121,6 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
         "last_pool_date": entry.get("last_pool_date"),
         "last_data_rows": int(entry.get("last_data_rows", 0)),
         "history": entry.get("history", [])[-_HISTORY_MAXLEN:],
-        "error_correction_map": {
-            str(int(k)): round(float(v), 4)
-            for k, v in entry.get("error_correction_map", {}).items()
-        },
         "regime_state": entry.get("regime_state", {}),
     }
     try:
@@ -200,22 +179,20 @@ def detect_regime_mismatch(
 def compute_post_draw_feedback(
     last_pool: list[int],
     actual_draw: list[int],
-    current_map: dict[int, float],
     history: list[dict] | None = None,
     game_type: str = "6/49",
     pool_size: int = 12,
     streak_zero: int = 0,
     prev_mode: str = "normal",
     reset_duration: int = 0,
-) -> tuple[dict[int, float], str, dict[str, object]]:
+) -> tuple[str, dict[str, object]]:
     """
-    Calculează noul `error_correction_map` după ce s-a întâmplat o extragere
-    reală.
+    Clasifică rezultatul unei extrageri reale (catastrofă/underperf/normal) și
+    actualizează detecția de regim (streak de catastrofe, fereastră rolling).
 
     Args:
         last_pool: pool-ul prezis pentru extragerea CURENTĂ (numerele jucate)
         actual_draw: numerele care AU IEȘIT efectiv
-        current_map: error_correction_map din pasul anterior
         history: istoricul pool_hits din extragerile anterioare (pentru regime)
         game_type, pool_size: pentru calculul baseline-ului
         streak_zero: numărul de catastrofe consecutive (din regime_state)
@@ -223,24 +200,16 @@ def compute_post_draw_feedback(
         reset_duration: nr. extrageri consecutive în care am fost în reset
 
     Returns:
-        (new_map, event_type, regime_info)
+        (event_type, regime_info)
     """
     pool_set: set[int] = {int(n) for n in last_pool}
     actual_set: set[int] = {int(n) for n in actual_draw}
     pool_hits = len(pool_set & actual_set)
 
     event = classify_event(pool_hits)
-    delta_missed, delta_fp = _MAGNITUDES[event]
-
-    new_map = dict(current_map)
 
     missed = sorted(actual_set - pool_set)
-    for m in missed:
-        new_map[m] = new_map.get(m, 1.0) + delta_missed
-
     false_positives = sorted(pool_set - actual_set)
-    for fp in false_positives:
-        new_map[fp] = new_map.get(fp, 1.0) - delta_fp
 
     # Streak update
     if event == "catastrophe":
@@ -279,19 +248,6 @@ def compute_post_draw_feedback(
         active_mode = "normal"
         new_reset_duration = 0
 
-    if active_mode == "reset":
-        # Clamp mai strict când suntem în reset — împiedicăm map-ul să se ducă în extreme.
-        for k in list(new_map.keys()):
-            new_map[k] = max(_RESET_MIN, min(_RESET_MAX, new_map[k]))
-    else:
-        # Clamp standard + decay spre 1.0 (memorie scurtă, evităm acumularea infinită)
-        for k in list(new_map.keys()):
-            v = max(_FEEDBACK_MIN, min(_FEEDBACK_MAX, new_map[k]))
-            new_map[k] = 1.0 + (v - 1.0) * _FEEDBACK_DECAY
-
-    # Curățare: scoatem multiplicatorii ce s-au întors la ~1.0 (zgomot)
-    new_map = {k: v for k, v in new_map.items() if abs(v - 1.0) > 0.005}
-
     regime_info = {
         "pool_hits": pool_hits,
         "rolling_avg": rolling_avg,
@@ -301,69 +257,11 @@ def compute_post_draw_feedback(
         "reset_duration": new_reset_duration,
         "missed": missed,
         "false_positives": false_positives,
-        "delta_missed": delta_missed,
-        "delta_fp": delta_fp,
         "is_mismatch": is_mismatch,
         "evaluated_pool": sorted(int(x) for x in pool_set),  # pool-ul pe care s-a calculat feedback (folosit pentru temp_blacklist)
     }
 
-    return new_map, event, regime_info
-
-
-def update_state_after_draw(
-    game_type: str,
-    pool_size: int,
-    actual_draw: list[int],
-    actual_date: str | None = None,
-) -> tuple[str, dict[str, object]] | None:
-    """
-    Wrapper convenabil: încarcă state, calculează feedback pentru last_pool vs
-    actual_draw, salvează state actualizat. Returnează (event, regime_info) sau
-    None dacă nu există un pool anterior de comparat.
-    """
-    state = load_adaptive_state(game_type, pool_size)
-    last_pool = state.get("last_pool", [])
-    if not last_pool:
-        return None
-
-    rs = state.get("regime_state", {})
-    new_map, event, info = compute_post_draw_feedback(
-        last_pool=last_pool,
-        actual_draw=actual_draw,
-        current_map=state.get("error_correction_map", {}),
-        history=state.get("history", []),
-        game_type=game_type,
-        pool_size=pool_size,
-        streak_zero=int(rs.get("streak_zero", 0)),
-        prev_mode=rs.get("active_mode", "normal"),
-        reset_duration=int(rs.get("reset_duration", 0)),
-    )
-
-    history = list(state.get("history", []))
-    history.append({
-        "date": actual_date or datetime.now().isoformat(timespec="seconds"),
-        "pool_hits": int(info["pool_hits"]),
-        "actual": [int(n) for n in actual_draw],
-        "event": event,
-    })
-    history = history[-_HISTORY_MAXLEN:]
-
-    state["error_correction_map"] = new_map
-    state["history"] = history
-    state["regime_state"] = {
-        "streak_zero": int(info["streak_zero"]),
-        "rolling_avg": float(info["rolling_avg"]) if info.get("rolling_avg") is not None else None,
-        "last_reset": (
-            actual_date or datetime.now().isoformat(timespec="seconds")
-            if info["active_mode"] == "reset"
-            else state.get("regime_state", {}).get("last_reset")
-        ),
-        "active_mode": info["active_mode"],
-        "reset_duration": int(info.get("reset_duration", 0)),
-    }
-
-    save_adaptive_state(game_type, pool_size, state)
-    return event, info
+    return event, regime_info
 
 
 def record_predicted_pool(
@@ -455,11 +353,6 @@ def get_state_summary(game_type: str, pool_size: int) -> dict:
     history = state.get("history", [])
     last = history[-1] if history else None
 
-    map_ = state.get("error_correction_map", {})
-    sorted_boost = sorted(map_.items(), key=lambda x: -x[1])
-    boosts = [(int(n), round(v, 3)) for n, v in sorted_boost if v > 1.05][:8]
-    penalties = [(int(n), round(v, 3)) for n, v in sorted_boost[::-1] if v < 0.95][:8]
-
     return {
         "last_event": last.get("event") if last else None,
         "last_hits": last.get("pool_hits") if last else None,
@@ -468,7 +361,5 @@ def get_state_summary(game_type: str, pool_size: int) -> dict:
         "streak_zero": state.get("regime_state", {}).get("streak_zero", 0),
         "rolling_avg": state.get("regime_state", {}).get("rolling_avg"),
         "baseline": _baseline_random_hits(game_type, pool_size),
-        "boosts": boosts,
-        "penalties": penalties,
         "history_size": len(history),
     }

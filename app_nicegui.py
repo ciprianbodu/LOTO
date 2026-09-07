@@ -1645,22 +1645,12 @@ def _render_adaptive(audit: dict) -> None:
     if ast.get("missed"):
         _missed = ", ".join(map(str, ast["missed"]))
         parts.append(render_html_safe(
-            t"<div style='color:#dc3545;'>Numere ratate: {_missed} → boost la următoarea predicție</div>"
+            t"<div style='color:#dc3545;'>Numere ratate: {_missed}</div>"
         ))
     if ast.get("false_positives"):
         _fp = ", ".join(map(str, ast["false_positives"][:10]))
         parts.append(render_html_safe(
-            t"<div style='color:#6c757d;'>Prezise dar absente: {_fp} → penalizare</div>"
-        ))
-    if ast.get("boosts"):
-        _boosts = ", ".join(f"{n}×{m:.2f}" for n, m in ast["boosts"][:6])
-        parts.append(render_html_safe(
-            t"<div><span style='color:#28a745;'>↑ Boost activ:</span> <strong>{_boosts}</strong></div>"
-        ))
-    if ast.get("penalties"):
-        _pen = ", ".join(f"{n}×{m:.2f}" for n, m in ast["penalties"][:6])
-        parts.append(render_html_safe(
-            t"<div><span style='color:#dc3545;'>↓ Penalizare activă:</span> <strong>{_pen}</strong></div>"
+            t"<div style='color:#6c757d;'>Prezise dar absente: {_fp}</div>"
         ))
     cd = audit.get("catastrophe_diversification")
     if cd and cd.get("injected"):
@@ -3634,7 +3624,6 @@ def adaptive_history_panel() -> None:
         entry = raw[key] or {}
         hist = entry.get("history", []) or []
         rs = entry.get("regime_state", {}) or {}
-        ecmap = entry.get("error_correction_map", {}) or {}
         mode = rs.get("active_mode", "normal")
         streak = int(rs.get("streak_zero", 0) or 0)
         events = [str(h.get("event", "?")) for h in hist]
@@ -3655,14 +3644,6 @@ def adaptive_history_panel() -> None:
                         ui.label(str(val)).classes("text-subtitle1")
             if entry.get("last_pool_date"):
                 ui.label(f"Ultima predicție: {entry['last_pool_date']}").classes("text-caption")
-            if ecmap:
-                boosts = sorted(((int(k2), float(v)) for k2, v in ecmap.items()), key=lambda x: x[1], reverse=True)
-                tb = [f"{nn}×{m:.2f}" for nn, m in boosts[:5] if m > 1.0]
-                tp = [f"{nn}×{m:.2f}" for nn, m in boosts[-5:] if m < 1.0]
-                if tb:
-                    ui.label("↑ Top boost: " + ", ".join(tb)).classes("text-caption text-positive")
-                if tp:
-                    ui.label("↓ Top penalizare: " + ", ".join(tp)).classes("text-caption text-negative")
             if hits:
                 ui.echart({
                     "tooltip": {"trigger": "axis"},

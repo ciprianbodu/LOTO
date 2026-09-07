@@ -279,7 +279,6 @@ class LotoEngine:
         self.data: pd.DataFrame | None = None
         self.arena2_index = None
         self._draw_matrix: np.ndarray | None = None
-        self.error_correction_map: dict[int, float] = {}  # num -> bias_multiplier
         # Pool size hint for method_selector (the wheeling pool, typically 12)
         self._winner_pool_hint: int = 12
 
@@ -710,7 +709,9 @@ class LotoEngine:
         # setează explicit Garanție = draw_n în UI.)
 
         # === ADAPTIVE FEEDBACK PRE-RUN: detectăm extrageri reale apărute de la
-        # ultima predicție și ajustăm error_correction_map ÎNAINTE de TimesFM. ===
+        # ultima predicție și actualizăm telemetria de regim (streak/mod) ÎNAINTE
+        # de TimesFM. Nu mai ajustează niciun scor — vezi docstring-ul modulului
+        # adaptive_feedback pentru eliminarea lui error_correction_map. ===
         adaptive_event = None
         adaptive_info = None
         if enable_adaptive_persistence and _HAS_ADAPTIVE and self.data is not None:
@@ -724,10 +725,9 @@ class LotoEngine:
                     new_actual = self._extract_draw_at_index(last_rows)
                     if new_actual:
                         rs = state.get("regime_state", {})
-                        new_map, adaptive_event, adaptive_info = compute_post_draw_feedback(
+                        adaptive_event, adaptive_info = compute_post_draw_feedback(
                             last_pool=last_pool,
                             actual_draw=new_actual,
-                            current_map=state.get("error_correction_map", {}),
                             history=state.get("history", []),
                             game_type=self.game_type,
                             pool_size=pool_size,
@@ -735,8 +735,7 @@ class LotoEngine:
                             prev_mode=rs.get("active_mode", "normal"),
                             reset_duration=int(rs.get("reset_duration", 0)),
                         )
-                        self.error_correction_map = new_map
-                        # Persistăm istoricul + map-ul actualizat
+                        # Persistăm istoricul actualizat
                         history = list(state.get("history", []))
                         history.append({
                             "date": self._extract_date_at_index(last_rows),
@@ -744,7 +743,6 @@ class LotoEngine:
                             "actual": [int(n) for n in new_actual],
                             "event": adaptive_event,
                         })
-                        state["error_correction_map"] = new_map
                         state["history"] = history[-50:]
                         state["regime_state"] = {
                             "streak_zero": int(adaptive_info["streak_zero"]),
