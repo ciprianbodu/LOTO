@@ -19,7 +19,7 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-04:
+Snapshot verificat la 2026-09-07:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py`, port 8000;
@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-04:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 33 fisiere `test_*.py`, 517 teste trecute la auditul global.
+- teste: 35 fisiere `test_*.py`, 550 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 

@@ -24,8 +24,27 @@ import psutil
 from runtime_paths import ENGINE_LOG_FILE, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-
 LOG_FILE = str(ENGINE_LOG_FILE)
+
+# `logger` e IMPORTAT atât de app_nicegui.py cât și de worker.py, dar cele două
+# procese configurează root logging DIFERIT: worker.py atașează explicit un
+# FileHandler pe LOG_FILE, în timp ce app_nicegui.py face doar
+# `logging.basicConfig(...)` FĂRĂ `handlers=` (deci implicit doar StreamHandler pe
+# stderr). Un `logger.error(...)` emis de AICI din procesul UI (ex.
+# `ensure_worker_running` eșuat — exact diagnosticul de care ai nevoie când
+# joburile rămân PENDING) era deci invizibil în panoul de log al UI-ului, care
+# citește/curăță exclusiv LOG_FILE. Atașăm propriul FileHandler necondiționat de
+# configurația root a apelantului; `propagate = False` evită scrierea DUBLĂ în
+# LOG_FILE când apelantul e worker.py (care oricum are propriul FileHandler pe root).
+logger.propagate = False
+if not logger.handlers:
+    try:
+        _fh = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a")
+        _fh.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s"))
+        logger.addHandler(_fh)
+        logger.setLevel(logging.INFO)
+    except OSError:
+        pass  # ex. directorul de runtime nu există încă la primul import
 
 # Versiune Python țintă (ALF-LUPTATORI). ACTUALIZARI.bat / START_8000.bat folosesc py -3.14.
 PYTHON_MIN = (3, 14)
@@ -179,6 +198,10 @@ def read_tail_lines(path: str, n_lines: int, block: int = _LOG_TAIL_BYTES) -> li
     `_LOG_TAIL_BYTES`); dacă nu, întoarce câte linii încap — degradare grațioasă,
     nu eroare.
     """
+    if n_lines <= 0:
+        # `list[-0:]` == `list[0:]` (tot fișierul) în Python, fiindcă -0 == 0 —
+        # fără gardă explicită, n_lines=0 întorcea totul, nu nimic.
+        return []
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
         size = f.tell()
@@ -216,9 +239,28 @@ def read_logs_filtered(n_lines: int = 50) -> str:
 
 
 def clear_logs() -> None:
+    """Golește LOG_FILE, cu un header nou.
+
+    NU elimină cursa cu un worker care scrie ACTIV pe fișier (logging.FileHandler
+    al worker.py e deschis în append pentru toată durata procesului și nu participă
+    la niciun lock din acest modul) — o eliminare completă ar cere ca AMBII
+    scriitori să treacă prin același mecanism de coordonare, schimbare mai mare
+    decât acest fix. `file_lock` protejează totuși împotriva a doi apelanți
+    CONCURENȚI ai lui `clear_logs()` însuși (ex. dublu-click în UI)."""
+    header = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [INFO] --- Log curățat manual ---\n"
     try:
-        with open(LOG_FILE, "w", encoding="utf-8") as f:
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [INFO] --- Log curățat manual ---\n")
+        with file_lock(LOG_FILE, timeout=2.0):
+            if not os.path.exists(LOG_FILE):
+                # "r+" cere fișierul deja EXISTENT (spre deosebire de vechiul "w",
+                # care îl crea) — la prima rulare (niciun log scris încă) am cădea
+                # altfel în except de mai jos în loc să creăm fișierul.
+                with open(LOG_FILE, "w", encoding="utf-8") as f:
+                    f.write(header)
+                return
+            with open(LOG_FILE, "r+", encoding="utf-8") as f:
+                f.seek(0)
+                f.write(header)
+                f.truncate()
     except OSError as exc:
         logger.warning("clear_logs: nu am putut rescrie %s: %s", LOG_FILE, exc)
 
@@ -242,8 +284,14 @@ def pack_queue_result(payload: object) -> str:
     try:
         from compression import zstd
         compressed = zstd.compress(raw, 3)
-    except (ImportError, ModuleNotFoundError, AttributeError) as exc:
-        logger.warning("zstd indisponibil pentru rezultatul jobului; folosesc pickle+b64: %s", exc)
+    except Exception as exc:  # noqa: BLE001 — degradare intenționată la orice defecțiune
+        # de compresie, nu doar import lipsă: un eșec la ÎNSUȘI `zstd.compress()`
+        # (ex. eroare specifică zstd, MemoryError pe un payload patologic de mare)
+        # trebuia să cadă pe fallback la fel ca un modul lipsă — altfel un job
+        # calculat corect pica la excepție NEPRINSĂ aici, deși docstring-ul de mai
+        # sus promite exact contrariul.
+        logger.warning("Compresie zstd indisponibilă/eșuată pentru rezultatul jobului; "
+                       "folosesc pickle+b64: %s", exc)
         return json.dumps({
             "encoding": ENCODING_PICKLE_B64,
             "payload": base64.b64encode(raw).decode("ascii"),
@@ -316,47 +364,83 @@ class file_lock:
     """Lock advisory cross-proces (Win+POSIX) prin lock-file O_EXCL, cu timeout.
     Previne lost-updates când worker-ul și UI-ul fac read-modify-write pe același
     fișier (ex. adaptive_state.json). La timeout continuă fără lock (anti-deadlock
-    pe lock-uri stale), pentru că scrierea în sine e oricum atomică."""
+    pe lock-uri stale), pentru că scrierea în sine e oricum atomică.
+
+    Staleness pe VÂRSTA fișierului de lock (mtime), NU pe cât a așteptat acest
+    waiter: un waiter sosit TÂRZIU pe un lock proaspăt (deținător activ, secțiune
+    critică legitim mai lungă decât `timeout`) altfel îl considera stale după
+    PROPRIUL cronometru, deși deținătorul abia începuse — spărgea un lock VIU.
+    Token unic scris în fișier la creare, verificat la `__exit__` înainte de
+    unlink: dacă alt proces a spart și recreat lock-ul între timp (ambii treceau
+    de pragul de staleness aproape simultan), conținutul nu mai e al nostru și NU
+    îl ștergem — altfel am fi șters lock-ul VIU al noului proprietar."""
 
     def __init__(self, target, timeout: float = 10.0):
         self.lockpath = str(target) + ".lock"
         self.timeout = timeout
         self._fd = None
+        self._token: str | None = None
+
+    def _lock_age(self) -> float:
+        try:
+            return time.time() - os.stat(self.lockpath).st_mtime
+        except OSError:
+            return 0.0  # dispărut chiar acum — nu-l tratăm ca stale
+
+    def _create(self) -> bool:
+        token = f"{os.getpid()}:{uuid.uuid4().hex}"
+        try:
+            fd = os.open(self.lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except OSError:
+            return False
+        try:
+            os.write(fd, token.encode("ascii"))
+        except OSError:
+            pass
+        self._fd = fd
+        self._token = token
+        return True
 
     def __enter__(self):
         start = time.time()
         while True:
-            try:
-                self._fd = os.open(self.lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            if self._create():
                 return self
-            except FileExistsError:
-                if time.time() - start > self.timeout:
-                    # Lock presupus STALE (deținătorul a crăpat fără unlink):
-                    # îl spargem noi și mai încercăm O dată; dacă tot nu merge,
-                    # continuăm fără lock (anti-deadlock, scrierea e oricum atomică).
-                    logger.debug("[file_lock] timeout pe %s — sparg lock-ul stale", self.lockpath)
-                    try:
-                        os.unlink(self.lockpath)
-                    except OSError:
-                        pass
-                    try:
-                        self._fd = os.open(self.lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    except OSError:
-                        self._fd = None
-                    return self
-                time.sleep(0.05)
+            if self._lock_age() > self.timeout:
+                logger.debug("[file_lock] lock stale pe %s (vârstă > %.1fs) — îl sparg",
+                            self.lockpath, self.timeout)
+                try:
+                    os.unlink(self.lockpath)
+                except OSError:
+                    pass
+                self._create()  # dacă eșuează din nou, continuăm fără lock mai jos
+                return self
+            if time.time() - start > self.timeout * 3:
+                # Plasă finală anti-deadlock: chiar dacă lock-ul pare mereu
+                # "proaspăt" (spart și recreat continuu de alți waiteri), nu
+                # așteptăm la nesfârșit — scrierea în sine e oricum atomică.
+                logger.debug("[file_lock] renunț la %s după %.1fs fără lock",
+                            self.lockpath, self.timeout * 3)
+                return self
+            time.sleep(0.05)
 
     def __exit__(self, *exc):
-        # Ștergem lock-file-ul DOAR dacă l-am creat noi (self._fd setat). Înainte,
-        # un intrat pe timeout (fără lock) ștergea la ieșire lock-ul VIU al
-        # deținătorului curent — mutual exclusion spartă pentru toți următorii.
+        # Ștergem lock-file-ul DOAR dacă (a) l-am creat NOI (self._fd setat) ȘI
+        # (b) conținutul lui e ÎNCĂ tokenul nostru. Fără (b): un al doilea proces
+        # care a spart același lock stale aproape simultan (ambii treceau pragul
+        # de staleness) l-a putut recrea DUPĂ noi — am fi șters lock-ul VIU al
+        # noului proprietar, nu pe-al nostru (mutual exclusion spartă pentru toți
+        # următorii, exact bug-ul pe care verificarea (a) singură îl rata).
         if self._fd is not None:
             try:
                 os.close(self._fd)
             except OSError:
                 pass
             try:
-                os.unlink(self.lockpath)
+                with open(self.lockpath, "rb") as f:
+                    current = f.read().decode("ascii", errors="replace")
+                if current == self._token:
+                    os.unlink(self.lockpath)
             except OSError:
                 pass
         return False
@@ -366,18 +450,34 @@ class file_lock:
 # Worker
 # --------------------------------------------------------------------------- #
 def is_worker_running() -> bool:
-    # normcase: pe Windows căile din cmdline pot diferi doar prin CASE
-    # (d:\_libraries vs D:\_LIBRARIES) — comparația case-sensitive rata worker-ul
-    # existent și spawn-a un DUPLICAT, al cărui requeue de startup fura jobul activ.
-    root = os.path.normcase(str(PROJECT_ROOT))
+    """Compară fiecare argument din cmdline cu `WORKER_PATH`, NU substring pe
+    linia de comandă întreagă. Vechiul `root in cmd` (root = PROJECT_ROOT ca
+    text) se potrivea și cu un proces al cărui cmdline avea PROJECT_ROOT doar
+    ca PREFIX de string — de exemplu un worker pornit dintr-un checkout nested
+    (`PROJECT_ROOT/.claude/worktrees/.../worker.py`) sau dintr-un director
+    frate cu nume ce începe la fel (`D:\\_BUILD\\_LOTO` vs `D:\\_BUILD\\_LOTO_OLD`).
+    `ensure_worker_running()` credea atunci că workerul ACESTUI proiect rulează,
+    când de fapt rula altul — jobul submis rămânea PENDING la nesfârșit, fără
+    nicio eroare vizibilă în UI.
+    normcase: pe Windows căile din cmdline pot diferi doar prin CASE
+    (d:\\_libraries vs D:\\_LIBRARIES); `samefile` acoperă și forme echivalente
+    dar scrise diferit (relativ vs absolut, `%~dp0` din START_8000.bat).
+    """
+    target_norm = os.path.normcase(str(WORKER_PATH))
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             cmdline = proc.info.get("cmdline") or []
-            if not cmdline:
-                continue
-            cmd = os.path.normcase(" ".join(str(p) for p in cmdline))
-            if "worker.py" in cmd and root in cmd:
-                return True
+            for arg in cmdline:
+                arg_s = str(arg)
+                if "worker.py" not in os.path.normcase(arg_s):
+                    continue
+                if os.path.normcase(arg_s) == target_norm:
+                    return True
+                try:
+                    if os.path.samefile(arg_s, WORKER_PATH):
+                        return True
+                except OSError:
+                    pass
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     return False

@@ -26,6 +26,29 @@ def _engine(df: pd.DataFrame) -> LotoEngine:
     return eng
 
 
+def test_bench_winner_scoring_enforces_ensemble_max_methods_cap(monkeypatch):
+    """Regresie: `_scores_via_bench_winner` trebuie să treacă explicit
+    `max_methods=ENSEMBLE_MAX_METHODS` (azi 1) la `get_ensemble_for_game`, nu să se
+    bazeze pe default-ul funcției (3, gândit pentru afișarea nominală din UI).
+    Fără gardă explicită la citire, un best_methods.json editat manual sau
+    restaurat dintr-un backup vechi cu >1 membri ar fi blendat tăcut în producție —
+    exact regresia măsurată în CLAUDE.md §5 pct. 8 (blend sub random, câștigător
+    unic peste)."""
+    import loto_enterprise.core.method_selector as ms
+    from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
+
+    captured: dict = {}
+
+    def _spy(game_key, pool_size=None, config_path=None, max_methods=3):
+        captured["max_methods"] = max_methods
+        return []  # ensemble gol -> {} devreme, fără să mai avem nevoie de date reale
+
+    monkeypatch.setattr(ms, "get_ensemble_for_game", _spy)
+    eng = _engine(_joker_frame(with_joker=True))
+    assert eng._scores_via_bench_winner(is_joker_drum=False) == {}
+    assert captured.get("max_methods") == ENSEMBLE_MAX_METHODS
+
+
 def test_urna2_without_joker_column_yields_no_scores():
     """Fără coloana `joker`, Urna 2 nu se scorează pe numerele Urnei 1."""
     eng = _engine(_joker_frame(with_joker=False))

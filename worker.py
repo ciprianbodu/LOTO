@@ -13,6 +13,7 @@ import sys
 import time
 import traceback
 import tempfile
+import uuid
 import os
 
 from runtime_paths import ENGINE_LOG_FILE
@@ -24,6 +25,14 @@ require_python_version()
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
 PIPELINE_CACHE_VERSION = "v3"
+
+# Identitate UNICĂ a acestei rulări de worker (regenerată la fiecare pornire).
+# Scrisă pe rândul revendicat (job_queue.fetch_pending_job/fetch_running_job) și
+# verificată la orice scriere ulterioară (complete_job/fail_job/update_job_progress):
+# dacă jobul a fost reprogramat sub picioarele acestui proces (requeue_running_jobs,
+# tipic la pornirea unui al doilea worker) și revendicat de altcineva, scrierile
+# acestui proces devin no-op în loc să suprascrie tăcut rularea nouă.
+WORKER_TOKEN = uuid.uuid4().hex
 
 LOG_FILE = str(ENGINE_LOG_FILE)
 
@@ -136,10 +145,10 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     job_id = int(job["id"])
 
     if not datasets_cfg:
-        fail_job(job_id, "Job fără CSV — nimic de generat.")
+        fail_job(job_id, "Job fără CSV — nimic de generat.", worker_token=WORKER_TOKEN)
         return None
 
-    if update_job_progress(job_id, 3, "Încarc motorul de generare..."):
+    if update_job_progress(job_id, 3, "Încarc motorul de generare...", worker_token=WORKER_TOKEN):
         logging.info("[worker] Job %s nu mai este RUNNING; opresc înainte de engine.", job_id)
         return None
     # Import GREU după ce jobul e deja preluat (altfel UI stă pe 0% /
@@ -154,7 +163,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     if use_cache and cache_key:
         cached = get_pipeline_cache(cache_key)
         if cached:
-            if update_job_progress(job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic)."):
+            if update_job_progress(job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic).",
+                                   worker_token=WORKER_TOKEN):
                 logging.info("[worker] Job %s a pierdut starea RUNNING la cache hit.", job_id)
                 return None
             return str(cached)
@@ -241,7 +251,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
                 # Dacă update_job_progress returnează True, înseamnă că job-ul a fost anulat sau șters
-                if update_job_progress(job_id, overall_pct, f"[{fname}][{game_label}] {msg}"):
+                if update_job_progress(job_id, overall_pct, f"[{fname}][{game_label}] {msg}",
+                                       worker_token=WORKER_TOKEN):
                     # Aruncăm o eroare pentru a opri engine-ul imediat
                     raise Exception("STOP_REQUESTED")
 
@@ -313,7 +324,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         _remove_temp_csv(temp_csv_path)
         results_bundle.append((fname, outputs))
 
-    if update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI..."):
+    if update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI...", worker_token=WORKER_TOKEN):
         logging.info("[worker] Job %s nu mai este RUNNING înainte de serializare.", job_id)
         return None
     persistent = (results_bundle, len(results_bundle))
@@ -326,9 +337,13 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
 def _requeue_on_terminate(*_args) -> None:
     """La oprire bruscă (SIGTERM/SIGINT) re-punem jobul RUNNING pe PENDING ca să
     NU rămână blocat 'în curs' pe veci — la următoarea pornire worker-ul îl reia.
-    Consistent cu requeue_running_jobs() de la startup."""
+
+    Scopat la ACEST worker (`worker_token=WORKER_TOKEN`), spre deosebire de
+    requeue_running_jobs() necondiționat de la startul din main(): la oprire
+    știm exact al cui job era, deci nu mai reprogramăm din greșeală jobul RUNNING
+    al unui alt worker încă viu (dublu-pornire, sau DB partajat între mașini)."""
     try:
-        requeue_running_jobs()
+        requeue_running_jobs(worker_token=WORKER_TOKEN)
     except Exception:  # noqa: BLE001
         pass
 
@@ -352,19 +367,19 @@ def main() -> None:
         job = None  # reset per iterație: altfel un fetch care crapă la iterația
         # următoare vede jobul VECHI (deja COMPLETED) și fail_job i-ar distruge rezultatul
         try:
-            job = fetch_pending_job()
+            job = fetch_pending_job(worker_token=WORKER_TOKEN)
             if not job:
-                job = fetch_running_job()
+                job = fetch_running_job(worker_token=WORKER_TOKEN)
             if not job:
                 time.sleep(2)
                 continue
             if job.get("status") != JOB_RUNNING:
                 time.sleep(2)
                 continue
-                
+
             task_type = str(job.get("task_type") or "")
             job_id = int(job["id"])
-            if update_job_progress(job_id, 2, "Job preluat de worker."):
+            if update_job_progress(job_id, 2, "Job preluat de worker.", worker_token=WORKER_TOKEN):
                 logging.info(
                     "[worker] Job %s nu mai este RUNNING imediat după claim; sarim.",
                     job_id,
@@ -378,7 +393,7 @@ def main() -> None:
             if task_type == "pipeline":
                 result_json = _run_pipeline_job(job)
             else:
-                fail_job(job_id, f"Unsupported task type: {task_type}")
+                fail_job(job_id, f"Unsupported task type: {task_type}", worker_token=WORKER_TOKEN)
                 continue
 
             if result_json is None:
@@ -388,35 +403,40 @@ def main() -> None:
                 logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
                 continue
 
-            if complete_job(job_id, result_json):
+            if complete_job(job_id, result_json, worker_token=WORKER_TOKEN):
                 logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
             else:
-                # UPDATE-ul cere status = RUNNING. Dacă un al doilea worker a rulat
-                # între timp `requeue_running_jobs()`, jobul e din nou PENDING și
-                # rezultatul NU se scrie. Înainte logam „completat cu succes"
-                # oricum — o rulare de 90 de minute dispărea tăcut. Salvăm
-                # rezultatul pe disc ca să nu fie pierdut definitiv.
+                # UPDATE-ul cere status = RUNNING ȘI worker_token = acest proces. Dacă
+                # un al doilea worker a revendicat jobul între timp (`requeue_running_jobs`),
+                # jobul e fie din nou PENDING, fie RUNNING sub alt token, și rezultatul
+                # NU se scrie. Înainte logam „completat cu succes" oricum — o rulare de
+                # 90 de minute dispărea tăcut. Salvăm rezultatul pe disc ca să nu fie
+                # pierdut definitiv; numele include tokenul + un uuid scurt (nu doar
+                # job_id) — altfel două rulări STALE succesive ale aceluiași job s-ar
+                # suprascrie reciproc pe fișierul de diagnostic cu nume fix.
                 _dump = os.path.join(
-                    tempfile.gettempdir(), f"loto_orphan_result_{job_id}.txt"
+                    tempfile.gettempdir(),
+                    f"loto_orphan_result_{job_id}_{WORKER_TOKEN[:8]}_{uuid.uuid4().hex[:8]}.txt",
                 )
                 try:
                     with open(_dump, "w", encoding="utf-8") as _fh:
                         _fh.write(result_json)
                     logging.error(
                         "[worker] Job %s: rezultatul NU a putut fi scris în coadă "
-                        "(jobul nu mai era RUNNING). L-am salvat în %s", job_id, _dump,
+                        "(jobul nu mai era RUNNING/al acestui worker). L-am salvat în %s",
+                        job_id, _dump,
                     )
                 except OSError as _exc:
                     logging.error(
-                        "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING) și "
-                        "nici salvarea în %s n-a mers: %s", job_id, _dump, _exc,
+                        "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING/al acestui "
+                        "worker) și nici salvarea în %s n-a mers: %s", job_id, _dump, _exc,
                     )
-            
+
         except Exception as exc:
             tb = traceback.format_exc()
             logging.error(f"[worker] Eroare în job: {exc}\n{tb}")
             if isinstance(job, dict) and job.get("id"):
-                fail_job(int(job["id"]), f"{exc}\n{tb}")
+                fail_job(int(job["id"]), f"{exc}\n{tb}", worker_token=WORKER_TOKEN)
             time.sleep(2)
 
 

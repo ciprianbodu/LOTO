@@ -1382,6 +1382,7 @@ class LotoEngine:
         """
         try:
             from loto_enterprise.core.method_selector import get_ensemble_for_game, combine_ensemble_scores
+            from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
         except Exception as exc:
             logging.warning("[ENGINE] method_selector import failed: %s", exc)
             return {}
@@ -1421,7 +1422,16 @@ class LotoEngine:
             draws_2d = self._draw_matrix.astype(np.int64)
 
         try:
-            ensemble = get_ensemble_for_game(game_key, pool_size=_pool_hint)
+            # max_methods explicit din decision.ENSEMBLE_MAX_METHODS (azi 1), NU
+            # default-ul funcției (3, gândit pentru afișarea nominală din UI —
+            # app_nicegui.py folosește explicit max_methods=3 acolo). best_methods.json
+            # respectă azi plafonul la SCRIERE (decision.py), dar producția nu avea
+            # nicio gardă proprie la CITIRE: un fișier editat manual, restaurat dintr-un
+            # backup vechi sau scris de o regresie viitoare cu >1 membri ar fi fost
+            # blendat tăcut aici — exact regresia măsurată în §5 pct. 8 (Joker k11:
+            # blend 6.73% sub random 8.53%, față de 11.16% pentru câștigătorul unic).
+            ensemble = get_ensemble_for_game(game_key, pool_size=_pool_hint,
+                                             max_methods=ENSEMBLE_MAX_METHODS)
             if not ensemble:
                 return {}
             contributions = []

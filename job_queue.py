@@ -156,11 +156,21 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
         # Migrare additivă: completed_at (joburile mai vechi NU o au). Folosită de UI
         # ca să știe DACĂ un job COMPLETED e recent (recuperare după repornire UI →
         # mail/shutdown DOAR pentru finalizări proaspete, fără surprize la joburi vechi).
+        # worker_token: identitatea (uuid4 per proces) a workerului care a REVENDICAT
+        # jobul. Fără ea, `complete_job`/`fail_job` garantau doar `status = RUNNING`,
+        # nu și că apelantul e ÎNCĂ proprietarul acelei rulări — un worker A căruia
+        # i s-a reprogramat jobul de `requeue_running_jobs()` (ex. la pornirea unui
+        # worker B) putea, la finalul propriei rulări STALE, să suprascrie tăcut
+        # rezultatul lui B (sau chiar să-l marcheze FAILED), fiindcă statusul redevenise
+        # RUNNING sub B. Coloana e opțională la citire/scriere (None = fără gardă de
+        # proprietate, comportament vechi) — doar worker.py o populează în producție.
         migrated = True
         try:
             cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
             if "completed_at" not in cols:
                 conn.execute("ALTER TABLE jobs ADD COLUMN completed_at TIMESTAMP")
+            if "worker_token" not in cols:
+                conn.execute("ALTER TABLE jobs ADD COLUMN worker_token TEXT")
         except sqlite3.OperationalError as exc:
             # "duplicate column" = altă conexiune a adăugat-o deja (race UI↔worker) → benign.
             # Altceva (lock/I/O OneDrive cât fișierul se sincronizează) → NU marcăm DB-ul
@@ -243,32 +253,47 @@ def is_fresh_ui_start() -> bool:
     return os.environ.get("LOTO_FRESH_START", "").strip().lower() in {"1", "true", "yes"}
 
 
-def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH) -> bool:
+def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH,
+                        worker_token: str | None = None) -> bool:
     """Actualizează atomic progresul; True cere workerului să se oprească.
 
     Scriem numai cât timp jobul este ``RUNNING``. Vechiul SELECT + UPDATE lăsa
     o fereastră în care anularea putea fi comisă între ele, iar UPDATE-ul
     workerului suprascria apoi logul de anulare și procentul jobului CANCELLED.
+
+    `worker_token`, dacă e dat, adaugă și gardă de PROPRIETATE (vezi comentariul
+    coloanei din `init_job_queue`): un worker căruia i s-a reprogramat jobul sub
+    picioare (`requeue_running_jobs`) nu mai poate scrie progres peste rularea
+    NOUĂ care l-a revendicat între timp, chiar dacă statusul e din nou RUNNING.
     """
     init_job_queue(db_path)
     pct_i = max(0, min(100, int(pct)))
     line = str(log_msg or "").strip()
     if not line:
         state = get_job_status(job_id, db_path=db_path)
-        return state is None or state.get("status") != JOB_RUNNING
+        if state is None or state.get("status") != JOB_RUNNING:
+            return True
+        if worker_token is not None and state.get("worker_token") != worker_token:
+            return True
+        return False
     ts = datetime.now().strftime("%H:%M:%S")
     stamped = f"[{ts}] {line}"
+    where = "id = ? AND status = ?"
+    params: tuple = (int(job_id), JOB_RUNNING)
+    if worker_token is not None:
+        where += " AND worker_token = ?"
+        params = params + (worker_token,)
     with _conn(db_path) as conn:
         cur = conn.execute(
-            """
+            f"""
             UPDATE jobs
             SET progress_pct = ?, log_tail = CASE
                 WHEN log_tail IS NULL OR log_tail = '' THEN ?
                 ELSE substr(log_tail || char(10) || ?, -6000)
             END
-            WHERE id = ? AND status = ?
+            WHERE {where}
             """,
-            (pct_i, stamped, stamped, int(job_id), JOB_RUNNING),
+            (pct_i, stamped, stamped) + params,
         )
         conn.commit()
         updated = cur.rowcount > 0
@@ -277,38 +302,51 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
         return True
     # Prinde și o anulare/reprogramare comisă imediat după tranzacția noastră.
     state = get_job_status(job_id, db_path=db_path)
-    return state is None or state.get("status") != JOB_RUNNING
+    if state is None or state.get("status") != JOB_RUNNING:
+        return True
+    if worker_token is not None and state.get("worker_token") != worker_token:
+        return True
+    return False
 
 
-def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH) -> bool:
+def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH,
+                 worker_token: str | None = None) -> bool:
     """Scrie rezultatul jobului. Întoarce True dacă rândul a fost ACTUALIZAT.
 
-    UPDATE-ul e condiționat de `status = RUNNING`. Dacă între timp altcineva a
-    schimbat starea (tipic: `requeue_running_jobs()` al unui al doilea worker
-    pornit peste primul → RUNNING revine la PENDING), UPDATE-ul prinde 0 rânduri
-    și rezultatul se PIERDE. Înainte întorceam None și nimeni nu verifica
-    rowcount, iar worker-ul loga „Job N completat cu succes" chiar și atunci —
-    un job de 90 de minute dispărea fără nicio urmă în log.
+    UPDATE-ul e condiționat de `status = RUNNING` și, dacă `worker_token` e dat,
+    și de PROPRIETATE (`worker_token = ?`). Dacă între timp altcineva a schimbat
+    starea (tipic: `requeue_running_jobs()` al unui al doilea worker pornit peste
+    primul → RUNNING revine la PENDING, apoi e revendicat de noul worker), UPDATE-ul
+    prinde 0 rânduri și rezultatul se PIERDE din coadă (worker.py îl salvează
+    separat pe disc — vezi `_dump_orphan_result`). Fără garda de token, un worker
+    STALE care termina DUPĂ ce jobul redevenise RUNNING sub alt worker ar fi
+    suprascris tăcut rezultatul acelei rulări noi cu propriul rezultat vechi.
     """
     init_job_queue(db_path)
+    where = "id = ? AND status = ?"
+    params: tuple = (int(job_id), JOB_RUNNING)
+    if worker_token is not None:
+        where += " AND worker_token = ?"
+        params = params + (worker_token,)
     with _conn(db_path) as conn:
         cur = conn.execute(
-            """
+            f"""
             -- completed_at TREBUIE să rămână text UTC din CURRENT_TIMESTAMP
             -- ('YYYY-MM-DD HH:MM:SS'): UI-ul (_completed_age_seconds) îl parsează ca
             -- naiv-UTC. Nu-l scrie din Python (ar fi local → vechime greșită).
             UPDATE jobs
             SET status = ?, progress_pct = 100, result_json = ?, completed_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND status = ?
+            WHERE {where}
             """,
-            (JOB_COMPLETED, result_json, int(job_id), JOB_RUNNING),
+            (JOB_COMPLETED, result_json) + params,
         )
         conn.commit()
         ok = cur.rowcount > 0
     if not ok:
         logger.error(
             "[job_queue] complete_job(%s): 0 rânduri actualizate — jobul nu mai era "
-            "RUNNING (requeue concurent?). REZULTATUL S-A PIERDUT.", job_id,
+            "RUNNING (sau nu mai era al acestui worker_token). REZULTATUL S-A PIERDUT "
+            "DIN COADĂ.", job_id,
         )
     return ok
 
@@ -332,26 +370,40 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH) -> bool:
+def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH,
+            worker_token: str | None = None) -> bool:
     """Marchează jobul ca FAILED. Întoarce True dacă rândul a fost actualizat
-    (vezi nota din `complete_job` — aceeași cursă de stare)."""
+    (vezi nota din `complete_job` — aceeași cursă de stare).
+
+    `worker_token`, dacă e dat, adaugă gardă de PROPRIETATE: excluderea veche
+    (`status NOT IN (COMPLETED, CANCELLED)`) las̆a un worker STALE (căruia jobul
+    i-a fost reprogramat de `requeue_running_jobs()`) să eșueze un job aflat din
+    nou PENDING (așteptând reluare) sau RUNNING sub un alt worker — crash-ul
+    workerului vechi, fără nicio legătură cu rularea nouă, marca FAILED munca
+    legitimă în curs. Cu token dat, garda cere ȘI potrivirea proprietarului.
+    """
     init_job_queue(db_path)
     msg = str(error_msg or "Unknown worker error")
+    where = "id = ? AND status NOT IN (?, ?)"
+    params: tuple = (int(job_id), JOB_COMPLETED, JOB_CANCELLED)
+    if worker_token is not None:
+        where += " AND worker_token = ?"
+        params = params + (worker_token,)
     with _conn(db_path) as conn:
         cur = conn.execute(
-            """
+            f"""
             UPDATE jobs
             SET status = ?, result_json = ?, log_tail = ?
-            WHERE id = ? AND status NOT IN (?, ?)
+            WHERE {where}
             """,
-            (JOB_FAILED, msg, msg[-6000:], int(job_id), JOB_COMPLETED, JOB_CANCELLED),
+            (JOB_FAILED, msg, msg[-6000:]) + params,
         )
         conn.commit()
         ok = cur.rowcount > 0
     if not ok:
         logger.warning(
             "[job_queue] fail_job(%s): 0 rânduri actualizate (jobul era deja "
-            "COMPLETED/CANCELLED).", job_id,
+            "COMPLETED/CANCELLED, sau nu mai era al acestui worker_token).", job_id,
         )
     return ok
 
@@ -384,30 +436,33 @@ def _claim_job(
     return get_job_status(job_id, db_path=db_path)
 
 
-def fetch_pending_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+def fetch_pending_job(db_path: str = DB_PATH, worker_token: str | None = None) -> dict[str, Any] | None:
+    """Revendică cel mai vechi job PENDING. `worker_token`, dacă e dat, se scrie pe
+    rând ca dovadă de proprietate pentru `complete_job`/`fail_job`/`update_job_progress`."""
     return _claim_job(
         db_path,
         where_sql="status = ?",
         where_params=(JOB_PENDING,),
-        update_sql="UPDATE jobs SET status = ?, progress_pct = 1 WHERE id = ?",
-        update_extra_params=(JOB_RUNNING,),
+        update_sql="UPDATE jobs SET status = ?, progress_pct = 1, worker_token = ? WHERE id = ?",
+        update_extra_params=(JOB_RUNNING, worker_token),
     )
 
 
-def fetch_running_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
+def fetch_running_job(db_path: str = DB_PATH, worker_token: str | None = None) -> dict[str, Any] | None:
     """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker).
 
     Pragul e <= 1 (doar claim-uit, niciodată atins de worker): orice job cu pct >= 2
     a fost deja preluat („Job preluat de worker.") și e PROPRIETATEA acelui worker —
     un al doilea worker nu are voie să-l fure cât primul încarcă pandas/engine
     (pct 2-5). Orfanii cu pct >= 2 se recuperează la următorul start de worker
-    (requeue_running_jobs), nu aici.
-    """
+    (requeue_running_jobs), nu aici. `worker_token`, dacă e dat, marchează noul
+    proprietar (vezi `fetch_pending_job`)."""
     return _claim_job(
         db_path,
         where_sql="status = ? AND progress_pct <= 1",
         where_params=(JOB_RUNNING,),
-        update_sql="UPDATE jobs SET progress_pct = 2 WHERE id = ?",
+        update_sql="UPDATE jobs SET progress_pct = 2, worker_token = ? WHERE id = ?",
+        update_extra_params=(worker_token,),
     )
 
 
@@ -492,25 +547,41 @@ def clear_pipeline_cache(db_path: str = DB_PATH) -> None:
         conn.commit()
 
 
-def requeue_running_jobs(db_path: str = DB_PATH) -> int:
-    """Move orphan RUNNING jobs back to PENDING (useful after worker restarts/crashes)."""
+def requeue_running_jobs(db_path: str = DB_PATH, worker_token: str | None = None) -> int:
+    """Move orphan RUNNING jobs back to PENDING (useful after worker restarts/crashes).
+
+    Fără `worker_token` (implicit, folosit la PORNIREA workerului): reprogramează
+    TOATE joburile RUNNING — la start nu putem ști ale cui erau, iar scopul e
+    recuperarea după un crash al unui worker anterior oarecare.
+
+    Cu `worker_token` (folosit la OPRIRE gracioasă — SIGTERM/SIGINT/atexit):
+    reprogramează DOAR jobul revendicat de ACEST worker. Înainte, oprirea
+    oricărui worker reprograma și joburile RUNNING ale altor workeri încă vii
+    (dublu-pornire accidentală, sau DB-ul partajat laptop↔ALF din istoricul
+    proiectului) — jobul lor legitim era smuls la mijloc și putea fi revendicat
+    și dublu-procesat de un al treilea worker.
+    """
     init_job_queue(db_path)
+    where = "status = ?"
+    params: tuple = (JOB_RUNNING,)
+    if worker_token is not None:
+        where += " AND worker_token = ?"
+        params = params + (worker_token,)
     with _conn(db_path) as conn:
         cur = conn.execute(
-            """
+            f"""
             UPDATE jobs
             SET status = ?, log_tail = CASE
                 WHEN log_tail IS NULL OR log_tail = '' THEN ?
-                ELSE log_tail || char(10) || ?
+                ELSE substr(log_tail || char(10) || ?, -6000)
             END
-            WHERE status = ?
+            WHERE {where}
             """,
             (
                 JOB_PENDING,
                 "Worker restart detectat: job reprogramat automat.",
                 "Worker restart detectat: job reprogramat automat.",
-                JOB_RUNNING,
-            ),
+            ) + params,
         )
         conn.commit()
         return int(getattr(cur, "rowcount", 0) or 0)

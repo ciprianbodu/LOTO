@@ -78,13 +78,17 @@ def _production_forbidden() -> frozenset[str]:
     try:
         from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
         forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # "random" (hardcodat mai sus) tot blochează — dar cei 74 de tombstone din
+        # disabled_methods.json (§4.3: „merge-only si ireversibil") NU au niciun
+        # backstop hardcodat separat. Un import spart aici trecea neobservat.
+        logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)
     try:
         from loto_enterprise.benchmark.disabled import load_disabled
         forbidden |= {str(m) for m in load_disabled()}
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[method_selector] disabled_methods.json indisponibil — "
+                     "tombstone-urile NU sunt aplicate în această revenire: %s", exc)
     return frozenset(forbidden)
 
 

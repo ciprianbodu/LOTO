@@ -135,7 +135,10 @@ def test_worker_marks_job_failed_when_config_has_no_datasets(db):
     import worker
 
     jid = jq.submit_job("pipeline", json.dumps({"datasets": []}), db_path=db)
-    jq.fetch_pending_job(db_path=db)
+    # worker_token trebuie să coincidă cu cel pe care worker._run_pipeline_job îl va
+    # folosi mai jos (WORKER_TOKEN al modulului) — altfel garda de proprietate din
+    # fail_job respinge scrierea (rândul revendicat rămâne cu worker_token=None).
+    jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)
     _fail, _prog = worker.fail_job, worker.update_job_progress
     worker.fail_job = functools.partial(jq.fail_job, db_path=db)
     worker.update_job_progress = functools.partial(jq.update_job_progress, db_path=db)
@@ -144,3 +147,95 @@ def test_worker_marks_job_failed_when_config_has_no_datasets(db):
     finally:
         worker.fail_job, worker.update_job_progress = _fail, _prog
     assert jq.get_job_status(jid, db_path=db)["status"] == "FAILED"
+
+
+# --- worker_token: un worker STALE nu mai poate suprascrie rularea care i-a luat locul ---
+def test_complete_job_with_stale_worker_token_does_not_clobber_reclaimed_job(db):
+    """Reproduce scenariul găsit la review: worker A revendică jobul, apoi
+    requeue_running_jobs() (ex. la pornirea worker-ului B) îl trimite înapoi la
+    PENDING, B îl revendică din nou și pornește o rulare NOUĂ — rezultatul STALE
+    al lui A nu are voie să devină rezultatul final al jobului."""
+    jid = jq.submit_job("pipeline", "{}", db_path=db)
+    claimed = jq.fetch_pending_job(db_path=db, worker_token="worker-A")
+    assert claimed["worker_token"] == "worker-A"
+
+    assert jq.requeue_running_jobs(db_path=db) == 1  # ex. worker B pornește
+    reclaimed = jq.fetch_pending_job(db_path=db, worker_token="worker-B")
+    assert reclaimed["id"] == jid and reclaimed["worker_token"] == "worker-B"
+
+    # A, neștiind că a pierdut proprietatea, termină și încearcă să scrie rezultatul.
+    ok = jq.complete_job(jid, '{"stale":"A"}', db_path=db, worker_token="worker-A")
+    assert ok is False
+    after_a = jq.get_job_status(jid, db_path=db)
+    assert after_a["status"] == "RUNNING"  # neatins de A
+    assert after_a["result_json"] is None
+
+    # B, proprietarul curent, termină legitim.
+    assert jq.complete_job(jid, '{"real":"B"}', db_path=db, worker_token="worker-B") is True
+    after_b = jq.get_job_status(jid, db_path=db)
+    assert after_b["status"] == "COMPLETED"
+    assert after_b["result_json"] == '{"real":"B"}'
+
+
+def test_fail_job_with_stale_worker_token_does_not_clobber_reclaimed_job(db):
+    """Aceeași cursă ca mai sus, dar A crapă (excepție) în loc să termine cu succes —
+    fail_job al lui A nu are voie să distrugă rularea legitimă a lui B."""
+    jid = jq.submit_job("pipeline", "{}", db_path=db)
+    jq.fetch_pending_job(db_path=db, worker_token="worker-A")
+    jq.requeue_running_jobs(db_path=db)
+    jq.fetch_pending_job(db_path=db, worker_token="worker-B")
+
+    ok = jq.fail_job(jid, "worker A a crăpat, fără legătură cu rularea B",
+                     db_path=db, worker_token="worker-A")
+    assert ok is False
+    after = jq.get_job_status(jid, db_path=db)
+    assert after["status"] == "RUNNING"  # B rămâne neatins
+
+
+def test_update_job_progress_with_stale_worker_token_is_noop(db):
+    jid = jq.submit_job("pipeline", "{}", db_path=db)
+    jq.fetch_pending_job(db_path=db, worker_token="worker-A")
+    jq.requeue_running_jobs(db_path=db)
+    jq.fetch_pending_job(db_path=db, worker_token="worker-B")
+
+    # True = "oprește-te" (semantica pentru un caller care nu mai deține jobul).
+    assert jq.update_job_progress(jid, 50, "progres stale de la A", db_path=db,
+                                  worker_token="worker-A") is True
+    after = jq.get_job_status(jid, db_path=db)
+    assert "progres stale de la A" not in (after["log_tail"] or "")
+
+    assert jq.update_job_progress(jid, 50, "progres real de la B", db_path=db,
+                                  worker_token="worker-B") is False
+    after = jq.get_job_status(jid, db_path=db)
+    assert "progres real de la B" in after["log_tail"]
+
+
+def test_requeue_running_jobs_scoped_to_worker_token_leaves_other_workers_alone(db):
+    """`_requeue_on_terminate` din worker.py trece worker_token=WORKER_TOKEN — oprirea
+    unui worker nu are voie să smulgă jobul RUNNING legitim al altui worker viu."""
+    jid_a = jq.submit_job("pipeline", "{}", db_path=db)
+    jid_b = jq.submit_job("pipeline", "{}", db_path=db)
+    jq.fetch_pending_job(db_path=db, worker_token="worker-A")
+    jq.fetch_pending_job(db_path=db, worker_token="worker-B")
+
+    # Worker A se oprește gracios: doar jobul LUI se reprogramează.
+    assert jq.requeue_running_jobs(db_path=db, worker_token="worker-A") == 1
+    status_a = jq.get_job_status(jid_a, db_path=db)
+    status_b = jq.get_job_status(jid_b, db_path=db)
+    assert status_a["status"] == "PENDING"
+    assert status_b["status"] == "RUNNING"  # B neatins, deși era tot RUNNING
+
+
+def test_requeue_running_jobs_caps_log_tail_growth(db):
+    """`requeue_running_jobs` trebuie să trunchieze `log_tail` la fel ca celelalte
+    UPDATE-uri de stare (update_job_progress, cancel_pending_running_jobs,
+    fail_running_jobs) — altfel un job reprogramat repetat (buclă crash/restart)
+    crește log_tail nemărginit."""
+    jid = jq.submit_job("pipeline", "{}", db_path=db)
+    jq.fetch_pending_job(db_path=db)
+    with jq._conn(db) as conn:
+        conn.execute("UPDATE jobs SET log_tail = ? WHERE id = ?", ("x" * 7000, jid))
+        conn.commit()
+    jq.requeue_running_jobs(db_path=db)
+    after = jq.get_job_status(jid, db_path=db)
+    assert len(after["log_tail"]) <= 6000
