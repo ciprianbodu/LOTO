@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 
 from loto_engine import LotoEngine
 from loto_enterprise.benchmark.methods import score_frequency
+from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 from ui_shared import atomic_write_json, atomic_write_text
@@ -96,9 +97,18 @@ def audit_game(game, pool):
     dates = pd.to_datetime(df.date, format="%d-%m-%Y", errors="raise").tolist()
     if dates != sorted(dates):
         raise ValueError(f"{filename}: cronologie invalidă")
-    draws = df[[f"n{i}" for i in range(1, draw_n + 1)]].to_numpy(dtype=int)
-    if not all(len(set(d)) == draw_n and min(d) >= 1 and max(d) <= universe for d in draws):
-        raise ValueError(f"{filename}: numere invalide")
+    # Contractul UNIC de validare (CLAUDE.md §4.1: "Engine, benchmark si
+    # walk-forward folosesc draw_validation.py") — inainte reimplementat manual
+    # aici (len(set(d))==draw_n, min/max), care rata valorile zecimale/non-
+    # numerice (`to_numpy(dtype=int)` le trunchia tacut in loc sa le respinga).
+    # Ramane fail-loud (ridica pe orice anomalie), doar definitia de "valid" e
+    # acum aceeasi ca in productie.
+    draws, _valid_mask = valid_draw_matrix(
+        df, [f"n{i}" for i in range(1, draw_n + 1)], draw_n=draw_n, max_num=universe,
+    )
+    if not _valid_mask.all():
+        _bad = np.flatnonzero(~_valid_mask).tolist()
+        raise ValueError(f"{filename}: numere invalide (randuri {_bad})")
     start, split = len(draws) // 2, len(draws) * 7 // 10
     hits, six_hits = {}, {}
     for i in range(start, len(draws)):

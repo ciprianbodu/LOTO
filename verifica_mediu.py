@@ -85,15 +85,19 @@ def check_and_upgrade(packages):
         print(f"-> [ATENTIE] Problema neasteptata: {e}")
 
 
+# Nume de import care nu coincid cu numele pachetului de distributie (pip) —
+# nici macar dupa substitutia "_" -> "-" (sklearn -> scikit-learn, nu "sklearn").
+_DIST_NAME_OVERRIDES = {"sklearn": "scikit-learn"}
+
+
 def _safe_version(modname: str) -> str:
-    try:
-        v = dist_version(modname.replace("_", "-"))
-    except PackageNotFoundError:
+    candidates = [_DIST_NAME_OVERRIDES.get(modname, modname), modname.replace("_", "-"), modname]
+    for cand in dict.fromkeys(candidates):  # dedupe, pastreaza ordinea
         try:
-            v = dist_version(modname)
+            return dist_version(cand)
         except PackageNotFoundError:
-            v = "?"
-    return v
+            continue
+    return "?"
 
 
 def check_cpu_methods():
@@ -109,8 +113,13 @@ def check_cpu_methods():
             print(f"-> [EROARE] {label}: {type(e).__name__}: {e}")
 
 
-def check_bench_assets():
+def check_bench_assets() -> bool:
+    """Returneaza False doar la o problema care blocheaza pornirea aplicatiei
+    (lipsa `_ISTORIC/`) — restul sunt avertismente informative (best_methods.json
+    lipsa se repara singur la prima generare, freshness stale doar recomanda
+    Re-Bench)."""
     _print_section("ASSETS BENCHMARK")
+    ok = True
     from pathlib import Path
     bm = Path("best_methods.json")
     if bm.exists():
@@ -141,6 +150,9 @@ def check_bench_assets():
               f"{[p.name for p in csvs]}")
     else:
         print("-> [LIPSA] folderul _ISTORIC — benchmark-ul nu poate rula fara el")
+        ok = False
+
+    return ok
 
 
 def _is_in_venv() -> bool:
@@ -167,7 +179,7 @@ def main():
         print("          Cauta venv-ul: .venv\n")
 
     check_cpu_methods()
-    check_bench_assets()
+    assets_ok = check_bench_assets()
 
     upgrade_pip()
     check_and_upgrade(SAFE_UPGRADE_PACKAGES)
@@ -181,6 +193,14 @@ def main():
     print("  Daca freshness recomanda re-bench:")
     print("    Re-Bench Full din UI (buton portocaliu) sau: python bench_all_methods.py")
     print("=" * 72)
+
+    if not assets_ok:
+        # ACTUALIZARI.bat citeste exit code-ul asta (`if errorlevel 1 goto
+        # :fatal_setup`) — inainte, orice problema aici (inclusiv _ISTORIC/
+        # lipsa, "benchmark-ul nu poate rula fara el") doar tiparea un mesaj si
+        # returna normal, deci setup-ul continua ca si cum mediul ar fi OK.
+        print("\n[EROARE] Mediul are o problema care blocheaza pornirea (vezi mai sus).")
+        sys.exit(22)
 
 
 if __name__ == "__main__":

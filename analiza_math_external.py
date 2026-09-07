@@ -17,7 +17,6 @@ NU e predicție — loteria e aleatoare.
 """
 from __future__ import annotations
 
-import csv
 import json
 import math
 import os
@@ -33,9 +32,12 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 import numpy as np
+import pandas as pd
 
 from loto_enterprise.benchmark.curated import load_per_game
+from loto_enterprise.benchmark.decision import _wilson_lower_bound
 from loto_enterprise.benchmark.methods import METHODS, call_method, method_meta
+from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.method_selector import MAX_MEMBER_CORR, _pair_corr
 from loto_enterprise.core.ranking import (
     is_consecutive_block,
@@ -50,7 +52,6 @@ MAX_TEST_PER_GAME = 100
 MIN_UNIQ_SCORES = 5
 MIN_UNIQ_SCORES_SINGLE_PICK = 2
 MAX_CONSEC_RUN = 7
-MIN_EXTRA_4PLUS_IF_NO_3 = 2
 OUTPUT_PATH = Path("bench_results") / "math_external_latest.json"
 
 SKIP_EXACT = frozenset({"random", "croston_classic", "croston_sba"})
@@ -107,27 +108,25 @@ def _cpu_math_candidates() -> list[str]:
 
 
 def _load_csv(path: Path, cols: tuple[str, ...], max_num: int) -> np.ndarray:
-    rows = []
-    with path.open(newline="", encoding="utf-8") as f:
-        for rec in csv.DictReader(f):
-            row = [int(rec[c]) for c in cols]
-            if all(1 <= v <= max_num for v in row):
-                rows.append(row)
-    if not rows:
+    """Contractul UNIC de validare (CLAUDE.md §4.1) — inainte reimplementat
+    manual (interval 1..max_num), care NU verifica duplicate intr-un rand.
+    Un rand cu numere repetate (CSV corupt) trecea ca extragere valida si
+    strica intersectiile hit-rate (mai putine numere distincte decat draw_n)."""
+    df = pd.read_csv(path)
+    draws, _mask = valid_draw_matrix(df, list(cols), draw_n=len(cols), max_num=max_num)
+    if draws.shape[0] == 0:
         raise RuntimeError(f"{path} gol / necitibil")
-    return np.asarray(rows, dtype=np.int64)
+    return draws
 
 
 def hyper_p_ge(k: int, universe: int, draw_n: int, pool: int) -> float:
-    total = math.comb(universe, draw_n)
-    if total == 0:
-        return 0.0
-    acc = 0
-    for j in range(k, draw_n + 1):
-        if j > pool or (draw_n - j) > (universe - pool):
-            continue
-        acc += math.comb(pool, j) * math.comb(universe - pool, draw_n - j)
-    return acc / total
+    """P(hituri >= k) pentru un pool aleator de `pool` numere.
+
+    Delega la `decision.expected_random_rate` — aceeasi formula hipergeometrica
+    era reimplementata aici separat, risc de divergenta tacuta fata de sursa
+    unica pe care se bazeaza decizia de productie (CLAUDE.md §5 pct. 4)."""
+    from loto_enterprise.benchmark.decision import expected_random_rate
+    return expected_random_rate(universe, draw_n, pool, k)
 
 
 def _eval_one(args: tuple) -> dict:
@@ -212,13 +211,20 @@ def _eval_one(args: tuple) -> dict:
     exp1 = p1 * n_eval
     exp3 = p3 * n_eval
     exp4 = p4 * n_eval
-    beat1 = n1 >= math.floor(exp1) + 1
-    beat3 = n3 >= math.floor(exp3) + 1
     extra4 = n4 - exp4
-    beat4 = n4 >= math.floor(exp4) + 1
-    # „bun la 4+" fără 3+ cere un plus mai gros (+2 evenimente), altfel
-    # un singur 4 norocos trece poarta.
-    beat4_strong = n4 >= math.floor(exp4) + MIN_EXTRA_4PLUS_IF_NO_3
+    # Poarta era "n >= floor(exp)+1" — trece la un singur eveniment peste
+    # asteptare, fara nicio masura de incredere, pe pana la 100 de candidati
+    # per joc dintr-un SINGUR split train/test (nu ferestre multiple ca
+    # decision.py). Acum: limita inferioara Wilson a ratei observate trebuie
+    # sa depaseasca baseline-ul teoretic — acelasi test folosit de decizia de
+    # productie (decision._wilson_lower_bound), nu doar "un pic peste medie".
+    wlb1 = _wilson_lower_bound(n1, n_eval)
+    wlb3 = _wilson_lower_bound(n3, n_eval)
+    wlb4 = _wilson_lower_bound(n4, n_eval)
+    beat1 = wlb1 > p1
+    beat3 = wlb3 > p3
+    beat4 = wlb4 > p4
+    beat4_strong = beat4
     hit_target = 1 if draw_n == 1 else 3
     beat_target = beat1 if hit_target == 1 else beat3
     beats = bool(beat_target)
@@ -246,6 +252,9 @@ def _eval_one(args: tuple) -> dict:
         "exp1": exp1,
         "exp3": exp3,
         "exp4": exp4,
+        "wilson_lb1": wlb1,
+        "wilson_lb3": wlb3,
+        "wilson_lb4": wlb4,
         "beat1": beat1,
         "beat3": beat3,
         "beat_target": beat_target,
