@@ -99,6 +99,103 @@ def test_bat_echo_has_no_dot_blank_and_no_parentheses():
     )
 
 
+def test_bat_rem_has_no_parentheses_inside_a_block():
+    """Aceeasi capcana ca la echo (linia de mai sus), dar pentru REM: un `(`/`)`
+    dintr-un comentariu care sta ÎN INTERIORUL unui bloc `if (`/`for (` inca
+    deschis inchide blocul la fel de "orb" ca un echo cu paranteze — REM nu e
+    tratat special de parserul cmd.exe cand vine vorba de paranteze nebalansate.
+
+    Testul de mai sus interzice paranteze in echo PESTE TOT (blanket), dar sare
+    peste REM complet — desi genereaza EXACT acelasi risc. O interdictie blanket
+    si pe REM ar cere rescrierea a ~28 de comentarii top-level deja sigure (in
+    afara oricarui bloc) din aceste fisiere; in loc de asta, verificam adancimea
+    reala de bloc: un `(`/`)` intr-un REM conteaza DOAR cand REM-ul e deja
+    in interiorul unui bloc deschis de un `if (`/`for (` anterior si inca
+    neinchis. Regresie: exact bug-ul asta a fost scris (si prins la recitire,
+    inainte de commit) in timpul verificarii globale din 2026-09-07, de doua ori,
+    in doua fisiere diferite — REM-uri explicative adaugate langa un fix real,
+    cu paranteze, in interiorul unui `if errorlevel 1 (`."""
+    depth = 0
+    offenders: list[str] = []
+    for p in _bat_files():
+        text = p.read_text(encoding="utf-8")
+        depth = 0
+        for i, raw in enumerate(text.splitlines(), 1):
+            line = raw.strip()
+            if not line:
+                continue
+            if line.upper().startswith("REM"):
+                if depth > 0 and ("(" in line or ")" in line):
+                    offenders.append(f"{p.name}:{i} (adancime {depth}): {line}")
+                continue
+            # Linie de cod (nu REM): actualizeaza adancimea din delta net de
+            # paranteze — o pereche echilibrata pe acelasi rand (ex. un
+            # subshell `('cmd')` intr-un `for /f`) se anuleaza reciproc, deci
+            # doar dezechilibrul net (ex. `if X (` sau `) else (` sau `)` simplu)
+            # schimba adancimea, exact cum le interpreteaza cmd.exe.
+            delta = line.count("(") - line.count(")")
+            depth = max(0, depth + delta)
+    assert not offenders, (
+        "scoate parantezele din REM cat timp e INTERIOR unui bloc if(/for( deschis "
+        "— cmd.exe nu trateaza REM diferit de orice alt text cand numara parantezele "
+        "unui bloc nebalansat:\n" + "\n".join(offenders)
+    )
+
+
+_SELF_CLOSED_QUOTED_LINE = re.compile(r'^"[^"]*"\s*\^?\s*$')
+
+
+def test_no_caret_escaped_pipe_inside_self_closed_quoted_segments():
+    """Un rand care e ÎN ÎNTREGIME un string dublu-cotat autonom (se deschide și
+    se închide pe același rând, eventual urmat de ^ de continuare pentru rândul
+    următor) NU tratează caret-ul ca escape — un "^|"/"^<"/"^>"/"^&" acolo ajunge
+    LITERAL la programul apelat (ex. PowerShell -Command), nu devine "|"/"<"/">"/"&".
+
+    Regresie (verificare globală 2026-09-07): ACTUALIZARI.bat detecta ultimul
+    patch Python 3.14 online printr-un -Command PowerShell scris ca 5 segmente
+    dublu-cotate autonome, îmbinate cu ^ la capăt de linie — unul din ele avea
+    "^|" în loc de "|", ceea ce strica silențios (>nul 2>&1) parsarea PowerShell
+    de fiecare dată, dezactivând permanent fallback-ul fără winget."""
+    offenders = []
+    for p in _bat_files():
+        text = p.read_text(encoding="utf-8")
+        for i, raw in enumerate(text.splitlines(), 1):
+            line = raw.strip()
+            if _SELF_CLOSED_QUOTED_LINE.match(line) and re.search(r"\^[|<>&]", line):
+                offenders.append(f"{p.name}:{i}: {line}")
+    assert not offenders, (
+        "caret inutil (si daunator) inaintea unui operator, DINTR-UN string "
+        "dublu-cotat autonom — caret-ul nu e escape in interiorul ghilimelelor:\n"
+        + "\n".join(offenders)
+    )
+
+
+_ENDLOCAL_EXIT_LINE = re.compile(r"endlocal\s*&\s*exit\s*/b\s+(\S+)", re.IGNORECASE)
+
+
+def test_endlocal_exit_never_uses_delayed_expansion_variable():
+    """`endlocal & exit /b !VAR!` pe un singur rând: `endlocal` oprește delayed
+    expansion ÎNAINTE ca `exit` să ruleze pe același rând (comenzile legate prin
+    & rulează secvențial, dar !VAR! se rezolvă la EXECUȚIE, nu la parse) — deci
+    !VAR! s-ar rezolva gol/literal, pierzând codul de retur real. Trebuie %VAR%
+    (rezolvat o dată, la PARSE-ul întregului rând, înainte ca endlocal să ruleze).
+
+    Regresie: START_8000.bat propaga astfel gresit RC-ul real al
+    verify_imports.py — cel mai sigur pas de verificare din pornire putea lasa
+    scriptul sa continue si sa lanseze aplicatia peste un mediu stricat."""
+    offenders = []
+    for p in _bat_files():
+        text = p.read_text(encoding="utf-8")
+        for i, raw in enumerate(text.splitlines(), 1):
+            m = _ENDLOCAL_EXIT_LINE.search(raw)
+            if m and m.group(1).startswith("!"):
+                offenders.append(f"{p.name}:{i}: {raw.strip()}")
+    assert not offenders, (
+        "endlocal & exit /b !VAR! pierde valoarea reala — foloseste %VAR%:\n"
+        + "\n".join(offenders)
+    )
+
+
 def test_loto_git_sync_avoids_delayed_expansion_and_paren_echo():
     """main 03f5409: fara delayed expansion; echo/REM fara paranteze.
 

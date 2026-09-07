@@ -47,6 +47,14 @@ if not errorlevel 1 set "_IST_DIRTY=1"
 if "%_IST_DIRTY%"=="1" (
     echo [GIT] Salvez _ISTORIC local inainte de sync.
     xcopy /E /I /Y /Q "_ISTORIC" "%_IST_BAK%" >nul
+    if errorlevel 1 (
+        REM Backup nereusit - disc plin, permisiuni, sau fisier blocat de
+        REM update_csv.py - nu continuam spre merge/force_sync fara plasa de
+        REM siguranta: un reset --hard fortat ar putea pierde extrageri locale
+        REM netrecute inca la commit, fara nicio copie de recuperat din ea.
+        echo [GIT] Backup _ISTORIC esuat - ANULEZ sync-ul ca sa nu pierd extrageri locale.
+        exit /b 1
+    )
 )
 
 git merge --ff-only origin/main >nul 2>&1
@@ -54,7 +62,18 @@ if errorlevel 1 (
     echo [GIT] Fast-forward imposibil. Stare:
     git status -sb
     call :force_sync
-    if errorlevel 1 exit /b 1
+    if errorlevel 1 (
+        if "%_IST_DIRTY%"=="1" (
+            REM force_sync poate esua in 3 puncte - branch backup, stash, reset
+            REM --hard - iar in oricare, cea mai sigura recuperare e sa restauram
+            REM _ISTORIC din copia salvata INAINTE de orice atingere de git, nu
+            REM sa il lasam intr-o stare ambigua, partial resetata.
+            echo [GIT] Restaurez _ISTORIC local din backup dupa sincronizare fortata esuata.
+            xcopy /E /I /Y /Q "%_IST_BAK%" "_ISTORIC" >nul
+            rmdir /s /q "%_IST_BAK%" >nul 2>&1
+        )
+        exit /b 1
+    )
 ) else (
     echo [GIT] Cod la zi cu GitHub.
 )
@@ -82,8 +101,14 @@ echo [GIT] Backup commit local: %_BACKUP_BRANCH%
 REM git stash intoarce errorlevel 1 si cand NU e nimic de salvat (working tree
 REM curat) - nu doar la o eroare reala. Fara distinctia asta, un sync fortat pe
 REM un repo curat anula degeaba resetul, desi nu era nimic de protejat.
+REM --untracked-files=no: git stash push (fara -u) protejeaza DOAR modificarile
+REM tracked, nu si fisierele netracked. Cu tot status-ul (untracked inclus), un
+REM repo cu DOAR fisiere netracked murdare (ex. un log ramas, netrecut in
+REM .gitignore) seta _REPO_DIRTY=1, stash-ul raporta corect "nimic tracked de
+REM salvat" (errorlevel 1), iar ramura de mai jos anula PERMANENT sincronizarea
+REM fortata, crezand ca stash-ul a esuat cu modificari reale prezente.
 set "_REPO_DIRTY=0"
-git status --porcelain 2>nul | findstr /R "." >nul 2>&1
+git status --porcelain --untracked-files=no 2>nul | findstr /R "." >nul 2>&1
 if not errorlevel 1 set "_REPO_DIRTY=1"
 git stash push -m "auto-backup before forced sync" >nul 2>&1
 if errorlevel 1 (
@@ -97,6 +122,7 @@ echo [GIT] Sincronizez FORTAT cu origin/main. Modificarile tracked sunt in stash
 git reset --hard origin/main >nul 2>&1
 if errorlevel 1 (
     echo [GIT] Sincronizare fortata esuata - branch-ul backup ramane disponibil.
+    echo [GIT] Modificarile tracked stashuite raman recuperabile: git stash list
     exit /b 1
 )
 echo [GIT] Sincronizat la zi cu GitHub.

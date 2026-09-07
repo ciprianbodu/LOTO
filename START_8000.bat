@@ -144,7 +144,10 @@ if not "!VERIFY_PY_RC!"=="0" (
     echo/
     echo [EROARE] verify_imports.py a returnat RC=!VERIFY_PY_RC!
     echo Vezi mai sus pentru pachetele REQUIRED lipsa.
-    endlocal & exit /b !VERIFY_PY_RC!
+    REM %VERIFY_PY_RC% - procent, NU !VERIFY_PY_RC! - endlocal opreste
+    REM delayed expansion INAINTE ca exit sa ruleze pe acelasi rand cu &,
+    REM deci !var! s-ar rezolva gol - RC-ul real s-ar pierde.
+    endlocal & exit /b %VERIFY_PY_RC%
 )
 
 echo/

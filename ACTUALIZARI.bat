@@ -349,10 +349,15 @@ set "PY_VER_FILE=%TEMP%\loto-python-3.14-latest.version"
 del "%PY_VER_FILE%" >nul 2>&1
 
 echo   [PYTHON] Verific ultimul patch stabil 3.14.x pe python.org...
+REM Fiecare segment de mai jos e un string dublu-cotat AUTONOM (se deschide
+REM si se inchide pe acelasi rand) - caret-ul NU e caracter de escape in
+REM interiorul ghilimelelor, deci un "^|" acolo ajunge LITERAL "^|" la
+REM PowerShell (eroare de parsare, silentioasa din cauza >nul 2>&1) - pipe-urile
+REM raman simple "|", fara caret, exact fiindca sunt deja protejate de ghilimele.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
   "$r=Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/' -UseBasicParsing;" ^
-  "$v=[regex]::Matches($r.Content,'3\.14\.\d+/') ^| ForEach-Object {$_.Value.TrimEnd('/')} ^| Sort-Object {[version]$_} -Descending -Unique ^| Select-Object -First 1;" ^
+  "$v=[regex]::Matches($r.Content,'3\.14\.\d+/') | ForEach-Object {$_.Value.TrimEnd('/')} | Sort-Object {[version]$_} -Descending -Unique | Select-Object -First 1;" ^
   "if(-not $v){throw 'Nu am gasit nicio versiune 3.14.x'};" ^
   "Set-Content -LiteralPath '%PY_VER_FILE%' -Value $v -NoNewline -Encoding ascii" >nul 2>&1
 if exist "%PY_VER_FILE%" set /p PY_LATEST=<"%PY_VER_FILE%"
