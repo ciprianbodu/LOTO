@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Scan TOATE metodele available: rate 3+ / 4+ @ k10 și k16, eval onest (ultimele 30%).
+"""Scan TOATE metodele available: rate 3+ / 4+ @ k10 și k16 (ultimele 30%).
 
-Folosește același _evaluate_fold ca bench-ul (block_size=1). Scrie
+Folosește același `_evaluate_fold` ca bench-ul, dar cu `block_size=50`, NU 1 —
+spre deosebire de Re-Bench-ul din UI (§5 "Re-Bench onest"), care re-scorează
+înaintea FIECĂREI extrageri testate. Aici scorerul se recalculează o dată la
+fiecare 50 de extrageri (770 reantrenări/metodă la block_size=1 ar dura ore;
+50 e un compromis practic, nu evaluarea onestă block_size=1 folosită de
+decizia de producție). Ratele de aici sunt orientative pentru triaj rapid, nu
+echivalente cu ce ar arăta un Re-Bench complet. Scrie
 bench_results/scan_all_hits.json + tipărește top-ul pe consolă.
 
 Usage:
@@ -136,18 +142,25 @@ def scan_game(game, pools: tuple[int, ...], methods: list[str], workers: int) ->
     return results
 
 
-def _print_top(rows: list[dict], game: str, pool: int, metric: str, n: int = 15) -> None:
+def _print_top(rows: list[dict], game, pool: int, metric: str, n: int = 15) -> None:
+    """`game` e GameDef complet (nu doar cheia) — avem nevoie de max_num/draw_n
+    pentru referința hipergeometrică. Lift-ul se calculează față de rata TEORETICĂ
+    (`expected_random_rate`), nu față de rata empirică a rândului `random` (o
+    singură realizare, zgomotoasă) — la fel ca decision.py (CLAUDE.md §5 pct. 4:
+    referința e rata așteptată hipergeometric, nu o realizare `random`)."""
+    from loto_enterprise.benchmark.decision import expected_random_rate
+
     col = f"{metric}_k{pool}"
-    ok = [r for r in rows if r.get("game") == game and not r.get("failed") and col in r]
+    ok = [r for r in rows if r.get("game") == game.key and not r.get("failed") and col in r]
     ok.sort(key=lambda r: r[col], reverse=True)
-    print(f"\n=== {game} @ k{pool} — TOP {n} după {metric.replace('rate_', '').replace('plus', '+')} ===")
-    base = next((r for r in ok if r["method"] == "random"), None)
-    base_v = float(base[col]) if base else None
+    print(f"\n=== {game.key} @ k{pool} — TOP {n} după {metric.replace('rate_', '').replace('plus', '+')} ===")
+    target = int(metric.split("_")[1].replace("plus", ""))
+    base_v = expected_random_rate(game.max_num, game.draw_n, pool, target)
     for i, r in enumerate(ok[:n], 1):
         v = r[col] * 100
         lift = ""
         if base_v and base_v > 0:
-            lift = f"  (lift vs random {(r[col] - base_v) / base_v * 100:+.1f}%)"
+            lift = f"  (lift vs random teoretic {(r[col] - base_v) / base_v * 100:+.1f}%)"
         r3 = r.get(f"rate_3plus_k{pool}", 0) * 100
         r4 = r.get(f"rate_4plus_k{pool}", 0) * 100
         print(f"  {i:2d}. {r['method']:32s}  3+={r3:5.2f}%  4+={r4:5.2f}%{lift}")
@@ -186,8 +199,8 @@ def main() -> int:
 
     for g in games:
         for k in pools:
-            _print_top(all_rows, g.key, k, "rate_3plus")
-            _print_top(all_rows, g.key, k, "rate_4plus", n=10)
+            _print_top(all_rows, g, k, "rate_3plus")
+            _print_top(all_rows, g, k, "rate_4plus", n=10)
     return 0
 
 

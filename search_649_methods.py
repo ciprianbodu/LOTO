@@ -161,6 +161,17 @@ def write_results(top: list[SearchResult], baseline: float, target: float) -> No
     logger.info("Rezultate → %s", RESULTS_JSON)
 
 
+def _top649_alias(method: str, index: int) -> str:
+    """Alias sub care `generate_methods_top649()` înregistrează candidatul de pe
+    poziția `index` (0-based în lista `top` completă, NU în orice sub-listă
+    trunchiată separat) — TREBUIE calculat identic în `patch_best_methods()`,
+    altfel „scorer"-ul scris în best_methods.json nu se mai rezolvă în METHODS
+    după un restart: blend-urile generate dinamic de `generate_blend_candidates`
+    nu sunt înregistrate sub numele lor brut nicăieri persistent pe disc, doar
+    sub acest alias din methods_top649.py."""
+    return f"top649_{index + 1:02d}_{method[:40].replace('-', '_')}"
+
+
 def generate_methods_top649(top: list[SearchResult]) -> None:
     """Generează methods_top649.py cu top-20 (alias sau forward la METHODS existent)."""
     lines = [
@@ -175,7 +186,7 @@ def generate_methods_top649(top: list[SearchResult]) -> None:
         "TOP649_METHODS: dict[str, tuple[Callable, str, bool, str]] = {",
     ]
     for i, r in enumerate(top[:TOP_N]):
-        alias = f"top649_{i + 1:02d}_{r.method[:40].replace('-', '_')}"
+        alias = _top649_alias(r.method, i)
         # Forward: reutilizăm scorer-ul din registry (deja în METHODS după search)
         lines.append(f'    "{alias}": METHODS["{r.method}"],  # {r.rate_4plus_k16*100:.2f}% 4+')
     lines.append("}")
@@ -186,41 +197,54 @@ def generate_methods_top649(top: list[SearchResult]) -> None:
 
 
 def patch_best_methods(top: list[SearchResult], baseline: float) -> None:
-    """Actualizează auto_pilot k16 pentru loto_6_49 cu câștigător + ensemble top-3."""
-    from ui_shared import atomic_write_json
+    """Actualizează auto_pilot k16 pentru loto_6_49 cu câștigătorul unic.
+
+    ENSEMBLE_MAX_METHODS=1 (decision.py) — un singur membru, nu top-3: măsurat
+    pe Joker k11 (CLAUDE.md §5 pct. 8), un blend nevalidat separat a dat 6.73%
+    sub random 8.53%, față de 11.16% pentru câștigătorul unic. `scorer`/`ensemble`
+    trebuie sa foloseasca ALIASUL din methods_top649.py (`_top649_alias`), nu
+    numele brut — un blend generat dinamic nu se rezolvă în METHODS sub numele
+    brut după un restart, doar sub alias.
+    """
+    from ui_shared import atomic_write_json, file_lock
     bm_path = ROOT / "best_methods.json"
     if not bm_path.exists():
         logger.warning("best_methods.json lipsă — sar patch")
         return
-    cfg = json.loads(bm_path.read_text(encoding="utf-8"))
-    games = cfg.setdefault("games", {})
-    g = games.setdefault("loto_6_49", {})
-    ap = g.setdefault("auto_pilot_per_pool", {})
     if not top:
         return
     winner = top[0]
-    ens_members = top[:3]
-    w_sum = sum(m.rate_4plus_k16 for m in ens_members) or 1.0
-    ensemble = [
-        {"method": m.method, "weight": round(m.rate_4plus_k16 / w_sum, 4)}
-        for m in ens_members
-    ]
+    winner_alias = _top649_alias(winner.method, 0)
     kkey = f"k{POOL_K}"
-    ap[kkey] = {
-        "scorer": winner.method,
-        "ensemble": ensemble,
-        "sim_depth_pct": PCT,
-        "use_blacklist": False,
-        "avg_hits": None,
-        "rationale": (
-            f"search_649: {winner.method} rate_4plus_k16={winner.rate_4plus_k16:.3f} "
-            f"(+{winner.lift_vs_baseline*100:.1f}% vs seasonal_naive {baseline:.3f})"
-        ),
-        "qualifying_methods": len(top),
-    }
-    atomic_write_json(bm_path, cfg)
-    logger.info("best_methods.json: k16 → %s (+ ensemble %s)", winner.method,
-                ", ".join(e["method"] for e in ensemble))
+    # file_lock: previne cursa cu decision.py/freshness.py, care scriu ACELAȘI
+    # fișier prin read-modify-write — fără lock, o scriere concurentă a UI-ului
+    # (Re-Bench, stampilă de prospețime) între citirea și scrierea de aici
+    # pierde tăcut câmpurile celeilalte părți.
+    with file_lock(bm_path):
+        cfg = json.loads(bm_path.read_text(encoding="utf-8"))
+        games = cfg.setdefault("games", {})
+        g = games.setdefault("loto_6_49", {})
+        ap = g.setdefault("auto_pilot_per_pool", {})
+        ap[kkey] = {
+            "scorer": winner_alias,
+            "ensemble": [{"method": winner_alias, "weight": 1.0}],
+            "sim_depth_pct": PCT,
+            "use_blacklist": False,
+            # 0.0, NU None: method_selector.recommend_optimal_config îl
+            # formatează cu :.3f — None ar arunca TypeError la citire (silențios
+            # prins de UI/WF, dar rupe Auto-Pilot + cache-ul WF pentru acest pool
+            # până la următorul Re-Bench). SearchResult nu urmărește avg_hits
+            # (doar rate_4plus_k16), deci 0.0 e valoarea onestă „necunoscut",
+            # exact convenția din decision.py.
+            "avg_hits": 0.0,
+            "rationale": (
+                f"search_649: {winner.method} rate_4plus_k16={winner.rate_4plus_k16:.3f} "
+                f"(+{winner.lift_vs_baseline*100:.1f}% vs seasonal_naive {baseline:.3f})"
+            ),
+            "qualifying_methods": len(top),
+        }
+        atomic_write_json(bm_path, cfg)
+    logger.info("best_methods.json: k16 → %s", winner_alias)
 
 
 def main() -> int:
