@@ -45,7 +45,7 @@ def read_valid_design(path: Path, v: int, pick: int, g: int):
             for line in path.read_text(encoding="utf-8-sig").splitlines()
             if line.strip()
         ]
-    except OSError, UnicodeError, ValueError:
+    except (OSError, UnicodeError, ValueError):
         return None
     if not blocks or any(
         len(block) != pick

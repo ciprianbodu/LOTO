@@ -20,7 +20,7 @@ def has_usable_score_variance(raw: Mapping[int, object] | None) -> bool:
         return False
     try:
         values = [float(value) for value in raw.values()]
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return False
     if len(values) < 2 or not all(math.isfinite(value) for value in values):
         return False

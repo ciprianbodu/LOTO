@@ -88,7 +88,7 @@ def _effective_lookback_pct(from_data: dict | None = None) -> float:
         raw = SETTINGS.get("lookback_val") or 0
     try:
         v = int(raw or 0)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         v = 0
     if v <= 0:
         return 100.0
@@ -129,7 +129,7 @@ def _clamped_bench_target(value=None) -> int:
     except Exception:  # noqa: BLE001
         try:
             n = int(raw)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             n = 3
         return n if n in (3, 4) else 3
 
@@ -189,7 +189,7 @@ def _float_setting(key: str, default: float | None = None) -> float:
         if v is None:
             v = DEFAULTS.get(key) if default is None else default
         return float(v)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return float(DEFAULTS.get(key, 0.0) if default is None else default)
 
 
@@ -204,7 +204,7 @@ def _int_setting(key: str, default: int | None = None) -> int:
         if v is None:
             raise TypeError(key)
         return int(v)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return int(default if default is not None else DEFAULTS[key])
 
 
@@ -254,7 +254,7 @@ def _load_settings() -> None:
     try:
         if int(SETTINGS.get("pool_size_val", 10)) > 16:
             SETTINGS["pool_size_val"] = 16
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         SETTINGS["pool_size_val"] = 10
 
     # Inițializează variabila din modulul decision și os.environ din setările salvate
@@ -504,7 +504,7 @@ def _verified_bench_pid() -> int | None:
         try:
             if "bench_all_methods.py" not in " ".join(proc.cmdline() or []):
                 raise psutil.NoSuchProcess(pid)
-        except psutil.AccessDenied, psutil.ZombieProcess:
+        except (psutil.AccessDenied, psutil.ZombieProcess):
             pass  # nu putem citi cmdline (elevat) → ne bazăm pe create_time
         return pid
     except Exception:  # noqa: BLE001
@@ -651,7 +651,7 @@ def _fmt_dur(sec) -> str:
     """Durată granulară în h/m/s: '1h 23m 4s' / '3m 12s' / '45s'."""
     try:
         s = int(round(float(sec)))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return "?"
     if s < 0:
         s = 0
@@ -873,7 +873,7 @@ def _start_walk_forward() -> None:
             try:
                 _b = float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"])
                 return max(60.0, _b * 60.0)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 return float(WF_TOTAL_BUDGET_S)
 
         def _global_deadline() -> float:
@@ -1634,7 +1634,7 @@ def _fmt_num(x) -> str:
         return "?"
     try:
         return f"{float(x):.1f}"
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return str(x)
 
 
@@ -1799,7 +1799,7 @@ def _render_cost(game: str, data: dict) -> None:
                 and int(_wc_top) != int(_g_used)
                 else ""
             )
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _wc_top_txt = ""
         _g_txt = (
             f"garanție {_g_used}{_wc_top_txt}"
@@ -2235,7 +2235,7 @@ def _render_pool_body(
             _g_used = _g_req
         try:
             _g_diff = _g_req is not None and int(_g_used) != int(_g_req)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _g_diff = _g_used != _g_req
         _wc = (data.get("audit") or {}).get("wheel_condition_used") or data.get(
             "wheel_condition"
@@ -2246,7 +2246,7 @@ def _render_pool_body(
                 if _wc is not None and int(_wc) != int(_g_used)
                 else ""
             )
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _wc_txt = ""
         ui.label(
             f"Garanție: {_g_used}{_wc_txt}"
@@ -2288,7 +2288,7 @@ def _render_pool_body(
             else:
                 try:
                     _mv = int((data.get("context") or {}).get("max_variants") or 0)
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     _mv = 0
                 if _mv > 0:
                     reason = (
@@ -2390,7 +2390,7 @@ def _render_pool_body(
                         if r is not None:
                             try:
                                 extra += f", r={float(r):.2f}"
-                            except TypeError, ValueError:
+                            except (TypeError, ValueError):
                                 extra += f", r={r}"
                         _dparts.append(f"{nm}{extra}")
                     else:
@@ -2755,7 +2755,7 @@ def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) ->
             try:
                 if ph is not None and int(ph) == int(pool):
                     return info
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 pass
     return {}
 
@@ -3538,7 +3538,7 @@ def _fmt_score_time(ms) -> str:
     """Timp de scoring lizibil: sub 100 ms afișăm milisecunde, nu «0.0s»."""
     try:
         v = float(ms)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return "?"
     return f"{v:.0f}ms" if v < 100 else f"{v / 1000:.1f}s"
 
@@ -4251,7 +4251,7 @@ def adaptive_history_panel() -> None:
         try:
             if int(str(k).split("_")[-1]) not in SUPPORTED_POOLS:
                 stale.append(k)
-        except ValueError, IndexError:
+        except (ValueError, IndexError):
             pass
 
     ui.label(
@@ -4808,7 +4808,7 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
     jid = int(last["id"])
     try:
         already = int(SETTINGS.get("last_finalized_job_id") or 0)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         already = 0
     if jid == already:
         return  # deja dus prin finalize într-o sesiune anterioară

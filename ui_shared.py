@@ -505,7 +505,7 @@ def is_worker_running() -> bool:
                         return True
                 except OSError:
                     pass
-        except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess:
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     return False
 

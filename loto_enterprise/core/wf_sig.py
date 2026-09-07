@@ -36,5 +36,5 @@ def lookback_pct(lookback_percent) -> int:
         return 100
     try:
         return int(round(float(lookback_percent)))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 100

@@ -186,7 +186,7 @@ def _snapshot() -> list[ProcView]:
         cwd: str | None = None
         try:
             cwd = proc.cwd()
-        except psutil.Error, OSError:
+        except (psutil.Error, OSError):
             cwd = None
         cmdline = info.get("cmdline") or []
         views.append(
@@ -210,7 +210,7 @@ def _listen_pids(port: int) -> set[int]:
     pids: set[int] = set()
     try:
         conns = psutil.net_connections(kind="inet")
-    except psutil.Error, OSError:
+    except (psutil.Error, OSError):
         return pids
     for conn in conns:
         try:
@@ -220,7 +220,7 @@ def _listen_pids(port: int) -> set[int]:
                 continue
             if conn.pid:
                 pids.add(int(conn.pid))
-        except TypeError, ValueError, AttributeError:
+        except (TypeError, ValueError, AttributeError):
             continue
     return pids
 
@@ -231,7 +231,7 @@ def _kill_pid(pid: int) -> bool:
     try:
         psutil.Process(pid).kill()
         return True
-    except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError:
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
         return False
 
 

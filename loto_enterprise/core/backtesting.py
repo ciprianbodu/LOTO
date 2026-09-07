@@ -260,7 +260,7 @@ def coverage_from_context(context) -> float | None:
         return None
     try:
         return float(cov)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

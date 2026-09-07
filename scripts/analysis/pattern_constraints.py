@@ -23,7 +23,7 @@ def load(path, pick):
         for row in csv.DictReader(f):
             try:
                 nums = [int(row[f"n{i}"]) for i in range(1, pick + 1)]
-            except KeyError, TypeError, ValueError:
+            except (KeyError, TypeError, ValueError):
                 continue
             if len(set(nums)) == pick:
                 out.append(sorted(nums))

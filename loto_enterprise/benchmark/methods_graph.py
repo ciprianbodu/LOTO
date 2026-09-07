@@ -75,7 +75,7 @@ def _indicator(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
         for v in arr[t]:
             try:
                 iv = int(v)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 continue
             if 1 <= iv <= max_num:
                 M[iv - 1, t] = 1.0

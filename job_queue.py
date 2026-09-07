@@ -240,7 +240,7 @@ def is_unstarted_job(job: dict | None) -> bool:
         return False
     try:
         pct = int(job.get("progress_pct") or 0)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         pct = 0
     tail = str(job.get("log_tail") or "").strip()
     return pct <= 1 and not tail

@@ -44,7 +44,7 @@ def _build_binary(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
         for v in row:
             try:
                 vi = int(v)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 # Consistent cu _indicator din methods_graph.py: o valoare
                 # necastabila (NaN/obiect strain) e sarita, nu propagata ca
                 # ValueError necaptata — draw_validation.py garanteaza intregi

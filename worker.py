@@ -227,17 +227,17 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             # Lotto design „guarantee dacă condition": lipsă/0 = cover clasic.
             try:
                 raw_cond = int(task.get("wheel_condition") or 0)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 raw_cond = 0
             wheel_cond = guar if raw_cond <= 0 else max(guar, min(draw_n, raw_cond))
             # Penalizare după ultimele extrageri (0 = oprit); factor în [0, 1).
             try:
                 rp_draws = max(0, min(50, int(task.get("recent_penalty_draws") or 0)))
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 rp_draws = 0
             try:
                 rp_factor = float(task.get("recent_penalty_factor", 0.5))
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 rp_factor = 0.5
             rp_factor = max(0.0, min(0.99, rp_factor))
             raw_lookback = int(task.get("lookback", 0))
@@ -406,7 +406,7 @@ def main() -> None:
     for _sig in (signal.SIGTERM, signal.SIGINT):
         try:
             signal.signal(_sig, lambda s, f: (_requeue_on_terminate(), sys.exit(1)))
-        except ValueError, OSError:
+        except (ValueError, OSError):
             pass  # signal disponibil doar pe thread-ul principal
     try:
         recovered = requeue_running_jobs()

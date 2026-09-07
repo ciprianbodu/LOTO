@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def clamp_bench_hit_target(value, *, default: int = 3) -> int:
     try:
         n = int(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         # Eșecul de parsare cădea tăcut pe `default` — spre deosebire de o valoare
         # doar în afara intervalului (3/4), care logează mai jos. O valoare
         # neparsabilă (ex. "4.0" scrisă programatic din str(float(x))) trecea
