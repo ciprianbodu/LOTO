@@ -33,6 +33,7 @@ if errorlevel 1 (
     echo [GIT] git negasit - sar peste auto-update.
 ) else (
     call "%BOOT_DIR%\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"
+    if errorlevel 1 echo [GIT] Auto-update esuat sau partial - codul local ramane cel de dinainte; verifica manual daca e nevoie.
 )
 REM Ruleaza launcherul NOU din repo; nu continua copia veche.
 "%PROJECT_DIR%START_8000.bat" --post-sync "%PROJECT_DIR%" "%BOOT_DIR%"

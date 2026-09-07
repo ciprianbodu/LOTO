@@ -30,6 +30,7 @@ if errorlevel 1 (
     echo [GIT] git negasit - sar peste auto-update cod.
 ) else (
     call "%BOOT_DIR%\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"
+    if errorlevel 1 echo [GIT] Auto-update esuat sau partial - codul local ramane cel de dinainte; verifica manual daca e nevoie.
 )
 REM FARA CALL: ruleaza versiunea NOUA descarcata, nu copia veche din TEMP.
 "%PROJECT_DIR%ACTUALIZARI.bat" --post-sync "%PROJECT_DIR%" "%BOOT_DIR%"

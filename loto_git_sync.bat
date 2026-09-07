@@ -12,6 +12,11 @@ set "_ROOT=%~2"
 if "%_ROOT%"=="" set "_ROOT=%~dp0"
 cd /d "%_ROOT%"
 git config windows.appendAtomically false >nul 2>&1
+REM gc.auto ar rula la orice fetch/commit/push care trece de threshold-ul de
+REM obiecte loose - lansatorul ruleaza la FIECARE pornire, deci un gc automat
+REM ar adauga latenta impredictibila (sau ar bloca pe lock daca alt git ruleaza
+REM concurent). Dezactivat persistent pe acest repo, nu doar per-comanda.
+git config gc.auto 0 >nul 2>&1
 
 if /I "%~1"=="autoupdate" goto autoupdate
 if /I "%~1"=="push_istoric" goto push_istoric
@@ -21,7 +26,9 @@ exit /b 2
 
 :autoupdate
 echo [GIT] Verific actualizari de pe GitHub...
-git fetch origin main --quiet 2>nul
+REM <nul: fara consola vizibila (pornit din START_8000/ACTUALIZARI), un prompt
+REM de credentiale HTTPS ar bloca scriptul la infinit in loc sa esueze rapid.
+git fetch origin main --quiet <nul 2>nul
 if errorlevel 1 (
     echo [GIT] Offline / fetch esuat - pornesc cu codul curent.
     exit /b 0
@@ -72,10 +79,19 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [GIT] Backup commit local: %_BACKUP_BRANCH%
+REM git stash intoarce errorlevel 1 si cand NU e nimic de salvat (working tree
+REM curat) - nu doar la o eroare reala. Fara distinctia asta, un sync fortat pe
+REM un repo curat anula degeaba resetul, desi nu era nimic de protejat.
+set "_REPO_DIRTY=0"
+git status --porcelain 2>nul | findstr /R "." >nul 2>&1
+if not errorlevel 1 set "_REPO_DIRTY=1"
 git stash push -m "auto-backup before forced sync" >nul 2>&1
 if errorlevel 1 (
-    echo [GIT] Stash esuat - ANULEZ resetul fortat. Branch-ul backup ramane.
-    exit /b 1
+    if "%_REPO_DIRTY%"=="1" (
+        echo [GIT] Stash esuat cu modificari locale prezente - ANULEZ resetul fortat. Branch-ul backup ramane.
+        exit /b 1
+    )
+    echo [GIT] Stash gol - nimic de salvat, continui.
 )
 echo [GIT] Sincronizez FORTAT cu origin/main. Modificarile tracked sunt in stash.
 git reset --hard origin/main >nul 2>&1
@@ -121,11 +137,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-git push origin main
+REM <nul: idem fetch - un push care ar cere credentiale interactiv nu are cui
+REM sa i le dea cand ruleaza silentios din launcher.
+git push origin main <nul
 if errorlevel 1 (
     echo [GIT] Push esuat - incerc git pull --ff-only origin main apoi push...
-    git pull --ff-only origin main
-    git push origin main
+    git pull --ff-only origin main <nul
+    git push origin main <nul
 )
 if errorlevel 1 (
     echo [GIT] Push origin/main ESUAT. Commit-ul e LOCAL pe main.
