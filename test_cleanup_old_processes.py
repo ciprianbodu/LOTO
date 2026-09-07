@@ -11,6 +11,7 @@ from cleanup_old_processes import (
     ProcView,
     cmdline_script_names,
     is_stale_proc,
+    kill_pid_tree,
     kill_stale_project_processes,
     path_is_under,
     select_stale_pids,
@@ -259,3 +260,72 @@ def test_kills_spawned_worker_without_touching_this_pytest(tmp_path):
         if proc.poll() is None:
             proc.kill()
             proc.wait(timeout=5)
+
+
+def test_kill_pid_tree_kills_the_whole_tree(tmp_path):
+    """cancel_all() are un singur PID cunoscut (bench_all_methods.py); tree-kill-ul
+    trebuie să ajungă și la copiii lui ProcessPoolExecutor, nu doar la părinte."""
+    child_script = tmp_path / "child.py"
+    child_script.write_text("import time; time.sleep(60)\n", encoding="utf-8")
+    parent_script = tmp_path / "parent.py"
+    parent_script.write_text(
+        "import subprocess, sys, time\n"
+        f"c = subprocess.Popen([sys.executable, {str(child_script)!r}])\n"
+        "print(c.pid, flush=True)\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    parent = subprocess.Popen(
+        [sys.executable, str(parent_script)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    try:
+        child_pid_line = parent.stdout.readline().strip()
+        assert child_pid_line, "copilul nu și-a raportat PID-ul"
+        child_pid = int(child_pid_line)
+        import psutil
+        assert psutil.pid_exists(child_pid)
+
+        acted = kill_pid_tree(parent.pid)
+
+        assert parent.pid in acted
+        assert child_pid in acted
+        parent.wait(timeout=5)
+        deadline = time.time() + 5
+        while psutil.pid_exists(child_pid) and time.time() < deadline:
+            time.sleep(0.05)
+        assert not psutil.pid_exists(child_pid), "copilul a rămas orfan în viață"
+        assert Path(__file__).exists()  # pytest n-a fost omorât
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+            parent.wait(timeout=5)
+        try:
+            if psutil.pid_exists(child_pid):
+                psutil.Process(child_pid).kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def test_kill_pid_tree_on_already_dead_pid_is_a_noop():
+    """PID mort (deja terminat) nu trebuie să crape apelantul — cancel_all()
+    poate ajunge aici după ce bench-ul s-a terminat singur între timp."""
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait(timeout=5)
+    dead_pid = proc.pid
+    assert kill_pid_tree(dead_pid) == []
+
+
+def test_kill_pid_tree_dry_run_reports_without_killing(tmp_path):
+    script = tmp_path / "sleeper.py"
+    script.write_text("import time; time.sleep(60)\n", encoding="utf-8")
+    proc = subprocess.Popen([sys.executable, str(script)])
+    try:
+        acted = kill_pid_tree(proc.pid, dry_run=True)
+        assert proc.pid in acted
+        assert proc.poll() is None  # tot in viata: dry-run n-a omorat nimic
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)

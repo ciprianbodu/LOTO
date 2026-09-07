@@ -685,11 +685,15 @@ def cancel_all() -> None:
         logger.warning("cancel jobs: %s", exc)
     # Kill bench (din .bench_pid) + fallback orice bench_all_methods.py din proiect
     import psutil
+    from cleanup_old_processes import kill_pid_tree
     if BENCH_PID_FILE.exists():
         try:
             pid = int(BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0])
             if psutil.pid_exists(pid):
-                psutil.Process(pid).terminate()
+                # Tree-kill, nu doar terminate() pe părinte: runner.py paralelizează
+                # foldurile pe un ProcessPoolExecutor — uciderea DOAR a procesului
+                # principal lasă lucrătorii orfani, arzând CPU după „Anulează TOT".
+                kill_pid_tree(pid)
         except Exception as exc:  # noqa: BLE001
             logger.warning("kill bench pid: %s", exc)
     try:
@@ -711,7 +715,7 @@ def cancel_all() -> None:
             except Exception:  # noqa: BLE001 — AccessDenied / procesul a murit
                 same_cwd = root.as_posix() in cl.replace("\\", "/")
             if same_cwd:
-                p.terminate()
+                kill_pid_tree(p.pid)
     except Exception as exc:  # noqa: BLE001
         logger.warning("kill bench fallback: %s", exc)
     try:

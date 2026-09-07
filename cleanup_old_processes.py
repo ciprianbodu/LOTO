@@ -214,6 +214,52 @@ def _kill_pid(pid: int) -> bool:
         return False
 
 
+def _order_deepest_first(pids: set[int], procs: list[ProcView]) -> list[int]:
+    """Copiii întâi: un părinte omorât înaintea copiilor lui poate lăsa
+    descendenți orfani (Windows nu omoară arborele odată cu părintele).
+    Sortăm invers după adâncimea aproximativă, construită din ppid — PID-ul
+    mare NU e adâncime."""
+    by_pid = {p.pid: p for p in procs}
+
+    def depth(pid: int) -> int:
+        d = 0
+        seen: set[int] = set()
+        cur = pid
+        while cur in by_pid and by_pid[cur].parent_pid and cur not in seen:
+            seen.add(cur)
+            cur = by_pid[cur].parent_pid  # type: ignore[assignment]
+            d += 1
+            if cur not in pids:
+                break
+        return d
+
+    return sorted(pids, key=depth, reverse=True)
+
+
+def kill_pid_tree(pid: int, *, dry_run: bool = False) -> list[int]:
+    """Omoară un PID și TOT arborele lui de descendenți.
+
+    Folosit acolo unde un singur `Process(pid).terminate()`/`kill()` lasă
+    copiii orfani — pe Windows uciderea părintelui nu omoară descendenții
+    (ex. lucrătorii `ProcessPoolExecutor` porniți de un bench/re-bench sau de
+    un pas de walk-forward). `pid` poate fi deja mort: `expand_descendants`
+    pornește oricum de la `{pid}`, iar `_kill_pid` eșuează silențios pe el.
+    Returnează PID-urile pe care a încercat efectiv să le omoare (sau le-ar
+    omorî, în `dry_run`), copiii întâi.
+    """
+    procs = _snapshot()
+    targets = expand_descendants({pid}, procs)
+    ordered = _order_deepest_first(targets, procs)
+    acted: list[int] = []
+    for p in ordered:
+        if dry_run:
+            acted.append(p)
+            continue
+        if _kill_pid(p):
+            acted.append(p)
+    return acted
+
+
 def kill_stale_project_processes(
     *,
     venv_dir: str | os.PathLike[str],
@@ -232,23 +278,7 @@ def kill_stale_project_processes(
         keep_pids=keep,
         listen_pids=listening,
     )
-    # Copiii întâi: parent_pid care NU e tot stale vine după; sortăm invers după
-    # adâncime aproximativă (PID mare nu e adâncime). Construim adâncimea din ppid.
-    by_pid = {p.pid: p for p in procs}
-
-    def depth(pid: int) -> int:
-        d = 0
-        seen: set[int] = set()
-        cur = pid
-        while cur in by_pid and by_pid[cur].parent_pid and cur not in seen:
-            seen.add(cur)
-            cur = by_pid[cur].parent_pid  # type: ignore[assignment]
-            d += 1
-            if cur not in stale:
-                break
-        return d
-
-    ordered = sorted(stale, key=depth, reverse=True)
+    ordered = _order_deepest_first(stale, procs)
     acted: list[int] = []
     for pid in ordered:
         if dry_run:
