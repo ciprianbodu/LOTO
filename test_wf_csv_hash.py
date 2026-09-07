@@ -41,6 +41,23 @@ def test_cache_version_tracks_covering_design_signature(monkeypatch, tmp_path):
     assert before != after
 
 
+def test_ensemble_sig_distinguishes_weights_beyond_four_decimals():
+    """0.30001 si 0.30004 nu sunt aceeasi pondere -- round(...,4) le confunda
+    (aceeasi conventie ca _penalty_sig, care foloseste float(...).hex())."""
+    from loto_enterprise.core.wf_sig import ensemble_sig
+
+    a = [{"method": "m1", "weight": 0.30001}]
+    b = [{"method": "m1", "weight": 0.30004}]
+    assert ensemble_sig(a) != ensemble_sig(b)
+
+    a_dict = {"m1": 0.30001}
+    b_dict = {"m1": 0.30004}
+    assert ensemble_sig(a_dict) != ensemble_sig(b_dict)
+
+    # Aceeasi pondere exacta -> aceeasi semnatura (determinist, indiferent de tip).
+    assert ensemble_sig([{"method": "m1", "weight": 0.5}]) == ensemble_sig([{"method": "m1", "weight": 0.5}])
+
+
 def test_joker_wf_signature_includes_urna2_decision(monkeypatch):
     """Schimbarea bilei Joker trebuie să invalideze WF-ul, nu doar Urna 1."""
     import loto_enterprise.core.method_selector as selector

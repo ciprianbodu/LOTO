@@ -42,7 +42,6 @@ from job_queue import (
     is_unstarted_job,
     submit_job,
 )
-from cancel import lock_engine, unlock_engine
 from runtime_paths import BENCH_LOG_FILE
 from ui_shared import (
     PROJECT_ROOT,
@@ -368,7 +367,6 @@ def submit_generation(pure: bool = False, sim_depth_per_game: dict | None = None
     STATE["retro"] = {}
     STATE["wf_status"] = ""
     ensure_worker_running()
-    lock_engine("deterministic_session")
     cfg = _build_config_json(sim_depth_per_game)
     job_id = submit_job("pipeline", cfg)
     STATE["active_job_id"] = int(job_id)
@@ -751,7 +749,6 @@ def cancel_all() -> None:
     # altfel „Anulează TOT" lăsa WF să ruleze până la buget (până la 90 min), iar
     # finally-ul lui declanșa mail/shutdown — PC-ul se putea ÎNCHIDE după un cancel.
     STATE["wf_user_cancel"] = True
-    unlock_engine()
     ui.notify("Proces anulat.", type="warning")
     _refresh_status()
 
@@ -959,7 +956,6 @@ def _abandon_unstarted_ui_job(reason: str) -> None:
         logger.warning("abandon unstarted: %s", exc)
     STATE["active_job_id"] = None
     STATE["job_start_time"] = None
-    unlock_engine()
 
 
 @ui.refreshable
@@ -971,7 +967,6 @@ def status_panel() -> None:
         stt = get_job_status(int(job_id))
         if not stt:
             STATE["active_job_id"] = None
-            unlock_engine()
             ui.label("Job invalid / dispărut.").classes("text-negative")
             return
         pct = int(stt.get("progress_pct") or 0)
@@ -990,7 +985,6 @@ def status_panel() -> None:
                     STATE["active_job_id"] = None
                     SETTINGS["last_finalized_job_id"] = int(job_id)
                 _save_settings()
-                unlock_engine()
                 logger.error("[JOB] #%s COMPLETED cu payload invalid (%r) — "
                              "fără mail/walk-forward/shutdown.", job_id, type(payload).__name__)
                 ui.label(f"⚠️ Job #{job_id} s-a terminat, dar rezultatul e ilizibil "
@@ -1017,7 +1011,6 @@ def status_panel() -> None:
                 ui.label("✅ Ultima generare e gata (vezi mai jos).").classes("text-positive")
                 return
             _save_settings()
-            unlock_engine()
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
             # Mail-ul conține doar pool-ul generat (fără stats WF, vezi _build_mail_body) →
             # numerele sunt deja fixate acum; nu are rost să aștepte walk-forward-ul de
@@ -1043,7 +1036,6 @@ def status_panel() -> None:
             return
         if state in ("FAILED", "CANCELLED"):
             STATE["active_job_id"] = None
-            unlock_engine()
             # Mesajul de eroare NU e o coloană proprie: `job_queue.fail_job` îl scrie
             # în `result_json` (întreg) și în `log_tail` (ultimii 6000 de octeți).
             # `stt.get("error_msg")` era o cheie INEXISTENTĂ în schema `jobs` → panoul

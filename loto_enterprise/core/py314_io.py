@@ -34,8 +34,17 @@ def pickle_load_path(path: Path) -> Any:
 
 
 def pickle_store_path(path: Path, obj: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(pickle_dump_bytes(obj))
+    """Alias pentru scrierea atomică — vezi `pickle_store_path_atomic`.
+
+    Înainte scria direct prin `path.write_bytes(...)` (truncate-then-write,
+    NEATOMIC). Singurul apelant, `bench_cache.store_cached_fold`, rulează sub
+    `ProcessPoolExecutor` (pana la ~75% din nuclee, `runner.py`): doi workeri
+    care evaluează aceeași cheie (csv_hash, metoda, percentila) concurent —
+    de exemplu un Re-Bench pornit peste unul întrerupt care încă avea un
+    worker în curs — se puteau trunchia reciproc, iar un cititor obținea un
+    pickle rupt. Cache-ul WF (`pickle_store_path_atomic`) fusese deja hardenat
+    exact pentru asta; funcția asta rămăsese pe implementarea veche."""
+    pickle_store_path_atomic(path, obj)
 
 
 def pickle_store_path_atomic(path: Path, obj: Any) -> None:
