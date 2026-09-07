@@ -9,9 +9,10 @@ Strategy:
     2. Also record total row count.
     3. On Auto-Pilot click, compare:
         • Same hash → cached decision still 100% valid, instant.
-        • Row delta < 5% → "data slightly fresher; cache likely still optimal".
-        • Row delta 5-20% → "recommend quick re-bench".
-        • Row delta > 20% OR hash radically different → "recommend full re-bench".
+        • Different hash → content changed (row count may be unchanged, e.g. one
+          historical draw corrected in place), so "use_cache" is never offered;
+          severity floors at "quick re-bench" and escalates to "full re-bench"
+          once the row-count delta itself is large (>=10%).
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ class FreshnessReport:
     cached_hash: str
     current_hash: str
     row_delta_pct: float
-    status: str  # "fresh" | "slight_drift" | "moderate_drift" | "stale" | "missing"
+    status: str  # "fresh" | "moderate_drift" | "stale" | "missing"
     recommendation: str  # "use_cache" | "quick_rebench" | "full_rebench" | "use_cache_no_csv"
 
 
@@ -161,12 +162,16 @@ def check_freshness(
 
         delta = abs(current_rows - cached_rows)
         delta_pct = (delta / max(cached_rows, 1)) * 100
-        if delta_pct < 2.0:
-            status, rec = "slight_drift", "use_cache"
-        elif delta_pct < 10.0:
-            status, rec = "moderate_drift", "quick_rebench"
-        else:
+        # Am ajuns aici DOAR dacă hash-ul diferă (ramura `cached_hash == current_hash`
+        # a ieșit deja mai sus) — deci datele s-au schimbat cu certitudine, chiar dacă
+        # numărul de rânduri e aproape neschimbat (ex. o extragere istorică corectată
+        # in loc, fără să adauge/scoată rânduri). Un `delta_pct` mic nu mai poate
+        # coborî recomandarea la "slight_drift"/use_cache — asta ar contrazice exact
+        # ce am verificat deja (hash diferit); minimul e moderate_drift/quick_rebench.
+        if delta_pct >= 10.0:
             status, rec = "stale", "full_rebench"
+        else:
+            status, rec = "moderate_drift", "quick_rebench"
 
         out[gk] = FreshnessReport(
             game_key=gk, csv_path=path,

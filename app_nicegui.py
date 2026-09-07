@@ -869,6 +869,11 @@ def _start_walk_forward() -> None:
                         use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
+                        # Semnal SEPARAT de should_cancel: doar înlocuire (alt WF pornit
+                        # pe aceeași cheie), NU buget/anulare — acelea vor cache-ul scris
+                        # (asta e scopul acoperirii parțiale). Fără el, o rulare veche
+                        # care termină DUPĂ una nouă i-ar suprascrie cache-ul mai complet.
+                        should_skip_cache_write=lambda: STATE.get("wf_seq") != my_seq,
                         **_wf_generation_options(data),
                     )
                     if STATE.get("wf_seq") != my_seq:

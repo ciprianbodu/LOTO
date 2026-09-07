@@ -482,6 +482,7 @@ def run_honest_walk_forward(
     force_refresh: bool = False,
     progress_cb=None,
     should_cancel=None,
+    should_skip_cache_write=None,
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
     guarantee: int | None = None,
@@ -494,6 +495,17 @@ def run_honest_walk_forward(
     intră în cheia de cache doar când e activă.
     guarantee/wheel_condition/max_variants: setările rezultatului generat.
     Fără guarantee explicită se păstrează geometria internă istorică a API-ului.
+
+    `should_cancel` oprește DOAR bucla de backtest (rezultat parțial, salvat oricum
+    — asta e scopul lui `skip_indices`/acoperirea incrementală). `should_skip_cache_write`
+    e un semnal SEPARAT, verificat DOAR chiar înainte de scrierea pe disc: dacă
+    apelantul a fost între timp ÎNLOCUIT de o rulare mai nouă pe ACEEAȘI cheie
+    (nu doar oprit de bugetul de timp), scrierea cache-ului se sare — altfel o
+    rulare veche, superseded, care termină DUPĂ cea nouă, ar suprascrie cache-ul
+    mai complet al rulării noi cu propria ei vedere mai veche/incompletă
+    (`_merge_partial_coverage` reunește corect DOAR în cadrul unei singure secvențe
+    serializate de rulări, nu între rulări concurente care se suprapun pe disc).
+    None (implicit) păstrează comportamentul vechi — scriere necondiționată.
 
     Returns:
         (flat_results, meta_dict)
@@ -627,8 +639,14 @@ def run_honest_walk_forward(
     # Save cache (rezultatul reunit ⊇ cache → suprascriem; scriere atomică anti-corupere
     # la UI-restart în mijlocul pickle.dump — un cache trunchiat ar crăpa la load).
     try:
-        pickle_store_path_atomic(cache_file, {"flat": flat, **meta})
-        logger.info(f"[WALK-FWD] Cache saved → {cache_file}")
+        if should_skip_cache_write is not None and should_skip_cache_write():
+            logger.info(
+                f"[WALK-FWD] Rulare înlocuită de una nouă pentru {game_type} pool={pool_size} "
+                "— sar scrierea cache-ului (evit suprascrierea rulării mai noi)."
+            )
+        else:
+            pickle_store_path_atomic(cache_file, {"flat": flat, **meta})
+            logger.info(f"[WALK-FWD] Cache saved → {cache_file}")
     except Exception as exc:
         logger.warning(f"[WALK-FWD] Cache save failed: {exc}")
 

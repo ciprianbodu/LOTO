@@ -95,6 +95,39 @@ def test_wf_tickets_equal_direct_generation_with_conditional_cap(tmp_path, monke
     assert cached == flat and cached_meta["max_variants"] == 2
 
 
+def test_should_skip_cache_write_prevents_superseded_run_from_persisting(tmp_path, monkeypatch):
+    """O rulare WF ÎNLOCUITĂ de una mai nouă pe aceeași cheie (alt WF pornit în UI
+    înainte ca prima să termine) nu are voie să suprascrie cache-ul cu propria ei
+    vedere mai veche/incompletă — `should_skip_cache_write` e verificat DOAR chiar
+    înainte de scriere, separat de `should_cancel` (care oprește bucla, dar
+    rezultatul parțial TREBUIE salvat pentru buget/anulare normale)."""
+    df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(15).reset_index(drop=True)
+    monkeypatch.setattr(wf, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(bt, "_wf_max_workers", lambda: 1)
+    monkeypatch.setattr(LotoEngine, "_get_timesfm_scores",
+                        lambda self, **kw: {n: float(n) for n in range(1, 50)})
+    opts = {"pool_size": 10, "guarantee": 3}
+
+    flat, meta = wf.run_honest_walk_forward(
+        df, "6/49", backtest_depth_percent=5., use_cache=True,
+        should_skip_cache_write=lambda: True, **opts,
+    )
+    assert flat  # rularea a produs rezultate reale...
+    assert not any(tmp_path.rglob("*.pkl*")), "cache-ul NU trebuia scris (rulare superseded)"
+
+    flat2, meta2 = wf.run_honest_walk_forward(
+        df, "6/49", backtest_depth_percent=5., use_cache=True,
+        should_skip_cache_write=lambda: False, **opts,
+    )
+    assert not meta2.get("from_cache")  # tot cache miss (nimic scris la pasul anterior)
+    assert any(tmp_path.rglob("*.pkl*")), "cache-ul trebuia scris de data asta"
+
+    flat3, meta3 = wf.run_honest_walk_forward(
+        df, "6/49", backtest_depth_percent=5., use_cache=True, **opts,
+    )
+    assert meta3.get("from_cache")  # cache hit — comportamentul vechi (fără param) e neschimbat
+
+
 def test_ui_describes_the_evaluated_conditional_budget():
     from types import SimpleNamespace
     from scripts.analysis.audit_output import capture_ui

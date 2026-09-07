@@ -383,6 +383,36 @@ def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):
     assert saved["_meta"]["csv_signatures"]["loto_6_49"]["hash"] == "abc123"
 
 
+def test_freshness_hash_mismatch_with_unchanged_row_count_never_says_use_cache(tmp_path, monkeypatch):
+    """O extragere istorica corectata IN LOC (fara sa schimbe numarul de randuri)
+    schimba hash-ul, dar delta_pct al randurilor ramane 0 — vechea logica
+    raporta "slight_drift"/use_cache (cache-ul e OK), contrazicand exact ce
+    tocmai verificase (hash DIFERIT). Severitatea trebuie sa porneasca minim
+    de la moderate_drift/quick_rebench, niciodata use_cache, cand hash-ul difera."""
+    import json
+    from loto_enterprise.benchmark import freshness
+
+    bm = tmp_path / "best_methods.json"
+    bm.write_text(json.dumps({
+        "_meta": {"csv_signatures": {
+            "loto_6_49": {"csv_path": "x.csv", "hash": "old_hash", "rows": 1000},
+        }},
+    }), encoding="utf-8")
+
+    def _fake_sig(gk):
+        # Acelasi numar de randuri, hash DIFERIT — extragere corectata in loc.
+        return ("x.csv", "new_hash", 1000)
+
+    monkeypatch.setattr(freshness, "compute_csv_signature", _fake_sig)
+    reports = freshness.check_freshness(str(bm))
+    r = reports["loto_6_49"]
+    assert r.row_delta_pct == 0.0
+    assert r.status != "fresh"
+    assert r.recommendation != "use_cache"
+    assert r.status == "moderate_drift"
+    assert r.recommendation == "quick_rebench"
+
+
 def test_requirements_txt_delegates_to_authoritative_cpu_list():
     text = open("requirements.txt", encoding="utf-8").read()
     assert "-r requirements_base.txt" in text

@@ -443,6 +443,17 @@ def test_clamp_bench_hit_target_only_3_or_4():
     assert decision.clamp_bench_hit_target(5, default=4) == 4
 
 
+def test_clamp_bench_hit_target_logs_on_unparsable_value(caplog):
+    """O valoare neparsabila (ex. "4.0" scrisa programatic din str(float(x)))
+    cadea tacut pe default, spre deosebire de o valoare doar in afara
+    intervalului (3/4), care logheaza — asimetrie care ascundea o
+    reconfigurare gresita a tintei de decizie."""
+    import logging
+    with caplog.at_level(logging.WARNING):
+        assert decision.clamp_bench_hit_target("4.0") == 3
+    assert "neparsabil" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # bench_cache: rezolvarea directorului deriva din runtime_paths, nu propriul
 # resolver duplicat (altfel un apelant care importa bench_cache fara sa fi

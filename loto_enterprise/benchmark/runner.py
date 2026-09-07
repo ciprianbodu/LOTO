@@ -480,8 +480,11 @@ def run_benchmark(
                 n_test = max(1, int(math.ceil(_n_g * pct / 100.0)))
                 n_train = max(0, _n_g - n_test)
                 if pct >= 100:
-                    n_train = max(80, n_train)
-                if n_train < 80:
+                    # Aceeași corecție ca în bucla reală de mai jos: verificarea
+                    # trebuie să fie pe n_test (n_train e mereu 80 prin construcție).
+                    n_train = 80
+                    n_test = _n_g - n_train
+                if n_train < 80 or n_test < 1:
                     continue
                 total_folds_est += 2 if shuffled_control else 1
     # Marker parsabil de UI: gpu=0 mereu (păstrat pt compatibilitate cu parsing-ul UI).
@@ -612,11 +615,23 @@ def run_benchmark(
                 n_test = max(1, int(math.ceil(n * pct / 100.0)))
                 n_train = max(0, n - n_test)
                 if pct >= 100:
-                    n_train = max(80, n_train)
+                    # La pct=100, n_test inițial e mereu n și n_train mereu 0 (înainte
+                    # de override) — deci `n_train = max(80, n_train)` fixa n_train la
+                    # 80 NECONDIȚIONAT, indiferent de `n` real. Garda de mai jos
+                    # (`n_train < 80`) verifica apoi valoarea deja fixată la 80, deci
+                    # nu se declanșa NICIODATĂ pentru pct=100 — pe un istoric cu
+                    # n <= 80 extrageri, n_test rezultat (`n - 80`) putea fi 0 sau
+                    # NEGATIV, iar fold-ul nu era marcat `failed`: `_evaluate_fold`
+                    # primea n_test<=0, bucla nu executa nimic, `blocks` rămânea 0
+                    # (deci verificarea `blocks>0 and unusable==blocks` nu se aplica),
+                    # și rezultatul era o rată fabricată 0.0 tratată ca fereastră
+                    # completă la poarta de consistență 60%. Verificarea corectă e
+                    # pe `n_test` (mai jos), nu pe `n_train` (mereu 80 prin construcție).
+                    n_train = 80
                     n_test = n - n_train
-                if n_train < 80:
-                    logger.info("[%s/%s/%d%%] skip — train too small (%d)",
-                                game.key, method, pct, n_train)
+                if n_train < 80 or n_test < 1:
+                    logger.info("[%s/%s/%d%%] skip — train too small (%d) sau test insuficient (%d)",
+                                game.key, method, pct, n_train, n_test)
                     continue
                 for is_random in ((False, True) if shuffled_control else (False,)):
                     # Cache lookup instant; doar cache-miss-urile intră la calcul.
