@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 from collections import Counter
 from itertools import combinations
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -21,11 +22,31 @@ CSV = sys.argv[1] if len(sys.argv) > 1 else "_ISTORIC/joker.csv"
 PCT = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0
 
 df = pd.read_csv(CSV)
-# Detecție DIN DATE (nu din nume): K = coloane de numere completate, MAXN = max real.
-# (Mai robust — ex. fișierul 5/40 are 6 coloane completate, range 1-40.)
-main_cols = [c for c in ["n1", "n2", "n3", "n4", "n5", "n6"] if c in df.columns and df[c].notna().any()]
+# K = numerele extrase per bilet (geometria REALĂ a jocului, nu "câte coloane
+# sunt completate"). `_ISTORIC/loto_5_40.csv` are 6 coloane n1..n6 populate,
+# dar jocul extrage doar 5 numere — a șasea e reziduu de format, NECONSUMATĂ
+# nicăieri altundeva (runner.discover_games() folosește explicit doar
+# cols=["n1".."n5"] pentru loto_5_40). Detecția veche ("K = coloane completate")
+# lua K=6, MAXN=40 pentru 5/40 — analiza rula pe geometria greșită. Recunoaștem
+# jocul din NUMELE fișierului, ca restul codebase-ului; doar pentru un fișier
+# necunoscut cădem pe vechea detecție din date.
+_KNOWN_MAIN_COLS = {
+    "6_49": ["n1", "n2", "n3", "n4", "n5", "n6"],
+    "649": ["n1", "n2", "n3", "n4", "n5", "n6"],
+    "5_40": ["n1", "n2", "n3", "n4", "n5"],
+    "540": ["n1", "n2", "n3", "n4", "n5"],
+    "joker": ["n1", "n2", "n3", "n4", "n5"],
+}
+_csv_name = Path(CSV).name.lower()
+main_cols = None
+for _pat, _cols in _KNOWN_MAIN_COLS.items():
+    if _pat in _csv_name:
+        main_cols = [c for c in _cols if c in df.columns]
+        break
+if not main_cols:
+    main_cols = [c for c in ["n1", "n2", "n3", "n4", "n5", "n6"] if c in df.columns and df[c].notna().any()]
 has_joker = "joker" in df.columns
-K = len(main_cols)  # numere extrase / extragere (din date)
+K = len(main_cols)  # numere extrase / extragere
 MAXN = int(df[main_cols].max().max())  # universul real observat
 
 n_total = len(df)

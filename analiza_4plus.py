@@ -36,8 +36,22 @@ def main() -> int:
         print("folds.csv nu are rânduri reale utilizabile.")
         return 1
 
+    # Referinta: rata TEORETICA hipergeometrica la pool-ul de baza (K=draw_n),
+    # aceeasi conventie ca decision.py (CLAUDE.md §5 pct. 4) — nu o realizare
+    # empirica zgomotoasa a randului `random`.
+    try:
+        from loto_enterprise.benchmark.decision import expected_random_rate
+        from loto_enterprise.benchmark.runner import discover_games
+        _geo = {g.key: g for g in discover_games()}
+    except Exception:  # noqa: BLE001
+        _geo = {}
+
     for game, gdf in df.groupby("game"):
         print(f"\n=== {game} ===")
+        g = _geo.get(game)
+        baseline = expected_random_rate(g.max_num, g.draw_n, g.draw_n, 4) if g else None
+        if baseline is not None:
+            print(f"  baseline random (hipergeometric, k={g.draw_n}): 4+: {baseline * 100:.2f}%")
         # Top procente de backtesting după rate_4plus MEDIU (peste toate metodele)
         by_pct = gdf.groupby("percentile")["rate_4plus"].mean().sort_values(ascending=False)
         print("  Procente backtesting (4+ mediu peste metode):")
@@ -50,6 +64,13 @@ def main() -> int:
         fam = f" [{best['family']}]" if "family" in gdf.columns and pd.notna(best.get("family")) else ""
         print(f"  ➜ MAXIM absolut: {best['method']}{fam} @ {int(best['percentile'])}%  "
               f"→ 4+: {best['rate_4plus'] * 100:.2f}%")
+        # ATENTIE: maximul e ales din N celule (metoda x percentila) fara corectie
+        # de testare multipla — poate fi zgomot, nu o metoda validata separat.
+        # Vezi decision.py (poarta de consistenta + Wilson) pentru selectia reala
+        # de productie; scriptul asta e diagnostic, nu decizie.
+        print("  (ATENTIE: maximul de mai sus e cea mai buna din multe celule "
+              "metoda×procent, fara corectie de testare multipla — poate fi "
+              "zgomot; nu e o metoda validata separat.)")
     print()
     return 0
 
