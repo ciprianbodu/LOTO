@@ -1,8 +1,15 @@
 """Background hardware sampler — runs in a thread and records peaks.
 
 Tracks per-phase peaks of:
-    * CPU %    — psutil.cpu_percent
-    * RAM      — psutil.virtual_memory used
+    * CPU %    — psutil.Process(pid).cpu_percent — PROPRIU procesului, nu al
+                 mașinii întregi
+    * RAM      — psutil.Process(pid).memory_info().rss — RSS-ul propriu
+
+Re-Bench paralelizează folds pe un ProcessPoolExecutor (zeci de procese
+concurente, ~75% din nuclee) — un sampler care ar citi CPU%/RAM la nivel de
+MAȘINĂ (nu de proces) ar contamina fiecare rând din folds.csv cu ce fac TOATE
+metodele concurente în același moment, nu costul metodei măsurate. Cu
+sampler-ul per-proces, fiecare fold raportează exclusiv propriul consum.
 
 (GPU/VRAM sampling a fost eliminat odată cu tot suportul GPU. Câmpurile
 gpu_pct_* / vram_mb_peak rămân în snapshot, mereu 0, pt compatibilitate cu
@@ -59,7 +66,6 @@ class HwSampler:
             self._have_psutil = True
             # Prime cpu_percent so the first sample isn't 0
             self._proc.cpu_percent(interval=None)
-            psutil.cpu_percent(interval=None)
         except Exception as exc:
             logger.debug("psutil unavailable: %s", exc)
 
@@ -77,13 +83,17 @@ class HwSampler:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                if self._have_psutil:
-                    cpu = self._psutil.cpu_percent(interval=None)  # system-wide %
+                if self._have_psutil and self._proc is not None:
+                    # PER-PROCES (nu system-wide): psutil.Process.cpu_percent()
+                    # poate depăși 100% dacă procesul folosește mai multe nuclee
+                    # (100% = un nucleu întreg) — corect pentru un fold single-
+                    # thread BLAS (§8: "BLAS single-thread per proces"), unde
+                    # valoarea reflectă exact cât din ACEL nucleu a consumat.
+                    cpu = self._proc.cpu_percent(interval=None)
                     if cpu > self._cpu_peak:
                         self._cpu_peak = cpu
                     self._cpu_total += cpu
-                    vm = self._psutil.virtual_memory()
-                    ram_gb = (vm.total - vm.available) / (1024**3)
+                    ram_gb = self._proc.memory_info().rss / (1024**3)
                     if ram_gb > self._ram_peak:
                         self._ram_peak = ram_gb
                 self._samples += 1

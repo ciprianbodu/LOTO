@@ -79,6 +79,37 @@ def test_force_clean_session_resets_autoincrement(isolated_db, monkeypatch):
     assert new_id == 1
 
 
+def test_force_survives_vacuum_failure_queue_still_cleared(isolated_db, monkeypatch):
+    """VACUUM (recuperare spațiu + renumerotare) NU e o condiție de corectitudine —
+    DELETE+commit de dinainte a golit deja coada cu succes. Un VACUUM eșuat (lock
+    rezidual imediat după kill-ul workerului vechi, disc plin) nu are voie să
+    propage o excepție care ar opri toată pornirea START_8000.bat peste o coadă
+    deja corect goală."""
+    completed_id = _insert_job(isolated_db, "COMPLETED", completed=True)
+    monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", lambda: completed_id)
+
+    # sqlite3.Connection e un tip C imutabil — nu poate fi patch-uit direct;
+    # injectam o subclasa prin `factory=` la connect().
+    class _VacuumFailingConnection(sqlite3.Connection):
+        def execute(self, sql, *args, **kwargs):
+            if str(sql).strip().upper() == "VACUUM":
+                raise sqlite3.OperationalError("database is locked")
+            return super().execute(sql, *args, **kwargs)
+
+    real_connect = sqlite3.connect
+
+    def _connect_with_vacuum_failure(*args, **kwargs):
+        kwargs["factory"] = _VacuumFailingConnection
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", _connect_with_vacuum_failure)
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+    rc = reset_jobs.main()
+
+    assert rc == 0
+    assert _job_ids(isolated_db) == set()  # coada tot golita, in ciuda VACUUM esuat
+
+
 # --------------------------------------------------------------------------- #
 # Scenariul 2: leftover PENDING/RUNNING după kill → ȘTERSE (nu reapar la pornire)
 # --------------------------------------------------------------------------- #

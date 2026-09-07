@@ -94,20 +94,28 @@ def _csv_date_to_date(s: str) -> date | None:
 
 
 def _last_date_in_csv(csv_path: Path) -> date | None:
-    """Ultima dată din CSV (rândul de jos). None dacă fișierul e gol/lipsă."""
+    """Cea mai RECENTĂ dată din CSV (maxim peste toate rândurile), NU data
+    ultimului rând citit — fișierele sunt de obicei ordonate crescător, dar
+    nimic din acest script nu impune sau verifică invariantul. Cu "ultimul
+    rând citit" ca proxy pentru "cea mai recentă", o corecție manuală, o
+    îmbinare care reordonează liniile, sau o adăugare din altă parte care nu
+    respectă ordinea ar face `update_all()` fie să reintroducă extrageri deja
+    prezente ca duplicate (nedetectate — validarea nu verifică duplicate
+    între rânduri), fie să sară tăcut extrageri noi reale. None dacă fișierul
+    e gol/lipsă/fără niciun rând cu dată parsabilă."""
     if not csv_path.exists():
         return None
-    last = None
+    max_date = None
     try:
         with open(csv_path, encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 d = _csv_date_to_date(row.get("date", ""))
-                if d:
-                    last = d
+                if d and (max_date is None or d > max_date):
+                    max_date = d
     except Exception:
         return None
-    return last
+    return max_date
 
 
 def _get_page_text(url: str) -> str:
@@ -148,6 +156,14 @@ def _extract_draws(text: str, num_main: int, has_joker: bool, after: date | None
         if after and d <= after:
             continue
         nums = [int(x) for x in m.group(2).split()]
+        if len(set(nums)) != num_main:
+            # Numere duplicate INTR-O SINGURA extragere: fragment HTML deformat
+            # (potriveste peste un rand invecinat, sau un separator lipsa).
+            # Contractul comun de validare (draw_validation.py) respinge exact
+            # asta pentru orice alt consumator — scraper-ul nu are voie sa scrie
+            # in _ISTORIC/ ceva ce engine/benchmark ar respinge oricum la citire,
+            # doar tacut, mai tarziu.
+            continue
         joker_num = int(m.group(3)) if has_joker else None
 
         key = (d, tuple(nums), joker_num)
@@ -160,8 +176,11 @@ def _extract_draws(text: str, num_main: int, has_joker: bool, after: date | None
     return results
 
 
-def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_main: int) -> None:
-    """Citește CSV existent, adaugă rândurile noi, rescrie atomic (tmp + rename)."""
+def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_main: int) -> int:
+    """Citește CSV existent, adaugă rândurile noi, rescrie atomic (tmp + rename).
+    Întoarce numărul de rânduri EFECTIV scrise (poate fi mai mic decât
+    len(new_rows) dacă unele aveau deja o dată prezentă în CSV — vezi garda
+    `existing_dates` de mai jos)."""
     # Citește rândurile existente
     existing: list[list[str]] = []
     header: list[str] | None = None
@@ -186,6 +205,14 @@ def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_mai
             row.append(rec["joker"])
         to_add.append([str(x) for x in row])
 
+    # Plasă de siguranță INDEPENDENTĂ de `_last_date_in_csv`: chiar dacă acel
+    # calcul ar greși cumva (fișier reordonat, corectat manual), niciun rând
+    # cu o dată deja prezentă în CSV nu se mai adaugă a doua oară.
+    existing_dates = {row[0] for row in existing if row}
+    to_add = [row for row in to_add if row[0] not in existing_dates]
+    if not to_add:
+        return 0
+
     # Scriere atomică: scrie în tmp, rename
     dir_ = csv_path.parent
     dir_.mkdir(parents=True, exist_ok=True)
@@ -203,6 +230,7 @@ def _append_rows_atomic(csv_path: Path, new_rows: list, has_joker: bool, num_mai
         except Exception:
             pass
         raise
+    return len(to_add)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +255,17 @@ def update_all() -> int:
         last = _last_date_in_csv(csv_path)
         last_str = last.strftime("%d-%m-%Y") if last else "N/A"
 
+        if csv_path.exists() and last is None:
+            # Fisierul EXISTA dar n-are niciun rand cu data parsabila — trunchiat
+            # sau corupt, nu "prima rulare vreodata" (fisierele din _ISTORIC/ sunt
+            # versionate cu mii de randuri deja). A trata asta ca "totul de pe
+            # site e nou" ar rescrie CSV-ul cu doar cateva luni de istoric — si
+            # `loto_git_sync.bat push_istoric` ar face auto-commit + push pe
+            # origin/main la urmatoarea pornire, fara niciun avertisment.
+            print(f"  {cfg['display_name']:<12}: CSV EXISTA dar fara nicio data valida — "
+                  "pare trunchiat/corupt. SAR peste (nu tratez ca prima rulare).")
+            continue
+
         # Fetch MEREU site-ul ca să raportăm ultima extragere reală (best-effort).
         site_last = None
         new_draws = []
@@ -246,10 +285,10 @@ def update_all() -> int:
         gap_str = f"{gap} zile în urmă" if gap is not None else "?"
 
         if new_draws:
-            _append_rows_atomic(csv_path, new_draws, cfg["has_joker"], cfg["num_main"])
+            written = _append_rows_atomic(csv_path, new_draws, cfg["has_joker"], cfg["num_main"])
             dates_str = ", ".join(r["date"].strftime("%d-%m-%Y") for r in new_draws)
-            print(f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} (azi: {gap_str}) | +{len(new_draws)} extrageri noi: {dates_str}")
-            total_added += len(new_draws)
+            print(f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} (azi: {gap_str}) | +{written} extrageri noi: {dates_str}")
+            total_added += written
         else:
             print(f"  {cfg['display_name']:<12}: CSV={last_str} | site={site_str} (azi: {gap_str}) | la zi.")
 

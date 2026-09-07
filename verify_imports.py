@@ -39,7 +39,19 @@ def try_import(name: str) -> tuple[bool, float, str]:
 
 
 def main() -> int:
-    from ui_shared import check_python_version
+    try:
+        from ui_shared import check_python_version
+    except Exception as e:
+        # ui_shared.py importa psutil neconditionat la nivel de modul — exact
+        # unul dintre pachetele REQUIRED verificate in bucla de mai jos. Fara
+        # aceasta garda, un psutil lipsa omora scriptul cu un traceback brut
+        # SI un exit code nedocumentat (1, implicit Python), inainte ca bucla
+        # sa apuce sa raporteze curat "[EROARE] Pachete REQUIRED lipsa: psutil"
+        # cu exit code 20 — exact diagnosticul pentru care exista scriptul.
+        print(f"[EROARE] Nu pot importa ui_shared (verificare versiune Python): "
+              f"{type(e).__name__}: {str(e)[:120]}")
+        print("Solutie: ruleaza ACTUALIZARI.bat apoi reincearca START_8000.bat.")
+        return 20
 
     py_ok, py_msg = check_python_version()
     print(f"Python: {sys.version.split()[0]} — {py_msg}")

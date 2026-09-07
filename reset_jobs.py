@@ -148,11 +148,28 @@ def main() -> int:
         else:
             con.execute("DELETE FROM jobs")
             con.commit()
-            con.execute("VACUUM")  # recuperează spațiu + următorul job devine #1
+            # DELETE+commit de mai sus a golit deja tabela cu succes — VACUUM
+            # e doar recuperare de spațiu pe disc + resetarea numerotării, NU
+            # o condiție de corectitudine. VACUUM cere un lock mai exclusiv
+            # decât un simplu write (poate eșua pe un lock rezidual imediat
+            # după ce cleanup_old_processes.py tocmai a omorât workerul/UI-ul
+            # vechi, sau pe disc plin) — o excepție nepri­nsă aici ar opri
+            # PORNIREA întregii aplicații pentru un pas pur cosmetic, deși
+            # coada e deja corect goală.
+            next_is_one = True
+            try:
+                con.execute("VACUUM")
+            except sqlite3.Error as exc:
+                next_is_one = False
+                print(f"⚠️  VACUUM eșuat ({exc}) — coada e golită oricum; "
+                      "numerotarea job-urilor s-ar putea sa nu reînceapă de la 1.")
             _cleared = _clear_last_finalized_job_id()
-            print(f"✅ Șterse {total} joburi din coadă. Următorul job va fi #1."
-                  + ("  (am resetat și last_finalized_job_id — id-urile reîncep de la 1)"
-                     if _cleared else ""))
+            msg = f"✅ Șterse {total} joburi din coadă."
+            if next_is_one:
+                msg += " Următorul job va fi #1."
+            if _cleared:
+                msg += "  (am resetat și last_finalized_job_id — id-urile reîncep de la 1)"
+            print(msg)
         return 0
     finally:
         con.close()
