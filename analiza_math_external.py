@@ -108,10 +108,8 @@ def _cpu_math_candidates() -> list[str]:
 
 
 def _load_csv(path: Path, cols: tuple[str, ...], max_num: int) -> np.ndarray:
-    """Contractul UNIC de validare (CLAUDE.md §4.1) — inainte reimplementat
-    manual (interval 1..max_num), care NU verifica duplicate intr-un rand.
-    Un rand cu numere repetate (CSV corupt) trecea ca extragere valida si
-    strica intersectiile hit-rate (mai putine numere distincte decat draw_n)."""
+    """Contractul unic de validare (CLAUDE.md §4.1) — inainte reimplementat
+    manual, fara verificare de duplicate intr-un rand."""
     df = pd.read_csv(path)
     draws, _mask = valid_draw_matrix(df, list(cols), draw_n=len(cols), max_num=max_num)
     if draws.shape[0] == 0:
@@ -122,9 +120,8 @@ def _load_csv(path: Path, cols: tuple[str, ...], max_num: int) -> np.ndarray:
 def hyper_p_ge(k: int, universe: int, draw_n: int, pool: int) -> float:
     """P(hituri >= k) pentru un pool aleator de `pool` numere.
 
-    Delega la `decision.expected_random_rate` — aceeasi formula hipergeometrica
-    era reimplementata aici separat, risc de divergenta tacuta fata de sursa
-    unica pe care se bazeaza decizia de productie (CLAUDE.md §5 pct. 4)."""
+    Delega la `decision.expected_random_rate`, sursa unica — era reimplementata
+    aici separat (risc de divergenta tacuta)."""
     from loto_enterprise.benchmark.decision import expected_random_rate
     return expected_random_rate(universe, draw_n, pool, k)
 
@@ -212,12 +209,9 @@ def _eval_one(args: tuple) -> dict:
     exp3 = p3 * n_eval
     exp4 = p4 * n_eval
     extra4 = n4 - exp4
-    # Poarta era "n >= floor(exp)+1" — trece la un singur eveniment peste
-    # asteptare, fara nicio masura de incredere, pe pana la 100 de candidati
-    # per joc dintr-un SINGUR split train/test (nu ferestre multiple ca
-    # decision.py). Acum: limita inferioara Wilson a ratei observate trebuie
-    # sa depaseasca baseline-ul teoretic — acelasi test folosit de decizia de
-    # productie (decision._wilson_lower_bound), nu doar "un pic peste medie".
+    # Poarta veche ("n >= floor(exp)+1") trecea la un singur eveniment peste
+    # asteptare. Acum: limita inferioara Wilson trebuie sa depaseasca
+    # baseline-ul teoretic, acelasi test ca decizia de productie.
     wlb1 = _wilson_lower_bound(n1, n_eval)
     wlb3 = _wilson_lower_bound(n3, n_eval)
     wlb4 = _wilson_lower_bound(n4, n_eval)

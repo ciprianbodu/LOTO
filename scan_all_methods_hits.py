@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Scan TOATE metodele available: rate 3+ / 4+ @ k10 și k16 (ultimele 30%).
 
-Folosește același `_evaluate_fold` ca bench-ul, dar cu `block_size=50`, NU 1 —
-spre deosebire de Re-Bench-ul din UI (§5 "Re-Bench onest"), care re-scorează
-înaintea FIECĂREI extrageri testate. Aici scorerul se recalculează o dată la
-fiecare 50 de extrageri (770 reantrenări/metodă la block_size=1 ar dura ore;
-50 e un compromis practic, nu evaluarea onestă block_size=1 folosită de
-decizia de producție). Ratele de aici sunt orientative pentru triaj rapid, nu
-echivalente cu ce ar arăta un Re-Bench complet. Scrie
-bench_results/scan_all_hits.json + tipărește top-ul pe consolă.
+Folosește același `_evaluate_fold` ca bench-ul, dar cu `block_size=50`, nu 1
+ca Re-Bench-ul din UI — orientativ pentru triaj rapid, nu echivalent cu un
+Re-Bench complet. Scrie bench_results/scan_all_hits.json + tipărește top-ul.
 
 Usage:
     py -3.14 scan_all_methods_hits.py [--workers N] [--pools 10,16]
@@ -143,11 +138,9 @@ def scan_game(game, pools: tuple[int, ...], methods: list[str], workers: int) ->
 
 
 def _print_top(rows: list[dict], game, pool: int, metric: str, n: int = 15) -> None:
-    """`game` e GameDef complet (nu doar cheia) — avem nevoie de max_num/draw_n
-    pentru referința hipergeometrică. Lift-ul se calculează față de rata TEORETICĂ
-    (`expected_random_rate`), nu față de rata empirică a rândului `random` (o
-    singură realizare, zgomotoasă) — la fel ca decision.py (CLAUDE.md §5 pct. 4:
-    referința e rata așteptată hipergeometric, nu o realizare `random`)."""
+    """`game` e GameDef complet (nu doar cheia), pentru max_num/draw_n. Lift-ul
+    se calculează față de rata teoretică (expected_random_rate), nu față de
+    realizarea empirică a rândului `random` — la fel ca în decision.py."""
     from loto_enterprise.benchmark.decision import expected_random_rate
 
     col = f"{metric}_k{pool}"

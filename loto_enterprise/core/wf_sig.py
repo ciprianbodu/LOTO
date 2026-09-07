@@ -10,13 +10,8 @@ from __future__ import annotations
 def ensemble_sig(ensemble) -> str:
     """Semnătură stabilă a ensemble-ului (listă {method,weight} sau dict).
 
-    Greutatea intră în cheie prin `float(...).hex()`, NU `round(..., 4)`:
-    aceeași convenție ca `_penalty_sig` (walk_forward_adapter.py) — 0.30001
-    și 0.30004 nu sunt aceeași pondere si nu au voie sa cada pe ACELASI
-    rezultat WF cache-uit. Rotunjirea la 4 zecimale e inofensiva azi (
-    ENSEMBLE_MAX_METHODS=1 in productie, decision.py), dar devine un bug de
-    cache STALE viu de indata ce plafonul creste la blend-uri multi-membru
-    validate direct (CLAUDE.md §5 pct. 8)."""
+    Greutatea intră prin `float(...).hex()`, nu `round(..., 4)` — la fel ca
+    `_penalty_sig`: 0.30001 și 0.30004 nu au voie să dea aceeași cheie."""
     if not ensemble:
         return ""
     if isinstance(ensemble, dict):

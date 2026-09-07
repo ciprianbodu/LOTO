@@ -37,22 +37,13 @@ def _is_gpu(method: str, family: str = "") -> bool:
 
 
 def _method_score(sub: pd.DataFrame) -> float:
-    """Scor de performanță per metodă: MEDIA pe (joc, fereastră) a ratei 4+ maxime
-    pe pool-uri, altfel avg_hits.
+    """Scor de performanță per metodă: media pe (joc, fereastră) a ratei 4+
+    maxime pe pool-uri, altfel avg_hits.
 
-    `sub` acoperă TOATE jocurile și TOATE ferestrele simultan (tool-ul nu
-    filtrează pe `game`, spre deosebire de decision.py, care mereu izolează pe
-    joc înainte de orice comparație). Un `nanmax` pe tot blocul 2D (cum era
-    înainte) alegea o SINGURĂ celulă norocoasă — un joc, o fereastră, un pool —
-    ca „scor" al metodei, nu o valoare reprezentativă; o metodă mediocră
-    supraviețuia pe o celulă zgomotoasă, iar una decentă putea fi legendată
-    PERMANENT (disabled_methods.json e merge-only, ireversibil) doar fiindcă
-    celula ei cea mai bună nu ajungea la nivelul celulei norocoase a alteia.
-    Maximul PE RAND (pe coloanele de pool-size, ``kN``) rămâne corect — pool-size
-    e o alegere de design, nu zgomot, o metodă poate avea legitim un pool optim
-    diferit — dar mediem acele maxime PE RÂNDURI (joc × fereastră), nu alegem
-    cel mai norocos rând.
-    """
+    Un `nanmax` pe tot blocul (cum era înainte) alegea o singură celulă
+    norocoasă ca „scor" — putea lengenda permanent o metodă decentă. Acum
+    maximul rămâne pe pool-size (alegere de design), dar mediat pe rânduri
+    (joc × fereastră)."""
     r4 = [c for c in sub.columns if c.startswith("rate_4plus")]
     if r4:
         row_maxes = []

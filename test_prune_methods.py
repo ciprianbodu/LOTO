@@ -1,6 +1,5 @@
 """Teste pentru prune_methods.py — scrie in disabled_methods.json, merge-only
-si IREVERSIBIL (§4.3), fara sa faca parte din pipeline-ul automat
-(verificare globala 2026-09-07)."""
+si ireversibil (§4.3)."""
 from __future__ import annotations
 
 import json

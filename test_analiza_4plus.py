@@ -1,10 +1,5 @@
-"""Teste pentru analiza_4plus.py — verificare globala 2026-09-07.
-
-Raporta "MAXIM absolut" (best-of-many celule metoda x procent) fara nicio
-referinta de baseline si fara avertisment de testare multipla -- exact
-tiparul "selectie dupa rezultat / multiple testing necontrolat" pe care
-CLAUDE.md §12 (P3) il respinge. Acum afiseaza baseline-ul hipergeometric
-teoretic (aceeasi conventie ca decision.py) si un avertisment explicit."""
+"""Teste pentru analiza_4plus.py — "MAXIM absolut" nu avea baseline si nici
+avertisment de testare multipla; acum afiseaza ambele."""
 from __future__ import annotations
 
 import pandas as pd

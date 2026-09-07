@@ -1,6 +1,5 @@
 """Teste pentru search_649_methods.py — scrie direct in best_methods.json si
-methods_top649.py (fisiere citite de aplicatia reala), fara sa faca parte din
-pipeline-ul automat (verificare globala 2026-09-07)."""
+methods_top649.py, fisiere citite de aplicatia reala."""
 from __future__ import annotations
 
 import json

@@ -114,10 +114,8 @@ def check_cpu_methods():
 
 
 def check_bench_assets() -> bool:
-    """Returneaza False doar la o problema care blocheaza pornirea aplicatiei
-    (lipsa `_ISTORIC/`) — restul sunt avertismente informative (best_methods.json
-    lipsa se repara singur la prima generare, freshness stale doar recomanda
-    Re-Bench)."""
+    """Returneaza False doar la o problema care blocheaza pornirea (lipsa
+    `_ISTORIC/`) — restul sunt avertismente informative."""
     _print_section("ASSETS BENCHMARK")
     ok = True
     from pathlib import Path
@@ -195,10 +193,7 @@ def main():
     print("=" * 72)
 
     if not assets_ok:
-        # ACTUALIZARI.bat citeste exit code-ul asta (`if errorlevel 1 goto
-        # :fatal_setup`) — inainte, orice problema aici (inclusiv _ISTORIC/
-        # lipsa, "benchmark-ul nu poate rula fara el") doar tiparea un mesaj si
-        # returna normal, deci setup-ul continua ca si cum mediul ar fi OK.
+        # ACTUALIZARI.bat citeste exit code-ul asta (if errorlevel 1 -> fatal_setup).
         print("\n[EROARE] Mediul are o problema care blocheaza pornirea (vezi mai sus).")
         sys.exit(22)
 

@@ -1,11 +1,6 @@
-"""Teste pentru scripts/analysis/audit_patterns_and_designs.py — verificare
-globala 2026-09-07.
-
-Validarea extragerilor era reimplementata manual (len(set(d))==draw_n,
-min/max), in loc sa foloseasca contractul unic `draw_validation.valid_draw_matrix`
-(CLAUDE.md §4.1). `to_numpy(dtype=int)` trunchia tacut valorile zecimale/non-
-numerice in loc sa le respinga. Testam ca validarea canonica prinde exact
-acest caz si ca scriptul ramane fail-loud (ridica, nu ignora tacut)."""
+"""Teste pentru audit_patterns_and_designs.py — validarea extragerilor era
+reimplementata manual, in loc sa foloseasca `draw_validation.valid_draw_matrix`
+(CLAUDE.md §4.1); ramane fail-loud, doar definitia de "valid" s-a aliniat."""
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,17 +1,9 @@
-"""Teste pentru analiza_math_external.py — verificare globala 2026-09-07.
-
-Trei goluri gasite intr-o revizuire adversa (fisier niciodata revizuit
-dedicat de la introducere):
-- `_load_csv` reimplementa manual validarea (interval 1..max_num), fara sa
-  verifice duplicate intr-un rand -- acum foloseste contractul unic
-  `draw_validation.valid_draw_matrix` (CLAUDE.md §4.1).
-- `hyper_p_ge` reimplementa formula hipergeometrica separat de sursa unica
-  `decision.expected_random_rate` -- acum deleaga la ea.
-- Poarta "bate baseline-ul" era `n >= floor(exp)+1` (un prag foarte slab,
-  fara nicio masura de incredere, rulat pe pana la 100 candidati per joc,
-  dintr-un SINGUR split train/test) -- acum foloseste limita inferioara
-  Wilson (`decision._wilson_lower_bound`), acelasi test ca decizia de
-  productie."""
+"""Teste pentru analiza_math_external.py — trei goluri:
+- `_load_csv` nu verifica duplicate intr-un rand, acum foloseste
+  `draw_validation.valid_draw_matrix`.
+- `hyper_p_ge` deleaga acum la `decision.expected_random_rate`.
+- poarta "bate baseline-ul" era un prag slab (`n >= floor(exp)+1`), acum
+  foloseste limita inferioara Wilson, ca decizia de productie."""
 from __future__ import annotations
 
 import pandas as pd

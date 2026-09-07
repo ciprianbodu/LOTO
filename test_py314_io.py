@@ -1,10 +1,5 @@
-"""Teste pentru loto_enterprise/core/py314_io.py — verificare globala 2026-09-07.
-
-pickle_store_path() scria inainte prin path.write_bytes(...) (truncate-then-
-write, NEATOMIC): singurul apelant, bench_cache.store_cached_fold, ruleaza
-sub ProcessPoolExecutor, deci doi workeri pe aceeasi cheie se puteau trunchia
-reciproc. Acum delegã la pickle_store_path_atomic (tmp unic + fsync +
-os.replace), acelasi mecanism deja folosit de cache-ul walk-forward."""
+"""Teste pentru py314_io.py — pickle_store_path() scria neatomic; acum
+delega la pickle_store_path_atomic (tmp unic + fsync + os.replace)."""
 from __future__ import annotations
 
 from loto_enterprise.core.py314_io import (

@@ -1,10 +1,5 @@
-"""Teste pentru verifica_mediu.py — verificare globala 2026-09-07.
-
-main() nu iesea niciodata cu cod diferit de zero decat la Python gresit —
-orice alta problema (inclusiv `_ISTORIC/` lipsa, "benchmark-ul nu poate rula
-fara el") doar tiparea un avertisment si returna normal (exit 0).
-ACTUALIZARI.bat citeste exact codul asta (`if errorlevel 1 goto :fatal_setup`),
-deci un mediu stricat era raportat ca OK si setup-ul continua orbeste."""
+"""Teste pentru verifica_mediu.py — main() ieșea mereu cu exit 0, chiar și
+cu `_ISTORIC/` lipsa; ACTUALIZARI.bat citea asta ca "mediu OK"."""
 from __future__ import annotations
 
 import verifica_mediu as vm

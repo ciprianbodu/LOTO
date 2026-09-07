@@ -768,14 +768,10 @@ def decide_optimal_config_for_pool(
     incomplete_methods: list[dict] = []
     tiebreak_dependent: list[dict] = []
     tiebreak_gate_applied = tiebreak_col in sub.columns
-    # Metode cu rânduri (real_m non-empty) dar FĂRĂ nicio valoare utilizabilă pe
-    # coloana de rată rezolvată la nivel de cadru (`_frame_rate_col`), deși alte
-    # metode din ACELAȘI (joc, pool) au date pe ea. Înainte, `gate_col is None`
-    # dădea `continue` fără nicio urmă — metoda dispărea din `qualifying`,
-    # `incomplete_methods` și `ranked_methods` deopotrivă, contrazicând regula
-    # „metodele excluse rămân vizibile cu motiv" (CLAUDE.md §5, coerența
-    # output-ului). `_rate_missing_seen` deduplichează între ramura calificată
-    # și cea de fallback, care iterează ambele peste `methods`.
+    # Metode cu rânduri dar fără valoare pe coloana de rată rezolvată la nivel
+    # de cadru — înainte dispăreau tăcut din tot (qualifying, ranked_methods),
+    # fără niciun motiv raportat. `_rate_missing_seen` deduplichează între
+    # ramura calificată și cea de fallback (ambele iterează peste `methods`).
     rate_data_missing: list[dict] = []
     _rate_missing_seen: set[str] = set()
 
@@ -800,14 +796,9 @@ def decide_optimal_config_for_pool(
             return True
         frac = pd.to_numeric(real_m[tiebreak_col], errors="coerce").dropna()
         if frac.empty:
-            # Poarta e activă la nivel de cadru (alte metode au coloana), dar
-            # ACEASTĂ metodă n-are nicio valoare `tiebreak_kN` — de regulă
-            # rânduri dintr-un bench mai vechi decât v17, ne-re-rulat de
-            # atunci. Tratăm ca date lipsă, NU ca „poarta nu se aplică":
-            # altfel o metodă lăsată ne-re-benchată ar ocoli PERMANENT
-            # verificarea de dependență de tie-break, exact opusul motivului
-            # pentru care poarta există. `tiebreak_fraction: None` o
-            # deosebește de cazul confirmat (fracție numerică ≥ prag).
+            # Poarta e activă la nivel de cadru, dar metoda asta n-are nicio
+            # valoare — tratăm ca dependentă, nu ca „poarta nu se aplică",
+            # altfel o metodă ne-re-benchată ar ocoli-o permanent.
             tiebreak_dependent.append({"method": m, "tiebreak_fraction": None})
             return False
         f = float(frac.mean())

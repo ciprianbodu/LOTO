@@ -103,12 +103,7 @@ def main() -> None:
     best_nm, best_rate, best_lift = results[0]
     print(f"\nBEST: {best_nm} = {best_rate*100:.2f}% (+{best_lift*100:.1f}%)")
 
-    # Înregistrăm câștigătorul DOAR în dict-urile din memoria acestui proces —
-    # NU se scrie nimic pe disc (nici methods_search_649.py, nici vreun JSON).
-    # Mesajul de mai jos era anterior "Permanent method registered", ceea ce
-    # sugera fals că numele supraviețuiește ieșirii din proces — de fapt
-    # dispare imediat ce scriptul se termină. Pentru persistență reală,
-    # adaugă manual intrarea în methods_search_649.py.SEARCH_649_NEW.
+    # Doar în memoria acestui proces — nu se scrie nimic pe disc.
     winner_fn = candidates[best_nm]
     from loto_enterprise.benchmark.methods_search_649 import SEARCH_649_NEW as S
     perm_name = "649_katz_gap_opt"

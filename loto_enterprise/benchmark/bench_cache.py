@@ -200,10 +200,8 @@ def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
                 return None
         return obj
     except Exception as exc:
-        # warning, nu debug: fisierul e sters imediat dupa (autovindecare, cache
-        # miss -> recalcul), deci asta e SINGURA urma ca ceva n-a mers (disc plin,
-        # permisiuni, pickle rupt) — la debug, dispare tacut din logurile normale
-        # si un bug real arata identic cu o auto-vindecare banala.
+        # warning, nu debug: fisierul e sters chiar dupa asta, deci logul e
+        # singura urma ca ceva n-a mers (nu doar autovindecare banala).
         logger.warning(f"[bench_cache] failed to load {f.name}: {exc}")
         try:
             f.unlink()  # corrupted; remove

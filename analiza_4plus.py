@@ -36,9 +36,7 @@ def main() -> int:
         print("folds.csv nu are rânduri reale utilizabile.")
         return 1
 
-    # Referinta: rata TEORETICA hipergeometrica la pool-ul de baza (K=draw_n),
-    # aceeasi conventie ca decision.py (CLAUDE.md §5 pct. 4) — nu o realizare
-    # empirica zgomotoasa a randului `random`.
+    # Baseline teoretic hipergeometric (ca decision.py), nu o realizare empirica.
     try:
         from loto_enterprise.benchmark.decision import expected_random_rate
         from loto_enterprise.benchmark.runner import discover_games
@@ -64,10 +62,6 @@ def main() -> int:
         fam = f" [{best['family']}]" if "family" in gdf.columns and pd.notna(best.get("family")) else ""
         print(f"  ➜ MAXIM absolut: {best['method']}{fam} @ {int(best['percentile'])}%  "
               f"→ 4+: {best['rate_4plus'] * 100:.2f}%")
-        # ATENTIE: maximul e ales din N celule (metoda x percentila) fara corectie
-        # de testare multipla — poate fi zgomot, nu o metoda validata separat.
-        # Vezi decision.py (poarta de consistenta + Wilson) pentru selectia reala
-        # de productie; scriptul asta e diagnostic, nu decizie.
         print("  (ATENTIE: maximul de mai sus e cea mai buna din multe celule "
               "metoda×procent, fara corectie de testare multipla — poate fi "
               "zgomot; nu e o metoda validata separat.)")

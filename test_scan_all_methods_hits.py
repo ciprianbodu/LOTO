@@ -1,9 +1,5 @@
-"""Teste pentru scan_all_methods_hits.py — verificare globala 2026-09-07.
-
-_print_top() trebuia sa primeasca GameDef complet (nu doar cheia) si sa
-calculeze lift-ul fata de rata TEORETICA hipergeometrica, nu fata de rata
-empirica a unei singure realizari `random` (aceeasi conventie ca decision.py,
-CLAUDE.md §5 pct. 4)."""
+"""Teste pentru scan_all_methods_hits.py — _print_top() calcula lift-ul fata
+de o realizare empirica `random`, nu fata de baseline-ul teoretic."""
 from __future__ import annotations
 
 from types import SimpleNamespace

@@ -22,14 +22,9 @@ CSV = sys.argv[1] if len(sys.argv) > 1 else "_ISTORIC/joker.csv"
 PCT = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0
 
 df = pd.read_csv(CSV)
-# K = numerele extrase per bilet (geometria REALĂ a jocului, nu "câte coloane
-# sunt completate"). `_ISTORIC/loto_5_40.csv` are 6 coloane n1..n6 populate,
-# dar jocul extrage doar 5 numere — a șasea e reziduu de format, NECONSUMATĂ
-# nicăieri altundeva (runner.discover_games() folosește explicit doar
-# cols=["n1".."n5"] pentru loto_5_40). Detecția veche ("K = coloane completate")
-# lua K=6, MAXN=40 pentru 5/40 — analiza rula pe geometria greșită. Recunoaștem
-# jocul din NUMELE fișierului, ca restul codebase-ului; doar pentru un fișier
-# necunoscut cădem pe vechea detecție din date.
+# K = numerele extrase per bilet, recunoscut din numele fișierului (ca în
+# runner.py) — nu din "câte coloane sunt completate": loto_5_40.csv are 6
+# coloane n1..n6, dar jocul extrage doar 5 (a șasea e reziduu de format).
 _KNOWN_MAIN_COLS = {
     "6_49": ["n1", "n2", "n3", "n4", "n5", "n6"],
     "649": ["n1", "n2", "n3", "n4", "n5", "n6"],

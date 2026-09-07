@@ -1,11 +1,6 @@
-"""Teste pentru analiza_patterns_last10.py — verificare globala 2026-09-07.
-
-Scriptul detecta K (numere/extragere) din COLOANELE COMPLETATE, nu din
-geometria reala a jocului: `_ISTORIC/loto_5_40.csv` are 6 coloane n1..n6
-populate (a sasea e reziduu de format), dar jocul extrage doar 5 numere —
-runner.discover_games() foloseste explicit doar n1..n5 pentru loto_5_40.
-Analiza rula deci pe "6/40" in loc de "5/40". Fix: geometria se recunoaste
-din numele fisierului (ca in runner.py), nu din coloanele nenule."""
+"""Teste pentru analiza_patterns_last10.py — K se detecta din coloanele
+completate, nu din geometria reala; loto_5_40.csv (6 coloane) rula gresit
+ca "6/40". Fix: geometria se recunoaste din numele fisierului."""
 from __future__ import annotations
 
 import re
