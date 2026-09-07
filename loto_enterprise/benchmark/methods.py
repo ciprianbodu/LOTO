@@ -168,6 +168,8 @@ def _load_extra_methods() -> None:
 
     added = 0
     skipped_tombstone = 0
+    skipped_collision = 0
+    _owner: dict[str, str] = {}  # nume -> primul modul care l-a inregistrat
     try:
         from .disabled import load_disabled
         tombstones = load_disabled()
@@ -182,11 +184,27 @@ def _load_extra_methods() -> None:
                 continue
             if name not in METHODS:
                 METHODS[name] = tup
+                _owner[name] = modname
                 added += 1
+            elif _owner.get(name) != modname:
+                # Coliziune REALĂ intre doua module de extensie (sau cu un
+                # nume deja in METHODS de baza) — inainte se sarea tacut,
+                # fara niciun log; a doua implementare disparea din bench
+                # fara nicio urma. Doar tombstone-urile aveau propriul
+                # numarator; o coliziune non-tombstone (ex. copy-paste intr-
+                # un fisier nou cu numele neschimbat) trecea neobservata.
+                skipped_collision += 1
+                logger.warning(
+                    "[methods] nume duplicat '%s' — pastrez implementarea din %s, "
+                    "ignor cea din %s (a doua NU intra in bench).",
+                    name, _owner.get(name, "registry de baza"), modname,
+                )
     if added > 0:
         logger.info(f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules).")
     if skipped_tombstone:
         logger.warning("[methods] skipped %d tombstoned (disabled) names at load", skipped_tombstone)
+    if skipped_collision:
+        logger.warning("[methods] skipped %d duplicate (non-tombstone) names at load", skipped_collision)
 
 
 # Alias-uri pentru nume vechi (înainte de eliminarea GPU: ml_*_cpu) și duplicate eliminate

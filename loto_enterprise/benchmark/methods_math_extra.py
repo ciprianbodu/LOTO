@@ -39,7 +39,15 @@ def _build_binary(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
     bm = np.zeros((max_num, n_draws), dtype=np.float64)
     for i, row in enumerate(draws_2d):
         for v in row:
-            vi = int(v)
+            try:
+                vi = int(v)
+            except (TypeError, ValueError):
+                # Consistent cu _indicator din methods_graph.py: o valoare
+                # necastabila (NaN/obiect strain) e sarita, nu propagata ca
+                # ValueError necaptata — draw_validation.py garanteaza intregi
+                # curati in productie, dar acest helper nu trebuie sa presupuna
+                # asta necondiționat.
+                continue
             if 1 <= vi <= max_num:
                 bm[vi - 1, i] = 1.0
     return bm
@@ -65,32 +73,35 @@ def score_pca_resid_surprise(draws_2d: np.ndarray, max_num: int) -> dict[int, fl
     global de apariție). Scor = |residual| pe ultima extragere + energia
     residuală recentă — nu e clone de frequency/bayes/gap.
     """
-    arr = _safe_draws(draws_2d)
-    if arr is None:
-        return {}
-    bm = _build_binary(arr, max_num)  # (max_num, T)
-    T = bm.shape[1]
-    win = min(T, 400)
-    X = bm[:, -win:]
-    Xc = X - X.mean(axis=1, keepdims=True)
     try:
+        arr = _safe_draws(draws_2d)
+        if arr is None:
+            return _normalize({}, max_num)
+        bm = _build_binary(arr, max_num)  # (max_num, T)
+        T = bm.shape[1]
+        win = min(T, 400)
+        X = bm[:, -win:]
+        Xc = X - X.mean(axis=1, keepdims=True)
         # economy SVD pe Xc.T ar fi (win x max_num); pe Xc e (max_num x win)
         # folosim SVD pe Xc (max_num x win) — u are direcțiile pe numere
         u, s, vt = np.linalg.svd(Xc, full_matrices=False)
-    except np.linalg.LinAlgError:
-        return {}
-    if s.size < 1 or s[0] < 1e-12:
-        return {}
-    # reconstrucție PC1
-    recon = (u[:, :1] * s[0]) @ vt[:1, :]
-    resid = Xc - recon
-    # energie residuală pe fereastra recentă (ultimele ~20%)
-    tail = max(8, resid.shape[1] // 5)
-    energy = np.sqrt(np.mean(resid[:, -tail:] ** 2, axis=1))
-    # surpriza pe ultima coloană (cât de departe e de PC1)
-    last_s = np.abs(resid[:, -1])
-    scores = 0.65 * last_s + 0.35 * energy
-    return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+        if s.size < 1 or s[0] < 1e-12:
+            return _normalize({}, max_num)
+        # reconstrucție PC1
+        recon = (u[:, :1] * s[0]) @ vt[:1, :]
+        resid = Xc - recon
+        # energie residuală pe fereastra recentă (ultimele ~20%)
+        tail = max(8, resid.shape[1] // 5)
+        energy = np.sqrt(np.mean(resid[:, -tail:] ** 2, axis=1))
+        # surpriza pe ultima coloană (cât de departe e de PC1)
+        last_s = np.abs(resid[:, -1])
+        scores = 0.65 * last_s + 0.35 * energy
+        return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+    except Exception:  # noqa: BLE001 — un bloc/extragere degenerat nu are voie
+        # sa invalideze TOT fold-ul (celelalte metode din methods_graph.py,
+        # methods_classical.py etc. urmeaza deja acest tipar; math_extra era
+        # singurul fisier de scorer fara el).
+        return _normalize({}, max_num)
 
 
 # ---------------------------------------------------------------------------
@@ -103,59 +114,62 @@ def score_mi_lag_bag(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     Nu e lanț Markov pe stări (dezactivate), nici lift-centrality pe graf:
     scor = sumă MI binară cu indicatorii din extragerea precedentă (fereastră recentă).
     """
-    arr = _safe_draws(draws_2d)
-    if arr is None:
-        return {}
-    bm = _build_binary(arr, max_num)  # (max_num, T)
-    T = bm.shape[1]
-    # folosește ultimele min(400, T) extrageri pt stabilitate
-    start = max(1, T - 400)
-    X = bm[:, start:]          # numere la t
-    prev = bm[:, start - 1:T - 1] if start >= 1 else bm[:, :-1]
-    # aliniere: X[:, k] corespunde prev[:, k] = draw t-1 pentru draw t = start+k
-    # bm[:, start:] are lungime T-start; prev din bm[:, start-1:T-1] are T-start
-    if prev.shape[1] != X.shape[1]:
-        m = min(prev.shape[1], X.shape[1])
-        prev, X = prev[:, -m:], X[:, -m:]
-    n = X.shape[1]
-    if n < 16:
-        return {}
+    try:
+        arr = _safe_draws(draws_2d)
+        if arr is None:
+            return _normalize({}, max_num)
+        bm = _build_binary(arr, max_num)  # (max_num, T)
+        T = bm.shape[1]
+        # folosește ultimele min(400, T) extrageri pt stabilitate
+        start = max(1, T - 400)
+        X = bm[:, start:]          # numere la t
+        prev = bm[:, start - 1:T - 1] if start >= 1 else bm[:, :-1]
+        # aliniere: X[:, k] corespunde prev[:, k] = draw t-1 pentru draw t = start+k
+        # bm[:, start:] are lungime T-start; prev din bm[:, start-1:T-1] are T-start
+        if prev.shape[1] != X.shape[1]:
+            m = min(prev.shape[1], X.shape[1])
+            prev, X = prev[:, -m:], X[:, -m:]
+        n = X.shape[1]
+        if n < 16:
+            return _normalize({}, max_num)
 
-    # Pentru fiecare număr i: MI cu fiecare j din bag-ul precedent, agregat pe
-    # cât de des j a apărut recent. Folosim MI pe 2x2 contingency.
-    def _mi_pair(a: np.ndarray, b: np.ndarray) -> float:
-        # a,b binary length n
-        p11 = float(np.mean(a * b))
-        p10 = float(np.mean(a * (1.0 - b)))
-        p01 = float(np.mean((1.0 - a) * b))
-        p00 = float(np.mean((1.0 - a) * (1.0 - b)))
-        pa1 = p11 + p10
-        pb1 = p11 + p01
-        mi = 0.0
-        for pxy, px, py in (
-            (p11, pa1, pb1),
-            (p10, pa1, 1.0 - pb1),
-            (p01, 1.0 - pa1, pb1),
-            (p00, 1.0 - pa1, 1.0 - pb1),
-        ):
-            if pxy > 1e-12 and px > 1e-12 and py > 1e-12:
-                mi += pxy * np.log(pxy / (px * py))
-        return float(max(0.0, mi))
+        # Pentru fiecare număr i: MI cu fiecare j din bag-ul precedent, agregat pe
+        # cât de des j a apărut recent. Folosim MI pe 2x2 contingency.
+        def _mi_pair(a: np.ndarray, b: np.ndarray) -> float:
+            # a,b binary length n
+            p11 = float(np.mean(a * b))
+            p10 = float(np.mean(a * (1.0 - b)))
+            p01 = float(np.mean((1.0 - a) * b))
+            p00 = float(np.mean((1.0 - a) * (1.0 - b)))
+            pa1 = p11 + p10
+            pb1 = p11 + p01
+            mi = 0.0
+            for pxy, px, py in (
+                (p11, pa1, pb1),
+                (p10, pa1, 1.0 - pb1),
+                (p01, 1.0 - pa1, pb1),
+                (p00, 1.0 - pa1, 1.0 - pb1),
+            ):
+                if pxy > 1e-12 and px > 1e-12 and py > 1e-12:
+                    mi += pxy * np.log(pxy / (px * py))
+            return float(max(0.0, mi))
 
-    # bag recent = ultima extragere (indicatori)
-    last_bag = bm[:, -1] > 0.5
-    bag_idx = np.where(last_bag)[0]
-    if bag_idx.size == 0:
-        return {}
+        # bag recent = ultima extragere (indicatori)
+        last_bag = bm[:, -1] > 0.5
+        bag_idx = np.where(last_bag)[0]
+        if bag_idx.size == 0:
+            return _normalize({}, max_num)
 
-    scores = np.zeros(max_num, dtype=np.float64)
-    # precompute MI(i, j) pe istoric pentru j din bag; media pe j din bag
-    for i in range(max_num):
-        s = 0.0
-        for j in bag_idx:
-            s += _mi_pair(X[i], prev[j])
-        scores[i] = s / float(bag_idx.size)
-    return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+        scores = np.zeros(max_num, dtype=np.float64)
+        # precompute MI(i, j) pe istoric pentru j din bag; media pe j din bag
+        for i in range(max_num):
+            s = 0.0
+            for j in bag_idx:
+                s += _mi_pair(X[i], prev[j])
+            scores[i] = s / float(bag_idx.size)
+        return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+    except Exception:  # noqa: BLE001 — vezi comentariul din score_pca_resid_surprise
+        return _normalize({}, max_num)
 
 
 # ---------------------------------------------------------------------------
@@ -168,52 +182,55 @@ def score_nmf_cooc(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     Ortogonal față de DMD/Fourier (pe serii per-număr) și față de Katz/PR
     (spectral pe graf de lift).
     """
-    arr = _safe_draws(draws_2d)
-    if arr is None:
-        return {}
-    # fereastră recentă
-    win = arr[-min(len(arr), 300):]
-    C = np.zeros((max_num, max_num), dtype=np.float64)
-    for row in win:
-        nums = [int(v) for v in row if 1 <= int(v) <= max_num]
-        for a_i, a in enumerate(nums):
-            for b in nums[a_i + 1:]:
-                C[a - 1, b - 1] += 1.0
-                C[b - 1, a - 1] += 1.0
-    # diagonală = frecvență
-    freq = np.zeros(max_num, dtype=np.float64)
-    for row in win:
-        for v in row:
-            vi = int(v)
-            if 1 <= vi <= max_num:
-                freq[vi - 1] += 1.0
-    np.fill_diagonal(C, freq + 1e-6)
-    C = np.maximum(C, 0.0)
-
-    k = min(4, max(2, max_num // 15))
     try:
-        from sklearn.decomposition import NMF
-        model = NMF(
-            n_components=k,
-            init="nndsvd",
-            max_iter=400,
-            random_state=0,
-            l1_ratio=0.0,
-        )
-        W = model.fit_transform(C)  # (max_num, k)
-        # scor = normă pe factori, ușor ponderată pe energia H
-        H = model.components_
-        energy = np.linalg.norm(H, axis=1) + 1e-12
-        energy /= energy.sum()
-        scores = W @ energy
-    except Exception:
-        # fallback SVD non-negativ aproximativ: top singular vector pe C, clip
+        arr = _safe_draws(draws_2d)
+        if arr is None:
+            return _normalize({}, max_num)
+        # fereastră recentă
+        win = arr[-min(len(arr), 300):]
+        C = np.zeros((max_num, max_num), dtype=np.float64)
+        for row in win:
+            nums = [int(v) for v in row if 1 <= int(v) <= max_num]
+            for a_i, a in enumerate(nums):
+                for b in nums[a_i + 1:]:
+                    C[a - 1, b - 1] += 1.0
+                    C[b - 1, a - 1] += 1.0
+        # diagonală = frecvență
+        freq = np.zeros(max_num, dtype=np.float64)
+        for row in win:
+            for v in row:
+                vi = int(v)
+                if 1 <= vi <= max_num:
+                    freq[vi - 1] += 1.0
+        np.fill_diagonal(C, freq + 1e-6)
+        C = np.maximum(C, 0.0)
+
+        k = min(4, max(2, max_num // 15))
         try:
-            u, s, _vt = np.linalg.svd(C, full_matrices=False)
-            scores = np.abs(u[:, 0]) * float(s[0])
+            from sklearn.decomposition import NMF
+            model = NMF(
+                n_components=k,
+                init="nndsvd",
+                max_iter=400,
+                random_state=0,
+                l1_ratio=0.0,
+            )
+            W = model.fit_transform(C)  # (max_num, k)
+            # scor = normă pe factori, ușor ponderată pe energia H
+            H = model.components_
+            energy = np.linalg.norm(H, axis=1) + 1e-12
+            energy /= energy.sum()
+            scores = W @ energy
         except Exception:
-            scores = freq
-    return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+            # fallback SVD non-negativ aproximativ: top singular vector pe C, clip
+            try:
+                u, s, _vt = np.linalg.svd(C, full_matrices=False)
+                scores = np.abs(u[:, 0]) * float(s[0])
+            except Exception:
+                scores = freq
+        return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+    except Exception:  # noqa: BLE001 — vezi comentariul din score_pca_resid_surprise
+        return _normalize({}, max_num)
 
 
 # ---------------------------------------------------------------------------
@@ -225,36 +242,39 @@ def score_cusum_appearance(draws_2d: np.ndarray, max_num: int) -> dict[int, floa
 
     Diferă de momentum fix 15-vs-60: acumulează abateri până la reset.
     """
-    arr = _safe_draws(draws_2d)
-    if arr is None:
-        return {}
-    bm = _build_binary(arr, max_num)  # (max_num, T)
-    T = bm.shape[1]
-    # rata așteptată globală ≈ draw_n / max_num
-    draw_n = max(1, int(arr.shape[1]))
-    p0 = float(draw_n) / float(max_num)
-    # CUSUM pozitiv (apariții peste așteptare) pe fereastra recentă
-    start = max(0, T - 250)
-    X = bm[:, start:]
-    scores = np.zeros(max_num, dtype=np.float64)
-    drift = 0.5 * p0  # allow small drift
-    for i in range(max_num):
-        s = 0.0
-        peak = 0.0
-        for t in range(X.shape[1]):
-            s = max(0.0, s + float(X[i, t]) - p0 - drift)
-            if s > peak:
-                peak = s
-        scores[i] = peak
-    # amestec ușor cu gap scurt ca să nu fie plat pe numere „reci”
-    last = np.zeros(max_num, dtype=np.float64)
-    for i in range(max_num):
-        idx = np.where(bm[i] > 0.5)[0]
-        last[i] = float(T - 1 - idx[-1]) if idx.size else float(T)
-    # overdue ușor: mai mare gap → boost mic (nu domină CUSUM)
-    gap_term = last / (last.max() + 1e-12)
-    mixed = scores + 0.15 * gap_term
-    return _normalize({i + 1: float(mixed[i]) for i in range(max_num)}, max_num)
+    try:
+        arr = _safe_draws(draws_2d)
+        if arr is None:
+            return _normalize({}, max_num)
+        bm = _build_binary(arr, max_num)  # (max_num, T)
+        T = bm.shape[1]
+        # rata așteptată globală ≈ draw_n / max_num
+        draw_n = max(1, int(arr.shape[1]))
+        p0 = float(draw_n) / float(max_num)
+        # CUSUM pozitiv (apariții peste așteptare) pe fereastra recentă
+        start = max(0, T - 250)
+        X = bm[:, start:]
+        scores = np.zeros(max_num, dtype=np.float64)
+        drift = 0.5 * p0  # allow small drift
+        for i in range(max_num):
+            s = 0.0
+            peak = 0.0
+            for t in range(X.shape[1]):
+                s = max(0.0, s + float(X[i, t]) - p0 - drift)
+                if s > peak:
+                    peak = s
+            scores[i] = peak
+        # amestec ușor cu gap scurt ca să nu fie plat pe numere „reci”
+        last = np.zeros(max_num, dtype=np.float64)
+        for i in range(max_num):
+            idx = np.where(bm[i] > 0.5)[0]
+            last[i] = float(T - 1 - idx[-1]) if idx.size else float(T)
+        # overdue ușor: mai mare gap → boost mic (nu domină CUSUM)
+        gap_term = last / (last.max() + 1e-12)
+        mixed = scores + 0.15 * gap_term
+        return _normalize({i + 1: float(mixed[i]) for i in range(max_num)}, max_num)
+    except Exception:  # noqa: BLE001 — vezi comentariul din score_pca_resid_surprise
+        return _normalize({}, max_num)
 
 
 # ---------------------------------------------------------------------------
@@ -267,31 +287,34 @@ def score_circular_kernel(draws_2d: np.ndarray, max_num: int) -> dict[int, float
     Completează parity/prime (curated) și decade/mod (disabled) cu geometrie
     pe cerc — numerele „atrase” de vecinii recenti pe inel.
     """
-    arr = _safe_draws(draws_2d)
-    if arr is None:
-        return {}
-    # bandwidth pe cerc (în „pași” de număr)
-    bw = max(2.0, max_num / 12.0)
-    scores = np.zeros(max_num, dtype=np.float64)
-    # decay temporal pe ultimele extrageri
-    win = arr[-min(len(arr), 120):]
-    tw = np.exp(-np.linspace(0.0, 2.5, len(win))[::-1])
-    tw /= tw.sum()
-    positions = np.arange(1, max_num + 1, dtype=np.float64)
+    try:
+        arr = _safe_draws(draws_2d)
+        if arr is None:
+            return _normalize({}, max_num)
+        # bandwidth pe cerc (în „pași” de număr)
+        bw = max(2.0, max_num / 12.0)
+        scores = np.zeros(max_num, dtype=np.float64)
+        # decay temporal pe ultimele extrageri
+        win = arr[-min(len(arr), 120):]
+        tw = np.exp(-np.linspace(0.0, 2.5, len(win))[::-1])
+        tw /= tw.sum()
+        positions = np.arange(1, max_num + 1, dtype=np.float64)
 
-    def _circ_dist(a: np.ndarray, b: float) -> np.ndarray:
-        d = np.abs(a - b)
-        return np.minimum(d, max_num - d)
+        def _circ_dist(a: np.ndarray, b: float) -> np.ndarray:
+            d = np.abs(a - b)
+            return np.minimum(d, max_num - d)
 
-    for t, row in enumerate(win):
-        wt = float(tw[t])
-        for v in row:
-            vi = int(v)
-            if not (1 <= vi <= max_num):
-                continue
-            d = _circ_dist(positions, float(vi))
-            scores += wt * np.exp(-0.5 * (d / bw) ** 2)
-    return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+        for t, row in enumerate(win):
+            wt = float(tw[t])
+            for v in row:
+                vi = int(v)
+                if not (1 <= vi <= max_num):
+                    continue
+                d = _circ_dist(positions, float(vi))
+                scores += wt * np.exp(-0.5 * (d / bw) ** 2)
+        return _normalize({i + 1: float(scores[i]) for i in range(max_num)}, max_num)
+    except Exception:  # noqa: BLE001 — vezi comentariul din score_pca_resid_surprise
+        return _normalize({}, max_num)
 
 
 MATH_EXTRA_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
