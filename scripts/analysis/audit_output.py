@@ -140,8 +140,19 @@ def audit_bundle(bundle):
             cov = compute_coverage_pct(wheel, pool, guarantee, condition)
             assert abs(cov - float(data["context"]["coverage_pct"])) < 1e-8
             rp = audit.get("recent_penalty") or {}
+            # Geometria wheel-ului (garanție/condiție/plafon) trebuie in cheie
+            # EXACT ca in productie (_wf_generation_options din app_nicegui.py),
+            # altfel un job cu lotto design "t daca p" sau plafon de bilete
+            # calculeaza o cheie diferita de cea reala si raporteaza "fara cache"
+            # pe un cache care exista, sau — mai rau — citeste tacit cache-ul
+            # unei geometrii NEPOTRIVITE (default guarantee=guarantee).
+            max_variants = int(
+                data.get("max_variants", (data.get("context") or {}).get("max_variants")) or 0
+            )
             sig = wf._decision_sig(game, len(pool), audit.get("lookback_pct") or 100,
-                                   rp.get("draws") or 0, rp.get("factor", 0.5))
+                                   rp.get("draws") or 0, rp.get("factor", 0.5),
+                                   guarantee=guarantee, wheel_condition=condition,
+                                   max_variants=max_variants)
             cache = wf._cache_path(game, wf._csv_hash(source, game), len(pool), 30, sig)
             item = {"game": game, "pool": len(pool), "variants": len(variants), "coverage": cov}
             if cache.exists():

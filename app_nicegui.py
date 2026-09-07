@@ -99,11 +99,22 @@ def _wf_generation_options(data: dict) -> dict:
     audit = data.get("audit") or {}
     context = data.get("context") or {}
     factor = data.get("recent_penalty_factor", 0.5)
+    # `is not None`, NU `or`: acelasi tipar de bug pe care factorul de mai sus
+    # tocmai l-a reparat (0 e valoare LEGITIMA, nu absenta) s-ar reintroduce
+    # aici daca `wheel_guarantee_used`/`wheel_condition_used` ar deveni vreodata
+    # 0 (azi imposibil - worker.py plafoneaza garantia la minim 3 - dar nimic nu
+    # garanteaza asta pentru totdeauna).
+    guarantee = audit.get("wheel_guarantee_used")
+    if guarantee is None:
+        guarantee = data.get("guarantee")
+    wheel_condition = audit.get("wheel_condition_used")
+    if wheel_condition is None:
+        wheel_condition = data.get("wheel_condition")
     return {
         "recent_penalty_draws": int(data.get("recent_penalty_draws") or 0),
         "recent_penalty_factor": 0.5 if factor is None else float(factor),
-        "guarantee": audit.get("wheel_guarantee_used") or data.get("guarantee"),
-        "wheel_condition": audit.get("wheel_condition_used") or data.get("wheel_condition"),
+        "guarantee": guarantee,
+        "wheel_condition": wheel_condition,
         "max_variants": int(data.get("max_variants", context.get("max_variants")) or 0),
     }
 
@@ -410,22 +421,24 @@ def apply_autopilot_and_generate() -> None:
 # --------------------------------------------------------------------------- #
 # Bench (subprocess) + status
 # --------------------------------------------------------------------------- #
-def _bench_running() -> bool:
-    """True doar dacă PID-ul din `.bench_pid` e CHIAR bench-ul pe care l-am pornit.
+def _verified_bench_pid() -> int | None:
+    """PID-ul din `.bench_pid` DOAR dacă e CHIAR bench-ul pe care l-am pornit.
 
     `psutil.pid_exists()` singur nu ajunge: nimic nu șterge `.bench_pid` la
     terminarea normală a bench-ului, deci fișierul supraviețuiește cu un PID mort,
     iar Windows reciclează PID-urile. Un proces străin care nimerea acel PID
     bloca la nesfârșit „Un bench rulează deja.", ascundea panoul de rezultate, iar
     la ieșirea lui `_tick` declanșa `_on_bench_finished()` → o generare Auto-Pilot
-    NECERUTĂ (și, cu shutdown-ul bifat, o oprire a PC-ului).
+    NECERUTĂ (și, cu shutdown-ul bifat, o oprire a PC-ului). Aceeași verificare
+    apără și `cancel_all()`: fără ea, un `kill_pid_tree(pid)` pe un PID reciclat
+    ar omorî tot arborele procesului străin, nu doar l-ar raporta greșit ca „bench".
 
     Verificăm identitatea, nu doar existența: `create_time` față de timestamp-ul
     scris la lansare (`pid|ts`) și `bench_all_methods.py` în linia de comandă.
     Fișierul stale e șters ca să nu mai fie reevaluat.
     """
     if not BENCH_PID_FILE.exists():
-        return False
+        return None
     try:
         import psutil
         parts = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
@@ -443,14 +456,18 @@ def _bench_running() -> bool:
                 raise psutil.NoSuchProcess(pid)
         except (psutil.AccessDenied, psutil.ZombieProcess):
             pass  # nu putem citi cmdline (elevat) → ne bazăm pe create_time
-        return True
+        return pid
     except Exception:  # noqa: BLE001
         # PID mort / reciclat / fișier corupt → curățăm ca să nu blocheze UI-ul.
         try:
             BENCH_PID_FILE.unlink(missing_ok=True)
         except OSError:
             pass
-        return False
+        return None
+
+
+def _bench_running() -> bool:
+    return _verified_bench_pid() is not None
 
 def _launch_bench(args: list[str], label: str) -> None:
     if _bench_running():
@@ -684,18 +701,20 @@ def cancel_all() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("cancel jobs: %s", exc)
     # Kill bench (din .bench_pid) + fallback orice bench_all_methods.py din proiect
-    import psutil
     from cleanup_old_processes import kill_pid_tree
-    if BENCH_PID_FILE.exists():
-        try:
-            pid = int(BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[0])
-            if psutil.pid_exists(pid):
-                # Tree-kill, nu doar terminate() pe părinte: runner.py paralelizează
-                # foldurile pe un ProcessPoolExecutor — uciderea DOAR a procesului
-                # principal lasă lucrătorii orfani, arzând CPU după „Anulează TOT".
-                kill_pid_tree(pid)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("kill bench pid: %s", exc)
+    try:
+        # PID VERIFICAT (aceeași identitate ca _bench_running: create_time +
+        # cmdline), nu doar `pid_exists`: un PID stale reciclat de Windows către
+        # un proces străin ar face ca tree-kill-ul să omoare tot arborele lui,
+        # nu doar procesul greșit izolat cum era înainte de tree-kill.
+        pid = _verified_bench_pid()
+        if pid is not None:
+            # Tree-kill, nu doar terminate() pe părinte: runner.py paralelizează
+            # foldurile pe un ProcessPoolExecutor — uciderea DOAR a procesului
+            # principal lasă lucrătorii orfani, arzând CPU după „Anulează TOT".
+            kill_pid_tree(pid)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("kill bench pid: %s", exc)
     try:
         # Plasa de siguranță cerea AMBELE substring-uri în linia de comandă:
         # „bench_all_methods.py" ȘI PROJECT_ROOT. Nu se potrivea niciodată:

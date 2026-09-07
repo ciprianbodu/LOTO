@@ -13,9 +13,12 @@ Comanda nu schimbă registry-ul sau deciziile. JSON-ul este scris în
 `bench_results/pattern_design_audit.json`. Numai opțiunea explicită
 `--prune-redundant` modifică designurile, după reverificarea garanției.
 
-Scripturi de MĂSURĂTOARE, nu de producție. Nu sunt importate de nicăieri;
-se rulează manual, din rădăcina repo-ului, când vrei să reverifici concluzia
-pe date noi (`_ISTORIC/` crește la fiecare `update_csv.py`).
+Scripturi de MĂSURĂTOARE, nu de producție; se rulează manual, din rădăcina
+repo-ului, când vrei să reverifici concluzia pe date noi (`_ISTORIC/` crește
+la fiecare `update_csv.py`). Cele trei de mai jos (`pattern_*.py`) nu sunt
+importate de nicăieri. `audit_output.py` și `audit_patterns_and_designs.py`
+(de mai sus) fac excepție: sunt importate direct de testele lor de regresie
+(`test_output_consistency.py`, `test_wf_generation_settings.py`).
 
 ```bash
 python scripts/analysis/pattern_constraints.py      # pasul 1

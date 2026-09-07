@@ -167,3 +167,28 @@ def test_score_time_shows_milliseconds_under_a_tenth_of_a_second():
     assert ui_mod._fmt_score_time(99) == "99ms"
     assert ui_mod._fmt_score_time(2500) == "2.5s"
     assert ui_mod._fmt_score_time(None) == "?"
+
+
+def test_wheel_lotto_rejects_condition_larger_than_pool():
+    """Un clamp tacut ar construi alt design decat cel raportat de apelant in
+    audit ÎNAINTE de apel - trebuie sa esueze zgomotos, nu sa serveasca o
+    garantie diferita de cea ceruta."""
+    from wheeling_methods import wheel_lotto
+    with pytest.raises(ValueError):
+        wheel_lotto(list(range(1, 8)), 5, 3, 9)
+
+
+def test_lotto_cover_positions_bounds_the_target_count():
+    """`nt = C(v, condition)` nu era plafonat separat de `len(blocks)` - un
+    apelant direct cu condition > pick putea porni o bucla O(blocks*nt) tacuta,
+    de ordinul minutelor. Trebuie sa esueze imediat, cu mesaj clar."""
+    from wheeling_methods import _lotto_cover_positions, _LOTTO_MAX_BLOCKS
+
+    # v mic, pick mic (deci len(blocks) e mic), dar condition ~ v/2 maximizeaza
+    # C(v, condition) mult peste C(v, pick).
+    v, pick, guarantee, condition = 30, 3, 2, 15
+    from math import comb
+    assert comb(v, pick) <= _LOTTO_MAX_BLOCKS  # blocks NU declanseaza garda veche
+    assert comb(v, condition) > _LOTTO_MAX_BLOCKS  # dar nt da
+    with pytest.raises(ValueError, match="tinte"):
+        _lotto_cover_positions(v, pick, guarantee, condition, time_limit=1.0)

@@ -717,11 +717,19 @@ def _lotto_cover_positions(v: int, pick: int, guarantee: int, condition: int,
         return _LOTTO_COVER_CACHE[key]
     g, c = int(guarantee), int(condition)
     idxs = range(int(v))
+    # Marimea se verifica pe `_comb` (math.comb), NU pe `len(list(itertools.combinations(...)))`:
+    # `itertools.combinations` materializeaza intreaga lista chiar daca doar ii citesti lungimea,
+    # deci garda trebuie sa vina INAINTE de orice apel la `list(itertools.combinations(...))` —
+    # altfel un `condition` mare (apelant direct, nu prin engine, care plafoneaza condiția la
+    # draw_n) poate porni minute intregi de materializare tacuta inainte ca garda sa apuce sa esueze.
+    n_blocks = _comb(v, pick)
+    if n_blocks > _LOTTO_MAX_BLOCKS:
+        raise ValueError(f"lotto design prea mare: C({v},{pick})={n_blocks} blocuri")
+    nt = _comb(v, c)
+    if nt > _LOTTO_MAX_BLOCKS:
+        raise ValueError(f"lotto design prea mare: C({v},{c})={nt} tinte")
     blocks = list(itertools.combinations(idxs, int(pick)))
     targets = list(itertools.combinations(idxs, c))
-    nt = len(targets)
-    if len(blocks) > _LOTTO_MAX_BLOCKS:
-        raise ValueError(f"lotto design prea mare: C({v},{pick})={len(blocks)} blocuri")
     # Bitmask-uri: ținta t acoperită de blocul b dacă |b ∩ t| >= g.
     block_masks: list[int] = []
     target_sets = [frozenset(t) for t in targets]
@@ -855,8 +863,13 @@ def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):
     if v < pk:
         return [list(pool)], 100.0
     if c > v:
-        # Nu există nicio submulțime de `condition` numere în pool: garanția e vidă.
-        c = v
+        # Nu există nicio submulțime de `condition` numere ÎN pool — o clampare
+        # tăcută ar construi alt design decât cel raportat de apelant (care a
+        # scris deja `wheel_condition_used = condition`, nu valoarea redusă)
+        # în audit ÎNAINTE de acest apel. Neatins de UI/engine (acolo condiția
+        # e plafonată la draw_n ≤ pool_size), dar orice alt apelant trebuie
+        # avertizat, nu servit tăcut cu o garanție diferită de cea cerută.
+        raise ValueError(f"condition={c} > pool size={v}")
     if c == g:
         return generate_wheel("lajolla", pool, pk, g, max_variants, scores)
     # Design local precalculat (validat 100%) → altfel greedy + ILP la cerere.

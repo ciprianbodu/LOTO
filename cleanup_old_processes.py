@@ -244,11 +244,17 @@ def kill_pid_tree(pid: int, *, dry_run: bool = False) -> list[int]:
     (ex. lucrătorii `ProcessPoolExecutor` porniți de un bench/re-bench sau de
     un pas de walk-forward). `pid` poate fi deja mort: `expand_descendants`
     pornește oricum de la `{pid}`, iar `_kill_pid` eșuează silențios pe el.
+
+    Plasă de siguranță INCONDIȚIONATĂ (nu doar responsabilitatea apelantului):
+    procesul curent și toți strămoșii lui (`_keep_pids()`) sunt scoși din
+    țintă — un `pid` stale reciclat de Windows către chiar acest proces sau un
+    părinte al lui nu trebuie să poată omorî propriul apelant.
+
     Returnează PID-urile pe care a încercat efectiv să le omoare (sau le-ar
     omorî, în `dry_run`), copiii întâi.
     """
     procs = _snapshot()
-    targets = expand_descendants({pid}, procs)
+    targets = expand_descendants({pid}, procs) - _keep_pids()
     ordered = _order_deepest_first(targets, procs)
     acted: list[int] = []
     for p in ordered:

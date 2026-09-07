@@ -444,6 +444,28 @@ def test_clamp_bench_hit_target_only_3_or_4():
 
 
 # ---------------------------------------------------------------------------
+# bench_cache: rezolvarea directorului deriva din runtime_paths, nu propriul
+# resolver duplicat (altfel un apelant care importa bench_cache fara sa fi
+# importat deja runtime_paths putea cadea pe .bench_cache RELATIV la CWD, chiar
+# in checkout-ul sincronizat de OneDrive).
+# ---------------------------------------------------------------------------
+def test_bench_cache_dir_derives_from_runtime_paths(monkeypatch, tmp_path):
+    """`from runtime_paths import RUNTIME_ROOT` leaga numele la import — patch-uim
+    referinta LOCALA din bench_cache, nu originalul din runtime_paths."""
+    monkeypatch.delenv("LOTO_BENCH_CACHE_DIR", raising=False)
+    from loto_enterprise.benchmark import bench_cache as bc
+    monkeypatch.setattr(bc, "RUNTIME_ROOT", tmp_path)
+    assert bc._resolve_cache_dir() == tmp_path / ".bench_cache"
+
+
+def test_bench_cache_dir_honors_explicit_override(monkeypatch, tmp_path):
+    from loto_enterprise.benchmark import bench_cache as bc
+    override = tmp_path / "custom-cache"
+    monkeypatch.setenv("LOTO_BENCH_CACHE_DIR", str(override))
+    assert bc._resolve_cache_dir() == override
+
+
+# ---------------------------------------------------------------------------
 # bench_cache: numele fisierelor poarta versiunea -> curatare selectiva posibila
 # ---------------------------------------------------------------------------
 def test_fold_cache_key_carries_version_prefix():

@@ -953,6 +953,9 @@ class LotoEngine:
                 if has_usable_score_variance(_j_pen):
                     j_scores = _j_pen
                     self.audit["recent_penalty"]["penalized_urna2"] = {int(k): int(v) for k, v in _jp.items()}
+                else:
+                    logging.warning("[PIPELINE] Penalizarea recentă a aplatizat scorurile Urnei 2 — o ignor.")
+                    self.audit["recent_penalty"]["skipped_flat_urna2"] = True
             # joker_urna2 e single-pick (pool 1) în TOT lanțul bench→decizie→UI
             # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
             # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.

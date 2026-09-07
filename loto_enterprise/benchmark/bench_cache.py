@@ -44,22 +44,25 @@ from typing import Any
 import numpy as np
 
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path
+from runtime_paths import RUNTIME_ROOT
 
 logger = logging.getLogger(__name__)
 
 def _resolve_cache_dir() -> Path:
     """Cache-ul stă ÎN AFARA OneDrive (ca .venv) — altfel zeci de mii de fișiere mici
-    se sincronizează degeaba și pot fi corupte la sync parțial. Implicit pe stația
-    ALF-LUPTATORI: D:\\_BUILD\\_LOTO\\.bench_cache. Override: LOTO_BENCH_CACHE_DIR.
-    Fallback: local .bench_cache (container/CI/altă stație fără D:\\_BUILD)."""
-    env = os.environ.get("LOTO_BENCH_CACHE_DIR")
+    se sincronizează degeaba și pot fi corupte la sync parțial.
+
+    Derivat din `runtime_paths.RUNTIME_ROOT` (LOTO_RUNTIME_DIR / D:\\_BUILD\\_LOTO
+    / rădăcina proiectului ca fallback), NU un resolver propriu: înainte, un
+    apelant care importa `bench_cache` fără să fi importat deja `runtime_paths`
+    (deci fără garanția lui `mkdir`) putea cădea tăcut pe `.bench_cache` RELATIV
+    la CWD — chiar în checkout-ul sincronizat de OneDrive, exact ce funcția asta
+    trebuie să evite. `LOTO_BENCH_CACHE_DIR` rămâne override SPECIFIC cache-ului
+    de benchmark, separat de `LOTO_RUNTIME_DIR` (care mută loguri + cache WF)."""
+    env = os.environ.get("LOTO_BENCH_CACHE_DIR", "").strip()
     if env:
-        return Path(env)
-    if os.name == "nt":
-        base = Path(r"D:\_BUILD\_LOTO")
-        if base.exists():
-            return base / ".bench_cache"
-    return Path(".bench_cache")
+        return Path(env).expanduser()
+    return RUNTIME_ROOT / ".bench_cache"
 
 
 CACHE_DIR = _resolve_cache_dir()

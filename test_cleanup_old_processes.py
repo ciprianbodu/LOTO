@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -329,3 +330,28 @@ def test_kill_pid_tree_dry_run_reports_without_killing(tmp_path):
     finally:
         proc.kill()
         proc.wait(timeout=5)
+
+
+def test_kill_pid_tree_never_kills_the_caller_or_its_ancestors():
+    """Plasa de siguranta e NECONDITIONATA (nu doar responsabilitatea apelantului):
+    un PID stale reciclat de Windows catre chiar procesul apelant nu trebuie sa
+    poata omori pytest-ul insusi (cazul care a motivat fixul din cancel_all)."""
+    acted = kill_pid_tree(os.getpid())
+    assert acted == []
+    assert Path(__file__).exists()  # pytest tot in viata
+
+
+def test_kill_pid_tree_excludes_ancestors_even_via_a_child_target(tmp_path):
+    """Un copil legitim de omorat nu trebuie sa antreneze si stramosii lui in
+    expand_descendants (parent_pid poate re-include self/parinti pe cai indirecte)."""
+    script = tmp_path / "sleeper.py"
+    script.write_text("import time; time.sleep(60)\n", encoding="utf-8")
+    proc = subprocess.Popen([sys.executable, str(script)])
+    try:
+        acted = kill_pid_tree(proc.pid)
+        assert os.getpid() not in acted
+        assert proc.pid in acted
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
