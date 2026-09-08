@@ -496,9 +496,10 @@ def is_worker_running() -> bool:
             cmdline = proc.info.get("cmdline") or []
             for arg in cmdline:
                 arg_s = str(arg)
-                if "worker.py" not in os.path.normcase(arg_s):
+                norm_arg = os.path.normcase(arg_s)
+                if "worker.py" not in norm_arg:
                     continue
-                if os.path.normcase(arg_s) == target_norm:
+                if norm_arg == target_norm:
                     return True
                 try:
                     if os.path.samefile(arg_s, WORKER_PATH):
