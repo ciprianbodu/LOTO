@@ -825,6 +825,6 @@ def clear_walk_forward_cache() -> int:
         try:
             f.unlink()
             deleted += 1
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.warning("[WALK-FWD] nu pot şterge %s: %s", f.name, exc)
     return deleted
