@@ -2041,16 +2041,38 @@ def _build_report() -> str:
         pool = sorted(int(x) for x in (d.get("hard_core") or []))
         stats = d.get("hard_core_stats") or {}
         eff, req = d.get("pool_size"), d.get("pool_size_requested")
+        # Garanția EFECTIV folosită la wheel (audit.wheel_guarantee_used) vs cea
+        # CERUTĂ din setări — pot diferi (rezultate vechi/recuperate, engine-ul
+        # clampează intern). Același fallback ca în _render_pool_body/_render_cost,
+        # ca raportul exportat (raport_complet.txt / dialogul "Raport integral")
+        # să nu contrazică panoul afișat pe ecran pentru același pool.
+        _g_req = d.get("guarantee")
+        _g_used = (d.get("audit") or {}).get("wheel_guarantee_used")
+        if _g_used is None:
+            _g_used = _g_req
+        _wc = (d.get("audit") or {}).get("wheel_condition_used") or d.get(
+            "wheel_condition"
+        )
+        try:
+            _wc_txt = (
+                f" dacă {int(_wc)}"
+                if _wc is not None and int(_wc) != int(_g_used)
+                else ""
+            )
+        except (TypeError, ValueError):
+            _wc_txt = ""
+        try:
+            _g_diff_txt = (
+                f" (cerută: {_g_req})"
+                if _g_req is not None and int(_g_used) != int(_g_req)
+                else ""
+            )
+        except (TypeError, ValueError):
+            _g_diff_txt = ""
         out.append(
             f"{indent}Pool efectiv: {eff}"
             + (f" (cerut {req})" if req and req != eff else "")
-            + f" | Garanție: {d.get('guarantee')}"
-            + (
-                f" dacă {d.get('wheel_condition')}"
-                if d.get("wheel_condition")
-                and int(d.get("wheel_condition")) != int(d.get("guarantee") or 0)
-                else ""
-            )
+            + f" | Garanție: {_g_used}{_wc_txt}{_g_diff_txt}"
             + f" | Variante simple: {len(d.get('variants') or [])}"
             + f" | Extrageri: {d.get('total_draws')}"
         )
