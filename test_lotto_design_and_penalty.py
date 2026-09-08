@@ -132,6 +132,56 @@ def test_pipeline_penalty_changes_pool_and_is_audited():
     assert ctx["recent_penalty"] == {"draws": 3, "factor": 0.0}
 
 
+def test_restrict_base_max_excludes_numbers_above_threshold_and_is_audited():
+    """Preferință OPȚIONALĂ (0 = oprit) — exclude candidații > prag din pool.
+    Nu are avantaj statistic (vezi docstring-ul run_institutional_pipeline);
+    testul verifică doar contractul mecanic: pool respectă pragul, e raportat
+    în audit, iar 0 (implicit) nu modifică deloc comportamentul de dinainte."""
+    eng = LotoEngine("6/49")
+    eng.data = _df(120, 6, 49)
+    eng._build_draw_matrix()
+    base_lines, *_, base_audit = eng.run_institutional_pipeline(
+        pool_size=10, guarantee=3, max_variants=0, track_pool_variation=False
+    )
+    base_pool = list(eng.hard_core)
+    assert "restrict_base" not in base_audit
+
+    eng2 = LotoEngine("6/49")
+    eng2.data = _df(120, 6, 49)
+    eng2._build_draw_matrix()
+    lines, *_, audit = eng2.run_institutional_pipeline(
+        pool_size=10,
+        guarantee=3,
+        max_variants=0,
+        track_pool_variation=False,
+        restrict_base_max=36,
+    )
+    assert all(n <= 36 for n in eng2.hard_core)
+    assert audit["restrict_base"] == {
+        "max": 36,
+        "excluded": list(range(37, 50)),
+    }
+    # restrict_base_max=0 (default) e identic comportamentului dinainte de fix.
+    assert base_pool == list(eng.hard_core)
+
+
+def test_restrict_base_max_is_clamped_to_game_universe():
+    """Un prag >= max_num (sau negativ tratat ca 0) nu exclude nimic — nu
+    aruncă și nu produce un pool gol."""
+    eng = LotoEngine("6/49")
+    eng.data = _df(120, 6, 49)
+    eng._build_draw_matrix()
+    lines, *_, audit = eng.run_institutional_pipeline(
+        pool_size=10,
+        guarantee=3,
+        max_variants=0,
+        track_pool_variation=False,
+        restrict_base_max=49,
+    )
+    assert "restrict_base" not in audit  # 49 == max_num -> no-op, nu se raportează
+    assert len(eng.hard_core) == 10
+
+
 def test_pipeline_wheel_condition_uses_lotto_design_and_audits():
     eng = LotoEngine("5/40")
     eng.data = _df(100, 5, 40)
@@ -170,22 +220,95 @@ def test_wf_cache_signature_changes_only_when_penalty_active():
     assert wfa._decision_sig("6/49", 10, 100.0, 3, 0.5) != off
 
 
+def test_wf_cache_signature_changes_only_when_restrict_base_active():
+    from loto_enterprise.core import walk_forward_adapter as wfa
+
+    assert wfa._restrict_base_sig(0) == ""
+    assert wfa._restrict_base_sig(36) != wfa._restrict_base_sig(40) != ""
+    off = wfa._decision_sig("6/49", 10, 100.0)
+    assert wfa._decision_sig("6/49", 10, 100.0, restrict_base_max=0) == off
+    assert wfa._decision_sig("6/49", 10, 100.0, restrict_base_max=36) != off
+    assert wfa._decision_sig(
+        "6/49", 10, 100.0, restrict_base_max=36
+    ) != wfa._decision_sig("6/49", 10, 100.0, restrict_base_max=40)
+
+
+def test_walk_forward_applies_restrict_base_max_identically_to_production():
+    """`run_honest_walk_forward` trebuie sa aplice EXACT aceeasi restrictie de
+    baza ca engine-ul de productie (CLAUDE.md: „se aplica identic in productie
+    si in walk-forward") — pool-ul validat retrospectiv respecta pragul."""
+    from loto_enterprise.core import walk_forward_adapter as wfa
+
+    df = _df(60, 6, 49)
+    flat, meta = wfa.run_honest_walk_forward(
+        df,
+        "6/49",
+        pool_size=10,
+        backtest_depth_percent=20.0,
+        use_cache=False,
+        restrict_base_max=36,
+    )
+    assert flat  # avem predictii
+    for r in flat:
+        assert all(n <= 36 for n in r.variant), r.variant
+
+    flat_off, meta_off = wfa.run_honest_walk_forward(
+        df,
+        "6/49",
+        pool_size=10,
+        backtest_depth_percent=20.0,
+        use_cache=False,
+        restrict_base_max=0,
+    )
+    # cheie de decizie diferita -> cache separat intre "activ" si "oprit"
+    assert meta["decision_sig"] != meta_off["decision_sig"]
+    assert any(n > 36 for r in flat_off for n in r.variant)
+
+
+def test_build_config_json_and_wf_generation_options_carry_restrict_base_max(
+    monkeypatch,
+):
+    """Bucla completa UI: setarea de sidebar -> config_json trimis workerului
+    -> optiunile citite de walk-forward dintr-un rezultat generat, toate cu
+    aceeasi valoare `restrict_base_max`."""
+    import json as _json
+
+    import app_nicegui as app_ui
+
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_max_val", 36)
+    monkeypatch.setattr(
+        app_ui, "STATE", {**app_ui.STATE, "datasets": [("loto_6_49.csv", _df(5, 6, 49))]}
+    )
+    cfg = _json.loads(app_ui._build_config_json())
+    task = cfg["datasets"][0]["tasks"][0]
+    assert task["restrict_base_max"] == 36
+
+    # Rezultatul generat (task normalizat de worker, apoi salvat) trebuie sa
+    # aiba aceeasi valoare citita de _wf_generation_options pentru WF.
+    opts = app_ui._wf_generation_options({"restrict_base_max": 36})
+    assert opts["restrict_base_max"] == 36
+    # Absenta cheii (rezultat vechi, dinainte de acest cimp) -> 0 (oprit), nu crash.
+    assert app_ui._wf_generation_options({})["restrict_base_max"] == 0
+
+
 def test_ui_task_and_worker_carry_the_new_keys():
     ui_src = open("app_nicegui.py", encoding="utf-8").read()
     for key in (
         '"wheel_condition"',
         '"recent_penalty_draws"',
         '"recent_penalty_factor"',
+        '"restrict_base_max"',
     ):
         assert key in ui_src
     w_src = open("worker.py", encoding="utf-8").read()
     for key in (
-        # regresia reala de garda: workerul trebuie sa forwardeze cele trei chei
+        # regresia reala de garda: workerul trebuie sa forwardeze cele patru chei
         # catre apelul engine-ului, indiferent de numele variabilelor locale
         # folosite pe drum (worker._normalize_task le tine intr-un dict `norm`).
         'wheel_condition=norm["wheel_condition"]',
         'recent_penalty_draws=norm["recent_penalty_draws"]',
         'recent_penalty_factor=norm["recent_penalty_factor"]',
+        'restrict_base_max=norm["restrict_base_max"]',
     ):
         assert key in w_src
 

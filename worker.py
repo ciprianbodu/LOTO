@@ -186,6 +186,15 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
     raw_lookback = int(task.get("lookback", 0))
     lookback = max(0, min(100, raw_lookback))
 
+    # Restrângere bază (preferință OPȚIONALĂ, 0 = oprit, implicit). Fără
+    # avantaj statistic demonstrat — vezi loto_engine.run_institutional_pipeline.
+    # Plafon 49 (cel mai mare max_num dintre jocuri); engine-ul re-clampează la
+    # propriul max_num al jocului curent.
+    try:
+        restrict_base_max = max(0, min(49, int(task.get("restrict_base_max") or 0)))
+    except (TypeError, ValueError):
+        restrict_base_max = 0
+
     return {
         "pool_size": pool_size,
         "guarantee": guarantee,
@@ -197,6 +206,7 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
         "recent_penalty_factor": recent_penalty_factor,
         "lookback": lookback,
         "raw_lookback": raw_lookback,
+        "restrict_base_max": restrict_base_max,
         "filter_consecutives": bool(task.get("filter_consecutives", False)),
         "smart_reduction": bool(task.get("smart_reduction", False)),
         "sim_depth_pct": int(task.get("sim_depth_pct", 10)),
@@ -364,6 +374,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         wheel_condition=norm["wheel_condition"],
                         recent_penalty_draws=norm["recent_penalty_draws"],
                         recent_penalty_factor=norm["recent_penalty_factor"],
+                        restrict_base_max=norm["restrict_base_max"],
                         lookback=norm["lookback"],
                         filter_consecutives=norm["filter_consecutives"],
                         smart_reduction=norm["smart_reduction"],
@@ -390,6 +401,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "wheel_condition": norm["wheel_condition"],
                     "recent_penalty_draws": norm["recent_penalty_draws"],
                     "recent_penalty_factor": norm["recent_penalty_factor"],
+                    "restrict_base_max": norm["restrict_base_max"],
                     "lookback": norm["lookback"],
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),

@@ -341,6 +341,12 @@ def _penalty_sig(
     return f"|rp{n}:{float(recent_penalty_factor).hex()}"
 
 
+def _restrict_base_sig(restrict_base_max: int = 0) -> str:
+    """Sufix de cheie pentru restrângerea bazei; gol când e oprită (chei vechi valide)."""
+    n = int(restrict_base_max or 0)
+    return f"|rb{n}" if n > 0 else ""
+
+
 def _decision_sig(
     game_type: str,
     pool_size: int,
@@ -350,6 +356,7 @@ def _decision_sig(
     guarantee=None,
     wheel_condition=None,
     max_variants=0,
+    restrict_base_max: int = 0,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
@@ -380,6 +387,7 @@ def _decision_sig(
             f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
             f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
+            f"{_restrict_base_sig(restrict_base_max)}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -395,6 +403,7 @@ def _decision_sig(
                     )
                     + f"|lb{lookback_pct(lookback_percent)}"
                     + _penalty_sig(recent_penalty_draws, recent_penalty_factor)
+                    + _restrict_base_sig(restrict_base_max)
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -545,6 +554,7 @@ def run_honest_walk_forward(
     guarantee: int | None = None,
     wheel_condition: int | None = None,
     max_variants: int = 0,
+    restrict_base_max: int = 0,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -552,6 +562,9 @@ def run_honest_walk_forward(
     intră în cheia de cache doar când e activă.
     guarantee/wheel_condition/max_variants: setările rezultatului generat.
     Fără guarantee explicită se păstrează geometria internă istorică a API-ului.
+    restrict_base_max: aceeași restrângere de bază (preferință fără avantaj
+    statistic — vezi loto_engine.run_institutional_pipeline) ca în producție;
+    intră în cheia de cache doar când e activă (0 = oprit).
 
     `should_cancel` oprește DOAR bucla de backtest (rezultat parțial, salvat oricum
     — asta e scopul lui `skip_indices`/acoperirea incrementală). `should_skip_cache_write`
@@ -579,6 +592,7 @@ def run_honest_walk_forward(
         guarantee,
         wheel_condition,
         max_variants,
+        restrict_base_max,
     )
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
@@ -667,6 +681,7 @@ def run_honest_walk_forward(
         ),
         recent_penalty_draws=int(recent_penalty_draws or 0),
         recent_penalty_factor=float(recent_penalty_factor),
+        restrict_base_max=int(restrict_base_max or 0),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).

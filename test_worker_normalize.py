@@ -98,6 +98,22 @@ def test_wheel_condition_non_numeric_falls_back_to_guarantee():
     assert t["wheel_condition"] == 4
 
 
+def test_restrict_base_max_clamped_0_49():
+    assert worker._normalize_task({"restrict_base_max": -1}, draw_n=6)[
+        "restrict_base_max"
+    ] == 0
+    assert worker._normalize_task({"restrict_base_max": 999}, draw_n=6)[
+        "restrict_base_max"
+    ] == 49
+    assert worker._normalize_task({"restrict_base_max": 36}, draw_n=6)[
+        "restrict_base_max"
+    ] == 36
+    assert worker._normalize_task({"restrict_base_max": "abc"}, draw_n=6)[
+        "restrict_base_max"
+    ] == 0
+    assert worker._normalize_task({}, draw_n=6)["restrict_base_max"] == 0
+
+
 def test_recent_penalty_draws_clamped_0_50():
     assert worker._normalize_task({"recent_penalty_draws": -1}, draw_n=6)[
         "recent_penalty_draws"

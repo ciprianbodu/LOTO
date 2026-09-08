@@ -123,6 +123,7 @@ def _retroactive_step_stateless(
     smart_reduction: bool,
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
+    restrict_base_max: int = 0,
     wheel_condition: int | None = None,
     adaptive_mode: str = "normal",
     adaptive_event: str | None = None,
@@ -162,6 +163,7 @@ def _retroactive_step_stateless(
             track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
             recent_penalty_draws=recent_penalty_draws,
             recent_penalty_factor=recent_penalty_factor,
+            restrict_base_max=restrict_base_max,
             wheel_condition=wheel_condition,
         )
         return eng, out_lines, (_ctx or {})
@@ -207,6 +209,7 @@ def _wf_worker_step(args):
         smart_reduction,
         rp_draws,
         rp_factor,
+        rb_max,
         wheel_condition,
     ) = args
     shared = _WF_SHARED
@@ -225,6 +228,7 @@ def _wf_worker_step(args):
             smart_reduction,
             rp_draws,
             rp_factor,
+            rb_max,
             wheel_condition,
         )
     except Exception as exc:  # noqa: BLE001
@@ -759,6 +763,7 @@ class LotoBacktester:
         skip_indices=None,
         recent_penalty_draws: int = 0,
         recent_penalty_factor: float = 0.5,
+        restrict_base_max: int = 0,
         wheel_condition: int | None = None,
     ) -> list[RetroactivePrediction]:
         """
@@ -869,6 +874,7 @@ class LotoBacktester:
                     smart_reduction,
                     int(recent_penalty_draws or 0),
                     float(recent_penalty_factor),
+                    int(restrict_base_max or 0),
                     wheel_condition,
                 )
                 for sim_idx in sim_indices
@@ -897,6 +903,7 @@ class LotoBacktester:
                     a[7],
                     a[8],
                     a[9],
+                    a[10],
                 )
 
             try:
@@ -1180,9 +1187,10 @@ class LotoBacktester:
                     lookback_percent,
                     filter_consecutives,
                     smart_reduction,
-                    recent_penalty_draws,
-                    recent_penalty_factor,
-                    wheel_condition,
+                    recent_penalty_draws=recent_penalty_draws,
+                    recent_penalty_factor=recent_penalty_factor,
+                    restrict_base_max=restrict_base_max,
+                    wheel_condition=wheel_condition,
                     adaptive_mode=active_mode,
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None
