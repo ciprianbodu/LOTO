@@ -116,6 +116,7 @@ def _wf_generation_options(data: dict) -> dict:
         "guarantee": guarantee,
         "wheel_condition": wheel_condition,
         "max_variants": int(data.get("max_variants", context.get("max_variants")) or 0),
+        "restrict_base_max": int(data.get("restrict_base_max") or 0),
     }
 
 
@@ -141,6 +142,7 @@ UI_PERSIST_KEYS = [
     "wheel_condition_val",
     "recent_penalty_draws_val",
     "recent_penalty_factor_val",
+    "restrict_base_max_val",
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -160,6 +162,14 @@ DEFAULTS = {
     # dacă e pornită din start — utilizatorul decide explicit din UI dacă o vrea.
     "recent_penalty_draws_val": 0,
     "recent_penalty_factor_val": 0.5,
+    # Restrângere bază (0 = fără restricție, implicit). Preferință OPȚIONALĂ a
+    # utilizatorului, FĂRĂ avantaj statistic demonstrat — probabilitatea de hit
+    # a unui pool de dimensiune fixă e identică matematic (hipergeometric)
+    # indiferent de care numere îl compun. Vezi
+    # scripts/analysis/pattern_base_reduction.py și docstring-ul
+    # loto_engine.run_institutional_pipeline. Nu prezenta niciodată acest câmp
+    # drept optimizare — e doar compoziție, la fel ca recent_penalty_draws.
+    "restrict_base_max_val": 0,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,
@@ -342,6 +352,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         "wheel_condition_val",
         "recent_penalty_draws_val",
         "recent_penalty_factor_val",
+        "restrict_base_max_val",
     ):
         h.update(str(SETTINGS.get(k, DEFAULTS.get(k))).encode("utf-8"))
     h.update(
@@ -367,6 +378,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "wheel_condition": _int_setting("wheel_condition_val"),
             "recent_penalty_draws": _int_setting("recent_penalty_draws_val"),
             "recent_penalty_factor": _float_setting("recent_penalty_factor_val"),
+            "restrict_base_max": _int_setting("restrict_base_max_val"),
             "lookback": _int_setting("lookback_val"),
             "filter_consecutives": False,
             "smart_reduction": False,  # neaplicat pe path-ul principal (filters_disabled)
@@ -1974,6 +1986,9 @@ def _bench_transform_note(data: dict) -> str:
         changes.append(f"penalizarea ultimelor {int(rp['draws'])} extrageri")
     if 0 < float(audit.get("lookback_pct") or 0) < 100:
         changes.append(f"istoric limitat la {float(audit['lookback_pct']):g}%")
+    _rb = audit.get("restrict_base") or {}
+    if _rb.get("max"):
+        changes.append(f"baza restrânsă la ≤{int(_rb['max'])}")
     if not changes:
         return ""
     return (
@@ -2096,6 +2111,13 @@ def _build_report() -> str:
                     )
                     or "niciunul"
                 )
+            )
+        _rb = (d.get("audit") or {}).get("restrict_base") or {}
+        if _rb.get("max"):
+            out.append(
+                f"{indent}Bază restrânsă la ≤{int(_rb['max'])} (preferință utilizator, "
+                f"fără avantaj statistic demonstrat); excluse: "
+                + ", ".join(str(n) for n in _rb.get("excluded") or [])
             )
         out.append(
             f"{indent}Nucleu dur (nr(frecvență)): "
@@ -2281,6 +2303,12 @@ def _render_pool_body(
                 f"Penalizare recentă: ultimele {int(_rp['draws'])} extrageri × {float(_rp.get('factor', 0.5)):.2f}"
                 f" ({len(_pen)} numere: {', '.join(str(k) for k in sorted(int(x) for x in _pen))})"
             ).classes("text-caption")
+        _rb = (data.get("audit") or {}).get("restrict_base") or {}
+        if _rb.get("max"):
+            ui.label(
+                f"Bază restrânsă la ≤{int(_rb['max'])} — preferință personală, "
+                "fără avantaj statistic demonstrat"
+            ).classes("text-caption text-warning")
         # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
         # pe cel puțin un bilet. Niciun filtru nu mai elimină bilete DUPĂ wheeling
@@ -4492,6 +4520,23 @@ def main_page() -> None:
             "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
             "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
             "Walk-forward aplică aceeași setare."
+        ).classes("text-caption text-grey")
+        _bind_save(
+            ui.number(
+                "Restrânge baza de numere jucate la maxim N (0 = fără restricție)",
+                min=0,
+                max=49,
+                step=1,
+            ).classes("w-full"),
+            "restrict_base_max_val",
+        )
+        ui.label(
+            "Exclude din pool orice număr peste N. FĂRĂ avantaj statistic demonstrat: "
+            "probabilitatea de hit a unui pool de dimensiune fixă e identică matematic, "
+            "indiferent de care numere îl compun (verificat pe istoricul acestei aplicații). "
+            "E doar o preferință personală de compoziție a pool-ului, ca penalizarea "
+            "recentă de mai sus — nu o crește nicio recomandare din aplicație. "
+            "Walk-forward aplică aceeași restricție."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.number(

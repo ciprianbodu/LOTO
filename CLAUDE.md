@@ -285,6 +285,16 @@ la randul ei candidata la excludere.
   valoare asteptata: analizele din `scripts/analysis/` nu au demonstrat
   predictibilitate pentru paritate, decade, sume sau tipare recente, iar
   penalizarea nu trebuie prezentata drept avantaj statistic.
+- Restrangerea bazei de numere este o OPTIUNE de utilizator (`restrict_base_max`),
+  implicit OPRITA (`restrict_base_max_val = 0` in UI) — exclude din candidati
+  orice numar peste pragul ales. FARA avantaj statistic demonstrat:
+  probabilitatea de hit a unui pool de dimensiune fixa e identica matematic
+  (hipergeometric) indiferent de care numere il compun, confirmat si empiric pe
+  istoricul aplicatiei (`scripts/analysis/pattern_base_reduction.py`). Se aplica
+  identic in productie si in walk-forward (intra in cheia de cache WF cand e
+  activa, prin `_restrict_base_sig`) si este raportata in `audit.restrict_base`.
+  Nu adauga niciodata o varianta "bench calculeaza pragul optim" — ar prezenta
+  zgomot statistic drept semnal (orice prag da aceeasi rata teoretica).
 
 ## 7. Wheeling si covering design
 

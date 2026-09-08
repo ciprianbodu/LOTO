@@ -31,6 +31,7 @@ def test_result_settings_override_current_ui_and_preserve_zero(monkeypatch):
         "max_variants": 2,
         "recent_penalty_draws": 3,
         "recent_penalty_factor": 0.0,
+        "restrict_base_max": 0,
     }
     assert app._wf_generation_options({})["recent_penalty_factor"] == 0.5
     # Workerul păstrează cap-ul în context, nu în câmpurile top-level.
@@ -127,7 +128,7 @@ def test_wf_tickets_equal_direct_generation_with_conditional_cap(
             },
         )
         dispatched = bt._wf_worker_step(
-            (index, 10, 3, 2, 100.0, False, False, 3, 0.0, 4)
+            (index, 10, 3, 2, 100.0, False, False, 3, 0.0, 0, 4)
         )
         assert dispatched.variants == lines
     # Cache-hit-ul aceleiași configurații păstrează geometria și variantele.

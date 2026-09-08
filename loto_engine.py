@@ -727,6 +727,7 @@ class LotoEngine:
         wheel_condition=None,
         recent_penalty_draws=0,
         recent_penalty_factor=0.5,
+        restrict_base_max=0,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -746,6 +747,15 @@ class LotoEngine:
             extrase în ultimele N extrageri (scor × factor^aparitii). 0 = oprit.
             Se aplică identic în producție și în walk-forward, deci validarea
             măsoară exact pool-ul jucat.
+
+        restrict_base_max: preferință OPȚIONALĂ a utilizatorului — exclude din
+            candidați toate numerele > acest prag (0 = fără restricție, implicit).
+            NU are avantaj statistic demonstrat: probabilitatea de hit a unui pool
+            de dimensiune fixă e identică matematic (hipergeometric) indiferent de
+            care numere îl compun — confirmat empiric pe istoricul acestei
+            aplicații (scripts/analysis/pattern_base_reduction.py). E o preferință
+            de compoziție, la fel ca `recent_penalty_draws`, aplicată identic în
+            producție și walk-forward (intră în cheia de cache WF când e activă).
 
         wheel_condition: numărul de numere din pool care trebuie să cadă pentru
             ca garanția să se aplice (lotto design „guarantee dacă condition").
@@ -1053,6 +1063,26 @@ class LotoEngine:
             "disabled_by_user": True,
         }
         logging.info("[PIPELINE] Filtre dezactivate — pool = top-scor pur.")
+
+        # Restrângere bază: preferință OPȚIONALĂ a utilizatorului (0 = oprit,
+        # implicit). Fără avantaj statistic — vezi docstring-ul funcției.
+        restrict_max = int(restrict_base_max or 0)
+        if restrict_max > 0:
+            _max_n = int(self.params["max_n"])
+            restrict_max = max(1, min(restrict_max, _max_n))
+            if restrict_max < _max_n:
+                _excluded = set(range(restrict_max + 1, _max_n + 1))
+                blacklist |= _excluded
+                self.audit["restrict_base"] = {
+                    "max": restrict_max,
+                    "excluded": sorted(_excluded),
+                }
+                logging.info(
+                    "[PIPELINE] Bază restrânsă la <= %d (preferință utilizator, "
+                    "fără avantaj statistic demonstrat) — %d numere excluse.",
+                    restrict_max,
+                    len(_excluded),
+                )
 
         self.hard_core = self._get_timesfm_pool(
             tfm_scores, pool_size=pool_size, blacklist=blacklist
