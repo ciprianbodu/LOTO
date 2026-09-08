@@ -183,9 +183,10 @@ def test_ui_submenu_renders_one_table_per_game_with_its_control_column():
 
     import app_nicegui as app
 
-    render = getattr(app._render_base_threshold_tables, "func", None)
+    render = getattr(app._render_base_interval_tables, "func", None)
     assert render is not None, "refreshable-ul trebuie sa expuna functia interna"
     app._BASE_TABLE_MEMO.clear()
+    app._BASE_TABLE_OPENED["value"] = True
     with capture_ui() as ui:
         render()
     tables = [n for n in ui.walk() if n["kind"] == "table"]
@@ -204,8 +205,11 @@ def test_ui_submenu_renders_one_table_per_game_with_its_control_column():
         rows = table["kwargs"]["rows"]
         assert [r["w"] for r in rows] == sorted(r["w"] for r in rows)
         assert {"w", "span", "whole", "h1", "h2", "ctrl"} == set(rows[0])
-        # Ultimul rand e jocul nerestrans: real si control au aceeasi rata.
-        assert rows[-1]["whole"] in rows[-1]["ctrl"]
+        # Ultimul rand e jocul nerestrans: real si control cad pe aceeasi rata,
+        # comparata ca numar (substring-ul ar fi lasat "9.03%" sa treaca in "19.03%").
+        assert float(rows[-1]["whole"].rstrip("%")) == pytest.approx(
+            float(rows[-1]["ctrl"].rsplit("·", 1)[1].strip().rstrip("%"))
+        )
 
 
 def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
@@ -214,7 +218,8 @@ def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
 
     import app_nicegui as app
 
-    render = app._render_base_threshold_tables.func
+    render = app._render_base_interval_tables.func
+    app._BASE_TABLE_OPENED["value"] = True
     for pool in (6, 16):
         monkeypatch.setitem(app.SETTINGS, "pool_size_val", pool)
         app._BASE_TABLE_MEMO.clear()
@@ -222,3 +227,77 @@ def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
             render()
         for table in (n for n in ui.walk() if n["kind"] == "table"):
             assert min(r["w"] for r in table["kwargs"]["rows"]) == pool
+
+
+def test_submenu_is_lazy_and_survives_a_pool_value_below_the_allowed_minimum():
+    """Inchis nu calculeaza nimic; un pool tastat sub minim nu strica tabelul.
+
+    `ui.number` isi aplica min/max abia la blur, deci in timpul tastarii ajung
+    aici valori ca 0 sau 1. Inainte de plafonare, geometria devenea invalida si
+    submeniul raporta „istoric indisponibil" pentru un istoric perfect valid.
+    """
+    from scripts.analysis.audit_output import capture_ui
+
+    import app_nicegui as app
+
+    render = app._render_base_interval_tables.func
+    app._BASE_TABLE_OPENED["value"] = False
+    app._BASE_TABLE_MEMO.clear()
+    with capture_ui() as ui:
+        render()
+    assert not [n for n in ui.walk() if n["kind"] == "table"]
+    assert "Deschide submeniul" in ui.text()
+    assert not app._BASE_TABLE_MEMO, "inchis nu are voie sa calculeze nimic"
+
+    app._BASE_TABLE_OPENED["value"] = True
+    for bad_pool in (0, 1, 99):
+        app.SETTINGS["pool_size_val"] = bad_pool
+        with capture_ui() as ui:
+            render()
+        assert "istoric indisponibil" not in ui.text()
+        assert len([n for n in ui.walk() if n["kind"] == "table"]) == 3
+    app.SETTINGS["pool_size_val"] = 10
+
+
+def test_memo_survives_a_walk_over_every_pool_size():
+    """Plafonul memo-ului trebuie sa incapa toate combinatiile joc x pool.
+
+    Cu un plafon prea mic, memo-ul se golea inainte sa fie folosit si fiecare
+    schimbare de pool platea din nou calculul complet.
+    """
+    import app_nicegui as app
+
+    app._BASE_TABLE_MEMO.clear()
+    app._BASE_TABLE_OPENED["value"] = True
+    for pool in range(6, 17):
+        for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES:
+            assert app._base_interval_rows(csv_name, draw_n, max_num, pool) is not None
+    filled = len(app._BASE_TABLE_MEMO)
+    assert filled == app._BASE_TABLE_MEMO_MAX
+    # A doua trecere peste aceleasi valori nu mai are voie sa evacueze nimic.
+    snapshot = dict(app._BASE_TABLE_MEMO)
+    for pool in range(6, 17):
+        for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES:
+            app._base_interval_rows(csv_name, draw_n, max_num, pool)
+    assert app._BASE_TABLE_MEMO == snapshot
+
+
+def test_diagnostic_script_still_imports_and_uses_the_shared_module():
+    """Scriptul din §6 nu e atins de restul suitei — se rupe tacit la redenumiri.
+
+    S-a si rupt: dupa trecerea modulului de la praguri la intervale, importul lui
+    `exact_rate` a ramas in script, care a devenit neexecutabil fara ca pytest sa
+    observe. Testul incarca modulul si ii ruleaza tabelul pe un istoric mic.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    path = Path("scripts/analysis/bench_base_threshold.py")
+    spec = importlib.util.spec_from_file_location("bench_base_threshold", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    draws = synthetic_draws(60, draw_n=6, max_num=49, seed=5)
+    module.K, module.TARGET = 10, 3
+    module.exact_table("test", draws, 49)  # nu trebuie sa arunce
+    assert callable(module.bench_thresholds)

@@ -111,6 +111,17 @@ def test_wf_cache_key_separates_intervals_and_keeps_old_keys_valid():
     assert wf._restrict_base_sig(40, 0) != wf._restrict_base_sig(40, 10)
     assert wf._restrict_base_sig(40, 10) != wf._restrict_base_sig(40, 12)
     assert wf._restrict_base_sig(0, 10) != ""
+    # Capetele pe care motorul le tratează ca inexistente dau ACEEAȘI cheie:
+    # min=1 e „fără capăt de jos", max=max_num e „fără capăt de sus". Altfel
+    # aceeași rulare primea două chei și se recalcula degeaba.
+    assert wf._restrict_base_sig(40, 1) == wf._restrict_base_sig(40, 0)
+    assert wf._restrict_base_sig(49, 0, max_num=49) == ""
+    assert wf._restrict_base_sig(49, 1, max_num=49) == ""
+    assert wf._restrict_base_sig(40, 0, max_num=49) == wf._restrict_base_sig(40, 0)
+    assert (
+        wf._decision_sig("6/49", 10, 100.0, 0, 0.5, 3, 4, 0, 49, 1)
+        == wf._decision_sig("6/49", 10, 100.0, 0, 0.5, 3, 4, 0, 0, 0)
+    )
     variants = [(0, 0), (40, 0), (40, 10), (36, 10)]
     assert (
         len({wf._decision_sig("6/49", 10, 100.0, 0, 0.5, 3, 4, 0, hi, lo) for hi, lo in variants})

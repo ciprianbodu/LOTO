@@ -4438,7 +4438,14 @@ _BASE_TABLE_GAMES = (
     ("Joker — Urna 1 (5/45)", "joker.csv", 5, 45),
 )
 
-_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool) → (rânduri, n)
+_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool) → (rânduri, n_extrageri)
+# 3 jocuri × pool 6..16 = 33 combinații. Sub atât, memo-ul se golea înainte să
+# apuce să fie folosit: o plimbare înainte și înapoi peste dimensiunile de pool
+# recalcula tot de fiecare dată.
+_BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11
+# Tabelul se calculează abia când submeniul e deschis: ~0.7 s pentru trei jocuri
+# ar fi fost plătiți la fiecare încărcare de pagină, chiar fără să fie deschis.
+_BASE_TABLE_OPENED = {"value": False}
 
 
 def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int):
@@ -4476,14 +4483,14 @@ def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int
     except Exception as exc:  # noqa: BLE001
         logger.warning("tabel intervale %s: %s", csv_name, exc)
         return None
-    if len(_BASE_TABLE_MEMO) > 12:
-        _BASE_TABLE_MEMO.clear()
+    while len(_BASE_TABLE_MEMO) >= _BASE_TABLE_MEMO_MAX:
+        _BASE_TABLE_MEMO.pop(next(iter(_BASE_TABLE_MEMO)))
     _BASE_TABLE_MEMO[key] = result
     return result
 
 
 @ui.refreshable
-def _render_base_threshold_tables() -> None:
+def _render_base_interval_tables() -> None:
     """Cel mai bun interval de fiecare lățime, per joc, lângă controlul lui.
 
     Procentele diferă de la joc la joc pentru că geometria diferă, de aceea
@@ -4495,7 +4502,15 @@ def _render_base_threshold_tables() -> None:
     """
     from loto_enterprise.core.base_threshold import theoretical_rate
 
-    pool = _int_setting("pool_size_val")
+    if not _BASE_TABLE_OPENED["value"]:
+        ui.label("Deschide submeniul pentru a calcula tabelul.").classes(
+            "text-caption text-grey"
+        )
+        return
+    # `ui.number` își aplică min/max abia la blur, deci în timpul tastării pot
+    # ajunge aici valori ca 0 sau 1. Fără plafonare, geometria era invalidă și
+    # tabelul raporta „istoric indisponibil" pentru un istoric perfect valid.
+    pool = max(6, min(16, _int_setting("pool_size_val")))
     ui.label(
         f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată de 3+ "
         f"la un pool de {pool} numere. Calcul exact (hipergeometric per extragere), "
@@ -4712,16 +4727,20 @@ def main_page() -> None:
             ).classes("w-full"),
             "restrict_base_max_val",
         )
-        with ui.expansion(
-            "📐 Procentul fiecărui prag, per joc", value=False
-        ).classes("w-full"):
-            _render_base_threshold_tables()
+        def _toggle_intervals(event) -> None:
+            _BASE_TABLE_OPENED["value"] = bool(event.value)
+            _render_base_interval_tables.refresh()
+
+        _intervals = ui.expansion(
+            "📐 Cel mai bun interval de fiecare lățime, per joc", value=False
+        ).classes("w-full")
+        with _intervals:
+            _render_base_interval_tables()
+        _intervals.on_value_change(_toggle_intervals)
         # Procentele depind de dimensiunea pool-ului, deci tabelul se recalculează
-        # când aceasta se schimbă. Pragul ales de utilizator nu intră în calcul —
-        # tabelul arată toate pragurile, nu îl evidențiază pe cel setat.
-        _pool_input.on_value_change(
-            lambda: _render_base_threshold_tables.refresh()
-        )
+        # când aceasta se schimbă. Intervalul ales de utilizator nu intră în calcul —
+        # tabelul arată toate lățimile, nu îl evidențiază pe cel setat.
+        _pool_input.on_value_change(lambda: _render_base_interval_tables.refresh())
         ui.label(
             "Restrânge candidații la intervalul ales — «de la 10 până la 40» înseamnă "
             "6 din 10–40 în loc de 6 din 1–49. Oricare capăt lăsat pe 0 rămâne liber; "

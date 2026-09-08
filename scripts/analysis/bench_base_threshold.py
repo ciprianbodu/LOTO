@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from loto_enterprise.core.base_threshold import (  # noqa: E402
-    exact_rate,
+    interval_rate,
     synthetic_draws,
     theoretical_rate,
 )
@@ -107,7 +107,7 @@ def exact_table(label: str, draws: np.ndarray, max_num: int) -> None:
     print(f"\n{label}: rata EXACTA de {TARGET}+ pentru pool K={K}, {half * 2} extrageri")
     print(f"{'prag':>5} {'tot istoricul':>14} {'prima jum.':>11} {'a doua jum.':>12}")
     def _r(sample, t):
-        return exact_rate(sample, t, K, TARGET)
+        return interval_rate(sample, 1, t, K, TARGET)
 
     rows = [
         (t, _r(draws, t), _r(draws[:half], t), _r(draws[half:], t))

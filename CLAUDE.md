@@ -303,14 +303,21 @@ la randul ei candidata la excludere.
   `audit.restrict_base`. Cele trei suprafete care o afiseaza — panoul, raportul
   si nota de bench — folosesc `_restrict_base_text`, ca intervalul sa nu apara
   altfel in raport decat pe ecran.
-- Submeniul „Procentul fiecarui interval, per joc" din sidebar afiseaza, pentru
+- Submeniul „Cel mai bun interval de fiecare latime, per joc" din sidebar
+  afiseaza, pentru
   fiecare latime de interval, intervalul cu cea mai buna rata pe istoric, ratele
   lui pe cele doua jumatati SI cel mai bun interval de aceeasi latime gasit pe
   extrageri sintetice uniforme. Ratele sunt exacte (hipergeometric per extragere,
   `loto_enterprise/core/base_threshold.py`), nu Monte Carlo. Coloana de control
   nu este optionala: acelasi calcul „gaseste" un campion si acolo unde nu exista
   nimic de gasit, iar fara ea un varf de 10.31% s-ar citi ca descoperire.
-  Submeniul NU seteaza si NU recomanda niciun interval.
+  Submeniul NU seteaza si NU recomanda niciun interval. Se calculeaza abia la
+  deschidere (inchis costa ~1 ms, deschis ~0.6 s pentru trei jocuri) si e
+  memoizat pe fisier + geometrie + pool, cu plafon peste toate combinatiile
+  joc × pool, ca o plimbare peste dimensiunile de pool sa nu recalculeze tot.
+  Pool-ul este plafonat la 6..16 inainte de calcul: `ui.number` isi aplica
+  min/max abia la blur, iar o valoare tastata intermediar producea o geometrie
+  invalida raportata drept „istoric indisponibil".
   Nu adauga niciodata o varianta "bench calculeaza intervalul optim" — ar prezenta
   zgomot statistic drept semnal (orice interval da aceeasi rata teoretica).
   Bench-ul a fost construit si rulat ca diagnostic, nu ca functie de productie:

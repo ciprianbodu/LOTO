@@ -341,15 +341,29 @@ def _penalty_sig(
     return f"|rp{n}:{float(recent_penalty_factor).hex()}"
 
 
-def _restrict_base_sig(restrict_base_max: int = 0, restrict_base_min: int = 0) -> str:
+_MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45}
+
+
+def _restrict_base_sig(
+    restrict_base_max: int = 0,
+    restrict_base_min: int = 0,
+    max_num: int | None = None,
+) -> str:
     """Sufix de cheie pentru restrângerea bazei; gol când e oprită.
 
-    Rămâne gol când ambele capete sunt 0, deci cheile scrise înainte de existența
-    setării continuă să fie servite. Capătul de jos apare separat, ca 1..40 și
-    10..40 să nu împartă același cache.
+    Capătul de jos apare separat, ca 1..40 și 10..40 să nu împartă același cache.
+    Capetele pe care motorul le tratează ca inexistente sunt aduse la aceeași
+    formă înainte de hash: `min=1` e identic cu „fără capăt de jos", iar
+    `max=max_num` e identic cu „fără capăt de sus" — altfel aceeași rulare
+    primea două chei și se recalcula degeaba. Ambele capete libere dau sufix gol,
+    deci cheile scrise înainte de existența setării rămân valide.
     """
     hi = int(restrict_base_max or 0)
     lo = int(restrict_base_min or 0)
+    if lo <= 1:
+        lo = 0
+    if max_num and hi >= int(max_num):
+        hi = 0
     if hi <= 0 and lo <= 0:
         return ""
     return f"|rb{hi}" + (f":{lo}" if lo > 0 else "")
@@ -396,7 +410,7 @@ def _decision_sig(
             f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
             f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
-            f"{_restrict_base_sig(restrict_base_max, restrict_base_min)}"
+            f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -412,7 +426,9 @@ def _decision_sig(
                     )
                     + f"|lb{lookback_pct(lookback_percent)}"
                     + _penalty_sig(recent_penalty_draws, recent_penalty_factor)
-                    + _restrict_base_sig(restrict_base_max, restrict_base_min)
+                    + _restrict_base_sig(
+                        restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type)
+                    )
                 ).encode()
             ).hexdigest()[:6]
         )
