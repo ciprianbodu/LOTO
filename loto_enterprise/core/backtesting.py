@@ -124,6 +124,7 @@ def _retroactive_step_stateless(
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
     restrict_base_max: int = 0,
+    restrict_base_min: int = 0,
     wheel_condition: int | None = None,
     adaptive_mode: str = "normal",
     adaptive_event: str | None = None,
@@ -164,6 +165,7 @@ def _retroactive_step_stateless(
             recent_penalty_draws=recent_penalty_draws,
             recent_penalty_factor=recent_penalty_factor,
             restrict_base_max=restrict_base_max,
+            restrict_base_min=restrict_base_min,
             wheel_condition=wheel_condition,
         )
         return eng, out_lines, (_ctx or {})
@@ -197,21 +199,15 @@ def _retroactive_step_stateless(
     )
 
 
-def _wf_worker_step(args):
-    """Worker picklable: pas + geometrie + penalizare, încărcate din task_args."""
-    (
-        sim_idx,
-        pool_size,
-        guarantee,
-        max_variants,
-        lookback_percent,
-        filter_consecutives,
-        smart_reduction,
-        rp_draws,
-        rp_factor,
-        rb_max,
-        wheel_condition,
-    ) = args
+def _wf_worker_step(args: dict):
+    """Worker picklabil: un pas WF, cu setările primite pe NUME.
+
+    `args` este un dict cu exact parametrii lui `_retroactive_step_stateless`
+    care variază per rulare. A fost tuplu pozițional până când adăugarea unei
+    setări noi a desincronizat cele trei locuri care îl consumau (construcția
+    din `run_retroactive_backtest`, despachetarea de aici și varianta în-proces);
+    pe nume, o setare nouă nu mai poate ajunge în parametrul greșit.
+    """
     shared = _WF_SHARED
     try:
         return _retroactive_step_stateless(
@@ -219,20 +215,10 @@ def _wf_worker_step(args):
             shared["draws"],
             shared["dates"],
             shared["game_type"],
-            sim_idx,
-            pool_size,
-            guarantee,
-            max_variants,
-            lookback_percent,
-            filter_consecutives,
-            smart_reduction,
-            rp_draws,
-            rp_factor,
-            rb_max,
-            wheel_condition,
+            **args,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.error("[BACKTEST] WF worker sim_idx=%s: %s", sim_idx, exc)
+        logger.error("[BACKTEST] WF worker sim_idx=%s: %s", args.get("sim_idx"), exc)
         return None
 
 
@@ -764,6 +750,7 @@ class LotoBacktester:
         recent_penalty_draws: int = 0,
         recent_penalty_factor: float = 0.5,
         restrict_base_max: int = 0,
+        restrict_base_min: int = 0,
         wheel_condition: int | None = None,
     ) -> list[RetroactivePrediction]:
         """
@@ -864,19 +851,20 @@ class LotoBacktester:
                 os.environ.setdefault(_tv, "1")
 
             task_args = [
-                (
-                    sim_idx,
-                    pool_size,
-                    guarantee,
-                    max_variants,
-                    lookback_percent,
-                    filter_consecutives,
-                    smart_reduction,
-                    int(recent_penalty_draws or 0),
-                    float(recent_penalty_factor),
-                    int(restrict_base_max or 0),
-                    wheel_condition,
-                )
+                {
+                    "sim_idx": sim_idx,
+                    "pool_size": pool_size,
+                    "guarantee": guarantee,
+                    "max_variants": max_variants,
+                    "lookback_percent": lookback_percent,
+                    "filter_consecutives": filter_consecutives,
+                    "smart_reduction": smart_reduction,
+                    "recent_penalty_draws": int(recent_penalty_draws or 0),
+                    "recent_penalty_factor": float(recent_penalty_factor),
+                    "restrict_base_max": int(restrict_base_max or 0),
+                    "restrict_base_min": int(restrict_base_min or 0),
+                    "wheel_condition": wheel_condition,
+                }
                 for sim_idx in sim_indices
             ]
             df_pickle = pickle.dumps(self.df, protocol=pickle.HIGHEST_PROTOCOL)
@@ -886,24 +874,14 @@ class LotoBacktester:
             batch_size = max(n_workers * 2, 8)
             last_log_pct = -1
 
-            def _step_in_process(a):
+            def _step_in_process(a: dict):
                 """Același pas ca `_wf_worker_step`, dar în procesul curent."""
                 return _retroactive_step_stateless(
                     self.df,
                     self.draws,
                     self.dates,
                     self.game_type,
-                    a[0],
-                    a[1],
-                    a[2],
-                    a[3],
-                    a[4],
-                    a[5],
-                    a[6],
-                    a[7],
-                    a[8],
-                    a[9],
-                    a[10],
+                    **a,
                 )
 
             try:
@@ -1190,6 +1168,7 @@ class LotoBacktester:
                     recent_penalty_draws=recent_penalty_draws,
                     recent_penalty_factor=recent_penalty_factor,
                     restrict_base_max=restrict_base_max,
+                    restrict_base_min=restrict_base_min,
                     wheel_condition=wheel_condition,
                     adaptive_mode=active_mode,
                     adaptive_event=(

@@ -194,6 +194,10 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
         restrict_base_max = max(0, min(49, int(task.get("restrict_base_max") or 0)))
     except (TypeError, ValueError):
         restrict_base_max = 0
+    try:
+        restrict_base_min = max(0, min(49, int(task.get("restrict_base_min") or 0)))
+    except (TypeError, ValueError):
+        restrict_base_min = 0
 
     return {
         "pool_size": pool_size,
@@ -207,6 +211,7 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
         "lookback": lookback,
         "raw_lookback": raw_lookback,
         "restrict_base_max": restrict_base_max,
+        "restrict_base_min": restrict_base_min,
         "filter_consecutives": bool(task.get("filter_consecutives", False)),
         "smart_reduction": bool(task.get("smart_reduction", False)),
         "sim_depth_pct": int(task.get("sim_depth_pct", 10)),
@@ -375,6 +380,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         recent_penalty_draws=norm["recent_penalty_draws"],
                         recent_penalty_factor=norm["recent_penalty_factor"],
                         restrict_base_max=norm["restrict_base_max"],
+                        restrict_base_min=norm["restrict_base_min"],
                         lookback=norm["lookback"],
                         filter_consecutives=norm["filter_consecutives"],
                         smart_reduction=norm["smart_reduction"],
@@ -402,6 +408,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "recent_penalty_draws": norm["recent_penalty_draws"],
                     "recent_penalty_factor": norm["recent_penalty_factor"],
                     "restrict_base_max": norm["restrict_base_max"],
+                    "restrict_base_min": norm["restrict_base_min"],
                     "lookback": norm["lookback"],
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),

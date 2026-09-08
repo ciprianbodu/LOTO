@@ -35,6 +35,11 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from loto_enterprise.core.base_threshold import (  # noqa: E402
+    interval_rate,
+    synthetic_draws,
+    theoretical_rate,
+)
 from loto_enterprise.core.draw_validation import valid_draw_matrix  # noqa: E402
 
 GAMES = {
@@ -90,7 +95,36 @@ def bench_thresholds(bools: np.ndarray, max_num: int, seed: int) -> dict:
     }
 
 
+def exact_table(label: str, draws: np.ndarray, max_num: int) -> None:
+    """Procentul exact al fiecarui prag, pe tot istoricul si pe cele doua jumatati.
+
+    Coloanele pe jumatati arata de ce maximul nu se poate lega de un buton:
+    pragul care castiga pe o jumatate nu e cel care castiga pe cealalta, iar
+    vartul creste pe masura ce pragul scade catre K, unde nu mai exista decat
+    un singur pool posibil si „rata" lui e istoricul unei singure combinatii.
+    """
+    half = len(draws) // 2
+    print(f"\n{label}: rata EXACTA de {TARGET}+ pentru pool K={K}, {half * 2} extrageri")
+    print(f"{'prag':>5} {'tot istoricul':>14} {'prima jum.':>11} {'a doua jum.':>12}")
+    def _r(sample, t):
+        return interval_rate(sample, 1, t, K, TARGET)
+
+    rows = [
+        (t, _r(draws, t), _r(draws[:half], t), _r(draws[half:], t))
+        for t in range(K, max_num + 1)
+    ]
+    for t, whole, first, second in rows:
+        if t % 5 == 0 or t in (K, max_num):
+            print(f"{t:>5} {whole:>13.2f}% {first:>10.2f}% {second:>11.2f}%")
+    print(
+        f"  maxim: tot istoricul -> prag {max(rows, key=lambda r: r[1])[0]}"
+        f" | prima jum. -> prag {max(rows, key=lambda r: r[2])[0]}"
+        f" | a doua jum. -> prag {max(rows, key=lambda r: r[3])[0]}"
+    )
+
+
 def run_game(label: str, draws: np.ndarray, max_num: int) -> None:
+    exact_table(label, draws, max_num)
     bools = _as_bool_matrix(draws, max_num)
     cut = int(len(bools) * TRAIN_FRAC)
     print(f"\n{'=' * 78}")
@@ -144,6 +178,13 @@ def main() -> int:
         df = pd.read_csv(ROOT / path)
         draws, _ = valid_draw_matrix(df, cols, draw_n=draw_n, max_num=max_num)
         run_game(label, draws, max_num)
+
+    synthetic = synthetic_draws(2580, draw_n=6, max_num=49, seed=500)
+    exact_table("6/49 SINTETIC (uniform, semnal zero prin constructie)", synthetic, 49)
+    print(
+        f"  referinta teoretica, identica pentru orice pool de {K} numere din 49: "
+        f"{theoretical_rate(49, K, 6, TARGET):.2f}%"
+    )
 
     print(
         "\nCitire: pragul optim arata un castig pozitiv pe TEST, dar acelasi castig\n"

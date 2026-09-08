@@ -32,6 +32,7 @@ def test_result_settings_override_current_ui_and_preserve_zero(monkeypatch):
         "recent_penalty_draws": 3,
         "recent_penalty_factor": 0.0,
         "restrict_base_max": 0,
+        "restrict_base_min": 0,
     }
     assert app._wf_generation_options({})["recent_penalty_factor"] == 0.5
     # Workerul păstrează cap-ul în context, nu în câmpurile top-level.
@@ -127,8 +128,23 @@ def test_wf_tickets_equal_direct_generation_with_conditional_cap(
                 "game_type": "6/49",
             },
         )
+        # Setările merg pe NUME: adăugarea uneia noi nu mai poate împinge
+        # valorile în parametrii vecini, cum s-a întâmplat cu tuplul pozițional.
         dispatched = bt._wf_worker_step(
-            (index, 10, 3, 2, 100.0, False, False, 3, 0.0, 0, 4)
+            {
+                "sim_idx": index,
+                "pool_size": 10,
+                "guarantee": 3,
+                "max_variants": 2,
+                "lookback_percent": 100.0,
+                "filter_consecutives": False,
+                "smart_reduction": False,
+                "recent_penalty_draws": 3,
+                "recent_penalty_factor": 0.0,
+                "restrict_base_max": 0,
+                "restrict_base_min": 0,
+                "wheel_condition": 4,
+            }
         )
         assert dispatched.variants == lines
     # Cache-hit-ul aceleiași configurații păstrează geometria și variantele.
