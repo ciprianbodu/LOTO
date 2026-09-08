@@ -265,3 +265,62 @@ def test_parallel_walk_forward_dispatch_reads_the_named_index(monkeypatch, caplo
     assert not [
         r for r in caplog.records if "WF rapid indisponibil" in r.getMessage()
     ], "dispatch-ul paralel a căzut pe fallback secvențial"
+
+
+def test_semantics_change_invalidates_only_the_restricted_cache_keys():
+    """Regula nouă nu are voie să citească rezultate scrise sub cea veche.
+
+    Sub regula veche, un interval mai îngust decât un bilet PRODUCEA un pool
+    trunchiat cu variante mai scurte decât biletul și acoperire 100%. Cheia de
+    cache nu se schimbase, deci un pickle scris atunci ar fi fost servit acum.
+    Marcajul de semantică intră în cheie DOAR când restricția e activă, ca
+    bump-ul să nu arunce cache-urile WF nerestrânse (90 de minute fiecare).
+    """
+    # Fără restricție: cheia rămâne exact cea dinainte de marcaj.
+    assert wf._restrict_base_sig(0, 0) == ""
+    assert wf._restrict_base_sig(49, 1, max_num=49) == ""
+    # Cu restricție: formatul vechi („|rb40:10") nu mai poate fi produs.
+    restricted = wf._restrict_base_sig(40, 10)
+    assert restricted != "|rb40:10"
+    assert wf._RESTRICT_SEMANTICS in restricted
+    assert wf._restrict_base_sig(40, 0) != "|rb40"
+    # Intervalele rămân separate între ele.
+    assert wf._restrict_base_sig(40, 10) != wf._restrict_base_sig(40, 12)
+
+
+def test_config_hash_carries_the_semantics_only_when_a_restriction_is_active():
+    """Același contract pentru cache-ul de pipeline al worker-ului."""
+    import json
+
+    import app_nicegui as app
+
+    app.STATE["datasets"] = [
+        ("loto_6_49.csv", pd.read_csv("_ISTORIC/loto_6_49.csv").tail(30))
+    ]
+    app.SETTINGS["restrict_base_min_val"] = 0
+    app.SETTINGS["restrict_base_max_val"] = 0
+    free = json.loads(app._build_config_json())["input_hash"]
+
+    app.SETTINGS["restrict_base_max_val"] = 40
+    restricted = json.loads(app._build_config_json())["input_hash"]
+    assert restricted != free
+
+    # Marcajul trebuie să conteze: aceleași setări, altă semantică → alt hash.
+    original = app._RESTRICT_SEMANTICS
+    try:
+        app._RESTRICT_SEMANTICS = "999"
+        assert json.loads(app._build_config_json())["input_hash"] != restricted
+        # ...dar fără restricție activă, semantica nu atinge hash-ul.
+        app.SETTINGS["restrict_base_max_val"] = 0
+        assert json.loads(app._build_config_json())["input_hash"] == free
+    finally:
+        app._RESTRICT_SEMANTICS = original
+        app.SETTINGS["restrict_base_max_val"] = 0
+        app.STATE["datasets"] = []
+
+
+def test_the_two_semantics_markers_stay_in_sync():
+    """Aceeași schimbare de regulă invalidează ambele cache-uri sau niciunul."""
+    import app_nicegui as app
+
+    assert app._RESTRICT_SEMANTICS == wf._RESTRICT_SEMANTICS

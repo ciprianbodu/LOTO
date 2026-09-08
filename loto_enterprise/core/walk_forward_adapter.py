@@ -343,6 +343,15 @@ def _penalty_sig(
 
 _MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45}
 
+# Versiunea SEMANTICII de restrângere, nu a formatului cheii. Se incrementează
+# când se schimbă ce pool produce un interval dat — altfel un pickle scris sub
+# regula veche e servit sub cea nouă. Intră în cheie DOAR când restricția e
+# activă, deci un bump nu aruncă cache-urile WF nerestrânse (90 de minute de
+# rulare fiecare), pe care schimbarea nu le atinge oricum.
+# v2: intervalele mai înguste decât un bilet sunt ignorate, nu aplicate — sub v1
+# produceau un pool trunchiat cu variante mai scurte decât biletul.
+_RESTRICT_SEMANTICS = "2"
+
 
 def _restrict_base_sig(
     restrict_base_max: int = 0,
@@ -366,7 +375,7 @@ def _restrict_base_sig(
         hi = 0
     if hi <= 0 and lo <= 0:
         return ""
-    return f"|rb{hi}" + (f":{lo}" if lo > 0 else "")
+    return f"|rb{_RESTRICT_SEMANTICS}:{hi}" + (f":{lo}" if lo > 0 else "")
 
 
 def _decision_sig(
