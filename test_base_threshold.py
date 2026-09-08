@@ -14,9 +14,11 @@ import pytest
 from loto_enterprise.core.base_threshold import (
     IntervalRow,
     best_interval,
+    full_draw_rate,
     interval_rate,
     interval_table,
     synthetic_draws,
+    theoretical_full_draw_rate,
     theoretical_rate,
 )
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -204,7 +206,7 @@ def test_ui_submenu_renders_one_table_per_game_with_its_control_column():
     for table in tables:
         rows = table["kwargs"]["rows"]
         assert [r["w"] for r in rows] == sorted(r["w"] for r in rows)
-        assert {"w", "span", "whole", "h1", "h2", "ctrl"} == set(rows[0])
+        assert {"w", "span", "whole", "h1", "h2", "ctrl", "full"} == set(rows[0])
         # Ultimul rand e jocul nerestrans: real si control cad pe aceeasi rata,
         # comparata ca numar (substring-ul ar fi lasat "9.03%" sa treaca in "19.03%").
         assert float(rows[-1]["whole"].rstrip("%")) == pytest.approx(
@@ -301,3 +303,59 @@ def test_diagnostic_script_still_imports_and_uses_the_shared_module():
     module.K, module.TARGET = 10, 3
     module.exact_table("test", draws, 49)  # nu trebuie sa arunce
     assert callable(module.bench_thresholds)
+
+
+def test_full_draw_rate_counts_draws_entirely_inside_the_interval():
+    """Altceva decat rata unui pool: aici conteaza extragerea INTREAGA.
+
+    Confuzia e usoara si a aparut in uz: „10.31% pentru 2-11" nu inseamna ca au
+    fost extrageri cu toate numerele in 2-11 (nu a fost niciuna in 2581), ci ca
+    cel putin 3 numere au cazut acolo.
+    """
+    draws = np.array([[1, 2, 3], [1, 2, 9], [4, 5, 6]])
+    assert full_draw_rate(draws, 1, 6) == pytest.approx(200 / 3)
+    assert full_draw_rate(draws, 1, 3) == pytest.approx(100 / 3)
+    assert full_draw_rate(draws, 1, 9) == pytest.approx(100.0)
+    assert full_draw_rate(draws, 7, 9) == pytest.approx(0.0)
+    with pytest.raises(ValueError, match="interval invalid"):
+        full_draw_rate(draws, 5, 2)
+    with pytest.raises(ValueError, match="extrageri"):
+        full_draw_rate(np.empty((0, 6), dtype=int), 1, 49)
+
+
+def test_no_draw_ever_fit_entirely_in_the_narrow_champion_interval():
+    """Intervalul care castiga la 3+ nu a incaput niciodata o extragere intreaga."""
+    draws = _draws(*GEOMETRIES[0])
+    assert full_draw_rate(draws, 2, 11) == pytest.approx(0.0)
+    # ...desi acolo cad cel putin 3 numere in peste 10% din extrageri.
+    assert interval_rate(draws, 2, 11, pool_size=10) > 10.0
+
+
+def test_theoretical_full_draw_rate_depends_only_on_the_width():
+    """Referinta nu se schimba mutand fereastra, doar largind-o."""
+    from math import comb
+
+    assert theoretical_full_draw_rate(49, 49, 6) == pytest.approx(100.0)
+    assert theoretical_full_draw_rate(49, 6, 6) == pytest.approx(
+        1 / comb(49, 6) * 100
+    )
+    assert theoretical_full_draw_rate(49, 31, 6) == pytest.approx(
+        comb(31, 6) / comb(49, 6) * 100
+    )
+    with pytest.raises(ValueError, match="latime invalida"):
+        theoretical_full_draw_rate(49, 5, 6)
+    with pytest.raises(ValueError, match="latime invalida"):
+        theoretical_full_draw_rate(49, 50, 6)
+
+
+def test_table_carries_the_full_draw_columns_and_the_last_row_is_certain():
+    draws = _draws(*GEOMETRIES[0])
+    rows = interval_table(draws, 49, pool_size=10, draw_n=6)
+    for row in rows:
+        assert row.full_draw == pytest.approx(full_draw_rate(draws, row.lo, row.hi))
+        assert row.full_draw_theoretical == pytest.approx(
+            theoretical_full_draw_rate(49, row.width, 6)
+        )
+    # Pe tot universul, orice extragere incape: 100% observat si asteptat.
+    assert rows[-1].full_draw == pytest.approx(100.0)
+    assert rows[-1].full_draw_theoretical == pytest.approx(100.0)

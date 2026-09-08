@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 58 fisiere `test_*.py`, 719 teste trecute la auditul global.
+- teste: 59 fisiere `test_*.py`, 726 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -307,8 +307,15 @@ la randul ei candidata la excludere.
   afiseaza, pentru
   fiecare latime de interval, intervalul cu cea mai buna rata pe istoric, ratele
   lui pe cele doua jumatati SI cel mai bun interval de aceeasi latime gasit pe
-  extrageri sintetice uniforme. Ratele sunt exacte (hipergeometric per extragere,
-  `loto_enterprise/core/base_threshold.py`), nu Monte Carlo. Coloana de control
+  extrageri sintetice uniforme. Coloana „Toata extragerea" masoara ALTCEVA: de
+  cate ori au incaput TOATE numerele extrase in interval, langa valoarea
+  asteptata pentru acea latime (`theoretical_full_draw_rate`, care nu depinde de
+  unde e fereastra, doar de cat e de lata). Distinctia nu e cosmetica: 10.31%
+  pentru 2-11 inseamna „cel putin 3 numere au cazut acolo", nu „a fost o
+  extragere intreaga in 2-11" — asta nu s-a intamplat niciodata in 2581 de
+  extrageri 6/49, maximul fiind 5 numere, o data. Ratele sunt exacte
+  (hipergeometric per extragere, `loto_enterprise/core/base_threshold.py`),
+  nu Monte Carlo. Coloana de control
   nu este optionala: acelasi calcul „gaseste" un campion si acolo unde nu exista
   nimic de gasit, iar fara ea un varf de 10.31% s-ar citi ca descoperire.
   Submeniul NU seteaza si NU recomanda niciun interval. Se calculeaza abia la
