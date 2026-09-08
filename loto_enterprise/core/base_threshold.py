@@ -29,9 +29,11 @@ import numpy as np
 __all__ = [
     "IntervalRow",
     "best_interval",
+    "full_draw_rate",
     "interval_rate",
     "interval_table",
     "synthetic_draws",
+    "theoretical_full_draw_rate",
     "theoretical_rate",
 ]
 
@@ -51,6 +53,31 @@ def theoretical_rate(
         for h in range(target, min(pool_size, draw_n) + 1)
     )
     return favourable / comb(max_num, draw_n) * 100
+
+
+def full_draw_rate(draws: np.ndarray, lo: int, hi: int) -> float:
+    """Procentul extragerilor cu TOATE numerele in `[lo..hi]`.
+
+    Altceva decat `interval_rate`: acolo se masoara cate numere prinde un pool,
+    aici de cate ori a incaput extragerea intreaga in interval. E plafonul unui
+    sistem care joaca tot intervalul, nu rata unui pool de dimensiune fixa.
+    """
+    if lo < 1 or hi < lo:
+        raise ValueError(f"interval invalid ({lo}..{hi})")
+    if draws.size == 0:
+        raise ValueError("nu exista extrageri")
+    return float(((draws >= lo) & (draws <= hi)).all(axis=1).mean()) * 100
+
+
+def theoretical_full_draw_rate(max_num: int, width: int, draw_n: int) -> float:
+    """Procentul asteptat de extrageri incapute intr-o fereastra de `width`.
+
+    Nu depinde de UNDE e fereastra, doar de cat de lata e: C(width, draw_n) /
+    C(max_num, draw_n). Este referinta fata de care se citeste coloana observata.
+    """
+    if width < draw_n or width > max_num:
+        raise ValueError(f"latime invalida ({width})")
+    return comb(width, draw_n) / comb(max_num, draw_n) * 100
 
 
 def interval_rate(
@@ -133,6 +160,8 @@ class IntervalRow:
     control_lo: int
     control_hi: int
     control: float
+    full_draw: float
+    full_draw_theoretical: float
 
     @property
     def label(self) -> str:
@@ -154,9 +183,10 @@ def interval_table(
     """Cate un rand per latime de interval, de la `pool_size` la `max_num`.
 
     Pentru fiecare latime: cel mai bun interval pe tot istoricul, ratele lui pe
-    cele doua jumatati, si cel mai bun interval de aceeasi latime gasit pe
-    extrageri uniforme. Ultimul rand (latime == max_num) este jocul nerestrans,
-    unde toate coloanele cad pe rata teoretica.
+    cele doua jumatati, cel mai bun interval de aceeasi latime gasit pe extrageri
+    uniforme, si de cate ori a incaput extragerea INTREAGA in intervalul ales,
+    langa valoarea asteptata pentru acea latime. Ultimul rand (latime == max_num)
+    este jocul nerestrans, unde toate coloanele cad pe rata teoretica.
     """
     half = len(draws) // 2
     if half < 1:
@@ -179,6 +209,10 @@ def interval_table(
                 control_lo=c_lo,
                 control_hi=c_hi,
                 control=c_rate,
+                full_draw=full_draw_rate(draws, lo, hi),
+                full_draw_theoretical=theoretical_full_draw_rate(
+                    max_num, width, draw_n
+                ),
             )
         )
     return rows

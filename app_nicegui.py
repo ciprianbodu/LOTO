@@ -4514,7 +4514,10 @@ def _render_base_interval_tables() -> None:
     ui.label(
         f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată de 3+ "
         f"la un pool de {pool} numere. Calcul exact (hipergeometric per extragere), "
-        "nu simulare. Ultimul rând este jocul nerestrâns și cade pe referința teoretică."
+        "nu simulare. Coloana «Toată extragerea» e altceva: de câte ori au încăput "
+        "TOATE numerele extrase în interval — plafonul unui sistem care ar juca "
+        "întregul interval, nu rata unui pool de dimensiune fixă. Ultimul rând este "
+        "jocul nerestrâns și cade pe referința teoretică."
     ).classes("text-caption text-grey")
     for label, csv_name, draw_n, max_num in _BASE_TABLE_GAMES:
         if pool > max_num:
@@ -4547,6 +4550,12 @@ def _render_base_interval_tables() -> None:
                         "field": "ctrl",
                         "align": "center",
                     },
+                    {
+                        "name": "full",
+                        "label": "Toată extragerea",
+                        "field": "full",
+                        "align": "center",
+                    },
                 ],
                 rows=[
                     {
@@ -4556,6 +4565,7 @@ def _render_base_interval_tables() -> None:
                         "h1": f"{r.first_half:.2f}%",
                         "h2": f"{r.second_half:.2f}%",
                         "ctrl": f"{r.control_label} · {r.control:.2f}%",
+                        "full": f"{r.full_draw:.2f}% (aşteptat {r.full_draw_theoretical:.2f}%)",
                     }
                     for r in rows
                 ],
