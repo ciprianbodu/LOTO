@@ -117,6 +117,53 @@ def test_wf_output_distinguishes_pool_hits_from_incomplete_tickets():
     assert tickets["rnd"] == "—"
 
 
+def test_report_uses_audited_guarantee_not_the_requested_one(monkeypatch):
+    """Regresie: _dump_pool citea `guarantee`/`wheel_condition` CERUTE direct din
+    payload, nu valorile EFECTIV folosite din audit (wheel_guarantee_used /
+    wheel_condition_used) — spre deosebire de _render_pool_body/_render_cost,
+    care deja citesc din audit cu exact acest fallback. Pe un payload vechi/
+    recuperat unde engine-ul a clampat intern garanția (loto_engine.py
+    documentează un incident real de acest tip), raportul exportat
+    (raport_complet.txt) ar fi arătat o garanție diferită de cea afișată pe
+    ecran pentru ACELAȘI pool."""
+    audit = {
+        "wheel_guarantee_used": 4,
+        "wheel_condition_used": 5,
+    }
+    data = {
+        "pool_size": 11,
+        "hard_core": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        "variants": [],
+        "guarantee": 9,  # cerut — engine-ul l-a clampat intern la 4
+        "wheel_condition": 9,
+        "context": {"coverage_pct": 100.0},
+        "audit": audit,
+    }
+    monkeypatch.setitem(app_ui.STATE, "results", ([("x.csv", {"6/49": data})], 0))
+    monkeypatch.setitem(app_ui.STATE, "retro", {})
+    text = app_ui._build_report()
+    assert "Garanție: 4 dacă 5 (cerută: 9)" in text
+    assert "Garanție: 9" not in text.replace("(cerută: 9)", "")
+
+
+def test_report_falls_back_to_requested_guarantee_when_audit_missing(monkeypatch):
+    """Payload vechi fără wheel_guarantee_used în audit — raportul cade pe
+    valoarea cerută (comportament neschimbat, ca la _render_pool_body)."""
+    data = {
+        "pool_size": 6,
+        "hard_core": [1, 2, 3, 4, 5, 6],
+        "variants": [],
+        "guarantee": 4,
+        "context": {"coverage_pct": 100.0},
+        "audit": {},
+    }
+    monkeypatch.setitem(app_ui.STATE, "results", ([("x.csv", {"6/49": data})], 0))
+    monkeypatch.setitem(app_ui.STATE, "retro", {})
+    text = app_ui._build_report()
+    assert "Garanție: 4" in text
+    assert "cerută" not in text
+
+
 def test_report_explains_transforms_without_mutating_payload(monkeypatch):
     audit = {
         "timesfm_predictions": {1: 0.5},
