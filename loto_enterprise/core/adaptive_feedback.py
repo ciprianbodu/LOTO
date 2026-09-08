@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -57,18 +56,18 @@ _REGIME_MAX_DURATION = 5
 # Lungimea istoricului păstrat per cheie (rolling buffer)
 _HISTORY_MAXLEN = 50
 
+# (draw_n, max_n) per joc — pentru E(hits) al unui pool ales la întâmplare.
+_GAME_GEOMETRY = {
+    "6/49": (6, 49),
+    "5/40": (5, 40),
+    "joker": (5, 45),
+}
+
 
 def _baseline_random_hits(game_type: str, pool_size: int) -> float:
-    """
-    Numărul AȘTEPTAT de hituri pe pool ales la întâmplare.
-    E(hits) = draw_n * pool_size / max_n
-    """
-    params = {
-        "6/49": (6, 49),
-        "5/40": (5, 40),
-        "joker": (5, 45),
-    }
-    draw_n, max_n = params.get(game_type, (6, 49))
+    """Numărul AȘTEPTAT de hituri pe pool ales la întâmplare: E(hits) =
+    draw_n * pool_size / max_n."""
+    draw_n, max_n = _GAME_GEOMETRY.get(game_type, (6, 49))
     return draw_n * pool_size / max_n
 
 
@@ -97,8 +96,7 @@ def load_adaptive_state(game_type: str, pool_size: int) -> dict:
     if not _STATE_FILE.exists():
         return _empty_entry()
     try:
-        with open(_STATE_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
+        raw = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
     except Exception as e:
         logger.warning(f"[ADAPTIVE] Nu pot citi {_STATE_FILE}: {e}. Pornesc gol.")
         return _empty_entry()
@@ -130,8 +128,7 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
             raw: dict = {}
             if _STATE_FILE.exists():
                 try:
-                    with open(_STATE_FILE, "r", encoding="utf-8") as f:
-                        raw = json.load(f)
+                    raw = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
                 except Exception as e:
                     logger.warning(
                         f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie."
@@ -179,6 +176,22 @@ def detect_regime_mismatch(
     return (avg < cutoff), avg
 
 
+def _advance_regime_mode(
+    prev_mode: str, reset_duration: int, should_reset: bool
+) -> tuple[str, int]:
+    """Tranziția stării de regim (normal <-> reset).
+
+    Ieșire forțată la normal dacă am petrecut deja `_REGIME_MAX_DURATION`
+    extrageri consecutive în reset — indiferent dacă `should_reset` mai e
+    adevărat, ca să nu rămânem blocați într-un regim care nu ajută."""
+    if prev_mode == "reset" and reset_duration >= _REGIME_MAX_DURATION:
+        return "normal", 0
+    if should_reset:
+        next_duration = reset_duration + 1 if prev_mode == "reset" else 1
+        return "reset", next_duration
+    return "normal", 0
+
+
 def compute_post_draw_feedback(
     last_pool: list[int],
     actual_draw: list[int],
@@ -210,44 +223,24 @@ def compute_post_draw_feedback(
     pool_hits = len(pool_set & actual_set)
 
     event = classify_event(pool_hits)
-
     missed = sorted(actual_set - pool_set)
     false_positives = sorted(pool_set - actual_set)
 
-    # Streak update
-    if event == "catastrophe":
-        streak_zero += 1
-    else:
-        streak_zero = 0
+    streak_zero = streak_zero + 1 if event == "catastrophe" else 0
 
     # Regime detection (semnificativ sub baseline, nu doar sub)
-    hist_for_check = list(history or [])
-    hist_for_check.append({"pool_hits": pool_hits})
+    hist_for_check = [*(history or []), {"pool_hits": pool_hits}]
     is_mismatch, rolling_avg = detect_regime_mismatch(
         hist_for_check, game_type, pool_size
     )
 
     # Trigger reset: streak >= THRESHOLD SAU mismatch detectat.
-    # Dar respectăm durata maximă: dacă suntem în reset de mai mult de
-    # _REGIME_MAX_DURATION extrageri, ieșim înapoi la normal indiferent.
-    new_reset_duration = reset_duration
     should_reset = streak_zero >= _REGIME_STREAK_THRESHOLD or is_mismatch
-
-    if prev_mode == "reset" and reset_duration >= _REGIME_MAX_DURATION:
-        # Forțăm ieșirea din reset — am dat o șansă, n-a funcționat.
-        active_mode = "normal"
-        new_reset_duration = 0
-    elif should_reset:
-        active_mode = "reset"
-        if prev_mode == "reset":
-            new_reset_duration = reset_duration + 1
-        else:
-            new_reset_duration = 1
-        if event != "catastrophe":
-            event = "regime_reset"
-    else:
-        active_mode = "normal"
-        new_reset_duration = 0
+    active_mode, new_reset_duration = _advance_regime_mode(
+        prev_mode, reset_duration, should_reset
+    )
+    if active_mode == "reset" and event != "catastrophe":
+        event = "regime_reset"
 
     regime_info = {
         "pool_hits": pool_hits,
@@ -331,14 +324,12 @@ def compute_temp_blacklist(
     if last_event != "catastrophe" or not last_pool:
         return set()
 
-    pool_unique = sorted(set(int(x) for x in last_pool))
+    pool_unique = sorted({int(x) for x in last_pool})
     available_after_full = universe_size - len(pool_unique)
 
     if enable_full_inversion and available_after_full >= pool_size:
-        # Full inversion: excludem tot pool-ul ratat
-        return set(pool_unique)
-    # Partial fallback: excludem doar primele partial_k
-    k = min(partial_k, len(pool_unique))
+        return set(pool_unique)  # full inversion: excludem tot pool-ul ratat
+    k = min(partial_k, len(pool_unique))  # partial fallback
     return set(pool_unique[:k])
 
 
@@ -349,14 +340,15 @@ def get_state_summary(game_type: str, pool_size: int) -> dict:
     state = load_adaptive_state(game_type, pool_size)
     history = state.get("history", [])
     last = history[-1] if history else None
+    regime_state = state.get("regime_state", {})
 
     return {
         "last_event": last.get("event") if last else None,
         "last_hits": last.get("pool_hits") if last else None,
         "last_date": last.get("date") if last else None,
-        "active_mode": state.get("regime_state", {}).get("active_mode", "normal"),
-        "streak_zero": state.get("regime_state", {}).get("streak_zero", 0),
-        "rolling_avg": state.get("regime_state", {}).get("rolling_avg"),
+        "active_mode": regime_state.get("active_mode", "normal"),
+        "streak_zero": regime_state.get("streak_zero", 0),
+        "rolling_avg": regime_state.get("rolling_avg"),
         "baseline": _baseline_random_hits(game_type, pool_size),
         "history_size": len(history),
     }
