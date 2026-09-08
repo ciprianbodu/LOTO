@@ -114,6 +114,11 @@ def _restrict_base_text(audit: dict | None) -> str:
     return f"baza restrânsă la ≤{hi}"
 
 
+# Ținut sincron cu `walk_forward_adapter._RESTRICT_SEMANTICS`: aceeași schimbare
+# de regulă invalidează și cache-ul WF, și cache-ul de pipeline al worker-ului.
+_RESTRICT_SEMANTICS = "2"
+
+
 def _wf_generation_options(data: dict) -> dict:
     """Validează configurația rezultatului, inclusiv factorul legitim 0."""
     audit = data.get("audit") or {}
@@ -379,6 +384,12 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         "restrict_base_min_val",
     ):
         h.update(str(SETTINGS.get(k, DEFAULTS.get(k))).encode("utf-8"))
+    # Semantica restrângerii intră în hash DOAR când e activă: un rezultat
+    # cache-uit sub regula veche (interval mai îngust decât un bilet aplicat, nu
+    # ignorat) nu are voie să fie servit sub cea nouă. Fără restricție, hash-ul
+    # rămâne cel dinainte, deci cache-urile existente continuă să fie folosite.
+    if _int_setting("restrict_base_max_val") or _int_setting("restrict_base_min_val"):
+        h.update(f"restrict_semantics={_RESTRICT_SEMANTICS}".encode("utf-8"))
     h.update(
         str(sorted(sim_depth_per_game.items())).encode("utf-8")
     )  # adâncime per joc → cache key

@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 59 fisiere `test_*.py`, 728 teste trecute la auditul global.
+- teste: 59 fisiere `test_*.py`, 731 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -412,6 +412,15 @@ hash-ul designului si, pentru Joker, decizia Urnei 2.
 
 Un bump WF schimba numele fisierului, dar nu sterge cache-urile vechi. Foloseste
 API-urile de inventariere/curatare, nu stergeri recursive oarbe.
+
+Cand se schimba ce pool produce o SETARE data, nu structura rezultatului, un bump
+global ar arunca si cache-urile pe care schimbarea nu le atinge — la WF, 90 de
+minute de rulare fiecare. Pentru restrangerea bazei exista in schimb
+`_RESTRICT_SEMANTICS`, un marcaj care intra in cheie DOAR cand restrictia e
+activa: `walk_forward_adapter._restrict_base_sig` pentru WF si hash-ul din
+`_build_config_json` pentru cache-ul de pipeline al worker-ului. Cele doua
+constante se tin sincron (exista un test pentru asta) si se incrementeaza
+impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 
 ## 10. Mediu si rulare
 
