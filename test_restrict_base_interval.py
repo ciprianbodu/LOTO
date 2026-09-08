@@ -184,3 +184,84 @@ def test_wf_worker_step_takes_named_settings_so_a_new_one_cannot_shift_a_slot():
     assert step is not None
     for variant in step.variants:
         assert all(10 <= n <= 40 for n in variant)
+
+
+def test_interval_narrower_than_a_ticket_is_ignored_not_turned_into_a_short_ticket():
+    """47–49 la 6/49 nu poate produce un bilet de 6 numere.
+
+    Fără gardă, blacklist-ul lăsa trei candidați, iar wheeling-ul tratează
+    `len(pool) < pick` drept sistem complet cu un singur bilet: pipeline-ul
+    raporta `[47, 48, 49]` ca bilet 6/49 cu acoperire 100%, adică un bilet
+    nejucabil prezentat drept acoperit integral.
+    """
+    engine = _engine()
+    lines, *_ = engine.run_institutional_pipeline(
+        pool_size=10,
+        guarantee=3,
+        max_variants=0,
+        track_pool_variation=False,
+        restrict_base_min=47,
+        restrict_base_max=49,
+    )
+    audit = engine.audit["restrict_base"]
+    assert audit["ignored"] is True and "prea îngust" in audit["reason"]
+    assert all(len(line) == 6 for line in lines)
+    assert len(engine.hard_core) == 10
+
+    # Exact cât un bilet: rămâne valid, un singur bilet complet.
+    exact = _engine()
+    lines_exact, *_ = exact.run_institutional_pipeline(
+        pool_size=10,
+        guarantee=3,
+        max_variants=0,
+        track_pool_variation=False,
+        restrict_base_min=44,
+        restrict_base_max=49,
+    )
+    assert not (exact.audit.get("restrict_base") or {}).get("ignored")
+    assert sorted(exact.hard_core) == [44, 45, 46, 47, 48, 49]
+    assert all(len(line) == 6 for line in lines_exact)
+
+
+def test_parallel_walk_forward_dispatch_reads_the_named_index(monkeypatch, caplog):
+    """Ramura PARALELĂ, pe care restul suitei nu o atinge (workers forțat la 1).
+
+    Acolo se construiește harta de future-uri din `task_args`. Cât timp erau
+    tupluri, indexul se lua pozițional; după trecerea la dicționar, aceeași
+    indexare arunca `KeyError` chiar la construirea hărții, iar handler-ul
+    exterior cădea înapoi pe execuția secvențială a tuturor pașilor scumpi.
+    """
+    import logging
+
+    from loto_enterprise.core import backtesting as bt
+
+    df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(14).reset_index(drop=True)
+    monkeypatch.setattr(bt, "_wf_max_workers", lambda: 2)
+    monkeypatch.setattr(bt, "_WF_SERIAL_MAX_MS", 0.0)  # forțează ramura paralelă
+    monkeypatch.setattr(bt, "_WF_PROBE_STEPS", 1)
+
+    backtester = bt.LotoBacktester(df, "6/49")
+    backtester._load_data()
+    with caplog.at_level(logging.WARNING, logger=bt.logger.name):
+        predictions = backtester.run_retroactive_backtest(
+            backtest_depth_percent=30.0,
+            pool_size=10,
+            guarantee=3,
+            max_variants=2,
+            restrict_base_min=10,
+            restrict_base_max=40,
+            # Calea stateless (cea paralelizabilă) e activă doar fără stare
+            # între pași — exact cum o apelează walk-forward-ul din UI.
+            use_feedback=False,
+            enable_hard_inversion=False,
+        )
+    assert predictions, "ramura paralelă nu a produs niciun pas"
+    for prediction in predictions:
+        for variant in prediction.variants:
+            assert all(10 <= n <= 40 for n in variant)
+    # Fără asta testul ar fi trecut și cu bug-ul: handler-ul exterior prinde
+    # excepția din construirea hărții de future-uri și reia TOT secvențial, cu
+    # rezultate corecte — paralelizarea dispare în tăcere, nu rezultatul.
+    assert not [
+        r for r in caplog.records if "WF rapid indisponibil" in r.getMessage()
+    ], "dispatch-ul paralel a căzut pe fallback secvențial"
