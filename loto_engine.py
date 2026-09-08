@@ -728,6 +728,7 @@ class LotoEngine:
         recent_penalty_draws=0,
         recent_penalty_factor=0.5,
         restrict_base_max=0,
+        restrict_base_min=0,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -748,8 +749,11 @@ class LotoEngine:
             Se aplică identic în producție și în walk-forward, deci validarea
             măsoară exact pool-ul jucat.
 
-        restrict_base_max: preferință OPȚIONALĂ a utilizatorului — exclude din
-            candidați toate numerele > acest prag (0 = fără restricție, implicit).
+        restrict_base_min / restrict_base_max: preferință OPȚIONALĂ a
+            utilizatorului — restrânge candidații la intervalul [min, max]
+            (0 pe oricare capăt = capătul rămâne liber; ambele 0 = fără
+            restricție, implicit). Exemplu: min 10 și max 40 înseamnă „6 din
+            10–40" în loc de „6 din 1–49".
             NU are avantaj statistic demonstrat: probabilitatea de hit a unui pool
             de dimensiune fixă e identică matematic (hipergeometric) indiferent de
             care numere îl compun — confirmat empiric pe istoricul acestei
@@ -1066,23 +1070,43 @@ class LotoEngine:
 
         # Restrângere bază: preferință OPȚIONALĂ a utilizatorului (0 = oprit,
         # implicit). Fără avantaj statistic — vezi docstring-ul funcției.
+        _max_n = int(self.params["max_n"])
         restrict_max = int(restrict_base_max or 0)
-        if restrict_max > 0:
-            _max_n = int(self.params["max_n"])
-            restrict_max = max(1, min(restrict_max, _max_n))
-            if restrict_max < _max_n:
-                _excluded = set(range(restrict_max + 1, _max_n + 1))
-                blacklist |= _excluded
-                self.audit["restrict_base"] = {
-                    "max": restrict_max,
-                    "excluded": sorted(_excluded),
-                }
-                logging.info(
-                    "[PIPELINE] Bază restrânsă la <= %d (preferință utilizator, "
-                    "fără avantaj statistic demonstrat) — %d numere excluse.",
-                    restrict_max,
-                    len(_excluded),
-                )
+        restrict_min = int(restrict_base_min or 0)
+        restrict_max = min(restrict_max, _max_n) if restrict_max > 0 else _max_n
+        restrict_min = max(restrict_min, 1) if restrict_min > 0 else 1
+        # Interval inversat (min > max) ar goli complet baza de candidați și ar
+        # lăsa pool-ul pe seama fallback-ului. Îl ignorăm și consemnăm motivul,
+        # în loc să producem tăcut un pool care nu respectă nicio setare.
+        if restrict_min > restrict_max:
+            self.audit["restrict_base"] = {
+                "ignored": True,
+                "reason": f"interval inversat ({restrict_min} > {restrict_max})",
+                "min": restrict_min,
+                "max": restrict_max,
+            }
+            logging.warning(
+                "[PIPELINE] Interval de bază inversat (%d > %d) — restricție ignorată.",
+                restrict_min,
+                restrict_max,
+            )
+        elif restrict_min > 1 or restrict_max < _max_n:
+            _excluded = set(range(1, restrict_min)) | set(
+                range(restrict_max + 1, _max_n + 1)
+            )
+            blacklist |= _excluded
+            self.audit["restrict_base"] = {
+                "min": restrict_min,
+                "max": restrict_max,
+                "excluded": sorted(_excluded),
+            }
+            logging.info(
+                "[PIPELINE] Bază restrânsă la %d..%d (preferință utilizator, "
+                "fără avantaj statistic demonstrat) — %d numere excluse.",
+                restrict_min,
+                restrict_max,
+                len(_excluded),
+            )
 
         self.hard_core = self._get_timesfm_pool(
             tfm_scores, pool_size=pool_size, blacklist=blacklist

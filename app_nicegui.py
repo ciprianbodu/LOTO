@@ -94,6 +94,26 @@ def _effective_lookback_pct(from_data: dict | None = None) -> float:
     return float(max(1, min(100, v)))
 
 
+def _restrict_base_text(audit: dict | None) -> str:
+    """Descrierea restrângerii de bază aplicate, sau "" dacă nu s-a aplicat.
+
+    Un singur loc pentru toate cele trei suprafețe (panou, raport, notă de bench),
+    ca intervalul să nu apară altfel în raport decât pe ecran. Întoarce "" și
+    pentru intervalul inversat, pe care motorul îl ignoră: acolo nu s-a exclus
+    niciun număr, deci nu e nimic de raportat ca restrângere.
+    """
+    rb = (audit or {}).get("restrict_base") or {}
+    if rb.get("ignored") or not rb.get("excluded"):
+        return ""
+    lo = int(rb.get("min") or 1)
+    hi = int(rb.get("max") or 0)
+    if not hi:
+        return ""
+    if lo > 1 and hi:
+        return f"baza restrânsă la {lo}–{hi}"
+    return f"baza restrânsă la ≤{hi}"
+
+
 def _wf_generation_options(data: dict) -> dict:
     """Validează configurația rezultatului, inclusiv factorul legitim 0."""
     audit = data.get("audit") or {}
@@ -117,6 +137,7 @@ def _wf_generation_options(data: dict) -> dict:
         "wheel_condition": wheel_condition,
         "max_variants": int(data.get("max_variants", context.get("max_variants")) or 0),
         "restrict_base_max": int(data.get("restrict_base_max") or 0),
+        "restrict_base_min": int(data.get("restrict_base_min") or 0),
     }
 
 
@@ -143,6 +164,7 @@ UI_PERSIST_KEYS = [
     "recent_penalty_draws_val",
     "recent_penalty_factor_val",
     "restrict_base_max_val",
+    "restrict_base_min_val",
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -170,6 +192,7 @@ DEFAULTS = {
     # loto_engine.run_institutional_pipeline. Nu prezenta niciodată acest câmp
     # drept optimizare — e doar compoziție, la fel ca recent_penalty_draws.
     "restrict_base_max_val": 0,
+    "restrict_base_min_val": 0,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,
@@ -353,6 +376,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         "recent_penalty_draws_val",
         "recent_penalty_factor_val",
         "restrict_base_max_val",
+        "restrict_base_min_val",
     ):
         h.update(str(SETTINGS.get(k, DEFAULTS.get(k))).encode("utf-8"))
     h.update(
@@ -379,6 +403,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "recent_penalty_draws": _int_setting("recent_penalty_draws_val"),
             "recent_penalty_factor": _float_setting("recent_penalty_factor_val"),
             "restrict_base_max": _int_setting("restrict_base_max_val"),
+            "restrict_base_min": _int_setting("restrict_base_min_val"),
             "lookback": _int_setting("lookback_val"),
             "filter_consecutives": False,
             "smart_reduction": False,  # neaplicat pe path-ul principal (filters_disabled)
@@ -1986,9 +2011,9 @@ def _bench_transform_note(data: dict) -> str:
         changes.append(f"penalizarea ultimelor {int(rp['draws'])} extrageri")
     if 0 < float(audit.get("lookback_pct") or 0) < 100:
         changes.append(f"istoric limitat la {float(audit['lookback_pct']):g}%")
-    _rb = audit.get("restrict_base") or {}
-    if _rb.get("max"):
-        changes.append(f"baza restrânsă la ≤{int(_rb['max'])}")
+    _rb_text = _restrict_base_text(audit)
+    if _rb_text:
+        changes.append(_rb_text)
     if not changes:
         return ""
     return (
@@ -2113,12 +2138,15 @@ def _build_report() -> str:
                 )
             )
         _rb = (d.get("audit") or {}).get("restrict_base") or {}
-        if _rb.get("max"):
+        _rb_text = _restrict_base_text(d.get("audit"))
+        if _rb_text:
             out.append(
-                f"{indent}Bază restrânsă la ≤{int(_rb['max'])} (preferință utilizator, "
+                f"{indent}{_rb_text[0].upper() + _rb_text[1:]} (preferință utilizator, "
                 f"fără avantaj statistic demonstrat); excluse: "
                 + ", ".join(str(n) for n in _rb.get("excluded") or [])
             )
+        elif _rb.get("ignored"):
+            out.append(f"{indent}Restrângere de bază ignorată: {_rb.get('reason', '')}")
         out.append(
             f"{indent}Nucleu dur (nr(frecvență)): "
             + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool)
@@ -2304,10 +2332,15 @@ def _render_pool_body(
                 f" ({len(_pen)} numere: {', '.join(str(k) for k in sorted(int(x) for x in _pen))})"
             ).classes("text-caption")
         _rb = (data.get("audit") or {}).get("restrict_base") or {}
-        if _rb.get("max"):
+        _rb_text = _restrict_base_text(data.get("audit"))
+        if _rb_text:
             ui.label(
-                f"Bază restrânsă la ≤{int(_rb['max'])} — preferință personală, "
+                f"{_rb_text[0].upper() + _rb_text[1:]} — preferință personală, "
                 "fără avantaj statistic demonstrat"
+            ).classes("text-caption text-warning")
+        elif _rb.get("ignored"):
+            ui.label(
+                f"Restrângere de bază ignorată: {_rb.get('reason', '')}"
             ).classes("text-caption text-warning")
         # Acoperirea REALĂ a garanției (set-cover), pe setul FINAL de bilete —
         # 100% = orice grup de `guarantee` numere prinse în pool apare garantat
@@ -4397,6 +4430,146 @@ def _refresh_status() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Submeniu: procentul exact al fiecărui prag de restrângere, per joc
+# --------------------------------------------------------------------------- #
+_BASE_TABLE_GAMES = (
+    ("6/49", "loto_6_49.csv", 6, 49),
+    ("5/40", "loto_5_40.csv", 5, 40),
+    ("Joker — Urna 1 (5/45)", "joker.csv", 5, 45),
+)
+
+_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool) → (rânduri, n)
+
+
+def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int):
+    """Tabelul de intervale al unui joc, memoizat pe fișier + geometrie + pool.
+
+    Calculul e exact (hipergeometric per extragere), nu simulare, și durează sub
+    o secundă per joc — memo-ul e doar ca redesenarea sidebar-ului să nu îl reia.
+    Întoarce None dacă istoricul lipsește sau e prea scurt ca să fie tăiat în
+    două, cazuri în care submeniul afișează motivul în loc de cifre.
+    """
+    from loto_enterprise.benchmark.runner import _list_istoric_dirs
+    from loto_enterprise.core.base_threshold import interval_table
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+
+    path = next(
+        (d / csv_name for d in _list_istoric_dirs() if (d / csv_name).exists()), None
+    )
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    key = (str(path), stat.st_mtime_ns, stat.st_size, draw_n, max_num, pool_size)
+    if key in _BASE_TABLE_MEMO:
+        return _BASE_TABLE_MEMO[key]
+    try:
+        draws, _ = valid_draw_matrix(
+            pd.read_csv(path),
+            [f"n{i}" for i in range(1, draw_n + 1)],
+            draw_n=draw_n,
+            max_num=max_num,
+        )
+        result = (interval_table(draws, max_num, pool_size, draw_n), len(draws))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("tabel intervale %s: %s", csv_name, exc)
+        return None
+    if len(_BASE_TABLE_MEMO) > 12:
+        _BASE_TABLE_MEMO.clear()
+    _BASE_TABLE_MEMO[key] = result
+    return result
+
+
+@ui.refreshable
+def _render_base_threshold_tables() -> None:
+    """Cel mai bun interval de fiecare lățime, per joc, lângă controlul lui.
+
+    Procentele diferă de la joc la joc pentru că geometria diferă, de aceea
+    tabelul e per joc. Coloana „uniform" este ACELAȘI calcul pe extrageri
+    generate aleator, unde niciun număr nu e mai bun decât altul: dacă acolo
+    apare un campion la fel de bun, campionul din coloana reală nu dovedește
+    nimic. Submeniul nu setează niciun interval — alegerea rămâne a
+    utilizatorului (CLAUDE.md §6).
+    """
+    from loto_enterprise.core.base_threshold import theoretical_rate
+
+    pool = _int_setting("pool_size_val")
+    ui.label(
+        f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată de 3+ "
+        f"la un pool de {pool} numere. Calcul exact (hipergeometric per extragere), "
+        "nu simulare. Ultimul rând este jocul nerestrâns și cade pe referința teoretică."
+    ).classes("text-caption text-grey")
+    for label, csv_name, draw_n, max_num in _BASE_TABLE_GAMES:
+        if pool > max_num:
+            continue
+        data = _base_interval_rows(csv_name, draw_n, max_num, pool)
+        if data is None:
+            ui.label(f"· {label}: istoric indisponibil.").classes(
+                "text-caption text-grey"
+            )
+            continue
+        rows, n_draws = data
+        with ui.expansion(f"{label} — {n_draws} extrageri", value=False).classes(
+            "w-full"
+        ):
+            ui.table(
+                columns=[
+                    {"name": "w", "label": "Lățime", "field": "w", "align": "center"},
+                    {
+                        "name": "span",
+                        "label": "Interval",
+                        "field": "span",
+                        "align": "center",
+                    },
+                    {"name": "whole", "label": "Tot", "field": "whole", "align": "center"},
+                    {"name": "h1", "label": "Jum. 1", "field": "h1", "align": "center"},
+                    {"name": "h2", "label": "Jum. 2", "field": "h2", "align": "center"},
+                    {
+                        "name": "ctrl",
+                        "label": "🎲 Uniform",
+                        "field": "ctrl",
+                        "align": "center",
+                    },
+                ],
+                rows=[
+                    {
+                        "w": r.width,
+                        "span": r.label,
+                        "whole": f"{r.whole:.2f}%",
+                        "h1": f"{r.first_half:.2f}%",
+                        "h2": f"{r.second_half:.2f}%",
+                        "ctrl": f"{r.control_label} · {r.control:.2f}%",
+                    }
+                    for r in rows
+                ],
+                row_key="w",
+                pagination=0,
+            ).classes("w-full")
+            _moved = sum(
+                1
+                for r in rows
+                if r.width < max_num and r.second_half < r.first_half
+            )
+            ui.label(
+                f"Referință teoretică, identică pentru ORICE pool de {pool} numere: "
+                f"{theoretical_rate(max_num, pool, draw_n):.2f}%. "
+                f"Din {len(rows) - 1} intervale alese pe tot istoricul, {_moved} au "
+                "ieșit mai slabe pe a doua jumătate decât pe prima."
+            ).classes("text-caption text-grey")
+    ui.label(
+        "Cum se citește: un pool de dimensiune fixă are aceeași probabilitate "
+        "indiferent care numere îl compun. Diferențele dintre intervale sunt abateri "
+        "ale istoricului, iar cu cât intervalul e mai îngust, cu atât rămân mai puține "
+        "combinații distincte și cu atât cifra e mai zgomotoasă — la lățime egală cu "
+        "pool-ul există o singură combinație posibilă. Compară fiecare rând cu "
+        "coloana uniformă, unde nu există nimic de găsit: dacă acolo apare un câștig "
+        "de aceeași mărime, câștigul din coloana reală e zgomot."
+    ).classes("text-caption text-grey")
+
+
+# --------------------------------------------------------------------------- #
 # Pagina principală
 # --------------------------------------------------------------------------- #
 @ui.page("/")
@@ -4465,7 +4638,7 @@ def main_page() -> None:
             widget.on_value_change(lambda: _save_settings())
             return widget
 
-        _bind_save(
+        _pool_input = _bind_save(
             ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=16, step=1).classes(
                 "w-full"
             ),
@@ -4523,15 +4696,37 @@ def main_page() -> None:
         ).classes("text-caption text-grey")
         _bind_save(
             ui.number(
-                "Restrânge baza de numere jucate la maxim N (0 = fără restricție)",
+                "Baza jucată — de la N (0 = fără capăt de jos)",
+                min=0,
+                max=49,
+                step=1,
+            ).classes("w-full"),
+            "restrict_base_min_val",
+        )
+        _bind_save(
+            ui.number(
+                "Baza jucată — până la N (0 = fără capăt de sus)",
                 min=0,
                 max=49,
                 step=1,
             ).classes("w-full"),
             "restrict_base_max_val",
         )
+        with ui.expansion(
+            "📐 Procentul fiecărui prag, per joc", value=False
+        ).classes("w-full"):
+            _render_base_threshold_tables()
+        # Procentele depind de dimensiunea pool-ului, deci tabelul se recalculează
+        # când aceasta se schimbă. Pragul ales de utilizator nu intră în calcul —
+        # tabelul arată toate pragurile, nu îl evidențiază pe cel setat.
+        _pool_input.on_value_change(
+            lambda: _render_base_threshold_tables.refresh()
+        )
         ui.label(
-            "Exclude din pool orice număr peste N. FĂRĂ avantaj statistic demonstrat: "
+            "Restrânge candidații la intervalul ales — «de la 10 până la 40» înseamnă "
+            "6 din 10–40 în loc de 6 din 1–49. Oricare capăt lăsat pe 0 rămâne liber; "
+            "ambele pe 0 = fără restricție. Un interval inversat (de la > până la) "
+            "este ignorat și consemnat în audit. FĂRĂ avantaj statistic demonstrat: "
             "probabilitatea de hit a unui pool de dimensiune fixă e identică matematic, "
             "indiferent de care numere îl compun (verificat pe istoricul acestei aplicații). "
             "E doar o preferință personală de compoziție a pool-ului, ca penalizarea "

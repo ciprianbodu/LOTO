@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 56 fisiere `test_*.py`, 679 teste trecute la auditul global.
+- teste: 58 fisiere `test_*.py`, 719 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -127,6 +127,9 @@ UI-ul face polling la o secunda, fara reload complet.
 - Nu scrie `pool_history.json` din pasi WF/backtest.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.
+- Pasii walk-forward paraleli primesc setarile pe NUME (`_wf_worker_step` ia un
+  dict). Nu reintroduce tuplul pozitional: o setare noua ajungea in parametrul
+  vecin daca unul dintre cele trei locuri care il consumau ramanea nesincronizat.
 
 ### 4.5 Git
 
@@ -285,17 +288,32 @@ la randul ei candidata la excludere.
   valoare asteptata: analizele din `scripts/analysis/` nu au demonstrat
   predictibilitate pentru paritate, decade, sume sau tipare recente, iar
   penalizarea nu trebuie prezentata drept avantaj statistic.
-- Restrangerea bazei de numere este o OPTIUNE de utilizator (`restrict_base_max`),
-  implicit OPRITA (`restrict_base_max_val = 0` in UI) — exclude din candidati
-  orice numar peste pragul ales. FARA avantaj statistic demonstrat:
-  probabilitatea de hit a unui pool de dimensiune fixa e identica matematic
-  (hipergeometric) indiferent de care numere il compun, confirmat si empiric pe
-  istoricul aplicatiei (`scripts/analysis/pattern_base_reduction.py`). Se aplica
-  identic in productie si in walk-forward (intra in cheia de cache WF cand e
-  activa, prin `_restrict_base_sig`) si este raportata in `audit.restrict_base`.
-  Nu adauga niciodata o varianta "bench calculeaza pragul optim" — ar prezenta
-  zgomot statistic drept semnal (orice prag da aceeasi rata teoretica). Bench-ul
-  a fost construit si rulat ca diagnostic, nu ca functie de productie:
+- Restrangerea bazei de numere este o OPTIUNE de utilizator, un INTERVAL
+  (`restrict_base_min`, `restrict_base_max`), implicit OPRITA (ambele capete 0 in
+  UI) — exclude din candidati orice numar din afara intervalului ales. Un capat
+  lasat pe 0 ramane liber, deci setarea veche doar-maxim continua sa functioneze;
+  intervalul inversat (min > max) este IGNORAT si consemnat in
+  `audit.restrict_base.ignored`, nu aplicat tacit peste o baza goala. FARA
+  avantaj statistic demonstrat: probabilitatea de hit a unui pool de dimensiune
+  fixa e identica matematic (hipergeometric) indiferent de care numere il compun,
+  confirmat si empiric pe istoricul aplicatiei
+  (`scripts/analysis/pattern_base_reduction.py`). Se aplica identic in productie
+  si in walk-forward (intra in cheia de cache WF cand e activa, prin
+  `_restrict_base_sig`, care separa 1..40 de 10..40) si este raportata in
+  `audit.restrict_base`. Cele trei suprafete care o afiseaza — panoul, raportul
+  si nota de bench — folosesc `_restrict_base_text`, ca intervalul sa nu apara
+  altfel in raport decat pe ecran.
+- Submeniul „Procentul fiecarui interval, per joc" din sidebar afiseaza, pentru
+  fiecare latime de interval, intervalul cu cea mai buna rata pe istoric, ratele
+  lui pe cele doua jumatati SI cel mai bun interval de aceeasi latime gasit pe
+  extrageri sintetice uniforme. Ratele sunt exacte (hipergeometric per extragere,
+  `loto_enterprise/core/base_threshold.py`), nu Monte Carlo. Coloana de control
+  nu este optionala: acelasi calcul „gaseste" un campion si acolo unde nu exista
+  nimic de gasit, iar fara ea un varf de 10.31% s-ar citi ca descoperire.
+  Submeniul NU seteaza si NU recomanda niciun interval.
+  Nu adauga niciodata o varianta "bench calculeaza intervalul optim" — ar prezenta
+  zgomot statistic drept semnal (orice interval da aceeasi rata teoretica).
+  Bench-ul a fost construit si rulat ca diagnostic, nu ca functie de productie:
   `scripts/analysis/bench_base_threshold.py` alege pragul pe primele 70% din
   istoric si il masoara pe ultimele 30%, apoi compara castigul cu distributia
   nula obtinuta prin permutarea etichetelor numerelor pe tot istoricul. Rezultat

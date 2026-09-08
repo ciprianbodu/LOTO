@@ -157,7 +157,10 @@ def test_restrict_base_max_excludes_numbers_above_threshold_and_is_audited():
         restrict_base_max=36,
     )
     assert all(n <= 36 for n in eng2.hard_core)
+    # Capătul de jos lipsă înseamnă 1 — auditul îl consemnează explicit, ca
+    # intervalul aplicat să se citească fără să fie dedus.
     assert audit["restrict_base"] == {
+        "min": 1,
         "max": 36,
         "excluded": list(range(37, 50)),
     }

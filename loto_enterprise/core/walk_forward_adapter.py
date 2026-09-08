@@ -341,10 +341,18 @@ def _penalty_sig(
     return f"|rp{n}:{float(recent_penalty_factor).hex()}"
 
 
-def _restrict_base_sig(restrict_base_max: int = 0) -> str:
-    """Sufix de cheie pentru restrângerea bazei; gol când e oprită (chei vechi valide)."""
-    n = int(restrict_base_max or 0)
-    return f"|rb{n}" if n > 0 else ""
+def _restrict_base_sig(restrict_base_max: int = 0, restrict_base_min: int = 0) -> str:
+    """Sufix de cheie pentru restrângerea bazei; gol când e oprită.
+
+    Rămâne gol când ambele capete sunt 0, deci cheile scrise înainte de existența
+    setării continuă să fie servite. Capătul de jos apare separat, ca 1..40 și
+    10..40 să nu împartă același cache.
+    """
+    hi = int(restrict_base_max or 0)
+    lo = int(restrict_base_min or 0)
+    if hi <= 0 and lo <= 0:
+        return ""
+    return f"|rb{hi}" + (f":{lo}" if lo > 0 else "")
 
 
 def _decision_sig(
@@ -357,6 +365,7 @@ def _decision_sig(
     wheel_condition=None,
     max_variants=0,
     restrict_base_max: int = 0,
+    restrict_base_min: int = 0,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
@@ -387,7 +396,7 @@ def _decision_sig(
             f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
             f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
-            f"{_restrict_base_sig(restrict_base_max)}"
+            f"{_restrict_base_sig(restrict_base_max, restrict_base_min)}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -403,7 +412,7 @@ def _decision_sig(
                     )
                     + f"|lb{lookback_pct(lookback_percent)}"
                     + _penalty_sig(recent_penalty_draws, recent_penalty_factor)
-                    + _restrict_base_sig(restrict_base_max)
+                    + _restrict_base_sig(restrict_base_max, restrict_base_min)
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -555,6 +564,7 @@ def run_honest_walk_forward(
     wheel_condition: int | None = None,
     max_variants: int = 0,
     restrict_base_max: int = 0,
+    restrict_base_min: int = 0,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -562,7 +572,7 @@ def run_honest_walk_forward(
     intră în cheia de cache doar când e activă.
     guarantee/wheel_condition/max_variants: setările rezultatului generat.
     Fără guarantee explicită se păstrează geometria internă istorică a API-ului.
-    restrict_base_max: aceeași restrângere de bază (preferință fără avantaj
+    restrict_base_min/max: același interval de bază (preferință fără avantaj
     statistic — vezi loto_engine.run_institutional_pipeline) ca în producție;
     intră în cheia de cache doar când e activă (0 = oprit).
 
@@ -593,6 +603,7 @@ def run_honest_walk_forward(
         wheel_condition,
         max_variants,
         restrict_base_max,
+        restrict_base_min,
     )
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
@@ -682,6 +693,7 @@ def run_honest_walk_forward(
         recent_penalty_draws=int(recent_penalty_draws or 0),
         recent_penalty_factor=float(recent_penalty_factor),
         restrict_base_max=int(restrict_base_max or 0),
+        restrict_base_min=int(restrict_base_min or 0),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
