@@ -45,8 +45,8 @@ logging.basicConfig(
     format="[%(asctime)s] [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a"),
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 
 from job_queue import (
@@ -70,11 +70,14 @@ try:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
-    logging.debug("UTF-8 console reconfigure eșuat; continuu cu encoding implicit.", exc_info=True)
+    logging.debug(
+        "UTF-8 console reconfigure eșuat; continuu cu encoding implicit.", exc_info=True
+    )
 
 
 import psutil
 import threading
+
 
 class ResourceMonitor:
     def __init__(self, interval=0.5):
@@ -83,22 +86,24 @@ class ResourceMonitor:
         self.max_ram = 0.0
         self.running = False
         self._thread = None
-        
+
     def start(self):
         self.running = True
         self._thread = threading.Thread(target=self._monitor, daemon=True)
         self._thread.start()
-        
+
     def stop(self):
         self.running = False
         if self._thread:
             self._thread.join()
-            
+
     def _monitor(self):
         while self.running:
             try:
                 # CPU & RAM
-                cpu = psutil.cpu_percent(interval=None)  # FIX: era cpu_percentage (typo)
+                cpu = psutil.cpu_percent(
+                    interval=None
+                )  # FIX: era cpu_percentage (typo)
                 ram = psutil.virtual_memory().percent
                 self.max_cpu = max(self.max_cpu, cpu)
                 self.max_ram = max(self.max_ram, ram)
@@ -113,6 +118,7 @@ class ResourceMonitor:
             "max_ram": round(self.max_ram, 1),
         }
 
+
 def _pack_result_payload(payload: object) -> str:
     return pack_queue_result(payload)
 
@@ -125,7 +131,9 @@ def _remove_temp_csv(temp_csv_path: str) -> None:
         try:
             os.remove(temp_csv_path)
         except OSError as exc:
-            logging.warning("Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc)
+            logging.warning(
+                "Nu pot șterge fișierul temporar %s: %s", temp_csv_path, exc
+            )
 
 
 def _run_pipeline_job(job: dict) -> str | None:
@@ -135,6 +143,7 @@ def _run_pipeline_job(job: dict) -> str | None:
         return _run_pipeline_job_inner(job, monitor)
     finally:
         monitor.stop()
+
 
 def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     cfg = json.loads(job["config_json"])
@@ -148,8 +157,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         fail_job(job_id, "Job fără CSV — nimic de generat.", worker_token=WORKER_TOKEN)
         return None
 
-    if update_job_progress(job_id, 3, "Încarc motorul de generare...", worker_token=WORKER_TOKEN):
-        logging.info("[worker] Job %s nu mai este RUNNING; opresc înainte de engine.", job_id)
+    if update_job_progress(
+        job_id, 3, "Încarc motorul de generare...", worker_token=WORKER_TOKEN
+    ):
+        logging.info(
+            "[worker] Job %s nu mai este RUNNING; opresc înainte de engine.", job_id
+        )
         return None
     # Import GREU după ce jobul e deja preluat (altfel UI stă pe 0% /
     # «se inițializează...» cât se încarcă pandas+engine).
@@ -163,9 +176,15 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     if use_cache and cache_key:
         cached = get_pipeline_cache(cache_key)
         if cached:
-            if update_job_progress(job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic).",
-                                   worker_token=WORKER_TOKEN):
-                logging.info("[worker] Job %s a pierdut starea RUNNING la cache hit.", job_id)
+            if update_job_progress(
+                job_id,
+                100,
+                "Cache hit: rezultat reutilizat (hash CSV identic).",
+                worker_token=WORKER_TOKEN,
+            ):
+                logging.info(
+                    "[worker] Job %s a pierdut starea RUNNING la cache hit.", job_id
+                )
                 return None
             return str(cached)
 
@@ -179,10 +198,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             io.StringIO(str(ds["df_json"])), orient="split", convert_dates=False
         )
         outputs = {}
-        
+
         # Salvăm un fișier temporar pentru a-l încărca cu engine-ul
         temp_csv_path = ""
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w", encoding="utf-8") as tmp:
+        with tempfile.NamedTemporaryFile(
+            suffix=".csv", delete=False, mode="w", encoding="utf-8"
+        ) as tmp:
             df.to_csv(tmp.name, index=False)
             temp_csv_path = tmp.name
 
@@ -225,7 +246,13 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                 logging.warning(
                     "[worker] Task normalizat %s: guarantee %s→%s, max_variants %s→%s, "
                     "lookback %s→%s",
-                    game_label, raw_guar, guar, raw_max_var, max_var, raw_lookback, lookback,
+                    game_label,
+                    raw_guar,
+                    guar,
+                    raw_max_var,
+                    max_var,
+                    raw_lookback,
+                    lookback,
                 )
             filter_cons = bool(task.get("filter_consecutives", False))
             smart_red = bool(task.get("smart_reduction", False))
@@ -233,34 +260,50 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             pure_bench = bool(task.get("pure_bench_mode", False))
             try:
                 from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
-                bench_hit_target = clamp_bench_hit_target(task.get("bench_hit_target", 3))
+
+                bench_hit_target = clamp_bench_hit_target(
+                    task.get("bench_hit_target", 3)
+                )
             except Exception:
                 bench_hit_target = 3
 
             try:
                 import loto_enterprise.benchmark.decision as decision
+
                 decision.BENCH_HIT_TARGET = bench_hit_target
                 os.environ["LOTO_BENCH_TARGET"] = str(bench_hit_target)
-                logging.info(f"[worker] S-a setat tinta de benchmark la {bench_hit_target}+ hits.")
+                logging.info(
+                    f"[worker] S-a setat tinta de benchmark la {bench_hit_target}+ hits."
+                )
             except Exception as exc:
                 logging.warning(f"[worker] Nu s-a putut seta tinta de benchmark: {exc}")
 
-            logging.info(f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})")
+            logging.info(
+                f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})"
+            )
             logging.debug(f"[worker] Full task: {task}")
-            
+
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
                 # Dacă update_job_progress returnează True, înseamnă că job-ul a fost anulat sau șters
-                if update_job_progress(job_id, overall_pct, f"[{fname}][{game_label}] {msg}",
-                                       worker_token=WORKER_TOKEN):
+                if update_job_progress(
+                    job_id,
+                    overall_pct,
+                    f"[{fname}][{game_label}] {msg}",
+                    worker_token=WORKER_TOKEN,
+                ):
                     # Aruncăm o eroare pentru a opri engine-ul imediat
                     raise Exception("STOP_REQUESTED")
 
             try:
                 # Verificăm dacă job-ul a fost anulat între timp
                 if is_job_cancelled(job_id):
-                    logging.info(f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire.")
-                    _remove_temp_csv(temp_csv_path)  # altfel istoricul rămâne în %TEMP% la fiecare anulare
+                    logging.info(
+                        f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire."
+                    )
+                    _remove_temp_csv(
+                        temp_csv_path
+                    )  # altfel istoricul rămâne în %TEMP% la fiecare anulare
                     return "{}"
 
                 engine = LotoEngine(game_type=game_mapped)
@@ -273,28 +316,32 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         f"Datele pentru {game_label} nu au putut fi încărcate "
                         f"(fișier lipsă, corupt sau fără extrageri valide)."
                     )
-                lines, p10, p90, g_range, context, audit = engine.run_institutional_pipeline(
-                    progress_cb=progress_cb,
-                    pool_size=p_size,
-                    guarantee=guar,
-                    max_variants=max_var,
-                    wheel_condition=wheel_cond,
-                    recent_penalty_draws=rp_draws,
-                    recent_penalty_factor=rp_factor,
-                    lookback=lookback,
-                    filter_consecutives=filter_cons,
-                    smart_reduction=smart_red,
-                    sim_depth_pct=sim_depth,
-                    enable_adaptive_persistence=False,
-                    pure_bench_mode=pure_bench,
+                lines, p10, p90, g_range, context, audit = (
+                    engine.run_institutional_pipeline(
+                        progress_cb=progress_cb,
+                        pool_size=p_size,
+                        guarantee=guar,
+                        max_variants=max_var,
+                        wheel_condition=wheel_cond,
+                        recent_penalty_draws=rp_draws,
+                        recent_penalty_factor=rp_factor,
+                        lookback=lookback,
+                        filter_consecutives=filter_cons,
+                        smart_reduction=smart_red,
+                        sim_depth_pct=sim_depth,
+                        enable_adaptive_persistence=False,
+                        pure_bench_mode=pure_bench,
+                    )
                 )
                 effective_pool = len(engine.hard_core) if engine.hard_core else p_size
                 outputs[game_label] = {
                     "total_draws": len(engine.data) if engine.data is not None else 0,
                     "hard_core": engine.hard_core,
-                    "hard_core_stats": getattr(engine, 'hard_core_stats', {}),
-                    "hard_core_joker": getattr(engine, 'hard_core_joker', []),
-                    "hard_core_joker_stats": getattr(engine, 'hard_core_joker_stats', {}),
+                    "hard_core_stats": getattr(engine, "hard_core_stats", {}),
+                    "hard_core_joker": getattr(engine, "hard_core_joker", []),
+                    "hard_core_joker_stats": getattr(
+                        engine, "hard_core_joker_stats", {}
+                    ),
                     "variants": lines,
                     "pool_size": effective_pool,
                     "pool_size_requested": p_size,
@@ -312,7 +359,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                 }
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):
-                    logging.info(f"[worker] Job {job_id} oprit la cerere (Stop Requested).")
+                    logging.info(
+                        f"[worker] Job {job_id} oprit la cerere (Stop Requested)."
+                    )
                     _remove_temp_csv(temp_csv_path)
                     return "{}"
                 logging.error(f"Eroare la procesarea task-ului {game_label}: {e}")
@@ -324,8 +373,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         _remove_temp_csv(temp_csv_path)
         results_bundle.append((fname, outputs))
 
-    if update_job_progress(job_id, 99, "Pregătesc rezultatul final pentru UI...", worker_token=WORKER_TOKEN):
-        logging.info("[worker] Job %s nu mai este RUNNING înainte de serializare.", job_id)
+    if update_job_progress(
+        job_id, 99, "Pregătesc rezultatul final pentru UI...", worker_token=WORKER_TOKEN
+    ):
+        logging.info(
+            "[worker] Job %s nu mai este RUNNING înainte de serializare.", job_id
+        )
         return None
     persistent = (results_bundle, len(results_bundle))
     packed = _pack_result_payload(persistent)
@@ -358,11 +411,14 @@ def main() -> None:
     try:
         recovered = requeue_running_jobs()
         if recovered > 0:
-            print(f"[worker] Recuperate {recovered} job(uri) RUNNING -> PENDING după restart.", flush=True)
+            print(
+                f"[worker] Recuperate {recovered} job(uri) RUNNING -> PENDING după restart.",
+                flush=True,
+            )
     except Exception as exc:
         logging.debug("Nu pot requeue joburile RUNNING la startup worker: %s", exc)
     logging.info("[worker] Început loop principal - aștept job-uri...")
-    
+
     while True:
         job = None  # reset per iterație: altfel un fetch care crapă la iterația
         # următoare vede jobul VECHI (deja COMPLETED) și fail_job i-ar distruge rezultatul
@@ -379,7 +435,9 @@ def main() -> None:
 
             task_type = str(job.get("task_type") or "")
             job_id = int(job["id"])
-            if update_job_progress(job_id, 2, "Job preluat de worker.", worker_token=WORKER_TOKEN):
+            if update_job_progress(
+                job_id, 2, "Job preluat de worker.", worker_token=WORKER_TOKEN
+            ):
                 logging.info(
                     "[worker] Job %s nu mai este RUNNING imediat după claim; sarim.",
                     job_id,
@@ -393,18 +451,26 @@ def main() -> None:
             if task_type == "pipeline":
                 result_json = _run_pipeline_job(job)
             else:
-                fail_job(job_id, f"Unsupported task type: {task_type}", worker_token=WORKER_TOKEN)
+                fail_job(
+                    job_id,
+                    f"Unsupported task type: {task_type}",
+                    worker_token=WORKER_TOKEN,
+                )
                 continue
 
             if result_json is None:
                 continue
 
             if is_job_cancelled(job_id):
-                logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
+                logging.info(
+                    f"[worker] Job {job_id} anulat în timpul execuției, nu completăm."
+                )
                 continue
 
             if complete_job(job_id, result_json, worker_token=WORKER_TOKEN):
-                logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
+                logging.info(
+                    f"[worker] Job {job_id} completat cu succes, continuă loop..."
+                )
             else:
                 # UPDATE-ul cere status = RUNNING ȘI worker_token = acest proces. Dacă
                 # un al doilea worker a revendicat jobul între timp (`requeue_running_jobs`),
@@ -424,12 +490,16 @@ def main() -> None:
                     logging.error(
                         "[worker] Job %s: rezultatul NU a putut fi scris în coadă "
                         "(jobul nu mai era RUNNING/al acestui worker). L-am salvat în %s",
-                        job_id, _dump,
+                        job_id,
+                        _dump,
                     )
                 except OSError as _exc:
                     logging.error(
                         "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING/al acestui "
-                        "worker) și nici salvarea în %s n-a mers: %s", job_id, _dump, _exc,
+                        "worker) și nici salvarea în %s n-a mers: %s",
+                        job_id,
+                        _dump,
+                        _exc,
                     )
 
         except Exception as exc:

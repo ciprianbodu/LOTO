@@ -31,7 +31,7 @@ SAFE_UPGRADE_PACKAGES = [
     "nicegui",
     "psutil",
     "requests",
-    "rich",            # bench reporting tables
+    "rich",  # bench reporting tables
 ]
 
 # Metode CPU pe care vrem sa stim DACA sunt instalate (nu le upgradam automat).
@@ -58,7 +58,8 @@ def upgrade_pip():
     try:
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
         )
         print("-> [OK] pip actualizat (sau deja la zi).")
     except subprocess.CalledProcessError as e:
@@ -72,9 +73,14 @@ def check_and_upgrade(packages):
         # --prefer-binary: NU build din sursa (evita FAIL pe pandas/numpy fara wheel)
         # --upgrade-strategy only-if-needed: nu cascadeaza upgrade-uri pe deps
         cmd = [
-            sys.executable, "-m", "pip", "install",
-            "--upgrade", "--prefer-binary",
-            "--upgrade-strategy", "only-if-needed",
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--prefer-binary",
+            "--upgrade-strategy",
+            "only-if-needed",
         ] + packages
         print(f"Comanda: pip install --upgrade --prefer-binary {' '.join(packages)}")
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -85,15 +91,23 @@ def check_and_upgrade(packages):
         print(f"-> [ATENTIE] Problema neasteptata: {e}")
 
 
+# Nume de import care nu coincid cu numele pachetului de distributie (pip) —
+# nici macar dupa substitutia "_" -> "-" (sklearn -> scikit-learn, nu "sklearn").
+_DIST_NAME_OVERRIDES = {"sklearn": "scikit-learn"}
+
+
 def _safe_version(modname: str) -> str:
-    try:
-        v = dist_version(modname.replace("_", "-"))
-    except PackageNotFoundError:
+    candidates = [
+        _DIST_NAME_OVERRIDES.get(modname, modname),
+        modname.replace("_", "-"),
+        modname,
+    ]
+    for cand in dict.fromkeys(candidates):  # dedupe, pastreaza ordinea
         try:
-            v = dist_version(modname)
+            return dist_version(cand)
         except PackageNotFoundError:
-            v = "?"
-    return v
+            continue
+    return "?"
 
 
 def check_cpu_methods():
@@ -109,38 +123,62 @@ def check_cpu_methods():
             print(f"-> [EROARE] {label}: {type(e).__name__}: {e}")
 
 
-def check_bench_assets():
+def check_bench_assets() -> bool:
+    """Returneaza False doar la o problema care blocheaza pornirea (lipsa
+    `_ISTORIC/`) — restul sunt avertismente informative."""
     _print_section("ASSETS BENCHMARK")
+    ok = True
     from pathlib import Path
+
     bm = Path("best_methods.json")
     if bm.exists():
         size_kb = bm.stat().st_size / 1024
         print(f"-> [OK] best_methods.json prezent ({size_kb:.1f} KB)")
         try:
-            from loto_enterprise.benchmark.freshness import check_freshness, aggregate_recommendation
+            from loto_enterprise.benchmark.freshness import (
+                check_freshness,
+                aggregate_recommendation,
+            )
+
             reports = check_freshness("best_methods.json")
             rec = aggregate_recommendation(reports)
             print(f"   Freshness overall: {rec}")
             for gk, r in reports.items():
-                tag = {"fresh": "[FRESH]", "slight_drift": "[+]", "moderate_drift": "[!!]",
-                       "stale": "[STALE]", "missing": "[?]"}.get(r.status, "[?]")
-                print(f"   {tag:>10s} {gk}: cached {r.cached_rows} vs curent {r.current_rows} "
-                      f"({r.row_delta_pct:+.1f}%)")
+                tag = {
+                    "fresh": "[FRESH]",
+                    "slight_drift": "[+]",
+                    "moderate_drift": "[!!]",
+                    "stale": "[STALE]",
+                    "missing": "[?]",
+                }.get(r.status, "[?]")
+                print(
+                    f"   {tag:>10s} {gk}: cached {r.cached_rows} vs curent {r.current_rows} "
+                    f"({r.row_delta_pct:+.1f}%)"
+                )
             if rec in ("quick_rebench", "full_rebench"):
-                print("   Recomandat: ruleaza Re-Bench Full (din UI sau "
-                      "'python bench_all_methods.py')")
+                print(
+                    "   Recomandat: ruleaza Re-Bench Full (din UI sau "
+                    "'python bench_all_methods.py')"
+                )
         except Exception as e:
             print(f"   [WARN] Freshness check failed: {e}")
     else:
-        print("-> [LIPSA] best_methods.json — ruleaza `python bench_all_methods.py` macar o data")
+        print(
+            "-> [LIPSA] best_methods.json — ruleaza `python bench_all_methods.py` macar o data"
+        )
 
     istoric = Path("_ISTORIC")
     if istoric.exists():
         csvs = list(istoric.glob("*.csv"))
-        print(f"-> [OK] folderul _ISTORIC contine {len(csvs)} CSV-uri: "
-              f"{[p.name for p in csvs]}")
+        print(
+            f"-> [OK] folderul _ISTORIC contine {len(csvs)} CSV-uri: "
+            f"{[p.name for p in csvs]}"
+        )
     else:
         print("-> [LIPSA] folderul _ISTORIC — benchmark-ul nu poate rula fara el")
+        ok = False
+
+    return ok
 
 
 def _is_in_venv() -> bool:
@@ -167,7 +205,7 @@ def main():
         print("          Cauta venv-ul: .venv\n")
 
     check_cpu_methods()
-    check_bench_assets()
+    assets_ok = check_bench_assets()
 
     upgrade_pip()
     check_and_upgrade(SAFE_UPGRADE_PACKAGES)
@@ -179,8 +217,17 @@ def main():
     print("  Daca toate sectiunile au [OK] si freshness e 'fresh' / 'use_cache',")
     print("  poti porni aplicatia cu START_8000.bat fara nicio actiune.")
     print("  Daca freshness recomanda re-bench:")
-    print("    Re-Bench Full din UI (buton portocaliu) sau: python bench_all_methods.py")
+    print(
+        "    Re-Bench Full din UI (buton portocaliu) sau: python bench_all_methods.py"
+    )
     print("=" * 72)
+
+    if not assets_ok:
+        # ACTUALIZARI.bat citeste exit code-ul asta (if errorlevel 1 -> fatal_setup).
+        print(
+            "\n[EROARE] Mediul are o problema care blocheaza pornirea (vezi mai sus)."
+        )
+        sys.exit(22)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 verificare globala 2026-09-07: o coliziune de NUME intre doua module de extensie
 (non-tombstone) trecea complet neobservata, fara niciun log — a doua implementare
 disparea tacut din bench, fara nicio urma."""
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,12 @@ def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):
     monkeypatch.setattr(methods, "METHODS", fake_methods)
 
     first_tup = (_dummy_fn, "test-family-1", False, "primul")
-    second_tup = (_dummy_fn, "test-family-2", False, "al doilea (nu trebuie sa castige)")
+    second_tup = (
+        _dummy_fn,
+        "test-family-2",
+        False,
+        "al doilea (nu trebuie sa castige)",
+    )
     monkeypatch.setitem(methods_classical.CLASSICAL_METHODS, "test_dup_name", first_tup)
     monkeypatch.setitem(methods_ml.ML_METHODS, "test_dup_name", second_tup)
 

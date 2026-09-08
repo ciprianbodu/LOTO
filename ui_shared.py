@@ -112,6 +112,7 @@ def html_escape(value: object) -> str:
     """Escape HTML pentru fragmente asamblate manual (ex. heatmap, chips)."""
     return _html_module.escape(str(value), quote=True)
 
+
 WORKER_PATH = PROJECT_ROOT / "worker.py"
 
 
@@ -139,7 +140,9 @@ def load_mail_config(project_root=PROJECT_ROOT):
             logger.warning("[mail] mail_config.json invalid: %s", exc)
     cfg["smtp_user"] = os.environ.get("LOTO_SMTP_USER", cfg.get("smtp_user") or "")
     # Gmail app password se afișează cu spații (4×4) — le scoatem (altfel login eșuează).
-    cfg["smtp_pass"] = (os.environ.get("LOTO_SMTP_PASS", cfg.get("smtp_pass") or "") or "").replace(" ", "")
+    cfg["smtp_pass"] = (
+        os.environ.get("LOTO_SMTP_PASS", cfg.get("smtp_pass") or "") or ""
+    ).replace(" ", "")
     cfg["mail_to"] = os.environ.get("LOTO_MAIL_TO", cfg.get("mail_to") or "")
     if not cfg["smtp_user"] or not cfg["smtp_pass"] or not cfg["mail_to"]:
         return None
@@ -157,12 +160,13 @@ def send_email(cfg, subject, body, attachments=None):
     msg["To"] = cfg["mail_to"]
     msg["Subject"] = subject
     msg.set_content(body or "(fără conținut)")
-    for path in (attachments or []):
+    for path in attachments or []:
         try:
             p = Path(path)
             if p.exists():
-                msg.add_attachment(p.read_bytes(), maintype="text", subtype="plain",
-                                   filename=p.name)
+                msg.add_attachment(
+                    p.read_bytes(), maintype="text", subtype="plain", filename=p.name
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("[mail] atașament %s eșuat: %s", path, exc)
     # TLS VERIFICAT implicit (sigur). Verificarea se sare DOAR dacă utilizatorul a setat
@@ -170,7 +174,9 @@ def send_email(cfg, subject, body, attachments=None):
     # antivirus care interceptează SSL cu un cert pe care OpenSSL 3.x îl respinge).
     if cfg.get("tls_insecure"):
         ctx = ssl._create_unverified_context()
-        logger.warning("[mail] tls_insecure=true → trimitere FĂRĂ verificare de certificat TLS.")
+        logger.warning(
+            "[mail] tls_insecure=true → trimitere FĂRĂ verificare de certificat TLS."
+        )
     else:
         ctx = ssl.create_default_context()
     with smtplib.SMTP(cfg["smtp_host"], int(cfg["smtp_port"]), timeout=30) as s:
@@ -211,7 +217,7 @@ def read_tail_lines(path: str, n_lines: int, block: int = _LOG_TAIL_BYTES) -> li
         # prima linie e aproape sigur tăiată la mijloc → o aruncăm
         nl = data.find(b"\n")
         if nl != -1:
-            data = data[nl + 1:]
+            data = data[nl + 1 :]
     return data.decode("utf-8", errors="replace").splitlines(keepends=True)[-n_lines:]
 
 
@@ -229,7 +235,9 @@ def read_logs_filtered(n_lines: int = 50) -> str:
                 if similar <= 3:
                     filtered.append(line)
                 elif similar == 4:
-                    filtered.append("... [mesaje de progres ascunse pentru claritate] ...\n")
+                    filtered.append(
+                        "... [mesaje de progres ascunse pentru claritate] ...\n"
+                    )
             else:
                 similar = 0
                 filtered.append(line)
@@ -247,7 +255,9 @@ def clear_logs() -> None:
     scriitori să treacă prin același mecanism de coordonare, schimbare mai mare
     decât acest fix. `file_lock` protejează totuși împotriva a doi apelanți
     CONCURENȚI ai lui `clear_logs()` însuși (ex. dublu-click în UI)."""
-    header = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [INFO] --- Log curățat manual ---\n"
+    header = (
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [INFO] --- Log curățat manual ---\n"
+    )
     try:
         with file_lock(LOG_FILE, timeout=2.0):
             if not os.path.exists(LOG_FILE):
@@ -283,6 +293,7 @@ def pack_queue_result(payload: object) -> str:
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
     try:
         from compression import zstd
+
         compressed = zstd.compress(raw, 3)
     except Exception as exc:  # noqa: BLE001 — degradare intenționată la orice defecțiune
         # de compresie, nu doar import lipsă: un eșec la ÎNSUȘI `zstd.compress()`
@@ -290,16 +301,23 @@ def pack_queue_result(payload: object) -> str:
         # trebuia să cadă pe fallback la fel ca un modul lipsă — altfel un job
         # calculat corect pica la excepție NEPRINSĂ aici, deși docstring-ul de mai
         # sus promite exact contrariul.
-        logger.warning("Compresie zstd indisponibilă/eșuată pentru rezultatul jobului; "
-                       "folosesc pickle+b64: %s", exc)
-        return json.dumps({
-            "encoding": ENCODING_PICKLE_B64,
-            "payload": base64.b64encode(raw).decode("ascii"),
-        })
-    return json.dumps({
-        "encoding": ENCODING_PICKLE_ZSTD_B64,
-        "payload": base64.b64encode(compressed).decode("ascii"),
-    })
+        logger.warning(
+            "Compresie zstd indisponibilă/eșuată pentru rezultatul jobului; "
+            "folosesc pickle+b64: %s",
+            exc,
+        )
+        return json.dumps(
+            {
+                "encoding": ENCODING_PICKLE_B64,
+                "payload": base64.b64encode(raw).decode("ascii"),
+            }
+        )
+    return json.dumps(
+        {
+            "encoding": ENCODING_PICKLE_ZSTD_B64,
+            "payload": base64.b64encode(compressed).decode("ascii"),
+        }
+    )
 
 
 def decode_queue_result(result_json: str) -> object:
@@ -322,6 +340,7 @@ def decode_queue_result(result_json: str) -> object:
     try:
         if enc == ENCODING_PICKLE_ZSTD_B64:
             from compression import zstd
+
             blob = zstd.decompress(blob)
         elif enc != ENCODING_PICKLE_B64:
             return None
@@ -356,7 +375,9 @@ def atomic_write_text(path, text: str, encoding: str = "utf-8") -> None:
         raise
 
 
-def atomic_write_json(path, obj, *, indent: int = 2, ensure_ascii: bool = False) -> None:
+def atomic_write_json(
+    path, obj, *, indent: int = 2, ensure_ascii: bool = False
+) -> None:
     atomic_write_text(path, json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii))
 
 
@@ -407,8 +428,11 @@ class file_lock:
             if self._create():
                 return self
             if self._lock_age() > self.timeout:
-                logger.debug("[file_lock] lock stale pe %s (vârstă > %.1fs) — îl sparg",
-                            self.lockpath, self.timeout)
+                logger.debug(
+                    "[file_lock] lock stale pe %s (vârstă > %.1fs) — îl sparg",
+                    self.lockpath,
+                    self.timeout,
+                )
                 try:
                     os.unlink(self.lockpath)
                 except OSError:
@@ -419,8 +443,11 @@ class file_lock:
                 # Plasă finală anti-deadlock: chiar dacă lock-ul pare mereu
                 # "proaspăt" (spart și recreat continuu de alți waiteri), nu
                 # așteptăm la nesfârșit — scrierea în sine e oricum atomică.
-                logger.debug("[file_lock] renunț la %s după %.1fs fără lock",
-                            self.lockpath, self.timeout * 3)
+                logger.debug(
+                    "[file_lock] renunț la %s după %.1fs fără lock",
+                    self.lockpath,
+                    self.timeout * 3,
+                )
                 return self
             time.sleep(0.05)
 

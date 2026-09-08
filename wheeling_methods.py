@@ -36,6 +36,7 @@ Orice eșec/limită → fallback la greedy (sigur). Default în `loto_engine`:
 există un cap de bilete. (Textul de dinainte, „Default = greedy (bit-identic)",
 descria comportamentul de dinaintea introducerii La Jolla.)
 """
+
 from __future__ import annotations
 
 import itertools
@@ -62,6 +63,7 @@ def _comb(n: int, k: int) -> int:
 def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
     """Apel lazy la greedy-ul canonic (evită import circular)."""
     from loto_engine import generate_combinatorial_wheel
+
     return generate_combinatorial_wheel(pool, pick, guarantee, max_variants, scores)
 
 
@@ -82,8 +84,9 @@ def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> fl
     return round(len(covered & targets) / len(targets) * 100.0, 2)
 
 
-def lotto_coverage_pct(wheel: list[list[int]], pool: list[int],
-                       guarantee: int, condition: int) -> float:
+def lotto_coverage_pct(
+    wheel: list[list[int]], pool: list[int], guarantee: int, condition: int
+) -> float:
     """Acoperirea unui lotto design „guarantee dacă condition".
 
     Țintele sunt submulțimile de `condition` numere din pool; o țintă e acoperită
@@ -108,8 +111,12 @@ def lotto_coverage_pct(wheel: list[list[int]], pool: list[int],
     return round(covered / len(targets) * 100.0, 2)
 
 
-def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int,
-                         condition: int | None = None) -> float:
+def compute_coverage_pct(
+    wheel: list[list[int]],
+    pool: list[int],
+    guarantee: int,
+    condition: int | None = None,
+) -> float:
     """API publică pt recalcularea acoperirii garanției pe un set de bilete DAT.
 
     Folosit din loto_engine.py pentru a revalida `coverage_pct` DUPĂ filtre
@@ -122,7 +129,9 @@ def compute_coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int
 
 
 def ensure_pool_numbers_on_tickets(
-    wheel: list[list[int]], pool: list[int], pick: int,
+    wheel: list[list[int]],
+    pool: list[int],
+    pick: int,
 ) -> list[list[int]]:
     """După un cap de bilete, fiecare număr din pool pe ≥1 bilet dacă încape.
 
@@ -220,14 +229,17 @@ def filter_preserving_coverage(
 def _order_by_scores(wheel: list[list[int]], scores) -> list[list[int]]:
     if not scores:
         return [sorted(t) for t in wheel]
-    return sorted([sorted(t) for t in wheel],
-                  key=lambda t: sum(scores.get(n, 0) for n in t), reverse=True)
+    return sorted(
+        [sorted(t) for t in wheel],
+        key=lambda t: sum(scores.get(n, 0) for n in t),
+        reverse=True,
+    )
 
 
 # ===========================================================================
 # 1) ILP — cover minim EXACT (scipy.optimize.milp)
 # ===========================================================================
-_ILP_MAX_BLOCKS = 12000   # guard: peste asta, ILP devine prea greu → fallback
+_ILP_MAX_BLOCKS = 12000  # guard: peste asta, ILP devine prea greu → fallback
 _ILP_MAX_TARGETS = 6000
 
 # Cache de PROCES pentru coverul ILP, keyed pe (v, pick, guarantee).
@@ -245,8 +257,9 @@ _ILP_MAX_TARGETS = 6000
 _ILP_COVER_CACHE: dict[tuple[int, int, int], list[tuple[int, ...]] | None] = {}
 
 
-def _ilp_cover_positions(v: int, pick: int, guarantee: int,
-                         time_limit: float) -> list[tuple[int, ...]] | None:
+def _ilp_cover_positions(
+    v: int, pick: int, guarantee: int, time_limit: float
+) -> list[tuple[int, ...]] | None:
     """Coverul ILP pentru C(v, pick, guarantee) ca POZIȚII 0..v-1 (memoizat).
 
     None = ILP indisponibil pentru configurația asta (prea mare / fără soluție /
@@ -263,6 +276,7 @@ def _ilp_cover_positions(v: int, pick: int, guarantee: int,
     try:
         from scipy.optimize import milp, LinearConstraint, Bounds
         from scipy.sparse import lil_matrix
+
         idxs = range(v)
         blocks = list(itertools.combinations(idxs, pick))
         targets = list(itertools.combinations(idxs, guarantee))
@@ -284,8 +298,11 @@ def _ilp_cover_positions(v: int, pick: int, guarantee: int,
             # ratează o dată și o prinde data viitoare. Memoizat, un singur timeout
             # dezactiva ILP-ul pentru TOT restul procesului (adică tot walk-forward-ul,
             # ~1940 de pași) și trecea tăcut pe greedy, cu bilete mai multe.
-            logger.warning("[WHEEL-ILP] fără soluție în %.1fs → greedy "
-                           "(NU memoizez: e limită de timp, nu geometrie)", time_limit)
+            logger.warning(
+                "[WHEEL-ILP] fără soluție în %.1fs → greedy "
+                "(NU memoizez: e limită de timp, nu geometrie)",
+                time_limit,
+            )
             return None
     except Exception as exc:  # noqa: BLE001
         # Idem: scipy lipsă, MemoryError, orice excepție = eșec de MEDIU, nu de
@@ -298,8 +315,9 @@ def _ilp_cover_positions(v: int, pick: int, guarantee: int,
     return cover
 
 
-def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
-              time_limit: float = 15.0):
+def wheel_ilp(
+    pool, pick, guarantee, max_variants=0, scores=None, time_limit: float = 15.0
+):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
@@ -322,15 +340,31 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
         g_cov = _coverage_pct(g_wheel, pool, guarantee)
         # `>=` păstrează comportamentul vechi la egalitate (ambele 100% → greedy).
         if (g_cov, -len(g_wheel)) >= (ilp_cov, -len(chosen)):
-            logger.info("[WHEEL-ILP] greedy (%d bilete, %.2f%%) ≥ ILP (%d bilete, %.2f%%) → păstrez greedy",
-                        len(g_wheel), g_cov, len(chosen), ilp_cov)
+            logger.info(
+                "[WHEEL-ILP] greedy (%d bilete, %.2f%%) ≥ ILP (%d bilete, %.2f%%) → păstrez greedy",
+                len(g_wheel),
+                g_cov,
+                len(chosen),
+                ilp_cov,
+            )
             chosen = [list(t) for t in g_wheel]
         else:
-            logger.info("[WHEEL-ILP] cover ILP = %d bilete la %.2f%% (greedy era %d la %.2f%%)",
-                        len(chosen), ilp_cov, len(g_wheel), g_cov)
+            logger.info(
+                "[WHEEL-ILP] cover ILP = %d bilete la %.2f%% (greedy era %d la %.2f%%)",
+                len(chosen),
+                ilp_cov,
+                len(g_wheel),
+                g_cov,
+            )
         if max_variants > 0 and len(chosen) > max_variants:
             chosen = _order_by_scores(chosen, scores)[:max_variants]
-        return _order_by_scores(chosen, scores), _coverage_pct(chosen, pool, guarantee)
+        ordered = _order_by_scores(chosen, scores)
+        if max_variants > 0:
+            # Trunchierea la buget poate scoate numere slabe complet de pe
+            # bilete — completăm ca la `generate_wheel`, ca proprietatea să
+            # fie garantată și la apel direct, nu doar prin dispatcher.
+            ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+        return ordered, _coverage_pct(ordered, pool, guarantee)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WHEEL-ILP] eșec (%s) → greedy", exc)
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -339,13 +373,22 @@ def wheel_ilp(pool, pick, guarantee, max_variants=0, scores=None,
 # ===========================================================================
 # 2) Simulated annealing — reduce wheel-ul greedy păstrând acoperirea
 # ===========================================================================
-def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
-                    iters: int = 4000, seed: int = 42):
+def wheel_annealing(
+    pool,
+    pick,
+    guarantee,
+    max_variants=0,
+    scores=None,
+    iters: int = 4000,
+    seed: int = 42,
+):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
         return [list(pool)], 100.0
-    base, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)  # plecăm din greedy complet
+    base, _ = _greedy_fallback(
+        pool, pick, guarantee, 0, scores
+    )  # plecăm din greedy complet
     # ⚠️ Cheile ȚINTELOR se construiesc pe pool-ul sortat NUMERIC, fiindcă
     # `ticket_targets` caută cu `tuple(sorted(...))`. `_sorted_pool` reordonează
     # după SCOR, deci pe apelul de producție (care pasează mereu scoruri) cheile
@@ -384,7 +427,8 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
             if all(cover_count[t] > 1 for t in cur_tt[i]):
                 for t in cur_tt[i]:
                     cover_count[t] -= 1
-                cur.pop(i); cur_tt.pop(i)
+                cur.pop(i)
+                cur_tt.pop(i)
                 changed = True
                 break
 
@@ -417,19 +461,24 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
                     cover_count[t] -= 1
                 for t in cand_tt:
                     cover_count[t] += 1
-                cur[i] = tuple(sorted(cand)); cur_tt[i] = cand_tt
+                cur[i] = tuple(sorted(cand))
+                cur_tt[i] = cand_tt
                 # re-eliminare redundante după swap
                 for j in range(len(cur) - 1, -1, -1):
                     if all(cover_count[t] > 1 for t in cur_tt[j]):
                         for t in cur_tt[j]:
                             cover_count[t] -= 1
-                        cur.pop(j); cur_tt.pop(j)
+                        cur.pop(j)
+                        cur_tt.pop(j)
 
     wheel = [list(t) for t in cur]
     if max_variants > 0 and len(wheel) > max_variants:
         wheel = _order_by_scores(wheel, scores)[:max_variants]
     logger.info("[WHEEL-SA] %d bilete (din %d greedy)", len(wheel), len(base))
-    return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
+    ordered = _order_by_scores(wheel, scores)
+    if max_variants > 0:
+        ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+    return ordered, _coverage_pct(ordered, pool, guarantee)
 
 
 # ===========================================================================
@@ -438,8 +487,16 @@ def wheel_annealing(pool, pick, guarantee, max_variants=0, scores=None,
 _GA_MAX_BLOCKS = 60000
 
 
-def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
-                  pop: int = 200, gens: int = 80, seed: int = 42):
+def wheel_genetic(
+    pool,
+    pick,
+    guarantee,
+    max_variants=0,
+    scores=None,
+    pop: int = 200,
+    gens: int = 80,
+    seed: int = 42,
+):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
@@ -454,6 +511,7 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
     budget = max(1, budget)
     try:
         import numpy as np
+
         rng = np.random.default_rng(seed)
         blocks = list(itertools.combinations(pool, pick))
         # ⚠️ Cheile pe tuple SORTAT NUMERIC: elitismul de mai jos caută cu
@@ -472,16 +530,17 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
                 M[j, tidx[sub]] = 1.0
         # ponderi ținte după scoruri (ținte din numere bune cântăresc mai mult)
         if scores:
-            tw = np.array([sum(scores.get(n, 0.0) for n in t) for t in targets],
-                          dtype=np.float32)
+            tw = np.array(
+                [sum(scores.get(n, 0.0) for n in t) for t in targets], dtype=np.float32
+            )
             tw = tw / (tw.mean() + 1e-9)
         else:
             tw = np.ones(nt, dtype=np.float32)
 
         def fitness(P_idx):  # P_idx: (P, budget) int
-            masks = M[P_idx]                # (P, budget, nt)
-            cov = masks.max(axis=1)         # (P, nt) acoperit?
-            return (cov * tw).sum(axis=1)   # (P,)
+            masks = M[P_idx]  # (P, budget, nt)
+            cov = masks.max(axis=1)  # (P, nt) acoperit?
+            return (cov * tw).sum(axis=1)  # (P,)
 
         # populație inițială: indici aleatori de blocuri
         P = rng.integers(0, nb, size=(pop, budget))
@@ -493,13 +552,16 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
             else:
                 pad = rng.integers(0, nb, size=(budget - len(g_idx),))
                 seed_row = np.concatenate([np.array(g_idx, dtype=np.int64), pad])
-            P[0] = seed_row  # GA pornește de la ≥ acoperirea greedy → poate doar îmbunătăți
+            P[0] = (
+                seed_row  # GA pornește de la ≥ acoperirea greedy → poate doar îmbunătăți
+            )
         best_idx, best_fit = None, -1.0
         for _g in range(gens):
             fit = fitness(P)
             mx = int(np.argmax(fit))
             if float(fit[mx]) > best_fit:
-                best_fit = float(fit[mx]); best_idx = P[mx].copy()
+                best_fit = float(fit[mx])
+                best_idx = P[mx].copy()
             # selecție prin turnir
             a = rng.integers(0, pop, size=pop)
             b = rng.integers(0, pop, size=pop)
@@ -519,8 +581,16 @@ def wheel_genetic(pool, pick, guarantee, max_variants=0, scores=None,
 
         chosen = sorted({int(i) for i in best_idx.tolist()})
         wheel = [list(blocks[j]) for j in chosen]
-        logger.info("[WHEEL-GA] buget=%d → %d bilete unice, fitness=%.1f", budget, len(wheel), best_fit)
-        return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
+        logger.info(
+            "[WHEEL-GA] buget=%d → %d bilete unice, fitness=%.1f",
+            budget,
+            len(wheel),
+            best_fit,
+        )
+        ordered = _order_by_scores(wheel, scores)
+        if max_variants > 0:
+            ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+        return ordered, _coverage_pct(ordered, pool, guarantee)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WHEEL-GA] eșec (%s) → greedy", exc)
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -542,8 +612,9 @@ _LAJOLLA_DIRS = [
 ]
 
 
-def covering_design_source_signature(v: int, pick: int, guarantee: int,
-                                     condition: int | None = None) -> str:
+def covering_design_source_signature(
+    v: int, pick: int, guarantee: int, condition: int | None = None
+) -> str:
     """Amprentă a fișierelor de design candidate pentru cheia cache-ului WF.
 
     Un design se poate îmbunătăți fără să se schimbe numele metodei sau
@@ -553,9 +624,11 @@ def covering_design_source_signature(v: int, pick: int, guarantee: int,
     digest = hashlib.sha256(f"C({v},{pick},{guarantee})".encode("ascii"))
     found = False
     seen: set[str] = set()
-    name = (lotto_design_path(v, pick, guarantee, condition)
-            if condition is not None and int(condition) > int(guarantee)
-            else f"C_{v}_{pick}_{guarantee}.txt")
+    name = (
+        lotto_design_path(v, pick, guarantee, condition)
+        if condition is not None and int(condition) > int(guarantee)
+        else f"C_{v}_{pick}_{guarantee}.txt"
+    )
     for directory in _LAJOLLA_DIRS:
         path = directory / name
         try:
@@ -595,8 +668,11 @@ def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
                     if not line.strip():
                         continue
                     nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
-                    if (len(nums) != pick or len(set(nums)) != pick
-                            or any(n < 1 or n > v for n in nums)):
+                    if (
+                        len(nums) != pick
+                        or len(set(nums)) != pick
+                        or any(n < 1 or n > v for n in nums)
+                    ):
                         raise ValueError(f"bloc invalid: {nums}")
                     blocks.append(nums)
                 if not blocks:
@@ -604,7 +680,11 @@ def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
                 coverage = _coverage_pct(blocks, list(range(1, v + 1)), guarantee)
                 if coverage < 100.0:
                     raise ValueError(f"acoperire incompletă: {coverage:.2f}%")
-                logger.info("[WHEEL-LaJolla] folosesc design valid %s (%d blocuri)", f, len(blocks))
+                logger.info(
+                    "[WHEEL-LaJolla] folosesc design valid %s (%d blocuri)",
+                    f,
+                    len(blocks),
+                )
                 return blocks
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[WHEEL-LaJolla] ignor design invalid %s: %s", f, exc)
@@ -635,7 +715,11 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                 logger.warning(
                     "[WHEEL-LaJolla] design C(%d,%d,%d) INCOMPLET (%.1f%% acoperire, %d blocuri) "
                     "— fișier corupt/trunchiat? Fallback ILP/greedy.",
-                    v, pick, guarantee, cov_full, len(wheel),
+                    v,
+                    pick,
+                    guarantee,
+                    cov_full,
+                    len(wheel),
                 )
             else:
                 # Designul e valid (100%). Îl comparăm totuși cu greedy și luăm
@@ -651,22 +735,35 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                 if _gc >= 100.0 and len(_gw) < len(wheel):
                     logger.info(
                         "[WHEEL-LaJolla] greedy bate designul C(%d,%d,%d): %d < %d bilete",
-                        v, pick, guarantee, len(_gw), len(wheel),
+                        v,
+                        pick,
+                        guarantee,
+                        len(_gw),
+                        len(wheel),
                     )
                     wheel = [sorted(int(x) for x in t) for t in _gw]
                 if max_variants > 0 and len(wheel) > max_variants:
                     wheel = _order_by_scores(wheel, scores)[:max_variants]
-                return _order_by_scores(wheel, scores), _coverage_pct(wheel, pool, guarantee)
+                ordered = _order_by_scores(wheel, scores)
+                if max_variants > 0:
+                    ordered = ensure_pool_numbers_on_tickets(ordered, pool, pick)
+                return ordered, _coverage_pct(ordered, pool, guarantee)
     # fără fișier → încearcă ILP exact (mic), altfel greedy
-    logger.info("[WHEEL-LaJolla] fără design local pt C(%d,%d,%d) → ILP/greedy", v, pick, guarantee)
+    logger.info(
+        "[WHEEL-LaJolla] fără design local pt C(%d,%d,%d) → ILP/greedy",
+        v,
+        pick,
+        guarantee,
+    )
     return wheel_ilp(pool, pick, guarantee, max_variants, scores)
 
 
 # ===========================================================================
 # 5) COMPATIBILITATE UNION34 — un cover 4-din-4 implică deja 3-din-3
 # ===========================================================================
-def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
-                  time_limit: float = 15.0):
+def wheel_union34(
+    pool, pick, guarantee=4, max_variants=0, scores=None, time_limit: float = 15.0
+):
     """Alias istoric pentru acoperire simultană 3+/4+.
 
     Orice 3-submulțime a unui pool cu cel puțin patru numere poate fi extinsă la
@@ -681,11 +778,18 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
     del time_limit  # păstrat în semnătură pentru apelanți existenți.
     target_guarantee = 4 if int(guarantee) <= 4 else int(guarantee)
     wheel, _coverage_for_target = wheel_lajolla(
-        pool, pick, target_guarantee, max_variants=max_variants, scores=scores,
+        pool,
+        pick,
+        target_guarantee,
+        max_variants=max_variants,
+        scores=scores,
     )
     logger.info(
         "[WHEEL-U34] cover g%d = %d bilete (pool=%d, pick=%d; 3+/4+ acoperite când g=4)",
-        target_guarantee, len(wheel), len(pool), pick,
+        target_guarantee,
+        len(wheel),
+        len(pool),
+        pick,
     )
     # Contractul comun al modulelor de wheeling: procentul raportat corespunde
     # garanției CERUTE de apelant. La un cap de bilete, C(v,pick,4) poate avea
@@ -696,14 +800,15 @@ def wheel_union34(pool, pick, guarantee=4, max_variants=0, scores=None,
 # ===========================================================================
 # 6) LOTTO DESIGN „t dacă p" — greedy pozițional + ILP exact pe geometrii mici
 # ===========================================================================
-_LOTTO_MAX_BLOCKS = 12000     # C(v, pick) peste care nici greedy-ul exhaustiv nu merită
+_LOTTO_MAX_BLOCKS = 12000  # C(v, pick) peste care nici greedy-ul exhaustiv nu merită
 _LOTTO_ILP_MAX_BLOCKS = 4000  # ILP doar pe geometrii mici (timp de solver)
 _LOTTO_ILP_MAX_TARGETS = 4000
 _LOTTO_COVER_CACHE: dict[tuple[int, int, int, int], list[tuple[int, ...]]] = {}
 
 
-def _lotto_cover_positions(v: int, pick: int, guarantee: int, condition: int,
-                           time_limit: float = 10.0) -> list[tuple[int, ...]]:
+def _lotto_cover_positions(
+    v: int, pick: int, guarantee: int, condition: int, time_limit: float = 10.0
+) -> list[tuple[int, ...]]:
     """Cover „guarantee dacă condition" pe POZIȚII 0..v-1, determinist, memoizat.
 
     Obiectivul e numărul de bilete, deci coverul nu depinde de scoruri și e
@@ -775,6 +880,7 @@ def _lotto_cover_positions(v: int, pick: int, guarantee: int, condition: int,
         try:
             from scipy.optimize import milp, LinearConstraint, Bounds
             from scipy.sparse import lil_matrix
+
             A = lil_matrix((nt, len(blocks)), dtype=np.float64)
             for j, m in enumerate(block_masks):
                 mm = m
@@ -798,8 +904,15 @@ def _lotto_cover_positions(v: int, pick: int, guarantee: int, condition: int,
                     if res.x[j] > 0.5:
                         ilp_cov |= block_masks[j]
                 if ilp_cov == full and len(ilp) < len(best):
-                    logger.info("[WHEEL-LOTTO] ILP %d < greedy %d bilete pentru L(%d,%d,%d,%d)",
-                                len(ilp), len(best), v, pick, c, g)
+                    logger.info(
+                        "[WHEEL-LOTTO] ILP %d < greedy %d bilete pentru L(%d,%d,%d,%d)",
+                        len(ilp),
+                        len(best),
+                        v,
+                        pick,
+                        c,
+                        g,
+                    )
                     best = ilp
         except Exception as exc:  # noqa: BLE001
             logger.info("[WHEEL-LOTTO] ILP indisponibil (%s) — păstrez greedy", exc)
@@ -812,8 +925,9 @@ def lotto_design_path(v: int, pick: int, guarantee: int, condition: int) -> str:
     return f"L_{int(v)}_{int(pick)}_{int(condition)}_{int(guarantee)}.txt"
 
 
-def _load_lotto_design(v: int, pick: int, guarantee: int,
-                       condition: int) -> list[tuple[int, ...]] | None:
+def _load_lotto_design(
+    v: int, pick: int, guarantee: int, condition: int
+) -> list[tuple[int, ...]] | None:
     """Citește și validează un lotto design local (același format ca La Jolla:
     un bloc de `pick` poziții 1-based pe linie). Întoarce POZIȚII 0-based sau
     None dacă fișierul lipsește ori nu acoperă 100%."""
@@ -828,16 +942,23 @@ def _load_lotto_design(v: int, pick: int, guarantee: int,
                 if not line.strip():
                     continue
                 nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
-                if (len(nums) != pick or len(set(nums)) != pick
-                        or any(n < 1 or n > v for n in nums)):
+                if (
+                    len(nums) != pick
+                    or len(set(nums)) != pick
+                    or any(n < 1 or n > v for n in nums)
+                ):
                     raise ValueError(f"bloc invalid: {nums}")
                 blocks.append(tuple(n - 1 for n in nums))
             if not blocks:
                 raise ValueError("fișier gol")
-            cov = lotto_coverage_pct([list(b) for b in blocks], list(range(v)), guarantee, condition)
+            cov = lotto_coverage_pct(
+                [list(b) for b in blocks], list(range(v)), guarantee, condition
+            )
             if cov < 100.0:
                 raise ValueError(f"acoperire incompletă: {cov:.2f}%")
-            logger.info("[WHEEL-LOTTO] folosesc design valid %s (%d blocuri)", f, len(blocks))
+            logger.info(
+                "[WHEEL-LOTTO] folosesc design valid %s (%d blocuri)", f, len(blocks)
+            )
             return blocks
         except Exception as exc:  # noqa: BLE001
             logger.warning("[WHEEL-LOTTO] ignor design invalid %s: %s", f, exc)
@@ -882,7 +1003,15 @@ def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):
         wheel = wheel[:max_variants]
         wheel = ensure_pool_numbers_on_tickets(wheel, pool, pk)
     cov = lotto_coverage_pct(wheel, pool, g, c)
-    logger.info("[WHEEL-LOTTO] L(%d,%d,%d,%d): %d bilete, acoperire %.2f%%", v, pk, c, g, len(wheel), cov)
+    logger.info(
+        "[WHEEL-LOTTO] L(%d,%d,%d,%d): %d bilete, acoperire %.2f%%",
+        v,
+        pk,
+        c,
+        g,
+        len(wheel),
+        cov,
+    )
     return wheel, cov
 
 
@@ -898,8 +1027,15 @@ WHEEL_METHODS = {
 }
 
 
-def generate_wheel(method: str, pool, pick, guarantee, max_variants=0, scores=None,
-                   condition: int | None = None):
+def generate_wheel(
+    method: str,
+    pool,
+    pick,
+    guarantee,
+    max_variants=0,
+    scores=None,
+    condition: int | None = None,
+):
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic.
 
     `condition` (numărul de numere din pool care trebuie să cadă ca garanția să

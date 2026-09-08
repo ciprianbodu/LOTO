@@ -7,6 +7,7 @@ Scorurile se normalizează în [0,1]. Exclusiv numpy (+ sklearn NMF dacă e disp
 Nu clonează frequency/graph/gap deja din curated — țintesc axe lipsă:
 PCA-residual, MI pe lag, NMF pe co-apariții, CUSUM, topologie circulară.
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,8 +27,10 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vmin, vmax = float(finite.min()), float(finite.max())
     rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
-           for k, v in scores.items()}
+    out = {
+        int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
+        for k, v in scores.items()
+    }
     for n in range(1, max_num + 1):
         out.setdefault(n, 0.0)
     return out
@@ -65,6 +68,7 @@ def _safe_draws(draws_2d: np.ndarray) -> np.ndarray | None:
 # ---------------------------------------------------------------------------
 # 1) Surpriză față de modul dominant PCA (residual)
 # ---------------------------------------------------------------------------
+
 
 def score_pca_resid_surprise(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Residual după scoaterea modului PCA dominant al seriilor binare.
@@ -108,6 +112,7 @@ def score_pca_resid_surprise(draws_2d: np.ndarray, max_num: int) -> dict[int, fl
 # 2) Mutual information cu bag-ul extragerii anterioare
 # ---------------------------------------------------------------------------
 
+
 def score_mi_lag_bag(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """MI(număr în t | bag-ul din t-1) — afinitate informațională pe lag 1.
 
@@ -122,8 +127,8 @@ def score_mi_lag_bag(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
         T = bm.shape[1]
         # folosește ultimele min(400, T) extrageri pt stabilitate
         start = max(1, T - 400)
-        X = bm[:, start:]          # numere la t
-        prev = bm[:, start - 1:T - 1] if start >= 1 else bm[:, :-1]
+        X = bm[:, start:]  # numere la t
+        prev = bm[:, start - 1 : T - 1] if start >= 1 else bm[:, :-1]
         # aliniere: X[:, k] corespunde prev[:, k] = draw t-1 pentru draw t = start+k
         # bm[:, start:] are lungime T-start; prev din bm[:, start-1:T-1] are T-start
         if prev.shape[1] != X.shape[1]:
@@ -176,6 +181,7 @@ def score_mi_lag_bag(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
 # 3) NMF pe matricea de co-apariții recente
 # ---------------------------------------------------------------------------
 
+
 def score_nmf_cooc(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """NMF pe co-apariții (fereastră recentă) — loading pe factorii dominanți.
 
@@ -187,12 +193,12 @@ def score_nmf_cooc(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
         if arr is None:
             return _normalize({}, max_num)
         # fereastră recentă
-        win = arr[-min(len(arr), 300):]
+        win = arr[-min(len(arr), 300) :]
         C = np.zeros((max_num, max_num), dtype=np.float64)
         for row in win:
             nums = [int(v) for v in row if 1 <= int(v) <= max_num]
             for a_i, a in enumerate(nums):
-                for b in nums[a_i + 1:]:
+                for b in nums[a_i + 1 :]:
                     C[a - 1, b - 1] += 1.0
                     C[b - 1, a - 1] += 1.0
         # diagonală = frecvență
@@ -208,6 +214,7 @@ def score_nmf_cooc(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
         k = min(4, max(2, max_num // 15))
         try:
             from sklearn.decomposition import NMF
+
             model = NMF(
                 n_components=k,
                 init="nndsvd",
@@ -236,6 +243,7 @@ def score_nmf_cooc(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
 # ---------------------------------------------------------------------------
 # 4) CUSUM pe reziduurile de apariție
 # ---------------------------------------------------------------------------
+
 
 def score_cusum_appearance(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """CUSUM per număr pe (observat − rata așteptată) — detectează regimuri.
@@ -281,6 +289,7 @@ def score_cusum_appearance(draws_2d: np.ndarray, max_num: int) -> dict[int, floa
 # 5) Kernel circular pe inelul 1…N
 # ---------------------------------------------------------------------------
 
+
 def score_circular_kernel(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Densitate pe topologia circulară a numerelor (1 lângă max_num).
 
@@ -295,7 +304,7 @@ def score_circular_kernel(draws_2d: np.ndarray, max_num: int) -> dict[int, float
         bw = max(2.0, max_num / 12.0)
         scores = np.zeros(max_num, dtype=np.float64)
         # decay temporal pe ultimele extrageri
-        win = arr[-min(len(arr), 120):]
+        win = arr[-min(len(arr), 120) :]
         tw = np.exp(-np.linspace(0.0, 2.5, len(win))[::-1])
         tw /= tw.sum()
         positions = np.arange(1, max_num + 1, dtype=np.float64)

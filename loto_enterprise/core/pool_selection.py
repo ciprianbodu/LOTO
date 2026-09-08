@@ -49,7 +49,9 @@ def select_pool_from_scores(
         n_unique = len({round(s, 9) for s in valid.values()})
         audit["timesfm_predictions"] = {n: round(valid[n], 6) for n in ranked_all[:25]}
         audit["pool_selection"] = "top_score_pure"
-        audit["pool_selection_note"] = "top-N după scor (regulă canonică ranking, aliniat bench / țintă 3+)"
+        audit["pool_selection_note"] = (
+            "top-N după scor (regulă canonică ranking, aliniat bench / țintă 3+)"
+        )
         audit["pool_score_unique_levels"] = n_unique
         if n_unique < max(3, int(pool_size) // 2):
             audit["pool_selection_warning"] = (

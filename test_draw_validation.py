@@ -3,6 +3,7 @@
 engine, benchmark și walk-forward (CLAUDE.md §4.1). Fisier lipsa pana acum
 (verificare globala 2026-09-07) — cele patru module de contract de baza aveau
 teste dedicate, in afara de acesta."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -59,12 +60,14 @@ def test_nan_values_rejected():
 
 
 def test_mixed_valid_and_invalid_rows_only_valid_survive():
-    df = _df([
-        [1, 2, 3, 4, 5, 6],       # valid
-        [1, 2, 3, 4, 5, 5],       # duplicat
-        [7, 8, 9, 10, 11, 12],    # valid
-        [0, 8, 9, 10, 11, 12],    # out of range
-    ])
+    df = _df(
+        [
+            [1, 2, 3, 4, 5, 6],  # valid
+            [1, 2, 3, 4, 5, 5],  # duplicat
+            [7, 8, 9, 10, 11, 12],  # valid
+            [0, 8, 9, 10, 11, 12],  # out of range
+        ]
+    )
     matrix, mask = valid_draw_matrix(df, COLS, draw_n=6, max_num=49)
     assert mask.tolist() == [True, False, True, False]
     assert matrix.tolist() == [[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]]

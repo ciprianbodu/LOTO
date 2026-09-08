@@ -66,12 +66,14 @@ from runtime_paths import BENCH_LOG_FILE
 # Pe loterie, diferențele dintre scorere sunt majoritar zgomot statistic.
 try:
     from loto_enterprise.benchmark.disabled import load_disabled as _load_disabled
+
     _DISABLED_METHODS = _load_disabled()
 except Exception:  # noqa: BLE001
     _DISABLED_METHODS = set()
 
 _AVAILABLE_METHODS = [
-    m for m in list_methods()
+    m
+    for m in list_methods()
     if method_meta(m).get("available", True) and m not in _DISABLED_METHODS
 ]
 
@@ -87,17 +89,23 @@ try:
         log_curation as _log_curation,
         resolve_methods_per_game as _resolve_methods_per_game,
     )
+
     ALL_SPEC_METHODS, CURATION_INFO = _apply_curation(_AVAILABLE_METHODS)
 except Exception as _exc:  # noqa: BLE001
     ALL_SPEC_METHODS = list(_AVAILABLE_METHODS)
-    CURATION_INFO = {"active": False, "n_before": len(_AVAILABLE_METHODS),
-                     "n_after": len(_AVAILABLE_METHODS), "error": str(_exc)}
+    CURATION_INFO = {
+        "active": False,
+        "n_before": len(_AVAILABLE_METHODS),
+        "n_after": len(_AVAILABLE_METHODS),
+        "error": str(_exc),
+    }
 
     def _log_curation(info):  # noqa: D103 — no-op dacă modulul lipsește
         return None
 
     def _resolve_methods_per_game(candidates, game_keys):  # noqa: D103
         return {}
+
 
 QUICK_METHODS = ["random", "frequency"]
 
@@ -106,46 +114,69 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Benchmark regresiv multi-model pentru predicție LOTO"
     )
-    parser.add_argument("--istoric", default=None,
-                        help="Folder cu CSV-uri istorice (default: auto-detect)")
+    parser.add_argument(
+        "--istoric",
+        default=None,
+        help="Folder cu CSV-uri istorice (default: auto-detect)",
+    )
     parser.add_argument("--out", default="bench_results")
     parser.add_argument(
-        "--methods", default=None,
+        "--methods",
+        default=None,
         help="Comma-sep list; default = setul curat (curated_methods.json) peste registry minus blacklist — renumără cu bench_all_methods.ALL_SPEC_METHODS",
     )
     parser.add_argument(
-        "--percentiles", default="10,20,30,40,50,60,70,80,90,100",
+        "--percentiles",
+        default="10,20,30,40,50,60,70,80,90,100",
         help="Ferestre walk-forward, default 10..100 cu pas 10",
     )
-    parser.add_argument("--block-size", type=int, default=1,
-                        help="Walk-forward re-score block; default = 1 (re-score înaintea "
-                             "fiecărei extrageri, identic cu validarea din UI). Valori mai "
-                             "mari sunt aproximări mai rapide, nu decizii de producție.")
-    parser.add_argument("--quick", action="store_true",
-                        help="Quick: random + frequency")
+    parser.add_argument(
+        "--block-size",
+        type=int,
+        default=1,
+        help="Walk-forward re-score block; default = 1 (re-score înaintea "
+        "fiecărei extrageri, identic cu validarea din UI). Valori mai "
+        "mari sunt aproximări mai rapide, nu decizii de producție.",
+    )
+    parser.add_argument(
+        "--quick", action="store_true", help="Quick: random + frequency"
+    )
     parser.add_argument("--seed", type=int, default=1234)
-    parser.add_argument("--no-rich", action="store_true",
-                        help="Plain-text output în loc de rich tables")
-    parser.add_argument("--no-cache", action="store_true",
-                        help="Ignora cache-ul disk (.bench_cache/). Folosit cand "
-                             "utilizatorul forteaza rebench.")
+    parser.add_argument(
+        "--no-rich", action="store_true", help="Plain-text output în loc de rich tables"
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Ignora cache-ul disk (.bench_cache/). Folosit cand "
+        "utilizatorul forteaza rebench.",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("--no-decision", action="store_true",
-                        help="Nu scrie best_methods.json (folosit la bench paralel pe faze: "
-                             "fiecare faza scrie doar folds.csv in --out propriu; decizia "
-                             "se ia separat dupa combinarea folds-urilor).")
-    parser.add_argument("--no-shuffled-control", action="store_true",
-                        help="Nu rula folds-urile de control pe extrageri AMESTECATE "
-                             "(is_random=True). Injumatateste bench-ul (masurat: 50.1%% "
-                             "din runtime) si NU afecteaza decizia de productie "
-                             "(decision.py filtreaza is_random==False). Pierzi doar "
-                             "lift_vs_shuffle din report.json (ramane null) si tie-break-ul secundar "
-                             "al winners_per_pool (cale legacy).")
-    parser.add_argument("--force-decision", action="store_true",
-                        help="Rescrie best_methods.json CHIAR ȘI cu set redus de metode "
-                             "(--quick/--methods). Implicit decizia e sărită la seturi "
-                             "reduse: un folds.csv cu 2 metode ar înlocui tăcut decizia "
-                             "de producție cu low_confidence/frequency peste tot.")
+    parser.add_argument(
+        "--no-decision",
+        action="store_true",
+        help="Nu scrie best_methods.json (folosit la bench paralel pe faze: "
+        "fiecare faza scrie doar folds.csv in --out propriu; decizia "
+        "se ia separat dupa combinarea folds-urilor).",
+    )
+    parser.add_argument(
+        "--no-shuffled-control",
+        action="store_true",
+        help="Nu rula folds-urile de control pe extrageri AMESTECATE "
+        "(is_random=True). Injumatateste bench-ul (masurat: 50.1%% "
+        "din runtime) si NU afecteaza decizia de productie "
+        "(decision.py filtreaza is_random==False). Pierzi doar "
+        "lift_vs_shuffle din report.json (ramane null) si tie-break-ul secundar "
+        "al winners_per_pool (cale legacy).",
+    )
+    parser.add_argument(
+        "--force-decision",
+        action="store_true",
+        help="Rescrie best_methods.json CHIAR ȘI cu set redus de metode "
+        "(--quick/--methods). Implicit decizia e sărită la seturi "
+        "reduse: un folds.csv cu 2 metode ar înlocui tăcut decizia "
+        "de producție cu low_confidence/frequency peste tot.",
+    )
     args = parser.parse_args()
 
     # Benchmark exclusiv CPU → un singur log.
@@ -164,13 +195,16 @@ def main() -> int:
     # override-uri EXPLICITE ale utilizatorului → ocolesc curarea, deliberat.
     _explicit = bool(args.quick or args.methods)
     if _explicit and CURATION_INFO.get("active"):
-        logging.info("[curated] curare IGNORATĂ: lista de metode e dată explicit "
-                     "(--methods/--quick).")
+        logging.info(
+            "[curated] curare IGNORATĂ: lista de metode e dată explicit "
+            "(--methods/--quick)."
+        )
     else:
         _log_curation(CURATION_INFO)
 
     methods = (
-        QUICK_METHODS if args.quick
+        QUICK_METHODS
+        if args.quick
         else (args.methods.split(",") if args.methods else ALL_SPEC_METHODS)
     )
     methods = [m.strip() for m in methods if m.strip()]
@@ -178,6 +212,7 @@ def main() -> int:
     # stack-ul (method_meta/call_method) — rezolvă-le ÎNAINTE de verificarea unknown,
     # altfel `--methods ml_catboost_cpu` era respins deși ar fi rulat corect.
     from loto_enterprise.benchmark.methods import resolve_method_name as _resolve
+
     methods = [_resolve(m) for m in methods]
     unknown = [m for m in methods if m not in METHODS]
     if unknown:
@@ -211,13 +246,17 @@ def main() -> int:
     # indicată rulează pe fiecare joc.
     methods_per_game = (
         _resolve_methods_per_game(methods, (g.key for g in games))
-        if CURATION_INFO.get("active") and not _explicit else {}
+        if CURATION_INFO.get("active") and not _explicit
+        else {}
     )
     if methods_per_game:
-        _matrix = ", ".join(f"{g.key}={len(methods_per_game.get(g.key, methods))}"
-                            for g in games)
+        _matrix = ", ".join(
+            f"{g.key}={len(methods_per_game.get(g.key, methods))}" for g in games
+        )
         logging.info("[curated] matrice Re-Bench per joc: %s", _matrix)
-        console.print(f"[dim]Matrice efectivă Re-Bench (+ baseline-uri): {_matrix}[/dim]")
+        console.print(
+            f"[dim]Matrice efectivă Re-Bench (+ baseline-uri): {_matrix}[/dim]"
+        )
     console.rule("[bold]Jocuri detectate[/bold]")
     for g in games:
         console.print(
@@ -234,9 +273,11 @@ def main() -> int:
     # Progress bar over folds
     available_methods = [m for m in methods if meta_map[m]["available"]]
     _control_factor = 1 if args.no_shuffled_control else 2
-    total_est = sum(
-        len(methods_per_game.get(g.key, available_methods)) for g in games
-    ) * len(pcts) * _control_factor
+    total_est = (
+        sum(len(methods_per_game.get(g.key, available_methods)) for g in games)
+        * len(pcts)
+        * _control_factor
+    )
 
     console.rule(f"[bold]Sweep start — est. {total_est} folds[/bold]")
 
@@ -266,7 +307,7 @@ def main() -> int:
             task_id,
             advance=1,
             description=f"[{game.label}] {fr.method} pct={fr.percentile}% "
-                        f"{'RND' if fr.is_random else 'REAL'}  hits@k{game.draw_n}={fr.avg_hits_topk:.3f}",
+            f"{'RND' if fr.is_random else 'REAL'}  hits@k{game.draw_n}={fr.avg_hits_topk:.3f}",
         )
         # Linie de progres parsabila de UI (app.py cauta regex r"\[(\d+)/(\d+)\]").
         # Scriem direct la stdout (flush imediat) ca sa apara in bench_full.log
@@ -302,11 +343,14 @@ def main() -> int:
 
     # Render regressive table from folds.csv
     import pandas as pd
+
     folds_df = pd.read_csv(Path(args.out) / "folds.csv")
 
     render_per_game(console, report)
     console.print()
-    console.rule("[bold green]REGRESIV — hits @ K=draw_n pe FIECARE fereastră istorică[/bold green]")
+    console.rule(
+        "[bold green]REGRESIV — hits @ K=draw_n pe FIECARE fereastră istorică[/bold green]"
+    )
     for game in games:
         render_regressive_table(console, folds_df, game.key, game.label, game.draw_n)
 
@@ -333,13 +377,15 @@ def main() -> int:
                 # Backward-compat (used by older method_selector callers):
                 "overall_winner": gd["overall_winner"],
                 "winners_per_pool": {
-                    k: w.get("winner") for k, w in gd.get("winners_per_pool", {}).items()
+                    k: w.get("winner")
+                    for k, w in gd.get("winners_per_pool", {}).items()
                 },
                 "winner_details": gd.get("winners_per_pool", {}),
                 # NEW (v3): with-blacklist winners
                 "overall_winner_bl": gd.get("overall_winner_bl"),
                 "winners_per_pool_bl": {
-                    k: w.get("winner") for k, w in gd.get("winners_per_pool_bl", {}).items()
+                    k: w.get("winner")
+                    for k, w in gd.get("winners_per_pool_bl", {}).items()
                 },
                 "winner_details_bl": gd.get("winners_per_pool_bl", {}),
                 # NEW (v3): best of (no-bl, with-bl) — what production should use
@@ -356,37 +402,53 @@ def main() -> int:
     # istoric decat cel de productie este tot un run REDUS: decizia ar iesi
     # low_confidence peste tot / pe alte date si ar rescrie best_methods.json.
     try:
-        from loto_enterprise.benchmark.decision import MIN_CONSISTENCY_WINDOWS as _MIN_WIN
+        from loto_enterprise.benchmark.decision import (
+            MIN_CONSISTENCY_WINDOWS as _MIN_WIN,
+        )
     except Exception:  # noqa: BLE001
         _MIN_WIN = 3
     _reduced_windows = len(pcts) < _MIN_WIN
     _other_istoric = bool(args.istoric)
-    if not _skip_decision and (_reduced_windows or _other_istoric) and not args.force_decision:
+    if (
+        not _skip_decision
+        and (_reduced_windows or _other_istoric)
+        and not args.force_decision
+    ):
         _skip_decision = True
-        logging.warning("[bench] run redus (%s): NU rescriu best_methods.json; "
-                        "foloseste --force-decision daca vrei asta explicit.",
-                        "sub %d ferestre" % _MIN_WIN if _reduced_windows else "--istoric explicit")
+        logging.warning(
+            "[bench] run redus (%s): NU rescriu best_methods.json; "
+            "foloseste --force-decision daca vrei asta explicit.",
+            "sub %d ferestre" % _MIN_WIN if _reduced_windows else "--istoric explicit",
+        )
     if not _skip_decision and _explicit and not args.force_decision:
         # Gardă anti-footgun: un run cu set REDUS (--quick / --methods a,b) scrie un
         # folds.csv redus (OVERWRITE) — dacă decizia rulează pe el, best_methods.json
         # de producție e înlocuit tăcut (ex. --quick → low_confidence/frequency peste
         # tot). UI-ul a scos Quick exact din motivul ăsta; CLI-ul cere acum opt-in.
         _skip_decision = True
-        logging.warning("[bench] set redus de metode (--quick/--methods): NU rescriu "
-                        "best_methods.json. Forțează explicit cu --force-decision.")
-        console.print("[bold yellow]⚠ Set redus de metode — best_methods.json rămâne "
-                      "NEATINS (adaugă --force-decision ca să-l rescrii).[/bold yellow]")
+        logging.warning(
+            "[bench] set redus de metode (--quick/--methods): NU rescriu "
+            "best_methods.json. Forțează explicit cu --force-decision."
+        )
+        console.print(
+            "[bold yellow]⚠ Set redus de metode — best_methods.json rămâne "
+            "NEATINS (adaugă --force-decision ca să-l rescrii).[/bold yellow]"
+        )
     if _skip_decision:
         # Bench paralel pe faze: scriem DOAR folds.csv in --out (deja scris de runner);
         # decizia (best_methods.json) se ia separat dupa combinarea folds-urilor.
         logging.info("[bench] sar scrierea best_methods.json (no-decision/set redus).")
     else:
         from ui_shared import atomic_write_json
+
         atomic_write_json("best_methods.json", best)  # atomic: tmp+fsync+os.replace
 
         # Stamp CSV signatures so freshness detection knows when cache is stale
         try:
-            from loto_enterprise.benchmark.freshness import write_signatures_to_best_methods
+            from loto_enterprise.benchmark.freshness import (
+                write_signatures_to_best_methods,
+            )
+
             write_signatures_to_best_methods()
         except Exception as _e:
             logging.warning(f"[freshness] failed to stamp signatures: {_e}")
@@ -399,7 +461,10 @@ def main() -> int:
         # un folds.csv vechi/strain — inclusiv peste un bump de CACHE_VERSION.
         _folds_now = str(out_path / "folds.csv")
         try:
-            from loto_enterprise.benchmark.decision import update_best_methods_with_auto_pilot
+            from loto_enterprise.benchmark.decision import (
+                update_best_methods_with_auto_pilot,
+            )
+
             update_best_methods_with_auto_pilot(folds_csv_path=_folds_now)
             logging.info("[auto-pilot] decizie construita din %s", _folds_now)
         except Exception as _e:
@@ -408,7 +473,10 @@ def main() -> int:
     # ─── Final summary panel ────────────────────────────────────────────────
     console.print()
     from rich.panel import Panel
-    lines = ["[bold]INTEGRARE FINALĂ — câștigător per pool per joc (NO-BL  |  +BL  |  BEST)[/bold]\n"]
+
+    lines = [
+        "[bold]INTEGRARE FINALĂ — câștigător per pool per joc (NO-BL  |  +BL  |  BEST)[/bold]\n"
+    ]
     for gk, gd in report["games"].items():
         lines.append(f"\n[bold magenta]{gd['label']}[/bold magenta]")
         wpp = gd.get("winners_per_pool", {})
@@ -425,14 +493,14 @@ def main() -> int:
                 continue
             fam = report["method_meta"].get(w["winner"], {}).get("family", "-")
             use_bl_label = (
-                f"[green]+BL[/green] (Δ+{wbest.get('delta_vs_no_bl',0):.3f})"
-                if wbest.get("use_blacklist") else
-                f"[yellow]no-BL[/yellow] (Δ+{wbest.get('delta_vs_with_bl',0):.3f})"
+                f"[green]+BL[/green] (Δ+{wbest.get('delta_vs_no_bl', 0):.3f})"
+                if wbest.get("use_blacklist")
+                else f"[yellow]no-BL[/yellow] (Δ+{wbest.get('delta_vs_with_bl', 0):.3f})"
             )
             lines.append(
                 f"  K={k[1:]:>2s}  no-BL: [cyan]{w['winner']:<12s}[/cyan] {w['avg_hits']:.3f}  │  "
-                f"+BL: [cyan]{wb.get('winner','-'):<12s}[/cyan] {wb.get('avg_hits',0):.3f}  │  "
-                f"BEST: [bold green]{wbest.get('winner','-')}[/bold green] {use_bl_label}"
+                f"+BL: [cyan]{wb.get('winner', '-'):<12s}[/cyan] {wb.get('avg_hits', 0):.3f}  │  "
+                f"BEST: [bold green]{wbest.get('winner', '-')}[/bold green] {use_bl_label}"
             )
         lines.append(
             f"  [dim]overall: no-BL={gd.get('overall_winner')}  |  +BL={gd.get('overall_winner_bl')}[/dim]"
@@ -441,20 +509,32 @@ def main() -> int:
     # cu `--quick` / `--methods` (fără `--force-decision`) sau cu `--no-decision`
     # garda de mai sus SARE scrierea, dar panoul raporta oricum
     # „Saved: • best_methods.json", adică exact fișierul rămas neatins.
-    _panel_title = ("[bold]câștigător per pool (NU s-a scris best_methods.json)[/bold]"
-                    if _skip_decision else "[bold]best_methods.json[/bold]")
-    console.print(Panel("\n".join(lines), title=_panel_title,
-                        border_style="yellow" if _skip_decision else "green"))
+    _panel_title = (
+        "[bold]câștigător per pool (NU s-a scris best_methods.json)[/bold]"
+        if _skip_decision
+        else "[bold]best_methods.json[/bold]"
+    )
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=_panel_title,
+            border_style="yellow" if _skip_decision else "green",
+        )
+    )
 
     console.print()
     console.print(f"[dim]Saved:[/dim]")
     console.print(f"  • [cyan]{out_path / 'folds.csv'}[/cyan]")
     console.print(f"  • [cyan]{out_path / 'report.json'}[/cyan]")
     if _skip_decision:
-        console.print("  • [yellow]best_methods.json NU a fost rescris[/yellow] "
-                      "(set redus de metode / --no-decision; forțează cu --force-decision)")
+        console.print(
+            "  • [yellow]best_methods.json NU a fost rescris[/yellow] "
+            "(set redus de metode / --no-decision; forțează cu --force-decision)"
+        )
     else:
-        console.print(f"  • [cyan]best_methods.json[/cyan]  (consumed by method_selector)")
+        console.print(
+            f"  • [cyan]best_methods.json[/cyan]  (consumed by method_selector)"
+        )
     console.print()
     return 0
 

@@ -4,6 +4,7 @@
 comandă), `read_tail_lines(0)`, `pack_queue_result` (fallback pe orice eșec de
 compresie, nu doar import lipsă) și `clear_logs()`.
 """
+
 from __future__ import annotations
 
 import os
@@ -53,7 +54,9 @@ def test_file_lock_breaks_genuinely_stale_lock(tmp_path):
     with open(lockpath, "wb") as f:
         f.write(b"dead-owner-token")
     old = time.time() - 3600
-    os.utime(lockpath, (old, old))  # lock "stale" — deținătorul a crăpat cu o oră în urmă
+    os.utime(
+        lockpath, (old, old)
+    )  # lock "stale" — deținătorul a crăpat cu o oră în urmă
     waiter = us.file_lock(target, timeout=1.0)
     waiter.__enter__()
     try:
@@ -95,8 +98,15 @@ class _FakeProc:
 
 def test_is_worker_running_true_on_exact_worker_path(monkeypatch):
     monkeypatch.setattr(
-        us.psutil, "process_iter",
-        lambda attrs=None: iter([_FakeProc([str(us.WORKER_PATH.parent / "python.exe"), str(us.WORKER_PATH)])]),
+        us.psutil,
+        "process_iter",
+        lambda attrs=None: iter(
+            [
+                _FakeProc(
+                    [str(us.WORKER_PATH.parent / "python.exe"), str(us.WORKER_PATH)]
+                )
+            ]
+        ),
     )
     assert us.is_worker_running() is True
 
@@ -107,7 +117,8 @@ def test_is_worker_running_false_on_mere_string_prefix_match(monkeypatch):
     implementare (`root in cmd`) îl confunda cu workerul CORECT al acestui proiect."""
     sibling_worker = str(us.PROJECT_ROOT) + "_OLD" + os.sep + "worker.py"
     monkeypatch.setattr(
-        us.psutil, "process_iter",
+        us.psutil,
+        "process_iter",
         lambda attrs=None: iter([_FakeProc(["python", sibling_worker])]),
     )
     assert us.is_worker_running() is False
@@ -115,7 +126,8 @@ def test_is_worker_running_false_on_mere_string_prefix_match(monkeypatch):
 
 def test_is_worker_running_false_with_no_matching_process(monkeypatch):
     monkeypatch.setattr(
-        us.psutil, "process_iter",
+        us.psutil,
+        "process_iter",
         lambda attrs=None: iter([_FakeProc(["python", "some_other_script.py"])]),
     )
     assert us.is_worker_running() is False

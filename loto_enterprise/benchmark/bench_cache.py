@@ -30,6 +30,7 @@ USAGE:
     # ... compute fold ...
     store_cached_fold(csv_hash, method, pct, game.key, result)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -47,6 +48,7 @@ from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path
 from runtime_paths import RUNTIME_ROOT
 
 logger = logging.getLogger(__name__)
+
 
 def _resolve_cache_dir() -> Path:
     """Cache-ul stă ÎN AFARA OneDrive (ca .venv) — altfel zeci de mii de fișiere mici
@@ -107,6 +109,7 @@ INDEX_FILE = CACHE_DIR / "index.json"
 # Hashing
 # ---------------------------------------------------------------------------
 
+
 def compute_csv_hash(draws_2d: np.ndarray) -> str:
     """Hash al continutului array-ului — stabil intre rulari."""
     body = draws_2d.tobytes()
@@ -134,8 +137,12 @@ def set_cache_variant(block_size: int, random_seed: int) -> None:
     _CACHE_VARIANT["seed"] = int(random_seed)
 
 
-def _fold_key(csv_hash: str, method: str, percentile: int, game_key: str, is_random: bool) -> str:
-    raw = f"{CACHE_VERSION}::{csv_hash}::{game_key}::{method}::{percentile}::{is_random}"
+def _fold_key(
+    csv_hash: str, method: str, percentile: int, game_key: str, is_random: bool
+) -> str:
+    raw = (
+        f"{CACHE_VERSION}::{csv_hash}::{game_key}::{method}::{percentile}::{is_random}"
+    )
     if _CACHE_VARIANT["block_size"] != _DEFAULT_BLOCK_SIZE:
         raw += f"::bs{_CACHE_VARIANT['block_size']}"
     if is_random and _CACHE_VARIANT["seed"] != _DEFAULT_SEED:
@@ -152,13 +159,19 @@ def _fold_key(csv_hash: str, method: str, percentile: int, game_key: str, is_ran
 # Disk cache I/O
 # ---------------------------------------------------------------------------
 
+
 def _ensure_cache_dir():
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
 
 
-def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
-                    is_random: bool = False,
-                    expected_pools: "set[str] | None" = None) -> Any | None:
+def get_cached_fold(
+    csv_hash: str,
+    method: str,
+    percentile: int,
+    game_key: str,
+    is_random: bool = False,
+    expected_pools: "set[str] | None" = None,
+) -> Any | None:
     """Return cached FoldResult or None.
 
     `expected_pools` = mulțimea de chei `kN` pe care GameDef-ul CURENT le cere
@@ -195,12 +208,18 @@ def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
                 logger.warning(
                     "[bench_cache] %s/%s pct=%s: fold cache-uit are pool-urile %s, "
                     "dar jocul cere %s — îl ignor și recalculez.",
-                    game_key, method, percentile, sorted(got), sorted(expected_pools),
+                    game_key,
+                    method,
+                    percentile,
+                    sorted(got),
+                    sorted(expected_pools),
                 )
                 return None
         return obj
     except Exception as exc:
-        logger.debug(f"[bench_cache] failed to load {f.name}: {exc}")
+        # warning, nu debug: fisierul e sters chiar dupa asta, deci logul e
+        # singura urma ca ceva n-a mers (nu doar autovindecare banala).
+        logger.warning(f"[bench_cache] failed to load {f.name}: {exc}")
         try:
             f.unlink()  # corrupted; remove
         except Exception:
@@ -208,8 +227,14 @@ def get_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
         return None
 
 
-def store_cached_fold(csv_hash: str, method: str, percentile: int, game_key: str,
-                       is_random: bool, result: Any) -> None:
+def store_cached_fold(
+    csv_hash: str,
+    method: str,
+    percentile: int,
+    game_key: str,
+    is_random: bool,
+    result: Any,
+) -> None:
     _ensure_cache_dir()
     key = _fold_key(csv_hash, method, percentile, game_key, is_random)
     f = CACHE_DIR / f"{key}.pkl"
@@ -261,12 +286,23 @@ def purge_stale_fold_cache(dry_run: bool = True) -> dict:
                 deleted += 1
             except OSError as exc:
                 logger.debug("[bench_cache] nu pot sterge %s: %s", f.name, exc)
-    logger.info("[bench_cache] purge %s: %d fisiere ale versiunii %s pastrate, "
-                "%d stale (%.1f MB)%s", "(dry-run)" if dry_run else "",
-                kept, CACHE_VERSION, stale, stale_bytes / 1048576,
-                "" if dry_run else f", {deleted} sterse")
-    return {"version": CACHE_VERSION, "kept": kept, "stale": stale,
-            "stale_mb": round(stale_bytes / 1048576, 1), "deleted": deleted}
+    logger.info(
+        "[bench_cache] purge %s: %d fisiere ale versiunii %s pastrate, "
+        "%d stale (%.1f MB)%s",
+        "(dry-run)" if dry_run else "",
+        kept,
+        CACHE_VERSION,
+        stale,
+        stale_bytes / 1048576,
+        "" if dry_run else f", {deleted} sterse",
+    )
+    return {
+        "version": CACHE_VERSION,
+        "kept": kept,
+        "stale": stale,
+        "stale_mb": round(stale_bytes / 1048576, 1),
+        "deleted": deleted,
+    }
 
 
 def clear_cache(older_than_days: int | None = None) -> int:
@@ -292,6 +328,7 @@ def clear_cache(older_than_days: int | None = None) -> int:
 # Adaptive coarse-to-fine sweep
 # ---------------------------------------------------------------------------
 
+
 def coarse_percentiles() -> list[int]:
     """3 percentile pentru pass-ul coarse — repere robuste."""
     return [30, 60, 100]
@@ -302,8 +339,9 @@ def fine_percentiles() -> list[int]:
     return [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 
-def select_survivors(coarse_results: list[dict], top_k_pct: float = 0.7,
-                     min_keep: int = 10) -> list[str]:
+def select_survivors(
+    coarse_results: list[dict], top_k_pct: float = 0.7, min_keep: int = 10
+) -> list[str]:
     """
     Din rezultatele coarse, pastreaza top-K% metode (default 70%).
 
@@ -319,7 +357,9 @@ def select_survivors(coarse_results: list[dict], top_k_pct: float = 0.7,
         method = r.get("method")
         if not method:
             continue
-        method_scores[method] = method_scores.get(method, 0.0) + float(r.get("score", 0.0))
+        method_scores[method] = method_scores.get(method, 0.0) + float(
+            r.get("score", 0.0)
+        )
     if not method_scores:
         return []
     sorted_methods = sorted(method_scores.items(), key=lambda x: x[1], reverse=True)
@@ -328,11 +368,17 @@ def select_survivors(coarse_results: list[dict], top_k_pct: float = 0.7,
     return survivors
 
 
-def estimate_time_savings(n_methods: int, n_percentiles_full: int = 10,
-                          n_coarse: int = 3, survival_rate: float = 0.7) -> dict:
+def estimate_time_savings(
+    n_methods: int,
+    n_percentiles_full: int = 10,
+    n_coarse: int = 3,
+    survival_rate: float = 0.7,
+) -> dict:
     """Estimare teoretica a economisirii de timp prin adaptive sweep."""
     full_folds = n_methods * n_percentiles_full
-    adaptive_folds = (n_methods * n_coarse) + (int(n_methods * survival_rate) * n_percentiles_full)
+    adaptive_folds = (n_methods * n_coarse) + (
+        int(n_methods * survival_rate) * n_percentiles_full
+    )
     savings = 1.0 - (adaptive_folds / full_folds)
     return {
         "full_folds": full_folds,
@@ -345,8 +391,10 @@ def estimate_time_savings(n_methods: int, n_percentiles_full: int = 10,
 # Pool size locality: skip pool sizes where winner is stable
 # ---------------------------------------------------------------------------
 
-def detect_stable_pool_neighborhoods(winners_per_pool: dict[str, str],
-                                      min_run: int = 3) -> list[str]:
+
+def detect_stable_pool_neighborhoods(
+    winners_per_pool: dict[str, str], min_run: int = 3
+) -> list[str]:
     """
     Detecteaza intervale de pool sizes unde castigatorul e acelasi.
 
@@ -388,9 +436,17 @@ def detect_stable_pool_neighborhoods(winners_per_pool: dict[str, str],
 # Cache-aware wrapper for evaluate_fold
 # ---------------------------------------------------------------------------
 
-def cached_evaluate_fold(evaluate_fn, draws_for_hash: np.ndarray,
-                         game_key: str, method: str, percentile: int,
-                         is_random: bool, *args, **kwargs) -> Any:
+
+def cached_evaluate_fold(
+    evaluate_fn,
+    draws_for_hash: np.ndarray,
+    game_key: str,
+    method: str,
+    percentile: int,
+    is_random: bool,
+    *args,
+    **kwargs,
+) -> Any:
     """
     Wrapper care consulta cache-ul inainte de a evalua.
 

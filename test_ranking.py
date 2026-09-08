@@ -1,4 +1,5 @@
 """rank_by_score — scoruri finite + sărire NaN/inf (tie-break determinist)."""
+
 from __future__ import annotations
 
 from loto_enterprise.core.ranking import rank_by_score

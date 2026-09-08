@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 # Game definitions
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class GameDef:
     key: str
@@ -98,39 +99,61 @@ def discover_games(istoric_dir: str | None = None) -> list[GameDef]:
                 key = "loto_6_49"
                 if key in seen_keys:
                     continue
-                games.append(GameDef(
-                    key=key, label="Loto 6/49", csv_path=str(p),
-                    cols=["n1", "n2", "n3", "n4", "n5", "n6"],
-                    max_num=49, draw_n=6, pool_extra=14,  # K=6..20 (extins 2026-05-25)
-                ))
+                games.append(
+                    GameDef(
+                        key=key,
+                        label="Loto 6/49",
+                        csv_path=str(p),
+                        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
+                        max_num=49,
+                        draw_n=6,
+                        pool_extra=14,  # K=6..20 (extins 2026-05-25)
+                    )
+                )
                 seen_keys.add(key)
             elif "5_40" in name or "540" in name:
                 key = "loto_5_40"
                 if key in seen_keys:
                     continue
-                games.append(GameDef(
-                    key=key, label="Loto 5/40", csv_path=str(p),
-                    cols=["n1", "n2", "n3", "n4", "n5"],
-                    max_num=40, draw_n=5, pool_extra=14,  # K=5..19 (extins 2026-05-25)
-                ))
+                games.append(
+                    GameDef(
+                        key=key,
+                        label="Loto 5/40",
+                        csv_path=str(p),
+                        cols=["n1", "n2", "n3", "n4", "n5"],
+                        max_num=40,
+                        draw_n=5,
+                        pool_extra=14,  # K=5..19 (extins 2026-05-25)
+                    )
+                )
                 seen_keys.add(key)
             elif "joker" in name:
                 if "joker_urna1" not in seen_keys:
-                    games.append(GameDef(
-                        key="joker_urna1", label="Joker — Urna 1 (5/45)",
-                        csv_path=str(p),
-                        cols=["n1", "n2", "n3", "n4", "n5"],
-                        max_num=45, draw_n=5, pool_extra=14,  # K=5..19 (extins 2026-05-25)
-                    ))
+                    games.append(
+                        GameDef(
+                            key="joker_urna1",
+                            label="Joker — Urna 1 (5/45)",
+                            csv_path=str(p),
+                            cols=["n1", "n2", "n3", "n4", "n5"],
+                            max_num=45,
+                            draw_n=5,
+                            pool_extra=14,  # K=5..19 (extins 2026-05-25)
+                        )
+                    )
                     seen_keys.add("joker_urna1")
                 if "joker_urna2" not in seen_keys:
-                    games.append(GameDef(
-                        key="joker_urna2", label="Joker — Urna 2 (1/20)",
-                        csv_path=str(p),
-                        cols=["joker"],
-                        max_num=20, draw_n=1, pool_extra=0,
-                        is_single_pick=True,
-                    ))
+                    games.append(
+                        GameDef(
+                            key="joker_urna2",
+                            label="Joker — Urna 2 (1/20)",
+                            csv_path=str(p),
+                            cols=["joker"],
+                            max_num=20,
+                            draw_n=1,
+                            pool_extra=0,
+                            is_single_pick=True,
+                        )
+                    )
                     seen_keys.add("joker_urna2")
     if not games:
         raise RuntimeError("Nu am detectat niciun CSV de joc.")
@@ -143,7 +166,10 @@ def load_draws(game: GameDef) -> np.ndarray:
     df = pd.read_csv(game.csv_path)
     try:
         draws, valid_mask = valid_draw_matrix(
-            df, game.cols, draw_n=game.draw_n, max_num=game.max_num,
+            df,
+            game.cols,
+            draw_n=game.draw_n,
+            max_num=game.max_num,
         )
     except ValueError as exc:
         raise ValueError(f"{game.csv_path}: {exc}") from exc
@@ -151,7 +177,8 @@ def load_draws(game: GameDef) -> np.ndarray:
     if rejected:
         logger.warning(
             "[bench] %s: ignor %d extrageri invalide (aceeași regulă ca engine/WF).",
-            game.csv_path, rejected,
+            game.csv_path,
+            rejected,
         )
     return draws
 
@@ -159,6 +186,7 @@ def load_draws(game: GameDef) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Per-fold evaluation
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FoldResult:
@@ -178,12 +206,14 @@ class FoldResult:
     hits_per_pool: dict[str, float] = field(default_factory=dict)
     # Hit rates per pool size WITH blacklist applied (bottom 25% excluded)
     hits_per_pool_bl: dict[str, float] = field(default_factory=dict)
-    family: str = ""                    # familia/librăria metodei (ml-*, classical-*, math-*, baseline...)
-    avg_hits_topk: float = 0.0          # avg hits at K = draw_n (base pool)
+    family: str = (
+        ""  # familia/librăria metodei (ml-*, classical-*, math-*, baseline...)
+    )
+    avg_hits_topk: float = 0.0  # avg hits at K = draw_n (base pool)
     max_hits_topk: int = 0
-    rate_4plus: float = 0.0             # rata extragerilor cu >=4 numere ghicite (regula 4+)
+    rate_4plus: float = 0.0  # rata extragerilor cu >=4 numere ghicite (regula 4+)
     rates_4plus_per_pool: dict[str, float] = field(default_factory=dict)
-    rate_3plus: float = 0.0             # rata extragerilor cu >=3 numere ghicite (regula 3+)
+    rate_3plus: float = 0.0  # rata extragerilor cu >=3 numere ghicite (regula 3+)
     rates_3plus_per_pool: dict[str, float] = field(default_factory=dict)
     # Urna 2 e single-pick (1/20): metrică proprie, exactă, de top-1. Se scrie
     # și pentru celelalte jocuri ca telemetrie uniformă, dar doar decizia cu
@@ -195,7 +225,7 @@ class FoldResult:
     # decis de regula de tie-break, nu de scor. Decizia exclude metodele cu
     # fractie >= decision.TIEBREAK_MAX_FRACTION. Coloane `tiebreak_kN` (v17).
     tiebreak_per_pool: dict[str, float] = field(default_factory=dict)
-    blacklist_size: int = 0             # how many numbers were blacklisted per score round
+    blacklist_size: int = 0  # how many numbers were blacklisted per score round
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
     ram_gb_peak: float = 0.0
@@ -226,12 +256,19 @@ def _evaluate_fold(
 ) -> tuple[FoldResult, HwSnapshot]:
     """Run a single fold with hardware sampling. Returns (FoldResult, hw_snap)."""
     n_test = len(test_draws)
-    pool_sizes = [game.draw_n] if game.is_single_pick else [
-        game.draw_n + i for i in range(game.pool_extra + 1)
-    ]
+    pool_sizes = (
+        [game.draw_n]
+        if game.is_single_pick
+        else [game.draw_n + i for i in range(game.pool_extra + 1)]
+    )
     fr = FoldResult(
-        game=game.key, method=method_name, percentile=0, is_random=False,
-        n_train=len(train_draws), n_test=n_test, runtime_sec=0.0,
+        game=game.key,
+        method=method_name,
+        percentile=0,
+        is_random=False,
+        n_train=len(train_draws),
+        n_test=n_test,
+        runtime_sec=0.0,
         family=str(method_meta(method_name).get("family", "") or ""),
         hits_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         hits_per_pool_bl={f"k{k}": 0.0 for k in pool_sizes},
@@ -247,11 +284,17 @@ def _evaluate_fold(
         per_pool_totals = {k: 0 for k in pool_sizes}
         per_pool_bl_totals = {k: 0 for k in pool_sizes}
         per_pool_max = {k: 0 for k in pool_sizes}
-        per_pool_4plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=4 numere ghicite
-        per_pool_3plus = {k: 0 for k in pool_sizes}   # nr. extrageri cu >=3 numere ghicite
-        per_pool_1plus = {k: 0 for k in pool_sizes}   # top-1 exact pentru Urna 2
-        per_pool_tie = {k: 0 for k in pool_sizes}     # blocuri cu taietura top-K in grup de egalitate
-        n_eval = 0                                     # nr. total extrageri evaluate
+        per_pool_4plus = {
+            k: 0 for k in pool_sizes
+        }  # nr. extrageri cu >=4 numere ghicite
+        per_pool_3plus = {
+            k: 0 for k in pool_sizes
+        }  # nr. extrageri cu >=3 numere ghicite
+        per_pool_1plus = {k: 0 for k in pool_sizes}  # top-1 exact pentru Urna 2
+        per_pool_tie = {
+            k: 0 for k in pool_sizes
+        }  # blocuri cu taietura top-K in grup de egalitate
+        n_eval = 0  # nr. total extrageri evaluate
         blocks = 0
         unusable_blocks = 0  # Empty/flat/non-finite scorer output (silent failure)
         bl_sizes_seen: list[int] = []
@@ -305,9 +348,9 @@ def _evaluate_fold(
                     h_bl = len(top_sets_bl[k] & actual)
                     per_pool_totals[k] += h
                     per_pool_bl_totals[k] += h_bl
-                    if h >= 4:                       # regula 4+: numărăm hiturile mari
+                    if h >= 4:  # regula 4+: numărăm hiturile mari
                         per_pool_4plus[k] += 1
-                    if h >= 3:                       # regula 3+ (prag alternativ, configurabil)
+                    if h >= 3:  # regula 3+ (prag alternativ, configurabil)
                         per_pool_3plus[k] += 1
                     if h >= 1:
                         per_pool_1plus[k] += 1
@@ -384,6 +427,7 @@ def _eval_fold_worker(args):
 # Sweep
 # ---------------------------------------------------------------------------
 
+
 def _expected_pool_keys(game) -> set[str]:
     """Cheile `kN` pe care `_evaluate_fold` le produce pentru acest GameDef.
 
@@ -391,8 +435,11 @@ def _expected_pool_keys(game) -> set[str]:
     respingă un fold cache-uit cu ALTĂ geometrie (`pool_extra` diferit): cheia de
     cache nu conține geometria, deci altfel era servit trunchiat.
     """
-    pool_sizes = ([game.draw_n] if game.is_single_pick
-                  else [game.draw_n + i for i in range(game.pool_extra + 1)])
+    pool_sizes = (
+        [game.draw_n]
+        if game.is_single_pick
+        else [game.draw_n + i for i in range(game.pool_extra + 1)]
+    )
     return {f"k{k}" for k in pool_sizes}
 
 
@@ -410,9 +457,7 @@ def _methods_for_game(
     if methods_per_game is None or game_key not in methods_per_game:
         return list(methods)
     allowed = set(methods)
-    return list(dict.fromkeys(
-        m for m in methods_per_game[game_key] if m in allowed
-    ))
+    return list(dict.fromkeys(m for m in methods_per_game[game_key] if m in allowed))
 
 
 def run_benchmark(
@@ -496,10 +541,15 @@ def run_benchmark(
     import os as _os
     import hashlib as _hl
     from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
+
     try:
         from .bench_cache import (
-            compute_csv_hash, get_cached_fold, store_cached_fold, set_cache_variant,
+            compute_csv_hash,
+            get_cached_fold,
+            store_cached_fold,
+            set_cache_variant,
         )
+
         # block_size/seed intră în cheia de cache (doar la valori non-default) —
         # altfel un `--block-size 1` / `--seed X` servea folduri stale de la default.
         set_cache_variant(block_size, random_seed)
@@ -535,10 +585,13 @@ def run_benchmark(
         # decat au fost trimise, iar decizia/clasamentul citesc metodele in
         # ordinea randurilor — egalitatile exacte s-ar rupe altfel dupa
         # ordinea de terminare a proceselor.
-        _sort_cols = [c for c in ("game", "method", "percentile", "is_random") if c in _df.columns]
+        _sort_cols = [
+            c for c in ("game", "method", "percentile", "is_random") if c in _df.columns
+        ]
         if _sort_cols:
             _df = _df.sort_values(_sort_cols, kind="stable").reset_index(drop=True)
         import uuid as _uuid
+
         _target = out_path / "folds.csv"
         _tmp = _target.with_name(
             f"{_target.name}.{os.getpid()}.{_uuid.uuid4().hex[:8]}.tmp"
@@ -561,12 +614,25 @@ def run_benchmark(
         nonlocal done_global, _since_flush
         done_global += 1
         fold_rows.append(fr)
-        tag = "CACHE HIT" if from_cache else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
+        tag = (
+            "CACHE HIT"
+            if from_cache
+            else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
+        )
         # [N/M] = total GRAND; eticheta CPU/GPU (kind) scrisă AUTORITAR în linie, ca UI-ul
         # să nu mai ghicească din nume (clasificarea după nume diverja de cea după familie
         # → cpu_done depășea cpu_tot). Format: [game/method/pct/REAL|RND/CPU|GPU].
-        logger.info("[%d/%d] [%s/%s/%d%%/%s/%s] %s", done_global, total_folds_est,
-                    game.key, method, pct, "RND" if is_random else "REAL", kind.upper(), tag)
+        logger.info(
+            "[%d/%d] [%s/%s/%d%%/%s/%s] %s",
+            done_global,
+            total_folds_est,
+            game.key,
+            method,
+            pct,
+            "RND" if is_random else "REAL",
+            kind.upper(),
+            tag,
+        )
         # Flush la fiecare 100 rezultate (cache SAU compute) → folds.csv rămâne proaspăt
         # pe parcurs (clasament live + rezultate parțiale la anulare). NU pe
         # `done_global % 100 == 0 and not from_cache`: rata flush-ul dacă al 100-lea
@@ -581,7 +647,7 @@ def run_benchmark(
 
     # ── PRE-PASS: încarcă TOATE jocurile, construiește task-urile, rezolvă cache-ul.
     # Adunăm TOATE task-urile (din toate jocurile) într-un singur pool global de procese.
-    all_cpu_compute = []   # (method, train, test, game, block_size, pct, is_random, csv_hash)
+    all_cpu_compute = []  # (method, train, test, game, block_size, pct, is_random, csv_hash)
 
     for game in games:
         try:
@@ -608,8 +674,12 @@ def run_benchmark(
         for method in _methods_for_game(methods, methods_per_game, game.key):
             meta = method_meta_map[method]
             if not meta["available"]:
-                logger.info("[%s/%s] SKIP (unavailable: %s)",
-                            game.key, method, meta.get("unavailable_reason"))
+                logger.info(
+                    "[%s/%s] SKIP (unavailable: %s)",
+                    game.key,
+                    method,
+                    meta.get("unavailable_reason"),
+                )
                 continue
             for pct in percentiles:
                 n_test = max(1, int(math.ceil(n * pct / 100.0)))
@@ -630,24 +700,46 @@ def run_benchmark(
                     n_train = 80
                     n_test = n - n_train
                 if n_train < 80 or n_test < 1:
-                    logger.info("[%s/%s/%d%%] skip — train too small (%d) sau test insuficient (%d)",
-                                game.key, method, pct, n_train, n_test)
+                    logger.info(
+                        "[%s/%s/%d%%] skip — train too small (%d) sau test insuficient (%d)",
+                        game.key,
+                        method,
+                        pct,
+                        n_train,
+                        n_test,
+                    )
                     continue
-                for is_random in ((False, True) if shuffled_control else (False,)):
+                for is_random in (False, True) if shuffled_control else (False,):
                     # Cache lookup instant; doar cache-miss-urile intră la calcul.
                     cached = None
                     if use_cache and _cache_ok and csv_hash_game is not None:
                         try:
-                            cached = get_cached_fold(csv_hash_game, method, pct, game.key, is_random,
-                                                 _expected_pool_keys(game))
+                            cached = get_cached_fold(
+                                csv_hash_game,
+                                method,
+                                pct,
+                                game.key,
+                                is_random,
+                                _expected_pool_keys(game),
+                            )
                         except Exception:  # noqa: BLE001
                             pass
                     if cached is not None:
-                        _handle_result(game, method, pct, is_random, cached, True, "cpu")
+                        _handle_result(
+                            game, method, pct, is_random, cached, True, "cpu"
+                        )
                     else:
                         src = shuffled_draws if is_random else draws
-                        args = (method, src[:n_train], src[n_train:n_train + n_test],
-                                game, block_size, pct, is_random, csv_hash_game)
+                        args = (
+                            method,
+                            src[:n_train],
+                            src[n_train : n_train + n_test],
+                            game,
+                            block_size,
+                            pct,
+                            is_random,
+                            csv_hash_game,
+                        )
                         all_cpu_compute.append(args)
 
     # ── EXECUȚIE CONCURENTĂ: UN singur pool de PROCESE CPU ────────────────────────
@@ -662,35 +754,67 @@ def run_benchmark(
     _PER_PROC_GB = 0.6
     try:
         import psutil as _ps
-        _avail_gb = _ps.virtual_memory().available / (1024 ** 3)
+
+        _avail_gb = _ps.virtual_memory().available / (1024**3)
     except Exception:  # noqa: BLE001
         _avail_gb = 8.0
     _proc_budget = max(2, int((_avail_gb * 0.50) / _PER_PROC_GB))  # ~50%% din RAM liber
 
     # Worker-e SINGLE-THREAD BLAS → N procese = N nuclee CURAT (fără oversubscription).
     # Metodele-s independente → paralelismul pe PROCESE bate threading-ul BLAS intra-metodă.
-    for _tv in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    for _tv in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
         _os.environ.setdefault(_tv, "1")
     _cpu_cap = _nc - max(2, _nc // 4)  # ~75% din nuclee
     n_workers = max(1, min(_cpu_cap, _proc_budget))
-    logger.info("[bench] RAM disp %.1f GB → buget %d procese (CPU=%d) "
-                "[per-proc ~%.1f GB; commit-limit-safe]",
-                _avail_gb, _proc_budget, n_workers, _PER_PROC_GB)
-    fut_kind = {}   # fut -> (game, csv_hash, args)  (args pt re-rulare la pool rupt)
+    logger.info(
+        "[bench] RAM disp %.1f GB → buget %d procese (CPU=%d) "
+        "[per-proc ~%.1f GB; commit-limit-safe]",
+        _avail_gb,
+        _proc_budget,
+        n_workers,
+        _PER_PROC_GB,
+    )
+    fut_kind = {}  # fut -> (game, csv_hash, args)  (args pt re-rulare la pool rupt)
 
     def _make_pool(compute, max_workers):
         if not compute:
             return None
+        ex = None
+        submitted = []
         try:
             ex = ProcessPoolExecutor(max_workers=max_workers)
             for args in compute:
                 method, train, test, game, bs, pct, is_random, csv_hash = args
-                fut = ex.submit(_eval_fold_worker, (method, train, test, game, bs, pct, is_random))
+                fut = ex.submit(
+                    _eval_fold_worker, (method, train, test, game, bs, pct, is_random)
+                )
                 fut_kind[fut] = (game, csv_hash, args)
-            logger.info("[bench] CPU pool: %d task-uri pe %d procese", len(compute), max_workers)
+                submitted.append(fut)
+            logger.info(
+                "[bench] CPU pool: %d task-uri pe %d procese", len(compute), max_workers
+            )
             return ex
         except Exception as exc:  # noqa: BLE001
-            logger.warning("[bench] ProcessPool indisponibil (%s) — fallback secvential.", exc)
+            logger.warning(
+                "[bench] ProcessPool indisponibil (%s) — fallback secvential.", exc
+            )
+            # Golim fut_kind de orice future deja înregistrat în încercarea asta:
+            # altfel watchdog-ul de mai jos aștepta/procesa futures de pe un pool
+            # pe cale să fie abandonat, IAR fallback-ul secvențial re-rula TOATE
+            # task-urile din `compute` de la zero — inclusiv cele deja trimise
+            # aici — dublând intrări în folds.csv (pooled_mean ponderat greșit
+            # de un fold numărat de două ori). Oprim și procesele deja pornite,
+            # ca să nu rămână orfane după acest eșec parțial.
+            for fut in submitted:
+                fut_kind.pop(fut, None)
+                fut.cancel()
+            if ex is not None:
+                ex.shutdown(wait=False, cancel_futures=True)
             return None
 
     def _run_seq_one(args):
@@ -705,8 +829,12 @@ def run_benchmark(
             if _cache_ok and csv_hash is not None and not getattr(fr, "failed", False):
                 store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
             elif getattr(fr, "failed", False):
-                logger.warning("[%s/%s] fold EȘUAT (secvential) — NU îl cache-uiesc (%s)",
-                               game.key, method, getattr(fr, "error", "") or "?")
+                logger.warning(
+                    "[%s/%s] fold EȘUAT (secvential) — NU îl cache-uiesc (%s)",
+                    game.key,
+                    method,
+                    getattr(fr, "error", "") or "?",
+                )
             _handle_result(game, method, pct, is_random, fr, False, "cpu")
         except Exception as e2:  # noqa: BLE001
             logger.error("[%s/%s] secvential failed: %s", game.key, method, e2)
@@ -722,23 +850,30 @@ def run_benchmark(
     # declarăm restul "hung", le abandonăm și continuăm cu folds-urile deja strânse
     # (decizia tolerează lipsuri). Pragul e pe INACTIVITATE totală, nu pe durata unui
     # task. Configurabil prin LOTO_BENCH_STALL_TIMEOUT (sec).
-    _stall_timeout = float(_os.environ.get("LOTO_BENCH_STALL_TIMEOUT", "900"))  # 15 min fara NICIUN rezultat = hung
+    _stall_timeout = float(
+        _os.environ.get("LOTO_BENCH_STALL_TIMEOUT", "900")
+    )  # 15 min fara NICIUN rezultat = hung
     _hung = False
     if fut_kind:
         try:
             pending = set(fut_kind.keys())
             while pending:
-                done, pending = wait(pending, timeout=_stall_timeout, return_when=FIRST_COMPLETED)
+                done, pending = wait(
+                    pending, timeout=_stall_timeout, return_when=FIRST_COMPLETED
+                )
                 if not done:
                     # Fereastra intreaga fara niciun rezultat -> restul e blocat.
                     logger.error(
                         "[bench] WATCHDOG: %d task-uri fara niciun rezultat in %.0fs — "
                         "le abandonez. Bench-ul continua cu folds-urile stranse.",
-                        len(pending), _stall_timeout,
+                        len(pending),
+                        _stall_timeout,
                     )
                     for fut in pending:
                         game, csv_hash, args = fut_kind[fut]
-                        logger.error("[bench] HUNG abandonat: [%s] task=%s", game.key, args[0])
+                        logger.error(
+                            "[bench] HUNG abandonat: [%s] task=%s", game.key, args[0]
+                        )
                         fut.cancel()
                     _hung = True
                     pending = set()
@@ -748,8 +883,11 @@ def run_benchmark(
                     try:
                         method, pct, is_random, fr, err = fut.result()
                     except Exception as exc:  # noqa: BLE001
-                        logger.error("[%s] future a crăpat (%s) — programez re-rulare secvențială.",
-                                     game.key, exc)
+                        logger.error(
+                            "[%s] future a crăpat (%s) — programez re-rulare secvențială.",
+                            game.key,
+                            exc,
+                        )
                         failed_tasks.append(args)
                         continue
                     if err or fr is None:
@@ -764,14 +902,24 @@ def run_benchmark(
                     # metoda dispare din agregate și din decizie (ambele filtrează
                     # failed==True) până la un bump de CACHE_VERSION sau --no-cache,
                     # fără nicio linie în log care să spună că e un eșec cache-uit.
-                    if _cache_ok and csv_hash is not None and not getattr(fr, "failed", False):
+                    if (
+                        _cache_ok
+                        and csv_hash is not None
+                        and not getattr(fr, "failed", False)
+                    ):
                         try:
-                            store_cached_fold(csv_hash, method, pct, game.key, is_random, fr)
+                            store_cached_fold(
+                                csv_hash, method, pct, game.key, is_random, fr
+                            )
                         except Exception:  # noqa: BLE001
                             pass
                     elif getattr(fr, "failed", False):
-                        logger.warning("[%s/%s] fold EȘUAT — NU îl cache-uiesc (%s)",
-                                       game.key, method, getattr(fr, "error", "") or "?")
+                        logger.warning(
+                            "[%s/%s] fold EȘUAT — NU îl cache-uiesc (%s)",
+                            game.key,
+                            method,
+                            getattr(fr, "error", "") or "?",
+                        )
                     _handle_result(game, method, pct, is_random, fr, False, "cpu")
         finally:
             # La hang: NU asteptam workerii blocati — anulam si abandonam procesele.
@@ -784,8 +932,10 @@ def run_benchmark(
         for a in all_cpu_compute:
             _run_seq_one(a)
     if failed_tasks:
-        logger.warning("[bench] Re-rulez SECVENȚIAL %d task-uri (pool rupt/OOM) — fără pierdere de rezultate.",
-                        len(failed_tasks))
+        logger.warning(
+            "[bench] Re-rulez SECVENȚIAL %d task-uri (pool rupt/OOM) — fără pierdere de rezultate.",
+            len(failed_tasks),
+        )
         for a in failed_tasks:
             _run_seq_one(a)
 
@@ -796,20 +946,24 @@ def run_benchmark(
         if g.is_single_pick:
             pool_keys_per_game[g.key] = [f"k{g.draw_n}"]
         else:
-            pool_keys_per_game[g.key] = [f"k{g.draw_n + i}" for i in range(g.pool_extra + 1)]
+            pool_keys_per_game[g.key] = [
+                f"k{g.draw_n + i}" for i in range(g.pool_extra + 1)
+            ]
     if df.empty:
         df = pd.DataFrame()
 
     # ----- Aggregate per (game, pool) → winner -----
     report = _aggregate(df, games, methods, method_meta_map, pool_keys_per_game)
     report["methods_per_game"] = {
-        g.key: _methods_for_game(methods, methods_per_game, g.key)
-        for g in games
+        g.key: _methods_for_game(methods, methods_per_game, g.key) for g in games
     }
     # Scriere atomică (tmp per-PID + fsync + rename) — OneDrive-safe, ca folds.csv.
     import uuid as _uuid
+
     _rjson = out_path / "report.json"
-    _rjson_tmp = _rjson.with_name(f"report.{os.getpid()}.{_uuid.uuid4().hex[:8]}.json.tmp")
+    _rjson_tmp = _rjson.with_name(
+        f"report.{os.getpid()}.{_uuid.uuid4().hex[:8]}.json.tmp"
+    )
     try:
         with open(_rjson_tmp, "w", encoding="utf-8") as _f:
             json.dump(report, _f, indent=2, ensure_ascii=False)
@@ -865,8 +1019,16 @@ def _aggregate(
         pool_keys = pool_keys_per_game[game.key]
         per_method = {}
         for method in methods:
-            real = sub[(sub["method"] == method) & (sub["is_random"] == False)] if not sub.empty else sub  # noqa: E712
-            rnd = sub[(sub["method"] == method) & (sub["is_random"] == True)] if not sub.empty else sub    # noqa: E712
+            real = (
+                sub[(sub["method"] == method) & (sub["is_random"] == False)]
+                if not sub.empty
+                else sub
+            )  # noqa: E712
+            rnd = (
+                sub[(sub["method"] == method) & (sub["is_random"] == True)]
+                if not sub.empty
+                else sub
+            )  # noqa: E712
             meta = method_meta_map[method]
             if real.empty:
                 per_method[method] = {
@@ -904,7 +1066,9 @@ def _aggregate(
                 entry["per_pool"][k] = {
                     "avg_hits_real": real_mean,
                     "avg_hits_shuffled": rnd_mean,
-                    "lift_vs_shuffle": real_mean - rnd_mean if rnd_mean is not None else None,
+                    "lift_vs_shuffle": real_mean - rnd_mean
+                    if rnd_mean is not None
+                    else None,
                     "hit_rate_real": real_mean / game.draw_n,
                     # WITH blacklist
                     "avg_hits_real_bl": real_mean_bl,
@@ -922,9 +1086,9 @@ def _aggregate(
             per_method[method] = entry
 
         # Winner per pool size for BOTH conditions (no_bl / with_bl) + global best
-        winners_per_pool = {}        # WITHOUT blacklist (legacy / default)
-        winners_per_pool_bl = {}     # WITH blacklist applied
-        winners_per_pool_best = {}   # whichever of the two has higher score
+        winners_per_pool = {}  # WITHOUT blacklist (legacy / default)
+        winners_per_pool_bl = {}  # WITH blacklist applied
+        winners_per_pool_best = {}  # whichever of the two has higher score
         for k in pool_keys:
             ranked_nobl = []
             ranked_bl = []
@@ -934,9 +1098,13 @@ def _aggregate(
                 stats = d.get("per_pool", {}).get(k)
                 if not stats:
                     continue
-                ranked_nobl.append((m, stats["avg_hits_real"], stats["lift_vs_shuffle"]))
+                ranked_nobl.append(
+                    (m, stats["avg_hits_real"], stats["lift_vs_shuffle"])
+                )
                 if stats["avg_hits_real_bl"] is not None:
-                    ranked_bl.append((m, stats["avg_hits_real_bl"], stats["lift_vs_shuffle_bl"]))
+                    ranked_bl.append(
+                        (m, stats["avg_hits_real_bl"], stats["lift_vs_shuffle_bl"])
+                    )
             ranked_nobl.sort(key=_rank_key)
             ranked_bl.sort(key=_rank_key)
             if ranked_nobl:
@@ -944,14 +1112,20 @@ def _aggregate(
                     "winner": ranked_nobl[0][0],
                     "avg_hits": ranked_nobl[0][1],
                     "lift_vs_shuffle": ranked_nobl[0][2],
-                    "ranking": [{"method": r[0], "avg_hits": r[1], "lift": r[2]} for r in ranked_nobl],
+                    "ranking": [
+                        {"method": r[0], "avg_hits": r[1], "lift": r[2]}
+                        for r in ranked_nobl
+                    ],
                 }
             if ranked_bl:
                 winners_per_pool_bl[k] = {
                     "winner": ranked_bl[0][0],
                     "avg_hits": ranked_bl[0][1],
                     "lift_vs_shuffle": ranked_bl[0][2],
-                    "ranking": [{"method": r[0], "avg_hits": r[1], "lift": r[2]} for r in ranked_bl],
+                    "ranking": [
+                        {"method": r[0], "avg_hits": r[1], "lift": r[2]}
+                        for r in ranked_bl
+                    ],
                 }
             # Best of two — used by production engine (we plug in whichever wins)
             if ranked_nobl and ranked_bl:
@@ -959,13 +1133,17 @@ def _aggregate(
                 bl_top = ranked_bl[0]
                 if bl_top[1] > nobl_top[1]:
                     winners_per_pool_best[k] = {
-                        "winner": bl_top[0], "avg_hits": bl_top[1],
-                        "use_blacklist": True, "delta_vs_no_bl": bl_top[1] - nobl_top[1],
+                        "winner": bl_top[0],
+                        "avg_hits": bl_top[1],
+                        "use_blacklist": True,
+                        "delta_vs_no_bl": bl_top[1] - nobl_top[1],
                     }
                 else:
                     winners_per_pool_best[k] = {
-                        "winner": nobl_top[0], "avg_hits": nobl_top[1],
-                        "use_blacklist": False, "delta_vs_with_bl": nobl_top[1] - bl_top[1],
+                        "winner": nobl_top[0],
+                        "avg_hits": nobl_top[1],
+                        "use_blacklist": False,
+                        "delta_vs_with_bl": nobl_top[1] - bl_top[1],
                     }
 
         # Overall winner across all pools — both conditions
@@ -977,10 +1155,13 @@ def _aggregate(
                 pools = d.get("per_pool", {})
                 if not pools:
                     continue
-                scores = [s[score_key] for s in pools.values() if s.get(score_key) is not None]
+                scores = [
+                    s[score_key] for s in pools.values() if s.get(score_key) is not None
+                ]
                 if scores:
                     tmp[m] = float(np.mean(scores))
             return sorted(tmp.items(), key=lambda kv: (-kv[1], kv[0]))
+
         ranked_overall = _overall("avg_hits_real")
         ranked_overall_bl = _overall("avg_hits_real_bl")
 
@@ -993,8 +1174,12 @@ def _aggregate(
             "winners_per_pool": winners_per_pool,
             "winners_per_pool_bl": winners_per_pool_bl,
             "winners_per_pool_best": winners_per_pool_best,
-            "overall_ranking": [{"method": m, "avg_hits": v} for m, v in ranked_overall],
-            "overall_ranking_bl": [{"method": m, "avg_hits": v} for m, v in ranked_overall_bl],
+            "overall_ranking": [
+                {"method": m, "avg_hits": v} for m, v in ranked_overall
+            ],
+            "overall_ranking_bl": [
+                {"method": m, "avg_hits": v} for m, v in ranked_overall_bl
+            ],
             "overall_winner": ranked_overall[0][0] if ranked_overall else None,
             "overall_winner_bl": ranked_overall_bl[0][0] if ranked_overall_bl else None,
             "per_method": per_method,

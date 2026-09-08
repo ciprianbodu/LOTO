@@ -13,6 +13,7 @@ condiție guarantee+1..pick.
 
     GEN_BUDGET=60 python scripts/analysis/gen_lotto_designs.py [--only 11,5,4,3]
 """
+
 import os
 import sys
 import time
@@ -61,10 +62,19 @@ def main() -> int:
             print(f"L({v},{pick},{c},{g}): acoperire {cov}% — NU scriu", flush=True)
             continue
         if existing is not None and len(existing) <= len(cover):
-            print(f"L({v},{pick},{c},{g}): existent {len(existing)} <= nou {len(cover)} — păstrez", flush=True)
+            print(
+                f"L({v},{pick},{c},{g}): existent {len(existing)} <= nou {len(cover)} — păstrez",
+                flush=True,
+            )
             continue
-        name.write_text("".join(" ".join(str(i + 1) for i in b) + "\n" for b in cover), encoding="utf-8")
-        print(f"L({v},{pick},{c},{g}): {len(cover)} bilete scrise în {name.name} ({time.perf_counter()-t0:.1f}s)", flush=True)
+        name.write_text(
+            "".join(" ".join(str(i + 1) for i in b) + "\n" for b in cover),
+            encoding="utf-8",
+        )
+        print(
+            f"L({v},{pick},{c},{g}): {len(cover)} bilete scrise în {name.name} ({time.perf_counter() - t0:.1f}s)",
+            flush=True,
+        )
     return 0
 
 

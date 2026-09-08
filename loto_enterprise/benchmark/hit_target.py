@@ -3,6 +3,7 @@
 Extrasă din `decision.py` ca să fie importabilă fără pandas (teste în
 container, worker, UI).
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,13 +21,15 @@ def clamp_bench_hit_target(value, *, default: int = 3) -> int:
         # neobservată, deși schimbă tinta deciziei (3+ vs 4+) la fel de mult.
         logger.warning(
             "[decision] LOTO_BENCH_TARGET=%r neparsabil ca intreg — folosesc %d",
-            value, default,
+            value,
+            default,
         )
         return default
     if n not in (3, 4):
         logger.warning(
             "[decision] LOTO_BENCH_TARGET=%r invalid (doar 3 sau 4) — folosesc %d",
-            value, default,
+            value,
+            default,
         )
         return default
     return n

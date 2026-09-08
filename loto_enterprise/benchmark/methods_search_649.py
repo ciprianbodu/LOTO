@@ -2,6 +2,7 @@
 
 Folosit de search_649_methods.py; după selecție, top-20 ajung în methods_top649.py.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -36,7 +37,10 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vmin, vmax = float(vals.min()), float(vals.max())
     rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((v - vmin) / rng) if np.isfinite(v) else 0.0 for k, v in scores.items()}
+    out = {
+        int(k): float((v - vmin) / rng) if np.isfinite(v) else 0.0
+        for k, v in scores.items()
+    }
     for n in range(1, max_num + 1):
         out.setdefault(n, 0.0)
     return out
@@ -109,9 +113,12 @@ def make_blend_scorer(parts: list[tuple[float, Callable]]) -> Callable:
     return _score
 
 
-def register_blend(name: str, parts: list[tuple[float, Callable]], notes: str = "") -> None:
+def register_blend(
+    name: str, parts: list[tuple[float, Callable]], notes: str = ""
+) -> None:
     from .methods import METHODS
     from .disabled import load_disabled
+
     if name in load_disabled():
         return  # tombstone — nu reînregistra
     METHODS[name] = (make_blend_scorer(parts), "search-649-blend", False, notes or name)
@@ -120,6 +127,7 @@ def register_blend(name: str, parts: list[tuple[float, Callable]], notes: str = 
 # --------------------------------------------------------------------------- #
 # Metode matematice noi (standalone)
 # --------------------------------------------------------------------------- #
+
 
 def score_649_gap_inverse(draws_2d, max_num):
     g = _gaps(draws_2d, max_num)
@@ -171,6 +179,7 @@ def score_649_ewma_freq(draws_2d, max_num, halflife: float = 20.0):
 
 def score_649_hmean_freq_recency(draws_2d, max_num):
     from .methods import score_frequency, score_recency
+
     f = score_frequency(draws_2d, max_num)
     r = score_recency(draws_2d, max_num)
     scores = {}
@@ -182,10 +191,13 @@ def score_649_hmean_freq_recency(draws_2d, max_num):
 
 def score_649_gmean_freq_recency(draws_2d, max_num):
     from .methods import score_frequency, score_recency
+
     f = score_frequency(draws_2d, max_num)
     r = score_recency(draws_2d, max_num)
-    scores = {n: float(np.sqrt(max(float(f.get(n, 0)), 0) * max(float(r.get(n, 0)), 0)))
-              for n in range(1, max_num + 1)}
+    scores = {
+        n: float(np.sqrt(max(float(f.get(n, 0)), 0) * max(float(r.get(n, 0)), 0)))
+        for n in range(1, max_num + 1)
+    }
     return _normalize(scores, max_num)
 
 
@@ -243,7 +255,10 @@ def score_649_low_high_balance(draws_2d, max_num):
     f = _freq(draws_2d, max_num, window=50)
     low, high = f[:mid].sum(), f[mid:].sum()
     favor_low = low >= high
-    scores = {n: float(f[n - 1]) * (1.2 if (n <= mid) == favor_low else 0.8) for n in range(1, max_num + 1)}
+    scores = {
+        n: float(f[n - 1]) * (1.2 if (n <= mid) == favor_low else 0.8)
+        for n in range(1, max_num + 1)
+    }
     return _normalize(scores, max_num)
 
 
@@ -316,9 +331,11 @@ def score_649_cold_rebound(draws_2d, max_num, cold: int = 25):
 
 def score_649_rank_borda(draws_2d, max_num):
     from .methods import score_frequency, score_recency, score_random
+
     sources = [score_frequency, score_recency]
     try:
         from .methods_classical import score_seasonal_naive_week
+
         sources.append(score_seasonal_naive_week)
     except Exception:
         sources.append(score_random)
@@ -396,17 +413,20 @@ def score_649_consecutive_penalty(draws_2d, max_num):
 
 
 def score_649_triple_graph_classic(draws_2d, max_num):
-    return make_blend_scorer([
-        (0.45, score_graph_katz_high),
-        (0.30, score_graph_community_strength),
-        (0.25, score_649_hazard_overdue),
-    ])(draws_2d, max_num)
+    return make_blend_scorer(
+        [
+            (0.45, score_graph_katz_high),
+            (0.30, score_graph_community_strength),
+            (0.25, score_649_hazard_overdue),
+        ]
+    )(draws_2d, max_num)
 
 
 # EWMA halflife variants
 def _ewma_hl(hl: float):
     def _fn(draws_2d, max_num):
         return score_649_ewma_freq(draws_2d, max_num, halflife=hl)
+
     _fn.__name__ = f"score_649_ewma_{int(hl)}"
     return _fn
 
@@ -415,51 +435,143 @@ def _ewma_hl(hl: float):
 def _mom(s: int, l: int):
     def _fn(draws_2d, max_num):
         return score_649_momentum(draws_2d, max_num, short=s, long=l)
+
     _fn.__name__ = f"score_649_mom_{s}_{l}"
     return _fn
 
 
 SEARCH_649_NEW: dict[str, tuple[Callable, str, bool, str]] = {
-    "649_gap_inverse":       (score_649_gap_inverse,       "math-649", False, "Inverse gap (overdue)"),
-    "649_gap_sqrt":          (score_649_gap_sqrt,          "math-649", False, "Sqrt gap overdue"),
-    "649_wilson_lb":         (score_649_wilson_lb,         "math-649", False, "Wilson lower bound freq"),
-    "649_beta_mean":         (score_649_beta_mean,         "math-649", False, "Beta posterior mean"),
-    "649_ewma_10":           (_ewma_hl(10),                "math-649", False, "EWMA freq halflife 10"),
-    "649_ewma_20":           (_ewma_hl(20),                "math-649", False, "EWMA freq halflife 20"),
-    "649_ewma_40":           (_ewma_hl(40),                "math-649", False, "EWMA freq halflife 40"),
-    "649_ewma_80":           (_ewma_hl(80),                "math-649", False, "EWMA freq halflife 80"),
-    "649_hmean_freq_rec":    (score_649_hmean_freq_recency, "math-649", False, "Harmonic mean freq+recency"),
-    "649_gmean_freq_rec":    (score_649_gmean_freq_recency, "math-649", False, "Geometric mean freq+recency"),
-    "649_last_neighbors":    (score_649_last_draw_neighbors, "math-649", False, "Neighbors of last draw"),
-    "649_decade_hot":        (score_649_decade_hot,        "math-649", False, "Hot decade buckets"),
-    "649_parity_recent":     (score_649_parity_recent,     "math-649", False, "Parity trend match"),
-    "649_low_high_bal":      (score_649_low_high_balance,  "math-649", False, "Low/high balance"),
-    "649_mod7_hot":          (score_649_mod7_hot,          "math-649", False, "Mod-7 hot residues"),
-    "649_mod10_hot":         (score_649_mod10_hot,         "math-649", False, "Mod-10 hot endings"),
-    "649_mom_10_40":         (_mom(10, 40),                "math-649", False, "Freq momentum 10 vs 40"),
-    "649_mom_15_60":         (_mom(15, 60),                "math-649", False, "Freq momentum 15 vs 60"),
-    "649_mom_20_80":         (_mom(20, 80),                "math-649", False, "Freq momentum 20 vs 80"),
-    "649_hazard_overdue":    (score_649_hazard_overdue,    "math-649", False, "Hazard = freq/(1+gap)"),
-    "649_volatility_low":    (score_649_volatility_low,    "math-649", False, "Low volatility preference"),
-    "649_streak_boost":      (score_649_streak_boost,      "math-649", False, "Recent hit streak"),
-    "649_cold_rebound":      (score_649_cold_rebound,      "math-649", False, "Cold number rebound"),
-    "649_rank_borda":        (score_649_rank_borda,        "math-649", False, "Borda rank fusion"),
-    "649_rrf_graph":         (score_649_rrf_fusion,        "math-649", False, "RRF graph fusion"),
-    "649_spectral_cooc":     (score_649_spectral_cooc,     "math-649", False, "Spectral co-occurrence"),
-    "649_sum_reversion":     (score_649_draw_sum_reversion, "math-649", False, "Draw sum reversion"),
-    "649_consec_penalty":    (score_649_consecutive_penalty, "math-649", False, "Anti-consecutive pairs"),
-    "649_triple_graph_classic": (score_649_triple_graph_classic, "math-649", False, "Katz+community+hazard"),
+    "649_gap_inverse": (
+        score_649_gap_inverse,
+        "math-649",
+        False,
+        "Inverse gap (overdue)",
+    ),
+    "649_gap_sqrt": (score_649_gap_sqrt, "math-649", False, "Sqrt gap overdue"),
+    "649_wilson_lb": (
+        score_649_wilson_lb,
+        "math-649",
+        False,
+        "Wilson lower bound freq",
+    ),
+    "649_beta_mean": (score_649_beta_mean, "math-649", False, "Beta posterior mean"),
+    "649_ewma_10": (_ewma_hl(10), "math-649", False, "EWMA freq halflife 10"),
+    "649_ewma_20": (_ewma_hl(20), "math-649", False, "EWMA freq halflife 20"),
+    "649_ewma_40": (_ewma_hl(40), "math-649", False, "EWMA freq halflife 40"),
+    "649_ewma_80": (_ewma_hl(80), "math-649", False, "EWMA freq halflife 80"),
+    "649_hmean_freq_rec": (
+        score_649_hmean_freq_recency,
+        "math-649",
+        False,
+        "Harmonic mean freq+recency",
+    ),
+    "649_gmean_freq_rec": (
+        score_649_gmean_freq_recency,
+        "math-649",
+        False,
+        "Geometric mean freq+recency",
+    ),
+    "649_last_neighbors": (
+        score_649_last_draw_neighbors,
+        "math-649",
+        False,
+        "Neighbors of last draw",
+    ),
+    "649_decade_hot": (score_649_decade_hot, "math-649", False, "Hot decade buckets"),
+    "649_parity_recent": (
+        score_649_parity_recent,
+        "math-649",
+        False,
+        "Parity trend match",
+    ),
+    "649_low_high_bal": (
+        score_649_low_high_balance,
+        "math-649",
+        False,
+        "Low/high balance",
+    ),
+    "649_mod7_hot": (score_649_mod7_hot, "math-649", False, "Mod-7 hot residues"),
+    "649_mod10_hot": (score_649_mod10_hot, "math-649", False, "Mod-10 hot endings"),
+    "649_mom_10_40": (_mom(10, 40), "math-649", False, "Freq momentum 10 vs 40"),
+    "649_mom_15_60": (_mom(15, 60), "math-649", False, "Freq momentum 15 vs 60"),
+    "649_mom_20_80": (_mom(20, 80), "math-649", False, "Freq momentum 20 vs 80"),
+    "649_hazard_overdue": (
+        score_649_hazard_overdue,
+        "math-649",
+        False,
+        "Hazard = freq/(1+gap)",
+    ),
+    "649_volatility_low": (
+        score_649_volatility_low,
+        "math-649",
+        False,
+        "Low volatility preference",
+    ),
+    "649_streak_boost": (
+        score_649_streak_boost,
+        "math-649",
+        False,
+        "Recent hit streak",
+    ),
+    "649_cold_rebound": (
+        score_649_cold_rebound,
+        "math-649",
+        False,
+        "Cold number rebound",
+    ),
+    "649_rank_borda": (score_649_rank_borda, "math-649", False, "Borda rank fusion"),
+    "649_rrf_graph": (score_649_rrf_fusion, "math-649", False, "RRF graph fusion"),
+    "649_spectral_cooc": (
+        score_649_spectral_cooc,
+        "math-649",
+        False,
+        "Spectral co-occurrence",
+    ),
+    "649_sum_reversion": (
+        score_649_draw_sum_reversion,
+        "math-649",
+        False,
+        "Draw sum reversion",
+    ),
+    "649_consec_penalty": (
+        score_649_consecutive_penalty,
+        "math-649",
+        False,
+        "Anti-consecutive pairs",
+    ),
+    "649_triple_graph_classic": (
+        score_649_triple_graph_classic,
+        "math-649",
+        False,
+        "Katz+community+hazard",
+    ),
 }
 
 
 # Baze pentru blend-uri (nume registry → fn)
 BLEND_BASE_NAMES: list[str] = [
-    "graph_649_katz_community", "graph_katz_high", "graph_community_strength",
-    "graph_pagerank", "graph_pagerank_recent", "graph_degree", "graph_degree_recent",
-    "graph_eigenvector", "graph_rwr_recent", "graph_second_order", "graph_temporal_drift",
-    "649_hazard_overdue", "649_wilson_lb", "649_gap_inverse", "649_ewma_20",
-    "649_mom_15_60", "649_rrf_graph", "649_triple_graph_classic", "649_hmean_freq_rec",
-    "seasonal_naive", "prime_bias", "frequency",
+    "graph_649_katz_community",
+    "graph_katz_high",
+    "graph_community_strength",
+    "graph_pagerank",
+    "graph_pagerank_recent",
+    "graph_degree",
+    "graph_degree_recent",
+    "graph_eigenvector",
+    "graph_rwr_recent",
+    "graph_second_order",
+    "graph_temporal_drift",
+    "649_hazard_overdue",
+    "649_wilson_lb",
+    "649_gap_inverse",
+    "649_ewma_20",
+    "649_mom_15_60",
+    "649_rrf_graph",
+    "649_triple_graph_classic",
+    "649_hmean_freq_rec",
+    "seasonal_naive",
+    "prime_bias",
+    "frequency",
     # gap_poisson / markov_* / beta_binomial / recency: scoase din METHODS (blacklist);
     # rămân doar ca helperi pentru blend-urile TOP649 / search deja înregistrate.
 ]
@@ -469,6 +581,7 @@ BLEND_WEIGHTS = (0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85)
 
 def _resolve_fn(name: str) -> Callable | None:
     from .methods import METHODS, method_meta
+
     name = name.replace("649_triple_graph_classical", "649_triple_graph_classic")
     if name not in METHODS and name in SEARCH_649_NEW:
         METHODS[name] = SEARCH_649_NEW[name]
@@ -480,7 +593,9 @@ def _resolve_fn(name: str) -> Callable | None:
     return fn
 
 
-def generate_blend_candidates(max_blends: int = 420) -> dict[str, tuple[Callable, str, bool, str]]:
+def generate_blend_candidates(
+    max_blends: int = 420,
+) -> dict[str, tuple[Callable, str, bool, str]]:
     """Generează blend-uri 2- și 3-componente din baze cunoscute."""
     bases: list[tuple[str, Callable]] = []
     for nm in BLEND_BASE_NAMES:
@@ -495,7 +610,7 @@ def generate_blend_candidates(max_blends: int = 420) -> dict[str, tuple[Callable
             w2 = 1.0 - w1
             if w2 <= 0.05:
                 continue
-            name = f"649_blend_{n1[:12]}_{int(w1*100)}_{n2[:12]}"
+            name = f"649_blend_{n1[:12]}_{int(w1 * 100)}_{n2[:12]}"
             if name in out:
                 continue
             out[name] = (
@@ -515,11 +630,13 @@ def generate_blend_candidates(max_blends: int = 420) -> dict[str, tuple[Callable
                 w3 = 1.0 - w1 - w2
                 if w3 < 0.1:
                     continue
-                name = f"649_tri_{combo[0][0][:8]}_{combo[1][0][:8]}_{int(w1*100)}"
+                name = f"649_tri_{combo[0][0][:8]}_{combo[1][0][:8]}_{int(w1 * 100)}"
                 if name in out:
                     continue
                 out[name] = (
-                    make_blend_scorer([(w1, combo[0][1]), (w2, combo[1][1]), (w3, combo[2][1])]),
+                    make_blend_scorer(
+                        [(w1, combo[0][1]), (w2, combo[1][1]), (w3, combo[2][1])]
+                    ),
                     "search-649-blend",
                     False,
                     f"tri blend {combo[0][0]}+{combo[1][0]}+{combo[2][0]}",
@@ -530,10 +647,13 @@ def generate_blend_candidates(max_blends: int = 420) -> dict[str, tuple[Callable
     return out
 
 
-def load_search_registry(include_existing: bool = True, max_blends: int = 420) -> list[str]:
+def load_search_registry(
+    include_existing: bool = True, max_blends: int = 420
+) -> list[str]:
     """Încarcă metode noi + blend-uri în METHODS; returnează lista de nume de evaluat."""
     from .methods import METHODS, list_methods, method_meta
     from .disabled import load_disabled
+
     disabled = load_disabled()
     for nm, tup in SEARCH_649_NEW.items():
         if nm in disabled:
@@ -546,8 +666,11 @@ def load_search_registry(include_existing: bool = True, max_blends: int = 420) -
             continue
         if nm not in METHODS:
             METHODS[nm] = tup
-    names: list[str] = [n for n in list(SEARCH_649_NEW.keys()) + list(blends.keys())
-                        if n not in disabled]
+    names: list[str] = [
+        n
+        for n in list(SEARCH_649_NEW.keys()) + list(blends.keys())
+        if n not in disabled
+    ]
     if include_existing:
         for nm in list_methods():
             if nm in disabled:
@@ -564,6 +687,7 @@ def merge_search_into_methods() -> int:
     """Înregistrează SEARCH_649_NEW în METHODS (fără blend-uri efemere)."""
     from .methods import METHODS
     from .disabled import load_disabled
+
     disabled = load_disabled()
     added = 0
     for nm, tup in SEARCH_649_NEW.items():

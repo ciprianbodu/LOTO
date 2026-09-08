@@ -19,7 +19,7 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-07:
+Snapshot verificat la 2026-09-08:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py`, port 8000;
@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-07:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 42 fisiere `test_*.py`, 599 teste trecute la auditul global.
+- teste: 55 fisiere `test_*.py`, 661 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -334,7 +334,7 @@ partiala, hitul de pool este doar plafon pentru hitul pe bilet.
   rulare pasii deja validati din cache-ul partial sunt sariti (`skip_indices`),
   deci acoperirea creste in loc sa se refaca de la zero.
 - Ordinea jocurilor este Joker, 5/40, 6/49.
-- Paralelizarea foloseste aproximativ 80% din nuclee, cu BLAS single-thread per
+- Paralelizarea foloseste aproximativ 75% din nuclee, cu BLAS single-thread per
   proces.
 
 Cache-ul WF sta in `D:\_BUILD\_LOTO\.wf_cache`, in afara OneDrive; override-ul
@@ -378,6 +378,10 @@ Verificarea canonica este:
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe --version
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe -m pip check
 ```
+
+Stilul de cod e uniformizat cu `ruff format` (config in `pyproject.toml`,
+`line-length = 88`); nu e instalat in venv-ul de productie, ruleaza separat,
+doar la nevoie: `ruff format .`.
 
 ## 11. Verificare obligatorie
 

@@ -1,6 +1,7 @@
 """Teste pentru update_csv.py (verificare globala 2026-09-07) — rulat pe FIECARE
 pornire a aplicatiei (ACTUALIZARI.bat + START_8000.bat), scrie direct in
 _ISTORIC/, sursa de adevar consumata de engine/benchmark/walk-forward."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -83,23 +84,47 @@ def test_append_nothing_to_add_does_not_touch_file(tmp_path):
 def test_extract_draws_rejects_duplicate_numbers_within_one_draw():
     # a doua extragere are 7 aparand de doua ori (fragment HTML deformat)
     text = "2026-06-10 1 2 3 4 5 6\n2026-06-17 7 7 9 10 11 12"
-    draws = uc._extract_draws(text, num_main=6, has_joker=False, after=None)
+    draws = uc._extract_draws(text, num_main=6, has_joker=False, after=None, max_num=49)
     assert len(draws) == 1
     assert draws[0]["date"] == date(2026, 6, 10)
 
 
 def test_extract_draws_accepts_valid_distinct_draws():
     text = "2026-06-10 1 2 3 4 5 6\n2026-06-17 7 8 9 10 11 12"
-    draws = uc._extract_draws(text, num_main=6, has_joker=False, after=None)
+    draws = uc._extract_draws(text, num_main=6, has_joker=False, after=None, max_num=49)
     assert len(draws) == 2
     assert {d["date"] for d in draws} == {date(2026, 6, 10), date(2026, 6, 17)}
+
+
+def test_extract_draws_rejects_number_out_of_range(monkeypatch):
+    """Fragment HTML deformat (rand vecin, separator lipsa) poate produce un
+    numar valid ca sir de cifre dar imposibil pentru geometria jocului (ex.
+    62 pe 6/49, max_num=49) — inainte doar duplicatele erau respinse, nu si
+    intervalul, iar randul ajungea in _ISTORIC/ ca sa fie respins tacut mai
+    tarziu, la citire prin draw_validation.py."""
+    text = "2026-06-10 1 2 3 4 5 62\n2026-06-17 7 8 9 10 11 12"
+    draws = uc._extract_draws(text, num_main=6, has_joker=False, after=None, max_num=49)
+    assert len(draws) == 1
+    assert draws[0]["date"] == date(2026, 6, 17)
+
+
+def test_extract_draws_rejects_joker_number_out_of_range():
+    text = "2026-06-10 1 2 3 4 5 + 25\n2026-06-17 6 7 8 9 10 + 15"
+    draws = uc._extract_draws(
+        text, num_main=5, has_joker=True, after=None, max_num=45, joker_max=20
+    )
+    assert len(draws) == 1
+    assert draws[0]["date"] == date(2026, 6, 17)
+    assert draws[0]["joker"] == 15
 
 
 # --------------------------------------------------------------------------- #
 # update_all — CSV existent dar TRUNCHIAT (fara nicio data valida) e sarit,
 # nu tratat ca "prima rulare" (care ar rescrie cu doar cateva luni de istoric).
 # --------------------------------------------------------------------------- #
-def test_update_all_skips_truncated_csv_instead_of_treating_as_fresh_start(tmp_path, monkeypatch, capsys):
+def test_update_all_skips_truncated_csv_instead_of_treating_as_fresh_start(
+    tmp_path, monkeypatch, capsys
+):
     istoric = tmp_path / "_ISTORIC"
     istoric.mkdir()
     # Fisier EXISTENT dar fara niciun rand cu data valida - trunchiat/corupt.
@@ -118,14 +143,20 @@ def test_update_all_skips_truncated_csv_instead_of_treating_as_fresh_start(tmp_p
     total = uc.update_all()
 
     assert total == 0
-    assert calls == []  # niciun fetch — jocurile trunchiate sunt sarite INAINTE de fetch
+    assert (
+        calls == []
+    )  # niciun fetch — jocurile trunchiate sunt sarite INAINTE de fetch
     out = capsys.readouterr().out
     assert "trunchiat" in out.lower() or "corupt" in out.lower()
     # Fisierul ramane exact cum era - nerescris cu "totul e nou".
-    assert (istoric / "loto_6_49.csv").read_text(encoding="utf-8") == "date,n1,n2,n3,n4,n5,n6\n"
+    assert (istoric / "loto_6_49.csv").read_text(
+        encoding="utf-8"
+    ) == "date,n1,n2,n3,n4,n5,n6\n"
 
 
-def test_update_all_bootstraps_normally_when_file_genuinely_missing(tmp_path, monkeypatch):
+def test_update_all_bootstraps_normally_when_file_genuinely_missing(
+    tmp_path, monkeypatch
+):
     """Fisierul LIPSA (nu doar gol) e in continuare tratat ca prima rulare —
     garda vizeaza doar cazul EXISTENT-dar-corupt, nu bootstrap-ul legitim."""
     istoric = tmp_path / "_ISTORIC"

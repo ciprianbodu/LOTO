@@ -34,8 +34,11 @@ def pickle_load_path(path: Path) -> Any:
 
 
 def pickle_store_path(path: Path, obj: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(pickle_dump_bytes(obj))
+    """Alias pentru scrierea atomică — vezi `pickle_store_path_atomic`.
+
+    Scria direct (`write_bytes`, neatomic); doi workeri din bench_cache pe
+    aceeași cheie se puteau trunchia reciproc."""
+    pickle_store_path_atomic(path, obj)
 
 
 def pickle_store_path_atomic(path: Path, obj: Any) -> None:

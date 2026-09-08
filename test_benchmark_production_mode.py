@@ -1,4 +1,5 @@
 """Producția și benchmarkul trebuie să recalculeze scorul la fiecare pas."""
+
 import ast
 import inspect
 from pathlib import Path
@@ -7,8 +8,11 @@ from pathlib import Path
 def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
     # Executăm doar handlerul: fără server NiceGUI sau procese de bench reale.
     source = ast.parse(Path("app_nicegui.py").read_text(encoding="utf-8"))
-    handler = next(n for n in source.body if isinstance(n, ast.FunctionDef)
-                   and n.name == "run_rebench")
+    handler = next(
+        n
+        for n in source.body
+        if isinstance(n, ast.FunctionDef) and n.name == "run_rebench"
+    )
     calls = []
     scope = {
         "_bench_running": lambda: False,
@@ -63,7 +67,9 @@ def test_runner_method_matrix_is_safe_and_deduplicated():
 def test_per_draw_cache_never_reuses_static_fold(monkeypatch):
     from loto_enterprise.benchmark import bench_cache
 
-    monkeypatch.setattr(bench_cache, "_CACHE_VARIANT", {"block_size": 99999, "seed": 1234})
+    monkeypatch.setattr(
+        bench_cache, "_CACHE_VARIANT", {"block_size": 99999, "seed": 1234}
+    )
     args = ("same-history", "frequency", 30, "joker_urna1", False)
     static_key = bench_cache._fold_key(*args)
     bench_cache.set_cache_variant(1, 1234)
@@ -109,7 +115,10 @@ def test_aggregate_weights_windows_and_does_not_invent_shuffled_lift():
     assert stats["avg_hits_real_bl"] == 2.4
     assert stats["avg_hits_shuffled"] is None
     assert stats["lift_vs_shuffle"] is None
-    assert without_control["games"]["game"]["winners_per_pool"]["k10"]["lift_vs_shuffle"] is None
+    assert (
+        without_control["games"]["game"]["winners_per_pool"]["k10"]["lift_vs_shuffle"]
+        is None
+    )
 
     shuffled_rows = [
         {**real_rows[0], "is_random": True, "k10": 0.5, "k10_bl": 0.4},

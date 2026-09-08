@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Scan TOATE metodele available: rate 3+ / 4+ @ k10 și k16, eval onest (ultimele 30%).
+"""Scan TOATE metodele available: rate 3+ / 4+ @ k10 și k16 (ultimele 30%).
 
-Folosește același _evaluate_fold ca bench-ul (block_size=1). Scrie
-bench_results/scan_all_hits.json + tipărește top-ul pe consolă.
+Folosește același `_evaluate_fold` ca bench-ul, dar cu `block_size=50`, nu 1
+ca Re-Bench-ul din UI — orientativ pentru triaj rapid, nu echivalent cu un
+Re-Bench complet. Scrie bench_results/scan_all_hits.json + tipărește top-ul.
 
 Usage:
     py -3.14 scan_all_methods_hits.py [--workers N] [--pools 10,16]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,7 +48,9 @@ _G_GAME = None
 _G_POOLS: tuple[int, ...] = (10, 16)
 
 
-def _worker_init(train_b: bytes, test_b: bytes, game_b: bytes, pools: tuple[int, ...]) -> None:
+def _worker_init(
+    train_b: bytes, test_b: bytes, game_b: bytes, pools: tuple[int, ...]
+) -> None:
     global _G_TRAIN, _G_TEST, _G_GAME, _G_POOLS
     _G_TRAIN = pickle.loads(train_b)
     _G_TEST = pickle.loads(test_b)
@@ -81,8 +85,14 @@ def _eval_one(method_name: str) -> dict:
 
 def _load_draws(csv_path: Path, draw_n: int) -> np.ndarray:
     df = pd.read_csv(csv_path)
-    cols = [c for c in df.columns if str(c).lower().startswith("n") and str(c).lower() != "numbers"]
-    cols = sorted(cols, key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"))
+    cols = [
+        c
+        for c in df.columns
+        if str(c).lower().startswith("n") and str(c).lower() != "numbers"
+    ]
+    cols = sorted(
+        cols, key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0")
+    )
     return df[cols[:draw_n]].to_numpy(dtype=np.int64)
 
 
@@ -93,30 +103,46 @@ _SKIP_SLOW: set[str] = set()
 
 def _available_methods() -> list[str]:
     from loto_enterprise.benchmark.methods import list_methods, method_meta
+
     try:
         from loto_enterprise.benchmark.disabled import load_disabled
+
         disabled = load_disabled()
     except Exception:  # noqa: BLE001
         disabled = set()
     return [
-        m for m in list_methods()
+        m
+        for m in list_methods()
         if method_meta(m).get("available", True)
         and m not in disabled
         and m not in _SKIP_SLOW
     ]
 
 
-def scan_game(game, pools: tuple[int, ...], methods: list[str], workers: int) -> list[dict]:
+def scan_game(
+    game, pools: tuple[int, ...], methods: list[str], workers: int
+) -> list[dict]:
     draws = _load_draws(Path(game.csv_path), game.draw_n)
     n = len(draws)
     n_test = max(1, int(math.ceil(n * PCT / 100.0)))
     n_train = n - n_test
-    train, test = draws[:n_train], draws[n_train:n_train + n_test]
+    train, test = draws[:n_train], draws[n_train : n_train + n_test]
     logger.info(
         "%s: draws=%d train=%d test=%d (%.0f%%) pools=%s methods=%d workers=%d",
-        game.key, n, n_train, n_test, PCT, pools, len(methods), workers,
+        game.key,
+        n,
+        n_train,
+        n_test,
+        PCT,
+        pools,
+        len(methods),
+        workers,
     )
-    train_b, test_b, game_b = pickle.dumps(train), pickle.dumps(test), pickle.dumps(game)
+    train_b, test_b, game_b = (
+        pickle.dumps(train),
+        pickle.dumps(test),
+        pickle.dumps(game),
+    )
     results: list[dict] = []
     t0 = time.perf_counter()
     with ProcessPoolExecutor(
@@ -132,22 +158,41 @@ def scan_game(game, pools: tuple[int, ...], methods: list[str], workers: int) ->
             row["game"] = game.key
             results.append(row)
             if done % 10 == 0 or done == len(methods):
-                logger.info("  %s progress %d/%d (%.0fs)", game.key, done, len(methods), time.perf_counter() - t0)
+                logger.info(
+                    "  %s progress %d/%d (%.0fs)",
+                    game.key,
+                    done,
+                    len(methods),
+                    time.perf_counter() - t0,
+                )
     return results
 
 
-def _print_top(rows: list[dict], game: str, pool: int, metric: str, n: int = 15) -> None:
+def _print_top(rows: list[dict], game, pool: int, metric: str, n: int = 15) -> None:
+    """`game` e GameDef complet (nu doar cheia), pentru max_num/draw_n. Lift-ul
+    se calculează față de rata teoretică (expected_random_rate), nu față de
+    realizarea empirică a rândului `random` — la fel ca în decision.py."""
+    from loto_enterprise.benchmark.decision import expected_random_rate
+
     col = f"{metric}_k{pool}"
-    ok = [r for r in rows if r.get("game") == game and not r.get("failed") and col in r]
+    ok = [
+        r
+        for r in rows
+        if r.get("game") == game.key and not r.get("failed") and col in r
+    ]
     ok.sort(key=lambda r: r[col], reverse=True)
-    print(f"\n=== {game} @ k{pool} — TOP {n} după {metric.replace('rate_', '').replace('plus', '+')} ===")
-    base = next((r for r in ok if r["method"] == "random"), None)
-    base_v = float(base[col]) if base else None
+    print(
+        f"\n=== {game.key} @ k{pool} — TOP {n} după {metric.replace('rate_', '').replace('plus', '+')} ==="
+    )
+    target = int(metric.split("_")[1].replace("plus", ""))
+    base_v = expected_random_rate(game.max_num, game.draw_n, pool, target)
     for i, r in enumerate(ok[:n], 1):
         v = r[col] * 100
         lift = ""
         if base_v and base_v > 0:
-            lift = f"  (lift vs random {(r[col] - base_v) / base_v * 100:+.1f}%)"
+            lift = (
+                f"  (lift vs random teoretic {(r[col] - base_v) / base_v * 100:+.1f}%)"
+            )
         r3 = r.get(f"rate_3plus_k{pool}", 0) * 100
         r4 = r.get(f"rate_4plus_k{pool}", 0) * 100
         print(f"  {i:2d}. {r['method']:32s}  3+={r3:5.2f}%  4+={r4:5.2f}%{lift}")
@@ -155,7 +200,9 @@ def _print_top(rows: list[dict], game: str, pool: int, metric: str, n: int = 15)
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 8) * 4 // 5))
+    ap.add_argument(
+        "--workers", type=int, default=max(1, (os.cpu_count() or 8) * 4 // 5)
+    )
     ap.add_argument("--pools", default="10,16")
     ap.add_argument("--games", default="loto_6_49,loto_5_40,joker_urna1")
     args = ap.parse_args()
@@ -186,8 +233,8 @@ def main() -> int:
 
     for g in games:
         for k in pools:
-            _print_top(all_rows, g.key, k, "rate_3plus")
-            _print_top(all_rows, g.key, k, "rate_4plus", n=10)
+            _print_top(all_rows, g, k, "rate_3plus")
+            _print_top(all_rows, g, k, "rate_4plus", n=10)
     return 0
 
 

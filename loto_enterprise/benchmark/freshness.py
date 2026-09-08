@@ -28,10 +28,30 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 GAMES_CSV_MAP = {
-    "loto_6_49": ["_ISTORIC/loto_6_49.csv", "ISTORIC/loto_6_49.csv", "istoric/loto_6_49.csv", "_LOTO/istoric/loto_6_49.csv"],
-    "loto_5_40": ["_ISTORIC/loto_5_40.csv", "ISTORIC/loto_5_40.csv", "istoric/loto_5_40.csv", "_LOTO/istoric/loto_5_40.csv"],
-    "joker_urna1": ["_ISTORIC/joker.csv", "ISTORIC/joker.csv", "istoric/joker.csv", "_LOTO/istoric/joker.csv"],
-    "joker_urna2": ["_ISTORIC/joker.csv", "ISTORIC/joker.csv", "istoric/joker.csv", "_LOTO/istoric/joker.csv"],
+    "loto_6_49": [
+        "_ISTORIC/loto_6_49.csv",
+        "ISTORIC/loto_6_49.csv",
+        "istoric/loto_6_49.csv",
+        "_LOTO/istoric/loto_6_49.csv",
+    ],
+    "loto_5_40": [
+        "_ISTORIC/loto_5_40.csv",
+        "ISTORIC/loto_5_40.csv",
+        "istoric/loto_5_40.csv",
+        "_LOTO/istoric/loto_5_40.csv",
+    ],
+    "joker_urna1": [
+        "_ISTORIC/joker.csv",
+        "ISTORIC/joker.csv",
+        "istoric/joker.csv",
+        "_LOTO/istoric/joker.csv",
+    ],
+    "joker_urna2": [
+        "_ISTORIC/joker.csv",
+        "ISTORIC/joker.csv",
+        "istoric/joker.csv",
+        "_LOTO/istoric/joker.csv",
+    ],
 }
 
 
@@ -45,7 +65,9 @@ class FreshnessReport:
     current_hash: str
     row_delta_pct: float
     status: str  # "fresh" | "moderate_drift" | "stale" | "missing"
-    recommendation: str  # "use_cache" | "quick_rebench" | "full_rebench" | "use_cache_no_csv"
+    recommendation: (
+        str  # "use_cache" | "quick_rebench" | "full_rebench" | "use_cache_no_csv"
+    )
 
 
 def _resolve_csv(game_key: str) -> Path | None:
@@ -84,7 +106,9 @@ def compute_csv_signature(game_key: str) -> tuple[str | None, str, int]:
     return str(p), h, n
 
 
-def write_signatures_to_best_methods(best_methods_path: str = "best_methods.json") -> dict[str, dict]:
+def write_signatures_to_best_methods(
+    best_methods_path: str = "best_methods.json",
+) -> dict[str, dict]:
     """Stamp the current CSV signatures into best_methods.json._meta.csv_signatures."""
     bm = Path(best_methods_path)
     if not bm.exists():
@@ -114,9 +138,14 @@ def check_freshness(
     if not bm.exists():
         for gk in GAMES_CSV_MAP:
             out[gk] = FreshnessReport(
-                game_key=gk, csv_path=None, cached_rows=0, current_rows=0,
-                cached_hash="", current_hash="",
-                row_delta_pct=0.0, status="missing",
+                game_key=gk,
+                csv_path=None,
+                cached_rows=0,
+                current_rows=0,
+                cached_hash="",
+                current_hash="",
+                row_delta_pct=0.0,
+                status="missing",
                 recommendation="full_rebench",
             )
         return out
@@ -131,10 +160,14 @@ def check_freshness(
 
         if path is None:
             out[gk] = FreshnessReport(
-                game_key=gk, csv_path=None,
-                cached_rows=cached_rows, current_rows=0,
-                cached_hash=cached_hash, current_hash="",
-                row_delta_pct=0.0, status="missing",
+                game_key=gk,
+                csv_path=None,
+                cached_rows=cached_rows,
+                current_rows=0,
+                cached_hash=cached_hash,
+                current_hash="",
+                row_delta_pct=0.0,
+                status="missing",
                 recommendation="use_cache_no_csv",
             )
             continue
@@ -142,20 +175,28 @@ def check_freshness(
         # If no cached signature exists, treat as stale (first benchmark run)
         if not cached_hash:
             out[gk] = FreshnessReport(
-                game_key=gk, csv_path=path,
-                cached_rows=cached_rows, current_rows=current_rows,
-                cached_hash="", current_hash=current_hash,
-                row_delta_pct=100.0, status="stale",
+                game_key=gk,
+                csv_path=path,
+                cached_rows=cached_rows,
+                current_rows=current_rows,
+                cached_hash="",
+                current_hash=current_hash,
+                row_delta_pct=100.0,
+                status="stale",
                 recommendation="full_rebench",
             )
             continue
 
         if cached_hash == current_hash:
             out[gk] = FreshnessReport(
-                game_key=gk, csv_path=path,
-                cached_rows=cached_rows, current_rows=current_rows,
-                cached_hash=cached_hash, current_hash=current_hash,
-                row_delta_pct=0.0, status="fresh",
+                game_key=gk,
+                csv_path=path,
+                cached_rows=cached_rows,
+                current_rows=current_rows,
+                cached_hash=cached_hash,
+                current_hash=current_hash,
+                row_delta_pct=0.0,
+                status="fresh",
                 recommendation="use_cache",
             )
             continue
@@ -174,10 +215,14 @@ def check_freshness(
             status, rec = "moderate_drift", "quick_rebench"
 
         out[gk] = FreshnessReport(
-            game_key=gk, csv_path=path,
-            cached_rows=cached_rows, current_rows=current_rows,
-            cached_hash=cached_hash, current_hash=current_hash,
-            row_delta_pct=delta_pct, status=status,
+            game_key=gk,
+            csv_path=path,
+            cached_rows=cached_rows,
+            current_rows=current_rows,
+            cached_hash=cached_hash,
+            current_hash=current_hash,
+            row_delta_pct=delta_pct,
+            status=status,
             recommendation=rec,
         )
     return out
@@ -185,7 +230,12 @@ def check_freshness(
 
 def aggregate_recommendation(reports: dict[str, FreshnessReport]) -> str:
     """Pick the strongest recommendation across all games."""
-    priority = {"full_rebench": 3, "quick_rebench": 2, "use_cache": 1, "use_cache_no_csv": 0}
+    priority = {
+        "full_rebench": 3,
+        "quick_rebench": 2,
+        "use_cache": 1,
+        "use_cache_no_csv": 0,
+    }
     best = "use_cache"
     for r in reports.values():
         if priority.get(r.recommendation, 0) > priority.get(best, 0):

@@ -64,8 +64,8 @@ def _baseline_random_hits(game_type: str, pool_size: int) -> float:
     E(hits) = draw_n * pool_size / max_n
     """
     params = {
-        "6/49":  (6, 49),
-        "5/40":  (5, 40),
+        "6/49": (6, 49),
+        "5/40": (5, 40),
         "joker": (5, 45),
     }
     draw_n, max_n = params.get(game_type, (6, 49))
@@ -79,15 +79,15 @@ def _state_key(game_type: str, pool_size: int) -> str:
 def _empty_entry() -> dict:
     return {
         "last_pool": [],
-        "last_pool_date": None,       # ISO timestamp al momentului predicției
-        "last_data_rows": 0,          # nr. rânduri din CSV când s-a făcut predicția
-        "history": [],                # listă dict {date, pool_hits, actual, event}
+        "last_pool_date": None,  # ISO timestamp al momentului predicției
+        "last_data_rows": 0,  # nr. rânduri din CSV când s-a făcut predicția
+        "history": [],  # listă dict {date, pool_hits, actual, event}
         "regime_state": {
             "streak_zero": 0,
             "rolling_avg": None,
             "last_reset": None,
             "active_mode": "normal",  # "normal" | "reset"
-            "reset_duration": 0,      # nr. extrageri în care suntem în reset
+            "reset_duration": 0,  # nr. extrageri în care suntem în reset
         },
     }
 
@@ -125,6 +125,7 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
     }
     try:
         from ui_shared import atomic_write_json, file_lock
+
         with file_lock(_STATE_FILE):
             raw: dict = {}
             if _STATE_FILE.exists():
@@ -132,7 +133,9 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
                     with open(_STATE_FILE, "r", encoding="utf-8") as f:
                         raw = json.load(f)
                 except Exception as e:
-                    logger.warning(f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie.")
+                    logger.warning(
+                        f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie."
+                    )
                     raw = {}
             raw[_state_key(game_type, pool_size)] = serializable
             atomic_write_json(_STATE_FILE, raw)  # atomic: tmp+fsync+os.replace
@@ -228,9 +231,7 @@ def compute_post_draw_feedback(
     # Dar respectăm durata maximă: dacă suntem în reset de mai mult de
     # _REGIME_MAX_DURATION extrageri, ieșim înapoi la normal indiferent.
     new_reset_duration = reset_duration
-    should_reset = (
-        streak_zero >= _REGIME_STREAK_THRESHOLD or is_mismatch
-    )
+    should_reset = streak_zero >= _REGIME_STREAK_THRESHOLD or is_mismatch
 
     if prev_mode == "reset" and reset_duration >= _REGIME_MAX_DURATION:
         # Forțăm ieșirea din reset — am dat o șansă, n-a funcționat.
@@ -258,7 +259,9 @@ def compute_post_draw_feedback(
         "missed": missed,
         "false_positives": false_positives,
         "is_mismatch": is_mismatch,
-        "evaluated_pool": sorted(int(x) for x in pool_set),  # pool-ul pe care s-a calculat feedback (folosit pentru temp_blacklist)
+        "evaluated_pool": sorted(
+            int(x) for x in pool_set
+        ),  # pool-ul pe care s-a calculat feedback (folosit pentru temp_blacklist)
     }
 
     return event, regime_info
@@ -282,12 +285,6 @@ def record_predicted_pool(
     state["last_pool_date"] = pool_date or datetime.now().isoformat(timespec="seconds")
     state["last_data_rows"] = int(data_rows)
     save_adaptive_state(game_type, pool_size, state)
-
-
-def get_active_mode(game_type: str, pool_size: int) -> str:
-    """Returnează modul activ ("normal" | "reset") pentru engine-ul TimesFM."""
-    state = load_adaptive_state(game_type, pool_size)
-    return state.get("regime_state", {}).get("active_mode", "normal")
 
 
 def compute_temp_blacklist(

@@ -17,6 +17,7 @@ gate-ul oficial din `decision.py` rămâne obligatoriu la fiecare Re-Bench.
 
 Cele două filtre se COMPUN: curated ∩ (available minus disabled).
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 _PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
 
-# Metode fără care mecanica deciziei se rupe — le verificăm, nu le impunem tăcut.
+# Metode fără care mecanica deciziei se rupe — `apply_curation()` le reinjectează
+# forțat dacă lipsesc din `active` (CLAUDE.md §4.3: "trebuie sa ramana in lista
+# activa", regulă de aur, nu opțională), plus avertisment în `log_curation()`.
 #   • `random`   = baseline STRUCTURAL. Pentru cele 4 jocuri cunoscute
 #     (decision.KNOWN_GAME_MAX_NUM), poarta de consistență și lift-ul se judecă
 #     față de rata hipergeometrică EXACTĂ (decision.expected_random_rate), nu mai
@@ -59,10 +62,14 @@ def load_curated() -> list[str]:
             return []
         data = json.loads(_PATH.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[curated] citire %s eșuată: %s — rulez TOATE metodele.", _PATH, exc)
+        logger.warning(
+            "[curated] citire %s eșuată: %s — rulez TOATE metodele.", _PATH, exc
+        )
         return []
     if not isinstance(data, dict):
-        logger.warning("[curated] %s nu conține un obiect JSON — rulez TOATE metodele.", _PATH)
+        logger.warning(
+            "[curated] %s nu conține un obiect JSON — rulez TOATE metodele.", _PATH
+        )
         return []
     raw = data.get("active") or []
     if not isinstance(raw, (list, tuple)):
@@ -161,7 +168,9 @@ def resolve_methods_per_game(
             logger.warning(
                 "[curated] %s: %d metode per_game nu sunt candidate valide și "
                 "au fost sărite: %s",
-                game_key, len(missing), missing,
+                game_key,
+                len(missing),
+                missing,
             )
         if not selected:
             logger.error(
@@ -208,6 +217,16 @@ def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
     cand_set = set(cand)
     kept = [m for m in curated if m in cand_set]
     info["missing"] = [m for m in curated if m not in cand_set]
+    # §4.3: "random"/"frequency" trebuie sa ramana active necondiționat — un
+    # utilizator care editează manual `active` și le omite nu are voie să rupă
+    # tăcut gate-ul de consistență (random) sau SAFE_FALLBACK_SCORER (frequency).
+    # Înainte doar `info["missing_required"]` era calculat (pt. log), fără sa
+    # fie reinjectat în `kept` — `resolve_methods_per_game()` face deja asta
+    # corect mai jos, dar plasa ei nu poate prinde o metodă absentă chiar de
+    # aici, la sursă.
+    for required in REQUIRED_METHODS:
+        if required in cand_set and required not in kept:
+            kept.append(required)
     info["n_after"] = len(kept)
     info["missing_required"] = [m for m in REQUIRED_METHODS if m not in kept]
 
@@ -217,7 +236,9 @@ def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
         logger.error(
             "[curated] lista 'active' din %s nu conține NICIO metodă validă "
             "(%s) — ignor curarea și rulez toate cele %d metode.",
-            _PATH, info["missing"], len(cand),
+            _PATH,
+            info["missing"],
+            len(cand),
         )
         info["active"] = False
         info["n_after"] = len(cand)
@@ -231,20 +252,24 @@ def log_curation(info: dict) -> None:
     if not info.get("active"):
         logger.info(
             "[curated] fără curare (curated_methods.json absent/gol) — rulez toate "
-            "cele %d metode active.", info.get("n_after", 0),
+            "cele %d metode active.",
+            info.get("n_after", 0),
         )
         return
     logger.info(
         "[curated] curated: %d din %d metode (criteriu: peste baseline + semnal "
         "distinct; selecție istorică reversibilă). Anulare: șterge sau golește "
         "%s + re-bench.",
-        info.get("n_after", 0), info.get("n_before", 0), _PATH,
+        info.get("n_after", 0),
+        info.get("n_before", 0),
+        _PATH,
     )
     if info.get("missing"):
         logger.warning(
             "[curated] %d nume din 'active' nu-s candidate valide (inexistente, "
             "unavailable sau blacklistate) și au fost sărite: %s",
-            len(info["missing"]), info["missing"],
+            len(info["missing"]),
+            info["missing"],
         )
     if info.get("missing_required"):
         logger.warning(

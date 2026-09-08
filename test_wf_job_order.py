@@ -3,6 +3,7 @@
 Regresia: _iter_wf_jobs itera pe results_bundle (ordinea de încărcare). Upload
 6/49, 5/40, joker → 6/49 era 1/3 și mânca bugetul. Contract: 6/49 ULTIM.
 """
+
 from __future__ import annotations
 
 WF_GAME_ORDER = {"joker": 0, "5/40": 1, "6/49": 2}

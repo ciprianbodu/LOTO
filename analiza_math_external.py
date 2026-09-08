@@ -15,9 +15,9 @@ Urna 2 pe toate cele 111 metode. Exclude croston (statsforecast) și `random`
 
 NU e predicție — loteria e aleatoare.
 """
+
 from __future__ import annotations
 
-import csv
 import json
 import math
 import os
@@ -33,9 +33,12 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 import numpy as np
+import pandas as pd
 
 from loto_enterprise.benchmark.curated import load_per_game
+from loto_enterprise.benchmark.decision import _wilson_lower_bound
 from loto_enterprise.benchmark.methods import METHODS, call_method, method_meta
+from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.method_selector import MAX_MEMBER_CORR, _pair_corr
 from loto_enterprise.core.ranking import (
     is_consecutive_block,
@@ -50,7 +53,6 @@ MAX_TEST_PER_GAME = 100
 MIN_UNIQ_SCORES = 5
 MIN_UNIQ_SCORES_SINGLE_PICK = 2
 MAX_CONSEC_RUN = 7
-MIN_EXTRA_4PLUS_IF_NO_3 = 2
 OUTPUT_PATH = Path("bench_results") / "math_external_latest.json"
 
 SKIP_EXACT = frozenset({"random", "croston_classic", "croston_sba"})
@@ -107,27 +109,23 @@ def _cpu_math_candidates() -> list[str]:
 
 
 def _load_csv(path: Path, cols: tuple[str, ...], max_num: int) -> np.ndarray:
-    rows = []
-    with path.open(newline="", encoding="utf-8") as f:
-        for rec in csv.DictReader(f):
-            row = [int(rec[c]) for c in cols]
-            if all(1 <= v <= max_num for v in row):
-                rows.append(row)
-    if not rows:
+    """Contractul unic de validare (CLAUDE.md §4.1) — inainte reimplementat
+    manual, fara verificare de duplicate intr-un rand."""
+    df = pd.read_csv(path)
+    draws, _mask = valid_draw_matrix(df, list(cols), draw_n=len(cols), max_num=max_num)
+    if draws.shape[0] == 0:
         raise RuntimeError(f"{path} gol / necitibil")
-    return np.asarray(rows, dtype=np.int64)
+    return draws
 
 
 def hyper_p_ge(k: int, universe: int, draw_n: int, pool: int) -> float:
-    total = math.comb(universe, draw_n)
-    if total == 0:
-        return 0.0
-    acc = 0
-    for j in range(k, draw_n + 1):
-        if j > pool or (draw_n - j) > (universe - pool):
-            continue
-        acc += math.comb(pool, j) * math.comb(universe - pool, draw_n - j)
-    return acc / total
+    """P(hituri >= k) pentru un pool aleator de `pool` numere.
+
+    Delega la `decision.expected_random_rate`, sursa unica — era reimplementata
+    aici separat (risc de divergenta tacuta)."""
+    from loto_enterprise.benchmark.decision import expected_random_rate
+
+    return expected_random_rate(universe, draw_n, pool, k)
 
 
 def _eval_one(args: tuple) -> dict:
@@ -154,7 +152,9 @@ def _eval_one(args: tuple) -> dict:
             scores, _dt = call_method(method, history, max_num)
         except Exception as exc:  # noqa: BLE001
             return {
-                "game": game_key, "method": method, "ok": False,
+                "game": game_key,
+                "method": method,
+                "ok": False,
                 "error": f"call_method: {exc}",
             }
         blocks += 1
@@ -178,7 +178,9 @@ def _eval_one(args: tuple) -> dict:
     runtime = time.perf_counter() - t0
     if n_eval == 0:
         return {
-            "game": game_key, "method": method, "ok": False,
+            "game": game_key,
+            "method": method,
+            "ok": False,
             "error": f"empty scores on all {blocks} blocks",
         }
 
@@ -212,13 +214,17 @@ def _eval_one(args: tuple) -> dict:
     exp1 = p1 * n_eval
     exp3 = p3 * n_eval
     exp4 = p4 * n_eval
-    beat1 = n1 >= math.floor(exp1) + 1
-    beat3 = n3 >= math.floor(exp3) + 1
     extra4 = n4 - exp4
-    beat4 = n4 >= math.floor(exp4) + 1
-    # „bun la 4+" fără 3+ cere un plus mai gros (+2 evenimente), altfel
-    # un singur 4 norocos trece poarta.
-    beat4_strong = n4 >= math.floor(exp4) + MIN_EXTRA_4PLUS_IF_NO_3
+    # Poarta veche ("n >= floor(exp)+1") trecea la un singur eveniment peste
+    # asteptare. Acum: limita inferioara Wilson trebuie sa depaseasca
+    # baseline-ul teoretic, acelasi test ca decizia de productie.
+    wlb1 = _wilson_lower_bound(n1, n_eval)
+    wlb3 = _wilson_lower_bound(n3, n_eval)
+    wlb4 = _wilson_lower_bound(n4, n_eval)
+    beat1 = wlb1 > p1
+    beat3 = wlb3 > p3
+    beat4 = wlb4 > p4
+    beat4_strong = beat4
     hit_target = 1 if draw_n == 1 else 3
     beat_target = beat1 if hit_target == 1 else beat3
     beats = bool(beat_target)
@@ -246,6 +252,9 @@ def _eval_one(args: tuple) -> dict:
         "exp1": exp1,
         "exp3": exp3,
         "exp4": exp4,
+        "wilson_lb1": wlb1,
+        "wilson_lb3": wlb3,
+        "wilson_lb4": wlb4,
         "beat1": beat1,
         "beat3": beat3,
         "beat_target": beat_target,
@@ -265,7 +274,9 @@ def _eval_one(args: tuple) -> dict:
     }
 
 
-def _max_abs_spearman(cand_scores: dict, others: list[tuple[str, dict]]) -> tuple[float, str]:
+def _max_abs_spearman(
+    cand_scores: dict, others: list[tuple[str, dict]]
+) -> tuple[float, str]:
     worst = 0.0
     vs = ""
     for name, sc in others:
@@ -281,20 +292,31 @@ def _max_abs_spearman(cand_scores: dict, others: list[tuple[str, dict]]) -> tupl
 
 
 def main() -> None:
-    sys.stdout.reconfigure(line_buffering=True, errors="replace") if hasattr(sys.stdout, "reconfigure") else None
+    sys.stdout.reconfigure(line_buffering=True, errors="replace") if hasattr(
+        sys.stdout, "reconfigure"
+    ) else None
     candidates = _cpu_math_candidates()
     print(f"cpu_math_candidates={len(candidates)} cap={MAX_TEST_PER_GAME}")
     jobs = []
     for gk, spec in GAMES.items():
         for m in candidates:
-            jobs.append((
-                gk, m, str(spec["csv"]), spec["cols"],
-                spec["max_num"], spec["draw_n"], spec["pool"],
-            ))
+            jobs.append(
+                (
+                    gk,
+                    m,
+                    str(spec["csv"]),
+                    spec["cols"],
+                    spec["max_num"],
+                    spec["draw_n"],
+                    spec["pool"],
+                )
+            )
 
     n_cpu = max(1, int((os.cpu_count() or 2) * 0.8))
     pools = ",".join(f"{g}={s['pool']}" for g, s in GAMES.items())
-    print(f"jobs={len(jobs)} workers={n_cpu} pools={pools} wf={WF_PCT}% block={BLOCK} top={TOP_N}")
+    print(
+        f"jobs={len(jobs)} workers={n_cpu} pools={pools} wf={WF_PCT}% block={BLOCK} top={TOP_N}"
+    )
     results: list[dict] = []
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=n_cpu) as ex:
@@ -305,15 +327,18 @@ def main() -> None:
             results.append(rec)
             done += 1
             if not rec.get("ok"):
-                print(f"[{done}/{len(jobs)}] FAIL {rec.get('game')}/{rec.get('method')}: {rec.get('error')}", flush=True)
+                print(
+                    f"[{done}/{len(jobs)}] FAIL {rec.get('game')}/{rec.get('method')}: {rec.get('error')}",
+                    flush=True,
+                )
             else:
                 flag = "YES" if rec["beats"] else "no "
                 target = int(rec["hit_target"])
                 print(
                     f"[{done}/{len(jobs)}] {flag} {rec['game']:13s} {rec['method']:28s} "
-                    f"{target}+ {rec[f'rate{target}']*100:5.2f}% "
-                    f"(rnd {rec[f'p{target}']*100:5.2f}%)  "
-                    f"4+ {rec['rate4']*100:5.2f}%  {rec['runtime_sec']:.1f}s",
+                    f"{target}+ {rec[f'rate{target}'] * 100:5.2f}% "
+                    f"(rnd {rec[f'p{target}'] * 100:5.2f}%)  "
+                    f"4+ {rec['rate4'] * 100:5.2f}%  {rec['runtime_sec']:.1f}s",
                     flush=True,
                 )
     print(f"eval {time.perf_counter() - t0:.1f}s", flush=True)
@@ -407,17 +432,24 @@ def main() -> None:
     }
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(
-        json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8",
+        json.dumps(out, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
     print(f"wrote {OUTPUT_PATH}", flush=True)
-    print(f"\n=== TOP {TOP_N} (beat target random, |Spearman|<{MAX_MEMBER_CORR}, not degenerate) ===", flush=True)
+    print(
+        f"\n=== TOP {TOP_N} (beat target random, |Spearman|<{MAX_MEMBER_CORR}, not degenerate) ===",
+        flush=True,
+    )
     for gk, picked in selected.items():
-        print(f"  {gk}: {len(picked)}/{TOP_N} -> {[p['method'] for p in picked]}", flush=True)
+        print(
+            f"  {gk}: {len(picked)}/{TOP_N} -> {[p['method'] for p in picked]}",
+            flush=True,
+        )
         for p in picked:
             target = int(p["hit_target"])
             print(
-                f"      {p['method']:28s}  {target}+={p[f'rate{target}']*100:.2f}%  "
-                f"4+={p['rate4']*100:.2f}%  "
+                f"      {p['method']:28s}  {target}+={p[f'rate{target}'] * 100:.2f}%  "
+                f"4+={p['rate4'] * 100:.2f}%  "
                 f"|r|={abs(p.get('spearman_vs_picked') or 0):.3f} vs {p.get('spearman_vs_name') or '-'}",
                 flush=True,
             )

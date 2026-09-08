@@ -11,6 +11,7 @@ Exit codes:
   20  = cel putin un REQUIRED LIPSA
   21  = Python < 3.14
 """
+
 from __future__ import annotations
 
 import importlib
@@ -48,8 +49,10 @@ def main() -> int:
         # SI un exit code nedocumentat (1, implicit Python), inainte ca bucla
         # sa apuce sa raporteze curat "[EROARE] Pachete REQUIRED lipsa: psutil"
         # cu exit code 20 — exact diagnosticul pentru care exista scriptul.
-        print(f"[EROARE] Nu pot importa ui_shared (verificare versiune Python): "
-              f"{type(e).__name__}: {str(e)[:120]}")
+        print(
+            f"[EROARE] Nu pot importa ui_shared (verificare versiune Python): "
+            f"{type(e).__name__}: {str(e)[:120]}"
+        )
         print("Solutie: ruleaza ACTUALIZARI.bat apoi reincearca START_8000.bat.")
         return 20
 
@@ -63,17 +66,17 @@ def main() -> int:
 
     # Stack CPU: strict ce e necesar pentru engine + UI.
     SCHEMA = [
-        ("nicegui",  True, "0-2"),   # UI principal (app_nicegui.py)
-        ("pandas",   True, "0-1"),
-        ("numpy",    True, "0-1"),
-        ("scipy",    True, "1-3"),
-        ("psutil",   True, "0-1"),
+        ("nicegui", True, "0-2"),  # UI principal (app_nicegui.py)
+        ("pandas", True, "0-1"),
+        ("numpy", True, "0-1"),
+        ("scipy", True, "1-3"),
+        ("psutil", True, "0-1"),
         ("requests", True, "0-1"),
-        ("rich",     True, "0-1"),
+        ("rich", True, "0-1"),
         # Metode CPU — optionale: daca lipsesc, bench-ul sare metodele respective,
         # dar aplicatia PORNESTE (engine are fallback determinist).
-        ("sklearn",       False, "0-2"),
-        ("statsmodels",   False, "0-3"),
+        ("sklearn", False, "0-2"),
+        ("statsmodels", False, "0-3"),
         ("statsforecast", False, "0-3"),
     ]
     total = len(SCHEMA)
@@ -87,7 +90,9 @@ def main() -> int:
 
     for i, (name, required, eta) in enumerate(SCHEMA, 1):
         tag = "REQ" if required else "opt"
-        print(f"[{i:2d}/{total}] {name:18s} ({tag}, ETA {eta}s) ... ", end="", flush=True)
+        print(
+            f"[{i:2d}/{total}] {name:18s} ({tag}, ETA {eta}s) ... ", end="", flush=True
+        )
 
         ok, elapsed, err = try_import(name)
         if ok:
@@ -102,9 +107,11 @@ def main() -> int:
                 print(f"skip ({elapsed:5.2f}s) - {err[:60]}", flush=True)
 
     print()
-    print(f"Rezultat: {ok_count}/{total} OK"
-          f" | missing required: {len(missing_required)}"
-          f" | optional missing: {len(optional_missing)}")
+    print(
+        f"Rezultat: {ok_count}/{total} OK"
+        f" | missing required: {len(missing_required)}"
+        f" | optional missing: {len(optional_missing)}"
+    )
 
     if missing_required:
         print()

@@ -37,7 +37,9 @@ def _default_db_path() -> str:
         if la:
             candidates.append(os.path.join(la, "LOTO"))
     else:
-        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+            os.path.expanduser("~"), ".cache"
+        )
         candidates.append(os.path.join(base, "LOTO"))
     for d in candidates:
         try:
@@ -61,7 +63,7 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     if not p.is_absolute():
         p = Path.cwd() / p
     p.parent.mkdir(parents=True, exist_ok=True)
-    
+
     last_exc = None
     for attempt in range(5):
         conn = None
@@ -77,7 +79,10 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
                 if "disk I/O error" in str(e):
                     # If WAL fails, try to continue with default if possible, or just log it
                     import logging
-                    logging.warning(f"Failed to set WAL mode (attempt {attempt+1}): {e}. Retrying...")
+
+                    logging.warning(
+                        f"Failed to set WAL mode (attempt {attempt + 1}): {e}. Retrying..."
+                    )
                     conn.close()
                     time.sleep(0.5 * (attempt + 1))
                     last_exc = e
@@ -95,10 +100,12 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
                 time.sleep(0.5 * (attempt + 1))
                 continue
             raise
-    
+
     if last_exc:
         raise last_exc
-    raise sqlite3.OperationalError("Could not connect to database after multiple retries")
+    raise sqlite3.OperationalError(
+        "Could not connect to database after multiple retries"
+    )
 
 
 @contextlib.contextmanager
@@ -250,11 +257,20 @@ def is_fresh_ui_start() -> bool:
     Fără acest flag (repornire doar a UI-ului, worker încă viu) reatașarea
     rămâne permisă. Valorile acceptate: 1 / true / yes.
     """
-    return os.environ.get("LOTO_FRESH_START", "").strip().lower() in {"1", "true", "yes"}
+    return os.environ.get("LOTO_FRESH_START", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
-def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_PATH,
-                        worker_token: str | None = None) -> bool:
+def update_job_progress(
+    job_id: int,
+    pct: int,
+    log_msg: str,
+    db_path: str = DB_PATH,
+    worker_token: str | None = None,
+) -> bool:
     """Actualizează atomic progresul; True cere workerului să se oprească.
 
     Scriem numai cât timp jobul este ``RUNNING``. Vechiul SELECT + UPDATE lăsa
@@ -309,8 +325,12 @@ def update_job_progress(job_id: int, pct: int, log_msg: str, db_path: str = DB_P
     return False
 
 
-def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH,
-                 worker_token: str | None = None) -> bool:
+def complete_job(
+    job_id: int,
+    result_json: str,
+    db_path: str = DB_PATH,
+    worker_token: str | None = None,
+) -> bool:
     """Scrie rezultatul jobului. Întoarce True dacă rândul a fost ACTUALIZAT.
 
     UPDATE-ul e condiționat de `status = RUNNING` și, dacă `worker_token` e dat,
@@ -346,7 +366,8 @@ def complete_job(job_id: int, result_json: str, db_path: str = DB_PATH,
         logger.error(
             "[job_queue] complete_job(%s): 0 rânduri actualizate — jobul nu mai era "
             "RUNNING (sau nu mai era al acestui worker_token). REZULTATUL S-A PIERDUT "
-            "DIN COADĂ.", job_id,
+            "DIN COADĂ.",
+            job_id,
         )
     return ok
 
@@ -370,8 +391,9 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH,
-            worker_token: str | None = None) -> bool:
+def fail_job(
+    job_id: int, error_msg: str, db_path: str = DB_PATH, worker_token: str | None = None
+) -> bool:
     """Marchează jobul ca FAILED. Întoarce True dacă rândul a fost actualizat
     (vezi nota din `complete_job` — aceeași cursă de stare).
 
@@ -403,7 +425,8 @@ def fail_job(job_id: int, error_msg: str, db_path: str = DB_PATH,
     if not ok:
         logger.warning(
             "[job_queue] fail_job(%s): 0 rânduri actualizate (jobul era deja "
-            "COMPLETED/CANCELLED, sau nu mai era al acestui worker_token).", job_id,
+            "COMPLETED/CANCELLED, sau nu mai era al acestui worker_token).",
+            job_id,
         )
     return ok
 
@@ -436,7 +459,9 @@ def _claim_job(
     return get_job_status(job_id, db_path=db_path)
 
 
-def fetch_pending_job(db_path: str = DB_PATH, worker_token: str | None = None) -> dict[str, Any] | None:
+def fetch_pending_job(
+    db_path: str = DB_PATH, worker_token: str | None = None
+) -> dict[str, Any] | None:
     """Revendică cel mai vechi job PENDING. `worker_token`, dacă e dat, se scrie pe
     rând ca dovadă de proprietate pentru `complete_job`/`fail_job`/`update_job_progress`."""
     return _claim_job(
@@ -448,7 +473,9 @@ def fetch_pending_job(db_path: str = DB_PATH, worker_token: str | None = None) -
     )
 
 
-def fetch_running_job(db_path: str = DB_PATH, worker_token: str | None = None) -> dict[str, Any] | None:
+def fetch_running_job(
+    db_path: str = DB_PATH, worker_token: str | None = None
+) -> dict[str, Any] | None:
     """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker).
 
     Pragul e <= 1 (doar claim-uit, niciodată atins de worker): orice job cu pct >= 2
@@ -466,8 +493,11 @@ def fetch_running_job(db_path: str = DB_PATH, worker_token: str | None = None) -
     )
 
 
-def cancel_pending_running_jobs(reason: str = "Oprit de utilizator", db_path: str = DB_PATH,
-                                job_ids: "list[int] | tuple[int, ...] | None" = None) -> int:
+def cancel_pending_running_jobs(
+    reason: str = "Oprit de utilizator",
+    db_path: str = DB_PATH,
+    job_ids: "list[int] | tuple[int, ...] | None" = None,
+) -> int:
     """Soft cancel: marchează joburile PENDING/RUNNING drept CANCELLED (fără DELETE).
 
     `job_ids` restrânge anularea la ID-urile date. FĂRĂ el se anulează TOT ce e
@@ -547,7 +577,9 @@ def clear_pipeline_cache(db_path: str = DB_PATH) -> None:
         conn.commit()
 
 
-def requeue_running_jobs(db_path: str = DB_PATH, worker_token: str | None = None) -> int:
+def requeue_running_jobs(
+    db_path: str = DB_PATH, worker_token: str | None = None
+) -> int:
     """Move orphan RUNNING jobs back to PENDING (useful after worker restarts/crashes).
 
     Fără `worker_token` (implicit, folosit la PORNIREA workerului): reprogramează
@@ -581,13 +613,16 @@ def requeue_running_jobs(db_path: str = DB_PATH, worker_token: str | None = None
                 JOB_PENDING,
                 "Worker restart detectat: job reprogramat automat.",
                 "Worker restart detectat: job reprogramat automat.",
-            ) + params,
+            )
+            + params,
         )
         conn.commit()
         return int(getattr(cur, "rowcount", 0) or 0)
 
 
-def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: str = DB_PATH) -> int:
+def fail_running_jobs(
+    reason: str = "Job oprit automat la startup.", db_path: str = DB_PATH
+) -> int:
     """Mark all RUNNING jobs as FAILED (startup safety cleanup)."""
     try:
         init_job_queue(db_path)
@@ -614,7 +649,10 @@ def fail_running_jobs(reason: str = "Job oprit automat la startup.", db_path: st
             return int(getattr(cur, "rowcount", 0) or 0)
     except Exception as e:
         import logging
-        logging.warning(f"fail_running_jobs: eroare în timpul procesării {db_path}: {e}")
+
+        logging.warning(
+            f"fail_running_jobs: eroare în timpul procesării {db_path}: {e}"
+        )
         return 0
 
 
@@ -639,7 +677,9 @@ def get_pipeline_cache(input_hash: str, db_path: str = DB_PATH) -> str | None:
         return str(row["result_json"])
 
 
-def put_pipeline_cache(input_hash: str, result_json: str, db_path: str = DB_PATH) -> None:
+def put_pipeline_cache(
+    input_hash: str, result_json: str, db_path: str = DB_PATH
+) -> None:
     """Insert/update cached pipeline result for current input hash."""
     key = str(input_hash or "").strip()
     if not key:
@@ -669,4 +709,3 @@ def put_pipeline_cache(input_hash: str, result_json: str, db_path: str = DB_PATH
             """
         )
         conn.commit()
-

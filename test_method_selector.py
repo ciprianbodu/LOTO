@@ -9,6 +9,7 @@ Teste pentru `loto_enterprise/core/method_selector.py` — partea de ENSEMBLE
   2. `get_ensemble_for_game` — citirea ensemble-ului din best_methods.json
      (config izolat, fișier temporar), cu fallback la scorer unic.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,10 +46,12 @@ def test_skips_members_with_empty_scores_and_renormalizes():
     """O metodă eșuată (raw gol) nu trebuie să reducă artificial suma
     ponderilor active — trebuie tratată ca simplu absentă."""
     raw_a = {1: 1.0, 2: 0.0}
-    out_with_failed = ms.combine_ensemble_scores([
-        ("methodA", raw_a, 0.5),
-        ("methodFailed", {}, 0.5),
-    ])
+    out_with_failed = ms.combine_ensemble_scores(
+        [
+            ("methodA", raw_a, 0.5),
+            ("methodFailed", {}, 0.5),
+        ]
+    )
     out_single = ms.combine_ensemble_scores([("methodA", raw_a, 0.5)])
     assert out_with_failed == out_single
 
@@ -58,10 +61,12 @@ def test_two_members_min_max_normalized_before_weighted_sum():
     raw_a = {1: 10.0, 2: 0.0}
     # methodB: pe scală total diferită (0..1000), dar ACEEAȘI ordine relativă.
     raw_b = {1: 1000.0, 2: 0.0}
-    out = ms.combine_ensemble_scores([
-        ("methodA", raw_a, 0.5),
-        ("methodB", raw_b, 0.5),
-    ])
+    out = ms.combine_ensemble_scores(
+        [
+            ("methodA", raw_a, 0.5),
+            ("methodB", raw_b, 0.5),
+        ]
+    )
     # Ambele normalizate la [0,1]: num 1 -> 1.0, num 2 -> 0.0 în ambele metode.
     assert out[1] == pytest.approx(1.0)
     assert out[2] == pytest.approx(0.0)
@@ -71,10 +76,12 @@ def test_two_members_weighted_combination_respects_weights():
     raw_a = {1: 1.0, 2: 0.0}  # num1=max(1.0), num2=min(0.0)
     raw_b = {1: 0.0, 2: 1.0}  # invers: num2=max, num1=min
     # Pondere 3:1 în favoarea metodei A -> num1 trebuie să domine combinat.
-    out = ms.combine_ensemble_scores([
-        ("methodA", raw_a, 0.75),
-        ("methodB", raw_b, 0.25),
-    ])
+    out = ms.combine_ensemble_scores(
+        [
+            ("methodA", raw_a, 0.75),
+            ("methodB", raw_b, 0.25),
+        ]
+    )
     assert out[1] > out[2]
     assert out[1] == pytest.approx(0.75)
     assert out[2] == pytest.approx(0.25)
@@ -85,10 +92,12 @@ def test_unnormalized_weights_are_renormalized_internally():
     funcția renormalizează intern pe baza membrilor ACTIVI."""
     raw_a = {1: 1.0, 2: 0.0}
     raw_b = {1: 0.0, 2: 1.0}
-    out_raw_weights = ms.combine_ensemble_scores([
-        ("methodA", raw_a, 3.0),   # 3:1, la fel ca 0.75:0.25 mai sus
-        ("methodB", raw_b, 1.0),
-    ])
+    out_raw_weights = ms.combine_ensemble_scores(
+        [
+            ("methodA", raw_a, 3.0),  # 3:1, la fel ca 0.75:0.25 mai sus
+            ("methodB", raw_b, 1.0),
+        ]
+    )
     assert out_raw_weights[1] == pytest.approx(0.75)
     assert out_raw_weights[2] == pytest.approx(0.25)
 
@@ -96,10 +105,12 @@ def test_unnormalized_weights_are_renormalized_internally():
 def test_flat_scores_no_division_by_zero():
     """Toate numerele cu același scor (span=0) — nu trebuie să crape."""
     raw = {1: 5.0, 2: 5.0, 3: 5.0}
-    out = ms.combine_ensemble_scores([
-        ("methodA", raw, 0.5),
-        ("methodB", {1: 1.0, 2: 2.0, 3: 3.0}, 0.5),
-    ])
+    out = ms.combine_ensemble_scores(
+        [
+            ("methodA", raw, 0.5),
+            ("methodB", {1: 1.0, 2: 2.0, 3: 3.0}, 0.5),
+        ]
+    )
     assert set(out.keys()) == {1, 2, 3}
     assert all(v == v for v in out.values())  # nu NaN
 
@@ -113,17 +124,24 @@ def temp_config(tmp_path):
         path = tmp_path / "best_methods_test.json"
         path.write_text(json.dumps({"games": games}), encoding="utf-8")
         return str(path)
+
     return _write
 
 
 def test_get_ensemble_falls_back_to_single_winner_when_no_ensemble_field(temp_config):
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {"scorer": "frequency", "sim_depth_pct": 30, "use_blacklist": False}
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "sim_depth_pct": 30,
+                        "use_blacklist": False,
+                    }
+                }
             }
         }
-    })
+    )
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     assert len(result) == 1
     name, fn, weight = result[0]
@@ -133,19 +151,21 @@ def test_get_ensemble_falls_back_to_single_winner_when_no_ensemble_field(temp_co
 
 
 def test_get_ensemble_reads_multi_method_ensemble(temp_config):
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "frequency",
-                    "ensemble": [
-                        {"method": "frequency", "weight": 0.6},
-                        {"method": "ml_logistic", "weight": 0.4},
-                    ],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "ensemble": [
+                            {"method": "frequency", "weight": 0.6},
+                            {"method": "ml_logistic", "weight": 0.4},
+                        ],
+                    }
                 }
             }
         }
-    })
+    )
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     names = {name for name, _fn, _w in result}
     assert "frequency" in names
@@ -160,19 +180,21 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
 
 def test_ensemble_skips_random_even_if_listed(temp_config):
     """random e EXCLUDED_FROM_PRODUCTION — nu intră în blend chiar dacă e în JSON."""
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "frequency",
-                    "ensemble": [
-                        {"method": "frequency", "weight": 0.5},
-                        {"method": "random", "weight": 0.5},
-                    ],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "ensemble": [
+                            {"method": "frequency", "weight": 0.5},
+                            {"method": "random", "weight": 0.5},
+                        ],
+                    }
                 }
             }
         }
-    })
+    )
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     assert len(result) == 1
     assert result[0][0] == "frequency"
@@ -181,20 +203,25 @@ def test_ensemble_skips_random_even_if_listed(temp_config):
 
 def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
     """Scorer mort + ensemble viu → winner/scorer/ensemble = același membru."""
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "recency",
-                    "ensemble": [
-                        {"method": "frequency", "weight": 0.6},
-                        {"method": "recency", "weight": 0.4},
-                    ],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "recency",
+                        "ensemble": [
+                            {"method": "frequency", "weight": 0.6},
+                            {"method": "recency", "weight": 0.4},
+                        ],
+                    }
                 }
             }
         }
-    })
-    assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
+    )
+    assert (
+        ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path)
+        == "frequency"
+    )
     ens = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     assert len(ens) == 1
     assert ens[0][0] == "frequency"
@@ -206,29 +233,42 @@ def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
 
 def test_get_winner_rejects_random_scorer(temp_config):
     """random e EXCLUDED_FROM_PRODUCTION — scorer → frequency."""
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {"scorer": "random", "ensemble": [{"method": "random", "weight": 1.0}]},
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "random",
+                        "ensemble": [{"method": "random", "weight": 1.0}],
+                    },
+                }
             }
         }
-    })
-    assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
+    )
+    assert (
+        ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path)
+        == "frequency"
+    )
 
 
 def test_unknown_legacy_alias_falls_back_to_frequency_named(temp_config):
     """ml_xgb_cpu (alias mort) → frequency pe NUME și pe callable, nu nume fals."""
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "ml_xgb_cpu",
-                    "ensemble": [{"method": "ml_xgb_cpu", "weight": 1.0}],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "ml_xgb_cpu",
+                        "ensemble": [{"method": "ml_xgb_cpu", "weight": 1.0}],
+                    }
                 }
             }
         }
-    })
-    assert ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path) == "frequency"
+    )
+    assert (
+        ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path)
+        == "frequency"
+    )
     ens = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     assert len(ens) == 1
     assert ens[0][0] == "frequency"
@@ -239,19 +279,21 @@ def test_unknown_legacy_alias_falls_back_to_frequency_named(temp_config):
 
 
 def test_get_ensemble_skips_unknown_method_and_renormalizes(temp_config):
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "frequency",
-                    "ensemble": [
-                        {"method": "frequency", "weight": 0.5},
-                        {"method": "this_method_does_not_exist", "weight": 0.5},
-                    ],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "ensemble": [
+                            {"method": "frequency", "weight": 0.5},
+                            {"method": "this_method_does_not_exist", "weight": 0.5},
+                        ],
+                    }
                 }
             }
         }
-    })
+    )
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     assert len(result) == 1
     name, _fn, weight = result[0]
@@ -260,19 +302,21 @@ def test_get_ensemble_skips_unknown_method_and_renormalizes(temp_config):
 
 
 def test_get_ensemble_all_unavailable_falls_back_to_winner(temp_config):
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "frequency",
-                    "ensemble": [
-                        {"method": "nope1", "weight": 0.5},
-                        {"method": "nope2", "weight": 0.5},
-                    ],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "ensemble": [
+                            {"method": "nope1", "weight": 0.5},
+                            {"method": "nope2", "weight": 0.5},
+                        ],
+                    }
                 }
             }
         }
-    })
+    )
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     assert len(result) == 1
     name, _fn, weight = result[0]
@@ -282,37 +326,47 @@ def test_get_ensemble_all_unavailable_falls_back_to_winner(temp_config):
 
 def test_get_winner_name_nearest_pool(temp_config):
     """Pool k11 absent → folosește k10 (cel mai apropiat decis), fără WARNING."""
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "frequency",
-                    "ensemble": [{"method": "frequency", "weight": 1.0}],
-                },
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "ensemble": [{"method": "frequency", "weight": 1.0}],
+                    },
+                }
             }
         }
-    })
-    assert ms.get_winner_name("loto_6_49", pool_size=11, config_path=cfg_path) == "frequency"
+    )
+    assert (
+        ms.get_winner_name("loto_6_49", pool_size=11, config_path=cfg_path)
+        == "frequency"
+    )
 
 
 def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
     """Urna 2 citește propria decizie top-1, nu mai este blocată pe frequency."""
-    cfg_path = temp_config({
-        "joker_urna2": {
-            "auto_pilot_per_pool": {
-                "k1": {
-                    "scorer": "autocorr",
-                    "hit_target": 1,
-                    "target_label": "top-1 (1/1)",
-                    "ensemble": [
-                        {"method": "autocorr", "weight": 0.7},
-                        {"method": "frequency", "weight": 0.3},
-                    ],
+    cfg_path = temp_config(
+        {
+            "joker_urna2": {
+                "auto_pilot_per_pool": {
+                    "k1": {
+                        "scorer": "autocorr",
+                        "hit_target": 1,
+                        "target_label": "top-1 (1/1)",
+                        "ensemble": [
+                            {"method": "autocorr", "weight": 0.7},
+                            {"method": "frequency", "weight": 0.3},
+                        ],
+                    }
                 }
             }
         }
-    })
-    assert ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path) == "autocorr"
+    )
+    assert (
+        ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path)
+        == "autocorr"
+    )
     result = ms.get_ensemble_for_game("joker_urna2", pool_size=1, config_path=cfg_path)
     assert [name for name, _fn, _weight in result] == ["autocorr", "frequency"]
     assert sum(weight for _name, _fn, weight in result) == pytest.approx(1.0)
@@ -322,24 +376,70 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
 
 def test_ensemble_cap_applies_after_sanitization(temp_config):
     """`random`/ponderi invalide în primele poziții nu consumă locuri din plafon."""
-    cfg_path = temp_config({
-        "loto_6_49": {
-            "auto_pilot_per_pool": {
-                "k10": {
-                    "scorer": "frequency",
-                    "ensemble": [
-                        {"method": "random", "weight": 0.4},
-                        {"method": "frequency", "weight": "abc"},
-                        {"method": "frequency", "weight": 0.2},
-                        {"method": "autocorr", "weight": 0.2},
-                        {"method": "pair_affinity", "weight": 0.2},
-                    ],
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "ensemble": [
+                            {"method": "random", "weight": 0.4},
+                            {"method": "frequency", "weight": "abc"},
+                            {"method": "frequency", "weight": 0.2},
+                            {"method": "autocorr", "weight": 0.2},
+                            {"method": "pair_affinity", "weight": 0.2},
+                        ],
+                    }
                 }
             }
         }
-    })
+    )
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     names = [name for name, _fn, _w in result]
     assert "random" not in names
     assert names == ["frequency", "autocorr", "pair_affinity"]
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
+
+
+def test_recommend_optimal_config_surfaces_decision_transparency_fields(temp_config):
+    """`rate_data_missing`/`tiebreak_dependent`/`incomplete_methods` sunt scrise
+    de decision.py in best_methods.json, dar `recommend_optimal_config` e o
+    lista ALBA de chei — un camp nou acolo dar absent aici ramanea invizibil
+    pentru UI, desi exista in fisier (vezi audit_output.py, care le citeste
+    direct din decizie, nu prin acest API)."""
+    cfg_path = temp_config(
+        {
+            "loto_6_49": {
+                "auto_pilot_per_pool": {
+                    "k10": {
+                        "scorer": "frequency",
+                        "rate_data_missing": [{"method": "m_no_rate"}],
+                        "tiebreak_dependent": [{"method": "m_tiebreak", "tiebreak_fraction": None}],
+                        "incomplete_methods": [{"method": "m_incomplete", "missing_windows": [60]}],
+                    }
+                }
+            }
+        }
+    )
+    out = ms.recommend_optimal_config("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert out["rate_data_missing"] == [{"method": "m_no_rate"}]
+    assert out["tiebreak_dependent"] == [{"method": "m_tiebreak", "tiebreak_fraction": None}]
+    assert out["incomplete_methods"] == [{"method": "m_incomplete", "missing_windows": [60]}]
+
+
+def test_recommend_optimal_config_transparency_fields_default_empty(temp_config):
+    """Fara aceste chei in JSON (folds vechi) sau fara nicio intrare deloc
+    (fallback) -> liste goale, nu KeyError/None."""
+    cfg_path = temp_config({"loto_6_49": {"auto_pilot_per_pool": {"k10": {"scorer": "frequency"}}}})
+    out = ms.recommend_optimal_config("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert out["rate_data_missing"] == []
+    assert out["tiebreak_dependent"] == []
+    assert out["incomplete_methods"] == []
+
+    cfg_path_empty = temp_config({})
+    out_fallback = ms.recommend_optimal_config(
+        "loto_6_49", pool_size=10, config_path=cfg_path_empty
+    )
+    assert out_fallback["rate_data_missing"] == []
+    assert out_fallback["tiebreak_dependent"] == []
+    assert out_fallback["incomplete_methods"] == []

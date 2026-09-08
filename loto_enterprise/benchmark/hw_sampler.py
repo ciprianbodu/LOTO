@@ -37,9 +37,9 @@ class HwSnapshot:
     cpu_pct_peak: float = 0.0
     cpu_pct_avg: float = 0.0
     ram_gb_peak: float = 0.0
-    gpu_pct_peak: float = 0.0   # mereu 0 (GPU eliminat)
-    gpu_pct_avg: float = 0.0    # mereu 0 (GPU eliminat)
-    vram_mb_peak: float = 0.0   # mereu 0 (GPU eliminat)
+    gpu_pct_peak: float = 0.0  # mereu 0 (GPU eliminat)
+    gpu_pct_avg: float = 0.0  # mereu 0 (GPU eliminat)
+    vram_mb_peak: float = 0.0  # mereu 0 (GPU eliminat)
     samples: int = 0
     duration_sec: float = 0.0
 
@@ -61,6 +61,7 @@ class HwSampler:
         self._have_psutil = False
         try:
             import psutil
+
             self._psutil = psutil
             self._proc = psutil.Process(os.getpid())
             self._have_psutil = True
@@ -76,7 +77,9 @@ class HwSampler:
         self._ram_peak = 0.0
         self._samples = 0
         self._t0 = time.perf_counter()
-        self._thread = threading.Thread(target=self._run, name="hw-sampler", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="hw-sampler", daemon=True
+        )
         self._thread.start()
         return self
 

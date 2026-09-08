@@ -33,9 +33,7 @@ def load_folds() -> pd.DataFrame | None:
         return None
 
 
-def matrix_for_game(
-    df: pd.DataFrame, game_key: str, pool_size: int
-) -> pd.DataFrame:
+def matrix_for_game(df: pd.DataFrame, game_key: str, pool_size: int) -> pd.DataFrame:
     """Returnează DataFrame [model × percentile] cu avg_hits pentru pool_size dat.
 
     Doar fold-uri reale (is_random=False, failed=False).
@@ -47,7 +45,7 @@ def matrix_for_game(
     sub = df[
         (df["game"] == game_key)
         & (df["is_random"] == False)  # noqa: E712
-        & (df["failed"] == False)     # noqa: E712
+        & (df["failed"] == False)  # noqa: E712
     ].copy()
     if sub.empty:
         return pd.DataFrame()
@@ -75,16 +73,14 @@ def random_baseline_for_game(
         (df["game"] == game_key)
         & (df["is_random"] == False)  # noqa: E712
         & (df["method"] == "random")
-        & (df["failed"] == False)     # noqa: E712
+        & (df["failed"] == False)  # noqa: E712
     ]
     if rnd.empty:
         return pd.Series(dtype=float)
     return rnd.groupby("percentile")[base_col].mean()
 
 
-def lift_matrix(
-    df: pd.DataFrame, game_key: str, pool_size: int
-) -> pd.DataFrame:
+def lift_matrix(df: pd.DataFrame, game_key: str, pool_size: int) -> pd.DataFrame:
     """Matrice de lift (avg_hits − random baseline) per (model, percentile)."""
     matrix = matrix_for_game(df, game_key, pool_size)
     if matrix.empty:

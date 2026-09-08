@@ -3,6 +3,7 @@ intregi — Re-Bench ruleaza zeci de folds ca procese concurente pe un
 ProcessPoolExecutor, deci o citire system-wide ar contamina fiecare rand din
 folds.csv cu ce fac TOATE metodele in acelasi moment (verificare globala
 2026-09-07)."""
+
 from __future__ import annotations
 
 import time

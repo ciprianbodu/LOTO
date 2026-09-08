@@ -6,6 +6,7 @@ prinde exceptia la nivel de fold, nu de bloc), scotand metoda din decizie
 prin `incomplete_methods`, in loc sa degradeze grațios la scor plat/0 (pe care
 `has_usable_score_variance` il respinge oricum, dar fara sa piarda fold-ul
 intreg). Verificare globala 2026-09-07."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,8 +26,10 @@ _ALL_SCORERS = [
 def _valid_draws(n_rows: int = 30, draw_n: int = 6, max_num: int = 49) -> np.ndarray:
     rng = np.random.default_rng(3)
     return np.array(
-        [sorted(rng.choice(np.arange(1, max_num + 1), size=draw_n, replace=False))
-         for _ in range(n_rows)],
+        [
+            sorted(rng.choice(np.arange(1, max_num + 1), size=draw_n, replace=False))
+            for _ in range(n_rows)
+        ],
         dtype=np.int64,
     )
 
@@ -57,10 +60,13 @@ def test_scorer_degrades_gracefully_on_internal_exception(monkeypatch, scorer):
     assert calls["n"] == 2  # a incercat calculul real, apoi a recuperat
 
 
-def test_pca_resid_surprise_degrades_gracefully_when_svd_raises_generic_error(monkeypatch):
+def test_pca_resid_surprise_degrades_gracefully_when_svd_raises_generic_error(
+    monkeypatch,
+):
     """SVD-ul are deja un except specific LinAlgError — verificam ca un tip
     DIFERIT de exceptie (nu doar LinAlgError) e tot prins de gardul de nivel
     functie adaugat acum in jurul intregului corp."""
+
     def _boom(*a, **kw):
         raise RuntimeError("eroare numerica simulata, nu LinAlgError")
 

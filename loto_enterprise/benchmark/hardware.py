@@ -18,6 +18,7 @@ def get_cpu_info() -> dict[str, Any]:
     }
     try:
         import psutil
+
         info["physical_cores"] = psutil.cpu_count(logical=False)
         info["logical_cores"] = psutil.cpu_count(logical=True)
         freq = psutil.cpu_freq()
@@ -34,6 +35,7 @@ def get_ram_info() -> dict[str, Any]:
     info: dict[str, Any] = {}
     try:
         import psutil
+
         vm = psutil.virtual_memory()
         info["total_gb"] = round(vm.total / (1024**3), 2)
         info["available_gb"] = round(vm.available / (1024**3), 2)

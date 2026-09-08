@@ -16,6 +16,7 @@ introdusă pentru rate_4plus (limita Wilson), parte din optimizarea "hits+4":
      ferestrele sim_depth sunt sufixe CUIBĂRITE; plus fallback-ul n_eval→n_test
      aplicat PE RÂND (folds mixte peste un bump de versiune).
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -28,8 +29,14 @@ from loto_enterprise.benchmark import decision
 # SINTETICE de mai jos nu există în registry → fără înregistrare temporară,
 # toate testele cădeau tăcut pe fallback-ul 'frequency' și nu mai verificau nimic.
 _SYNTHETIC_METHODS = [
-    "noisy_smallwindow", "robust_morevidence", "some_method", "weak_method",
-    "avg_only_trap", "target_rate_winner", "missing_rate_method", "single_pick_winner",
+    "noisy_smallwindow",
+    "robust_morevidence",
+    "some_method",
+    "weak_method",
+    "avg_only_trap",
+    "target_rate_winner",
+    "missing_rate_method",
+    "single_pick_winner",
     *[f"method_{i}" for i in range(6)],
 ]
 
@@ -37,10 +44,12 @@ _SYNTHETIC_METHODS = [
 @pytest.fixture(autouse=True)
 def _register_synthetic_methods(monkeypatch):
     from loto_enterprise.benchmark import methods as _mm
+
     for _name in _SYNTHETIC_METHODS:
         if _name not in _mm.METHODS:
             monkeypatch.setitem(
-                _mm.METHODS, _name,
+                _mm.METHODS,
+                _name,
                 (lambda draws, max_num: {}, "test", False, "sintetic (doar teste)"),
             )
 
@@ -66,8 +75,18 @@ def test_wilson_lower_bound_monotonic_in_n_at_fixed_phat():
     assert vals == sorted(vals)
 
 
-def _make_folds_row(game, method, pct, n_test, k_col, k_val, rate_col, rate_val,
-                     is_random=False, failed=False):
+def _make_folds_row(
+    game,
+    method,
+    pct,
+    n_test,
+    k_col,
+    k_val,
+    rate_col,
+    rate_val,
+    is_random=False,
+    failed=False,
+):
     return {
         "game": game,
         "method": method,
@@ -96,21 +115,31 @@ def noisy_vs_robust_folds() -> pd.DataFrame:
     rows = []
     # random baseline: bate niciodată metodele de mai jos (avg_hits mic constant)
     for pct, n_test in windows:
-        rows.append(_make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.01))
+        rows.append(
+            _make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.01)
+        )
 
     # Metoda "noisy": rată brută mare doar în fereastra mică (2/25=0.08), apoi
     # scade constant — 8 evenimente 4+ în total din 500 extrageri testate.
     noisy_events = {10: 2, 30: 2, 60: 2, 100: 2}  # total 8 / 500
     for pct, n_test in windows:
         rate = noisy_events[pct] / n_test
-        rows.append(_make_folds_row(game, "noisy_smallwindow", pct, n_test, k_col, 1.5, rate_col, rate))
+        rows.append(
+            _make_folds_row(
+                game, "noisy_smallwindow", pct, n_test, k_col, 1.5, rate_col, rate
+            )
+        )
 
     # Metoda "robust": rată brută mică în fereastra mică (0/25), dar mult mai
     # multe evenimente agregate — 19 evenimente 4+ în total din 500 extrageri.
     robust_events = {10: 0, 30: 3, 60: 6, 100: 10}  # total 19 / 500
     for pct, n_test in windows:
         rate = robust_events[pct] / n_test
-        rows.append(_make_folds_row(game, "robust_morevidence", pct, n_test, k_col, 1.4, rate_col, rate))
+        rows.append(
+            _make_folds_row(
+                game, "robust_morevidence", pct, n_test, k_col, 1.4, rate_col, rate
+            )
+        )
 
     return pd.DataFrame(rows)
 
@@ -125,12 +154,17 @@ def test_raw_mean_would_pick_the_noisy_method(noisy_vs_robust_folds):
     assert noisy_mean > robust_mean
 
 
-def test_decide_optimal_config_picks_method_with_more_pooled_evidence(noisy_vs_robust_folds):
+def test_decide_optimal_config_picks_method_with_more_pooled_evidence(
+    noisy_vs_robust_folds,
+):
     """Testul central: decizia NOUĂ trebuie să aleagă 'robust_morevidence'
     (mai multe evenimente 4+ agregate), NU 'noisy_smallwindow' (rată brută mai
     mare doar din fereastra mică/zgomotoasă)."""
     cfg = decision.decide_optimal_config_for_pool(
-        noisy_vs_robust_folds, game_key="test_game", pool_size=10, draw_n=6,
+        noisy_vs_robust_folds,
+        game_key="test_game",
+        pool_size=10,
+        draw_n=6,
     )
     assert cfg.get("scorer") == "robust_morevidence"
 
@@ -143,11 +177,19 @@ def test_decide_optimal_config_returns_valid_structure_on_simple_case():
     rate_col = f"rate_4plus_k{pool}"
     rows = []
     for pct, n_test in [(10, 30), (100, 300)]:
-        rows.append(_make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.02))
-        rows.append(_make_folds_row(game, "some_method", pct, n_test, k_col, 1.3, rate_col, 0.03))
+        rows.append(
+            _make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.02)
+        )
+        rows.append(
+            _make_folds_row(
+                game, "some_method", pct, n_test, k_col, 1.3, rate_col, 0.03
+            )
+        )
     df = pd.DataFrame(rows)
 
-    cfg = decision.decide_optimal_config_for_pool(df, game_key=game, pool_size=pool, draw_n=6)
+    cfg = decision.decide_optimal_config_for_pool(
+        df, game_key=game, pool_size=pool, draw_n=6
+    )
 
     assert cfg.get("scorer") == "some_method"
     assert "sim_depth_pct" in cfg
@@ -190,11 +232,16 @@ def test_decide_optimal_config_includes_ensemble_field(noisy_vs_robust_folds):
     """Decizia trebuie să includă un câmp 'ensemble' (top metode calificate +
     ponderi), consumat de method_selector.get_ensemble_for_game."""
     cfg = decision.decide_optimal_config_for_pool(
-        noisy_vs_robust_folds, game_key="test_game", pool_size=10, draw_n=6,
+        noisy_vs_robust_folds,
+        game_key="test_game",
+        pool_size=10,
+        draw_n=6,
     )
     assert "ensemble" in cfg
     assert isinstance(cfg["ensemble"], list)
-    assert cfg["ensemble"], "ensemble nu trebuie să fie gol când există metode calificate"
+    assert cfg["ensemble"], (
+        "ensemble nu trebuie să fie gol când există metode calificate"
+    )
     total_weight = sum(e["weight"] for e in cfg["ensemble"])
     assert total_weight == pytest.approx(1.0, abs=1e-3)
     # câștigătorul unic (scorer) trebuie să fie primul/dominant în ensemble
@@ -211,14 +258,28 @@ def test_decide_optimal_config_uses_only_directly_validated_winner(monkeypatch):
     rows = []
     windows = [(10, 50), (30, 150), (60, 300), (100, 500)]
     for pct, n_test in windows:
-        rows.append(_make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.01))
+        rows.append(
+            _make_folds_row(game, "random", pct, n_test, k_col, 1.0, rate_col, 0.01)
+        )
         for i in range(6):  # mai multe metode calificate decât limita de producție
             rate = 0.02 + i * 0.001
-            rows.append(_make_folds_row(game, f"method_{i}", pct, n_test, k_col, 1.2 + i * 0.01,
-                                         rate_col, rate))
+            rows.append(
+                _make_folds_row(
+                    game,
+                    f"method_{i}",
+                    pct,
+                    n_test,
+                    k_col,
+                    1.2 + i * 0.01,
+                    rate_col,
+                    rate,
+                )
+            )
     df = pd.DataFrame(rows)
 
-    cfg = decision.decide_optimal_config_for_pool(df, game_key=game, pool_size=pool, draw_n=6)
+    cfg = decision.decide_optimal_config_for_pool(
+        df, game_key=game, pool_size=pool, draw_n=6
+    )
 
     assert decision.ENSEMBLE_MAX_METHODS == 1
     assert cfg["qualifying_methods"] == 6
@@ -236,11 +297,19 @@ def test_decide_optimal_config_fallback_branch_has_single_member_ensemble():
     rows = []
     for pct, n_test in [(10, 30), (100, 300)]:
         # metoda e mai SLABĂ decât random -> nu se califică (nu bate random)
-        rows.append(_make_folds_row(game, "random", pct, n_test, k_col, 2.0, rate_col, 0.05))
-        rows.append(_make_folds_row(game, "weak_method", pct, n_test, k_col, 1.0, rate_col, 0.02))
+        rows.append(
+            _make_folds_row(game, "random", pct, n_test, k_col, 2.0, rate_col, 0.05)
+        )
+        rows.append(
+            _make_folds_row(
+                game, "weak_method", pct, n_test, k_col, 1.0, rate_col, 0.02
+            )
+        )
     df = pd.DataFrame(rows)
 
-    cfg = decision.decide_optimal_config_for_pool(df, game_key=game, pool_size=pool, draw_n=6)
+    cfg = decision.decide_optimal_config_for_pool(
+        df, game_key=game, pool_size=pool, draw_n=6
+    )
 
     assert cfg["rationale"].startswith("FALLBACK")
     assert cfg["ensemble"] == [{"method": cfg["scorer"], "weight": 1.0}]
@@ -257,21 +326,48 @@ def test_consistency_gate_uses_same_target_rate_as_winner(monkeypatch):
     monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
     rows = []
     for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
-        rows.append(_make_folds_row(
-            "target_gate", "random", pct, n_test, "k10", 1.0,
-            "rate_3plus_k10", 0.10,
-        ))
-        rows.append(_make_folds_row(
-            "target_gate", "avg_only_trap", pct, n_test, "k10", 1.4,
-            "rate_3plus_k10", 0.09,
-        ))
-        rows.append(_make_folds_row(
-            "target_gate", "target_rate_winner", pct, n_test, "k10", 0.9,
-            "rate_3plus_k10", 0.12,
-        ))
+        rows.append(
+            _make_folds_row(
+                "target_gate",
+                "random",
+                pct,
+                n_test,
+                "k10",
+                1.0,
+                "rate_3plus_k10",
+                0.10,
+            )
+        )
+        rows.append(
+            _make_folds_row(
+                "target_gate",
+                "avg_only_trap",
+                pct,
+                n_test,
+                "k10",
+                1.4,
+                "rate_3plus_k10",
+                0.09,
+            )
+        )
+        rows.append(
+            _make_folds_row(
+                "target_gate",
+                "target_rate_winner",
+                pct,
+                n_test,
+                "k10",
+                0.9,
+                "rate_3plus_k10",
+                0.12,
+            )
+        )
 
     cfg = decision.decide_optimal_config_for_pool(
-        pd.DataFrame(rows), game_key="target_gate", pool_size=10, draw_n=6,
+        pd.DataFrame(rows),
+        game_key="target_gate",
+        pool_size=10,
+        draw_n=6,
     )
 
     assert cfg["scorer"] == "target_rate_winner"
@@ -283,17 +379,36 @@ def test_single_pick_uses_top1_rate_not_the_global_3plus_target():
     """Urna 2 trebuie decisă pe 1/1 chiar dacă UI-ul are ținta globală +3/+4."""
     rows = []
     for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
-        rows.append(_make_folds_row(
-            "joker_urna2", "random", pct, n_test, "k1", 0.05,
-            "rate_1plus_k1", 0.05,
-        ))
-        rows.append(_make_folds_row(
-            "joker_urna2", "single_pick_winner", pct, n_test, "k1", 0.09,
-            "rate_1plus_k1", 0.09,
-        ))
+        rows.append(
+            _make_folds_row(
+                "joker_urna2",
+                "random",
+                pct,
+                n_test,
+                "k1",
+                0.05,
+                "rate_1plus_k1",
+                0.05,
+            )
+        )
+        rows.append(
+            _make_folds_row(
+                "joker_urna2",
+                "single_pick_winner",
+                pct,
+                n_test,
+                "k1",
+                0.09,
+                "rate_1plus_k1",
+                0.09,
+            )
+        )
 
     cfg = decision.decide_optimal_config_for_pool(
-        pd.DataFrame(rows), game_key="joker_urna2", pool_size=1, draw_n=1,
+        pd.DataFrame(rows),
+        game_key="joker_urna2",
+        pool_size=1,
+        draw_n=1,
     )
 
     assert cfg["scorer"] == "single_pick_winner"
@@ -307,17 +422,36 @@ def test_unsuffixed_rate_is_not_used_for_a_different_pool(monkeypatch):
     monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
     rows = []
     for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
-        rows.append(_make_folds_row(
-            "wrong_pool_rate", "random", pct, n_test, "k10", 1.0,
-            "rate_3plus", 0.01,
-        ))
-        rows.append(_make_folds_row(
-            "wrong_pool_rate", "some_method", pct, n_test, "k10", 1.5,
-            "rate_3plus", 0.20,
-        ))
+        rows.append(
+            _make_folds_row(
+                "wrong_pool_rate",
+                "random",
+                pct,
+                n_test,
+                "k10",
+                1.0,
+                "rate_3plus",
+                0.01,
+            )
+        )
+        rows.append(
+            _make_folds_row(
+                "wrong_pool_rate",
+                "some_method",
+                pct,
+                n_test,
+                "k10",
+                1.5,
+                "rate_3plus",
+                0.20,
+            )
+        )
 
     cfg = decision.decide_optimal_config_for_pool(
-        pd.DataFrame(rows), game_key="wrong_pool_rate", pool_size=10, draw_n=6,
+        pd.DataFrame(rows),
+        game_key="wrong_pool_rate",
+        pool_size=10,
+        draw_n=6,
     )
 
     assert cfg["scorer"] == decision.SAFE_FALLBACK_SCORER
@@ -331,17 +465,36 @@ def test_method_without_common_rate_data_cannot_win(monkeypatch):
     monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
     rows = []
     for pct, n_test in ((10, 100), (30, 300), (60, 600), (100, 1000)):
-        rows.append(_make_folds_row(
-            "partial_rate", "random", pct, n_test, "k10", 1.0,
-            "rate_3plus_k10", 0.10,
-        ))
-        rows.append(_make_folds_row(
-            "partial_rate", "missing_rate_method", pct, n_test, "k10", 9.0,
-            "rate_3plus_k10", float("nan"),
-        ))
+        rows.append(
+            _make_folds_row(
+                "partial_rate",
+                "random",
+                pct,
+                n_test,
+                "k10",
+                1.0,
+                "rate_3plus_k10",
+                0.10,
+            )
+        )
+        rows.append(
+            _make_folds_row(
+                "partial_rate",
+                "missing_rate_method",
+                pct,
+                n_test,
+                "k10",
+                9.0,
+                "rate_3plus_k10",
+                float("nan"),
+            )
+        )
 
     cfg = decision.decide_optimal_config_for_pool(
-        pd.DataFrame(rows), game_key="partial_rate", pool_size=10, draw_n=6,
+        pd.DataFrame(rows),
+        game_key="partial_rate",
+        pool_size=10,
+        draw_n=6,
     )
 
     assert cfg["scorer"] == decision.SAFE_FALLBACK_SCORER
@@ -365,8 +518,8 @@ def test_neff_is_kish_not_sum_and_not_max():
     phat, n_eff = decision.pooled_rate_and_neff(df, "r")
     assert phat == pytest.approx(0.04)
     assert n_eff == pytest.approx(_neff(sizes), rel=1e-9)
-    assert max(sizes) * 0.75 < n_eff < max(sizes)      # ~0.805 x n_max
-    assert n_eff < sum(sizes)                          # strict sub varianta veche
+    assert max(sizes) * 0.75 < n_eff < max(sizes)  # ~0.805 x n_max
+    assert n_eff < sum(sizes)  # strict sub varianta veche
 
 
 def test_pooled_wilson_below_old_sum_based_bound():
@@ -407,11 +560,13 @@ def test_single_window_matches_plain_wilson():
 def test_n_eval_fallback_is_PER_ROW_not_per_frame():
     """Folds MIXT (unele randuri v13 cu n_eval, altele vechi fara): randurile vechi
     trebuie sa cada pe n_test, NU sa fie aruncate din agregare."""
-    mixed = pd.DataFrame({
-        "r": [0.10, 0.02],
-        "n_test": [100, 400],
-        "n_eval": [float("nan"), 400],
-    })
+    mixed = pd.DataFrame(
+        {
+            "r": [0.10, 0.02],
+            "n_test": [100, 400],
+            "n_eval": [float("nan"), 400],
+        }
+    )
     clean = pd.DataFrame({"r": [0.10, 0.02], "n_test": [100, 400]})
     assert decision.pooled_rate_and_neff(mixed, "r") == pytest.approx(
         decision.pooled_rate_and_neff(clean, "r")
@@ -429,7 +584,10 @@ def test_n_eval_preferred_and_zero_rows_dropped():
 def test_pooled_none_on_missing_or_empty():
     assert decision.pooled_rate_and_neff(pd.DataFrame({"x": [1]}), "r") is None
     assert decision.pooled_wilson_distinct(pd.DataFrame({"x": [1]}), "r") is None
-    assert decision.pooled_rate_and_neff(pd.DataFrame({"r": [0.1], "n_test": [0]}), "r") is None
+    assert (
+        decision.pooled_rate_and_neff(pd.DataFrame({"r": [0.1], "n_test": [0]}), "r")
+        is None
+    )
 
 
 def test_clamp_bench_hit_target_only_3_or_4():
@@ -449,6 +607,7 @@ def test_clamp_bench_hit_target_logs_on_unparsable_value(caplog):
     intervalului (3/4), care logheaza — asimetrie care ascundea o
     reconfigurare gresita a tintei de decizie."""
     import logging
+
     with caplog.at_level(logging.WARNING):
         assert decision.clamp_bench_hit_target("4.0") == 3
     assert "neparsabil" in caplog.text
@@ -465,12 +624,14 @@ def test_bench_cache_dir_derives_from_runtime_paths(monkeypatch, tmp_path):
     referinta LOCALA din bench_cache, nu originalul din runtime_paths."""
     monkeypatch.delenv("LOTO_BENCH_CACHE_DIR", raising=False)
     from loto_enterprise.benchmark import bench_cache as bc
+
     monkeypatch.setattr(bc, "RUNTIME_ROOT", tmp_path)
     assert bc._resolve_cache_dir() == tmp_path / ".bench_cache"
 
 
 def test_bench_cache_dir_honors_explicit_override(monkeypatch, tmp_path):
     from loto_enterprise.benchmark import bench_cache as bc
+
     override = tmp_path / "custom-cache"
     monkeypatch.setenv("LOTO_BENCH_CACHE_DIR", str(override))
     assert bc._resolve_cache_dir() == override
@@ -481,12 +642,14 @@ def test_bench_cache_dir_honors_explicit_override(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 def test_fold_cache_key_carries_version_prefix():
     from loto_enterprise.benchmark import bench_cache as bc
+
     key = bc._fold_key("deadbeef", "frequency", 30, "loto_6_49", False)
     assert key.startswith(bc.CACHE_VERSION + "_")
 
 
 def test_purge_stale_fold_cache_keeps_current_version(tmp_path, monkeypatch):
     from loto_enterprise.benchmark import bench_cache as bc
+
     monkeypatch.setattr(bc, "CACHE_DIR", tmp_path)
     (tmp_path / f"{bc.CACHE_VERSION}_aaa.pkl").write_bytes(b"x")
     (tmp_path / "v11_bbb.pkl").write_bytes(b"y")

@@ -10,6 +10,7 @@ Interfață identică cu restul: score_xxx(draws_2d: np.ndarray, max_num: int) -
 Pur numpy (fără dependențe noi, fără GPU). Pe date aleatoare rezultatele rămân zgomot —
 e o familie nouă de EXPLORARE, nu o garanție de performanță.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,10 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vmin, vmax = float(vals.min()), float(vals.max())
     rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((v - vmin) / rng) if np.isfinite(v) else 0.0 for k, v in scores.items()}
+    out = {
+        int(k): float((v - vmin) / rng) if np.isfinite(v) else 0.0
+        for k, v in scores.items()
+    }
     for n in range(1, max_num + 1):
         out.setdefault(n, 0.0)
     return out
@@ -78,7 +82,9 @@ def _indicator(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
     return M
 
 
-def _adj(draws_2d: np.ndarray, max_num: int, halflife: float | None = None) -> np.ndarray:
+def _adj(
+    draws_2d: np.ndarray, max_num: int, halflife: float | None = None
+) -> np.ndarray:
     """Adiacență (max_num × max_num) = co-apariție PESTE întâmplare (lift centrat).
 
     Co-apariția BRUTĂ pe loto e ~ proporțională cu frecvențele (graf cvasi-complet,
@@ -97,15 +103,17 @@ def _adj(draws_2d: np.ndarray, max_num: int, halflife: float | None = None) -> n
         w = np.ones(T, dtype=np.float64)
     W = float(w.sum()) or 1.0
     Mw = M * np.sqrt(w)[None, :]
-    O = Mw @ Mw.T                       # co-apariție observată (ponderată)
-    c = M @ w                           # „frecvențe" ponderate per număr
-    E = np.outer(c, c) / W              # co-apariție așteptată sub independență
-    A = np.maximum(O - E, 0.0)          # exces de asociere (lift centrat, ≥0)
+    O = Mw @ Mw.T  # co-apariție observată (ponderată)
+    c = M @ w  # „frecvențe" ponderate per număr
+    E = np.outer(c, c) / W  # co-apariție așteptată sub independență
+    A = np.maximum(O - E, 0.0)  # exces de asociere (lift centrat, ≥0)
     np.fill_diagonal(A, 0.0)
     return A
 
 
-def _recency_seed(draws_2d: np.ndarray, max_num: int, halflife: float = 30.0) -> np.ndarray:
+def _recency_seed(
+    draws_2d: np.ndarray, max_num: int, halflife: float = 30.0
+) -> np.ndarray:
     """Vector seed (lungime max_num): cât de recent/des a apărut fiecare număr."""
     M = _indicator(draws_2d, max_num)
     T = M.shape[1]
@@ -128,7 +136,7 @@ def _pagerank(A: np.ndarray, damping: float = 0.85, iters: int = 200) -> np.ndar
         return np.ones(n) / max(n, 1)
     deg = A.sum(axis=1)
     safe = np.where(deg > 0, deg, 1.0)
-    P = A / safe[:, None]               # tranziție rând-stocastică (i→j)
+    P = A / safe[:, None]  # tranziție rând-stocastică (i→j)
     dangling = (deg == 0).astype(np.float64)
     r = np.ones(n) / n
     for _ in range(iters):
@@ -144,7 +152,7 @@ def _pagerank(A: np.ndarray, damping: float = 0.85, iters: int = 200) -> np.ndar
 def _eig_principal(A: np.ndarray) -> np.ndarray:
     if A.sum() == 0:
         return np.zeros(A.shape[0])
-    vals, vecs = np.linalg.eigh(A)        # A simetrică
+    vals, vecs = np.linalg.eigh(A)  # A simetrică
     return np.abs(vecs[:, int(np.argmax(vals))])
 
 
@@ -154,7 +162,7 @@ def _katz(A: np.ndarray, frac: float = 0.5) -> np.ndarray:
         return np.zeros(n)
     vals = np.linalg.eigvalsh(A)
     lam = float(np.max(np.abs(vals))) or 1.0
-    alpha = frac / lam                    # alpha < 1/λmax pentru convergență
+    alpha = frac / lam  # alpha < 1/λmax pentru convergență
     try:
         c = np.linalg.solve(np.eye(n) - alpha * A, np.ones(n))
         return np.abs(c)
@@ -209,7 +217,7 @@ def score_graph_degree_recent(draws_2d, max_num):
 def score_graph_second_order(draws_2d, max_num):
     try:
         A = _adj(draws_2d, max_num)
-        return _vec((A @ A).sum(axis=1), max_num)   # vecinii vecinilor
+        return _vec((A @ A).sum(axis=1), max_num)  # vecinii vecinilor
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)
 
@@ -219,7 +227,7 @@ def score_graph_neighbor_degree(draws_2d, max_num):
         A = _adj(draws_2d, max_num)
         deg = _degree(A)
         safe = np.where(deg > 0, deg, 1.0)
-        return _vec((A @ deg) / safe, max_num)       # gradul mediu al vecinilor
+        return _vec((A @ deg) / safe, max_num)  # gradul mediu al vecinilor
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)
 
@@ -230,7 +238,7 @@ def score_graph_assort_residual(draws_2d, max_num):
         deg = _degree(A)
         safe = np.where(deg > 0, deg, 1.0)
         nbr = (A @ deg) / safe
-        return _vec(deg - nbr, max_num)              # noduri „hub" cu vecini slabi
+        return _vec(deg - nbr, max_num)  # noduri „hub" cu vecini slabi
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)
 
@@ -297,8 +305,8 @@ def score_graph_subgraph_centrality(draws_2d, max_num):
         if A.sum() == 0:
             return _normalize({}, max_num)
         vals, vecs = np.linalg.eigh(A)
-        vals = np.clip(vals, None, 50.0)             # anti-overflow exp
-        sc = (vecs ** 2) @ np.exp(vals)              # diag(expm(A))
+        vals = np.clip(vals, None, 50.0)  # anti-overflow exp
+        sc = (vecs**2) @ np.exp(vals)  # diag(expm(A))
         return _vec(sc, max_num)
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)
@@ -381,7 +389,7 @@ def score_graph_commute(draws_2d, max_num):
         Lp = np.linalg.pinv(_laplacian(A))
         diag = np.diag(Lp)
         n = A.shape[0]
-        res = diag[:, None] + diag[None, :] - 2 * Lp     # rezistențe r_ij
+        res = diag[:, None] + diag[None, :] - 2 * Lp  # rezistențe r_ij
         avg = res.sum(axis=1) / max(n - 1, 1)
         return _vec(1.0 / np.where(avg > 0, avg, np.inf), max_num)
     except Exception:  # noqa: BLE001
@@ -447,7 +455,7 @@ def score_graph_clustering(draws_2d, max_num):
         if A.sum() == 0:
             return _normalize({}, max_num)
         Aw = A / (A.max() or 1.0)
-        tri = np.diag(Aw @ Aw @ Aw)                  # triunghiuri ponderate
+        tri = np.diag(Aw @ Aw @ Aw)  # triunghiuri ponderate
         deg = (A > 0).sum(axis=1).astype(np.float64)
         denom = deg * (deg - 1)
         # `np.where(cond, tri / denom, 0.0)` evaluează împărțirea pentru TOATE
@@ -458,8 +466,9 @@ def score_graph_clustering(draws_2d, max_num):
         # `Exception`, deci sub `-W error` metoda ar cădea tăcut pe dict gol.
         # `np.divide(..., where=)` nu evaluează deloc ramura exclusă. Valorile
         # rezultate sunt IDENTICE.
-        out = np.divide(tri, denom, out=np.zeros_like(tri, dtype=np.float64),
-                        where=denom > 0)
+        out = np.divide(
+            tri, denom, out=np.zeros_like(tri, dtype=np.float64), where=denom > 0
+        )
         return _vec(out, max_num)
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)
@@ -476,7 +485,7 @@ def score_graph_triangles(draws_2d, max_num):
 def score_graph_weighted_triangles(draws_2d, max_num):
     try:
         A = _adj(draws_2d, max_num)
-        Aw = np.cbrt(A)                              # medie geometrică pe triunghi
+        Aw = np.cbrt(A)  # medie geometrică pe triunghi
         return _vec(np.diag(Aw @ Aw @ Aw), max_num)
     except Exception:  # noqa: BLE001
         return _normalize({}, max_num)
@@ -511,7 +520,9 @@ def score_graph_anti_community(draws_2d, max_num):
 # --------------------------------------------------------------------------- #
 # Random walk / temporal
 # --------------------------------------------------------------------------- #
-def _rwr(A: np.ndarray, seed: np.ndarray, restart: float = 0.15, iters: int = 200) -> np.ndarray:
+def _rwr(
+    A: np.ndarray, seed: np.ndarray, restart: float = 0.15, iters: int = 200
+) -> np.ndarray:
     n = A.shape[0]
     if A.sum() == 0:
         return seed
@@ -590,39 +601,194 @@ def score_graph_649_katz_community(draws_2d, max_num):
 # --------------------------------------------------------------------------- #
 GRAPH_METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     # centralitate
-    "graph_degree":              (score_graph_degree,             "graph-centrality", False, "Grad ponderat în graful de co-apariție"),
-    "graph_degree_recent":       (score_graph_degree_recent,      "graph-centrality", False, "Grad ponderat, recență (halflife 40)"),
-    "graph_second_order":        (score_graph_second_order,       "graph-centrality", False, "Grad de ordin 2 (vecinii vecinilor)"),
-    "graph_neighbor_degree":     (score_graph_neighbor_degree,    "graph-centrality", False, "Gradul mediu al vecinilor"),
-    "graph_assort_residual":     (score_graph_assort_residual,    "graph-centrality", False, "Reziduu asortativitate (hub cu vecini slabi)"),
-    "graph_pagerank":            (score_graph_pagerank,           "graph-centrality", False, "PageRank (damping 0.85)"),
-    "graph_pagerank_low":        (score_graph_pagerank_low,       "graph-centrality", False, "PageRank (damping 0.50)"),
-    "graph_pagerank_high":       (score_graph_pagerank_high,      "graph-centrality", False, "PageRank (damping 0.95)"),
-    "graph_pagerank_recent":     (score_graph_pagerank_recent,    "graph-centrality", False, "PageRank pe graf cu recență"),
-    "graph_eigenvector":         (score_graph_eigenvector,        "graph-centrality", False, "Centralitate vector propriu"),
-    "graph_eigenvector_recent":  (score_graph_eigenvector_recent, "graph-centrality", False, "Vector propriu, graf cu recență"),
-    "graph_katz_low":            (score_graph_katz_low,           "graph-centrality", False, "Katz (alpha mic)"),
-    "graph_katz_high":           (score_graph_katz_high,          "graph-centrality", False, "Katz (alpha mare)"),
-    "graph_subgraph_centrality": (score_graph_subgraph_centrality,"graph-centrality", False, "Subgraph centrality diag(exp(A))"),
-    "graph_personalized_pr":     (score_graph_personalized_pr,    "graph-centrality", False, "PageRank personalizat (teleport recență)"),
+    "graph_degree": (
+        score_graph_degree,
+        "graph-centrality",
+        False,
+        "Grad ponderat în graful de co-apariție",
+    ),
+    "graph_degree_recent": (
+        score_graph_degree_recent,
+        "graph-centrality",
+        False,
+        "Grad ponderat, recență (halflife 40)",
+    ),
+    "graph_second_order": (
+        score_graph_second_order,
+        "graph-centrality",
+        False,
+        "Grad de ordin 2 (vecinii vecinilor)",
+    ),
+    "graph_neighbor_degree": (
+        score_graph_neighbor_degree,
+        "graph-centrality",
+        False,
+        "Gradul mediu al vecinilor",
+    ),
+    "graph_assort_residual": (
+        score_graph_assort_residual,
+        "graph-centrality",
+        False,
+        "Reziduu asortativitate (hub cu vecini slabi)",
+    ),
+    "graph_pagerank": (
+        score_graph_pagerank,
+        "graph-centrality",
+        False,
+        "PageRank (damping 0.85)",
+    ),
+    "graph_pagerank_low": (
+        score_graph_pagerank_low,
+        "graph-centrality",
+        False,
+        "PageRank (damping 0.50)",
+    ),
+    "graph_pagerank_high": (
+        score_graph_pagerank_high,
+        "graph-centrality",
+        False,
+        "PageRank (damping 0.95)",
+    ),
+    "graph_pagerank_recent": (
+        score_graph_pagerank_recent,
+        "graph-centrality",
+        False,
+        "PageRank pe graf cu recență",
+    ),
+    "graph_eigenvector": (
+        score_graph_eigenvector,
+        "graph-centrality",
+        False,
+        "Centralitate vector propriu",
+    ),
+    "graph_eigenvector_recent": (
+        score_graph_eigenvector_recent,
+        "graph-centrality",
+        False,
+        "Vector propriu, graf cu recență",
+    ),
+    "graph_katz_low": (
+        score_graph_katz_low,
+        "graph-centrality",
+        False,
+        "Katz (alpha mic)",
+    ),
+    "graph_katz_high": (
+        score_graph_katz_high,
+        "graph-centrality",
+        False,
+        "Katz (alpha mare)",
+    ),
+    "graph_subgraph_centrality": (
+        score_graph_subgraph_centrality,
+        "graph-centrality",
+        False,
+        "Subgraph centrality diag(exp(A))",
+    ),
+    "graph_personalized_pr": (
+        score_graph_personalized_pr,
+        "graph-centrality",
+        False,
+        "PageRank personalizat (teleport recență)",
+    ),
     # distanță
-    "graph_closeness":           (score_graph_closeness,          "graph-distance",   False, "Closeness centrality"),
-    "graph_harmonic":            (score_graph_harmonic,           "graph-distance",   False, "Harmonic centrality"),
-    "graph_eccentricity_inv":    (score_graph_eccentricity_inv,   "graph-distance",   False, "1 / excentricitate"),
-    "graph_commute":             (score_graph_commute,            "graph-distance",   False, "Centralitate rezistență (commute-time)"),
+    "graph_closeness": (
+        score_graph_closeness,
+        "graph-distance",
+        False,
+        "Closeness centrality",
+    ),
+    "graph_harmonic": (
+        score_graph_harmonic,
+        "graph-distance",
+        False,
+        "Harmonic centrality",
+    ),
+    "graph_eccentricity_inv": (
+        score_graph_eccentricity_inv,
+        "graph-distance",
+        False,
+        "1 / excentricitate",
+    ),
+    "graph_commute": (
+        score_graph_commute,
+        "graph-distance",
+        False,
+        "Centralitate rezistență (commute-time)",
+    ),
     # spectral
-    "graph_fiedler":             (score_graph_fiedler,            "graph-spectral",   False, "|Vector Fiedler| (al 2-lea al Laplacianului)"),
-    "graph_spectral_embed":      (score_graph_spectral_embed,     "graph-spectral",   False, "Normă în embedding spectral (3 vectori)"),
-    "graph_heat_diffuse":        (score_graph_heat_diffuse,       "graph-spectral",   False, "Difuzie de căldură exp(-tL) pe recență"),
+    "graph_fiedler": (
+        score_graph_fiedler,
+        "graph-spectral",
+        False,
+        "|Vector Fiedler| (al 2-lea al Laplacianului)",
+    ),
+    "graph_spectral_embed": (
+        score_graph_spectral_embed,
+        "graph-spectral",
+        False,
+        "Normă în embedding spectral (3 vectori)",
+    ),
+    "graph_heat_diffuse": (
+        score_graph_heat_diffuse,
+        "graph-spectral",
+        False,
+        "Difuzie de căldură exp(-tL) pe recență",
+    ),
     # comunități / clustering
-    "graph_clustering":          (score_graph_clustering,         "graph-community",  False, "Coeficient de clustering ponderat"),
-    "graph_triangles":           (score_graph_triangles,          "graph-community",  False, "Participare la triunghiuri (binar)"),
-    "graph_weighted_triangles":  (score_graph_weighted_triangles, "graph-community",  False, "Triunghiuri ponderate (medie geometrică)"),
-    "graph_community_strength":  (score_graph_community_strength, "graph-community",  False, "Tărie intra-comunitate (bisecție Fiedler)"),
-    "graph_649_katz_community":  (score_graph_649_katz_community,  "graph/network (numpy)", False, "Blend Katz+community (6/49 k16, +17% 4+ vs seasonal_naive)"),
-    "graph_anti_community":      (score_graph_anti_community,     "graph-community",  False, "Contrarian: punți inter-comunitate"),
+    "graph_clustering": (
+        score_graph_clustering,
+        "graph-community",
+        False,
+        "Coeficient de clustering ponderat",
+    ),
+    "graph_triangles": (
+        score_graph_triangles,
+        "graph-community",
+        False,
+        "Participare la triunghiuri (binar)",
+    ),
+    "graph_weighted_triangles": (
+        score_graph_weighted_triangles,
+        "graph-community",
+        False,
+        "Triunghiuri ponderate (medie geometrică)",
+    ),
+    "graph_community_strength": (
+        score_graph_community_strength,
+        "graph-community",
+        False,
+        "Tărie intra-comunitate (bisecție Fiedler)",
+    ),
+    "graph_649_katz_community": (
+        score_graph_649_katz_community,
+        "graph/network (numpy)",
+        False,
+        "Blend Katz+community (6/49 k16, +17% 4+ vs seasonal_naive)",
+    ),
+    "graph_anti_community": (
+        score_graph_anti_community,
+        "graph-community",
+        False,
+        "Contrarian: punți inter-comunitate",
+    ),
     # random walk / temporal
-    "graph_rwr":                 (score_graph_rwr,                "graph-walk",       False, "Random walk with restart (uniform)"),
-    "graph_rwr_recent":          (score_graph_rwr_recent,         "graph-walk",       False, "Random walk with restart (seed recență)"),
-    "graph_temporal_drift":      (score_graph_temporal_drift,     "graph-walk",       False, "Drift de centralitate recent vs vechi"),
+    "graph_rwr": (
+        score_graph_rwr,
+        "graph-walk",
+        False,
+        "Random walk with restart (uniform)",
+    ),
+    "graph_rwr_recent": (
+        score_graph_rwr_recent,
+        "graph-walk",
+        False,
+        "Random walk with restart (seed recență)",
+    ),
+    "graph_temporal_drift": (
+        score_graph_temporal_drift,
+        "graph-walk",
+        False,
+        "Drift de centralitate recent vs vechi",
+    ),
 }

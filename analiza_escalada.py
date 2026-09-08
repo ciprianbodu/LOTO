@@ -12,6 +12,7 @@ Pentru fiecare joc și fiecare fereastră (ultimele 10%, 20%, …, 100%):
 Dacă la 10% nu există pattern, lărgesc fereastra cu 10% ș.a.m.d. până la 100%.
 K = draw_n (6/49→6, 5/40→5 [Categoria I = primele 5], joker→5).
 """
+
 from __future__ import annotations
 
 import sys
@@ -23,12 +24,12 @@ DATADIR = sys.argv[1] if len(sys.argv) > 1 else "_ISTORIC"
 
 GAMES = [
     ("6/49", "loto_6_49.csv", 49, 6),
-    ("5/40", "loto_5_40.csv", 40, 5),   # 5/40: primele 5 extrase = Categoria I
+    ("5/40", "loto_5_40.csv", 40, 5),  # 5/40: primele 5 extrase = Categoria I
     ("joker", "joker.csv", 45, 5),
 ]
 WINDOWS = list(range(10, 101, 10))
 ALPHA = 0.05
-N_TESTS = len(GAMES) * len(WINDOWS)          # 30 teste → corecție Bonferroni
+N_TESTS = len(GAMES) * len(WINDOWS)  # 30 teste → corecție Bonferroni
 ALPHA_BONF = ALPHA / N_TESTS
 
 
@@ -82,7 +83,7 @@ for game, fname, N, K in GAMES:
     p3_rand = hyper_p3plus(N, K)
 
     print(f"\n### {game}  (K={K}/{N}, {n_total} extrageri)")
-    print(f"    Aleator: medie hits/bilet={mu0:.3f} | rată 3+ = {100*p3_rand:.2f}%")
+    print(f"    Aleator: medie hits/bilet={mu0:.3f} | rată 3+ = {100 * p3_rand:.2f}%")
     found = False
     for w in WINDOWS:
         start = int(round(n_total * (100 - w) / 100.0))
@@ -98,15 +99,21 @@ for game, fname, N, K in GAMES:
         p = float(stats.norm.sf(z))  # one-sided (hot > aleator?)
         beats = (p < ALPHA_BONF) and (rate3 > p3_rand)
         flag = "  ⚠️ PATTERN" if beats else ""
-        print(f"    ultimele {w:3d}% ({n:4d} extr.): hot medie={mean_h:.3f} "
-              f"(aleator {mu0:.3f}) | 3+ hot={100*rate3:.2f}% (aleator {100*p3_rand:.2f}%) "
-              f"| z={z:+.2f} p={p:.3f}{flag}")
+        print(
+            f"    ultimele {w:3d}% ({n:4d} extr.): hot medie={mean_h:.3f} "
+            f"(aleator {mu0:.3f}) | 3+ hot={100 * rate3:.2f}% (aleator {100 * p3_rand:.2f}%) "
+            f"| z={z:+.2f} p={p:.3f}{flag}"
+        )
         if beats:
             found = True
-            print(f"    → PATTERN GĂSIT la fereastra {w}% — hot bate aleatorul semnificativ.")
+            print(
+                f"    → PATTERN GĂSIT la fereastra {w}% — hot bate aleatorul semnificativ."
+            )
             break
     if not found:
-        print(f"    → NICIUN pattern 3+ peste prag până la 100%. "
-              f"Hot ≈ aleator pe toate ferestrele (loterie aleatoare).")
+        print(
+            f"    → NICIUN pattern 3+ peste prag până la 100%. "
+            f"Hot ≈ aleator pe toate ferestrele (loterie aleatoare)."
+        )
 
 print("\n" + "=" * 74)

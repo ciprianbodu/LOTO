@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 # Utilities
 # ---------------------------------------------------------------------------
 
+
 def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
     if not scores:
         return {n: 0.0 for n in range(1, max_num + 1)}
@@ -42,8 +43,10 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vmin, vmax = float(finite.min()), float(finite.max())
     rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
-           for k, v in scores.items()}
+    out = {
+        int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
+        for k, v in scores.items()
+    }
     for n in range(1, max_num + 1):
         out.setdefault(n, 0.0)
     return out
@@ -52,6 +55,7 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
 # ---------------------------------------------------------------------------
 # Baselines
 # ---------------------------------------------------------------------------
+
 
 def score_random(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     """Baseline structural: scoruri uniforme, INDEPENDENTE de istoric ca semnal.
@@ -62,8 +66,15 @@ def score_random(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     Fiecare bloc primeste alt istoric, deci alta realizare.
     """
     import hashlib as _hashlib
-    _body = np.ascontiguousarray(np.asarray(draws_2d)).tobytes() if draws_2d is not None else b""
-    _digest = _hashlib.blake2b(_body + int(max_num).to_bytes(4, "little"), digest_size=8).digest()
+
+    _body = (
+        np.ascontiguousarray(np.asarray(draws_2d)).tobytes()
+        if draws_2d is not None
+        else b""
+    )
+    _digest = _hashlib.blake2b(
+        _body + int(max_num).to_bytes(4, "little"), digest_size=8
+    ).digest()
     rng = np.random.default_rng(int.from_bytes(_digest, "little"))
     return _normalize({n: float(rng.random()) for n in range(1, max_num + 1)}, max_num)
 
@@ -111,8 +122,13 @@ def score_recency(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
 # Method tuple: (callable, family, requires_train, notes)
 METHODS: dict[str, tuple[Callable, str, bool, str]] = {
     # Baselines (recency a fost blacklistată și scoasă din registry)
-    "random":      (score_random,      "baseline",        False, "Pure-random scores; sanity floor"),
-    "frequency":   (score_frequency,   "baseline",        False, "Exp-decay recency-weighted frequency"),
+    "random": (score_random, "baseline", False, "Pure-random scores; sanity floor"),
+    "frequency": (
+        score_frequency,
+        "baseline",
+        False,
+        "Exp-decay recency-weighted frequency",
+    ),
 }
 
 
@@ -132,36 +148,43 @@ def _load_extra_methods() -> None:
     extensions = []
     try:
         from . import methods_classical
+
         extensions.append(("methods_classical", methods_classical.CLASSICAL_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_classical not loaded: {exc}")
     try:
         from . import methods_ml
+
         extensions.append(("methods_ml", methods_ml.ML_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_ml not loaded: {exc}")
     try:
         from . import methods_coverage
+
         extensions.append(("methods_coverage", methods_coverage.COVERAGE_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_coverage not loaded: {exc}")
     try:
         from . import methods_graph
+
         extensions.append(("methods_graph", methods_graph.GRAPH_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_graph not loaded: {exc}")
     try:
         from . import methods_search_649
+
         extensions.append(("methods_search_649", methods_search_649.SEARCH_649_NEW))
     except Exception as exc:
         logger.debug(f"[methods] methods_search_649 not loaded: {exc}")
     try:
         from . import methods_top649
+
         extensions.append(("methods_top649", methods_top649.TOP649_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_top649 not loaded: {exc}")
     try:
         from . import methods_math_extra
+
         extensions.append(("methods_math_extra", methods_math_extra.MATH_EXTRA_METHODS))
     except Exception as exc:
         logger.debug(f"[methods] methods_math_extra not loaded: {exc}")
@@ -172,6 +195,7 @@ def _load_extra_methods() -> None:
     _owner: dict[str, str] = {}  # nume -> primul modul care l-a inregistrat
     try:
         from .disabled import load_disabled
+
         tombstones = load_disabled()
     except Exception:
         tombstones = set()
@@ -197,14 +221,24 @@ def _load_extra_methods() -> None:
                 logger.warning(
                     "[methods] nume duplicat '%s' — pastrez implementarea din %s, "
                     "ignor cea din %s (a doua NU intra in bench).",
-                    name, _owner.get(name, "registry de baza"), modname,
+                    name,
+                    _owner.get(name, "registry de baza"),
+                    modname,
                 )
     if added > 0:
-        logger.info(f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules).")
+        logger.info(
+            f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules)."
+        )
     if skipped_tombstone:
-        logger.warning("[methods] skipped %d tombstoned (disabled) names at load", skipped_tombstone)
+        logger.warning(
+            "[methods] skipped %d tombstoned (disabled) names at load",
+            skipped_tombstone,
+        )
     if skipped_collision:
-        logger.warning("[methods] skipped %d duplicate (non-tombstone) names at load", skipped_collision)
+        logger.warning(
+            "[methods] skipped %d duplicate (non-tombstone) names at load",
+            skipped_collision,
+        )
 
 
 # Alias-uri pentru nume vechi (înainte de eliminarea GPU: ml_*_cpu) și duplicate eliminate
@@ -260,7 +294,9 @@ def method_meta(name: str) -> dict:
     return meta
 
 
-def call_method(name: str, draws_2d: np.ndarray, max_num: int) -> tuple[dict[int, float], float]:
+def call_method(
+    name: str, draws_2d: np.ndarray, max_num: int
+) -> tuple[dict[int, float], float]:
     """Call a registered method; returns (scores_dict, wall_time_sec)."""
     name = resolve_method_name(name)
     if name not in METHODS:

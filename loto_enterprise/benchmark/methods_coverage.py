@@ -10,6 +10,7 @@ Metodele cover_* blacklistate (greedy, rarity, winslips, etc.) au fost
 ELIMINATE din cod — rămâne `cover_positional_bands` în METHODS (poate fi
 scoasă din curated fără a fi blacklistată).
 """
+
 from __future__ import annotations
 
 from typing import Callable
@@ -26,8 +27,10 @@ def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
         return {n: 0.0 for n in range(1, max_num + 1)}
     vmin, vmax = float(finite.min()), float(finite.max())
     rng = max(vmax - vmin, 1e-12)
-    out = {int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
-           for k, v in scores.items()}
+    out = {
+        int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
+        for k, v in scores.items()
+    }
     for n in range(1, max_num + 1):
         out.setdefault(n, 0.0)
     return out
@@ -45,7 +48,9 @@ def _binary(draws_2d: np.ndarray, max_num: int) -> np.ndarray:
     return B
 
 
-def score_cover_positional_bands(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
+def score_cover_positional_bands(
+    draws_2d: np.ndarray, max_num: int
+) -> dict[int, float]:
     """Acoperire pe benzi poziționale (decade): împarte [1..max_num] în 5 benzi egale
     și echilibrează selecția între ele. Numere din benzi sub-reprezentate în ponderile
     recente primesc un bonus → pool echilibrat pe tot intervalul."""
@@ -59,7 +64,9 @@ def score_cover_positional_bands(draws_2d: np.ndarray, max_num: int) -> dict[int
     band_size = max_num / n_bands
     band_ids = (np.arange(max_num) / band_size).astype(int).clip(0, n_bands - 1)
     band_total = np.array([freq_w[band_ids == b].sum() + 1e-9 for b in range(n_bands)])
-    band_avg = band_total / np.array([(band_ids == b).sum() + 1e-9 for b in range(n_bands)])
+    band_avg = band_total / np.array(
+        [(band_ids == b).sum() + 1e-9 for b in range(n_bands)]
+    )
     band_inv = 1.0 / band_avg
     band_weight = band_inv[band_ids]
     scores = {i + 1: float(freq_w[i] * band_weight[i]) for i in range(max_num)}

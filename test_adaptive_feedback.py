@@ -7,6 +7,7 @@ Acoperă:
   • Regime mismatch via fereastră rolling sub baseline
   • Persistența stării (load/save round-trip)
 """
+
 from __future__ import annotations
 
 import json
@@ -29,6 +30,7 @@ def isolated_state(tmp_path, monkeypatch):
 # classify_event
 # ---------------------------------------------------------------------------
 
+
 def test_classify_zero_hits_is_catastrophe():
     assert af.classify_event(0) == "catastrophe"
 
@@ -46,12 +48,16 @@ def test_classify_two_or_more_is_normal(hits):
 # compute_post_draw_feedback — clasificare eveniment + missed/false_positives
 # ---------------------------------------------------------------------------
 
+
 def test_normal_event_has_small_magnitudes():
     pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     actual = [1, 2, 3, 47, 48, 49]
     event, info = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual,
-        history=[], game_type="6/49", pool_size=12,
+        last_pool=pool,
+        actual_draw=actual,
+        history=[],
+        game_type="6/49",
+        pool_size=12,
     )
     assert event == "normal"
     assert info["pool_hits"] == 3
@@ -63,8 +69,11 @@ def test_underperf_event_amplifies_feedback():
     pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     actual = [1, 47, 48, 41, 42, 43]
     event, info = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual,
-        history=[], game_type="6/49", pool_size=12,
+        last_pool=pool,
+        actual_draw=actual,
+        history=[],
+        game_type="6/49",
+        pool_size=12,
     )
     assert event == "underperf"
     assert info["pool_hits"] == 1
@@ -74,8 +83,11 @@ def test_catastrophe_event_has_largest_magnitude():
     pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     actual = [40, 41, 42, 43, 44, 45]  # zero overlap
     event, info = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual,
-        history=[], game_type="6/49", pool_size=12,
+        last_pool=pool,
+        actual_draw=actual,
+        history=[],
+        game_type="6/49",
+        pool_size=12,
     )
     assert event == "catastrophe"
     assert info["pool_hits"] == 0
@@ -86,6 +98,7 @@ def test_catastrophe_event_has_largest_magnitude():
 # Streak detector → regime_reset
 # ---------------------------------------------------------------------------
 
+
 def test_three_consecutive_catastrophes_trigger_regime_reset():
     """Trigger reset cere streak >= 3 (mărit de la 2 pentru a evita varianța naturală)."""
     pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -94,16 +107,23 @@ def test_three_consecutive_catastrophes_trigger_regime_reset():
     actual3 = [20, 21, 22, 23, 24, 25]
 
     ev1, info1 = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual1,
-        history=[], game_type="6/49", pool_size=12, streak_zero=0,
+        last_pool=pool,
+        actual_draw=actual1,
+        history=[],
+        game_type="6/49",
+        pool_size=12,
+        streak_zero=0,
     )
     assert ev1 == "catastrophe"
     assert info1["active_mode"] == "normal"
     assert info1["streak_zero"] == 1
 
     ev2, info2 = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual2,
-        history=[{"pool_hits": 0}], game_type="6/49", pool_size=12,
+        last_pool=pool,
+        actual_draw=actual2,
+        history=[{"pool_hits": 0}],
+        game_type="6/49",
+        pool_size=12,
         streak_zero=info1["streak_zero"],
     )
     assert ev2 == "catastrophe"
@@ -113,9 +133,11 @@ def test_three_consecutive_catastrophes_trigger_regime_reset():
     assert info2["active_mode"] == "normal"
 
     ev3, info3 = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual3,
+        last_pool=pool,
+        actual_draw=actual3,
         history=[{"pool_hits": 0}, {"pool_hits": 0}],
-        game_type="6/49", pool_size=12,
+        game_type="6/49",
+        pool_size=12,
         streak_zero=info2["streak_zero"],
     )
     assert ev3 == "catastrophe"
@@ -133,9 +155,14 @@ def test_reset_max_duration_force_exit():
 
     # Suntem deja în reset de 5 extrageri (max duration)
     event, info = af.compute_post_draw_feedback(
-        last_pool=pool, actual_draw=actual,
-        history=bad_history, game_type="6/49", pool_size=12,
-        streak_zero=5, prev_mode="reset", reset_duration=5,
+        last_pool=pool,
+        actual_draw=actual,
+        history=bad_history,
+        game_type="6/49",
+        pool_size=12,
+        streak_zero=5,
+        prev_mode="reset",
+        reset_duration=5,
     )
     # Trebuie să ieșim înapoi la normal forțat
     assert info["active_mode"] == "normal"
@@ -145,6 +172,7 @@ def test_reset_max_duration_force_exit():
 # ---------------------------------------------------------------------------
 # Regime mismatch detector
 # ---------------------------------------------------------------------------
+
 
 def test_rolling_severely_underperf_triggers_regime_reset():
     # Baseline 6/49 cu pool 12 = 6 * 12 / 49 ≈ 1.47
@@ -183,6 +211,7 @@ def test_short_history_no_mismatch():
 # Persistență
 # ---------------------------------------------------------------------------
 
+
 def test_temp_blacklist_no_op_outside_catastrophe():
     """Temp blacklist NU se generează decât după catastrofă."""
     pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -195,7 +224,9 @@ def test_temp_blacklist_full_inversion_after_catastrophe():
     """După catastrofă cu spațiu suficient, excludem TOT pool-ul ratat."""
     pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     # 6/49 cu pool 12: spațiu disponibil după excludere = 49-12 = 37 >= 12 → full
-    bl = af.compute_temp_blacklist(pool, "catastrophe", 49, 12, enable_full_inversion=True)
+    bl = af.compute_temp_blacklist(
+        pool, "catastrophe", 49, 12, enable_full_inversion=True
+    )
     assert bl == set(pool)
 
 
@@ -204,8 +235,12 @@ def test_temp_blacklist_partial_when_insufficient_space():
     # Pool de 30 dintr-un univers de 40 → 40-30 = 10 < 30 → fallback
     pool = list(range(1, 31))
     bl = af.compute_temp_blacklist(
-        pool, "catastrophe", universe_size=40, pool_size=30,
-        enable_full_inversion=True, partial_k=4,
+        pool,
+        "catastrophe",
+        universe_size=40,
+        pool_size=30,
+        enable_full_inversion=True,
+        partial_k=4,
     )
     assert len(bl) == 4
     assert bl == {1, 2, 3, 4}
@@ -214,8 +249,12 @@ def test_temp_blacklist_partial_when_insufficient_space():
 def test_temp_blacklist_partial_explicit():
     pool = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
     bl = af.compute_temp_blacklist(
-        pool, "catastrophe", 49, 12,
-        enable_full_inversion=False, partial_k=3,
+        pool,
+        "catastrophe",
+        49,
+        12,
+        enable_full_inversion=False,
+        partial_k=3,
     )
     assert len(bl) == 3
     assert bl == {10, 11, 12}
@@ -230,10 +269,20 @@ def test_save_load_round_trip(isolated_state):
         "last_pool": [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 47, 49],
         "last_pool_date": "2026-05-01T10:00:00",
         "last_data_rows": 2137,
-        "history": [{"date": "2026-04-30", "pool_hits": 2, "actual": [1, 5, 9, 33, 41, 48], "event": "normal"}],
+        "history": [
+            {
+                "date": "2026-04-30",
+                "pool_hits": 2,
+                "actual": [1, 5, 9, 33, 41, 48],
+                "event": "normal",
+            }
+        ],
         "regime_state": {
-            "streak_zero": 0, "rolling_avg": 1.8, "last_reset": None,
-            "active_mode": "normal", "reset_duration": 0,
+            "streak_zero": 0,
+            "rolling_avg": 1.8,
+            "last_reset": None,
+            "active_mode": "normal",
+            "reset_duration": 0,
         },
     }
     af.save_adaptive_state("6/49", 12, entry)
@@ -247,7 +296,9 @@ def test_save_load_round_trip(isolated_state):
 
 
 def test_record_predicted_pool_persists(isolated_state):
-    af.record_predicted_pool("6/49", 12, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], data_rows=100)
+    af.record_predicted_pool(
+        "6/49", 12, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], data_rows=100
+    )
     raw = json.loads(isolated_state.read_text(encoding="utf-8"))
     assert "6/49_12" in raw
     assert raw["6/49_12"]["last_data_rows"] == 100
@@ -265,11 +316,15 @@ def test_load_state_missing_file_returns_empty(isolated_state):
 # Baseline sanity
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("game,pool,expected", [
-    ("6/49", 12, 6 * 12 / 49),
-    ("6/49", 15, 6 * 15 / 49),
-    ("5/40", 12, 5 * 12 / 40),
-    ("joker", 12, 5 * 12 / 45),
-])
+
+@pytest.mark.parametrize(
+    "game,pool,expected",
+    [
+        ("6/49", 12, 6 * 12 / 49),
+        ("6/49", 15, 6 * 15 / 49),
+        ("5/40", 12, 5 * 12 / 40),
+        ("joker", 12, 5 * 12 / 45),
+    ],
+)
 def test_baseline_random_hits(game, pool, expected):
     assert af._baseline_random_hits(game, pool) == pytest.approx(expected, abs=1e-6)
