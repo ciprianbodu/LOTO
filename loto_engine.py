@@ -7,7 +7,6 @@ from __future__ import annotations
 import hashlib
 import json
 import warnings
-import functools
 from datetime import datetime
 
 import itertools
@@ -731,6 +730,18 @@ class LotoEngine:
     ):
         """Rulează pipeline-ul complet de analiză.
 
+        ⚠️ `filter_consecutives`, `smart_reduction` și `pure_bench_mode` sunt
+        acceptate pentru compatibilitate cu apelanții existenți (worker.py,
+        backtesting.py), dar NU influențează pool-ul: „Flow minimal" (cerere
+        utilizator, 2026-07-08) a scos anti-secvența, reducerea inteligentă și
+        orice alt filtru post-scoring din fluxul principal — pool-ul e mereu
+        top-scor pur (`self.audit["filters_disabled"] = True`). Filtrul de
+        anti-secvență (`_apply_consecutive_filter`) există încă în cod, dar e
+        atins doar din calea de FALLBACK `_get_initial_hard_core` (scorer fără
+        niciun scor), care nu primește `filter_consecutives` de aici. Același
+        tipar ca `should_use_blacklist`: telemetrie/compatibilitate, nu buton
+        de configurare activ.
+
         recent_penalty_draws / recent_penalty_factor: penalizare pe numerele
             extrase în ultimele N extrageri (scor × factor^aparitii). 0 = oprit.
             Se aplică identic în producție și în walk-forward, deci validarea
@@ -966,11 +977,7 @@ class LotoEngine:
             try:
                 from loto_enterprise.core.method_selector import get_winner_name
 
-                _gk = {
-                    "6/49": "loto_6_49",
-                    "5/40": "loto_5_40",
-                    "joker": "joker_urna1",
-                }.get(self.game_type, "loto_6_49")
+                _gk = self._bench_game_key()
                 _wn = get_winner_name(
                     _gk, pool_size=int(getattr(self, "_winner_pool_hint", 16))
                 )
@@ -1274,9 +1281,7 @@ class LotoEngine:
         # în loto.log între 2026-07-06 și 2026-08-08.
         if track_pool_variation:
             try:
-                import json
                 from pathlib import Path
-                from datetime import datetime
 
                 history_file = Path("pool_history.json")
                 history = {}
@@ -1642,22 +1647,13 @@ class LotoEngine:
 
         # Mapping (game_type, is_joker_drum) -> (game_key, max_num, pool_hint).
         # joker_urna2 e single-pick (draw_n=1) — pool_hint trebuie sa fie 1,
-        # nu pool-size-ul UI care e pentru Urna 1.
-        if self.game_type == "joker":
-            if is_joker_drum:
-                game_key = "joker_urna2"
-                max_num = 20
-                _pool_hint = 1
-            else:
-                game_key = "joker_urna1"
-                max_num = int(self.params["max_n"])
-                _pool_hint = int(self._winner_pool_hint)
-        elif self.game_type == "5/40":
-            game_key = "loto_5_40"
-            max_num = int(self.params["max_n"])
-            _pool_hint = int(self._winner_pool_hint)
+        # nu pool-size-ul UI care e pentru Urna 1. game_key vine din
+        # `_bench_game_key` (sursă unică, aceeași folosită mai jos la fallback).
+        game_key = self._bench_game_key(is_joker_drum)
+        if is_joker_drum:
+            max_num = 20
+            _pool_hint = 1
         else:
-            game_key = "loto_6_49"
             max_num = int(self.params["max_n"])
             _pool_hint = int(self._winner_pool_hint)
 
@@ -1840,18 +1836,8 @@ class LotoEngine:
             logging.warning(
                 "[ENGINE] bench-winner scoring returned empty — fallback frecvență"
             )
-            if is_joker_drum:
-                _gk = "joker_urna2"
-                _ph = 1
-            elif self.game_type == "joker":
-                _gk = "joker_urna1"
-                _ph = int(getattr(self, "_winner_pool_hint", 11))
-            elif self.game_type == "5/40":
-                _gk = "loto_5_40"
-                _ph = int(getattr(self, "_winner_pool_hint", 11))
-            else:
-                _gk = "loto_6_49"
-                _ph = int(getattr(self, "_winner_pool_hint", 11))
+            _gk = self._bench_game_key(is_joker_drum)
+            _ph = 1 if is_joker_drum else int(getattr(self, "_winner_pool_hint", 11))
             # Suprascriem (nu setdefault): pe scoruri inutilizabile intrarea a fost
             # deja scrisa cu numele metodei moarte, iar UI-ul ar fi afisat-o ca
             # activa desi pool-ul vine din frecventa.
