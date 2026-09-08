@@ -294,7 +294,14 @@ la randul ei candidata la excludere.
   identic in productie si in walk-forward (intra in cheia de cache WF cand e
   activa, prin `_restrict_base_sig`) si este raportata in `audit.restrict_base`.
   Nu adauga niciodata o varianta "bench calculeaza pragul optim" — ar prezenta
-  zgomot statistic drept semnal (orice prag da aceeasi rata teoretica).
+  zgomot statistic drept semnal (orice prag da aceeasi rata teoretica). Bench-ul
+  a fost construit si rulat ca diagnostic, nu ca functie de productie:
+  `scripts/analysis/bench_base_threshold.py` alege pragul pe primele 70% din
+  istoric si il masoara pe ultimele 30%, apoi compara castigul cu distributia
+  nula obtinuta prin permutarea etichetelor numerelor pe tot istoricul. Rezultat
+  la 2026-09-08: 6/49 +0.67pp (p = 0.075), 5/40 +0.35pp (p = 0.200), praguri
+  alese instabile intre seed-uri (20/23/25, respectiv 24/25). Castigul aparent
+  cade in distributia nula, deci nu justifica un prag automat.
 
 ## 7. Wheeling si covering design
 
