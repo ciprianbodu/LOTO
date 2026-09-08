@@ -12,17 +12,10 @@ from typing import Callable
 import numpy as np
 
 from .methods_graph import (
-    score_graph_649_katz_community,
     score_graph_community_strength,
-    score_graph_degree,
     score_graph_degree_recent,
-    score_graph_eigenvector,
     score_graph_katz_high,
     score_graph_pagerank,
-    score_graph_pagerank_recent,
-    score_graph_rwr_recent,
-    score_graph_second_order,
-    score_graph_temporal_drift,
 )
 
 logger = logging.getLogger(__name__)
