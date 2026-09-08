@@ -784,6 +784,8 @@ def run_benchmark(
     def _make_pool(compute, max_workers):
         if not compute:
             return None
+        ex = None
+        submitted = []
         try:
             ex = ProcessPoolExecutor(max_workers=max_workers)
             for args in compute:
@@ -792,6 +794,7 @@ def run_benchmark(
                     _eval_fold_worker, (method, train, test, game, bs, pct, is_random)
                 )
                 fut_kind[fut] = (game, csv_hash, args)
+                submitted.append(fut)
             logger.info(
                 "[bench] CPU pool: %d task-uri pe %d procese", len(compute), max_workers
             )
@@ -800,6 +803,18 @@ def run_benchmark(
             logger.warning(
                 "[bench] ProcessPool indisponibil (%s) — fallback secvential.", exc
             )
+            # Golim fut_kind de orice future deja înregistrat în încercarea asta:
+            # altfel watchdog-ul de mai jos aștepta/procesa futures de pe un pool
+            # pe cale să fie abandonat, IAR fallback-ul secvențial re-rula TOATE
+            # task-urile din `compute` de la zero — inclusiv cele deja trimise
+            # aici — dublând intrări în folds.csv (pooled_mean ponderat greșit
+            # de un fold numărat de două ori). Oprim și procesele deja pornite,
+            # ca să nu rămână orfane după acest eșec parțial.
+            for fut in submitted:
+                fut_kind.pop(fut, None)
+                fut.cancel()
+            if ex is not None:
+                ex.shutdown(wait=False, cancel_futures=True)
             return None
 
     def _run_seq_one(args):

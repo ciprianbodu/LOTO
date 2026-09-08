@@ -13,12 +13,52 @@ import json
 import logging
 import os
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable
 
 logger = logging.getLogger(__name__)
 
 _PATH = Path(__file__).resolve().parents[2] / "disabled_methods.json"
+
+
+@contextmanager
+def _file_lock(path: Path, timeout: float = 10.0):
+    """Lock advisory minimal (O_EXCL + timeout pe vârsta fișierului), fără
+    dependența ui_shared/psutil (deliberat evitată în tot acest modul — vezi
+    `_atomic_write_json`). Mai simplu decât `ui_shared.file_lock` (fără token
+    de staleness), suficient pentru singurul apelant curent (`prune_methods.py`,
+    rulare rară, nu concurentă). Previne un "lost update" între doi scriitori
+    care fac read-modify-write pe `disabled_methods.json` — merge-only, deci o
+    scriere pierdută aici ar însemna o metodă tombstoned de un proces, ștearsă
+    tăcut de scrierea următoare a altui proces."""
+    lockpath = str(path) + ".lock"
+    start = time.time()
+    acquired = False
+    while True:
+        try:
+            fd = os.open(lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            acquired = True
+            break
+        except OSError:
+            pass
+        try:
+            age = time.time() - os.stat(lockpath).st_mtime
+        except OSError:
+            age = 0.0
+        if age > timeout or (time.time() - start) > timeout:
+            break  # anti-deadlock: continuăm fără lock, scrierea e oricum atomică
+        time.sleep(0.05)
+    try:
+        yield
+    finally:
+        if acquired:
+            try:
+                os.unlink(lockpath)
+            except OSError:
+                pass
 
 
 def load_disabled() -> set[str]:
@@ -54,26 +94,28 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 
 
 def add_disabled(names: Iterable[str], reason: str = "") -> set[str]:
-    """Adaugă (union, nu șterge niciodată) metode în blacklist. Întoarce setul final."""
-    cur = load_disabled()
-    before = len(cur)
-    cur |= {str(n) for n in names}
-    payload = {
-        "disabled": sorted(cur),
-        "_meta": {
-            "note": "Tombstone: metode ELIMINATE din METHODS. NU le reintroduce. Merge-only.",
-            "last_reason": reason,
-            "count": len(cur),
-        },
-    }
-    try:
+    """Adaugă (union, nu șterge niciodată) metode în blacklist.
+
+    Întoarce setul final scris cu succes pe disc. Ridică excepția mai departe
+    la eșec de scriere — apelanții (`prune_methods.py`) nu au voie să anunțe
+    succes când `disabled_methods.json` n-a fost de fapt atins."""
+    with _file_lock(_PATH):
+        cur = load_disabled()
+        before = len(cur)
+        cur |= {str(n) for n in names}
+        payload = {
+            "disabled": sorted(cur),
+            "_meta": {
+                "note": "Tombstone: metode ELIMINATE din METHODS. NU le reintroduce. Merge-only.",
+                "last_reason": reason,
+                "count": len(cur),
+            },
+        }
         _atomic_write_json(_PATH, payload)
-        logger.info(
-            "[disabled] %d metode legendate (+%d). Fișier: %s",
-            len(cur),
-            len(cur) - before,
-            _PATH,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[disabled] scriere %s eșuată: %s", _PATH, exc)
+    logger.info(
+        "[disabled] %d metode legendate (+%d). Fișier: %s",
+        len(cur),
+        len(cur) - before,
+        _PATH,
+    )
     return cur

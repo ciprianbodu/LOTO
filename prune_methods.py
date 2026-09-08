@@ -182,7 +182,15 @@ def main() -> int:
             if args.top
             else f"prune 50% din {fp.name}"
         )
-        final = add_disabled(to_disable, reason=reason)
+        try:
+            final = add_disabled(to_disable, reason=reason)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"\n❌ EROARE la scrierea disabled_methods.json: {exc}. "
+                "Blacklist-ul NU a fost actualizat.",
+                file=sys.stderr,
+            )
+            return 3
         print(f"\n✅ APLICAT. Blacklist permanent acum: {len(final)} metode.")
     else:
         print("\n(DRY-RUN — adaugă --apply ca să scrii în disabled_methods.json)")

@@ -111,6 +111,17 @@ def audit_rankings(df):
                         )
                     ranked = ui.ranking()
                     expected = cfg["ranked_methods"]
+                    # O randare complet esuata (0 randuri) trecea vacuu la
+                    # comparatia de mai jos: ranked[:len(expected)] si
+                    # expected[:len(ranked)] devin ambele [] cand ranked==[],
+                    # indiferent de cate metode calificate exista de fapt —
+                    # exact clasa de bug pe care auditul asta o cauta.
+                    if expected and not ranked:
+                        raise AssertionError(
+                            f"randare esuata: 0 randuri afisate, desi decizia "
+                            f"are {len(expected)} metode calificate "
+                            f"({game}, k{pool}, {target})"
+                        )
                     assert ranked[: len(expected)] == expected[: len(ranked)], (
                         game,
                         pool,
@@ -119,6 +130,10 @@ def audit_rankings(df):
                         expected,
                     )
                     for excluded in cfg.get("tiebreak_dependent", []):
+                        assert excluded["method"] not in ranked, (game, pool, excluded)
+                    for excluded in cfg.get("rate_data_missing", []):
+                        assert excluded["method"] not in ranked, (game, pool, excluded)
+                    for excluded in cfg.get("incomplete_methods", []):
                         assert excluded["method"] not in ranked, (game, pool, excluded)
                     if draw_n == 1:
                         assert "brut 4+" not in ui.text()

@@ -118,10 +118,21 @@ def main() -> int:
     except sqlite3.Error:
         pass  # DB nou/read-only: mergem mai departe ca înainte
     try:
+        # BEGIN IMMEDIATE ia lock-ul de scriere ÎNAINTE de verificarea RUNNING,
+        # nu doar înaintea DELETE-ului final. Fără asta, verificarea RUNNING și
+        # DELETE-ul erau instrucțiuni separate, necuprinse în nicio tranzacție
+        # explicită (SELECT-urile din sqlite3 rulează în autocommit) — un worker
+        # putea trece un job PENDING în RUNNING exact în fereastra dintre ele, iar
+        # DELETE FROM jobs WHERE id NOT IN (...) îl ștergea tăcut, deși garda de
+        # mai sus tocmai raportase 0 job-uri RUNNING. Cu lock-ul luat aici, orice
+        # alt scriitor așteaptă (busy_timeout) sau eșuează — nu mai poate strecura
+        # o tranziție de stare între verificare și ștergere.
+        con.execute("BEGIN IMMEDIATE")
         running = con.execute(
             "SELECT COUNT(*) FROM jobs WHERE status = 'RUNNING'"
         ).fetchone()[0]
         if running and not force:
+            con.execute("ROLLBACK")
             print(
                 f"⚠️  {running} job(uri) RUNNING. Oprește-le întâi (butonul "
                 f"'🔴 Anulează TOT Procesul') sau rulează cu --force."

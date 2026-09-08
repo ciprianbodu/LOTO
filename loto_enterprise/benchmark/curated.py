@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 _PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
 
-# Metode fără care mecanica deciziei se rupe — le verificăm, nu le impunem tăcut.
+# Metode fără care mecanica deciziei se rupe — `apply_curation()` le reinjectează
+# forțat dacă lipsesc din `active` (CLAUDE.md §4.3: "trebuie sa ramana in lista
+# activa", regulă de aur, nu opțională), plus avertisment în `log_curation()`.
 #   • `random`   = baseline STRUCTURAL. Pentru cele 4 jocuri cunoscute
 #     (decision.KNOWN_GAME_MAX_NUM), poarta de consistență și lift-ul se judecă
 #     față de rata hipergeometrică EXACTĂ (decision.expected_random_rate), nu mai
@@ -215,6 +217,16 @@ def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
     cand_set = set(cand)
     kept = [m for m in curated if m in cand_set]
     info["missing"] = [m for m in curated if m not in cand_set]
+    # §4.3: "random"/"frequency" trebuie sa ramana active necondiționat — un
+    # utilizator care editează manual `active` și le omite nu are voie să rupă
+    # tăcut gate-ul de consistență (random) sau SAFE_FALLBACK_SCORER (frequency).
+    # Înainte doar `info["missing_required"]` era calculat (pt. log), fără sa
+    # fie reinjectat în `kept` — `resolve_methods_per_game()` face deja asta
+    # corect mai jos, dar plasa ei nu poate prinde o metodă absentă chiar de
+    # aici, la sursă.
+    for required in REQUIRED_METHODS:
+        if required in cand_set and required not in kept:
+            kept.append(required)
     info["n_after"] = len(kept)
     info["missing_required"] = [m for m in REQUIRED_METHODS if m not in kept]
 

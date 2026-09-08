@@ -157,6 +157,48 @@ def test_without_force_succeeds_when_no_running(isolated_db, monkeypatch):
     assert completed_id not in _job_ids(isolated_db)
 
 
+def test_running_check_and_delete_are_one_atomic_transaction(isolated_db, monkeypatch):
+    """TOCTOU: verificarea RUNNING și DELETE-ul final trebuie să fie sub ACELAȘI
+    lock de scriere, nu instrucțiuni separate. Altfel un worker poate trece un
+    job PENDING în RUNNING exact în fereastra dintre ele — invizibil pentru
+    gardă, dar șters oricum de `DELETE ... WHERE id NOT IN (...)`.
+
+    `_last_finalized_job_id()` e apelat DUPĂ verificarea RUNNING, în interiorul
+    aceleiași tranzacții — folosim exact acest hook, deja existent în main(),
+    ca să încercăm o scriere de pe o a doua conexiune. Cu BEGIN IMMEDIATE ținut
+    corect, scrierea trebuie să eșueze cu „database is locked" (busy_timeout
+    scurt, ca testul să nu aștepte); fără el, ar reuși nestingherită."""
+    _insert_job(isolated_db, "COMPLETED", completed=True)
+    other = sqlite3.connect(isolated_db, timeout=0.2)
+    attempted = {}
+
+    def _probe_write_during_transaction():
+        try:
+            other.execute(
+                "INSERT INTO jobs (task_type, status, config_json) VALUES (?,?,?)",
+                ("pipeline", "PENDING", "{}"),
+            )
+            other.commit()
+            attempted["locked"] = False
+        except sqlite3.OperationalError as exc:
+            attempted["locked"] = "locked" in str(exc).lower()
+        return 0
+
+    monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", _probe_write_during_transaction)
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+    try:
+        rc = reset_jobs.main()
+    finally:
+        other.close()
+
+    assert rc == 0
+    assert attempted.get("locked") is True, (
+        "a doua conexiune a putut scrie in timp ce reset_jobs.py verifica "
+        "RUNNING si pregatea DELETE-ul — lock-ul BEGIN IMMEDIATE nu a fost "
+        "tinut pe toata sectiunea critica"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Scenariul 3: ultimul COMPLETED nefinalizat de UI → păstrat pentru recuperare
 # --------------------------------------------------------------------------- #

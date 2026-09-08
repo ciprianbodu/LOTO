@@ -5,7 +5,6 @@ rescrie tot istoricul. Adaugă la final rândurile care lipsesc, scriere atomic�
 
 Rulare:
     python update_csv.py               # verifică toate jocurile
-    python update_csv.py --force       # verifică chiar dacă CSV pare la zi
     python update_csv.py --verbose     # afișează detalii extra
 
 Exit code: 0 mereu (best-effort) — eroare de rețea / parsing nu blochează pornirea.
@@ -33,7 +32,6 @@ from pathlib import Path
 # Config
 # ---------------------------------------------------------------------------
 
-_FORCE = "--force" in sys.argv
 _VERBOSE = "--verbose" in sys.argv
 
 # URL-ul RECENT (primul) e de ajuns pentru update — extrage ultimele luni.
@@ -44,6 +42,7 @@ GAME_CONFIGS = {
         "num_main": 6,
         "has_joker": False,
         "csv_name": "loto_6_49.csv",
+        "max_num": 49,
     },
     "joker": {
         "display_name": "Joker",
@@ -51,6 +50,8 @@ GAME_CONFIGS = {
         "num_main": 5,
         "has_joker": True,
         "csv_name": "joker.csv",
+        "max_num": 45,
+        "joker_max": 20,
     },
     "loto_5_40": {
         "display_name": "Loto 5/40",
@@ -58,6 +59,7 @@ GAME_CONFIGS = {
         "num_main": 6,
         "has_joker": False,
         "csv_name": "loto_5_40.csv",
+        "max_num": 40,
     },
 }
 
@@ -136,8 +138,23 @@ def _get_page_text(url: str) -> str:
         return re.sub(r"<[^>]+>", " ", raw.decode("utf-8", errors="replace"))
 
 
-def _extract_draws(text: str, num_main: int, has_joker: bool, after: date | None):
-    """Extrage extrageri din textul paginii. Returnează doar cele > after."""
+def _extract_draws(
+    text: str,
+    num_main: int,
+    has_joker: bool,
+    after: date | None,
+    max_num: int,
+    joker_max: int | None = None,
+):
+    """Extrage extrageri din textul paginii. Returnează doar cele > after.
+
+    Contractul comun (draw_validation.py) respinge orice extragere cu valori
+    in afara intervalului jocului — inainte doar duplicatele intra-extragere
+    erau verificate aici, nu si intervalul. Un fragment HTML deformat (potrivit
+    peste un rand vecin, separator lipsa) putea produce un numar in afara
+    intervalului, scris tacut in _ISTORIC/, respins abia mai tarziu, silentios,
+    la citirea prin draw_validation.py (randul pur si simplu dispare din
+    istoricul folosit de engine/benchmark, fara nicio urma aici)."""
     if has_joker:
         pattern = re.compile(
             r"\b(\d{4}-\d{1,2}-\d{1,2})\b"
@@ -168,7 +185,15 @@ def _extract_draws(text: str, num_main: int, has_joker: bool, after: date | None
             # in _ISTORIC/ ceva ce engine/benchmark ar respinge oricum la citire,
             # doar tacut, mai tarziu.
             continue
+        if any(not (1 <= n <= max_num) for n in nums):
+            # Numar in afara intervalului jocului: acelasi fragment HTML
+            # deformat suspectat mai sus, doar ca deraparea a produs un numar
+            # valid ca sir de cifre dar imposibil pentru geometria jocului.
+            continue
         joker_num = int(m.group(3)) if has_joker else None
+        if has_joker and joker_num is not None and joker_max is not None:
+            if not (1 <= joker_num <= joker_max):
+                continue
 
         key = (d, tuple(nums), joker_num)
         if key in seen:
@@ -282,7 +307,12 @@ def update_all() -> int:
         try:
             text = _get_page_text(cfg["recent_url"])
             all_draws = _extract_draws(
-                text, cfg["num_main"], cfg["has_joker"], after=None
+                text,
+                cfg["num_main"],
+                cfg["has_joker"],
+                after=None,
+                max_num=cfg["max_num"],
+                joker_max=cfg.get("joker_max"),
             )
             if all_draws:
                 site_last = all_draws[-1]["date"]

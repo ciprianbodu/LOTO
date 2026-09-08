@@ -76,7 +76,7 @@ def render_per_game(console: Console, report: dict) -> None:
         t1.add_column("Family", style="dim")
         for k in pool_keys:
             t1.add_column(k, justify="right")
-        t1.add_column("vs Random*", justify="right")
+        t1.add_column("vs E[hits] teoretic", justify="right")
         # Order: by overall ranking
         ordered = [r["method"] for r in data["overall_ranking"]]
         skipped = [
@@ -94,12 +94,23 @@ def render_per_game(console: Console, report: dict) -> None:
                 else:
                     row.append("-")
             base_k = pool_keys[0]
-            random_stat = per_method.get("random", {}).get("per_pool", {}).get(base_k)
-            if random_stat and d.get("per_pool", {}).get(base_k):
-                lift = (
-                    d["per_pool"][base_k]["avg_hits_real"]
-                    - random_stat["avg_hits_real"]
-                )
+            # Baseline TEORETIC (media hipergeometrica a hiturilor pentru un
+            # pool aleator, E[hits] = pool*draw_n/max_num), nu rata empirica a
+            # randului `random` — acelasi tipar deja corectat in decision.py,
+            # scan_all_methods_hits.py, analiza_4plus.py: o singura realizare
+            # empirica e zgomotoasa si poate arata un lift fals-pozitiv/negativ
+            # pe o metoda mediocra/decenta, in raportul citit de utilizator.
+            try:
+                _pool_n = int(base_k[1:])
+            except (ValueError, IndexError):
+                _pool_n = None
+            expected_avg = (
+                _pool_n * data["draw_n"] / data["max_num"]
+                if _pool_n and data.get("max_num") and data.get("draw_n")
+                else None
+            )
+            if expected_avg is not None and d.get("per_pool", {}).get(base_k):
+                lift = d["per_pool"][base_k]["avg_hits_real"] - expected_avg
                 color = (
                     "green" if lift > 0 else ("yellow" if abs(lift) < 1e-3 else "red")
                 )
