@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import atexit
-import base64
 import io
 import json
 import logging
-import pickle
+import os
 import signal
 import sys
+import tempfile
+import threading
 import time
 import traceback
-import tempfile
 import uuid
-import os
+
+import psutil
 
 from runtime_paths import ENGINE_LOG_FILE
 from ui_shared import pack_queue_result, require_python_version
@@ -49,9 +50,8 @@ logging.basicConfig(
     ],
 )
 
-from job_queue import (
+from job_queue import (  # noqa: E402 — trebuie după logging.basicConfig (vezi mai jos)
     JOB_RUNNING,
-    JOB_CANCELLED,
     complete_job,
     fail_job,
     fetch_pending_job,
@@ -75,44 +75,40 @@ except Exception:
     )
 
 
-import psutil
-import threading
-
-
 class ResourceMonitor:
-    def __init__(self, interval=0.5):
+    """Urmărește vârful de CPU%/RAM% al mașinii pe durata unui job — best-effort,
+    afișat în raport, fără să blocheze pipeline-ul la o eroare psutil."""
+
+    def __init__(self, interval: float = 0.5):
         self.interval = interval
         self.max_cpu = 0.0
         self.max_ram = 0.0
         self.running = False
-        self._thread = None
+        self._thread: threading.Thread | None = None
 
-    def start(self):
+    def start(self) -> None:
         self.running = True
         self._thread = threading.Thread(target=self._monitor, daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
         if self._thread:
             self._thread.join()
 
-    def _monitor(self):
+    def _monitor(self) -> None:
         while self.running:
             try:
-                # CPU & RAM
-                cpu = psutil.cpu_percent(
-                    interval=None
-                )  # FIX: era cpu_percentage (typo)
+                # FIX: era cpu_percentage (typo) — psutil.cpu_percent e numele corect.
+                cpu = psutil.cpu_percent(interval=None)
                 ram = psutil.virtual_memory().percent
                 self.max_cpu = max(self.max_cpu, cpu)
                 self.max_ram = max(self.max_ram, ram)
             except Exception as e:
                 logging.warning(f"[MONITOR] Eroare CPU/RAM: {e}")
-
             time.sleep(self.interval)
 
-    def get_stats(self):
+    def get_stats(self) -> dict:
         return {
             "max_cpu": round(self.max_cpu, 1),
             "max_ram": round(self.max_ram, 1),
@@ -136,6 +132,78 @@ def _remove_temp_csv(temp_csv_path: str) -> None:
             )
 
 
+def _map_game_label(game_label: str) -> tuple[str, int]:
+    """Rezolvă eticheta de joc din UI la (cheia engine-ului, draw_n).
+
+    Fallback implicit "6/49" — un label necunoscut nu are voie să blocheze
+    jobul, doar să ruleze pe geometria implicită."""
+    label = game_label.lower()
+    if "5/40" in label:
+        return "5/40", 5
+    if "joker" in label:
+        return "joker", 5
+    return "6/49", 6
+
+
+def _normalize_task(task: dict, draw_n: int) -> dict:
+    """Normalizează + clampează parametrii unui task de pipeline la intervalele
+    valide. UI-ul le trimite deja clampate, dar workerul poate primi joburi
+    vechi sau externe cu valori în afara plajei."""
+    raw_pool = int(task.get("pool_size", 12))
+    pool_size = max(6, min(16, raw_pool))  # aliniat cu UI (pool_size_val max 16)
+
+    raw_guarantee = int(task.get("guarantee", 4))
+    # UI-ul permite 3..6; workerul poate primi însă joburi vechi sau externe.
+    # O garanție 0 generează semantic un cover al mulțimii vide, iar una peste
+    # draw_n nu e realizabilă pentru jocul respectiv.
+    guarantee = max(3, min(draw_n, raw_guarantee))
+
+    raw_max_variants = int(task.get("max_variants", 0))
+    max_variants = max(0, raw_max_variants)
+
+    # Lotto design „guarantee dacă condition": lipsă/0 = cover clasic.
+    try:
+        raw_condition = int(task.get("wheel_condition") or 0)
+    except (TypeError, ValueError):
+        raw_condition = 0
+    wheel_condition = (
+        guarantee if raw_condition <= 0 else max(guarantee, min(draw_n, raw_condition))
+    )
+
+    # Penalizare după ultimele extrageri (0 = oprit); factor în [0, 1).
+    try:
+        recent_penalty_draws = max(
+            0, min(50, int(task.get("recent_penalty_draws") or 0))
+        )
+    except (TypeError, ValueError):
+        recent_penalty_draws = 0
+    try:
+        recent_penalty_factor = float(task.get("recent_penalty_factor", 0.5))
+    except (TypeError, ValueError):
+        recent_penalty_factor = 0.5
+    recent_penalty_factor = max(0.0, min(0.99, recent_penalty_factor))
+
+    raw_lookback = int(task.get("lookback", 0))
+    lookback = max(0, min(100, raw_lookback))
+
+    return {
+        "pool_size": pool_size,
+        "guarantee": guarantee,
+        "raw_guarantee": raw_guarantee,
+        "max_variants": max_variants,
+        "raw_max_variants": raw_max_variants,
+        "wheel_condition": wheel_condition,
+        "recent_penalty_draws": recent_penalty_draws,
+        "recent_penalty_factor": recent_penalty_factor,
+        "lookback": lookback,
+        "raw_lookback": raw_lookback,
+        "filter_consecutives": bool(task.get("filter_consecutives", False)),
+        "smart_reduction": bool(task.get("smart_reduction", False)),
+        "sim_depth_pct": int(task.get("sim_depth_pct", 10)),
+        "pure_bench_mode": bool(task.get("pure_bench_mode", False)),
+    }
+
+
 def _run_pipeline_job(job: dict) -> str | None:
     monitor = ResourceMonitor()
     monitor.start()
@@ -143,6 +211,25 @@ def _run_pipeline_job(job: dict) -> str | None:
         return _run_pipeline_job_inner(job, monitor)
     finally:
         monitor.stop()
+
+
+def _set_bench_hit_target(task: dict) -> None:
+    """Propagă `bench_hit_target` din task în starea globală a modulului de
+    decizie + env — citit de tot ce compară o metodă cu baseline-ul (3+/4+)."""
+    from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+
+    try:
+        bench_hit_target = clamp_bench_hit_target(task.get("bench_hit_target", 3))
+    except Exception:
+        bench_hit_target = 3
+    try:
+        import loto_enterprise.benchmark.decision as decision
+
+        decision.BENCH_HIT_TARGET = bench_hit_target
+        os.environ["LOTO_BENCH_TARGET"] = str(bench_hit_target)
+        logging.info(f"[worker] S-a setat tinta de benchmark la {bench_hit_target}+ hits.")
+    except Exception as exc:
+        logging.warning(f"[worker] Nu s-a putut seta tinta de benchmark: {exc}")
 
 
 def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
@@ -200,7 +287,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         outputs = {}
 
         # Salvăm un fișier temporar pentru a-l încărca cu engine-ul
-        temp_csv_path = ""
         with tempfile.NamedTemporaryFile(
             suffix=".csv", delete=False, mode="w", encoding="utf-8"
         ) as tmp:
@@ -209,97 +295,50 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
 
         for task in ds.get("tasks", []):
             game_label = str(task["game_label"])
-            game_mapped = "6/49"
-            if "5/40" in game_label.lower():
-                game_mapped = "5/40"
-            elif "joker" in game_label.lower():
-                game_mapped = "joker"
-            draw_n = 6 if game_mapped == "6/49" else 5
-            p_size = int(task.get("pool_size", 12))
-            p_size = max(6, min(16, p_size))  # aliniat cu UI (pool_size_val max 16)
-            raw_guar = int(task.get("guarantee", 4))
-            # UI-ul permite 3..6; workerul poate primi însă joburi vechi sau
-            # externe. O garanție 0 generează semantic un cover al mulțimii vide,
-            # iar una peste draw_n nu e realizabilă pentru jocul respectiv.
-            guar = max(3, min(draw_n, raw_guar))
-            raw_max_var = int(task.get("max_variants", 0))
-            max_var = max(0, raw_max_var)
-            # Lotto design „guarantee dacă condition": lipsă/0 = cover clasic.
-            try:
-                raw_cond = int(task.get("wheel_condition") or 0)
-            except (TypeError, ValueError):
-                raw_cond = 0
-            wheel_cond = guar if raw_cond <= 0 else max(guar, min(draw_n, raw_cond))
-            # Penalizare după ultimele extrageri (0 = oprit); factor în [0, 1).
-            try:
-                rp_draws = max(0, min(50, int(task.get("recent_penalty_draws") or 0)))
-            except (TypeError, ValueError):
-                rp_draws = 0
-            try:
-                rp_factor = float(task.get("recent_penalty_factor", 0.5))
-            except (TypeError, ValueError):
-                rp_factor = 0.5
-            rp_factor = max(0.0, min(0.99, rp_factor))
-            raw_lookback = int(task.get("lookback", 0))
-            lookback = max(0, min(100, raw_lookback))
-            if (guar, max_var, lookback) != (raw_guar, raw_max_var, raw_lookback):
+            game_mapped, draw_n = _map_game_label(game_label)
+            norm = _normalize_task(task, draw_n)
+            if (norm["guarantee"], norm["max_variants"], norm["lookback"]) != (
+                norm["raw_guarantee"],
+                norm["raw_max_variants"],
+                norm["raw_lookback"],
+            ):
                 logging.warning(
                     "[worker] Task normalizat %s: guarantee %s→%s, max_variants %s→%s, "
                     "lookback %s→%s",
                     game_label,
-                    raw_guar,
-                    guar,
-                    raw_max_var,
-                    max_var,
-                    raw_lookback,
-                    lookback,
+                    norm["raw_guarantee"],
+                    norm["guarantee"],
+                    norm["raw_max_variants"],
+                    norm["max_variants"],
+                    norm["raw_lookback"],
+                    norm["lookback"],
                 )
-            filter_cons = bool(task.get("filter_consecutives", False))
-            smart_red = bool(task.get("smart_reduction", False))
-            sim_depth = int(task.get("sim_depth_pct", 10))
-            pure_bench = bool(task.get("pure_bench_mode", False))
-            try:
-                from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
 
-                bench_hit_target = clamp_bench_hit_target(
-                    task.get("bench_hit_target", 3)
-                )
-            except Exception:
-                bench_hit_target = 3
-
-            try:
-                import loto_enterprise.benchmark.decision as decision
-
-                decision.BENCH_HIT_TARGET = bench_hit_target
-                os.environ["LOTO_BENCH_TARGET"] = str(bench_hit_target)
-                logging.info(
-                    f"[worker] S-a setat tinta de benchmark la {bench_hit_target}+ hits."
-                )
-            except Exception as exc:
-                logging.warning(f"[worker] Nu s-a putut seta tinta de benchmark: {exc}")
+            _set_bench_hit_target(task)
 
             logging.info(
-                f"[worker] Se procesează task pentru {game_label} (Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})"
+                f"[worker] Se procesează task pentru {game_label} "
+                f"(Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})"
             )
             logging.debug(f"[worker] Full task: {task}")
 
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
-                # Dacă update_job_progress returnează True, înseamnă că job-ul a fost anulat sau șters
+                # Dacă update_job_progress returnează True, jobul a fost anulat sau șters.
                 if update_job_progress(
                     job_id,
                     overall_pct,
                     f"[{fname}][{game_label}] {msg}",
                     worker_token=WORKER_TOKEN,
                 ):
-                    # Aruncăm o eroare pentru a opri engine-ul imediat
+                    # Aruncăm o eroare pentru a opri engine-ul imediat.
                     raise Exception("STOP_REQUESTED")
 
             try:
-                # Verificăm dacă job-ul a fost anulat între timp
                 if is_job_cancelled(job_id):
                     logging.info(
-                        f"[worker] Job {job_id} anulat în timpul execuției (task {game_label}). Oprire."
+                        f"[worker] Job {job_id} anulat în timpul execuției "
+                        f"(task {game_label}). Oprire."
                     )
                     _remove_temp_csv(
                         temp_csv_path
@@ -319,21 +358,23 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                 lines, p10, p90, g_range, context, audit = (
                     engine.run_institutional_pipeline(
                         progress_cb=progress_cb,
-                        pool_size=p_size,
-                        guarantee=guar,
-                        max_variants=max_var,
-                        wheel_condition=wheel_cond,
-                        recent_penalty_draws=rp_draws,
-                        recent_penalty_factor=rp_factor,
-                        lookback=lookback,
-                        filter_consecutives=filter_cons,
-                        smart_reduction=smart_red,
-                        sim_depth_pct=sim_depth,
+                        pool_size=norm["pool_size"],
+                        guarantee=norm["guarantee"],
+                        max_variants=norm["max_variants"],
+                        wheel_condition=norm["wheel_condition"],
+                        recent_penalty_draws=norm["recent_penalty_draws"],
+                        recent_penalty_factor=norm["recent_penalty_factor"],
+                        lookback=norm["lookback"],
+                        filter_consecutives=norm["filter_consecutives"],
+                        smart_reduction=norm["smart_reduction"],
+                        sim_depth_pct=norm["sim_depth_pct"],
                         enable_adaptive_persistence=False,
-                        pure_bench_mode=pure_bench,
+                        pure_bench_mode=norm["pure_bench_mode"],
                     )
                 )
-                effective_pool = len(engine.hard_core) if engine.hard_core else p_size
+                effective_pool = (
+                    len(engine.hard_core) if engine.hard_core else norm["pool_size"]
+                )
                 outputs[game_label] = {
                     "total_draws": len(engine.data) if engine.data is not None else 0,
                     "hard_core": engine.hard_core,
@@ -344,12 +385,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     ),
                     "variants": lines,
                     "pool_size": effective_pool,
-                    "pool_size_requested": p_size,
-                    "guarantee": guar,
-                    "wheel_condition": wheel_cond,
-                    "recent_penalty_draws": rp_draws,
-                    "recent_penalty_factor": rp_factor,
-                    "lookback": lookback,
+                    "pool_size_requested": norm["pool_size"],
+                    "guarantee": norm["guarantee"],
+                    "wheel_condition": norm["wheel_condition"],
+                    "recent_penalty_draws": norm["recent_penalty_draws"],
+                    "recent_penalty_factor": norm["recent_penalty_factor"],
+                    "lookback": norm["lookback"],
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),
                     "p10": p10,
@@ -401,6 +442,73 @@ def _requeue_on_terminate(*_args) -> None:
         pass
 
 
+def _dump_orphan_result(job_id: int, result_json: str) -> None:
+    """Jobul nu mai era RUNNING/al acestui worker când rezultatul a fost gata
+    (al doilea worker l-a revendicat între timp) — `complete_job` a refuzat
+    scrierea. Salvăm rezultatul pe disc în loc să-l pierdem definitiv; numele
+    include tokenul + un uuid scurt (nu doar job_id) — altfel două rulări
+    STALE succesive ale aceluiași job s-ar suprascrie reciproc."""
+    dump_path = os.path.join(
+        tempfile.gettempdir(),
+        f"loto_orphan_result_{job_id}_{WORKER_TOKEN[:8]}_{uuid.uuid4().hex[:8]}.txt",
+    )
+    try:
+        with open(dump_path, "w", encoding="utf-8") as fh:
+            fh.write(result_json)
+        logging.error(
+            "[worker] Job %s: rezultatul NU a putut fi scris în coadă "
+            "(jobul nu mai era RUNNING/al acestui worker). L-am salvat în %s",
+            job_id,
+            dump_path,
+        )
+    except OSError as exc:
+        logging.error(
+            "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING/al acestui "
+            "worker) și nici salvarea în %s n-a mers: %s",
+            job_id,
+            dump_path,
+            exc,
+        )
+
+
+def _process_one_job(job: dict) -> None:
+    task_type = str(job.get("task_type") or "")
+    job_id = int(job["id"])
+    if update_job_progress(
+        job_id, 2, "Job preluat de worker.", worker_token=WORKER_TOKEN
+    ):
+        logging.info(
+            "[worker] Job %s nu mai este RUNNING imediat după claim; sarim.", job_id
+        )
+        return
+
+    if is_job_cancelled(job_id):
+        logging.info(f"[worker] Job {job_id} a fost anulat (CANCELLED), sarim.")
+        return
+
+    if task_type != "pipeline":
+        fail_job(job_id, f"Unsupported task type: {task_type}", worker_token=WORKER_TOKEN)
+        return
+
+    result_json = _run_pipeline_job(job)
+    if result_json is None:
+        return
+
+    if is_job_cancelled(job_id):
+        logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
+        return
+
+    if complete_job(job_id, result_json, worker_token=WORKER_TOKEN):
+        logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
+    else:
+        # UPDATE-ul cere status = RUNNING ȘI worker_token = acest proces. Dacă
+        # un al doilea worker a revendicat jobul între timp (requeue_running_jobs),
+        # jobul e fie din nou PENDING, fie RUNNING sub alt token, și rezultatul
+        # NU se scrie. Înainte logam „completat cu succes" oricum — o rulare de
+        # 90 de minute dispărea tăcut.
+        _dump_orphan_result(job_id, result_json)
+
+
 def main() -> None:
     atexit.register(_requeue_on_terminate)
     for _sig in (signal.SIGTERM, signal.SIGINT):
@@ -433,74 +541,7 @@ def main() -> None:
                 time.sleep(2)
                 continue
 
-            task_type = str(job.get("task_type") or "")
-            job_id = int(job["id"])
-            if update_job_progress(
-                job_id, 2, "Job preluat de worker.", worker_token=WORKER_TOKEN
-            ):
-                logging.info(
-                    "[worker] Job %s nu mai este RUNNING imediat după claim; sarim.",
-                    job_id,
-                )
-                continue
-
-            if is_job_cancelled(job_id):
-                logging.info(f"[worker] Job {job_id} a fost anulat (CANCELLED), sarim.")
-                continue
-
-            if task_type == "pipeline":
-                result_json = _run_pipeline_job(job)
-            else:
-                fail_job(
-                    job_id,
-                    f"Unsupported task type: {task_type}",
-                    worker_token=WORKER_TOKEN,
-                )
-                continue
-
-            if result_json is None:
-                continue
-
-            if is_job_cancelled(job_id):
-                logging.info(
-                    f"[worker] Job {job_id} anulat în timpul execuției, nu completăm."
-                )
-                continue
-
-            if complete_job(job_id, result_json, worker_token=WORKER_TOKEN):
-                logging.info(
-                    f"[worker] Job {job_id} completat cu succes, continuă loop..."
-                )
-            else:
-                # UPDATE-ul cere status = RUNNING ȘI worker_token = acest proces. Dacă
-                # un al doilea worker a revendicat jobul între timp (`requeue_running_jobs`),
-                # jobul e fie din nou PENDING, fie RUNNING sub alt token, și rezultatul
-                # NU se scrie. Înainte logam „completat cu succes" oricum — o rulare de
-                # 90 de minute dispărea tăcut. Salvăm rezultatul pe disc ca să nu fie
-                # pierdut definitiv; numele include tokenul + un uuid scurt (nu doar
-                # job_id) — altfel două rulări STALE succesive ale aceluiași job s-ar
-                # suprascrie reciproc pe fișierul de diagnostic cu nume fix.
-                _dump = os.path.join(
-                    tempfile.gettempdir(),
-                    f"loto_orphan_result_{job_id}_{WORKER_TOKEN[:8]}_{uuid.uuid4().hex[:8]}.txt",
-                )
-                try:
-                    with open(_dump, "w", encoding="utf-8") as _fh:
-                        _fh.write(result_json)
-                    logging.error(
-                        "[worker] Job %s: rezultatul NU a putut fi scris în coadă "
-                        "(jobul nu mai era RUNNING/al acestui worker). L-am salvat în %s",
-                        job_id,
-                        _dump,
-                    )
-                except OSError as _exc:
-                    logging.error(
-                        "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING/al acestui "
-                        "worker) și nici salvarea în %s n-a mers: %s",
-                        job_id,
-                        _dump,
-                        _exc,
-                    )
+            _process_one_job(job)
 
         except Exception as exc:
             tb = traceback.format_exc()
