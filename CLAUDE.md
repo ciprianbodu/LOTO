@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 59 fisiere `test_*.py`, 726 teste trecute la auditul global.
+- teste: 59 fisiere `test_*.py`, 728 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -130,6 +130,13 @@ UI-ul face polling la o secunda, fara reload complet.
 - Pasii walk-forward paraleli primesc setarile pe NUME (`_wf_worker_step` ia un
   dict). Nu reintroduce tuplul pozitional: o setare noua ajungea in parametrul
   vecin daca unul dintre cele trei locuri care il consumau ramanea nesincronizat.
+  Ramura paralela reala (`_stateless`, adica `use_feedback=False` si
+  `enable_hard_inversion=False`) e activata in teste numai explicit; restul
+  suitei forteaza `_wf_max_workers` la 1, deci o regresie acolo nu apare de la
+  sine. Mai rau, handler-ul exterior prinde exceptia si reia TOT secvential, cu
+  rezultate corecte — paralelizarea dispare in tacere. Un test pe ramura aceea
+  trebuie sa verifice ca avertismentul „WF rapid indisponibil" LIPSESTE, nu doar
+  ca rezultatele sunt bune.
 
 ### 4.5 Git
 
@@ -292,8 +299,11 @@ la randul ei candidata la excludere.
   (`restrict_base_min`, `restrict_base_max`), implicit OPRITA (ambele capete 0 in
   UI) — exclude din candidati orice numar din afara intervalului ales. Un capat
   lasat pe 0 ramane liber, deci setarea veche doar-maxim continua sa functioneze;
-  intervalul inversat (min > max) este IGNORAT si consemnat in
-  `audit.restrict_base.ignored`, nu aplicat tacit peste o baza goala. FARA
+  intervalul inversat (min > max) si cel mai ingust decat un bilet (span <
+  `draw_n`) sunt IGNORATE si consemnate in `audit.restrict_base.ignored`, nu
+  aplicate tacit. Fara a doua garda, 47-49 la 6/49 lasa trei candidati, iar
+  wheeling-ul trateaza `len(pool) < pick` drept sistem complet cu un bilet:
+  pipeline-ul raporta `[47, 48, 49]` ca bilet 6/49 cu acoperire 100%. FARA
   avantaj statistic demonstrat: probabilitatea de hit a unui pool de dimensiune
   fixa e identica matematic (hipergeometric) indiferent de care numere il compun,
   confirmat si empiric pe istoricul aplicatiei

@@ -896,7 +896,9 @@ class LotoBacktester:
                         if pred is not None:
                             retro_predictions.append(pred)
                     except Exception as exc:  # noqa: BLE001
-                        logger.error("[BACKTEST] WF sondă sim_idx=%s: %s", a[0], exc)
+                        logger.error(
+                            "[BACKTEST] WF sondă sim_idx=%s: %s", a["sim_idx"], exc
+                        )
                     done_count += 1
                     probe_done += 1
                     _wf_report_progress(progress_cb, done_count, n_steps)
@@ -939,7 +941,9 @@ class LotoBacktester:
                             if pred is not None:
                                 retro_predictions.append(pred)
                         except Exception as exc:  # noqa: BLE001
-                            logger.error("[BACKTEST] WF pas sim_idx=%s: %s", a[0], exc)
+                            logger.error(
+                                "[BACKTEST] WF pas sim_idx=%s: %s", a["sim_idx"], exc
+                            )
                         done_count += 1
                         _wf_report_progress(progress_cb, done_count, n_steps)
                         pct = int(done_count * 100 / max(1, n_steps))
@@ -972,7 +976,8 @@ class LotoBacktester:
                                 except Exception:  # noqa: BLE001
                                     pass
                             futures = {
-                                ex.submit(_wf_worker_step, a): a[0] for a in batch
+                                ex.submit(_wf_worker_step, a): a["sim_idx"]
+                                for a in batch
                             }
                             pending = set(futures)
                             hung = False

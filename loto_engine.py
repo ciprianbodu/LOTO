@@ -1078,17 +1078,30 @@ class LotoEngine:
         # Interval inversat (min > max) ar goli complet baza de candidați și ar
         # lăsa pool-ul pe seama fallback-ului. Îl ignorăm și consemnăm motivul,
         # în loc să producem tăcut un pool care nu respectă nicio setare.
+        _draw_n_ticket = int(self.params["draw_n"])
+        _span = restrict_max - restrict_min + 1
+        _reason = ""
         if restrict_min > restrict_max:
+            _reason = f"interval inversat ({restrict_min} > {restrict_max})"
+        elif _span < _draw_n_ticket:
+            # Un interval mai îngust decât un bilet nu poate produce un bilet
+            # jucabil. Wheeling-ul trateaza `len(pool) < pick` drept sistem
+            # complet cu un singur bilet, deci fara garda de aici pipeline-ul
+            # raporta [47, 48, 49] ca bilet 6/49 cu acoperire 100%.
+            _reason = (
+                f"interval prea îngust ({_span} numere) pentru un bilet de "
+                f"{_draw_n_ticket}"
+            )
+        if _reason:
             self.audit["restrict_base"] = {
                 "ignored": True,
-                "reason": f"interval inversat ({restrict_min} > {restrict_max})",
+                "reason": _reason,
                 "min": restrict_min,
                 "max": restrict_max,
             }
             logging.warning(
-                "[PIPELINE] Interval de bază inversat (%d > %d) — restricție ignorată.",
-                restrict_min,
-                restrict_max,
+                "[PIPELINE] Restrângere de bază ignorată: %s.",
+                _reason,
             )
         elif restrict_min > 1 or restrict_max < _max_n:
             _excluded = set(range(1, restrict_min)) | set(
