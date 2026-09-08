@@ -57,6 +57,21 @@ JOB_COMPLETED = "COMPLETED"
 JOB_FAILED = "FAILED"
 JOB_CANCELLED = "CANCELLED"
 
+# Fragment SQL repetat de fiecare UPDATE care adaugă o linie la `log_tail`:
+# prima linie devine conținutul întreg, orice linie ulterioară se concatenează
+# și se trunchiază la 6000 caractere (păstrează doar coada, nu creștere
+# nemărginită pe un job reprogramat/anulat repetat).
+_LOG_TAIL_APPEND_SQL = (
+    "CASE WHEN log_tail IS NULL OR log_tail = '' THEN ? "
+    "ELSE substr(log_tail || char(10) || ?, -6000) END"
+)
+
+
+def _append_log_tail_params(message: str) -> tuple[str, str]:
+    """Cei doi parametri poziționali ceruți de `_LOG_TAIL_APPEND_SQL` — mereu
+    același mesaj, o dată pentru ramura „prima linie", o dată pentru „concatenat"."""
+    return (message, message)
+
 
 def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     p = Path(db_path)
@@ -78,8 +93,6 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
             except sqlite3.OperationalError as e:
                 if "disk I/O error" in str(e):
                     # If WAL fails, try to continue with default if possible, or just log it
-                    import logging
-
                     logging.warning(
                         f"Failed to set WAL mode (attempt {attempt + 1}): {e}. Retrying..."
                     )
@@ -303,13 +316,10 @@ def update_job_progress(
         cur = conn.execute(
             f"""
             UPDATE jobs
-            SET progress_pct = ?, log_tail = CASE
-                WHEN log_tail IS NULL OR log_tail = '' THEN ?
-                ELSE substr(log_tail || char(10) || ?, -6000)
-            END
+            SET progress_pct = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
             WHERE {where}
             """,
-            (pct_i, stamped, stamped) + params,
+            (pct_i, *_append_log_tail_params(stamped)) + params,
         )
         conn.commit()
         updated = cur.rowcount > 0
@@ -510,7 +520,9 @@ def cancel_pending_running_jobs(
     msg = str(reason or "Oprit de utilizator")
     ids = [int(j) for j in (job_ids or [])]
     where = "status IN (?, ?)"
-    params: tuple = (JOB_CANCELLED, msg, msg, msg, JOB_PENDING, JOB_RUNNING)
+    params: tuple = (
+        (JOB_CANCELLED, msg) + _append_log_tail_params(msg) + (JOB_PENDING, JOB_RUNNING)
+    )
     if ids:
         where += f" AND id IN ({','.join('?' * len(ids))})"
         params = params + tuple(ids)
@@ -518,10 +530,7 @@ def cancel_pending_running_jobs(
         cur = conn.execute(
             f"""
             UPDATE jobs
-            SET status = ?, result_json = ?, log_tail = CASE
-                WHEN log_tail IS NULL OR log_tail = '' THEN ?
-                ELSE substr(log_tail || char(10) || ?, -6000)
-            END
+            SET status = ?, result_json = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
             WHERE {where}
             """,
             params,
@@ -599,22 +608,15 @@ def requeue_running_jobs(
     if worker_token is not None:
         where += " AND worker_token = ?"
         params = params + (worker_token,)
+    msg = "Worker restart detectat: job reprogramat automat."
     with _conn(db_path) as conn:
         cur = conn.execute(
             f"""
             UPDATE jobs
-            SET status = ?, log_tail = CASE
-                WHEN log_tail IS NULL OR log_tail = '' THEN ?
-                ELSE substr(log_tail || char(10) || ?, -6000)
-            END
+            SET status = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
             WHERE {where}
             """,
-            (
-                JOB_PENDING,
-                "Worker restart detectat: job reprogramat automat.",
-                "Worker restart detectat: job reprogramat automat.",
-            )
-            + params,
+            (JOB_PENDING, *_append_log_tail_params(msg)) + params,
         )
         conn.commit()
         return int(getattr(cur, "rowcount", 0) or 0)
@@ -629,27 +631,16 @@ def fail_running_jobs(
         msg = str(reason or "Job oprit automat la startup.")
         with _conn(db_path) as conn:
             cur = conn.execute(
-                """
+                f"""
                 UPDATE jobs
-                SET status = ?, result_json = ?, log_tail = CASE
-                    WHEN log_tail IS NULL OR log_tail = '' THEN ?
-                    ELSE substr(log_tail || char(10) || ?, -6000)
-                END
+                SET status = ?, result_json = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
                 WHERE status = ?
                 """,
-                (
-                    JOB_FAILED,
-                    msg,
-                    msg,
-                    msg,
-                    JOB_RUNNING,
-                ),
+                (JOB_FAILED, msg, *_append_log_tail_params(msg), JOB_RUNNING),
             )
             conn.commit()
             return int(getattr(cur, "rowcount", 0) or 0)
     except Exception as e:
-        import logging
-
         logging.warning(
             f"fail_running_jobs: eroare în timpul procesării {db_path}: {e}"
         )

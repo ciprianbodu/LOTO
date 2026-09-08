@@ -180,9 +180,12 @@ def test_ui_task_and_worker_carry_the_new_keys():
         assert key in ui_src
     w_src = open("worker.py", encoding="utf-8").read()
     for key in (
-        "wheel_condition=wheel_cond",
-        "recent_penalty_draws=rp_draws",
-        '"recent_penalty_factor": rp_factor',
+        # regresia reala de garda: workerul trebuie sa forwardeze cele trei chei
+        # catre apelul engine-ului, indiferent de numele variabilelor locale
+        # folosite pe drum (worker._normalize_task le tine intr-un dict `norm`).
+        'wheel_condition=norm["wheel_condition"]',
+        'recent_penalty_draws=norm["recent_penalty_draws"]',
+        'recent_penalty_factor=norm["recent_penalty_factor"]',
     ):
         assert key in w_src
 

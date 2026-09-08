@@ -5,7 +5,7 @@ ci „știind ce s-a întâmplat în ultimele K extrageri, pot prezice dacă URM
 respectă X?". Doar a doua ar reduce legitim baza de numere.
 """
 
-import sys, csv, math, itertools
+import sys, csv, math
 from math import comb
 
 sys.path.insert(0, "/home/user/LOTO")

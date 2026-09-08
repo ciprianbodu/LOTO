@@ -89,7 +89,7 @@ class SearchResult:
 def run_search(max_methods: int, workers: int) -> list[SearchResult]:
     import pickle
     from loto_enterprise.benchmark.methods_search_649 import load_search_registry
-    from loto_enterprise.benchmark.runner import GameDef, discover_games
+    from loto_enterprise.benchmark.runner import discover_games
 
     games = discover_games()
     game = next(g for g in games if g.key == "loto_6_49")
@@ -312,7 +312,6 @@ def main() -> int:
         from loto_enterprise.benchmark.methods_search_649 import (
             merge_search_into_methods,
         )
-        from loto_enterprise.benchmark import methods as methods_mod
 
         merge_search_into_methods()
         # Reload top649 in methods.py requires restart; user runs ACTUALIZARI or restart

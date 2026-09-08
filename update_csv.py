@@ -17,7 +17,7 @@ import os
 import re
 import sys
 import tempfile
-from datetime import date, datetime
+from datetime import date
 
 # Consola Windows e cp1252 by default -> diacriticele (ă, î) arunca UnicodeEncodeError.
 # Reconfiguram stdout/stderr pe UTF-8 cu fallback 'replace' ca sa nu mai crape.

@@ -56,7 +56,6 @@ from ui_shared import (
     read_tail_lines,
     render_html_safe,
     send_email,
-    html_escape,
 )
 
 logging.basicConfig(

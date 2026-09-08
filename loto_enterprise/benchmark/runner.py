@@ -33,11 +33,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .methods import METHODS, call_method, method_meta
-from .hardware import (
-    snapshot as hw_snapshot,
-    format_snapshot,
-)
+from .methods import call_method, method_meta
 from .hw_sampler import HwSampler, HwSnapshot
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.draw_validation import valid_draw_matrix
