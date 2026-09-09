@@ -742,6 +742,62 @@ def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
         return default
 
 
+def _target_bench_folds() -> int:
+    """Numărul de folduri pe care Re-Bench-ul UI (`run_rebench`, fără
+    `--methods`/`--quick`) urmează să le ruleze — ținta pentru `_estimate_bench_eta`.
+
+    Aceeași formulă din CLAUDE.md §5: suma metodelor per joc după
+    `resolve_methods_per_game` (curarea + baseline-urile structurale
+    random/frequency adăugate acolo, NU numărătoarea brută din
+    `apply_curation`, care nu include baseline-urile) ori numărul de ferestre
+    din `_PCTS`. Cu curarea inactivă, `resolve_methods_per_game` întoarce {},
+    iar `runner._methods_for_game` rulează întreaga listă pe FIECARE joc — de
+    aceea fallback-ul de mai jos e `len(kept) * len(games)`, nu 0.
+
+    Întoarce 0 (→ ETA implicit „~5 min"/„~50 min") dacă istoricul sau
+    registry-ul de metode nu sunt disponibile la randare — nu trebuie să
+    blocheze sidebar-ul.
+    """
+    try:
+        from loto_enterprise.benchmark.curated import (
+            apply_curation,
+            resolve_methods_per_game,
+        )
+        from loto_enterprise.benchmark.disabled import load_disabled
+        from loto_enterprise.benchmark.methods import list_methods, method_meta
+        from loto_enterprise.benchmark.runner import discover_games
+
+        disabled = load_disabled()
+        avail = [
+            m
+            for m in list_methods()
+            if method_meta(m).get("available", True) and m not in disabled
+        ]
+        kept, info = apply_curation(avail)
+        games = discover_games()
+        # Aceeași poartă ca bench_all_methods.py: matricea restrânsă per joc se
+        # aplică DOAR cu curarea activă (fără `--methods` explicit, cum rulează
+        # mereu UI-ul). Cu curarea oprită, `resolve_methods_per_game` ar întoarce
+        # totuși o restrângere — CLI-ul nu o folosește în cazul ăsta, deci nici
+        # estimarea de-aici nu are voie, altfel supraestimează eronat un bench
+        # care de fapt rulează toate metodele pe fiecare joc.
+        per_game = (
+            resolve_methods_per_game(kept, (g.key for g in games))
+            if info.get("active")
+            else {}
+        )
+        total_methods = (
+            sum(len(v) for v in per_game.values())
+            if per_game
+            else len(kept) * len(games)
+        )
+        n_windows = len([p for p in _PCTS.split(",") if p.strip()])
+        return total_methods * max(1, n_windows)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("target folds Re-Bench: %s", exc)
+        return 0
+
+
 def _fmt_dur(sec) -> str:
     """Durată granulară în h/m/s: '1h 23m 4s' / '3m 12s' / '45s'."""
     try:
@@ -4989,6 +5045,13 @@ def main_page() -> None:
             f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
             "Vezi clasamentul complet la 🏆 Clasament bench."
         ).classes("text-caption")
+        _eta_folds = _target_bench_folds()
+        if _eta_folds:
+            ui.label(
+                f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
+                f"{_eta_folds} folduri — calculat din durata ultimei rulări; "
+                "prima estimare după o schimbare de matrice e optimistă."
+            ).classes("text-caption text-grey")
         # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
         # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
         _cur = _curation_banner_info()

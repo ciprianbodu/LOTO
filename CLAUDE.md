@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 59 fisiere `test_*.py`, 734 teste trecute la auditul global.
+- teste: 60 fisiere `test_*.py`, 740 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -237,9 +237,14 @@ recalculeaza inaintea FIECAREI extrageri testate, la fel ca validarea
 walk-forward afisata dupa generare. Varianta veche (`block_size=99999`, un
 singur scor per fereastra) putea alege un castigator care trecea poarta din
 bench dar pierdea fata de random in WF real — cazul masurat mai sus la punctul
-8. Costul e un Re-Bench mult mai lent; ETA-ul din UI se auto-calibreaza din
-`runtime_sec`-ul ultimei rulari, deci prima estimare dupa schimbarea de
-default e optimista.
+8. Costul e un Re-Bench mult mai lent; ETA-ul afisat langa butonul RE-BENCH se
+auto-calibreaza din `runtime_sec`-ul ultimei rulari (`_estimate_bench_eta`),
+deci prima estimare dupa schimbarea de default e optimista. Tinta de folduri
+(`_target_bench_folds`) reproduce exact poarta din `bench_all_methods.py`:
+matricea restransa per joc (`resolve_methods_per_game`) se aplica DOAR cu
+curarea activa; altfel Re-Bench-ul ruleaza toata lista pe fiecare din cele 4
+jocuri, si estimarea trebuie sa reflecte asta, nu doar un numar plauzibil —
+verificat explicit ca „fara curare" da o tinta mai mare, nu aceeasi.
 
 Controlul pe istoric amestecat (`is_random=True`, ~50% din timpul de bench)
 este sarit implicit in UI (`--no-shuffled-control`): alimenteaza doar
