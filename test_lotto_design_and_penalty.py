@@ -273,18 +273,33 @@ def test_build_config_json_and_wf_generation_options_carry_restrict_base_max(
 ):
     """Bucla completa UI: setarea de sidebar -> config_json trimis workerului
     -> optiunile citite de walk-forward dintr-un rezultat generat, toate cu
-    aceeasi valoare `restrict_base_max`."""
+    aceeasi valoare `restrict_base_max`. Praguri PE JOC — cheia are sufixul
+    jocului (`_649_`), sub bifa de activare `restrict_base_enabled_val`."""
     import json as _json
 
     import app_nicegui as app_ui
 
-    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_max_val", 36)
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_enabled_val", True)
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_max_649_val", 36)
     monkeypatch.setattr(
         app_ui, "STATE", {**app_ui.STATE, "datasets": [("loto_6_49.csv", _df(5, 6, 49))]}
     )
     cfg = _json.loads(app_ui._build_config_json())
     task = cfg["datasets"][0]["tasks"][0]
     assert task["restrict_base_max"] == 36
+
+    # Bifa oprită anulează pragul, indiferent de ce mai e tastat în câmp —
+    # motivul pentru care valorile nu mai pot ajunge tăcut în producție.
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_enabled_val", False)
+    cfg_off = _json.loads(app_ui._build_config_json())
+    assert cfg_off["datasets"][0]["tasks"][0]["restrict_base_max"] == 0
+
+    # Un prag setat pentru 5/40 nu are voie să se scurgă în task-ul lui 6/49.
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_enabled_val", True)
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_max_649_val", 0)
+    monkeypatch.setitem(app_ui.SETTINGS, "restrict_base_max_540_val", 35)
+    cfg_other_game = _json.loads(app_ui._build_config_json())
+    assert cfg_other_game["datasets"][0]["tasks"][0]["restrict_base_max"] == 0
 
     # Rezultatul generat (task normalizat de worker, apoi salvat) trebuie sa
     # aiba aceeasi valoare citita de _wf_generation_options pentru WF.
