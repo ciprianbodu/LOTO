@@ -146,6 +146,37 @@ def _wf_generation_options(data: dict) -> dict:
     }
 
 
+# Praguri separate PER JOC: 6/49, 5/40 și Joker Urna 1 au universuri diferite
+# (49/40/45), deci un singur interval global (ex. „10-40") nu are sens pentru
+# toate trei deodată — pentru 5/40 chiar depășește universul. Cheia SETTINGS e
+# sufixată cu identificatorul jocului; `game_label` e forma întoarsă de
+# `_game_label_for` ("6/49", "5/40", "joker"), aceeași folosită la construirea
+# task-urilor din `_build_config_json`.
+_RESTRICT_BASE_GAMES = (
+    ("6/49", "649", 49),
+    ("5/40", "540", 40),
+    ("joker", "joker", 45),
+)
+_RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_BASE_GAMES}
+
+
+def _active_restrict_base(game_label: str) -> tuple[int, int]:
+    """Interval de bază activ pentru UN joc: (0, 0) dacă bifa e oprită sau
+    jocul nu are o pereche proprie de praguri, indiferent de ce e tastat în
+    câmpuri. Sursa unică pentru `_build_config_json` (hash + task per joc) —
+    oprirea bifei trebuie să anuleze valorile peste tot, nu doar la ultima
+    citire."""
+    if not SETTINGS.get("restrict_base_enabled_val"):
+        return 0, 0
+    suffix = _RESTRICT_BASE_SUFFIX.get(game_label)
+    if suffix is None:
+        return 0, 0
+    return (
+        _int_setting(f"restrict_base_min_{suffix}_val"),
+        _int_setting(f"restrict_base_max_{suffix}_val"),
+    )
+
+
 def _clamped_bench_target(value=None) -> int:
     raw = SETTINGS.get("bench_hit_target", 3) if value is None else value
     try:
@@ -168,8 +199,9 @@ UI_PERSIST_KEYS = [
     "wheel_condition_val",
     "recent_penalty_draws_val",
     "recent_penalty_factor_val",
-    "restrict_base_max_val",
-    "restrict_base_min_val",
+    "restrict_base_enabled_val",
+    *(f"restrict_base_min_{suffix}_val" for _l, suffix, _m in _RESTRICT_BASE_GAMES),
+    *(f"restrict_base_max_{suffix}_val" for _l, suffix, _m in _RESTRICT_BASE_GAMES),
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -189,15 +221,22 @@ DEFAULTS = {
     # dacă e pornită din start — utilizatorul decide explicit din UI dacă o vrea.
     "recent_penalty_draws_val": 0,
     "recent_penalty_factor_val": 0.5,
-    # Restrângere bază (0 = fără restricție, implicit). Preferință OPȚIONALĂ a
-    # utilizatorului, FĂRĂ avantaj statistic demonstrat — probabilitatea de hit
-    # a unui pool de dimensiune fixă e identică matematic (hipergeometric)
-    # indiferent de care numere îl compun. Vezi
-    # scripts/analysis/pattern_base_reduction.py și docstring-ul
-    # loto_engine.run_institutional_pipeline. Nu prezenta niciodată acest câmp
-    # drept optimizare — e doar compoziție, la fel ca recent_penalty_draws.
-    "restrict_base_max_val": 0,
-    "restrict_base_min_val": 0,
+    # Restrângere bază — praguri SEPARATE per joc (6/49, 5/40, Joker Urna 1), toate
+    # 0 implicit (fără restricție). Preferință OPȚIONALĂ a utilizatorului, FĂRĂ
+    # avantaj statistic demonstrat — probabilitatea de hit a unui pool de
+    # dimensiune fixă e identică matematic (hipergeometric) indiferent de care
+    # numere îl compun. Vezi scripts/analysis/pattern_base_reduction.py și
+    # docstring-ul loto_engine.run_institutional_pipeline. Nu prezenta niciodată
+    # acest câmp drept optimizare — e doar compoziție, la fel ca recent_penalty_draws.
+    **{
+        f"restrict_base_{bound}_{suffix}_val": 0
+        for _label, suffix, _max_num in _RESTRICT_BASE_GAMES
+        for bound in ("min", "max")
+    },
+    # Bifă separată de valorile de mai sus: oprită implicit, indiferent de ce e
+    # tastat în câmpuri — un capăt lăsat din greșeală nediscutat nu ajunge
+    # niciodată în producție cât bifa e oprită (vezi `_active_restrict_base`).
+    "restrict_base_enabled_val": False,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,
@@ -380,15 +419,23 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         "wheel_condition_val",
         "recent_penalty_draws_val",
         "recent_penalty_factor_val",
-        "restrict_base_max_val",
-        "restrict_base_min_val",
     ):
         h.update(str(SETTINGS.get(k, DEFAULTS.get(k))).encode("utf-8"))
-    # Semantica restrângerii intră în hash DOAR când e activă: un rezultat
+    # Praguri active PER JOC — bifa oprită anulează toate, indiferent de ce mai
+    # e tastat în câmpuri. Calculat o singură dată, pentru toate cele trei jocuri
+    # canonice (nu doar pentru cele efectiv încărcate): hash-ul reprezintă
+    # întreaga submisie (`PIPELINE_CACHE_VERSION:input_hash`, un singur cache_key
+    # pentru tot job-ul), deci trebuie să reflecte TOATE restrângerile alese, nu
+    # doar jocul ultimului fișier procesat în bucla de mai jos.
+    _rb_by_game = {
+        label: _active_restrict_base(label) for label, _s, _m in _RESTRICT_BASE_GAMES
+    }
+    h.update(str(sorted(_rb_by_game.items())).encode("utf-8"))
+    # Semantica restrângerii intră în hash DOAR când e activă undeva: un rezultat
     # cache-uit sub regula veche (interval mai îngust decât un bilet aplicat, nu
-    # ignorat) nu are voie să fie servit sub cea nouă. Fără restricție, hash-ul
-    # rămâne cel dinainte, deci cache-urile existente continuă să fie folosite.
-    if _int_setting("restrict_base_max_val") or _int_setting("restrict_base_min_val"):
+    # ignorat) nu are voie să fie servit sub cea nouă. Fără nicio restricție,
+    # hash-ul rămâne cel dinainte, deci cache-urile existente continuă să fie folosite.
+    if any(lo or hi for lo, hi in _rb_by_game.values()):
         h.update(f"restrict_semantics={_RESTRICT_SEMANTICS}".encode("utf-8"))
     h.update(
         str(sorted(sim_depth_per_game.items())).encode("utf-8")
@@ -405,6 +452,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
         _sd_pg = sim_depth_per_game.get(g_label)
         sd = int(_sd_pg) if _sd_pg is not None else _int_setting("sim_depth_val")
+        _rb_min, _rb_max = _rb_by_game.get(g_label, (0, 0))
         task = {
             "game_label": g_label,
             "pool_size": _int_setting("pool_size_val"),
@@ -413,8 +461,8 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "wheel_condition": _int_setting("wheel_condition_val"),
             "recent_penalty_draws": _int_setting("recent_penalty_draws_val"),
             "recent_penalty_factor": _float_setting("recent_penalty_factor_val"),
-            "restrict_base_max": _int_setting("restrict_base_max_val"),
-            "restrict_base_min": _int_setting("restrict_base_min_val"),
+            "restrict_base_max": _rb_max,
+            "restrict_base_min": _rb_min,
             "lookback": _int_setting("lookback_val"),
             "filter_consecutives": False,
             "smart_reduction": False,  # neaplicat pe path-ul principal (filters_disabled)
@@ -4730,24 +4778,76 @@ def main_page() -> None:
             "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
             "Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
-        _bind_save(
-            ui.number(
-                "Baza jucată — de la N (0 = fără capăt de jos)",
-                min=0,
-                max=49,
-                step=1,
-            ).classes("w-full"),
-            "restrict_base_min_val",
+        ui.label(
+            "Restrânge candidații jucați la un interval de numere, SEPARAT pentru "
+            "fiecare joc — de exemplu 10–40 la 6/49 în loc de 1–49. FĂRĂ avantaj "
+            "statistic demonstrat: probabilitatea de hit a unui pool de dimensiune "
+            "fixă e identică matematic, indiferent de care numere îl compun "
+            "(verificat pe istoricul acestei aplicații, vezi tabelul de mai jos). "
+            "E doar o preferință personală de compoziție a pool-ului, ca penalizarea "
+            "recentă de mai sus — bifa e implicit OPRITĂ și aplicația nu alege și nu "
+            "recomandă niciun interval. Walk-forward aplică aceeași restricție."
+        ).classes("text-caption text-grey")
+
+        def _on_restrict_base_toggle(event) -> None:
+            if event.value:
+                for _label, suffix, max_num in _RESTRICT_BASE_GAMES:
+                    lo_key = f"restrict_base_min_{suffix}_val"
+                    hi_key = f"restrict_base_max_{suffix}_val"
+                    if not SETTINGS.get(lo_key) and not SETTINGS.get(hi_key):
+                        # Prima activare, per joc: punct de plecare ca bifa să nu se
+                        # deschidă pe câmpuri goale — NU e un interval recomandat de
+                        # aplicație. Scalat de la exemplul „10-40" al lui 6/49
+                        # (49 - 9 = 40) la universul fiecărui joc, ca marginea de sus
+                        # să nu depășească niciodată jocul (5/40 nu poate merge la 40
+                        # dacă exemplul ar fi copiat direct). Tabelul de mai jos și
+                        # scripts/analysis/bench_base_threshold.py arată zgomot
+                        # statistic pentru orice interval ales — utilizatorul schimbă
+                        # liber ambele praguri sau lasă unul pe 0.
+                        SETTINGS[lo_key] = 10
+                        SETTINGS[hi_key] = max(10, max_num - 9)
+            _save_settings()
+
+        _restrict_enabled = ui.checkbox(
+            "🎯 Restrânge baza de numere jucate (implicit oprită)"
+        ).classes("w-full")
+        _restrict_enabled.bind_value(SETTINGS, "restrict_base_enabled_val")
+        _restrict_enabled.on_value_change(_on_restrict_base_toggle)
+
+        _RESTRICT_BASE_ROW_LABEL = {
+            "6/49": "6/49 (1–49)",
+            "5/40": "5/40 (1–40)",
+            "joker": "Joker Urna 1 (1–45)",
+        }
+        for _label, _suffix, _max_num in _RESTRICT_BASE_GAMES:
+            with ui.row().classes("w-full items-center gap-2") as _rb_row:
+                ui.label(_RESTRICT_BASE_ROW_LABEL[_label]).classes(
+                    "text-caption w-24"
+                )
+                _bind_save(
+                    ui.number(
+                        "de la", min=0, max=_max_num, step=1
+                    ).classes("w-20"),
+                    f"restrict_base_min_{_suffix}_val",
+                )
+                _bind_save(
+                    ui.number(
+                        "până la", min=0, max=_max_num, step=1
+                    ).classes("w-20"),
+                    f"restrict_base_max_{_suffix}_val",
+                )
+            # Rândurile apar doar cât bifa e activă — ascunse, nu dispărute: valorile
+            # tastate rămân la reactivare. Config_json ignoră oricum toate cele trei
+            # praguri cât bifa e oprită (vezi `_active_restrict_base`), deci o
+            # valoare rămasă într-un câmp nu poate ajunge în producție pe furiș.
+            _rb_row.bind_visibility_from(_restrict_enabled, "value")
+        ui.label(
+            "Interval inversat (minim > maxim) este ignorat și consemnat în audit, "
+            "nu aplicat peste o bază goală."
+        ).classes("text-caption text-grey").bind_visibility_from(
+            _restrict_enabled, "value"
         )
-        _bind_save(
-            ui.number(
-                "Baza jucată — până la N (0 = fără capăt de sus)",
-                min=0,
-                max=49,
-                step=1,
-            ).classes("w-full"),
-            "restrict_base_max_val",
-        )
+
         def _toggle_intervals(event) -> None:
             _BASE_TABLE_OPENED["value"] = bool(event.value)
             _render_base_interval_tables.refresh()
@@ -4762,17 +4862,6 @@ def main_page() -> None:
         # când aceasta se schimbă. Intervalul ales de utilizator nu intră în calcul —
         # tabelul arată toate lățimile, nu îl evidențiază pe cel setat.
         _pool_input.on_value_change(lambda: _render_base_interval_tables.refresh())
-        ui.label(
-            "Restrânge candidații la intervalul ales — «de la 10 până la 40» înseamnă "
-            "6 din 10–40 în loc de 6 din 1–49. Oricare capăt lăsat pe 0 rămâne liber; "
-            "ambele pe 0 = fără restricție. Un interval inversat (de la > până la) "
-            "este ignorat și consemnat în audit. FĂRĂ avantaj statistic demonstrat: "
-            "probabilitatea de hit a unui pool de dimensiune fixă e identică matematic, "
-            "indiferent de care numere îl compun (verificat pe istoricul acestei aplicații). "
-            "E doar o preferință personală de compoziție a pool-ului, ca penalizarea "
-            "recentă de mai sus — nu o crește nicio recomandare din aplicație. "
-            "Walk-forward aplică aceeași restricție."
-        ).classes("text-caption text-grey")
         _bind_save(
             ui.number(
                 "Analizează doar ultimele X% extrageri", min=0, max=100, step=5

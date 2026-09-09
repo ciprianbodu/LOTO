@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 59 fisiere `test_*.py`, 731 teste trecute la auditul global.
+- teste: 59 fisiere `test_*.py`, 734 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -296,11 +296,17 @@ la randul ei candidata la excludere.
   predictibilitate pentru paritate, decade, sume sau tipare recente, iar
   penalizarea nu trebuie prezentata drept avantaj statistic.
 - Restrangerea bazei de numere este o OPTIUNE de utilizator, un INTERVAL
-  (`restrict_base_min`, `restrict_base_max`), implicit OPRITA (ambele capete 0 in
-  UI) — exclude din candidati orice numar din afara intervalului ales. Un capat
-  lasat pe 0 ramane liber, deci setarea veche doar-maxim continua sa functioneze;
-  intervalul inversat (min > max) si cel mai ingust decat un bilet (span <
-  `draw_n`) sunt IGNORATE si consemnate in `audit.restrict_base.ignored`, nu
+  (`restrict_base_min`, `restrict_base_max`), SEPARAT per joc (6/49, 5/40, Joker
+  Urna 1) — universurile difera (49/40/45), deci un singur interval global nu are
+  sens pentru toate trei. In UI: o singura bifa de activare
+  (`restrict_base_enabled_val`, implicit OPRITA) urmata de cate un rand de praguri
+  pentru fiecare joc; bifa oprita anuleaza toate cele trei intervale, indiferent
+  de ce mai e tastat in campuri (`_active_restrict_base(game_label)`,
+  `app_nicegui.py`). La prima activare, campurile goale ale unui joc primesc un
+  punct de plecare 10..(max_n - 9) — NU o recomandare, doar ca bifa sa nu se
+  deschida pe campuri goale; utilizatorul schimba liber. Un capat lasat pe 0
+  ramane liber; intervalul inversat (min > max) si cel mai ingust decat un bilet
+  (span < `draw_n`) sunt IGNORATE si consemnate in `audit.restrict_base.ignored`, nu
   aplicate tacit. Fara a doua garda, 47-49 la 6/49 lasa trei candidati, iar
   wheeling-ul trateaza `len(pool) < pick` drept sistem complet cu un bilet:
   pipeline-ul raporta `[47, 48, 49]` ca bilet 6/49 cu acoperire 100%. FARA
