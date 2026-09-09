@@ -41,7 +41,7 @@ Snapshot verificat la 2026-09-08:
 - cache benchmark: `v17`;
 - cache walk-forward: `v23`;
 - cache rezultat worker: `v3`;
-- teste: 60 fisiere `test_*.py`, 740 teste trecute la auditul global.
+- teste: 60 fisiere `test_*.py`, 742 teste trecute la auditul global.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -208,6 +208,13 @@ Pentru fiecare joc si pool:
 - WF afiseaza distinct hiturile pool-ului si extragerile cu cel putin un bilet
   care atinge 3+/4+. Metadatele indica geometria interna WF, care poate diferi
   de garantia/bugetul productiei; adaugarea nu invalideaza cache-ul.
+- Istoricul WF (`📜 Istoric hits`) foloseste ACELASI `restrict_base_min/max` care
+  a produs pool-ul afisat: `run_honest_walk_forward` primeste intervalul prin
+  `_wf_generation_options(data)`, citit din audit-ul rezultatului, nu din
+  setarea live din sidebar (care se poate schimba intre timp). Sectiunea de
+  istoric afiseaza explicit intervalul aplicat (`_restrict_base_text` pe
+  `data.get("audit")`), langa tabel, nu doar in nota de sub clasamentul bench —
+  fara restrictie, sectiunea nu arata nicio mentiune.
 - Costurile folosesc tarife standard (sursa loto.ro/info-loto/preturi, verificata
   2026-09-04). Primele 10 variante nu mostenesc garantia intregului wheel;
   minimalitatea numarului de bilete nu este afirmata fara dovada.

@@ -430,3 +430,14 @@ def test_toggle_on_prefills_each_game_scaled_to_its_own_universe():
         for _label, suffix, _max_num in app._RESTRICT_BASE_GAMES:
             app.SETTINGS[f"restrict_base_min_{suffix}_val"] = 0
             app.SETTINGS[f"restrict_base_max_{suffix}_val"] = 0
+
+
+def test_wf_history_section_is_wired_to_the_same_audit_as_the_pool():
+    """`_render_analysis_menu` trebuie sa citeasca restrict_base din ACELASI
+    audit care a produs pool-ul afisat, nu dintr-o setare live care se poate
+    schimba intre timp. Verificare de sursa (nu randare completa, care ar
+    cere folds.csv/CSV-uri reale): linia trebuie sa treaca `data.get("audit")`
+    prin `_restrict_base_text` inainte de `_render_hits_4plus`.
+    """
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    assert 'restrict_base_text=_restrict_base_text(data.get("audit"))' in src

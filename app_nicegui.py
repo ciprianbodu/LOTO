@@ -4099,9 +4099,19 @@ def _wf_per_draw_stats(flat) -> dict:
 
 
 def _render_hits_4plus(
-    flat, game: str, meta: dict | None = None, pool_n: int | None = None
+    flat,
+    game: str,
+    meta: dict | None = None,
+    pool_n: int | None = None,
+    restrict_base_text: str = "",
 ) -> None:
-    """Istoric hits pentru pool-ul unic; folosește mărimea efectivă din rezultat."""
+    """Istoric hits pentru pool-ul unic; folosește mărimea efectivă din rezultat.
+
+    `restrict_base_text`: eticheta intervalului aplicat (din audit-ul aceluiași
+    rezultat), sau "" fără restricție. `run_honest_walk_forward` primește exact
+    aceleași praguri prin `_wf_generation_options` — istoricul de mai jos NU e
+    calculat pe universul complet cât timp restricția era activă la generare.
+    """
     if not flat:
         return
     per = _wf_per_draw_stats(flat)
@@ -4120,6 +4130,12 @@ def _render_hits_4plus(
     ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes(
         "text-bold text-caption mt-2"
     )
+    if restrict_base_text:
+        ui.label(
+            f"{restrict_base_text[0].upper() + restrict_base_text[1:]} — istoricul "
+            "de mai jos folosește ACEEAȘI restricție ca pool-ul generat, nu "
+            "universul complet."
+        ).classes("text-caption text-grey")
     _wg = (meta or {}).get("wheel_guarantee")
     if _wg is not None:
         _wc = (meta or {}).get("wheel_condition") or _wg
@@ -4343,6 +4359,13 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                                 f"{res_prefix}{fname}_{game}"
                             ),
                             pool_n=_pn,
+                            # `_wf_generation_options(data)` (folosit la pornirea WF de
+                            # mai sus) citește exact acest audit — istoricul de mai jos
+                            # a rulat cu ACEEAȘI restrângere ca pool-ul afișat, nu una
+                            # nerestrânsă. Fără linia asta, întrebarea „e cu pragul
+                            # bifat sau fără?" nu avea răspuns lângă tabel, doar sus,
+                            # lângă clasamentul bench.
+                            restrict_base_text=_restrict_base_text(data.get("audit")),
                         )
 
 

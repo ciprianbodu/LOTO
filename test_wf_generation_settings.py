@@ -233,6 +233,39 @@ def test_ui_describes_the_evaluated_conditional_budget():
     assert "Setările wheel-ului generat pot fi diferite" not in text
 
 
+def test_wf_history_states_whether_it_used_the_restricted_base():
+    """Istoricul walk-forward trebuie sa spuna daca a rulat cu baza restransa.
+
+    `run_honest_walk_forward` primeste exact acelasi interval care a produs
+    pool-ul (via `_wf_generation_options`), deci istoricul NU e calculat pe
+    universul complet cat timp restrictia era activa la generare — dar fara o
+    linie explicita langa tabel, utilizatorul nu are cum sa stie asta decat
+    scrollind pana la nota de sub clasamentul bench.
+    """
+    from types import SimpleNamespace
+
+    from scripts.analysis.audit_output import capture_ui
+
+    flat = [
+        SimpleNamespace(
+            draw_index=1, draw_date="03-09-2026", hits_union=3, hits=2, wheel_coverage=100.0
+        )
+    ]
+    with capture_ui() as ui:
+        app._render_hits_4plus(
+            flat, "6/49", meta={"pool_size": 10}, pool_n=10,
+            restrict_base_text="baza restrânsă la 10–40",
+        )
+    text = ui.text()
+    assert "Baza restrânsă la 10–40" in text
+    assert "ACEEAȘI restricție ca pool-ul generat" in text
+
+    # Fara restrictie (text gol, cazul implicit) -> nicio mentiune inselatoare.
+    with capture_ui() as ui2:
+        app._render_hits_4plus(flat, "6/49", meta={"pool_size": 10}, pool_n=10)
+    assert "restricție" not in ui2.text()
+
+
 def test_pattern_audit_coverage_matches_exhaustive_intersections():
     blocks = [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7], [1, 2, 3, 6, 7]]
     matrix = target_matrix(blocks, 7, 4, 3)
