@@ -1,0 +1,20 @@
+{
+  "name": "LOTO — NiceGUI (CPU-only, Python 3.14)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "worker",
+      "command": "\"$PWD/.venv/bin/python\" worker.py",
+      "description": "Background job daemon: consumes pipeline jobs from the SQLite queue and runs the scoring -> pool -> wheeling pipeline. Logs to loto.log."
+    },
+    {
+      "name": "ui",
+      "command": "LOTO_UI_PORT=8080 \"$PWD/.venv/bin/python\" app_nicegui.py",
+      "description": "NiceGUI web UI on port 8080. Upload CSVs, run Generate/Auto-Pilot/Re-Bench, view pools + wheeling variants."
+    }
+  ],
+  "ports": [
+    { "name": "nicegui-ui", "port": 8080 }
+  ]
+}
