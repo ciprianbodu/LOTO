@@ -156,9 +156,9 @@ def ensure_pool_numbers_on_tickets(
                 c[int(n)] += 1
         return c
 
-    missing = [n for n in pool_list if _counts()[n] == 0]
+    counts = _counts()
+    missing = [n for n in pool_list if counts[n] == 0]
     for miss in missing:
-        counts = _counts()
         placed = False
         # Coada întâi: T1 e cel mai bine punctat; îl atingem doar dacă
         # biletele slabe n-au niciun duplicat de evacuat.
@@ -169,6 +169,8 @@ def ensure_pool_numbers_on_tickets(
                     new_t = list(t)
                     new_t[j] = miss
                     out[ti] = sorted(int(x) for x in new_t)
+                    counts[int(n)] -= 1
+                    counts[miss] += 1
                     placed = True
                     break
             if placed:

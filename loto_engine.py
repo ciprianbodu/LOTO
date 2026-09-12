@@ -89,9 +89,9 @@ def generate_combinatorial_wheel(
         # ele din tot modulul. ORDINEA BILETELOR rămâne dată de pool-ul sortat după
         # scor (trunchierea la `max_variants` ia întâi combinațiile numerelor tari,
         # apoi `ensure_pool_numbers_on_tickets` readuce numerele rămase pe dinafară).
-        wheel = [sorted(c) for c in itertools.combinations(pool, pick)]
         n_full = math.comb(pool_len, pick)
-        if max_variants > 0 and len(wheel) > max_variants:
+        combinations = itertools.combinations(pool, pick)
+        if max_variants > 0 and n_full > max_variants:
             logging.warning(
                 "[WHEEL] guarantee==pick cu max_variants=%d < C(%d,%d)=%d — "
                 "acoperirea NU poate fi 100%% (sistem incomplet).",
@@ -100,7 +100,8 @@ def generate_combinatorial_wheel(
                 pick,
                 n_full,
             )
-            wheel = wheel[:max_variants]
+            combinations = itertools.islice(combinations, max_variants)
+        wheel = [sorted(c) for c in combinations]
         if max_variants > 0:
             from wheeling_methods import ensure_pool_numbers_on_tickets
 
@@ -143,6 +144,8 @@ def generate_combinatorial_wheel(
     # P3: cache ticket→target-set. Același ticket reapare la iterații diferite
     # (base_ticket overlap) → evităm recalcul itertools.combinations. Bit-identic.
     _tt_cache: dict = {}
+    target_cursor = 0
+    max_ticket_coverage = math.comb(pick, guarantee)
 
     while len(covered_targets) < total_targets:
         if max_variants > 0 and len(wheel) >= max_variants:
@@ -157,11 +160,16 @@ def generate_combinatorial_wheel(
         best_targets_covered = set()
 
         # Găsim prima țintă neacoperită (cea mai valoroasă datorită sortării)
-        target_to_cover = None
-        for t in all_targets_list:
-            if t not in covered_targets:
-                target_to_cover = t
-                break
+        # Acoperirea crește monoton: țintele deja sărite nu mai pot deveni
+        # neacoperite. Păstrăm exact ordinea greedy fără a rescana prefixul.
+        while (
+            target_cursor < total_targets
+            and all_targets_list[target_cursor] in covered_targets
+        ):
+            target_cursor += 1
+        target_to_cover = (
+            all_targets_list[target_cursor] if target_cursor < total_targets else None
+        )
 
         if not target_to_cover:
             break
@@ -187,6 +195,11 @@ def generate_combinatorial_wheel(
                     best_coverage = len(new_coverage)
                     best_ticket = ticket
                     best_targets_covered = ticket_targets
+                    # Primul candidat cu C(pick, guarantee) ținte NOI este
+                    # deja optim. Candidații următori pot doar egala scorul,
+                    # iar tie-break-ul existent îl păstrează pe primul.
+                    if best_coverage == max_ticket_coverage:
+                        break
 
                 search_count += 1
                 if search_count > max_search_per_iter:

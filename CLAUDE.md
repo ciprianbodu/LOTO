@@ -399,6 +399,24 @@ Un wheel cu acoperire sub 100% trebuie raportat explicit. La acoperire 100% si
 garantie suficienta, 3+ in pool implica 3+ pe cel putin un bilet; la acoperire
 partiala, hitul de pool este doar plafon pentru hitul pe bilet.
 
+Generatorul greedy pastreaza un cursor peste tintele deja acoperite si opreste
+cautarea la primul bilet cu `C(pick, guarantee)` tinte noi: niciun candidat nu
+poate depasi acest maxim, iar egalitatile pastreaza primul candidat. Sistemul
+complet cu buget materializeaza numai variantele cerute. Completarea numerelor
+lipsa actualizeaza incremental frecventele dupa fiecare schimbare de bilet.
+Ordinea biletelor si acoperirea raman identice cu baseline-ul `67effec`,
+verificate prin cele 54 de cazuri din `test_wheel_golden.json` (scoruri absente,
+egale si variate, pool-uri mici/mari, buget liber/1/7). Nu necesita bump de
+cache: rezultatul serializat si semantica raman aceleasi.
+
+Masurare reproductibila, fara scrieri de stare:
+`python scripts/analysis/bench_wheel_generation.py`.
+Pe Linux/Python 3.14.7, mediana a 9 repetari: pool 16/pick 5/g4, 20.585 ->
+8.241 ms; sistem complet pool 16/pick 6 plafonat la 7 bilete, 1.594 -> 0.019 ms,
+cu varful alocarilor Python redus de la 895920 la 3309 octeti. Sunt timpi ai
+generatorului pe scorurile fixe din script, nu accelerarea intregii aplicatii;
+castigul depinde de geometrie, scoruri si hardware.
+
 ## 8. Walk-forward
 
 - WF foloseste numai date anterioare extragerii validate.
