@@ -30,7 +30,9 @@ pool trebuie să fie conținută în ≥1 bilet de `pick` numere.
                        ILP exact pe geometrii mici. Ales automat de
                        `generate_wheel(..., condition=p)` când p > guarantee.
 
-Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34.
+Selectabile prin env LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34|maxcover.
+`maxcover` este experimental: acoperire marginală + schimburi locale la buget
+fix, cu revenire la greedy dacă acoperirea exactă nu crește după reparare.
 Orice eșec/limită → fallback la greedy (sigur). Default în `loto_engine`:
 **lajolla** când `max_variants == 0` (setarea implicită a UI-ului), greedy când
 există un cap de bilete. (Textul de dinainte, „Default = greedy (bit-identic)",
@@ -47,6 +49,8 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
+
+from budget_cover import wheel_maxcover
 
 logger = logging.getLogger(__name__)
 
@@ -1019,6 +1023,7 @@ def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):
 # Dispatcher
 # ===========================================================================
 WHEEL_METHODS = {
+    "maxcover": wheel_maxcover,
     "ilp": wheel_ilp,
     "annealing": wheel_annealing,
     "genetic": wheel_genetic,

@@ -1,0 +1,2776 @@
+{
+  "protocol": "Fixed-budget covering experiment; no production decisions or caches written.\n\nProtocol fixed before evaluation: frequency scorer over the expanding prefix;\nlast 30% of valid chronological draws, three consecutive reporting windows;\nall draws on the target date are excluded from scoring (unknown intra-day order);\npool 11, budgets 7/10, targets 3/4. Same pool and actual ticket count for every\nmethod. Holdout is new to this experiment, NOT unseen by the wider project.\nJoker measures urn 1 only; 5/40 uses n1..n5, matching the application.\n",
+  "pool_size": 11,
+  "seed": 20260912,
+  "sources": {
+    "6/49": {
+      "sha256": "d62e59c615930bc69e90ff2ee37348ddba73e1af0933c5d2df8d00b776f6c779",
+      "valid": 2582,
+      "rejected": 0,
+      "evaluated": 775,
+      "same_day_rows": 136,
+      "first": "2019-02-14",
+      "last": "2026-09-10"
+    },
+    "5/40": {
+      "sha256": "8f94c05da17b4aca316df3a859a8f0a1ee5dcec5c6945c8d55cd5124f986eda4",
+      "valid": 1733,
+      "rejected": 0,
+      "evaluated": 520,
+      "same_day_rows": 36,
+      "first": "2020-10-25",
+      "last": "2026-09-10"
+    },
+    "Joker urn 1": {
+      "sha256": "33e30d75553aa18d1dd2fe1f08a277ee0077988f0bfd920aebe37c0bf2eda481",
+      "valid": 2185,
+      "rejected": 0,
+      "evaluated": 656,
+      "same_day_rows": 124,
+      "first": "2020-03-19",
+      "last": "2026-09-10"
+    }
+  },
+  "geometry": [
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 39.39,
+      "seconds": 0.0016044919993873918,
+      "uniform_rate": 0.037702198224036
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 36.36,
+      "seconds": 0.001548548998471233,
+      "uniform_rate": 0.03501508890051148
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 41.82,
+      "seconds": 0.0017402729990863008,
+      "uniform_rate": 0.040437598577133464
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 54.55,
+      "seconds": 0.0005270889996609185,
+      "uniform_rate": 0.05027341726150575
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 52.12,
+      "seconds": 0.0013673510002263356,
+      "uniform_rate": 0.047992279983204544
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 57.58,
+      "seconds": 0.002087195000058273,
+      "uniform_rate": 0.05301618404284315
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 10.61,
+      "seconds": 0.000497634999192087,
+      "uniform_rate": 0.0011156046323374741
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 10.61,
+      "seconds": 0.001613044998521218,
+      "uniform_rate": 0.0011115121722041746
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 10.61,
+      "seconds": 0.0014679400010209065,
+      "uniform_rate": 0.0011156046323374741
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 15.15,
+      "seconds": 0.0004056390007463051,
+      "uniform_rate": 0.0015698677071337309
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 15.15,
+      "seconds": 0.0014867669997329358,
+      "uniform_rate": 0.0015633197709204515
+    },
+    {
+      "pool": 11,
+      "pick": 5,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 15.15,
+      "seconds": 0.001711629998681019,
+      "uniform_rate": 0.0015698677071337309
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 72.12,
+      "seconds": 0.001133985999331344,
+      "uniform_rate": 0.08946628016272526
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 72.12,
+      "seconds": 0.004180008998446283,
+      "uniform_rate": 0.08951655256333464
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 72.73,
+      "seconds": 0.0031643169986637076,
+      "uniform_rate": 0.09017009377125672
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 89.09,
+      "seconds": 0.0014077409996389179,
+      "uniform_rate": 0.10655889636991792
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 93.94,
+      "seconds": 0.0021611740012303926,
+      "uniform_rate": 0.11138504682841936
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 91.52,
+      "seconds": 0.003045892000955064,
+      "uniform_rate": 0.10897197159916863
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 29.39,
+      "seconds": 0.0005453060002764687,
+      "uniform_rate": 0.0058348164764181676
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 28.18,
+      "seconds": 0.0022246889984671725,
+      "uniform_rate": 0.005578591709158645
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 31.82,
+      "seconds": 0.002317205000508693,
+      "uniform_rate": 0.006373868191629523
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 41.21,
+      "seconds": 0.0006530950013257097,
+      "uniform_rate": 0.00797858038177848
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 38.79,
+      "seconds": 0.002178970000386471,
+      "uniform_rate": 0.007499884151793759
+    },
+    {
+      "pool": 11,
+      "pick": 6,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 45.45,
+      "seconds": 0.001737077000143472,
+      "uniform_rate": 0.008783081814005562
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 12.5,
+      "seconds": 0.0009213109988195356,
+      "uniform_rate": 0.041573665510137435
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 11.79,
+      "seconds": 0.047234309000486974,
+      "uniform_rate": 0.0394054801315153
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 12.5,
+      "seconds": 0.014845182999124518,
+      "uniform_rate": 0.041573665510137435
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 17.86,
+      "seconds": 0.0014101849992584903,
+      "uniform_rate": 0.055936563593965746
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 16.79,
+      "seconds": 0.010751652000180911,
+      "uniform_rate": 0.053767559723316954
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 17.86,
+      "seconds": 0.012408691998643917,
+      "uniform_rate": 0.055936563593965746
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 1.92,
+      "seconds": 0.0014147609999781707,
+      "uniform_rate": 0.0011254265366573931
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 1.92,
+      "seconds": 0.011819360999652417,
+      "uniform_rate": 0.0011254265366573931
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 7,
+      "coverage": 1.92,
+      "seconds": 0.014657666000857716,
+      "uniform_rate": 0.0011254265366573931
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 2.75,
+      "seconds": 0.001362513999993098,
+      "uniform_rate": 0.0015829635795602897
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 2.75,
+      "seconds": 0.011820321999039152,
+      "uniform_rate": 0.0015829635795602897
+    },
+    {
+      "pool": 16,
+      "pick": 5,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 45,
+      "tickets": 10,
+      "coverage": 2.75,
+      "seconds": 0.014069757000470418,
+      "uniform_rate": 0.0015829635795602897
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 23.93,
+      "seconds": 0.0070867559988982975,
+      "uniform_rate": 0.10298254782528603
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 23.04,
+      "seconds": 0.041960344000472105,
+      "uniform_rate": 0.09914868731110306
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 25.0,
+      "seconds": 0.04130466499918839,
+      "uniform_rate": 0.10924206954668168
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 33.57,
+      "seconds": 0.00974893000056909,
+      "uniform_rate": 0.13486754974464768
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 31.61,
+      "seconds": 0.04006407099950593,
+      "uniform_rate": 0.12652912481113882
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 35.71,
+      "seconds": 0.04083407900179736,
+      "uniform_rate": 0.14808032371135318
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 5.77,
+      "seconds": 0.0024250139995274367,
+      "uniform_rate": 0.006521896455159307
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 5.6,
+      "seconds": 0.07682453799861833,
+      "uniform_rate": 0.006339256752234154
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 7,
+      "coverage": 5.77,
+      "seconds": 0.041439212998739094,
+      "uniform_rate": 0.006521896455159307
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 8.24,
+      "seconds": 0.00278809199880925,
+      "uniform_rate": 0.008911015419539273
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 7.86,
+      "seconds": 0.033113126000898774,
+      "uniform_rate": 0.00860451825167036
+    },
+    {
+      "pool": 16,
+      "pick": 6,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "universe": 49,
+      "tickets": 10,
+      "coverage": 8.24,
+      "seconds": 0.032497496000360115,
+      "uniform_rate": 0.008911015419539273
+    }
+  ],
+  "rows": [
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 69.02007741935483,
+      "median_ms": 1.0670070005289745,
+      "rate3": 0.0967741935483871,
+      "ci3": [
+        0.07790443678472879,
+        0.11962158995457413
+      ],
+      "windows3": [
+        0.10424710424710425,
+        0.10077519379844961,
+        0.08527131782945736
+      ],
+      "winning_per_100_tickets_3": 2.2119815668202767,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.007741935483870968,
+      "ci4": [
+        0.003552888962996344,
+        0.01678688448034467
+      ],
+      "windows4": [
+        0.007722007722007722,
+        0.003875968992248062,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.12903225806451613,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 72.12,
+      "median_ms": 2.0496190008998383,
+      "rate3": 0.09806451612903226,
+      "ci3": [
+        0.07906652441485329,
+        0.12102741903888387
+      ],
+      "windows3": [
+        0.11969111969111969,
+        0.09302325581395349,
+        0.08139534883720931
+      ],
+      "winning_per_100_tickets_3": 2.1013824884792625,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.007741935483870968,
+      "ci4": [
+        0.003552888962996344,
+        0.01678688448034467
+      ],
+      "windows4": [
+        0.003861003861003861,
+        0.003875968992248062,
+        0.015503875968992248
+      ],
+      "winning_per_100_tickets_4": 0.11059907834101383,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "random_tickets",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 59.823406451612904,
+      "median_ms": 0.06016899897076655,
+      "rate3": 0.08645161290322581,
+      "ci3": [
+        0.06864946508907531,
+        0.10833322793475376
+      ],
+      "windows3": [
+        0.10424710424710425,
+        0.07751937984496124,
+        0.07751937984496124
+      ],
+      "winning_per_100_tickets_3": 1.9723502304147464,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.0064516129032258064,
+      "ci4": [
+        0.002758799234504802,
+        0.01501305749440198
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.003875968992248062,
+        0.003875968992248062
+      ],
+      "winning_per_100_tickets_4": 0.11059907834101383,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 72.73,
+      "median_ms": 1.0998880006809486,
+      "rate3": 0.10193548387096774,
+      "ci3": [
+        0.08255925988997238,
+        0.12523843370706744
+      ],
+      "windows3": [
+        0.10810810810810811,
+        0.10852713178294573,
+        0.08914728682170543
+      ],
+      "winning_per_100_tickets_3": 2.1382488479262673,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.005161290322580645,
+      "ci4": [
+        0.0020089010271400224,
+        0.013195038987332527
+      ],
+      "windows4": [
+        0.007722007722007722,
+        0.0,
+        0.007751937984496124
+      ],
+      "winning_per_100_tickets_4": 0.07373271889400922,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 88.64687741935484,
+      "median_ms": 1.486246999775176,
+      "rate3": 0.12129032258064516,
+      "ci3": [
+        0.10015462043700435,
+        0.14616182387654897
+      ],
+      "windows3": [
+        0.13127413127413126,
+        0.1124031007751938,
+        0.12015503875968993
+      ],
+      "winning_per_100_tickets_3": 2.2193548387096773,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.007741935483870968,
+      "ci4": [
+        0.003552888962996344,
+        0.01678688448034467
+      ],
+      "windows4": [
+        0.007722007722007722,
+        0.003875968992248062,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.11612903225806452,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 93.94000000000001,
+      "median_ms": 2.091461999953026,
+      "rate3": 0.13032258064516128,
+      "ci3": [
+        0.10843218849407141,
+        0.15585967282052146
+      ],
+      "windows3": [
+        0.14671814671814673,
+        0.12403100775193798,
+        0.12015503875968993
+      ],
+      "winning_per_100_tickets_3": 2.1032258064516127,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.007741935483870968,
+      "ci4": [
+        0.003552888962996344,
+        0.01678688448034467
+      ],
+      "windows4": [
+        0.003861003861003861,
+        0.003875968992248062,
+        0.015503875968992248
+      ],
+      "winning_per_100_tickets_4": 0.07741935483870968,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "random_tickets",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 73.09912258064516,
+      "median_ms": 0.06937299986020662,
+      "rate3": 0.11096774193548387,
+      "ci3": [
+        0.0907445174912958,
+        0.13502859310678367
+      ],
+      "windows3": [
+        0.1274131274131274,
+        0.10465116279069768,
+        0.10077519379844961
+      ],
+      "winning_per_100_tickets_3": 2.2451612903225806,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.00903225806451613,
+      "ci4": [
+        0.0043819807910341025,
+        0.018525709366741142
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.007751937984496124,
+        0.007751937984496124
+      ],
+      "winning_per_100_tickets_4": 0.12903225806451613,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 91.52,
+      "median_ms": 1.5178029989328934,
+      "rate3": 0.12774193548387097,
+      "ci3": [
+        0.10606324284366514,
+        0.1530927850420593
+      ],
+      "windows3": [
+        0.15057915057915058,
+        0.12015503875968993,
+        0.1124031007751938
+      ],
+      "winning_per_100_tickets_3": 2.141935483870968,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.007741935483870968,
+      "ci4": [
+        0.003552888962996344,
+        0.01678688448034467
+      ],
+      "windows4": [
+        0.003861003861003861,
+        0.007751937984496124,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.09032258064516129,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 29.364554838709672,
+      "median_ms": 0.48957400031213183,
+      "rate3": 0.0967741935483871,
+      "ci3": [
+        0.07790443678472879,
+        0.11962158995457413
+      ],
+      "windows3": [
+        0.11583011583011583,
+        0.08914728682170543,
+        0.08527131782945736
+      ],
+      "winning_per_100_tickets_3": 2.119815668202765,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.0064516129032258064,
+      "ci4": [
+        0.002758799234504802,
+        0.01501305749440198
+      ],
+      "windows4": [
+        0.003861003861003861,
+        0.003875968992248062,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.09216589861751152,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 28.372206451612904,
+      "median_ms": 2.0819780002057087,
+      "rate3": 0.08903225806451613,
+      "ci3": [
+        0.0709559474585439,
+        0.11116257899415365
+      ],
+      "windows3": [
+        0.11196911196911197,
+        0.07364341085271318,
+        0.08139534883720931
+      ],
+      "winning_per_100_tickets_3": 2.046082949308756,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.00903225806451613,
+      "ci4": [
+        0.0043819807910341025,
+        0.018525709366741142
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.003875968992248062,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.14746543778801843,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "random_tickets",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 27.95352258064516,
+      "median_ms": 0.06690900045214221,
+      "rate3": 0.08645161290322581,
+      "ci3": [
+        0.06864946508907531,
+        0.10833322793475376
+      ],
+      "windows3": [
+        0.10424710424710425,
+        0.07751937984496124,
+        0.07751937984496124
+      ],
+      "winning_per_100_tickets_3": 1.9723502304147464,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.0064516129032258064,
+      "ci4": [
+        0.002758799234504802,
+        0.01501305749440198
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.003875968992248062,
+        0.003875968992248062
+      ],
+      "winning_per_100_tickets_4": 0.11059907834101383,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "n": 775,
+      "mean_tickets": 7.0,
+      "coverage": 31.82,
+      "median_ms": 0.5361829989851685,
+      "rate3": 0.10193548387096774,
+      "ci3": [
+        0.08255925988997238,
+        0.12523843370706744
+      ],
+      "windows3": [
+        0.1274131274131274,
+        0.10077519379844961,
+        0.07751937984496124
+      ],
+      "winning_per_100_tickets_3": 2.119815668202765,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.007741935483870968,
+      "ci4": [
+        0.003552888962996344,
+        0.01678688448034467
+      ],
+      "windows4": [
+        0.007722007722007722,
+        0.0,
+        0.015503875968992248
+      ],
+      "winning_per_100_tickets_4": 0.11059907834101383,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 40.7743870967742,
+      "median_ms": 0.6368619997374481,
+      "rate3": 0.1135483870967742,
+      "ci3": [
+        0.09309173831420453,
+        0.1378172057127434
+      ],
+      "windows3": [
+        0.13127413127413126,
+        0.1124031007751938,
+        0.09689922480620156
+      ],
+      "winning_per_100_tickets_3": 1.9870967741935484,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.00903225806451613,
+      "ci4": [
+        0.0043819807910341025,
+        0.018525709366741142
+      ],
+      "windows4": [
+        0.007722007722007722,
+        0.007751937984496124,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.09032258064516129,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 38.92321290322581,
+      "median_ms": 2.1287559993652394,
+      "rate3": 0.10580645161290322,
+      "ci3": [
+        0.08606133081645057,
+        0.129440112923892
+      ],
+      "windows3": [
+        0.1274131274131274,
+        0.09689922480620156,
+        0.09302325581395349
+      ],
+      "winning_per_100_tickets_3": 2.064516129032258,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.01032258064516129,
+      "ci4": [
+        0.005239701884537049,
+        0.020235904987672422
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.007751937984496124,
+        0.011627906976744186
+      ],
+      "winning_per_100_tickets_4": 0.11612903225806452,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "random_tickets",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 37.556038709677416,
+      "median_ms": 0.0751309999031946,
+      "rate3": 0.11096774193548387,
+      "ci3": [
+        0.0907445174912958,
+        0.13502859310678367
+      ],
+      "windows3": [
+        0.1274131274131274,
+        0.10465116279069768,
+        0.10077519379844961
+      ],
+      "winning_per_100_tickets_3": 2.2451612903225806,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.00903225806451613,
+      "ci4": [
+        0.0043819807910341025,
+        0.018525709366741142
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.007751937984496124,
+        0.007751937984496124
+      ],
+      "winning_per_100_tickets_4": 0.12903225806451613,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "n": 775,
+      "mean_tickets": 10.0,
+      "coverage": 45.45,
+      "median_ms": 0.6726639985572547,
+      "rate3": 0.13032258064516128,
+      "ci3": [
+        0.10843218849407141,
+        0.15585967282052146
+      ],
+      "windows3": [
+        0.15057915057915058,
+        0.12015503875968993,
+        0.12015503875968993
+      ],
+      "winning_per_100_tickets_3": 2.1806451612903226,
+      "pool_rate3": 0.13419354838709677,
+      "uniform_pool_rate3": 0.11741773490154621,
+      "uniform_single_ticket_rate3": 0.018637545002022343,
+      "rate4": 0.01032258064516129,
+      "ci4": [
+        0.005239701884537049,
+        0.020235904987672422
+      ],
+      "windows4": [
+        0.011583011583011582,
+        0.003875968992248062,
+        0.015503875968992248
+      ],
+      "winning_per_100_tickets_4": 0.11612903225806452,
+      "pool_rate4": 0.01935483870967742,
+      "uniform_pool_rate4": 0.017878381694953652,
+      "uniform_single_ticket_rate4": 0.0009871411351522362
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 39.407384615384615,
+      "median_ms": 0.3533469998728833,
+      "rate3": 0.051923076923076926,
+      "ci3": [
+        0.03592704937037569,
+        0.07449082200412485
+      ],
+      "windows3": [
+        0.034482758620689655,
+        0.06936416184971098,
+        0.05202312138728324
+      ],
+      "winning_per_100_tickets_3": 0.8516483516483516,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0,
+      "ci4": [
+        0.0,
+        0.0073332470273396585
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.0,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 36.78380769230769,
+      "median_ms": 1.3180830001147115,
+      "rate3": 0.046153846153846156,
+      "ci3": [
+        0.031208722156090527,
+        0.06775530206872549
+      ],
+      "windows3": [
+        0.034482758620689655,
+        0.057803468208092484,
+        0.046242774566473986
+      ],
+      "winning_per_100_tickets_3": 0.7417582417582418,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0038461538461538464,
+      "ci4": [
+        0.0010553885533972412,
+        0.013913756573732113
+      ],
+      "windows4": [
+        0.005747126436781609,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.054945054945054944,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "random_tickets",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 35.78019230769231,
+      "median_ms": 0.04809600068256259,
+      "rate3": 0.046153846153846156,
+      "ci3": [
+        0.031208722156090527,
+        0.06775530206872549
+      ],
+      "windows3": [
+        0.017241379310344827,
+        0.08092485549132948,
+        0.04046242774566474
+      ],
+      "winning_per_100_tickets_3": 0.8516483516483516,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0,
+      "ci4": [
+        0.0,
+        0.0073332470273396585
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.0,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 41.82,
+      "median_ms": 0.3992904994447599,
+      "rate3": 0.057692307692307696,
+      "ci3": [
+        0.04070754806446067,
+        0.08116417045972442
+      ],
+      "windows3": [
+        0.04597701149425287,
+        0.07514450867052024,
+        0.05202312138728324
+      ],
+      "winning_per_100_tickets_3": 0.9340659340659341,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.005780346820809248
+      ],
+      "winning_per_100_tickets_4": 0.027472527472527472,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 54.578038461538455,
+      "median_ms": 0.48800599961396074,
+      "rate3": 0.075,
+      "ci3": [
+        0.05534697045918717,
+        0.10088628951405156
+      ],
+      "windows3": [
+        0.05172413793103448,
+        0.08670520231213873,
+        0.08670520231213873
+      ],
+      "winning_per_100_tickets_3": 0.9230769230769231,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.019230769230769232,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 52.310461538461546,
+      "median_ms": 1.335564001237799,
+      "rate3": 0.06538461538461539,
+      "ci3": [
+        0.04716407896032499,
+        0.0899794357634395
+      ],
+      "windows3": [
+        0.04597701149425287,
+        0.08092485549132948,
+        0.06936416184971098
+      ],
+      "winning_per_100_tickets_3": 0.8269230769230769,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0038461538461538464,
+      "ci4": [
+        0.0010553885533972412,
+        0.013913756573732113
+      ],
+      "windows4": [
+        0.005747126436781609,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.038461538461538464,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "random_tickets",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 46.78398076923077,
+      "median_ms": 0.05503150077856844,
+      "rate3": 0.075,
+      "ci3": [
+        0.05534697045918717,
+        0.10088628951405156
+      ],
+      "windows3": [
+        0.05747126436781609,
+        0.09248554913294797,
+        0.07514450867052024
+      ],
+      "winning_per_100_tickets_3": 1.0769230769230769,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0,
+      "ci4": [
+        0.0,
+        0.0073332470273396585
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.0,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 57.58000000000001,
+      "median_ms": 0.5366634995880304,
+      "rate3": 0.07307692307692308,
+      "ci3": [
+        0.053701404343813,
+        0.09871390657953087
+      ],
+      "windows3": [
+        0.05172413793103448,
+        0.09826589595375723,
+        0.06936416184971098
+      ],
+      "winning_per_100_tickets_3": 0.9230769230769231,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0,
+      "ci4": [
+        0.0,
+        0.0073332470273396585
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.0,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 10.601653846153848,
+      "median_ms": 0.27454049995867535,
+      "rate3": 0.04230769230769231,
+      "ci3": [
+        0.02810297240066055,
+        0.06322515372436575
+      ],
+      "windows3": [
+        0.017241379310344827,
+        0.057803468208092484,
+        0.05202312138728324
+      ],
+      "winning_per_100_tickets_3": 0.7967032967032966,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.027472527472527472,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 10.610000000000001,
+      "median_ms": 1.356830000077025,
+      "rate3": 0.05,
+      "ci3": [
+        0.034346888127268646,
+        0.07225303419733706
+      ],
+      "windows3": [
+        0.022988505747126436,
+        0.06936416184971098,
+        0.057803468208092484
+      ],
+      "winning_per_100_tickets_3": 0.8516483516483516,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.027472527472527472,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "random_tickets",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 10.21194230769231,
+      "median_ms": 0.05340900042938301,
+      "rate3": 0.046153846153846156,
+      "ci3": [
+        0.031208722156090527,
+        0.06775530206872549
+      ],
+      "windows3": [
+        0.017241379310344827,
+        0.08092485549132948,
+        0.04046242774566474
+      ],
+      "winning_per_100_tickets_3": 0.8516483516483516,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0,
+      "ci4": [
+        0.0,
+        0.0073332470273396585
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.0,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "n": 520,
+      "mean_tickets": 7.0,
+      "coverage": 10.610000000000001,
+      "median_ms": 0.301740999930189,
+      "rate3": 0.04230769230769231,
+      "ci3": [
+        0.02810297240066055,
+        0.06322515372436575
+      ],
+      "windows3": [
+        0.017241379310344827,
+        0.057803468208092484,
+        0.05202312138728324
+      ],
+      "winning_per_100_tickets_3": 0.8241758241758241,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.027472527472527472,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 15.043846153846156,
+      "median_ms": 0.30435450025834143,
+      "rate3": 0.05384615384615385,
+      "ci3": [
+        0.037514097823662926,
+        0.07672172260073247
+      ],
+      "windows3": [
+        0.034482758620689655,
+        0.07514450867052024,
+        0.05202312138728324
+      ],
+      "winning_per_100_tickets_3": 0.8653846153846154,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.019230769230769232,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 15.150000000000004,
+      "median_ms": 1.3705054989259224,
+      "rate3": 0.06923076923076923,
+      "ci3": [
+        0.05042342084872857,
+        0.0943559919748256
+      ],
+      "windows3": [
+        0.04597701149425287,
+        0.08670520231213873,
+        0.07514450867052024
+      ],
+      "winning_per_100_tickets_3": 0.8846153846153846,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.019230769230769232,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "random_tickets",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 14.283576923076925,
+      "median_ms": 0.05730950033466797,
+      "rate3": 0.075,
+      "ci3": [
+        0.05534697045918717,
+        0.10088628951405156
+      ],
+      "windows3": [
+        0.05747126436781609,
+        0.09248554913294797,
+        0.07514450867052024
+      ],
+      "winning_per_100_tickets_3": 1.0769230769230769,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0,
+      "ci4": [
+        0.0,
+        0.0073332470273396585
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.0,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "n": 520,
+      "mean_tickets": 10.0,
+      "coverage": 15.150000000000004,
+      "median_ms": 0.3386254993529292,
+      "rate3": 0.057692307692307696,
+      "ci3": [
+        0.04070754806446067,
+        0.08116417045972442
+      ],
+      "windows3": [
+        0.040229885057471264,
+        0.07514450867052024,
+        0.057803468208092484
+      ],
+      "winning_per_100_tickets_3": 0.9038461538461539,
+      "pool_rate3": 0.11730769230769231,
+      "uniform_pool_rate3": 0.11705328810591971,
+      "uniform_single_ticket_rate3": 0.00930991720465405,
+      "rate4": 0.0019230769230769232,
+      "ci4": [
+        0.0003395509959939315,
+        0.010811645081240575
+      ],
+      "windows4": [
+        0.0,
+        0.005780346820809248,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.019230769230769232,
+      "pool_rate4": 0.013461538461538462,
+      "uniform_pool_rate4": 0.01524601524601525,
+      "uniform_single_ticket_rate4": 0.00026747395168447803
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "greedy",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 39.31146341463415,
+      "median_ms": 0.3480539999145549,
+      "rate3": 0.04878048780487805,
+      "ci3": [
+        0.03476295705330071,
+        0.0680518296106719
+      ],
+      "windows3": [
+        0.0593607305936073,
+        0.0365296803652968,
+        0.05045871559633028
+      ],
+      "winning_per_100_tickets_3": 0.936411149825784,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.001524390243902439,
+      "ci4": [
+        0.00026914301058313106,
+        0.008583678743197405
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.02177700348432056,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "lajolla",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 37.991219512195116,
+      "median_ms": 1.3185534999138326,
+      "rate3": 0.054878048780487805,
+      "ci3": [
+        0.0399004205157963,
+        0.07503849065271721
+      ],
+      "windows3": [
+        0.0730593607305936,
+        0.0547945205479452,
+        0.03669724770642202
+      ],
+      "winning_per_100_tickets_3": 1.1541811846689896,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.003048780487804878,
+      "ci4": [
+        0.0008364841219427009,
+        0.011047368757973063
+      ],
+      "windows4": [
+        0.0,
+        0.0045662100456621,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.04355400696864112,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "random_tickets",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 35.73128048780488,
+      "median_ms": 0.04792099935002625,
+      "rate3": 0.041158536585365856,
+      "ci3": [
+        0.02843858898911783,
+        0.059221042044178634
+      ],
+      "windows3": [
+        0.0502283105022831,
+        0.0502283105022831,
+        0.022935779816513763
+      ],
+      "winning_per_100_tickets_3": 0.740418118466899,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.001524390243902439,
+      "ci4": [
+        0.00026914301058313106,
+        0.008583678743197405
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.02177700348432056,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "method": "maxcover",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 41.82,
+      "median_ms": 0.4013480011053616,
+      "rate3": 0.051829268292682924,
+      "ci3": [
+        0.037323871440186784,
+        0.07155297747605627
+      ],
+      "windows3": [
+        0.0593607305936073,
+        0.0365296803652968,
+        0.05963302752293578
+      ],
+      "winning_per_100_tickets_3": 0.8710801393728222,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.003048780487804878,
+      "ci4": [
+        0.0008364841219427009,
+        0.011047368757973063
+      ],
+      "windows4": [
+        0.0,
+        0.0045662100456621,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.04355400696864112,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "greedy",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 53.29908536585366,
+      "median_ms": 0.4885619991910062,
+      "rate3": 0.06707317073170732,
+      "ci3": [
+        0.05034137790786845,
+        0.08884578226972689
+      ],
+      "windows3": [
+        0.0821917808219178,
+        0.0502283105022831,
+        0.06880733944954129
+      ],
+      "winning_per_100_tickets_3": 0.975609756097561,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.001524390243902439,
+      "ci4": [
+        0.00026914301058313106,
+        0.008583678743197405
+      ],
+      "windows4": [
+        0.0,
+        0.0,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.01524390243902439,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "lajolla",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 52.78606707317073,
+      "median_ms": 1.3309669993759599,
+      "rate3": 0.0625,
+      "ci3": [
+        0.04640278700218728,
+        0.08369127979700236
+      ],
+      "windows3": [
+        0.0867579908675799,
+        0.0547945205479452,
+        0.045871559633027525
+      ],
+      "winning_per_100_tickets_3": 1.0365853658536586,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.004573170731707317,
+      "ci4": [
+        0.001556483862258381,
+        0.013358400143792613
+      ],
+      "windows4": [
+        0.0,
+        0.0045662100456621,
+        0.009174311926605505
+      ],
+      "winning_per_100_tickets_4": 0.04573170731707317,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "random_tickets",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 46.731829268292685,
+      "median_ms": 0.05451599918160355,
+      "rate3": 0.056402439024390245,
+      "ci3": [
+        0.04119418200792493,
+        0.07677576028672381
+      ],
+      "windows3": [
+        0.0547945205479452,
+        0.0639269406392694,
+        0.05045871559633028
+      ],
+      "winning_per_100_tickets_3": 0.9603658536585366,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.001524390243902439,
+      "ci4": [
+        0.00026914301058313106,
+        0.008583678743197405
+      ],
+      "windows4": [
+        0.0,
+        0.0045662100456621,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.01524390243902439,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "method": "maxcover",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 57.57999999999999,
+      "median_ms": 0.5374695001592045,
+      "rate3": 0.06859756097560976,
+      "ci3": [
+        0.05165984686661919,
+        0.09055834443711137
+      ],
+      "windows3": [
+        0.0821917808219178,
+        0.0502283105022831,
+        0.07339449541284404
+      ],
+      "winning_per_100_tickets_3": 0.9146341463414634,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.006097560975609756,
+      "ci4": [
+        0.0023737020579508257,
+        0.015572213074235394
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0091324200913242,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.06097560975609756,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "greedy",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 10.593932926829266,
+      "median_ms": 0.272762999884435,
+      "rate3": 0.036585365853658534,
+      "ci3": [
+        0.024706622511933198,
+        0.053859915142957585
+      ],
+      "windows3": [
+        0.0547945205479452,
+        0.0273972602739726,
+        0.027522935779816515
+      ],
+      "winning_per_100_tickets_3": 0.8710801393728222,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.003048780487804878,
+      "ci4": [
+        0.0008364841219427009,
+        0.011047368757973063
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.08710801393728224,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "lajolla",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 10.61,
+      "median_ms": 1.3697894992219517,
+      "rate3": 0.042682926829268296,
+      "ci3": [
+        0.02969371346708107,
+        0.06099694869235063
+      ],
+      "windows3": [
+        0.0593607305936073,
+        0.0319634703196347,
+        0.03669724770642202
+      ],
+      "winning_per_100_tickets_3": 0.9146341463414634,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.003048780487804878,
+      "ci4": [
+        0.0008364841219427009,
+        0.011047368757973063
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0045662100456621,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.04355400696864112,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "random_tickets",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 10.211844512195123,
+      "median_ms": 0.05293300091580022,
+      "rate3": 0.041158536585365856,
+      "ci3": [
+        0.02843858898911783,
+        0.059221042044178634
+      ],
+      "windows3": [
+        0.0502283105022831,
+        0.0502283105022831,
+        0.022935779816513763
+      ],
+      "winning_per_100_tickets_3": 0.740418118466899,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.001524390243902439,
+      "ci4": [
+        0.00026914301058313106,
+        0.008583678743197405
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.02177700348432056,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "method": "maxcover",
+      "n": 656,
+      "mean_tickets": 7.0,
+      "coverage": 10.61,
+      "median_ms": 0.3013199993802118,
+      "rate3": 0.0350609756097561,
+      "ci3": [
+        0.02347482703488327,
+        0.05206067949387229
+      ],
+      "windows3": [
+        0.0502283105022831,
+        0.0273972602739726,
+        0.027522935779816515
+      ],
+      "winning_per_100_tickets_3": 0.8493031358885017,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.003048780487804878,
+      "ci4": [
+        0.0008364841219427009,
+        0.011047368757973063
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.08710801393728224,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "greedy",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 14.983993902439025,
+      "median_ms": 0.30302300001494586,
+      "rate3": 0.05030487804878049,
+      "ci3": [
+        0.036041379292071116,
+        0.06980443849803672
+      ],
+      "windows3": [
+        0.0547945205479452,
+        0.0502283105022831,
+        0.045871559633027525
+      ],
+      "winning_per_100_tickets_3": 0.975609756097561,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.003048780487804878,
+      "ci4": [
+        0.0008364841219427009,
+        0.011047368757973063
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.06097560975609756,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "lajolla",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 15.150000000000002,
+      "median_ms": 1.3767700011158013,
+      "rate3": 0.056402439024390245,
+      "ci3": [
+        0.04119418200792493,
+        0.07677576028672381
+      ],
+      "windows3": [
+        0.0776255707762557,
+        0.0410958904109589,
+        0.05045871559633028
+      ],
+      "winning_per_100_tickets_3": 0.9451219512195121,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.004573170731707317,
+      "ci4": [
+        0.001556483862258381,
+        0.013358400143792613
+      ],
+      "windows4": [
+        0.0045662100456621,
+        0.0045662100456621,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.04573170731707317,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "random_tickets",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 14.277530487804878,
+      "median_ms": 0.05678899924532743,
+      "rate3": 0.056402439024390245,
+      "ci3": [
+        0.04119418200792493,
+        0.07677576028672381
+      ],
+      "windows3": [
+        0.0547945205479452,
+        0.0639269406392694,
+        0.05045871559633028
+      ],
+      "winning_per_100_tickets_3": 0.9603658536585366,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.001524390243902439,
+      "ci4": [
+        0.00026914301058313106,
+        0.008583678743197405
+      ],
+      "windows4": [
+        0.0,
+        0.0045662100456621,
+        0.0
+      ],
+      "winning_per_100_tickets_4": 0.01524390243902439,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "method": "maxcover",
+      "n": 656,
+      "mean_tickets": 10.0,
+      "coverage": 15.150000000000002,
+      "median_ms": 0.3367179997439962,
+      "rate3": 0.04878048780487805,
+      "ci3": [
+        0.03476295705330071,
+        0.0680518296106719
+      ],
+      "windows3": [
+        0.0502283105022831,
+        0.0502283105022831,
+        0.045871559633027525
+      ],
+      "winning_per_100_tickets_3": 0.9603658536585366,
+      "pool_rate3": 0.10975609756097561,
+      "uniform_pool_rate3": 0.08532533830321691,
+      "uniform_single_ticket_rate3": 0.006548754705306037,
+      "rate4": 0.004573170731707317,
+      "ci4": [
+        0.001556483862258381,
+        0.013358400143792613
+      ],
+      "windows4": [
+        0.0091324200913242,
+        0.0,
+        0.0045871559633027525
+      ],
+      "winning_per_100_tickets_4": 0.07621951219512195,
+      "pool_rate4": 0.01524390243902439,
+      "uniform_pool_rate4": 0.009561623855441211,
+      "uniform_single_ticket_rate4": 0.00016451689735864436
+    }
+  ],
+  "paired": [
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "outcome": 3,
+      "delta_pp": 0.5161290322580642,
+      "wins": 19,
+      "losses": 15,
+      "p": 0.6075913612730801,
+      "p_holm": 1.0
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "outcome": 4,
+      "delta_pp": -0.25806451612903225,
+      "wins": 1,
+      "losses": 3,
+      "p": 0.625,
+      "p_holm": 1.0
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "outcome": 3,
+      "delta_pp": 0.645161290322581,
+      "wins": 10,
+      "losses": 5,
+      "p": 0.30175781249999994,
+      "p_holm": 1.0
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "outcome": 4,
+      "delta_pp": 0.0,
+      "wins": 2,
+      "losses": 2,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "outcome": 3,
+      "delta_pp": 0.5161290322580642,
+      "wins": 18,
+      "losses": 14,
+      "p": 0.5966148958541453,
+      "p_holm": 1.0
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "outcome": 4,
+      "delta_pp": 0.12903225806451613,
+      "wins": 2,
+      "losses": 1,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "outcome": 3,
+      "delta_pp": 1.6774193548387077,
+      "wins": 15,
+      "losses": 2,
+      "p": 0.002349853515625,
+      "p_holm": 0.056396484375
+    },
+    {
+      "game": "6/49",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "outcome": 4,
+      "delta_pp": 0.12903225806451604,
+      "wins": 3,
+      "losses": 2,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "outcome": 3,
+      "delta_pp": 0.576923076923077,
+      "wins": 14,
+      "losses": 11,
+      "p": 0.6900379657745361,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "outcome": 4,
+      "delta_pp": 0.19230769230769232,
+      "wins": 1,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "outcome": 3,
+      "delta_pp": -0.19230769230769162,
+      "wins": 8,
+      "losses": 9,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "outcome": 4,
+      "delta_pp": -0.19230769230769232,
+      "wins": 0,
+      "losses": 1,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "outcome": 3,
+      "delta_pp": 0.0,
+      "wins": 0,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "outcome": 4,
+      "delta_pp": 0.0,
+      "wins": 0,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "outcome": 3,
+      "delta_pp": 0.38461538461538464,
+      "wins": 2,
+      "losses": 0,
+      "p": 0.5,
+      "p_holm": 1.0
+    },
+    {
+      "game": "5/40",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "outcome": 4,
+      "delta_pp": 0.0,
+      "wins": 0,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "outcome": 3,
+      "delta_pp": 0.3048780487804874,
+      "wins": 8,
+      "losses": 6,
+      "p": 0.79052734375,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 7,
+      "outcome": 4,
+      "delta_pp": 0.1524390243902439,
+      "wins": 1,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "outcome": 3,
+      "delta_pp": 0.15243902439024404,
+      "wins": 8,
+      "losses": 7,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 3,
+      "budget": 10,
+      "outcome": 4,
+      "delta_pp": 0.4573170731707318,
+      "wins": 3,
+      "losses": 0,
+      "p": 0.25,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "outcome": 3,
+      "delta_pp": -0.15243902439024334,
+      "wins": 0,
+      "losses": 1,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 7,
+      "outcome": 4,
+      "delta_pp": 0.0,
+      "wins": 0,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "outcome": 3,
+      "delta_pp": -0.15243902439024404,
+      "wins": 2,
+      "losses": 3,
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "game": "Joker urn 1",
+      "pool": 11,
+      "target": 4,
+      "budget": 10,
+      "outcome": 4,
+      "delta_pp": 0.15243902439024387,
+      "wins": 1,
+      "losses": 0,
+      "p": 1.0,
+      "p_holm": 1.0
+    }
+  ]
+}

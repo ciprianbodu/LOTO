@@ -374,6 +374,26 @@ la randul ei candidata la excludere.
 - `lajolla`;
 - `union34`.
 
+Metoda opt-in `maxcover` adauga greedy pe castig marginal exhaustiv si doua
+treceri de schimburi locale, pe geometrie pozitionala memoizata. Este limitata
+la pool <=16, pick <=6, 1..64 bilete si garantie < pick; in afara limitelor
+revine la greedy. Compara acoperirea EXACTA dupa completarea numerelor lipsa
+si pastreaza candidatul numai daca acopera mai multe tinte, cu cel mult
+acelasi numar de bilete. Nu demonstreaza optimalitate sau avantaj predictiv.
+Nu modifica default-urile. Activare explicita: `LOTO_WHEEL_METHOD=maxcover`.
+Cheia WF distinge deja numele metodei; workerul adauga exclusiv pentru aceasta
+optiune sufixul `:wheel=maxcover-v1`, fara invalidarea cache-urilor default.
+
+Experimentul reproductibil `scripts/analysis/bench_budget_cover.py` compara
+greedy, La Jolla, bilete aleatoare si maxcover: pool identic dupa frequency
+canonic, bugete 7/10, tinte 3/4, ultimele 30% din istoric. Exclude inclusiv
+extragerile din aceeasi zi din scorare. Raportul din
+`scripts/analysis/budget_cover_report_2026-09-12.md` include toate configurarile,
+intervale Wilson, test pereche si corectie Holm pentru 24 de comparatii.
+Acoperirea creste, dar avantajul istoric nu trece pragul ajustat de 5%;
+metoda ramane experimentala. Joker masoara numai Urna 1, iar 5/40 foloseste
+n1..n5, conform contractului aplicatiei, nu toate categoriile oficiale de premii.
+
 Reguli:
 
 - fara plafon de bilete, productia prefera La Jolla;
