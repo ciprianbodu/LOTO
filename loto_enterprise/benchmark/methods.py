@@ -139,10 +139,6 @@ METHODS: dict[str, tuple[Callable, str, bool, str]] = {
 # methods_coverage.py, methods_graph.py. Loaded lazily; if any module is missing
 # or import fails, the loader logs and continues.
 # (Modulele GPU — torch_extra / torch_advanced / geometry — au fost eliminate.)
-# ⚠️ methods_omnius a fost ELIMINAT (2026-08-09): meta-selectorul își lua candidații
-# direct din METHODS, fără să citească disabled_methods.json sau curated_methods.json
-# → repunea în pool 50 de metode BLACKLISTATE, încălcând regula de aur 6. NU-l
-# reintroduce fără să-i filtrezi candidații prin blacklist + curare.
 # ============================================================================
 def _load_extra_methods() -> None:
     """Merge METHODS dicts from CPU extension modules into the global METHODS."""

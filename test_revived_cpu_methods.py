@@ -1,4 +1,4 @@
-"""CPU tombstones restored into METHODS; omnius stays dead."""
+"""CPU tombstones restored into METHODS."""
 
 import numpy as np
 
@@ -8,10 +8,11 @@ from loto_enterprise.benchmark.methods_revived import REVIVED_METHODS
 
 
 def test_revived_names_are_registered_and_cpu():
-    assert load_disabled() == {"omnius", "ml_gaussian_process"}
+    assert load_disabled() == {"ml_gaussian_process"}
     for name in REVIVED_METHODS:
         assert name in METHODS, name
-        assert name != "omnius"
+    assert "omnius" not in METHODS
+    assert "omnius" not in load_disabled()
 
 
 def test_cheap_revived_scorers_return_full_universe():

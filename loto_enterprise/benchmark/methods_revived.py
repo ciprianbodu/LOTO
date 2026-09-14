@@ -1,7 +1,6 @@
 """CPU scorers restored from tombstone (2026-09-14).
 
-No GPU/torch. `omnius` stays disabled: it was a meta-selector that re-injected
-tombstoned names into the pool. Helpers that already exist are re-registered;
+No GPU/torch. Helpers that already exist are re-registered;
 sklearn/statsforecast wrappers follow the live `_sklearn_per_number` /
 `_statsforecast_per_number` contracts.
 """

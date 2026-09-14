@@ -92,8 +92,8 @@ CACHE_VERSION = "v24"
 #      Bump-ul de VERSIUNE (peste schimbarea de sig, care ar fi invalidat oricum) e ca
 #      pickle-urile v13 să devină vizibile pentru `purge_stale_wf_cache`, altfel ar fi
 #      rămas orfane la nesfârșit sub aceeași versiune.
-# v13: (a) flat-ul NU mai conține omnius_hits/omnius_ticket (biletul OMNIUS scos din
-#      WF/UI) — structură incompatibilă cu v12; (b) DECORELAREA membrilor de ensemble
+# v13: (a) câmpuri extra per-draw scoase din flat (structură incompatibilă cu v12);
+#      (b) DECORELAREA membrilor de ensemble
 #      (method_selector.MAX_MEMBER_CORR=0.95, pe scoruri) + filtrul de redundanță din
 #      decizie pot schimba POOL-ul generat față de v12 — deci cache-urile v12 validează
 #      un pool care nu se mai generează; (c) `_decision_sig` include acum ensemble-ul
@@ -103,12 +103,12 @@ CACHE_VERSION = "v24"
 # v12: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
 # v11: prime_bias tie-break frecvență + _decision_sig include BENCH_HIT_TARGET + tie-break pool.
 # v10: nefolosită (sărită la bump-ul v9→v11).
-# v9:  pool top-N pur + OMNIUS top-N (optimizare hits 3+).
+# v9:  pool top-N pur.
 # v8:  649_katz12_gap88 scorer 6/49 k16.
 # v7:  nefolosită (sărită).
 # v6:  sufix legacy pentru cache-ul celei de-a doua treceri (funcție eliminată).
 # v5:  iterare recent→vechi la oprire parțială (buget) — cache-urile v4 parțiale acopereau felia veche.
-# v4:  flat-ul include omnius_hits/omnius_ticket per extragere.
+# v4:  câmpuri extra per-draw pe flat.
 # v3:  cheia include semnătura deciziei bench (scorer/sim_depth/blacklist).
 # v2:  versiunea inițială.
 

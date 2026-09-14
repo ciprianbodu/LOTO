@@ -1,10 +1,9 @@
 """Ranking canonic „top-N după scor" — sursa UNICĂ de adevăr pentru tie-break.
 
-De ce există modulul: până în 2026-07 existau trei implementări divergente ale
+De ce există modulul: până în 2026-07 existau implementări divergente ale
 selecției „top-N după scor" — bench (`runner._top_k`), producție
-(`pool_selection.select_pool_from_scores`) și biletul OMNIUS
-(`pick_omnius_ticket`, eliminat între timp odată cu modulul `methods_omnius`) —
-fiecare cu ALT tie-break la scoruri egale (număr mare /
+(`pool_selection.select_pool_from_scores`) și un al treilea apelant scos din
+cod — fiecare cu ALT tie-break la scoruri egale (număr mare /
 frecvență / ordinea de iterare a set-ului). Pe scoreri cu puține nivele
 distincte, pool-ul VALIDAT de bench diferea de pool-ul GENERAT în producție
 (6/16 numere diferite pe un scorer cu 2 nivele), încălcând regula din CLAUDE.md:

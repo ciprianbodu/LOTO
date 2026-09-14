@@ -447,11 +447,6 @@ class PipelineMixin:
         if len(self.hard_core) < int(self.params["draw_n"]):
             raise ValueError("Pool insuficient pentru un bilet valid după selecție")
 
-        # Biletul OMNIUS a fost eliminat din UI și din walk-forward → snapshot-ul
-        # de scoruri (`_last_pool_scores`) și audit['omnius_pool_scores'] nu mai au
-        # niciun consumator. Scoase: erau doar date moarte în payload și în raport.
-        # (Metoda de scoring "omnius" a fost la rândul ei eliminată în 2026-08-09.)
-
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
         # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
         self.audit["pipeline_stages"] = {

@@ -148,7 +148,7 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.3 Metode active, curate si dezactivate
 
 - `disabled_methods.json` este merge-only si ireversibil. Nu elimina nume din el.
-- Nu reintroduce `omnius`, metode GPU/neural sau alte tombstone-uri.
+- Nu reintroduce metode GPU/neural.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului.
 - `random` si `frequency` trebuie sa ramana in lista activa.
 - Curarea curenta cere avantaj observat fata de baseline si diversitatea

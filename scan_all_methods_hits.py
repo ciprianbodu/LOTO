@@ -97,7 +97,6 @@ def _load_draws(csv_path: Path, draw_n: int) -> np.ndarray:
 
 
 # Metode prea lente pentru scanul paralel (rulează alte metode înăuntru → blocaj).
-# Gol de la eliminarea lui `omnius` (2026-08-09); hook-ul rămâne pentru viitor.
 _SKIP_SLOW: set[str] = set()
 
 

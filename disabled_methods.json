@@ -1,11 +1,10 @@
 {
   "disabled": [
-    "ml_gaussian_process",
-    "omnius"
+    "ml_gaussian_process"
   ],
   "_meta": {
-    "note": "Tombstone residual. omnius is not a CPU scorer (meta-selector that re-injected disabled names). ml_gaussian_process is CPU but too slow for walk-forward (one GP per number). All other former tombstones were restored in methods_revived.py on 2026-09-14.",
-    "last_reason": "2026-09-14: revive CPU blacklist; keep omnius + GaussianProcess out",
-    "count": 2
+    "note": "Tombstone residual. ml_gaussian_process is CPU but too slow for walk-forward (one GP per number).",
+    "last_reason": "2026-09-14: purge leftover meta-selector name; GaussianProcess stays out",
+    "count": 1
   }
 }

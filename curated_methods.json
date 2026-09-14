@@ -4,7 +4,7 @@
     "updated": "2026-09-01",
     "criterion": "TOP 20 per joc refăcut pe ultimele 30% din istoricul disponibil, pool 11, walk-forward expanding, dintre 97 metode matematice CPU. Fiecare metodă selectată are rata 3+ observată strict peste baseline-ul hipergeometric al jocului, nu este degenerată și respectă |Spearman|<0.95 față de cele deja alese. Joker Urna 2 este selectată separat pe top-1/pool 1, inclusiv pre-screening oficial pe toate cele 111 metode: numai 16 metode distincte au trecut porțile externe, deci lista nu este completată artificial până la 20. `ml_knn_5` este singura care bate controlul oficial în 3/4 ferestre. NU blacklist; selecția rămâne reversibilă. `random`+`frequency` rămân în active pentru gate/fallback; `random` nu e candidat de producție.",
     "note": "gol/absent active = toate cele 111. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc.",
-    "source_folds": "git:12e4663 bench_results/folds.csv (107 metode; omnius sărit)",
+    "source_folds": "git:12e4663 bench_results/folds.csv (107 metode)",
     "pool_ranked": 11,
     "metric": "rate_4plus_k11 Wilson_lb pooled; plus 2026-08-25: WF extern 3+/4+ vs hipergeometric (3 runde; runda 3 = rebuild TOP 20 din 97 CPU math)",
     "n_active": 56,
