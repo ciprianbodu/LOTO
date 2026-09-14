@@ -1,0 +1,280 @@
+"""Curare REVERSIBILĂ a setului de metode rulate de benchmark.
+
+Sursa: curated_methods.json (rădăcina proiectului).
+
+Diferența față de `disabled.py` (blacklist):
+    • `disabled_methods.json` e MERGE-ONLY și PERMANENT — o metodă intrată acolo
+      nu se mai rulează niciodată și nu se scoate.
+    • `curated_methods.json` e o SELECȚIE ACTIVĂ, complet reversibilă: ștergi
+      fișierul (sau golești lista `active`) și bench-ul revine instantaneu la
+      toate metodele available minus blacklist. Nimic nu se pierde.
+
+Criteriul curent combină avantajul observat față de baseline pe fereastra
+externă cu ACOPERIREA DE SEMNAL DISTINCT: păstrăm numai metode peste random,
+nedegenerate, apoi eliminăm clonele cu |Spearman| >= 0.95. Este o selecție
+reversibilă pe istoric, nu o afirmație că loteria a devenit predictibilă;
+gate-ul oficial din `decision.py` rămâne obligatoriu la fiecare Re-Bench.
+
+Cele două filtre se COMPUN: curated ∩ (available minus disabled).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Iterable
+
+logger = logging.getLogger(__name__)
+
+_PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
+
+# Metode fără care mecanica deciziei se rupe — `apply_curation()` le reinjectează
+# forțat dacă lipsesc din `active` (CLAUDE.md §4.3: "trebuie sa ramana in lista
+# activa", regulă de aur, nu opțională), plus avertisment în `log_curation()`.
+#   • `random`   = baseline STRUCTURAL. Pentru cele 4 jocuri cunoscute
+#     (decision.KNOWN_GAME_MAX_NUM), poarta de consistență și lift-ul se judecă
+#     față de rata hipergeometrică EXACTĂ (decision.expected_random_rate), nu mai
+#     depind de rândul `random` din folds.csv — un Re-Bench fără el tot decide
+#     corect pe acele jocuri. Rândul `random` rămâne totuși necesar: e singura
+#     referință pentru un joc NECUNOSCUT (`baseline_source="empirical_random"`,
+#     fallback pe `real_random`) și alimentează `random_empirical_rate`, verificarea
+#     de sanitate afișată lângă rata hipergeometrică. (Rămâne interzis ca scorer
+#     de producție: decision.EXCLUDED_FROM_PRODUCTION.)
+#   • `frequency` = decision.SAFE_FALLBACK_SCORER, folosit pe ramura fără metode
+#     calificate. Baseline DETERMINIST, deci permis în producție (regula de aur 7).
+REQUIRED_METHODS = ("random", "frequency")
+
+
+def curated_path() -> Path:
+    """Calea fișierului de curare (util pt UI: mesaj de dezactivare)."""
+    return _PATH
+
+
+def load_curated() -> list[str]:
+    """Lista de metode curate, în ordinea din fișier (dedup, ordine păstrată).
+
+    Întoarce [] dacă fișierul lipsește, e invalid, sau `active` e gol/absent —
+    adică „fără curare", comportamentul implicit (toate metodele).
+    """
+    try:
+        if not _PATH.exists():
+            return []
+        data = json.loads(_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "[curated] citire %s eșuată: %s — rulez TOATE metodele.", _PATH, exc
+        )
+        return []
+    if not isinstance(data, dict):
+        logger.warning(
+            "[curated] %s nu conține un obiect JSON — rulez TOATE metodele.", _PATH
+        )
+        return []
+    raw = data.get("active") or []
+    if not isinstance(raw, (list, tuple)):
+        logger.warning("[curated] cheia 'active' nu e listă — rulez TOATE metodele.")
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        name = str(item).strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def is_curation_active() -> bool:
+    """True dacă există o listă `active` nevidă (deci bench-ul rulează un subset)."""
+    return bool(load_curated())
+
+
+def curated_meta() -> dict:
+    """Blocul `_meta` din fișier (criteriu, dată, notă) — pt afișare în UI."""
+    try:
+        if _PATH.exists():
+            data = json.loads(_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and isinstance(data.get("_meta"), dict):
+                return dict(data["_meta"])
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[curated] _meta necitibil: %s", exc)
+    return {}
+
+
+def load_per_game() -> dict[str, list[str]]:
+    """Top-N per joc din curated_methods.json ``per_game`` (dedup, ordine păstrată).
+
+    Chei așteptate: ``loto_6_49`` / ``loto_5_40`` / ``joker_urna1`` /
+    ``joker_urna2``.
+    Lipsă/invalid → {} (decizia folosește tot ``active``).
+    """
+    try:
+        if not _PATH.exists():
+            return {}
+        data = json.loads(_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[curated] citire per_game eșuată: %s", exc)
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    raw = data.get("per_game") or {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for game, names in raw.items():
+        if not isinstance(names, (list, tuple)):
+            continue
+        lst: list[str] = []
+        seen: set[str] = set()
+        for item in names:
+            name = str(item).strip()
+            if name and name not in seen:
+                seen.add(name)
+                lst.append(name)
+        if lst:
+            out[str(game)] = lst
+    return out
+
+
+def resolve_methods_per_game(
+    candidates: Iterable[str],
+    game_keys: Iterable[str],
+) -> dict[str, list[str]]:
+    """Construiește matricea efectivă joc -> metode pentru Re-Bench.
+
+    ``active`` este uniunea reversibilă a semnalelor păstrate pentru toate
+    jocurile. A rula întreaga uniune pe FIECARE joc este însă muncă inutilă:
+    decizia și clasamentul restrâng deja candidații la ``per_game``. Pentru
+    fiecare cheie configurată păstrăm exact lista acelui joc și adăugăm
+    baseline-urile structurale disponibile (``random`` + ``frequency``).
+
+    O cheie absentă sau o listă fără nicio metodă validă este omisă din rezultat;
+    ``runner.run_benchmark`` interpretează lipsa cheii drept fallback sigur la
+    toate metodele candidate. Astfel un JSON incomplet nu poate produce tăcut un
+    joc fără folduri.
+    """
+    ordered = list(dict.fromkeys(str(m).strip() for m in candidates if str(m).strip()))
+    allowed = set(ordered)
+    configured = load_per_game()
+    out: dict[str, list[str]] = {}
+    for game_key in dict.fromkeys(str(g) for g in game_keys):
+        requested = configured.get(game_key)
+        if not requested:
+            continue
+        selected = [m for m in requested if m in allowed]
+        missing = [m for m in requested if m not in allowed]
+        if missing:
+            logger.warning(
+                "[curated] %s: %d metode per_game nu sunt candidate valide și "
+                "au fost sărite: %s",
+                game_key,
+                len(missing),
+                missing,
+            )
+        if not selected:
+            logger.error(
+                "[curated] %s: lista per_game nu conține metode valide — "
+                "runner-ul va folosi toate metodele active pentru acest joc.",
+                game_key,
+            )
+            continue
+        for required in REQUIRED_METHODS:
+            if required in allowed and required not in selected:
+                selected.append(required)
+        out[game_key] = selected
+    return out
+
+
+def apply_curation(candidates: Iterable[str]) -> tuple[list[str], dict]:
+    """Filtrează `candidates` (available minus blacklist) prin lista curată.
+
+    Întoarce (metode, info). `info` e telemetrie pt log/UI:
+        active            – curarea e pornită sau nu
+        n_before/n_after  – câte metode erau candidate / câte rămân
+        missing           – nume din curated care NU sunt candidate valide
+                            (inexistente în registry, unavailable sau blacklistate)
+        missing_required  – `random`/`frequency` absente → decizia se rupe
+
+    Ordinea rezultatului e cea din curated_methods.json (nu cea din registry),
+    ca lista rulată să fie exact ce a cerut utilizatorul, citibilă în log.
+    Dacă curarea e inactivă, `candidates` se întoarce neatins.
+    """
+    cand = list(candidates)
+    curated = load_curated()
+    info = {
+        "active": bool(curated),
+        "n_before": len(cand),
+        "n_after": len(cand),
+        "n_curated": len(curated),
+        "missing": [],
+        "missing_required": [],
+        "per_game": {g: len(v) for g, v in load_per_game().items()},
+    }
+    if not curated:
+        return cand, info
+
+    cand_set = set(cand)
+    kept = [m for m in curated if m in cand_set]
+    info["missing"] = [m for m in curated if m not in cand_set]
+    # §4.3: "random"/"frequency" trebuie sa ramana active necondiționat — un
+    # utilizator care editează manual `active` și le omite nu are voie să rupă
+    # tăcut gate-ul de consistență (random) sau SAFE_FALLBACK_SCORER (frequency).
+    # Înainte doar `info["missing_required"]` era calculat (pt. log), fără sa
+    # fie reinjectat în `kept` — `resolve_methods_per_game()` face deja asta
+    # corect mai jos, dar plasa ei nu poate prinde o metodă absentă chiar de
+    # aici, la sursă.
+    for required in REQUIRED_METHODS:
+        if required in cand_set and required not in kept:
+            kept.append(required)
+    info["n_after"] = len(kept)
+    info["missing_required"] = [m for m in REQUIRED_METHODS if m not in kept]
+
+    if not kept:
+        # Curare care nu lasă nimic = greșeală de configurare, nu intenție.
+        # Mai bine rulăm tot decât să rămână bench-ul fără nicio metodă.
+        logger.error(
+            "[curated] lista 'active' din %s nu conține NICIO metodă validă "
+            "(%s) — ignor curarea și rulez toate cele %d metode.",
+            _PATH,
+            info["missing"],
+            len(cand),
+        )
+        info["active"] = False
+        info["n_after"] = len(cand)
+        return cand, info
+
+    return kept, info
+
+
+def log_curation(info: dict) -> None:
+    """Emite în log starea curării. De apelat DUPĂ logging.basicConfig()."""
+    if not info.get("active"):
+        logger.info(
+            "[curated] fără curare (curated_methods.json absent/gol) — rulez toate "
+            "cele %d metode active.",
+            info.get("n_after", 0),
+        )
+        return
+    logger.info(
+        "[curated] curated: %d din %d metode (criteriu: peste baseline + semnal "
+        "distinct; selecție istorică reversibilă). Anulare: șterge sau golește "
+        "%s + re-bench.",
+        info.get("n_after", 0),
+        info.get("n_before", 0),
+        _PATH,
+    )
+    if info.get("missing"):
+        logger.warning(
+            "[curated] %d nume din 'active' nu-s candidate valide (inexistente, "
+            "unavailable sau blacklistate) și au fost sărite: %s",
+            len(info["missing"]),
+            info["missing"],
+        )
+    if info.get("missing_required"):
+        logger.warning(
+            "[curated] LIPSESC metode structurale %s — fără 'random' gate-ul de "
+            "consistență din decision.py nu funcționează (low_confidence pe toate "
+            "jocurile), fără 'frequency' dispare SAFE_FALLBACK_SCORER.",
+            info["missing_required"],
+        )

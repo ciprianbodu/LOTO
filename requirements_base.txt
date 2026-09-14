@@ -1,0 +1,42 @@
+# =============================================================================
+# requirements_base.txt — TOATE dependențele aplicației (exclusiv CPU).
+# Python țintă: ultimul 3.14.x stabil (py -3.14, venv D:\_BUILD\_LOTO\.venv).
+# Instalate de ACTUALIZARI.bat. Suportul GPU/neural (torch / TimesFM / Chronos /
+# NeuralForecast / foundation models) a fost ELIMINAT complet din aplicație.
+# =============================================================================
+
+# UI + utilitare
+nicegui                  # UI principal (app_nicegui.py)
+# streamlit: ELIMINAT. Era pentru „UI legacy (app.py)" — un fișier care nu
+# există în repo și nu apare nici în istoricul git.
+requests
+psutil
+matplotlib
+
+# Tabular / numeric (C-extensions; nu se update-eaza fara grija)
+pandas>=2.2,<3
+numpy
+scipy
+# numba: ELIMINAT. `loto_engine` importa `jit` fara sa-l foloseasca nicaieri
+# (un singur `jit` in tot fisierul: importul insusi) — costa ~424 ms per
+# proces la import si aducea numba+llvmlite ca dependinta HARD, degeaba.
+
+# Benchmark / lab utilitare
+rich
+
+# Metode statistice / ML (toate CPU):
+# - scikit-learn: 12+ ML classifiers (logistic, RF, KNN, SVM, ...)
+# - statsmodels: ARIMA, ETS, Holt-Winters, STL decomposition
+# - statsforecast: AutoARIMA, AutoETS, Theta, CES, Croston family, ADIDA, IMAPA
+# - hmmlearn: HMM (Hidden Markov Model)
+# - xgboost / lightgbm / catboost: gradient boosting (CPU)
+scikit-learn
+statsmodels
+statsforecast
+hmmlearn
+xgboost
+lightgbm
+catboost
+
+# Teste unitare (test_decision.py, test_method_selector.py)
+pytest
