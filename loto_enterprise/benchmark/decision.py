@@ -145,7 +145,15 @@ ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 # (aceleași date → același scor), reproductibile și explicabile pentru
 # utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
 # "numere date cu zarul" nu.
-EXCLUDED_FROM_PRODUCTION = frozenset({"random"})
+EXCLUDED_FROM_PRODUCTION = frozenset(
+    {
+        "random",
+        # Two-level class filters: top-K becomes "all odd" or "all even".
+        # They are not scorers; production pool must stay mixed.
+        "parity_balance",
+        "649_parity_recent",
+    }
+)
 
 # Geometria jocurilor cunoscute (max_num). Folosita cand apelantul nu poate da
 # `max_num` (folds.csv nu contine geometria). Pentru chei necunoscute decizia
@@ -669,7 +677,7 @@ def decide_optimal_config_for_pool(
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
-    # candidați (vezi EXCLUDED_FROM_PRODUCTION, în prezent doar `random`): nu
+    # candidați (vezi EXCLUDED_FROM_PRODUCTION: random + filtrele de paritate): nu
     # are voie să ajungă scorer de producție.
     # Plus: sare metodele eliminate din METHODS / tombstone (folds vechi).
     try:

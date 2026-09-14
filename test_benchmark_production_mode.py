@@ -41,14 +41,14 @@ def test_curated_benchmark_runs_only_relevant_methods_per_game():
     games = ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
     matrix = resolve_methods_per_game(load_curated(), games)
 
-    # 20/20/20/16 semnale; random+frequency sunt adăugate dacă nu erau deja.
+    # 19/19/18/16 semnale; random+frequency sunt adăugate dacă nu erau deja.
     assert {g: len(matrix[g]) for g in games} == {
-        "loto_6_49": 22,
-        "loto_5_40": 22,
-        "joker_urna1": 21,  # frequency este deja unul dintre cele 20
+        "loto_6_49": 21,
+        "loto_5_40": 21,
+        "joker_urna1": 19,  # frequency este deja unul dintre cele 18
         "joker_urna2": 18,
     }
-    assert sum(map(len, matrix.values())) == 83
+    assert sum(map(len, matrix.values())) == 79
     for selected in matrix.values():
         assert "random" in selected
         assert "frequency" in selected

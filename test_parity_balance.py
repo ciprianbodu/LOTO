@@ -66,10 +66,12 @@ def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 57
+    assert len(cur) == 55
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
-    # Rebuild TOP 20/joc din metodele CPU + selecția top-1 pentru Urna 2
+    assert "parity_balance" not in cur
+    assert "649_parity_recent" not in cur
+    # Rebuild TOP per joc din metodele CPU + selecția top-1 pentru Urna 2
     # (2026-09-01). Urna 2 are numai 16 semnale distincte peste baseline;
     # lista nu este umplută artificial cu pierzători sau clone.
     added = {
@@ -80,7 +82,6 @@ def test_curated_active_and_per_game():
         "pair_affinity",
         "dmd",
         "649_gap_sqrt",
-        "parity_balance",
         "graph_clustering",
         "649_katz15_beta85",
         "graph_eigenvector",
@@ -97,9 +98,9 @@ def test_curated_active_and_per_game():
     assert added <= set(cur)
     pg = load_per_game()
     expect_n = {
-        "loto_6_49": 20,
-        "loto_5_40": 20,
-        "joker_urna1": 20,
+        "loto_6_49": 19,
+        "loto_5_40": 19,
+        "joker_urna1": 18,
         "joker_urna2": 16,
     }
     expect_extra = {
@@ -125,7 +126,6 @@ def test_curated_active_and_per_game():
             "frequency",
             "649_mom_20_80",
             "cusum_appearance",
-            "649_parity_recent",
             "modular",
             "cover_complement",
         ],
@@ -147,11 +147,26 @@ def test_curated_active_and_per_game():
             assert m in pg[g]
         assert "ml_decision_tree" not in pg[g]
         assert "ml_nearest_centroid" not in pg[g]
+        assert "parity_balance" not in pg[g]
+        assert "649_parity_recent" not in pg[g]
     # frequency rămâne fallback structural și a trecut gate-ul extern pe Joker.
     assert "frequency" in pg["joker_urna1"]
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 57
-    assert info["per_game"]["loto_6_49"] == 20
-    assert info["per_game"]["loto_5_40"] == 20
-    assert info["per_game"]["joker_urna1"] == 20
+    assert len(kept) == 55
+    assert info["per_game"]["loto_6_49"] == 19
+    assert info["per_game"]["loto_5_40"] == 19
+    assert info["per_game"]["joker_urna1"] == 18
     assert info["per_game"]["joker_urna2"] == 16
+
+
+def test_parity_class_filters_are_not_production_scorers():
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+    from loto_enterprise.core.method_selector import _production_forbidden
+
+    assert "parity_balance" in EXCLUDED_FROM_PRODUCTION
+    assert "649_parity_recent" in EXCLUDED_FROM_PRODUCTION
+    forbidden = _production_forbidden()
+    assert "parity_balance" in forbidden
+    assert "649_parity_recent" in forbidden
+    assert "random" in forbidden
+    assert "frequency" not in forbidden

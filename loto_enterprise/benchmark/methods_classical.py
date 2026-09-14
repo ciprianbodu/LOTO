@@ -446,10 +446,11 @@ def score_sum_affinity(draws_2d, max_num):
 def score_parity_balance(draws_2d, max_num):
     """Echilibru par/impar: clasa cerută + frecvență în clasă (tie-break).
 
-    Fără tie-break, scorul are doar 2 nivele → top-K degeneră în „cele mai
-    mari pare/impare" (rank_by_score: număr desc), nu un pool util. Același
-    pattern ca ``prime_bias``. Clasa rămâne axa principală; frecvența rupe
-    egalitățile din aceeași clasă.
+    Nu e scorer de producție: top-K e „toate imparele" sau „toate parele"
+    (`EXCLUDED_FROM_PRODUCTION`). Fără tie-break, scorul are doar 2 nivele →
+    top-K degeneră în „cele mai mari pare/impare" (rank_by_score: număr desc).
+    Același pattern ca ``prime_bias``. Clasa rămâne axa principală; frecvența
+    rupe egalitățile din aceeași clasă.
     """
     if draws_2d.shape[0] < 5:
         return {}

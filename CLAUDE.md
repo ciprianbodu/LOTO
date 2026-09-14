@@ -30,11 +30,13 @@ Snapshot verificat la 2026-09-14:
   `LOTO_WF_CACHE_DIR`;
 - registry: 183 metode CPU in `METHODS` (111 + 72 reinvie); `list_methods()`
   exclude aliasurile identice (`ngram_trigram` → `markov_3` etc.);
-- curare reversibila: 57 metode eligibile in uniunea `active`; Re-Bench ruleaza
-  matricea efectiva 20/20/20/16 per joc, plus `random` si `frequency` unde nu
+- curare reversibila: 55 metode eligibile in uniunea `active`; Re-Bench ruleaza
+  matricea efectiva 19/19/18/16 per joc, plus `random` si `frequency` unde nu
   sunt deja prezente;
-- selectie: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
+- selectie: 19/19/18 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
   distincte peste baseline pentru Joker Urna 2;
+- `parity_balance` si `649_parity_recent` sunt in `EXCLUDED_FROM_PRODUCTION`
+  (filtru de clasa par/impar: top-K = toate imparele sau toate parele);
 - tombstone: 1 nume in `disabled_methods.json` (`ml_gaussian_process`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
@@ -304,10 +306,10 @@ sunt `null` (indisponibile), nu zero; mediile agregate sunt ponderate cu
 `n_eval`/`n_test`, identic cu decizia si clasamentul UI.
 
 Lista `active` este uniunea semnalelor tuturor jocurilor, nu o cerere de a rula
-toate cele 57 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
+toate cele 55 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
 construirea task-urilor si adauga baseline-urile structurale. La configuratia
 curenta, cu patru ferestre si fara controlul amestecat, matricea scade de la
-57 × 4 × 4 = 912 la (22 + 22 + 21 + 18) × 4 = 332 folduri. Override-urile
+55 × 4 × 4 = 880 la (21 + 21 + 19 + 18) × 4 = 316 folduri. Override-urile
 explicite `--methods` si `--quick` continua sa ruleze metodele cerute pe toate
 jocurile.
 
