@@ -2374,6 +2374,31 @@ def _startup() -> None:
         logger.warning("recover completed job startup: %s", exc)
 
 
+# Star-import skips _-prefixed names; functions look up globals in the defining
+# module. Copy private helpers (and `time`) so Generate / Auto-Pilot / panels
+# resolve after the UI split.
+def _sync_ui_namespace() -> None:
+    import ui_bench
+    import ui_hits
+    import ui_results
+    import ui_runtime
+
+    facade = sys.modules[__name__]
+    modules = (ui_runtime, ui_results, ui_bench, ui_hits, facade)
+    merged: dict = {}
+    for mod in modules:
+        for key, value in vars(mod).items():
+            if key.startswith("__") and key.endswith("__"):
+                continue
+            if key.startswith("_") or key == "time":
+                merged[key] = value
+    merged["time"] = time
+    for mod in modules:
+        vars(mod).update(merged)
+
+
+_sync_ui_namespace()
+
 app.on_startup(_startup)
 
 if __name__ in {"__main__", "__mp_main__"}:

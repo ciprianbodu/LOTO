@@ -82,7 +82,7 @@ def _production_forbidden() -> frozenset[str]:
 
         forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
     except Exception as exc:  # noqa: BLE001
-        # "random" (hardcodat mai sus) tot blochează — dar cei 74 de tombstone din
+        # "random" (hardcodat mai sus) tot blochează — dar tombstone-urile din
         # disabled_methods.json (§4.3: „merge-only si ireversibil") NU au niciun
         # backstop hardcodat separat. Un import spart aici trecea neobservat.
         logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)

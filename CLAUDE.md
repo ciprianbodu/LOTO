@@ -19,29 +19,30 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-13:
+Snapshot verificat la 2026-09-14:
 
 - branch de productie: `main`;
-- UI: NiceGUI, `app_nicegui.py`, port 8000;
+- UI: NiceGUI, `app_nicegui.py` + `ui_runtime.py` / `ui_results.py` / `ui_bench.py` / `ui_hits.py`, port 8000;
 - runtime tinta: ultimul Python 3.14.x stabil;
 - venv: `D:\_BUILD\_LOTO\.venv`, in afara OneDrive;
 - runtime scris frecvent: `D:\_BUILD\_LOTO` (`.wf_cache`, `loto.log`,
   `bench_full.log`, `startup_8000.log`), cu override prin `LOTO_RUNTIME_DIR` si
   `LOTO_WF_CACHE_DIR`;
-- registry: 111 metode CPU in `METHODS`;
-- curare reversibila: 56 metode eligibile in uniunea `active`; Re-Bench ruleaza
+- registry: 183 metode CPU in `METHODS` (111 + 72 reinvie); `list_methods()`
+  exclude aliasurile identice (`ngram_trigram` → `markov_3` etc.);
+- curare reversibila: 57 metode eligibile in uniunea `active`; Re-Bench ruleaza
   matricea efectiva 20/20/20/16 per joc, plus `random` si `frequency` unde nu
   sunt deja prezente;
 - selectie: 20/20/20 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
   distincte peste baseline pentru Joker Urna 2;
-- tombstone permanent: 74 nume in `disabled_methods.json`;
+- tombstone: 1 nume in `disabled_methods.json` (`ml_gaussian_process`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
 - cache benchmark: `v18`;
 - cache walk-forward: `v24`;
 - cache rezultat worker: `v4`;
-- teste: 62 fisiere `test_*.py`, 871 teste trecute la auditul global.
+- teste: 67 fisiere `test_*.py`.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -111,11 +112,12 @@ UI-ul face polling la o secunda, fara reload complet.
 
 | Modul | Responsabilitate |
 |---|---|
-| `app_nicegui.py` | UI, configurare, submit, polling, randare, raport si orchestrare WF |
+| `app_nicegui.py` | UI facade: configurare, submit, polling, orchestrare WF |
+| `ui_runtime.py` / `ui_results.py` / `ui_bench.py` / `ui_hits.py` | Panouri NiceGUI extrase; `_sync_ui_namespace` leaga numele `_` |
 | `worker.py` | consumator SQLite, executie pipeline, cache rezultat, requeue la oprire |
 | `job_queue.py` | contractul persistent UI-worker |
 | `loto_engine.py` | validare productie, scoring, pool unic, wheeling si audit |
-| `wheeling_methods.py` | algoritmi de covering design si dispatcher |
+| `covering/` + `wheeling_methods.py` | algoritmi de covering design; fatada publica `wheeling_methods` |
 | `ui_shared.py` | I/O atomic, lock-uri, payload queue, worker si loguri |
 | `loto_enterprise/benchmark/runner.py` | folduri walk-forward si metrici per pool |
 | `loto_enterprise/benchmark/decision.py` | gate vs random, Wilson, ensemble si decizie per pool |
@@ -302,10 +304,10 @@ sunt `null` (indisponibile), nu zero; mediile agregate sunt ponderate cu
 `n_eval`/`n_test`, identic cu decizia si clasamentul UI.
 
 Lista `active` este uniunea semnalelor tuturor jocurilor, nu o cerere de a rula
-toate cele 56 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
+toate cele 57 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
 construirea task-urilor si adauga baseline-urile structurale. La configuratia
 curenta, cu patru ferestre si fara controlul amestecat, matricea scade de la
-56 × 4 × 4 = 896 la (22 + 22 + 21 + 18) × 4 = 332 folduri. Override-urile
+57 × 4 × 4 = 912 la (22 + 22 + 21 + 18) × 4 = 332 folduri. Override-urile
 explicite `--methods` si `--quick` continua sa ruleze metodele cerute pe toate
 jocurile.
 

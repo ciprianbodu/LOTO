@@ -7,12 +7,16 @@ import logging
 import math
 from pathlib import Path
 
+import numpy as np
+
 from covering.common import (
     _comb,
     _coverage_pct,
     _greedy_fallback,
     _order_by_scores,
     _sorted_pool,
+    compute_coverage_pct,
+    ensure_pool_numbers_on_tickets,
     filter_preserving_coverage,
     lotto_coverage_pct,
 )
@@ -193,7 +197,9 @@ def wheel_union34(
     că un cover 4-din-4 garantează 5+.
     """
     del time_limit  # păstrat în semnătură pentru apelanți existenți.
-    target_guarantee = 4 if int(guarantee) <= 4 else int(guarantee)
+    g = int(guarantee)
+    pk = int(pick)
+    target_guarantee = min(pk, 4 if g <= 4 else g)
     wheel, _coverage_for_target = wheel_lajolla(
         pool,
         pick,
@@ -409,7 +415,7 @@ def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):
         # avertizat, nu servit tăcut cu o garanție diferită de cea cerută.
         raise ValueError(f"condition={c} > pool size={v}")
     if c == g:
-        return generate_wheel("lajolla", pool, pk, g, max_variants, scores)
+        return wheel_lajolla(pool, pk, g, max_variants, scores)
     # Design local precalculat (validat 100%) → altfel greedy + ILP la cerere.
     cover = _load_lotto_design(v, pk, g, c)
     if cover is None:

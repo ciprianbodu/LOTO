@@ -13,6 +13,7 @@ from covering.common import (
     _greedy_fallback,
     _order_by_scores,
     _sorted_pool,
+    ensure_pool_numbers_on_tickets,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,20 @@ def _ilp_cover_positions(
         logger.warning("[WHEEL-ILP] eșec (%s) → greedy (NU memoizez)", exc)
         return None
     cover = [blocks[j] for j in range(nb) if res.x[j] > 0.5]
+    covered = {
+        sub for blk in cover for sub in itertools.combinations(blk, guarantee)
+    }
+    if len(covered) < nt:
+        # HiGHS can return a feasible but incomplete vector at the time cap.
+        # Memoizing it would poison every later call (including a longer budget)
+        # for the rest of the process.
+        logger.warning(
+            "[WHEEL-ILP] soluție incompletă (%d/%d ținte, limită %.1fs) — nu memoizez",
+            len(covered),
+            nt,
+            time_limit,
+        )
+        return cover
     _ILP_COVER_CACHE[key] = cover
     return cover
 
@@ -146,7 +161,3 @@ def wheel_ilp(
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WHEEL-ILP] eșec (%s) → greedy", exc)
         return _greedy_fallback(pool, pick, guarantee, max_variants, scores)
-
-
-# ===========================================================================
-# 2) Simulated annealing — reduce wheel-ul greedy păstrând acoperirea

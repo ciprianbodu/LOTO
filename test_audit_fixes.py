@@ -59,7 +59,7 @@ def test_ilp_does_not_memoize_timeout():
     Înainte: `res.x is None` → `_ILP_COVER_CACHE[key] = None` permanent, deci
     toți cei ~1940 de pași de walk-forward cădeau tăcut pe greedy.
     """
-    import wheeling_methods as wm
+    import covering.ilp as wm
 
     key = (9, 5, 3)
     wm._ILP_COVER_CACHE.pop(key, None)
@@ -72,7 +72,7 @@ def test_ilp_does_not_memoize_timeout():
 
 def test_ilp_still_memoizes_too_big_geometry():
     """Pragul de DIMENSIUNE rămâne memoizat: ăla chiar e o proprietate stabilă."""
-    import wheeling_methods as wm
+    import covering.ilp as wm
 
     v = 60  # C(60, 6) depășește _ILP_MAX_BLOCKS
     key = (v, 6, 4)
@@ -84,7 +84,7 @@ def test_ilp_still_memoizes_too_big_geometry():
 def test_ilp_success_is_memoized():
     """Cazul bun (optimizarea din #81) rămâne memoizat."""
     scipy = pytest.importorskip("scipy")  # noqa: F841
-    import wheeling_methods as wm
+    import covering.ilp as wm
 
     key = (8, 4, 3)
     wm._ILP_COVER_CACHE.pop(key, None)
@@ -95,6 +95,28 @@ def test_ilp_success_is_memoized():
     assert (
         wm._ilp_cover_positions(*key, time_limit=30.0) is cover
     )  # al doilea apel = cache
+
+
+def test_ilp_does_not_memoize_incomplete_cover(monkeypatch):
+    """Un vector HiGHS incomplet nu are voie să blocheze un apel ulterior."""
+    scipy = pytest.importorskip("scipy")  # noqa: F841
+    import covering.ilp as wm
+    import numpy as np
+    from types import SimpleNamespace
+
+    key = (6, 4, 3)
+    wm._ILP_COVER_CACHE.pop(key, None)
+
+    def _partial_milp(*_args, **kwargs):
+        nb = int(kwargs["c"].shape[0])
+        x = np.zeros(nb)
+        x[0] = 1.0
+        return SimpleNamespace(x=x, success=False)
+
+    monkeypatch.setattr("scipy.optimize.milp", _partial_milp)
+    cover = wm._ilp_cover_positions(*key, time_limit=15.0)
+    assert cover is not None
+    assert key not in wm._ILP_COVER_CACHE
 
 
 # --------------------------------------------------------------------------
@@ -149,8 +171,8 @@ def test_should_use_blacklist_docstring_is_truthful():
 
 
 def test_engine_really_ignores_blacklist():
-    """Faptul din spatele docstring-ului: engine-ul chiar golește blacklist-ul."""
-    src = open("loto_engine.py", encoding="utf-8").read()
+    """Faptul din spatele docstring-ului: pipeline-ul chiar golește blacklist-ul."""
+    src = open("loto_enterprise/engine/pipeline.py", encoding="utf-8").read()
     assert "blacklist = set()" in src
     assert 'self.audit["filters_disabled"] = True' in src
     # Logul NU mai pretinde că exclude numerele (filtrul e mort).
@@ -318,9 +340,11 @@ def test_bench_progress_reads_only_log_tail(tmp_path, monkeypatch):
 def test_live_folds_reader_caches_unchanged_file(tmp_path, monkeypatch):
     """Între două flush-uri ale bench-ului, folds.csv este parsată o singură dată."""
     import app_nicegui as app_ui
+    import ui_bench
 
     folds = tmp_path / "folds.csv"
     folds.write_text("game,method\nloto_6_49,frequency\n", encoding="utf-8")
+    ui_bench._BENCH_FOLDS_CACHE.update({"signature": None, "df": None})
     app_ui._BENCH_FOLDS_CACHE.update({"signature": None, "df": None})
 
     real_read_csv = app_ui.pd.read_csv
@@ -341,10 +365,12 @@ def test_live_folds_reader_caches_unchanged_file(tmp_path, monkeypatch):
 def test_target_data_ready_fails_closed(tmp_path, monkeypatch):
     """Un folds corupt/blocat nu produce bannerul fals «cache rapid»."""
     import app_nicegui as app_ui
+    import ui_hits
 
     bench_dir = tmp_path / "bench_results"
     bench_dir.mkdir()
     (bench_dir / "folds.csv").write_text("corupt", encoding="utf-8")
+    monkeypatch.setattr(ui_hits, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(app_ui, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(
         app_ui.pd,
@@ -465,3 +491,22 @@ def test_requirements_txt_delegates_to_authoritative_cpu_list():
     )
     assert "streamlit" not in active
     assert "numba" not in active
+
+
+def test_ui_split_binds_private_helpers_on_facade():
+    """`from ui_* import *` nu aduce numele `_`; sync-ul de la import le leagă."""
+    import app_nicegui as app_ui
+    import ui_bench
+    import ui_results
+    import ui_runtime
+
+    assert callable(app_ui._active_restrict_base)
+    assert callable(app_ui._int_setting)
+    assert callable(app_ui._game_label_for)
+    assert "loto_6_49" in app_ui._LABEL_TO_FOLDS_GAME.values()
+    assert callable(ui_results._render_results_bundle)
+    assert callable(ui_results._fmt_dur)
+    assert callable(ui_bench._random_rate_hypergeo)
+    assert app_ui._BENCH_FOLDS_CACHE is ui_bench._BENCH_FOLDS_CACHE
+    assert app_ui.SETTINGS is ui_runtime.SETTINGS
+    assert ui_results.time is app_ui.time

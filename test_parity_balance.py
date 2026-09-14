@@ -66,7 +66,7 @@ def test_curated_active_and_per_game():
     from loto_enterprise.benchmark.methods import METHODS
 
     cur = load_curated()
-    assert len(cur) == 56
+    assert len(cur) == 57
     assert all(m in METHODS for m in cur)
     assert all(m in cur for m in REQUIRED_METHODS)
     # Rebuild TOP 20/joc din metodele CPU + selecția top-1 pentru Urna 2
@@ -76,20 +76,17 @@ def test_curated_active_and_per_game():
         "pca_resid_surprise",
         "649_spectral_cooc",
         "cusum_appearance",
-        "nmf_cooc",
         "fourier",
         "pair_affinity",
         "dmd",
         "649_gap_sqrt",
         "parity_balance",
         "graph_clustering",
-        "prime_bias",
         "649_katz15_beta85",
         "graph_eigenvector",
         "mi_lag_bag",
         "graph_anti_community",
         "649_rrf_graph",
-        "649_gmean_freq_rec",
         "649_mom_20_80",
         "graph_personalized_pr",
         "ml_knn_5",
@@ -111,8 +108,8 @@ def test_curated_active_and_per_game():
             "649_katz25_gap75_b",
             "dmd",
             "pair_affinity",
-            "graph_degree_recent",
-            "graph_personalized_pr",
+            "cover_diversity_mmr",
+            "cover_adaptive_blend",
         ],
         "loto_5_40": [
             "649_rank_borda",
@@ -120,7 +117,8 @@ def test_curated_active_and_per_game():
             "autocorr",
             "graph_anti_community",
             "649_gap_sqrt",
-            "graph_commute",
+            "weighted_recent",
+            "ssa",
         ],
         "joker_urna1": [
             "dmd",
@@ -128,7 +126,8 @@ def test_curated_active_and_per_game():
             "649_mom_20_80",
             "cusum_appearance",
             "649_parity_recent",
-            "nmf_cooc",
+            "modular",
+            "cover_complement",
         ],
         "joker_urna2": [
             "circular_kernel",
@@ -151,7 +150,7 @@ def test_curated_active_and_per_game():
     # frequency rămâne fallback structural și a trecut gate-ul extern pe Joker.
     assert "frequency" in pg["joker_urna1"]
     kept, info = apply_curation(list(METHODS))
-    assert len(kept) == 56
+    assert len(kept) == 57
     assert info["per_game"]["loto_6_49"] == 20
     assert info["per_game"]["loto_5_40"] == 20
     assert info["per_game"]["joker_urna1"] == 20

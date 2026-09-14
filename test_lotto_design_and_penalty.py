@@ -334,7 +334,7 @@ def test_ui_task_and_worker_carry_the_new_keys():
 def test_all_local_lotto_designs_are_valid_and_complete():
     """Fiecare L_v_pick_p_t.txt din covering_designs/ se încarcă și acoperă 100%."""
     from pathlib import Path
-    from wheeling_methods import _load_lotto_design
+    from covering.designs import _load_lotto_design
 
     files = sorted(Path("covering_designs").glob("L_*_*_*_*.txt"))
     assert files, "niciun lotto design local"
@@ -387,7 +387,7 @@ def test_lotto_cover_positions_bounds_the_target_count():
     """`nt = C(v, condition)` nu era plafonat separat de `len(blocks)` - un
     apelant direct cu condition > pick putea porni o bucla O(blocks*nt) tacuta,
     de ordinul minutelor. Trebuie sa esueze imediat, cu mesaj clar."""
-    from wheeling_methods import _lotto_cover_positions, _LOTTO_MAX_BLOCKS
+    from covering.designs import _LOTTO_MAX_BLOCKS, _lotto_cover_positions
 
     # v mic, pick mic (deci len(blocks) e mic), dar condition ~ v/2 maximizeaza
     # C(v, condition) mult peste C(v, pick).

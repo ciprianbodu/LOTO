@@ -439,5 +439,5 @@ def test_wf_history_section_is_wired_to_the_same_audit_as_the_pool():
     cere folds.csv/CSV-uri reale): linia trebuie sa treaca `data.get("audit")`
     prin `_restrict_base_text` inainte de `_render_hits_4plus`.
     """
-    src = open("app_nicegui.py", encoding="utf-8").read()
+    src = open("ui_hits.py", encoding="utf-8").read()
     assert 'restrict_base_text=_restrict_base_text(data.get("audit"))' in src

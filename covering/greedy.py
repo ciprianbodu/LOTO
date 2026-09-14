@@ -10,6 +10,8 @@ import logging
 import math
 import time
 
+from covering.common import ensure_pool_numbers_on_tickets
+
 def generate_combinatorial_wheel(
     pool, pick=6, guarantee=4, max_variants=0, scores=None
 ):
@@ -50,8 +52,6 @@ def generate_combinatorial_wheel(
             combinations = itertools.islice(combinations, max_variants)
         wheel = [sorted(c) for c in combinations]
         if max_variants > 0:
-            from wheeling_methods import ensure_pool_numbers_on_tickets
-
             wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         coverage_pct = (
             100.0
@@ -164,8 +164,6 @@ def generate_combinatorial_wheel(
             break
 
     if max_variants > 0:
-        from wheeling_methods import ensure_pool_numbers_on_tickets
-
         wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         covered_mask = 0
         g = int(guarantee)

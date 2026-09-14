@@ -15,7 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from wheeling_methods import _load_lajolla, generate_wheel, wheel_lajolla, wheel_union34
+from covering.designs import _load_lajolla
+from wheeling_methods import generate_wheel, wheel_lajolla, wheel_union34
 
 DESIGNS = sorted(Path("covering_designs").glob("C_*_*_*.txt"))
 
@@ -64,10 +65,10 @@ def test_loader_accepts_the_design(path: Path):
 
 def test_loader_rejects_incomplete_design(tmp_path, monkeypatch):
     """Un fișier OneDrive trunchiat trebuie să cadă pe fallback, nu să fie folosit."""
-    import wheeling_methods as wm
+    import covering.designs as designs
 
     (tmp_path / "C_6_5_3.txt").write_text("1 2 3 4 5\n", encoding="utf-8")
-    monkeypatch.setattr(wm, "_LAJOLLA_DIRS", [tmp_path])
+    monkeypatch.setattr(designs, "_LAJOLLA_DIRS", [tmp_path])
     assert _load_lajolla(6, 5, 3) is None
 
 

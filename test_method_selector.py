@@ -208,10 +208,10 @@ def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
             "loto_6_49": {
                 "auto_pilot_per_pool": {
                     "k10": {
-                        "scorer": "recency",
+                        "scorer": "omnius",
                         "ensemble": [
                             {"method": "frequency", "weight": 0.6},
-                            {"method": "recency", "weight": 0.4},
+                            {"method": "omnius", "weight": 0.4},
                         ],
                     }
                 }
@@ -252,14 +252,14 @@ def test_get_winner_rejects_random_scorer(temp_config):
 
 
 def test_unknown_legacy_alias_falls_back_to_frequency_named(temp_config):
-    """ml_xgb_cpu (alias mort) → frequency pe NUME și pe callable, nu nume fals."""
+    """ml_gaussian_process (tombstone) → frequency pe NUME și pe callable."""
     cfg_path = temp_config(
         {
             "loto_6_49": {
                 "auto_pilot_per_pool": {
                     "k10": {
-                        "scorer": "ml_xgb_cpu",
-                        "ensemble": [{"method": "ml_xgb_cpu", "weight": 1.0}],
+                        "scorer": "ml_gaussian_process",
+                        "ensemble": [{"method": "ml_gaussian_process", "weight": 1.0}],
                     }
                 }
             }
@@ -275,7 +275,7 @@ def test_unknown_legacy_alias_falls_back_to_frequency_named(temp_config):
     rec = ms.recommend_optimal_config("loto_6_49", 10, config_path=cfg_path)
     assert rec["scorer"] == "frequency"
     assert all(e.get("method") == "frequency" for e in (rec.get("ensemble") or []))
-    assert rec["scorer"] not in ("ml_xgb_cpu", "ml_xgb", "random")
+    assert rec["scorer"] not in ("ml_gaussian_process", "ml_xgb_cpu", "random")
 
 
 def test_get_ensemble_skips_unknown_method_and_renormalizes(temp_config):

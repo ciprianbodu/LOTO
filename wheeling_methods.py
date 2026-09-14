@@ -7,12 +7,19 @@ dispatch). Importurile vechi `from wheeling_methods import ...` rămân valide.
 from __future__ import annotations
 
 from covering.common import (
+    _greedy_fallback,
     compute_coverage_pct,
     ensure_pool_numbers_on_tickets,
     filter_preserving_coverage,
     lotto_coverage_pct,
 )
 from covering.designs import (
+    _LAJOLLA_DIRS,
+    _LOTTO_COVER_CACHE,
+    _LOTTO_MAX_BLOCKS,
+    _load_lajolla,
+    _load_lotto_design,
+    _lotto_cover_positions,
     covering_design_source_signature,
     lotto_design_path,
     wheel_lajolla,
@@ -20,7 +27,7 @@ from covering.designs import (
     wheel_union34,
 )
 from covering.dispatch import WHEEL_METHODS, generate_wheel
-from covering.ilp import wheel_ilp
+from covering.ilp import _ILP_COVER_CACHE, _ilp_cover_positions, wheel_ilp
 from covering.search import wheel_annealing, wheel_genetic
 
 __all__ = [

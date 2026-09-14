@@ -156,7 +156,7 @@ def test_engine_rejects_degenerate_zero_guarantee_before_wheeling():
     """API-ul direct nu poate raporta 100% pentru cover-ul mulțimii vide."""
     # Verificare de contract la nivel de sursă: clamp-ul trebuie să fie înainte
     # de generarea wheel-ului, fără a porni un pipeline complet cu CSV real.
-    source = open("loto_engine.py", encoding="utf-8").read()
+    source = open("loto_enterprise/engine/pipeline.py", encoding="utf-8").read()
     start = source.index("def run_institutional_pipeline")
     body = source[start : source.index("# === ADAPTIVE FEEDBACK PRE-RUN", start)]
     assert "if int(guarantee) < 1:" in body
@@ -265,7 +265,7 @@ def test_capped_wheel_keeps_first_ticket_strongest() -> None:
     scores = {n: float(n) for n in pool}
     kwargs = dict(pick=6, guarantee=4, max_variants=3, scores=scores)
     with patch(
-        "wheeling_methods.ensure_pool_numbers_on_tickets",
+        "covering.greedy.ensure_pool_numbers_on_tickets",
         side_effect=lambda w, p, k: [list(t) for t in w],
     ):
         raw, raw_cov = generate_combinatorial_wheel(pool, **kwargs)

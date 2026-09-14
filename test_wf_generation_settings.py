@@ -43,10 +43,10 @@ def test_result_settings_override_current_ui_and_preserve_zero(monkeypatch):
 
 
 def test_cache_separates_all_generation_settings_and_lotto_file(tmp_path, monkeypatch):
-    import wheeling_methods as wm
+    import covering.designs as designs
 
     monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
-    monkeypatch.setattr(wm, "_LAJOLLA_DIRS", [tmp_path])
+    monkeypatch.setattr(designs, "_LAJOLLA_DIRS", [tmp_path])
     variants = [(3, 3, 0), (3, 4, 0), (3, 4, 2), (4, 4, 0)]
     assert (
         len({wf._decision_sig("6/49", 10, 100.0, 3, 0.0, *cfg) for cfg in variants})

@@ -254,6 +254,16 @@ METHOD_ALIASES: dict[str, str] = {
     "ml_xgb_cpu": "ml_xgb",
     "ml_lgbm_cpu": "ml_lgbm",
     "649_top_autocorr": "autocorr",
+    # Revived CPU wrappers identical to a live scorer. Not in curated per_game
+    # (those keep their own names: cover_diversity_mmr, ssa, markov_3).
+    "ngram_bigram": "markov_2",
+    "ngram_trigram": "markov_3",
+    "vlmm": "markov_3",
+    "winslips": "cover_greedy",
+    "cover_temporal_shift": "drift",
+    "cover_triplet": "assoc_rules",
+    "cover_balanced_spread": "decade_balance",
+    "centrality": "graph_degree",
 }
 
 

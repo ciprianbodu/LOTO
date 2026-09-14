@@ -25,6 +25,24 @@ def test_no_collisions_in_the_real_registry():
     assert len(methods.METHODS) == 111 + len(REVIVED_METHODS)
 
 
+def test_revived_duplicate_slots_are_aliases():
+    """Clonele reînviate nu trebuie să ocupe un slot de bench separat.
+
+    Numele deja curate (`cover_diversity_mmr`, `ssa`) rămân first-class — sunt
+    câștigătorii per joc; aliasăm doar wrapper-urile nefolosite în per_game.
+    """
+    assert methods.resolve_method_name("ngram_trigram") == "markov_3"
+    assert methods.resolve_method_name("ngram_bigram") == "markov_2"
+    assert methods.resolve_method_name("vlmm") == "markov_3"
+    assert methods.resolve_method_name("winslips") == "cover_greedy"
+    assert methods.resolve_method_name("cover_temporal_shift") == "drift"
+    assert methods.resolve_method_name("centrality") == "graph_degree"
+    assert "cover_diversity_mmr" not in methods.METHOD_ALIASES
+    assert "ssa" not in methods.METHOD_ALIASES
+    assert "ngram_trigram" not in methods.list_methods()
+    assert "markov_3" in methods.list_methods()
+
+
 def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):
     fake_methods = {"random": methods.METHODS["random"]}
     monkeypatch.setattr(methods, "METHODS", fake_methods)

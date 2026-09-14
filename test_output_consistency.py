@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 import app_nicegui as app_ui
+import ui_bench
 from loto_enterprise.benchmark import decision
 from scripts.analysis.audit_output import capture_ui
 
@@ -41,7 +42,8 @@ def test_rendered_ranking_obeys_structural_gate_without_disqualifying_baseline(
     monkeypatch,
 ):
     monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
-    monkeypatch.setattr(app_ui, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(app_ui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(_folds(), "joker_urna1", 11, "Joker", 20)
     assert ui.ranking()[0] == "frequency"
@@ -51,7 +53,8 @@ def test_rendered_ranking_obeys_structural_gate_without_disqualifying_baseline(
 
 
 def test_no_eligible_method_still_renders_exclusion_reasons(monkeypatch):
-    monkeypatch.setattr(app_ui, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(app_ui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
     df = _folds().query("method != 'frequency'")
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
@@ -63,7 +66,13 @@ def test_no_eligible_method_still_renders_exclusion_reasons(monkeypatch):
 def test_leaderboard_uses_result_pool_after_setting_changes(monkeypatch):
     calls = []
     monkeypatch.setitem(app_ui.SETTINGS, "pool_size_val", 16)
+    monkeypatch.setattr(ui_bench, "_read_bench_folds_cached", lambda _: _folds())
     monkeypatch.setattr(app_ui, "_read_bench_folds_cached", lambda _: _folds())
+    monkeypatch.setattr(
+        ui_bench,
+        "_render_bench_leaderboard_slice",
+        lambda df, game, pool, label, **kw: calls.append((game, pool)),
+    )
     monkeypatch.setattr(
         app_ui,
         "_render_bench_leaderboard_slice",

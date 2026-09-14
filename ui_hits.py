@@ -1,6 +1,7 @@
 """Walk-forward hit history and analysis menu."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 
