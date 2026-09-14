@@ -3,3 +3,4 @@
 #   `echo.`   -> "'ho.' is not recognized as an internal or external command"
 *.bat text eol=crlf
 *.cmd text eol=crlf
+scripts/git-hooks/* text eol=lf

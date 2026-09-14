@@ -187,6 +187,9 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.5 Git
 
 - Lucrul de productie se integreaza pe `main`.
+- `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
+  pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). Lansatoarele
+  activeaza calea prin `git config core.hooksPath scripts/git-hooks`.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.

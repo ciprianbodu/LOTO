@@ -17,6 +17,8 @@ REM obiecte loose - lansatorul ruleaza la FIECARE pornire, deci un gc automat
 REM ar adauga latenta impredictibila (sau ar bloca pe lock daca alt git ruleaza
 REM concurent). Dezactivat persistent pe acest repo, nu doar per-comanda.
 git config gc.auto 0 >nul 2>&1
+REM post-commit auto-push origin/main. Versioned hooks, not .git samples.
+git config core.hooksPath scripts/git-hooks >nul 2>&1
 
 if /I "%~1"=="autoupdate" goto autoupdate
 if /I "%~1"=="push_istoric" goto push_istoric

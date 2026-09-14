@@ -1,0 +1,43 @@
+#!/bin/sh
+# Auto-push origin/main after a commit on main.
+# Installed by loto_git_sync.bat: git config core.hooksPath scripts/git-hooks
+# Disable one commit: LOTO_SKIP_AUTO_PUSH=1
+# Never force-push. Closed stdin + GIT_TERMINAL_PROMPT=0 so a credential
+# prompt cannot hang START_8000 / ACTUALIZARI.
+
+if [ -n "${LOTO_SKIP_AUTO_PUSH:-}" ]; then
+    exit 0
+fi
+
+git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+for p in rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+    if [ -e "$git_dir/$p" ]; then
+        exit 0
+    fi
+done
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0
+if [ "$branch" != "main" ]; then
+    exit 0
+fi
+
+# Amend of an already-pushed commit cannot fast-forward; leave it local.
+case "$(git log -g -1 --format=%gs 2>/dev/null)" in
+    *commit\ \(amend\)*) exit 0 ;;
+esac
+
+if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+    ahead=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+    if [ "$ahead" = "0" ]; then
+        exit 0
+    fi
+fi
+
+GIT_TERMINAL_PROMPT=0
+export GIT_TERMINAL_PROMPT
+if git push --quiet origin main </dev/null; then
+    echo "[git] auto-push origin/main ok" >&2
+else
+    echo "[git] auto-push failed; commit is local. Retry: git push origin main" >&2
+fi
+exit 0

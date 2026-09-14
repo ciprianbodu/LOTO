@@ -52,6 +52,32 @@ def test_gitattributes_forces_crlf_on_bat():
     )
 
 
+def test_gitattributes_forces_lf_on_git_hooks():
+    ga = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert re.search(r"(?m)^\s*scripts/git-hooks/\*\s+.*eol=lf", ga)
+
+
+def test_post_commit_hook_auto_pushes_main_without_force():
+    hook = ROOT / "scripts" / "git-hooks" / "post-commit"
+    data = hook.read_bytes()
+    assert data.startswith(b"#!/bin/sh")
+    assert b"\r" not in data, "hook-ul trebuie LF — Git Bash pe Windows"
+    text = data.decode("utf-8")
+    assert "LOTO_SKIP_AUTO_PUSH" in text
+    assert "git push --quiet origin main" in text
+    assert "--force" not in text
+    assert "GIT_TERMINAL_PROMPT=0" in text
+    assert "rebase-merge" in text
+
+
+def test_loto_git_sync_installs_versioned_hooks_path():
+    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
+    assert "core.hooksPath" in text
+    assert "scripts/git-hooks" in text
+    assert text.index("core.hooksPath") < text.index(":autoupdate")
+
+
+
 def test_bat_files_exist_and_use_crlf():
     bats = _bat_files()
     assert bats, "nu am găsit niciun .bat în rădăcină"
