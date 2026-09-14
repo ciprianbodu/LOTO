@@ -1,13 +1,13 @@
 {
   "_meta": {
     "created": "2026-07-30",
-    "updated": "2026-09-01",
+    "updated": "2026-09-14",
     "criterion": "TOP 20 per joc refăcut pe ultimele 30% din istoricul disponibil, pool 11, walk-forward expanding, dintre 97 metode matematice CPU. Fiecare metodă selectată are rata 3+ observată strict peste baseline-ul hipergeometric al jocului, nu este degenerată și respectă |Spearman|<0.95 față de cele deja alese. Joker Urna 2 este selectată separat pe top-1/pool 1, inclusiv pre-screening oficial pe toate cele 111 metode: numai 16 metode distincte au trecut porțile externe, deci lista nu este completată artificial până la 20. `ml_knn_5` este singura care bate controlul oficial în 3/4 ferestre. NU blacklist; selecția rămâne reversibilă. `random`+`frequency` rămân în active pentru gate/fallback; `random` nu e candidat de producție.",
     "note": "gol/absent active = toate cele 111. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc.",
     "source_folds": "git:12e4663 bench_results/folds.csv (107 metode)",
     "pool_ranked": 11,
     "metric": "rate_4plus_k11 Wilson_lb pooled; plus 2026-08-25: WF extern 3+/4+ vs hipergeometric (3 runde; runda 3 = rebuild TOP 20 din 97 CPU math)",
-    "n_active": 56,
+    "n_active": 57,
     "external_math_2026_08_25": {
       "script": "analiza_math_external.py",
       "window": "ultimele 30% (ca UI WF), pool 11, block 8, rank_by_score",
@@ -460,11 +460,43 @@
       },
       "official_urna2_all_methods": "111 metode testate; ml_knn_5 bate controlul random în 3/4 ferestre (5.69% pooled), 649_decade_hot în 2/3 ferestre comune; este preferată metoda cu patru ferestre complete",
       "note": "Toate metodele păstrate au depășit random pe fereastra măsurată. Sunt exact 20 pentru fiecare joc principal și 16 pentru Joker Urna 2; numai 16 au fost simultan peste 5%, utilizabile și neclone. Este selecție pe istoric, nu garanție pentru extrageri viitoare; aplicația păstrează avertismentul onest dacă un WF ulterior nu confirmă."
+    },
+    "revived_cover_2026_09_14": {
+      "script": "scripts/analysis/eval_revived_cover.py",
+      "window": "ultimele 30% WF, pool 11 / urna2 top-1, block 8, rank_by_score",
+      "gate": "Wilson LB pe tinta (3+ sau 1+) > hipergeometric; |Spearman|<0.95 vs per_game existent; fara degenerare",
+      "added": {
+        "loto_6_49": [
+          "cover_diversity_mmr",
+          "cover_adaptive_blend",
+          "modular",
+          "compression",
+          "markov_3"
+        ],
+        "loto_5_40": [
+          "weighted_recent",
+          "ssa"
+        ],
+        "joker_urna1": [
+          "modular",
+          "weighted_recent",
+          "markov_2",
+          "cover_complement",
+          "markov_3"
+        ],
+        "joker_urna2": []
+      },
+      "note": "NU e predictie. Re-Bench necesar ca folds.csv/decizia sa vada metodele noi."
     }
   },
   "active": [
     "random",
     "frequency",
+    "cover_diversity_mmr",
+    "cover_adaptive_blend",
+    "modular",
+    "compression",
+    "markov_3",
     "649_rank_borda",
     "649_katz25_gap75_b",
     "dmd",
@@ -480,22 +512,21 @@
     "cusum_appearance",
     "649_spectral_cooc",
     "649_katz75_prime25",
-    "prime_bias",
-    "649_gmean_freq_rec",
-    "graph_degree_recent",
-    "graph_community_strength",
-    "graph_personalized_pr",
+    "weighted_recent",
+    "ssa",
     "fourier",
     "graph_closeness",
     "649_gap_sqrt",
     "mi_lag_bag",
+    "graph_community_strength",
     "649_katz85_katzhigh15",
     "649_hmean_freq_rec",
     "649_katz25_gap75",
     "graph_pagerank",
     "graph_eccentricity_inv",
-    "graph_assort_residual",
-    "graph_commute",
+    "graph_personalized_pr",
+    "markov_2",
+    "cover_complement",
     "649_mom_20_80",
     "649_ewma_80",
     "649_mom_15_60",
@@ -504,24 +535,26 @@
     "649_ewma_40",
     "649_parity_recent",
     "649_mod7_hot",
-    "649_mom_10_40",
-    "graph_eigenvector_recent",
-    "nmf_cooc",
     "circular_kernel",
+    "649_last_neighbors",
+    "649_decade_hot",
     "649_katz12_gap88",
     "neg_binomial",
     "649_cold_rebound",
+    "ml_knn_5",
     "sum_affinity",
     "649_volatility_low",
     "649_consec_penalty",
     "bayes_poisson",
-    "649_low_high_bal",
-    "649_last_neighbors",
-    "649_decade_hot",
-    "ml_knn_5"
+    "649_low_high_bal"
   ],
   "per_game": {
     "loto_6_49": [
+      "cover_diversity_mmr",
+      "cover_adaptive_blend",
+      "modular",
+      "compression",
+      "markov_3",
       "649_rank_borda",
       "649_katz25_gap75_b",
       "dmd",
@@ -536,14 +569,11 @@
       "autocorr",
       "cusum_appearance",
       "649_spectral_cooc",
-      "649_katz75_prime25",
-      "prime_bias",
-      "649_gmean_freq_rec",
-      "graph_degree_recent",
-      "graph_community_strength",
-      "graph_personalized_pr"
+      "649_katz75_prime25"
     ],
     "loto_5_40": [
+      "weighted_recent",
+      "ssa",
       "649_rank_borda",
       "649_rrf_graph",
       "autocorr",
@@ -561,11 +591,14 @@
       "649_katz25_gap75",
       "graph_pagerank",
       "graph_eccentricity_inv",
-      "graph_personalized_pr",
-      "graph_assort_residual",
-      "graph_commute"
+      "graph_personalized_pr"
     ],
     "joker_urna1": [
+      "modular",
+      "weighted_recent",
+      "markov_2",
+      "cover_complement",
+      "markov_3",
       "dmd",
       "frequency",
       "649_mom_20_80",
@@ -580,12 +613,7 @@
       "649_rank_borda",
       "parity_balance",
       "649_parity_recent",
-      "649_mod7_hot",
-      "649_mom_10_40",
-      "graph_anti_community",
-      "graph_eigenvector_recent",
-      "649_gmean_freq_rec",
-      "nmf_cooc"
+      "649_mod7_hot"
     ],
     "joker_urna2": [
       "circular_kernel",
