@@ -30,13 +30,16 @@ Snapshot verificat la 2026-09-14:
   `LOTO_WF_CACHE_DIR`;
 - registry: 183 metode CPU in `METHODS` (111 + 72 reinvie); `list_methods()`
   exclude aliasurile identice (`ngram_trigram` → `markov_3` etc.);
-- curare reversibila: 55 metode eligibile in uniunea `active`; Re-Bench ruleaza
-  matricea efectiva 19/19/18/16 per joc, plus `random` si `frequency` unde nu
+- curare reversibila: 52 metode eligibile in uniunea `active`; Re-Bench ruleaza
+  matricea efectiva 19/19/17/13 per joc, plus `random` si `frequency` unde nu
   sunt deja prezente;
-- selectie: 19/19/18 pentru 6/49, 5/40 si Joker Urna 1, plus 16 semnale
+- selectie: 19/19/17 pentru 6/49, 5/40 si Joker Urna 1, plus 13 semnale
   distincte peste baseline pentru Joker Urna 2;
-- `parity_balance` si `649_parity_recent` sunt in `EXCLUDED_FROM_PRODUCTION`
-  (filtru de clasa par/impar: top-K = toate imparele sau toate parele);
+- `parity_balance`, `649_parity_recent`, `prime_bias`, `649_mod7_hot`,
+  `649_mod10_hot`, `649_decade_hot`, `649_sum_reversion` si `649_last_neighbors`
+  sunt in `EXCLUDED_FROM_PRODUCTION` (filtre de clasa/bucket/spatial: top-K =
+  o paritate, o decadă, un reziduu, toate primele/compusele, un bloc consecutiv,
+  sau vecinii ultimei extrageri);
 - tombstone: 1 nume in `disabled_methods.json` (`ml_gaussian_process`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%

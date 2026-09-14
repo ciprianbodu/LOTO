@@ -482,8 +482,9 @@ def score_parity_balance(draws_2d, max_num):
 def score_prime_bias(draws_2d, max_num):
     """Bias prime/compuse + frecvență în clasă (tie-break).
 
-    Fără tie-break, scorul are doar 2 nivele → top-K degeneră în „cele mai mici
-    N compuse/prime” (ordine numerică), nu un pool util.
+    Nu e scorer de producție: top-K e „toate primele" sau „toate compusele"
+    (`EXCLUDED_FROM_PRODUCTION`). Fără tie-break, scorul are doar 2 nivele →
+    top-K degeneră în „cele mai mici N compuse/prime” (ordine numerică).
     """
     if draws_2d.shape[0] < 5:
         return {}

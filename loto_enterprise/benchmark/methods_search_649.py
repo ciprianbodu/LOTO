@@ -195,6 +195,12 @@ def score_649_gmean_freq_recency(draws_2d, max_num):
 
 
 def score_649_last_draw_neighbors(draws_2d, max_num):
+    """Apartenență spațială: +1 pentru fiecare bilă din ultima extragere la ±3.
+
+    Nu e scorer de producție (`EXCLUDED_FROM_PRODUCTION`). Doar 2–4 nivele;
+    top-K e vecinătatea ultimei extrageri, iar pe Urna 2 (single-pick) predicția
+    e mereu cel mai mare vecin (tie-break număr desc).
+    """
     arr = np.asarray(draws_2d)
     if arr.ndim == 1:
         arr = arr.reshape(1, -1)
@@ -210,6 +216,11 @@ def score_649_last_draw_neighbors(draws_2d, max_num):
 
 
 def score_649_decade_hot(draws_2d, max_num):
+    """Heat pe decade: toate numerele din aceeași decadă au ACELAȘI scor.
+
+    Nu e scorer de producție (`EXCLUDED_FROM_PRODUCTION`): top-K umple
+    decada(ele) cele mai fierbinți — de obicei un bloc consecutiv.
+    """
     arr = np.asarray(draws_2d)
     w = min(40, arr.shape[0])
     recent = arr[-w:] if w else arr
@@ -256,6 +267,11 @@ def score_649_low_high_balance(draws_2d, max_num):
 
 
 def score_649_mod7_hot(draws_2d, max_num):
+    """Heat pe reziduuri mod 7: același scor pentru tot restul r.
+
+    Nu e scorer de producție (`EXCLUDED_FROM_PRODUCTION`): top-K umple
+    clasa(ele) de reziduu cele mai fierbinți, nu numere individuale.
+    """
     arr = np.asarray(draws_2d)
     w = min(50, arr.shape[0])
     mod = np.zeros(7)
@@ -266,6 +282,10 @@ def score_649_mod7_hot(draws_2d, max_num):
 
 
 def score_649_mod10_hot(draws_2d, max_num):
+    """Heat pe ultima cifră: același scor pentru tot restul r.
+
+    Nu e scorer de producție (`EXCLUDED_FROM_PRODUCTION`).
+    """
     arr = np.asarray(draws_2d)
     w = min(50, arr.shape[0])
     mod = np.zeros(10)
@@ -382,6 +402,11 @@ def score_649_spectral_cooc(draws_2d, max_num):
 
 
 def score_649_draw_sum_reversion(draws_2d, max_num):
+    """Scor = proximitate față de media sumei tipice — pool = bloc consecutiv.
+
+    Nu e scorer de producție (`EXCLUDED_FROM_PRODUCTION`): ranking-ul e un
+    interval în jurul mediei, nu un pool amestecat.
+    """
     arr = np.asarray(draws_2d)
     if arr.shape[0] < 10:
         return _normalize({}, max_num)

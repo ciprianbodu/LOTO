@@ -3,11 +3,11 @@
     "created": "2026-07-30",
     "updated": "2026-09-14",
     "criterion": "TOP 20 per joc refăcut pe ultimele 30% din istoricul disponibil, pool 11, walk-forward expanding, dintre 97 metode matematice CPU. Fiecare metodă selectată are rata 3+ observată strict peste baseline-ul hipergeometric al jocului, nu este degenerată și respectă |Spearman|<0.95 față de cele deja alese. Joker Urna 2 este selectată separat pe top-1/pool 1, inclusiv pre-screening oficial pe toate cele 111 metode: numai 16 metode distincte au trecut porțile externe, deci lista nu este completată artificial până la 20. `ml_knn_5` este singura care bate controlul oficial în 3/4 ferestre. NU blacklist; selecția rămâne reversibilă. `random`+`frequency` rămân în active pentru gate/fallback; `random` nu e candidat de producție.",
-    "note": "gol/absent active = toate metodele din registry. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc. 2026-09-14: parity_balance și 649_parity_recent scoase — sunt filtre de clasă par/impar, nu scorere; top-K devenea toate imparele sau toate parele.",
+    "note": "gol/absent active = toate metodele din registry. random+frequency obligatorii în active (gate). per_game = lista pentru decizie/clasament pe acel joc. 2026-09-14: parity_balance și 649_parity_recent scoase — sunt filtre de clasă par/impar, nu scorere; top-K devenea toate imparele sau toate parele. 2026-09-14b: prime_bias, 649_mod7_hot, 649_mod10_hot, 649_decade_hot, 649_sum_reversion scoase — filtre de clasă/bucket (top-K = o decadă, un reziduu, toate primele/compusele, sau bloc consecutiv), nu scorere. 2026-09-14c: 649_last_neighbors scos — filtru spațial last±3 (pe Urna 2 top-1 = cel mai mare vecin).",
     "source_folds": "git:12e4663 bench_results/folds.csv (107 metode)",
     "pool_ranked": 11,
     "metric": "rate_4plus_k11 Wilson_lb pooled; plus 2026-08-25: WF extern 3+/4+ vs hipergeometric (3 runde; runda 3 = rebuild TOP 20 din 97 CPU math)",
-    "n_active": 55,
+    "n_active": 52,
     "external_math_2026_08_25": {
       "script": "analiza_math_external.py",
       "window": "ultimele 30% (ca UI WF), pool 11, block 8, rank_by_score",
@@ -532,10 +532,7 @@
     "pca_resid_surprise",
     "graph_spectral_embed",
     "649_ewma_40",
-    "649_mod7_hot",
     "circular_kernel",
-    "649_last_neighbors",
-    "649_decade_hot",
     "649_katz12_gap88",
     "neg_binomial",
     "649_cold_rebound",
@@ -606,13 +603,10 @@
       "graph_spectral_embed",
       "649_ewma_40",
       "649_gap_sqrt",
-      "649_rank_borda",
-      "649_mod7_hot"
+      "649_rank_borda"
     ],
     "joker_urna2": [
       "circular_kernel",
-      "649_last_neighbors",
-      "649_decade_hot",
       "649_katz12_gap88",
       "neg_binomial",
       "649_cold_rebound",
@@ -624,8 +618,7 @@
       "mi_lag_bag",
       "bayes_poisson",
       "649_katz75_prime25",
-      "649_low_high_bal",
-      "649_mod7_hot"
+      "649_low_high_bal"
     ]
   }
 }

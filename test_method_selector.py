@@ -252,26 +252,36 @@ def test_get_winner_rejects_random_scorer(temp_config):
 
 
 def test_get_winner_rejects_parity_class_filters(temp_config):
-    """parity_balance / 649_parity_recent sunt filtre de clasă, nu scorere."""
-    cfg_path = temp_config(
-        {
-            "loto_5_40": {
-                "auto_pilot_per_pool": {
-                    "k16": {
-                        "scorer": "parity_balance",
-                        "ensemble": [{"method": "parity_balance", "weight": 1.0}],
+    """Filtrele de clasă din EXCLUDED_FROM_PRODUCTION nu pot fi scorer de producție."""
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+
+    for scorer in (
+        "parity_balance",
+        "prime_bias",
+        "649_decade_hot",
+        "649_mod7_hot",
+        "649_last_neighbors",
+    ):
+        assert scorer in EXCLUDED_FROM_PRODUCTION
+        cfg_path = temp_config(
+            {
+                "loto_5_40": {
+                    "auto_pilot_per_pool": {
+                        "k16": {
+                            "scorer": scorer,
+                            "ensemble": [{"method": scorer, "weight": 1.0}],
+                        }
                     }
                 }
             }
-        }
-    )
-    assert (
-        ms.get_winner_name("loto_5_40", pool_size=16, config_path=cfg_path)
-        == "frequency"
-    )
-    rec = ms.recommend_optimal_config("loto_5_40", 16, config_path=cfg_path)
-    assert rec["scorer"] == "frequency"
-    assert rec["scorer"] != "parity_balance"
+        )
+        assert (
+            ms.get_winner_name("loto_5_40", pool_size=16, config_path=cfg_path)
+            == "frequency"
+        )
+        rec = ms.recommend_optimal_config("loto_5_40", 16, config_path=cfg_path)
+        assert rec["scorer"] == "frequency"
+        assert rec["scorer"] != scorer
 
 
 def test_unknown_legacy_alias_falls_back_to_frequency_named(temp_config):

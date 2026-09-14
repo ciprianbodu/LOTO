@@ -28,8 +28,8 @@ The output is written to best_methods.json under `auto_pilot_per_pool[gk][kN]`
 with full traceability (rationale + supporting numbers).
 
 Invarianți (NU strica):
-    * Baseline-urile NEDETERMINISTE (`EXCLUDED_FROM_PRODUCTION`, adică `random`)
-      sunt doar REFERINȚĂ de comparație — nu pot deveni niciodată scorer de
+    * Baseline-urile NEDETERMINISTE și filtrele de clasă (`EXCLUDED_FROM_PRODUCTION`)
+      sunt doar REFERINȚĂ / registry — nu pot deveni niciodată scorer de
       producție, nici pe ramura de fallback.
     * Producția folosește câștigătorul unic evaluat direct. Ratele individuale
       din folds.csv NU permit reconstruirea performanței pool-ului obținut prin
@@ -148,10 +148,18 @@ ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 EXCLUDED_FROM_PRODUCTION = frozenset(
     {
         "random",
-        # Two-level class filters: top-K becomes "all odd" or "all even".
-        # They are not scorers; production pool must stay mixed.
+        # Two-level / bucket class filters: top-K becomes one class
+        # (all odd/even, all prime/composite, one decade, one residue,
+        # consecutive block around the mean, last-draw ±3 membership).
+        # Not scorers.
         "parity_balance",
         "649_parity_recent",
+        "prime_bias",
+        "649_mod7_hot",
+        "649_mod10_hot",
+        "649_decade_hot",
+        "649_sum_reversion",
+        "649_last_neighbors",
     }
 )
 
@@ -677,7 +685,7 @@ def decide_optimal_config_for_pool(
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
-    # candidați (vezi EXCLUDED_FROM_PRODUCTION: random + filtrele de paritate): nu
+    # candidați (vezi EXCLUDED_FROM_PRODUCTION: random + filtre de clasă): nu
     # are voie să ajungă scorer de producție.
     # Plus: sare metodele eliminate din METHODS / tombstone (folds vechi).
     try:

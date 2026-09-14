@@ -238,6 +238,13 @@ def score_centrality(draws_2d, max_num):
 
 
 def _cover_leftover(draws_2d, max_num, mode: str):
+    """Gain static pe extrageri, nu leftover greedy iterativ.
+
+    ``uncovered`` rămâne 1 pe fiecare extragere: nu se actualizează după un
+    „pick". În mode=greedy, ``gain`` e frecvența ponderată recency — rang identic
+    cu ``frequency``. mode=min_overlap / rarity / entropy schimbă rangul prin
+    divizor, nu prin leftover real. cover_diversity_mmr folosește min_overlap.
+    """
     if draws_2d.shape[0] < 8:
         return {}
     uncovered = np.ones(draws_2d.shape[0], dtype=np.float64)

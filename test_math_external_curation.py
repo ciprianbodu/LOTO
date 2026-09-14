@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from loto_enterprise.benchmark.curated import load_per_game
+from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
 from loto_enterprise.benchmark.methods import METHODS, call_method
 from loto_enterprise.core.ranking import is_consecutive_block, rank_by_score
 
@@ -95,6 +96,8 @@ def test_added_math_methods_finite_not_consecutive_block():
 
     for name in ADDED:
         assert name in METHODS, name
+        if name in EXCLUDED_FROM_PRODUCTION:
+            continue
         games = [g for g, lst in pg.items() if name in lst]
         if not games:
             games = ["loto_6_49"]
