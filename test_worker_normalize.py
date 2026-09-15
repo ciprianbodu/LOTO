@@ -149,23 +149,49 @@ def test_lookback_clamped_0_100():
 def test_boolean_and_passthrough_fields():
     t = worker._normalize_task(
         {
-            "filter_consecutives": True,
-            "smart_reduction": True,
             "sim_depth_pct": 25,
             "pure_bench_mode": True,
         },
         draw_n=6,
     )
-    assert t["filter_consecutives"] is True
-    assert t["smart_reduction"] is True
     assert t["sim_depth_pct"] == 25
     assert t["pure_bench_mode"] is True
 
     defaults = worker._normalize_task({}, draw_n=6)
-    assert defaults["filter_consecutives"] is False
-    assert defaults["smart_reduction"] is False
     assert defaults["sim_depth_pct"] == 10
     assert defaults["pure_bench_mode"] is False
+
+
+def test_legacy_filter_keys_are_ignored_not_propagated():
+    """Contractul de dupa stergerea filtrelor moarte: un task scris de o versiune
+    veche a UI-ului, ramas in coada SQLite, mai poarta `filter_consecutives` si
+    `smart_reduction`. Normalizarea trebuie sa il accepte in continuare — cheile
+    se ignora, nu ajung in pipeline si nu arunca TypeError/KeyError."""
+    t = worker._normalize_task(
+        {
+            "pool_size": 10,
+            "guarantee": 3,
+            "filter_consecutives": True,
+            "smart_reduction": True,
+            "o_cheie_care_nu_a_existat_niciodata": 42,
+        },
+        draw_n=6,
+    )
+    assert "filter_consecutives" not in t
+    assert "smart_reduction" not in t
+    assert "o_cheie_care_nu_a_existat_niciodata" not in t
+    # Restul contractului ramane neatins de cheile in plus.
+    assert t["pool_size"] == 10
+    assert t["guarantee"] == 3
+    # Semnatura pipeline-ului nu mai accepta flagurile: `norm` trebuie sa fie
+    # exact multimea de chei pe care o consuma apelul din worker.
+    import inspect
+
+    from loto_enterprise.engine.pipeline import PipelineMixin
+
+    params = inspect.signature(PipelineMixin.run_institutional_pipeline).parameters
+    assert "filter_consecutives" not in params
+    assert "smart_reduction" not in params
 
 
 def test_raw_values_preserved_for_change_logging():

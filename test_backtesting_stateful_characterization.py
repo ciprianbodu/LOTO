@@ -66,7 +66,6 @@ def test_stateful_path_matches_golden_reference(monkeypatch, tmp_path):
         simulation_step=1,
         use_feedback=True,
         enable_hard_inversion=True,
-        smart_reduction=False,
     )
     got = [(p.draw_index, p.hits, p.hits_union, len(p.variants)) for p in preds]
     assert got == _GOLDEN

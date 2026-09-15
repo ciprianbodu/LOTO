@@ -12,41 +12,45 @@ from ui_shared import PROJECT_ROOT, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
 
+# Familia din registry (`METHODS[name][1]`) → etichetă lizibilă în clasament.
+# TOATE metodele din registry sunt numpy/scipy pur: nicio familie nu mai are voie
+# să pretindă scikit-learn, statsmodels, XGBoost, LightGBM sau CatBoost — acele
+# dependențe nu mai sunt importate de nicio metodă. Lista trebuie ținută sincron
+# cu familiile reale; una necunoscută se afișează ca atare, nu se maschează.
+_FAMILY_LIBRARY = {
+    "baseline": "baseline (numpy)",
+    "recency": "recență (numpy)",
+    "gap": "goluri (numpy)",
+    "timeseries": "serii de timp (numpy)",
+    "transition": "tranziții (numpy)",
+    "cooccurrence": "co-apariție (numpy)",
+    "graph": "graf (numpy)",
+    "similarity": "similaritate (numpy)",
+    "structure": "vecinătate numerică (numpy)",
+    "learning": "învățare (numpy+scipy)",
+    "ensemble": "ansamblu (mix de metode)",
+}
+
+
 def _method_library(name: str, family: str = "") -> str:
     """Librăria/categoria lizibilă a metodei. Din `family` (preferat) sau din nume (fallback)."""
     f = (family or "").strip().lower()
     if f:
-        if f.startswith("ml-"):
-            return (
-                "gradient boosting (XGBoost/LightGBM/CatBoost)"
-                if "boost" in f
-                else "scikit-learn"
-            )
-        if f.startswith("classical"):
-            return "statsmodels"
-        if f.startswith("ensemble"):
-            return "ansamblu (mix de metode)"
-        if f == "coverage":
-            return "greedy set-cover (numpy)"
-        if f.startswith("graph"):
-            return "graph/network (numpy)"
-        if (
-            f.startswith("math")
-            or f.startswith("geometric")
-            or f.startswith("probabil")
-        ):
-            return "independent (numpy)"
-        return family  # familia brută dacă n-o recunoaștem
-    n = (name or "").lower()
-    if n.startswith("ml_"):
-        return (
-            "gradient boosting (XGBoost/LightGBM/CatBoost)"
-            if any(b in n for b in ("xgb", "lgbm", "catboost", "boost", "gbm"))
-            else "scikit-learn"
-        )
-    if n in {"croston_classic", "croston_sba"}:
-        return "statsmodels"
-    return "independent (numpy)"
+        return _FAMILY_LIBRARY.get(f, family)  # familia brută dacă n-o recunoaștem
+    # Fallback pe nume: rândurile vechi din folds.csv pot avea `family` gol.
+    # Îl rezolvăm din registry, nu din prefixe lexicale — vechile ramuri `ml_*`,
+    # `croston_classic`, `croston_sba` numeau metode care nu mai există.
+    n = (name or "").strip().lower()
+    if n:
+        try:
+            from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
+
+            meta = _METHODS_NOW.get(n)
+        except Exception:  # noqa: BLE001
+            meta = None
+        if meta:
+            return _FAMILY_LIBRARY.get(meta[1], meta[1])
+    return "necunoscută (metodă absentă din registry)"
 
 
 # Eticheta UI/worker → cheia exactă din folds.csv / best_methods.json

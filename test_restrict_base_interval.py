@@ -144,8 +144,6 @@ def test_wf_applies_the_same_interval_as_production():
         guarantee=3,
         max_variants=2,
         lookback_percent=100.0,
-        filter_consecutives=False,
-        smart_reduction=False,
         restrict_base_min=10,
         restrict_base_max=40,
     )
@@ -172,8 +170,6 @@ def test_wf_worker_step_takes_named_settings_so_a_new_one_cannot_shift_a_slot():
             "guarantee": 3,
             "max_variants": 2,
             "lookback_percent": 100.0,
-            "filter_consecutives": False,
-            "smart_reduction": False,
             "recent_penalty_draws": 0,
             "recent_penalty_factor": 0.0,
             "restrict_base_max": 40,

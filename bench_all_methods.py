@@ -13,7 +13,10 @@ Specul:
     • la final scrie best_methods.json (per-pool winner per joc)
 
 Suport GPU/neural (torch/TimesFM/foundation) eliminat complet — benchmark
-exclusiv CPU (numpy/sklearn/statsmodels).
+exclusiv CPU. După înlocuirea setului de metode (14.09.2026) stack-ul numeric
+este numpy + scipy; pachetele ML grele (scikit-learn, statsmodels,
+statsforecast, hmmlearn, xgboost, lightgbm, catboost) nu mai sunt importate de
+niciun modul și au fost scoase din requirements_base.txt.
 
 Usage
 -----
@@ -198,9 +201,11 @@ def main() -> int:
         else (args.methods.split(",") if args.methods else ALL_SPEC_METHODS)
     )
     methods = [m.strip() for m in methods if m.strip()]
-    # Aliasurile legacy (METHOD_ALIASES, ex. ml_catboost_cpu) sunt acceptate de tot
-    # stack-ul (method_meta/call_method) — rezolvă-le ÎNAINTE de verificarea unknown,
-    # altfel `--methods ml_catboost_cpu` era respins deși ar fi rulat corect.
+    # METHOD_ALIASES este GOL azi: aliasurile legacy (ex. ml_catboost_cpu) au
+    # dispărut odată cu setul vechi de metode, la 14.09.2026. Rezolvarea rămâne
+    # ÎNAINTE de verificarea `unknown` pentru că tot stack-ul (method_meta /
+    # call_method) acceptă aliasuri: dacă se reintroduce vreodată unul,
+    # `--methods <alias>` trebuie acceptat, nu respins deși ar fi rulat corect.
     from loto_enterprise.benchmark.methods import resolve_method_name as _resolve
 
     methods = [_resolve(m) for m in methods]

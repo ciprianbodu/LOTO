@@ -126,8 +126,6 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "restrict_base_max": _rb_max,
             "restrict_base_min": _rb_min,
             "lookback": _int_setting("lookback_val"),
-            "filter_consecutives": False,
-            "smart_reduction": False,  # neaplicat pe path-ul principal (filters_disabled)
             "sim_depth_pct": sd,  # TELEMETRIE de bench, nu taie istoricul (vezi CLAUDE.md)
             # Mereu True: singurul mod de generare care există azi (scoring → top-N →
             # wheel, fără filtre). Rămâne în contractul worker↔UI (regula de aur 2).

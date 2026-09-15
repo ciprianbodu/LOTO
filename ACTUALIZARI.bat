@@ -206,7 +206,7 @@ timeout /t 2 /nobreak >nul
 call :CleanGhosts
 echo/
 
-echo [2/4] Verificare mediu CPU: metode statistice/ML + assets benchmark...
+echo [2/4] Verificare mediu CPU: stack de scoring numeric + assets benchmark...
 "%VENV_PY%" -u "%~dp0verify_imports.py"
 if errorlevel 1 (
     echo   [EROARE] Verificarea importurilor obligatorii a esuat.
@@ -321,13 +321,13 @@ if errorlevel 1 (
     echo   [OK] Dependinte coerente.
 )
 echo   - smoke test import librarii critice - CPU...
-"%VENV_PY%" -c "import numpy,pandas,scipy,sklearn,statsmodels,nicegui" 2>nul
+"%VENV_PY%" -c "import numpy,pandas,scipy,nicegui" 2>nul
 if errorlevel 1 (
     echo   [ATENTIE] O librarie critica NU se importa - posibil corupta OneDrive
     echo            SAU prima instalare - normal, se instaleaza la pasii [1b]+.
     echo            Daca persista dupa install: %VENV_PY% -m pip install --force-reinstall ^<pachet^>
 ) else (
-    echo   [OK] Librarii critice importate curat - numpy/pandas/scipy/sklearn/statsmodels/nicegui.
+    echo   [OK] Librarii critice importate curat - numpy/pandas/scipy/nicegui.
 )
 goto :eof
 

@@ -36,7 +36,6 @@ def test_skip_indices_only_runs_the_missing_steps():
         simulation_step=1,
         use_feedback=False,
         enable_hard_inversion=False,
-        smart_reduction=False,
         skip_indices=skip,
     )
     got = {int(p.draw_index) for p in preds}

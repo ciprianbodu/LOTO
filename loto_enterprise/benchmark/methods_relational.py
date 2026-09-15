@@ -17,6 +17,12 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
 sume / decade au fost scoase înainte de bench (14.09.2026); acesta a rămas
 și a fost exclus din producție la auditul din 15.09.2026.
 
+`neighbor_adjacent` e singura intrare din registry cu familia declarată
+`structure`, dar eticheta descrie doar sursa semnalului (poziția numerică față
+de ultima extragere), nu un filtru: metoda dă un scor fiecărui număr din
+univers, independent, iar pool-ul rămâne top-N pur după scor. Familia NU se
+schimbă — intră în `bench_results/folds.csv` și în afișaj.
+
 Pe geometria cu o singură bilă (Joker Urna 2) co-aparițiile din aceeași
 extragere nu există: metodele bazate pe ele dau scoruri plate, iar bench-ul
 le marchează ca inutilizabile acolo, nu le maschează.
@@ -197,6 +203,15 @@ def score_knn_draw_similarity(draws_2d, max_num, k: int = 40):
 
 
 def score_neighbor_adjacent(draws_2d, max_num):
+    """Scor PER NUMĂR: cât de aproape numeric e de numerele ultimei extrageri.
+
+    Fiecare număr din univers primește 1.0 pentru fiecare vecin la distanță 1 și
+    0.5 pentru fiecare vecin la distanță 2 în ultima extragere, plus tie-break-ul
+    de frecvență. NU e un filtru structural: nu respinge și nu impune nicio
+    combinație (secvențe, distanțe minime, „numere lipite"), iar selecția rămâne
+    top-N pur după scor. Familia declarată în registry, `structure`, se referă la
+    sursa semnalului — poziția pe axa numerelor — nu la o constrângere pe bilet.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     if n == 0:

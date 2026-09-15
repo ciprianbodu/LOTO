@@ -124,8 +124,6 @@ def _retroactive_step_stateless(
     guarantee: int,
     max_variants: int,
     lookback_percent: float,
-    filter_consecutives: bool,
-    smart_reduction: bool,
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
     restrict_base_max: int = 0,
@@ -160,6 +158,10 @@ def _retroactive_step_stateless(
         eng._build_draw_matrix()
         eng._adaptive_mode = adaptive_mode
         eng._adaptive_event = adaptive_event
+        # INERT: pipeline-ul NU mai citeste `_temp_blacklist` (pool-ul e top-scor
+        # pur de la oprirea filtrelor, 2026-07-08, iar blocul care il calcula a
+        # fost sters). Atributul se scrie doar ca sa nu se piarda urma optiunii
+        # `enable_hard_inversion`; nu influenteaza pool-ul si nu e un avantaj.
         eng._temp_blacklist = set(temp_blacklist) if temp_blacklist else set()
         out_lines, _, _, _, _ctx, _audit = eng.run_institutional_pipeline(
             progress_cb=None,
@@ -167,8 +169,6 @@ def _retroactive_step_stateless(
             guarantee=guarantee,
             max_variants=max_variants,
             lookback=lookback_percent,
-            filter_consecutives=filter_consecutives,
-            smart_reduction=smart_reduction,
             enable_adaptive_persistence=False,
             track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
             recent_penalty_draws=recent_penalty_draws,
@@ -749,12 +749,10 @@ class LotoBacktester:
         guarantee: int = 4,
         lookback_percent: float = 20.0,
         backtest_depth_percent: float = 5.0,
-        filter_consecutives: bool = False,
         max_variants: int = 0,
         simulation_step: int = 1,
         use_feedback: bool = True,
         enable_hard_inversion: bool = True,
-        smart_reduction: bool = False,
         progress_cb=None,
         should_cancel=None,
         skip_indices=None,
@@ -776,13 +774,15 @@ class LotoBacktester:
             guarantee: Garantia set cover
             lookback_percent: Ce % din istoric sa foloseasca pentru analiza frecventei la FIECARE pas
             backtest_depth_percent: Procentul din istoric (coada) de testat
-            filter_consecutives: Daca sa aplice filtrul anti-secventa
             max_variants: Limita de variante
             simulation_step: Din cate in cate extrageri sa faca simulare (1 = toate)
             use_feedback: Daca sa foloseasca Adaptive Local Tuning (Metoda 1)
-            enable_hard_inversion: Daca sa aplice Hard Inversion partiala (temp_blacklist)
-                dupa catastrofe. Setati False pentru ablation studies care masoara
-                contributia exclusiva a regime_reset.
+            enable_hard_inversion: INERT azi — calculeaza blacklist-ul temporar
+                dupa catastrofe si il paseaza mai departe, dar pipeline-ul nu il
+                mai citeste (filtrele post-scoring au fost oprite in 2026-07-08 si
+                codul lor sters), deci pool-ul este identic cu True si cu False.
+                Ramane in semnatura pentru ablation studies si pentru testele de
+                caracterizare; nu il descrie ca filtru activ.
         """
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")
@@ -870,8 +870,6 @@ class LotoBacktester:
                     "guarantee": guarantee,
                     "max_variants": max_variants,
                     "lookback_percent": lookback_percent,
-                    "filter_consecutives": filter_consecutives,
-                    "smart_reduction": smart_reduction,
                     "recent_penalty_draws": int(recent_penalty_draws or 0),
                     "recent_penalty_factor": float(recent_penalty_factor),
                     "restrict_base_max": int(restrict_base_max or 0),
@@ -1181,8 +1179,6 @@ class LotoBacktester:
                     guarantee,
                     max_variants,
                     lookback_percent,
-                    filter_consecutives,
-                    smart_reduction,
                     recent_penalty_draws=recent_penalty_draws,
                     recent_penalty_factor=recent_penalty_factor,
                     restrict_base_max=restrict_base_max,

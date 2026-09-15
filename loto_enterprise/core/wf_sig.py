@@ -1,7 +1,7 @@
 """Semnături pentru cache-ul walk-forward — pur stdlib (fără pandas).
 
-Extrase din `walk_forward_adapter` ca să fie testabile în mediul container
-fără sklearn/pandas, și ca serializarea ensemble-ului să aibă o singură
+Extrase din `walk_forward_adapter` ca să fie testabile fără pandas, într-un
+mediu minimal, și ca serializarea ensemble-ului să aibă o singură
 implementare.
 """
 
