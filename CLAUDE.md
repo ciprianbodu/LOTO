@@ -49,10 +49,14 @@ Snapshot verificat la 2026-09-15:
 - cache benchmark: `v18`;
 - cache walk-forward: `v24`;
 - cache rezultat worker: `v4`;
-- teste: 57 fisiere `test_*.py` (848 trecute pe Python 3.14.7 + nicegui in
+- teste: 58 fisiere `test_*.py` (890 trecute pe Python 3.14 + nicegui in
   containerul de audit; 2 esecuri PRE-EXISTENTE in `test_wf_generation_settings`
   — `conditional_cap`, tie-break WF vs. generare directa in calea `covering/`,
-  fara legatura cu metodele).
+  fara legatura cu metodele, confirmate identice pe HEAD neatins);
+- dependinte de scoring: numpy si scipy. Stack-ul ML vechi (scikit-learn,
+  statsmodels, statsforecast, hmmlearn, xgboost, lightgbm, catboost) a fost
+  scos din `requirements_base.txt` la 15.09.2026: niciunul nu mai avea import
+  real dupa inlocuirea setului de metode.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -163,9 +167,24 @@ UI-ul face polling la o secunda, fara reload complet.
   `methods_common.make_registry`; o coliziune de nume intre module se logheaza,
   nu se ascunde. Nu mai exista mecanism de tombstone (`disabled_methods.json`):
   o metoda stearsa dispare din cod, iar un nume necunoscut cade pe `frequency`.
+- Un modul de metode care NU se incarca nu dispare tacit: eroarea intra in
+  `methods.METHOD_LOAD_ERRORS`, se logheaza la ERROR si e numita de
+  `method_selector._sanitize_production_name` in mesajul de fallback. Fara asta,
+  o dependinta lipsa (masurat: scipy) scadea registry-ul de la 52 la 28, iar
+  productia cadea pe `frequency` raportand doar „metoda necunoscuta".
 - Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
   decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
   nu prezic un numar (CLAUDE.md §4.2). Nicio metoda din registry nu e filtru.
+  Garda automata e `test_no_structural_filters.py`: contractul de semnatura si
+  de iesire, scoruri utilizabile pe cele trei geometrii reale, si pool-ul
+  fiecarei metode comparat cu distributia nula pe paritate, bloc consecutiv si
+  decade. Pragurile sunt calibrate pe istoricul real — o metoda care impune o
+  clasa de paritate sau un interval contiguu pica acolo.
+- `alternating_parity` masoara paritatea INDEXULUI extragerii (sezonalitate de
+  perioada 2 pe axa timpului), nu paritatea numerelor. Numele e istoric si NU
+  se redenumeste: are randuri in `bench_results/folds.csv`, iar un rename le-ar
+  orfana. La fel, familia `structure` a lui `neighbor_adjacent` descrie sursa
+  semnalului (pozitia numerica fata de ultima extragere), nu un filtru.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
   azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
   istoric). `random` si `frequency` trebuie sa ramana in lista activa.
@@ -642,6 +661,9 @@ scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisa
   toate cele 111 metode; pastreaza numai semnale peste baseline si distincte.
 - [ ] Automatizeaza testul care ruleaza fiecare metoda activa pe toate geometriile
   si compara acceptarea benchmarkului cu acceptarea engine-ului.
+  `test_no_structural_filters.py` acopera prima jumatate: ruleaza toate metodele
+  pe cele trei geometrii reale si verifica contractul de scorer plus absenta
+  structurii de filtru. Compararea acceptarii bench vs. engine ramane de facut.
 - [x] Raporteaza separat metodele incomplete (fereastra lipsa) si dependente de
   tie-break in decizie; raman de raportat unavailable, plate si corelate.
 - [ ] Adauga un test de regresie pentru fallback-ul top-1 fara coloana
