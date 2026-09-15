@@ -12,7 +12,9 @@ inclusiv idei reluate din vechea listă `disabled` (rescrise de la zero, ieftin
     ssa_forecast           analiză spectrală singulară pe seria proprie, prognoză prin recurență (fost `ssa`)
     dmd_forecast           descompunere în moduri dinamice pe matricea-indicator (fost `dmd`)
     runs_persistence       z-ul testului seriilor (Wald–Wolfowitz) × deviația recentă (fost `runs_test`)
-    alternating_parity     rata pe extragerile de aceeași paritate de index (sezonalitate 2)
+    alternating_parity     rata calculată numai pe extragerile cu ACELAȘI INDEX PAR/IMPAR
+                           pe axa timpului (sezonalitate de perioadă 2). NU are legătură cu
+                           paritatea numerelor și NU e un filtru par/impar pe combinație.
     repeat_last_draw       repetarea ultimei extrageri (fost `naive_last`), tie-break pe frecvență
     vlmm_self_k3           Markov cu lungime variabilă pe seria proprie, context ≤ 3 (fost `vlmm`)
     knn_pattern_self       k-NN pe ferestrele proprii de 10 stări (fost `ml_knn_*`, pe serie)
@@ -22,6 +24,14 @@ inclusiv idei reluate din vechea listă `disabled` (rescrise de la zero, ieftin
     nb_lags_pooled         Naive Bayes Bernoulli pe ultimele 10 stări, model comun (fost `ml_bernoulli_nb`)
     knn_feature_pooled     k-NN în spațiul celor 6 trăsături comune (fost `ml_knn_5`, pe trăsături)
     gbm_stumps_pooled      gradient boosting cu 30 de „stumps" pe cele 6 trăsături (fost `ml_gradient_boost`)
+
+Numele `alternating_parity` e ISTORIC și induce în eroare: „paritatea" de acolo
+e a INDEXULUI extragerii pe axa timpului, nu a numerelor jucate. Nu a fost
+redenumit pentru că apare ca etichetă de metodă în `bench_results/folds.csv`
+(fișier versionat, rezultatul ultimului Re-Bench) — un rename ar orfana acele
+rânduri și ar rupe comparabilitatea cu decizia salvată. Clarificarea se face
+deci prin text (aici, în docstring-ul funcției și în nota din registry), nu
+prin rename.
 """
 
 from __future__ import annotations
@@ -235,7 +245,15 @@ def score_runs_persistence(draws_2d, max_num, window: int = 300):
 
 
 def score_alternating_parity(draws_2d, max_num, window: int = 400):
-    """Rata pe extragerile cu aceeași paritate de index ca următoarea (sezonalitate de perioadă 2)."""
+    """Rata fiecărui număr, calculată numai pe extragerile cu același index par/impar.
+
+    „Paritatea" din nume e a INDEXULUI EXTRAGERII pe axa timpului (sezonalitate
+    de perioadă 2: extragerile din doi în doi, aceeași poziție în alternanță ca
+    extragerea următoare), NU paritatea numerelor. Metoda nu se uită la par/impar
+    pe bilele jucate, nu impune nicio proporție par/impar și nu respinge nicio
+    combinație: e un scorer per număr, iar pool-ul rămâne top-N pur după scor.
+    Numele e păstrat doar pentru compatibilitatea cu `bench_results/folds.csv`.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     if n < 20:
@@ -488,7 +506,7 @@ WAVE2_METHODS = make_registry(
         ("ssa_forecast", score_ssa_forecast, "timeseries", "SSA cu recurență liniară"),
         ("dmd_forecast", score_dmd_forecast, "timeseries", "descompunere în moduri dinamice"),
         ("runs_persistence", score_runs_persistence, "timeseries", "z Wald–Wolfowitz × deviația recentă"),
-        ("alternating_parity", score_alternating_parity, "recency", "rata pe extragerile de aceeași paritate de index"),
+        ("alternating_parity", score_alternating_parity, "recency", "rata pe extragerile cu același index par/impar pe axa timpului (sezonalitate 2); NU paritatea numerelor, nu e filtru par/impar"),
         ("repeat_last_draw", score_repeat_last_draw, "transition", "repetarea ultimei extrageri"),
         ("vlmm_self_k3", score_vlmm_self_k3, "transition", "Markov cu lungime variabilă pe seria proprie"),
         ("knn_pattern_self", score_knn_pattern_self, "similarity", "k-NN pe ferestrele proprii de 10 stări"),

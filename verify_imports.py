@@ -4,11 +4,13 @@ Apelat din START_8000.bat. Imprima fiecare modul cu durata + statut,
 flushed line-by-line pentru ca log-ul sa fie util in timp real.
 
 Aplicatia ruleaza exclusiv pe CPU — suportul GPU/neural (torch / TimesFM /
-NeuralForecast / pynvml) a fost ELIMINAT complet. Verificam doar stack-ul CPU.
+NeuralForecast / pynvml) a fost ELIMINAT complet. Verificam doar stack-ul CPU,
+iar acesta e in intregime OBLIGATORIU: dupa inlocuirea setului de metode
+(14.09.2026) nu mai exista pachete optionale de scoring de sarit.
 
 Exit codes:
   0   = toate REQUIRED OK
-  20  = cel putin un REQUIRED LIPSA
+  20  = cel putin un pachet REQUIRED lipsa (toate din SCHEMA sunt REQUIRED)
   21  = Python < 3.14
 """
 
@@ -64,20 +66,19 @@ def main() -> int:
     print(f"Exec:   {sys.executable}")
     print()
 
-    # Stack CPU: strict ce e necesar pentru engine + UI.
+    # Stack CPU: strict ce e necesar pentru engine + UI. Toate sunt OBLIGATORII
+    # — nu mai exista categorie optionala. Setul de metode din 14.09.2026 se
+    # sprijina exclusiv pe numpy + scipy, iar vechile pachete ML (scikit-learn,
+    # statsmodels, statsforecast, hmmlearn, xgboost, lightgbm, catboost) au fost
+    # scoase din requirements_base.txt: niciun modul nu le mai importa.
     SCHEMA = [
-        ("nicegui", True, "0-2"),  # UI principal (app_nicegui.py)
-        ("pandas", True, "0-1"),
-        ("numpy", True, "0-1"),
-        ("scipy", True, "1-3"),
-        ("psutil", True, "0-1"),
-        ("requests", True, "0-1"),
-        ("rich", True, "0-1"),
-        # Metode CPU — optionale: daca lipsesc, bench-ul sare metodele respective,
-        # dar aplicatia PORNESTE (engine are fallback determinist).
-        ("sklearn", False, "0-2"),
-        ("statsmodels", False, "0-3"),
-        ("statsforecast", False, "0-3"),
+        ("nicegui", "0-2"),  # UI principal (app_nicegui.py)
+        ("pandas", "0-1"),
+        ("numpy", "0-1"),
+        ("scipy", "1-3"),  # 24 din cele 50 de metode noi il importa
+        ("psutil", "0-1"),
+        ("requests", "0-1"),
+        ("rich", "0-1"),
     ]
     total = len(SCHEMA)
 
@@ -85,32 +86,22 @@ def main() -> int:
     print()
 
     missing_required: list[str] = []
-    optional_missing: list[str] = []
     ok_count = 0
 
-    for i, (name, required, eta) in enumerate(SCHEMA, 1):
-        tag = "REQ" if required else "opt"
-        print(
-            f"[{i:2d}/{total}] {name:18s} ({tag}, ETA {eta}s) ... ", end="", flush=True
-        )
+    for i, (name, eta) in enumerate(SCHEMA, 1):
+        print(f"[{i:2d}/{total}] {name:18s} (REQ, ETA {eta}s) ... ", end="", flush=True)
 
         ok, elapsed, err = try_import(name)
         if ok:
             print(f"OK   ({elapsed:5.2f}s)", flush=True)
             ok_count += 1
         else:
-            if required:
-                missing_required.append(name)
-                print(f"LIPSA ({elapsed:5.2f}s) - {err}", flush=True)
-            else:
-                optional_missing.append(name)
-                print(f"skip ({elapsed:5.2f}s) - {err[:60]}", flush=True)
+            missing_required.append(name)
+            print(f"LIPSA ({elapsed:5.2f}s) - {err}", flush=True)
 
     print()
     print(
-        f"Rezultat: {ok_count}/{total} OK"
-        f" | missing required: {len(missing_required)}"
-        f" | optional missing: {len(optional_missing)}"
+        f"Rezultat: {ok_count}/{total} OK | missing required: {len(missing_required)}"
     )
 
     if missing_required:
@@ -118,10 +109,6 @@ def main() -> int:
         print(f"[EROARE] Pachete REQUIRED lipsa: {' '.join(missing_required)}")
         print("Solutie: ruleaza ACTUALIZARI.bat apoi reincearca START_8000.bat.")
         return 20
-
-    if optional_missing:
-        print(f"[INFO] Pachete optionale lipsa: {' '.join(optional_missing)}")
-        print("       (app va merge cu fallback determinist)")
 
     return 0
 

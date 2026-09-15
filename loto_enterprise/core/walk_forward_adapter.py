@@ -706,12 +706,10 @@ def run_honest_walk_forward(
         wheel_condition=condition,
         lookback_percent=lookback_percent,
         backtest_depth_percent=backtest_depth_percent,
-        filter_consecutives=False,
         max_variants=cap,
         simulation_step=1,
         use_feedback=False,  # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem
-        smart_reduction=False,
         progress_cb=progress_cb,  # frac 0..1 per simulare → bară de progres în UI
         should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
         # Pașii deja validați în cache-ul PARȚIAL se sar: altfel rularea nouă

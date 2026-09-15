@@ -22,8 +22,6 @@ def main():
         guarantee=4,
         max_variants=16,
         lookback=20,  # Folosim ultimele 20% ca in feedback "508 extrageri"
-        filter_consecutives=True,
-        smart_reduction=True,
         sim_depth_pct=10,
     )
 

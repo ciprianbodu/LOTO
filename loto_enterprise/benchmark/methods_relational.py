@@ -1,4 +1,4 @@
-"""Metode de scoring relaționale (11 metode).
+"""Metode de scoring relaționale (10 metode).
 
 Ipoteze despre legăturile dintre numere și despre forma extragerii:
 
@@ -9,12 +9,19 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
     pair_lift_last                  lift-ul perechilor față de independență, spre ultima extragere
     pagerank_cooc                   centralitate PageRank în graful de co-apariție (ponderat recent)
     knn_draw_similarity             ce a urmat după extragerile cele mai asemănătoare cu ultima
-    neighbor_adjacent               vecinii numerici (±1, ±2) ai ultimei extrageri
+    neighbor_adjacent               scor PER NUMĂR din vecinii numerici (±1, ±2) ai
+                                    ultimei extrageri — nu o constrângere pe combinație
 
 Nicio metodă de aici nu e un filtru structural (paritate, sume, decade,
 poziție): acelea constrâng combinația, nu prezic un număr, și sunt interzise
 ca „metode" (CLAUDE.md §13 P3). Cele trei variante de acest fel scrise inițial
 pe 14.09.2026 au fost scoase înainte de bench.
+
+`neighbor_adjacent` e singura intrare din registry cu familia declarată
+`structure`, dar eticheta descrie doar sursa semnalului (poziția numerică față
+de ultima extragere), nu un filtru: metoda dă un scor fiecărui număr din
+univers, independent, iar pool-ul rămâne top-N pur după scor. Familia NU se
+schimbă — intră în `bench_results/folds.csv` și în afișaj.
 
 Pe geometria cu o singură bilă (Joker Urna 2) co-aparițiile din aceeași
 extragere nu există: metodele bazate pe ele dau scoruri plate, iar bench-ul
@@ -196,6 +203,15 @@ def score_knn_draw_similarity(draws_2d, max_num, k: int = 40):
 
 
 def score_neighbor_adjacent(draws_2d, max_num):
+    """Scor PER NUMĂR: cât de aproape numeric e de numerele ultimei extrageri.
+
+    Fiecare număr din univers primește 1.0 pentru fiecare vecin la distanță 1 și
+    0.5 pentru fiecare vecin la distanță 2 în ultima extragere, plus tie-break-ul
+    de frecvență. NU e un filtru structural: nu respinge și nu impune nicio
+    combinație (secvențe, distanțe minime, „numere lipite"), iar selecția rămâne
+    top-N pur după scor. Familia declarată în registry, `structure`, se referă la
+    sursa semnalului — poziția pe axa numerelor — nu la o constrângere pe bilet.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     if n == 0:
@@ -220,7 +236,7 @@ RELATIONAL_METHODS = make_registry(
         ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere"),
         ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție ponderat recent"),
         ("knn_draw_similarity", score_knn_draw_similarity, "similarity", "ce a urmat după cele 40 de extrageri cele mai asemănătoare"),
-        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "vecinii ±1/±2 ai ultimei extrageri"),
+        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "scor per număr din vecinii ±1/±2 ai ultimei extrageri (nu filtrează combinația)"),
     ]
 )
 

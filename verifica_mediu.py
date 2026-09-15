@@ -1,10 +1,15 @@
 """Verifică + actualizează mediul aplicației LOTO (exclusiv CPU).
 
 Acoperă:
-    • Librării standard sigure (nicegui, pandas, numpy, scipy, ...)
-    • Metode statistice / ML CPU (scikit-learn, statsmodels, statsforecast,
-      hmmlearn, xgboost, lightgbm, catboost)
+    • Librării standard sigure, actualizabile automat (nicegui, psutil,
+      requests, rich)
+    • Stack-ul de scoring, raportat doar ca versiune (numpy, scipy, pandas) —
+      C-extensions, nu se actualizează automat
     • Verificare freshness a `best_methods.json` și a istoricului CSV
+
+NOTĂ: pachetele ML grele (scikit-learn, statsmodels, statsforecast, hmmlearn,
+xgboost, lightgbm, catboost) au fost ELIMINATE odată cu setul vechi de metode
+(14.09.2026) — niciun modul nu le mai importă, deci nu se mai verifică.
 
 NOTĂ: tot suportul GPU/neural (torch / CUDA / TimesFM / Chronos / MOMENT /
 NeuralForecast) a fost ELIMINAT din aplicație — nu se mai verifică nimic GPU.
@@ -34,15 +39,14 @@ SAFE_UPGRADE_PACKAGES = [
     "rich",  # bench reporting tables
 ]
 
-# Metode CPU pe care vrem sa stim DACA sunt instalate (nu le upgradam automat).
-CPU_METHOD_PACKAGES = {
-    "sklearn": "scikit-learn (ML classifiers)",
-    "statsmodels": "statsmodels (ARIMA/ETS/Holt-Winters)",
-    "statsforecast": "statsforecast (AutoARIMA/AutoETS/Theta/Croston)",
-    "hmmlearn": "hmmlearn (HMM)",
-    "xgboost": "XGBoost (gradient boosting CPU)",
-    "lightgbm": "LightGBM (gradient boosting CPU)",
-    "catboost": "CatBoost (gradient boosting CPU)",
+# Stack-ul pe care ruleaza scoring-ul: vrem sa stim DACA e instalat si la ce
+# versiune, dar NU il upgradam automat (C-extensions — vezi nota de mai sus).
+# Toate cele 52 de metode din registry se sprijina exclusiv pe numpy si scipy;
+# pandas e folosit de UI si de citirea istoricului.
+SCORING_STACK_PACKAGES = {
+    "numpy": "numpy (baza tuturor scorerelor)",
+    "scipy": "scipy (lfilter / sparse / cKDTree — 24 din cele 50 de metode noi)",
+    "pandas": "pandas (istoric CSV + tabele UI)",
 }
 
 
@@ -91,17 +95,15 @@ def check_and_upgrade(packages):
         print(f"-> [ATENTIE] Problema neasteptata: {e}")
 
 
-# Nume de import care nu coincid cu numele pachetului de distributie (pip) —
-# nici macar dupa substitutia "_" -> "-" (sklearn -> scikit-learn, nu "sklearn").
-_DIST_NAME_OVERRIDES = {"sklearn": "scikit-learn"}
-
-
 def _safe_version(modname: str) -> str:
-    candidates = [
-        _DIST_NAME_OVERRIDES.get(modname, modname),
-        modname.replace("_", "-"),
-        modname,
-    ]
+    """Versiunea de distributie (pip) a unui modul importabil.
+
+    Numele de import si cel de distributie pot sa difere doar prin "_" vs "-"
+    pentru pachetele ramase; incercam ambele forme inainte de a da "?".
+    (Cazul sklearn -> scikit-learn, care cerea un tabel de exceptii, a disparut
+    odata cu pachetele ML eliminate la 14.09.2026.)
+    """
+    candidates = [modname, modname.replace("_", "-")]
     for cand in dict.fromkeys(candidates):  # dedupe, pastreaza ordinea
         try:
             return dist_version(cand)
@@ -110,9 +112,9 @@ def _safe_version(modname: str) -> str:
     return "?"
 
 
-def check_cpu_methods():
-    _print_section("METODE CPU (statistice / ML)")
-    for mod, label in CPU_METHOD_PACKAGES.items():
+def check_scoring_stack():
+    _print_section("STACK DE SCORING (numeric, CPU)")
+    for mod, label in SCORING_STACK_PACKAGES.items():
         try:
             importlib.import_module(mod)
             v = _safe_version(mod)
@@ -204,7 +206,7 @@ def main():
         print("\n[ATENTIE] Ruleaza ACTUALIZARI.bat, nu direct verifica_mediu.py!")
         print("          Cauta venv-ul: .venv\n")
 
-    check_cpu_methods()
+    check_scoring_stack()
     assets_ok = check_bench_assets()
 
     upgrade_pip()
