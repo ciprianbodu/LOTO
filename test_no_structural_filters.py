@@ -22,10 +22,10 @@ istoricul real (52 de metode × 3 geometrii × 5 prefixe de istoric):
 
 * concentrarea pe decade a unui scorer legitim e MOȘTENITĂ din date — vine din
   ultima extragere sau din istoric — deci apare și dispare odată cu ele.
-  ``neighbor_adjacent`` pe 5/40 atinge pe unele prefixe chiar valoarea maximă
-  posibilă a statisticii (10+6 numere în două decade), deci pragul singur NU îl
-  poate deosebi de un filtru. Pe cele 5 prefixe fixe însă depășește o singură
-  dată din cinci;
+  ``neighbor_adjacent`` e cazul de frontieră: pe 6/49 depășește pragul pe 1 din
+  cele 5 prefixe (vârf 3.54 la prag 3.23), pe 5/40 pe niciunul (vârf 3.24 la
+  prag 3.62), deși pe alte tăieturi de istoric urcă mult mai sus. Valoarea de
+  vârf singură nu îl deosebește de un filtru; numărul de prefixe, da;
 * un filtru IMPUNE structura, deci depășește pe TOATE prefixele — inclusiv cele
   dependente de date, gen „decada fierbinte" (verificat în
   ``test_controalele_pozitive_sunt_prinse_de_porti``: 5 din 5, pe fiecare joc).
@@ -36,6 +36,25 @@ apariție e eșec): probabilitatea unui interval contiguu de 16 numere sub null 
 ~34/C(49,16) ≈ 7e-12, iar pe 52 de metode × 3 jocuri × 16 prefixe nu s-a produs
 niciodată. Aceeași gardă există deja în ``pool_selection.py``, dar acolo doar
 scrie un avertisment în audit; aici e contract.
+
+Ce NU prind porțile (limită cunoscută, scrisă aici ca să nu fie citită drept
+acoperire completă a listei din CLAUDE.md §4.3):
+
+* un filtru care ar IMPUNE echilibru perfect — 8 pare / 8 impare, sau
+  uniformitate pe decade — stă exact pe media nulă, adică acolo unde stau și
+  pool-urile aleatoare; ar fi prins doar dacă ar produce în plus bloc
+  consecutiv;
+* filtrele de SPAȚIERE și de clasă de rest (pas fix între numere: „doar
+  n % 3 == 1", „doar n % 7 ∈ {0,1,2}"), deși secvențele sunt și ele interzise
+  de §4.3. Verificat prin injectare în registry: un pool cu pas 3 trece neprins
+  pe toate cele trei geometrii — are paritate mixtă, decade uniforme și niciun
+  bloc consecutiv. O poartă pe regularitatea golurilor nu se poate calibra azi:
+  pe 5/40 filtrul cu pas 3 dă deviație a golurilor 0.80, iar cea mai mică
+  valoare a unei metode reale e 0.85 (``imapa_agg``) — pragul ar tăia metoda
+  reală odată cu filtrul. Clasa rămâne descoperită până când există o
+  statistică ce o separă;
+* geometria Joker Urna 2 (pool de un singur număr) nu trece prin porțile de
+  formă — vezi ``test_urna2_doar_metodele_relationale_pot_avea_scoruri_plate``.
 
 Nu scrie niciun fișier, nu atinge cache-uri și nu depinde de
 ``best_methods.json`` (care poate lipsi). Dacă un CSV din ``_ISTORIC/`` lipsește,
@@ -78,7 +97,7 @@ NULL_REPLICAS = 4000
 PREFIX_FRACTIONS = (0.60, 0.70, 0.80, 0.90, 1.00)
 
 # Paritate: 4σ față de media nulă. Măsurat pe registry-ul curent, cea mai mare
-# abatere reală e |z| = 2.94 (knn_draw_similarity, 6/49); un filtru care păstrează
+# abatere reală e |z| = 3.16 (knn_feature_pooled, 6/49); un filtru care păstrează
 # o singură clasă de paritate ajunge la |z| = 4.8..5.1 pe cele trei geometrii.
 # Pragul 4.0 cade curat între cele două regimuri.
 PARITY_SIGMA = 4.0

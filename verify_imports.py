@@ -77,7 +77,6 @@ def main() -> int:
         ("numpy", "0-1"),
         ("scipy", "1-3"),  # 24 din cele 50 de metode noi il importa
         ("psutil", "0-1"),
-        ("requests", "0-1"),
         ("rich", "0-1"),
     ]
     total = len(SCHEMA)

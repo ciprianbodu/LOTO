@@ -65,13 +65,22 @@ def test_schema_drops_removed_ml_packages():
         "lightgbm",
         "catboost",
         "matplotlib",
+        # scos la 15.09.2026: zero `import requests` in tot repo-ul.
+        "requests",
     ):
         assert f'"{pkg}"' not in schema, pkg
 
 
-def test_schema_keeps_the_cpu_stack_that_has_real_consumers():
+def test_schema_keeps_the_declared_cpu_stack():
+    """SCHEMA trebuie sa acopere exact pachetele declarate in
+    requirements_base.txt.
+
+    Fiecare nume de aici are consumator real in cod, verificat prin import, nu
+    presupus: `requests` a fost scos la 15.09.2026 tocmai pentru ca nu avea
+    niciunul. Testul afirma coerenta SCHEMA <-> requirements; perechea lui,
+    `test_schema_drops_removed_ml_packages`, apara sensul invers."""
     schema = _schema_source()
-    for pkg in ("nicegui", "pandas", "numpy", "scipy", "psutil", "requests", "rich"):
+    for pkg in ("nicegui", "pandas", "numpy", "scipy", "psutil", "rich"):
         assert f'"{pkg}"' in schema, pkg
 
 

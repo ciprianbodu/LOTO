@@ -760,8 +760,14 @@ def run_benchmark(
     _nc = _os.cpu_count() or 4
 
     # ── BUGET DE MEMORIE pentru procese (evită commit-limit Windows 0xc000012d) ──────
-    # Worker-ele CPU importă registry-ul de metode (sklearn/statsmodels ≈ 0.6 GB/proces).
-    # Limităm numărul de procese după RAM-ul DISPONIBIL ca să nu-l epuizăm.
+    # Worker-ele CPU importă registry-ul de metode (numpy + scipy) și își țin
+    # propriile matrice-indicator. Limităm numărul de procese după RAM-ul
+    # DISPONIBIL ca să nu-l epuizăm.
+    # 0.6 GB/proces a fost calibrat când registry-ul aducea sklearn+statsmodels;
+    # de la 14.09.2026 stack-ul e doar numpy+scipy, deci estimarea e acum
+    # CONSERVATOARE (pornesc mai puține procese decât ar încăpea). Rămâne așa
+    # până la o măsurătoare reală a RSS-ului per worker — o scădere ghicită
+    # readuce exact eroarea de commit-limit pentru care există plafonul.
     _PER_PROC_GB = 0.6
     try:
         import psutil as _ps

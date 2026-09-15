@@ -2,7 +2,7 @@
 
 Acoperă:
     • Librării standard sigure, actualizabile automat (nicegui, psutil,
-      requests, rich)
+      rich)
     • Stack-ul de scoring, raportat doar ca versiune (numpy, scipy, pandas) —
       C-extensions, nu se actualizează automat
     • Verificare freshness a `best_methods.json` și a istoricului CSV
@@ -35,7 +35,6 @@ for _stream in (sys.stdout, sys.stderr):
 SAFE_UPGRADE_PACKAGES = [
     "nicegui",
     "psutil",
-    "requests",
     "rich",  # bench reporting tables
 ]
 

@@ -158,6 +158,10 @@ def _retroactive_step_stateless(
         eng._build_draw_matrix()
         eng._adaptive_mode = adaptive_mode
         eng._adaptive_event = adaptive_event
+        # INERT: pipeline-ul NU mai citeste `_temp_blacklist` (pool-ul e top-scor
+        # pur de la oprirea filtrelor, 2026-07-08, iar blocul care il calcula a
+        # fost sters). Atributul se scrie doar ca sa nu se piarda urma optiunii
+        # `enable_hard_inversion`; nu influenteaza pool-ul si nu e un avantaj.
         eng._temp_blacklist = set(temp_blacklist) if temp_blacklist else set()
         out_lines, _, _, _, _ctx, _audit = eng.run_institutional_pipeline(
             progress_cb=None,
@@ -773,9 +777,12 @@ class LotoBacktester:
             max_variants: Limita de variante
             simulation_step: Din cate in cate extrageri sa faca simulare (1 = toate)
             use_feedback: Daca sa foloseasca Adaptive Local Tuning (Metoda 1)
-            enable_hard_inversion: Daca sa aplice Hard Inversion partiala (temp_blacklist)
-                dupa catastrofe. Setati False pentru ablation studies care masoara
-                contributia exclusiva a regime_reset.
+            enable_hard_inversion: INERT azi — calculeaza blacklist-ul temporar
+                dupa catastrofe si il paseaza mai departe, dar pipeline-ul nu il
+                mai citeste (filtrele post-scoring au fost oprite in 2026-07-08 si
+                codul lor sters), deci pool-ul este identic cu True si cu False.
+                Ramane in semnatura pentru ablation studies si pentru testele de
+                caracterizare; nu il descrie ca filtru activ.
         """
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")

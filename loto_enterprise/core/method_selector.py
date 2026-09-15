@@ -492,8 +492,9 @@ _SPEARMAN_TRIED = False
 def _get_spearman() -> Callable | None:
     """scipy.stats.spearmanr dacă e disponibil (import LEAZY, o singură dată).
 
-    scipy vine oricum cu sklearn, dar method_selector e importat și în contexte
-    minimale → fără dependență obligatorie: la eșec cădem pe implementarea numpy.
+    scipy e dependență obligatorie a aplicației (24 din cele 50 de metode îl
+    importă), dar method_selector e importat și în contexte minimale → îl
+    tratăm ca opțional: la eșec cădem pe implementarea numpy.
     """
     global _SPEARMAN_FN, _SPEARMAN_TRIED
     if not _SPEARMAN_TRIED:
