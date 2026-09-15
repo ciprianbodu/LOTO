@@ -262,7 +262,6 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
         for filename in (
             "best_methods.json",
             "curated_methods.json",
-            "disabled_methods.json",
         ):
             path = PROJECT_ROOT / filename
             digest.update(filename.encode())

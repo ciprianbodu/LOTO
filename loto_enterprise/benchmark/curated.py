@@ -2,20 +2,17 @@
 
 Sursa: curated_methods.json (rădăcina proiectului).
 
-Diferența față de `disabled.py` (blacklist):
-    • `disabled_methods.json` e MERGE-ONLY și PERMANENT — o metodă intrată acolo
-      nu se mai rulează niciodată și nu se scoate.
-    • `curated_methods.json` e o SELECȚIE ACTIVĂ, complet reversibilă: ștergi
-      fișierul (sau golești lista `active`) și bench-ul revine instantaneu la
-      toate metodele available minus blacklist. Nimic nu se pierde.
+`curated_methods.json` e o SELECȚIE ACTIVĂ, complet reversibilă: ștergi fișierul
+(sau golești lista `active`) și bench-ul revine instantaneu la toate metodele
+available din registry. Nimic nu se pierde. Mecanismul vechi de tombstone
+(`disabled_methods.json`, blacklist merge-only) a fost eliminat la 14.09.2026 —
+o metodă ștearsă dispare pur și simplu din cod.
 
 Criteriul curent combină avantajul observat față de baseline pe fereastra
 externă cu ACOPERIREA DE SEMNAL DISTINCT: păstrăm numai metode peste random,
 nedegenerate, apoi eliminăm clonele cu |Spearman| >= 0.95. Este o selecție
 reversibilă pe istoric, nu o afirmație că loteria a devenit predictibilă;
 gate-ul oficial din `decision.py` rămâne obligatoriu la fiecare Re-Bench.
-
-Cele două filtre se COMPUN: curated ∩ (available minus disabled).
 """
 
 from __future__ import annotations

@@ -357,10 +357,9 @@ def _render_bench_leaderboard_slice(
     _BASE = _baseline_methods()
     try:
         from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
-        from loto_enterprise.benchmark.disabled import load_disabled as _load_dis
         from loto_enterprise.benchmark.curated import load_per_game as _load_pg
 
-        _alive_methods = set(_METHODS_NOW) - _load_dis()
+        _alive_methods = set(_METHODS_NOW)
         _pg_only = set(_load_pg().get(folds_game_key) or [])
     except Exception:  # noqa: BLE001
         _alive_methods = None

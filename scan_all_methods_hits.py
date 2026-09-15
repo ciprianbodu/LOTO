@@ -103,17 +103,10 @@ _SKIP_SLOW: set[str] = set()
 def _available_methods() -> list[str]:
     from loto_enterprise.benchmark.methods import list_methods, method_meta
 
-    try:
-        from loto_enterprise.benchmark.disabled import load_disabled
-
-        disabled = load_disabled()
-    except Exception:  # noqa: BLE001
-        disabled = set()
     return [
         m
         for m in list_methods()
         if method_meta(m).get("available", True)
-        and m not in disabled
         and m not in _SKIP_SLOW
     ]
 

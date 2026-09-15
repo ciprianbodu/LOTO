@@ -198,8 +198,8 @@ class ScoringMixin:
         if self.use_bench_winner:
             scores = self._scores_via_bench_winner(is_joker_drum=is_joker_drum)
             # Un dict NEVID dar PLAT (toate scorurile egale) nu e un rezultat, e un
-            # eșec deghizat: `methods_graph` semnalează eroarea internă cu
-            # `_normalize({}, max_num)`, care întoarce {n: 0.0 …} — TRUTHY, deci
+            # eșec deghizat: un scorer poate semnala eroarea internă cu
+            # `normalize({}, max_num)`, care întoarce {n: 0.0 …} — TRUTHY, deci
             # trecea de `if scores`. Tie-break-ul canonic e „număr mare întâi", așa
             # că pool-ul devenea [49, 48, 47, …]: cele mai mari numere, pur artefact,
             # fără niciun avertisment pentru utilizator. Tratăm platul ca pe gol →

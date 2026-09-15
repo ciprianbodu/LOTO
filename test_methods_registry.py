@@ -1,46 +1,28 @@
-"""Teste pentru fuziunea registry-ului de metode (`methods._load_extra_methods`) —
-verificare globala 2026-09-07: o coliziune de NUME intre doua module de extensie
-(non-tombstone) trecea complet neobservata, fara niciun log — a doua implementare
-disparea tacut din bench, fara nicio urma."""
+"""Registry-ul de metode (`methods._load_extra_methods`): dimensiune, coliziuni, tombstone."""
 
 from __future__ import annotations
 
 import logging
 
-from loto_enterprise.benchmark import methods, methods_classical, methods_ml
+from loto_enterprise.benchmark import methods, methods_recency, methods_relational
 
 
 def _dummy_fn(draws_2d, max_num):
     return {n: 0.0 for n in range(1, max_num + 1)}
 
 
-def test_no_collisions_in_the_real_registry():
-    """Gardă: registry-ul real nu are coliziuni; CPU-urile reînviate sunt prezente."""
-    from loto_enterprise.benchmark.methods_revived import REVIVED_METHODS
-
-    assert "recency" in methods.METHODS
-    assert "ml_rf" in methods.METHODS
-    assert "omnius" not in methods.METHODS
-    assert "ml_gaussian_process" not in methods.METHODS
-    assert len(methods.METHODS) == 111 + len(REVIVED_METHODS)
+def test_registry_has_two_baselines_plus_fifty_methods():
+    """2 baseline-uri structurale (random, frequency) + 30 + 20 metode (14.09.2026)."""
+    assert len(methods.METHODS) == 52
+    assert "random" in methods.METHODS and "frequency" in methods.METHODS
+    assert len(methods.list_methods()) == 52
+    assert methods.METHOD_ALIASES == {}
 
 
-def test_revived_duplicate_slots_are_aliases():
-    """Clonele reînviate nu trebuie să ocupe un slot de bench separat.
-
-    Numele deja curate (`cover_diversity_mmr`, `ssa`) rămân first-class — sunt
-    câștigătorii per joc; aliasăm doar wrapper-urile nefolosite în per_game.
-    """
-    assert methods.resolve_method_name("ngram_trigram") == "markov_3"
-    assert methods.resolve_method_name("ngram_bigram") == "markov_2"
-    assert methods.resolve_method_name("vlmm") == "markov_3"
-    assert methods.resolve_method_name("winslips") == "cover_greedy"
-    assert methods.resolve_method_name("cover_temporal_shift") == "drift"
-    assert methods.resolve_method_name("centrality") == "graph_degree"
-    assert "cover_diversity_mmr" not in methods.METHOD_ALIASES
-    assert "ssa" not in methods.METHOD_ALIASES
-    assert "ngram_trigram" not in methods.list_methods()
-    assert "markov_3" in methods.list_methods()
+def test_old_method_names_are_gone():
+    """Cele 109 metode vechi nu mai există în registry (și nici lista de tombstone)."""
+    for old in ("autocorr", "ml_knn_5", "649_decade_hot", "parity_balance", "dmd", "omnius"):
+        assert old not in methods.METHODS
 
 
 def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):
@@ -48,20 +30,13 @@ def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):
     monkeypatch.setattr(methods, "METHODS", fake_methods)
 
     first_tup = (_dummy_fn, "test-family-1", False, "primul")
-    second_tup = (
-        _dummy_fn,
-        "test-family-2",
-        False,
-        "al doilea (nu trebuie sa castige)",
-    )
-    monkeypatch.setitem(methods_classical.CLASSICAL_METHODS, "test_dup_name", first_tup)
-    monkeypatch.setitem(methods_ml.ML_METHODS, "test_dup_name", second_tup)
+    second_tup = (_dummy_fn, "test-family-2", False, "al doilea (nu trebuie sa castige)")
+    monkeypatch.setitem(methods_recency.RECENCY_METHODS, "test_dup_name", first_tup)
+    monkeypatch.setitem(methods_relational.RELATIONAL_METHODS, "test_dup_name", second_tup)
 
     with caplog.at_level(logging.WARNING):
         methods._load_extra_methods()
 
-    # Primul modul incarcat (methods_classical) castiga; al doilea NU
-    # suprascrie tacut.
     assert fake_methods["test_dup_name"] == first_tup
     assert any(
         "test_dup_name" in rec.message and "duplicat" in rec.message

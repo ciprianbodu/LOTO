@@ -85,8 +85,25 @@ class CaptureUI:
 
 @contextmanager
 def capture_ui():
+    """Redirecționează `ui` către un colector în TOATE modulele UI încărcate.
+
+    Funcțiile de randare (`_render_bench_leaderboard_slice`, `_render_hits_4plus`
+    etc.) trăiesc în `ui_bench.py` / `ui_hits.py` / `ui_results.py` / `ui_runtime.py`
+    și folosesc `ui`-ul propriului modul; `app_nicegui` doar le re-exportă. A
+    patch-ui doar `app_ui.ui` lăsa aceste funcții pe `ui`-ul real NiceGUI, care
+    fără client conectat nu produce nimic capturabil — capturarea ieșea goală.
+    Patch-uim `ui` pe fiecare modul UI care îl expune.
+    """
+    import sys as _sys
+    from contextlib import ExitStack
+
     collector = CaptureUI()
-    with patch.object(app_ui, "ui", collector):
+    _ui_modules = ("app_nicegui", "ui_bench", "ui_hits", "ui_results", "ui_runtime")
+    with ExitStack() as stack:
+        for _modname in _ui_modules:
+            _mod = _sys.modules.get(_modname)
+            if _mod is not None and hasattr(_mod, "ui"):
+                stack.enter_context(patch.object(_mod, "ui", collector))
         yield collector
 
 

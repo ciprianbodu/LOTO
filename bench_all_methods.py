@@ -61,27 +61,18 @@ from runtime_paths import BENCH_LOG_FILE
 
 
 # Lista bench = TOATE metodele disponibile din registry (exclusiv CPU).
-# Metodele din disabled_methods.json au fost ELIMINATE din cod (tombstone).
-# Pe loterie, diferențele dintre scorere sunt majoritar zgomot statistic.
-try:
-    from loto_enterprise.benchmark.disabled import load_disabled as _load_disabled
-
-    _DISABLED_METHODS = _load_disabled()
-except Exception:  # noqa: BLE001
-    _DISABLED_METHODS = set()
-
+# Mecanismul de tombstone (disabled_methods.json) a fost eliminat la 14.09.2026:
+# o metodă ștearsă dispare din cod, deci nu mai există listă de blacklist de
+# scăzut. Pe loterie, diferențele dintre scorere sunt majoritar zgomot statistic.
 _AVAILABLE_METHODS = [
-    m
-    for m in list_methods()
-    if method_meta(m).get("available", True) and m not in _DISABLED_METHODS
+    m for m in list_methods() if method_meta(m).get("available", True)
 ]
 
-# Al DOILEA filtru, REVERSIBIL: curated_methods.json (rădăcina repo). Dacă fișierul
-# există și are `active` nevidă, bench-ul rulează DOAR acel subset (criteriu
-# curent: peste baseline + semnal distinct). Absent/gol → comportamentul de
-# dinainte (toate metodele available minus blacklist). Cele două filtre se compun:
-# curated ∩ (available minus disabled). Log-ul se emite în main(), după
-# logging.basicConfig() (aici, la import, handler-ele încă nu există).
+# Filtru REVERSIBIL: curated_methods.json (rădăcina repo). Dacă fișierul există
+# și are `active` nevidă, bench-ul rulează DOAR acel subset (criteriu curent:
+# peste baseline + semnal distinct). Absent/gol → toate metodele available.
+# Log-ul se emite în main(), după logging.basicConfig() (aici, la import,
+# handler-ele încă nu există).
 try:
     from loto_enterprise.benchmark.curated import (
         apply_curation as _apply_curation,

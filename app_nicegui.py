@@ -425,15 +425,13 @@ def _target_bench_folds() -> int:
             apply_curation,
             resolve_methods_per_game,
         )
-        from loto_enterprise.benchmark.disabled import load_disabled
         from loto_enterprise.benchmark.methods import list_methods, method_meta
         from loto_enterprise.benchmark.runner import discover_games
 
-        disabled = load_disabled()
         avail = [
             m
             for m in list_methods()
-            if method_meta(m).get("available", True) and m not in disabled
+            if method_meta(m).get("available", True)
         ]
         kept, info = apply_curation(avail)
         games = discover_games()

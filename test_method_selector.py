@@ -159,7 +159,7 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
                         "scorer": "frequency",
                         "ensemble": [
                             {"method": "frequency", "weight": 0.6},
-                            {"method": "ml_logistic", "weight": 0.4},
+                            {"method": "markov_pairs", "weight": 0.4},
                         ],
                     }
                 }
@@ -170,12 +170,12 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
     names = {name for name, _fn, _w in result}
     assert "frequency" in names
     assert "random" not in names
-    # ml_logistic e în METHODS (nu e blacklistat); dacă import sklearn eșuează tot rămâne frequency
+    # markov_pairs e în METHODS: blend real cu 2 membri
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
-    if "ml_logistic" in names:
-        weights = {name: w for name, _fn, w in result}
-        assert weights["frequency"] == pytest.approx(0.6)
-        assert weights["ml_logistic"] == pytest.approx(0.4)
+    assert "markov_pairs" in names
+    weights = {name: w for name, _fn, w in result}
+    assert weights["frequency"] == pytest.approx(0.6)
+    assert weights["markov_pairs"] == pytest.approx(0.4)
 
 
 def test_ensemble_skips_random_even_if_listed(temp_config):
@@ -251,9 +251,12 @@ def test_get_winner_rejects_random_scorer(temp_config):
     )
 
 
-def test_get_winner_rejects_parity_class_filters(temp_config):
-    """Filtrele de clasă din EXCLUDED_FROM_PRODUCTION nu pot fi scorer de producție."""
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+def test_old_class_filters_are_gone_and_never_reach_production(temp_config):
+    """Vechile filtre de clasă (paritate, prime, decade, mod, vecini) au fost
+    ELIMINATE din registry la 14.09.2026. Un `best_methods.json` vechi care încă
+    le numește nu are voie să reactiveze un filtru: numele nu mai e în METHODS,
+    deci sanitizarea cade determinist pe frequency."""
+    from loto_enterprise.benchmark.methods import METHODS
 
     for scorer in (
         "parity_balance",
@@ -262,7 +265,7 @@ def test_get_winner_rejects_parity_class_filters(temp_config):
         "649_mod7_hot",
         "649_last_neighbors",
     ):
-        assert scorer in EXCLUDED_FROM_PRODUCTION
+        assert scorer not in METHODS
         cfg_path = temp_config(
             {
                 "loto_5_40": {
@@ -384,11 +387,11 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
             "joker_urna2": {
                 "auto_pilot_per_pool": {
                     "k1": {
-                        "scorer": "autocorr",
+                        "scorer": "ewma_hl30",
                         "hit_target": 1,
                         "target_label": "top-1 (1/1)",
                         "ensemble": [
-                            {"method": "autocorr", "weight": 0.7},
+                            {"method": "ewma_hl30", "weight": 0.7},
                             {"method": "frequency", "weight": 0.3},
                         ],
                     }
@@ -398,10 +401,10 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
     )
     assert (
         ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path)
-        == "autocorr"
+        == "ewma_hl30"
     )
     result = ms.get_ensemble_for_game("joker_urna2", pool_size=1, config_path=cfg_path)
-    assert [name for name, _fn, _weight in result] == ["autocorr", "frequency"]
+    assert [name for name, _fn, _weight in result] == ["ewma_hl30", "frequency"]
     assert sum(weight for _name, _fn, weight in result) == pytest.approx(1.0)
     cfg = ms.recommend_optimal_config("joker_urna2", 1, config_path=cfg_path)
     assert (cfg["hit_target"], cfg["target_label"]) == (1, "top-1 (1/1)")
@@ -419,8 +422,8 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
                             {"method": "random", "weight": 0.4},
                             {"method": "frequency", "weight": "abc"},
                             {"method": "frequency", "weight": 0.2},
-                            {"method": "autocorr", "weight": 0.2},
-                            {"method": "pair_affinity", "weight": 0.2},
+                            {"method": "ewma_hl30", "weight": 0.2},
+                            {"method": "markov_pairs", "weight": 0.2},
                         ],
                     }
                 }
@@ -430,7 +433,7 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
     result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
     names = [name for name, _fn, _w in result]
     assert "random" not in names
-    assert names == ["frequency", "autocorr", "pair_affinity"]
+    assert names == ["frequency", "ewma_hl30", "markov_pairs"]
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
 
 

@@ -22,15 +22,9 @@ def test_target_bench_folds_matches_the_documented_matrix():
         apply_curation,
         resolve_methods_per_game,
     )
-    from loto_enterprise.benchmark.disabled import load_disabled
     from loto_enterprise.benchmark.methods import list_methods, method_meta
 
-    disabled = load_disabled()
-    avail = [
-        m
-        for m in list_methods()
-        if method_meta(m).get("available", True) and m not in disabled
-    ]
+    avail = [m for m in list_methods() if method_meta(m).get("available", True)]
     kept, info = apply_curation(avail)
     games = runner.discover_games()
     expected = 0
@@ -60,7 +54,10 @@ def test_target_bench_folds_is_larger_without_curation():
     finally:
         curated.load_curated = original
     with_curation = app._target_bench_folds()
-    assert without > with_curation > 0
+    # De la 14.09.2026 curarea = tot registry-ul (30 + frequency, plus random adaugat
+    # de runner), deci cele doua tinte coincid; ramane garda ca niciuna nu e 0.
+    assert without >= with_curation > 0
+    assert with_curation == 52 * 4 * 4
 
 
 def test_target_bench_folds_falls_back_to_zero_without_istoric():

@@ -1,19 +1,19 @@
-"""Unified scoring interface for every model in the benchmark.
+"""Registry-ul unic al metodelor de scoring (setul din 14.09.2026).
 
-Each scorer is a callable that accepts:
-    * draws_2d : np.ndarray of shape (n_draws, draw_n) with the history of
-                 drawn numbers (per row)
-    * max_num  : int — universe size (e.g. 49 for 6/49)
+Contract (CLAUDE.md §5.2): ``fn(draws_2d, max_num) -> dict[int, float]``,
+scoruri în [0, 1], determinism, fără efecte secundare.
 
-…and returns ``dict[int, float]`` keyed by candidate number (1..max_num),
-with scores normalized to [0, 1] (higher = more likely to be drawn next).
-
-A METHODS dict at the bottom registers every available method. Extra CPU
-methods (classical / ML / coverage / graph) are merged from extension
-modules at import time.
-
-NOTĂ: tot GPU-ul a fost eliminat din aplicație — nu mai există metode
-neural/foundation/torch/TimesFM aici. Benchmark-ul rulează exclusiv metode CPU.
+Registry-ul conține cele două baseline-uri structurale (`random` — martorul
+benchmark-ului, interzis în producție; `frequency` — fallback-ul determinist
+de producție) și cele 50 de metode din modulele:
+    methods_recency.py     16 metode: recență, goluri, serii de timp
+    methods_relational.py  10 metode: tranziții, co-apariție, graf, vecinătate
+    methods_learning.py     4 metode: modele comune ieftine + media rangurilor
+    methods_wave2.py       20 metode (al doilea val, 14.09.2026): idei reluate din
+                           vechea listă disabled + descompuneri, context propriu,
+                           relații de ordinul 2, învățare ieftină
+Cele 109 metode anterioare (7 module) au fost eliminate la 14.09.2026, împreună
+cu mecanismul de tombstone (`disabled_methods.json`), la cererea utilizatorului.
 """
 
 from __future__ import annotations
@@ -34,22 +34,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
-    if not scores:
-        return {n: 0.0 for n in range(1, max_num + 1)}
-    vals = np.fromiter((float(v) for v in scores.values()), dtype=np.float64)
-    finite = vals[np.isfinite(vals)]
-    if finite.size == 0:
-        return {n: 0.0 for n in range(1, max_num + 1)}
-    vmin, vmax = float(finite.min()), float(finite.max())
-    rng = max(vmax - vmin, 1e-12)
-    out = {
-        int(k): float((float(v) - vmin) / rng) if np.isfinite(v) else 0.0
-        for k, v in scores.items()
-    }
-    for n in range(1, max_num + 1):
-        out.setdefault(n, 0.0)
-    return out
+from .methods_common import normalize as _normalize  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -96,27 +81,6 @@ def score_frequency(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
     return _normalize({i: float(scores[i]) for i in range(1, max_num + 1)}, max_num)
 
 
-def score_recency(draws_2d: np.ndarray, max_num: int) -> dict[int, float]:
-    """Helper (NU e în METHODS): folosit de blend-uri search-649.
-
-    Intrarea de registry `recency` a fost ELIMINATĂ (blacklist). Nu o reînregistra.
-    """
-    n = draws_2d.shape[0]
-    last_seen = np.full(max_num + 1, -1, dtype=np.int32)
-    for i, row in enumerate(draws_2d):
-        for v in row:
-            vi = int(v)
-            if 1 <= vi <= max_num:
-                last_seen[vi] = i
-    scores = {}
-    for num in range(1, max_num + 1):
-        if last_seen[num] < 0:
-            scores[num] = float(n + 1)
-        else:
-            scores[num] = float(n - last_seen[num])
-    return _normalize(scores, max_num)
-
-
 # ---------------------------------------------------------------------------
 # Registry (group → method name → (callable, family, requires_train, notes))
 # ---------------------------------------------------------------------------
@@ -135,92 +99,38 @@ METHODS: dict[str, tuple[Callable, str, bool, str]] = {
 
 
 # ============================================================================
-# EXTENSIONS — extra CPU methods loaded from methods_classical.py, methods_ml.py,
-# methods_coverage.py, methods_graph.py. Loaded lazily; if any module is missing
-# or import fails, the loader logs and continues.
-# (Modulele GPU — torch_extra / torch_advanced / geometry — au fost eliminate.)
+# EXTENSIONS — metodele din methods_recency / methods_relational / methods_learning.
+# Coliziunile de nume între module sunt logate, nu ascunse.
 # ============================================================================
 def _load_extra_methods() -> None:
     """Merge METHODS dicts from CPU extension modules into the global METHODS."""
     global METHODS
     extensions = []
-    try:
-        from . import methods_classical
-
-        extensions.append(("methods_classical", methods_classical.CLASSICAL_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_classical not loaded: {exc}")
-    try:
-        from . import methods_ml
-
-        extensions.append(("methods_ml", methods_ml.ML_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_ml not loaded: {exc}")
-    try:
-        from . import methods_coverage
-
-        extensions.append(("methods_coverage", methods_coverage.COVERAGE_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_coverage not loaded: {exc}")
-    try:
-        from . import methods_graph
-
-        extensions.append(("methods_graph", methods_graph.GRAPH_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_graph not loaded: {exc}")
-    try:
-        from . import methods_revived
-
-        extensions.append(("methods_revived", methods_revived.REVIVED_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_revived not loaded: {exc}")
-    try:
-        from . import methods_search_649
-
-        extensions.append(("methods_search_649", methods_search_649.SEARCH_649_NEW))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_search_649 not loaded: {exc}")
-    try:
-        from . import methods_top649
-
-        extensions.append(("methods_top649", methods_top649.TOP649_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_top649 not loaded: {exc}")
-    try:
-        from . import methods_math_extra
-
-        extensions.append(("methods_math_extra", methods_math_extra.MATH_EXTRA_METHODS))
-    except Exception as exc:
-        logger.debug(f"[methods] methods_math_extra not loaded: {exc}")
+    for modname, attr in (
+        ("methods_recency", "RECENCY_METHODS"),
+        ("methods_relational", "RELATIONAL_METHODS"),
+        ("methods_learning", "LEARNING_METHODS"),
+        ("methods_wave2", "WAVE2_METHODS"),
+    ):
+        try:
+            module = __import__(f"{__package__}.{modname}", fromlist=[attr])
+            extensions.append((modname, getattr(module, attr)))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[methods] %s not loaded: %s", modname, exc)
 
     added = 0
-    skipped_tombstone = 0
     skipped_collision = 0
     _owner: dict[str, str] = {}  # nume -> primul modul care l-a inregistrat
-    try:
-        from .disabled import load_disabled
-
-        tombstones = load_disabled()
-    except Exception:
-        tombstones = set()
     for modname, extra_dict in extensions:
         for name, tup in extra_dict.items():
-            if name in tombstones:
-                # Plasă: nume din disabled_methods.json NU se reînregistrează
-                # chiar dacă cineva le pune din greșeală înapoi în dict.
-                skipped_tombstone += 1
-                continue
             if name not in METHODS:
                 METHODS[name] = tup
                 _owner[name] = modname
                 added += 1
             elif _owner.get(name) != modname:
-                # Coliziune REALĂ intre doua module de extensie (sau cu un
-                # nume deja in METHODS de baza) — inainte se sarea tacut,
-                # fara niciun log; a doua implementare disparea din bench
-                # fara nicio urma. Doar tombstone-urile aveau propriul
-                # numarator; o coliziune non-tombstone (ex. copy-paste intr-
-                # un fisier nou cu numele neschimbat) trecea neobservata.
+                # Coliziune REALĂ între două module de extensie (sau cu un nume
+                # din registry-ul de bază): a doua implementare NU intră în bench
+                # și se loghează, ca să nu dispară tăcut.
                 skipped_collision += 1
                 logger.warning(
                     "[methods] nume duplicat '%s' — pastrez implementarea din %s, "
@@ -233,11 +143,6 @@ def _load_extra_methods() -> None:
         logger.info(
             f"[methods] Loaded {added} extra prediction methods from extensions ({len(extensions)} modules)."
         )
-    if skipped_tombstone:
-        logger.warning(
-            "[methods] skipped %d tombstoned (disabled) names at load",
-            skipped_tombstone,
-        )
     if skipped_collision:
         logger.warning(
             "[methods] skipped %d duplicate (non-tombstone) names at load",
@@ -245,26 +150,10 @@ def _load_extra_methods() -> None:
         )
 
 
-# Alias-uri pentru nume vechi (înainte de eliminarea GPU: ml_*_cpu) și duplicate eliminate
-# (649_top_autocorr delega pur către autocorr — două sloturi de clasament, semnal dublu în
-# ensemble). Nu intră în bench (list_methods le exclude) — doar rezolvă best_methods.json /
-# folds.csv vechi până la re-bench.
-METHOD_ALIASES: dict[str, str] = {
-    "ml_catboost_cpu": "ml_catboost",
-    "ml_xgb_cpu": "ml_xgb",
-    "ml_lgbm_cpu": "ml_lgbm",
-    "649_top_autocorr": "autocorr",
-    # Revived CPU wrappers identical to a live scorer. Not in curated per_game
-    # (those keep their own names: cover_diversity_mmr, ssa, markov_3).
-    "ngram_bigram": "markov_2",
-    "ngram_trigram": "markov_3",
-    "vlmm": "markov_3",
-    "winslips": "cover_greedy",
-    "cover_temporal_shift": "drift",
-    "cover_triplet": "assoc_rules",
-    "cover_balanced_spread": "decade_balance",
-    "centrality": "graph_degree",
-}
+# Alias-uri de nume legacy → nume curent. Gol de la 14.09.2026: toate țintele
+# vechi au fost eliminate; `resolve_method_name` rămâne ca punct unic de
+# rezolvare pentru folds.csv / best_methods.json mai vechi decât registry-ul.
+METHOD_ALIASES: dict[str, str] = {}
 
 
 def resolve_method_name(name: str) -> str:

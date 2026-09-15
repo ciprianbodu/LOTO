@@ -147,19 +147,13 @@ ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 # "numere date cu zarul" nu.
 EXCLUDED_FROM_PRODUCTION = frozenset(
     {
+        # `random` e singurul martor structural interzis în producție (fără
+        # semnal, seed instabil în timp). Vechile filtre de clasă/bucket
+        # (parity_balance, prime_bias, 649_decade_hot etc.) nu mai există ca
+        # metode — au fost eliminate odată cu întreg setul vechi la 14.09.2026 —
+        # deci nu mai e nimic de listat aici pe lângă `random`. Niciuna dintre
+        # cele 50 de metode noi nu e filtru structural (CLAUDE.md §5.3).
         "random",
-        # Two-level / bucket class filters: top-K becomes one class
-        # (all odd/even, all prime/composite, one decade, one residue,
-        # consecutive block around the mean, last-draw ±3 membership).
-        # Not scorers.
-        "parity_balance",
-        "649_parity_recent",
-        "prime_bias",
-        "649_mod7_hot",
-        "649_mod10_hot",
-        "649_decade_hot",
-        "649_sum_reversion",
-        "649_last_neighbors",
     }
 )
 
@@ -685,14 +679,14 @@ def decide_optimal_config_for_pool(
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
     # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
-    # candidați (vezi EXCLUDED_FROM_PRODUCTION: random + filtre de clasă): nu
-    # are voie să ajungă scorer de producție.
-    # Plus: sare metodele eliminate din METHODS / tombstone (folds vechi).
+    # candidați (vezi EXCLUDED_FROM_PRODUCTION): nu are voie să ajungă scorer de
+    # producție. Plus: sare metodele care nu mai există în METHODS (folds mai
+    # vechi decât registry-ul). Mecanismul de tombstone a fost eliminat la
+    # 14.09.2026: un nume necunoscut cade oricum, fiindcă nu e în METHODS.
     try:
         from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
-        from loto_enterprise.benchmark.disabled import load_disabled as _load_dis
 
-        _alive = set(_METHODS_NOW) - _load_dis()
+        _alive = set(_METHODS_NOW)
     except Exception:  # noqa: BLE001
         _alive = None
     methods = [

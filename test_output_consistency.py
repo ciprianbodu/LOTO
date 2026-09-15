@@ -15,7 +15,7 @@ def _folds():
     for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
         for method, rate, ties in (
             ("frequency", 0.10, 0.1),
-            ("649_mom_15_60", 0.15, 0.7),
+            ("markov_pairs", 0.15, 0.7),
             ("random", 0.085, 0.9),
         ):
             rows.append(
@@ -47,7 +47,7 @@ def test_rendered_ranking_obeys_structural_gate_without_disqualifying_baseline(
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(_folds(), "joker_urna1", 11, "Joker", 20)
     assert ui.ranking()[0] == "frequency"
-    assert "649_mom_15_60" not in ui.ranking()
+    assert "markov_pairs" not in ui.ranking()
     assert "70.0%" in ui.text()
     assert "1 excluse structural" in ui.text()  # random rămâne doar reper
 
@@ -59,7 +59,7 @@ def test_no_eligible_method_still_renders_exclusion_reasons(monkeypatch):
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
     assert "Nicio metodă eligibilă" in ui.text()
-    assert "649_mom_15_60" in ui.text()
+    assert "markov_pairs" in ui.text()
     assert not ui.ranking()
 
 

@@ -41,14 +41,14 @@ def test_curated_benchmark_runs_only_relevant_methods_per_game():
     games = ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
     matrix = resolve_methods_per_game(load_curated(), games)
 
-    # 19/19/17/13 semnale; random+frequency sunt adăugate dacă nu erau deja.
-    assert {g: len(matrix[g]) for g in games} == {
-        "loto_6_49": 21,
-        "loto_5_40": 21,
-        "joker_urna1": 18,  # frequency este deja unul dintre cele 17
-        "joker_urna2": 15,
-    }
-    assert sum(map(len, matrix.values())) == 75
+    # De la 14.09.2026, curated per_game = toate cele 50 de metode noi + frequency
+    # pe fiecare joc (fără preselecție pe istoric), iar runner-ul adaugă `random`:
+    # 52 pe fiecare joc. Nu hardcodăm împrăștiat — verificăm că e chiar registry-ul.
+    from loto_enterprise.benchmark.methods import list_methods
+
+    n_reg = len(list_methods())  # 52 (random + frequency + 50)
+    assert {g: len(matrix[g]) for g in games} == {g: n_reg for g in games}
+    assert sum(map(len, matrix.values())) == n_reg * len(games)
     for selected in matrix.values():
         assert "random" in selected
         assert "frequency" in selected

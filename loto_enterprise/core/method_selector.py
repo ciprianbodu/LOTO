@@ -72,9 +72,12 @@ def _load_config(path: str | None = None) -> dict:
 def _production_forbidden() -> frozenset[str]:
     """Metode care NU au voie să scocheze pool-ul de producție.
 
-    = EXCLUDED_FROM_PRODUCTION (random) ∪ disabled_methods.json.
-    best_methods.json vechi/manual putea totuși să le numească — fără gardă
-    aici, pool-ul devenea nedeterminist sau reactiva o metodă legendată.
+    = EXCLUDED_FROM_PRODUCTION (doar `random`). best_methods.json vechi/manual
+    putea totuși să numească `random` — fără gardă aici, pool-ul devenea
+    nedeterminist. Mecanismul de tombstone (disabled_methods.json) a fost
+    eliminat la 14.09.2026: un nume necunoscut e respins oricum de gărzile din
+    `_sanitize_production_name` (nu e în METHODS), nu mai e nevoie de o listă
+    separată de blacklist.
     """
     forbidden: set[str] = {"random"}
     try:
@@ -82,29 +85,16 @@ def _production_forbidden() -> frozenset[str]:
 
         forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
     except Exception as exc:  # noqa: BLE001
-        # "random" (hardcodat mai sus) tot blochează — dar tombstone-urile din
-        # disabled_methods.json (§4.3: „merge-only si ireversibil") NU au niciun
-        # backstop hardcodat separat. Un import spart aici trecea neobservat.
+        # "random" (hardcodat mai sus) tot blochează chiar dacă importul e spart.
         logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)
-    try:
-        from loto_enterprise.benchmark.disabled import load_disabled
-
-        forbidden |= {str(m) for m in load_disabled()}
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "[method_selector] disabled_methods.json indisponibil — "
-            "tombstone-urile NU sunt aplicate în această revenire: %s",
-            exc,
-        )
     return frozenset(forbidden)
 
 
 def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
     """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
 
-    Respinge: random, tombstone (disabled), alias-uri moarte (ml_xgb_cpu),
-    orice nume care nu e în registry. Altfel UI/audit pretindea XGBoost când
-    rulează frequency.
+    Respinge: random, orice nume care nu e în registry. Altfel UI/audit
+    pretindea un scorer inexistent când rulează de fapt frequency.
     """
     if not name:
         return None

@@ -19,7 +19,7 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-14:
+Snapshot verificat la 2026-09-15:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py` + `ui_runtime.py` / `ui_results.py` / `ui_bench.py` / `ui_hits.py`, port 8000;
@@ -28,33 +28,37 @@ Snapshot verificat la 2026-09-14:
 - runtime scris frecvent: `D:\_BUILD\_LOTO` (`.wf_cache`, `loto.log`,
   `bench_full.log`, `startup_8000.log`), cu override prin `LOTO_RUNTIME_DIR` si
   `LOTO_WF_CACHE_DIR`;
-- registry: 183 metode CPU in `METHODS` (111 + 72 reinvie); `list_methods()`
-  exclude aliasurile identice (`ngram_trigram` → `markov_3` etc.);
-- curare reversibila: 52 metode eligibile in uniunea `active`; Re-Bench ruleaza
-  matricea efectiva 19/19/17/13 per joc, plus `random` si `frequency` unde nu
-  sunt deja prezente;
-- selectie: 19/19/17 pentru 6/49, 5/40 si Joker Urna 1, plus 13 semnale
-  distincte peste baseline pentru Joker Urna 2;
-- `parity_balance`, `649_parity_recent`, `prime_bias`, `649_mod7_hot`,
-  `649_mod10_hot`, `649_decade_hot`, `649_sum_reversion` si `649_last_neighbors`
-  sunt in `EXCLUDED_FROM_PRODUCTION` (filtre de clasa/bucket/spatial: top-K =
-  o paritate, o decadă, un reziduu, toate primele/compusele, un bloc consecutiv,
-  sau vecinii ultimei extrageri);
-- tombstone: 1 nume in `disabled_methods.json` (`ml_gaussian_process`);
+- registry: 52 de intrari in `METHODS` = `random` (martor structural, interzis
+  in productie) + `frequency` (fallback determinist) + 50 de metode noi
+  (14.09.2026), grupate in patru module cu utilitare comune in `methods_common`:
+  `methods_recency` (16), `methods_relational` (10), `methods_learning` (4),
+  `methods_wave2` (20). Cele ~183 de metode vechi (clasice/ml/coverage/graph/
+  revived/search_649/top649/math_extra) au fost sterse, impreuna cu mecanismul
+  de tombstone (`disabled_methods.json`, `disabled.py`, `prune_methods.py`);
+  `METHOD_ALIASES` este gol. Nicio metoda nu e filtru structural (paritate,
+  sume, decade, pozitie);
+- curare reversibila: toate cele 50 + `frequency` in `active` si in `per_game`
+  pe fiecare joc, fara preselectie pe istoric; Re-Bench ruleaza matricea completa
+  (52 pe fiecare joc, cu `random` adaugat de runner);
+- `EXCLUDED_FROM_PRODUCTION` = `{random}`; vechile filtre de clasa (parity_balance,
+  prime_bias, 649_decade_hot etc.) nu mai exista ca metode. Un nume necunoscut din
+  `best_methods.json` cade determinist pe `frequency` (`_sanitize_production_name`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
 - cache benchmark: `v18`;
 - cache walk-forward: `v24`;
 - cache rezultat worker: `v4`;
-- teste: 67 fisiere `test_*.py`.
+- teste: 57 fisiere `test_*.py` (848 trecute pe Python 3.14.7 + nicegui in
+  containerul de audit; 2 esecuri PRE-EXISTENTE in `test_wf_generation_settings`
+  — `conditional_cap`, tie-break WF vs. generare directa in calea `covering/`,
+  fara legatura cu metodele).
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
 ```powershell
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
-python -c "from loto_enterprise.benchmark.disabled import load_disabled; print(len(load_disabled()))"
 ```
 
 ### Audit global 2026-09-13
@@ -125,6 +129,7 @@ UI-ul face polling la o secunda, fara reload complet.
 | `covering/` + `wheeling_methods.py` | algoritmi de covering design; fatada publica `wheeling_methods` |
 | `ui_shared.py` | I/O atomic, lock-uri, payload queue, worker si loguri |
 | `loto_enterprise/benchmark/runner.py` | folduri walk-forward si metrici per pool |
+| `loto_enterprise/benchmark/methods*.py` | registry (`methods.py`) + `methods_common` si cele 4 module de metode (`methods_recency`, `methods_relational`, `methods_learning`, `methods_wave2`) |
 | `loto_enterprise/benchmark/decision.py` | gate vs random, Wilson, ensemble si decizie per pool |
 | `loto_enterprise/core/method_selector.py` | citire decizie, sanitizare, decorelare si blend runtime |
 | `loto_enterprise/core/ranking.py` | singurul tie-break acceptat pentru top-N |
@@ -152,14 +157,18 @@ UI-ul face polling la o secunda, fara reload complet.
 - Fallback-ul de productie este `frequency`, determinist.
 - `random` este baseline structural pentru benchmark si este interzis in productie.
 
-### 4.3 Metode active, curate si dezactivate
+### 4.3 Metode active si curate
 
-- `disabled_methods.json` este merge-only si ireversibil. Nu elimina nume din el.
-- Nu reintroduce metode GPU/neural.
-- `curated_methods.json` este reversibil si controleaza costul benchmarkului.
-- `random` si `frequency` trebuie sa ramana in lista activa.
-- Curarea curenta cere avantaj observat fata de baseline si diversitatea
-  semnalului. Este selectie reversibila pe istoric, nu garantie predictiva.
+- Registry-ul (`methods.py`) incarca cele patru module de metode prin
+  `methods_common.make_registry`; o coliziune de nume intre module se logheaza,
+  nu se ascunde. Nu mai exista mecanism de tombstone (`disabled_methods.json`):
+  o metoda stearsa dispare din cod, iar un nume necunoscut cade pe `frequency`.
+- Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
+  decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
+  nu prezic un numar (CLAUDE.md §4.2). Nicio metoda din registry nu e filtru.
+- `curated_methods.json` este reversibil si controleaza costul benchmarkului;
+  azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
+  istoric). `random` si `frequency` trebuie sa ramana in lista activa.
 - Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`)
   sau pe alt `--istoric` nu trebuie sa rescrie decizia de productie fara
   `--force-decision`.
@@ -311,13 +320,12 @@ prezent in folds. Cand controlul amestecat lipseste, campurile lui din raport
 sunt `null` (indisponibile), nu zero; mediile agregate sunt ponderate cu
 `n_eval`/`n_test`, identic cu decizia si clasamentul UI.
 
-Lista `active` este uniunea semnalelor tuturor jocurilor, nu o cerere de a rula
-toate cele 55 de metode pe fiecare joc. Re-Bench aplica `per_game` inainte de
-construirea task-urilor si adauga baseline-urile structurale. La configuratia
-curenta, cu patru ferestre si fara controlul amestecat, matricea scade de la
-55 × 4 × 4 = 880 la (21 + 21 + 19 + 18) × 4 = 316 folduri. Override-urile
-explicite `--methods` si `--quick` continua sa ruleze metodele cerute pe toate
-jocurile.
+Lista `active` = toate cele 50 de metode + `frequency`, aceleasi pe fiecare joc
+(fara preselectie pe istoric la 14.09.2026). Re-Bench aplica `per_game` inainte de
+construirea task-urilor si adauga `random`. La configuratia curenta, cu patru
+ferestre si fara controlul amestecat, matricea e 52 × 4 × 4 = 832 folduri.
+Override-urile explicite `--methods` si `--quick` continua sa ruleze metodele
+cerute pe toate jocurile.
 
 Cheia de cache a foldurilor primeste sufixul `bs1` de indata ce `block_size`
 difera de sentinel-ul istoric (99999) — care ramane in cod ca valoare implicita
@@ -327,15 +335,15 @@ noua semantica.
 
 ### Joker Urna 2
 
-Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar.
-Pre-screeningul din 2026-09-01 a verificat toate cele 111 metode: `ml_knn_5` a
-bătut controlul în 3/4 ferestre, iar `649_decade_hot` în 2/3 ferestre comune.
-Decizia recalibrată nu mai este `low_confidence`. Cifrele sunt diagnostic pe
-istoric, nu selecție permanentă; datele noi pot schimba rezultatul. Scanarea din
-2026-09-02 arata ca `649_decade_hot` are doar doua niveluri de scor pe 1..20 si
-alege mereu 20 sau 10 prin tie-break; dupa un Re-Bench cu `tiebreak_k1` poarta
-din decizie o exclude, iar `ml_knn_5` (tie la granita in ~65% din blocuri) este
-la randul ei candidata la excludere.
+Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar
+(top-1, baseline aleator exact 5%). Metodele vechi selectate pentru Urna 2
+(`ml_knn_5`, `649_decade_hot` etc.) au fost sterse odata cu intreg setul la
+14.09.2026; decizia se reface la primul Re-Bench pe cele 50 de metode noi.
+Poarta `tiebreak_k1` ramane: o metoda cu doar cateva niveluri de scor pe 1..20,
+care alege mereu acelasi numar prin tie-break, este exclusa ca dependenta de
+tie-break, nu transformata artificial in castigator. Pana la un Re-Bench pe
+extrageri viitoare, un rezultat de clasament NU e dovada de avantaj (vezi
+limita de validitate din §5).
 
 ## 6. Pool unic
 

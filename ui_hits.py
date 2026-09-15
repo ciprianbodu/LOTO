@@ -83,19 +83,17 @@ def _curation_banner_info():
     """Starea curării de metode (curated_methods.json) pentru banner-ul de Re-Bench.
 
     Întoarce None dacă nu e nicio curare activă (fișier absent/gol → bench-ul
-    rulează toate metodele available minus blacklist, ca înainte). Curarea e
-    complet REVERSIBILĂ (nu e blacklist) — vezi CLAUDE.md.
+    rulează toate metodele available). Curarea e complet REVERSIBILĂ — vezi
+    CLAUDE.md.
     """
     try:
         from loto_enterprise.benchmark.curated import apply_curation, curated_path
-        from loto_enterprise.benchmark.disabled import load_disabled
         from loto_enterprise.benchmark.methods import list_methods, method_meta
 
-        disabled = load_disabled()
         avail = [
             m
             for m in list_methods()
-            if method_meta(m).get("available", True) and m not in disabled
+            if method_meta(m).get("available", True)
         ]
         _kept, info = apply_curation(avail)
         if not info.get("active"):

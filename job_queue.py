@@ -422,13 +422,17 @@ def fail_job(
         where += " AND worker_token = ?"
         params = params + (worker_token,)
     with _conn(db_path) as conn:
+        # log_tail se APPEND-uiește, nu se suprascrie: mesajul de eroare înlocuia
+        # tot progresul de până atunci („Job preluat…", pașii pipeline-ului), iar
+        # diagnosticarea unui job eșuat pierdea exact contextul dinaintea căderii
+        # (audit 2026-09-14, #2). Ultima linie rămâne eroarea; istoricul rămâne.
         cur = conn.execute(
             f"""
             UPDATE jobs
-            SET status = ?, result_json = ?, log_tail = ?
+            SET status = ?, result_json = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
             WHERE {where}
             """,
-            (JOB_FAILED, msg, msg[-6000:]) + params,
+            (JOB_FAILED, msg, *_append_log_tail_params(msg)) + params,
         )
         conn.commit()
         ok = cur.rowcount > 0
@@ -610,10 +614,15 @@ def requeue_running_jobs(
         params = params + (worker_token,)
     msg = "Worker restart detectat: job reprogramat automat."
     with _conn(db_path) as conn:
+        # worker_token = NULL: jobul redevine PENDING „liber". Fără resetare,
+        # rândul reprogramat păstra token-ul workerului mort, iar gărzile de
+        # proprietate (`worker_token = ?`) din update_job_progress/complete/fail
+        # respingeau apoi noul worker care îl revendica — jobul reluat nu-și mai
+        # putea scrie progresul/rezultatul (audit 2026-09-14, #2).
         cur = conn.execute(
             f"""
             UPDATE jobs
-            SET status = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
+            SET status = ?, worker_token = NULL, log_tail = {_LOG_TAIL_APPEND_SQL}
             WHERE {where}
             """,
             (JOB_PENDING, *_append_log_tail_params(msg)) + params,
