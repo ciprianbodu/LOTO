@@ -9,13 +9,13 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
     pair_lift_last                  lift-ul perechilor față de independență, spre ultima extragere
     pagerank_cooc                   centralitate PageRank în graful de co-apariție (ponderat recent)
     knn_draw_similarity             ce a urmat după extragerile cele mai asemănătoare cu ultima
-    neighbor_adjacent               scor PER NUMĂR din vecinii numerici (±1, ±2) ai
-                                    ultimei extrageri — nu o constrângere pe combinație
+    neighbor_adjacent               vecinii numerici (±1, ±2) ai ultimei extrageri
+                                    (filtru spațial: top-K = clasa de vecinătate;
+                                    rămâne în bench, EXCLUDED_FROM_PRODUCTION)
 
-Nicio metodă de aici nu e un filtru structural (paritate, sume, decade,
-poziție): acelea constrâng combinația, nu prezic un număr, și sunt interzise
-ca „metode" (CLAUDE.md §13 P3). Cele trei variante de acest fel scrise inițial
-pe 14.09.2026 au fost scoase înainte de bench.
+`neighbor_adjacent` e filtru de poziție pe axa 1…N, nu predictor. Paritate /
+sume / decade au fost scoase înainte de bench (14.09.2026); acesta a rămas
+și a fost exclus din producție la auditul din 15.09.2026.
 
 `neighbor_adjacent` e singura intrare din registry cu familia declarată
 `structure`, dar eticheta descrie doar sursa semnalului (poziția numerică față
@@ -236,7 +236,7 @@ RELATIONAL_METHODS = make_registry(
         ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere"),
         ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție ponderat recent"),
         ("knn_draw_similarity", score_knn_draw_similarity, "similarity", "ce a urmat după cele 40 de extrageri cele mai asemănătoare"),
-        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "scor per număr din vecinii ±1/±2 ai ultimei extrageri (nu filtrează combinația)"),
+        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "filtru spațial: vecinii ±1/±2 ai ultimei extrageri (exclus din producție)"),
     ]
 )
 

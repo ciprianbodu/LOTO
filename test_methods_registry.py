@@ -6,6 +6,7 @@ import builtins
 import logging
 
 from loto_enterprise.benchmark import methods, methods_recency, methods_relational
+from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
 
 
 def _dummy_fn(draws_2d, max_num):
@@ -24,6 +25,15 @@ def test_old_method_names_are_gone():
     """Cele 109 metode vechi nu mai există în registry (și nici lista de tombstone)."""
     for old in ("autocorr", "ml_knn_5", "649_decade_hot", "parity_balance", "dmd", "omnius"):
         assert old not in methods.METHODS
+
+
+def test_spatial_filters_stay_in_registry_but_excluded_from_production():
+    """Filtrele de apartenență rămân măsurabile în bench, nu scorer de producție."""
+    for name in ("neighbor_adjacent", "repeat_last_draw"):
+        assert name in methods.METHODS
+        assert name in EXCLUDED_FROM_PRODUCTION
+    assert "random" in EXCLUDED_FROM_PRODUCTION
+    assert "frequency" not in EXCLUDED_FROM_PRODUCTION
 
 
 def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):

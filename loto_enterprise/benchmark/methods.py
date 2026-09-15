@@ -17,6 +17,11 @@ math_extra, ml, revived, search_649, top649 — nume unice numărate în
 registrele lor, la commit-ul dinaintea înlocuirii) au fost eliminate la
 14.09.2026, împreună cu mecanismul de tombstone (`disabled_methods.json`),
 la cererea utilizatorului.
+
+`neighbor_adjacent` și `repeat_last_draw` rămân în registry, pentru ca bench-ul
+să le măsoare ca martori, dar sunt în `EXCLUDED_FROM_PRODUCTION`: top-K-ul lor
+e o clasă geometrică (vecinii ultimei extrageri, respectiv ultima extragere),
+nu un ranking (audit 2026-09-15).
 """
 
 from __future__ import annotations

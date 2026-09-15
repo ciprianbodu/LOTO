@@ -35,14 +35,17 @@ Snapshot verificat la 2026-09-15:
   `methods_wave2` (20). Cele ~183 de metode vechi (clasice/ml/coverage/graph/
   revived/search_649/top649/math_extra) au fost sterse, impreuna cu mecanismul
   de tombstone (`disabled_methods.json`, `disabled.py`, `prune_methods.py`);
-  `METHOD_ALIASES` este gol. Nicio metoda nu e filtru structural (paritate,
-  sume, decade, pozitie);
+  `METHOD_ALIASES` este gol. `neighbor_adjacent` (vecinii numerici ±1/±2 ai
+  ultimei extrageri) si `repeat_last_draw` (naive last) raman in METHODS ca
+  martori de bench, dar sunt in `EXCLUDED_FROM_PRODUCTION` — top-K e o clasa
+  geometrica, nu un ranking (audit 2026-09-15);
 - curare reversibila: toate cele 50 + `frequency` in `active` si in `per_game`
   pe fiecare joc, fara preselectie pe istoric; Re-Bench ruleaza matricea completa
   (52 pe fiecare joc, cu `random` adaugat de runner);
-- `EXCLUDED_FROM_PRODUCTION` = `{random}`; vechile filtre de clasa (parity_balance,
-  prime_bias, 649_decade_hot etc.) nu mai exista ca metode. Un nume necunoscut din
-  `best_methods.json` cade determinist pe `frequency` (`_sanitize_production_name`);
+- `EXCLUDED_FROM_PRODUCTION` = `{random, neighbor_adjacent, repeat_last_draw}`;
+  vechile filtre de clasa (parity_balance, prime_bias, 649_decade_hot etc.) nu
+  mai exista ca metode. Un nume necunoscut sau exclus din `best_methods.json`
+  cade determinist pe `frequency` (`_sanitize_production_name`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
@@ -160,6 +163,8 @@ UI-ul face polling la o secunda, fara reload complet.
 - Nu adauga sortari locale care pot schimba tie-break-ul dintre bench si productie.
 - Fallback-ul de productie este `frequency`, determinist.
 - `random` este baseline structural pentru benchmark si este interzis in productie.
+- `neighbor_adjacent` si `repeat_last_draw` raman in registry pentru bench si
+  sunt interzise in productie (`EXCLUDED_FROM_PRODUCTION`).
 
 ### 4.3 Metode active si curate
 
@@ -174,17 +179,24 @@ UI-ul face polling la o secunda, fara reload complet.
   productia cadea pe `frequency` raportand doar „metoda necunoscuta".
 - Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
   decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
-  nu prezic un numar (CLAUDE.md §4.2). Nicio metoda din registry nu e filtru.
-  Garda automata e `test_no_structural_filters.py`: contractul de semnatura si
-  de iesire, scoruri utilizabile pe cele trei geometrii reale, si pool-ul
+  nu prezic un numar. Daca un astfel de filtru intra in METHODS, intra si in
+  `EXCLUDED_FROM_PRODUCTION` (ramane martor de bench, nu scorer). Azi:
+  `neighbor_adjacent`, `repeat_last_draw`.
+- Garda automata partiala e `test_no_structural_filters.py`: contractul de
+  semnatura si de iesire, scoruri utilizabile pe geometriile reale, si pool-ul
   fiecarei metode comparat cu distributia nula pe paritate, bloc consecutiv si
-  decade. Pragurile sunt calibrate pe istoricul real — o metoda care impune o
-  clasa de paritate sau un interval contiguu pica acolo.
+  decade, cu praguri calibrate pe istoricul real. NU acopera intreaga lista de
+  mai sus, si testul o spune el insusi: filtrele de spatiere / clasa de rest
+  („doar n % 3 == 1") trec neprinse, iar un filtru care ar impune echilibru
+  perfect par/impar sta exact pe media nula. Clasa care a scapat efectiv e cea
+  de APARTENENTA — top-K determinat de ultima extragere, nu de un ranking:
+  `neighbor_adjacent` si `repeat_last_draw` trec toate cele trei porti si au
+  fost prinse abia de citirea manuala (audit 2026-09-15). Un test verde de aici
+  NU e dovada ca o metoda noua nu e filtru; ramane de citit ce alege top-K-ul.
 - `alternating_parity` masoara paritatea INDEXULUI extragerii (sezonalitate de
-  perioada 2 pe axa timpului), nu paritatea numerelor. Numele e istoric si NU
-  se redenumeste: are randuri in `bench_results/folds.csv`, iar un rename le-ar
-  orfana. La fel, familia `structure` a lui `neighbor_adjacent` descrie sursa
-  semnalului (pozitia numerica fata de ultima extragere), nu un filtru.
+  perioada 2 pe axa timpului), nu paritatea numerelor, deci nu e filtru
+  par/impar. Numele e istoric si NU se redenumeste: are randuri in
+  `bench_results/folds.csv`, iar un rename le-ar orfana.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
   azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
   istoric). `random` si `frequency` trebuie sa ramana in lista activa.

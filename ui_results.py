@@ -719,7 +719,7 @@ _METHOD_DESC = {
     "markov_self_state": "șansa proprie de a ieși, după cum a ieșit sau nu data trecută · tranziții",
     "naive_bayes_last": "dovezile ultimei extrageri combinate multiplicativ (Naive Bayes) · tranziții",
     "pair_transition": "ce numere au urmat după PERECHILE din ultima extragere · tranziții",
-    "repeat_last_draw": "repetarea ultimei extrageri (departajare pe frecvență recentă) · tranziții",
+    "repeat_last_draw": "repetarea ultimei extrageri: filtru naive-last — la pool = mărimea extragerii, top-K E ultima extragere. Martor de bench, EXCLUS din producție · tranziții",
     "vlmm_self_k3": "Markov cu context variabil (≤ 3 stări proprii), cu retragere la contexte rare · tranziții",
     # --- co-apariție ------------------------------------------------------
     "cooc_last3": "afinitatea de co-apariție cu numerele din ultimele 3 extrageri · co-apariție",
@@ -734,9 +734,9 @@ _METHOD_DESC = {
     "knn_pattern_self": "ce a urmat după tipare proprii asemănătoare (ferestre de 10 stări) · similaritate",
     # --- vecinătate numerică ----------------------------------------------
     "neighbor_adjacent": (
-        "vecinii numerici (±1, ±2) ai numerelor din ultima extragere: semnal PER "
-        "NUMĂR derivat din ultima extragere, nu o regulă de compoziție a biletului "
-        "· vecinătate numerică"
+        "vecinii numerici (±1, ±2) ai numerelor din ultima extragere: filtru "
+        "spațial — top-K e clasa de vecinătate, nu un clasament. Martor de bench, "
+        "EXCLUS din producție · vecinătate numerică"
     ),
     # --- învățare (numpy + scipy, fără scikit-learn) ----------------------
     "ridge_pooled_feats": "regresie ridge pe 6 trăsături, un singur model comun tuturor numerelor · învățare (numpy+scipy)",

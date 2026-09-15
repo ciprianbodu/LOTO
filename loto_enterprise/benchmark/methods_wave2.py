@@ -1,6 +1,7 @@
 """Al doilea val de metode (20), adăugat la 14.09.2026 la cererea utilizatorului,
 inclusiv idei reluate din vechea listă `disabled` (rescrise de la zero, ieftin
-și determinist; niciuna nu e filtru structural):
+și determinist). `repeat_last_draw` e filtru naive-last (top-K la k=draw_n
+este ultima extragere); rămâne în bench, exclus din producție:
 
     ses_opt_alpha          netezire exponențială simplă cu α optimizat per număr (fost `ses`)
     croston_interval       Croston: intervalele dintre apariții netezite, rata = 1/interval (fost `croston_opt`)
@@ -507,7 +508,7 @@ WAVE2_METHODS = make_registry(
         ("dmd_forecast", score_dmd_forecast, "timeseries", "descompunere în moduri dinamice"),
         ("runs_persistence", score_runs_persistence, "timeseries", "z Wald–Wolfowitz × deviația recentă"),
         ("alternating_parity", score_alternating_parity, "recency", "rata pe extragerile cu același index par/impar pe axa timpului (sezonalitate 2); NU paritatea numerelor, nu e filtru par/impar"),
-        ("repeat_last_draw", score_repeat_last_draw, "transition", "repetarea ultimei extrageri"),
+        ("repeat_last_draw", score_repeat_last_draw, "transition", "filtru naive-last: repetarea ultimei extrageri (exclus din producție)"),
         ("vlmm_self_k3", score_vlmm_self_k3, "transition", "Markov cu lungime variabilă pe seria proprie"),
         ("knn_pattern_self", score_knn_pattern_self, "similarity", "k-NN pe ferestrele proprii de 10 stări"),
         ("pair_transition", score_pair_transition, "transition", "perechi din extragerea t → numere la t+1"),

@@ -71,8 +71,9 @@ def _baseline_methods() -> frozenset[str]:
     """Metodele care sunt DOAR baseline de referință, NU candidați de producție.
 
     Trebuie să rămână SINCRON cu excluderea din decizie (decision.py:
-    `methods = [m for m in ... if m != "random"]`). Preferăm constanta din
-    decision.py dacă există; altfel fallback identic cu ce face decizia azi.
+    `methods = [m for m in ... if m not in EXCLUDED_FROM_PRODUCTION]`). Preferăm
+    constanta din decision.py dacă există; altfel fallback identic cu ce face
+    decizia azi.
     NB: `frequency` are family="baseline" în folds.csv, DAR decizia NU o exclude
     (e și fallback-ul de scoring în producție) → rămâne candidat aici."""
     try:
@@ -80,7 +81,7 @@ def _baseline_methods() -> frozenset[str]:
 
         return frozenset(str(m) for m in _EX)
     except Exception:  # noqa: BLE001
-        return frozenset({"random"})
+        return frozenset({"random", "neighbor_adjacent", "repeat_last_draw"})
 
 
 def _decision_entry(folds_game_key: str, pool: int) -> dict:
