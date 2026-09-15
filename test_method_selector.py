@@ -251,6 +251,39 @@ def test_get_winner_rejects_random_scorer(temp_config):
     )
 
 
+def test_spatial_last_draw_filters_never_reach_production(temp_config):
+    """neighbor_adjacent / repeat_last_draw rămân în METHODS (bench) dar sunt
+    EXCLUDED_FROM_PRODUCTION — un best_methods.json care le numește cade pe
+    frequency, ca random."""
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+    from loto_enterprise.benchmark.methods import METHODS
+
+    for scorer in ("neighbor_adjacent", "repeat_last_draw"):
+        assert scorer in METHODS
+        assert scorer in EXCLUDED_FROM_PRODUCTION
+        cfg_path = temp_config(
+            {
+                "loto_5_40": {
+                    "auto_pilot_per_pool": {
+                        "k11": {
+                            "scorer": scorer,
+                            "ensemble": [{"method": scorer, "weight": 1.0}],
+                        }
+                    }
+                }
+            }
+        )
+        assert (
+            ms.get_winner_name("loto_5_40", pool_size=11, config_path=cfg_path)
+            == "frequency"
+        )
+        rec = ms.recommend_optimal_config("loto_5_40", 11, config_path=cfg_path)
+        assert rec["scorer"] == "frequency"
+        assert rec["scorer"] != scorer
+        ens = ms.get_ensemble_for_game("loto_5_40", pool_size=11, config_path=cfg_path)
+        assert all(name != scorer for name, _fn, _w in ens)
+
+
 def test_old_class_filters_are_gone_and_never_reach_production(temp_config):
     """Vechile filtre de clasă (paritate, prime, decade, mod, vecini) au fost
     ELIMINATE din registry la 14.09.2026. Un `best_methods.json` vechi care încă

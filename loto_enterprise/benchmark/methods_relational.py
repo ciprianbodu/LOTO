@@ -1,4 +1,4 @@
-"""Metode de scoring relaționale (11 metode).
+"""Metode de scoring relaționale (10 metode).
 
 Ipoteze despre legăturile dintre numere și despre forma extragerii:
 
@@ -10,11 +10,12 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
     pagerank_cooc                   centralitate PageRank în graful de co-apariție (ponderat recent)
     knn_draw_similarity             ce a urmat după extragerile cele mai asemănătoare cu ultima
     neighbor_adjacent               vecinii numerici (±1, ±2) ai ultimei extrageri
+                                    (filtru spațial: top-K = clasa de vecinătate;
+                                    rămâne în bench, EXCLUDED_FROM_PRODUCTION)
 
-Nicio metodă de aici nu e un filtru structural (paritate, sume, decade,
-poziție): acelea constrâng combinația, nu prezic un număr, și sunt interzise
-ca „metode" (CLAUDE.md §13 P3). Cele trei variante de acest fel scrise inițial
-pe 14.09.2026 au fost scoase înainte de bench.
+`neighbor_adjacent` e filtru de poziție pe axa 1…N, nu predictor. Paritate /
+sume / decade au fost scoase înainte de bench (14.09.2026); acesta a rămas
+și a fost exclus din producție la auditul din 15.09.2026.
 
 Pe geometria cu o singură bilă (Joker Urna 2) co-aparițiile din aceeași
 extragere nu există: metodele bazate pe ele dau scoruri plate, iar bench-ul
@@ -220,7 +221,7 @@ RELATIONAL_METHODS = make_registry(
         ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere"),
         ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție ponderat recent"),
         ("knn_draw_similarity", score_knn_draw_similarity, "similarity", "ce a urmat după cele 40 de extrageri cele mai asemănătoare"),
-        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "vecinii ±1/±2 ai ultimei extrageri"),
+        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "filtru spațial: vecinii ±1/±2 ai ultimei extrageri (exclus din producție)"),
     ]
 )
 

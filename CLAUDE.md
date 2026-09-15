@@ -35,14 +35,17 @@ Snapshot verificat la 2026-09-15:
   `methods_wave2` (20). Cele ~183 de metode vechi (clasice/ml/coverage/graph/
   revived/search_649/top649/math_extra) au fost sterse, impreuna cu mecanismul
   de tombstone (`disabled_methods.json`, `disabled.py`, `prune_methods.py`);
-  `METHOD_ALIASES` este gol. Nicio metoda nu e filtru structural (paritate,
-  sume, decade, pozitie);
+  `METHOD_ALIASES` este gol. `neighbor_adjacent` (vecinii numerici ±1/±2 ai
+  ultimei extrageri) si `repeat_last_draw` (naive last) raman in METHODS ca
+  martori de bench, dar sunt in `EXCLUDED_FROM_PRODUCTION` — top-K e o clasa
+  geometrica, nu un ranking (audit 2026-09-15);
 - curare reversibila: toate cele 50 + `frequency` in `active` si in `per_game`
   pe fiecare joc, fara preselectie pe istoric; Re-Bench ruleaza matricea completa
   (52 pe fiecare joc, cu `random` adaugat de runner);
-- `EXCLUDED_FROM_PRODUCTION` = `{random}`; vechile filtre de clasa (parity_balance,
-  prime_bias, 649_decade_hot etc.) nu mai exista ca metode. Un nume necunoscut din
-  `best_methods.json` cade determinist pe `frequency` (`_sanitize_production_name`);
+- `EXCLUDED_FROM_PRODUCTION` = `{random, neighbor_adjacent, repeat_last_draw}`;
+  vechile filtre de clasa (parity_balance, prime_bias, 649_decade_hot etc.) nu
+  mai exista ca metode. Un nume necunoscut sau exclus din `best_methods.json`
+  cade determinist pe `frequency` (`_sanitize_production_name`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
@@ -156,6 +159,8 @@ UI-ul face polling la o secunda, fara reload complet.
 - Nu adauga sortari locale care pot schimba tie-break-ul dintre bench si productie.
 - Fallback-ul de productie este `frequency`, determinist.
 - `random` este baseline structural pentru benchmark si este interzis in productie.
+- `neighbor_adjacent` si `repeat_last_draw` raman in registry pentru bench si
+  sunt interzise in productie (`EXCLUDED_FROM_PRODUCTION`).
 
 ### 4.3 Metode active si curate
 
@@ -165,7 +170,9 @@ UI-ul face polling la o secunda, fara reload complet.
   o metoda stearsa dispare din cod, iar un nume necunoscut cade pe `frequency`.
 - Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
   decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
-  nu prezic un numar (CLAUDE.md §4.2). Nicio metoda din registry nu e filtru.
+  nu prezic un numar. Daca un astfel de filtru intra in METHODS, intra si in
+  `EXCLUDED_FROM_PRODUCTION` (ramane martor de bench, nu scorer). Azi:
+  `neighbor_adjacent`, `repeat_last_draw`.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
   azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
   istoric). `random` si `frequency` trebuie sa ramana in lista activa.
