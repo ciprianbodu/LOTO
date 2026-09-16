@@ -13,6 +13,14 @@ cd /d "%PROJECT_DIR%"
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
+REM Doar START_8000.bat si ACTUALIZARI.bat raman. Helperul git vechi si
+REM orice alt .bat din radacina se sterg de pe disc.
+for %%F in ("%~dp0*.bat") do (
+    if /I not "%%~nxF"=="START_8000.bat" if /I not "%%~nxF"=="ACTUALIZARI.bat" (
+        echo [GIT] Sterg lansator vechi %%~nxF
+        del /f /q "%%~fF" >nul 2>&1
+    )
+)
 set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"
 if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"

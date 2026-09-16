@@ -389,3 +389,14 @@ def test_start8000_opens_ipv4_loopback_not_localhost():
     assert "http://127.0.0.1:8000" in launch
     assert "start http://localhost:8000" not in launch
     assert "timeout /t 12" in launch
+
+
+def test_launchers_delete_stray_root_bats():
+    """Pe disc pot rămâne loto_git_sync.bat sau copii vechi; le ștergem."""
+    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert '%~dp0*.bat' in text, name
+        assert 'if /I not "%%~nxF"=="START_8000.bat"' in text, name
+        assert 'if /I not "%%~nxF"=="ACTUALIZARI.bat"' in text, name
+        assert "del /f /q" in text, name
+        assert "loto_git_sync" not in text, name

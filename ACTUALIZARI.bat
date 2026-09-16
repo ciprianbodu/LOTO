@@ -13,6 +13,14 @@ if not errorlevel 1 (
     git pull --ff-only origin main <nul
     if errorlevel 1 echo [GIT] pull --ff-only esuat - continui cu codul local.
 )
+REM Doar START_8000.bat si ACTUALIZARI.bat raman. Helperul git vechi si
+REM orice alt .bat din radacina se sterg de pe disc.
+for %%F in ("%~dp0*.bat") do (
+    if /I not "%%~nxF"=="START_8000.bat" if /I not "%%~nxF"=="ACTUALIZARI.bat" (
+        echo [GIT] Sterg lansator vechi %%~nxF
+        del /f /q "%%~fF" >nul 2>&1
+    )
+)
 setlocal enabledelayedexpansion
 
 set VENV_DIR=D:\_BUILD\_LOTO\.venv
