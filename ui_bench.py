@@ -77,7 +77,15 @@ def _baseline_methods() -> frozenset[str]:
 
         return frozenset(str(m) for m in _EX)
     except Exception:  # noqa: BLE001
-        return frozenset({"random", "neighbor_adjacent", "repeat_last_draw"})
+        return frozenset(
+            {
+                "random",
+                "neighbor_adjacent",
+                "repeat_last_draw",
+                "rwr_last_draw",
+                "haar_multiscale",
+            }
+        )
 
 
 def _decision_entry(folds_game_key: str, pool: int) -> dict:
@@ -657,13 +665,23 @@ def _render_bench_leaderboard_slice(
     except Exception:  # noqa: BLE001
         chosen_name = winner[0]
     # Dacă există generare recentă, 🎯 = membrul ACTIV din audit (nu scorer
-    # stale din best_methods.json eliminat din METHODS).
+    # stale din best_methods.json eliminat din METHODS). Un audit vechi care
+    # numește un filtru EXCLUDED nu are voie să devină 🎯.
     _gen_early = _last_generation_bench_info(folds_game_key, pool)
-    if isinstance(_gen_early, dict) and _gen_early.get("method"):
-        chosen_name = str(_gen_early["method"])
-    _chosen_caption = (
-        "Metoda din ultima generare" if _gen_early else "Metoda din decizia salvată"
+    _gen_usable = (
+        isinstance(_gen_early, dict)
+        and _gen_early.get("method")
+        and str(_gen_early["method"]) not in _BASE
     )
+    if _gen_usable:
+        chosen_name = str(_gen_early["method"])
+    _saved_entry = _decision_entry(folds_game_key, pool)
+    if _gen_usable:
+        _chosen_caption = "Metoda din ultima generare"
+    elif _saved_entry:
+        _chosen_caption = "Metoda din decizia salvată"
+    else:
+        _chosen_caption = "Fără decizie salvată — fallback frequency"
 
     def _row(i, rec):
         """`i=None` → rând de BASELINE (referință, fără rang și fără pretenția de candidat)."""
@@ -835,6 +853,11 @@ def _render_bench_leaderboard_slice(
                 _why = (
                     f"selecția folosită provine dintr-o decizie anterioară, iar bench-ul curent "
                     f"o exclude structural: {_structural_fail[chosen_name]}"
+                )
+            elif not _gen_usable and not _saved_entry:
+                _why = (
+                    "nu există decizie salvată (best_methods.json lipsește sau fără acest "
+                    "joc/pool) — producția folosește frequency până la Re-Bench"
                 )
             elif _dec_low is True:
                 _why = (

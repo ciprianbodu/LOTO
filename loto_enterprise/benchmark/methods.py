@@ -14,8 +14,8 @@ de producție) și cele 50 de metode din modulele:
                            relații de ordinul 2, învățare ieftină
 Cele 109 metode anterioare (7 module) au fost eliminate la 14.09.2026, împreună
 cu mecanismul de tombstone (`disabled_methods.json`), la cererea utilizatorului.
-`neighbor_adjacent` și `repeat_last_draw` rămân în registry (bench) dar sunt
-în `EXCLUDED_FROM_PRODUCTION`.
+`neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` și `haar_multiscale`
+rămân în registry (bench) dar sunt în `EXCLUDED_FROM_PRODUCTION`.
 """
 
 from __future__ import annotations

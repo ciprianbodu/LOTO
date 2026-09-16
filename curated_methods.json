@@ -5,7 +5,7 @@
     "criterion": "Setul complet de 50 de metode noi (methods_recency 16, methods_relational 10, methods_learning 4, methods_wave2 20 — al doilea val, cu idei reluate din vechea lista disabled), FARA preselectie pe istoric: auditul din 14.09.2026 (§4.1) a aratat ca alegerea candidatilor pe perioada pe care bench-ul ii retesteaza garanteaza practic trecerea portii. Toate ruleaza pe toate cele 4 jocuri; bench-ul si decizia (poarta hipergeometrica, Wilson) spun singure ce ramane. `random` (martor) si `frequency` (fallback de productie) sunt baseline-uri structurale.",
     "count_active": 52,
     "per_game_note": "identic pe toate jocurile: `frequency` (metoda canonica de numere calde, fallback-ul de productie) plus cele 50; `random` ramane martor structural, adaugat de runner, niciodata candidat. Metodele de co-aparitie sunt plate pe Joker Urna 2 (o singura bila) si ies ca inutilizabile acolo, nu sunt mascate",
-    "filters_note": "Paritate/sume/decade nu sunt in set. `neighbor_adjacent` (vecini ±1/±2 ai ultimei extrageri) si `repeat_last_draw` (naive last) raman in METHODS/curare ca martori de bench, dar sunt in EXCLUDED_FROM_PRODUCTION (audit 2026-09-15). Nu sunt scorer de productie."
+    "filters_note": "Paritate/sume/decade nu sunt in set. Filtre last-draw (`neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`) raman in METHODS/curare ca martori de bench, dar sunt in EXCLUDED_FROM_PRODUCTION (audit 2026-09-15/16). Nu sunt scorer de productie."
   },
   "active": [
     "random",

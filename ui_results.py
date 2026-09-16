@@ -671,30 +671,30 @@ def _show_report() -> None:
     dlg.open()
 
 
-# Descriere lizibilă per metodă (ce e + din ce librărie) — afișată lângă 🏆
+# Descriere lizibilă per metodă — afișată lângă scorerul de generare.
+# Overlay scurt pentru baseline-uri; restul vine din notele registry-ului
+# (METHODS), ca să nu rămână nume moarte sau claim-uri de performanță.
 _METHOD_DESC = {
     "frequency": "euristică simplă · frecvență recentă ponderată",
     "random": "baseline aleator (prag de referință)",
-    # Matematice / statistice / geometrice
-    "bayes_poisson": "Bayesian Poisson · probabilistic",
-    "neg_binomial": "binomial negativ · probabilistic",
-    "fourier": "analiză spectrală Fourier (cicluri) · geometric/frecvențial",
-    "autocorr": "autocorelație lag 1–5 pe seria binară · matematic",
-    "649_last_neighbors": "vecini (±3) ai ultimei extrageri · math-649",
-    "mi_lag_bag": "informație mutuală cu bag-ul extragerii anterioare · matematic",
-    "parity_balance": "echilibru par/impar + frecvență în clasă · geometric",
-    "sum_affinity": "afinitate empirică cu suma tipică a extragerii (nu Gaussian pe |k−medie/n|) · geometric",
-    "ml_passive_aggressive": "Passive-Aggressive (sklearn) · ml-linear",
-    "graph_temporal_drift": "drift de centralitate recent vs vechi · graf",
-    "graph_spectral_embed": "embedding spectral (3 vectori) · graf",
-    "pca_resid_surprise": "surpriză residuală după PCA dominant · matematic",
-    "nmf_cooc": "NMF pe co-apariții recente · matematic",
-    "cusum_appearance": "CUSUM pe reziduuri de apariție (regim) · matematic",
-    "circular_kernel": "kernel densitate pe topologia circulară 1…N · matematic",
-    "649_katz12_gap88": "12% KatzCommunity + 88% gap_poisson (search winner, +21.7% 4+ @ k16)",
-    "649_katz15_gap85": "15% KatzCommunity + 85% gap_poisson (search blend)",
-    "graph_649_katz_community": "60% KatzHigh + 40% community strength (graf)",
 }
+
+
+def _method_desc(name: str) -> str:
+    """Textul de lângă metodă: overlay UI, altfel notele din registry."""
+    overlay = _METHOD_DESC.get(name)
+    if overlay:
+        return overlay
+    try:
+        from loto_enterprise.benchmark.methods import method_meta
+
+        meta = method_meta(name)
+        notes = str(meta.get("notes") or "").strip()
+        if notes and meta.get("available", True):
+            return notes
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
 
 
 def _consecutive_pool_warning(pool) -> str | None:
@@ -851,7 +851,7 @@ def _render_pool_body(
             m = info.get("method", "?")
             ph = info.get("pool_hint")
             fam = info.get("family", "")
-            desc = _METHOD_DESC.get(m, "")
+            desc = _method_desc(m)
             tail = ""
             if desc:
                 tail += render_html_safe(t" <span style='opacity:.65'>— {desc}</span>")

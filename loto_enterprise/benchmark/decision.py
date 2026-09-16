@@ -152,11 +152,16 @@ EXCLUDED_FROM_PRODUCTION = frozenset(
         # Filtre de apartenență pe ultima extragere: top-K e o clasă geometrică,
         # nu un ranking. Rămân în METHODS (bench le măsoară ca martori), dar nu
         # pot fi scorer de producție — același tratament ca vechile
-        # parity_balance / 649_last_neighbors. Audit 2026-09-15 pe 59fb075:
-        # neighbor_adjacent (vecinii numerici ±1/±2) câștiga 5/40 k10–k14;
-        # repeat_last_draw (naive last) copiază ultima extragere la k=draw_n.
+        # parity_balance / 649_last_neighbors.
+        # neighbor_adjacent: vecinii numerici ±1/±2 (câștiga 5/40 k10–k14).
+        # repeat_last_draw: naive last; la k=draw_n copiază ultima extragere.
+        # rwr_last_draw: RWR restart 0.3 semănat din ultima extragere — prefix
+        #   last-draw garantat (urna1 k6/k8–k10 câștigător pe 1e8076a).
+        # haar_multiscale: Haar pe fereastra recentă; pe Urna 2 top-1 ≡ repeat.
         "neighbor_adjacent",
         "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
     }
 )
 
