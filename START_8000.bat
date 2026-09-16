@@ -1,65 +1,14 @@
 @echo off
 setlocal DisableDelayedExpansion
 REM ============================================================
-REM START_8000.bat — Launcher rapid + log silent in fundal.
-REM Pe success: nu mai vezi nimic despre log, pornesti direct NiceGUI (app_nicegui.py).
-REM Pe eroare: afisez log-ul automat si las fereastra deschisa.
+REM START_8000.bat — launcher UI + worker.
+REM Codul vine pe origin/main din mediul de audit. Aici NU facem git pull
+REM pe .bat-ul aflat in rulare. Doar extrageri noi din _ISTORIC.
 REM CRLF obligatoriu (.gitattributes). Linie goala = echo/ nu echo.
 REM In echo din blocuri if (...): fara paranteze rotunde.
 REM ============================================================
-if /I "%~1"=="--bootstrap-sync" goto :bootstrap_sync
-if /I "%~1"=="--post-sync" goto :post_sync
-
 set "PROJECT_DIR=%~dp0"
-set "BOOT_DIR=%TEMP%\loto-start-%RANDOM%-%RANDOM%"
-mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
-copy /Y "%~f0" "%BOOT_DIR%\START_8000.bat" >nul || goto :bootstrap_failed
-copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\loto_git_sync.bat" >nul || goto :bootstrap_failed
-REM FARA CALL: fisierul din repo poate fi inlocuit in siguranta de git reset.
-"%BOOT_DIR%\START_8000.bat" --bootstrap-sync "%PROJECT_DIR%" "%BOOT_DIR%"
-exit /b 99
-
-:bootstrap_failed
-REM copy pe un .bat aflat in rulare din Google Drive/OneDrive poate esua cu
-REM sharing violation; TEMP poate fi neinscriptibil. Incerc type + D:\_BUILD.
-REM Fara paranteze dupa set BOOT_DIR: DisableDelayedExpansion ar folosi valoarea veche.
-if "%BOOT_DIR%"=="" set "BOOT_DIR=%TEMP%\loto-start-%RANDOM%"
-if exist "%BOOT_DIR%" goto :boot_retry_copy
-if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO" >nul 2>&1
-set "BOOT_DIR=D:\_BUILD\_LOTO\boot-%RANDOM%"
-mkdir "%BOOT_DIR%" >nul 2>&1
-:boot_retry_copy
-if not exist "%BOOT_DIR%\START_8000.bat" type "%~f0" > "%BOOT_DIR%\START_8000.bat" 2>nul
-if not exist "%BOOT_DIR%\loto_git_sync.bat" type "%~dp0loto_git_sync.bat" > "%BOOT_DIR%\loto_git_sync.bat" 2>nul
-if not exist "%BOOT_DIR%\START_8000.bat" goto :boot_give_up
-if not exist "%BOOT_DIR%\loto_git_sync.bat" goto :boot_give_up
-echo [GIT] Bootstrap prin type - continui auto-update.
-"%BOOT_DIR%\START_8000.bat" --bootstrap-sync "%PROJECT_DIR%" "%BOOT_DIR%"
-exit /b 99
-:boot_give_up
-echo [GIT] Nu pot crea bootstrap-ul temporar - continui fara auto-update.
-if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
-goto :main
-:bootstrap_sync
-set "PROJECT_DIR=%~2"
-set "BOOT_DIR=%~3"
 cd /d "%PROJECT_DIR%"
-where git >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] git negasit - sar peste auto-update.
-) else (
-    call "%BOOT_DIR%\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"
-    if errorlevel 1 echo [GIT] Auto-update esuat sau partial - codul local ramane cel de dinainte; verifica manual daca e nevoie.
-)
-REM Ruleaza launcherul NOU din repo; nu continua copia veche.
-"%PROJECT_DIR%START_8000.bat" --post-sync "%PROJECT_DIR%" "%BOOT_DIR%"
-exit /b 98
-
-:post_sync
-set "PROJECT_DIR=%~2"
-set "BOOT_DIR=%~3"
-cd /d "%PROJECT_DIR%"
-if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
 
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
@@ -227,9 +176,26 @@ endlocal & exit /b %RC%
 
 
 :push_istoric
-REM CALL "G:\My Drive\...\loto_git_sync.bat" esueaza cu "is not recognized".
-REM cmd /c + ghilimele duble e forma stabila pe CMD.EXE cand calea are spatii.
+where git >nul 2>&1
+if errorlevel 1 goto :eof
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
-cmd /c ""%PROJECT_DIR%loto_git_sync.bat" push_istoric"
+cd /d "%PROJECT_DIR%"
+git config core.hooksPath scripts/git-hooks >nul 2>&1
+git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] _ISTORIC fara modificari.
+    goto :eof
+)
+echo [GIT] Extrageri noi - commit + push origin/main...
+git add -A -- _ISTORIC
+if errorlevel 1 goto :eof
+git diff --cached --quiet -- _ISTORIC
+if not errorlevel 1 goto :eof
+git commit -m "auto: update istoric extrageri"
+if errorlevel 1 (
+    echo [GIT] commit _ISTORIC esuat.
+    goto :eof
+)
+git push origin main <nul
+if errorlevel 1 echo [GIT] Push _ISTORIC esuat - commitul e local.
 goto :eof
-

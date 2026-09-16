@@ -70,11 +70,11 @@ def test_post_commit_hook_auto_pushes_main_without_force():
     assert "rebase-merge" in text
 
 
-def test_loto_git_sync_installs_versioned_hooks_path():
-    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
-    assert "core.hooksPath" in text
-    assert "scripts/git-hooks" in text
-    assert text.index("core.hooksPath") < text.index(":autoupdate")
+def test_launchers_install_versioned_hooks_path():
+    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "core.hooksPath" in text, name
+        assert "scripts/git-hooks" in text, name
 
 
 
@@ -82,7 +82,8 @@ def test_bat_files_exist_and_use_crlf():
     bats = _bat_files()
     assert bats, "nu am găsit niciun .bat în rădăcină"
     names = {p.name for p in bats}
-    assert {"START_8000.bat", "loto_git_sync.bat", "ACTUALIZARI.bat"} <= names
+    assert {"START_8000.bat", "ACTUALIZARI.bat"} <= names
+    assert "loto_git_sync.bat" not in names
     for p in bats:
         data = p.read_bytes()
         assert b"\r\n" in data, f"{p.name} nu are CRLF"
@@ -222,19 +223,14 @@ def test_endlocal_exit_never_uses_delayed_expansion_variable():
     )
 
 
-def test_loto_git_sync_avoids_delayed_expansion_and_paren_echo():
-    """main 03f5409: fara delayed expansion; echo/REM fara paranteze.
-
-    Varianta cu goto :au_need_reset de pe ramura PR e echivalenta ca intentie,
-    dar delayed expansion + echo cu paranteze a fost cauza 'Auto-update is not
-    recognized'. Pastram contractul de pe main.
-    """
-    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
-    assert "EnableDelayedExpansion" not in text
-    assert "git reset --hard origin/main" in text
-    assert "^(main^)" not in text
-    assert "(main)" not in text
-    assert "(backup in stash" not in text
+def test_no_external_git_helper_bat():
+    """Codul se publica pe GitHub din mediul de audit; lansatoarele nu mai apeleaza un .bat helper."""
+    assert not (ROOT / "loto_git_sync.bat").exists()
+    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "loto_git_sync" not in text, name
+        assert "--bootstrap-sync" not in text, name
+        assert "git reset --hard" not in text, name
 
 
 def test_updates_installs_latest_python314_without_hardcoded_patch():
@@ -345,58 +341,15 @@ def test_python_version_check_has_no_stale_patch_constant():
     assert "ultimul patch stabil 3.14.x" in text
 
 
-@pytest.mark.parametrize("launcher", ["ACTUALIZARI.bat", "START_8000.bat"])
-def test_self_updating_launchers_sync_from_immutable_temp_copy(launcher):
-    """Niciun context .bat din repo nu rămâne pe stack în timpul git reset."""
-    text = (ROOT / launcher).read_text(encoding="utf-8")
-    bootstrap_label = text.index("\n:bootstrap_sync\n")
-    post_label = text.index("\n:post_sync\n")
-    main_label = text.index("\n:main\n")
-    normal = text[:bootstrap_label]
-    bootstrap = text[bootstrap_label:post_label]
-    post = text[post_label:main_label]
-
-    assert (
-        f'copy /Y "%~f0" "%BOOT_DIR%\\{launcher}" >nul || goto :bootstrap_failed'
-        in normal
-    )
-    assert (
-        'copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\\loto_git_sync.bat" '
-        ">nul || goto :bootstrap_failed"
-    ) in normal
-    transfer = f'"%BOOT_DIR%\\{launcher}" --bootstrap-sync'
-    assert transfer in normal
-    assert f"call {transfer}".lower() not in normal.lower()
-
-    assert (
-        'call "%BOOT_DIR%\\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"' in bootstrap
-    )
-    resume = f'"%PROJECT_DIR%{launcher}" --post-sync'
-    assert resume in bootstrap
-    assert f"call {resume}".lower() not in bootstrap.lower()
-    assert 'rmdir /s /q "%BOOT_DIR%"' in post
-
-
-def test_forced_sync_preserves_ahead_commit_and_tracked_changes():
-    """Stash-ul singur nu salvează commit-ul local `ahead`; trebuie branch backup."""
-    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
-    force = text[text.index(":force_sync") : text.index(":push_istoric")]
-
-    assert "backup/auto-sync-" in force
-    assert 'git branch "%_BACKUP_BRANCH%" HEAD' in force
-    assert 'git stash push -m "auto-backup before forced sync"' in force
-    assert force.index('git branch "%_BACKUP_BRANCH%" HEAD') < force.index(
-        "git reset --hard origin/main"
-    )
-    assert force.index(
-        'git stash push -m "auto-backup before forced sync"'
-    ) < force.index("git reset --hard origin/main")
-
-
-def test_temp_git_helper_accepts_explicit_repository_root():
-    text = (ROOT / "loto_git_sync.bat").read_text(encoding="utf-8")
-    assert 'set "_ROOT=%~2"' in text
-    assert 'cd /d "%_ROOT%"' in text
+def test_launchers_have_no_temp_bootstrap():
+    """START_8000 nu trage cod in timp ce .bat-ul ruleaza; ACTUALIZARI face ff-only."""
+    start = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    assert "git pull --ff-only" not in start
+    assert "git pull origin" not in start
+    assert ":bootstrap_sync" not in start
+    actual = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    assert "git pull --ff-only origin main" in actual
+    assert ":bootstrap_sync" not in actual
 
 
 def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
@@ -416,16 +369,17 @@ def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
     assert 'findstr /c:":8000 "' in compact
 
 
-def test_push_istoric_survives_spaces_in_project_path():
-    """CALL pe `G:\\My Drive\\...\\loto_git_sync.bat` eșuează cu 'is not recognized'."""
+def test_push_istoric_uses_git_exe_not_helper_bat():
+    """Calea cu spatii nu mai trece prin CALL la un .bat helper."""
     for name in ("START_8000.bat", "ACTUALIZARI.bat"):
         text = (ROOT / name).read_text(encoding="utf-8")
         body = text[text.index("\n:push_istoric\n") :]
         nxt = body.find("\n:", 2)
         if nxt != -1:
             body = body[:nxt]
-        assert 'call "%~dp0loto_git_sync.bat"' not in body, name
-        assert 'cmd /c ""%PROJECT_DIR%loto_git_sync.bat" push_istoric"' in body, name
+        assert "loto_git_sync" not in body, name
+        assert "git push origin main" in body, name
+        assert "git add -A -- _ISTORIC" in body, name
 
 
 def test_start8000_opens_ipv4_loopback_not_localhost():
@@ -435,18 +389,3 @@ def test_start8000_opens_ipv4_loopback_not_localhost():
     assert "http://127.0.0.1:8000" in launch
     assert "start http://localhost:8000" not in launch
     assert "timeout /t 12" in launch
-
-
-def test_bootstrap_failed_retries_via_type_without_delayed_expansion_trap():
-    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
-    failed = text[text.index("\n:bootstrap_failed\n") : text.index("\n:bootstrap_sync\n")]
-    assert 'type "%~f0"' in failed
-    assert "boot_retry_copy" in failed
-    assert "DisableDelayedExpansion ar folosi valoarea veche" in failed
-    # set BOOT_DIR and mkdir must not share a parenthesized block
-    assert "set \"BOOT_DIR=D:\\_BUILD\\_LOTO\\boot-%RANDOM%\"" in failed
-    assert "mkdir \"%BOOT_DIR%\" >nul 2>&1" in failed
-    set_pos = failed.index('set "BOOT_DIR=D:\\_BUILD\\_LOTO\\boot-%RANDOM%"')
-    mkdir_pos = failed.index('mkdir "%BOOT_DIR%" >nul 2>&1', set_pos)
-    between = failed[set_pos:mkdir_pos]
-    assert "(" not in between
