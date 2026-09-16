@@ -252,13 +252,18 @@ def test_get_winner_rejects_random_scorer(temp_config):
 
 
 def test_spatial_last_draw_filters_never_reach_production(temp_config):
-    """neighbor_adjacent / repeat_last_draw rămân în METHODS (bench) dar sunt
+    """Filtrele last-draw rămân în METHODS (bench) dar sunt
     EXCLUDED_FROM_PRODUCTION — un best_methods.json care le numește cade pe
     frequency, ca random."""
     from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
     from loto_enterprise.benchmark.methods import METHODS
 
-    for scorer in ("neighbor_adjacent", "repeat_last_draw"):
+    for scorer in (
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
+    ):
         assert scorer in METHODS
         assert scorer in EXCLUDED_FROM_PRODUCTION
         cfg_path = temp_config(

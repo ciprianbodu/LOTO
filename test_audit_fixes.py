@@ -552,3 +552,32 @@ def test_ui_split_binds_private_helpers_on_facade():
     assert app_ui._BENCH_FOLDS_CACHE is ui_bench._BENCH_FOLDS_CACHE
     assert app_ui.SETTINGS is ui_runtime.SETTINGS
     assert ui_results.time is app_ui.time
+
+
+def test_method_desc_uses_registry_not_graveyard():
+    """Etichetele de lângă scorer vin din METHODS, nu din nume șterse +21.7%."""
+    import ui_results
+    from loto_enterprise.benchmark.methods import METHODS
+
+    overlay = ui_results._METHOD_DESC
+    for dead in (
+        "parity_balance",
+        "649_last_neighbors",
+        "649_katz12_gap88",
+        "ml_passive_aggressive",
+    ):
+        assert dead not in overlay
+    assert "+21.7%" not in str(overlay)
+    desc = ui_results._method_desc("croston_interval")
+    assert desc
+    assert "croston" in desc.lower() or "interval" in desc.lower()
+    for name in METHODS:
+        text = ui_results._method_desc(name)
+        assert "21.7%" not in text
+        assert "KatzCommunity" not in text
+
+
+def test_wf_hits_caption_does_not_label_ticket_volume_as_pool():
+    source = open("ui_hits.py", encoding="utf-8").read()
+    assert "Pool = {n_tick" not in source
+    assert "Bilete evaluate" in source

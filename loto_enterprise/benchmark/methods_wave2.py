@@ -1,7 +1,9 @@
 """Al doilea val de metode (20), adăugat la 14.09.2026 la cererea utilizatorului,
 inclusiv idei reluate din vechea listă `disabled` (rescrise de la zero, ieftin
 și determinist). `repeat_last_draw` e filtru naive-last (top-K la k=draw_n
-este ultima extragere); rămâne în bench, exclus din producție:
+este ultima extragere); `rwr_last_draw` e aceeași clasă cu costum de graf
+(restart 0.3 → prefix last-draw); `haar_multiscale` pe Urna 2 top-1 e identic
+cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
 
     ses_opt_alpha          netezire exponențială simplă cu α optimizat per număr (fost `ses`)
     croston_interval       Croston: intervalele dintre apariții netezite, rata = 1/interval (fost `croston_opt`)
@@ -9,7 +11,7 @@ este ultima extragere); rămâne în bench, exclus din producție:
     weighted_recent_linear frecvență cu ponderi liniar descrescătoare pe 100 (fost `weighted_recent`)
     drift_linear           tendința liniară a ratei glisante (CMMP pe 300), extrapolată (fost `drift`)
     imapa_agg              SES la nivele de agregare 1/2/4/8 combinate (fost `imapa` / `adida`)
-    haar_multiscale        coeficienți Haar la scările 2..16 din fereastra recentă (fost `wavelet_haar`)
+    haar_multiscale        coeficienți Haar la scările 2..16 (filtru last-draw; exclus)
     ssa_forecast           analiză spectrală singulară pe seria proprie, prognoză prin recurență (fost `ssa`)
     dmd_forecast           descompunere în moduri dinamice pe matricea-indicator (fost `dmd`)
     runs_persistence       z-ul testului seriilor (Wald–Wolfowitz) × deviația recentă (fost `runs_test`)
@@ -20,7 +22,7 @@ este ultima extragere); rămâne în bench, exclus din producție:
     vlmm_self_k3           Markov cu lungime variabilă pe seria proprie, context ≤ 3 (fost `vlmm`)
     knn_pattern_self       k-NN pe ferestrele proprii de 10 stări (fost `ml_knn_*`, pe serie)
     pair_transition        tranziții de ordinul 2: perechi din extragerea t → numere la t+1 (fost `assoc_rules`)
-    rwr_last_draw          random walk with restart pe graful de co-apariție, pornit din ultima extragere
+    rwr_last_draw          RWR pe co-apariție, semănat din ultima extragere (exclus)
     hawkes_cross           excitație încrucișată cu decădere exponențială prin co-aparițiile normalizate
     nb_lags_pooled         Naive Bayes Bernoulli pe ultimele 10 stări, model comun (fost `ml_bernoulli_nb`)
     knn_feature_pooled     k-NN în spațiul celor 6 trăsături comune (fost `ml_knn_5`, pe trăsături)
@@ -503,7 +505,7 @@ WAVE2_METHODS = make_registry(
         ("weighted_recent_linear", score_weighted_recent_linear, "recency", "ponderi liniare pe ultimele 100"),
         ("drift_linear", score_drift_linear, "timeseries", "tendința liniară a ratei glisante, extrapolată"),
         ("imapa_agg", score_imapa_agg, "timeseries", "SES la nivele de agregare 1/2/4/8"),
-        ("haar_multiscale", score_haar_multiscale, "timeseries", "coeficienți Haar la scările 2..16"),
+        ("haar_multiscale", score_haar_multiscale, "timeseries", "filtru last-draw (Haar recent); exclus din producție"),
         ("ssa_forecast", score_ssa_forecast, "timeseries", "SSA cu recurență liniară"),
         ("dmd_forecast", score_dmd_forecast, "timeseries", "descompunere în moduri dinamice"),
         ("runs_persistence", score_runs_persistence, "timeseries", "z Wald–Wolfowitz × deviația recentă"),
@@ -512,7 +514,7 @@ WAVE2_METHODS = make_registry(
         ("vlmm_self_k3", score_vlmm_self_k3, "transition", "Markov cu lungime variabilă pe seria proprie"),
         ("knn_pattern_self", score_knn_pattern_self, "similarity", "k-NN pe ferestrele proprii de 10 stări"),
         ("pair_transition", score_pair_transition, "transition", "perechi din extragerea t → numere la t+1"),
-        ("rwr_last_draw", score_rwr_last_draw, "graph", "random walk with restart din ultima extragere"),
+        ("rwr_last_draw", score_rwr_last_draw, "graph", "RWR din ultima extragere (prefix last-draw); exclus din producție"),
         ("hawkes_cross", score_hawkes_cross, "cooccurrence", "excitație încrucișată cu decădere"),
         ("nb_lags_pooled", score_nb_lags_pooled, "learning", "Naive Bayes Bernoulli pe 10 laguri, model comun"),
         ("knn_feature_pooled", score_knn_feature_pooled, "learning", "k-NN în spațiul trăsăturilor comune"),

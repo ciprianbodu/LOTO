@@ -73,17 +73,19 @@ def _production_forbidden() -> frozenset[str]:
     """Metode care NU au voie să scocheze pool-ul de producție.
 
     = EXCLUDED_FROM_PRODUCTION (`random` + filtrele de apartenență
-    `neighbor_adjacent` / `repeat_last_draw`). best_methods.json vechi/manual
-    putea totuși să numească `random` — fără gardă aici, pool-ul devenea
-    nedeterminist. Mecanismul de tombstone (disabled_methods.json) a fost
-    eliminat la 14.09.2026: un nume necunoscut e respins oricum de gărzile din
-    `_sanitize_production_name` (nu e în METHODS), nu mai e nevoie de o listă
-    separată de blacklist.
+    last-draw: `neighbor_adjacent` / `repeat_last_draw` / `rwr_last_draw` /
+    `haar_multiscale`). best_methods.json vechi/manual putea totuși să numească
+    `random` — fără gardă aici, pool-ul devenea nedeterminist. Mecanismul de
+    tombstone (disabled_methods.json) a fost eliminat la 14.09.2026: un nume
+    necunoscut e respins oricum de gărzile din `_sanitize_production_name`
+    (nu e în METHODS), nu mai e nevoie de o listă separată de blacklist.
     """
     forbidden: set[str] = {
         "random",
         "neighbor_adjacent",
         "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
     }
     try:
         from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION

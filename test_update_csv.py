@@ -44,20 +44,34 @@ def test_last_date_existing_but_empty_returns_none(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# _append_rows_atomic — nu mai duplica un rand a carui data e deja in CSV
+# _append_rows_atomic — nu duplica un rând identic (dată + numere);
+# o a doua extragere în aceeași zi, cu numere diferite, se păstrează.
 # --------------------------------------------------------------------------- #
-def test_append_skips_rows_whose_date_already_exists(tmp_path):
+def test_append_skips_exact_duplicate_rows(tmp_path):
     csv_path = tmp_path / "loto_6_49.csv"
     _write_csv(csv_path, ["10-06-2026"])
     new_rows = [
-        {"date": date(2026, 6, 10), "main": [1, 2, 3, 4, 5, 6]},  # deja in CSV
-        {"date": date(2026, 6, 17), "main": [7, 8, 9, 10, 11, 12]},  # chiar noua
+        {"date": date(2026, 6, 10), "main": [1, 2, 3, 4, 5, 6]},  # identic
+        {"date": date(2026, 6, 17), "main": [7, 8, 9, 10, 11, 12]},  # nou
     ]
     written = uc._append_rows_atomic(csv_path, new_rows, has_joker=False, num_main=6)
     assert written == 1
     text = csv_path.read_text(encoding="utf-8")
     assert text.count("10-06-2026") == 1  # neduplicat
     assert "17-06-2026" in text
+
+
+def test_append_keeps_same_day_extra_with_different_numbers(tmp_path):
+    csv_path = tmp_path / "loto_6_49.csv"
+    _write_csv(csv_path, ["10-06-2026"])  # 1,2,3,4,5,6
+    new_rows = [
+        {"date": date(2026, 6, 10), "main": [7, 8, 9, 10, 11, 12]},
+    ]
+    written = uc._append_rows_atomic(csv_path, new_rows, has_joker=False, num_main=6)
+    assert written == 1
+    text = csv_path.read_text(encoding="utf-8")
+    assert text.count("10-06-2026") == 2
+    assert "7,8,9,10,11,12" in text
 
 
 def test_append_all_new_returns_full_count(tmp_path):

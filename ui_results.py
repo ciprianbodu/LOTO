@@ -667,87 +667,38 @@ def _show_report() -> None:
     dlg.open()
 
 
-# Descriere lizibilă per metodă — afișată lângă 🏆 (ce MĂSOARĂ metoda, nu cum e
-# implementată). Cheile trebuie să acopere EXACT registry-ul curent
-# (`loto_enterprise.benchmark.methods.METHODS`): la ștergerea unei metode se
-# șterge și descrierea ei de aici, la adăugarea uneia noi se adaugă și descrierea.
-# Un nume mort lăsat în dicționar nu produce eroare, doar o etichetă care nu mai
-# apare niciodată — exact așa au supraviețuit aici, până la 15.09.2026, numele
-# vechilor filtre structurale (parity_balance, sum_affinity ș.a.), interzise ca
-# metode prin CLAUDE.md §4.2/§4.3.
+# Descrierea unei metode vine din `notes`-ul ei din registry
+# (`methods.method_meta`), prin `_method_desc` de mai jos. `_METHOD_DESC` e
+# doar un overlay pentru cele doua baseline-uri, care n-au o nota lizibila.
+# De ce asa, si nu un dictionar scris de mana cu toate metodele: pana la
+# 15.09.2026 exact un astfel de dictionar tinea in viata numele vechilor
+# filtre structurale (parity_balance, sum_affinity s.a.) la mult timp dupa
+# stergerea lor, iar cele 50 de metode noi nu aveau nicio descriere. O a doua
+# lista, oricat de corecta azi, ramane iar in urma la prima metoda adaugata.
+# Descriere lizibilă per metodă — afișată lângă scorerul de generare.
+# Overlay scurt pentru baseline-uri; restul vine din notele registry-ului
+# (METHODS), ca să nu rămână nume moarte sau claim-uri de performanță.
 _METHOD_DESC = {
-    # --- baseline ---------------------------------------------------------
-    "frequency": "frecvență recentă ponderată exponențial (fallback determinist) · baseline",
-    "random": "scoruri pur aleatoare, prag de referință în bench (interzis în producție) · baseline",
-    # --- recență ----------------------------------------------------------
-    "freq_window_50": "de câte ori a ieșit numărul în ultimele 50 de extrageri · recență",
-    "freq_window_200": "de câte ori a ieșit numărul în ultimele 200 de extrageri · recență",
-    "ewma_hl30": "căldură netezită exponențial (timp de înjumătățire 30 de extrageri) · recență",
-    "ewma_cold_hl30": "numere reci: inversul căldurii netezite exponențial · recență",
-    "momentum_30_300": "accelerare: frecvența pe 30 minus frecvența pe 300 de extrageri · recență",
-    "hot_consistency": "în câte dintre ultimele 10 blocuri de 30 de extrageri a fost peste așteptare · recență",
-    "weighted_recent_linear": "frecvență pe ultimele 100, cu ponderi care scad liniar spre trecut · recență",
-    "alternating_parity": (
-        "sezonalitate de perioadă 2 pe axa TIMPULUI: rata numărului pe extragerile "
-        "cu același index par/impar ca următoarea. NU este filtru de numere "
-        "pare/impare — nu spune nimic despre paritatea numărului · recență"
-    ),
-    # --- goluri (numere „datorate”) ---------------------------------------
-    "gap_current": "câte extrageri au trecut de la ultima apariție · goluri",
-    "gap_ratio": "golul curent raportat la golul mediu al numărului · goluri",
-    "gap_hazard": "șansa empirică să iasă acum, dat fiind cât de mult a stat · goluri",
-    "rhythm_phase": "cât de aproape e golul curent de golul tipic al numărului · goluri",
-    "croston_interval": "Croston: intervalele dintre apariții, netezite; rata = 1/interval · goluri",
-    # --- serii de timp ----------------------------------------------------
-    "holt_forecast": "nivel + tendință (Holt) pe seria de apariții a numărului · serii de timp",
-    "autocorr_lag": "prognoză din autocorelațiile proprii, pe ultimele 20 de laguri · serii de timp",
-    "ar_ls_pooled": "model autoregresiv AR(10) cu coeficienți comuni tuturor numerelor · serii de timp",
-    "spectral_phase": "componenta ciclică dominantă a numărului, proiectată la extragerea următoare · serii de timp",
-    "hurst_persistence": "persistență (exponent Hurst) × direcția deviației recente · serii de timp",
-    "cusum_burst": "explozie recentă de apariții, indiferent de lungimea ferestrei · serii de timp",
-    "ses_opt_alpha": "netezire exponențială simplă, cu viteza de uitare aleasă per număr · serii de timp",
-    "theta_drift": "metoda Theta: media dintre tendința liniară și netezirea exponențială · serii de timp",
-    "drift_linear": "tendința liniară a ratei glisante, extrapolată la extragerea următoare · serii de timp",
-    "imapa_agg": "netezire la mai multe niveluri de agregare (1/2/4/8 extrageri), mediate · serii de timp",
-    "haar_multiscale": "unde s-a schimbat ritmul recent: detalii Haar la scările 2–16 · serii de timp",
-    "ssa_forecast": "analiză spectrală singulară pe seria proprie, prognoză prin recurență · serii de timp",
-    "dmd_forecast": "moduri dinamice pe matricea numere × timp, un pas înainte · serii de timp",
-    "runs_persistence": "grupare vs. alternanță (testul seriilor) × deviația recentă · serii de timp",
-    # --- tranziții --------------------------------------------------------
-    "markov_pairs": "cât de des a urmat numărul după numerele din ultima extragere · tranziții",
-    "markov_lag2": "aceleași tranziții, dar pornind de la extragerea de acum doi pași · tranziții",
-    "markov_self_state": "șansa proprie de a ieși, după cum a ieșit sau nu data trecută · tranziții",
-    "naive_bayes_last": "dovezile ultimei extrageri combinate multiplicativ (Naive Bayes) · tranziții",
-    "pair_transition": "ce numere au urmat după PERECHILE din ultima extragere · tranziții",
-    "repeat_last_draw": "repetarea ultimei extrageri: filtru naive-last — la pool = mărimea extragerii, top-K E ultima extragere. Martor de bench, EXCLUS din producție · tranziții",
-    "vlmm_self_k3": "Markov cu context variabil (≤ 3 stări proprii), cu retragere la contexte rare · tranziții",
-    # --- co-apariție ------------------------------------------------------
-    "cooc_last3": "afinitatea de co-apariție cu numerele din ultimele 3 extrageri · co-apariție",
-    "anti_cooc_last": "contrariul co-apariției: numerele care evită ultima extragere · co-apariție",
-    "pair_lift_last": "cât de des apar perechile peste independență, față de ultima extragere · co-apariție",
-    "hawkes_cross": "excitație încrucișată cu uitare exponențială: cine „aprinde” pe cine · co-apariție",
-    # --- graf -------------------------------------------------------------
-    "pagerank_cooc": "centralitate PageRank în graful de co-apariție, ponderat spre recent · graf",
-    "rwr_last_draw": "plimbare aleatoare cu restart, pornită din ultima extragere · graf",
-    # --- similaritate -----------------------------------------------------
-    "knn_draw_similarity": "ce a urmat după cele 40 de extrageri cele mai asemănătoare cu ultima · similaritate",
-    "knn_pattern_self": "ce a urmat după tipare proprii asemănătoare (ferestre de 10 stări) · similaritate",
-    # --- vecinătate numerică ----------------------------------------------
-    "neighbor_adjacent": (
-        "vecinii numerici (±1, ±2) ai numerelor din ultima extragere: filtru "
-        "spațial — top-K e clasa de vecinătate, nu un clasament. Martor de bench, "
-        "EXCLUS din producție · vecinătate numerică"
-    ),
-    # --- învățare (numpy + scipy, fără scikit-learn) ----------------------
-    "ridge_pooled_feats": "regresie ridge pe 6 trăsături, un singur model comun tuturor numerelor · învățare (numpy+scipy)",
-    "logit_pooled_feats": "regresie logistică pe aceleași 6 trăsături comune · învățare (numpy+scipy)",
-    "online_logit_sgd": "aceeași regresie logistică, învățată online, într-o singură trecere · învățare (numpy+scipy)",
-    "nb_lags_pooled": "Naive Bayes Bernoulli pe ultimele 10 stări, model comun · învățare (numpy+scipy)",
-    "knn_feature_pooled": "k-NN în spațiul trăsăturilor comune: media vecinilor · învățare (numpy+scipy)",
-    "gbm_stumps_pooled": "gradient boosting cu 30 de tăieturi simple pe trăsăturile comune · învățare (numpy+scipy)",
-    # --- ansamblu ---------------------------------------------------------
-    "rank_ensemble_core": "media rangurilor a 5 metode din familii diferite · ansamblu",
+    "frequency": "euristică simplă · frecvență recentă ponderată",
+    "random": "baseline aleator (prag de referință)",
 }
+
+
+def _method_desc(name: str) -> str:
+    """Textul de lângă metodă: overlay UI, altfel notele din registry."""
+    overlay = _METHOD_DESC.get(name)
+    if overlay:
+        return overlay
+    try:
+        from loto_enterprise.benchmark.methods import method_meta
+
+        meta = method_meta(name)
+        notes = str(meta.get("notes") or "").strip()
+        if notes and meta.get("available", True):
+            return notes
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
 
 
 def _consecutive_pool_warning(pool) -> str | None:
@@ -904,7 +855,7 @@ def _render_pool_body(
             m = info.get("method", "?")
             ph = info.get("pool_hint")
             fam = info.get("family", "")
-            desc = _METHOD_DESC.get(m, "")
+            desc = _method_desc(m)
             tail = ""
             if desc:
                 tail += render_html_safe(t" <span style='opacity:.65'>— {desc}</span>")

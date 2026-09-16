@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import builtins
 import logging
+from pathlib import Path
+
+import pandas as pd
+import pytest
 
 from loto_enterprise.benchmark import methods, methods_recency, methods_relational
-from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+from loto_enterprise.benchmark.decision import (
+    EXCLUDED_FROM_PRODUCTION,
+    KNOWN_GAME_MAX_NUM,
+    decide_optimal_config_for_pool,
+)
 
 
 def _dummy_fn(draws_2d, max_num):
@@ -29,11 +37,36 @@ def test_old_method_names_are_gone():
 
 def test_spatial_filters_stay_in_registry_but_excluded_from_production():
     """Filtrele de apartenență rămân măsurabile în bench, nu scorer de producție."""
-    for name in ("neighbor_adjacent", "repeat_last_draw"):
+    for name in (
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
+    ):
         assert name in methods.METHODS
         assert name in EXCLUDED_FROM_PRODUCTION
     assert "random" in EXCLUDED_FROM_PRODUCTION
     assert "frequency" not in EXCLUDED_FROM_PRODUCTION
+
+
+def test_folds_decision_never_picks_excluded_last_draw_filters():
+    """Pe folds.csv curent, decizia nu poate numi un filtru last-draw."""
+    folds = Path("bench_results/folds.csv")
+    if not folds.exists():
+        pytest.skip("folds.csv absent")
+    df = pd.read_csv(folds)
+    specs = (
+        ("loto_6_49", 12, 6),
+        ("loto_5_40", 11, 5),
+        ("joker_urna1", 10, 5),
+        ("joker_urna2", 1, 1),
+    )
+    for game, k, draw_n in specs:
+        cfg = decide_optimal_config_for_pool(
+            df, game, k, draw_n, max_num=KNOWN_GAME_MAX_NUM[game]
+        )
+        assert cfg.get("scorer") not in EXCLUDED_FROM_PRODUCTION
+        assert cfg.get("scorer") != "rwr_last_draw"
 
 
 def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):

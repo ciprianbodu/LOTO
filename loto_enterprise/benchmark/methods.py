@@ -18,10 +18,12 @@ registrele lor, la commit-ul dinaintea înlocuirii) au fost eliminate la
 14.09.2026, împreună cu mecanismul de tombstone (`disabled_methods.json`),
 la cererea utilizatorului.
 
-`neighbor_adjacent` și `repeat_last_draw` rămân în registry, pentru ca bench-ul
-să le măsoare ca martori, dar sunt în `EXCLUDED_FROM_PRODUCTION`: top-K-ul lor
-e o clasă geometrică (vecinii ultimei extrageri, respectiv ultima extragere),
-nu un ranking (audit 2026-09-15).
+`neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` și `haar_multiscale`
+rămân în registry, pentru ca bench-ul să le măsoare ca martori, dar sunt în
+`EXCLUDED_FROM_PRODUCTION`: top-K-ul lor e determinat de ultima extragere, nu
+de un clasament — vecinii ei, ea însăși, prefixul unui random walk pornit din
+ea, respectiv (pe Urna 2 top-1) echivalentul repetării ei
+(audit 2026-09-15 / 2026-09-16).
 """
 
 from __future__ import annotations
