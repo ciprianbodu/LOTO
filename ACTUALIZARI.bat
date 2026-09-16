@@ -281,7 +281,8 @@ exit /b 1
 
 
 :push_istoric
-call "%~dp0loto_git_sync.bat" push_istoric
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+cmd /c ""%PROJECT_DIR%loto_git_sync.bat" push_istoric"
 goto :eof
 
 

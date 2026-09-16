@@ -414,3 +414,39 @@ def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
     compact = " ".join(launch.lower().split())
     assert "taskkill /f /t /pid" in compact
     assert 'findstr /c:":8000 "' in compact
+
+
+def test_push_istoric_survives_spaces_in_project_path():
+    """CALL pe `G:\\My Drive\\...\\loto_git_sync.bat` eșuează cu 'is not recognized'."""
+    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        body = text[text.index("\n:push_istoric\n") :]
+        nxt = body.find("\n:", 2)
+        if nxt != -1:
+            body = body[:nxt]
+        assert 'call "%~dp0loto_git_sync.bat"' not in body, name
+        assert 'cmd /c ""%PROJECT_DIR%loto_git_sync.bat" push_istoric"' in body, name
+
+
+def test_start8000_opens_ipv4_loopback_not_localhost():
+    """Chrome pe Windows rezolvă localhost ca ::1; NiceGUI ascultă IPv4."""
+    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    launch = text[text.index("\n:launch_phase") : text.index("\n:push_istoric")]
+    assert "http://127.0.0.1:8000" in launch
+    assert "start http://localhost:8000" not in launch
+    assert "timeout /t 12" in launch
+
+
+def test_bootstrap_failed_retries_via_type_without_delayed_expansion_trap():
+    text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    failed = text[text.index("\n:bootstrap_failed\n") : text.index("\n:bootstrap_sync\n")]
+    assert 'type "%~f0"' in failed
+    assert "boot_retry_copy" in failed
+    assert "DisableDelayedExpansion ar folosi valoarea veche" in failed
+    # set BOOT_DIR and mkdir must not share a parenthesized block
+    assert "set \"BOOT_DIR=D:\\_BUILD\\_LOTO\\boot-%RANDOM%\"" in failed
+    assert "mkdir \"%BOOT_DIR%\" >nul 2>&1" in failed
+    set_pos = failed.index('set "BOOT_DIR=D:\\_BUILD\\_LOTO\\boot-%RANDOM%"')
+    mkdir_pos = failed.index('mkdir "%BOOT_DIR%" >nul 2>&1', set_pos)
+    between = failed[set_pos:mkdir_pos]
+    assert "(" not in between

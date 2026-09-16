@@ -20,10 +20,26 @@ REM FARA CALL: fisierul din repo poate fi inlocuit in siguranta de git reset.
 exit /b 99
 
 :bootstrap_failed
+REM copy pe un .bat aflat in rulare din Google Drive/OneDrive poate esua cu
+REM sharing violation; TEMP poate fi neinscriptibil. Incerc type + D:\_BUILD.
+REM Fara paranteze dupa set BOOT_DIR: DisableDelayedExpansion ar folosi valoarea veche.
+if "%BOOT_DIR%"=="" set "BOOT_DIR=%TEMP%\loto-start-%RANDOM%"
+if exist "%BOOT_DIR%" goto :boot_retry_copy
+if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO" >nul 2>&1
+set "BOOT_DIR=D:\_BUILD\_LOTO\boot-%RANDOM%"
+mkdir "%BOOT_DIR%" >nul 2>&1
+:boot_retry_copy
+if not exist "%BOOT_DIR%\START_8000.bat" type "%~f0" > "%BOOT_DIR%\START_8000.bat" 2>nul
+if not exist "%BOOT_DIR%\loto_git_sync.bat" type "%~dp0loto_git_sync.bat" > "%BOOT_DIR%\loto_git_sync.bat" 2>nul
+if not exist "%BOOT_DIR%\START_8000.bat" goto :boot_give_up
+if not exist "%BOOT_DIR%\loto_git_sync.bat" goto :boot_give_up
+echo [GIT] Bootstrap prin type - continui auto-update.
+"%BOOT_DIR%\START_8000.bat" --bootstrap-sync "%PROJECT_DIR%" "%BOOT_DIR%"
+exit /b 99
+:boot_give_up
 echo [GIT] Nu pot crea bootstrap-ul temporar - continui fara auto-update.
 if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
 goto :main
-
 :bootstrap_sync
 set "PROJECT_DIR=%~2"
 set "BOOT_DIR=%~3"
@@ -195,9 +211,11 @@ start "LOTO WORKER" /min "%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
 echo [4/4] Pornire UI NiceGUI - port 8000
 REM NiceGUI tine starea pe server si face update prin websocket (fara reload de
 REM pagina) -^> bifele/CSV-ul NU se mai pierd.
-REM Deschidem browserul automat dupa 5s (timp ca serverul sa porneasca), intr-un
-REM proces paralel ca sa nu blocheze pornirea serverului.
-start "" /min cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:8000"
+REM Deschidem browserul automat dupa 12s, intr-un proces paralel.
+echo [UI] http://127.0.0.1:8000 - lasa fereastra asta DESCHISA.
+REM 127.0.0.1 nu localhost: Chrome pe Windows rezolva localhost ca IPv6 ::1, iar
+REM NiceGUI asculta IPv4 -^> ERR_CONNECTION_REFUSED. 12s: importul a 50 metode.
+start "" /min cmd /c "timeout /t 12 /nobreak >nul & start http://127.0.0.1:8000"
 set "LOTO_UI_PORT=8000"
 REM Sesiune noua: UI-ul NU reia un job vechi si NU afiseaza «Job în rulare»
 REM pana nu apesi Genereaza / Auto-Pilot. Worker-ul NU primeste flag-ul
@@ -209,6 +227,9 @@ endlocal & exit /b %RC%
 
 
 :push_istoric
-call "%~dp0loto_git_sync.bat" push_istoric
+REM CALL "G:\My Drive\...\loto_git_sync.bat" esueaza cu "is not recognized".
+REM cmd /c + ghilimele duble e forma stabila pe CMD.EXE cand calea are spatii.
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+cmd /c ""%PROJECT_DIR%loto_git_sync.bat" push_istoric"
 goto :eof
 
