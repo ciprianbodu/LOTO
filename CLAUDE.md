@@ -228,8 +228,13 @@ UI-ul face polling la o secunda, fara reload complet.
 
 - Lucrul de productie se integreaza pe `main`.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
-  pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). Lansatoarele
-  activeaza calea prin `git config core.hooksPath scripts/git-hooks`.
+  pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). `START_8000.bat` si
+  `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
+- Codul se publica pe `origin/main` din mediul de audit. `START_8000.bat` nu
+  mai face git pull la pornire (ar inlocui .bat-ul aflat in rulare). Doar
+  commit+push `_ISTORIC` daca exista extrageri noi, prin `git.exe` direct.
+  `ACTUALIZARI.bat` face `git pull --ff-only origin main`. Helperul
+  `loto_git_sync.bat` a fost scos.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.

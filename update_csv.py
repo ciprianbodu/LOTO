@@ -293,7 +293,7 @@ def update_all() -> int:
             # sau corupt, nu "prima rulare vreodata" (fisierele din _ISTORIC/ sunt
             # versionate cu mii de randuri deja). A trata asta ca "totul de pe
             # site e nou" ar rescrie CSV-ul cu doar cateva luni de istoric — si
-            # `loto_git_sync.bat push_istoric` ar face auto-commit + push pe
+            # START_8000.bat :push_istoric ar face auto-commit + push pe
             # origin/main la urmatoarea pornire, fara niciun avertisment.
             print(
                 f"  {cfg['display_name']:<12}: CSV EXISTA dar fara nicio data valida — "

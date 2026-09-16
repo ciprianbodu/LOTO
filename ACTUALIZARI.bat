@@ -1,50 +1,18 @@
 @echo off
 setlocal DisableDelayedExpansion
-
-REM Git poate inlocui chiar acest .bat. CMD reia un CALL la offsetul vechi din
-REM fisierul nou si executa fragmente de linie ca comenzi. De aceea sincronizarea
-REM ruleaza din copii IMUTABILE in TEMP, apoi transfera controlul la scriptul nou.
-if /I "%~1"=="--bootstrap-sync" goto :bootstrap_sync
-if /I "%~1"=="--post-sync" goto :post_sync
-
+REM ACTUALIZARI.bat — venv, dependente, extrageri. Cod: git pull --ff-only.
+REM Fara helper git separat / bootstrap TEMP.
 set "PROJECT_DIR=%~dp0"
-set "BOOT_DIR=%TEMP%\loto-update-%RANDOM%-%RANDOM%"
-mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
-copy /Y "%~f0" "%BOOT_DIR%\ACTUALIZARI.bat" >nul || goto :bootstrap_failed
-copy /Y "%~dp0loto_git_sync.bat" "%BOOT_DIR%\loto_git_sync.bat" >nul || goto :bootstrap_failed
-REM FARA CALL: contextul fisierului din repo trebuie abandonat inainte de git reset.
-"%BOOT_DIR%\ACTUALIZARI.bat" --bootstrap-sync "%PROJECT_DIR%" "%BOOT_DIR%"
-exit /b 99
-
-:bootstrap_failed
-echo [GIT] Nu pot crea bootstrap-ul temporar - continui fara auto-update.
-if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
-goto :main
-
-:bootstrap_sync
-set "PROJECT_DIR=%~2"
-set "BOOT_DIR=%~3"
-cd /d "%PROJECT_DIR%"
-where git >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] git negasit - sar peste auto-update cod.
-) else (
-    call "%BOOT_DIR%\loto_git_sync.bat" autoupdate "%PROJECT_DIR%"
-    if errorlevel 1 echo [GIT] Auto-update esuat sau partial - codul local ramane cel de dinainte; verifica manual daca e nevoie.
-)
-REM FARA CALL: ruleaza versiunea NOUA descarcata, nu copia veche din TEMP.
-"%PROJECT_DIR%ACTUALIZARI.bat" --post-sync "%PROJECT_DIR%" "%BOOT_DIR%"
-exit /b 98
-
-:post_sync
-set "PROJECT_DIR=%~2"
-set "BOOT_DIR=%~3"
-cd /d "%PROJECT_DIR%"
-if not "%BOOT_DIR%"=="" rmdir /s /q "%BOOT_DIR%" >nul 2>&1
 
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
+where git >nul 2>&1
+if not errorlevel 1 (
+    git config core.hooksPath scripts/git-hooks >nul 2>&1
+    git pull --ff-only origin main <nul
+    if errorlevel 1 echo [GIT] pull --ff-only esuat - continui cu codul local.
+)
 setlocal enabledelayedexpansion
 
 set VENV_DIR=D:\_BUILD\_LOTO\.venv
@@ -281,9 +249,29 @@ exit /b 1
 
 
 :push_istoric
-call "%~dp0loto_git_sync.bat" push_istoric
+where git >nul 2>&1
+if errorlevel 1 goto :eof
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+cd /d "%PROJECT_DIR%"
+git config core.hooksPath scripts/git-hooks >nul 2>&1
+git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] _ISTORIC fara modificari.
+    goto :eof
+)
+echo [GIT] Extrageri noi - commit + push origin/main...
+git add -A -- _ISTORIC
+if errorlevel 1 goto :eof
+git diff --cached --quiet -- _ISTORIC
+if not errorlevel 1 goto :eof
+git commit -m "auto: update istoric extrageri"
+if errorlevel 1 (
+    echo [GIT] commit _ISTORIC esuat.
+    goto :eof
+)
+git push origin main <nul
+if errorlevel 1 echo [GIT] Push _ISTORIC esuat - commitul e local.
 goto :eof
-
 
 :CleanGhosts
 set GHOSTS=0
