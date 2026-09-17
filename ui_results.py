@@ -130,16 +130,12 @@ def _render_audit(audit: dict) -> None:
             "(sunt acceptați doar întregi 1–20)."
         ).classes("text-warning")
 
-    cf = audit.get("consecutive_filter")
-    if cf:
-        ui.markdown(
-            "⚠️ **Intervenție Filtru Anti-Secvență:**\n"
-            + "\n".join(f"- {m}" for m in cf)
-        ).classes("text-warning")
-    # Aici erau randate `timesfm_excluded`, `anomaly_filter`, `smart_selector` și
-    # `kept_sequences`. Niciuna dintre chei nu mai are PRODUCĂTOR în engine (filtrele
-    # TimesFM, Smart Selector și anti-anomalie au fost scoase din pipeline), deci
-    # ramurile nu se mai executau niciodată.
+    # Aici erau randate `consecutive_filter`, `timesfm_excluded`, `anomaly_filter`,
+    # `smart_selector` și `kept_sequences`. Niciuna dintre chei nu mai are
+    # PRODUCĂTOR în engine (filtrul anti-secvență, TimesFM, Smart Selector și
+    # anti-anomalie au fost scoase din pipeline), deci ramurile nu se mai
+    # executau niciodată. `consecutive_filter_warnings` era scrisă în audit de
+    # același filtru, dar nu a fost randată niciodată aici.
 
 
 def _render_stages(audit: dict) -> None:
@@ -671,6 +667,14 @@ def _show_report() -> None:
     dlg.open()
 
 
+# Descrierea unei metode vine din `notes`-ul ei din registry
+# (`methods.method_meta`), prin `_method_desc` de mai jos. `_METHOD_DESC` e
+# doar un overlay pentru cele doua baseline-uri, care n-au o nota lizibila.
+# De ce asa, si nu un dictionar scris de mana cu toate metodele: pana la
+# 15.09.2026 exact un astfel de dictionar tinea in viata numele vechilor
+# filtre structurale (parity_balance, sum_affinity s.a.) la mult timp dupa
+# stergerea lor, iar cele 50 de metode noi nu aveau nicio descriere. O a doua
+# lista, oricat de corecta azi, ramane iar in urma la prima metoda adaugata.
 # Descriere lizibilă per metodă — afișată lângă scorerul de generare.
 # Overlay scurt pentru baseline-uri; restul vine din notele registry-ului
 # (METHODS), ca să nu rămână nume moarte sau claim-uri de performanță.

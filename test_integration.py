@@ -59,7 +59,6 @@ try:
         pool_size=9,
         guarantee=4,
         max_variants=5,
-        smart_reduction=True,
         sim_depth_pct=100,
         track_pool_variation=False,
     )

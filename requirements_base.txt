@@ -9,11 +9,15 @@
 nicegui                  # UI principal (app_nicegui.py)
 # streamlit: ELIMINAT. Era pentru „UI legacy (app.py)" — un fișier care nu
 # există în repo și nu apare nici în istoricul git.
-requests
+# requests: ELIMINAT (15.09.2026). Zero consumatori — niciun `import requests`
+# in .py, .bat sau scripts/; ramasese din suportul de retea scos odata cu
+# TimesFM/foundation models.
 psutil
-matplotlib
 
-# Tabular / numeric (C-extensions; nu se update-eaza fara grija)
+# Tabular / numeric (C-extensions; nu se update-eaza fara grija).
+# Acesta ESTE și stack-ul de scoring: după înlocuirea întregului set de metode
+# (14.09.2026), cele 52 de intrări din registry se sprijină exclusiv pe numpy
+# și scipy (scipy.signal.lfilter, scipy.sparse.csr_matrix, scipy.spatial.cKDTree).
 pandas>=2.2,<3
 numpy
 scipy
@@ -24,19 +28,12 @@ scipy
 # Benchmark / lab utilitare
 rich
 
-# Metode statistice / ML (toate CPU):
-# - scikit-learn: 12+ ML classifiers (logistic, RF, KNN, SVM, ...)
-# - statsmodels: ARIMA, ETS, Holt-Winters, STL decomposition
-# - statsforecast: AutoARIMA, AutoETS, Theta, CES, Croston family, ADIDA, IMAPA
-# - hmmlearn: HMM (Hidden Markov Model)
-# - xgboost / lightgbm / catboost: gradient boosting (CPU)
-scikit-learn
-statsmodels
-statsforecast
-hmmlearn
-xgboost
-lightgbm
-catboost
+# scikit-learn / statsmodels / statsforecast / hmmlearn / xgboost / lightgbm /
+# catboost: ELIMINATE (14.09.2026). Descriau setul vechi de ~183 de metode,
+# șters odată cu înlocuirea registry-ului. Niciun modul nu le mai importă —
+# verificat cu grep pe instrucțiuni `import`/`from` reale, nu pe text liber.
+# matplotlib: ELIMINAT. Zero consumatori în repo: aplicația nu desenează nimic,
+# nu există niciun `import matplotlib` și niciun grafic generat.
 
 # Teste unitare (test_decision.py, test_method_selector.py)
 pytest
