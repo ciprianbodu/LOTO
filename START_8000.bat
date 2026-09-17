@@ -2,8 +2,9 @@
 setlocal DisableDelayedExpansion
 REM ============================================================
 REM START_8000.bat — launcher UI + worker.
-REM Codul vine pe origin/main din mediul de audit. Aici NU facem git pull
-REM pe .bat-ul aflat in rulare. Doar extrageri noi din _ISTORIC.
+REM Daca origin/main e inainte sau lansatoarele de pe disc sunt vechi:
+REM scriem D:\_BUILD\_LOTO\loto_relaunch.bat, IESIM, iar acela face
+REM git pull --ff-only si reporneste. Nu tragem .bat-ul aflat in rulare.
 REM CRLF obligatoriu (.gitattributes). Linie goala = echo/ nu echo.
 REM In echo din blocuri if (...): fara paranteze rotunde.
 REM ============================================================
@@ -24,6 +25,8 @@ for %%F in ("%~dp0*.bat") do (
 set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"
 if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
+set "RELAUNCH=START_8000.bat"
+call :maybe_git_update
 set "LOGFILE=%RUNTIME_DIR%\startup_8000.log"
 
 REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
@@ -207,3 +210,59 @@ if errorlevel 1 (
 git push origin main <nul
 if errorlevel 1 echo [GIT] Push _ISTORIC esuat - commitul e local.
 goto :eof
+
+
+:maybe_git_update
+if "%LOTO_RELAUNCHED%"=="1" (
+    echo [GIT] Repornit dupa actualizare.
+    goto :eof
+)
+where git >nul 2>&1
+if errorlevel 1 (
+    echo [GIT] git.exe nu e in PATH. Continui cu codul local.
+    goto :eof
+)
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
+if "%RELAUNCH%"=="" set "RELAUNCH=START_8000.bat"
+cd /d "%PROJECT_DIR%"
+git config core.hooksPath scripts/git-hooks >nul 2>&1
+echo [GIT] Verific origin/main...
+set "GIT_TERMINAL_PROMPT=0"
+git fetch origin <nul
+set "FETCH_FAILED="
+if errorlevel 1 set "FETCH_FAILED=1"
+set "LOCAL_SHA="
+set "REMOTE_SHA="
+for /f %%H in ('git rev-parse HEAD 2^>nul') do set "LOCAL_SHA=%%H"
+for /f %%H in ('git rev-parse origin/main 2^>nul') do set "REMOTE_SHA=%%H"
+echo [GIT] local  %LOCAL_SHA%
+echo [GIT] origin %REMOTE_SHA%
+set "NEED_UPDATE="
+if not "%LOCAL_SHA%"=="%REMOTE_SHA%" set "NEED_UPDATE=1"
+git diff --quiet -- START_8000.bat ACTUALIZARI.bat
+if errorlevel 1 set "NEED_UPDATE=1"
+if defined FETCH_FAILED set "NEED_UPDATE=1"
+if not defined NEED_UPDATE (
+    echo [GIT] Deja la zi.
+    goto :eof
+)
+echo [GIT] Cod nou sau lansator vechi pe disc. Actualizez si repornesc...
+if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
+set "UPDATER=%RUNTIME_DIR%\loto_relaunch.bat"
+> "%UPDATER%" echo @echo off
+>> "%UPDATER%" echo cd /d "%PROJECT_DIR%."
+>> "%UPDATER%" echo echo [GIT] Astept 2s ca lansatorul vechi sa se inchida...
+>> "%UPDATER%" echo timeout /t 2 /nobreak ^>nul
+>> "%UPDATER%" echo git config core.hooksPath scripts/git-hooks
+>> "%UPDATER%" echo git fetch origin
+>> "%UPDATER%" echo git pull --ff-only origin main
+>> "%UPDATER%" echo if errorlevel 1 echo [GIT] pull --ff-only esuat - restabilesc lansatoarele.
+>> "%UPDATER%" echo git checkout origin/main -- START_8000.bat ACTUALIZARI.bat
+>> "%UPDATER%" echo echo [GIT] Repornesc lansatorul actualizat.
+>> "%UPDATER%" echo set LOTO_RELAUNCHED=1
+>> "%UPDATER%" echo call %RELAUNCH%
+echo [GIT] Inchid fereastra curenta ca sa pot inlocui lansatorul.
+start "LOTO UPDATE" cmd /c "%UPDATER%"
+exit 0
+
