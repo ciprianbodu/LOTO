@@ -2,8 +2,9 @@
 setlocal DisableDelayedExpansion
 REM ============================================================
 REM START_8000.bat — launcher UI + worker.
-REM Codul vine pe origin/main din mediul de audit. Aici NU facem git pull
-REM pe .bat-ul aflat in rulare. Doar extrageri noi din _ISTORIC.
+REM Daca origin/main e inainte sau lansatoarele de pe disc sunt vechi:
+REM scriem D:\_BUILD\_LOTO\loto_relaunch.bat, IESIM, iar acela face
+REM git pull --ff-only si reporneste. Nu tragem .bat-ul aflat in rulare.
 REM CRLF obligatoriu (.gitattributes). Linie goala = echo/ nu echo.
 REM In echo din blocuri if (...): fara paranteze rotunde.
 REM ============================================================
@@ -13,9 +14,19 @@ cd /d "%PROJECT_DIR%"
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
+REM Doar START_8000.bat si ACTUALIZARI.bat raman. Helperul git vechi si
+REM orice alt .bat din radacina se sterg de pe disc.
+for %%F in ("%~dp0*.bat") do (
+    if /I not "%%~nxF"=="START_8000.bat" if /I not "%%~nxF"=="ACTUALIZARI.bat" (
+        echo [GIT] Sterg lansator vechi %%~nxF
+        del /f /q "%%~fF" >nul 2>&1
+    )
+)
 set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"
 if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
+set "RELAUNCH=START_8000.bat"
+call :maybe_git_update
 set "LOGFILE=%RUNTIME_DIR%\startup_8000.log"
 
 REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
@@ -199,3 +210,58 @@ if errorlevel 1 (
 git push origin main <nul
 if errorlevel 1 echo [GIT] Push _ISTORIC esuat - commitul e local.
 goto :eof
+
+
+:maybe_git_update
+if "%LOTO_RELAUNCHED%"=="1" (
+    echo [GIT] Repornit dupa actualizare.
+    goto :eof
+)
+if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
+if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
+if "%RELAUNCH%"=="" set "RELAUNCH=START_8000.bat"
+if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
+cd /d "%PROJECT_DIR%"
+echo [GIT] Descarc lansatoarele de pe GitHub...
+curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\START_8000.bat.new" https://raw.githubusercontent.com/ciprianbodu/LOTO/main/START_8000.bat
+if errorlevel 1 echo [GIT] Descarcare START_8000 esuata.
+curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\ACTUALIZARI.bat.new" https://raw.githubusercontent.com/ciprianbodu/LOTO/main/ACTUALIZARI.bat
+if errorlevel 1 echo [GIT] Descarcare ACTUALIZARI esuata.
+set "NEED_UPDATE="
+findstr /C:"loto_relaunch.bat" "%PROJECT_DIR%START_8000.bat" >nul
+if errorlevel 1 set "NEED_UPDATE=1"
+set "LOCAL_SHA="
+where git >nul 2>&1
+if errorlevel 1 goto :after_sha
+git config core.hooksPath scripts/git-hooks >nul 2>&1
+for /f %%H in ('git rev-parse HEAD 2^>nul') do set "LOCAL_SHA=%%H"
+echo [GIT] local %LOCAL_SHA%
+curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\gh_main.json" https://api.github.com/repos/ciprianbodu/LOTO/commits/main
+if errorlevel 1 goto :after_sha
+if "%LOCAL_SHA%"=="" set "NEED_UPDATE=1"
+if "%LOCAL_SHA%"=="" goto :after_sha
+findstr /C:"%LOCAL_SHA%" "%RUNTIME_DIR%\gh_main.json" >nul
+if errorlevel 1 set "NEED_UPDATE=1"
+:after_sha
+if not defined NEED_UPDATE (
+    echo [GIT] Deja la zi.
+    goto :eof
+)
+echo [GIT] Cod nou sau lansator vechi pe disc. Actualizez si repornesc...
+set "UPDATER=%RUNTIME_DIR%\loto_relaunch.bat"
+> "%UPDATER%" echo @echo off
+>> "%UPDATER%" echo cd /d "%PROJECT_DIR%."
+>> "%UPDATER%" echo echo [GIT] Astept 2s ca lansatorul vechi sa se inchida...
+>> "%UPDATER%" echo timeout /t 2 /nobreak ^>nul
+>> "%UPDATER%" echo if exist "%RUNTIME_DIR%\START_8000.bat.new" copy /Y "%RUNTIME_DIR%\START_8000.bat.new" START_8000.bat
+>> "%UPDATER%" echo if exist "%RUNTIME_DIR%\ACTUALIZARI.bat.new" copy /Y "%RUNTIME_DIR%\ACTUALIZARI.bat.new" ACTUALIZARI.bat
+>> "%UPDATER%" echo git config core.hooksPath scripts/git-hooks
+>> "%UPDATER%" echo git fetch origin
+>> "%UPDATER%" echo git pull --ff-only origin main
+>> "%UPDATER%" echo if errorlevel 1 echo [GIT] pull --ff-only esuat - lansatoarele sunt deja copiate de pe GitHub.
+>> "%UPDATER%" echo echo [GIT] Repornesc lansatorul actualizat.
+>> "%UPDATER%" echo set LOTO_RELAUNCHED=1
+>> "%UPDATER%" echo call %RELAUNCH%
+echo [GIT] Inchid fereastra curenta ca sa pot inlocui lansatorul.
+start "LOTO UPDATE" cmd /c "%UPDATER%"
+exit 0

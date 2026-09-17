@@ -379,15 +379,27 @@ def test_python_version_check_has_no_stale_patch_constant():
     assert "ultimul patch stabil 3.14.x" in text
 
 
-def test_launchers_have_no_temp_bootstrap():
-    """START_8000 nu trage cod in timp ce .bat-ul ruleaza; ACTUALIZARI face ff-only."""
+def test_launchers_relaunch_via_runtime_dir_updater():
+    """Nu tragem .bat-ul aflat in rulare. Scriem updater pe D:\\_BUILD\\_LOTO, iesim, pull, repornim."""
+    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert ":bootstrap_sync" not in text, name
+        assert "--bootstrap-sync" not in text, name
+        assert "loto_relaunch.bat" in text, name
+        assert 'start "LOTO UPDATE"' in text, name
+        assert "LOTO_RELAUNCHED" in text, name
+        assert "git pull --ff-only origin main" in text, name
+        assert "curl.exe" in text, name
+        assert "raw.githubusercontent.com/ciprianbodu/LOTO/main/START_8000.bat" in text, name
+        assert "git reset --hard" not in text, name
+        assert "loto_git_sync" not in text, name
     start = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
-    assert "git pull --ff-only" not in start
-    assert "git pull origin" not in start
-    assert ":bootstrap_sync" not in start
     actual = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
-    assert "git pull --ff-only origin main" in actual
-    assert ":bootstrap_sync" not in actual
+    assert "git pull --ff-only origin main <nul" not in start
+    assert "git pull --ff-only origin main <nul" not in actual
+    assert 'set "RELAUNCH=START_8000.bat"' in start
+    assert 'set "RELAUNCH=ACTUALIZARI.bat"' in actual
+
 
 
 def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
@@ -427,3 +439,14 @@ def test_start8000_opens_ipv4_loopback_not_localhost():
     assert "http://127.0.0.1:8000" in launch
     assert "start http://localhost:8000" not in launch
     assert "timeout /t 12" in launch
+
+
+def test_launchers_delete_stray_root_bats():
+    """Pe disc pot rămâne loto_git_sync.bat sau copii vechi; le ștergem."""
+    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert '%~dp0*.bat' in text, name
+        assert 'if /I not "%%~nxF"=="START_8000.bat"' in text, name
+        assert 'if /I not "%%~nxF"=="ACTUALIZARI.bat"' in text, name
+        assert "del /f /q" in text, name
+        assert "loto_git_sync" not in text, name

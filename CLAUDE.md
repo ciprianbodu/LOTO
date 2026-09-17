@@ -236,11 +236,16 @@ UI-ul face polling la o secunda, fara reload complet.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
   pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). `START_8000.bat` si
   `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
-- Codul se publica pe `origin/main` din mediul de audit. `START_8000.bat` nu
-  mai face git pull la pornire (ar inlocui .bat-ul aflat in rulare). Doar
+- Codul se publica pe `origin/main` din mediul de audit. `START_8000.bat` si
+  `ACTUALIZARI.bat` nu fac `git pull` cat timp `.bat`-ul propriu ruleaza
+  (CMD ar sari la offset vechi; pe Google Drive copierea fisierului in rulare
+  da sharing violation). Daca `origin/main` e inainte sau lansatoarele de pe
+  disc difera, scriu `D:\_BUILD\_LOTO\loto_relaunch.bat`, ies, iar acel script
+  copiaza lansatoarele descarcate cu `curl` de pe GitHub, face
+  `git pull --ff-only origin main` si reporneste. Verificarea nu mai asteapta
+  `git fetch` in .bat-ul aflat in rulare (pe Google Drive poate parea blocat).
+  Helperul `loto_git_sync.bat` ramane scos. `START_8000.bat` mai face
   commit+push `_ISTORIC` daca exista extrageri noi, prin `git.exe` direct.
-  `ACTUALIZARI.bat` face `git pull --ff-only origin main`. Helperul
-  `loto_git_sync.bat` a fost scos.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.
@@ -581,10 +586,10 @@ impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 
 Instalarea canonica este:
 
-1. `ACTUALIZARI.bat` - sincronizeaza `main`, instaleaza/actualizeaza Python
+1. `ACTUALIZARI.bat` - trage `main` prin relaunch, instaleaza/actualizeaza Python
    3.14, recreeaza venv-ul daca patch-ul difera si instaleaza
    `requirements_base.txt`;
-2. `START_8000.bat` - sincronizeaza, verifica mediul, curata procese vechi,
+2. `START_8000.bat` - trage `main` prin relaunch daca e in urma, verifica mediul, curata procese vechi,
    porneste worker-ul si UI-ul.
 
 `requirements_snapshot.txt` este arhiva si nu se instaleaza. Stack-ul este CPU;
