@@ -351,7 +351,8 @@ def test_launchers_relaunch_via_runtime_dir_updater():
         assert 'start "LOTO UPDATE"' in text, name
         assert "LOTO_RELAUNCHED" in text, name
         assert "git pull --ff-only origin main" in text, name
-        assert "git checkout origin/main -- START_8000.bat ACTUALIZARI.bat" in text, name
+        assert "curl.exe" in text, name
+        assert "raw.githubusercontent.com/ciprianbodu/LOTO/main/START_8000.bat" in text, name
         assert "git reset --hard" not in text, name
         assert "loto_git_sync" not in text, name
     start = (ROOT / "START_8000.bat").read_text(encoding="utf-8")

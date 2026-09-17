@@ -215,9 +215,11 @@ UI-ul face polling la o secunda, fara reload complet.
   (CMD ar sari la offset vechi; pe Google Drive copierea fisierului in rulare
   da sharing violation). Daca `origin/main` e inainte sau lansatoarele de pe
   disc difera, scriu `D:\_BUILD\_LOTO\loto_relaunch.bat`, ies, iar acel script
-  face `git pull --ff-only origin main`, restabileste cele doua lansatoare si
-  reporneste. Helperul `loto_git_sync.bat` ramane scos. `START_8000.bat` mai
-  face commit+push `_ISTORIC` daca exista extrageri noi, prin `git.exe` direct.
+  copiaza lansatoarele descarcate cu `curl` de pe GitHub, face
+  `git pull --ff-only origin main` si reporneste. Verificarea nu mai asteapta
+  `git fetch` in .bat-ul aflat in rulare (pe Google Drive poate parea blocat).
+  Helperul `loto_git_sync.bat` ramane scos. `START_8000.bat` mai face
+  commit+push `_ISTORIC` daca exista extrageri noi, prin `git.exe` direct.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.
