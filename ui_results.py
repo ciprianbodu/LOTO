@@ -286,9 +286,52 @@ def _render_cost(game: str, data: dict) -> None:
             ui.label(
                 "Primele 10 variante sunt doar un subset; garanția afișată se referă la întregul wheel."
             ).classes("text-caption text-grey")
+        for line in _wheel_probability_lines(game, data):
+            ui.label(line).classes("text-caption")
+
         ui.label(
             f"Estimare la tariful standard {price:g} lei/variantă; tragerile speciale pot avea alt tarif. Taxa fizică pe bilet nu este inclusă."
         ).classes("text-caption text-grey")
+
+
+def _wheel_probability_lines(game: str, data: dict) -> list[str]:
+    """Same exact, unconditional ticket odds in the UI and the saved report."""
+    from covering.probability import wheel_hit_probabilities
+
+    params = _hypergeo_params(game)
+    pool, variants = data.get("hard_core") or [], data.get("variants") or []
+    if not params or not pool or not variants:
+        return []
+    pick, max_num = params
+    is_joker = "joker" in str(game).lower()
+    try:
+        if any(len(v) != pick + int(is_joker) for v in variants):
+            raise ValueError("lungime variantă invalidă")
+        odds = wheel_hit_probabilities(pool, [v[:pick] for v in variants], pick, max_num)
+    except (ValueError, TypeError):
+        return ["Șanse teoretice indisponibile: pool sau variante invalide."]
+    lines = [
+        "Șanse teoretice la o extragere uniformă, pentru toate variantele generate:",
+        " · ".join(
+            f"{t}+ numere: în pool {100 * odds['pool'][t]:.3f}%; "
+            f"pe cel puțin o variantă {100 * odds['ticket'][t]:.3f}%"
+            for t in (3, 4)
+        ),
+    ]
+    if max_num == 40:
+        all_six = wheel_hit_probabilities(pool, variants, 6, 40)
+        lines.append(
+            f"5/40 — cel puțin 4 din toate cele 6 numere extrase pe o variantă: "
+            f"{100 * all_six['ticket'][4]:.3f}%."
+        )
+        lines.append(
+            "5/40: analiza folosește primele 5 numere extrase (referința categoriei I). "
+            "3 numere nu aduc premiu; categoriile II/III folosesc toate cele 6 numere extrase."
+        )
+    elif is_joker:
+        lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
+    lines.append("Acoperirea 100% este o garanție condiționată de numerele prinse în pool, nu șansa de câștig.")
+    return lines
 
 
 def _hypergeo_params(game: str) -> tuple[int, int] | None:
@@ -509,7 +552,7 @@ def _build_report() -> str:
         "=" * 72,
     ]
 
-    def _dump_pool(d: dict, label: str | None, indent: str = "  ") -> None:
+    def _dump_pool(d: dict, label: str | None, indent: str = "  ", game: str = "") -> None:
         if label:
             out.append(f"\n{indent}{'-' * 60}\n{indent}{label}\n{indent}{'-' * 60}")
         pool = sorted(int(x) for x in (d.get("hard_core") or []))
@@ -555,6 +598,7 @@ def _build_report() -> str:
             f"{indent}Acoperire garanție (wheel generat): "
             + (f"{float(cov):.2f}%" if cov is not None else "necunoscută")
         )
+        out.extend(f"{indent}{line}" for line in _wheel_probability_lines(game, d))
         transform_note = _bench_transform_note(d)
         if transform_note:
             out.append(f"{indent}{transform_note}")
@@ -588,6 +632,14 @@ def _build_report() -> str:
         _cw = _consecutive_pool_warning(pool)
         if _cw:
             out.append(f"{indent}⚠️ {_cw}")
+        _unplayed = (d.get("audit") or {}).get("pool_numbers_not_on_tickets") or []
+        if _unplayed:
+            out.append(
+                f"{indent}⚠️ Numere din pool care NU apar pe niciun bilet: "
+                + ", ".join(str(int(n)) for n in _unplayed)
+                + " — garanția designului rămâne validă, dar hiturile de pool "
+                "le numără, iar biletele nu le pot prinde."
+            )
         if d.get("hard_core_joker"):
             out.append(
                 f"{indent}Joker: "
@@ -642,7 +694,7 @@ def _build_report() -> str:
             d = _primary_pool_data(raw_data)
             out.append(f"\n=================  JOC: {g.upper()}  =================")
             flat = STATE["retro"].get(f"{fn}_{g}")
-            _dump_pool(d, None)
+            _dump_pool(d, None, game=g)
             wf = _wf_summary(flat)
             if wf:
                 out.append(f"  Walk-forward: {wf}")
@@ -939,6 +991,14 @@ def _render_pool_body(
     _cw = _consecutive_pool_warning(pool)
     if _cw:
         ui.label(f"⚠️ {_cw}").classes("text-bold text-negative mt-1")
+    _unplayed = (data.get("audit") or {}).get("pool_numbers_not_on_tickets") or []
+    if _unplayed:
+        ui.label(
+            "⚠️ Nu apar pe niciun bilet: "
+            + ", ".join(str(int(n)) for n in _unplayed)
+            + " — designul își ține garanția fără ele, dar hiturile de pool le "
+            "numără, iar biletele nu le pot prinde."
+        ).classes("text-caption text-warning mt-1")
     if data.get("hard_core_joker"):
         ui.label("Joker:").classes("text-bold mt-1")
         _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
@@ -1050,4 +1110,3 @@ def results_panel() -> None:
         ui.button("📋 Raport integral", on_click=_show_report).props("flat dense")
 
     _render_results_bundle(results[0])
-

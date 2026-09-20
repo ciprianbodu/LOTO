@@ -8,9 +8,9 @@ best_methods.json schema (v2 — per-pool winners):
         "loto_6_49": {
           "label": "Loto 6/49",
           "draw_n": 6,
-          "overall_winner": "patchtst",
-          "winners_per_pool": {"k6": "patchtst", "k7": "patchtst", ...},
-          "winner_details": { "k6": {"winner":"patchtst","avg_hits":0.79,...}, ...}
+          "overall_winner": "ewma_hl30",
+          "winners_per_pool": {"k6": "ewma_hl30", "k7": "gap_hazard", ...},
+          "winner_details": { "k6": {"winner":"ewma_hl30","avg_hits":0.79,...}, ...}
         },
         ...
       }
@@ -63,6 +63,8 @@ def _load_config(path: str | None = None) -> dict:
         return _CONFIG
     try:
         _CONFIG = json.loads(cfg_path.read_text(encoding="utf-8"))
+        if not isinstance(_CONFIG, dict) or not isinstance(_CONFIG.get("games", {}), dict):
+            raise ValueError("config must contain a games object")
     except Exception as exc:
         logger.error("[method_selector] failed to parse %s: %s", cfg_path, exc)
         _CONFIG = {"games": {}}
@@ -156,7 +158,7 @@ def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
             wt = float(item.get("weight", 0) or 0)
         except (TypeError, ValueError):
             wt = 0.0
-        if wt <= 0:
+        if not math.isfinite(wt) or wt <= 0:
             continue
         clean_ens.append({"method": nm, "weight": wt})
     if clean_ens:
@@ -270,10 +272,13 @@ def should_use_blacklist(
 ) -> bool:
     """Ce spune bench-ul despre blacklist pentru acest (joc, pool).
 
-    ⚠️ **VALOAREA ASTA NU SE APLICĂ ÎN PRODUCȚIE.** `loto_engine` face
-    `blacklist = set()` necondiționat și scrie `audit["filters_disabled"] = True`
-    — filtrele post-scoring au fost oprite DELIBERAT (cerere utilizator,
-    2026-07-08): scoring → top-N → wheel, fără nimic între. Deci bit-ul e
+    ⚠️ **VALOAREA ASTA NU SE APLICĂ ÎN PRODUCȚIE.**
+    `loto_enterprise/engine/pipeline.py` pornește cu `blacklist = set()` și scrie
+    `audit["filters_disabled"] = True` — filtrele post-scoring au fost oprite
+    DELIBERAT (cerere utilizator, 2026-07-08): scoring → top-N → wheel, fără
+    nimic între. Singurul lucru care mai poate umple acea mulțime e restrângerea
+    de interval cerută explicit din UI (`restrict_base`), care n-are legătură cu
+    bitul de aici și e aplicată identic în walk-forward. Deci bit-ul e
     TELEMETRIE de bench, exact ca `sim_depth_pct`, nu un buton de configurare.
     Docstring-ul de dinainte pretindea invers („production rulează blacklist-ul
     oricum") și era pur și simplu fals.
@@ -353,26 +358,55 @@ def get_ensemble_for_game(
     game_key: str,
     pool_size: int | None = None,
     config_path: str | None = None,
-    max_methods: int = 3,
+    max_methods: int | None = None,
 ) -> list[tuple[str, Callable, float]]:
     """Return [(method_name, scorer_fn, weight), ...] — pondere ∝ limita Wilson
     a ratei țintei din decizie (+3/+4, iar Urna 2 top-1).
 
-    Variance-reduction: combină scorurile mai multor metode CALIFICATE (nu doar
-    câștigătorul unic) — loteria e aleatoare, diferența dintre metode e majoritar
-    zgomot statistic, deci blend-ul reduce riscul ca o singură metodă "norocoasă"
-    pe date de test să domine complet pool-ul.
+    Ideea blend-ului e reducerea varianței: diferența dintre metode e majoritar
+    zgomot, deci combinarea mai multor metode calificate ar limita influența
+    uneia norocoase pe datele de test. Măsurat însă pe Joker k11, blend-ul a
+    ieșit SUB random (6,73% față de 8,53%), de unde plafonul
+    `decision.ENSEMBLE_MAX_METHODS` (azi 1). `max_methods=None` (implicit) ia
+    chiar acel plafon: default-ul fix 3 de dinainte contrazicea tăcut plafonul
+    de producție, iar `ui_bench` explica diferența 3→1 prin decorelare, deși ea
+    venea din plafonul aplicat în `engine/scoring.py`.
 
     Fallback (best_methods.json vechi, fără câmp 'ensemble', sau toate metodele
     din ensemble indisponibile la runtime) → listă cu UN SINGUR membru
     (get_winner_name + get_scorer_for_game, weight=1.0) — identic cu
     comportamentul dinaintea ensemble-ului.
     """
+    if max_methods is None:
+        try:
+            from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
+
+            max_methods = int(ENSEMBLE_MAX_METHODS)
+        except Exception:  # noqa: BLE001
+            max_methods = 1
 
     def _single_fallback() -> list[tuple[str, Callable, float]]:
-        # Numele și callable-ul trebuie să coincidă (ambele după sanitizare).
+        # Numele și callable-ul TREBUIE să coincidă. `get_scorer_for_game` cade
+        # pe `frequency` când scorerul ales e indisponibil la runtime, dar
+        # numele rămânea cel original — audit-ul și UI-ul anunțau atunci un
+        # scorer care nu rulase. Verificăm identitatea funcției și corectăm
+        # numele, ca raportul să spună ce s-a jucat.
         name = get_winner_name(game_key, pool_size, config_path)
         fn = get_scorer_for_game(game_key, pool_size, config_path)
+        try:
+            from loto_enterprise.benchmark.methods import METHODS
+
+            if name and fn is METHODS.get("frequency", (None,))[0] and name != "frequency":
+                logger.warning(
+                    "[method_selector] %s: scorerul %r e indisponibil la runtime "
+                    "— rulează `frequency`; raportez `frequency`, nu %r.",
+                    game_key,
+                    name,
+                    name,
+                )
+                name = "frequency"
+        except Exception:  # noqa: BLE001
+            pass
         return [(name, fn, 1.0)]
 
     cfg = _load_config(config_path)
@@ -448,8 +482,10 @@ def _has_variance(raw: dict) -> bool:
 # --- Decorelare membri ensemble -------------------------------------------
 # Prag peste care doi membri sunt considerați REDUNDANȚI (aceeași informație de
 # ranking) — auditul a arătat perechi cu |Spearman| ∈ {0.98, 1.00} în ensemble-
-# urile scrise de decision.py (ex. 649_katz15_gap85 + 649_katz25_gap75 = blend-uri
-# pe ACELEAȘI componente, cover_positional_bands + frequency la 5/40 → r=+0.98).
+# urile scrise de decision.py. Exemplele măsurate atunci (`649_katz15_gap85` +
+# `649_katz25_gap75`, două blend-uri pe ACELEAȘI componente; respectiv
+# `cover_positional_bands` + `frequency` la 5/40, r=+0.98) sunt din setul vechi,
+# șters la 14.09.2026 — tiparul rămâne, numele nu mai există în registry.
 # Un asemenea "ensemble" e un no-op: nu reduce varianța, doar dublează un semnal.
 MAX_MEMBER_CORR = 0.95
 # Sub atâtea numere comune, Spearman e degenerat (cu 2 puncte e mereu ±1) —
@@ -600,7 +636,8 @@ def _split_active(
     EXACT aceeași listă pe care blend-ul o folosește efectiv).
 
     Ignoră scoruri goale SAU plate (toate egale) — altfel un Ridge defect
-    (toate 0) + prime_bias (2 nivele) → pool = „cele mai mici compuse".
+    (toate 0) combinat cu un scorer cu două nivele dădea pool = „cele mai mici
+    compuse" (măsurat pe vechiul `prime_bias`, șters la 14.09.2026).
     „flat" acoperă și scorurile NE-FINITE (vezi `_has_variance`).
     dropped = [(nume, motiv)], motiv ∈ {"empty", "flat"}."""
     active: list[tuple[str, dict[int, float], float]] = []
@@ -976,10 +1013,24 @@ def recommend_optimal_config(
     """Return the optimal (scorer, sim_depth_pct, use_blacklist) for (game, pool).
 
     Consumed by the auto-pilot - reads `auto_pilot_per_pool[kN]` from
-    best_methods.json. The decision algorithm guarantees:
-        - scorer beats random on the selected 3+/4+ rate in >=60% of windows
-        - sim_depth_pct is the window where that target rate peaks (>=30 evaluated draws)
-        - use_blacklist = True only if +BL outperforms no-BL at that window
+    Ce face decizia pe calea NORMALĂ (metode calificate):
+        - scorerul bate random pe rata țintei în ≥60% din ferestre;
+        - sim_depth_pct e fereastra cu rata țintei maximă, dintre cele cu ≥30 de
+          extrageri evaluate — dacă NICIUNA nu ajunge la 30, filtrul se anulează
+          și se alege din toate (`decision.py`, ramura `if stable.empty`);
+        - use_blacklist reflectă comparația +BL / no-BL la acea fereastră.
+
+    Nu sunt garanții pe toate ramurile, iar apelantul trebuie să citească
+    `low_confidence` / `fallback` înainte de a le presupune. Ies din ele:
+    `low_confidence` (prin definiție, nicio metodă n-a bătut random),
+    celula degenerată care cade pe SAFE_FALLBACK_SCORER (acolo `use_blacklist`
+    se scrie True necondiționat), substituția pe pool-ul vecin
+    (`pool_substituted` — cifrele sunt ale altui pool) și ramura fără intrare în
+    best_methods.json. ⚠️ `use_blacklist` rămâne oricum INERT în producție.
+
+    `avg_hits` e valoarea de la fereastra ALEASĂ pentru că maximizează rata
+    țintei, deci e o statistică selectată prin maxim — optimistă prin
+    construcție, de citit ca reper, nu ca estimare nepărtinitoare.
 
     Returns dict with keys: scorer, sim_depth_pct, use_blacklist, avg_hits,
     rationale, ensemble, rate_col_used, rate_col_mismatch, low_confidence,

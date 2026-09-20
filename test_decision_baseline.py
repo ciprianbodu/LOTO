@@ -286,3 +286,47 @@ def test_fold_reports_tiebreak_fraction_per_pool(monkeypatch):
     )
     fold2, _ = runner._evaluate_fold(name, train, test, game, block_size=2)
     assert fold2.tiebreak_per_pool == {"k6": 0.0, "k7": 0.0, "k8": 0.0}
+
+
+def test_rate_column_fallback_realigns_the_random_threshold(monkeypatch):
+    """Folds.csv fără coloana 3+ → decizia cade pe 4+; pragul trebuie să cadă cu ea.
+
+    Înainte, `baseline_rate` rămânea P(≥3) ≈ 0,11 în timp ce metodele erau
+    judecate pe rate de 4+ (~0,02): poarta devenea imposibil de trecut, toată
+    matricea ieșea `low_confidence`, iar `lift` scădea o rată de 4+ dintr-un prag
+    de 3+. Aici o metodă bate net pragul REAL de 4+ și trebuie să câștige.
+    """
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    base4 = decision.expected_random_rate(49, 6, 10, 4)
+    rows = []
+    for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        # Doar coloana 4+ există (cache vechi), pe toate rândurile.
+        rows.append(
+            _row(
+                "loto_6_49",
+                "random",
+                pct,
+                n,
+                base4,
+                rate_col="rate_4plus_k10",
+            )
+        )
+        rows.append(
+            _row(
+                "loto_6_49",
+                "m_signal",
+                pct,
+                n,
+                base4 + 0.05,
+                rate_col="rate_4plus_k10",
+            )
+        )
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), "loto_6_49", 10, 6
+    )
+    assert cfg["rate_col_mismatch"] is True
+    # Pragul e cel al țintei pe care s-a judecat efectiv, nu cel al lui 3+.
+    assert cfg["baseline_rate"] == pytest.approx(base4)
+    assert cfg["baseline_rate"] < decision.expected_random_rate(49, 6, 10, 3)
+    assert cfg["scorer"] == "m_signal"
+    assert cfg["low_confidence"] is False

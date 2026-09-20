@@ -1,32 +1,39 @@
 @echo off
 setlocal DisableDelayedExpansion
-REM ============================================================
-REM START_8000.bat — launcher UI + worker.
-REM Daca origin/main e inainte sau lansatoarele de pe disc sunt vechi:
-REM scriem D:\_BUILD\_LOTO\loto_relaunch.bat, IESIM, iar acela face
-REM git pull --ff-only si reporneste. Nu tragem .bat-ul aflat in rulare.
-REM CRLF obligatoriu (.gitattributes). Linie goala = echo/ nu echo.
-REM In echo din blocuri if (...): fara paranteze rotunde.
-REM ============================================================
+REM Transfer fara CALL: nicio copie .bat din repo nu ramane activa la sync.
+if /I "%~1"=="--sync-copy" goto :sync_copy
+if /I "%~1"=="--post-sync" goto :post_sync
 set "PROJECT_DIR=%~dp0"
-cd /d "%PROJECT_DIR%"
+set "BOOT_DIR=%TEMP%\loto-launch-%RANDOM%-%RANDOM%"
+mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
+copy /Y "%~f0" "%BOOT_DIR%\START_8000.bat" >nul || goto :bootstrap_failed
+copy /Y "%PROJECT_DIR%scripts\launcher_git.ps1" "%BOOT_DIR%\launcher_git.ps1" >nul || goto :bootstrap_failed
+"%BOOT_DIR%\START_8000.bat" --sync-copy "%PROJECT_DIR%." "%BOOT_DIR%"
+exit /b 99
+
+:bootstrap_failed
+echo [GIT] Copia temporara nu poate fi pregatita - continui cu versiunea locala.
+goto :main
+
+:sync_copy
+set "PROJECT_DIR=%~2\"
+set "BOOT_DIR=%~3"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOT_DIR%\launcher_git.ps1" -Mode Sync -ProjectDir "%PROJECT_DIR%."
+REM Chiar la eroare de retea, repo-ul ramane integral pe versiunea locala.
+"%PROJECT_DIR%START_8000.bat" --post-sync "%PROJECT_DIR%." "%BOOT_DIR%"
+exit /b 98
+
+:post_sync
+set "PROJECT_DIR=%~2\"
+set "BOOT_DIR=%~3"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode Cleanup -ProjectDir "%PROJECT_DIR%." -SnapshotDir "%BOOT_DIR%"
 
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
-REM Doar START_8000.bat si ACTUALIZARI.bat raman. Helperul git vechi si
-REM orice alt .bat din radacina se sterg de pe disc.
-for %%F in ("%~dp0*.bat") do (
-    if /I not "%%~nxF"=="START_8000.bat" if /I not "%%~nxF"=="ACTUALIZARI.bat" (
-        echo [GIT] Sterg lansator vechi %%~nxF
-        del /f /q "%%~fF" >nul 2>&1
-    )
-)
 set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"
 if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
-set "RELAUNCH=START_8000.bat"
-call :maybe_git_update
 set "LOGFILE=%RUNTIME_DIR%\startup_8000.log"
 
 REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
@@ -113,7 +120,7 @@ set PYTHONUNBUFFERED=1
 
 echo/
 echo --- Verificare imports prin verify_imports.py - exclusiv CPU ---
-"%VENV_DIR%\Scripts\python.exe" -u "%~dp0verify_imports.py"
+"%VENV_DIR%\Scripts\python.exe" -u "%PROJECT_DIR%verify_imports.py"
 set "VERIFY_PY_RC=!ERRORLEVEL!"
 
 if not "!VERIFY_PY_RC!"=="0" (
@@ -143,9 +150,9 @@ echo [2/4] Eliberare resurse - port 8000, UI + worker + bench vechi
 REM Omoara UI + worker + bench + copiii ProcessPool din sesiunea anterioara.
 REM NU filtra pe calea proiectului in CommandLine: bench-ul din UI e pornit cu
 REM cale RELATIVA, exe-ul e venv-ul din D:\_BUILD\_LOTO (in AFARA repo-ului),
-REM deci %~dp0 nu apare pe cmdline — acelasi bug ca in cancel_all din UI.
+REM deci %PROJECT_DIR% nu apare pe cmdline — acelasi bug ca in cancel_all din UI.
 REM Python face tree-kill: pe Windows uciderea parintelui NU omoara copiii.
-"%VENV_DIR%\Scripts\python.exe" "%~dp0cleanup_old_processes.py" --venv "%VENV_DIR%" --port 8000
+"%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%cleanup_old_processes.py" --venv "%VENV_DIR%" --port 8000
 REM Fallback: orice mai asculta pe 8000. /C:":8000 " evita :80001; /T = arborele.
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr /C:":8000 " 2^>nul') do (
     if NOT "%%a"=="0" (
@@ -159,14 +166,14 @@ REM Golire coada de joburi la FIECARE pornire -> mereu fresh, fara joburi
 REM reziduale care se reiau singure (procesele vechi sunt deja omorate la [2/4],
 REM deci putem reseta in siguranta). Numerotarea reincepe de la #1.
 echo [2b/4] Golire coada de joburi - fresh start
-"%VENV_DIR%\Scripts\python.exe" "%~dp0reset_jobs.py" --force
+"%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%reset_jobs.py" --force
 if errorlevel 1 (
     echo [EROARE] Resetarea cozii de joburi a esuat. Nu pornesc worker-ul peste o baza inconsistenta.
     endlocal & exit /b 30
 )
 
 echo [3/4] Pornire Worker
-start "LOTO WORKER" /min "%VENV_DIR%\Scripts\python.exe" "%~dp0worker.py"
+start "LOTO WORKER" /min "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%worker.py"
 
 echo [4/4] Pornire UI NiceGUI - port 8000
 REM NiceGUI tine starea pe server si face update prin websocket (fara reload de
@@ -181,87 +188,11 @@ REM Sesiune noua: UI-ul NU reia un job vechi si NU afiseaza «Job în rulare»
 REM pana nu apesi Genereaza / Auto-Pilot. Worker-ul NU primeste flag-ul
 REM (trebuie sa preia joburile pe care le trimitI TU dupa pornire).
 set "LOTO_FRESH_START=1"
-"%VENV_DIR%\Scripts\python.exe" "%~dp0app_nicegui.py"
+"%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%app_nicegui.py"
 set "RC=!ERRORLEVEL!"
 endlocal & exit /b %RC%
 
 
 :push_istoric
-where git >nul 2>&1
-if errorlevel 1 goto :eof
-if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
-cd /d "%PROJECT_DIR%"
-git config core.hooksPath scripts/git-hooks >nul 2>&1
-git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] _ISTORIC fara modificari.
-    goto :eof
-)
-echo [GIT] Extrageri noi - commit + push origin/main...
-git add -A -- _ISTORIC
-if errorlevel 1 goto :eof
-git diff --cached --quiet -- _ISTORIC
-if not errorlevel 1 goto :eof
-git commit -m "auto: update istoric extrageri"
-if errorlevel 1 (
-    echo [GIT] commit _ISTORIC esuat.
-    goto :eof
-)
-git push origin main <nul
-if errorlevel 1 echo [GIT] Push _ISTORIC esuat - commitul e local.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode PushHistory -ProjectDir "%PROJECT_DIR%."
 goto :eof
-
-
-:maybe_git_update
-if "%LOTO_RELAUNCHED%"=="1" (
-    echo [GIT] Repornit dupa actualizare.
-    goto :eof
-)
-if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
-if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
-if "%RELAUNCH%"=="" set "RELAUNCH=START_8000.bat"
-if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
-cd /d "%PROJECT_DIR%"
-echo [GIT] Descarc lansatoarele de pe GitHub...
-curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\START_8000.bat.new" https://raw.githubusercontent.com/ciprianbodu/LOTO/main/START_8000.bat
-if errorlevel 1 echo [GIT] Descarcare START_8000 esuata.
-curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\ACTUALIZARI.bat.new" https://raw.githubusercontent.com/ciprianbodu/LOTO/main/ACTUALIZARI.bat
-if errorlevel 1 echo [GIT] Descarcare ACTUALIZARI esuata.
-set "NEED_UPDATE="
-findstr /C:"loto_relaunch.bat" "%PROJECT_DIR%START_8000.bat" >nul
-if errorlevel 1 set "NEED_UPDATE=1"
-set "LOCAL_SHA="
-where git >nul 2>&1
-if errorlevel 1 goto :after_sha
-git config core.hooksPath scripts/git-hooks >nul 2>&1
-for /f %%H in ('git rev-parse HEAD 2^>nul') do set "LOCAL_SHA=%%H"
-echo [GIT] local %LOCAL_SHA%
-curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\gh_main.json" https://api.github.com/repos/ciprianbodu/LOTO/commits/main
-if errorlevel 1 goto :after_sha
-if "%LOCAL_SHA%"=="" set "NEED_UPDATE=1"
-if "%LOCAL_SHA%"=="" goto :after_sha
-findstr /C:"%LOCAL_SHA%" "%RUNTIME_DIR%\gh_main.json" >nul
-if errorlevel 1 set "NEED_UPDATE=1"
-:after_sha
-if not defined NEED_UPDATE (
-    echo [GIT] Deja la zi.
-    goto :eof
-)
-echo [GIT] Cod nou sau lansator vechi pe disc. Actualizez si repornesc...
-set "UPDATER=%RUNTIME_DIR%\loto_relaunch.bat"
-> "%UPDATER%" echo @echo off
->> "%UPDATER%" echo cd /d "%PROJECT_DIR%."
->> "%UPDATER%" echo echo [GIT] Astept 2s ca lansatorul vechi sa se inchida...
->> "%UPDATER%" echo timeout /t 2 /nobreak ^>nul
->> "%UPDATER%" echo if exist "%RUNTIME_DIR%\START_8000.bat.new" copy /Y "%RUNTIME_DIR%\START_8000.bat.new" START_8000.bat
->> "%UPDATER%" echo if exist "%RUNTIME_DIR%\ACTUALIZARI.bat.new" copy /Y "%RUNTIME_DIR%\ACTUALIZARI.bat.new" ACTUALIZARI.bat
->> "%UPDATER%" echo git config core.hooksPath scripts/git-hooks
->> "%UPDATER%" echo git fetch origin
->> "%UPDATER%" echo git pull --ff-only origin main
->> "%UPDATER%" echo if errorlevel 1 echo [GIT] pull --ff-only esuat - lansatoarele sunt deja copiate de pe GitHub.
->> "%UPDATER%" echo echo [GIT] Repornesc lansatorul actualizat.
->> "%UPDATER%" echo set LOTO_RELAUNCHED=1
->> "%UPDATER%" echo call %RELAUNCH%
-echo [GIT] Inchid fereastra curenta ca sa pot inlocui lansatorul.
-start "LOTO UPDATE" cmd /c "%UPDATER%"
-exit 0

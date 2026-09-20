@@ -7,12 +7,25 @@ the winner per (game, pool) may have changed.
 Strategy:
     1. Hash all number columns and dates (dates define training boundaries).
     2. Also record total row count.
-    3. On Auto-Pilot click, compare:
-        • Same hash → cached decision still 100% valid, instant.
-        • Different hash → content changed (row count may be unchanged, e.g. one
-          historical draw corrected in place), so "use_cache" is never offered;
-          severity floors at "quick re-bench" and escalates to "full re-bench"
-          once the row-count delta itself is large (>=10%).
+    3. Stamp the MOTOR alongside the data: versiunea cache-ului de bench și
+       setul de metode din registry (vezi `compute_engine_signature`).
+    4. On Auto-Pilot click, compare:
+        • Același hash ȘI același motor → decizia din cache rămâne validă.
+        • Hash diferit → s-au schimbat datele (numărul de rânduri poate fi
+          neschimbat, ex. o extragere corectată in loc), deci „use_cache" nu se
+          mai oferă; minimul e „quick re-bench" și urcă la „full re-bench" când
+          delta de rânduri e mare (>=10%).
+        • Motor diferit → decizia din cache a fost calculată cu ALTE scoruri sau
+          cu alt set de metode, deci e stale indiferent de date: full re-bench.
+
+⚠️ Punctul 3 a fost adăugat la 15.09.2026. Înainte, semnătura acoperea DOAR
+conținutul CSV, iar docstring-ul promitea „Same hash → cached decision still 100%
+valid". Fals la orice bump de `bench_cache.CACHE_VERSION` (care se face tocmai
+pentru că scorurile s-au schimbat) și la orice ștergere/redenumire de metodă: cu
+CSV-urile neatinse, freshness raporta „fresh / use_cache" pentru o decizie
+calculată cu alt motor. S-a văzut concret la v18 -> v19 și la curarea din
+14.09.2026, când ~183 de metode au dispărut din registry fără ca vreo semnătură
+să se schimbe.
 """
 
 from __future__ import annotations
@@ -94,6 +107,32 @@ def _content_hash(csv_path: Path, num_cols: list[str] | None = None) -> tuple[st
     return h, n_rows
 
 
+def compute_engine_signature() -> dict[str, str | int]:
+    """Semnătura MOTORULUI care a produs decizia: versiune de cache + registry.
+
+    Nu include configurația de rulare (percentile, pool_extra): aceea schimbă cât
+    de fin e măsurată decizia, nu ce ar măsura. Aici stă doar ce face un
+    `folds.csv` vechi INCOMPARABIL cu unul nou: scoruri schimbate (bump de
+    `CACHE_VERSION`) și alt set de metode.
+    """
+    try:
+        from loto_enterprise.benchmark.bench_cache import CACHE_VERSION
+    except Exception:  # noqa: BLE001
+        CACHE_VERSION = "?"
+    try:
+        from loto_enterprise.benchmark.methods import METHODS
+
+        names = sorted(str(n) for n in METHODS)
+    except Exception:  # noqa: BLE001
+        names = []
+    digest = hashlib.md5("\n".join(names).encode("utf-8")).hexdigest()[:16]
+    return {
+        "bench_cache_version": str(CACHE_VERSION),
+        "methods_hash": digest,
+        "n_methods": len(names),
+    }
+
+
 def compute_csv_signature(game_key: str) -> tuple[str | None, str, int]:
     """Return (csv_path, hash, n_rows). Path is None if CSV missing."""
     p = _resolve_csv(game_key)
@@ -128,6 +167,7 @@ def write_signatures_to_best_methods(
             path, h, n = compute_csv_signature(gk)
             sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
         cfg.setdefault("_meta", {})["csv_signatures"] = sigs
+        cfg["_meta"]["engine_signature"] = compute_engine_signature()
         atomic_write_json(bm, cfg)
     return sigs
 
@@ -154,6 +194,30 @@ def check_freshness(
         return out
     cfg = json.loads(bm.read_text(encoding="utf-8"))
     cached_sigs = cfg.get("_meta", {}).get("csv_signatures", {})
+
+    # Motorul se compară ÎNAINTE de date: dacă scorurile sau setul de metode
+    # s-au schimbat, `folds.csv` și decizia din el descriu alt sistem, oricât de
+    # neatinse ar fi CSV-urile. O semnătură lipsă (best_methods.json scris
+    # înainte de 15.09.2026) nu se tratează ca nepotrivire — n-avem cu ce
+    # compara, iar o alarmă la fiecare pornire ar fi zgomot; se stampilează la
+    # primul bench.
+    _cached_engine = cfg.get("_meta", {}).get("engine_signature")
+    _engine_changed = False
+    if isinstance(_cached_engine, dict) and _cached_engine:
+        _current_engine = compute_engine_signature()
+        _engine_changed = any(
+            str(_cached_engine.get(k, "")) != str(v)
+            for k, v in _current_engine.items()
+        )
+        if _engine_changed:
+            logger.warning(
+                "[freshness] decizia din cache a fost calculată cu alt motor "
+                "(cache %s / %s metode, acum %s / %s) — full re-bench.",
+                _cached_engine.get("bench_cache_version"),
+                _cached_engine.get("n_methods"),
+                _current_engine.get("bench_cache_version"),
+                _current_engine.get("n_methods"),
+            )
 
     for gk in GAMES_CSV_MAP:
         path, current_hash, current_rows = compute_csv_signature(gk)
@@ -191,6 +255,8 @@ def check_freshness(
             continue
 
         if cached_hash == current_hash:
+            # Date identice, dar motorul poate fi altul: atunci decizia din cache
+            # e stale chiar cu hash-ul neschimbat.
             out[gk] = FreshnessReport(
                 game_key=gk,
                 csv_path=path,
@@ -199,8 +265,8 @@ def check_freshness(
                 cached_hash=cached_hash,
                 current_hash=current_hash,
                 row_delta_pct=0.0,
-                status="fresh",
-                recommendation="use_cache",
+                status="stale" if _engine_changed else "fresh",
+                recommendation="full_rebench" if _engine_changed else "use_cache",
             )
             continue
 
@@ -212,7 +278,9 @@ def check_freshness(
         # in loc, fără să adauge/scoată rânduri). Un `delta_pct` mic nu mai poate
         # coborî recomandarea la "slight_drift"/use_cache — asta ar contrazice exact
         # ce am verificat deja (hash diferit); minimul e moderate_drift/quick_rebench.
-        if delta_pct >= 10.0:
+        if delta_pct >= 10.0 or _engine_changed:
+            # Motor schimbat = re-bench complet: un quick re-bench ar amesteca
+            # folduri calculate cu scoruri vechi cu unele calculate cu cele noi.
             status, rec = "stale", "full_rebench"
         else:
             status, rec = "moderate_drift", "quick_rebench"

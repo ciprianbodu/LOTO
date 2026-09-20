@@ -10,6 +10,26 @@ from loto_enterprise.benchmark import decision
 from scripts.analysis.audit_output import capture_ui
 
 
+def test_pool_odds_are_consistent_in_render_and_report(monkeypatch):
+    import ui_results
+
+    data = {
+        "hard_core": list(range(1, 7)), "pool_size": 6,
+        "variants": [list(range(1, 6))], "guarantee": 4,
+        "context": {"coverage_pct": 100.0},
+    }
+    lines = ui_results._wheel_probability_lines("5/40", data)
+    assert any("toate cele 6" in line and "%" in line for line in lines)
+    assert any("3 numere nu aduc premiu" in line for line in lines)
+    with capture_ui() as ui:
+        ui_results._render_cost("5/40", data)
+    monkeypatch.setitem(ui_results.STATE, "results", ([("test.csv", {"5/40": data})], {}))
+    report = ui_results._build_report()
+    for line in lines:
+        assert line in ui.text()
+        assert line in report
+
+
 def _folds():
     rows = []
     for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):

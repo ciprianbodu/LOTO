@@ -71,10 +71,9 @@ def test_post_commit_hook_auto_pushes_main_without_force():
 
 
 def test_launchers_install_versioned_hooks_path():
-    for name in ("START_8000.bat", "ACTUALIZARI.bat"):
-        text = (ROOT / name).read_text(encoding="utf-8")
-        assert "core.hooksPath" in text, name
-        assert "scripts/git-hooks" in text, name
+    text = (ROOT / "scripts" / "launcher_git.ps1").read_text(encoding="utf-8")
+    assert "core.hooksPath" in text
+    assert "scripts/git-hooks" in text
 
 
 
@@ -341,26 +340,20 @@ def test_python_version_check_has_no_stale_patch_constant():
     assert "ultimul patch stabil 3.14.x" in text
 
 
-def test_launchers_relaunch_via_runtime_dir_updater():
-    """Nu tragem .bat-ul aflat in rulare. Scriem updater pe D:\\_BUILD\\_LOTO, iesim, pull, repornim."""
+def test_launchers_sync_only_from_immutable_copy():
     for name in ("START_8000.bat", "ACTUALIZARI.bat"):
         text = (ROOT / name).read_text(encoding="utf-8")
-        assert ":bootstrap_sync" not in text, name
-        assert "--bootstrap-sync" not in text, name
-        assert "loto_relaunch.bat" in text, name
-        assert 'start "LOTO UPDATE"' in text, name
-        assert "LOTO_RELAUNCHED" in text, name
-        assert "git pull --ff-only origin main" in text, name
-        assert "curl.exe" in text, name
-        assert "raw.githubusercontent.com/ciprianbodu/LOTO/main/START_8000.bat" in text, name
-        assert "git reset --hard" not in text, name
-        assert "loto_git_sync" not in text, name
-    start = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
-    actual = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
-    assert "git pull --ff-only origin main <nul" not in start
-    assert "git pull --ff-only origin main <nul" not in actual
-    assert 'set "RELAUNCH=START_8000.bat"' in start
-    assert 'set "RELAUNCH=ACTUALIZARI.bat"' in actual
+        assert 'copy /Y "%~f0"' in text
+        assert '" --sync-copy ' in text
+        assert '" --post-sync ' in text
+        assert 'call "%BOOT_DIR%' not in text.lower()
+        assert "raw.githubusercontent.com" not in text
+        assert "curl.exe" not in text
+        assert "del /f /q" not in text
+        assert "-Mode Sync" in text
+    helper = (ROOT / "scripts" / "launcher_git.ps1").read_text(encoding="utf-8")
+    assert "'merge', '--ff-only', 'origin/main'" in helper
+    assert "reset', '--hard" not in helper
 
 
 
@@ -381,17 +374,15 @@ def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
     assert 'findstr /c:":8000 "' in compact
 
 
-def test_push_istoric_uses_git_exe_not_helper_bat():
-    """Calea cu spatii nu mai trece prin CALL la un .bat helper."""
+def test_history_commit_is_scoped_and_guarded():
     for name in ("START_8000.bat", "ACTUALIZARI.bat"):
         text = (ROOT / name).read_text(encoding="utf-8")
-        body = text[text.index("\n:push_istoric\n") :]
-        nxt = body.find("\n:", 2)
-        if nxt != -1:
-            body = body[:nxt]
-        assert "loto_git_sync" not in body, name
-        assert "git push origin main" in body, name
-        assert "git add -A -- _ISTORIC" in body, name
+        assert "-Mode PushHistory" in text
+    helper = (ROOT / "scripts" / "launcher_git.ps1").read_text(encoding="utf-8")
+    assert "'commit', '--only'" in helper
+    assert "$branch.Text -ne 'main'" in helper
+    assert "LOTO_SKIP_AUTO_PUSH" in helper
+
 
 
 def test_start8000_opens_ipv4_loopback_not_localhost():
@@ -403,12 +394,22 @@ def test_start8000_opens_ipv4_loopback_not_localhost():
     assert "timeout /t 12" in launch
 
 
-def test_launchers_delete_stray_root_bats():
-    """Pe disc pot rămâne loto_git_sync.bat sau copii vechi; le ștergem."""
+def test_launchers_preserve_unrelated_local_bats():
     for name in ("START_8000.bat", "ACTUALIZARI.bat"):
         text = (ROOT / name).read_text(encoding="utf-8")
-        assert '%~dp0*.bat' in text, name
-        assert 'if /I not "%%~nxF"=="START_8000.bat"' in text, name
-        assert 'if /I not "%%~nxF"=="ACTUALIZARI.bat"' in text, name
-        assert "del /f /q" in text, name
-        assert "loto_git_sync" not in text, name
+        assert "*.bat" not in text
+        assert "del /f /q" not in text
+
+
+def test_sync_keeps_startup_and_update_steps_reachable():
+    start = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
+    main = start.split("\n:main\n")[1].split("\n:verify_phase\n")[0]
+    assert "call :verify_phase" in main
+    assert "call :launch_phase" in main
+    assert "goto :eof" not in main
+    update = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    main = update.split("\n:main\n")[1].split("\n:fatal_setup\n")[0]
+    assert "call :push_istoric" in main
+    assert "migrate_legacy_wf_cache" in main
+    assert "check_freshness" in main
+    assert "goto :eof" not in main

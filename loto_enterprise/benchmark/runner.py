@@ -1028,6 +1028,57 @@ def _aggregate(
         else:
             sub = df[df["game"] == game.key] if not df.empty else df
         pool_keys = pool_keys_per_game[game.key]
+        # Aceleași două porți de comparabilitate pe care le aplică decizia
+        # (`decision._complete_windows` + motivul `unevaluated_draws`):
+        #   a) un fold parțial evaluat (`n_eval < n_test`, blocuri sărite fiindcă
+        #      scorurile erau inutilizabile) măsoară altceva decât unul complet;
+        #   b) o metodă căreia îi lipsește o fereastră întreagă e clasată pe mai
+        #      puține extrageri, deci pe o poartă mai ușoară.
+        # Fără ele, `winners_per_pool` / `winners_per_pool_best` puteau promova
+        # exact metoda pe care decizia o exclusese — iar acelea NU sunt date
+        # moarte: `method_selector.get_winner_name` cade pe ele (prioritățile 2
+        # și 3) când lipsește `auto_pilot_per_pool`.
+        _incomplete_methods: list[str] = []
+        if not sub.empty and {"n_eval", "n_test"} <= set(sub.columns):
+            _n_eval = pd.to_numeric(sub["n_eval"], errors="coerce")
+            _n_test = pd.to_numeric(sub["n_test"], errors="coerce")
+            sub = sub[~(_n_eval.notna() & _n_test.notna() & (_n_eval < _n_test))]
+        if not sub.empty and "percentile" in sub.columns:
+            _real_rows = sub[sub["is_random"] == False]  # noqa: E712
+            _expected_pcts = {
+                int(p)
+                for p in pd.to_numeric(
+                    _real_rows["percentile"], errors="coerce"
+                ).dropna()
+            }
+            if len(_expected_pcts) > 1:
+                _keep: set[str] = set()
+                for _m, _rows in _real_rows.groupby("method"):
+                    _have = {
+                        int(p)
+                        for p in pd.to_numeric(
+                            _rows["percentile"], errors="coerce"
+                        ).dropna()
+                    }
+                    if _expected_pcts <= _have:
+                        _keep.add(str(_m))
+                    else:
+                        _incomplete_methods.append(str(_m))
+                # Dacă TOATE metodele au ferestre lipsă (bench oprit devreme),
+                # nu golim clasamentul: raportăm lista și lăsăm datele ca atare.
+                if _keep:
+                    sub = sub[sub["method"].astype(str).isin(_keep)]
+                else:
+                    _incomplete_methods = []
+            if _incomplete_methods:
+                _incomplete_methods = sorted(set(_incomplete_methods))
+                logger.warning(
+                    "[bench] %s: %d metode cu ferestre lipsă, excluse din "
+                    "winners_per_pool (aceeași regulă ca decizia): %s",
+                    game.key,
+                    len(_incomplete_methods),
+                    ", ".join(_incomplete_methods[:10]),
+                )
         per_method = {}
         for method in methods:
             real = (
@@ -1193,6 +1244,9 @@ def _aggregate(
             ],
             "overall_winner": ranked_overall[0][0] if ranked_overall else None,
             "overall_winner_bl": ranked_overall_bl[0][0] if ranked_overall_bl else None,
+            # Metodele scoase din clasament fiindcă le lipsea o fereastră —
+            # raportate, nu dispărute tăcut (același contract ca al deciziei).
+            "incomplete_methods": _incomplete_methods,
             "per_method": per_method,
         }
     return report

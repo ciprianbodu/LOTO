@@ -20,9 +20,12 @@ Selection rules (in priority order):
        Nu există tie-break pe fereastra mai lungă. ⚠️ `sim_depth` e TELEMETRIE:
        producția taie istoricul doar cu `lookback`, nu cu fereastra asta.
     4. Use blacklist if the +BL variant beats the no-BL variant at that
-       chosen (method, window). ⚠️ Bit-ul e la fel de INERT în producție:
-       `loto_engine` face `blacklist = set()` (filtre oprite deliberat,
-       2026-07-08). Vezi `method_selector.should_use_blacklist`.
+       chosen (method, window). ⚠️ Bit-ul e INERT în producție: pool-ul se
+       construiește pe `blacklist` pornită goală în
+       `loto_enterprise/engine/pipeline.py` (filtre oprite deliberat,
+       2026-07-08), iar singurul lucru care o mai poate umple este restrângerea
+       de interval cerută EXPLICIT de utilizator (`restrict_base`), nu bitul
+       ăsta. Vezi `method_selector.should_use_blacklist`.
 
 The output is written to best_methods.json under `auto_pilot_per_pool[gk][kN]`
 with full traceability (rationale + supporting numbers).
@@ -56,6 +59,7 @@ import json
 import logging
 import math
 import os
+import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -67,14 +71,18 @@ logger = logging.getLogger(__name__)
 
 CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 
-# Câte ferestre COMUNE cu date finite (metodă ∩ random) trebuie să existe ca
-# poarta de consistență să însemne ceva. `_windows_method_beats_random`
-# întoarce dimensiunea INTERSECȚIEI de percentile; cu o singură fereastră comună,
-# „bate random în ≥60% din ferestre" degenerează într-o comparație unică —
-# adică 1/1 = 100%, deci poarta lasă să treacă orice.
-# Reproductibil: pe folds.csv real (loto_6_49 k12), ștergând rândurile `random`
-# de la 3 din 4 percentile, numărul de metode calificate sare de la 3 la 17
-# (random doar @100), 12 (@30) sau 4 cu ALT câștigător (@10) — și
+# Câte ferestre cu date finite trebuie să existe ca poarta de consistență să
+# însemne ceva. `_windows_method_beats_random` numără ferestrele pe care le
+# compară; cu una singură, „bate random în ≥60% din ferestre" degenerează într-o
+# comparație unică — adică 1/1 = 100%, deci poarta lasă să treacă orice.
+# ⚠️ Experimentul de mai jos e reproductibil DOAR pe ramura `empirical_random`
+# (joc fără geometrie cunoscută), unde referința chiar vine din rândurile
+# `random`. Pe cele patru jocuri reale, `KNOWN_GAME_MAX_NUM` le acoperă pe
+# toate, deci referința e hipergeometrică și `_reference_by_pct` o întinde pe
+# percentilele METODEI: ștergerea rândurilor `random` nu mai schimbă poarta.
+# Pe ramura empirică, pe folds.csv real (loto_6_49 k12), ștergând rândurile
+# `random` de la 3 din 4 percentile, numărul de metode calificate sare de la 3
+# la 17 (random doar @100), 12 (@30) sau 4 cu ALT câștigător (@10) — și
 # `low_confidence` rămâne False în toate cazurile.
 # Nu e doar teoretic: `runner._flush_folds` rescrie folds.csv la fiecare ~100 de
 # folds terminate, iar future-urile se termină în altă ordine decât au fost
@@ -112,11 +120,12 @@ ENSEMBLE_MAX_CORR = 0.99
 # r=-1 mereu), deci nici acolo nu merită încredere.
 # ⚠️ ACTUALIZAT 2026-07-27 — garda NU mai e inertă. Înainte de curarea de metode
 # (`curated_methods.json`), pe folds.csv cu 107 metode semnătura era (106, 60) pe
-# toate cele 3 jocuri, deci garda nu se declanșa niciodată. Cu setul curat (16
-# metode benchuite) numărul de metode CALIFICATE per pool scade la 2-4 → sub prag
+# toate cele 3 jocuri, deci garda nu se declanșa niciodată. Cu setul curat
+# numărul de metode CALIFICATE per pool scade la 2-4 → sub prag
 # → dedup-ul pe semnătura de performanță e SĂRIT sistematic (vezi log-ul
 # "[decision] dedup ensemble dezactivat"). Consecință: `ensemble_dropped_redundant`
-# rămâne gol. Setul curent de 43 NU mai garantează decorelare totală (măsurat
+# rămâne gol. Setul curent (52 de intrări în registry: 2 baseline-uri + 50 de
+# metode, 14.09.2026) NU garantează decorelare totală (măsurat
 # 2026-08-26: există perechi cu |Spearman| ≥ 0.95), deci filtrul runtime
 # `method_selector._select_decorrelated` rămâne obligatoriu și poate reduce
 # ensemble-ul nominal. Dacă se revine la toate metodele, garda de aici redevine
@@ -605,7 +614,10 @@ def _select_ensemble_members(
     # Gardă de eșantion: pe semnături prea scurte (puține ferestre/pool-uri) sau
     # cu prea puține metode, corelația degenerează spre ±1 și am elimina membri
     # pe zgomot — vezi ENSEMBLE_MIN_SIGNATURE_POINTS. Dedup dezactivat, NU
-    # aproximat. Inert pe date reale (semnătura are 60 de coloane × 106 metode).
+    # aproximat. ⚠️ NU mai e inert: după curarea din 14.09.2026 rămân 2-4 metode
+    # calificate per pool, deci garda se declanșează practic la fiecare celulă
+    # (vezi nota din capul fișierului). Oricum, cu ENSEMBLE_MAX_METHODS = 1
+    # bucla iese înainte de orice comparație de semnătură.
     if sig is not None and min(sig.shape) < ENSEMBLE_MIN_SIGNATURE_POINTS:
         logger.info(
             "[decision] dedup ensemble dezactivat: semnătură prea mică %s "
@@ -787,6 +799,42 @@ def decide_optimal_config_for_pool(
             pool_size,
             target_label,
         )
+
+    # Pragul random trebuie să măsoare ACEEAȘI țintă ca și coloana pe care se
+    # judecă metodele. `baseline_rate` de mai sus e calculat pentru `target`
+    # (3+ de regulă), dar `_resolve_rate_col` poate cădea pe `rate_4plus_*` când
+    # coloana cerută lipsește dintr-un folds.csv vechi. Fără realinierea de aici,
+    # poarta compara rate de 4+ (~0,02 la 6/49 k12) cu P(≥3) ≈ 0,11: nicio metodă
+    # nu putea trece, întreaga matrice devenea `low_confidence`, iar `lift` era o
+    # diferență între două mărimi diferite — semnalizată doar ca
+    # `rate_col_mismatch`, nu ca poartă invalidă.
+    if _frame_rate_col is not None and max_num is not None:
+        _resolved_target = None
+        _m = re.match(r"rate_(\d+)plus", str(_frame_rate_col))
+        if _m:
+            _resolved_target = int(_m.group(1))
+        if _resolved_target is not None and _resolved_target != target:
+            # Coloana fără sufix `_kN` e rata pool-ului de BAZĂ (K = draw_n);
+            # pragul ei se calculează pe acea geometrie, nu pe pool_size.
+            _base_pool = (
+                int(pool_size)
+                if str(_frame_rate_col).endswith(f"_k{pool_size}")
+                else int(draw_n)
+            )
+            if int(max_num) >= _base_pool:
+                baseline_rate = expected_random_rate(
+                    int(max_num), int(draw_n), _base_pool, _resolved_target
+                )
+                logger.warning(
+                    "[decision] %s k%d: pragul random realiniat la %s (%.4f) — "
+                    "decizia se judecă pe %r, nu pe ținta %s.",
+                    game_key,
+                    pool_size,
+                    f"{_resolved_target}+ @ k{_base_pool}",
+                    baseline_rate,
+                    _frame_rate_col,
+                    target_label,
+                )
 
     def _rate_col_for(frame: pd.DataFrame) -> str | None:
         """Coloana comună dacă metoda are date în ea; altfel None (metoda e sărită)."""

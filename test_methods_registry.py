@@ -25,7 +25,20 @@ def test_registry_has_two_baselines_plus_fifty_methods():
     assert len(methods.METHODS) == 52
     assert "random" in methods.METHODS and "frequency" in methods.METHODS
     assert len(methods.list_methods()) == 52
-    assert methods.METHOD_ALIASES == {}
+
+
+def test_renamed_method_still_resolves_from_saved_decisions():
+    """`alternating_parity` → `season_period2`: o decizie salvată sub numele vechi
+    nu are voie să cadă pe `frequency` după redenumire."""
+    from loto_enterprise.core.method_selector import _sanitize_production_name
+
+    assert "alternating_parity" not in methods.METHODS
+    assert "season_period2" in methods.METHODS
+    assert methods.resolve_method_name("alternating_parity") == "season_period2"
+    assert (
+        _sanitize_production_name("alternating_parity", context="test")
+        == "season_period2"
+    )
 
 
 def test_old_method_names_are_gone():

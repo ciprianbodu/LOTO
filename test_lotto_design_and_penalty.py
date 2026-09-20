@@ -398,3 +398,41 @@ def test_lotto_cover_positions_bounds_the_target_count():
     assert comb(v, condition) > _LOTTO_MAX_BLOCKS  # dar nt da
     with pytest.raises(ValueError, match="tinte"):
         _lotto_cover_positions(v, pick, guarantee, condition, time_limit=1.0)
+
+
+def test_pipeline_reports_pool_numbers_that_reach_no_ticket(monkeypatch):
+    """Un lotto design își ține garanția fără să folosească toate cele v poziții.
+
+    18 din cele 99 de designuri L livrate chiar nu le folosesc, deci acoperirea
+    raportată rămâne onest 100% — dar numerele acelea din pool nu se joacă, iar
+    `hits_union` (hit de POOL) le numără. Diferența trebuie să apară în audit,
+    nu să fie dedusă de utilizator. Numerele NU se forțează pe bilete: o
+    substituție ar strica exact garanția pentru care a fost ales designul.
+    """
+    import pandas as pd
+
+    from loto_engine import LotoEngine
+
+    df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(120).reset_index(drop=True)
+    monkeypatch.setattr(
+        LotoEngine,
+        "_get_timesfm_scores",
+        lambda self, **kw: {n: float(n) for n in range(1, 50)},
+    )
+    eng = LotoEngine("6/49")
+    eng.data = df
+    eng._build_draw_matrix()
+    lines, *_ = eng.run_institutional_pipeline(
+        pool_size=12,
+        guarantee=3,
+        wheel_condition=6,  # lotto design „3 dacă 6" → L_12_6_6_3, 2 bilete
+        track_pool_variation=False,
+    )
+
+    played = {int(n) for line in lines for n in line}
+    unplayed = sorted(n for n in eng.hard_core if int(n) not in played)
+    assert eng.audit["pool_numbers_not_on_tickets"] == unplayed
+    # Geometria asta chiar lasă numere pe dinafară — altfel testul n-ar proba nimic.
+    assert unplayed, "L(12,6,6,3) folosește doar 2 bilete din pool de 12"
+    # Garanția rămâne raportată corect, nu „reparată" prin substituție.
+    assert len(lines) == 2

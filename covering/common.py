@@ -26,17 +26,35 @@ def _sorted_pool(pool, scores) -> list[int]:
         return sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
     return sorted(list(pool))
 
+def _coverage_ratio_pct(covered: int, total: int) -> float:
+    """Procent rotunjit la 2 zecimale care NU poate urca la 100.0 dintr-un parțial.
+
+    Rotunjirea simplă ducea 53129/53130 (lipsea exact o țintă) la `100.0`, iar
+    porțile de validare a designurilor compară `coverage < 100.0` — deci un
+    design cu gaură trecea drept complet. Sub 20000 de ținte pragul nu se
+    atinge, adică geometriile livrate azi scapă din noroc, nu prin construcție.
+    Acoperirea completă rămâne exact 100.0; orice lipsă se oprește la 99.99.
+    """
+    if total <= 0:
+        # Fără ținte nu există garanție îndeplinită, ci o cerere fără sens
+        # (pool gol, pool mai mic decât garanția, condiție peste pool).
+        # `100.0` aici raporta „acoperire totală" pentru un sistem inexistent.
+        return 0.0
+    pct = round(covered / total * 100.0, 2)
+    if covered < total and pct >= 100.0:
+        return 99.99
+    return pct
+
+
 def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
     if not wheel:
         return 0.0
-    targets = set(itertools.combinations(sorted(pool), guarantee))
-    if not targets:
-        return 100.0
+    targets = set(itertools.combinations(sorted(set(pool)), guarantee))
     covered = set()
     for t in wheel:
         for sub in itertools.combinations(sorted(t), guarantee):
             covered.add(sub)
-    return round(len(covered & targets) / len(targets) * 100.0, 2)
+    return _coverage_ratio_pct(len(covered & targets), len(targets))
 
 
 def lotto_coverage_pct(
@@ -55,17 +73,17 @@ def lotto_coverage_pct(
         return _coverage_pct(wheel, pool, g)
     if c < g:
         raise ValueError(f"condition={c} < guarantee={g}")
-    pool_sorted = sorted(int(x) for x in pool)
+    # Pool-ul se deduplică: cu numere repetate, `combinations` genera ținte
+    # distincte pentru același set de numere și umfla numitorul.
+    pool_sorted = sorted({int(x) for x in pool})
     targets = list(itertools.combinations(pool_sorted, c))
-    if not targets:
-        return 100.0
     tickets = [set(int(x) for x in t) for t in wheel]
     covered = 0
     for tg in targets:
         tg_set = set(tg)
         if any(len(tk & tg_set) >= g for tk in tickets):
             covered += 1
-    return round(covered / len(targets) * 100.0, 2)
+    return _coverage_ratio_pct(covered, len(targets))
 
 
 def compute_coverage_pct(

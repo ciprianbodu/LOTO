@@ -15,7 +15,10 @@ cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
     ssa_forecast           analiză spectrală singulară pe seria proprie, prognoză prin recurență (fost `ssa`)
     dmd_forecast           descompunere în moduri dinamice pe matricea-indicator (fost `dmd`)
     runs_persistence       z-ul testului seriilor (Wald–Wolfowitz) × deviația recentă (fost `runs_test`)
-    alternating_parity     rata pe extragerile de aceeași paritate de index (sezonalitate 2)
+    season_period2         rata pe extragerile alternate — sezonalitate de perioadă 2
+                           (paritatea INDEXULUI extragerii, nu a numărului; fost
+                           `alternating_parity`, redenumită ca numele să nu se
+                           citească drept filtru de paritate)
     repeat_last_draw       repetarea ultimei extrageri (fost `naive_last`), tie-break pe frecvență
     vlmm_self_k3           Markov cu lungime variabilă pe seria proprie, context ≤ 3 (fost `vlmm`)
     knn_pattern_self       k-NN pe ferestrele proprii de 10 stări (fost `ml_knn_*`, pe serie)
@@ -48,6 +51,27 @@ def _window_mean(ind: np.ndarray, window: int) -> np.ndarray:
     if ind.shape[0] == 0:
         return np.zeros(ind.shape[1])
     return ind[-int(window) :].mean(axis=0)
+
+
+def _knn_tiebreak(ind: np.ndarray, k: int, window: int = 300) -> np.ndarray:
+    """Termen minuscul care sparge egalitățile unui k-NN prin frecvența recentă.
+
+    O medie a k ținte binare ia doar valorile 0, 1/k, 2/k… — pe 49 de numere,
+    zeci de numere cad pe același nivel, iar pool-ul top-N ajunge decis de
+    tie-break-ul canonic (număr descrescător), nu de metodă. Măsurat pe 6/49:
+    `knn_pattern_self` producea 6-8 nivele distincte și 6 din cele 12 locuri ale
+    pool-ului cădeau pe „cel mai mare număr dintre cele egale".
+
+    Termenul e mărginit la un sfert din pasul 1/k, deci NU poate rearanja două
+    nivele vecine: schimbă doar ordinea ÎN interiorul unui nivel, înlocuind o
+    regulă arbitrară cu una măsurată. Același tipar ca la `repeat_last_draw`,
+    `hot_consistency` și `neighbor_adjacent` (și ca bump-ul de cache v12, unde
+    vechile metode de clasă au primit exact acest tratament).
+    """
+    if ind.shape[0] == 0:
+        return np.zeros(ind.shape[1])
+    freq = ind[-int(window) :].mean(axis=0)  # în [0, 1]
+    return freq * (0.25 / float(max(k, 1)))
 
 
 def _ses_series(x: np.ndarray, alpha: float) -> np.ndarray:
@@ -237,15 +261,21 @@ def score_runs_persistence(draws_2d, max_num, window: int = 300):
     return vector_to_scores(-z * recent, max_num)
 
 
-def score_alternating_parity(draws_2d, max_num, window: int = 400):
-    """Rata pe extragerile cu aceeași paritate de index ca următoarea (sezonalitate de perioadă 2)."""
+def score_season_period2(draws_2d, max_num, window: int = 400):
+    """Rata pe extragerile alternate: sezonalitate de perioadă 2 pe axa timpului.
+
+    Selecția se face după paritatea INDEXULUI extragerii (a câta e la rând),
+    nu după paritatea numărului: ipoteza e că extragerea următoare seamănă mai
+    mult cu extragerile de pe aceeași poziție în alternanță. Fiecare număr își
+    păstrează scorul propriu, continuu — nu e o clasă par/impar de numere.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     if n < 20:
         return vector_to_scores(_window_mean(ind, 50), max_num)
     x = ind[-window:]
     k = x.shape[0]
-    # următoarea extragere are indexul n; pe fereastră, aceeași paritate = pozițiile k-2, k-4, ...
+    # următoarea extragere are indexul n; pe fereastră, același rest la 2 = pozițiile k-2, k-4, ...
     same = x[(k - 2) % 2 :: 2] if k >= 2 else x
     return vector_to_scores(same.mean(axis=0), max_num)
 
@@ -305,7 +335,7 @@ def score_knn_pattern_self(draws_2d, max_num, L: int = 10, k: int = 30):
         order = np.lexsort((-np.arange(W.shape[0]), d))[:k]
         follow = ind[idx[order, -1] + 1, j]
         out[j] = follow.mean()
-    return vector_to_scores(out, max_num)
+    return vector_to_scores(out + _knn_tiebreak(ind, k), max_num)
 
 
 # --------------------------------------------------------------------------- #
@@ -418,7 +448,7 @@ def score_knn_feature_pooled(draws_2d, max_num, k: int = 25):
     kk = min(k, X.shape[0])
     _, nn = tree.query(Q / sd, k=kk)
     nn = np.asarray(nn).reshape(m, -1)
-    return vector_to_scores(y[nn].mean(axis=1), max_num)
+    return vector_to_scores(y[nn].mean(axis=1) + _knn_tiebreak(ind, kk), max_num)
 
 
 def score_gbm_stumps_pooled(draws_2d, max_num, rounds: int = 30, lr: float = 0.3):
@@ -491,7 +521,7 @@ WAVE2_METHODS = make_registry(
         ("ssa_forecast", score_ssa_forecast, "timeseries", "SSA cu recurență liniară"),
         ("dmd_forecast", score_dmd_forecast, "timeseries", "descompunere în moduri dinamice"),
         ("runs_persistence", score_runs_persistence, "timeseries", "z Wald–Wolfowitz × deviația recentă"),
-        ("alternating_parity", score_alternating_parity, "recency", "rata pe extragerile de aceeași paritate de index"),
+        ("season_period2", score_season_period2, "recency", "rata pe extragerile alternate (sezonalitate de perioadă 2)"),
         ("repeat_last_draw", score_repeat_last_draw, "transition", "filtru naive-last: repetarea ultimei extrageri (exclus din producție)"),
         ("vlmm_self_k3", score_vlmm_self_k3, "transition", "Markov cu lungime variabilă pe seria proprie"),
         ("knn_pattern_self", score_knn_pattern_self, "similarity", "k-NN pe ferestrele proprii de 10 stări"),

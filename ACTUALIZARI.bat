@@ -1,10 +1,32 @@
 @echo off
 setlocal DisableDelayedExpansion
-REM ACTUALIZARI.bat — venv, dependente, extrageri.
-REM Daca origin/main e inainte sau lansatoarele de pe disc sunt vechi:
-REM scriem D:\_BUILD\_LOTO\loto_relaunch.bat, IESIM, iar acela face
-REM git pull --ff-only si reporneste. Nu tragem .bat-ul aflat in rulare.
+REM Transfer fara CALL: nicio copie .bat din repo nu ramane activa la sync.
+if /I "%~1"=="--sync-copy" goto :sync_copy
+if /I "%~1"=="--post-sync" goto :post_sync
 set "PROJECT_DIR=%~dp0"
+set "BOOT_DIR=%TEMP%\loto-launch-%RANDOM%-%RANDOM%"
+mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
+copy /Y "%~f0" "%BOOT_DIR%\ACTUALIZARI.bat" >nul || goto :bootstrap_failed
+copy /Y "%PROJECT_DIR%scripts\launcher_git.ps1" "%BOOT_DIR%\launcher_git.ps1" >nul || goto :bootstrap_failed
+"%BOOT_DIR%\ACTUALIZARI.bat" --sync-copy "%PROJECT_DIR%." "%BOOT_DIR%"
+exit /b 99
+
+:bootstrap_failed
+echo [GIT] Copia temporara nu poate fi pregatita - continui cu versiunea locala.
+goto :main
+
+:sync_copy
+set "PROJECT_DIR=%~2\"
+set "BOOT_DIR=%~3"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOT_DIR%\launcher_git.ps1" -Mode Sync -ProjectDir "%PROJECT_DIR%."
+REM Chiar la eroare de retea, repo-ul ramane integral pe versiunea locala.
+"%PROJECT_DIR%ACTUALIZARI.bat" --post-sync "%PROJECT_DIR%." "%BOOT_DIR%"
+exit /b 98
+
+:post_sync
+set "PROJECT_DIR=%~2\"
+set "BOOT_DIR=%~3"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode Cleanup -ProjectDir "%PROJECT_DIR%." -SnapshotDir "%BOOT_DIR%"
 
 :main
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
@@ -12,16 +34,6 @@ cd /d "%PROJECT_DIR%"
 set "RUNTIME_DIR=%LOTO_RUNTIME_DIR%"
 if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
-set "RELAUNCH=ACTUALIZARI.bat"
-call :maybe_git_update
-REM Doar START_8000.bat si ACTUALIZARI.bat raman. Helperul git vechi si
-REM orice alt .bat din radacina se sterg de pe disc.
-for %%F in ("%~dp0*.bat") do (
-    if /I not "%%~nxF"=="START_8000.bat" if /I not "%%~nxF"=="ACTUALIZARI.bat" (
-        echo [GIT] Sterg lansator vechi %%~nxF
-        del /f /q "%%~fF" >nul 2>&1
-    )
-)
 setlocal enabledelayedexpansion
 
 set VENV_DIR=D:\_BUILD\_LOTO\.venv
@@ -184,12 +196,12 @@ call :CleanGhosts
 echo/
 
 echo [2/4] Verificare mediu CPU: metode statistice/ML + assets benchmark...
-"%VENV_PY%" -u "%~dp0verify_imports.py"
+"%VENV_PY%" -u "%PROJECT_DIR%verify_imports.py"
 if errorlevel 1 (
     echo   [EROARE] Verificarea importurilor obligatorii a esuat.
     goto :fatal_setup
 )
-"%VENV_PY%" "%~dp0verifica_mediu.py"
+"%VENV_PY%" "%PROJECT_DIR%verifica_mediu.py"
 if errorlevel 1 (
     echo   [EROARE] Verificarea mediului a esuat.
     goto :fatal_setup
@@ -198,7 +210,7 @@ echo/
 
 echo [2b/4] Descarcare extrageri noi din loto49.ro...
 set "UPDATE_LOG=%TEMP%\loto_update_%RANDOM%.log"
-"%VENV_PY%" "%~dp0update_csv.py" > "%UPDATE_LOG%" 2>&1
+"%VENV_PY%" "%PROJECT_DIR%update_csv.py" > "%UPDATE_LOG%" 2>&1
 powershell -NoProfile -Command "$log='%UPDATE_LOG%'; Get-Content $log | ForEach-Object { if ($_ -match 'extrageri noi') { Write-Host $_ -ForegroundColor Green } else { Write-Host $_ } }"
 findstr /C:"EROARE" "%UPDATE_LOG%" >nul 2>&1
 if not errorlevel 1 (
@@ -258,29 +270,9 @@ exit /b 1
 
 
 :push_istoric
-where git >nul 2>&1
-if errorlevel 1 goto :eof
-if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
-cd /d "%PROJECT_DIR%"
-git config core.hooksPath scripts/git-hooks >nul 2>&1
-git status --porcelain _ISTORIC 2>nul | findstr /R "." >nul 2>&1
-if errorlevel 1 (
-    echo [GIT] _ISTORIC fara modificari.
-    goto :eof
-)
-echo [GIT] Extrageri noi - commit + push origin/main...
-git add -A -- _ISTORIC
-if errorlevel 1 goto :eof
-git diff --cached --quiet -- _ISTORIC
-if not errorlevel 1 goto :eof
-git commit -m "auto: update istoric extrageri"
-if errorlevel 1 (
-    echo [GIT] commit _ISTORIC esuat.
-    goto :eof
-)
-git push origin main <nul
-if errorlevel 1 echo [GIT] Push _ISTORIC esuat - commitul e local.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode PushHistory -ProjectDir "%PROJECT_DIR%."
 goto :eof
+
 
 :CleanGhosts
 set GHOSTS=0
@@ -447,64 +439,11 @@ if "!SYS_VER!"=="" (
 goto :eof
 
 
-:maybe_git_update
-if "%LOTO_RELAUNCHED%"=="1" (
-    echo [GIT] Repornit dupa actualizare.
-    goto :eof
-)
-if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
-if "%RUNTIME_DIR%"=="" set "RUNTIME_DIR=D:\_BUILD\_LOTO"
-if "%RELAUNCH%"=="" set "RELAUNCH=ACTUALIZARI.bat"
-if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
-cd /d "%PROJECT_DIR%"
-echo [GIT] Descarc lansatoarele de pe GitHub...
-curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\START_8000.bat.new" https://raw.githubusercontent.com/ciprianbodu/LOTO/main/START_8000.bat
-if errorlevel 1 echo [GIT] Descarcare START_8000 esuata.
-curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\ACTUALIZARI.bat.new" https://raw.githubusercontent.com/ciprianbodu/LOTO/main/ACTUALIZARI.bat
-if errorlevel 1 echo [GIT] Descarcare ACTUALIZARI esuata.
-set "NEED_UPDATE="
-findstr /C:"loto_relaunch.bat" "%PROJECT_DIR%START_8000.bat" >nul
-if errorlevel 1 set "NEED_UPDATE=1"
-set "LOCAL_SHA="
-where git >nul 2>&1
-if errorlevel 1 goto :after_sha
-git config core.hooksPath scripts/git-hooks >nul 2>&1
-for /f %%H in ('git rev-parse HEAD 2^>nul') do set "LOCAL_SHA=%%H"
-echo [GIT] local %LOCAL_SHA%
-curl.exe -L --fail -s -A LOTO -o "%RUNTIME_DIR%\gh_main.json" https://api.github.com/repos/ciprianbodu/LOTO/commits/main
-if errorlevel 1 goto :after_sha
-if "%LOCAL_SHA%"=="" set "NEED_UPDATE=1"
-if "%LOCAL_SHA%"=="" goto :after_sha
-findstr /C:"%LOCAL_SHA%" "%RUNTIME_DIR%\gh_main.json" >nul
-if errorlevel 1 set "NEED_UPDATE=1"
-:after_sha
-if not defined NEED_UPDATE (
-    echo [GIT] Deja la zi.
-    goto :eof
-)
-echo [GIT] Cod nou sau lansator vechi pe disc. Actualizez si repornesc...
-set "UPDATER=%RUNTIME_DIR%\loto_relaunch.bat"
-> "%UPDATER%" echo @echo off
->> "%UPDATER%" echo cd /d "%PROJECT_DIR%."
->> "%UPDATER%" echo echo [GIT] Astept 2s ca lansatorul vechi sa se inchida...
->> "%UPDATER%" echo timeout /t 2 /nobreak ^>nul
->> "%UPDATER%" echo if exist "%RUNTIME_DIR%\START_8000.bat.new" copy /Y "%RUNTIME_DIR%\START_8000.bat.new" START_8000.bat
->> "%UPDATER%" echo if exist "%RUNTIME_DIR%\ACTUALIZARI.bat.new" copy /Y "%RUNTIME_DIR%\ACTUALIZARI.bat.new" ACTUALIZARI.bat
->> "%UPDATER%" echo git config core.hooksPath scripts/git-hooks
->> "%UPDATER%" echo git fetch origin
->> "%UPDATER%" echo git pull --ff-only origin main
->> "%UPDATER%" echo if errorlevel 1 echo [GIT] pull --ff-only esuat - lansatoarele sunt deja copiate de pe GitHub.
->> "%UPDATER%" echo echo [GIT] Repornesc lansatorul actualizat.
->> "%UPDATER%" echo set LOTO_RELAUNCHED=1
->> "%UPDATER%" echo call %RELAUNCH%
-echo [GIT] Inchid fereastra curenta ca sa pot inlocui lansatorul.
-start "LOTO UPDATE" cmd /c "%UPDATER%"
-exit 0
 
 :detect_python314
 set "PY314_EXE="
 set "SYS_VER="
-for /f "tokens=1,2 delims=|" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\find_python314.ps1" 2^>nul') do (
+for /f "tokens=1,2 delims=|" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\find_python314.ps1" 2^>nul') do (
     set "PY314_EXE=%%P"
     set "SYS_VER=%%Q"
 )
