@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Sync', 'PushHistory', 'Cleanup')]
+    [ValidateSet('Sync', 'PushHistory', 'Cleanup', 'Detect')]
     [string]$Mode,
     [Parameter(Mandatory = $true)]
     [string]$ProjectDir,
@@ -32,12 +32,47 @@ if ($Mode -eq 'Cleanup') {
     exit 0
 }
 
+function Resolve-LotoGit {
+    # Explorer/CMD need not inherit the PATH supplied by an editor or Codex.
+    # Resolve here for BOTH Sync and PushHistory; do not change Windows settings.
+    $candidates = @()
+    if ($env:LOTO_GIT_EXE) { $candidates += $env:LOTO_GIT_EXE.Trim('"') }
+    $command = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($command) { $candidates += $command.Source }
+
+    foreach ($key in @('HKCU:\Software\GitForWindows', 'HKLM:\Software\GitForWindows',
+                       'HKLM:\Software\WOW6432Node\GitForWindows')) {
+        $install = (Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue).InstallPath
+        if ($install) { $candidates += Join-Path $install 'cmd\git.exe' }
+    }
+    foreach ($base in @($env:ProgramW6432, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if ($base) { $candidates += Join-Path $base 'Git\cmd\git.exe' }
+    }
+    if ($env:LOCALAPPDATA) {
+        $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd\git.exe'
+    }
+    # The local machine currently has this portable Git, without a global install.
+    if ($env:USERPROFILE) {
+        $candidates += Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe'
+    }
+    foreach ($candidate in $candidates) {
+        if ([IO.Path]::IsPathRooted($candidate) -and
+            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return [IO.Path]::GetFullPath($candidate)
+        }
+    }
+    return $null
+}
+
 Set-Location -LiteralPath $ProjectDir
-$gitExe = (Get-Command git.exe -ErrorAction SilentlyContinue).Source
+$gitExe = Resolve-LotoGit
 if (-not $gitExe) {
-    Write-Host '[GIT] Git indisponibil - pastrez codul si istoricul local.'
+    Write-Host '[GIT] Git nu a fost gasit. Instaleaza Git for Windows sau seteaza LOTO_GIT_EXE; pastrez codul si istoricul local.'
+    if ($Mode -eq 'Detect') { exit 1 }
     exit 0
 }
+Write-Host ('[GIT] Executabil: ' + $gitExe)
 
 function Invoke-LotoGit {
     param([string[]]$GitArgs, [int]$TimeoutSeconds = 45)
@@ -51,6 +86,8 @@ function Invoke-LotoGit {
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
     $info.RedirectStandardInput = $true
+    # Git children/hooks must find the same executable even when CMD has no Git in PATH.
+    $info.EnvironmentVariables['PATH'] = (Split-Path -Parent $gitExe) + ';' + $env:PATH
     $info.EnvironmentVariables['GIT_TERMINAL_PROMPT'] = '0'
     $info.EnvironmentVariables['GCM_INTERACTIVE'] = 'Never'
     $info.EnvironmentVariables['LOTO_SKIP_AUTO_PUSH'] = '1'
@@ -75,6 +112,12 @@ function Invoke-LotoGit {
 }
 
 try {
+    if ($Mode -eq 'Detect') {
+        $version = Invoke-LotoGit -GitArgs @('--version')
+        if ($version.Code -ne 0) { throw $version.Text }
+        Write-Host ('[GIT] ' + $version.Text)
+        exit 0
+    }
     $root = Invoke-LotoGit -GitArgs @('rev-parse', '--show-toplevel')
     if ($root.Code -ne 0 -or
         [IO.Path]::GetFullPath($root.Text) -ne (Get-Location).Path.TrimEnd('\')) {

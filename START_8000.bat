@@ -56,8 +56,8 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
 REM ===== Auto-commit + push extrageri noi din _ISTORIC, best-effort =====
 REM Vizibil in consola, nu doar in startup_8000.log. Push STRICT pe origin/main.
 REM git push origin HEAD pe alta ramura era pierdut la urmatorul reset.
-where git >nul 2>&1
-if not errorlevel 1 call :push_istoric
+REM Detectia Git este centralizata in helper, inclusiv cand lipseste din PATH.
+call :push_istoric
 
 REM ===== Verify phase (silent, logat in fundal) =====
 call :verify_phase >> "%LOGFILE%" 2>&1

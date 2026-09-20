@@ -219,8 +219,8 @@ if not errorlevel 1 (
 del "%UPDATE_LOG%" >nul 2>&1
 
 REM Auto-commit + push extrageri noi din _ISTORIC pe GitHub (best-effort).
-where git >nul 2>&1
-if not errorlevel 1 call :push_istoric
+REM Detectia Git este centralizata in helper, inclusiv cand lipseste din PATH.
+call :push_istoric
 echo/
 
 REM Muta cache-ul WF legacy din OneDrive in D:\_BUILD\_LOTO\.wf_cache, apoi
