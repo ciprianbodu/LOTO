@@ -1,5 +1,10 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Teste noi, 21.09.2026:** [contracte și ferestre distincte pentru toate cele 52 de metode](raport_test_metode_2026-09-21.md).
+375 teste noi; diagnostic pe 180 extrageri/joc, pool 6/8/10/12/16, inclusiv Joker
+Urna 2. Niciun avantaj confirmat după corecția comparațiilor multiple; fără
+modificarea deciziei de producție. Reproducere: `python scripts/analysis/audit_method_windows.py`.
+
 **Audit nou, 05.09.2026:** [tipare de calendar, penalizări și designuri](raport_patternuri_cover_penalizari_2026-09-05.md).
 Experiment cronologic 50/20/30 la pool 11; nicio regulă nouă confirmată după
 corecția comparațiilor multiple. 151 designuri verificate; 7 blocuri redundante
