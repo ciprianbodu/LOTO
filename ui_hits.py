@@ -318,7 +318,7 @@ def _render_hits_4plus(
         "Premiile și ROI-ul nu sunt estimate: CSV-ul nu conține categoria de premiu, "
         "iar Joker cere și validarea Urnei 2 pe același bilet. "
     )
-    _cap += f" Pool = {n_tick:,} variante ({tick_avg:.2f}/extragere)."
+    _cap += f" Bilete evaluate = {n_tick:,} (extragere × variantă, {tick_avg:.2f}/extragere)."
     _cap += " Rândul de bilete numără extrageri cu cel puțin un bilet care atinge pragul; baseline-ul de pool nu este un baseline separat pentru bilete."
     _price = PRICES.get(gk, 8.0)
     if n_tick:

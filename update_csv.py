@@ -210,8 +210,9 @@ def _append_rows_atomic(
 ) -> int:
     """Citește CSV existent, adaugă rândurile noi, rescrie atomic (tmp + rename).
     Întoarce numărul de rânduri EFECTIV scrise (poate fi mai mic decât
-    len(new_rows) dacă unele aveau deja o dată prezentă în CSV — vezi garda
-    `existing_dates` de mai jos)."""
+    len(new_rows) dacă un rând identic — aceeași dată ȘI aceleași numere —
+    e deja în CSV; o a doua extragere în aceeași zi, cu numere diferite,
+    se adaugă)."""
     # Citește rândurile existente
     existing: list[list[str]] = []
     header: list[str] | None = None
@@ -236,11 +237,11 @@ def _append_rows_atomic(
             row.append(rec["joker"])
         to_add.append([str(x) for x in row])
 
-    # Plasă de siguranță INDEPENDENTĂ de `_last_date_in_csv`: chiar dacă acel
-    # calcul ar greși cumva (fișier reordonat, corectat manual), niciun rând
-    # cu o dată deja prezentă în CSV nu se mai adaugă a doua oară.
-    existing_dates = {row[0] for row in existing if row}
-    to_add = [row for row in to_add if row[0] not in existing_dates]
+    # Plasă de siguranță INDEPENDENTĂ de `_last_date_in_csv`: nu re-adăugăm
+    # un rând identic (dată + numere). Zilele cu două extrageri diferite
+    # rămân permise — istoricul le stochează deja, WF le tratează separat.
+    existing_keys = {tuple(str(x) for x in row) for row in existing if row}
+    to_add = [row for row in to_add if tuple(str(x) for x in row) not in existing_keys]
     if not to_add:
         return 0
 
@@ -293,7 +294,7 @@ def update_all() -> int:
             # sau corupt, nu "prima rulare vreodata" (fisierele din _ISTORIC/ sunt
             # versionate cu mii de randuri deja). A trata asta ca "totul de pe
             # site e nou" ar rescrie CSV-ul cu doar cateva luni de istoric — si
-            # `loto_git_sync.bat push_istoric` ar face auto-commit + push pe
+            # START_8000.bat :push_istoric ar face auto-commit + push pe
             # origin/main la urmatoarea pornire, fara niciun avertisment.
             print(
                 f"  {cfg['display_name']:<12}: CSV EXISTA dar fara nicio data valida — "

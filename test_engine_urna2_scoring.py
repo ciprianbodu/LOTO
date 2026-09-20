@@ -97,3 +97,27 @@ def test_unusable_bench_scores_audit_names_frequency_fallback(monkeypatch):
     assert info["fallback"] is True
     assert info["attempted"] == "zz_flat"
     assert eng.audit["bench_winner_unusable_scores"] is True
+
+
+def test_pair_lift_last_is_unusable_on_single_pick():
+    """Urna 2: co-apariție inexistentă → scor plat, nu ranking Laplace fabricat."""
+    from loto_enterprise.benchmark.methods_relational import score_pair_lift_last
+    from loto_enterprise.core.score_validation import has_usable_score_variance
+
+    rng = np.random.default_rng(0)
+    draws = rng.integers(1, 21, size=(200, 1))
+    scores = score_pair_lift_last(draws, 20)
+    assert set(scores) == set(range(1, 21))
+    assert not has_usable_score_variance(scores)
+
+
+def test_pair_lift_last_has_variance_on_multi_ball():
+    from loto_enterprise.benchmark.methods_relational import score_pair_lift_last
+    from loto_enterprise.core.score_validation import has_usable_score_variance
+
+    rng = np.random.default_rng(0)
+    draws = np.vstack(
+        [rng.choice(np.arange(1, 50), size=6, replace=False) for _ in range(80)]
+    )
+    scores = score_pair_lift_last(draws, 49)
+    assert has_usable_score_variance(scores)

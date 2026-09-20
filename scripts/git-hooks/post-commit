@@ -1,6 +1,6 @@
 #!/bin/sh
 # Auto-push origin/main after a commit on main.
-# Installed by loto_git_sync.bat: git config core.hooksPath scripts/git-hooks
+# Installed by START_8000.bat / ACTUALIZARI.bat: git config core.hooksPath scripts/git-hooks
 # Disable one commit: LOTO_SKIP_AUTO_PUSH=1
 # Never force-push. Closed stdin + GIT_TERMINAL_PROMPT=0 so a credential
 # prompt cannot hang START_8000 / ACTUALIZARI.

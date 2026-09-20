@@ -72,14 +72,21 @@ def _load_config(path: str | None = None) -> dict:
 def _production_forbidden() -> frozenset[str]:
     """Metode care NU au voie să scocheze pool-ul de producție.
 
-    = EXCLUDED_FROM_PRODUCTION (doar `random`). best_methods.json vechi/manual
-    putea totuși să numească `random` — fără gardă aici, pool-ul devenea
-    nedeterminist. Mecanismul de tombstone (disabled_methods.json) a fost
-    eliminat la 14.09.2026: un nume necunoscut e respins oricum de gărzile din
-    `_sanitize_production_name` (nu e în METHODS), nu mai e nevoie de o listă
-    separată de blacklist.
+    = EXCLUDED_FROM_PRODUCTION (`random` + filtrele de apartenență
+    last-draw: `neighbor_adjacent` / `repeat_last_draw` / `rwr_last_draw` /
+    `haar_multiscale`). best_methods.json vechi/manual putea totuși să numească
+    `random` — fără gardă aici, pool-ul devenea nedeterminist. Mecanismul de
+    tombstone (disabled_methods.json) a fost eliminat la 14.09.2026: un nume
+    necunoscut e respins oricum de gărzile din `_sanitize_production_name`
+    (nu e în METHODS), nu mai e nevoie de o listă separată de blacklist.
     """
-    forbidden: set[str] = {"random"}
+    forbidden: set[str] = {
+        "random",
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
+    }
     try:
         from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
 
@@ -93,8 +100,9 @@ def _production_forbidden() -> frozenset[str]:
 def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
     """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
 
-    Respinge: random, orice nume care nu e în registry. Altfel UI/audit
-    pretindea un scorer inexistent când rulează de fapt frequency.
+    Respinge: random, filtrele last-draw/spațiale, orice nume care nu e în
+    registry. Altfel UI/audit pretindea un scorer inexistent când rulează de
+    fapt frequency.
     """
     if not name:
         return None
@@ -107,7 +115,7 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
         METHODS = {}
     if name in _production_forbidden():
         logger.warning(
-            "[method_selector] %s %r interzis în producție (random/blacklist) — skip",
+            "[method_selector] %s %r interzis în producție (EXCLUDED_FROM_PRODUCTION) — skip",
             context,
             name,
         )

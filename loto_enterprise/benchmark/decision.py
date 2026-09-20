@@ -147,13 +147,21 @@ ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 # "numere date cu zarul" nu.
 EXCLUDED_FROM_PRODUCTION = frozenset(
     {
-        # `random` e singurul martor structural interzis în producție (fără
-        # semnal, seed instabil în timp). Vechile filtre de clasă/bucket
-        # (parity_balance, prime_bias, 649_decade_hot etc.) nu mai există ca
-        # metode — au fost eliminate odată cu întreg setul vechi la 14.09.2026 —
-        # deci nu mai e nimic de listat aici pe lângă `random`. Niciuna dintre
-        # cele 50 de metode noi nu e filtru structural (CLAUDE.md §5.3).
+        # `random` e martorul structural (fără semnal, seed instabil în timp).
         "random",
+        # Filtre de apartenență pe ultima extragere: top-K e o clasă geometrică,
+        # nu un ranking. Rămân în METHODS (bench le măsoară ca martori), dar nu
+        # pot fi scorer de producție — același tratament ca vechile
+        # parity_balance / 649_last_neighbors.
+        # neighbor_adjacent: vecinii numerici ±1/±2 (câștiga 5/40 k10–k14).
+        # repeat_last_draw: naive last; la k=draw_n copiază ultima extragere.
+        # rwr_last_draw: RWR restart 0.3 semănat din ultima extragere — prefix
+        #   last-draw garantat (urna1 k6/k8–k10 câștigător pe 1e8076a).
+        # haar_multiscale: Haar pe fereastra recentă; pe Urna 2 top-1 ≡ repeat.
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
     }
 )
 

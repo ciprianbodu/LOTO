@@ -1,4 +1,4 @@
-"""Metode de scoring relaționale (11 metode).
+"""Metode de scoring relaționale (10 metode).
 
 Ipoteze despre legăturile dintre numere și despre forma extragerii:
 
@@ -10,15 +10,17 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
     pagerank_cooc                   centralitate PageRank în graful de co-apariție (ponderat recent)
     knn_draw_similarity             ce a urmat după extragerile cele mai asemănătoare cu ultima
     neighbor_adjacent               vecinii numerici (±1, ±2) ai ultimei extrageri
+                                    (filtru spațial: top-K = clasa de vecinătate;
+                                    rămâne în bench, EXCLUDED_FROM_PRODUCTION)
 
-Nicio metodă de aici nu e un filtru structural (paritate, sume, decade,
-poziție): acelea constrâng combinația, nu prezic un număr, și sunt interzise
-ca „metode" (CLAUDE.md §13 P3). Cele trei variante de acest fel scrise inițial
-pe 14.09.2026 au fost scoase înainte de bench.
+`neighbor_adjacent` e filtru de poziție pe axa 1…N, nu predictor. Paritate /
+sume / decade au fost scoase înainte de bench (14.09.2026); acesta a rămas
+și a fost exclus din producție la auditul din 15.09.2026.
 
 Pe geometria cu o singură bilă (Joker Urna 2) co-aparițiile din aceeași
-extragere nu există: metodele bazate pe ele dau scoruri plate, iar bench-ul
-le marchează ca inutilizabile acolo, nu le maschează.
+extragere nu există: metodele bazate pe ele (inclusiv `pair_lift_last`,
+fără Laplace pe matrice goală) dau scoruri plate, iar bench-ul le
+marchează ca inutilizabile acolo, nu le maschează.
 """
 
 from __future__ import annotations
@@ -147,12 +149,23 @@ def score_anti_cooc_last(draws_2d, max_num):
 
 
 def score_pair_lift_last(draws_2d, max_num):
-    """lift(i, j) = n·C[i,j] / (c_i·c_j), mediat peste i din ultima extragere."""
+    """lift(i, j) = n·C[i,j] / (c_i·c_j), mediat peste i din ultima extragere.
+
+    Pe o singură bilă (Joker Urna 2) co-apariția în aceeași extragere nu există:
+    C e gol după ștergerea diagonalei. Fără garda de mai jos, Laplace +1
+    fabrica un ranking anti-frecvență din zerouri — masca eșecul, spre deosebire
+    de cooc_last3 / pagerank / rwr care cad ca plate.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
-    if n == 0:
+    arr = np.asarray(draws_2d)
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    if n == 0 or arr.shape[1] < 2:
         return vector_to_scores(np.zeros(m), max_num)
     c = _cooc(ind)
+    if float(np.asarray(c).sum()) <= 0:
+        return vector_to_scores(np.zeros(m), max_num)
     count = ind.sum(axis=0)
     lift = (n * c + 1.0) / (np.outer(count, count) + 1.0)
     np.fill_diagonal(lift, 0.0)
@@ -217,10 +230,10 @@ RELATIONAL_METHODS = make_registry(
         ("markov_self_state", score_markov_self_state, "transition", "lanț cu două stări per număr"),
         ("cooc_last3", score_cooc_last3, "cooccurrence", "co-apariție cu ultimele 3 extrageri"),
         ("anti_cooc_last", score_anti_cooc_last, "cooccurrence", "contrariul co-apariției cu ultima extragere"),
-        ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere"),
+        ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere (plat pe 1 bilă)"),
         ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție ponderat recent"),
         ("knn_draw_similarity", score_knn_draw_similarity, "similarity", "ce a urmat după cele 40 de extrageri cele mai asemănătoare"),
-        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "vecinii ±1/±2 ai ultimei extrageri"),
+        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "filtru spațial: vecinii ±1/±2 ai ultimei extrageri (exclus din producție)"),
     ]
 )
 
