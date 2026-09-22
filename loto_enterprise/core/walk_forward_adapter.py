@@ -46,7 +46,10 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v25"
+CACHE_VERSION = "v26"
+# v26: SES corect (s_0 = x_0 pe toată seria) și `theta_drift` pe prognoza liniară
+#      a ratei glisante. Pool-urile `ses_opt_alpha`, `imapa_agg` și
+#      `theta_drift` din v25 nu se mai reproduc.
 # v25: tie-break pe frecvență la cele două k-NN (`knn_pattern_self`,
 #      `knn_feature_pooled`) și redenumirea `alternating_parity` →
 #      `season_period2`. Ambele schimbă pool-ul pe care îl generează scorerul,

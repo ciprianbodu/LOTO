@@ -7,7 +7,7 @@ cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
 
     ses_opt_alpha          netezire exponențială simplă cu α optimizat per număr (fost `ses`)
     croston_interval       Croston: intervalele dintre apariții netezite, rata = 1/interval (fost `croston_opt`)
-    theta_drift            metoda Theta pe cumulul aparițiilor: drift + SES (fost `theta_auto`)
+    theta_drift            Theta: prognoză liniară și SES(0.2) pe rata glisantă (fost `theta_auto`)
     weighted_recent_linear frecvență cu ponderi liniar descrescătoare pe 100 (fost `weighted_recent`)
     drift_linear           tendința liniară a ratei glisante (CMMP pe 300), extrapolată (fost `drift`)
     imapa_agg              SES la nivele de agregare 1/2/4/8 combinate (fost `imapa` / `adida`)
@@ -75,12 +75,20 @@ def _knn_tiebreak(ind: np.ndarray, k: int, window: int = 300) -> np.ndarray:
 
 
 def _ses_series(x: np.ndarray, alpha: float) -> np.ndarray:
-    """SES vectorizat pe axa 0: s_t = α x_t + (1−α) s_{t−1}, s_0 = x_0."""
+    """SES vectorizat pe axa 0: s_t = α x_t + (1−α) s_{t−1}, s_0 = x_0.
+
+    `lfilter` pornește din repaus (s_{-1} = 0), deci y_0 = α x_0. Suprascrierea
+    doar a lui y_0 nu repară pașii următori: ei au fost deja calculați din α x_0.
+    Diferența (1−α) x_0 se stinge ca (1−α)^(t+1) x_0.
+    """
     if x.shape[0] == 0:
         return x
-    out = lfilter([alpha], [1.0, -(1.0 - alpha)], x, axis=0)
-    out[0] = x[0]
-    return out
+    decay = 1.0 - float(alpha)
+    out = lfilter([float(alpha)], [1.0, -decay], x, axis=0)
+    powers = decay ** np.arange(1, x.shape[0] + 1, dtype=np.float64)
+    if np.ndim(x) == 1:
+        return out + powers * x[0]
+    return out + powers[:, None] * np.asarray(x[0], dtype=np.float64)
 
 
 # --------------------------------------------------------------------------- #
@@ -125,17 +133,32 @@ def score_croston_interval(draws_2d, max_num, alpha: float = 0.1):
     return vector_to_scores(out, max_num)
 
 
-def score_theta_drift(draws_2d, max_num, window: int = 300):
-    """Theta: media dintre driftul liniar și SES(0.2) pe rata glisantă a numărului."""
+def score_theta_drift(draws_2d, max_num, window: int = 300, rate_win: int = 50):
+    """Theta: media dintre prognoza liniară și SES(0.2) pe rata glisantă.
+
+    `(cum[-1] - cum[0]) / (n - 1)` este media indicatorului de la al doilea
+    pas, nu o pantă: două numere cu aceeași sumă primesc același „drift" chiar
+    dacă unul urcă și celălalt coboară. Prognoza liniară e aceeași extrapolare
+    la un pas ca la `drift_linear`, pe rata de `rate_win` extrageri.
+    """
     ind = indicator(draws_2d, max_num)
-    x = ind[-window:]
+    x = ind[-(window + rate_win) :]
     n, m = x.shape
-    if n < 30:
+    if n < rate_win + 20:
         return vector_to_scores(_window_mean(ind, 50), max_num)
-    cum = np.cumsum(x, axis=0)
-    drift = (cum[-1] - cum[0]) / max(n - 1, 1)
-    ses = _ses_series(x, 0.2)[-1]
-    return vector_to_scores(0.5 * drift + 0.5 * ses, max_num)
+    cs = np.vstack([np.zeros((1, m)), np.cumsum(x, axis=0)])
+    rate = (cs[rate_win:] - cs[:-rate_win]) / float(rate_win)
+    k = rate.shape[0]
+    t = np.arange(k, dtype=np.float64)
+    tc = t - t.mean()
+    denom = float((tc**2).sum())
+    if denom <= 0.0:
+        return vector_to_scores(_window_mean(ind, 50), max_num)
+    centered = rate - rate.mean(axis=0)
+    slope = (tc[:, None] * centered).sum(axis=0) / denom
+    linear = rate.mean(axis=0) + slope * (k - t.mean())
+    ses = _ses_series(rate, 0.2)[-1]
+    return vector_to_scores(0.5 * linear + 0.5 * ses, max_num)
 
 
 def score_weighted_recent_linear(draws_2d, max_num, window: int = 100):
@@ -513,7 +536,12 @@ WAVE2_METHODS = make_registry(
     [
         ("ses_opt_alpha", score_ses_opt_alpha, "timeseries", "SES cu α optimizat per număr"),
         ("croston_interval", score_croston_interval, "gap", "Croston pe intervalele dintre apariții"),
-        ("theta_drift", score_theta_drift, "timeseries", "Theta: drift + SES pe rata numărului"),
+        (
+            "theta_drift",
+            score_theta_drift,
+            "timeseries",
+            "Theta: prognoză liniară + SES pe rata glisantă",
+        ),
         ("weighted_recent_linear", score_weighted_recent_linear, "recency", "ponderi liniare pe ultimele 100"),
         ("drift_linear", score_drift_linear, "timeseries", "tendința liniară a ratei glisante, extrapolată"),
         ("imapa_agg", score_imapa_agg, "timeseries", "SES la nivele de agregare 1/2/4/8"),

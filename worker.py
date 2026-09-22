@@ -26,7 +26,10 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v4"
+PIPELINE_CACHE_VERSION = "v5"
+# v5: SES și theta_drift schimbă pool-ul serializat când câștigătorul e
+#     ses_opt_alpha, imapa_agg sau theta_drift. UI-ul ține use_cache=False;
+#     bump-ul acoperă apelanții care reactivează cache-ul.
 
 # Identitate UNICĂ a acestei rulări de worker (regenerată la fiecare pornire).
 # Scrisă pe rândul revendicat (job_queue.fetch_pending_job/fetch_running_job) și

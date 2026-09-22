@@ -274,7 +274,14 @@ class ScoringMixin:
             return {}
         from loto_enterprise.benchmark.methods import score_frequency
 
-        return score_frequency(draws_2d, max_num)
+        scores = score_frequency(draws_2d, max_num)
+        # Istoric gol: `score_frequency` normalizează un vector constant la 0.
+        # Fără a doua gardă, `rank_by_score` umple pool-ul cu cele mai mari
+        # numere — exact eșecul pe care poarta de varianță îl oprește la
+        # câștigătorul de bench.
+        if not has_usable_score_variance(scores):
+            return {}
+        return scores
 
     def _get_timesfm_pool(
         self, scores: dict[int, float], pool_size: int, blacklist: set[int]

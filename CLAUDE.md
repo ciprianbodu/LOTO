@@ -52,10 +52,10 @@ Snapshot verificat la 2026-09-15:
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
-- cache benchmark: `v19` (bump 15.09.2026: tie-break pe frecventa la cele doua
-  k-NN + redenumirea de mai sus);
-- cache walk-forward: `v25` (acelasi motiv: pool-ul generat se schimba);
-- cache rezultat worker: `v4`;
+- cache benchmark: `v20` (SES cu s_0 = x_0 pe toata seria; `theta_drift` pe
+ prognoza liniara a ratei glisante);
+- cache walk-forward: `v26` (acelasi motiv: pool-ul generat se schimba);
+- cache rezultat worker: `v5`;
 - teste: 58 fisiere `test_*.py`, 905 trecute, 0 esecuri (Python 3.14 + nicegui in
   containerul de audit). Cele doua esecuri raportate anterior ca PRE-EXISTENTE in
   `test_wf_generation_settings` erau un defect al TESTULUI, nu al motorului — vezi
@@ -622,9 +622,9 @@ hash-ul designului si, pentru Joker, decizia Urnei 2.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v19` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v25` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v4` | se schimba rezultatul serializat al pipeline-ului |
+| benchmark fold | `v20` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| walk-forward | `v26` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| worker pipeline | `v5` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

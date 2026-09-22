@@ -67,7 +67,10 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v19"
+CACHE_VERSION = "v20"
+# v20: SES pornește din x_0 pe toată seria (`_ses_series`), nu doar la primul
+#      pas; `theta_drift` scorează prognoza liniară a ratei glisante, nu media
+#      indicatorului. Se schimbă `ses_opt_alpha`, `imapa_agg` și `theta_drift`.
 # v19: `knn_pattern_self` și `knn_feature_pooled` primesc tie-break pe frecvență
 #      (media a k ținte binare are doar k+1 nivele; pe 6/49 jumătate din pool era
 #      decisă de „cel mai mare număr dintre cele egale", nu de metodă). Scorurile

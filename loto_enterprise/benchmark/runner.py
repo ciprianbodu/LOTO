@@ -42,6 +42,20 @@ from loto_enterprise.core.score_validation import has_usable_score_variance
 
 logger = logging.getLogger(__name__)
 
+# Co-apariția din aceeași extragere e zero când fiecare rând are o singură bilă.
+# Lista doar evită bucla; fold-ul e failed doar dacă sonda chiar e plată.
+_SINGLE_PICK_FLAT_METHODS = frozenset(
+    {
+        "cooc_last3",
+        "anti_cooc_last",
+        "pair_lift_last",
+        "pagerank_cooc",
+        "pair_transition",
+        "hawkes_cross",
+        "rwr_last_draw",
+    }
+)
+
 
 # ---------------------------------------------------------------------------
 # Game definitions
@@ -160,8 +174,35 @@ def discover_games(istoric_dir: str | None = None) -> list[GameDef]:
     return games
 
 
+def _align_urna2_with_engine(df: pd.DataFrame) -> pd.DataFrame:
+    """Urna 2 se scorează pe jokerii rămași după filtrarea n1..n5, ca engine-ul.
+
+    Engine-ul scoate întâi rândurile cu Urna 1 invalidă din `self.data`, apoi
+    citește jokerul. Bench-ul care valida doar coloana `joker` păstra un joker
+    valid de pe un rând cu numere principale stricate și îl lăsa în serie.
+    """
+    cols = [f"n{i}" for i in range(1, 6)]
+    if any(col not in df.columns for col in cols):
+        return df
+    try:
+        _matrix, mask = valid_draw_matrix(df, cols, draw_n=5, max_num=45)
+    except ValueError as exc:
+        logger.warning("[bench] joker_urna2: nu pot valida Urna 1 (%s).", exc)
+        return df
+    dropped = int(len(df) - int(np.asarray(mask).sum()))
+    if dropped:
+        logger.warning(
+            "[bench] joker_urna2: ignor %d rânduri cu Urna 1 invalidă "
+            "(aceeași serie ca engine/WF).",
+            dropped,
+        )
+    return df.loc[mask].reset_index(drop=True)
+
+
 def load_draws(game: GameDef) -> np.ndarray:
     df = chronological_history(pd.read_csv(game.csv_path))
+    if game.key == "joker_urna2":
+        df = _align_urna2_with_engine(df)
     try:
         draws, valid_mask = valid_draw_matrix(
             df,
@@ -280,6 +321,17 @@ def _evaluate_fold(
     sampler = HwSampler(interval=0.1).start()
     t0 = time.perf_counter()
     try:
+        if game.is_single_pick and method_name in _SINGLE_PICK_FLAT_METHODS:
+            # O singură sondă: dacă scorul e deja plat, bucla pe fiecare
+            # extragere ar eșua la fel și ar marca fold-ul failed. Dacă sonda
+            # are varianță, metoda chiar se evaluează — lista nu e o excludere.
+            probe_hist = train_draws if len(train_draws) else test_draws
+            probe, _probe_t = call_method(method_name, probe_hist, game.max_num)
+            if not has_usable_score_variance(probe):
+                raise RuntimeError(
+                    f"method '{method_name}' returned unusable scores on all "
+                    f"blocks (empty, flat, non-numeric or non-finite)"
+                )
         if block_size < 1 or n_test < 1:
             raise ValueError("block_size and test length must be positive")
         per_pool_totals = {k: 0 for k in pool_sizes}

@@ -872,21 +872,37 @@ def decide_optimal_config_for_pool(
         v = pooled_wilson_distinct(frame, c)
         return float(v) if v is not None else 0.0
 
-    # Toti candidatii se judeca pe ACELASI set de ferestre: cel mai larg set de
-    # percentile prezent in randurile reale ale jocului. O metoda cu o fereastra
-    # lipsa (fold `failed`, n_eval=0) ar fi altfel comparata pe alt subset de
-    # extrageri, cu o poarta mai usoara (2/3 in loc de 3/4) si cu o rata pooled
-    # care ii omite exact fereastra in care a esuat. Ea iese din decizie si
-    # este raportata in `incomplete_methods`.
+    # Toti candidatii se judeca pe ACELASI set de ferestre. Contractul e setul
+    # lui `random` (martorul prezent pe fiecare fereastra a matricei). Un
+    # percentile aparut doar la o metoda — fold vechi amestecat sau flush
+    # intrerupt — nu mai declara incomplete toate celelalte. Fara suficiente
+    # ferestre la `random`, ramane uniunea (folds sintetice / vechi).
+    # O metoda cu o fereastra lipsa (fold `failed`, n_eval=0) ar fi altfel
+    # comparata pe alt subset de extrageri, cu o poarta mai usoara (2/3 in loc
+    # de 3/4) si cu o rata pooled care ii omite exact fereastra in care a
+    # esuat. Ea iese din decizie si este raportata in `incomplete_methods`.
     _expected_pcts: set[int] = set()
     if "percentile" in _all_real.columns and _frame_rate_col is not None:
         _ok_rows = _all_real[
             pd.to_numeric(_all_real[_frame_rate_col], errors="coerce").notna()
         ]
-        _expected_pcts = {
-            int(p)
-            for p in pd.to_numeric(_ok_rows["percentile"], errors="coerce").dropna()
-        }
+
+        def _pct_set(frame: pd.DataFrame) -> set[int]:
+            return {
+                int(p)
+                for p in pd.to_numeric(frame["percentile"], errors="coerce").dropna()
+            }
+
+        _random_rows = (
+            _ok_rows[_ok_rows["method"] == "random"]
+            if "method" in _ok_rows.columns
+            else _ok_rows.iloc[0:0]
+        )
+        _random_pcts = _pct_set(_random_rows)
+        if len(_random_pcts) >= MIN_CONSISTENCY_WINDOWS:
+            _expected_pcts = _random_pcts
+        else:
+            _expected_pcts = _pct_set(_ok_rows)
     incomplete_methods: list[dict] = []
     tiebreak_dependent: list[dict] = []
     tiebreak_gate_applied = tiebreak_col in sub.columns
@@ -933,14 +949,30 @@ def decide_optimal_config_for_pool(
     def _tiebreak_ok(m: str, real_m: pd.DataFrame) -> bool:
         if not tiebreak_gate_applied:
             return True
-        frac = pd.to_numeric(real_m[tiebreak_col], errors="coerce").dropna()
+        raw_frac = pd.to_numeric(real_m[tiebreak_col], errors="coerce")
+        frac = raw_frac.dropna()
         if frac.empty:
             # Poarta e activă la nivel de cadru, dar metoda asta n-are nicio
             # valoare — tratăm ca dependentă, nu ca „poarta nu se aplică",
             # altfel o metodă ne-re-benchată ar ocoli-o permanent.
             tiebreak_dependent.append({"method": m, "tiebreak_fraction": None})
             return False
-        f = float(frac.mean())
+        # Coloana e fracția din BLOCURILE ferestrei. Media neponderată dă
+        # ferestrei de 10% același vot ca celei de 100%. Cu `blocks` (numărul
+        # de blocuri din fold) media e fracția pe toate blocurile evaluate.
+        # La block_size sentinel (un bloc pe fereastră) ponderile sunt 1 și
+        # media rămâne cea veche. Fără coloană, folds de test: media simplă.
+        if "blocks" in real_m.columns:
+            weights = pd.to_numeric(
+                real_m.loc[frac.index, "blocks"], errors="coerce"
+            ).fillna(0.0)
+            wsum = float(weights.sum())
+            if wsum > 0.0:
+                f = float(np.dot(frac.to_numpy(dtype=float), weights.to_numpy()) / wsum)
+            else:
+                f = float(frac.mean())
+        else:
+            f = float(frac.mean())
         if f >= TIEBREAK_MAX_FRACTION:
             tiebreak_dependent.append({"method": m, "tiebreak_fraction": round(f, 3)})
             return False

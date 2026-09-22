@@ -500,7 +500,33 @@ def _bench_transform_note(data: dict) -> str:
     )
 
 
-def _wf_summary(flat) -> str | None:
+def _conditional_cover_note(data: dict | None) -> str:
+    """Text când 100% e acoperirea „t dacă p”, nu coverul clasic t-din-t."""
+    if not isinstance(data, dict):
+        return ""
+    audit = data.get("audit") or {}
+    guarantee = audit.get("wheel_guarantee_used")
+    if guarantee is None:
+        guarantee = data.get("guarantee")
+    condition = audit.get("wheel_condition_used")
+    if condition is None:
+        condition = data.get("wheel_condition")
+    try:
+        if (
+            condition is not None
+            and guarantee is not None
+            and int(condition) > int(guarantee)
+        ):
+            return (
+                f"acoperire condițională 100% ({int(guarantee)} dacă {int(condition)}); "
+                "hitul pe bilet nu e garantat sub această condiție"
+            )
+    except (TypeError, ValueError):
+        return ""
+    return ""
+
+
+def _wf_summary(flat, data: dict | None = None) -> str | None:
     if not flat:
         return None
     from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
@@ -527,7 +553,8 @@ def _wf_summary(flat) -> str | None:
     elif cov["unknown"]:
         cov_txt = f" | acoperire wheel: 100% pe {cov['known']}/{cov['n_draws']} extrageri (restul necunoscute)"
     else:
-        cov_txt = " | acoperire wheel: 100%"
+        _cond = _conditional_cover_note(data)
+        cov_txt = f" | {_cond}" if _cond else " | acoperire wheel: 100%"
     p3 = sum(row["pool"] >= 3 for row in per_draw.values())
     p4 = sum(row["pool"] >= 4 for row in per_draw.values())
     b3 = sum(row["best_ticket"] >= 3 for row in per_draw.values())
@@ -695,7 +722,7 @@ def _build_report() -> str:
             out.append(f"\n=================  JOC: {g.upper()}  =================")
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
-            wf = _wf_summary(flat)
+            wf = _wf_summary(flat, d)
             if wf:
                 out.append(f"  Walk-forward: {wf}")
     return "\n".join(out)
