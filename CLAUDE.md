@@ -300,8 +300,12 @@ UI-ul face polling la o secunda, fara reload complet.
   Modificari necomise, commit-uri divergente sau alta ramura: se pastreaza local,
   cu mesaj explicit. Nu se sterg fisierele .bat personale si nu exista reset fortat.
 - Auto-commit-ul de istoric foloseste `commit --only -- _ISTORIC`, verifica `main`,
-  nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
-  Hook-ul de auto-push este oprit pentru acest commit: push-ul este executat o data.
+ nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
+ Inainte de push face `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat,
+ commit-ul este repus peste `origin/main`; la conflict, `rebase --abort`.
+ Modificarile necomise tot blocheaza merge-ul, dar Sync face fetch ca `origin/main`
+ sa nu ramana vechi. Un `packed-refs.lock` fara proces `git` este sters.
+ Hook-ul de auto-push este oprit pentru acest commit: push-ul este executat o data.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.

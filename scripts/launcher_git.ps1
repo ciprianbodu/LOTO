@@ -111,6 +111,43 @@ function Invoke-LotoGit {
     return $result
 }
 
+function Clear-StaleGitLocks {
+    # Un alt git.exe tine lock-ul. Fara proces, fisierul e ramas (Drive il
+    # sincronizeaza) si blocheaza fetch/push cu "packed-refs.lock: File exists".
+    if (Get-Process -Name 'git' -ErrorAction SilentlyContinue) { return }
+    $dir = Invoke-LotoGit -GitArgs @('rev-parse', '--git-dir')
+    if ($dir.Code -ne 0) { return }
+    $gitDir = $dir.Text.Trim()
+    if (-not [IO.Path]::IsPathRooted($gitDir)) {
+        $gitDir = Join-Path (Get-Location).Path $gitDir
+    }
+    foreach ($name in @('packed-refs.lock', 'index.lock', 'HEAD.lock', 'config.lock')) {
+        $path = Join-Path $gitDir $name
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            Write-Host ('[GIT] Lock vechi eliminat: ' + $name)
+        }
+    }
+    $refs = Join-Path $gitDir 'refs'
+    if (Test-Path -LiteralPath $refs -PathType Container) {
+        Get-ChildItem -LiteralPath $refs -Recurse -Filter '*.lock' -File -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+                Write-Host ('[GIT] Lock vechi eliminat: ' + $_.Name)
+            }
+    }
+}
+
+function Invoke-LotoGitRetry {
+    param([string[]]$GitArgs, [int]$TimeoutSeconds = 45)
+    $result = Invoke-LotoGit -GitArgs $GitArgs -TimeoutSeconds $TimeoutSeconds
+    if ($result.Code -ne 0 -and $result.Text -match 'File exists|Another git process') {
+        Clear-StaleGitLocks
+        $result = Invoke-LotoGit -GitArgs $GitArgs -TimeoutSeconds $TimeoutSeconds
+    }
+    return $result
+}
+
 try {
     if ($Mode -eq 'Detect') {
         $version = Invoke-LotoGit -GitArgs @('--version')
@@ -134,6 +171,7 @@ try {
             throw 'Exista o operatie Git neterminata. Pastrez starea pentru rezolvare manuala.'
         }
     }
+    Clear-StaleGitLocks
     $hooks = Invoke-LotoGit -GitArgs @('config', 'core.hooksPath', 'scripts/git-hooks')
     if ($hooks.Code -ne 0) { throw $hooks.Text }
 
@@ -141,10 +179,21 @@ try {
         $dirty = Invoke-LotoGit -GitArgs @('status', '--porcelain', '--untracked-files=no')
         if ($dirty.Code -ne 0) { throw $dirty.Text }
         if ($dirty.Text) {
-            Write-Host '[GIT] Modificari locale necomise - pastrez versiunea locala integral.'
+            # Nu facem merge peste fisiere necomise, dar fetch-ul aduce
+            # origin/main. Altfel push-ul de istoric vede o referinta veche.
+            Write-Host '[GIT] Modificari locale necomise - pastrez fisierele locale.'
+            $fetch = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
+            if ($fetch.Code -ne 0) {
+                Write-Host '[GIT] Fetch esuat - fisierele locale raman neschimbate.'
+                exit 0
+            }
+            $behind = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'HEAD..origin/main')
+            if ($behind.Code -eq 0 -and [int]$behind.Text -gt 0) {
+                Write-Host '[GIT] origin/main are commit-uri noi. Nu le aplic peste modificarile necomise.'
+            }
             exit 0
         }
-        $fetch = Invoke-LotoGit -GitArgs @('fetch', 'origin')
+        $fetch = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
         if ($fetch.Code -ne 0) { throw $fetch.Text }
         $ahead = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'origin/main..HEAD')
         $behind = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'HEAD..origin/main')
@@ -172,13 +221,40 @@ try {
             if ($commit.Text) { Write-Host $commit.Text }
             if ($commit.Code -ne 0) { throw 'Commit istoric esuat.' }
         }
-        # Retry a previous failed push even if the CSV has no new rows today.
+        # Fetch inainte de numarare: Sync putut fi sarit, iar origin/main local e vechi.
+        $fetch = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
+        if ($fetch.Code -ne 0) { throw $fetch.Text }
+        if ($fetch.Text) { Write-Host $fetch.Text }
         $ahead = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'origin/main..HEAD')
-        if ($ahead.Code -eq 0 -and [int]$ahead.Text -eq 0) {
+        $behind = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'HEAD..origin/main')
+        if ($ahead.Code -ne 0 -or $behind.Code -ne 0) { throw 'origin/main indisponibil.' }
+        if ([int]$ahead.Text -eq 0) {
             Write-Host '[GIT] Istoric la zi.'
             exit 0
         }
-        $push = Invoke-LotoGit -GitArgs @('push', 'origin', 'main')
+        if ([int]$behind.Text -gt 0) {
+            $dirtyNow = Invoke-LotoGit -GitArgs @('status', '--porcelain', '--untracked-files=no')
+            if ($dirtyNow.Code -ne 0) { throw $dirtyNow.Text }
+            if ($dirtyNow.Text) {
+                throw 'main local si origin/main au divergat, iar exista modificari necomise. Commit-ul de istoric ramane local.'
+            }
+            $names = Invoke-LotoGit -GitArgs @('diff', '--name-only', 'origin/main...HEAD')
+            if ($names.Code -ne 0) { throw $names.Text }
+            $outside = @($names.Text -split "`r?`n" | Where-Object {
+                $_ -and $_ -notlike '_ISTORIC/*' -and $_ -ne '_ISTORIC'
+            })
+            if ($outside.Count -gt 0) {
+                throw 'main local are commit-uri in afara _ISTORIC. Integrarea cu origin/main ramane manuala.'
+            }
+            Write-Host '[GIT] Repun commit-urile de istoric peste origin/main.'
+            $rebase = Invoke-LotoGitRetry -GitArgs @('rebase', 'origin/main')
+            if ($rebase.Text) { Write-Host $rebase.Text }
+            if ($rebase.Code -ne 0) {
+                Invoke-LotoGit -GitArgs @('rebase', '--abort') | Out-Null
+                throw 'Rebase esuat - commit-urile raman locale, repository-ul nu ramane in rebase.'
+            }
+        }
+        $push = Invoke-LotoGitRetry -GitArgs @('push', 'origin', 'main')
         if ($push.Text) { Write-Host $push.Text }
         if ($push.Code -ne 0) { throw 'Push esuat - commit-urile raman locale pentru reincercare.' }
         Write-Host '[GIT] Push origin/main reusit.'

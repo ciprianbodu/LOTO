@@ -126,6 +126,61 @@ def test_history_auto_commit_does_not_include_staged_code(
     assert git(origin, 'show', 'main:_ISTORIC/draws.csv') == 'new draw'
 
 
+def test_sync_with_local_edits_fetches_without_touching_files(repos):
+    local, seed, _ = repos
+    (local / 'code.txt').write_text('personal\n')
+    advance(seed)
+    out = run_helper(local)
+    assert 'pastrez fisierele locale' in out
+    assert 'commit-uri noi' in out
+    assert git(local, 'rev-parse', 'HEAD') != git(seed, 'rev-parse', 'HEAD')
+    assert git(local, 'rev-parse', 'origin/main') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'personal\n'
+
+
+def test_stale_packed_refs_lock_does_not_block_fast_forward(repos):
+    local, seed, _ = repos
+    advance(seed)
+    lock = local / '.git' / 'packed-refs.lock'
+    lock.write_text('', encoding='utf-8')
+    run_helper(local)
+    assert not lock.exists()
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_history_push_replays_draw_commit_onto_newer_main(repos):
+    local, seed, origin = repos
+    advance(seed)
+    (local / '_ISTORIC' / 'draws.csv').write_text('local draw\n', encoding='utf-8')
+    out = run_helper(local, 'PushHistory')
+    assert 'Repun commit-urile de istoric' in out
+    assert git(origin, 'show', 'main:_ISTORIC/draws.csv') == 'local draw'
+    assert git(origin, 'show', 'main:code.txt') == 'new'
+    assert git(local, 'rev-parse', 'HEAD') == git(origin, 'rev-parse', 'main')
+    assert not (local / '.git' / 'rebase-merge').exists()
+
+
+def test_history_push_leaves_diverged_code_commits_untouched(repos):
+    local, seed, origin = repos
+    (local / 'code.txt').write_text('personal\n', encoding='utf-8')
+    commit(local, 'personal work')
+    advance(seed)
+    (local / '_ISTORIC' / 'draws.csv').write_text('draw\n', encoding='utf-8')
+    head = git(local, 'rev-parse', 'HEAD')
+    p = subprocess.run(
+        [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+         str(HELPER), '-Mode', 'PushHistory', '-ProjectDir', str(local)],
+        capture_output=True, text=True, errors='replace', timeout=60,
+    )
+    assert p.returncode != 0, p.stdout + p.stderr
+    assert 'in afara _ISTORIC' in (p.stdout + p.stderr)
+    assert git(local, 'log', '-1', '--format=%s') == 'auto: update istoric extrageri'
+    assert git(local, 'rev-parse', 'HEAD') != head
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+    assert not (local / '.git' / 'rebase-merge').exists()
+    assert (local / 'code.txt').read_text() == 'personal\n'
+
+
 def test_history_retries_unpushed_commit_with_no_csv_changes(repos):
     local, _, origin = repos
     (local / '_ISTORIC' / 'draws.csv').write_text('retry draw\n')
