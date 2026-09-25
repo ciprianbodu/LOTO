@@ -299,6 +299,11 @@ UI-ul face polling la o secunda, fara reload complet.
   Codul si lansatoarele se actualizeaza impreuna; nu se descarca fragmente cu curl.
   Modificari necomise, commit-uri divergente sau alta ramura: se pastreaza local,
   cu mesaj explicit. Nu se sterg fisierele .bat personale si nu exista reset fortat.
+- Pe un folder sincronizat in cloud (Google Drive, OneDrive, Dropbox),
+  `launcher_git.ps1` cere o data fixarea offline (`attrib +P /S /D`, marcaj in
+  `.git\loto-offline-pin`) si ridica limita pe comanda git de la 45 la 180 s.
+  Fixarea esuata se raporteaza cu pasul manual si nu opreste sincronizarea.
+  Recomandarea ramane repository-ul pe disc local.
 - Auto-commit-ul de istoric foloseste `commit --only -- _ISTORIC`, verifica `main`,
  nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
  Inainte de push face `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat,
