@@ -52,9 +52,14 @@ Snapshot verificat la 2026-09-15:
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
-- cache benchmark: `v20` (SES cu s_0 = x_0 pe toata seria; `theta_drift` pe
- prognoza liniara a ratei glisante);
-- cache walk-forward: `v26` (acelasi motiv: pool-ul generat se schimba);
+- cache benchmark: `v21` (Loto 5/40 citeste toate cele 6 numere extrase);
+- cache walk-forward: `v27` (acelasi motiv: pool-ul si hiturile 5/40 se schimba);
+- Loto 5/40 = 6 numere extrase din 40, bilet de 5. Istoricul scorerilor,
+  hiturile de bench/WF/UI si baseline-ul random folosesc n1..n6 (`draw_n = 6`);
+  biletul, garantia, sistemul complet, costul si pool-ul de baza (k5) folosesc
+  `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
+  separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
+  marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
 - teste: 63 fisiere `test_*.py`, 1348 de teste (renumarat la 2026-09-25). Pe
   Python 3.14.0rc2 (containerul de audit) trec toate testele care nu importa
@@ -325,12 +330,17 @@ UI-ul face polling la o secunda, fara reload complet.
 | Cheie | Geometrie | Tinta deciziei |
 |---|---:|---|
 | `loto_6_49` | 6/49 | 3+ implicit sau 4+ |
-| `loto_5_40` | 5/40 | 3+ implicit sau 4+ |
+| `loto_5_40` | 6 extrase din 40, bilet de 5 | mereu 4+ (3 numere nu aduc premiu) |
 | `joker_urna1` | 5/45 | 3+ implicit sau 4+ |
 | `joker_urna2` | 1/20 | top-1, independent de tinta globala |
 
 `LOTO_BENCH_TARGET` accepta numai 3 sau 4 pentru jocurile de pool. Orice alta
-valoare este clampata. Urna 2 scrie si consuma `rate_1plus_k1`; baseline-ul
+valoare este clampata. Tinta efectiva per joc vine din
+`hit_target.game_hit_target`: 5/40 are minim 4 (`GAME_MIN_HIT_TARGET`), deci
+selectorul global 3 nu il coboara, iar 4 il lasa pe 4. Geometria
+(extrase, bilet) per joc este `hit_target.GAME_DRAW_PICK`; decizia o ia de acolo
+pentru jocurile cunoscute, chiar daca un `best_methods.json` vechi are
+`draw_n = 5` la 5/40. Urna 2 scrie si consuma `rate_1plus_k1`; baseline-ul
 aleator exact este 5%.
 
 ### Selectia unei metode
@@ -487,7 +497,7 @@ limita de validitate din §5).
   punct de plecare 10..(max_n - 9) — NU o recomandare, doar ca bifa sa nu se
   deschida pe campuri goale; utilizatorul schimba liber. Un capat lasat pe 0
   ramane liber; intervalul inversat (min > max) si cel mai ingust decat un bilet
-  (span < `draw_n`) sunt IGNORATE si consemnate in `audit.restrict_base.ignored`, nu
+  (span < numerele de pe bilet, `play_n`) sunt IGNORATE si consemnate in `audit.restrict_base.ignored`, nu
   aplicate tacit. Fara a doua garda, 47-49 la 6/49 lasa trei candidati, iar
   wheeling-ul trateaza `len(pool) < pick` drept sistem complet cu un bilet:
   pipeline-ul raporta `[47, 48, 49]` ca bilet 6/49 cu acoperire 100%. FARA
@@ -560,8 +570,9 @@ extragerile din aceeasi zi din scorare. Raportul din
 `scripts/analysis/budget_cover_report_2026-09-12.md` include toate configurarile,
 intervale Wilson, test pereche si corectie Holm pentru 24 de comparatii.
 Acoperirea creste, dar avantajul istoric nu trece pragul ajustat de 5%;
-metoda ramane experimentala. Joker masoara numai Urna 1, iar 5/40 foloseste
-n1..n5, conform contractului aplicatiei, nu toate categoriile oficiale de premii.
+metoda ramane experimentala. Joker masoara numai Urna 1, iar la 5/40 raportul
+din 2026-09-12 a folosit n1..n5 (contractul de atunci); aplicatia numara acum
+hiturile 5/40 pe toate cele 6 numere extrase.
 
 Reguli:
 
@@ -611,7 +622,8 @@ castigul depinde de geometrie, scoruri si hardware.
 - WF foloseste numai date anterioare extragerii validate.
 - UI valideaza onest pool-ul unic.
 - `hits` = maximul pe un singur bilet.
-- `hits_union` = intersectia pool-ului cu extragerea.
+- `hits_union` = intersectia pool-ului cu extragerea (la 5/40, cu toate cele
+  6 numere extrase; biletul ramane de 5).
 - `wheel_coverage=None` inseamna necunoscut, nu 100%.
 - Adancimea UI este 30% din istoric.
 - Bugetul implicit este 90 minute si permite rezultat partial; la urmatoarea
@@ -631,8 +643,8 @@ hash-ul designului si, pentru Joker, decizia Urnei 2.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v20` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v26` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| walk-forward | `v27` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
 | worker pipeline | `v5` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job

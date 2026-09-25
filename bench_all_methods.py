@@ -260,7 +260,7 @@ def main() -> int:
             + (
                 "metrică = top-1 (1/1), pool = 1 [italic dim](single-pick)[/italic dim]"
                 if g.is_single_pick
-                else f"pool_range = {g.draw_n}..{g.draw_n + g.pool_extra}"
+                else f"pool_range = {g.base_k}..{g.base_k + g.pool_extra}"
             )
         )
     console.print()
@@ -369,6 +369,7 @@ def main() -> int:
             gk: {
                 "label": gd["label"],
                 "draw_n": gd["draw_n"],
+                "pick_n": gd.get("pick_n", gd["draw_n"]),
                 # Backward-compat (used by older method_selector callers):
                 "overall_winner": gd["overall_winner"],
                 "winners_per_pool": {

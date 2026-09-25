@@ -25,7 +25,7 @@ from loto_enterprise.core.draw_validation import valid_draw_matrix
 
 GEOMETRIES = [
     ("_ISTORIC/loto_6_49.csv", [f"n{i}" for i in range(1, 7)], 6, 49),
-    ("_ISTORIC/loto_5_40.csv", [f"n{i}" for i in range(1, 6)], 5, 40),
+    ("_ISTORIC/loto_5_40.csv", [f"n{i}" for i in range(1, 7)], 6, 40),
 ]
 
 

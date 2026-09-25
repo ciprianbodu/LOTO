@@ -85,7 +85,7 @@ class PipelineMixin:
         wheel_condition: numărul de numere din pool care trebuie să cadă pentru
             ca garanția să se aplice (lotto design „guarantee dacă condition").
             None, 0 sau egal cu garanția = cover clasic „guarantee dacă guarantee".
-            Se limitează la [guarantee, draw_n].
+            Se limitează la [guarantee, play_n] (numere pe bilet).
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
@@ -110,7 +110,9 @@ class PipelineMixin:
         # UI la 3..draw_n, însă engine-ul rămâne API public și apără inclusiv
         # apelurile directe: guarantee=0 ar acoperi formal doar mulțimea vidă și
         # ar raporta absurd 100%.
-        _draw_n = int(self.params["draw_n"])
+        # Biletul are `play_n` numere (5/40: 5, deși se extrag 6); garanția și
+        # condiția lotto se raportează la BILET, nu la extragere.
+        _draw_n = int(self.params.get("play_n", self.params["draw_n"]))
         if int(guarantee) < 1:
             logging.warning(
                 "[PIPELINE] Garanție %s < 1 — imposibilă; o limitez la 1.",
@@ -119,7 +121,7 @@ class PipelineMixin:
             guarantee = 1
         if int(guarantee) > _draw_n:
             logging.warning(
-                "[PIPELINE] Garanție %s > numere extrase (%s) — imposibil; "
+                "[PIPELINE] Garanție %s > numere pe bilet (%s) — imposibil; "
                 "o limitez la %s.",
                 guarantee,
                 _draw_n,
@@ -366,7 +368,7 @@ class PipelineMixin:
         # Interval inversat (min > max) ar goli complet baza de candidați și ar
         # lăsa pool-ul pe seama fallback-ului. Îl ignorăm și consemnăm motivul,
         # în loc să producem tăcut un pool care nu respectă nicio setare.
-        _draw_n_ticket = int(self.params["draw_n"])
+        _draw_n_ticket = int(self.params.get("play_n", self.params["draw_n"]))
         _span = restrict_max - restrict_min + 1
         _reason = ""
         if restrict_min > restrict_max:
@@ -412,7 +414,7 @@ class PipelineMixin:
         self.hard_core = self._get_timesfm_pool(
             tfm_scores, pool_size=pool_size, blacklist=blacklist
         )
-        if len(self.hard_core) < int(self.params["draw_n"]):
+        if len(self.hard_core) < int(self.params.get("play_n", self.params["draw_n"])):
             raise ValueError("Pool insuficient pentru un bilet valid după selecție")
 
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
@@ -590,7 +592,8 @@ class PipelineMixin:
         p10, p90 = (
             np.percentile(final_freq, [10, 90]) if final_freq.size else (0.0, 0.0)
         )
-        g_range = [p10 * self.params["draw_n"], p90 * self.params["draw_n"]]
+        _play_n = int(self.params.get("play_n", self.params["draw_n"]))
+        g_range = [p10 * _play_n, p90 * _play_n]
 
         context = {"first_3": [], "last_3": []}
         if self.data is not None and not self.data.empty:

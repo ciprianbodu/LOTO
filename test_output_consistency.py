@@ -19,7 +19,10 @@ def test_pool_odds_are_consistent_in_render_and_report(monkeypatch):
         "context": {"coverage_pct": 100.0},
     }
     lines = ui_results._wheel_probability_lines("5/40", data)
-    assert any("toate cele 6" in line and "%" in line for line in lines)
+    # 5/40: șansele se calculează pe toate cele 6 numere extrase (bilet de 5).
+    assert any("toate cele 6" in line for line in lines)
+    assert any("4+ numere" in line and "%" in line for line in lines)
+    assert any("Categoria I" in line and "nu este modelată" in line for line in lines)
     assert any("3 numere nu aduc premiu" in line for line in lines)
     with capture_ui() as ui:
         ui_results._render_cost("5/40", data)

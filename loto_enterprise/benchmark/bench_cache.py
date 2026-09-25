@@ -67,7 +67,8 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v20"
+CACHE_VERSION = "v21"
+# v21: Loto 5/40 = 6 numere extrase (n1..n6, hituri pe toate 6), bilet de 5.
 # v20: SES pornește din x_0 pe toată seria (`_ses_series`), nu doar la primul
 #      pas; `theta_drift` scorează prognoza liniară a ratei glisante, nu media
 #      indicatorului. Se schimbă `ses_opt_alpha`, `imapa_agg` și `theta_drift`.

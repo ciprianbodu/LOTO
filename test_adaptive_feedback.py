@@ -270,7 +270,7 @@ def test_load_state_missing_file_returns_empty(isolated_state):
     [
         ("6/49", 12, 6 * 12 / 49),
         ("6/49", 15, 6 * 15 / 49),
-        ("5/40", 12, 5 * 12 / 40),
+        ("5/40", 12, 6 * 12 / 40),  # 5/40: 6 numere extrase
         ("joker", 12, 5 * 12 / 45),
     ],
 )

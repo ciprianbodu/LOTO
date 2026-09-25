@@ -137,7 +137,10 @@ def _remove_temp_csv(temp_csv_path: str) -> None:
 
 
 def _map_game_label(game_label: str) -> tuple[str, int]:
-    """Rezolvă eticheta de joc din UI la (cheia engine-ului, draw_n).
+    """Rezolvă eticheta de joc din UI la (cheia engine-ului, numere pe BILET).
+
+    Al doilea element e dimensiunea biletului (plafonul garanției), nu a
+    extragerii: la 5/40 se extrag 6 numere, dar biletul are 5.
 
     Fallback implicit "6/49" — un label necunoscut nu are voie să blocheze
     jobul, doar să ruleze pe geometria implicită."""

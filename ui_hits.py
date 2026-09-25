@@ -257,8 +257,11 @@ def _render_hits_4plus(
         ).classes("text-warning text-caption text-bold")
     # (1) Sumar comparabil: +3 / +4 pe pool, baseline hipergeometric și volumul
     # real de variante din WF. Premiile nu pot fi deduse din hiturile Urnei 1.
-    _TT = _bench_target()
     gk = _game_label_for(game)
+    # Ținta per joc, ca decizia: 5/40 rămâne pe 4+ (3 numere nu aduc premiu).
+    from loto_enterprise.benchmark.hit_target import game_hit_target
+
+    _TT = game_hit_target("loto_5_40" if gk == "5/40" else str(gk), _bench_target())
     # Pool-ul REAL (nu string fix „din 16"): meta WF (salvat la rulare) are prioritate,
     # apoi rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
     _pn = int((meta or {}).get("pool_size") or pool_n or 0)

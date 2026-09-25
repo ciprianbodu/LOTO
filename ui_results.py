@@ -196,7 +196,8 @@ def _render_stages(audit: dict) -> None:
 def _render_cost(game: str, data: dict) -> None:
     gk = _game_label_for(game)
     price = PRICES.get(gk, 8.0)
-    draw_n = 6 if gk == "6/49" else 5
+    # Numere pe BILET (5/40 extrage 6, dar varianta are 5).
+    draw_n = _ticket_pick(gk)
     pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
 
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
@@ -297,12 +298,15 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     pool, variants = data.get("hard_core") or [], data.get("variants") or []
     if not params or not pool or not variants:
         return []
-    pick, max_num = params
+    draw_n, max_num = params
+    pick = _ticket_pick(game)
     is_joker = "joker" in str(game).lower()
     try:
         if any(len(v) != pick + int(is_joker) for v in variants):
             raise ValueError("lungime variantă invalidă")
-        odds = wheel_hit_probabilities(pool, [v[:pick] for v in variants], pick, max_num)
+        odds = wheel_hit_probabilities(
+            pool, [v[:pick] for v in variants], draw_n, max_num
+        )
     except (ValueError, TypeError):
         return ["Șanse teoretice indisponibile: pool sau variante invalide."]
     lines = [
@@ -314,14 +318,10 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
         ),
     ]
     if max_num == 40:
-        all_six = wheel_hit_probabilities(pool, variants, 6, 40)
         lines.append(
-            f"5/40 — cel puțin 4 din toate cele 6 numere extrase pe o variantă: "
-            f"{100 * all_six['ticket'][4]:.3f}%."
-        )
-        lines.append(
-            "5/40: analiza folosește primele 5 numere extrase (referința categoriei I). "
-            "3 numere nu aduc premiu; categoriile II/III folosesc toate cele 6 numere extrase."
+            "5/40: hiturile se numără pe toate cele 6 numere extrase (varianta are 5); "
+            "3 numere nu aduc premiu, de aceea ținta bench-ului la 5/40 este 4+. "
+            "Categoria I (5 din primele 5 extrase) nu este modelată separat."
         )
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
@@ -331,6 +331,7 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
 
 def _hypergeo_params(game: str) -> tuple[int, int] | None:
     """(n numere extrase, M univers) pentru baseline-ul random hipergeometric.
+    5/40 = (6, 40): hiturile se numără pe toate cele 6 numere extrase.
     Acceptă etichete UI ("6/49", "5/40", "joker") și chei folds ("loto_6_49",
     "joker_urna1"). Urna 2 Joker are baseline exact separat în
     `_random_rate_hypergeo` (top-1 = 1/20)."""
@@ -338,12 +339,18 @@ def _hypergeo_params(game: str) -> tuple[int, int] | None:
     if "6" in g and "49" in g:
         return (6, 49)
     if "5" in g and "40" in g:
-        return (5, 40)
+        return (6, 40)  # 5/40: se extrag 6 numere, hiturile se numără pe toate 6
     if "urna2" in g:
         return None
     if "joker" in g:
         return (5, 45)
     return None
+
+
+def _ticket_pick(game: str) -> int:
+    """Numere pe BILET: 6 la 6/49, 5 la 5/40 și Joker (Urna 1)."""
+    g = str(game).lower()
+    return 6 if ("6" in g and "49" in g) else 5
 
 
 def _random_rate_hypergeo(game: str, k_pool: int, t_min: int) -> float | None:

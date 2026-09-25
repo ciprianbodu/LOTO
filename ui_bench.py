@@ -59,6 +59,8 @@ _LABEL_TO_FOLDS_GAME = {
     "5/40": "loto_5_40",
     "joker": "joker_urna1",
 }
+# Pool-ul de BAZĂ al fiecărui joc (= numere pe bilet; coloana fără `_kN`), nu
+# numărul de numere extrase: 5/40 extrage 6, dar biletul și pool-ul de bază au 5.
 _BENCH_DRAW_N = {
     "loto_6_49": 6,
     "loto_5_40": 5,
@@ -280,6 +282,11 @@ def _render_bench_leaderboard_slice(
     _is_single_pick = _draw_n == 1
     if _is_single_pick:
         _T = 1
+    else:
+        # Aceeași țintă per joc ca decizia: 5/40 rămâne pe 4+.
+        from loto_enterprise.benchmark.hit_target import game_hit_target
+
+        _T = game_hit_target(folds_game_key, _T)
     _shown_t, metric = _T, None
     _target_candidates = [f"rate_{_T}plus_k{pool}"]
     if _draw_n is not None and int(pool) == int(_draw_n):
@@ -1035,10 +1042,10 @@ def _last_csv_draw(fname: str):
             pass
     if not nums:
         return None
-    # 5/40 are n6 în CSV (istoric), dar Cat. I e doar primele 5 — engine-ul taie
-    # la draw_n. Afișăm ACEEAȘI tăiere, nu un al 6-lea număr care nu e jucat.
+    # 5/40 extrage 6 numere și hiturile se numără pe toate 6 (engine-ul citește
+    # n1..n6); Joker are 5 în Urna 1, plus jokerul afișat separat.
     label = _game_label_for(fname)
-    draw_n = 5 if label in ("5/40", "joker") else 6
+    draw_n = 5 if label == "joker" else 6
     nums = nums[:draw_n]
     joker = None
     if "joker" in cols:

@@ -225,7 +225,8 @@ def _wf_worker_step(args: dict):
         return None
 
 
-_GAME_DRAW_N = {
+# Numere pe BILET (nu pe extragere): 5/40 extrage 6, dar biletul are 5.
+_GAME_PICK_N = {
     "6/49": 6,
     "5/40": 5,
     "joker": 5,
@@ -238,7 +239,7 @@ def scored_variant_numbers(variant: list[int], game_type: str) -> list[int]:
     Joker tickets include the Urna 2 value for display; it must not count as an
     Urna 1 hit in backtests or walk-forward expansion.
     """
-    draw_n = int(_GAME_DRAW_N.get(game_type, 6))
+    draw_n = int(_GAME_PICK_N.get(game_type, 6))
     vals = [int(n) for n in list(variant)]
     if game_type == "joker":
         return vals[:draw_n]
@@ -380,9 +381,11 @@ class LotoBacktester:
                 "num_cols": ["n1", "n2", "n3", "n4", "n5", "n6"],
             },
             "5/40": {
+                # 6 numere extrase (hiturile se numără pe toate 6), bilet de 5.
                 "max_n": 40,
-                "draw_n": 5,
-                "num_cols": ["n1", "n2", "n3", "n4", "n5"],
+                "draw_n": 6,
+                "pick_n": 5,
+                "num_cols": ["n1", "n2", "n3", "n4", "n5", "n6"],
             },
             "joker": {
                 "max_n": 45,
@@ -475,6 +478,10 @@ class LotoBacktester:
 
         return cols[: self.params["draw_n"]]
 
+    def _pick_n(self) -> int:
+        """Numere pe bilet (hit_rate = hituri / bilet); 5/40: 5 din 6 extrase."""
+        return int(self.params.get("pick_n", self.params["draw_n"]))
+
     def _scored_variant_numbers(self, variant: list[int]) -> list[int]:
         return scored_variant_numbers(variant, self.game_type)
 
@@ -539,7 +546,7 @@ class LotoBacktester:
 
             hit_count = len(hit_numbers)
             hit_rate = (
-                hit_count / self.params["draw_n"] if self.params["draw_n"] > 0 else 0
+                hit_count / self._pick_n() if self._pick_n() > 0 else 0
             )
 
             results.append(
@@ -609,7 +616,7 @@ class LotoBacktester:
 
         # Vectorized hit counting: variant_bin @ draw_bin.T în loc de loop dublu.
         max_n = int(self.params["max_n"])
-        draw_n = int(self.params["draw_n"])
+        pick_n = self._pick_n()
         V = len(variants)
         D = len(target_draws)
 
@@ -644,7 +651,7 @@ class LotoBacktester:
                         variant=variant,
                         hits=h,
                         hit_numbers=set(),  # lazy: populat doar pentru top performers
-                        hit_rate=(h / draw_n) if draw_n > 0 else 0.0,
+                        hit_rate=(h / pick_n) if pick_n > 0 else 0.0,
                         hits_union=int(union_hits_per_draw[di]),
                     )
                 )
@@ -679,7 +686,7 @@ class LotoBacktester:
             avg_hits_per_draw=float(np.mean(hits_array))
             if len(hits_array) > 0
             else 0.0,
-            avg_hit_rate=float(np.mean(hits_array / self.params["draw_n"]))
+            avg_hit_rate=float(np.mean(hits_array / self._pick_n()))
             if len(hits_array) > 0
             else 0.0,
             best_draw_hits=int(np.max(hits_array)) if len(hits_array) > 0 else 0,

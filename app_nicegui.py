@@ -1555,7 +1555,7 @@ def _refresh_status() -> None:
 # --------------------------------------------------------------------------- #
 _BASE_TABLE_GAMES = (
     ("6/49", "loto_6_49.csv", 6, 49),
-    ("5/40", "loto_5_40.csv", 5, 40),
+    ("5/40", "loto_5_40.csv", 6, 40),  # 6 numere extrase
     ("Joker — Urna 1 (5/45)", "joker.csv", 5, 45),
 )
 
@@ -2012,6 +2012,10 @@ def main_page() -> None:
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
         ).classes("w-full")
+        ui.label(
+            "Ținta se aplică la 6/49 și Joker (Urna 1). Loto 5/40 rămâne mereu pe 4+: "
+            "hiturile se numără pe toate cele 6 numere extrase, iar 3 numere nu aduc premiu."
+        ).classes("text-caption text-grey")
         ui.label(
             f"Validarea pool-ului (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric): "
             "Joker → 5/40 → 6/49 (6/49 ultim). "

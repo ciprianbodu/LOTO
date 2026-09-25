@@ -59,7 +59,7 @@ _HISTORY_MAXLEN = 50
 # (draw_n, max_n) per joc — pentru E(hits) al unui pool ales la întâmplare.
 _GAME_GEOMETRY = {
     "6/49": (6, 49),
-    "5/40": (5, 40),
+    "5/40": (6, 40),  # 6 numere extrase; hiturile se numără pe toate 6
     "joker": (5, 45),
 }
 

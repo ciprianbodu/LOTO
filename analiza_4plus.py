@@ -50,10 +50,10 @@ def main() -> int:
     for game, gdf in df.groupby("game"):
         print(f"\n=== {game} ===")
         g = _geo.get(game)
-        baseline = expected_random_rate(g.max_num, g.draw_n, g.draw_n, 4) if g else None
+        baseline = expected_random_rate(g.max_num, g.draw_n, g.base_k, 4) if g else None
         if baseline is not None:
             print(
-                f"  baseline random (hipergeometric, k={g.draw_n}): 4+: {baseline * 100:.2f}%"
+                f"  baseline random (hipergeometric, k={g.base_k}): 4+: {baseline * 100:.2f}%"
             )
         # Top procente de backtesting după rate_4plus MEDIU (peste toate metodele)
         by_pct = (

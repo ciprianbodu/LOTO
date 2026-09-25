@@ -140,7 +140,7 @@ def compute_csv_signature(game_key: str) -> tuple[str | None, str, int]:
         return None, "", 0
     cols_map = {
         "loto_6_49": ["n1", "n2", "n3", "n4", "n5", "n6"],
-        "loto_5_40": ["n1", "n2", "n3", "n4", "n5"],
+        "loto_5_40": ["n1", "n2", "n3", "n4", "n5", "n6"],
         "joker_urna1": ["n1", "n2", "n3", "n4", "n5"],
         "joker_urna2": ["joker"],
     }

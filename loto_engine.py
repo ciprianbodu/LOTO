@@ -96,7 +96,10 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             },
             "5/40": {
                 "max_n": 40,
-                "draw_n": 5,
+                # 5/40: se extrag 6 numere (hiturile se numără pe toate 6;
+                # categoria I = 5 din primele 5 nu e modelată separat), biletul
+                # are 5. draw_n = extragere, play_n = bilet.
+                "draw_n": 6,
                 "play_n": 5,
                 "scheme": "2-1-2",
                 "lookback": 25,
@@ -176,7 +179,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                     if str(c).lower().startswith("n") and str(c).lower() != "numbers"
                 ],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
-            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I), nu toate 6
+            )[: int(self.params["draw_n"])]  # 5/40 = toate cele 6 extrase
             nums = []
             for c in n_cols:
                 if c in row and pd.notna(row[c]):
@@ -281,7 +284,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             n_cols = sorted(
                 [c for c in self.data.columns if str(c).lower().startswith("n")],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
-            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
+            )[: int(self.params["draw_n"])]  # 5/40 = toate cele 6 extrase
             if n_cols:
                 raw_vals = self.data[n_cols].values.ravel()
                 all_numbers = raw_vals[~np.isnan(raw_vals)].astype(int).tolist()
@@ -370,7 +373,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             variants, coverage_pct = generate_wheel(
                 "lotto",
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=self.params["play_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
@@ -407,7 +410,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             variants, coverage_pct = generate_wheel(
                 _wheel_method,
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=self.params["play_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
@@ -415,7 +418,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         else:
             variants, coverage_pct = generate_combinatorial_wheel(
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=self.params["play_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
