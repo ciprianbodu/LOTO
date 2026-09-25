@@ -137,6 +137,8 @@ class WalkForwardResult:
     # Contează fiindcă `hits_union` e hit de POOL: „3 în pool" ⇔ „3 pe un bilet"
     # doar la 100% acoperire (şi guarantee ≥ 3); sub 100% e un PLAFON.
     wheel_coverage: float | None = None
+    # Joker: numarul din urna 2 a iesit la aceasta extragere (None = alt joc/necunoscut).
+    joker_hit: bool | None = None
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -215,6 +217,8 @@ def per_draw_hit_summary(flat) -> dict:
                 "pool": int(getattr(p, "hits_union", 0) or 0),
                 "best_ticket": int(getattr(p, "hits", 0) or 0),
             }
+            if getattr(p, "joker_hit", None) is not None:
+                per[draw_index]["joker"] = bool(p.joker_hit)
         else:
             row["best_ticket"] = max(
                 int(row["best_ticket"]), int(getattr(p, "hits", 0) or 0)
@@ -537,6 +541,7 @@ def expand_predictions_to_flat(
                     hits_union=p.hits_union,
                     target_draw_date=p.target_draw_date,
                     wheel_coverage=getattr(p, "wheel_coverage", None),
+                    joker_hit=getattr(p, "joker_hit", None),
                 )
             )
     return flat

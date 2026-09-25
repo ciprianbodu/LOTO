@@ -199,6 +199,7 @@ def _retroactive_step_stateless(
         draw_index=sim_idx,
         wheel_coverage=coverage_from_context(ctx),
         hard_core=list(engine.hard_core),
+        joker_hit=_joker_hit(df, sim_idx, lines) if game_type == "joker" else None,
     )
 
 
@@ -335,6 +336,22 @@ class RetroactivePrediction:
     # necesar apelantului cu stare (adaptive feedback) pentru
     # pasul URMĂTOR. None pentru orice construcție care nu-l pasează explicit.
     hard_core: list[int] | None = None
+    # Joker: numarul din urna 2 de pe bilete a iesit? None = alt joc sau necunoscut.
+    joker_hit: bool | None = None
+
+
+def _joker_hit(df, sim_idx: int, lines) -> bool | None:
+    """Numarul Joker de pe bilete (ultimul element) fata de coloana `joker`."""
+    if not lines or len(lines[0]) <= 5 or "joker" not in df.columns:
+        return None
+    try:
+        actual = int(df.iloc[sim_idx]["joker"])
+        predicted = int(lines[0][5])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if not 1 <= actual <= 20:
+        return None
+    return predicted == actual
 
 
 class LotoBacktester:

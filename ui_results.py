@@ -560,10 +560,17 @@ def _wf_summary(flat, data: dict | None = None) -> str | None:
     p4 = sum(row["pool"] >= 4 for row in per_draw.values())
     b3 = sum(row["best_ticket"] >= 3 for row in per_draw.values())
     b4 = sum(row["best_ticket"] >= 4 for row in per_draw.values())
+    jk = [row.get("joker") for row in per_draw.values() if row.get("joker") is not None]
+    jk_txt = (
+        f" | Joker urna 2: {sum(jk)}/{len(jk)} ({sum(jk) / len(jk) * 100:.1f}%; "
+        "aleator 5%)"
+        if jk
+        else ""
+    )
     return (
         f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
         f"| best pool={bp} | best bilet={bv} "
-        f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4}{cov_txt}"
+        f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4}{cov_txt}{jk_txt}"
     )
 
 

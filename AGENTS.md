@@ -624,6 +624,8 @@ castigul depinde de geometrie, scoruri si hardware.
 - `hits` = maximul pe un singur bilet.
 - `hits_union` = intersectia pool-ului cu extragerea (la 5/40, cu toate cele
   6 numere extrase; biletul ramane de 5).
+- Joker: `joker_hit` = numarul din urna 2 de pe bilete a iesit la acea extragere
+  (`None` = alt joc sau cache vechi). Sumarul WF il afiseaza fata de aleator 5%.
 - `wheel_coverage=None` inseamna necunoscut, nu 100%.
 - Adancimea UI este 30% din istoric.
 - Bugetul implicit este 90 minute si permite rezultat partial; la urmatoarea
