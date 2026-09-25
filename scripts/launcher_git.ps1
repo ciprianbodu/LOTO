@@ -101,7 +101,11 @@ function Invoke-LotoGit {
         # Only this Git invocation and its children; never an application worker.
         & "$env:SystemRoot\System32\taskkill.exe" /F /T /PID $process.Id 2>&1 | Out-Null
         $process.Dispose()
-        throw 'Git a depasit timpul de asteptare; operatia s-a oprit.'
+        $message = 'Git a depasit ' + $TimeoutSeconds + ' s la "git ' + ($GitArgs -join ' ') + '"; operatia s-a oprit.'
+        if ($info.WorkingDirectory -match 'My Drive|Google Drive|OneDrive|Dropbox') {
+            $message += ' Proiectul este intr-un folder sincronizat in cloud (' + $info.WorkingDirectory + '); acolo git citeste lent fiecare fisier. Tineti repository-ul pe disc local.'
+        }
+        throw $message
     }
     $result = [pscustomobject]@{
         Code = $process.ExitCode
