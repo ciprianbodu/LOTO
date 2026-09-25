@@ -3,7 +3,7 @@
 apply_curation() calcula `missing_required` (random/frequency lipsa din
 `active`) doar pentru log, fara sa reinjecteze metodele in `kept` — un
 `curated_methods.json` editat manual fara "random"/"frequency" excludea
-tacut ambele din Re-Bench, contrazicand regula de aur CLAUDE.md §4.3
+tacut ambele din Re-Bench, contrazicand regula de aur AGENTS.md §4.3
 ("trebuie sa ramana in lista activa")."""
 from __future__ import annotations
 

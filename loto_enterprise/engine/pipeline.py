@@ -59,7 +59,7 @@ class PipelineMixin:
         worker.py într-un dict cu chei fixe, deci cheile în plus se ignoră fără
         eroare. Nu reintroduce filtre structurale (paritate, sume, decade,
         poziție, secvențe): ele constrâng combinația, nu prezic un număr
-        (CLAUDE.md §4.2).
+        (AGENTS.md §4.2).
 
         `pure_bench_mode` rămâne acceptat pentru compatibilitatea contractului
         UI↔worker, la fel ca `should_use_blacklist`: telemetrie, nu buton de

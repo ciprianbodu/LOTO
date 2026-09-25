@@ -84,7 +84,7 @@ def _curation_banner_info():
 
     Întoarce None dacă nu e nicio curare activă (fișier absent/gol → bench-ul
     rulează toate metodele available). Curarea e complet REVERSIBILĂ — vezi
-    CLAUDE.md.
+    AGENTS.md.
     """
     try:
         from loto_enterprise.benchmark.curated import apply_curation, curated_path

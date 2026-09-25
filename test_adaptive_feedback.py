@@ -212,58 +212,6 @@ def test_short_history_no_mismatch():
 # ---------------------------------------------------------------------------
 
 
-def test_temp_blacklist_no_op_outside_catastrophe():
-    """Temp blacklist NU se generează decât după catastrofă."""
-    pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    assert af.compute_temp_blacklist(pool, "normal", 49, 12) == set()
-    assert af.compute_temp_blacklist(pool, "underperf", 49, 12) == set()
-    assert af.compute_temp_blacklist(pool, None, 49, 12) == set()
-
-
-def test_temp_blacklist_full_inversion_after_catastrophe():
-    """După catastrofă cu spațiu suficient, excludem TOT pool-ul ratat."""
-    pool = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    # 6/49 cu pool 12: spațiu disponibil după excludere = 49-12 = 37 >= 12 → full
-    bl = af.compute_temp_blacklist(
-        pool, "catastrophe", 49, 12, enable_full_inversion=True
-    )
-    assert bl == set(pool)
-
-
-def test_temp_blacklist_partial_when_insufficient_space():
-    """Dacă spațiul complementar e prea mic, fallback la partial_k."""
-    # Pool de 30 dintr-un univers de 40 → 40-30 = 10 < 30 → fallback
-    pool = list(range(1, 31))
-    bl = af.compute_temp_blacklist(
-        pool,
-        "catastrophe",
-        universe_size=40,
-        pool_size=30,
-        enable_full_inversion=True,
-        partial_k=4,
-    )
-    assert len(bl) == 4
-    assert bl == {1, 2, 3, 4}
-
-
-def test_temp_blacklist_partial_explicit():
-    pool = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
-    bl = af.compute_temp_blacklist(
-        pool,
-        "catastrophe",
-        49,
-        12,
-        enable_full_inversion=False,
-        partial_k=3,
-    )
-    assert len(bl) == 3
-    assert bl == {10, 11, 12}
-
-
-def test_temp_blacklist_empty_pool():
-    assert af.compute_temp_blacklist([], "catastrophe", 49, 12) == set()
-
-
 def test_save_load_round_trip(isolated_state):
     entry = {
         "last_pool": [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 47, 49],

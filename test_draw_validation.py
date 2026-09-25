@@ -1,6 +1,6 @@
 """Teste pentru contractul comun de validare a extragerilor
 (`loto_enterprise.core.draw_validation.valid_draw_matrix`), consumat identic de
-engine, benchmark și walk-forward (CLAUDE.md §4.1). Fisier lipsa pana acum
+engine, benchmark și walk-forward (AGENTS.md §4.1). Fisier lipsa pana acum
 (verificare globala 2026-09-07) — cele patru module de contract de baza aveau
 teste dedicate, in afara de acesta."""
 

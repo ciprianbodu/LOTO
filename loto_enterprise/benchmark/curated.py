@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
 
 # Metode fără care mecanica deciziei se rupe — `apply_curation()` le reinjectează
-# forțat dacă lipsesc din `active` (CLAUDE.md §4.3: "trebuie sa ramana in lista
+# forțat dacă lipsesc din `active` (AGENTS.md §4.3: "trebuie sa ramana in lista
 # activa", regulă de aur, nu opțională), plus avertisment în `log_curation()`.
 #   • `random`   = baseline STRUCTURAL. Pentru cele 4 jocuri cunoscute
 #     (decision.KNOWN_GAME_MAX_NUM), poarta de consistență și lift-ul se judecă

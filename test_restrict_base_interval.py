@@ -1,7 +1,7 @@
 """Intervalul de bază [min, max]: producție, worker și walk-forward, identic.
 
 Restrângerea e o preferință de compoziție a pool-ului, fără avantaj statistic
-(CLAUDE.md §6). Testele de aici nu apără vreun avantaj, ci apără CONSECVENȚA:
+(AGENTS.md §6). Testele de aici nu apără vreun avantaj, ci apără CONSECVENȚA:
 ce alege utilizatorul se aplică la fel în producție și în validare, un interval
 imposibil nu produce tăcut un pool care nu respectă nimic, iar cache-ul WF nu
 servește un rezultat calculat pe alt interval.

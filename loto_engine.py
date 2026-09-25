@@ -26,7 +26,7 @@ from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import chronological_history
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
-# Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
+# Tie-break CANONIC „top-N după scor" (regula de aur 8 din AGENTS.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
 from loto_enterprise.core.ranking import rank_by_score
@@ -448,7 +448,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
 
         Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri se
         înmulțește cu `factor**k`. Preferință a utilizatorului, neutră ca
-        valoare așteptată (vezi CLAUDE.md §6): nu schimbă probabilitatea
+        valoare așteptată (vezi AGENTS.md §6): nu schimbă probabilitatea
         extragerii, doar compoziția pool-ului. Întoarce (scoruri_noi,
         {numar: aparitii}) — al doilea dict conține doar numerele penalizate.
         """
@@ -496,7 +496,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         }
         pool = rank_by_score(freq_scores, pool_size)
 
-        # Fără filtre post-scoring: pool-ul rămâne top-scor pur (CLAUDE.md §4.2 —
+        # Fără filtre post-scoring: pool-ul rămâne top-scor pur (AGENTS.md §4.2 —
         # un filtru structural constrânge combinația, nu prezice un număr).
 
         # Salvăm statisticile inițiale

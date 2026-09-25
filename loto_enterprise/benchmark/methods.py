@@ -1,6 +1,6 @@
 """Registry-ul unic al metodelor de scoring (setul din 14.09.2026).
 
-Contract (CLAUDE.md §5.2): ``fn(draws_2d, max_num) -> dict[int, float]``,
+Contract (AGENTS.md §5.2): ``fn(draws_2d, max_num) -> dict[int, float]``,
 scoruri în [0, 1], determinism, fără efecte secundare.
 
 Registry-ul conține cele două baseline-uri structurale (`random` — martorul

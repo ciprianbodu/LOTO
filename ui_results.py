@@ -198,7 +198,6 @@ def _render_cost(game: str, data: dict) -> None:
     price = PRICES.get(gk, 8.0)
     draw_n = 6 if gk == "6/49" else 5
     pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
-    import math
 
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
     full_cost = full_vars * price
@@ -359,7 +358,6 @@ def _random_rate_hypergeo(game: str, k_pool: int, t_min: int) -> float | None:
     # exact 1/20, iar 3+/4+ sunt imposibile.
     if "urna2" in str(game).lower():
         return 1.0 / 20.0 if int(k_pool) == 1 and int(t_min) <= 1 else 0.0
-    import math
 
     params = _hypergeo_params(game)
     if not params:

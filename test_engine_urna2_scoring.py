@@ -33,7 +33,7 @@ def test_bench_winner_scoring_enforces_ensemble_max_methods_cap(monkeypatch):
     bazeze pe default-ul funcției (3, gândit pentru afișarea nominală din UI).
     Fără gardă explicită la citire, un best_methods.json editat manual sau
     restaurat dintr-un backup vechi cu >1 membri ar fi blendat tăcut în producție —
-    exact regresia măsurată în CLAUDE.md §5 pct. 8 (blend sub random, câștigător
+    exact regresia măsurată în AGENTS.md §5 pct. 8 (blend sub random, câștigător
     unic peste)."""
     import loto_enterprise.core.method_selector as ms
     from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS

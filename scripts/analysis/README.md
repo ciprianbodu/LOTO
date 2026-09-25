@@ -86,5 +86,5 @@ Nu s-a scris niciun scorer pe tiparele astea fiindcă pasul 2 dă zero semnal �
 un scorer construit pe ele ar fi zgomot cu nume. Mai rău: o constrângere chiar
 aplicată taie universul, deci în cazurile în care extragerea o încalcă (70.75%
 din timp pentru „toate ≤ 40" pe 6/49) pool-ul are **zero** șanse la premiul
-mare, nu doar mai mici. Vezi și „Curare de metode" din `CLAUDE.md`: pârghiile
+mare, nu doar mai mici. Vezi și „Curare de metode" din `AGENTS.md`: pârghiile
 reale rămân dimensiunea pool-ului (K) și acoperirea pool→bilete (wheeling).

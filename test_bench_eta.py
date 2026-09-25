@@ -14,9 +14,9 @@ from loto_enterprise.benchmark import curated, runner
 
 
 def test_target_bench_folds_matches_the_documented_matrix():
-    """Cu curarea activa (starea reala a repo-ului), formula din CLAUDE.md §5:
+    """Cu curarea activa (starea reala a repo-ului), formula din AGENTS.md §5:
     suma metodelor per joc dupa `resolve_methods_per_game` ori numarul de
-    ferestre din `_PCTS`. Nu hardcodam 332 — CLAUDE.md spune explicit sa nu
+    ferestre din `_PCTS`. Nu hardcodam 332 — AGENTS.md spune explicit sa nu
     copiem cifre in cod — recalculam aceeasi formula independent."""
     from loto_enterprise.benchmark.curated import (
         apply_curation,

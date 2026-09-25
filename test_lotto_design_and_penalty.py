@@ -110,7 +110,6 @@ def test_pipeline_penalty_changes_pool_and_is_audited():
     base_lines, *_, base_ctx, base_audit = eng.run_institutional_pipeline(
         pool_size=10, guarantee=3, max_variants=0, track_pool_variation=False
     )
-    base_pool = list(eng.hard_core)
     assert base_audit["recent_penalty"]["draws"] == 0
 
     eng2 = LotoEngine("6/49")
@@ -238,7 +237,7 @@ def test_wf_cache_signature_changes_only_when_restrict_base_active():
 
 def test_walk_forward_applies_restrict_base_max_identically_to_production():
     """`run_honest_walk_forward` trebuie sa aplice EXACT aceeasi restrictie de
-    baza ca engine-ul de productie (CLAUDE.md: „se aplica identic in productie
+    baza ca engine-ul de productie (AGENTS.md: „se aplica identic in productie
     si in walk-forward") — pool-ul validat retrospectiv respecta pragul."""
     from loto_enterprise.core import walk_forward_adapter as wfa
 

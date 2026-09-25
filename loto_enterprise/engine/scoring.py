@@ -167,7 +167,7 @@ class ScoringMixin:
                         )
                 if _dropped:
                     bench_winner_info["ensemble_dropped"] = _dropped
-            # Flagurile documentate în CLAUDE.md (ex. ensemble_single_active_normalized)
+            # Flagurile documentate în AGENTS.md (ex. ensemble_single_active_normalized)
             # se pierdeau: combine_ensemble_scores le scria doar în _ens_audit local.
             for _flag in (
                 "ensemble_single_active_normalized",

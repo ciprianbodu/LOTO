@@ -126,7 +126,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "restrict_base_max": _rb_max,
             "restrict_base_min": _rb_min,
             "lookback": _int_setting("lookback_val"),
-            "sim_depth_pct": sd,  # TELEMETRIE de bench, nu taie istoricul (vezi CLAUDE.md)
+            "sim_depth_pct": sd,  # TELEMETRIE de bench, nu taie istoricul (vezi AGENTS.md)
             # Mereu True: singurul mod de generare care există azi (scoring → top-N →
             # wheel, fără filtre). Rămâne în contractul worker↔UI (regula de aur 2).
             "pure_bench_mode": True,
@@ -406,7 +406,7 @@ def _target_bench_folds() -> int:
     """Numărul de folduri pe care Re-Bench-ul UI (`run_rebench`, fără
     `--methods`/`--quick`) urmează să le ruleze — ținta pentru `_estimate_bench_eta`.
 
-    Aceeași formulă din CLAUDE.md §5: suma metodelor per joc după
+    Aceeași formulă din AGENTS.md §5: suma metodelor per joc după
     `resolve_methods_per_game` (curarea + baseline-urile structurale
     random/frequency adăugate acolo, NU numărătoarea brută din
     `apply_curation`, care nu include baseline-urile) ori numărul de ferestre
@@ -1619,7 +1619,7 @@ def _render_base_interval_tables() -> None:
     generate aleator, unde niciun număr nu e mai bun decât altul: dacă acolo
     apare un campion la fel de bun, campionul din coloana reală nu dovedește
     nimic. Submeniul nu setează niciun interval — alegerea rămâne a
-    utilizatorului (CLAUDE.md §6).
+    utilizatorului (AGENTS.md §6).
     """
     from loto_enterprise.core.base_threshold import theoretical_rate
 

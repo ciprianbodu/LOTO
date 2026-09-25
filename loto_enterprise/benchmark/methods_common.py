@@ -1,6 +1,6 @@
 """Utilitare comune pentru metodele de scoring (setul din 14.09.2026).
 
-Contractul unei metode (CLAUDE.md §5.2):
+Contractul unei metode (AGENTS.md §5.2):
     fn(draws_2d: np.ndarray, max_num: int) -> dict[int, float]
 Scorurile sunt normalizate în [0, 1] prin min-max; orice valoare nefinită
 devine 0. Metoda nu modifică `draws_2d` și nu ține stare între apeluri.

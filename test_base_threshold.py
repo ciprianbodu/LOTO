@@ -109,7 +109,7 @@ def test_best_interval_breaks_ties_on_the_lower_bound():
     """Doua intervale la egalitate: castiga cel care incepe mai jos.
 
     Fara asta, rezultatul afisat ar depinde de ordinea de parcurgere, exact
-    genul de tie-break pe care CLAUDE.md §4.2 il interzice la ranking.
+    genul de tie-break pe care AGENTS.md §4.2 il interzice la ranking.
     """
     # Univers 1..4, extrageri simetrice: toate intervalele de latime 3 sunt egale.
     draws = np.array([[1, 4], [2, 3]])

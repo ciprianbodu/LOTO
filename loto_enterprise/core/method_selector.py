@@ -314,7 +314,7 @@ def should_use_blacklist(
     oricum") și era pur și simplu fals.
 
     Cine vrea să-l RECONECTEZE: locul e `pool_selection.select_pool_from_scores`
-    (filtrarea rămâne la apelant, vezi „Tie-break canonic" din CLAUDE.md), și
+    (filtrarea rămâne la apelant, vezi „Tie-break canonic" din AGENTS.md), și
     cere bump de `CACHE_VERSION` în `walk_forward_adapter` — altfel WF-ul servește
     pool-uri vechi, nefiltrate, sub o cheie care pretinde că include bit-ul.
 
@@ -936,7 +936,7 @@ def combine_ensemble_scores(
 
     Bit-identitate: DOAR cu ensemble NOMINAL de exact 1 membru (decizia n-a
     construit un blend real) scorurile lui se întorc BRUTE, NEnormalizate —
-    identic cu apelul direct al scorer-ului (CLAUDE.md regula 1); cu un singur
+    identic cu apelul direct al scorer-ului (AGENTS.md regula 1); cu un singur
     membru nu se calculează nicio corelație. Când nominal >1 dar rămâne 1 singur
     membru ACTIV, scorurile lui sunt min-max normalizate (rank-preserving, pool
     identic) — exact „membru normalizat înainte de combinare", nu un scorer

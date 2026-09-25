@@ -272,8 +272,6 @@ def _append_rows_atomic(
 
 def update_all() -> int:
     """Verifică și actualizează toate jocurile. Returnează numărul total de rânduri adăugate."""
-    from datetime import timedelta
-
     istoric_dir = _find_istoric_dir()
     if not istoric_dir:
         print("[UPDATE-CSV] Folderul _ISTORIC/ nu există — skip.")
@@ -281,7 +279,6 @@ def update_all() -> int:
 
     total_added = 0
     today = date.today()
-    yesterday = today - timedelta(days=1)
     print(f"[UPDATE-CSV] Data curentă: {today.strftime('%d-%m-%Y')}")
 
     for game_key, cfg in GAME_CONFIGS.items():

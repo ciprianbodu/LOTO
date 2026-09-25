@@ -187,7 +187,7 @@ KNOWN_GAME_MAX_NUM = {
 # O metoda a carei selectie top-K cade in interiorul unui grup de scoruri EGALE
 # in cel putin aceasta fractie din blocurile evaluate nu alege pool-ul dupa scor,
 # ci dupa regula de tie-break („numarul mare intai"). Rata ei T+ este atunci
-# rata unei reguli fixe, nu a unui semnal — CLAUDE.md §12 P3 cere respingerea
+# rata unei reguli fixe, nu a unui semnal — AGENTS.md §12 P3 cere respingerea
 # metodelor care castiga doar prin tie-break. Coloana `tiebreak_kN` exista in
 # folds.csv de la bench cache v17; pe folds vechi (coloana lipsa) poarta nu se
 # aplica si celula o spune in `tiebreak_gate_applied`.

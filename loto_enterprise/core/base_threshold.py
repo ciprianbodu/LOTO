@@ -16,7 +16,7 @@ rata masurata e mai zgomotoasa — la latime egala cu `pool_size` exista o singu
 combinatie posibila, deci „rata" ei este istoricul acelei combinatii. De aceea
 `interval_table` intoarce, pentru fiecare latime, si cel mai bun interval gasit
 pe extrageri sintetice uniforme: campionul apare in orice set de date, inclusiv
-acolo unde nu exista nimic de gasit. Vezi CLAUDE.md §6.
+acolo unde nu exista nimic de gasit. Vezi AGENTS.md §6.
 """
 
 from __future__ import annotations

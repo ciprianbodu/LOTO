@@ -190,7 +190,7 @@ def test_pipeline_has_no_dead_filter_plumbing():
     `filter_consecutives` / `smart_reduction` erau acceptate de la UI până în
     engine fără să atingă vreodată pool-ul (fallback-ul `_get_initial_hard_core`
     era apelat FĂRĂ flag), iar filtrul anti-secvență rămânea în cod ca și cum ar
-    fi fost o opțiune activă. Vezi și CLAUDE.md §4.2: un filtru structural
+    fi fost o opțiune activă. Vezi și AGENTS.md §4.2: un filtru structural
     constrânge combinația, nu prezice un număr.
     """
     import inspect

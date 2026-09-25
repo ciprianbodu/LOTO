@@ -486,7 +486,6 @@ def main() -> int:
             wbest = wpp_best.get(k, {})
             if not w.get("winner"):
                 continue
-            fam = report["method_meta"].get(w["winner"], {}).get("family", "-")
             use_bl_label = (
                 f"[green]+BL[/green] (Δ+{wbest.get('delta_vs_no_bl', 0):.3f})"
                 if wbest.get("use_blacklist")
