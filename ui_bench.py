@@ -210,9 +210,10 @@ def _wilson_pooled_rate(grp, metric: str) -> float | None:
 def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) -> dict:
     """Ensemble-ul EFECTIV din ultima generare (`audit.bench_winner`), dacă există.
 
-    Clasamentul citea `get_ensemble_for_game` (nominal, înainte de decorelarea
-    pe scoruri). Pool-ul e construit din membrii ACTIVI după combine — deci
-    3 nominali puteau deveni 2 în panoul Nucleu dur. Preferăm auditul ultimei
+    Clasamentul citea `get_ensemble_for_game` cu plafon 3, deci lista afișată
+    putea avea mai mulți membri decât cei jucați: producția cere
+    `ENSEMBLE_MAX_METHODS` (azi 1) în `engine/scoring.py`, iar din cei rămași
+    intră în pool doar membrii ACTIVI după combine. Preferăm auditul ultimei
     generări; `{}` dacă n-a rulat încă Generate.
 
     Dacă `pool` e dat, acceptăm numai aceeași geometrie; altfel prima potrivire.
@@ -787,7 +788,10 @@ def _render_bench_leaderboard_slice(
                         folds_game_key, pool, max_methods=3
                     )
                 ]
-                _ens_source = "nominal (înainte de decorelarea pe scoruri la generare)"
+                _ens_source = (
+                    "nominal, plafon 3 (producția aplică "
+                    "ENSEMBLE_MAX_METHODS, azi 1)"
+                )
             except Exception:  # noqa: BLE001
                 _ens_names = []
         if len(_ens_names) > 1:

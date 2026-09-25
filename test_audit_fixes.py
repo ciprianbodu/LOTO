@@ -581,3 +581,94 @@ def test_wf_hits_caption_does_not_label_ticket_volume_as_pool():
     source = open("ui_hits.py", encoding="utf-8").read()
     assert "Pool = {n_tick" not in source
     assert "Bilete evaluate" in source
+
+
+def test_freshness_flags_stale_decision_when_engine_changed(tmp_path, monkeypatch):
+    """CSV-uri neatinse + alt motor (bump de cache / alt set de metode) = STALE.
+
+    Semnătura acoperea doar conținutul CSV, iar docstring-ul promitea „Same hash
+    → cached decision still 100% valid". Fals la orice bump de
+    `bench_cache.CACHE_VERSION` — care se face tocmai fiindcă scorurile s-au
+    schimbat — și la orice ștergere sau redenumire de metodă: cu CSV-urile
+    identice, freshness raporta „fresh / use_cache" pentru o decizie calculată cu
+    alt sistem.
+    """
+    import json
+
+    from loto_enterprise.benchmark import freshness
+
+    def _fake_sig(gk):
+        return ("x.csv", "same_hash", 1000)
+
+    monkeypatch.setattr(freshness, "compute_csv_signature", _fake_sig)
+
+    def _write(engine: dict) -> str:
+        bm = tmp_path / f"bm_{engine['bench_cache_version']}.json"
+        bm.write_text(
+            json.dumps(
+                {
+                    "_meta": {
+                        "csv_signatures": {
+                            gk: {"csv_path": "x.csv", "hash": "same_hash", "rows": 1000}
+                            for gk in freshness.GAMES_CSV_MAP
+                        },
+                        "engine_signature": engine,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        return str(bm)
+
+    current = freshness.compute_engine_signature()
+    assert set(current) == {"bench_cache_version", "methods_hash", "n_methods"}
+
+    # Același motor → fresh, ca înainte.
+    r_same = freshness.check_freshness(_write(dict(current)))["loto_6_49"]
+    assert (r_same.status, r_same.recommendation) == ("fresh", "use_cache")
+
+    # Versiune de cache veche → decizia e stale deși datele nu s-au clintit.
+    r_ver = freshness.check_freshness(
+        _write(dict(current, bench_cache_version="v1"))
+    )["loto_6_49"]
+    assert (r_ver.status, r_ver.recommendation) == ("stale", "full_rebench")
+
+    # Alt set de metode (registry șters/redenumit) → la fel.
+    r_meth = freshness.check_freshness(
+        _write(dict(current, bench_cache_version="v0", methods_hash="deadbeef", n_methods=999))
+    )["loto_6_49"]
+    assert (r_meth.status, r_meth.recommendation) == ("stale", "full_rebench")
+
+
+def test_freshness_without_stamped_engine_signature_stays_quiet(tmp_path, monkeypatch):
+    """best_methods.json scris înainte de 15.09.2026 n-are semnătura motorului.
+
+    N-avem cu ce compara, deci nu inventăm o nepotrivire: comportamentul rămâne
+    cel vechi, iar semnătura se stampilează la primul bench.
+    """
+    import json
+
+    from loto_enterprise.benchmark import freshness
+
+    monkeypatch.setattr(
+        freshness, "compute_csv_signature", lambda gk: ("x.csv", "same_hash", 1000)
+    )
+    bm = tmp_path / "best_methods.json"
+    bm.write_text(
+        json.dumps(
+            {
+                "_meta": {
+                    "csv_signatures": {
+                        "loto_6_49": {
+                            "csv_path": "x.csv",
+                            "hash": "same_hash",
+                            "rows": 1000,
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = freshness.check_freshness(str(bm))["loto_6_49"]
+    assert (r.status, r.recommendation) == ("fresh", "use_cache")

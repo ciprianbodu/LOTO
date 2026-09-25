@@ -35,7 +35,7 @@ Snapshot verificat la 2026-09-15:
   `methods_wave2` (20). Cele ~183 de metode vechi (clasice/ml/coverage/graph/
   revived/search_649/top649/math_extra) au fost sterse, impreuna cu mecanismul
   de tombstone (`disabled_methods.json`, `disabled.py`, `prune_methods.py`);
-  `METHOD_ALIASES` este gol. `neighbor_adjacent` (vecinii numerici ±1/±2 ai
+  `METHOD_ALIASES` pastreaza redenumirea `alternating_parity` -> `season_period2`. `neighbor_adjacent` (vecinii numerici ±1/±2 ai
   ultimei extrageri), `repeat_last_draw` (naive last), `rwr_last_draw` (RWR
   semanat din ultima extragere, prefix last-draw) si `haar_multiscale` (pe
   Urna 2 top-1 ≡ repeat) raman in METHODS ca martori de bench, dar sunt in
@@ -52,17 +52,14 @@ Snapshot verificat la 2026-09-15:
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
-- cache benchmark: `v18`;
-- cache walk-forward: `v24`;
-- cache rezultat worker: `v4`;
-- teste: 58 fisiere `test_*.py` (890 trecute pe Python 3.14 + nicegui in
-  containerul de audit; 2 esecuri PRE-EXISTENTE in `test_wf_generation_settings`
-  — `conditional_cap`, tie-break WF vs. generare directa in calea `covering/`,
-  fara legatura cu metodele, confirmate identice pe HEAD neatins);
-- dependinte de scoring: numpy si scipy. Stack-ul ML vechi (scikit-learn,
-  statsmodels, statsforecast, hmmlearn, xgboost, lightgbm, catboost) a fost
-  scos din `requirements_base.txt` la 15.09.2026: niciunul nu mai avea import
-  real dupa inlocuirea setului de metode.
+- cache benchmark: `v20` (SES cu s_0 = x_0 pe toata seria; `theta_drift` pe
+ prognoza liniara a ratei glisante);
+- cache walk-forward: `v26` (acelasi motiv: pool-ul generat se schimba);
+- cache rezultat worker: `v5`;
+- teste: 58 fisiere `test_*.py`, 905 trecute, 0 esecuri (Python 3.14 + nicegui in
+  containerul de audit). Cele doua esecuri raportate anterior ca PRE-EXISTENTE in
+  `test_wf_generation_settings` erau un defect al TESTULUI, nu al motorului — vezi
+  §Audit global 2026-09-15.
 
 Nu copia aceste numere in cod. Renumara inainte de a le cita:
 
@@ -70,6 +67,86 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Audit global 2026-09-15
+
+Audit de cod si de logica, cu accent pe cerinta „niciun filtru deghizat in
+metoda". Ce s-a masurat si ce s-a reparat:
+
+- **Metodele nu contin filtre.** Cele 52 de intrari au fost verificate si prin
+  citire, si prin masurare, pe 6/49 si 5/40, pe patru ferestre de istoric
+  fiecare: 0 din 52 suspecte. Detectorul a ramas in suita ca
+  `test_no_structural_filters.py`, deci o metoda noua scrisa neatent nu mai poate
+  intra tacut.
+- **`alternating_parity` -> `season_period2`.** Metoda lucreaza pe paritatea
+  INDEXULUI extragerii (sezonalitate de perioada 2), nu pe paritatea numarului;
+  numele vechi se citea ca filtru. Alias in `METHOD_ALIASES`, iar
+  `_sanitize_production_name` rezolva alias-ul INAINTE de a verifica registry-ul,
+  deci o decizie salvata sub numele vechi nu cade pe `frequency`.
+- **Tie-break la cele doua k-NN.** Media a `k` tinte binare are doar `k+1`
+  nivele: pe 6/49, `knn_pattern_self` producea 6-8 nivele distincte si 6 din cele
+  12 locuri ale pool-ului cadeau pe regula canonica „numarul cel mai mare dintre
+  cele egale", nu pe metoda. Cu un termen de frecventa plafonat la un sfert din
+  pasul `1/k` (deci incapabil sa rearanjeze doua nivele vecine): 33-43 nivele si
+  1 din 12 locuri. Acelasi tratament ca la bump-ul v12, pe vechile metode de
+  clasa. Bump `v18 -> v19` (bench) si `v24 -> v25` (WF).
+- **Cele doua esecuri „pre-existente" erau ale testului, nu ale motorului.**
+  `training_cutoffs` scoate din istoric toate extragerile din ziua tintei —
+  istoricul nu retine ordinea intrazilnica. Coada CSV-ului are doua extrageri pe
+  13-09-2026, iar testul compara walk-forward-ul cu o generare directa pe
+  `df.iloc[:index]`, care dadea pipeline-ului exact extragerea pe care WF n-are
+  voie s-o vada; de acolo penalizarea recenta lovea alte numere si pool-ul
+  diverga. Testul foloseste acum aceeasi regula de taiere. Comportamentul
+  motorului era deja corect si ramane aparat de
+  `test_budget_cover.test_same_day_draws_are_not_visible_to_scorer`.
+- **Pragul random se realiniaza la metrica pe care se judeca efectiv.** Cand
+  `folds.csv` nu are coloana 3+, decizia cade pe 4+, dar `baseline_rate` ramanea
+  P(>=3) ~ 0,11 fata de rate de 4+ de ~0,02: nicio metoda nu putea trece poarta,
+  toata matricea iesea `low_confidence`, iar `lift` scadea doua marimi diferite.
+  Latent pe un folds.csv curent, viu pe unul vechi. Blocat de
+  `test_decision_baseline.test_rate_column_fallback_realigns_the_random_threshold`.
+- **Acoperirea nu mai poate raporta 100% fals.** Doua gauri in poarta de
+  validare: (a) `round(coverage, 2)` ducea 53129/53130 la exact `100.0`, iar
+  portile compara `coverage < 100.0`, deci un design cu gaura trecea drept
+  complet — sub 20000 de tinte pragul nu se atinge, adica geometriile livrate
+  scapau din noroc geometric, nu prin constructie; acum o acoperire incompleta se
+  opreste la 99,99; (b) multimea de tinte goala (pool gol, pool mai mic decat
+  garantia, conditie peste pool) raporta `100.0` — acum `0.0`, fiindca „nicio
+  tinta" nu inseamna „garantie indeplinita". Pool-ul se dedupliceaza inainte de
+  numarare.
+- **Numerele din pool care nu ajung pe niciun bilet sunt raportate.** 18 din cele
+  99 de designuri lotto nu folosesc toate cele `v` pozitii; garantia ramane
+  matematic adevarata, dar `hits_union` (hit de POOL) numara numere care nu se
+  joaca. Apar acum in `audit["pool_numbers_not_on_tickets"]` si in UI. NU se
+  forteaza pe bilete: o substitutie ar strica exact garantia pentru care a fost
+  ales designul.
+- **UI-ul descrie metodele care ruleaza.** `ui_results._METHOD_DESC` era un
+  dictionar paralel ramas cu ~20 de metode sterse — printre care vechile filtre
+  `parity_balance` („echilibru par/impar") si `sum_affinity` — si fara niciuna
+  dintre cele 50 curente. Descrierea se citeste acum din registry
+  (`method_meta`), deci nu mai poate ramane in urma.
+- **`get_ensemble_for_game` respecta plafonul de productie.** Implicitul era 3,
+  desi `ENSEMBLE_MAX_METHODS` e 1; `ui_bench` explica diferenta 3 -> 1 prin
+  „decorelare pe scoruri", ceea ce nu era adevarat (plafonul se aplica in
+  `engine/scoring.py`). Implicit e acum chiar `ENSEMBLE_MAX_METHODS`; testele
+  care verifica mecanismul de blend cer explicit plafonul.
+- **Documentatie aliniata la cod** in `decision.py` si `method_selector.py`:
+  „decizia GARANTEAZA ..." (fals pe `low_confidence`, pe celula degeneratii, pe
+  substitutia de pool si pe ramura fara intrare), garda de esantion descrisa ca
+  „inerta" desi se declanseaza practic la fiecare celula, experimentul de
+  reproducere pentru `MIN_CONSISTENCY_WINDOWS` valabil doar pe ramura
+  `empirical_random`, si calea gresita pentru `blacklist = set()` (e in
+  `engine/pipeline.py`). `avg_hits` e marcat explicit ca statistica selectata
+  prin maxim.
+
+Ramase de decis (nu s-au schimbat):
+
+- `compute_temp_blacklist` se calculeaza in `engine/pipeline.py` dupa o
+  catastrofa si NU se aplica (log explicit, audit-only). E cod mort care costa
+  un calcul si sperie in log; poate fi scos cand se decide asta.
+- Acoperirea 100% a unui lotto design „t daca p" nu e acelasi lucru cu 100%
+  clasic t-din-t (masurat: L(12,6,4,3) da 54,09% pe metrica clasica). Panoul de
+  rezultate avertizeaza, sumarul WF si nota de hituri nu.
 
 ### Audit global 2026-09-13
 
@@ -176,33 +253,13 @@ UI-ul face polling la o secunda, fara reload complet.
   `methods_common.make_registry`; o coliziune de nume intre module se logheaza,
   nu se ascunde. Nu mai exista mecanism de tombstone (`disabled_methods.json`):
   o metoda stearsa dispare din cod, iar un nume necunoscut cade pe `frequency`.
-- Un modul de metode care NU se incarca nu dispare tacit: eroarea intra in
-  `methods.METHOD_LOAD_ERRORS`, se logheaza la ERROR si e numita de
-  `method_selector._sanitize_production_name` in mesajul de fallback. Fara asta,
-  o dependinta lipsa (masurat: scipy) scadea registry-ul de la 52 la 28, iar
-  productia cadea pe `frequency` raportand doar „metoda necunoscuta".
 - Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
   decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
   nu prezic un numar. Daca un astfel de filtru intra in METHODS, intra si in
   `EXCLUDED_FROM_PRODUCTION` (ramane martor de bench, nu scorer). Azi:
   `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`.
-- Garda automata partiala e `test_no_structural_filters.py`: contractul de
-  semnatura si de iesire, scoruri utilizabile pe geometriile reale, si pool-ul
-  fiecarei metode comparat cu distributia nula pe paritate, bloc consecutiv si
-  decade, cu praguri calibrate pe istoricul real. NU acopera intreaga lista de
-  mai sus, si testul o spune el insusi: filtrele de spatiere / clasa de rest
-  („doar n % 3 == 1") trec neprinse, iar un filtru care ar impune echilibru
-  perfect par/impar sta exact pe media nula. Clasa care a scapat efectiv e cea
-  de APARTENENTA — top-K determinat de ultima extragere, nu de un ranking:
-  toate cele patru metode excluse trec cele trei porti si au fost prinse abia
-  de citirea manuala, in doua runde (audit 2026-09-15, apoi 2026-09-16 pentru
-  `rwr_last_draw` si `haar_multiscale`). Un test verde de aici NU e dovada ca o
-  metoda noua nu e filtru; ramane de citit ce alege top-K-ul. Cand testul ii
-  masoara pe cei patru, ii masoara ca martori de bench, nu ca scoreri.
-- `alternating_parity` masoara paritatea INDEXULUI extragerii (sezonalitate de
-  perioada 2 pe axa timpului), nu paritatea numerelor, deci nu e filtru
-  par/impar. Numele e istoric si NU se redenumeste: are randuri in
-  `bench_results/folds.csv`, iar un rename le-ar orfana.
+- `test_no_structural_filters.py` masoara scorurile pentru clase statice;
+  nu constituie dovada unui avantaj predictiv.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
   azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
   istoric). `random` si `frequency` trebuie sa ramana in lista activa.
@@ -236,16 +293,19 @@ UI-ul face polling la o secunda, fara reload complet.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
   pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). `START_8000.bat` si
   `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
-- Codul se publica pe `origin/main` din mediul de audit. `START_8000.bat` si
-  `ACTUALIZARI.bat` nu fac `git pull` cat timp `.bat`-ul propriu ruleaza
-  (CMD ar sari la offset vechi; pe Google Drive copierea fisierului in rulare
-  da sharing violation). Daca `origin/main` e inainte sau lansatoarele de pe
-  disc difera, scriu `D:\_BUILD\_LOTO\loto_relaunch.bat`, ies, iar acel script
-  copiaza lansatoarele descarcate cu `curl` de pe GitHub, face
-  `git pull --ff-only origin main` si reporneste. Verificarea nu mai asteapta
-  `git fetch` in .bat-ul aflat in rulare (pe Google Drive poate parea blocat).
-  Helperul `loto_git_sync.bat` ramane scos. `START_8000.bat` mai face
-  commit+push `_ISTORIC` daca exista extrageri noi, prin `git.exe` direct.
+- Lansatoarele transfera executia FARA CALL intr-o copie temporara imuabila.
+  `scripts/launcher_git.ps1`, copiat impreuna cu lansatorul, face fetch cu timeout
+  si `merge --ff-only origin/main`, apoi ruleaza lansatorul din repo actualizat.
+  Codul si lansatoarele se actualizeaza impreuna; nu se descarca fragmente cu curl.
+  Modificari necomise, commit-uri divergente sau alta ramura: se pastreaza local,
+  cu mesaj explicit. Nu se sterg fisierele .bat personale si nu exista reset fortat.
+- Auto-commit-ul de istoric foloseste `commit --only -- _ISTORIC`, verifica `main`,
+ nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
+ Inainte de push face `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat,
+ commit-ul este repus peste `origin/main`; la conflict, `rebase --abort`.
+ Modificarile necomise tot blocheaza merge-ul, dar Sync face fetch ca `origin/main`
+ sa nu ramana vechi. Un `packed-refs.lock` fara proces `git` este sters.
+ Hook-ul de auto-push este oprit pentru acest commit: push-ul este executat o data.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.
@@ -566,12 +626,22 @@ hash-ul designului si, pentru Joker, decizia Urnei 2.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v18` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v24` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v4` | se schimba rezultatul serializat al pipeline-ului |
+| benchmark fold | `v20` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| walk-forward | `v26` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| worker pipeline | `v5` | se schimba rezultatul serializat al pipeline-ului |
+
+⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
+(`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
+Randul ramane ca sa se stie ce s-ar bumpa daca se reactiveaza.
 
 Un bump WF schimba numele fisierului, dar nu sterge cache-urile vechi. Foloseste
 API-urile de inventariere/curatare, nu stergeri recursive oarbe.
+
+Un bump de bench NU mai poate trece neobservat pe langa decizie: semnatura din
+`_meta.engine_signature` (versiunea cache-ului + hash-ul registry-ului de metode)
+se stampileaza la fiecare bench, iar `freshness.check_freshness` o compara
+INAINTE de datele CSV. Cu CSV-urile neatinse dar alt motor, raspunsul e
+`stale` / `full_rebench`, nu `fresh` / `use_cache` ca inainte.
 
 Cand se schimba ce pool produce o SETARE data, nu structura rezultatului, un bump
 global ar arunca si cache-urile pe care schimbarea nu le atinge — la WF, 90 de
@@ -586,10 +656,10 @@ impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 
 Instalarea canonica este:
 
-1. `ACTUALIZARI.bat` - trage `main` prin relaunch, instaleaza/actualizeaza Python
+1. `ACTUALIZARI.bat` - sincronizeaza `main` din copia temporara, instaleaza/actualizeaza Python
    3.14, recreeaza venv-ul daca patch-ul difera si instaleaza
    `requirements_base.txt`;
-2. `START_8000.bat` - trage `main` prin relaunch daca e in urma, verifica mediul, curata procese vechi,
+2. `START_8000.bat` - sincronizeaza `main` din copia temporara daca e in urma, verifica mediul, curata procese vechi,
    porneste worker-ul si UI-ul.
 
 `requirements_snapshot.txt` este arhiva si nu se instaleaza. Stack-ul este CPU;
@@ -689,9 +759,6 @@ scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisa
   toate cele 111 metode; pastreaza numai semnale peste baseline si distincte.
 - [ ] Automatizeaza testul care ruleaza fiecare metoda activa pe toate geometriile
   si compara acceptarea benchmarkului cu acceptarea engine-ului.
-  `test_no_structural_filters.py` acopera prima jumatate: ruleaza toate metodele
-  pe cele trei geometrii reale si verifica contractul de scorer plus absenta
-  structurii de filtru. Compararea acceptarii bench vs. engine ramane de facut.
 - [x] Raporteaza separat metodele incomplete (fereastra lipsa) si dependente de
   tie-break in decizie; raman de raportat unavailable, plate si corelate.
 - [ ] Adauga un test de regresie pentru fallback-ul top-1 fara coloana

@@ -101,9 +101,16 @@ def test_wf_tickets_equal_direct_generation_with_conditional_cap(
     assert meta["wheel_guarantee"] == 3 and meta["wheel_condition"] == 4
     assert meta["max_variants"] == 2 and not meta["partial"]
     assert len({r.draw_index for r in flat}) == int(len(df) * depth / 100)
+    # Istoricul generării directe se taie cu ACEEAȘI regulă ca a WF-ului:
+    # `training_cutoffs` scoate toate extragerile din ziua țintei, fiindcă
+    # istoricul nu reține ordinea intrazilnică. Pe o coadă cu două extrageri în
+    # aceeași zi (13-09-2026), un `df.iloc[:index]` naiv dădea pipeline-ului o
+    # extragere pe care WF n-are voie s-o vadă, iar penalizarea recentă lovea
+    # alte numere — de aici divergența de pool, nu dintr-un tie-break.
+    cutoffs = bt.training_cutoffs(df)
     for index in {r.draw_index for r in flat}:
         engine = LotoEngine("6/49")
-        engine.data = df.iloc[:index].copy()
+        engine.data = df.iloc[: cutoffs[index]].copy()
         engine._build_draw_matrix()
         lines, *_, context, _ = engine.run_institutional_pipeline(
             track_pool_variation=False, **opts

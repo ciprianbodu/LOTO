@@ -549,6 +549,25 @@ class PipelineMixin:
             f"[PIPELINE] S-au generat {len(lines)} variante de joc. Acoperire: {coverage_pct}%"
         )
 
+        # Numere din pool care nu apar pe NICIUN bilet. Un lotto design „t dacă p"
+        # nu are nevoie de toate cele v poziții ca să-și țină garanția (18 din cele
+        # 99 de designuri L livrate chiar nu le folosesc), deci acoperirea rămâne
+        # onest 100%. Dar hiturile de POOL (`hits_union` din backtest) numără și
+        # numerele acelea, care nu se joacă — diferența trebuie să fie vizibilă,
+        # nu dedusă. Nu le forțăm pe bilete: o substituție ar strica exact
+        # garanția pentru care a fost ales designul.
+        _played = {int(n) for line in (lines or []) for n in line}
+        _unplayed = sorted(int(n) for n in self.hard_core if int(n) not in _played)
+        self.audit["pool_numbers_not_on_tickets"] = _unplayed
+        if _unplayed:
+            logging.warning(
+                "[PIPELINE] %d numere din pool nu apar pe niciun bilet (%s) — "
+                "garanția designului rămâne validă, dar hiturile de POOL le "
+                "numără, iar biletele nu le pot prinde.",
+                len(_unplayed),
+                _unplayed,
+            )
+
         if progress_cb:
             progress_cb("Validare rezultate...", 90)
 

@@ -46,7 +46,14 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v24"
+CACHE_VERSION = "v26"
+# v26: SES corect (s_0 = x_0 pe toată seria) și `theta_drift` pe prognoza liniară
+#      a ratei glisante. Pool-urile `ses_opt_alpha`, `imapa_agg` și
+#      `theta_drift` din v25 nu se mai reproduc.
+# v25: tie-break pe frecvență la cele două k-NN (`knn_pattern_self`,
+#      `knn_feature_pooled`) și redenumirea `alternating_parity` →
+#      `season_period2`. Ambele schimbă pool-ul pe care îl generează scorerul,
+#      deci validările v24 confirmă un pool care nu se mai produce.
 # v24: chronological loading, earlier-day training, and canonical frequency fallback.
 # Changelog (cea mai nouă prima; bump = invalidare cache walk-forward):
 # v23: UI validează garanția, condiția lotto și bugetul producției; factorul 0

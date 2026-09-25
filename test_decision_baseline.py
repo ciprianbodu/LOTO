@@ -16,6 +16,7 @@ _SYNTH = [
     "m_tiebreak",
     "m_signal",
     "m_no_rate",
+    "m_stray",
 ]
 
 
@@ -286,3 +287,117 @@ def test_fold_reports_tiebreak_fraction_per_pool(monkeypatch):
     )
     fold2, _ = runner._evaluate_fold(name, train, test, game, block_size=2)
     assert fold2.tiebreak_per_pool == {"k6": 0.0, "k7": 0.0, "k8": 0.0}
+
+
+def test_rate_column_fallback_realigns_the_random_threshold(monkeypatch):
+    """Folds.csv fără coloana 3+ → decizia cade pe 4+; pragul trebuie să cadă cu ea.
+
+    Înainte, `baseline_rate` rămânea P(≥3) ≈ 0,11 în timp ce metodele erau
+    judecate pe rate de 4+ (~0,02): poarta devenea imposibil de trecut, toată
+    matricea ieșea `low_confidence`, iar `lift` scădea o rată de 4+ dintr-un prag
+    de 3+. Aici o metodă bate net pragul REAL de 4+ și trebuie să câștige.
+    """
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    base4 = decision.expected_random_rate(49, 6, 10, 4)
+    rows = []
+    for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        # Doar coloana 4+ există (cache vechi), pe toate rândurile.
+        rows.append(
+            _row(
+                "loto_6_49",
+                "random",
+                pct,
+                n,
+                base4,
+                rate_col="rate_4plus_k10",
+            )
+        )
+        rows.append(
+            _row(
+                "loto_6_49",
+                "m_signal",
+                pct,
+                n,
+                base4 + 0.05,
+                rate_col="rate_4plus_k10",
+            )
+        )
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), "loto_6_49", 10, 6
+    )
+    assert cfg["rate_col_mismatch"] is True
+    # Pragul e cel al țintei pe care s-a judecat efectiv, nu cel al lui 3+.
+    assert cfg["baseline_rate"] == pytest.approx(base4)
+    assert cfg["baseline_rate"] < decision.expected_random_rate(49, 6, 10, 3)
+    assert cfg["scorer"] == "m_signal"
+    assert cfg["low_confidence"] is False
+
+
+def test_tiebreak_fraction_is_weighted_by_blocks(monkeypatch):
+    """50% din blocuri, nu media neponderată a ferestrelor.
+
+    Fereastra de 10% are puține blocuri. 0.99 acolo și 0.05 pe fereastra lungă
+    trec de 0.5 la media simplă și rămân sub 0.5 ponderat cu `blocks`.
+    """
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    base = decision.expected_random_rate(49, 6, 10, 3)
+    windows = ((10, 10), (30, 20), (60, 30), (100, 1000))
+    rows = []
+    for pct, blocks in windows:
+        rows.append(
+            _row(
+                "loto_6_49",
+                "random",
+                pct,
+                blocks,
+                base,
+                tiebreak_k10=0.0,
+                blocks=blocks,
+            )
+        )
+        rows.append(
+            _row(
+                "loto_6_49",
+                "m_alpha",
+                pct,
+                blocks,
+                base + 0.01,
+                tiebreak_k10=0.99 if blocks < 1000 else 0.05,
+                blocks=blocks,
+            )
+        )
+        rows.append(
+            _row(
+                "loto_6_49",
+                "m_beta",
+                pct,
+                blocks,
+                base + 0.08,
+                tiebreak_k10=0.05 if blocks < 1000 else 0.80,
+                blocks=blocks,
+            )
+        )
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), "loto_6_49", 10, 6
+    )
+    assert cfg["scorer"] == "m_alpha"
+    assert {d["method"] for d in cfg["tiebreak_dependent"]} == {"m_beta"}
+    fraction = cfg["tiebreak_dependent"][0]["tiebreak_fraction"]
+    assert fraction == pytest.approx(0.758, abs=0.01)
+
+
+def test_stray_percentile_does_not_void_the_other_methods(monkeypatch):
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    base = decision.expected_random_rate(49, 6, 10, 3)
+    rows = []
+    for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows.append(_row("loto_6_49", "random", pct, n, base))
+        rows.append(_row("loto_6_49", "m_alpha", pct, n, base + 0.01))
+    rows.append(_row("loto_6_49", "m_stray", 50, 50, base + 0.50))
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), "loto_6_49", 10, 6
+    )
+    assert cfg["expected_windows"] == [10, 30, 60, 100]
+    assert cfg["scorer"] == "m_alpha"
+    stray = next(d for d in cfg["incomplete_methods"] if d["method"] == "m_stray")
+    assert stray["missing_windows"] == [10, 30, 60, 100]

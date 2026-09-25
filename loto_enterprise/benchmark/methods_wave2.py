@@ -7,7 +7,7 @@ cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
 
     ses_opt_alpha          netezire exponențială simplă cu α optimizat per număr (fost `ses`)
     croston_interval       Croston: intervalele dintre apariții netezite, rata = 1/interval (fost `croston_opt`)
-    theta_drift            metoda Theta pe cumulul aparițiilor: drift + SES (fost `theta_auto`)
+    theta_drift            Theta: prognoză liniară și SES(0.2) pe rata glisantă (fost `theta_auto`)
     weighted_recent_linear frecvență cu ponderi liniar descrescătoare pe 100 (fost `weighted_recent`)
     drift_linear           tendința liniară a ratei glisante (CMMP pe 300), extrapolată (fost `drift`)
     imapa_agg              SES la nivele de agregare 1/2/4/8 combinate (fost `imapa` / `adida`)
@@ -15,9 +15,10 @@ cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
     ssa_forecast           analiză spectrală singulară pe seria proprie, prognoză prin recurență (fost `ssa`)
     dmd_forecast           descompunere în moduri dinamice pe matricea-indicator (fost `dmd`)
     runs_persistence       z-ul testului seriilor (Wald–Wolfowitz) × deviația recentă (fost `runs_test`)
-    alternating_parity     rata calculată numai pe extragerile cu ACELAȘI INDEX PAR/IMPAR
-                           pe axa timpului (sezonalitate de perioadă 2). NU are legătură cu
-                           paritatea numerelor și NU e un filtru par/impar pe combinație.
+    season_period2         rata pe extragerile alternate — sezonalitate de perioadă 2
+                           (paritatea INDEXULUI extragerii, nu a numărului; fost
+                           `alternating_parity`, redenumită ca numele să nu se
+                           citească drept filtru de paritate)
     repeat_last_draw       repetarea ultimei extrageri (fost `naive_last`), tie-break pe frecvență
     vlmm_self_k3           Markov cu lungime variabilă pe seria proprie, context ≤ 3 (fost `vlmm`)
     knn_pattern_self       k-NN pe ferestrele proprii de 10 stări (fost `ml_knn_*`, pe serie)
@@ -27,14 +28,6 @@ cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
     nb_lags_pooled         Naive Bayes Bernoulli pe ultimele 10 stări, model comun (fost `ml_bernoulli_nb`)
     knn_feature_pooled     k-NN în spațiul celor 6 trăsături comune (fost `ml_knn_5`, pe trăsături)
     gbm_stumps_pooled      gradient boosting cu 30 de „stumps" pe cele 6 trăsături (fost `ml_gradient_boost`)
-
-Numele `alternating_parity` e ISTORIC și induce în eroare: „paritatea" de acolo
-e a INDEXULUI extragerii pe axa timpului, nu a numerelor jucate. Nu a fost
-redenumit pentru că apare ca etichetă de metodă în `bench_results/folds.csv`
-(fișier versionat, rezultatul ultimului Re-Bench) — un rename ar orfana acele
-rânduri și ar rupe comparabilitatea cu decizia salvată. Clarificarea se face
-deci prin text (aici, în docstring-ul funcției și în nota din registry), nu
-prin rename.
 """
 
 from __future__ import annotations
@@ -60,13 +53,42 @@ def _window_mean(ind: np.ndarray, window: int) -> np.ndarray:
     return ind[-int(window) :].mean(axis=0)
 
 
+def _knn_tiebreak(ind: np.ndarray, k: int, window: int = 300) -> np.ndarray:
+    """Termen minuscul care sparge egalitățile unui k-NN prin frecvența recentă.
+
+    O medie a k ținte binare ia doar valorile 0, 1/k, 2/k… — pe 49 de numere,
+    zeci de numere cad pe același nivel, iar pool-ul top-N ajunge decis de
+    tie-break-ul canonic (număr descrescător), nu de metodă. Măsurat pe 6/49:
+    `knn_pattern_self` producea 6-8 nivele distincte și 6 din cele 12 locuri ale
+    pool-ului cădeau pe „cel mai mare număr dintre cele egale".
+
+    Termenul e mărginit la un sfert din pasul 1/k, deci NU poate rearanja două
+    nivele vecine: schimbă doar ordinea ÎN interiorul unui nivel, înlocuind o
+    regulă arbitrară cu una măsurată. Același tipar ca la `repeat_last_draw`,
+    `hot_consistency` și `neighbor_adjacent` (și ca bump-ul de cache v12, unde
+    vechile metode de clasă au primit exact acest tratament).
+    """
+    if ind.shape[0] == 0:
+        return np.zeros(ind.shape[1])
+    freq = ind[-int(window) :].mean(axis=0)  # în [0, 1]
+    return freq * (0.25 / float(max(k, 1)))
+
+
 def _ses_series(x: np.ndarray, alpha: float) -> np.ndarray:
-    """SES vectorizat pe axa 0: s_t = α x_t + (1−α) s_{t−1}, s_0 = x_0."""
+    """SES vectorizat pe axa 0: s_t = α x_t + (1−α) s_{t−1}, s_0 = x_0.
+
+    `lfilter` pornește din repaus (s_{-1} = 0), deci y_0 = α x_0. Suprascrierea
+    doar a lui y_0 nu repară pașii următori: ei au fost deja calculați din α x_0.
+    Diferența (1−α) x_0 se stinge ca (1−α)^(t+1) x_0.
+    """
     if x.shape[0] == 0:
         return x
-    out = lfilter([alpha], [1.0, -(1.0 - alpha)], x, axis=0)
-    out[0] = x[0]
-    return out
+    decay = 1.0 - float(alpha)
+    out = lfilter([float(alpha)], [1.0, -decay], x, axis=0)
+    powers = decay ** np.arange(1, x.shape[0] + 1, dtype=np.float64)
+    if np.ndim(x) == 1:
+        return out + powers * x[0]
+    return out + powers[:, None] * np.asarray(x[0], dtype=np.float64)
 
 
 # --------------------------------------------------------------------------- #
@@ -111,17 +133,32 @@ def score_croston_interval(draws_2d, max_num, alpha: float = 0.1):
     return vector_to_scores(out, max_num)
 
 
-def score_theta_drift(draws_2d, max_num, window: int = 300):
-    """Theta: media dintre driftul liniar și SES(0.2) pe rata glisantă a numărului."""
+def score_theta_drift(draws_2d, max_num, window: int = 300, rate_win: int = 50):
+    """Theta: media dintre prognoza liniară și SES(0.2) pe rata glisantă.
+
+    `(cum[-1] - cum[0]) / (n - 1)` este media indicatorului de la al doilea
+    pas, nu o pantă: două numere cu aceeași sumă primesc același „drift" chiar
+    dacă unul urcă și celălalt coboară. Prognoza liniară e aceeași extrapolare
+    la un pas ca la `drift_linear`, pe rata de `rate_win` extrageri.
+    """
     ind = indicator(draws_2d, max_num)
-    x = ind[-window:]
+    x = ind[-(window + rate_win) :]
     n, m = x.shape
-    if n < 30:
+    if n < rate_win + 20:
         return vector_to_scores(_window_mean(ind, 50), max_num)
-    cum = np.cumsum(x, axis=0)
-    drift = (cum[-1] - cum[0]) / max(n - 1, 1)
-    ses = _ses_series(x, 0.2)[-1]
-    return vector_to_scores(0.5 * drift + 0.5 * ses, max_num)
+    cs = np.vstack([np.zeros((1, m)), np.cumsum(x, axis=0)])
+    rate = (cs[rate_win:] - cs[:-rate_win]) / float(rate_win)
+    k = rate.shape[0]
+    t = np.arange(k, dtype=np.float64)
+    tc = t - t.mean()
+    denom = float((tc**2).sum())
+    if denom <= 0.0:
+        return vector_to_scores(_window_mean(ind, 50), max_num)
+    centered = rate - rate.mean(axis=0)
+    slope = (tc[:, None] * centered).sum(axis=0) / denom
+    linear = rate.mean(axis=0) + slope * (k - t.mean())
+    ses = _ses_series(rate, 0.2)[-1]
+    return vector_to_scores(0.5 * linear + 0.5 * ses, max_num)
 
 
 def score_weighted_recent_linear(draws_2d, max_num, window: int = 100):
@@ -247,15 +284,13 @@ def score_runs_persistence(draws_2d, max_num, window: int = 300):
     return vector_to_scores(-z * recent, max_num)
 
 
-def score_alternating_parity(draws_2d, max_num, window: int = 400):
-    """Rata fiecărui număr, calculată numai pe extragerile cu același index par/impar.
+def score_season_period2(draws_2d, max_num, window: int = 400):
+    """Rata pe extragerile alternate: sezonalitate de perioadă 2 pe axa timpului.
 
-    „Paritatea" din nume e a INDEXULUI EXTRAGERII pe axa timpului (sezonalitate
-    de perioadă 2: extragerile din doi în doi, aceeași poziție în alternanță ca
-    extragerea următoare), NU paritatea numerelor. Metoda nu se uită la par/impar
-    pe bilele jucate, nu impune nicio proporție par/impar și nu respinge nicio
-    combinație: e un scorer per număr, iar pool-ul rămâne top-N pur după scor.
-    Numele e păstrat doar pentru compatibilitatea cu `bench_results/folds.csv`.
+    Selecția se face după paritatea INDEXULUI extragerii (a câta e la rând),
+    nu după paritatea numărului: ipoteza e că extragerea următoare seamănă mai
+    mult cu extragerile de pe aceeași poziție în alternanță. Fiecare număr își
+    păstrează scorul propriu, continuu — nu e o clasă par/impar de numere.
     """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
@@ -263,7 +298,7 @@ def score_alternating_parity(draws_2d, max_num, window: int = 400):
         return vector_to_scores(_window_mean(ind, 50), max_num)
     x = ind[-window:]
     k = x.shape[0]
-    # următoarea extragere are indexul n; pe fereastră, aceeași paritate = pozițiile k-2, k-4, ...
+    # următoarea extragere are indexul n; pe fereastră, același rest la 2 = pozițiile k-2, k-4, ...
     same = x[(k - 2) % 2 :: 2] if k >= 2 else x
     return vector_to_scores(same.mean(axis=0), max_num)
 
@@ -323,7 +358,7 @@ def score_knn_pattern_self(draws_2d, max_num, L: int = 10, k: int = 30):
         order = np.lexsort((-np.arange(W.shape[0]), d))[:k]
         follow = ind[idx[order, -1] + 1, j]
         out[j] = follow.mean()
-    return vector_to_scores(out, max_num)
+    return vector_to_scores(out + _knn_tiebreak(ind, k), max_num)
 
 
 # --------------------------------------------------------------------------- #
@@ -436,7 +471,7 @@ def score_knn_feature_pooled(draws_2d, max_num, k: int = 25):
     kk = min(k, X.shape[0])
     _, nn = tree.query(Q / sd, k=kk)
     nn = np.asarray(nn).reshape(m, -1)
-    return vector_to_scores(y[nn].mean(axis=1), max_num)
+    return vector_to_scores(y[nn].mean(axis=1) + _knn_tiebreak(ind, kk), max_num)
 
 
 def score_gbm_stumps_pooled(draws_2d, max_num, rounds: int = 30, lr: float = 0.3):
@@ -501,7 +536,12 @@ WAVE2_METHODS = make_registry(
     [
         ("ses_opt_alpha", score_ses_opt_alpha, "timeseries", "SES cu α optimizat per număr"),
         ("croston_interval", score_croston_interval, "gap", "Croston pe intervalele dintre apariții"),
-        ("theta_drift", score_theta_drift, "timeseries", "Theta: drift + SES pe rata numărului"),
+        (
+            "theta_drift",
+            score_theta_drift,
+            "timeseries",
+            "Theta: prognoză liniară + SES pe rata glisantă",
+        ),
         ("weighted_recent_linear", score_weighted_recent_linear, "recency", "ponderi liniare pe ultimele 100"),
         ("drift_linear", score_drift_linear, "timeseries", "tendința liniară a ratei glisante, extrapolată"),
         ("imapa_agg", score_imapa_agg, "timeseries", "SES la nivele de agregare 1/2/4/8"),
@@ -509,7 +549,7 @@ WAVE2_METHODS = make_registry(
         ("ssa_forecast", score_ssa_forecast, "timeseries", "SSA cu recurență liniară"),
         ("dmd_forecast", score_dmd_forecast, "timeseries", "descompunere în moduri dinamice"),
         ("runs_persistence", score_runs_persistence, "timeseries", "z Wald–Wolfowitz × deviația recentă"),
-        ("alternating_parity", score_alternating_parity, "recency", "rata pe extragerile cu același index par/impar pe axa timpului (sezonalitate 2); NU paritatea numerelor, nu e filtru par/impar"),
+        ("season_period2", score_season_period2, "recency", "rata pe extragerile alternate (sezonalitate de perioadă 2)"),
         ("repeat_last_draw", score_repeat_last_draw, "transition", "filtru naive-last: repetarea ultimei extrageri (exclus din producție)"),
         ("vlmm_self_k3", score_vlmm_self_k3, "transition", "Markov cu lungime variabilă pe seria proprie"),
         ("knn_pattern_self", score_knn_pattern_self, "similarity", "k-NN pe ferestrele proprii de 10 stări"),

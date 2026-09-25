@@ -187,10 +187,15 @@ def _load_extra_methods() -> None:
         )
 
 
-# Alias-uri de nume legacy → nume curent. Gol de la 14.09.2026: toate țintele
-# vechi au fost eliminate; `resolve_method_name` rămâne ca punct unic de
-# rezolvare pentru folds.csv / best_methods.json mai vechi decât registry-ul.
-METHOD_ALIASES: dict[str, str] = {}
+# Alias-uri de nume legacy → nume curent. `resolve_method_name` e punctul unic
+# de rezolvare pentru folds.csv / best_methods.json mai vechi decât registry-ul;
+# `_sanitize_production_name` îl apelează înainte de a verifica registry-ul, deci
+# un câștigător salvat sub numele vechi rămâne câștigător după redenumire.
+METHOD_ALIASES: dict[str, str] = {
+    # 15.09.2026: numele se citea drept filtru de paritate pe numere, deși metoda
+    # lucrează pe paritatea INDEXULUI extragerii (sezonalitate de perioadă 2).
+    "alternating_parity": "season_period2",
+}
 
 
 def resolve_method_name(name: str) -> str:

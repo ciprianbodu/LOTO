@@ -67,7 +67,16 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v18"
+CACHE_VERSION = "v20"
+# v20: SES pornește din x_0 pe toată seria (`_ses_series`), nu doar la primul
+#      pas; `theta_drift` scorează prognoza liniară a ratei glisante, nu media
+#      indicatorului. Se schimbă `ses_opt_alpha`, `imapa_agg` și `theta_drift`.
+# v19: `knn_pattern_self` și `knn_feature_pooled` primesc tie-break pe frecvență
+#      (media a k ținte binare are doar k+1 nivele; pe 6/49 jumătate din pool era
+#      decisă de „cel mai mare număr dintre cele egale", nu de metodă). Scorurile
+#      celor două metode se schimbă → fold-urile v18 pentru ele sunt stale.
+#      În aceeași versiune, `alternating_parity` → `season_period2` (redenumire;
+#      alias în METHOD_ALIASES, deci deciziile salvate se rezolvă mai departe).
 # v18: chronological loading and strict earlier-day training boundaries.
 # Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
 # v17: FoldResult scrie tiebreak_kN (fracția blocurilor în care tăietura top-K
@@ -398,8 +407,9 @@ def detect_stable_pool_neighborhoods(
     """
     Detecteaza intervale de pool sizes unde castigatorul e acelasi.
 
-    De exemplu, daca winners_per_pool = {k10: timesfm, k11: timesfm, k12: timesfm,
-    k13: chronos, k14: chronos, k15: chronos, k16: patchtst, k17: patchtst},
+    De exemplu, daca winners_per_pool = {k10: ewma_hl30, k11: ewma_hl30,
+    k12: ewma_hl30, k13: gap_hazard, k14: gap_hazard, k15: gap_hazard,
+    k16: markov_pairs, k17: markov_pairs},
     cu min_run=3, returnam ['k11', 'k14'] — mijlocul fiecarui run stabil.
     Aceste pool sizes pot fi sarite intr-un re-bench rapid.
     """

@@ -93,3 +93,92 @@ def test_pct100_window_runs_on_sufficient_history(tmp_path):
     assert row["percentile"] == 100
     assert int(row["n_test"]) == 10
     assert bool(row["failed"]) is False
+
+
+def _fold_row(method: str, pct: int, k_val: float, *, n_eval: int = 100, n_test: int = 100):
+    return {
+        "game": "loto_6_49",
+        "method": method,
+        "percentile": pct,
+        "is_random": False,
+        "failed": False,
+        "n_test": n_test,
+        "n_eval": n_eval,
+        "runtime_sec": 0.1,
+        "cpu_pct_peak": 0.0,
+        "cpu_pct_avg": 0.0,
+        "ram_gb_peak": 0.0,
+        "gpu_pct_peak": 0.0,
+        "gpu_pct_avg": 0.0,
+        "vram_mb_peak": 0.0,
+        "k10": k_val,
+    }
+
+
+def _aggregate_649(rows):
+    game = runner.GameDef(
+        key="loto_6_49",
+        label="Loto 6/49",
+        csv_path="x.csv",
+        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
+        max_num=49,
+        draw_n=6,
+    )
+    methods = sorted({r["method"] for r in rows})
+    meta = {
+        m: {"available": True, "family": "test", "requires_train": False, "notes": ""}
+        for m in methods
+    }
+    return runner._aggregate(
+        pd.DataFrame(rows), [game], methods, meta, {"loto_6_49": ["k10"]}
+    )
+
+
+def test_winners_per_pool_excludes_methods_with_missing_windows():
+    """O metodă care a rulat pe 3 din 4 ferestre nu are voie să câștige clasamentul.
+
+    `winners_per_pool` / `winners_per_pool_best` NU sunt date moarte:
+    `method_selector.get_winner_name` cade pe ele (prioritățile 2 și 3) când
+    lipsește `auto_pilot_per_pool`. Fără poarta asta, o metodă pe care decizia o
+    exclusese ca `incomplete` putea deveni scorer de producție pe calea de
+    fallback — clasată pe mai puține extrageri, deci pe o poartă mai ușoară.
+    """
+    rows = []
+    for pct in (10, 30, 60, 100):
+        rows.append(_fold_row("m_complet", pct, 1.0))
+    # Îi lipsește fereastra 10%, dar pe restul are scoruri mai mari.
+    for pct in (30, 60, 100):
+        rows.append(_fold_row("m_lipsa_fereastra", pct, 9.0))
+
+    report = _aggregate_649(rows)["games"]["loto_6_49"]
+    assert report["winners_per_pool"]["k10"]["winner"] == "m_complet"
+    assert report["incomplete_methods"] == ["m_lipsa_fereastra"]
+    assert report["overall_winner"] == "m_complet"
+
+
+def test_partially_evaluated_folds_do_not_feed_the_ranking():
+    """`n_eval < n_test` = blocuri sărite (scoruri inutilizabile): fold-ul măsoară
+    altceva decât unul complet, exact motivul `unevaluated_draws` din decizie."""
+    rows = []
+    for pct in (10, 30, 60, 100):
+        rows.append(_fold_row("m_complet", pct, 1.0))
+        rows.append(_fold_row("m_partial", pct, 9.0, n_eval=10, n_test=100))
+
+    report = _aggregate_649(rows)["games"]["loto_6_49"]
+    ranked = [r["method"] for r in report["winners_per_pool"]["k10"]["ranking"]]
+    assert ranked == ["m_complet"]
+    assert report["winners_per_pool"]["k10"]["winner"] == "m_complet"
+
+
+def test_all_methods_incomplete_keeps_the_ranking_instead_of_emptying_it():
+    """Bench oprit devreme: dacă TOATE metodele au ferestre lipsă, raportul rămâne
+    utilizabil — altfel un Re-Bench întrerupt ar șterge clasamentul cu totul."""
+    rows = []
+    for pct in (30, 60, 100):
+        rows.append(_fold_row("m_a", pct, 1.0))
+    for pct in (10, 60, 100):
+        rows.append(_fold_row("m_b", pct, 2.0))
+
+    report = _aggregate_649(rows)["games"]["loto_6_49"]
+    assert report["incomplete_methods"] == []
+    assert report["winners_per_pool"]["k10"]["winner"] == "m_b"

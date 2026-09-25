@@ -19,6 +19,23 @@ import pytest
 from loto_enterprise.core import method_selector as ms
 
 
+@pytest.mark.parametrize("payload", [[], None, {"games": []}])
+def test_invalid_config_shape_falls_back_to_frequency(tmp_path, payload):
+    config = tmp_path / "best_methods.json"
+    config.write_text(json.dumps(payload), encoding="utf-8")
+    assert ms.get_winner_name("loto_6_49", 6, str(config)) == "frequency"
+
+
+@pytest.mark.parametrize("weight", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_saved_weights_cannot_poison_ensemble(weight):
+    scorer, ensemble, _ = ms._sanitize_ap_production({
+        "scorer": "frequency",
+        "ensemble": [{"method": "frequency", "weight": weight}],
+    })
+    assert scorer == "frequency"
+    assert ensemble == [{"method": "frequency", "weight": 1.0}]
+
+
 # ---------------------------------------------------------------------------
 # combine_ensemble_scores
 # ---------------------------------------------------------------------------
@@ -118,6 +135,10 @@ def test_flat_scores_no_division_by_zero():
 # ---------------------------------------------------------------------------
 # get_ensemble_for_game
 # ---------------------------------------------------------------------------
+# Testele de aici verifică MECANISMUL (citire, sanitizare, ponderi, plafon),
+# deci cer explicit `max_methods`. Implicitul funcției e
+# `decision.ENSEMBLE_MAX_METHODS` (azi 1) — plafonul de producție; un blend
+# cu mai mulți membri e o cerere a apelantului, nu starea implicită.
 @pytest.fixture
 def temp_config(tmp_path):
     def _write(games: dict) -> str:
@@ -166,7 +187,9 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
             }
         }
     )
-    result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    result = ms.get_ensemble_for_game(
+        "loto_6_49", pool_size=10, config_path=cfg_path, max_methods=3
+    )
     names = {name for name, _fn, _w in result}
     assert "frequency" in names
     assert "random" not in names
@@ -441,7 +464,9 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
         ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path)
         == "ewma_hl30"
     )
-    result = ms.get_ensemble_for_game("joker_urna2", pool_size=1, config_path=cfg_path)
+    result = ms.get_ensemble_for_game(
+        "joker_urna2", pool_size=1, config_path=cfg_path, max_methods=3
+    )
     assert [name for name, _fn, _weight in result] == ["ewma_hl30", "frequency"]
     assert sum(weight for _name, _fn, weight in result) == pytest.approx(1.0)
     cfg = ms.recommend_optimal_config("joker_urna2", 1, config_path=cfg_path)
@@ -468,7 +493,9 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
             }
         }
     )
-    result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    result = ms.get_ensemble_for_game(
+        "loto_6_49", pool_size=10, config_path=cfg_path, max_methods=3
+    )
     names = [name for name, _fn, _w in result]
     assert "random" not in names
     assert names == ["frequency", "ewma_hl30", "markov_pairs"]
