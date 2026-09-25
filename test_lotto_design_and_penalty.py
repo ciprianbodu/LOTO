@@ -103,6 +103,17 @@ def test_apply_recent_penalty_multiplies_by_factor_per_appearance():
     assert same == scores and none == {}
 
 
+def test_apply_recent_penalty_lowers_negative_scores():
+    """Inmultirea simpla urca un scor negativ (-1.0 * 0.5 = -0.5) si il muta
+    peste un numar nepenalizat; penalizarea trebuie sa coboare pe ambele semne."""
+    draws = np.array([[1, 3, 4, 5, 6, 7]])
+    out, _ = LotoEngine.apply_recent_penalty({1: -1.0, 2: -0.9}, draws, 1, 0.5, 49)
+    assert out[1] == -1.5 and out[2] == -0.9
+    assert out[1] < out[2]
+    pos, _ = LotoEngine.apply_recent_penalty({1: 0.3, 2: 0.2}, draws, 1, 0.35, 49)
+    assert pos[1] == 0.3 * 0.35 and pos[2] == 0.2
+
+
 def test_pipeline_penalty_changes_pool_and_is_audited():
     eng = LotoEngine("6/49")
     eng.data = _df(120, 6, 49)

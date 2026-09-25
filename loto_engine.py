@@ -446,8 +446,9 @@ class LotoEngine(PipelineMixin, ScoringMixin):
     ) -> tuple[dict, dict]:
         """Penalizează numerele extrase în ultimele `n_draws` extrageri.
 
-        Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri se
-        înmulțește cu `factor**k`. Preferință a utilizatorului, neutră ca
+        Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri scade
+        cu `(1 - factor**k) * |scor|`: pentru scoruri pozitive e exact înmulțirea
+        cu `factor**k`, iar un scor negativ coboară, nu urcă. Preferință a utilizatorului, neutră ca
         valoare așteptată (vezi AGENTS.md §6): nu schimbă probabilitatea
         extragerii, doar compoziția pool-ului. Întoarce (scoruri_noi,
         {numar: aparitii}) — al doilea dict conține doar numerele penalizate.
@@ -470,7 +471,12 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         out = {}
         for num, sc in scores.items():
             k = counts.get(int(num), 0)
-            out[num] = float(sc) * (f**k) if k else float(sc)
+            v = float(sc)
+            if k:
+                # La v < 0, v*f**k ar URCA scorul (-1 * 0.5 = -0.5). Ramura pozitiva
+                # pastreaza exact inmultirea veche, bit cu bit (pool si cache WF).
+                v = v * (f**k) if v >= 0 else v * (2.0 - f**k)
+            out[num] = v
         return out, {k_: v_ for k_, v_ in sorted(counts.items())}
 
     def _get_initial_hard_core(
