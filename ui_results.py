@@ -1,6 +1,7 @@
 """Results / pool / cost rendering."""
 from __future__ import annotations
 
+import json
 import logging
 import math
 import time
@@ -758,6 +759,43 @@ def _show_report() -> None:
     dlg.open()
 
 
+# Clipboard-ul browserului: `navigator.clipboard` există doar pe pagini sigure
+# (localhost/HTTPS). Deschisă pe adresa de rețea (http://192.168...), pagina cade
+# pe `execCommand("copy")`, cu textarea pusă în dialog: capcana de focus a
+# dialogului Quasar ar anula o selecție făcută în afara lui.
+_COPY_JS = """
+try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+const box = document.createElement("textarea");
+box.value = text;
+box.setAttribute("readonly", "");
+box.style.position = "fixed";
+box.style.opacity = "0";
+const host = (document.activeElement && document.activeElement.parentElement) || document.body;
+host.appendChild(box);
+box.select();
+let ok = false;
+try { ok = document.execCommand("copy"); } catch (e) {}
+box.remove();
+return ok;
+"""
+
+
+async def _copy_text_to_clipboard(text: str) -> None:
+    try:
+        ok = await ui.run_javascript(
+            f"const text = {json.dumps(text)};" + _COPY_JS, timeout=5.0
+        )
+    except Exception:  # noqa: BLE001 - timeout sau client deconectat
+        ok = False
+    if ok:
+        ui.notify("📋 Numerele au fost copiate.", type="positive")
+    else:
+        ui.notify(
+            "Browserul nu a permis copierea; selectați numerele din fereastră.",
+            type="warning",
+        )
+
+
 def _show_full_ticket() -> None:
     """Câte un bilet complet per joc (3/4/2 variante) din pool-ul afișat."""
     from loto_enterprise.core.full_ticket import TICKET_VARIANTS, build_full_ticket
@@ -767,11 +805,14 @@ def _show_full_ticket() -> None:
         ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
         return
     rb, _ = res
+    copy_lines: list[str] = []
     with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
         ui.label("🎟️ Bilet complet (un bilet fizic pe joc)").classes("text-bold")
         ui.label(
-            "Variantele se aleg din pool-ul afișat. Acoperirea e cea a acestor "
-            "câteva variante, nu a wheel-ului complet; nu e o șansă de câștig."
+            "Variantele se aleg din pool-ul afișat, potrivit automat după "
+            "clasamentul metodei când e prea mic sau prea mare pentru bilet. "
+            "Acoperirea e cea a acestor câteva variante, nu a wheel-ului "
+            "complet; nu e o șansă de câștig."
         ).classes("text-caption")
         for _fn, outs in rb:
             for g, raw in _ordered_game_items(outs):
@@ -782,19 +823,33 @@ def _show_full_ticket() -> None:
                 if t.get("error"):
                     ui.label(f"⚠️ {t['error']}").classes("text-warning")
                     continue
+                if t.get("note"):
+                    ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
+                if copy_lines:
+                    copy_lines.append("")
+                copy_lines.append(game.upper())
                 for i, v in enumerate(t["variants"], 1):
                     if t["joker"] is not None:
                         txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
                     else:
                         txt = ", ".join(str(n) for n in v)
                     ui.label(f"V{i}: {txt}").classes("font-mono")
+                    copy_lines.append(f"V{i}: {txt}")
                 n = len(t["variants"])
                 cost = n * PRICES.get(game, 0.0)
                 ui.label(
                     f"{n}/{TICKET_VARIANTS[game]} variante · acoperire garanție "
                     f"{t['guarantee']}: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
                 ).classes("text-caption")
-        ui.button("Închide", on_click=dlg.close)
+        copy_text = "\n".join(copy_lines)
+        with ui.row().classes("w-full justify-end gap-2"):
+            copy_btn = ui.button(
+                "📋 Copiază numerele",
+                on_click=lambda: _copy_text_to_clipboard(copy_text),
+            ).props("color=primary no-caps")
+            if not copy_text:
+                copy_btn.disable()
+            ui.button("Închide", on_click=dlg.close).props("no-caps")
     dlg.open()
 
 

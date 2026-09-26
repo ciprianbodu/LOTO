@@ -43,3 +43,48 @@ def test_every_pool_number_is_played():
 def test_pool_smaller_than_a_ticket_is_refused():
     t = build_full_ticket("6/49", {"hard_core": [1, 2, 3], "guarantee": 3})
     assert t["error"] and "variants" not in t
+
+
+_RANK = {n: float(26 - n) for n in range(1, 26)}  # 1 = cel mai bine clasat
+
+
+def _data(pool, scores=_RANK, **extra):
+    d = {"hard_core": pool, "guarantee": 3, "audit": {"timesfm_predictions": scores}}
+    d.update(extra)
+    return d
+
+
+def test_6_49_pool_of_six_gets_the_next_ranked_number():
+    """Din 6 numere iese o singura varianta de 6; biletul cere 3 distincte."""
+    t = build_full_ticket("6/49", _data([1, 2, 3, 4, 5, 6]))
+    assert t["pool"] == [1, 2, 3, 4, 5, 6, 7]
+    assert len({tuple(v) for v in t["variants"]}) == 3
+    assert "am adăugat 7" in t["note"]
+
+
+def test_extension_follows_the_canonical_tie_break():
+    """La scor egal castiga numarul mai mare, ca la pool-ul afisat."""
+    scores = {n: 10.0 for n in range(1, 7)} | {20: 1.0, 30: 1.0}
+    t = build_full_ticket("6/49", _data([1, 2, 3, 4, 5, 6], scores))
+    assert t["pool"] == [1, 2, 3, 4, 5, 6, 30]
+
+
+def test_joker_pool_over_ten_keeps_the_best_ranked_ten():
+    pool = list(range(1, 13))
+    t = build_full_ticket("joker", _data(pool, hard_core_joker=[7]))
+    assert t["pool"] == list(range(1, 11))
+    assert {n for v in t["variants"] for n in v[:5]} == set(range(1, 11))
+    assert "În afara biletului: 11, 12" in t["note"]
+
+
+def test_pools_within_ticket_limits_are_untouched():
+    for game, pool in (("6/49", list(range(1, 17))), ("5/40", list(range(1, 7))),
+                       ("joker", list(range(1, 11)))):
+        t = build_full_ticket(game, _data(pool, hard_core_joker=[7]))
+        assert t["pool"] == pool and t["note"] is None
+
+
+def test_without_ranking_the_pool_stays_and_the_reason_is_shown():
+    t = build_full_ticket("6/49", {"hard_core": [1, 2, 3, 4, 5, 6], "guarantee": 3})
+    assert t["pool"] == [1, 2, 3, 4, 5, 6] and len(t["variants"]) == 1
+    assert "clasamentul metodei lipsește" in t["note"]

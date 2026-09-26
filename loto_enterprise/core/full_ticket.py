@@ -1,14 +1,25 @@
 """Un bilet fizic complet per joc, din pool-ul rezultatului afisat.
 
 Numarul de variante simple de pe un bilet: 3 la 6/49, 4 la 5/40, 2 la Joker.
-Variantele se aleg din pool cu wheel-ul cu buget (acelasi traseu ca
-`max_variants` in productie), deci acoperirea e recalculata exact pentru acest
-numar de variante, nu mostenita de la wheel-ul complet.
+Variantele se aleg cu wheel-ul cu buget (acelasi traseu ca `max_variants` in
+productie), deci acoperirea e recalculata exact pentru aceste variante.
+
+Pool-ul biletului se potriveste automat pe clasamentul metodei (acelasi
+`rank_by_score` ca pool-ul afisat):
+- prea mic pentru variante distincte (6/49 cu 6 numere are o singura
+  combinatie de 6) -> se adauga urmatoarele numere din clasament;
+- mai mare decat locurile de pe bilet (Joker: 2 x 5 = 10) -> raman cele mai
+  bine clasate numere, ca niciun numar jucat sa nu fie ales la intamplare.
+Clasamentul vine din `audit["timesfm_predictions"]`, calculat dupa
+restrangerea bazei si dupa penalizarea recenta, deci le respecta pe amandoua.
 """
 
 from __future__ import annotations
 
+from math import comb
+
 from covering.dispatch import generate_wheel
+from loto_enterprise.core.ranking import rank_by_score
 
 TICKET_VARIANTS = {"6/49": 3, "5/40": 4, "joker": 2}
 PICK = {"6/49": 6, "5/40": 5, "joker": 5}
@@ -25,15 +36,74 @@ def _pool_scores(data: dict) -> dict[int, float] | None:
         return None
 
 
+def _min_pool(pick: int, n_var: int) -> int:
+    """Cel mai mic pool din care ies `n_var` variante distincte de `pick`."""
+    k = pick
+    while comb(k, pick) < n_var:
+        k += 1
+    return k
+
+
+def _fmt(nums) -> str:
+    return ", ".join(str(n) for n in nums)
+
+
+def _ticket_pool(
+    pool: list[int], scores: dict[int, float] | None, n_var: int, pick: int
+) -> tuple[list[int], str | None]:
+    """Pool-ul efectiv al biletului si explicatia ajustarii (None = neschimbat)."""
+    need = _min_pool(pick, n_var)
+    capacity = n_var * pick
+    if len(pool) < need:
+        if not scores:
+            return pool, (
+                f"Pool-ul are {len(pool)} numere, prea puține pentru {n_var} "
+                "variante distincte, iar clasamentul metodei lipsește din "
+                "rezultat. Generați cu un pool mai mare."
+            )
+        extra = rank_by_score(
+            {n: s for n, s in scores.items() if n not in pool}, need - len(pool)
+        )
+        if len(extra) < need - len(pool):
+            return pool, (
+                f"Pool-ul are {len(pool)} numere, prea puține pentru {n_var} "
+                "variante distincte."
+            )
+        which = (
+            "următorul număr din clasamentul metodei"
+            if len(extra) == 1
+            else "următoarele numere din clasamentul metodei"
+        )
+        return sorted(pool + extra), (
+            f"Cu {len(pool)} numere există prea puține combinații de {pick} "
+            f"pentru {n_var} variante; am adăugat {_fmt(sorted(extra))}, {which}."
+        )
+    if len(pool) > capacity:
+        if not scores or any(n not in scores for n in pool):
+            return pool, (
+                f"Pe {n_var} variante încap {capacity} numere, iar pool-ul are "
+                f"{len(pool)}; clasamentul metodei lipsește, deci unele numere "
+                "pot rămâne în afara biletului."
+            )
+        kept = rank_by_score({n: scores[n] for n in pool}, capacity)
+        dropped = sorted(set(pool) - set(kept))
+        return sorted(kept), (
+            f"Pe {n_var} variante încap {capacity} numere; am păstrat cele mai "
+            f"bine clasate {capacity}. În afara biletului: {_fmt(dropped)}."
+        )
+    return pool, None
+
+
 def build_full_ticket(game: str, data: dict) -> dict:
-    """Intoarce {variants, coverage, guarantee, cost_per_variant_count, error}."""
+    """{variants, coverage, guarantee, joker, pool, note, error} pentru un joc."""
     n_var = TICKET_VARIANTS.get(game)
     pick = PICK.get(game)
     if n_var is None:
         return {"error": f"joc necunoscut: {game}"}
-    pool = [int(x) for x in (data.get("hard_core") or [])]
+    pool = sorted({int(x) for x in (data.get("hard_core") or [])})
     if len(pool) < pick:
-        return {"error": "pool-ul afisat e mai mic decat un bilet"}
+        return {"error": "pool-ul afișat e mai mic decât un bilet"}
+    pool, note = _ticket_pool(pool, _pool_scores(data), n_var, pick)
     guarantee = max(1, min(int(data.get("guarantee") or 3), pick))
     variants, coverage = generate_wheel(
         "greedy",
@@ -55,5 +125,7 @@ def build_full_ticket(game: str, data: dict) -> dict:
         "coverage": float(coverage),
         "guarantee": guarantee,
         "joker": joker,
+        "pool": pool,
+        "note": note,
         "error": None,
     }
