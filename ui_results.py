@@ -758,6 +758,46 @@ def _show_report() -> None:
     dlg.open()
 
 
+def _show_full_ticket() -> None:
+    """Câte un bilet complet per joc (3/4/2 variante) din pool-ul afișat."""
+    from loto_enterprise.core.full_ticket import TICKET_VARIANTS, build_full_ticket
+
+    res = STATE.get("results")
+    if not isinstance(res, tuple) or len(res) != 2:
+        ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
+        return
+    rb, _ = res
+    with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
+        ui.label("🎟️ Bilet complet (un bilet fizic pe joc)").classes("text-bold")
+        ui.label(
+            "Variantele se aleg din pool-ul afișat. Acoperirea e cea a acestor "
+            "câteva variante, nu a wheel-ului complet; nu e o șansă de câștig."
+        ).classes("text-caption")
+        for _fn, outs in rb:
+            for g, raw in _ordered_game_items(outs):
+                game = _game_label_for(str(g))
+                t = build_full_ticket(game, _primary_pool_data(raw))
+                ui.separator()
+                ui.label(game.upper()).classes("text-bold")
+                if t.get("error"):
+                    ui.label(f"⚠️ {t['error']}").classes("text-warning")
+                    continue
+                for i, v in enumerate(t["variants"], 1):
+                    if t["joker"] is not None:
+                        txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
+                    else:
+                        txt = ", ".join(str(n) for n in v)
+                    ui.label(f"V{i}: {txt}").classes("font-mono")
+                n = len(t["variants"])
+                cost = n * PRICES.get(game, 0.0)
+                ui.label(
+                    f"{n}/{TICKET_VARIANTS[game]} variante · acoperire garanție "
+                    f"{t['guarantee']}: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
+                ).classes("text-caption")
+        ui.button("Închide", on_click=dlg.close)
+    dlg.open()
+
+
 # Descrierea unei metode vine din `notes`-ul ei din registry
 # (`methods.method_meta`), prin `_method_desc` de mai jos. `_METHOD_DESC` e
 # doar un overlay pentru cele doua baseline-uri, care n-au o nota lizibila.

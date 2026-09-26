@@ -470,6 +470,12 @@ limita de validitate din §5).
 ## 6. Pool unic
 
 - Pool-ul UI este limitat la 6..16.
+- Butonul „🎟️ Bilet complet" din sidebar face cate un bilet fizic per joc din
+  pool-ul rezultatului afisat: 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu
+  numarul Joker pe fiecare). Variantele vin din wheel-ul cu buget
+  (`core/full_ticket.py`, `generate_wheel` cu `max_variants`), iar acoperirea
+  afisata e a acestor variante, nu a wheel-ului complet. Nu trimite job si nu
+  schimba rezultatul afisat.
 - Selectia este top-N pura dupa scorul validat.
 - Fiecare joc genereaza si afiseaza un singur pool; configuratia, worker-ul,
   raportul, emailul si walk-forward-ul nu mai au Pool 2/auto-invert.

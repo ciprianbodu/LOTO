@@ -2043,6 +2043,10 @@ def main_page() -> None:
             "🚀 Generează (setări manuale)",
             on_click=lambda: submit_generation(pure=False),
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.button(
+            "🎟️ Bilet complet (6/49: 3 · 5/40: 4 · Joker: 2 variante)",
+            on_click=lambda: _show_full_ticket(),
+        ).props("color=positive no-caps").classes(_BTN).style(_BTN_STYLE)
 
         ui.separator()
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
