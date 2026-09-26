@@ -545,8 +545,10 @@ def test_bench_note_and_report_name_the_limit(monkeypatch):
     changed = _limited_result([[4, 5]], [[9, 8]])
     note = app._bench_transform_note(changed)
     assert "limita de consecutive (fără 3 numere consecutive în pool)" in note
-    # Top-N care respecta deja limita: bench-ul a măsurat chiar pool-ul jucat.
-    assert app._bench_transform_note(_limited_result([], [])) == ""
+    # Și fără înlocuire azi: bench-ul măsoară top-K brut la fiecare pas din
+    # istoric, iar limita schimbă pool-ul jucat la mulți dintre ei.
+    assert "limita de consecutive" in app._bench_transform_note(_limited_result([], []))
+    assert app._bench_transform_note({"audit": {}}) == ""
 
     monkeypatch.setitem(app.STATE, "results", ([("x.csv", {"6/49": changed})], 0))
     monkeypatch.setitem(app.STATE, "retro", {})
@@ -642,3 +644,21 @@ def test_submit_worker_result_and_wf_options_carry_the_limit(tmp_path, monkeypat
     assert job_old["id"] == jid_old
     assert data_old["max_consecutive_run"] == 0
     assert "consecutive_limit" not in data_old["audit"]
+
+
+
+@pytest.mark.parametrize(
+    "lookback,expected",
+    [(30, "în ultimele 30% din istoric:"), (0, "de câte ori a ieșit numărul în istoric:")],
+)
+def test_pool_header_says_where_the_frequency_was_counted(lookback, expected):
+    """Paranteza e frecvența pe istoricul folosit; cu lookback, doar pe fereastră."""
+    import app_nicegui as app
+    from scripts.analysis.audit_output import capture_ui
+
+    data = _limited_result([], [])
+    data["hard_core_stats"] = {5: 114}
+    data["audit"]["lookback_pct"] = lookback
+    with capture_ui() as ui:
+        app._render_pool_body("loto_6_49.csv", "6/49", data)
+    assert expected in ui.text()

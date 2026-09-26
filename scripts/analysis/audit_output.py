@@ -202,7 +202,7 @@ def audit_bundle(bundle):
                 or 0
             )
             # Opțiunile de compoziție (bază restrânsă, limită de consecutive) din
-            # rezultat, ca la pornirea WF din UI; fără ele cheia citea tacit
+            # rezultat, ca la pornirea WF din UI; fără ele cheia ar citi tacit
             # cache-ul configurației nerestrânse.
             opts = app_ui._wf_generation_options(data)
             sig = wf._decision_sig(

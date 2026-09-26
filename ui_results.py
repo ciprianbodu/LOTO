@@ -495,8 +495,10 @@ def _bench_transform_note(data: dict) -> str:
     _rb_text = _restrict_base_text(audit)
     if _rb_text:
         changes.append(_rb_text)
-    _cl = audit.get("consecutive_limit") or {}
-    if _cl.get("removed") or _cl.get("relaxed"):
+    # Numită oricând e activă, ca restrângerea: bench-ul măsoară top-K brut la
+    # fiecare pas din istoric, iar limita schimbă pool-ul jucat la mulți dintre
+    # ei, chiar dacă pool-ul de azi n-a avut nevoie de nicio înlocuire.
+    if int((audit.get("consecutive_limit") or {}).get("requested") or 0) > 0:
         changes.append(
             f"limita de consecutive ({_consecutive_limit_text(audit, details=False)})"
         )
@@ -1149,9 +1151,13 @@ def _render_pool_body(
             "🎯 Metodă scorer: fallback implicit (fără decizie bench disponibilă)"
         ).classes("text-caption text-grey")
 
-    ui.label("Nucleu dur (pool) — în paranteză, de câte ori a ieșit numărul:").classes(
-        "text-bold mt-2"
-    )
+    # Frecvența din paranteză e numărată pe istoricul folosit la generare: cu
+    # lookback, doar pe fereastra lui, nu pe tot CSV-ul.
+    _lb = float((data.get("audit") or {}).get("lookback_pct") or 0)
+    _where = f"în ultimele {_lb:g}% din istoric" if 0 < _lb < 100 else "în istoric"
+    ui.label(
+        f"Nucleu dur (pool) — în paranteză, de câte ori a ieșit numărul {_where}:"
+    ).classes("text-bold mt-2")
     _badges(pool, stats)
     _cw = _consecutive_pool_warning(pool)
     if _cw:
