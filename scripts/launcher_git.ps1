@@ -74,8 +74,47 @@ if (-not $gitExe) {
 }
 Write-Host ('[GIT] Executabil: ' + $gitExe)
 
+# Pe un folder sincronizat in cloud, fisierele pot fi doar descarcate la cerere,
+# iar git status le citeste pe toate: limita de 45 s nu ajunge la prima trecere.
+$cloudFolder = (Get-Location).Path -match 'My Drive|Google Drive|OneDrive|Dropbox'
+$script:GitTimeoutSeconds = if ($cloudFolder) { 180 } else { 45 }
+
+function Request-OfflinePin {
+    # attrib +P cere furnizorului cloud sa pastreze fisierele pe disc
+    # (Disponibil offline). O data reusit, marcajul din .git evita repetarea.
+    $marker = Join-Path (Get-Location).Path '.git\loto-offline-pin'
+    if (Test-Path -LiteralPath $marker -PathType Leaf) { return }
+    Write-Host '[GIT] Folder sincronizat in cloud - cer fixarea fisierelor pe disc (Disponibil offline)...'
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = "$env:SystemRoot\System32\attrib.exe"
+    $info.Arguments = '+P /S /D "' + (Join-Path (Get-Location).Path '*') + '"'
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $process = [System.Diagnostics.Process]::Start($info)
+    $stdout = $process.StandardOutput.ReadToEndAsync()
+    $stderr = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit(300000)) {
+        & "$env:SystemRoot\System32\taskkill.exe" /F /T /PID $process.Id 2>&1 | Out-Null
+        $process.Dispose()
+        Write-Host '[GIT] Fixarea offline nu s-a terminat in 5 minute; continui fara ea.'
+        return
+    }
+    $text = ($stdout.Result + $stderr.Result).Trim()
+    $code = $process.ExitCode
+    $process.Dispose()
+    if ($code -eq 0 -and -not $text) {
+        Set-Content -LiteralPath $marker -Value (Get-Date -Format 's') -Encoding ASCII
+        Write-Host '[GIT] Fixare offline ceruta. Drive descarca fisierele in fundal.'
+    } else {
+        Write-Host '[GIT] Google Drive nu a acceptat fixarea automata. Manual: click dreapta pe folderul proiectului > Acces offline > Disponibil offline.'
+    }
+}
+
 function Invoke-LotoGit {
-    param([string[]]$GitArgs, [int]$TimeoutSeconds = 45)
+    param([string[]]$GitArgs, [int]$TimeoutSeconds = 0)
+    if ($TimeoutSeconds -le 0) { $TimeoutSeconds = $script:GitTimeoutSeconds }
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = $gitExe
     $info.WorkingDirectory = (Get-Location).Path
@@ -101,7 +140,11 @@ function Invoke-LotoGit {
         # Only this Git invocation and its children; never an application worker.
         & "$env:SystemRoot\System32\taskkill.exe" /F /T /PID $process.Id 2>&1 | Out-Null
         $process.Dispose()
-        throw 'Git a depasit timpul de asteptare; operatia s-a oprit.'
+        $message = 'Git a depasit ' + $TimeoutSeconds + ' s la "git ' + ($GitArgs -join ' ') + '"; operatia s-a oprit.'
+        if ($info.WorkingDirectory -match 'My Drive|Google Drive|OneDrive|Dropbox') {
+            $message += ' Proiectul este intr-un folder sincronizat in cloud (' + $info.WorkingDirectory + '); acolo git citeste lent fiecare fisier. Tineti repository-ul pe disc local.'
+        }
+        throw $message
     }
     $result = [pscustomobject]@{
         Code = $process.ExitCode
@@ -139,7 +182,7 @@ function Clear-StaleGitLocks {
 }
 
 function Invoke-LotoGitRetry {
-    param([string[]]$GitArgs, [int]$TimeoutSeconds = 45)
+    param([string[]]$GitArgs, [int]$TimeoutSeconds = 0)
     $result = Invoke-LotoGit -GitArgs $GitArgs -TimeoutSeconds $TimeoutSeconds
     if ($result.Code -ne 0 -and $result.Text -match 'File exists|Another git process') {
         Clear-StaleGitLocks
@@ -170,6 +213,10 @@ try {
         if ($statePath.Code -ne 0 -or (Test-Path -LiteralPath $statePath.Text)) {
             throw 'Exista o operatie Git neterminata. Pastrez starea pentru rezolvare manuala.'
         }
+    }
+    if ($cloudFolder) {
+        # Fixarea e un ajutor, nu o conditie: un esec aici nu opreste sincronizarea.
+        try { Request-OfflinePin } catch { Write-Host ('[GIT] Fixare offline esuata: ' + $_.Exception.Message) }
     }
     Clear-StaleGitLocks
     $hooks = Invoke-LotoGit -GitArgs @('config', 'core.hooksPath', 'scripts/git-hooks')

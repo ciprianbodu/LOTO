@@ -1,6 +1,6 @@
 """Teste de caracterizare pentru calea SECVENTIALA CU STARE (adaptive feedback +
 hard inversion) din LotoBacktester.run_retroactive_backtest — inainte de orice
-refactorizare (CLAUDE.md §12 P2: "adauga teste de caracterizare inaintea
+refactorizare (AGENTS.md §12 P2: "adauga teste de caracterizare inaintea
 fiecarei extrageri").
 
 Singurul test existent pentru run_retroactive_backtest (test_wf_partial_cache_
@@ -47,7 +47,7 @@ _GOLDEN = [
 def test_stateful_path_matches_golden_reference(monkeypatch, tmp_path):
     from loto_enterprise.core.backtesting import LotoBacktester
 
-    # Fara best_methods.json -> fallback determinist pe `frequency` (CLAUDE.md
+    # Fara best_methods.json -> fallback determinist pe `frequency` (AGENTS.md
     # §4.2), la fel ca la capturarea valorilor golden. `_DEFAULT_CONFIG_PATH`
     # e o cale ABSOLUTA derivata din locatia modulului, nu relativa la CWD —
     # trebuie redirectionata explicit, un `chdir` n-ar avea niciun efect (si
@@ -66,7 +66,6 @@ def test_stateful_path_matches_golden_reference(monkeypatch, tmp_path):
         simulation_step=1,
         use_feedback=True,
         enable_hard_inversion=True,
-        smart_reduction=False,
     )
     got = [(p.draw_index, p.hits, p.hits_union, len(p.variants)) for p in preds]
     assert got == _GOLDEN

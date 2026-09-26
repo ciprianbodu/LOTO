@@ -46,7 +46,9 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v26"
+CACHE_VERSION = "v27"
+# v27: Loto 5/40 numără hiturile pe toate cele 6 numere extrase (n1..n6), nu
+#      doar pe primele 5; scorerii învață din extrageri de 6. Biletul rămâne 5.
 # v26: SES corect (s_0 = x_0 pe toată seria) și `theta_drift` pe prognoza liniară
 #      a ratei glisante. Pool-urile `ses_opt_alpha`, `imapa_agg` și
 #      `theta_drift` din v25 nu se mai reproduc.
@@ -135,6 +137,8 @@ class WalkForwardResult:
     # Contează fiindcă `hits_union` e hit de POOL: „3 în pool" ⇔ „3 pe un bilet"
     # doar la 100% acoperire (şi guarantee ≥ 3); sub 100% e un PLAFON.
     wheel_coverage: float | None = None
+    # Joker: numarul din urna 2 a iesit la aceasta extragere (None = alt joc/necunoscut).
+    joker_hit: bool | None = None
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -213,6 +217,8 @@ def per_draw_hit_summary(flat) -> dict:
                 "pool": int(getattr(p, "hits_union", 0) or 0),
                 "best_ticket": int(getattr(p, "hits", 0) or 0),
             }
+            if getattr(p, "joker_hit", None) is not None:
+                per[draw_index]["joker"] = bool(p.joker_hit)
         else:
             row["best_ticket"] = max(
                 int(row["best_ticket"]), int(getattr(p, "hits", 0) or 0)
@@ -230,7 +236,7 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     df = canonical_history_columns(df)
     cols_map = {
         "6/49": ["n1", "n2", "n3", "n4", "n5", "n6"],
-        "5/40": ["n1", "n2", "n3", "n4", "n5"],
+        "5/40": ["n1", "n2", "n3", "n4", "n5", "n6"],
         "joker": ["n1", "n2", "n3", "n4", "n5", "joker"],
     }
     cols = [c for c in cols_map.get(game_type, []) if c in df.columns]
@@ -243,7 +249,8 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
     return h[:12]
 
 
-# Câte numere se extrag per joc (= `pick`-ul wheel-ului).
+# Câte numere are un BILET (= `pick`-ul wheel-ului). La 5/40 se extrag 6, dar
+# biletul are 5; hiturile se numără pe toate cele 6 extrase.
 _WF_PICK = {"6/49": 6, "5/40": 5, "joker": 5}
 
 
@@ -410,6 +417,7 @@ def _decision_sig(
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
+        from loto_enterprise.benchmark.hit_target import game_hit_target
 
         gk = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}.get(
             game_type, "loto_6_49"
@@ -429,7 +437,7 @@ def _decision_sig(
         # fără să schimbe pool-ul sau wheel-ul.
         raw = (
             f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-            f"{BENCH_HIT_TARGET}|{_ens_sig}{urna2_sig}|"
+            f"{game_hit_target(gk, BENCH_HIT_TARGET)}|{_ens_sig}{urna2_sig}|"
             f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
@@ -533,6 +541,7 @@ def expand_predictions_to_flat(
                     hits_union=p.hits_union,
                     target_draw_date=p.target_draw_date,
                     wheel_coverage=getattr(p, "wheel_coverage", None),
+                    joker_hit=getattr(p, "joker_hit", None),
                 )
             )
     return flat
@@ -713,12 +722,10 @@ def run_honest_walk_forward(
         wheel_condition=condition,
         lookback_percent=lookback_percent,
         backtest_depth_percent=backtest_depth_percent,
-        filter_consecutives=False,
         max_variants=cap,
         simulation_step=1,
         use_feedback=False,  # decuplat pentru a măsura PUR ce face engine-ul
         enable_hard_inversion=False,  # idem
-        smart_reduction=False,
         progress_cb=progress_cb,  # frac 0..1 per simulare → bară de progres în UI
         should_cancel=should_cancel,  # oprire timpurie (anulare/buget timp) → validare parțială
         # Pașii deja validați în cache-ul PARȚIAL se sar: altfel rularea nouă

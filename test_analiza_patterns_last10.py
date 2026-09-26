@@ -53,10 +53,11 @@ def _write_5_40_csv(path: Path, n_rows: int = 60) -> None:
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
-def test_5_40_filename_forces_five_columns_despite_six_populated(tmp_path):
+def test_5_40_filename_uses_all_six_drawn_columns(tmp_path):
+    # Loto 5/40 extrage 6 numere; hiturile se numara pe toate 6 (biletul are 5).
     csv = tmp_path / "loto_5_40.csv"
     _write_5_40_csv(csv)
-    assert _draw_size(_run(csv)) == 5
+    assert _draw_size(_run(csv)) == 6
 
 
 def test_6_49_filename_still_uses_six_columns(tmp_path):

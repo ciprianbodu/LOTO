@@ -48,8 +48,9 @@ def _probabilities(v: int, masks: tuple[int, ...], draw_n: int, max_num: int):
 def wheel_hit_probabilities(pool, tickets, draw_n: int, max_num: int) -> dict:
     """P(at least t hits), for pool and at least one ticket, t=1..draw_n.
 
-    Tickets contain only main-urn numbers. For 5/40 callers choose draw_n=5
-    (first-five benchmark) or 6 (all-six hit statistics); no prize is inferred.
+    Tickets contain only main-urn numbers. For 5/40 the app uses draw_n=6
+    (hits counted on all six drawn numbers, 5-number tickets); no prize is
+    inferred.
     Joker's second urn must be handled separately by the caller.
     Invalid/oversized data are rejected instead of publishing misleading odds.
     """

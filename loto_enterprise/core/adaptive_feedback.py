@@ -59,7 +59,7 @@ _HISTORY_MAXLEN = 50
 # (draw_n, max_n) per joc — pentru E(hits) al unui pool ales la întâmplare.
 _GAME_GEOMETRY = {
     "6/49": (6, 49),
-    "5/40": (5, 40),
+    "5/40": (6, 40),  # 6 numere extrase; hiturile se numără pe toate 6
     "joker": (5, 45),
 }
 
@@ -278,59 +278,6 @@ def record_predicted_pool(
     state["last_pool_date"] = pool_date or datetime.now().isoformat(timespec="seconds")
     state["last_data_rows"] = int(data_rows)
     save_adaptive_state(game_type, pool_size, state)
-
-
-def compute_temp_blacklist(
-    last_pool: list[int],
-    last_event: str | None,
-    universe_size: int = 49,
-    pool_size: int = 12,
-    enable_full_inversion: bool = True,
-    partial_k: int = 4,
-) -> set[int]:
-    """
-    Hard Inversion Temporară: după o CATASTROFĂ (0 hits), excludem temporar
-    numere din pool-ul ratat la următoarea predicție.
-
-    Strategie:
-        * Activă DOAR dacă last_event == "catastrophe"
-        * Cu enable_full_inversion=True (recomandat): excludem TOT pool-ul
-          ratat — forțăm pool-ul nou să fie complet în spațiul complementar.
-          Dacă universul (49) - pool_size (12) < pool_size (12), nu putem
-          exclude toate (am ramane fara candidati suficienti) → fallback la
-          excludere parțială.
-        * Cu enable_full_inversion=False: excludem doar primele `partial_k`
-          numere (top-K din pool, asumând pool ordonat dupa scor).
-        * Această excludere e EFEMERĂ — se aplică UNA singură extragere,
-          NU se persistă, NU se acumulează.
-
-    Filozofie: dacă algoritmul a ratat COMPLET, pool-ul lui era prost
-    calibrat. Forțăm explorarea spațiului complementar pentru o extragere
-    singură — dacă rezolvă, nu mai apare catastrofă; dacă nu, măcar testăm
-    ipoteza inversă.
-
-    Args:
-        last_pool: pool-ul anterior (cel ratat în catastrofă)
-        last_event: evenimentul ultimei evaluări ("catastrophe" | altele)
-        universe_size: nr. total de numere din care se extrag (49, 45 etc.)
-        pool_size: dimensiunea pool-ului ce urmează a fi prezis
-        enable_full_inversion: dacă True excludem TOT pool-ul ratat (când
-            spațiul complementar e suficient)
-        partial_k: nr. de numere de exclus când nu facem full inversion
-
-    Returns:
-        set de numere de exclus la următoarea selecție
-    """
-    if last_event != "catastrophe" or not last_pool:
-        return set()
-
-    pool_unique = sorted({int(x) for x in last_pool})
-    available_after_full = universe_size - len(pool_unique)
-
-    if enable_full_inversion and available_after_full >= pool_size:
-        return set(pool_unique)  # full inversion: excludem tot pool-ul ratat
-    k = min(partial_k, len(pool_unique))  # partial fallback
-    return set(pool_unique[:k])
 
 
 def get_state_summary(game_type: str, pool_size: int) -> dict:

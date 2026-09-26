@@ -179,7 +179,6 @@ def _print_top(rows: list[dict], game, pool: int, metric: str, n: int = 15) -> N
     target = int(metric.split("_")[1].replace("plus", ""))
     base_v = expected_random_rate(game.max_num, game.draw_n, pool, target)
     for i, r in enumerate(ok[:n], 1):
-        v = r[col] * 100
         lift = ""
         if base_v and base_v > 0:
             lift = (

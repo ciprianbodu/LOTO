@@ -130,16 +130,12 @@ def _render_audit(audit: dict) -> None:
             "(sunt acceptați doar întregi 1–20)."
         ).classes("text-warning")
 
-    cf = audit.get("consecutive_filter")
-    if cf:
-        ui.markdown(
-            "⚠️ **Intervenție Filtru Anti-Secvență:**\n"
-            + "\n".join(f"- {m}" for m in cf)
-        ).classes("text-warning")
-    # Aici erau randate `timesfm_excluded`, `anomaly_filter`, `smart_selector` și
-    # `kept_sequences`. Niciuna dintre chei nu mai are PRODUCĂTOR în engine (filtrele
-    # TimesFM, Smart Selector și anti-anomalie au fost scoase din pipeline), deci
-    # ramurile nu se mai executau niciodată.
+    # Aici erau randate `consecutive_filter`, `timesfm_excluded`, `anomaly_filter`,
+    # `smart_selector` și `kept_sequences`. Niciuna dintre chei nu mai are
+    # PRODUCĂTOR în engine (filtrul anti-secvență, TimesFM, Smart Selector și
+    # anti-anomalie au fost scoase din pipeline), deci ramurile nu se mai
+    # executau niciodată. `consecutive_filter_warnings` era scrisă în audit de
+    # același filtru, dar nu a fost randată niciodată aici.
 
 
 def _render_stages(audit: dict) -> None:
@@ -200,9 +196,9 @@ def _render_stages(audit: dict) -> None:
 def _render_cost(game: str, data: dict) -> None:
     gk = _game_label_for(game)
     price = PRICES.get(gk, 8.0)
-    draw_n = 6 if gk == "6/49" else 5
+    # Numere pe BILET (5/40 extrage 6, dar varianta are 5).
+    draw_n = _ticket_pick(gk)
     pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
-    import math
 
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
     full_cost = full_vars * price
@@ -302,12 +298,15 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     pool, variants = data.get("hard_core") or [], data.get("variants") or []
     if not params or not pool or not variants:
         return []
-    pick, max_num = params
+    draw_n, max_num = params
+    pick = _ticket_pick(game)
     is_joker = "joker" in str(game).lower()
     try:
         if any(len(v) != pick + int(is_joker) for v in variants):
             raise ValueError("lungime variantă invalidă")
-        odds = wheel_hit_probabilities(pool, [v[:pick] for v in variants], pick, max_num)
+        odds = wheel_hit_probabilities(
+            pool, [v[:pick] for v in variants], draw_n, max_num
+        )
     except (ValueError, TypeError):
         return ["Șanse teoretice indisponibile: pool sau variante invalide."]
     lines = [
@@ -319,14 +318,10 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
         ),
     ]
     if max_num == 40:
-        all_six = wheel_hit_probabilities(pool, variants, 6, 40)
         lines.append(
-            f"5/40 — cel puțin 4 din toate cele 6 numere extrase pe o variantă: "
-            f"{100 * all_six['ticket'][4]:.3f}%."
-        )
-        lines.append(
-            "5/40: analiza folosește primele 5 numere extrase (referința categoriei I). "
-            "3 numere nu aduc premiu; categoriile II/III folosesc toate cele 6 numere extrase."
+            "5/40: hiturile se numără pe toate cele 6 numere extrase (varianta are 5); "
+            "3 numere nu aduc premiu, de aceea ținta bench-ului la 5/40 este 4+. "
+            "Categoria I (5 din primele 5 extrase) nu este modelată separat."
         )
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
@@ -336,6 +331,7 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
 
 def _hypergeo_params(game: str) -> tuple[int, int] | None:
     """(n numere extrase, M univers) pentru baseline-ul random hipergeometric.
+    5/40 = (6, 40): hiturile se numără pe toate cele 6 numere extrase.
     Acceptă etichete UI ("6/49", "5/40", "joker") și chei folds ("loto_6_49",
     "joker_urna1"). Urna 2 Joker are baseline exact separat în
     `_random_rate_hypergeo` (top-1 = 1/20)."""
@@ -343,12 +339,18 @@ def _hypergeo_params(game: str) -> tuple[int, int] | None:
     if "6" in g and "49" in g:
         return (6, 49)
     if "5" in g and "40" in g:
-        return (5, 40)
+        return (6, 40)  # 5/40: se extrag 6 numere, hiturile se numără pe toate 6
     if "urna2" in g:
         return None
     if "joker" in g:
         return (5, 45)
     return None
+
+
+def _ticket_pick(game: str) -> int:
+    """Numere pe BILET: 6 la 6/49, 5 la 5/40 și Joker (Urna 1)."""
+    g = str(game).lower()
+    return 6 if ("6" in g and "49" in g) else 5
 
 
 def _random_rate_hypergeo(game: str, k_pool: int, t_min: int) -> float | None:
@@ -363,7 +365,6 @@ def _random_rate_hypergeo(game: str, k_pool: int, t_min: int) -> float | None:
     # exact 1/20, iar 3+/4+ sunt imposibile.
     if "urna2" in str(game).lower():
         return 1.0 / 20.0 if int(k_pool) == 1 and int(t_min) <= 1 else 0.0
-    import math
 
     params = _hypergeo_params(game)
     if not params:
@@ -559,10 +560,17 @@ def _wf_summary(flat, data: dict | None = None) -> str | None:
     p4 = sum(row["pool"] >= 4 for row in per_draw.values())
     b3 = sum(row["best_ticket"] >= 3 for row in per_draw.values())
     b4 = sum(row["best_ticket"] >= 4 for row in per_draw.values())
+    jk = [row.get("joker") for row in per_draw.values() if row.get("joker") is not None]
+    jk_txt = (
+        f" | Joker urna 2: {sum(jk)}/{len(jk)} ({sum(jk) / len(jk) * 100:.1f}%; "
+        "aleator 5%)"
+        if jk
+        else ""
+    )
     return (
         f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
         f"| best pool={bp} | best bilet={bv} "
-        f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4}{cov_txt}"
+        f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4}{cov_txt}{jk_txt}"
     )
 
 
@@ -750,6 +758,54 @@ def _show_report() -> None:
     dlg.open()
 
 
+def _show_full_ticket() -> None:
+    """Câte un bilet complet per joc (3/4/2 variante) din pool-ul afișat."""
+    from loto_enterprise.core.full_ticket import TICKET_VARIANTS, build_full_ticket
+
+    res = STATE.get("results")
+    if not isinstance(res, tuple) or len(res) != 2:
+        ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
+        return
+    rb, _ = res
+    with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
+        ui.label("🎟️ Bilet complet (un bilet fizic pe joc)").classes("text-bold")
+        ui.label(
+            "Variantele se aleg din pool-ul afișat. Acoperirea e cea a acestor "
+            "câteva variante, nu a wheel-ului complet; nu e o șansă de câștig."
+        ).classes("text-caption")
+        for _fn, outs in rb:
+            for g, raw in _ordered_game_items(outs):
+                game = _game_label_for(str(g))
+                t = build_full_ticket(game, _primary_pool_data(raw))
+                ui.separator()
+                ui.label(game.upper()).classes("text-bold")
+                if t.get("error"):
+                    ui.label(f"⚠️ {t['error']}").classes("text-warning")
+                    continue
+                for i, v in enumerate(t["variants"], 1):
+                    if t["joker"] is not None:
+                        txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
+                    else:
+                        txt = ", ".join(str(n) for n in v)
+                    ui.label(f"V{i}: {txt}").classes("font-mono")
+                n = len(t["variants"])
+                cost = n * PRICES.get(game, 0.0)
+                ui.label(
+                    f"{n}/{TICKET_VARIANTS[game]} variante · acoperire garanție "
+                    f"{t['guarantee']}: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
+                ).classes("text-caption")
+        ui.button("Închide", on_click=dlg.close)
+    dlg.open()
+
+
+# Descrierea unei metode vine din `notes`-ul ei din registry
+# (`methods.method_meta`), prin `_method_desc` de mai jos. `_METHOD_DESC` e
+# doar un overlay pentru cele doua baseline-uri, care n-au o nota lizibila.
+# De ce asa, si nu un dictionar scris de mana cu toate metodele: pana la
+# 15.09.2026 exact un astfel de dictionar tinea in viata numele vechilor
+# filtre structurale (parity_balance, sum_affinity s.a.) la mult timp dupa
+# stergerea lor, iar cele 50 de metode noi nu aveau nicio descriere. O a doua
+# lista, oricat de corecta azi, ramane iar in urma la prima metoda adaugata.
 # Descriere lizibilă per metodă — afișată lângă scorerul de generare.
 # Overlay scurt pentru baseline-uri; restul vine din notele registry-ului
 # (METHODS), ca să nu rămână nume moarte sau claim-uri de performanță.

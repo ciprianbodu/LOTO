@@ -313,16 +313,54 @@ def test_environment_check_uses_canonical_history_directory():
 
 
 def test_updates_integrity_check_matches_cpu_requirements():
-    """Updater-ul nu mai verifică dependențe eliminate precum numba/streamlit."""
+    """Smoke testul din ACTUALIZARI.bat importă EXACT ce se instalează.
+
+    Lista e fixată intenționat, nu relaxată: scoaterea unui pachet din
+    `requirements_base.txt` fără să-l scoți și de aici trece neobservată pe
+    stația de dezvoltare (unde pachetul e deja în venv) și lovește abia la o
+    instalare NOUĂ, unde linia raportează [ATENTIE] pentru ceva ce nimeni nu
+    mai instalează. Exact așa au supraviețuit `sklearn,statsmodels` după
+    14.09.2026. Dacă adaugi sau scoți o dependență, actualizează ambele
+    locuri și acest test."""
     text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
     active = "\n".join(
         line
         for line in text.splitlines()
         if line.strip() and not line.lstrip().upper().startswith("REM")
     ).lower()
-    assert "import numpy,pandas,scipy,sklearn,statsmodels,nicegui" in active
-    assert "import numpy,pandas,scipy,numba" not in active
+    assert "import numpy,pandas,scipy,nicegui" in active
+    for gone in ("sklearn", "statsmodels", "numba", "torch"):
+        assert f",{gone}" not in active, (
+            f"ACTUALIZARI.bat importă {gone}, care nu mai e în requirements_base.txt"
+        )
     assert "taskkill /f /t /im streamlit.exe" not in active
+
+
+def test_launchers_do_not_install_removed_ml_packages():
+    """Niciun lansator nu are voie să instaleze pachetele ML eliminate la
+    14.09.2026 pe lângă requirements_base.txt (un `pip install xgboost` rătăcit
+    ar readuce ~1 GB de dependențe pe care nimic nu le importă)."""
+    removed = (
+        "scikit-learn",
+        "statsforecast",
+        "hmmlearn",
+        "xgboost",
+        "lightgbm",
+        "catboost",
+        "matplotlib",
+    )
+    offenders = []
+    for p in _bat_files():
+        for i, raw in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            line = raw.strip()
+            if line.upper().startswith("REM") or "pip install" not in line.lower():
+                continue
+            for pkg in removed:
+                if pkg in line.lower():
+                    offenders.append(f"{p.name}:{i}: {line}")
+    assert not offenders, "pip install pentru pachete eliminate:\n" + "\n".join(
+        offenders
+    )
 
 
 def test_updates_migrates_wf_cache_out_of_onedrive():

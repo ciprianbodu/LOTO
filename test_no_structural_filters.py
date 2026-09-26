@@ -2,7 +2,7 @@
 
 Un filtru (paritate, sume, decade, poziție) nu prezice un număr: împarte
 universul în câteva clase și dă aceeași valoare tuturor membrilor unei clase.
-Interdicția e o cerință a utilizatorului (CLAUDE.md §13 P3), iar o metodă nouă
+Interdicția e o cerință a utilizatorului (AGENTS.md §13 P3), iar o metodă nouă
 scrisă neatent o poate încălca fără ca nimeni să observe — numele și docstring-ul
 spun altceva decât face codul. Testul măsoară comportamentul, nu intenția:
 

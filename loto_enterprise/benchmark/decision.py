@@ -64,7 +64,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+from loto_enterprise.benchmark.hit_target import (
+    GAME_DRAW_PICK,
+    clamp_bench_hit_target,
+    game_hit_target,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +191,7 @@ KNOWN_GAME_MAX_NUM = {
 # O metoda a carei selectie top-K cade in interiorul unui grup de scoruri EGALE
 # in cel putin aceasta fractie din blocurile evaluate nu alege pool-ul dupa scor,
 # ci dupa regula de tie-break („numarul mare intai"). Rata ei T+ este atunci
-# rata unei reguli fixe, nu a unui semnal — CLAUDE.md §12 P3 cere respingerea
+# rata unei reguli fixe, nu a unui semnal — AGENTS.md §12 P3 cere respingerea
 # metodelor care castiga doar prin tie-break. Coloana `tiebreak_kN` exista in
 # folds.csv de la bench cache v17; pe folds vechi (coloana lipsa) poarta nu se
 # aplica si celula o spune in `tiebreak_gate_applied`.
@@ -660,8 +664,15 @@ def decide_optimal_config_for_pool(
     pool_size: int,
     draw_n: int,
     max_num: int | None = None,
+    pick_n: int | None = None,
 ) -> dict:
     """Run the decision algorithm for one (game, pool_size) pair.
+
+    `draw_n` = numere EXTRASE (baseline hipergeometric), `pick_n` = numere pe
+    BILET (pool-ul de bază al coloanelor fără `_kN`). Pentru jocurile cunoscute
+    ambele vin din `GAME_DRAW_PICK` (5/40: 6 extrase, bilet de 5), indiferent de
+    ce trimite apelantul — un `best_methods.json` vechi cu draw_n=5 nu mai poate
+    calcula pragul random pe 5 numere extrase.
 
     `max_num` = universul jocului; cu el, referinta portii de consistenta este
     rata asteptata hipergeometric a unui pool aleator (determinista). Lipsa lui
@@ -674,7 +685,14 @@ def decide_optimal_config_for_pool(
     # Urna 2 Joker este un joc categoric single-pick: +3/+4 sunt imposibile.
     # O evaluăm separat pe singura întrebare semnificativă, top-1 (1/1). Celelalte
     # jocuri păstrează ținta globală +3 sau +4, fără a dilua benchmark-ul de cover.
-    target = 1 if int(draw_n) == 1 else BENCH_HIT_TARGET
+    _known_geometry = GAME_DRAW_PICK.get(str(game_key))
+    if _known_geometry is not None:
+        draw_n, base_pool = _known_geometry
+    else:
+        base_pool = int(pick_n or draw_n)
+    # Ținta per joc: 5/40 rămâne pe 4+ (3 numere nu aduc premiu), oricare ar fi
+    # ținta globală; celelalte jocuri de pool urmează ținta globală 3/4.
+    target = 1 if int(draw_n) == 1 else game_hit_target(game_key, BENCH_HIT_TARGET)
     target_label = "top-1 (1/1)" if target == 1 else f"{target}+"
     rate_target_col = f"rate_{target}plus_k{pool_size}"
     tiebreak_col = f"tiebreak_k{pool_size}"
@@ -736,14 +754,14 @@ def decide_optimal_config_for_pool(
     # exemplu, ar puncta toate metodele pe k5/k6 și ar produce un câștigător
     # pentru alt pool decât cel cerut.
     _candidate_cols = [rate_target_col]
-    if int(pool_size) == int(draw_n):
+    if int(pool_size) == int(base_pool):
         _candidate_cols.append(f"rate_{target}plus")
     # Pentru 3+/4+ păstrăm fallback-ul compatibil cu folds vechi. Pentru top-1
     # nu există o metrică echivalentă în cache vechi: cădem explicit pe frequency
     # cu low_confidence, nu pretindem că rate_4plus=0 e dovadă.
     if target != 1:
         _candidate_cols.append(f"rate_4plus_k{pool_size}")
-        if int(pool_size) == int(draw_n):
+        if int(pool_size) == int(base_pool):
             _candidate_cols.append("rate_4plus")
     _rate_target_candidate_cols = tuple(dict.fromkeys(_candidate_cols))
     # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
@@ -754,7 +772,7 @@ def decide_optimal_config_for_pool(
     # BAZĂ (K = draw_n). E deci un fallback de POOL, nu doar de țintă, și trebuie
     # semnalizat la fel ca trecerea pe 4+.
     _target_cols = {rate_target_col}
-    if int(pool_size) == int(draw_n):
+    if int(pool_size) == int(base_pool):
         _target_cols.add(f"rate_{target}plus")
     _mismatch_cols_used: set[str] = set()
 
@@ -819,7 +837,7 @@ def decide_optimal_config_for_pool(
             _base_pool = (
                 int(pool_size)
                 if str(_frame_rate_col).endswith(f"_k{pool_size}")
-                else int(draw_n)
+                else int(base_pool)
             )
             if int(max_num) >= _base_pool:
                 baseline_rate = expected_random_rate(
@@ -1335,6 +1353,7 @@ def build_auto_pilot_matrix(
                 pool_size=k,
                 draw_n=meta["draw_n"],
                 max_num=meta.get("max_num"),
+                pick_n=meta.get("pick_n"),
             )
             matrix[gk][f"k{k}"] = cfg
     return matrix
@@ -1363,16 +1382,20 @@ def update_best_methods_with_auto_pilot(
         games_meta = {}
         for gk, gd in games.items():
             draw_n = int(gd.get("draw_n", 6))
+            pick_n = int(gd.get("pick_n") or draw_n)
+            if gk in GAME_DRAW_PICK:
+                draw_n, pick_n = GAME_DRAW_PICK[gk]
             if gk == "joker_urna2":
-                pool_range = [draw_n]
+                pool_range = [pick_n]
             else:
                 # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14
                 # (2026-05-26: extins de la +6 → +14 ca să acopere pool size sweep
                 # K=15/18/20 cerut de user pentru testare 4+ hits stable).
-                pool_range = list(range(draw_n, draw_n + 15))  # draw_n .. draw_n+14
+                pool_range = list(range(pick_n, pick_n + 15))  # pick_n .. pick_n+14
             _mx = gd.get("max_num") or KNOWN_GAME_MAX_NUM.get(gk)
             games_meta[gk] = {
                 "draw_n": draw_n,
+                "pick_n": pick_n,
                 "pool_range": pool_range,
                 "max_num": int(_mx) if _mx else None,
             }

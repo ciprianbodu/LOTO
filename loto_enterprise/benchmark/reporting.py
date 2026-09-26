@@ -179,7 +179,6 @@ def render_per_game(console: Console, report: dict) -> None:
                     if wbest.get("use_blacklist")
                     else wbest.get("delta_vs_with_bl")
                 )
-                use_bl = "YES" if wbest.get("use_blacklist") else "no"
                 use_color = (
                     "[green]YES[/green]"
                     if wbest.get("use_blacklist")

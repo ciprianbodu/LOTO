@@ -177,7 +177,49 @@ def test_engine_really_ignores_blacklist():
     assert 'self.audit["filters_disabled"] = True' in src
     # Logul NU mai pretinde că exclude numerele (filtrul e mort).
     assert "excludem temporar" not in src
-    assert "NU se aplică" in src
+    # Blacklist-ul temporar (Hard Inversion) nu se mai calculează deloc în
+    # pipeline: se calcula, se loga „NU se aplică" și se arunca. Un calcul mort
+    # care se re-citește ca funcționalitate activă e mai rău decât absența lui.
+    assert "compute_temp_blacklist" not in src
+    assert "_temp_blacklist" not in src
+
+
+def test_pipeline_has_no_dead_filter_plumbing():
+    """Filtrele post-scoring șterse nu au voie să reapară ca parametri inerți.
+
+    `filter_consecutives` / `smart_reduction` erau acceptate de la UI până în
+    engine fără să atingă vreodată pool-ul (fallback-ul `_get_initial_hard_core`
+    era apelat FĂRĂ flag), iar filtrul anti-secvență rămânea în cod ca și cum ar
+    fi fost o opțiune activă. Vezi și AGENTS.md §4.2: un filtru structural
+    constrânge combinația, nu prezice un număr.
+    """
+    import inspect
+
+    from loto_enterprise.engine.pipeline import PipelineMixin
+
+    params = inspect.signature(PipelineMixin.run_institutional_pipeline).parameters
+    assert "filter_consecutives" not in params
+    assert "smart_reduction" not in params
+
+    eng_src = open("loto_engine.py", encoding="utf-8").read()
+    assert "_apply_consecutive_filter" not in eng_src
+    assert "_consecutive_filter_applied" not in eng_src
+    assert 'audit["consecutive_filter"]' not in eng_src
+
+    # Nicăieri pe traseul UI → coadă → worker → engine → backtest nu mai există
+    # plumbing pentru cele două flaguri: nici cheie de task, nici argument de
+    # apel. (O mențiune în comentariu/docstring care explică de ce au dispărut e
+    # permisă — de asta căutăm formele sintactice, nu simplul cuvânt.)
+    for path in (
+        "worker.py",
+        "app_nicegui.py",
+        "loto_enterprise/core/backtesting.py",
+        "loto_enterprise/core/walk_forward_adapter.py",
+    ):
+        body = open(path, encoding="utf-8").read()
+        for flag in ("filter_consecutives", "smart_reduction"):
+            assert f"{flag}=" not in body, f"{path}: {flag} încă se pasează"
+            assert f'"{flag}"' not in body, f"{path}: {flag} încă e cheie de task"
 
 
 # --------------------------------------------------------------------------

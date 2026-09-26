@@ -144,8 +144,6 @@ def test_wf_tickets_equal_direct_generation_with_conditional_cap(
                 "guarantee": 3,
                 "max_variants": 2,
                 "lookback_percent": 100.0,
-                "filter_consecutives": False,
-                "smart_reduction": False,
                 "recent_penalty_draws": 3,
                 "recent_penalty_factor": 0.0,
                 "restrict_base_max": 0,

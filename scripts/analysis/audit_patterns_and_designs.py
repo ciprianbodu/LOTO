@@ -112,7 +112,7 @@ def audit_game(game, pool):
     dates = pd.to_datetime(df.date, format="%d-%m-%Y", errors="raise").tolist()
     if dates != sorted(dates):
         raise ValueError(f"{filename}: cronologie invalidă")
-    # Contractul unic de validare (CLAUDE.md §4.1) — inainte reimplementat
+    # Contractul unic de validare (AGENTS.md §4.1) — inainte reimplementat
     # manual aici, rata valorile zecimale. Ramane fail-loud, doar definitia
     # de "valid" e acum aceeasi ca in productie.
     draws, _valid_mask = valid_draw_matrix(

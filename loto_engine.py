@@ -26,7 +26,7 @@ from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import chronological_history
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
-# Tie-break CANONIC „top-N după scor" (regula de aur 8 din CLAUDE.md): orice
+# Tie-break CANONIC „top-N după scor" (regula de aur 8 din AGENTS.md): orice
 # selecție top-N din engine trece prin el, ca pool-ul GENERAT să folosească exact
 # regula cu care bench-ul îl VALIDEAZĂ (`runner._top_k`).
 from loto_enterprise.core.ranking import rank_by_score
@@ -96,7 +96,10 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             },
             "5/40": {
                 "max_n": 40,
-                "draw_n": 5,
+                # 5/40: se extrag 6 numere (hiturile se numără pe toate 6;
+                # categoria I = 5 din primele 5 nu e modelată separat), biletul
+                # are 5. draw_n = extragere, play_n = bilet.
+                "draw_n": 6,
                 "play_n": 5,
                 "scheme": "2-1-2",
                 "lookback": 25,
@@ -176,7 +179,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                     if str(c).lower().startswith("n") and str(c).lower() != "numbers"
                 ],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
-            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I), nu toate 6
+            )[: int(self.params["draw_n"])]  # 5/40 = toate cele 6 extrase
             nums = []
             for c in n_cols:
                 if c in row and pd.notna(row[c]):
@@ -281,7 +284,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             n_cols = sorted(
                 [c for c in self.data.columns if str(c).lower().startswith("n")],
                 key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
-            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
+            )[: int(self.params["draw_n"])]  # 5/40 = toate cele 6 extrase
             if n_cols:
                 raw_vals = self.data[n_cols].values.ravel()
                 all_numbers = raw_vals[~np.isnan(raw_vals)].astype(int).tolist()
@@ -370,7 +373,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             variants, coverage_pct = generate_wheel(
                 "lotto",
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=self.params["play_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
@@ -407,7 +410,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             variants, coverage_pct = generate_wheel(
                 _wheel_method,
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=self.params["play_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
@@ -415,7 +418,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         else:
             variants, coverage_pct = generate_combinatorial_wheel(
                 pool=self.hard_core,
-                pick=self.params["draw_n"],
+                pick=self.params["play_n"],
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
@@ -446,9 +449,10 @@ class LotoEngine(PipelineMixin, ScoringMixin):
     ) -> tuple[dict, dict]:
         """Penalizează numerele extrase în ultimele `n_draws` extrageri.
 
-        Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri se
-        înmulțește cu `factor**k`. Preferință a utilizatorului, neutră ca
-        valoare așteptată (vezi CLAUDE.md §6): nu schimbă probabilitatea
+        Scorul unui număr apărut de k ori în ultimele `n_draws` rânduri scade
+        cu `(1 - factor**k) * |scor|`: pentru scoruri pozitive e exact înmulțirea
+        cu `factor**k`, iar un scor negativ coboară, nu urcă. Preferință a utilizatorului, neutră ca
+        valoare așteptată (vezi AGENTS.md §6): nu schimbă probabilitatea
         extragerii, doar compoziția pool-ului. Întoarce (scoruri_noi,
         {numar: aparitii}) — al doilea dict conține doar numerele penalizate.
         """
@@ -470,11 +474,16 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         out = {}
         for num, sc in scores.items():
             k = counts.get(int(num), 0)
-            out[num] = float(sc) * (f**k) if k else float(sc)
+            v = float(sc)
+            if k:
+                # La v < 0, v*f**k ar URCA scorul (-1 * 0.5 = -0.5). Ramura pozitiva
+                # pastreaza exact inmultirea veche, bit cu bit (pool si cache WF).
+                v = v * (f**k) if v >= 0 else v * (2.0 - f**k)
+            out[num] = v
         return out, {k_: v_ for k_, v_ in sorted(counts.items())}
 
     def _get_initial_hard_core(
-        self, freq: np.ndarray, pool_size=12, filter_consecutives=False, blacklist=None
+        self, freq: np.ndarray, pool_size=12, blacklist=None
     ) -> list:
         """Selectează nucleul dur inițial bazat pe top frecvență.
 
@@ -496,11 +505,8 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         }
         pool = rank_by_score(freq_scores, pool_size)
 
-        if filter_consecutives:
-            pool = self._apply_consecutive_filter(pool, freq)
-            self._consecutive_filter_applied = True
-        else:
-            self._consecutive_filter_applied = False
+        # Fără filtre post-scoring: pool-ul rămâne top-scor pur (AGENTS.md §4.2 —
+        # un filtru structural constrânge combinația, nu prezice un număr).
 
         # Salvăm statisticile inițiale
         self.hard_core_stats = {
@@ -508,197 +514,6 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         }
         logging.info(f"[INIT] Nucleu inițial: {pool}")
         return pool
-
-    def _apply_consecutive_filter(
-        self,
-        pool: list,
-        freq: np.ndarray,
-        scores: dict | None = None,
-        avoid: set | None = None,
-    ) -> list:
-        """STRICT (cerință utilizator): NU păstrăm NICIO pereche de numere consecutive
-        în pool (nici 9-10, nici 38-39). Pentru fiecare adiacență (run de 2+): scoatem
-        cel mai slab număr (după frecvență) și punem cea mai bine cotată rezervă care NU
-        e adiacentă cu vreun număr din pool. Repetăm până nu mai rămâne niciun consecutiv.
-
-        Înlocuirea folosește `scores` (bench-winner sau NQI) dacă e furnizat, altfel cade
-        pe frecvența raw. (Anterior: doar 3+ erau sparte, perechile permise.)
-        """
-        if self.data is None or len(pool) < 2:
-            return pool
-
-        draw_sets = []
-        if self._draw_matrix is not None and self._draw_matrix.size:
-            draw_sets = [set(row) for row in self._draw_matrix]
-        else:
-            # Robust columns detection
-            df = self.data
-            n_cols = sorted(
-                [
-                    c
-                    for c in df.columns
-                    if str(c).lower().startswith("n") and str(c).lower() != "numbers"
-                ],
-                key=lambda x: int("".join(ch for ch in str(x) if ch.isdigit()) or "0"),
-            )[: int(self.params["draw_n"])]  # 5/40 = primele 5 (Cat. I)
-            if n_cols:
-                for _, row in df.iterrows():
-                    draw_sets.append(
-                        set(
-                            pd.to_numeric(row[n_cols], errors="coerce")
-                            .dropna()
-                            .astype(int)
-                        )
-                    )
-            elif "numbers" in df.columns:
-                for _, row in df.iterrows():
-                    try:
-                        draw_sets.append(
-                            set(
-                                int(x)
-                                for x in str(row["numbers"]).split(",")
-                                if str(x).strip().isdigit()
-                            )
-                        )
-                    except (ValueError, TypeError) as exc:
-                        logging.debug("anti-sequence: skip row (parse): %s", exc)
-                        continue
-
-        current_pool = sorted(pool.copy())
-        # Ranking rezervelor: prefera bench-winner scoring daca disponibil,
-        # altfel cade pe frecventa raw (legacy).
-        if scores:
-            ranked_reserves = sorted(
-                range(1, len(freq) + 1),
-                key=lambda n: scores.get(n, freq[n - 1] if n - 1 < len(freq) else 0),
-                reverse=True,
-            )
-            # Convertim la indici 0-based pentru compatibilitate cu codul existent
-            all_sorted_indices = np.array(
-                [n - 1 for n in ranked_reserves], dtype=np.int64
-            )
-            _replacement_signal = "bench-winner scores"
-        else:
-            all_sorted_indices = np.argsort(freq)[::-1]
-            _replacement_signal = "raw frequency"
-        modifications = []
-        logging.info(f"[ANTI-SEQ] Replacement signal: {_replacement_signal}")
-
-        # Trackăm numerele scoase ca să NU le re-adăugăm ca rezerve (altfel ai putea avea
-        # "Scos 18 → adăugat 18"). Bug observat 2026-05-02.
-        removed_nums: set[int] = set()
-        # Instrumentare (audit): de câte ori garanția "zero consecutive" a trebuit să cadă
-        # pe fallback (nicio rezervă neadiacentă disponibilă) sau bucla a fost întreruptă
-        # de anti-loop guard — semnal că pool-ul rezultat poate încă avea o adiacență.
-        fallback_any_count = 0
-        guard_triggered = False
-
-        def _forms_adjacency(pool_set: set, num: int) -> bool:
-            """True dacă `num` e adiacent cu vreun număr din pool (ar crea consecutive)."""
-            return (num - 1) in pool_set or (num + 1) in pool_set
-
-        _iter_guard = 0
-        while True:
-            _iter_guard += 1
-            if _iter_guard > 4 * max(len(pool), 1):  # anti-buclă (nu ar trebui atins)
-                guard_triggered = True
-                logging.warning(
-                    "[ANTI-SEQ] iter_guard atins (%d iterații) — opresc filtrul înainte de "
-                    "convergență completă; pool-ul poate încă conține numere consecutive.",
-                    _iter_guard - 1,
-                )
-                break
-            found_sequence = None
-            # Căutăm orice CONSECUTIV (run de 2+) în pool — strict, fără perechi.
-            for start_idx in range(len(current_pool) - 1):
-                consecutive_nums = [current_pool[start_idx]]
-                for next_idx in range(start_idx + 1, len(current_pool)):
-                    if current_pool[next_idx] == consecutive_nums[-1] + 1:
-                        consecutive_nums.append(current_pool[next_idx])
-                    else:
-                        break
-                if len(consecutive_nums) >= 2:
-                    found_sequence = tuple(consecutive_nums)
-                    break
-
-            if not found_sequence:
-                break
-
-            # STRICT (cerință utilizator): NU păstrăm NICIO pereche consecutivă în pool
-            # (nici 2 adiacente). Spargem orice consecutiv găsit.
-            seq_set = set(found_sequence)
-            occurrences = sum(1 for d_set in draw_sets if seq_set.issubset(d_set))
-
-            # Scoatem cel mai slab număr din secvență (după frecvență).
-            weakest_num = min(found_sequence, key=lambda x: freq[x - 1])
-            current_pool.remove(weakest_num)
-            removed_nums.add(weakest_num)
-            _pool_set = set(current_pool)
-
-            # Alegem rezerva: cel mai bine cotat număr care NU e adiacent (fără consecutive);
-            # dacă niciunul (improbabil), cădem pe cel mai bine cotat disponibil (păstrăm
-            # dimensiunea pool-ului). Sărim numerele deja din pool sau scoase în rulare.
-            chosen, chosen_any = None, None
-            for idx in all_sorted_indices:
-                num = int(idx) + 1
-                if num in _pool_set or num in removed_nums or (avoid and num in avoid):
-                    continue
-                if chosen_any is None:
-                    chosen_any = num
-                if not _forms_adjacency(_pool_set, num):
-                    chosen = num
-                    break
-            pick = chosen if chosen is not None else chosen_any
-            if pick is None:
-                logging.warning(
-                    "[ANTI-SEQ] Nicio rezervă disponibilă (pool epuizat) — opresc filtrul cu "
-                    "%d numere în pool (cerut %d); posibil consecutive rămase.",
-                    len(current_pool),
-                    len(pool),
-                )
-                break  # nu mai există rezerve (improbabil) — oprim
-            if chosen is None:
-                # Fallback: NU am găsit rezervă neadiacentă → garanția "zero consecutive"
-                # se poate încălca pentru acest pick (rezerva aleasă poate fi adiacentă).
-                fallback_any_count += 1
-                logging.warning(
-                    "[ANTI-SEQ] Fallback chosen_any pentru secvența %s: nicio rezervă neadiacentă "
-                    "disponibilă, aleg %d (poate reintroduce o adiacență).",
-                    found_sequence,
-                    pick,
-                )
-            current_pool.append(pick)
-            modifications.append(
-                f"Scos {weakest_num} (frecvență {int(freq[weakest_num - 1])}) din secvența "
-                f"{found_sequence} [a ieșit de {occurrences}× în istoric], adăugat {pick} "
-                f"(frecvență {int(freq[pick - 1])})"
-            )
-            current_pool = sorted(current_pool)
-
-        if modifications:
-            self.audit["consecutive_filter"] = modifications
-            logging.info(f"[FILTER] Modificări anti-secvență: {modifications}")
-
-        # Verificare finală (doar audit/log — nu schimbă pool-ul): garanția "zero
-        # consecutive" poate fi încălcată dacă fallback_any_count>0 sau guard_triggered.
-        remaining_adjacent = [
-            (a, b) for a, b in zip(current_pool, current_pool[1:]) if b == a + 1
-        ]
-        if fallback_any_count or guard_triggered or remaining_adjacent:
-            self.audit["consecutive_filter_warnings"] = {
-                "fallback_any_count": fallback_any_count,
-                "iter_guard_triggered": guard_triggered,
-                "remaining_adjacent_pairs": remaining_adjacent,
-            }
-            logging.warning(
-                "[ANTI-SEQ] Garanție posibil incompletă: fallback_any=%d, iter_guard=%s, "
-                "perechi adiacente rămase=%s",
-                fallback_any_count,
-                guard_triggered,
-                remaining_adjacent,
-            )
-
-        return current_pool
 
     def _get_hard_core_joker(self, freq: np.ndarray, pool_size=3) -> list:
         """Selectează nucleul dur pentru Joker (1-based) și salvează statisticile."""

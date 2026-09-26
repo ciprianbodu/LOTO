@@ -137,7 +137,10 @@ def _remove_temp_csv(temp_csv_path: str) -> None:
 
 
 def _map_game_label(game_label: str) -> tuple[str, int]:
-    """Rezolvă eticheta de joc din UI la (cheia engine-ului, draw_n).
+    """Rezolvă eticheta de joc din UI la (cheia engine-ului, numere pe BILET).
+
+    Al doilea element e dimensiunea biletului (plafonul garanției), nu a
+    extragerii: la 5/40 se extrag 6 numere, dar biletul are 5.
 
     Fallback implicit "6/49" — un label necunoscut nu are voie să blocheze
     jobul, doar să ruleze pe geometria implicită."""
@@ -152,7 +155,13 @@ def _map_game_label(game_label: str) -> tuple[str, int]:
 def _normalize_task(task: dict, draw_n: int) -> dict:
     """Normalizează + clampează parametrii unui task de pipeline la intervalele
     valide. UI-ul le trimite deja clampate, dar workerul poate primi joburi
-    vechi sau externe cu valori în afara plajei."""
+    vechi sau externe cu valori în afara plajei.
+
+    Rezultatul e un dict cu CHEI FIXE, construit prin `task.get(...)`: un task
+    vechi din coada SQLite care mai poartă chei scoase între timp (de ex.
+    `filter_consecutives` / `smart_reduction`, filtre șterse fiindcă nu ajungeau
+    niciodată la pool) trece mai departe fără eroare — cheile în plus sunt pur
+    și simplu ignorate, nu propagate în pipeline."""
     raw_pool = int(task.get("pool_size", 12))
     pool_size = max(6, min(16, raw_pool))  # aliniat cu UI (pool_size_val max 16)
 
@@ -216,8 +225,6 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
         "raw_lookback": raw_lookback,
         "restrict_base_max": restrict_base_max,
         "restrict_base_min": restrict_base_min,
-        "filter_consecutives": bool(task.get("filter_consecutives", False)),
-        "smart_reduction": bool(task.get("smart_reduction", False)),
         "sim_depth_pct": int(task.get("sim_depth_pct", 10)),
         "pure_bench_mode": bool(task.get("pure_bench_mode", False)),
     }
@@ -423,8 +430,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         restrict_base_max=norm["restrict_base_max"],
                         restrict_base_min=norm["restrict_base_min"],
                         lookback=norm["lookback"],
-                        filter_consecutives=norm["filter_consecutives"],
-                        smart_reduction=norm["smart_reduction"],
                         sim_depth_pct=norm["sim_depth_pct"],
                         enable_adaptive_persistence=False,
                         pure_bench_mode=norm["pure_bench_mode"],

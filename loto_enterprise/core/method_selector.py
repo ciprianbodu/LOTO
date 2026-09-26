@@ -99,6 +99,29 @@ def _production_forbidden() -> frozenset[str]:
     return frozenset(forbidden)
 
 
+def _registry_gap_hint(registry_error: str | None = None) -> str:
+    """Sufix de mesaj care numește modulele de metode care NU s-au încărcat.
+
+    Gol când registry-ul e întreg. Defensiv (import în try/except, ca restul
+    fișierului): diagnosticul nu are voie să arunce peste o cale de fallback.
+    """
+    if registry_error:
+        return f" — CAUZĂ: registry-ul de metode nu s-a putut importa ({registry_error})"
+    try:
+        from loto_enterprise.benchmark.methods import METHOD_LOAD_ERRORS
+
+        failed = dict(METHOD_LOAD_ERRORS)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not failed:
+        return ""
+    detail = "; ".join(f"{mod}: {err}" for mod, err in sorted(failed.items()))
+    return (
+        " — CAUZĂ PROBABILĂ: module de metode neîncărcate, deci numele lipsește "
+        f"din registry, nu neapărat din decizie ({detail})"
+    )
+
+
 def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
     """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
 
@@ -108,13 +131,15 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
     """
     if not name:
         return None
+    registry_error: str | None = None
     try:
         from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
 
         name = resolve_method_name(str(name))
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         name = str(name)
         METHODS = {}
+        registry_error = f"{type(exc).__name__}: {exc}"
     if name in _production_forbidden():
         logger.warning(
             "[method_selector] %s %r interzis în producție (EXCLUDED_FROM_PRODUCTION) — skip",
@@ -123,10 +148,15 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
         )
         return None
     if name not in METHODS:
+        # Un nume poate lipsi din registry din două motive foarte diferite:
+        # metoda chiar a fost ștearsă, SAU modulul care o definește nu s-a
+        # încărcat (dependență lipsă). Fără a doua explicație, diagnosticul
+        # afișa „metodă necunoscută" când cauza reală era un import picat.
         logger.warning(
-            "[method_selector] %s %r necunoscut (eliminat din METHODS) — skip",
+            "[method_selector] %s %r necunoscut (eliminat din METHODS)%s — skip",
             context,
             name,
+            _registry_gap_hint(registry_error),
         )
         return None
     return name
@@ -284,7 +314,7 @@ def should_use_blacklist(
     oricum") și era pur și simplu fals.
 
     Cine vrea să-l RECONECTEZE: locul e `pool_selection.select_pool_from_scores`
-    (filtrarea rămâne la apelant, vezi „Tie-break canonic" din CLAUDE.md), și
+    (filtrarea rămâne la apelant, vezi „Tie-break canonic" din AGENTS.md), și
     cere bump de `CACHE_VERSION` în `walk_forward_adapter` — altfel WF-ul servește
     pool-uri vechi, nefiltrate, sub o cheie care pretinde că include bit-ul.
 
@@ -506,8 +536,9 @@ _SPEARMAN_TRIED = False
 def _get_spearman() -> Callable | None:
     """scipy.stats.spearmanr dacă e disponibil (import LEAZY, o singură dată).
 
-    scipy vine oricum cu sklearn, dar method_selector e importat și în contexte
-    minimale → fără dependență obligatorie: la eșec cădem pe implementarea numpy.
+    scipy e dependență obligatorie a aplicației (24 din cele 50 de metode îl
+    importă), dar method_selector e importat și în contexte minimale → îl
+    tratăm ca opțional: la eșec cădem pe implementarea numpy.
     """
     global _SPEARMAN_FN, _SPEARMAN_TRIED
     if not _SPEARMAN_TRIED:
@@ -905,7 +936,7 @@ def combine_ensemble_scores(
 
     Bit-identitate: DOAR cu ensemble NOMINAL de exact 1 membru (decizia n-a
     construit un blend real) scorurile lui se întorc BRUTE, NEnormalizate —
-    identic cu apelul direct al scorer-ului (CLAUDE.md regula 1); cu un singur
+    identic cu apelul direct al scorer-ului (AGENTS.md regula 1); cu un singur
     membru nu se calculează nicio corelație. Când nominal >1 dar rămâne 1 singur
     membru ACTIV, scorurile lui sunt min-max normalizate (rank-preserving, pool
     identic) — exact „membru normalizat înainte de combinare", nu un scorer

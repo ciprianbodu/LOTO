@@ -73,6 +73,14 @@ class GameDef:
     pool_extra: int = 14  # evaluate hits for pools = draw_n .. draw_n + pool_extra
     is_single_pick: bool = False  # joker_urna2 → fixed pool_size = draw_n
     history_cutoffs: tuple[int, ...] = field(default=(), repr=False)
+    # Numere pe BILET (dimensiunea variantei jucate). 0 = egal cu draw_n.
+    # 5/40: se extrag 6 numere (hiturile se numara pe toate 6), biletul are 5,
+    # deci pool-ul de baza ramane k5 (pool-uri 5..19, ca inainte).
+    pick_n: int = 0
+
+    @property
+    def base_k(self) -> int:
+        return int(self.pick_n or self.draw_n)
 
 
 def _list_istoric_dirs() -> list[Path]:
@@ -132,9 +140,10 @@ def discover_games(istoric_dir: str | None = None) -> list[GameDef]:
                         key=key,
                         label="Loto 5/40",
                         csv_path=str(p),
-                        cols=["n1", "n2", "n3", "n4", "n5"],
+                        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
                         max_num=40,
-                        draw_n=5,
+                        draw_n=6,  # hituri pe toate cele 6 numere extrase
+                        pick_n=5,  # biletul are 5 numere
                         pool_extra=14,  # K=5..19 (extins 2026-05-25)
                     )
                 )
@@ -297,9 +306,9 @@ def _evaluate_fold(
     """Run a single fold with hardware sampling. Returns (FoldResult, hw_snap)."""
     n_test = len(test_draws)
     pool_sizes = (
-        [game.draw_n]
+        [game.base_k]
         if game.is_single_pick
-        else [game.draw_n + i for i in range(game.pool_extra + 1)]
+        else [game.base_k + i for i in range(game.pool_extra + 1)]
     )
     fr = FoldResult(
         game=game.key,
@@ -439,12 +448,12 @@ def _evaluate_fold(
             fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
             fr.rates_3plus_per_pool[f"k{k}"] = per_pool_3plus[k] / max(n_eval, 1)
             fr.rates_1plus_per_pool[f"k{k}"] = per_pool_1plus[k] / max(n_eval, 1)
-        fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.draw_n}", 0.0)
-        fr.max_hits_topk = per_pool_max[game.draw_n]
+        fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.base_k}", 0.0)
+        fr.max_hits_topk = per_pool_max[game.base_k]
         # Regula 4+: rata de extrageri cu >=4 numere ghicite la pool-ul de bază (draw_n)
-        fr.rate_4plus = fr.rates_4plus_per_pool.get(f"k{game.draw_n}", 0.0)
-        fr.rate_3plus = fr.rates_3plus_per_pool.get(f"k{game.draw_n}", 0.0)
-        fr.rate_1plus = fr.rates_1plus_per_pool.get(f"k{game.draw_n}", 0.0)
+        fr.rate_4plus = fr.rates_4plus_per_pool.get(f"k{game.base_k}", 0.0)
+        fr.rate_3plus = fr.rates_3plus_per_pool.get(f"k{game.base_k}", 0.0)
+        fr.rate_1plus = fr.rates_1plus_per_pool.get(f"k{game.base_k}", 0.0)
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
     except Exception as exc:
@@ -494,9 +503,9 @@ def _expected_pool_keys(game) -> set[str]:
     cache nu conține geometria, deci altfel era servit trunchiat.
     """
     pool_sizes = (
-        [game.draw_n]
+        [game.base_k]
         if game.is_single_pick
-        else [game.draw_n + i for i in range(game.pool_extra + 1)]
+        else [game.base_k + i for i in range(game.pool_extra + 1)]
     )
     return {f"k{k}" for k in pool_sizes}
 
@@ -675,7 +684,7 @@ def run_benchmark(
         tag = (
             "CACHE HIT"
             if from_cache
-            else f"hits@k{game.draw_n}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
+            else f"hits@k{game.base_k}={fr.avg_hits_topk:.3f} t={fr.runtime_sec:.1f}s"
         )
         # [N/M] = total GRAND; eticheta CPU/GPU (kind) scrisă AUTORITAR în linie, ca UI-ul
         # să nu mai ghicească din nume (clasificarea după nume diverja de cea după familie
@@ -812,8 +821,14 @@ def run_benchmark(
     _nc = _os.cpu_count() or 4
 
     # ── BUGET DE MEMORIE pentru procese (evită commit-limit Windows 0xc000012d) ──────
-    # Worker-ele CPU importă registry-ul de metode (sklearn/statsmodels ≈ 0.6 GB/proces).
-    # Limităm numărul de procese după RAM-ul DISPONIBIL ca să nu-l epuizăm.
+    # Worker-ele CPU importă registry-ul de metode (numpy + scipy) și își țin
+    # propriile matrice-indicator. Limităm numărul de procese după RAM-ul
+    # DISPONIBIL ca să nu-l epuizăm.
+    # 0.6 GB/proces a fost calibrat când registry-ul aducea sklearn+statsmodels;
+    # de la 14.09.2026 stack-ul e doar numpy+scipy, deci estimarea e acum
+    # CONSERVATOARE (pornesc mai puține procese decât ar încăpea). Rămâne așa
+    # până la o măsurătoare reală a RSS-ului per worker — o scădere ghicită
+    # readuce exact eroarea de commit-limit pentru care există plafonul.
     _PER_PROC_GB = 0.6
     try:
         import psutil as _ps
@@ -1007,10 +1022,10 @@ def run_benchmark(
     pool_keys_per_game = {}
     for g in games:
         if g.is_single_pick:
-            pool_keys_per_game[g.key] = [f"k{g.draw_n}"]
+            pool_keys_per_game[g.key] = [f"k{g.base_k}"]
         else:
             pool_keys_per_game[g.key] = [
-                f"k{g.draw_n + i}" for i in range(g.pool_extra + 1)
+                f"k{g.base_k + i}" for i in range(g.pool_extra + 1)
             ]
     if df.empty:
         df = pd.DataFrame()
@@ -1284,6 +1299,7 @@ def _aggregate(
             "csv_path": game.csv_path,
             "max_num": game.max_num,
             "draw_n": game.draw_n,
+            "pick_n": game.base_k,
             "pool_keys": pool_keys,
             "winners_per_pool": winners_per_pool,
             "winners_per_pool_bl": winners_per_pool_bl,

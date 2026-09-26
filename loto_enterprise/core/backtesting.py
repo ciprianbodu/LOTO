@@ -124,8 +124,6 @@ def _retroactive_step_stateless(
     guarantee: int,
     max_variants: int,
     lookback_percent: float,
-    filter_consecutives: bool,
-    smart_reduction: bool,
     recent_penalty_draws: int = 0,
     recent_penalty_factor: float = 0.5,
     restrict_base_max: int = 0,
@@ -133,11 +131,10 @@ def _retroactive_step_stateless(
     wheel_condition: int | None = None,
     adaptive_mode: str = "normal",
     adaptive_event: str | None = None,
-    temp_blacklist: set[int] | None = None,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward — un singur loc pentru "un pas", folosit atât de
     calea paralelă/stateless (parametrii de stare rămân la implicit) cât și
-    de calea secvențială cu adaptive feedback/hard inversion (apelantul
+    de calea secvențială cu adaptive feedback (apelantul
     calculează starea între pași și o pasează aici). Înainte, calea cu stare
     reimplementa manual acest bloc — o schimbare aici trebuia făcută în două
     locuri, fără nimic care să garanteze că rămân sincronizate."""
@@ -160,15 +157,12 @@ def _retroactive_step_stateless(
         eng._build_draw_matrix()
         eng._adaptive_mode = adaptive_mode
         eng._adaptive_event = adaptive_event
-        eng._temp_blacklist = set(temp_blacklist) if temp_blacklist else set()
         out_lines, _, _, _, _ctx, _audit = eng.run_institutional_pipeline(
             progress_cb=None,
             pool_size=pool_size,
             guarantee=guarantee,
             max_variants=max_variants,
             lookback=lookback_percent,
-            filter_consecutives=filter_consecutives,
-            smart_reduction=smart_reduction,
             enable_adaptive_persistence=False,
             track_pool_variation=False,  # pas de backtest: nu atinge pool_history.json
             recent_penalty_draws=recent_penalty_draws,
@@ -205,6 +199,7 @@ def _retroactive_step_stateless(
         draw_index=sim_idx,
         wheel_coverage=coverage_from_context(ctx),
         hard_core=list(engine.hard_core),
+        joker_hit=_joker_hit(df, sim_idx, lines) if game_type == "joker" else None,
     )
 
 
@@ -231,7 +226,8 @@ def _wf_worker_step(args: dict):
         return None
 
 
-_GAME_DRAW_N = {
+# Numere pe BILET (nu pe extragere): 5/40 extrage 6, dar biletul are 5.
+_GAME_PICK_N = {
     "6/49": 6,
     "5/40": 5,
     "joker": 5,
@@ -244,7 +240,7 @@ def scored_variant_numbers(variant: list[int], game_type: str) -> list[int]:
     Joker tickets include the Urna 2 value for display; it must not count as an
     Urna 1 hit in backtests or walk-forward expansion.
     """
-    draw_n = int(_GAME_DRAW_N.get(game_type, 6))
+    draw_n = int(_GAME_PICK_N.get(game_type, 6))
     vals = [int(n) for n in list(variant)]
     if game_type == "joker":
         return vals[:draw_n]
@@ -276,7 +272,7 @@ def pool_draw_hits(hard_core, actual) -> int:
     """Câte numere din POOL (hard_core) coincid cu extragerea.
 
     NU e uniunea numerelor de pe bilete: un wheel incomplet poate omite numere
-    din pool, iar UI-ul / CLAUDE.md numesc `hits_union` hit-urile de pool.
+    din pool, iar UI-ul / AGENTS.md numesc `hits_union` hit-urile de pool.
     `hits` (max pe un bilet) rămâne metrica de ticket.
     """
     if not hard_core:
@@ -337,9 +333,25 @@ class RetroactivePrediction:
     # ex. înregistrare dintr-un cache scris înainte de introducerea câmpului).
     wheel_coverage: float | None = None
     # Pool-ul ORDONAT (engine.hard_core, nu doar `predicted_numbers` ca set) —
-    # necesar apelantului cu stare (adaptive feedback/hard inversion) pentru
+    # necesar apelantului cu stare (adaptive feedback) pentru
     # pasul URMĂTOR. None pentru orice construcție care nu-l pasează explicit.
     hard_core: list[int] | None = None
+    # Joker: numarul din urna 2 de pe bilete a iesit? None = alt joc sau necunoscut.
+    joker_hit: bool | None = None
+
+
+def _joker_hit(df, sim_idx: int, lines) -> bool | None:
+    """Numarul Joker de pe bilete (ultimul element) fata de coloana `joker`."""
+    if not lines or len(lines[0]) <= 5 or "joker" not in df.columns:
+        return None
+    try:
+        actual = int(df.iloc[sim_idx]["joker"])
+        predicted = int(lines[0][5])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if not 1 <= actual <= 20:
+        return None
+    return predicted == actual
 
 
 class LotoBacktester:
@@ -386,9 +398,11 @@ class LotoBacktester:
                 "num_cols": ["n1", "n2", "n3", "n4", "n5", "n6"],
             },
             "5/40": {
+                # 6 numere extrase (hiturile se numără pe toate 6), bilet de 5.
                 "max_n": 40,
-                "draw_n": 5,
-                "num_cols": ["n1", "n2", "n3", "n4", "n5"],
+                "draw_n": 6,
+                "pick_n": 5,
+                "num_cols": ["n1", "n2", "n3", "n4", "n5", "n6"],
             },
             "joker": {
                 "max_n": 45,
@@ -481,6 +495,10 @@ class LotoBacktester:
 
         return cols[: self.params["draw_n"]]
 
+    def _pick_n(self) -> int:
+        """Numere pe bilet (hit_rate = hituri / bilet); 5/40: 5 din 6 extrase."""
+        return int(self.params.get("pick_n", self.params["draw_n"]))
+
     def _scored_variant_numbers(self, variant: list[int]) -> list[int]:
         return scored_variant_numbers(variant, self.game_type)
 
@@ -545,7 +563,7 @@ class LotoBacktester:
 
             hit_count = len(hit_numbers)
             hit_rate = (
-                hit_count / self.params["draw_n"] if self.params["draw_n"] > 0 else 0
+                hit_count / self._pick_n() if self._pick_n() > 0 else 0
             )
 
             results.append(
@@ -615,7 +633,7 @@ class LotoBacktester:
 
         # Vectorized hit counting: variant_bin @ draw_bin.T în loc de loop dublu.
         max_n = int(self.params["max_n"])
-        draw_n = int(self.params["draw_n"])
+        pick_n = self._pick_n()
         V = len(variants)
         D = len(target_draws)
 
@@ -650,7 +668,7 @@ class LotoBacktester:
                         variant=variant,
                         hits=h,
                         hit_numbers=set(),  # lazy: populat doar pentru top performers
-                        hit_rate=(h / draw_n) if draw_n > 0 else 0.0,
+                        hit_rate=(h / pick_n) if pick_n > 0 else 0.0,
                         hits_union=int(union_hits_per_draw[di]),
                     )
                 )
@@ -685,7 +703,7 @@ class LotoBacktester:
             avg_hits_per_draw=float(np.mean(hits_array))
             if len(hits_array) > 0
             else 0.0,
-            avg_hit_rate=float(np.mean(hits_array / self.params["draw_n"]))
+            avg_hit_rate=float(np.mean(hits_array / self._pick_n()))
             if len(hits_array) > 0
             else 0.0,
             best_draw_hits=int(np.max(hits_array)) if len(hits_array) > 0 else 0,
@@ -749,12 +767,10 @@ class LotoBacktester:
         guarantee: int = 4,
         lookback_percent: float = 20.0,
         backtest_depth_percent: float = 5.0,
-        filter_consecutives: bool = False,
         max_variants: int = 0,
         simulation_step: int = 1,
         use_feedback: bool = True,
         enable_hard_inversion: bool = True,
-        smart_reduction: bool = False,
         progress_cb=None,
         should_cancel=None,
         skip_indices=None,
@@ -776,13 +792,12 @@ class LotoBacktester:
             guarantee: Garantia set cover
             lookback_percent: Ce % din istoric sa foloseasca pentru analiza frecventei la FIECARE pas
             backtest_depth_percent: Procentul din istoric (coada) de testat
-            filter_consecutives: Daca sa aplice filtrul anti-secventa
             max_variants: Limita de variante
             simulation_step: Din cate in cate extrageri sa faca simulare (1 = toate)
             use_feedback: Daca sa foloseasca Adaptive Local Tuning (Metoda 1)
-            enable_hard_inversion: Daca sa aplice Hard Inversion partiala (temp_blacklist)
-                dupa catastrofe. Setati False pentru ablation studies care masoara
-                contributia exclusiva a regime_reset.
+            enable_hard_inversion: nu mai schimba pool-ul (blacklist-ul temporar
+                dupa catastrofe a fost sters). Decide doar ruta: cu False si
+                use_feedback=False, pasii ruleaza pe calea paralela stateless.
         """
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")
@@ -805,15 +820,10 @@ class LotoBacktester:
         streak_zero = 0
         active_mode = "normal"
         reset_duration = 0
-        # Hard inversion temporară între iterații: pool-ul de la pasul anterior
-        # care a produs catastrofă (excludere o singură extragere).
-        prev_pool_for_inversion: list[int] = []
-        prev_event_for_inversion: str | None = None
 
         try:
             from loto_enterprise.core.adaptive_feedback import (
                 compute_post_draw_feedback,
-                compute_temp_blacklist,
             )
 
             _has_adaptive = True
@@ -870,8 +880,6 @@ class LotoBacktester:
                     "guarantee": guarantee,
                     "max_variants": max_variants,
                     "lookback_percent": lookback_percent,
-                    "filter_consecutives": filter_consecutives,
-                    "smart_reduction": smart_reduction,
                     "recent_penalty_draws": int(recent_penalty_draws or 0),
                     "recent_penalty_factor": float(recent_penalty_factor),
                     "restrict_base_max": int(restrict_base_max or 0),
@@ -1137,39 +1145,13 @@ class LotoBacktester:
                 self.dates[sim_idx] if sim_idx < len(self.dates) else f"Draw_{sim_idx}"
             )
 
-            # Data la care facem simularea (extragerea curentă)
-            sim_date = self.dates[sim_idx - 1] if sim_idx > 0 else "Start"
-
             logger.info(
                 f"[BACKTEST RETROACTIV] Simulare {sim_num}/{n_simulate} pentru {target_date}"
             )
 
             try:
-                # Hard inversion: calculat ÎNAINTE de pas (depinde de starea
-                # pasului anterior, nu de engine-ul acestui pas). Skip complet
-                # dacă enable_hard_inversion=False (ablation mode).
-                if (
-                    enable_hard_inversion
-                    and _has_adaptive
-                    and prev_event_for_inversion == "catastrophe"
-                    and prev_pool_for_inversion
-                ):
-                    try:
-                        temp_bl = compute_temp_blacklist(
-                            last_pool=list(prev_pool_for_inversion),
-                            last_event=prev_event_for_inversion,
-                            universe_size=int(self.params.get("max_n", 49)),
-                            pool_size=int(pool_size),
-                            enable_full_inversion=True,
-                        )
-                    except Exception as _e_inv:
-                        logger.warning(f"[BACKTEST] Eroare temp_blacklist: {_e_inv}")
-                        temp_bl = set()
-                else:
-                    temp_bl = set()
-
                 # Un singur loc pentru "un pas" — vezi `_retroactive_step_stateless`.
-                # Aici pasăm starea reală (regim adaptiv, hard inversion); calea
+                # Aici pasăm starea reală (regim adaptiv); calea
                 # paralelă/stateless de mai sus o lasă la implicit ("normal"/gol).
                 retro_pred = _retroactive_step_stateless(
                     self.df,
@@ -1181,8 +1163,6 @@ class LotoBacktester:
                     guarantee,
                     max_variants,
                     lookback_percent,
-                    filter_consecutives,
-                    smart_reduction,
                     recent_penalty_draws=recent_penalty_draws,
                     recent_penalty_factor=recent_penalty_factor,
                     restrict_base_max=restrict_base_max,
@@ -1192,7 +1172,6 @@ class LotoBacktester:
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None
                     ),
-                    temp_blacklist=temp_bl,
                 )
                 if retro_pred is None:
                     logger.warning(
@@ -1232,9 +1211,6 @@ class LotoBacktester:
                     )
                     # Limităm istoricul (backtest poate fi lung)
                     adaptive_history = adaptive_history[-50:]
-                    # Setăm starea pentru hard inversion la următoarea iterație
-                    prev_event_for_inversion = event
-                    prev_pool_for_inversion = list(retro_pred.hard_core or [])
 
             except Exception as e:
                 logger.error(f"[BACKTEST RETROACTIV] Eroare la simulare {sim_num}: {e}")

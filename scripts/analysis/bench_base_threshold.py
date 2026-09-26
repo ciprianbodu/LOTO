@@ -191,7 +191,7 @@ def main() -> int:
         "apare si cand numerele sunt reetichetate aleator, unde legatura dintre\n"
         "'numar mic' si 'numar cald' nu mai exista. Marimea castigului nu iese din\n"
         "distributia nula, deci selectia pragului nu a gasit semnal.\n"
-        "Vezi CLAUDE.md §6 (restrict_base_max)."
+        "Vezi AGENTS.md §6 (restrict_base_max)."
     )
     return 0
 

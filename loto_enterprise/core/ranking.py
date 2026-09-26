@@ -6,7 +6,7 @@ selecției „top-N după scor" — bench (`runner._top_k`), producție
 cod — fiecare cu ALT tie-break la scoruri egale (număr mare /
 frecvență / ordinea de iterare a set-ului). Pe scoreri cu puține nivele
 distincte, pool-ul VALIDAT de bench diferea de pool-ul GENERAT în producție
-(6/16 numere diferite pe un scorer cu 2 nivele), încălcând regula din CLAUDE.md:
+(6/16 numere diferite pe un scorer cu 2 nivele), încălcând regula din AGENTS.md:
 „pool_selection = top-N pur după scor (identic cu bench _top_k)".
 
 Regula CANONICĂ de sortare (în această ordine, toate DESCRESCĂTOR):

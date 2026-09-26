@@ -27,14 +27,14 @@ CSV = sys.argv[1] if len(sys.argv) > 1 else "_ISTORIC/joker.csv"
 PCT = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0
 
 df = pd.read_csv(CSV)
-# K = numerele extrase per bilet, recunoscut din numele fișierului (ca în
-# runner.py) — nu din "câte coloane sunt completate": loto_5_40.csv are 6
-# coloane n1..n6, dar jocul extrage doar 5 (a șasea e reziduu de format).
+# K = numerele extrase, recunoscut din numele fișierului (ca în runner.py) —
+# nu din "câte coloane sunt completate". Loto 5/40 extrage 6 numere (n1..n6),
+# biletul are 5; hiturile se numără pe toate cele 6.
 _KNOWN_MAIN_COLS = {
     "6_49": ["n1", "n2", "n3", "n4", "n5", "n6"],
     "649": ["n1", "n2", "n3", "n4", "n5", "n6"],
-    "5_40": ["n1", "n2", "n3", "n4", "n5"],
-    "540": ["n1", "n2", "n3", "n4", "n5"],
+    "5_40": ["n1", "n2", "n3", "n4", "n5", "n6"],
+    "540": ["n1", "n2", "n3", "n4", "n5", "n6"],
     "joker": ["n1", "n2", "n3", "n4", "n5"],
 }
 _csv_name = Path(CSV).name.lower()

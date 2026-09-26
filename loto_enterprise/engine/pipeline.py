@@ -38,8 +38,6 @@ class PipelineMixin:
         guarantee=4,
         max_variants=0,
         lookback=0,
-        filter_consecutives=False,
-        smart_reduction=False,
         sim_depth_pct=10,
         enable_adaptive_persistence=False,
         pure_bench_mode=False,
@@ -52,17 +50,20 @@ class PipelineMixin:
     ):
         """Rulează pipeline-ul complet de analiză.
 
-        ⚠️ `filter_consecutives`, `smart_reduction` și `pure_bench_mode` sunt
-        acceptate pentru compatibilitate cu apelanții existenți (worker.py,
-        backtesting.py), dar NU influențează pool-ul: „Flow minimal" (cerere
-        utilizator, 2026-07-08) a scos anti-secvența, reducerea inteligentă și
-        orice alt filtru post-scoring din fluxul principal — pool-ul e mereu
-        top-scor pur (`self.audit["filters_disabled"] = True`). Filtrul de
-        anti-secvență (`_apply_consecutive_filter`) există încă în cod, dar e
-        atins doar din calea de FALLBACK `_get_initial_hard_core` (scorer fără
-        niciun scor), care nu primește `filter_consecutives` de aici. Același
-        tipar ca `should_use_blacklist`: telemetrie/compatibilitate, nu buton
-        de configurare activ.
+        ⚠️ Pool-ul e mereu top-scor pur (`self.audit["filters_disabled"] =
+        True`): „Flow minimal" (cerere utilizator, 2026-07-08) a scos
+        anti-secvența, reducerea inteligentă și orice alt filtru post-scoring
+        din fluxul principal, iar codul lor mort a fost șters. Vechii parametri
+        `filter_consecutives` / `smart_reduction` NU mai există în semnătură;
+        un task vechi din coada SQLite care încă îi poartă e normalizat de
+        worker.py într-un dict cu chei fixe, deci cheile în plus se ignoră fără
+        eroare. Nu reintroduce filtre structurale (paritate, sume, decade,
+        poziție, secvențe): ele constrâng combinația, nu prezic un număr
+        (AGENTS.md §4.2).
+
+        `pure_bench_mode` rămâne acceptat pentru compatibilitatea contractului
+        UI↔worker, la fel ca `should_use_blacklist`: telemetrie, nu buton de
+        configurare activ.
 
         recent_penalty_draws / recent_penalty_factor: penalizare pe numerele
             extrase în ultimele N extrageri (scor × factor^aparitii). 0 = oprit.
@@ -84,7 +85,7 @@ class PipelineMixin:
         wheel_condition: numărul de numere din pool care trebuie să cadă pentru
             ca garanția să se aplice (lotto design „guarantee dacă condition").
             None, 0 sau egal cu garanția = cover clasic „guarantee dacă guarantee".
-            Se limitează la [guarantee, draw_n].
+            Se limitează la [guarantee, play_n] (numere pe bilet).
 
         enable_adaptive_persistence: Dacă True (live mode), încarcă/salvează
             adaptive_state.json — învățare persistentă din extrageri reale.
@@ -109,7 +110,9 @@ class PipelineMixin:
         # UI la 3..draw_n, însă engine-ul rămâne API public și apără inclusiv
         # apelurile directe: guarantee=0 ar acoperi formal doar mulțimea vidă și
         # ar raporta absurd 100%.
-        _draw_n = int(self.params["draw_n"])
+        # Biletul are `play_n` numere (5/40: 5, deși se extrag 6); garanția și
+        # condiția lotto se raportează la BILET, nu la extragere.
+        _draw_n = int(self.params.get("play_n", self.params["draw_n"]))
         if int(guarantee) < 1:
             logging.warning(
                 "[PIPELINE] Garanție %s < 1 — imposibilă; o limitez la 1.",
@@ -118,7 +121,7 @@ class PipelineMixin:
             guarantee = 1
         if int(guarantee) > _draw_n:
             logging.warning(
-                "[PIPELINE] Garanție %s > numere extrase (%s) — imposibil; "
+                "[PIPELINE] Garanție %s > numere pe bilet (%s) — imposibil; "
                 "o limitez la %s.",
                 guarantee,
                 _draw_n,
@@ -217,45 +220,14 @@ class PipelineMixin:
                     if adaptive_info
                     else state.get("regime_state", {}).get("active_mode", "normal")
                 )
-                # Hard Inversion Temporară: dacă tocmai am avut catastrofă,
-                # excludem pool-ul ratat la următoarea selecție (1 extragere).
-                try:
-                    from loto_enterprise.core.adaptive_feedback import (
-                        compute_temp_blacklist as _compute_temp_bl,
-                    )
-
-                    evaluated = (
-                        (adaptive_info or {}).get("evaluated_pool")
-                        if adaptive_info
-                        else None
-                    )
-                    if evaluated is None:
-                        evaluated = state.get("last_pool", [])
-                    self._temp_blacklist = _compute_temp_bl(
-                        last_pool=list(evaluated or []),
-                        last_event=adaptive_event,
-                        universe_size=int(self.params.get("max_n", 49)),
-                        pool_size=int(pool_size),
-                        enable_full_inversion=True,
-                    )
-                    if self._temp_blacklist:
-                        logging.warning(
-                            "[HARD-INVERSION] Catastrofă detectată — blacklist temporar "
-                            "%s calculat dar NU se aplică (filtre oprite 2026-07-08; "
-                            "audit only). Pool-ul rămâne top-scor pur.",
-                            sorted(self._temp_blacklist),
-                        )
-                except Exception as _e_inv:
-                    logging.error(
-                        f"[HARD-INVERSION] Eroare la calcul temp_blacklist: {_e_inv}"
-                    )
-                    self._temp_blacklist = set()
+                # Hard Inversion Temporară: ștearsă — blacklist-ul temporar se
+                # calcula, se loga și se arunca (pool-ul rămâne top-scor pur de
+                # la oprirea filtrelor, 2026-07-08).
             except Exception as e:
                 logging.error(f"[ADAPTIVE] Eroare la procesarea feedback-ului: {e}")
                 self._adaptive_event = None
                 self._adaptive_info = None
                 self._adaptive_mode = "normal"
-                self._temp_blacklist = set()
         else:
             # NU suprascriem dacă au fost setate extern (e.g. de backtester
             # care îi pasează regime_mode în mod manual).
@@ -265,11 +237,9 @@ class PipelineMixin:
                 self._adaptive_info = None
             if not hasattr(self, "_adaptive_mode"):
                 self._adaptive_mode = "normal"
-            if not hasattr(self, "_temp_blacklist"):
-                self._temp_blacklist = set()
 
         logging.info(
-            f"[PIPELINE] Inițializare scoring (câștigător bench CPU) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%, smart_reduction={smart_reduction}]..."
+            f"[PIPELINE] Inițializare scoring (câștigător bench CPU) [pool_size={pool_size}, guarantee={guarantee}, max_variants={max_variants}, lookback={lookback}%]..."
         )
 
         # Numarul de randuri INAINTE de trunchierea pe lookback: feedback-ul
@@ -398,7 +368,7 @@ class PipelineMixin:
         # Interval inversat (min > max) ar goli complet baza de candidați și ar
         # lăsa pool-ul pe seama fallback-ului. Îl ignorăm și consemnăm motivul,
         # în loc să producem tăcut un pool care nu respectă nicio setare.
-        _draw_n_ticket = int(self.params["draw_n"])
+        _draw_n_ticket = int(self.params.get("play_n", self.params["draw_n"]))
         _span = restrict_max - restrict_min + 1
         _reason = ""
         if restrict_min > restrict_max:
@@ -444,7 +414,7 @@ class PipelineMixin:
         self.hard_core = self._get_timesfm_pool(
             tfm_scores, pool_size=pool_size, blacklist=blacklist
         )
-        if len(self.hard_core) < int(self.params["draw_n"]):
+        if len(self.hard_core) < int(self.params.get("play_n", self.params["draw_n"])):
             raise ValueError("Pool insuficient pentru un bilet valid după selecție")
 
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
@@ -476,7 +446,6 @@ class PipelineMixin:
         logging.info(
             f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}"
         )
-        self._consecutive_filter_applied = False
         self.audit["pipeline_stages"]["2_smart_selector"] = sorted(
             self.hard_core.copy()
         )
@@ -623,7 +592,8 @@ class PipelineMixin:
         p10, p90 = (
             np.percentile(final_freq, [10, 90]) if final_freq.size else (0.0, 0.0)
         )
-        g_range = [p10 * self.params["draw_n"], p90 * self.params["draw_n"]]
+        _play_n = int(self.params.get("play_n", self.params["draw_n"]))
+        g_range = [p10 * _play_n, p90 * _play_n]
 
         context = {"first_3": [], "last_3": []}
         if self.data is not None and not self.data.empty:
