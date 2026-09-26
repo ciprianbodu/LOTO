@@ -61,10 +61,11 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 66 fisiere `test_*.py`, 1365 de teste (renumarat la 2026-09-26). Pe
-  Python 3.14.0rc2 (containerul de audit) trec toate testele care nu importa
-  `nicegui`; cele 48 care il importa pica acolo in pydantic (`ForwardRef` din
-  rc2), nu in cod, si se confirma pe venv-ul Windows cu 3.14 final. Cele doua
+- teste: 66 fisiere `test_*.py`, 1373 de teste (renumarat la 2026-09-26). Pe
+  Python 3.14.7: 1353 trec, 20 sarite (integrarea reala a lansatorului, numai pe
+  Windows), 0 esecuri. In containerele de audit, `uv` mai vechi de 0.9 stie doar
+  3.14.0rc2, pe care pydantic pica la importul `nicegui` (`prefer_fwd_module`
+  lipseste din `typing._eval_type`); un `uv` recent instaleaza 3.14.7. Cele doua
   esecuri raportate anterior ca PRE-EXISTENTE in
   `test_wf_generation_settings` erau un defect al TESTULUI, nu al motorului — vezi
   §Audit global 2026-09-15.
@@ -475,7 +476,18 @@ limita de validitate din §5).
   numarul Joker pe fiecare). Variantele vin din wheel-ul cu buget
   (`core/full_ticket.py`, `generate_wheel` cu `max_variants`), iar acoperirea
   afisata e a acestor variante, nu a wheel-ului complet. Nu trimite job si nu
-  schimba rezultatul afisat.
+  schimba rezultatul afisat. Pool-ul biletului se potriveste automat pe
+  clasamentul metodei (`audit["timesfm_predictions"]`, deci cu restrangerea
+  bazei si penalizarea recenta deja aplicate): prea mic pentru variante
+  distincte (6/49 cu pool 6) -> se adauga urmatorul numar din clasament; mai
+  mare decat locurile de pe bilet (Joker peste 10) -> raman cele mai bine
+  clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
+  `rank_by_score` pe scorurile exacte; valorile sunt rotunjite la 6 zecimale si
+  nu se reordoneaza (doua scoruri apropiate devin egale, iar tie-break-ul ar
+  alege alt numar decat metoda). Fereastra spune ce s-a adaugat sau ce a ramas
+  afara, iar acoperirea numeste pe cate numere ale biletului e calculata.
+  „📋 Copiaza numerele" copiaza in browser, chiar in click: Safari/iOS scriu in
+  clipboard numai in timpul gestului, nu dupa un drum pana la server.
 - Selectia este top-N pura dupa scorul validat.
 - Fiecare joc genereaza si afiseaza un singur pool; configuratia, worker-ul,
   raportul, emailul si walk-forward-ul nu mai au Pool 2/auto-invert.
