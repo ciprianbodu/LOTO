@@ -493,6 +493,8 @@ def _bench_transform_note(data: dict) -> str:
     _rb_text = _restrict_base_text(audit)
     if _rb_text:
         changes.append(_rb_text)
+    if (audit.get("consecutive_limit") or {}).get("removed"):
+        changes.append(_consecutive_limit_text(audit, details=False))
     if not changes:
         return ""
     return (
@@ -661,6 +663,12 @@ def _build_report() -> str:
             )
         elif _rb.get("ignored"):
             out.append(f"{indent}Restrângere de bază ignorată: {_rb.get('reason', '')}")
+        _cl_text = _consecutive_limit_text(d.get("audit"))
+        if _cl_text:
+            out.append(
+                f"{indent}{_cl_text[0].upper() + _cl_text[1:]} (preferință "
+                "utilizator, fără avantaj statistic demonstrat)"
+            )
         out.append(
             f"{indent}Nucleu dur (nr(frecvență)): "
             + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool)
@@ -695,7 +703,9 @@ def _build_report() -> str:
         au.pop("pure_bench_mode", None)  # flag legacy: nu descrie penalizarea recentă
         if "pool_selection_note" in au:
             au["pool_selection_note"] = (
-                "top-N după scorul final, cu departajarea canonică"
+                "top-N după scorul final, cu limita de consecutive a utilizatorului"
+                if au.get("pool_selection") == "top_score_max_run"
+                else "top-N după scorul final, cu departajarea canonică"
             )
         if isinstance(au.get("hit_forecast"), dict):
             forecast = dict(au["hit_forecast"])
@@ -1134,11 +1144,19 @@ def _render_pool_body(
             "🎯 Metodă scorer: fallback implicit (fără decizie bench disponibilă)"
         ).classes("text-caption text-grey")
 
-    ui.label("Nucleu dur (pool):").classes("text-bold mt-2")
+    ui.label("Nucleu dur (pool) — în paranteză, de câte ori a ieșit numărul:").classes(
+        "text-bold mt-2"
+    )
     _badges(pool, stats)
     _cw = _consecutive_pool_warning(pool)
     if _cw:
         ui.label(f"⚠️ {_cw}").classes("text-bold text-negative mt-1")
+    _cl_text = _consecutive_limit_text(data.get("audit"))
+    if _cl_text:
+        ui.label(
+            f"🔗 {_cl_text[0].upper() + _cl_text[1:]}. Preferință de compoziție, "
+            "fără avantaj statistic demonstrat."
+        ).classes("text-caption text-info mt-1")
     _unplayed = (data.get("audit") or {}).get("pool_numbers_not_on_tickets") or []
     if _unplayed:
         ui.label(

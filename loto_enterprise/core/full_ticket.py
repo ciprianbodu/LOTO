@@ -12,11 +12,15 @@ ordine ca pool-ul afisat:
   bine clasate numere, ca niciun numar jucat sa nu fie ales la intamplare.
 Clasamentul vine din `audit["timesfm_predictions"]`, calculat dupa
 restrangerea bazei si dupa penalizarea recenta, deci le respecta pe amandoua.
-`select_pool_from_scores` scrie acolo primele 25 de numere in ordinea
+`select_pool_from_scores` scrie acolo cel putin primele 25 de numere in ordinea
 `rank_by_score` pe scorurile exacte, iar valorile rotunjite la 6 zecimale.
 Ordinea cheilor ESTE clasamentul; nu se reordoneaza dupa valori: doua scoruri
 apropiate devin egale dupa rotunjire, iar tie-break-ul canonic ar alege atunci
 numarul mai mare, nu pe cel clasat de metoda.
+
+Daca rezultatul a fost generat cu limita de consecutive a utilizatorului
+(`audit["consecutive_limit"]`), extinderea o respecta: numarul care ar forma
+secventa e sarit, iar nota il numeste. Rezultatele fara limita raman neschimbate.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from __future__ import annotations
 from math import comb
 
 from covering.dispatch import generate_wheel
+from loto_enterprise.core.ranking import longest_consecutive_run
 
 TICKET_VARIANTS = {"6/49": 3, "5/40": 4, "joker": 2}
 PICK = {"6/49": 6, "5/40": 5, "joker": 5}
@@ -38,6 +43,15 @@ def _pool_scores(data: dict) -> dict[int, float] | None:
         return {int(k): float(v) for k, v in raw.items()}
     except (TypeError, ValueError):
         return None
+
+
+def _max_run(data: dict) -> int:
+    """Limita de consecutive a rezultatului afisat (0 = generat fara limita)."""
+    cl = (data.get("audit") or {}).get("consecutive_limit") or {}
+    try:
+        return max(0, int(cl.get("applied") or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _ranked(scores: dict[int, float], among) -> list[int]:
@@ -58,7 +72,11 @@ def _fmt(nums) -> str:
 
 
 def _ticket_pool(
-    pool: list[int], scores: dict[int, float] | None, n_var: int, pick: int
+    pool: list[int],
+    scores: dict[int, float] | None,
+    n_var: int,
+    pick: int,
+    max_run: int = 0,
 ) -> tuple[list[int], str | None]:
     """Pool-ul efectiv al biletului si explicatia ajustarii (None = neschimbat)."""
     need = _min_pool(pick, n_var)
@@ -70,7 +88,17 @@ def _ticket_pool(
                 "variante distincte, iar clasamentul metodei lipsește din "
                 "rezultat. Generați cu un pool mai mare."
             )
-        extra = _ranked(scores, set(scores) - set(pool))[: need - len(pool)]
+        # Limita nu poate fi mai stricta decat pool-ul afisat (rezultat relaxat).
+        limit = max(max_run, longest_consecutive_run(pool)) if max_run else 0
+        extra: list[int] = []
+        skipped: list[int] = []
+        for n in _ranked(scores, set(scores) - set(pool)):
+            if len(extra) == need - len(pool):
+                break
+            if limit and longest_consecutive_run(pool + extra + [n]) > limit:
+                skipped.append(n)
+                continue
+            extra.append(n)
         if len(extra) < need - len(pool):
             return pool, (
                 f"Pool-ul are {len(pool)} numere, prea puține pentru {n_var} "
@@ -81,9 +109,15 @@ def _ticket_pool(
             if len(extra) == 1
             else "următoarele numere din clasamentul metodei"
         )
+        why = ""
+        if skipped:
+            why = (
+                f" care nu formează {limit + 1} consecutive "
+                f"(am sărit {_fmt(skipped)})"
+            )
         return sorted(pool + extra), (
             f"Cu {len(pool)} numere există prea puține combinații de {pick} "
-            f"pentru {n_var} variante; am adăugat {_fmt(sorted(extra))}, {which}."
+            f"pentru {n_var} variante; am adăugat {_fmt(sorted(extra))}, {which}{why}."
         )
     if len(pool) > capacity:
         if not scores or any(n not in scores for n in pool):
@@ -110,7 +144,7 @@ def build_full_ticket(game: str, data: dict) -> dict:
     pool = sorted({int(x) for x in (data.get("hard_core") or [])})
     if len(pool) < pick:
         return {"error": "pool-ul afișat e mai mic decât un bilet"}
-    pool, note = _ticket_pool(pool, _pool_scores(data), n_var, pick)
+    pool, note = _ticket_pool(pool, _pool_scores(data), n_var, pick, _max_run(data))
     guarantee = max(1, min(int(data.get("guarantee") or 3), pick))
     variants, coverage = generate_wheel(
         "greedy",

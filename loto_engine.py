@@ -21,7 +21,10 @@ import sys
 # Scoring = câștigătorul benchmark (metode CPU) → fallback frecvență.
 # Tot suportul GPU/neural (TimesFM/torch/foundation) a fost eliminat din aplicație.
 # Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
-from loto_enterprise.core.pool_selection import select_pool_from_scores
+from loto_enterprise.core.pool_selection import (
+    apply_consecutive_limit,
+    select_pool_from_scores,
+)
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import chronological_history
 from loto_enterprise.core.score_validation import has_usable_score_variance
@@ -483,13 +486,14 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         return out, {k_: v_ for k_, v_ in sorted(counts.items())}
 
     def _get_initial_hard_core(
-        self, freq: np.ndarray, pool_size=12, blacklist=None
+        self, freq: np.ndarray, pool_size=12, blacklist=None, max_consecutive_run=0
     ) -> list:
         """Selectează nucleul dur inițial bazat pe top frecvență.
 
         FALLBACK: se folosește doar când scorerul n-a produs niciun scor
         (`_get_timesfm_pool` cu `scores` gol). Pe path-ul normal pool-ul vine din
-        `select_pool_from_scores`.
+        `select_pool_from_scores`. Limita de consecutive a utilizatorului se
+        aplică și aici, ca opțiunea să nu depindă de traseul pe care s-a ajuns.
         """
         logging.info(f"[INIT] Generare nucleu inițial de {pool_size} numere...")
 
@@ -503,10 +507,16 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             for i in range(len(freq))
             if freq[i] > 0 and (int(i) + 1) not in blacklist
         }
-        pool = rank_by_score(freq_scores, pool_size)
+        pool = apply_consecutive_limit(
+            rank_by_score(freq_scores, len(freq_scores)),
+            pool_size,
+            max_consecutive_run,
+            getattr(self, "audit", None),
+        )
 
-        # Fără filtre post-scoring: pool-ul rămâne top-scor pur (AGENTS.md §4.2 —
-        # un filtru structural constrânge combinația, nu prezice un număr).
+        # Fără filtre post-scoring automate: pool-ul rămâne top-scor pur, cu o
+        # singură excepție, opțiunea explicită `max_consecutive_run` de mai sus
+        # (AGENTS.md §4.2: un filtru structural deghizat în metodă e interzis).
 
         # Salvăm statisticile inițiale
         self.hard_core_stats = {

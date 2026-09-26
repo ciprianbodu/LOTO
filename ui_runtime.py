@@ -66,9 +66,58 @@ def _restrict_base_text(audit: dict | None) -> str:
 # de regulă invalidează și cache-ul WF, și cache-ul de pipeline al worker-ului.
 _RESTRICT_SEMANTICS = "2"
 
+# Același contract pentru limita de consecutive: sincron cu
+# `walk_forward_adapter._CONSECUTIVE_SEMANTICS`, în cheie numai cu limita activă.
+_CONSECUTIVE_SEMANTICS = "1"
+# Valoarea trimisă când bifa e pusă: cel mult 2 consecutive, deci fără 4-5-6.
+_MAX_CONSECUTIVE_RUN_ON = 2
+
+
+def _consecutive_limit_text(audit: dict | None, details: bool = True) -> str:
+    """Limita de consecutive aplicată rezultatului, sau "" dacă a fost oprită.
+
+    Sursa unică pentru panou, raport, nota de bench și istoricul WF. Citește
+    auditul rezultatului afișat, nu bifa din sidebar: un rezultat generat fără
+    limită rămâne descris ca atare. Numerele din clasament apar cu locul lor în
+    clasamentul metodei, nu cu frecvența din paranteza pool-ului. `details=False`
+    dă numai regula, pentru istoricul WF, unde înlocuirile se decid la fiecare pas.
+    """
+    cl = (audit or {}).get("consecutive_limit") or {}
+    requested = int(cl.get("requested") or 0)
+    if requested <= 0:
+        return ""
+    text = f"fără {requested + 1} numere consecutive în pool"
+    if not details:
+        return text
+    removed = [(int(n), int(r)) for n, r in cl.get("removed") or []]
+    added = [(int(n), int(r)) for n, r in cl.get("added") or []]
+    if removed:
+        text += (
+            "; au ieșit "
+            + ", ".join(f"{n} (locul {r})" for n, r in removed)
+            + ", au intrat "
+            + ", ".join(f"{n} (locul {r})" for n, r in added)
+            + " în clasamentul metodei"
+        )
+    else:
+        text += "; nu a fost nevoie de nicio înlocuire"
+    applied = int(cl.get("applied") or requested)
+    if cl.get("relaxed"):
+        text += (
+            f"; limita a urcat la {applied} consecutive: baza restrânsă e prea "
+            "îngustă pentru pool"
+        )
+    return text
+
 
 def _wf_generation_options(data: dict) -> dict:
-    """Validează configurația rezultatului, inclusiv factorul legitim 0."""
+    """Validează configurația rezultatului, inclusiv factorul legitim 0.
+
+    Totul vine din rezultatul afișat, nu din sidebar. Limita de consecutive:
+    ecoul worker-ului, apoi limita cerută din audit, apoi 0 (rezultat vechi,
+    generat fără limită). Se trimite limita CERUTĂ, nu cea relaxată: WF decide
+    relaxarea la fiecare pas, ca producția.
+    """
     audit = data.get("audit") or {}
     context = data.get("context") or {}
     factor = data.get("recent_penalty_factor", 0.5)
@@ -83,6 +132,9 @@ def _wf_generation_options(data: dict) -> dict:
     wheel_condition = audit.get("wheel_condition_used")
     if wheel_condition is None:
         wheel_condition = data.get("wheel_condition")
+    max_run = data.get("max_consecutive_run")
+    if max_run is None:
+        max_run = (audit.get("consecutive_limit") or {}).get("requested")
     return {
         "recent_penalty_draws": int(data.get("recent_penalty_draws") or 0),
         "recent_penalty_factor": 0.5 if factor is None else float(factor),
@@ -91,6 +143,7 @@ def _wf_generation_options(data: dict) -> dict:
         "max_variants": int(data.get("max_variants", context.get("max_variants")) or 0),
         "restrict_base_max": int(data.get("restrict_base_max") or 0),
         "restrict_base_min": int(data.get("restrict_base_min") or 0),
+        "max_consecutive_run": int(max_run or 0),
     }
 
 
@@ -125,6 +178,16 @@ def _active_restrict_base(game_label: str) -> tuple[int, int]:
     )
 
 
+def _active_max_consecutive_run() -> int:
+    """Limita de consecutive pentru următoarea generare: 2 cu bifa pusă, 0 fără.
+
+    Întreg, nu bool: `int(True)` ar da 1, adică „fără nicio pereche", mult mai
+    strict decât a cerut utilizatorul. Aceeași valoare pentru toate jocurile;
+    motorul o aplică numai pool-ului principal (Urna 2 Joker are un număr).
+    """
+    return _MAX_CONSECUTIVE_RUN_ON if SETTINGS.get("max_consecutive_run_enabled_val") else 0
+
+
 def _clamped_bench_target(value=None) -> int:
     raw = SETTINGS.get("bench_hit_target", 3) if value is None else value
     try:
@@ -150,6 +213,9 @@ UI_PERSIST_KEYS = [
     "restrict_base_enabled_val",
     *(f"restrict_base_min_{suffix}_val" for _l, suffix, _m in _RESTRICT_BASE_GAMES),
     *(f"restrict_base_max_{suffix}_val" for _l, suffix, _m in _RESTRICT_BASE_GAMES),
+    # Fără ea în listă, bifa debifată revine pornită la fiecare repornire:
+    # `_load_settings` citește numai cheile de aici, iar implicitul e True.
+    "max_consecutive_run_enabled_val",
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -185,6 +251,11 @@ DEFAULTS = {
     # tastat în câmpuri — un capăt lăsat din greșeală nediscutat nu ajunge
     # niciodată în producție cât bifa e oprită (vezi `_active_restrict_base`).
     "restrict_base_enabled_val": False,
+    # Fără 3 numere consecutive în pool: PORNITĂ implicit, la cererea explicită a
+    # utilizatorului (2026-09-26), spre deosebire de penalizare și restrângere,
+    # oprite fiindcă ar schimba pool-ul fără nicio acțiune. Tot compoziție, FĂRĂ
+    # avantaj statistic demonstrat (hipergeometric, ca mai sus); bifa o oprește.
+    "max_consecutive_run_enabled_val": True,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,

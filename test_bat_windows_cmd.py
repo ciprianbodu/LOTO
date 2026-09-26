@@ -451,3 +451,47 @@ def test_sync_keeps_startup_and_update_steps_reachable():
     assert "migrate_legacy_wf_cache" in main
     assert "check_freshness" in main
     assert "goto :eof" not in main
+
+
+def test_updates_ensures_git_for_windows_before_the_sync():
+    """Sync-ul si push-ul istoricului au nevoie de Git; ACTUALIZARI il verifica
+    (instalat + la zi) INAINTE sa predea executia copiei temporare care face sync."""
+    raw = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    # Numai liniile active: un REM in fata apelului ar opri verificarea.
+    text = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().lower().startswith("rem ")
+    )
+    assert "-Mode EnsureGit" in text
+    assert text.index("-Mode EnsureGit") < text.index('" --sync-copy ')
+    helper = (ROOT / "scripts" / "launcher_git.ps1").read_text(encoding="utf-8")
+    assert "'EnsureGit'" in helper.split("\n", 4)[2]
+    block = helper[helper.index("if ($Mode -eq 'EnsureGit')") : helper.index("function Resolve-LotoGit")]
+    assert "'Git.Git', '-e'" in block
+    assert "--accept-package-agreements" in block and "--accept-source-agreements" in block
+    assert "-1978335189" in block and "-1978335212" in block
+    # Git for Windows propriu-zis: git-ul portabil din Codex nu conteaza ca instalare.
+    assert "codex-primary-runtime" not in block
+    assert r"$codex = '[\\/]codex-runtimes[\\/]'" in block and "-notmatch $codex" in block
+    assert block.rstrip().endswith("exit 0\n}") or block.rstrip().endswith("exit 0\r\n}")
+
+
+def test_git_check_runs_once_even_on_the_first_run_after_the_update():
+    """Prima rulare dupa actualizare porneste din ACTUALIZARI-ul vechi, fara pas;
+    faza de dupa sync il face atunci. Marcajul din copia temporara impiedica
+    dublarea, iar Cleanup il sterge, ca folderul temporar sa nu ramana."""
+    raw = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
+    text = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().lower().startswith("rem ")
+    )
+    head, post = text.split("\n:post_sync\n", 1)
+    post = post.split("\n:main\n", 1)[0]
+    marker = 'type nul >"%BOOT_DIR%\\git-checked" 2>nul'
+    assert head.index('mkdir "%BOOT_DIR%"') < head.index(marker) < head.index('" --sync-copy ')
+    guarded = [line for line in post.splitlines() if "-Mode EnsureGit" in line]
+    assert guarded == [
+        line for line in guarded if line.startswith('if not exist "%BOOT_DIR%\\git-checked" powershell ')
+    ] and len(guarded) == 1
+    assert post.index("-Mode EnsureGit") < post.index("-Mode Cleanup")
+    helper = (ROOT / "scripts" / "launcher_git.ps1").read_text(encoding="utf-8")
+    cleanup = helper[helper.index("if ($Mode -eq 'Cleanup')") : helper.index("if ($Mode -eq 'EnsureGit')")]
+    assert "'git-checked'" in cleanup

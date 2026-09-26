@@ -99,6 +99,13 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     # hash-ul rămâne cel dinainte, deci cache-urile existente continuă să fie folosite.
     if any(lo or hi for lo, hi in _rb_by_game.values()):
         h.update(f"restrict_semantics={_RESTRICT_SEMANTICS}".encode("utf-8"))
+    # Limita de consecutive, cu aceeași regulă: în hash numai când e activă, ca
+    # hash-urile fără ea să rămână cele dinainte.
+    _mcr = _active_max_consecutive_run()
+    if _mcr:
+        h.update(
+            f"max_consecutive_run={_mcr}|{_CONSECUTIVE_SEMANTICS}".encode("utf-8")
+        )
     h.update(
         str(sorted(sim_depth_per_game.items())).encode("utf-8")
     )  # adâncime per joc → cache key
@@ -125,10 +132,12 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "recent_penalty_factor": _float_setting("recent_penalty_factor_val"),
             "restrict_base_max": _rb_max,
             "restrict_base_min": _rb_min,
+            "max_consecutive_run": _mcr,
             "lookback": _int_setting("lookback_val"),
             "sim_depth_pct": sd,  # TELEMETRIE de bench, nu taie istoricul (vezi AGENTS.md)
-            # Mereu True: singurul mod de generare care există azi (scoring → top-N →
-            # wheel, fără filtre). Rămâne în contractul worker↔UI (regula de aur 2).
+            # Mereu True: singurul mod de generare care există azi (scoring → top-N
+            # cu opțiunile explicite ale utilizatorului → wheel, fără filtre
+            # automate). Rămâne în contractul worker↔UI (regula de aur 2).
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
         }
@@ -806,6 +815,7 @@ def _start_walk_forward() -> None:
                             "wheel_guarantee": meta.get("wheel_guarantee"),
                             "wheel_condition": meta.get("wheel_condition"),
                             "max_variants": meta.get("max_variants"),
+                            "max_consecutive_run": meta.get("max_consecutive_run"),
                         }
                 except Exception as exc:  # noqa: BLE001
                     logger.error("walk-forward %s: %s", g_label, exc)
@@ -1839,6 +1849,19 @@ def main_page() -> None:
             "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
             "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
             "Walk-forward aplică aceeași setare."
+        ).classes("text-caption text-grey")
+        _bind_save(
+            ui.checkbox("🔗 Fără 3 numere consecutive în pool (ex. 4-5-6)").classes(
+                "w-full"
+            ),
+            "max_consecutive_run_enabled_val",
+        )
+        ui.label(
+            "Pool-ul se ia tot după clasamentul metodei. Numărul care ar forma al "
+            "treilea consecutiv este sărit, iar locul lui îl ia următorul număr din "
+            "clasament care nu formează o secvență. Fereastra rezultatului arată ce "
+            "a ieșit și ce a intrat. Preferință de compoziție, fără avantaj "
+            "statistic demonstrat; walk-forward aplică aceeași regulă."
         ).classes("text-caption text-grey")
         ui.label(
             "Restrânge candidații jucați la un interval de numere, SEPARAT pentru "

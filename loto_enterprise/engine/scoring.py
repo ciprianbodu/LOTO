@@ -6,7 +6,10 @@ import os
 
 import numpy as np
 
-from loto_enterprise.core.pool_selection import select_pool_from_scores
+from loto_enterprise.core.pool_selection import (
+    apply_consecutive_limit,
+    select_pool_from_scores,
+)
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
@@ -284,14 +287,26 @@ class ScoringMixin:
         return scores
 
     def _get_timesfm_pool(
-        self, scores: dict[int, float], pool_size: int, blacklist: set[int]
+        self,
+        scores: dict[int, float],
+        pool_size: int,
+        blacklist: set[int],
+        max_consecutive_run: int = 0,
     ) -> list[int]:
-        """Selectează top-N după scor (aliniat bench). Numele e istoric (TimesFM)."""
+        """Selectează top-N după scor (aliniat bench). Numele e istoric (TimesFM).
+
+        ``max_consecutive_run`` (opțiunea utilizatorului, 0 = oprit) se aplică pe
+        toate cele trei trasee: selectorul, completarea defensivă și fallback-ul
+        pe frecvență, ca opțiunea să nu poată fi ocolită.
+        """
         if not scores:
             # Fallback pe frecvență dacă TimesFM e indisponibil
             freq = self.analyze_frequency()
             return self._get_initial_hard_core(
-                freq, pool_size=pool_size, blacklist=blacklist
+                freq,
+                pool_size=pool_size,
+                blacklist=blacklist,
+                max_consecutive_run=max_consecutive_run,
             )
 
         max_num = int(self.params.get("max_n", 49))
@@ -304,6 +319,7 @@ class ScoringMixin:
             self.audit,
             max_num=max_num,
             draw_matrix=self._draw_matrix,
+            max_consecutive_run=max_consecutive_run,
         )
 
         # Gardă defensivă: dacă selectorul întoarce prea puține numere,
@@ -313,33 +329,37 @@ class ScoringMixin:
                 f"[TIMESFM] Pool incomplet ({len(pool)}/{pool_size}). "
                 "Completez din numere ne-excluse (nu din blacklist)."
             )
+            clean = {int(n): float(v) for n, v in scores.items()}
             have = {int(n) for n in pool}
             blocked = set(int(n) for n in blacklist)
             extra_scores = {
-                int(num): float(score)
-                for num, score in scores.items()
-                if int(num) not in have
-                and int(num) not in blocked
-                and 1 <= int(num) <= max_num
+                num: score
+                for num, score in clean.items()
+                if num not in have and num not in blocked and 1 <= num <= max_num
             }
-            needed = pool_size - len(pool)
-            pool.extend(rank_by_score(extra_scores, needed))
+            # Ordinea de preferință: pool-ul după scor, restul scorurilor, apoi
+            # frecvența. Limita de consecutive se aplică pe toată lista.
+            candidates = rank_by_score({n: clean[n] for n in have}, len(have))
+            candidates += rank_by_score(extra_scores, len(extra_scores))
 
-            if len(pool) < pool_size:
+            if len(candidates) < pool_size:
                 logging.warning(
-                    f"[TIMESFM] Pool încă incomplet ({len(pool)}/{pool_size}). "
+                    f"[TIMESFM] Pool încă incomplet ({len(candidates)}/{pool_size}). "
                     "Fallback frecvență, tot fără blacklist."
                 )
                 freq = getattr(self, "freq", None)
                 if freq is None:
                     freq = self.analyze_frequency()
-                have = {int(n) for n in pool}
+                have = set(candidates)
                 freq_scores = {
                     int(i) + 1: float(freq[i])
                     for i in range(len(freq))
                     if (int(i) + 1) not in have and (int(i) + 1) not in blocked
                 }
-                pool.extend(rank_by_score(freq_scores, pool_size - len(pool)))
+                candidates += rank_by_score(freq_scores, len(freq_scores))
+            pool = apply_consecutive_limit(
+                candidates, pool_size, max_consecutive_run, self.audit
+            )
             if len(pool) < pool_size:
                 logging.warning(
                     f"[TIMESFM] Pool final {len(pool)}/{pool_size} — universul "
