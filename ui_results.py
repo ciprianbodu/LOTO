@@ -759,35 +759,44 @@ def _show_report() -> None:
     dlg.open()
 
 
-# Clipboard-ul browserului: `navigator.clipboard` există doar pe pagini sigure
-# (localhost/HTTPS). Deschisă pe adresa de rețea (http://192.168...), pagina cade
-# pe `execCommand("copy")`, cu textarea pusă în dialog: capcana de focus a
+# Copierea rulează în browser, chiar în click. Safari și iOS scriu în clipboard
+# numai cât durează gestul utilizatorului; un `ui.run_javascript` trimis de server
+# după click ajunge prea târziu și e refuzat. Serverul primește doar rezultatul,
+# pentru mesaj. `navigator.clipboard` există doar pe pagini sigure
+# (localhost/HTTPS); pe adresa de rețea (http://192.168...) se folosește
+# `execCommand("copy")`, cu textarea pusă în dialog: capcana de focus a
 # dialogului Quasar ar anula o selecție făcută în afara lui.
-_COPY_JS = """
-try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
-const box = document.createElement("textarea");
-box.value = text;
-box.setAttribute("readonly", "");
-box.style.position = "fixed";
-box.style.opacity = "0";
-const host = (document.activeElement && document.activeElement.parentElement) || document.body;
-host.appendChild(box);
-box.select();
-let ok = false;
-try { ok = document.execCommand("copy"); } catch (e) {}
-box.remove();
-return ok;
-"""
+_COPY_JS = """(e) => {
+  const text = __TEXT__;
+  const host = (e && e.target && e.target.closest && e.target.closest(".q-card")) || document.body;
+  const viaTextarea = () => {
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.setAttribute("readonly", "");
+    box.style.position = "fixed";
+    box.style.opacity = "0";
+    host.appendChild(box);
+    box.select();
+    box.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) {}
+    box.remove();
+    return ok;
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => emit(true), () => emit(viaTextarea()));
+  } else {
+    emit(viaTextarea());
+  }
+}"""
 
 
-async def _copy_text_to_clipboard(text: str) -> None:
-    try:
-        ok = await ui.run_javascript(
-            f"const text = {json.dumps(text)};" + _COPY_JS, timeout=5.0
-        )
-    except Exception:  # noqa: BLE001 - timeout sau client deconectat
-        ok = False
-    if ok:
+def _copy_js(text: str) -> str:
+    return _COPY_JS.replace("__TEXT__", json.dumps(text))
+
+
+def _copy_feedback(e) -> None:
+    if e.args is True:
         ui.notify("📋 Numerele au fost copiate.", type="positive")
     else:
         ui.notify(
@@ -839,14 +848,15 @@ def _show_full_ticket() -> None:
                 cost = n * PRICES.get(game, 0.0)
                 ui.label(
                     f"{n}/{TICKET_VARIANTS[game]} variante · acoperire garanție "
-                    f"{t['guarantee']}: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
+                    f"{t['guarantee']} pe cele {len(t['pool'])} numere ale "
+                    f"biletului: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
                 ).classes("text-caption")
         copy_text = "\n".join(copy_lines)
         with ui.row().classes("w-full justify-end gap-2"):
-            copy_btn = ui.button(
-                "📋 Copiază numerele",
-                on_click=lambda: _copy_text_to_clipboard(copy_text),
-            ).props("color=primary no-caps")
+            copy_btn = ui.button("📋 Copiază numerele").props(
+                "color=primary no-caps"
+            )
+            copy_btn.on("click", _copy_feedback, js_handler=_copy_js(copy_text))
             if not copy_text:
                 copy_btn.disable()
             ui.button("Închide", on_click=dlg.close).props("no-caps")

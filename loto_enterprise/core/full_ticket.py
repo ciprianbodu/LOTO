@@ -4,14 +4,19 @@ Numarul de variante simple de pe un bilet: 3 la 6/49, 4 la 5/40, 2 la Joker.
 Variantele se aleg cu wheel-ul cu buget (acelasi traseu ca `max_variants` in
 productie), deci acoperirea e recalculata exact pentru aceste variante.
 
-Pool-ul biletului se potriveste automat pe clasamentul metodei (acelasi
-`rank_by_score` ca pool-ul afisat):
+Pool-ul biletului se potriveste automat pe clasamentul metodei, in aceeasi
+ordine ca pool-ul afisat:
 - prea mic pentru variante distincte (6/49 cu 6 numere are o singura
   combinatie de 6) -> se adauga urmatoarele numere din clasament;
 - mai mare decat locurile de pe bilet (Joker: 2 x 5 = 10) -> raman cele mai
   bine clasate numere, ca niciun numar jucat sa nu fie ales la intamplare.
 Clasamentul vine din `audit["timesfm_predictions"]`, calculat dupa
 restrangerea bazei si dupa penalizarea recenta, deci le respecta pe amandoua.
+`select_pool_from_scores` scrie acolo primele 25 de numere in ordinea
+`rank_by_score` pe scorurile exacte, iar valorile rotunjite la 6 zecimale.
+Ordinea cheilor ESTE clasamentul; nu se reordoneaza dupa valori: doua scoruri
+apropiate devin egale dupa rotunjire, iar tie-break-ul canonic ar alege atunci
+numarul mai mare, nu pe cel clasat de metoda.
 """
 
 from __future__ import annotations
@@ -19,7 +24,6 @@ from __future__ import annotations
 from math import comb
 
 from covering.dispatch import generate_wheel
-from loto_enterprise.core.ranking import rank_by_score
 
 TICKET_VARIANTS = {"6/49": 3, "5/40": 4, "joker": 2}
 PICK = {"6/49": 6, "5/40": 5, "joker": 5}
@@ -34,6 +38,11 @@ def _pool_scores(data: dict) -> dict[int, float] | None:
         return {int(k): float(v) for k, v in raw.items()}
     except (TypeError, ValueError):
         return None
+
+
+def _ranked(scores: dict[int, float], among) -> list[int]:
+    """Numerele din `among`, in ordinea clasamentului scris in audit."""
+    return [n for n in scores if n in among]
 
 
 def _min_pool(pick: int, n_var: int) -> int:
@@ -61,9 +70,7 @@ def _ticket_pool(
                 "variante distincte, iar clasamentul metodei lipsește din "
                 "rezultat. Generați cu un pool mai mare."
             )
-        extra = rank_by_score(
-            {n: s for n, s in scores.items() if n not in pool}, need - len(pool)
-        )
+        extra = _ranked(scores, set(scores) - set(pool))[: need - len(pool)]
         if len(extra) < need - len(pool):
             return pool, (
                 f"Pool-ul are {len(pool)} numere, prea puține pentru {n_var} "
@@ -85,7 +92,7 @@ def _ticket_pool(
                 f"{len(pool)}; clasamentul metodei lipsește, deci unele numere "
                 "pot rămâne în afara biletului."
             )
-        kept = rank_by_score({n: scores[n] for n in pool}, capacity)
+        kept = _ranked(scores, set(pool))[:capacity]
         dropped = sorted(set(pool) - set(kept))
         return sorted(kept), (
             f"Pe {n_var} variante încap {capacity} numere; am păstrat cele mai "

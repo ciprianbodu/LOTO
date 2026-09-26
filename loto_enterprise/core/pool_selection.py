@@ -47,6 +47,8 @@ def select_pool_from_scores(
 
     if audit is not None:
         n_unique = len({round(s, 9) for s in valid.values()})
+        # Ordinea cheilor e clasamentul exact; `full_ticket` o citeste ca atare,
+        # fiindca rotunjirea poate egala doua scoruri apropiate.
         audit["timesfm_predictions"] = {n: round(valid[n], 6) for n in ranked_all[:25]}
         audit["pool_selection"] = "top_score_pure"
         audit["pool_selection_note"] = (

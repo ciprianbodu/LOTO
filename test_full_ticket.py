@@ -5,6 +5,7 @@ from __future__ import annotations
 from itertools import combinations
 
 from loto_enterprise.core.full_ticket import build_full_ticket
+from loto_enterprise.core.pool_selection import select_pool_from_scores
 
 
 def _cov(variants, pool, g):
@@ -62,11 +63,43 @@ def test_6_49_pool_of_six_gets_the_next_ranked_number():
     assert "am adăugat 7" in t["note"]
 
 
+def _pipeline_data(scores, size, max_num=49, **extra):
+    """Pool-ul si audit-ul scrise de productie pentru aceste scoruri."""
+    audit: dict = {}
+    pool = select_pool_from_scores(scores, size, set(), audit, max_num=max_num)
+    d = {"hard_core": pool, "guarantee": 3, "audit": audit}
+    d.update(extra)
+    return d
+
+
 def test_extension_follows_the_canonical_tie_break():
     """La scor egal castiga numarul mai mare, ca la pool-ul afisat."""
     scores = {n: 10.0 for n in range(1, 7)} | {20: 1.0, 30: 1.0}
-    t = build_full_ticket("6/49", _data([1, 2, 3, 4, 5, 6], scores))
+    t = build_full_ticket("6/49", _pipeline_data(scores, 6))
     assert t["pool"] == [1, 2, 3, 4, 5, 6, 30]
+
+
+def test_extension_ignores_ties_created_by_the_audit_rounding():
+    """22 e peste 34 pe scorul exact; rotunjite la 6 zecimale sunt egale."""
+    scores = {n: 10.0 for n in range(1, 7)} | {22: 0.6489827, 34: 0.6489826}
+    data = _pipeline_data(scores, 6)
+    assert data["audit"]["timesfm_predictions"][22] == data["audit"]["timesfm_predictions"][34]
+    t = build_full_ticket("6/49", data)
+    assert t["pool"] == sorted(select_pool_from_scores(scores, 7, set(), {}, max_num=49))
+    assert t["pool"] == [1, 2, 3, 4, 5, 6, 22]
+    assert "am adăugat 22" in t["note"]
+
+
+def test_joker_trim_keeps_the_method_ranking_not_the_smallest_numbers():
+    """1 e ultimul in clasament; 40 bate 45 doar pe scorul exact."""
+    scores = {n: 30.0 - n for n in range(20, 29)} | {40: 0.5000004, 45: 0.5000003}
+    scores |= {1: 0.1}
+    data = _pipeline_data(scores, 12, max_num=45, hard_core_joker=[7])
+    assert sorted(data["hard_core"]) == [1, *range(20, 29), 40, 45]
+    t = build_full_ticket("joker", data)
+    assert t["pool"] == sorted(select_pool_from_scores(scores, 10, set(), {}, max_num=45))
+    assert t["pool"] == [*range(20, 29), 40]
+    assert "În afara biletului: 1, 45" in t["note"]
 
 
 def test_joker_pool_over_ten_keeps_the_best_ranked_ten():
