@@ -47,19 +47,21 @@ class PipelineMixin:
         recent_penalty_factor=0.5,
         restrict_base_max=0,
         restrict_base_min=0,
+        max_consecutive_run=0,
     ):
         """Rulează pipeline-ul complet de analiză.
 
-        ⚠️ Pool-ul e mereu top-scor pur (`self.audit["filters_disabled"] =
-        True`): „Flow minimal" (cerere utilizator, 2026-07-08) a scos
-        anti-secvența, reducerea inteligentă și orice alt filtru post-scoring
-        din fluxul principal, iar codul lor mort a fost șters. Vechii parametri
+        ⚠️ Fără filtre post-scoring automate (`self.audit["filters_disabled"] =
+        True`): „Flow minimal" (cerere utilizator, 2026-07-08) a scos vechea
+        anti-secvență, reducerea inteligentă și orice alt filtru automat din
+        fluxul principal, iar codul lor mort a fost șters. Vechii parametri
         `filter_consecutives` / `smart_reduction` NU mai există în semnătură;
         un task vechi din coada SQLite care încă îi poartă e normalizat de
         worker.py într-un dict cu chei fixe, deci cheile în plus se ignoră fără
-        eroare. Nu reintroduce filtre structurale (paritate, sume, decade,
-        poziție, secvențe): ele constrâng combinația, nu prezic un număr
-        (AGENTS.md §4.2).
+        eroare. Nu reintroduce filtre structurale deghizate în metode (paritate,
+        sume, decade, poziție, secvențe): ele constrâng combinația, nu prezic un
+        număr (AGENTS.md §4.3). Pool-ul e top-scor pur, cu excepția opțiunilor
+        explicite ale utilizatorului de mai jos, fiecare consemnată în audit.
 
         `pure_bench_mode` rămâne acceptat pentru compatibilitatea contractului
         UI↔worker, la fel ca `should_use_blacklist`: telemetrie, nu buton de
@@ -81,6 +83,19 @@ class PipelineMixin:
             aplicații (scripts/analysis/pattern_base_reduction.py). E o preferință
             de compoziție, la fel ca `recent_penalty_draws`, aplicată identic în
             producție și walk-forward (intră în cheia de cache WF când e activă).
+
+        max_consecutive_run: preferință OPȚIONALĂ a utilizatorului (cerere
+            2026-09-26) — cel mult atâtea numere consecutive în pool; 2 = fără
+            trei la rând (ex. 4-5-6), 0 = oprit (implicit în motor). Clasamentul
+            metodei (după penalizarea recentă și restrângerea bazei) se parcurge
+            în ordine; numărul care ar forma secvența e înlocuit cu următorul din
+            clasament care încape (`pool_selection.apply_consecutive_limit`).
+            Dacă baza restrânsă e prea îngustă pentru pool, limita se relaxează,
+            nu pool-ul și nici intervalul; relaxarea apare în
+            `audit["consecutive_limit"]`. NU are avantaj statistic demonstrat
+            (probabilitate hipergeometrică identică pentru orice pool de mărime
+            fixă). Nu se aplică Urnei 2 Joker (un singur număr). Aplicată identic
+            în producție și walk-forward (intră în cheia de cache WF când e activă).
 
         wheel_condition: numărul de numere din pool care trebuie să cadă pentru
             ca garanția să se aplice (lotto design „guarantee dacă condition").
@@ -356,7 +371,7 @@ class PipelineMixin:
             "sim_depth_pct": sim_depth_pct,
             "disabled_by_user": True,
         }
-        logging.info("[PIPELINE] Filtre dezactivate — pool = top-scor pur.")
+        logging.info("[PIPELINE] Filtre automate dezactivate — pool = top-scor.")
 
         # Restrângere bază: preferință OPȚIONALĂ a utilizatorului (0 = oprit,
         # implicit). Fără avantaj statistic — vezi docstring-ul funcției.
@@ -411,20 +426,40 @@ class PipelineMixin:
                 len(_excluded),
             )
 
+        # Limita de consecutive: opțiune a utilizatorului (0 = oprit, implicit în
+        # motor). Se aplică pe clasament, după penalizare și restrângerea bazei.
+        _mcr = max(0, int(max_consecutive_run or 0))
         self.hard_core = self._get_timesfm_pool(
-            tfm_scores, pool_size=pool_size, blacklist=blacklist
+            tfm_scores,
+            pool_size=pool_size,
+            blacklist=blacklist,
+            max_consecutive_run=_mcr,
         )
+        _cl = self.audit.get("consecutive_limit") or {}
+        if _cl.get("removed") or _cl.get("relaxed"):
+            logging.info(
+                "[PIPELINE] Limită de consecutive %d (aplicată %d): scoase %s, "
+                "intrate %s (preferință utilizator, fără avantaj statistic).",
+                _mcr,
+                int(_cl.get("applied") or 0),
+                [n for n, _r in _cl.get("removed") or []],
+                [n for n, _r in _cl.get("added") or []],
+            )
         if len(self.hard_core) < int(self.params.get("play_n", self.params["draw_n"])):
             raise ValueError("Pool insuficient pentru un bilet valid după selecție")
 
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
-        # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
-        self.audit["pipeline_stages"] = {
-            "1_nqi_raw": sorted(self.hard_core.copy()),
-        }
+        # Pasul 1 = top-N pur după scor; pasul 3 = după limita de consecutive a
+        # utilizatorului (fără limită, identic cu pasul 1). UI-ul arată diferența.
+        _top_n = sorted(
+            (set(self.hard_core) - {int(n) for n, _r in _cl.get("added") or []})
+            | {int(n) for n, _r in _cl.get("removed") or []}
+        )
+        self.audit["pipeline_stages"] = {"1_nqi_raw": _top_n}
 
         # Flow minimal (cerere user 2026-07-08): scoring → pool top-N → wheel.
-        # Fără POST-HOC, anti-secvență, anomaly filter sau alte rafinări.
+        # Fără POST-HOC, anomaly filter sau alte rafinări automate. Limita de
+        # consecutive e opțiune a utilizatorului, consemnată separat în audit.
         self.audit["pure_bench_mode"] = True
         self.audit["filters_disabled"] = True
         if len(self.hard_core) > pool_size:
@@ -446,9 +481,7 @@ class PipelineMixin:
         logging.info(
             f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}"
         )
-        self.audit["pipeline_stages"]["2_smart_selector"] = sorted(
-            self.hard_core.copy()
-        )
+        self.audit["pipeline_stages"]["2_smart_selector"] = list(_top_n)
         self.audit["pipeline_stages"]["3_anti_sequence"] = sorted(self.hard_core.copy())
         self.audit["pipeline_stages"]["4_post_hoc_final"] = sorted(
             self.hard_core.copy()
@@ -635,6 +668,10 @@ class PipelineMixin:
         context["recent_penalty"] = {
             "draws": _rp_n,
             "factor": float(recent_penalty_factor),
+        }
+        context["max_consecutive_run"] = {
+            "requested": _mcr,
+            "applied": int(_cl.get("applied") or 0),
         }
         # Necesar UI-ului ca să atribuie corect cauza unei acoperiri <100%: limita
         # de variante SAU garanție degenerată. Fără el, mesajul acuza mereu limita,

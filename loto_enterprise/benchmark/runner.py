@@ -289,7 +289,8 @@ class FoldResult:
 def _top_k(scores: dict[int, float], k: int) -> list[int]:
     # Deleagă la regula canonică (scor desc, apoi număr mare întâi — evită
     # degenerarea 1..K) din core.ranking — ACEEAȘI folosită de producție
-    # (pool_selection) și de biletul OMNIUS. Cu freq=None comportamentul e
+    # (pool_selection) și de biletul OMNIUS. Bench-ul măsoară top-K brut; limita
+    # de consecutive a utilizatorului nu intră aici, o validează walk-forward-ul. Cu freq=None comportamentul e
     # bit-identic cu vechea implementare locală, deci fold-urile din bench
     # cache (CACHE_VERSION curent) rămân valide — fără bump.
     # Filtrarea (ex. blacklist „numere moarte") rămâne la apelant.

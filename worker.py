@@ -161,7 +161,9 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
     vechi din coada SQLite care mai poartă chei scoase între timp (de ex.
     `filter_consecutives` / `smart_reduction`, filtre șterse fiindcă nu ajungeau
     niciodată la pool) trece mai departe fără eroare — cheile în plus sunt pur
-    și simplu ignorate, nu propagate în pipeline."""
+    și simplu ignorate, nu propagate în pipeline. `max_consecutive_run` e altă
+    cheie, vie: limita de consecutive a utilizatorului; un task fără ea (coadă
+    veche) rulează fără limită, iar `filter_consecutives` rămâne ignorat."""
     raw_pool = int(task.get("pool_size", 12))
     pool_size = max(6, min(16, raw_pool))  # aliniat cu UI (pool_size_val max 16)
 
@@ -212,6 +214,13 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
     except (TypeError, ValueError):
         restrict_base_min = 0
 
+    # Limita de consecutive (preferință OPȚIONALĂ, 0 = oprit; UI-ul trimite 0
+    # sau 2). Plafon 16 = pool-ul maxim: o limită cât pool-ul nu mai schimbă nimic.
+    try:
+        max_consecutive_run = max(0, min(16, int(task.get("max_consecutive_run") or 0)))
+    except (TypeError, ValueError):
+        max_consecutive_run = 0
+
     return {
         "pool_size": pool_size,
         "guarantee": guarantee,
@@ -225,6 +234,7 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
         "raw_lookback": raw_lookback,
         "restrict_base_max": restrict_base_max,
         "restrict_base_min": restrict_base_min,
+        "max_consecutive_run": max_consecutive_run,
         "sim_depth_pct": int(task.get("sim_depth_pct", 10)),
         "pure_bench_mode": bool(task.get("pure_bench_mode", False)),
     }
@@ -429,6 +439,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         recent_penalty_factor=norm["recent_penalty_factor"],
                         restrict_base_max=norm["restrict_base_max"],
                         restrict_base_min=norm["restrict_base_min"],
+                        max_consecutive_run=norm["max_consecutive_run"],
                         lookback=norm["lookback"],
                         sim_depth_pct=norm["sim_depth_pct"],
                         enable_adaptive_persistence=False,
@@ -455,6 +466,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "recent_penalty_factor": norm["recent_penalty_factor"],
                     "restrict_base_max": norm["restrict_base_max"],
                     "restrict_base_min": norm["restrict_base_min"],
+                    "max_consecutive_run": norm["max_consecutive_run"],
                     "lookback": norm["lookback"],
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),

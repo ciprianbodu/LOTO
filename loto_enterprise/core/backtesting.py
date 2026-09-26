@@ -131,6 +131,7 @@ def _retroactive_step_stateless(
     wheel_condition: int | None = None,
     adaptive_mode: str = "normal",
     adaptive_event: str | None = None,
+    max_consecutive_run: int = 0,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward — un singur loc pentru "un pas", folosit atât de
     calea paralelă/stateless (parametrii de stare rămân la implicit) cât și
@@ -170,6 +171,7 @@ def _retroactive_step_stateless(
             restrict_base_max=restrict_base_max,
             restrict_base_min=restrict_base_min,
             wheel_condition=wheel_condition,
+            max_consecutive_run=max_consecutive_run,
         )
         return eng, out_lines, (_ctx or {})
 
@@ -779,6 +781,7 @@ class LotoBacktester:
         restrict_base_max: int = 0,
         restrict_base_min: int = 0,
         wheel_condition: int | None = None,
+        max_consecutive_run: int = 0,
     ) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
@@ -786,6 +789,8 @@ class LotoBacktester:
         skip_indices: indici de extragere deja validați (cache parțial) — sunt
             săriți, ca rularea să EXTINDĂ acoperirea în loc să refacă aceiași pași
             și să se oprească la același buget în același loc.
+        max_consecutive_run: limita de consecutive a utilizatorului, aceeași ca
+            în producție (0 = oprit); ajunge la fiecare pas pe ambele căi.
 
         Args:
             pool_size: Dimensiunea pool-ului pentru wheeling
@@ -885,6 +890,7 @@ class LotoBacktester:
                     "restrict_base_max": int(restrict_base_max or 0),
                     "restrict_base_min": int(restrict_base_min or 0),
                     "wheel_condition": wheel_condition,
+                    "max_consecutive_run": int(max_consecutive_run or 0),
                 }
                 for sim_idx in sim_indices
             ]
@@ -1168,6 +1174,7 @@ class LotoBacktester:
                     restrict_base_max=restrict_base_max,
                     restrict_base_min=restrict_base_min,
                     wheel_condition=wheel_condition,
+                    max_consecutive_run=int(max_consecutive_run or 0),
                     adaptive_mode=active_mode,
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None

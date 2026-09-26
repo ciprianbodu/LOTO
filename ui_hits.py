@@ -201,6 +201,7 @@ def _render_hits_4plus(
     meta: dict | None = None,
     pool_n: int | None = None,
     restrict_base_text: str = "",
+    consecutive_limit_text: str = "",
 ) -> None:
     """Istoric hits pentru pool-ul unic; folosește mărimea efectivă din rezultat.
 
@@ -208,6 +209,8 @@ def _render_hits_4plus(
     rezultat), sau "" fără restricție. `run_honest_walk_forward` primește exact
     aceleași praguri prin `_wf_generation_options` — istoricul de mai jos NU e
     calculat pe universul complet cât timp restricția era activă la generare.
+    `consecutive_limit_text`: la fel pentru limita de consecutive; apare ori de
+    câte ori limita a fost cerută, chiar dacă pool-ul de azi n-a avut nevoie de ea.
     """
     if not flat:
         return
@@ -232,6 +235,12 @@ def _render_hits_4plus(
             f"{restrict_base_text[0].upper() + restrict_base_text[1:]} — istoricul "
             "de mai jos folosește ACEEAȘI restricție ca pool-ul generat, nu "
             "universul complet."
+        ).classes("text-caption text-grey")
+    if consecutive_limit_text:
+        ui.label(
+            f"{consecutive_limit_text[0].upper() + consecutive_limit_text[1:]} — "
+            "istoricul de mai jos aplică aceeași limită la fiecare pas, ca la "
+            "pool-ul generat."
         ).classes("text-caption text-grey")
     _wg = (meta or {}).get("wheel_guarantee")
     if _wg is not None:
@@ -478,5 +487,8 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                             # bifat sau fără?" nu avea răspuns lângă tabel, doar sus,
                             # lângă clasamentul bench.
                             restrict_base_text=_restrict_base_text(data.get("audit")),
+                            consecutive_limit_text=_consecutive_limit_text(
+                                data.get("audit"), details=False
+                            ),
                         )
 

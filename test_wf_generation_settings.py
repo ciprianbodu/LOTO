@@ -33,6 +33,7 @@ def test_result_settings_override_current_ui_and_preserve_zero(monkeypatch):
         "recent_penalty_factor": 0.0,
         "restrict_base_max": 0,
         "restrict_base_min": 0,
+        "max_consecutive_run": 0,
     }
     assert app._wf_generation_options({})["recent_penalty_factor"] == 0.5
     # Workerul păstrează cap-ul în context, nu în câmpurile top-level.

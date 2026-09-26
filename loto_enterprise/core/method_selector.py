@@ -306,9 +306,11 @@ def should_use_blacklist(
     `loto_enterprise/engine/pipeline.py` pornește cu `blacklist = set()` și scrie
     `audit["filters_disabled"] = True` — filtrele post-scoring au fost oprite
     DELIBERAT (cerere utilizator, 2026-07-08): scoring → top-N → wheel, fără
-    nimic între. Singurul lucru care mai poate umple acea mulțime e restrângerea
-    de interval cerută explicit din UI (`restrict_base`), care n-are legătură cu
-    bitul de aici și e aplicată identic în walk-forward. Deci bit-ul e
+    filtre automate între (limita de consecutive a utilizatorului lucrează pe
+    clasament, nu pe blacklist). Singurul lucru care mai poate umple acea
+    mulțime e restrângerea de interval cerută explicit din UI (`restrict_base`),
+    care n-are legătură cu bitul de aici și e aplicată identic în walk-forward.
+    Deci bit-ul e
     TELEMETRIE de bench, exact ca `sim_depth_pct`, nu un buton de configurare.
     Docstring-ul de dinainte pretindea invers („production rulează blacklist-ul
     oricum") și era pur și simplu fals.

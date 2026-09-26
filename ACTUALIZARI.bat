@@ -4,8 +4,13 @@ REM Transfer fara CALL: nicio copie .bat din repo nu ramane activa la sync.
 if /I "%~1"=="--sync-copy" goto :sync_copy
 if /I "%~1"=="--post-sync" goto :post_sync
 set "PROJECT_DIR=%~dp0"
+REM Git for Windows instalat si la zi INAINTE de sincronizare: fara el, sync-ul si
+REM push-ul istoricului cad pe un git portabil sau nu ruleaza deloc. Nu blocheaza.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode EnsureGit -ProjectDir "%PROJECT_DIR%."
 set "BOOT_DIR=%TEMP%\loto-launch-%RANDOM%-%RANDOM%"
 mkdir "%BOOT_DIR%" >nul 2>&1 || goto :bootstrap_failed
+REM Marcaj pentru faza de dupa sync: verificarea Git a rulat deja.
+type nul >"%BOOT_DIR%\git-checked" 2>nul
 copy /Y "%~f0" "%BOOT_DIR%\ACTUALIZARI.bat" >nul || goto :bootstrap_failed
 copy /Y "%PROJECT_DIR%scripts\launcher_git.ps1" "%BOOT_DIR%\launcher_git.ps1" >nul || goto :bootstrap_failed
 "%BOOT_DIR%\ACTUALIZARI.bat" --sync-copy "%PROJECT_DIR%." "%BOOT_DIR%"
@@ -26,6 +31,9 @@ exit /b 98
 :post_sync
 set "PROJECT_DIR=%~2\"
 set "BOOT_DIR=%~3"
+REM Fara marcaj, faza de dinainte de sync era o versiune fara verificarea Git
+REM (prima rulare dupa actualizarea care o aduce): verificarea ruleaza acum.
+if not exist "%BOOT_DIR%\git-checked" powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode EnsureGit -ProjectDir "%PROJECT_DIR%."
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode Cleanup -ProjectDir "%PROJECT_DIR%." -SnapshotDir "%BOOT_DIR%"
 
 :main
