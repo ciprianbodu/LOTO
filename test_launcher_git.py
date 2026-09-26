@@ -189,16 +189,38 @@ def test_history_retries_unpushed_commit_with_no_csv_changes(repos):
     assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
 
 
+@pytest.fixture
+def fake_winget(tmp_path):
+    """winget simulat: ACTUALIZARI verifica Git la fiecare rulare, iar testul nu
+    are voie sa actualizeze Git-ul real al statiei."""
+    log = tmp_path / 'winget.log'
+    exe = tmp_path / 'winget.cmd'
+    exe.write_text(f'@echo %*>>"{log}"\r\n@exit /b 0\r\n', encoding='ascii')
+    return exe, log
+
+
+def _without_git_check(bootstrap):
+    """Bootstrap-ul de dinaintea verificarii Git (prima rulare dupa actualizare)."""
+    return '\n'.join(
+        line for line in bootstrap.split('\n')
+        if 'EnsureGit' not in line and 'git-checked' not in line
+    )
+
+
 @pytest.mark.parametrize('launcher', ['START_8000.bat', 'ACTUALIZARI.bat'])
 @pytest.mark.parametrize('git_on_path', [True, False])
+@pytest.mark.parametrize('old_has_git_check', [True, False])
 def test_cmd_self_update_executes_new_launcher_with_spaces(
-    repos, launcher, gitless_env, git_on_path,
+    repos, launcher, gitless_env, git_on_path, fake_winget, old_has_git_check,
 ):
+    if launcher == 'START_8000.bat' and not old_has_git_check:
+        pytest.skip('START_8000 nu verifica Git; varianta ar repeta cazul de mai sus')
     local, seed, _ = repos
     # Keep the real bootstrap, replace application startup with a harmless marker.
     bootstrap = (ROOT / launcher).read_text(encoding='utf-8').split('\n:main\n')[0]
+    old_bootstrap = bootstrap if old_has_git_check else _without_git_check(bootstrap)
     (seed / launcher).write_text(
-        bootstrap + '\n:main\necho OLD> "%PROJECT_DIR%ran.txt"\nexit /b 0\n',
+        old_bootstrap + '\n:main\necho OLD> "%PROJECT_DIR%ran.txt"\nexit /b 0\n',
         encoding='utf-8', newline='\r\n',
     )
     commit(seed, 'old launcher')
@@ -211,14 +233,20 @@ def test_cmd_self_update_executes_new_launcher_with_spaces(
     )
     commit(seed, 'new launcher')
     git(seed, 'push', 'origin', 'main')
+    winget, winget_log = fake_winget
+    env = dict(os.environ if git_on_path else gitless_env)
+    env['LOTO_WINGET_EXE'] = str(winget)
     p = subprocess.run(
         ['cmd.exe', '/d', '/c', launcher], cwd=local,
-        capture_output=True, text=True, errors='replace', timeout=60,
-        env=None if git_on_path else gitless_env,
+        capture_output=True, text=True, errors='replace', timeout=60, env=env,
     )
     assert p.returncode == 0, p.stdout + p.stderr
     assert (local / 'ran.txt').read_text().strip() == 'NEW', p.stdout + p.stderr
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    # ACTUALIZARI verifica Git o singura data pe rulare: inainte de sync sau, daca
+    # versiunea veche nu avea pasul, dupa sync. START_8000 nu il face deloc.
+    calls = winget_log.read_text().splitlines() if winget_log.exists() else []
+    assert len(calls) == (launcher == 'ACTUALIZARI.bat'), p.stdout + p.stderr
 
 
 @pytest.mark.parametrize('launcher', ['START_8000.bat', 'ACTUALIZARI.bat'])

@@ -61,11 +61,13 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 66 fisiere `test_*.py`, 1373 de teste (renumarat la 2026-09-26). Pe
-  Python 3.14.7: 1353 trec, 20 sarite (integrarea reala a lansatorului, numai pe
-  Windows), 0 esecuri. In containerele de audit, `uv` mai vechi de 0.9 stie doar
-  3.14.0rc2, pe care pydantic pica la importul `nicegui` (`prefer_fwd_module`
-  lipseste din `typing._eval_type`); un `uv` recent instaleaza 3.14.7. Cele doua
+- teste: 67 fisiere `test_*.py`, 1389 de teste (renumarat la 2026-09-26). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1365 trec, 24 sarite (integrarea
+  reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 10 teste
+  `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
+  containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
+  pydantic pica la importul `nicegui` (`prefer_fwd_module` lipseste din
+  `typing._eval_type`); un `uv` recent instaleaza 3.14.7. Cele doua
   esecuri raportate anterior ca PRE-EXISTENTE in
   `test_wf_generation_settings` erau un defect al TESTULUI, nu al motorului — vezi
   §Audit global 2026-09-15.
@@ -310,6 +312,17 @@ UI-ul face polling la o secunda, fara reload complet.
   `.git\loto-offline-pin`) si ridica limita pe comanda git de la 45 la 180 s.
   Fixarea esuata se raporteaza cu pasul manual si nu opreste sincronizarea.
   Recomandarea ramane repository-ul pe disc local.
+- `ACTUALIZARI.bat` verifica Git for Windows inainte de sincronizare
+  (`launcher_git.ps1 -Mode EnsureGit`): lipsa -> `winget install --id Git.Git`,
+  prezent -> `winget upgrade`, apoi raporteaza versiunea. Git-ul portabil din
+  Codex nu conteaza ca instalare. Un Git din PATH instalat altfel (scoop, alt
+  folder) se pastreaza, fara un al doilea Git. Pasul nu blocheaza niciodata
+  (iese cu 0); fara winget indica instalarea manuala. Prima rulare dupa
+  actualizarea care aduce pasul porneste din versiunea veche, deci faza de dupa
+  sync il face atunci; marcajul `git-checked` din copia temporara impiedica
+  dublarea, iar Cleanup il sterge odata cu copia. START_8000 nu verifica Git.
+  Testele de lansator folosesc un winget simulat (`LOTO_WINGET_EXE`), ca sa nu
+  actualizeze Git-ul statiei.
 - Auto-commit-ul de istoric foloseste `commit --only -- _ISTORIC`, verifica `main`,
  nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
  Inainte de push face `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat,
@@ -693,7 +706,8 @@ impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 
 Instalarea canonica este:
 
-1. `ACTUALIZARI.bat` - sincronizeaza `main` din copia temporara, instaleaza/actualizeaza Python
+1. `ACTUALIZARI.bat` - instaleaza/actualizeaza Git for Windows prin winget,
+   sincronizeaza `main` din copia temporara, instaleaza/actualizeaza Python
    3.14, recreeaza venv-ul daca patch-ul difera si instaleaza
    `requirements_base.txt`;
 2. `START_8000.bat` - sincronizeaza `main` din copia temporara daca e in urma, verifica mediul, curata procese vechi,
