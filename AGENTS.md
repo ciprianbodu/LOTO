@@ -61,7 +61,7 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 63 fisiere `test_*.py`, 1348 de teste (renumarat la 2026-09-25). Pe
+- teste: 66 fisiere `test_*.py`, 1365 de teste (renumarat la 2026-09-26). Pe
   Python 3.14.0rc2 (containerul de audit) trec toate testele care nu importa
   `nicegui`; cele 48 care il importa pica acolo in pydantic (`ForwardRef` din
   rc2), nu in cod, si se confirma pe venv-ul Windows cu 3.14 final. Cele doua
