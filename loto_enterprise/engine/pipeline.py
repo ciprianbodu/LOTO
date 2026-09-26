@@ -449,10 +449,13 @@ class PipelineMixin:
             raise ValueError("Pool insuficient pentru un bilet valid după selecție")
 
         # Transparența pipeline-ului: snapshot la fiecare etapă (pentru afișare în UI).
-        # Cronologia e: NQI_raw → Smart → Anti-Seq → POST-HOC (final).
-        self.audit["pipeline_stages"] = {
-            "1_nqi_raw": sorted(self.hard_core.copy()),
-        }
+        # Pasul 1 = top-N pur după scor; pasul 3 = după limita de consecutive a
+        # utilizatorului (fără limită, identic cu pasul 1). UI-ul arată diferența.
+        _top_n = sorted(
+            (set(self.hard_core) - {int(n) for n, _r in _cl.get("added") or []})
+            | {int(n) for n, _r in _cl.get("removed") or []}
+        )
+        self.audit["pipeline_stages"] = {"1_nqi_raw": _top_n}
 
         # Flow minimal (cerere user 2026-07-08): scoring → pool top-N → wheel.
         # Fără POST-HOC, anomaly filter sau alte rafinări automate. Limita de
@@ -478,9 +481,7 @@ class PipelineMixin:
         logging.info(
             f"[PIPELINE] Nucleu (Pool) generat prin {_score_lbl}: {self.hard_core}"
         )
-        self.audit["pipeline_stages"]["2_smart_selector"] = sorted(
-            self.hard_core.copy()
-        )
+        self.audit["pipeline_stages"]["2_smart_selector"] = list(_top_n)
         self.audit["pipeline_stages"]["3_anti_sequence"] = sorted(self.hard_core.copy())
         self.audit["pipeline_stages"]["4_post_hoc_final"] = sorted(
             self.hard_core.copy()

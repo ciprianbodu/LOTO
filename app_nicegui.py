@@ -1860,8 +1860,9 @@ def main_page() -> None:
             "Pool-ul se ia tot după clasamentul metodei. Numărul care ar forma al "
             "treilea consecutiv este sărit, iar locul lui îl ia următorul număr din "
             "clasament care nu formează o secvență. Fereastra rezultatului arată ce "
-            "a ieșit și ce a intrat. Preferință de compoziție, fără avantaj "
-            "statistic demonstrat; walk-forward aplică aceeași regulă."
+            "număr a fost scos din pool și ce număr i-a luat locul. Preferință de "
+            "compoziție, fără avantaj statistic demonstrat; walk-forward aplică "
+            "aceeași regulă."
         ).classes("text-caption text-grey")
         ui.label(
             "Restrânge candidații jucați la un interval de numere, SEPARAT pentru "

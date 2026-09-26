@@ -86,9 +86,11 @@ STAGE_META = [
     ),
     (
         "3_anti_sequence",
-        "3. Anti-Sequence (dezactivat)",
+        "3. Limita de consecutive (opțiunea utilizatorului)",
         "#f59e0b",
-        "Filtru anti-secvență ELIMINAT — pool-ul rămâne decizia scorerului.",
+        "Cu bifa „Fără 3 numere consecutive”, numărul care ar forma secvența iese, "
+        "iar locul lui îl ia următorul din clasamentul metodei. Fără bifă, pool-ul "
+        "rămâne cel de la pasul 1. Preferință de compoziție, fără avantaj statistic.",
     ),
     (
         "4_post_hoc_final",
@@ -493,8 +495,11 @@ def _bench_transform_note(data: dict) -> str:
     _rb_text = _restrict_base_text(audit)
     if _rb_text:
         changes.append(_rb_text)
-    if (audit.get("consecutive_limit") or {}).get("removed"):
-        changes.append(_consecutive_limit_text(audit, details=False))
+    _cl = audit.get("consecutive_limit") or {}
+    if _cl.get("removed") or _cl.get("relaxed"):
+        changes.append(
+            f"limita de consecutive ({_consecutive_limit_text(audit, details=False)})"
+        )
     if not changes:
         return ""
     return (

@@ -20,7 +20,8 @@ import sys
 
 # Scoring = câștigătorul benchmark (metode CPU) → fallback frecvență.
 # Tot suportul GPU/neural (TimesFM/torch/foundation) a fost eliminat din aplicație.
-# Selecția pool-ului (top-N pur după scor, aliniat bench / țintă 3+) e logică pură CPU.
+# Selecția pool-ului (top-N după scor, aliniat bench / țintă 3+, cu limita
+# opțională de consecutive a utilizatorului) e logică pură CPU.
 from loto_enterprise.core.pool_selection import (
     apply_consecutive_limit,
     select_pool_from_scores,

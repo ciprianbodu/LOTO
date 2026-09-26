@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 68 fisiere `test_*.py`, 1431 de teste (renumarat la 2026-09-26). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1407 trec, 24 sarite (integrarea
+- teste: 68 fisiere `test_*.py`, 1435 de teste (renumarat la 2026-09-26). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1411 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -297,7 +297,10 @@ UI-ul face polling la o secunda, fara reload complet.
   sine. Mai rau, handler-ul exterior prinde exceptia si reia TOT secvential, cu
   rezultate corecte — paralelizarea dispare in tacere. Un test pe ramura aceea
   trebuie sa verifice ca avertismentul „WF rapid indisponibil" LIPSESTE, nu doar
-  ca rezultatele sunt bune.
+  ca rezultatele sunt bune. O eroare per pas (parametru lipsa in semnatura) nu
+  declanseaza fallback-ul: pasul e prins si sarit, iar WF iese cu zero
+  predictii. Testul cere deci si predictii nenule, plus invariantul setarii
+  (ex. `max_consecutive_run`: cel mult 2 consecutive in `hard_core`).
 
 ### 4.5 Git
 
@@ -532,8 +535,8 @@ limita de validitate din §5).
   intervalul e prea ingust pentru pool, se relaxeaza limita, nu pool-ul si nici
   intervalul. Se aplica si pe completarea defensiva si pe fallback-ul pe
   frecventa; nu atinge Urna 2 Joker. Auditul `consecutive_limit` retine limita
-  ceruta si aplicata, numerele iesite si intrate cu locul lor in clasament;
-  `timesfm_predictions` coboara atunci sub locul 25 cat e nevoie. Panoul,
+  ceruta si aplicata, numerele scoase din pool si puse in loc, cu locul lor in
+  clasament; `timesfm_predictions` coboara atunci sub locul 25 cat e nevoie. Panoul,
   raportul, nota de bench si istoricul WF il descriu prin `_consecutive_limit_text`.
   Pe datele curente, 6/49 are secvente de 3-4 la fiecare pool 6..16, deci pool-ul
   jucat difera de top-K validat de bench; numai WF masoara pool-ul jucat. FARA
@@ -857,7 +860,9 @@ scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisa
   `rate_1plus_k1`.
 
 Criteriu de iesire: zero diferente de acceptare bench/productie si curation
-Urna 2 explicabila, reversibila si reproductibila.
+Urna 2 explicabila, reversibila si reproductibila. Comparatia top-K
+bench/productie se face cu limita de consecutive oprita: pornita, pool-ul jucat
+difera de top-K prin constructie (§6).
 
 ### P1 - acoperire si cost
 

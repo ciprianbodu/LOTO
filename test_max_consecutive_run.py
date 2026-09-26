@@ -179,6 +179,23 @@ def test_pipeline_default_is_unchanged_and_the_option_applies(monkeypatch):
     assert ctx["max_consecutive_run"] == {"requested": 2, "applied": 2}
 
 
+def test_pool_evolution_shows_the_limit_as_its_own_stage(monkeypatch):
+    """Pasul 1 = top-N pur, pasul 3 = după limită: panoul arată −4/+9."""
+    _linear_scores(monkeypatch)
+    engine = _engine()
+    engine.run_institutional_pipeline(
+        pool_size=12,
+        guarantee=3,
+        max_variants=5,
+        track_pool_variation=False,
+        max_consecutive_run=2,
+    )
+    stages = engine.audit["pipeline_stages"]
+    assert stages["1_nqi_raw"] == list(range(38, 50))
+    assert stages["3_anti_sequence"] == sorted(engine.hard_core)
+    assert stages["4_post_hoc_final"] == sorted(engine.hard_core)
+
+
 def test_limit_with_a_restricted_base_is_relaxed_not_the_pool(monkeypatch):
     """Intervalul exact cât un bilet: limita urcă, pool-ul și intervalul rămân."""
     _linear_scores(monkeypatch)
@@ -328,6 +345,28 @@ def test_wf_worker_step_takes_the_limit_by_name(monkeypatch):
     assert step is not None and longest_consecutive_run(step.hard_core) <= 2
 
 
+def test_sequential_walk_forward_carries_the_limit(monkeypatch):
+    """Calea secvențială (cu feedback adaptiv și reluarea după „WF rapid
+    indisponibil") trece limita la fiecare pas, ca și cea paralelă."""
+    _linear_scores(monkeypatch)
+    df, _draws, _dates = _tail(14)
+    backtester = bt.LotoBacktester(df, "6/49")
+    backtester._load_data()
+    predictions = backtester.run_retroactive_backtest(
+        backtest_depth_percent=30.0,
+        pool_size=12,
+        guarantee=3,
+        max_variants=2,
+        max_consecutive_run=2,
+        use_feedback=True,
+    )
+    assert predictions, "calea secvențială nu a produs niciun pas"
+    for prediction in predictions:
+        assert sorted(prediction.hard_core) == [
+            33, 34, 36, 37, 39, 40, 42, 43, 45, 46, 48, 49,
+        ]
+
+
 def test_parallel_walk_forward_carries_the_limit(monkeypatch, caplog):
     """Ramura paralelă reală (procese): fiecare pas respectă limita, iar
     avertismentul de cădere pe calea secvențială lipsește (AGENTS.md §4.4)."""
@@ -417,6 +456,25 @@ def test_wf_options_come_from_the_result_not_from_the_sidebar(monkeypatch):
     assert app._wf_generation_options(explicit)["max_consecutive_run"] == 0
 
 
+def test_run_honest_walk_forward_hands_the_limit_to_the_backtester(tmp_path, monkeypatch):
+    """Adaptorul trece limita mai departe; meta o raportează."""
+    seen = {}
+
+    def _spy(self, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(wf, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(bt.LotoBacktester, "run_retroactive_backtest", _spy)
+    df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(40).reset_index(drop=True)
+    _flat, meta = wf.run_honest_walk_forward(
+        df, "6/49", 7, backtest_depth_percent=10.0, use_cache=False,
+        max_consecutive_run=2,
+    )
+    assert seen["max_consecutive_run"] == 2
+    assert meta["max_consecutive_run"] == 2
+
+
 def test_run_honest_walk_forward_accepts_every_generated_option():
     """Un nume nepotrivit ar arunca TypeError, prins de UI și doar logat:
     istoricul WF ar dispărea în tăcere pentru toate jocurile."""
@@ -447,11 +505,83 @@ def test_text_describes_the_result_and_its_ranks():
         "fără 3 numere consecutive în pool"
     )
     assert ui_runtime._consecutive_limit_text({}) == ""
+    # Limită relaxată: textul nu mai promite „fără 3 consecutive".
+    relaxed = {
+        "consecutive_limit": {
+            "requested": 2, "applied": 6, "relaxed": True, "removed": [], "added": [],
+        }
+    }
+    for details in (True, False):
+        short = ui_runtime._consecutive_limit_text(relaxed, details=details)
+        assert "nu a încăput în baza restrânsă" in short and "până la 6" in short
+
+
+def _limited_result(removed, added):
+    audit = {
+        "timesfm_predictions": {5: 0.9, 6: 0.8, 4: 0.7, 9: 0.6},
+        "consecutive_limit": {
+            "requested": 2,
+            "applied": 2,
+            "relaxed": False,
+            "removed": removed,
+            "added": added,
+        },
+        "pool_selection": "top_score_max_run" if removed else "top_score_pure",
+        "pool_selection_note": "din motor",
+    }
+    return {
+        "pool_size": 6,
+        "hard_core": [5, 6, 9, 12, 23, 25],
+        "variants": [],
+        "guarantee": 4,
+        "context": {"coverage_pct": 25.0},
+        "audit": audit,
+    }
+
+
+def test_bench_note_and_report_name_the_limit(monkeypatch):
+    import app_nicegui as app
+
+    changed = _limited_result([[4, 5]], [[9, 8]])
+    note = app._bench_transform_note(changed)
+    assert "limita de consecutive (fără 3 numere consecutive în pool)" in note
+    # Top-N care respecta deja limita: bench-ul a măsurat chiar pool-ul jucat.
+    assert app._bench_transform_note(_limited_result([], [])) == ""
+
+    monkeypatch.setitem(app.STATE, "results", ([("x.csv", {"6/49": changed})], 0))
+    monkeypatch.setitem(app.STATE, "retro", {})
+    text = app._build_report()
+    assert "Fără 3 numere consecutive în pool; scos din pool: 4 (locul 5)" in text
+    assert "cu limita de consecutive a utilizatorului" in text
+    assert changed["audit"]["pool_selection_note"] == "din motor"  # payload neatins
 
 
 def test_wf_history_names_the_limit_it_used():
+    """Nota apare în istoricul randat, cu regula, nu cu înlocuirile de azi."""
+    from types import SimpleNamespace
+
+    import app_nicegui as app
+    from scripts.analysis.audit_output import capture_ui
+
     src = open("ui_hits.py", encoding="utf-8").read()
     assert "consecutive_limit_text=_consecutive_limit_text(" in src
+    flat = [
+        SimpleNamespace(
+            draw_index=1, draw_date="03-09-2026", hits_union=3, hits=2, wheel_coverage=100.0
+        )
+    ]
+    audit = _limited_result([[4, 5]], [[9, 8]])["audit"]
+    with capture_ui() as ui:
+        app._render_hits_4plus(
+            flat, "6/49", meta={"pool_size": 10}, pool_n=10,
+            consecutive_limit_text=app._consecutive_limit_text(audit, details=False),
+        )
+    text = ui.text()
+    assert "Fără 3 numere consecutive în pool — istoricul de mai jos aplică" in text
+    assert "scos din pool" not in text
+    with capture_ui() as ui_off:
+        app._render_hits_4plus(flat, "6/49", meta={"pool_size": 10}, pool_n=10)
+    assert "consecutive" not in ui_off.text()
 
 
 # --- biletul complet respectă limita rezultatului ------------------------------

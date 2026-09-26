@@ -86,27 +86,32 @@ def _consecutive_limit_text(audit: dict | None, details: bool = True) -> str:
     requested = int(cl.get("requested") or 0)
     if requested <= 0:
         return ""
-    text = f"fără {requested + 1} numere consecutive în pool"
+    applied = int(cl.get("applied") or requested)
+    if cl.get("relaxed"):
+        # Baza restrânsă nu a lăsat destule numere: pool-ul poate avea secvențe
+        # mai lungi, deci textul nu are voie să promită „fără 3 consecutive".
+        text = (
+            f"cererea „fără {requested + 1} numere consecutive” nu a încăput în "
+            f"baza restrânsă; pool-ul are până la {applied} consecutive"
+        )
+    else:
+        text = f"fără {requested + 1} numere consecutive în pool"
     if not details:
         return text
     removed = [(int(n), int(r)) for n, r in cl.get("removed") or []]
     added = [(int(n), int(r)) for n, r in cl.get("added") or []]
+    # „Scos din pool", nu „a ieșit": într-o aplicație de loterie „a ieșit"
+    # înseamnă „a fost extras". Locul e cel din clasamentul metodei.
     if removed:
         text += (
-            "; au ieșit "
+            "; scos din pool: "
             + ", ".join(f"{n} (locul {r})" for n, r in removed)
-            + ", au intrat "
+            + "; pus în loc: "
             + ", ".join(f"{n} (locul {r})" for n, r in added)
             + " în clasamentul metodei"
         )
-    else:
+    elif not cl.get("relaxed"):
         text += "; nu a fost nevoie de nicio înlocuire"
-    applied = int(cl.get("applied") or requested)
-    if cl.get("relaxed"):
-        text += (
-            f"; limita a urcat la {applied} consecutive: baza restrânsă e prea "
-            "îngustă pentru pool"
-        )
     return text
 
 

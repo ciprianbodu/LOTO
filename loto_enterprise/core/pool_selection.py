@@ -41,10 +41,10 @@ def apply_consecutive_limit(
 
     ``max_consecutive_run`` 0 = oprit (top-N pur, fără cheie în audit); 2 = fără
     trei consecutive. Pool-ul întors e în ordinea rangului. În audit,
-    ``consecutive_limit`` spune ce număr a ieșit și ce număr a intrat, cu rangul
-    fiecăruia în clasamentul metodei, și dacă limita a trebuit relaxată (bază
-    restrânsă prea îngustă pentru pool). Liste, nu dicturi cu chei int: raportul
-    și emailul trec prin JSON.
+    ``consecutive_limit`` spune ce număr a fost scos din pool și ce număr i-a
+    luat locul, cu rangul fiecăruia în clasamentul metodei, și dacă limita a
+    trebuit relaxată (bază restrânsă prea îngustă pentru pool). Liste, nu
+    dicturi cu chei int: raportul și emailul trec prin JSON.
     """
     k = max(0, int(pool_size))
     top_n = ranked_all[:k]

@@ -218,7 +218,15 @@ def audit_bundle(bundle):
                 restrict_base_min=opts["restrict_base_min"],
                 max_consecutive_run=opts["max_consecutive_run"],
             )
-            cache = wf._cache_path(game, wf._csv_hash(source, game), len(pool), 30, sig)
+            # Adâncimea intră în nume ca `float(...).hex()`, ca în
+            # `run_honest_walk_forward`; cu `30` simplu cheia nu se potrivea niciodată.
+            cache = wf._cache_path(
+                game,
+                wf._csv_hash(source, game),
+                len(pool),
+                float(app_ui.WF_DEPTH_PERCENT).hex(),
+                sig,
+            )
             item = {
                 "game": game,
                 "pool": len(pool),
