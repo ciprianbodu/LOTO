@@ -201,6 +201,10 @@ def audit_bundle(bundle):
                 )
                 or 0
             )
+            # Opțiunile de compoziție (bază restrânsă, limită de consecutive) din
+            # rezultat, ca la pornirea WF din UI; fără ele cheia citea tacit
+            # cache-ul configurației nerestrânse.
+            opts = app_ui._wf_generation_options(data)
             sig = wf._decision_sig(
                 game,
                 len(pool),
@@ -210,6 +214,9 @@ def audit_bundle(bundle):
                 guarantee=guarantee,
                 wheel_condition=condition,
                 max_variants=max_variants,
+                restrict_base_max=opts["restrict_base_max"],
+                restrict_base_min=opts["restrict_base_min"],
+                max_consecutive_run=opts["max_consecutive_run"],
             )
             cache = wf._cache_path(game, wf._csv_hash(source, game), len(pool), 30, sig)
             item = {

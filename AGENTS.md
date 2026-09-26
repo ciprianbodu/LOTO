@@ -8,7 +8,7 @@ Aplicatia optimizeaza pool-uri si sisteme de acoperire pentru Loto 6/49, Loto
 1. valideaza istoricul;
 2. compara metode de scoring prin walk-forward;
 3. alege un scorer sau ensemble pentru fiecare joc si dimensiune de pool;
-4. genereaza pool-ul prin top-N canonic;
+4. genereaza pool-ul prin top-N canonic (cu limita optionala de consecutive, §6);
 5. transforma pool-ul in bilete prin covering design;
 6. raporteaza separat hiturile de pool, hiturile pe bilet, acoperirea si costul.
 
@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 67 fisiere `test_*.py`, 1394 de teste (renumarat la 2026-09-26). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1370 trec, 24 sarite (integrarea
+- teste: 68 fisiere `test_*.py`, 1431 de teste (renumarat la 2026-09-26). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1407 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -247,7 +247,8 @@ UI-ul face polling la o secunda, fara reload complet.
 - Scorer: `fn(draws_2d, max_num) -> {numar: scor}`.
 - Scorurile goale, plate, ne-numerice sau ne-finite sunt inutilizabile.
 - Validarea trece prin `has_usable_score_variance`.
-- Orice top-N dupa scor trece prin `core.ranking.rank_by_score`.
+- Orice top-N dupa scor trece prin `core.ranking.rank_by_score`. Limita de
+  consecutive (`limit_consecutive_run`) parcurge iesirea lui, fara sortare proprie.
 - Nu adauga sortari locale care pot schimba tie-break-ul dintre bench si productie.
 - Fallback-ul de productie este `frequency`, determinist.
 - `random` este baseline structural pentru benchmark si este interzis in productie.
@@ -266,6 +267,9 @@ UI-ul face polling la o secunda, fara reload complet.
   nu prezic un numar. Daca un astfel de filtru intra in METHODS, intra si in
   `EXCLUDED_FROM_PRODUCTION` (ramane martor de bench, nu scorer). Azi:
   `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`.
+  Limita de consecutive (§6) nu e o metoda: e o optiune explicita a
+  utilizatorului pe compozitia pool-ului, aplicata dupa scor, absenta din bench,
+  fara afirmatie predictiva.
 - `test_no_structural_filters.py` masoara scorurile pentru clase statice;
   nu constituie dovada unui avantaj predictiv.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
@@ -402,9 +406,9 @@ Pentru fiecare joc si pool:
   metoda din ultima generare (numai la acelasi pool) sau din decizia salvata.
 - Analiza foloseste pool-ul rezultatului afisat, chiar daca setarea pentru
   generarea urmatoare s-a schimbat. Urna 2 arata doar top-1, fara coloana 4+.
-- Penalizarea recenta/lookback-ul sunt explicate separat: bench-ul masoara
-  scorerul brut, WF masoara configuratia ajustata. Scorurile nu sunt
-  probabilitati de castig.
+- Penalizarea recenta/lookback-ul/limita de consecutive sunt explicate separat:
+  bench-ul masoara scorerul brut, WF masoara configuratia ajustata. Scorurile nu
+  sunt probabilitati de castig.
 - WF afiseaza distinct hiturile pool-ului si extragerile cu cel putin un bilet
   care atinge 3+/4+. Metadatele indica geometria interna WF, care poate diferi
   de garantia/bugetul productiei; adaugarea nu invalideaza cache-ul.
@@ -414,7 +418,10 @@ Pentru fiecare joc si pool:
   setarea live din sidebar (care se poate schimba intre timp). Sectiunea de
   istoric afiseaza explicit intervalul aplicat (`_restrict_base_text` pe
   `data.get("audit")`), langa tabel, nu doar in nota de sub clasamentul bench —
-  fara restrictie, sectiunea nu arata nicio mentiune.
+  fara restrictie, sectiunea nu arata nicio mentiune. La fel limita de
+  consecutive: `_wf_generation_options` o ia din ecoul worker-ului
+  (`data["max_consecutive_run"]`), apoi din limita CERUTA din audit, apoi 0,
+  niciodata din bifa din sidebar; istoricul o numeste (`_consecutive_limit_text`).
 - Costurile folosesc tarife standard (sursa loto.ro/info-loto/preturi, verificata
   2026-09-04). Primele 10 variante nu mostenesc garantia intregului wheel;
   minimalitatea numarului de bilete nu este afirmata fara dovada.
@@ -505,9 +512,32 @@ limita de validitate din §5).
   nu se reordoneaza (doua scoruri apropiate devin egale, iar tie-break-ul ar
   alege alt numar decat metoda). Fereastra spune ce s-a adaugat sau ce a ramas
   afara, iar acoperirea numeste pe cate numere ale biletului e calculata.
+  Extinderea respecta limita de consecutive a rezultatului
+  (`audit.consecutive_limit.applied`) si spune ce numar a sarit; un rezultat
+  fara limita ramane pe regula veche.
   „📋 Copiaza numerele" copiaza in browser, chiar in click: Safari/iOS scriu in
   clipboard numai in timpul gestului, nu dupa un drum pana la server.
-- Selectia este top-N pura dupa scorul validat.
+- Selectia este top-N pura dupa scorul validat, cu o singura exceptie, limita
+  de consecutive de mai jos.
+- Limita de consecutive este o OPTIUNE de utilizator (`max_consecutive_run` in
+  `config_json`; bifa „🔗 Fara 3 numere consecutive in pool"), PORNITA implicit
+  in UI la cererea explicita a utilizatorului (2026-09-26), spre deosebire de
+  penalizare si restrangere. Motorul si worker-ul au implicit 0 (oprit): un task
+  vechi fara cheie ruleaza fara limita, iar `filter_consecutives` ramane ignorat.
+  UI-ul trimite 2 (int, nu bool). Clasamentul (dupa penalizare si restrangerea
+  bazei) se parcurge in ordine; numarul care ar forma a treia secventa e sarit,
+  iar locul lui il ia urmatorul care incape. Verificarea de completare
+  (`limit_consecutive_run`) alege cel mai bun set dupa rang care respecta limita,
+  si pe o baza restransa unde parcurgerea simpla ramane fara numere. Daca
+  intervalul e prea ingust pentru pool, se relaxeaza limita, nu pool-ul si nici
+  intervalul. Se aplica si pe completarea defensiva si pe fallback-ul pe
+  frecventa; nu atinge Urna 2 Joker. Auditul `consecutive_limit` retine limita
+  ceruta si aplicata, numerele iesite si intrate cu locul lor in clasament;
+  `timesfm_predictions` coboara atunci sub locul 25 cat e nevoie. Panoul,
+  raportul, nota de bench si istoricul WF il descriu prin `_consecutive_limit_text`.
+  Pe datele curente, 6/49 are secvente de 3-4 la fiecare pool 6..16, deci pool-ul
+  jucat difera de top-K validat de bench; numai WF masoara pool-ul jucat. FARA
+  avantaj statistic demonstrat (hipergeometric, ca la restrangere).
 - Fiecare joc genereaza si afiseaza un singur pool; configuratia, worker-ul,
   raportul, emailul si walk-forward-ul nu mai au Pool 2/auto-invert.
 - Payload-urile vechi cu doua faze sunt citite compatibil folosind numai pool-ul
@@ -676,7 +706,8 @@ Cache-ul WF sta in `D:\_BUILD\_LOTO\.wf_cache`, in afara OneDrive; override-ul
 este `LOTO_WF_CACHE_DIR`. `ACTUALIZARI.bat` migreaza idempotent fisierele legacy
 `bench_results/walk_forward_*.pkl`, fara sa suprascrie o destinatie existenta.
 Cheia include istoricul complet, lookback, scorer, ensemble, tinta, wheel,
-hash-ul designului si, pentru Joker, decizia Urnei 2.
+hash-ul designului, limita de consecutive (numai activa) si, pentru Joker,
+decizia Urnei 2.
 
 ## 9. Cache si invalidare
 
@@ -707,6 +738,10 @@ activa: `walk_forward_adapter._restrict_base_sig` pentru WF si hash-ul din
 `_build_config_json` pentru cache-ul de pipeline al worker-ului. Cele doua
 constante se tin sincron (exista un test pentru asta) si se incrementeaza
 impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
+Limita de consecutive urmeaza acelasi contract cu `_CONSECUTIVE_SEMANTICS`
+(`walk_forward_adapter._consecutive_sig` si hash-ul din `_build_config_json`),
+fara bump de `v27`. Cum bifa e pornita implicit, primul WF dupa actualizare
+calculeaza o cheie noua (poate iesi partial si continua prin `skip_indices`).
 
 ## 10. Mediu si rulare
 

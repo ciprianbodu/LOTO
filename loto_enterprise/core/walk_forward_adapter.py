@@ -16,6 +16,8 @@ Cache:
       câştigătorul, sau o schimbare de algoritm de wheeling, invalidează automat
       cache-ul. Wheel-ul contează pentru că determină numărul de variante, acoperirea
       şi hiturile per bilet; fără el, raportul ar evalua un wheel care nu mai există.
+      Opțiunile de compoziție ale utilizatorului (penalizare recentă, bază
+      restrânsă, limită de consecutive) intră în dec_sig numai când sunt active.
     - Un bump de CACHE_VERSION doar schimbă NUMELE fişierului: pickle-urile vechi
       rămân pe disc la nesfârşit. `purge_stale_wf_cache()` le inventariază (implicit
       dry-run) şi le poate şterge; `clear_walk_forward_cache()` şterge TOT, inclusiv
@@ -71,6 +73,9 @@ CACHE_VERSION = "v27"
 # v19: `wheel_union34` nu mai unește două covere redundante; pentru 3+/4+
 #      folosește un singur C(v, pick, 4). Se schimbă lista de bilete, costul și
 #      rezultatele `hits` per bilet, deci cache-ul v18 ar valida un wheel vechi.
+# (v27, ADITIV — FĂRĂ bump): limita de consecutive `max_consecutive_run` intră
+#      în dec_sig ca `|mc<semantică>:<n>` DOAR când e activă; cheile fără limită
+#      rămân identice, deci cache-urile WF existente (90 de minute) rămân valide.
 # (v18, ADITIV — FĂRĂ bump): câmpul `wheel_coverage` pe `WalkForwardResult`.
 #      E o ADĂUGIRE cu default, nu o schimbare de semantică a câmpurilor vechi:
 #      înregistrările deja pe disc rămân corecte, doar că nu ştiu acoperirea
@@ -398,6 +403,22 @@ def _restrict_base_sig(
     return f"|rb{_RESTRICT_SEMANTICS}:{hi}" + (f":{lo}" if lo > 0 else "")
 
 
+# Versiunea SEMANTICII limitei de consecutive (opțiunea utilizatorului
+# `max_consecutive_run`), cu același contract ca `_RESTRICT_SEMANTICS`: intră în
+# cheie DOAR când limita e activă și se incrementează când se schimbă regula
+# (parcurgerea după rang, relaxarea). Ținut sincron cu `ui_runtime`.
+_CONSECUTIVE_SEMANTICS = "1"
+
+
+def _consecutive_sig(max_consecutive_run: int = 0) -> str:
+    """Sufix de cheie pentru limita de consecutive; gol când e oprită, deci cheile
+    scrise înainte de existența opțiunii rămân valide."""
+    n = int(max_consecutive_run or 0)
+    if n <= 0:
+        return ""
+    return f"|mc{_CONSECUTIVE_SEMANTICS}:{n}"
+
+
 def _decision_sig(
     game_type: str,
     pool_size: int,
@@ -409,10 +430,13 @@ def _decision_sig(
     max_variants=0,
     restrict_base_max: int = 0,
     restrict_base_min: int = 0,
+    max_consecutive_run: int = 0,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
     este ataşată fiecărei variante şi îi poate schimba evaluarea retrospectivă.
+    Opțiunile de compoziție ale utilizatorului (penalizare, bază restrânsă,
+    limită de consecutive) intră numai când sunt active.
     """
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
@@ -441,6 +465,7 @@ def _decision_sig(
             f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
+            f"{_consecutive_sig(max_consecutive_run)}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -459,6 +484,7 @@ def _decision_sig(
                     + _restrict_base_sig(
                         restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type)
                     )
+                    + _consecutive_sig(max_consecutive_run)
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -612,6 +638,7 @@ def run_honest_walk_forward(
     max_variants: int = 0,
     restrict_base_max: int = 0,
     restrict_base_min: int = 0,
+    max_consecutive_run: int = 0,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -622,6 +649,9 @@ def run_honest_walk_forward(
     restrict_base_min/max: același interval de bază (preferință fără avantaj
     statistic — vezi loto_engine.run_institutional_pipeline) ca în producție;
     intră în cheia de cache doar când e activă (0 = oprit).
+    max_consecutive_run: aceeași limită de consecutive ca în producție (cerută,
+    nu cea relaxată: relaxarea se decide la fiecare pas); în cheie doar când e
+    activă (0 = oprit).
 
     `should_cancel` oprește DOAR bucla de backtest (rezultat parțial, salvat oricum
     — asta e scopul lui `skip_indices`/acoperirea incrementală). `should_skip_cache_write`
@@ -651,6 +681,7 @@ def run_honest_walk_forward(
         max_variants,
         restrict_base_max,
         restrict_base_min,
+        max_consecutive_run=int(max_consecutive_run or 0),
     )
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
@@ -669,6 +700,7 @@ def run_honest_walk_forward(
         "wheel_guarantee": g,
         "wheel_condition": condition,
         "max_variants": cap,
+        "max_consecutive_run": int(max_consecutive_run or 0),
         "selection_validation": "fixed_current_decision",
     }
 
@@ -740,6 +772,7 @@ def run_honest_walk_forward(
         recent_penalty_factor=float(recent_penalty_factor),
         restrict_base_max=int(restrict_base_max or 0),
         restrict_base_min=int(restrict_base_min or 0),
+        max_consecutive_run=int(max_consecutive_run or 0),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
