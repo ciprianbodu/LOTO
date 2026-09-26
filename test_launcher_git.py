@@ -245,8 +245,12 @@ def test_cmd_self_update_executes_new_launcher_with_spaces(
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
     # ACTUALIZARI verifica Git o singura data pe rulare: inainte de sync sau, daca
     # versiunea veche nu avea pasul, dupa sync. START_8000 nu il face deloc.
-    calls = winget_log.read_text().splitlines() if winget_log.exists() else []
-    assert len(calls) == (launcher == 'ACTUALIZARI.bat'), p.stdout + p.stderr
+    # Se numara rularile EnsureGit (linia de antet), nu apelurile winget: un Git
+    # din PATH instalat altfel (scoop) e pastrat fara winget.
+    runs = p.stdout.count('[GIT] Verific Git for Windows')
+    assert runs == (1 if launcher == 'ACTUALIZARI.bat' else 0), p.stdout + p.stderr
+    if launcher == 'START_8000.bat':
+        assert not winget_log.exists()
 
 
 @pytest.mark.parametrize('launcher', ['START_8000.bat', 'ACTUALIZARI.bat'])

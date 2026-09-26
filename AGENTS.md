@@ -61,9 +61,9 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 67 fisiere `test_*.py`, 1389 de teste (renumarat la 2026-09-26). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1365 trec, 24 sarite (integrarea
-  reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 10 teste
+- teste: 67 fisiere `test_*.py`, 1394 de teste (renumarat la 2026-09-26). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1370 trec, 24 sarite (integrarea
+  reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
   pydantic pica la importul `nicegui` (`prefer_fwd_module` lipseste din
@@ -315,14 +315,20 @@ UI-ul face polling la o secunda, fara reload complet.
 - `ACTUALIZARI.bat` verifica Git for Windows inainte de sincronizare
   (`launcher_git.ps1 -Mode EnsureGit`): lipsa -> `winget install --id Git.Git`,
   prezent -> `winget upgrade`, apoi raporteaza versiunea. Git-ul portabil din
-  Codex nu conteaza ca instalare. Un Git din PATH instalat altfel (scoop, alt
-  folder) se pastreaza, fara un al doilea Git. Pasul nu blocheaza niciodata
-  (iese cu 0); fara winget indica instalarea manuala. Prima rulare dupa
+  Codex nu conteaza ca instalare. Un Git ales prin `LOTO_GIT_EXE` sau aflat in
+  PATH, instalat altfel (scoop, alt folder), se pastreaza, fara un al doilea Git.
+  Un cod winget necunoscut cu versiunea neschimbata se raporteaza neutru
+  (verificare esuata, confirmare de administrator refuzata sau instalare
+  esuata), nu drept „nu a putut verifica". Pasul nu blocheaza niciodata (iese
+  cu 0); fara winget indica instalarea manuala. `Resolve-LotoGit` (Sync,
+  PushHistory) pastreaza ordinea `LOTO_GIT_EXE`, PATH, Git for Windows, dar
+  git-ul Codex din PATH-ul unui editor trece dupa Git for Windows. Prima rulare dupa
   actualizarea care aduce pasul porneste din versiunea veche, deci faza de dupa
   sync il face atunci; marcajul `git-checked` din copia temporara impiedica
   dublarea, iar Cleanup il sterge odata cu copia. START_8000 nu verifica Git.
   Testele de lansator folosesc un winget simulat (`LOTO_WINGET_EXE`), ca sa nu
-  actualizeze Git-ul statiei.
+  actualizeze Git-ul statiei, si numara rularile EnsureGit dupa linia de antet
+  „[GIT] Verific Git for Windows", nu dupa apelurile winget.
 - Auto-commit-ul de istoric foloseste `commit --only -- _ISTORIC`, verifica `main`,
  nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
  Inainte de push face `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat,

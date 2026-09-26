@@ -58,12 +58,19 @@ if ($Mode -eq 'EnsureGit') {
     }
 
     function Find-OtherGit {
-        # Git on PATH installed another way (scoop, custom folder). The Codex
+        # A git the user chose (LOTO_GIT_EXE, which Sync also uses first) or one
+        # on PATH installed another way (scoop, custom folder). The Codex
         # portable git does not count: it is exactly what this step replaces.
-        $command = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue |
-            Where-Object { $_.Source -notmatch '[\\/]codex-runtimes[\\/]' } |
+        $codex = '[\\/]codex-runtimes[\\/]'
+        $chosen = if ($env:LOTO_GIT_EXE) { $env:LOTO_GIT_EXE.Trim('"') } else { '' }
+        if ($chosen -and [IO.Path]::IsPathRooted($chosen) -and $chosen -notmatch $codex -and
+            (Test-Path -LiteralPath $chosen -PathType Leaf)) {
+            return [pscustomobject]@{ Path = [IO.Path]::GetFullPath($chosen); Source = 'LOTO_GIT_EXE' }
+        }
+        $command = Get-Command git.exe -CommandType Application -All -ErrorAction SilentlyContinue |
+            Where-Object { $_.Source -notmatch $codex } |
             Select-Object -First 1
-        if ($command) { return $command.Source }
+        if ($command) { return [pscustomobject]@{ Path = $command.Source; Source = 'PATH' } }
         return $null
     }
 
@@ -85,14 +92,17 @@ if ($Mode -eq 'EnsureGit') {
     }
 
     try {
+        # One header line per run: the launcher tests count runs by it.
+        Write-Host '[GIT] Verific Git for Windows (instalat si la zi)...'
         $manual = 'https://git-scm.com/download/win'
         $before = Get-GitVersion (Find-GitForWindows)
         if (-not $before) {
             $other = Find-OtherGit
-            $otherVersion = Get-GitVersion $other
+            $otherVersion = if ($other) { Get-GitVersion $other.Path } else { $null }
             if ($otherVersion) {
-                Write-Host ('[GIT] Git ' + (Format-GitVersion $otherVersion) + ' gasit in PATH (' + $other +
-                    '), instalat altfel decat Git for Windows standard. Il pastrez; actualizati-l cu programul care l-a instalat.')
+                Write-Host ('[GIT] Git ' + (Format-GitVersion $otherVersion) + ' gasit prin ' + $other.Source +
+                    ' (' + $other.Path + '), instalat altfel decat Git for Windows standard. ' +
+                    'Il pastrez; actualizati-l cu programul care l-a instalat.')
                 exit 0
             }
         }
@@ -125,6 +135,9 @@ if ($Mode -eq 'EnsureGit') {
         $after = Get-GitVersion (Find-GitForWindows)
         # winget: 0x8A15002B = nicio actualizare aplicabila, 0x8A150014 = pachet
         # negasit printre cele instalate (Git pus pe alta cale decat winget).
+        # Orice alt cod cu versiunea neschimbata: verificarea sau instalarea a
+        # esuat, ori confirmarea de administrator a fost refuzata; winget nu
+        # spune care, deci mesajul nu presupune una anume.
         if (-not $after) {
             Write-Host ('[GIT] [ATENTIE] Git for Windows nu s-a instalat - winget cod ' + $code +
                 '. Instalati-l manual de pe ' + $manual)
@@ -139,8 +152,9 @@ if ($Mode -eq 'EnsureGit') {
             Write-Host ('[GIT] Git for Windows ' + (Format-GitVersion $after) +
                 ' nu e gestionat de winget - verificati versiunea pe ' + $manual)
         } else {
-            Write-Host ('[GIT] [ATENTIE] winget nu a putut verifica actualizarea - cod ' + $code +
-                '. Raman pe Git ' + (Format-GitVersion $after) + '.')
+            Write-Host ('[GIT] [ATENTIE] Actualizarea Git nu s-a aplicat - winget cod ' + $code +
+                ' (verificare esuata, confirmare de administrator refuzata sau instalare esuata). Raman pe Git ' +
+                (Format-GitVersion $after) + '; reincercati la urmatoarea rulare sau instalati manual de pe ' + $manual)
         }
     } catch {
         Write-Host ('[GIT] [ATENTIE] Verificarea Git a esuat: ' + $_.Exception.Message)
@@ -153,9 +167,13 @@ function Resolve-LotoGit {
     # Resolve here for BOTH Sync and PushHistory; do not change Windows settings.
     $candidates = @()
     if ($env:LOTO_GIT_EXE) { $candidates += $env:LOTO_GIT_EXE.Trim('"') }
-    $command = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($command) { $candidates += $command.Source }
+    # PATH order, except the Codex portable git (an editor's PATH): it goes after
+    # Git for Windows, which EnsureGit installs, because it can vanish with the app.
+    $codexOnPath = @()
+    foreach ($command in @(Get-Command git.exe -CommandType Application -All -ErrorAction SilentlyContinue)) {
+        if ($command.Source -match '[\\/]codex-runtimes[\\/]') { $codexOnPath += $command.Source }
+        else { $candidates += $command.Source }
+    }
 
     foreach ($key in @('HKCU:\Software\GitForWindows', 'HKLM:\Software\GitForWindows',
                        'HKLM:\Software\WOW6432Node\GitForWindows')) {
@@ -168,6 +186,7 @@ function Resolve-LotoGit {
     if ($env:LOCALAPPDATA) {
         $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd\git.exe'
     }
+    $candidates += $codexOnPath
     # The local machine currently has this portable Git, without a global install.
     if ($env:USERPROFILE) {
         $candidates += Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe'
