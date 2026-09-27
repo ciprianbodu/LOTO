@@ -1,8 +1,11 @@
-"""Un bilet fizic complet per joc, din pool-ul rezultatului afisat.
+"""Bilete fizice complete per joc (1-10), din pool-ul rezultatului afisat.
 
-Numarul de variante simple de pe un bilet: 3 la 6/49, 4 la 5/40, 2 la Joker.
-Variantele se aleg cu wheel-ul cu buget (acelasi traseu ca `max_variants` in
-productie), deci acoperirea e recalculata exact pentru aceste variante.
+Numarul de variante simple de pe un bilet: 3 la 6/49, 4 la 5/40, 2 la Joker;
+N bilete au de N ori mai multe. Variantele se aleg cu wheel-ul cu buget (acelasi
+traseu ca `max_variants` in productie), deci acoperirea e recalculata exact
+pentru aceste variante. Cand garantia e completa inainte de a umple biletele,
+locurile ramase acopera grupe mai mari din acelasi pool (4 din 4, apoi 5 din 5),
+tot cu wheel-ul greedy; niciun numar nu vine din afara pool-ului biletului.
 
 Pool-ul biletului se potriveste automat pe clasamentul metodei, in aceeasi
 ordine ca pool-ul afisat:
@@ -27,11 +30,22 @@ from __future__ import annotations
 
 from math import comb
 
+from covering.common import compute_coverage_pct
 from covering.dispatch import generate_wheel
 from loto_enterprise.core.ranking import longest_consecutive_run
 
-TICKET_VARIANTS = {"6/49": 3, "5/40": 4, "joker": 2}
+TICKET_VARIANTS = {"6/49": 3, "5/40": 4, "joker": 2}  # variante pe un bilet fizic
 PICK = {"6/49": 6, "5/40": 5, "joker": 5}
+MAX_TICKETS = 10
+
+
+def clamp_tickets(value) -> int:
+    """Numarul de bilete cerut, intre 1 si 10 (campul gol sau text -> 1)."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, min(MAX_TICKETS, n))
 
 
 def _pool_scores(data: dict) -> dict[int, float] | None:
@@ -135,26 +149,68 @@ def _ticket_pool(
     return pool, None
 
 
-def build_full_ticket(game: str, data: dict) -> dict:
-    """{variants, coverage, guarantee, joker, pool, note, error} pentru un joc."""
-    n_var = TICKET_VARIANTS.get(game)
-    pick = PICK.get(game)
-    if n_var is None:
-        return {"error": f"joc necunoscut: {game}"}
-    pool = sorted({int(x) for x in (data.get("hard_core") or [])})
-    if len(pool) < pick:
-        return {"error": "pool-ul afișat e mai mic decât un bilet"}
-    pool, note = _ticket_pool(pool, _pool_scores(data), n_var, pick, _max_run(data))
-    guarantee = max(1, min(int(data.get("guarantee") or 3), pick))
-    variants, coverage = generate_wheel(
+def _fill_variants(
+    pool: list[int], pick: int, guarantee: int, n_var: int, scores
+) -> tuple[list[list[int]], int]:
+    """Variantele biletelor si cate dintre ele formeaza wheel-ul garantiei.
+
+    Wheel-ul se opreste cand garantia e completa. Locurile ramase se umplu cu
+    wheel-ul garantiei urmatoare (g+1, apoi g+2 ... pana la sistemul complet),
+    sarind variantele deja alese; pool-ul are cel putin `n_var` combinatii
+    (`_min_pool`), deci biletele se umplu mereu cand clasamentul exista."""
+    base, _ = generate_wheel(
         "greedy",
         pool=pool,
         pick=pick,
         guarantee=guarantee,
         max_variants=n_var,
-        scores=_pool_scores(data),
+        scores=scores,
     )
-    variants = [sorted(int(x) for x in v) for v in variants][:n_var]
+    chosen = [tuple(sorted(int(x) for x in v)) for v in base][:n_var]
+    n_base = len(chosen)
+    seen = set(chosen)
+    level = guarantee
+    while len(chosen) < n_var and level < pick:
+        level += 1
+        more, _ = generate_wheel(
+            "greedy",
+            pool=pool,
+            pick=pick,
+            guarantee=level,
+            max_variants=n_var,
+            scores=scores,
+        )
+        for v in more:
+            t = tuple(sorted(int(x) for x in v))
+            if t not in seen:
+                chosen.append(t)
+                seen.add(t)
+                if len(chosen) == n_var:
+                    break
+    return [list(v) for v in chosen], n_base
+
+
+def build_full_ticket(game: str, data: dict, tickets: int = 1) -> dict:
+    """{variants, coverage, guarantee, joker, pool, note, error, ...} pentru un joc.
+
+    `tickets` = bilete fizice (1-10); variantele cerute = bilete x variante pe bilet."""
+    per_ticket = TICKET_VARIANTS.get(game)
+    pick = PICK.get(game)
+    if per_ticket is None:
+        return {"error": f"joc necunoscut: {game}"}
+    tickets = clamp_tickets(tickets)
+    n_var = per_ticket * tickets
+    pool = sorted({int(x) for x in (data.get("hard_core") or [])})
+    if len(pool) < pick:
+        return {"error": "pool-ul afișat e mai mic decât un bilet"}
+    scores = _pool_scores(data)
+    pool, note = _ticket_pool(pool, scores, n_var, pick, _max_run(data))
+    guarantee = max(1, min(int(data.get("guarantee") or 3), pick))
+    variants, n_base = _fill_variants(pool, pick, guarantee, n_var, scores)
+    coverage = compute_coverage_pct(variants, pool, guarantee)
+    upper = None
+    if len(variants) > n_base and guarantee < pick:
+        upper = (guarantee + 1, compute_coverage_pct(variants, pool, guarantee + 1))
     joker = None
     if game == "joker":
         jk = data.get("hard_core_joker") or []
@@ -169,4 +225,9 @@ def build_full_ticket(game: str, data: dict) -> dict:
         "pool": pool,
         "note": note,
         "error": None,
+        "tickets": tickets,
+        "per_ticket": per_ticket,
+        "requested": n_var,
+        "guarantee_variants": n_base,
+        "upper_coverage": upper,
     }

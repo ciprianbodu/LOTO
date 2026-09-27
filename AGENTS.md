@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 69 fisiere `test_*.py`, 1458 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1434 trec, 24 sarite (integrarea
+- teste: 69 fisiere `test_*.py`, 1467 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1443 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -500,17 +500,23 @@ limita de validitate din §5).
 ## 6. Pool unic
 
 - Pool-ul UI este limitat la 6..16.
-- Butonul „🎟️ Bilet complet" din sidebar face cate un bilet fizic per joc din
-  pool-ul rezultatului afisat: 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu
+- Butonul „🎟️ Bilet complet" din sidebar face 1-10 bilete fizice per joc
+  (campul „Bilete", `full_ticket_count_val`, implicit 1) din pool-ul
+  rezultatului afisat: pe bilet 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu
   numarul Joker pe fiecare). Variantele vin din wheel-ul cu buget
   (`core/full_ticket.py`, `generate_wheel` cu `max_variants`), iar acoperirea
-  afisata e a acestor variante, nu a wheel-ului complet. Nu trimite job si nu
+  afisata e a acestor variante, nu a wheel-ului complet. Cand garantia e
+  completa inainte de a umple biletele, locurile ramase acopera grupe mai mari
+  din acelasi pool (g+1, apoi pana la sistemul complet); nota spune cu cate
+  variante s-a completat garantia. Fiecare bloc si fiecare bilet poarta tara si
+  jocul (`core/lotteries.display_name`, ex. „România · Loto 6/49"), si in
+  textul copiat. Nu trimite job si nu
   schimba rezultatul afisat. Pool-ul biletului se potriveste automat pe
   clasamentul metodei (`audit["timesfm_predictions"]`, deci cu restrangerea
-  bazei si penalizarea recenta deja aplicate): prea mic pentru variante
-  distincte (6/49 cu pool 6) -> se adauga urmatorul numar din clasament; mai
-  mare decat locurile de pe bilet (Joker peste 10) -> raman cele mai bine
-  clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
+  bazei si penalizarea recenta deja aplicate): prea mic pentru variantele
+  distincte cerute (6/49 cu pool 6: 7 numere la un bilet, 9 la zece) -> se
+  adauga urmatoarele numere din clasament; mai mare decat locurile de pe bilete
+  (Joker: 10 numere pe bilet) -> raman cele mai bine clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
   `rank_by_score` pe scorurile exacte; valorile sunt rotunjite la 6 zecimale si
   nu se reordoneaza (doua scoruri apropiate devin egale, iar tie-break-ul ar
   alege alt numar decat metoda). Fereastra spune ce s-a adaugat sau ce a ramas

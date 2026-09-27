@@ -221,6 +221,7 @@ UI_PERSIST_KEYS = [
     # Fără ea în listă, bifa debifată revine pornită la fiecare repornire:
     # `_load_settings` citește numai cheile de aici, iar implicitul e True.
     "max_consecutive_run_enabled_val",
+    "full_ticket_count_val",
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -261,6 +262,8 @@ DEFAULTS = {
     # oprite fiindcă ar schimba pool-ul fără nicio acțiune. Tot compoziție, FĂRĂ
     # avantaj statistic demonstrat (hipergeometric, ca mai sus); bifa o oprește.
     "max_consecutive_run_enabled_val": True,
+    # Bilete fizice cerute de „🎟️ Bilet complet”, 1-10 (full_ticket.clamp_tickets).
+    "full_ticket_count_val": 1,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,

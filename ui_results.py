@@ -822,52 +822,74 @@ def _copy_feedback(e) -> None:
         )
 
 
+def _full_ticket_summary(t: dict, game: str) -> str:
+    """Linia de sub variante: câte, acoperirea garanției și costul."""
+    n = len(t["variants"])
+    cost = n * PRICES.get(game, 0.0)
+    text = (
+        f"{n}/{t['requested']} variante ({t['tickets']} × {t['per_ticket']}) · "
+        f"acoperire garanție {t['guarantee']} pe cele {len(t['pool'])} numere ale "
+        f"biletului: {t['coverage']:.2f}%"
+    )
+    upper = t.get("upper_coverage")
+    if upper:
+        level, pct = upper
+        text += (
+            f" · garanția e completă cu {t['guarantee_variants']} variante; "
+            f"cu toate cele {n}, grupele de {level} sunt acoperite {pct:.2f}%"
+        )
+    return text + f" · ≈ {cost:.0f} Lei"
+
+
 def _show_full_ticket() -> None:
-    """Câte un bilet complet per joc (3/4/2 variante) din pool-ul afișat."""
-    from loto_enterprise.core.full_ticket import TICKET_VARIANTS, build_full_ticket
+    """Bilete complete per joc (1-10 bilete × 3/4/2 variante) din pool-ul afișat."""
+    from loto_enterprise.core.full_ticket import build_full_ticket, clamp_tickets
+    from loto_enterprise.core.lotteries import display_name
 
     res = STATE.get("results")
     if not isinstance(res, tuple) or len(res) != 2:
         ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
         return
     rb, _ = res
+    tickets = clamp_tickets(SETTINGS.get("full_ticket_count_val"))
     copy_lines: list[str] = []
     with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
-        ui.label("🎟️ Bilet complet (un bilet fizic pe joc)").classes("text-bold")
+        title = "un bilet fizic" if tickets == 1 else f"{tickets} bilete fizice"
+        ui.label(f"🎟️ Bilet complet ({title} pe joc)").classes("text-bold")
         ui.label(
             "Variantele se aleg din pool-ul afișat, potrivit automat după "
-            "clasamentul metodei când e prea mic sau prea mare pentru bilet. "
-            "Acoperirea e cea a acestor câteva variante, nu a wheel-ului "
-            "complet; nu e o șansă de câștig."
+            "clasamentul metodei când e prea mic sau prea mare pentru bilete. "
+            "Acoperirea e cea a acestor variante, nu a wheel-ului complet; "
+            "nu e o șansă de câștig."
         ).classes("text-caption")
-        for _fn, outs in rb:
-            for g, raw in _ordered_game_items(outs):
-                game = _game_label_for(str(g))
-                t = build_full_ticket(game, _primary_pool_data(raw))
-                ui.separator()
-                ui.label(game.upper()).classes("text-bold")
-                if t.get("error"):
-                    ui.label(f"⚠️ {t['error']}").classes("text-warning")
-                    continue
-                if t.get("note"):
-                    ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
-                if copy_lines:
-                    copy_lines.append("")
-                copy_lines.append(game.upper())
-                for i, v in enumerate(t["variants"], 1):
-                    if t["joker"] is not None:
-                        txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
-                    else:
-                        txt = ", ".join(str(n) for n in v)
-                    ui.label(f"V{i}: {txt}").classes("font-mono")
-                    copy_lines.append(f"V{i}: {txt}")
-                n = len(t["variants"])
-                cost = n * PRICES.get(game, 0.0)
-                ui.label(
-                    f"{n}/{TICKET_VARIANTS[game]} variante · acoperire garanție "
-                    f"{t['guarantee']} pe cele {len(t['pool'])} numere ale "
-                    f"biletului: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
-                ).classes("text-caption")
+        with ui.scroll_area().classes("w-full").style("max-height:65vh"):
+            for _fn, outs in rb:
+                for g, raw in _ordered_game_items(outs):
+                    game = _game_label_for(str(g))
+                    t = build_full_ticket(game, _primary_pool_data(raw), tickets)
+                    lottery = display_name(game)
+                    ui.separator()
+                    ui.label(lottery).classes("text-bold")
+                    if t.get("error"):
+                        ui.label(f"⚠️ {t['error']}").classes("text-warning")
+                        continue
+                    if t.get("note"):
+                        ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
+                    if copy_lines:
+                        copy_lines.append("")
+                    copy_lines.append(lottery)
+                    for i, v in enumerate(t["variants"], 1):
+                        if tickets > 1 and (i - 1) % t["per_ticket"] == 0:
+                            slip = f"Biletul {(i - 1) // t['per_ticket'] + 1} · {lottery}"
+                            ui.label(slip).classes("text-caption text-bold q-mt-xs")
+                            copy_lines.append(slip)
+                        if t["joker"] is not None:
+                            txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
+                        else:
+                            txt = ", ".join(str(n) for n in v)
+                        ui.label(f"V{i}: {txt}").classes("font-mono")
+                        copy_lines.append(f"V{i}: {txt}")
+                    ui.label(_full_ticket_summary(t, game)).classes("text-caption")
         copy_text = "\n".join(copy_lines)
         with ui.row().classes("w-full justify-end gap-2"):
             copy_btn = ui.button("📋 Copiază numerele").props(

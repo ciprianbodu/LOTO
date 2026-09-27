@@ -2067,10 +2067,15 @@ def main_page() -> None:
             "🚀 Generează (setări manuale)",
             on_click=lambda: submit_generation(pure=False),
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.button(
-            "🎟️ Bilet complet (6/49: 3 · 5/40: 4 · Joker: 2 variante)",
-            on_click=lambda: _show_full_ticket(),
-        ).props("color=positive no-caps").classes(_BTN).style(_BTN_STYLE)
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            _bind_save(
+                ui.number("Bilete", min=1, max=10, step=1, precision=0).classes("w-20"),
+                "full_ticket_count_val",
+            ).tooltip("Câte bilete fizice complete pe joc (1-10)")
+            ui.button(
+                "🎟️ Bilet complet (pe bilet: 6/49 3 · 5/40 4 · Joker 2 variante)",
+                on_click=lambda: _show_full_ticket(),
+            ).props("color=positive no-caps").classes("grow").style(_BTN_STYLE)
 
         ui.separator()
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
