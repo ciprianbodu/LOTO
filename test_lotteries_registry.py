@@ -498,7 +498,7 @@ def test_registry_module_does_not_import_pandas():
 def test_bulgaria_is_played_in_person_not_training_only():
     g = L.GAMES_BY_ID["bg_toto2"]
     assert (g.country, g.geometry, g.bench_key, g.currency) == ("BG", "6/49", "bg_toto2", "EUR")
-    assert (g.per_ticket, g.price, g.draw_weekdays) == (4, None, (3, 6))
+    assert (g.per_ticket, g.price, g.draw_weekdays) == (4, 1.0, (3, 6))
     # Nu se joacă online din România, dar nu e nici „doar antrenament”.
     assert g.playable_from_ro is False and g.play_note
     assert not g.training_only

@@ -386,7 +386,6 @@ GAMES: tuple[Lottery, ...] = (
         wf_order=0,
     ),
     # Nu se joacă online din România; se joacă în agenție în Bulgaria.
-    # Tariful n-a putut fi citit (toto.bg e în spatele protecției Radware).
     Lottery(
         game_id="bg_toto2",
         country="BG",
@@ -398,9 +397,9 @@ GAMES: tuple[Lottery, ...] = (
         # 4 zone pe fișa fizică (după utilizator, info.toto.bg/toto1-i-toto2/
         # toto-2-6-ot-49; pagina nu s-a putut citi automat).
         per_ticket=4,
-        price=None,
+        price=1.0,
         currency="EUR",
-        price_source=None,
+        price_source="după utilizator (2026-09-27); toto.bg nu s-a putut citi automat",
         draw_weekdays=(3, 6),
         playable_from_ro=False,
         play_note="se joacă în agenție în Bulgaria, nu online din România",
