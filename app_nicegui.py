@@ -1428,7 +1428,7 @@ def _build_mail_body() -> str:
                 f"extragere: {_next_draw_date(_sp.draw_weekdays)} "
                 f"({_weekdays_text(_sp.draw_weekdays)})"
             )
-            if _sp.training_only:
+            if _training_only_note(_sp):
                 lines.append(f"({_training_only_note(_sp)})")
         info = _last_csv_draw(fn)
         if info:

@@ -336,6 +336,40 @@ def fetch_eu_euromillions(last: dt.date, today: dt.date) -> list[Draw]:
     return out
 
 
+_TOTO49_ROW = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
+_TOTO49_CELL = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.S)
+
+
+def parse_toto49_year(page: str) -> list[Draw]:
+    """Tabelul anual toto49.com: tiraj, dată ZZ.LL.AAAA, 6 numere (1-ea tragere)."""
+    out = []
+    for tr in _TOTO49_ROW.findall(page):
+        cells = [re.sub(r"<[^>]*>", " ", c) for c in _TOTO49_CELL.findall(tr)]
+        m = re.match(r"\s*\d+\s+(\d\d\.\d\d\.\d{4})\s+(.*)", " ".join(cells), re.S)
+        if not m:
+            continue
+        nums = [int(x) for x in re.findall(r"\d+", m.group(2))]
+        if len(nums) != 6:
+            # Anii vechi au 2-3 trageri pe tiraj; sursa se folosește numai din 2020.
+            raise SourceError(f"toto49: rand cu {len(nums)} numere")
+        out.append(Draw(_dmy(m.group(1)), tuple(nums)))
+    return out
+
+
+def fetch_bg_toto2(last: dt.date, today: dt.date) -> list[Draw]:
+    """toto49.com, arhiva anuală Toto 2 6/49 (neoficială; toto.bg e în spatele
+    protecției anti-bot, iar tototiraj.bg nu mai e la zi)."""
+    out: list[Draw] = []
+    for year in range(last.year, today.year + 1):
+        page = _get(f"https://www.toto49.com/arhiv/toto_49/{year}").decode("utf-8", "replace")
+        rows = parse_toto49_year(page)
+        if not rows and year < today.year:
+            raise SourceError(f"toto49: anul {year} fara extrageri")
+        out += rows
+    out.sort(key=lambda x: x.date)
+    return out
+
+
 @dataclass(frozen=True)
 class Source:
     fetch: Callable[[dt.date, dt.date], list[Draw]]
@@ -353,6 +387,7 @@ SOURCES: dict[str, Source] = {
     "cz_sportka": Source(fetch_cz_sportka, "allwyn.cz", False),
     "sk_loto": Source(fetch_sk_loto, "tipos.sk", False),
     "eu_euromillions": Source(fetch_eu_euromillions, "fdj.fr", False),
+    "bg_toto2": Source(fetch_bg_toto2, "toto49.com", True),
 }
 
 

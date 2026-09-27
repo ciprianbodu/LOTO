@@ -123,6 +123,10 @@ class Lottery:
     wf_order: int  # ordinea walk-forward, în cadrul țării (rapid întâi)
     min_hit_target: int = 3  # ținta minimă a deciziei (3 numere aduc premiu)
     bench_key_urna2: str | None = None  # numai geometria "joker"
+    # Unde se joacă un joc care NU se joacă online din România, dar se joacă
+    # altfel (ex. în agenție, peste graniță). Setat => jocul nu e „doar
+    # antrenament”, iar interfața arată nota în locul celei de antrenament.
+    play_note: str | None = None
 
     @property
     def key(self) -> str:
@@ -155,7 +159,7 @@ class Lottery:
 
     @property
     def training_only(self) -> bool:
-        return self.playable_from_ro is not True
+        return self.playable_from_ro is not True and not self.play_note
 
     @property
     def bench_keys(self) -> tuple[str, ...]:
@@ -378,6 +382,28 @@ GAMES: tuple[Lottery, ...] = (
         price_source="tipos.sk (verificat 2026-09-27)",
         draw_weekdays=(2, 6),
         playable_from_ro=None,
+        display_order=0,
+        wf_order=0,
+    ),
+    # Nu se joacă online din România; se joacă în agenție în Bulgaria.
+    # Tariful n-a putut fi citit (toto.bg e în spatele protecției Radware).
+    Lottery(
+        game_id="bg_toto2",
+        country="BG",
+        country_name="Bulgaria",
+        name="Toto 2 6/49",
+        geometry="6/49",
+        bench_key="bg_toto2",
+        csv="_ISTORIC/externe/bulgaria_toto2_6din49.csv",
+        # 4 zone pe fișa fizică (după utilizator, info.toto.bg/toto1-i-toto2/
+        # toto-2-6-ot-49; pagina nu s-a putut citi automat).
+        per_ticket=4,
+        price=None,
+        currency="EUR",
+        price_source=None,
+        draw_weekdays=(3, 6),
+        playable_from_ro=False,
+        play_note="se joacă în agenție în Bulgaria, nu online din România",
         display_order=0,
         wf_order=0,
     ),

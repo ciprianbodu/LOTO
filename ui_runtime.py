@@ -528,7 +528,13 @@ _TRAINING_ONLY_NOTE = "doar antrenament: nu se joacă online din România"
 
 
 def _training_only_note(lot) -> str:
-    return _TRAINING_ONLY_NOTE if lot is not None and lot.training_only else ""
+    """Nota „doar antrenament”, sau nota de joc (`play_note`) a unui joc care
+    se joacă altfel decât online din România; gol pentru jocurile online."""
+    if lot is None:
+        return ""
+    if getattr(lot, "play_note", None):
+        return lot.play_note
+    return _TRAINING_ONLY_NOTE if lot.training_only else ""
 
 
 def _restrict_games_for(country=None) -> tuple:

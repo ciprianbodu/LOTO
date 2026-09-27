@@ -263,7 +263,7 @@ def test_registry_is_unique_and_facts_are_well_formed():
         assert g.draw_weekdays and all(0 <= d <= 6 for d in g.draw_weekdays)
         assert g.min_hit_target in (3, 4)
         assert g.playable_from_ro in (True, False, None)
-        assert g.training_only is (g.playable_from_ro is not True)
+        assert g.training_only is (g.playable_from_ro is not True and not g.play_note)
         if g.price is not None:
             assert g.price_source
 
@@ -493,3 +493,14 @@ def test_registry_module_does_not_import_pandas():
         check=True,
     )
     assert out.stdout.strip() == "False"
+
+
+def test_bulgaria_is_played_in_person_not_training_only():
+    g = L.GAMES_BY_ID["bg_toto2"]
+    assert (g.country, g.geometry, g.bench_key, g.currency) == ("BG", "6/49", "bg_toto2", "EUR")
+    assert (g.per_ticket, g.price, g.draw_weekdays) == (4, None, (3, 6))
+    # Nu se joacă online din România, dar nu e nici „doar antrenament”.
+    assert g.playable_from_ro is False and g.play_note
+    assert not g.training_only
+    # Jocurile fără notă își păstrează semantica.
+    assert all(x.play_note is None for x in L.GAMES if x.game_id != "bg_toto2")

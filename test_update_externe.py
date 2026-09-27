@@ -265,3 +265,22 @@ def test_actualizari_bat_runs_it_after_update_csv_before_push():
     assert i_csv < i_ext < text.index("call :push_istoric")
     assert "update_externe" not in (ROOT / "START_8000.bat").read_text(encoding="utf-8")
     assert os.path.exists(ROOT / "update_externe.py")
+
+
+def test_bg_toto49_year_table_parses_rows_and_refuses_multi_draw_rows(monkeypatch):
+    page = (
+        "<table><tr><th>Тираж #</th><th>Дата</th><th>1-во Теглене</th></tr>"
+        "<tr><td>75</td><td>24.09.2026</td><td>08 19 21 27 35 43</td></tr>"
+        "<tr><td>76</td><td>27.09.2026</td><td>08 09 17 27 37 48</td></tr></table>"
+    )
+    rows = ue.parse_toto49_year(page)
+    assert rows == [
+        ue.Draw(dt.date(2026, 9, 24), (8, 19, 21, 27, 35, 43)),
+        ue.Draw(dt.date(2026, 9, 27), (8, 9, 17, 27, 37, 48)),
+    ]
+    bad = "<tr><td>1</td><td>04.01.2012</td><td>1 2 3 4 5 6</td><td>7 8 9 10 11 12</td></tr>"
+    with pytest.raises(ue.SourceError):
+        ue.parse_toto49_year(bad)
+    monkeypatch.setattr(ue, "_http_get", lambda url, headers=None: page.encode())
+    got = ue.fetch_bg_toto2(dt.date(2026, 9, 1), dt.date(2026, 9, 27))
+    assert [d.date for d in got] == [dt.date(2026, 9, 24), dt.date(2026, 9, 27)]

@@ -275,3 +275,9 @@ def test_mail_names_last_draw_with_the_best_pool_result():
     assert "4 numere în pool" in line and "08-09-2026" in line
     assert "de 2 ori" in line and "3 extrageri" in line
     assert "fără walk-forward" in app._mail_best_draw_line(None)
+
+
+def test_play_note_replaces_the_training_only_note():
+    bg = L.GAMES_BY_ID["bg_toto2"]
+    assert app._training_only_note(bg) == bg.play_note
+    assert "agenție" in app._training_only_note(bg)
