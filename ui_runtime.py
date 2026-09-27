@@ -140,7 +140,7 @@ def _wf_generation_options(data: dict) -> dict:
     max_run = data.get("max_consecutive_run")
     if max_run is None:
         max_run = (audit.get("consecutive_limit") or {}).get("requested")
-    return {
+    opts = {
         "recent_penalty_draws": int(data.get("recent_penalty_draws") or 0),
         "recent_penalty_factor": 0.5 if factor is None else float(factor),
         "guarantee": guarantee,
@@ -150,6 +150,14 @@ def _wf_generation_options(data: dict) -> dict:
         "restrict_base_min": int(data.get("restrict_base_min") or 0),
         "max_consecutive_run": int(max_run or 0),
     }
+    # Identitatea jocului STRĂIN vine din ecoul rezultatului (worker v6), ca WF
+    # să citească decizia țării lui. România (sau un rezultat fără ecou): dict-ul
+    # de dinainte, fără chei noi.
+    country = data.get("country")
+    if country and str(country).upper() != "RO":
+        opts["game_key"] = data.get("bench_key")
+        opts["country"] = country
+    return opts
 
 
 # Praguri separate PER JOC: 6/49, 5/40 și Joker Urna 1 au universuri diferite

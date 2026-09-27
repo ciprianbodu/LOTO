@@ -243,6 +243,8 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
         "6/49": ["n1", "n2", "n3", "n4", "n5", "n6"],
         "5/40": ["n1", "n2", "n3", "n4", "n5", "n6"],
         "joker": ["n1", "n2", "n3", "n4", "n5", "joker"],
+        "6/45": ["n1", "n2", "n3", "n4", "n5", "n6"],
+        "5/50": ["n1", "n2", "n3", "n4", "n5"],
     }
     cols = [c for c in cols_map.get(game_type, []) if c in df.columns]
     if "date" in df.columns:
@@ -256,7 +258,7 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
 
 # Câte numere are un BILET (= `pick`-ul wheel-ului). La 5/40 se extrag 6, dar
 # biletul are 5; hiturile se numără pe toate cele 6 extrase.
-_WF_PICK = {"6/49": 6, "5/40": 5, "joker": 5}
+_WF_PICK = {"6/49": 6, "5/40": 5, "joker": 5, "6/45": 6, "5/50": 5}
 
 
 def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
@@ -366,7 +368,7 @@ def _penalty_sig(
     return f"|rp{n}:{float(recent_penalty_factor).hex()}"
 
 
-_MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45}
+_MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45, "6/45": 45, "5/50": 50}
 
 # Versiunea SEMANTICII de restrângere, nu a formatului cheii. Se incrementează
 # când se schimbă ce pool produce un interval dat — altfel un pickle scris sub
@@ -419,6 +421,35 @@ def _consecutive_sig(max_consecutive_run: int = 0) -> str:
     return f"|mc{_CONSECUTIVE_SEMANTICS}:{n}"
 
 
+def _wf_lottery(game_type: str, game_key: str | None, country: str | None):
+    """Jocul STRĂIN al unui WF, sau None pentru România (cu sau fără identitate).
+
+    Identitatea se verifică strict (`loto_engine.resolve_engine_lottery`): țară
+    sau cheie necunoscută, cheie din altă țară ori geometrie nepotrivită ridică
+    eroare — nu se cade niciodată tăcut pe decizia românească. România explicită
+    e tratată exact ca apelul fără identitate, ca cheile să rămână identice."""
+    from loto_engine import resolve_engine_lottery
+
+    lot = resolve_engine_lottery(game_type, game_key=game_key, country=country)
+    if lot is None or lot.is_romanian:
+        return None
+    return lot
+
+
+def _foreign_decision_suffix(lot) -> str:
+    """`|country=CC|key=...|dp=<hash>` pentru un joc străin: fișierul de decizie
+    al țării intră în cheie prin conținut, ca un Re-Bench al țării să invalideze
+    WF-ul ei (iar decizia românească să nu-l atingă)."""
+    from loto_enterprise.core.method_selector import decision_path_for
+
+    path = decision_path_for(lot.country)
+    try:
+        dp = hashlib.md5(Path(path).read_bytes()).hexdigest()[:12]
+    except OSError:
+        dp = "absent"
+    return f"|country={lot.country}|key={lot.bench_key}|dp={dp}"
+
+
 def _decision_sig(
     game_type: str,
     pool_size: int,
@@ -431,26 +462,51 @@ def _decision_sig(
     restrict_base_max: int = 0,
     restrict_base_min: int = 0,
     max_consecutive_run: int = 0,
+    *,
+    game_key: str | None = None,
+    country: str | None = None,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
     este ataşată fiecărei variante şi îi poate schimba evaluarea retrospectivă.
     Opțiunile de compoziție ale utilizatorului (penalizare, bază restrânsă,
     limită de consecutive) intră numai când sunt active.
+
+    `game_key`/`country`: România (lipsă sau explicită) = semnătura de dinainte,
+    byte cu byte. Alt joc: decizia se citește din fișierul țării, iar semnătura
+    primește `|country=..|key=..|dp=..` (și pe ramura de eroare).
     """
+    lot = _wf_lottery(game_type, game_key, country)
+    foreign_sfx = _foreign_decision_suffix(lot) if lot is not None else ""
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
         from loto_enterprise.benchmark.hit_target import game_hit_target
 
-        gk = {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}.get(
-            game_type, "loto_6_49"
-        )
-        c = recommend_optimal_config(gk, int(pool_size))
+        cfg_path = None
+        if lot is not None:
+            from loto_enterprise.core.method_selector import decision_path_for
+
+            gk = lot.bench_key
+            cfg_path = str(decision_path_for(lot.country))
+        else:
+            gk = {
+                "6/49": "loto_6_49",
+                "5/40": "loto_5_40",
+                "joker": "joker_urna1",
+            }.get(game_type, "loto_6_49")
+        # România: apelul de dinainte, fără argument nou.
+        _cp = {} if cfg_path is None else {"config_path": cfg_path}
+        c = recommend_optimal_config(gk, int(pool_size), **_cp)
         _ens_sig = _ensemble_sig(c.get("ensemble") or [])
         urna2_sig = ""
         if game_type == "joker":
-            c2 = recommend_optimal_config("joker_urna2", 1)
+            u2_key = (
+                (lot.bench_key_urna2 or f"{lot.bench_key}_urna2")
+                if lot is not None
+                else "joker_urna2"
+            )
+            c2 = recommend_optimal_config(u2_key, 1, **_cp)
             urna2_sig = (
                 f"|u2:{c2.get('scorer', '?')}:{c2.get('hit_target', 1)}:"
                 f"{_ensemble_sig(c2.get('ensemble') or [])}"
@@ -466,6 +522,7 @@ def _decision_sig(
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
+            f"{foreign_sfx}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -485,6 +542,7 @@ def _decision_sig(
                         restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type)
                     )
                     + _consecutive_sig(max_consecutive_run)
+                    + foreign_sfx
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -534,9 +592,24 @@ def migrate_legacy_wf_cache() -> dict:
 
 
 def _cache_path(
-    game_type: str, csv_hash: str, pool_size: int, depth: int | str, dec_sig: str
+    game_type: str,
+    csv_hash: str,
+    pool_size: int,
+    depth: int | str,
+    dec_sig: str,
+    *,
+    game_key: str | None = None,
+    country: str | None = None,
 ) -> Path:
-    safe = game_type.replace("/", "_")
+    """Fișierul de cache. România: numele de dinainte (după geometrie). Alt joc:
+    `<CC>_<game_id>` în locul geometriei, ca un Lotto 6/49 străin să nu stea
+    lângă Loto 6/49 românesc sub același prefix."""
+    lot = _wf_lottery(game_type, game_key, country)
+    safe = (
+        game_type.replace("/", "_")
+        if lot is None
+        else f"{lot.country}_{lot.game_id}"
+    )
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
     return (
         CACHE_DIR
@@ -639,6 +712,9 @@ def run_honest_walk_forward(
     restrict_base_max: int = 0,
     restrict_base_min: int = 0,
     max_consecutive_run: int = 0,
+    *,
+    game_key: str | None = None,
+    country: str | None = None,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -652,6 +728,10 @@ def run_honest_walk_forward(
     max_consecutive_run: aceeași limită de consecutive ca în producție (cerută,
     nu cea relaxată: relaxarea se decide la fiecare pas); în cheie doar când e
     activă (0 = oprit).
+    game_key/country: identitatea jocului (keyword-only). Lipsă sau România =
+    exact WF-ul de dinainte (aceeași cheie, aceeași decizie). Alt joc: decizia
+    țării ajunge pe NUME la fiecare pas (în proces, secvențial și în procesele
+    paralele); o identitate necunoscută ridică eroare.
 
     `should_cancel` oprește DOAR bucla de backtest (rezultat parțial, salvat oricum
     — asta e scopul lui `skip_indices`/acoperirea incrementală). `should_skip_cache_write`
@@ -669,6 +749,9 @@ def run_honest_walk_forward(
         meta_dict include: from_cache (bool), n_predictions, n_test_draws, csv_hash
     """
     _log_stale_wf_cache_once()
+    lot = _wf_lottery(game_type, game_key, country)
+    wf_key = lot.bench_key if lot is not None else None
+    wf_country = lot.country if lot is not None else None
     csv_hash = _csv_hash(df_source, game_type)
     dec_sig = _decision_sig(
         game_type,
@@ -682,12 +765,20 @@ def run_honest_walk_forward(
         restrict_base_max,
         restrict_base_min,
         max_consecutive_run=int(max_consecutive_run or 0),
+        game_key=wf_key,
+        country=wf_country,
     )
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
     )
     cache_file = _cache_path(
-        game_type, csv_hash, pool_size, float(backtest_depth_percent).hex(), dec_sig
+        game_type,
+        csv_hash,
+        pool_size,
+        float(backtest_depth_percent).hex(),
+        dec_sig,
+        game_key=wf_key,
+        country=wf_country,
     )
     meta = {
         "csv_hash": csv_hash,
@@ -703,6 +794,11 @@ def run_honest_walk_forward(
         "max_consecutive_run": int(max_consecutive_run or 0),
         "selection_validation": "fixed_current_decision",
     }
+    if lot is not None:
+        # Numai în afara României: meta-ul românesc rămâne cel de dinainte.
+        meta["game_key"] = wf_key
+        meta["country"] = wf_country
+        meta["game_id"] = lot.game_id
 
     cached = None
     if use_cache and not force_refresh and cache_file.exists():
@@ -747,7 +843,9 @@ def run_honest_walk_forward(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
     )
-    bt = LotoBacktester(df_source, game_type=game_type)
+    bt = LotoBacktester(
+        df_source, game_type=game_type, game_key=wf_key, country=wf_country
+    )
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
         guarantee=g,
