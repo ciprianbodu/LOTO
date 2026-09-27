@@ -36,6 +36,7 @@ def test_startup_scripts_reconfigure_console_streams():
         "verify_imports.py",
         "verifica_mediu.py",
         "update_csv.py",
+        "update_externe.py",
         "reset_jobs.py",
     ):
         text = Path(name).read_text(encoding="utf-8")

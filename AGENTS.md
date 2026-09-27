@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
-- teste: 76 fisiere `test_*.py`, 1652 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1628 trec, 24 sarite (integrarea
+- teste: 77 fisiere `test_*.py`, 1670 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1646 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -803,7 +803,12 @@ Instalarea canonica este:
 1. `ACTUALIZARI.bat` - instaleaza/actualizeaza Git for Windows prin winget,
    sincronizeaza `main` din copia temporara, instaleaza/actualizeaza Python
    3.14, recreeaza venv-ul daca patch-ul difera si instaleaza
-   `requirements_base.txt`;
+   `requirements_base.txt`; dupa `update_csv.py` ruleaza `update_externe.py`
+   (in acelasi log, inainte de auto-commit-ul `_ISTORIC`): cate o sursa per joc
+   strain din registru (sursele in `_ISTORIC/externe/README.md`), timeout 15 s,
+   verifica extragerile deja stocate din ultimele 60 de zile si, la orice
+   nepotrivire sau rand invalid, nu scrie nimic pentru jocul acela; adauga numai
+   extragerile mai noi, atomic, LF; iese mereu cu 0. START_8000 nu il ruleaza;
 2. `START_8000.bat` - sincronizeaza `main` din copia temporara daca e in urma, verifica mediul, curata procese vechi,
    porneste worker-ul si UI-ul.
 

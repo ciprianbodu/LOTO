@@ -17,6 +17,26 @@ tratează ca extrageri simultane (niciuna nu intră în istoricul celeilalte).
 Fișierele se verifică la fiecare rulare a testelor (`test_externe_history.py`):
 format, valori, ordine, fără rânduri repetate.
 
+## Actualizare
+
+`ACTUALIZARI.bat` rulează `update_externe.py` după `update_csv.py`. Pentru
+fiecare fișier folosește o singură sursă, verifică extragerile deja stocate din
+ultimele 60 de zile (la orice diferență sau rând invalid nu scrie nimic pentru
+jocul acela) și adaugă numai extragerile mai noi, atomic, cu LF. Manual:
+`python update_externe.py --dry-run`.
+
+| Fișier | Sursa de actualizare |
+|---|---|
+| `germania_lotto_6aus49.csv` | lotto.de, API-ul portalului (lista datelor pe an + extragerea pe dată) |
+| `polonia_lotto_6din49.csv` | wynikilotto.net.pl/download/lotto.csv (neoficială; lotto.pl blochează accesul automat) |
+| `spania_la_primitiva_6din49.csv` | lawebdelaprimitiva.com, exportul CSV (neoficială; loteriasyapuestas.es blochează) |
+| `austria_lotto_6aus45.csv` | win2day.at, API JSON public `drawResultInfo/lotto` |
+| `belgia_lotto_6din45.csv` | apim.prd.natlot.be, API-ul oficial Loterie Nationale |
+| `ungaria_hatoslotto_6din45.csv` | bet.szerencsejatek.hu/cmsfiles/hatos.csv (oficial) |
+| `cehia_sportka_6din49.csv` | allwyn.cz/loterie/historie-cisel?game=sportka (oficial, CSV) |
+| `slovacia_loto_6din49.csv` | tipos.sk, arhivele `file=loto1` și `file=loto2` (oficial) |
+| `euromillions_5din50_stele.csv` | fdj.fr, arhiva zip a perioadei curente (oficial) |
+
 ## Fișiere
 
 ### `germania_lotto_6aus49.csv`: Germania, Lotto 6aus49
