@@ -243,3 +243,35 @@ def test_foreign_6_45_task_end_to_end(ui_state, queue):  # noqa: F811
     assert app._echo_mismatch("at_lotto", {k: v for k, v in data.items() if k != "game_id"})
     t = build_full_ticket("at_lotto", data, 1)
     assert t["error"] is None and t["per_ticket"] == 12
+
+
+def test_mail_names_method_and_rating_for_the_pool(monkeypatch):
+    import app_nicegui as app
+    from loto_enterprise.core.lotteries import lottery_by_id
+
+    spec = lottery_by_id("6/49")
+    entry = {"rationale": "dmd_forecast: rată 3+ @ k12 = 0.162 (Wilson_lb=0.151), beat random (hipergeometric 0.1480) in 3/4 windows on the same 3+ target (lift +0.0100)",
+             "baseline_rate": 0.1480, "target_label": "3+"}
+    monkeypatch.setattr(app, "_decision_entry", lambda k, pool: entry)
+    data = {"pool_size": 12, "audit": {"bench_winner": {"loto_6_49": {"method": "dmd_forecast"}}}}
+    lines = app._mail_method_lines(spec, data)
+    assert lines[0] == "METODĂ: dmd_forecast (câștigătoarea bench-ului la pool 12)"
+    assert "16.20%" in lines[1] and "14.80%" in lines[1] and "3/4" in lines[1]
+    data["audit"]["bench_winner"]["loto_6_49"]["fallback"] = True
+    assert "fără bench" in app._mail_method_lines(spec, data)[0]
+
+
+def test_mail_names_last_draw_with_the_best_pool_result():
+    from types import SimpleNamespace as NS
+
+    import app_nicegui as app
+
+    flat = [
+        NS(draw_index=1, draw_date="01-09-2026", hits=2, hits_union=4),
+        NS(draw_index=2, draw_date="04-09-2026", hits=1, hits_union=2),
+        NS(draw_index=3, draw_date="08-09-2026", hits=3, hits_union=4),
+    ]
+    line = app._mail_best_draw_line(flat)
+    assert "4 numere în pool" in line and "08-09-2026" in line
+    assert "de 2 ori" in line and "3 extrageri" in line
+    assert "fără walk-forward" in app._mail_best_draw_line(None)

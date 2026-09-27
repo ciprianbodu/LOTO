@@ -1442,8 +1442,70 @@ def _build_mail_body() -> str:
             + _nums(primary.get("hard_core") or [])
             + (f"  | joker: {_nums(joker)}" if joker else "")
         )
+        lines.extend(_mail_method_lines(_sp, primary))
+        lines.append(_mail_best_draw_line(STATE.get("retro", {}).get(f"{fn}_{g}")))
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def _mail_best_draw_line(flat) -> str:
+    """Ultima extragere din walk-forward cu cele mai multe numere din pool."""
+    if not flat:
+        return "CEL MAI BUN REZULTAT: fără walk-forward rulat pentru acest joc"
+    per = _wf_per_draw_stats(flat)
+    if not per:
+        return "CEL MAI BUN REZULTAT: fără walk-forward rulat pentru acest joc"
+    best = max(int(v.get("pool") or 0) for v in per.values())
+    di = max(k for k, v in per.items() if int(v.get("pool") or 0) == best)
+    row = per[di]
+    n_best = sum(1 for v in per.values() if int(v.get("pool") or 0) == best)
+    ticket = row.get("best_ticket")
+    return (
+        f"CEL MAI BUN REZULTAT (walk-forward, {len(per)} extrageri): "
+        f"{best} numere în pool, ultima oară la {row['label']}"
+        + (f" (maxim {int(ticket)} pe un bilet)" if ticket is not None else "")
+        + f"; de {n_best} ori în total"
+    )
+
+
+def _mail_method_lines(spec, data: dict) -> list[str]:
+    """Metoda folosită la generare și ratingul ei din bench, pe pool-ul generat.
+
+    Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
+    țării pentru același pool (`rationale` scris de decision.py)."""
+    import re
+
+    audit = data.get("audit") or {}
+    pool = data.get("pool_size") or len(data.get("hard_core") or []) or None
+    info = (audit.get("bench_winner") or {}).get(spec.bench_key) or {}
+    method = info.get("method") or (info.get("ensemble") or [{}])[0].get("method")
+    if not method:
+        return ["METODĂ: necunoscută (rezultat fără audit de metodă)"]
+    if info.get("no_decision") or info.get("fallback"):
+        return [
+            f"METODĂ: {method} (fără bench pentru {spec.display}; "
+            "rezervă implicită, fără rating)"
+        ]
+    entry = _decision_entry(spec.bench_key, int(pool)) if pool else {}
+    head = f"METODĂ: {method} (câștigătoarea bench-ului la pool {pool})"
+    rat = str(entry.get("rationale") or "")
+    base = entry.get("baseline_rate")
+    label = entry.get("target_label") or "3+"
+    m = re.search(r"= ([0-9.]+) \(Wilson_lb=([0-9.]+)\).*?in (\d+)/(\d+) windows", rat)
+    if m:
+        rate, wil, w_ok, w_all = float(m[1]), float(m[2]), m[3], m[4]
+        line = f"RATING: rată {label} {100 * rate:.2f}%"
+        if base:
+            line += f" față de {100 * float(base):.2f}% la întâmplare"
+        line += f"; limita Wilson {100 * wil:.2f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
+        return [head, line]
+    m = re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat)
+    if m:
+        line = f"RATING: rată {label} {100 * float(m[1]):.2f}%"
+        if base:
+            line += f" față de {100 * float(base):.2f}% la întâmplare"
+        return [head, line + "; nicio metodă nu a bătut hazardul constant (încredere redusă)"]
+    return [head, "RATING: indisponibil în decizia salvată"]
 
 
 def _send_test_email() -> None:
