@@ -388,6 +388,13 @@ def _game_label_for(fname: str) -> str:
     return "6/49"
 
 
+def _game_title(game) -> str:
+    """Țara și jocul pentru titluri, rapoarte și mail: „România · Loto 6/49”."""
+    from loto_enterprise.core.lotteries import display_name
+
+    return display_name(_game_label_for(str(game)))
+
+
 # Ordinea de AFIȘARE a jocurilor în UI / rapoarte: 6/49 primul, Joker al doilea, 5/40 al treilea.
 # (Independentă de ordinea în care s-au încărcat fișierele/dataset-urile.)
 _GAME_DISPLAY_ORDER = {"6/49": 0, "joker": 1, "5/40": 2}

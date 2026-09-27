@@ -446,7 +446,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             for fname, game, raw_data in flat_games:
                 data = _primary_pool_data(raw_data)
                 ui.separator().classes("my-3")
-                ui.label(f"🎯 {game.upper()}").classes("text-bold text-lg")
+                ui.label(f"🎯 {_game_title(game)}").classes("text-bold text-lg")
 
                 # Reper: ultima extragere reală din CSV (deasupra clasamentului).
                 _render_last_csv_draw(

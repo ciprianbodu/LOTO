@@ -33,6 +33,14 @@ import frozen_dmd  # noqa: E402
 REGISTRATION = HERE / "preregistration_2026-09-27.json"
 CONFIRMED = "avantaj confirmat"
 REJECTED = "fără avantaj (respins)"
+UNCONFIRMED = "neconfirmat la plafon"
+
+
+def count(n: int, noun: str) -> str:
+    """„5 extrageri”, „20 de extrageri”, „101 extrageri”: „de” după numeralele
+    care se termină în 00 sau 20-99."""
+    last = n % 100
+    return f"{n} {noun}" if n < 20 or 1 <= last <= 19 else f"{n} de {noun}"
 
 
 def _parse_date(text: str) -> dt.date:
@@ -59,8 +67,14 @@ def load_history(
             continue
         parts = [p.strip() for p in line.split(",")]
         day = _parse_date(parts[0])
+        fields = [p for p in parts[1:] if p]
+        if len(fields) != draw_n:
+            raise ValueError(
+                f"{csv_path.name}, rândul {lineno}: extragere nevalidă, "
+                f"{len(fields)} numere în loc de {draw_n}: {line!r}"
+            )
         try:
-            nums = [int(x) for x in parts[1 : 1 + draw_n]]
+            nums = [int(x) for x in fields]
         except ValueError:
             raise ValueError(f"{csv_path.name}, rândul {lineno}: numere nevalide {line!r}")
         if (
@@ -103,6 +117,7 @@ class Sprt:
         self.llr = 0.0
         self.n = self.hits = 0
         self.decided_at: int | None = None
+        self.hits_at_decision: int | None = None
         self.decision = "continuă"
         self.final_p: float | None = None
 
@@ -116,6 +131,8 @@ class Sprt:
             self.decision, self.decided_at = CONFIRMED, self.n
         elif self.llr <= self.lower:
             self.decision, self.decided_at = REJECTED, self.n
+        if self.decided_at is not None:
+            self.hits_at_decision = self.hits
 
     def final_test(self) -> None:
         """Pool nedecis la plafon: test binomial exact unilateral, cu același α."""
@@ -124,21 +141,25 @@ class Sprt:
         from scipy.stats import binomtest
 
         self.final_p = float(binomtest(self.hits, self.n, self.p0, alternative="greater").pvalue)
-        self.decided_at = self.n
+        self.decided_at, self.hits_at_decision = self.n, self.hits
         if self.final_p < self.alpha:
             self.decision = f"{CONFIRMED} (test final, p={self.final_p:.4f})"
         else:
-            self.decision = f"fără avantaj (test final, p={self.final_p:.4f})"
+            self.decision = f"{UNCONFIRMED} (test final, p={self.final_p:.4f})"
 
 
 def verdict(tests: dict[int, Sprt]) -> str:
     """Regula preînregistrată: confirmată dacă cel puțin un pool e confirmat,
-    respinsă dacă toate pool-urile sunt respinse."""
+    respinsă dacă toate pool-urile sunt respinse prin SPRT. La plafon, un pool
+    fără confirmare nici prin testul final nu e „respins”: metoda rămâne
+    neconfirmată (amendamentul din 2026-09-27)."""
     decisions = [t.decision for t in tests.values()]
     if any(d.startswith(CONFIRMED) for d in decisions):
         return "metodă confirmată"
-    if all(d.startswith("fără avantaj") for d in decisions):
+    if all(d == REJECTED for d in decisions):
         return "metodă respinsă"
+    if all(t.decided_at is not None for t in tests.values()):
+        return "metodă neconfirmată"
     return "în curs"
 
 
@@ -152,6 +173,16 @@ def wilson(k: int, n: int, z: float = 1.959964) -> tuple[float, float]:
     return max(0.0, mid - half), min(1.0, mid + half)
 
 
+def fingerprints() -> dict[str, str]:
+    """Amprentele (LF) ale regulii, ale evaluatorului și ale înregistrării.
+
+    Un rezultat publicat le poartă, ca oricine să le compare cu commit-ul."""
+    return {
+        name: file_hash(HERE / name)
+        for name in ("frozen_dmd.py", "forward_test.py", REGISTRATION.name)
+    }
+
+
 def integrity_warnings(reg: dict, dates, draws, method_file: Path) -> list[str]:
     """Ce s-a schimbat față de înregistrare: regula, istoricul vechi, rânduri târzii."""
     warnings = []
@@ -163,7 +194,7 @@ def integrity_warnings(reg: dict, dates, draws, method_file: Path) -> list[str]:
     upto = sum(1 for d in dates if d <= last_reg)
     if upto != n_reg:
         warnings.append(
-            f"istoricul de până la {last_reg.isoformat()} are {upto} extrageri, "
+            f"istoricul de până la {last_reg.isoformat()} are {count(upto, 'extrageri')}, "
             f"nu {n_reg} ca la înregistrare"
         )
     elif history_hash(dates, draws, n_reg) != reg["history_sha256"]:
@@ -208,8 +239,13 @@ def evaluate(reg: dict, dates, draws) -> dict:
         for test in tests.values():
             test.final_test()
     last = dates[-1] if dates else None
+    final = verdict(tests)
     if capped:
-        next_pools, next_note = {}, f"plafonul de {cap} extrageri a fost atins: testul s-a încheiat"
+        next_pools = {}
+        next_note = f"plafonul de {count(cap, 'extrageri')} a fost atins: testul s-a încheiat"
+    elif final != "în curs":
+        next_pools = {}
+        next_note = f"verdictul este final ({final}); extragerile următoare nu îl mai schimbă"
     elif last is None or last < start:
         next_pools = {}
         next_note = (
@@ -224,7 +260,7 @@ def evaluate(reg: dict, dates, draws) -> dict:
         "n": len(ledger),
         "capped": capped,
         "tests": tests,
-        "verdict": verdict(tests),
+        "verdict": final,
         "ledger": ledger,
         "next_pools": next_pools,
         "next_note": next_note,
@@ -248,13 +284,15 @@ def main(argv=None) -> int:
     res = evaluate(reg, dates, draws)
     if args.json:
         out = {
+            "fingerprints": fingerprints(),
             "warnings": warnings,
             "n_forward_draws": res["n"],
             "capped": res["capped"],
             "verdict": res["verdict"],
             "tests": {
                 k: {"hits": t.hits, "n": t.n, "llr": t.llr, "decision": t.decision,
-                    "decided_at": t.decided_at, "final_p": t.final_p, "p0": t.p0, "p1": t.p1}
+                    "decided_at": t.decided_at, "hits_at_decision": t.hits_at_decision,
+                    "final_p": t.final_p, "p0": t.p0, "p1": t.p1}
                 for k, t in res["tests"].items()
             },
             "next_pools": res["next_pools"],
@@ -275,7 +313,12 @@ def main(argv=None) -> int:
             f"Pool {k}: {t.hits}/{t.n} extrageri cu {reg['target_hits']}+ = {rate} "
             f"(interval 95%: {100 * lo:.1f}–{100 * hi:.1f}%) | aleator {100 * t.p0:.2f}%, "
             f"afirmat {100 * t.p1:.2f}% | decizie: {t.decision}"
-            + (f" (după {t.decided_at} extrageri)" if t.decided_at else "")
+            + (
+                f" (după {count(t.decided_at, 'extrageri')}, "
+                f"{count(t.hits_at_decision, 'reușite')} la decizie)"
+                if t.decided_at
+                else ""
+            )
         )
     print(f"Verdict: {res['verdict']}")
     if res["next_pools"]:
@@ -283,6 +326,7 @@ def main(argv=None) -> int:
             print(f"Pool {k} {res['next_note']}: {pool}")
     else:
         print(f"Notă: {res['next_note']}")
+    print("Amprente SHA-256 (LF): " + ", ".join(f"{k} {v[:16]}" for k, v in fingerprints().items()))
     return 0
 
 

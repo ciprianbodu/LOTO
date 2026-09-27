@@ -96,6 +96,11 @@
    "date": "2026-09-27",
    "before_first_evaluated_draw": true,
    "text": "Corecturi după revizia independentă, înainte de prima extragere evaluată (prima cu data după 2026-09-27). Parametrii SPRT, pragurile, pool-urile, ținta și data de start nu se schimbă. Se implementează testul binomial final la plafon și verdictul combinat, deja scrise în protocol; tabelul de durate e recalculat exact (sprt_operating.py), cu probabilitățile de decizie la plafon; replicarea externă folosește α = 0,0125 per pool și exclude Marea Britanie. Se adaugă scorurile metodei la înregistrare, pentru controlul copiei înghețate."
+  },
+  {
+   "date": "2026-09-27",
+   "before_first_evaluated_draw": true,
+   "text": "A doua verificare independentă, înainte de rularea replicării și de prima extragere evaluată: un pool nedecis la plafon și nesemnificativ la testul final este „neconfirmat la plafon”, iar metoda fără niciun pool confirmat este „neconfirmată” („respinsă” rămâne numai pentru ambele pool-uri respinse prin SPRT); un rând cu alt număr de valori decât 6 oprește evaluarea; setul replicării este format din cele patru fișiere 6/49 numite în external_replication.md."
   }
  ]
 }

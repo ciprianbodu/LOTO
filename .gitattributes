@@ -6,3 +6,5 @@
 scripts/git-hooks/* text eol=lf
 # Amprenta copiei inghetate din testul preinregistrat se calculeaza pe LF.
 scripts/analysis/forward_test/* text eol=lf
+# Istoricele externe: testul si amprentele din external_replication.md cer LF.
+_ISTORIC/externe/*.csv text eol=lf

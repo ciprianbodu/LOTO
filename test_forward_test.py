@@ -59,6 +59,8 @@ def test_registration_parameters_are_the_published_ones():
         assert math.isclose(REG["sprt"][k]["p0"], p0, rel_tol=1e-12)
         assert REG["sprt"][k]["alpha"] == 0.0125 and REG["sprt"][k]["beta"] == 0.2
     assert all(a["before_first_evaluated_draw"] for a in REG["amendments"])
+    # Eticheta de mai sus e declarativă; data trebuie să fie și ea înainte de start.
+    assert all(a["date"] <= REG["start_after_date"] for a in REG["amendments"])
 
 
 def test_frozen_method_reproduces_the_registered_ranking_and_scores():
@@ -131,7 +133,12 @@ def test_hits_count_the_drawn_numbers_inside_the_pool(tmp_path):
 
 @pytest.mark.parametrize(
     "line",
-    ["01-10-2026,4,4,4,7,7,70", "01-10-2026,4,7,18,19,25,50", "01-10-2026,4,7,18,19,25"],
+    [
+        "01-10-2026,4,4,4,7,7,70",
+        "01-10-2026,4,7,18,19,25,50",
+        "01-10-2026,4,7,18,19,25",
+        "01-10-2026,1,7,20,30,40,45,49",  # a șaptea valoare nu se taie pe tăcute
+    ],
 )
 def test_an_invalid_draw_stops_the_evaluation(tmp_path, line):
     with pytest.raises(ValueError, match="nevalid"):
@@ -158,7 +165,7 @@ def test_a_late_row_before_the_start_date_is_reported(tmp_path):
     moved = _real_history_plus(tmp_path, ["20-09-2026,13,17,21,33,39,45"])
     dates, draws = ft.load_history(moved)
     warnings = ft.integrity_warnings(REG, dates, draws, HERE / "frozen_dmd.py")
-    assert any("2588 extrageri" in w for w in warnings)
+    assert any("2588 de extrageri" in w for w in warnings)
 
 
 def test_sequential_decision_follows_the_registered_thresholds():
@@ -186,7 +193,8 @@ def test_final_binomial_test_decides_an_open_pool_at_the_cap():
         want = binomtest(hits, 1000, p["p0"], alternative="greater").pvalue
         assert math.isclose(t.final_p, want, rel_tol=1e-12)
         assert t.decision.startswith(ft.CONFIRMED) is confirmed
-        assert t.decided_at == 1000
+        assert t.decision.startswith(ft.UNCONFIRMED) is not confirmed
+        assert (t.decided_at, t.hits_at_decision) == (1000, hits)
 
 
 def test_the_cap_closes_the_test_and_applies_the_final_test(tmp_path):
@@ -209,8 +217,29 @@ def test_combined_verdict_follows_the_registered_rule():
     assert ft.verdict({6: sprt(confirmed), 12: sprt(running)}) == "metodă confirmată"
     assert ft.verdict({6: sprt(rejected), 12: sprt(rejected)}) == "metodă respinsă"
     assert ft.verdict({6: sprt(rejected), 12: sprt(running)}) == "în curs"
-    final_no = "fără avantaj (test final, p=0.2000)"
-    assert ft.verdict({6: sprt(final_no), 12: sprt(rejected)}) == "metodă respinsă"
+    final_no = f"{ft.UNCONFIRMED} (test final, p=0.2000)"
+    unconfirmed = {6: sprt(final_no), 12: sprt(rejected)}
+    for t in unconfirmed.values():
+        t.decided_at = 1000
+    assert ft.verdict(unconfirmed) == "metodă neconfirmată"
+
+
+def test_no_next_pool_once_the_verdict_is_final(tmp_path):
+    """După verdictul final, extragerile următoare nu mai schimbă nimic: scriptul
+    nu mai anunță pool-uri și arată reușitele de la momentul deciziei.
+
+    Aceeași extragere repetată de 120 de ori ajunge în pool-ul metodei, deci
+    ambele pool-uri se decid devreme (determinist)."""
+    same = [7, 13, 22, 31, 40, 48]
+    day, future = ft.dt.date(2026, 10, 1), []
+    for _ in range(120):
+        future.append((day.strftime("%d-%m-%Y"), same))
+        day += ft.dt.timedelta(days=1)
+    res = ft.evaluate(REG, *ft.load_history(_history(tmp_path, future)))
+    assert res["verdict"] == "metodă confirmată"
+    assert res["next_pools"] == {} and "verdictul este final" in res["next_note"]
+    for t in res["tests"].values():
+        assert t.decided_at < t.n and t.hits_at_decision < t.hits
 
 
 def test_next_pool_is_announced_only_for_an_evaluated_draw(tmp_path):
@@ -250,6 +279,7 @@ def test_script_reports_without_writing_anything(tmp_path, capsys):
     assert "Extrageri evaluate (după 2026-09-27): 1" in out
     assert "Verdict: în curs" in out
     assert "Pool 6 pentru următoarea extragere" in out
+    assert "Amprente SHA-256 (LF): frozen_dmd.py " + REG["frozen_method_sha256"][:16] in out
     assert sorted(p.name for p in HERE.iterdir() if p.name != "__pycache__") == [
         n for n in before if n != "__pycache__"
     ]
@@ -280,7 +310,10 @@ def test_replication_reads_calendar_dates_and_never_looks_ahead(tmp_path):
     path = tmp_path / "germania.csv"
     _write_csv(path, rows)
     dates, draws = er.load(path)
-    assert dates == sorted(dates)
+    # Ordinea încărcată e cea calendaristică, cu date, nu text.
+    assert all(isinstance(d, ft.dt.date) for d in dates)
+    assert [d.strftime("%d-%m-%Y") for d in dates] == [r[0] for r in rows]
+    assert [sorted(map(int, r)) for r in draws] == [sorted(r[1]) for r in rows]
     hits = er.replicate(dates, draws)
     assert hits[6].size == 230 - er.WARMUP
     # Primul pool evaluat vine exact din primele 200 de extrageri.

@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 70 fisiere `test_*.py`, 1476 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1452 trec, 24 sarite (integrarea
+- teste: 70 fisiere `test_*.py`, 1485 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1461 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -514,15 +514,19 @@ limita de validitate din §5).
   (`core/full_ticket.py`, `generate_wheel` cu `max_variants`), iar acoperirea
   afisata e a acestor variante, nu a wheel-ului complet. Cand garantia e
   completa inainte de a umple biletele, locurile ramase acopera grupe mai mari
-  din acelasi pool (g+1, apoi pana la sistemul complet); nota spune cu cate
-  variante s-a completat garantia. Fiecare bloc si fiecare bilet poarta tara si
-  jocul (`core/lotteries.display_name`, ex. „România · Loto 6/49"), si in
-  textul copiat. Nu trimite job si nu
+  din acelasi pool (g+1, apoi pana la sistemul complet); rezumatul de sub
+  variante spune cu cate variante s-a completat garantia. Fiecare bloc si
+  fiecare bilet poarta tara si jocul (`core/lotteries.display_name`, ex.
+  „România · Loto 6/49"), si in textul copiat; la fel titlurile rezultatelor,
+  ale raportului, ale istoricului de hituri si ale mailului (`_game_title`). Nu trimite job si nu
   schimba rezultatul afisat. Pool-ul biletului se potriveste automat pe
   clasamentul metodei (`audit["timesfm_predictions"]`, deci cu restrangerea
   bazei si penalizarea recenta deja aplicate): prea mic pentru variantele
   distincte cerute (6/49 cu pool 6: 7 numere la un bilet, 9 la zece) -> se
-  adauga urmatoarele numere din clasament; mai mare decat locurile de pe bilete
+  adauga urmatoarele numere din clasament, cu aceeasi verificare de completare
+  ca `limit_consecutive_run` (pool-ul afisat ramane intreg; limita creste numai
+  daca altfel s-ar pierde un numar din el; pe o baza ingusta se ia tot ce are
+  clasamentul); mai mare decat locurile de pe bilete
   (Joker: 10 numere pe bilet) -> raman cele mai bine clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
   `rank_by_score` pe scorurile exacte; valorile sunt rotunjite la 6 zecimale si
   nu se reordoneaza (doua scoruri apropiate devin egale, iar tie-break-ul ar
@@ -933,10 +937,11 @@ pipeline-ului sau a contractului UI-worker.
   cu hash-ul in `preregistration_2026-09-27.json`; se evalueaza numai extragerile
   cu data dupa 2026-09-27. `test_forward_test.py` cade daca regula sau istoricul
   de dinaintea inregistrarii se schimba; parametrii deciziei sunt fixati si in
-  test. Caracteristicile de operare sunt calculate exact (`sprt_operating.py`):
-  fara avantaj real, jumatate din rulari se resping in ~2 ani; cu avantajul
-  afirmat real, jumatate confirma abia in 6-7 ani, iar plafonul de 1.000 de
-  extrageri coboara puterea la 70-76%. Testul nu atinge productia. Pana la
+  test. Caracteristicile de operare sunt calculate exact, PE FIECARE POOL
+  (`sprt_operating.py`): fara avantaj real, jumatate din rulari resping un pool
+  in ~2 ani; cu avantajul afirmat real, jumatate confirma un pool abia in 6-7
+  ani, iar plafonul de 1.000 de extrageri coboara puterea la 70-76%. Verdictul
+  pe metoda (confirmata daca un pool confirma) are alte cifre. Testul nu atinge productia. Pana la
   decizie, metoda nu are avantaj demonstrat si nu se promoveaza. Amendamentele
   (numai inainte de prima extragere evaluata) sunt in `PREREGISTRATION.md`.
   Replicarea preinregistrata pe Germania, Canada, Polonia si Spania (21.821 de

@@ -62,7 +62,7 @@ def operating(p: float, p0: float, p1: float, alpha: float, beta: float, cap: in
         "undecided_at_cap": float(alive.sum()),
         "confirm_with_final_test": float(confirm_by[cap]) + final_confirm,
         "final_test_min_hits": crit,
-        "median_any_decision": first_reaching(np.append(decided, 1.0)[1:], 0.5),
+        "median_any_decision": first_reaching(decided, 0.5),
         "median_to_confirmation": first_reaching(confirm_by, 0.5),
         "median_to_rejection": first_reaching(reject_by, 0.5),
     }
@@ -103,9 +103,11 @@ def main() -> int:
               f"respins fals {pct(h1['reject_by_cap'])}; nedecis la plafon {pct(h1['undecided_at_cap'])}")
         print(f"  avantajul afirmat e real: jumătate din rulări confirmă până la "
               f"{_years(h1['median_to_confirmation'])}")
-        print(f"  testul final confirmă de la {h0['final_test_min_hits']} reușite din "
-              f"{reg['max_forward_draws']}")
-    print(f"Eroare de tip I totală (ambele pooluri, margine Bonferroni): {pct(res['type1_bound_total'])}")
+        print(f"  testul final confirmă de la {ft.count(h0['final_test_min_hits'], 'reușite')} "
+              f"din {reg['max_forward_draws']}")
+        print(f"  avantajul afirmat e real: neconfirmat la plafon (nici prin testul final) "
+              f"{pct(h1['undecided_at_cap'] - (h1['confirm_with_final_test'] - h1['confirm_by_cap']))}")
+    print(f"Eroare de tip I totală (ambele pool-uri, margine Bonferroni): {pct(res['type1_bound_total'])}")
     return 0
 
 

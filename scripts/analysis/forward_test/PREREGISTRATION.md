@@ -45,10 +45,12 @@ fiecare (unilateral) și β = 0,20:
 - „Avantaj confirmat” pentru un pool = raportul de verosimilitate atinge
   pragul superior; „fără avantaj” = atinge pragul inferior.
 - Metoda e confirmată dacă cel puțin un pool e confirmat. E respinsă dacă ambele
-  pooluri sunt respinse.
+  pool-uri sunt respinse.
 - Plafon: 1.000 de extrageri noi (~9,5 ani). Un pool nedecis la plafon primește
   testul binomial exact unilateral pe toate extragerile, cu α = 0,0125; la pool 6
-  confirmă de la 30 de reușite, la pool 12 de la 175.
+  confirmă de la 30 de reușite, la pool 12 de la 175. Un pool care nu trece nici
+  testul final rămâne „neconfirmat la plafon”, nu „respins”; fără niciun pool
+  confirmat, metoda este atunci „neconfirmată”.
 
 Caracteristicile de operare sunt calculate exact, nu simulate
 (`sprt_operating.py`), la ~105 extrageri pe an:
@@ -59,9 +61,11 @@ Caracteristicile de operare sunt calculate exact, nu simulate
 | Fără avantaj real: confirmare falsă (SPRT / cu testul final) | 0,8% / 1,1% | 1,0% / 1,3% |
 | Avantajul afirmat e real: confirmat până la plafon (SPRT / cu testul final) | 63,1% / 69,6% | 71,2% / 76,3% |
 | Avantajul afirmat e real: respins fals | 18,7% | 19,0% |
+| Avantajul afirmat e real: neconfirmat la plafon | 11,7% | 4,7% |
 | Avantajul afirmat e real: jumătate din rulări confirmate până la | 743 (~7,1 ani) | 600 (~5,7 ani) |
 
-Fără plafon, β = 0,20 ar da 80% putere; plafonul o coboară la valorile de mai sus.
+Cifrele sunt pe fiecare pool. Fără plafon, β = 0,20 ar da 80% putere; plafonul o
+coboară la valorile de mai sus.
 Cu testul final, eroarea de tip I e 1,1% la pool 6 și 1,3% la pool 12;
 pe ambele, cel mult 2,4% (suma lor).
 
@@ -70,7 +74,9 @@ pe ambele, cel mult 2,4% (suma lor).
 `forward_test.py` avertizează dacă `frozen_dmd.py` s-a schimbat, dacă istoricul
 de dinaintea înregistrării (2.587 de extrageri, ultima pe 2026-09-24) a fost
 modificat sau dacă a apărut un rând datat între 2026-09-24 și 2026-09-27, când
-nu era programată nicio extragere. Un rând nevalid sau repetat oprește rularea.
+nu era programată nicio extragere. Un rând nevalid (alt număr de valori decât 6,
+valori repetate sau în afara intervalului) sau repetat oprește rularea. Ieșirea
+poartă amprentele SHA-256 ale regulii, ale evaluatorului și ale înregistrării.
 Rezultatul se poate recalcula oricând din istoric: regula e deterministă și
 folosește numai extragerile anterioare fiecărei extrageri evaluate.
 
@@ -92,8 +98,9 @@ nici la alegerea ei.
 - Analiza principală: toate loteriile la un loc, reușită = 3+ în pool, test
   binomial exact unilateral față de rata hipergeometrică, pool 6 și pool 12,
   α = 0,0125 fiecare. Rezultatele pe fiecare loterie sunt secundare.
-- Datele stau în `_ISTORIC/externe/`, cu sursa și amprenta SHA-256 a fiecărui
-  fișier în README-ul folderului; rezultatul se scrie în `external_replication.md`.
+- Datele stau în `_ISTORIC/externe/`, cu sursa și verificarea fiecărui fișier în
+  README-ul folderului. Rezultatul, cu amprenta SHA-256 (pe LF) a fiecărui fișier
+  folosit, se trece în `external_replication.md` din ieșirea `--json`.
 - Script: `external_replication.py`.
 
 ## Amendamente
@@ -119,3 +126,14 @@ pool-urile, ținta și data de start nu s-au schimbat.
     păstrează în repo, în `_ISTORIC/externe/`;
   - Marea Britanie iese din replicare. Jocul actual e 6 din 59 (din octombrie
     2015), deci nu e o loterie 6/49; arhiva cu 49 de bile nu se păstrează.
+- 2026-09-27, după a doua verificare independentă, tot înainte de rularea
+  replicării și de prima extragere evaluată:
+  - un pool nedecis la plafon și nesemnificativ la testul final este
+    „neconfirmat la plafon”, iar metoda fără niciun pool confirmat este
+    „neconfirmată”; „respinsă” rămâne numai pentru ambele pool-uri respinse prin
+    SPRT;
+  - un rând cu alt număr de valori decât 6 oprește evaluarea;
+  - după verdictul final, scriptul nu mai anunță pool-ul pentru următoarea
+    extragere;
+  - setul replicării: cele patru fișiere 6/49 numite în `external_replication.md`
+    (Germania, Canada, Polonia, Spania), cu amprentele lor.

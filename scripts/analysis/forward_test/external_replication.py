@@ -20,7 +20,6 @@ nevalid, repetat sau cu dată necunoscută oprește rularea.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import sys
@@ -37,7 +36,7 @@ import frozen_dmd  # noqa: E402
 
 POOLS = (6, 12)
 TARGET = 3
-ALPHA = 0.0125  # per pool: verdictul pe două pooluri rămâne la cel mult 2,5%
+ALPHA = 0.0125  # per pool: verdictul pe două pool-uri rămâne la cel mult 2,5%
 WARMUP = 200
 
 
@@ -98,7 +97,7 @@ def main(argv=None) -> int:
             "rows": len(draws),
             "first": dates[0].isoformat(),
             "last": dates[-1].isoformat(),
-            "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+            "sha256": forward_test.file_hash(p),  # pe LF, ca pe orice checkout
             **{f"pool{k}": summarize(h[k], k) for k in POOLS},
         }
         for k in POOLS:

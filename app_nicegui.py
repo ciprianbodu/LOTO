@@ -1144,7 +1144,7 @@ def _build_mail_body() -> str:
     for fn, g, d in games:
         primary = _primary_pool_data(d)
         joker = sorted(int(x) for x in (primary.get("hard_core_joker") or []))
-        lines.append(f"=== {g.upper()} ===")
+        lines.append(f"=== {_game_title(g)} ===")
         info = _last_csv_draw(fn)
         if info:
             _ds, _dn, _dj = info
@@ -1380,7 +1380,7 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, raw_data in _ordered_game_items(outs):
                 data = _primary_pool_data(raw_data)
-                with ui.expansion(f"🎯 {game.upper()}", value=True).classes("w-full"):
+                with ui.expansion(f"🎯 {_game_title(game)}", value=True).classes("w-full"):
                     _render_pool_body(fname, game, data)
 
 
@@ -2069,7 +2069,9 @@ def main_page() -> None:
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
         with ui.row().classes("w-full items-center no-wrap gap-2"):
             _bind_save(
-                ui.number("Bilete", min=1, max=10, step=1, precision=0).classes("w-20"),
+                ui.number(
+                    "Bilete", min=1, max=10, step=1, precision=0, format="%.0f"
+                ).classes("w-20"),
                 "full_ticket_count_val",
             ).tooltip("Câte bilete fizice complete pe joc (1-10)")
             ui.button(

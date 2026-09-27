@@ -246,7 +246,7 @@ def _render_cost(game: str, data: dict) -> None:
     else:
         ui.markdown(
             f"💡 **Cost la agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
-            f"{game.upper()}. **{_full_lbl}** (toate combinațiile, exhaustiv)."
+            f"{_game_title(game)}. **{_full_lbl}** (toate combinațiile, exhaustiv)."
         ).classes("text-info")
 
     variants = data.get("variants") or []
@@ -745,7 +745,7 @@ def _build_report() -> str:
         out.append(f"\n{'#' * 72}\nFIȘIER: {fn}\n{'#' * 72}")
         for g, raw_data in _ordered_game_items(outs):
             d = _primary_pool_data(raw_data)
-            out.append(f"\n=================  JOC: {g.upper()}  =================")
+            out.append(f"\n=================  JOC: {_game_title(g)}  =================")
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
             wf = _wf_summary(flat, d)
@@ -824,18 +824,21 @@ def _copy_feedback(e) -> None:
 
 def _full_ticket_summary(t: dict, game: str) -> str:
     """Linia de sub variante: câte, acoperirea garanției și costul."""
+    from loto_enterprise.core.ro_text import count
+
     n = len(t["variants"])
     cost = n * PRICES.get(game, 0.0)
+    slip = "biletului" if t["tickets"] == 1 else "biletelor"
     text = (
-        f"{n}/{t['requested']} variante ({t['tickets']} × {t['per_ticket']}) · "
-        f"acoperire garanție {t['guarantee']} pe cele {len(t['pool'])} numere ale "
-        f"biletului: {t['coverage']:.2f}%"
+        f"{n}/{count(t['requested'], 'variante')} ({t['tickets']} × {t['per_ticket']}) · "
+        f"acoperire garanție {t['guarantee']} pe cele {count(len(t['pool']), 'numere')} "
+        f"ale {slip}: {t['coverage']:.2f}%"
     )
     upper = t.get("upper_coverage")
     if upper:
         level, pct = upper
         text += (
-            f" · garanția e completă cu {t['guarantee_variants']} variante; "
+            f" · garanția e completă cu {count(t['guarantee_variants'], 'variante', 'variantă')}; "
             f"cu toate cele {n}, grupele de {level} sunt acoperite {pct:.2f}%"
         )
     return text + f" · ≈ {cost:.0f} Lei"
@@ -862,12 +865,15 @@ def _show_full_ticket() -> None:
             "Acoperirea e cea a acestor variante, nu a wheel-ului complet; "
             "nu e o șansă de câștig."
         ).classes("text-caption")
-        with ui.scroll_area().classes("w-full").style("max-height:65vh"):
+        # Nu ui.scroll_area: NiceGUI îi fixează înălțimea la 16rem (256px).
+        with ui.column().classes("w-full no-wrap gap-1").style(
+            "max-height:65vh; overflow-y:auto"
+        ):
             for _fn, outs in rb:
                 for g, raw in _ordered_game_items(outs):
                     game = _game_label_for(str(g))
                     t = build_full_ticket(game, _primary_pool_data(raw), tickets)
-                    lottery = display_name(game)
+                    lottery = display_name(game)  # = _game_title(g)
                     ui.separator()
                     ui.label(lottery).classes("text-bold")
                     if t.get("error"):

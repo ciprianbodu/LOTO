@@ -202,7 +202,8 @@ def test_summary_names_the_tickets_and_the_extra_groups():
 
     t = build_full_ticket("6/49", _data(list(range(1, 10))), 10)
     text = ui_results._full_ticket_summary(t, "6/49")
-    assert text.startswith("30/30 variante (10 × 3)")
+    assert text.startswith("30/30 de variante (10 × 3)")
+    assert "ale biletelor" in text
     assert f"garanția e completă cu {t['guarantee_variants']} variante" in text
     assert "cu toate cele 30, grupele de 4 sunt acoperite" in text
     assert text.endswith("≈ 240 Lei")
@@ -218,3 +219,71 @@ def test_every_ticket_names_its_country_and_game():
     assert display_name("joker") == "România · Joker"
     assert set(LOTTERIES) == set(TICKET_VARIANTS)
     assert display_name("necunoscut") == "necunoscut"
+
+
+def _ranked_data(ranking, pool, limit=0):
+    scores = {n: float(100 - i) for i, n in enumerate(ranking)}
+    audit = {"timesfm_predictions": scores}
+    if limit:
+        audit["consecutive_limit"] = {"requested": limit, "applied": limit}
+    return {"hard_core": pool, "guarantee": 3, "audit": audit}
+
+
+def test_narrow_base_extends_as_far_as_the_ranking_goes():
+    """Interval 42..49: zece bilete cer 9 numere, clasamentul are 8. Înainte,
+    pool-ul rămânea de 6 și ieșea o singură variantă; acum ies toate C(8,6) = 28."""
+    ranking = [45, 42, 49, 46, 48, 47, 43, 44]
+    t = build_full_ticket("6/49", _ranked_data(ranking, [42, 45, 46, 47, 48, 49]), 10)
+    assert t["pool"] == list(range(42, 50))
+    assert len(t["variants"]) == 28
+    assert "Clasamentul are numai 8 numere" in t["note"]
+
+
+def test_extension_keeps_the_displayed_pool_and_respects_the_limit():
+    """Parcurgerea simplă lua 43 și bloca 42 și 44; completarea verificată găsește
+    singurul superset valid cu cel mult 2 consecutive."""
+    ranking = [38, 49, 47, 39, 45, 40, 46, 48, 41, 43, 42, 44]
+    pool = [38, 39, 41, 45, 47, 49]
+    t = build_full_ticket("6/49", _ranked_data(ranking, pool, limit=2), 3)
+    assert t["pool"] == [38, 39, 41, 42, 44, 45, 47, 49]
+    assert len(t["variants"]) == 9
+    from loto_enterprise.core.ranking import longest_consecutive_run
+
+    assert longest_consecutive_run(t["pool"]) <= 2
+
+
+def test_extension_relaxes_the_limit_rather_than_losing_the_pool():
+    ranking = [37, 38, 40, 42, 44, 45, 36, 39, 41, 43, 46, 47, 48, 49]
+    pool = [37, 38, 40, 42, 44, 45]
+    t = build_full_ticket("6/49", _ranked_data(ranking, pool, limit=2), 10)
+    assert set(pool) <= set(t["pool"]) and len(t["pool"]) == 9
+    assert len(t["variants"]) == 30
+    assert "Limita de consecutive a crescut" in t["note"]
+
+
+def test_fractional_ticket_count_is_rounded_like_the_field():
+    assert [clamp_tickets(v) for v in (2.6, 3.4, 9.9, "2.5", float("inf"))] == [3, 3, 10, 2, 1]
+
+
+def test_trim_note_speaks_of_all_the_slips():
+    pool = list(range(1, 25))
+    two = build_full_ticket("joker", _data(pool, hard_core_joker=[7]), 2)
+    assert "În afara biletelor" in two["note"]
+
+
+def test_result_headings_name_country_and_game():
+    import ui_runtime
+
+    assert ui_runtime._game_title("6/49") == "România · Loto 6/49"
+    assert ui_runtime._game_title("joker") == "România · Joker"
+    assert ui_runtime._game_title("5/40") == "România · Loto 5/40"
+
+
+def test_romanian_numeral_agreement():
+    from loto_enterprise.core.ro_text import count
+
+    assert [count(n, "variante") for n in (1, 19, 20, 23, 100, 101, 119, 120)] == [
+        "1 variante", "19 variante", "20 de variante", "23 de variante",
+        "100 de variante", "101 variante", "119 variante", "120 de variante",
+    ]
+    assert count(1, "variante", "variantă") == "1 variantă"
