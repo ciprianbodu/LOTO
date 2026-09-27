@@ -90,3 +90,15 @@ format, valori, ordine, fără rânduri repetate.
 - 1.850 de extrageri, 29.10.1988 – 24.09.2026 (la import), din fișierul oficial
   Szerencsejáték.
 - Verificare: 1.763 de extrageri comparate cu o sursă independentă, zero diferențe.
+
+### `cehia_sportka_6din49.csv`: Cehia, Sportka
+
+- 7.620 de rânduri, 09.01.1994 – 25.09.2026 (la import), din arhiva oficială
+  Sazka. Fiecare zi de extragere are două trageri (1. tah și 2. tah), păstrate
+  ca două rânduri cu aceeași dată, în ordinea oficială.
+- Verificare: 684 de trageri comparate cu o sursă independentă, zero diferențe.
+
+### `slovacia_loto_6din49.csv`: Slovacia, Loto
+
+- 5.164 de rânduri, 02.10.2002 – 25.09.2026 (la import), din arhiva oficială TIPOS.
+- Verificare: 450 de extrageri comparate cu o sursă independentă, zero diferențe.
