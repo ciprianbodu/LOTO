@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 68 fisiere `test_*.py`, 1435 de teste (renumarat la 2026-09-26). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1411 trec, 24 sarite (integrarea
+- teste: 68 fisiere `test_*.py`, 1437 de teste (renumarat la 2026-09-26). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1413 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -538,6 +538,11 @@ limita de validitate din §5).
   ceruta si aplicata, numerele scoase din pool si puse in loc, cu locul lor in
   clasament; `timesfm_predictions` coboara atunci sub locul 25 cat e nevoie. Panoul,
   raportul, nota de bench si istoricul WF il descriu prin `_consecutive_limit_text`.
+  Nota de bench numeste limita oricand e ceruta, ca restrangerea: bench-ul masoara
+  top-K brut la fiecare pas istoric, iar limita schimba pool-ul jucat la multi
+  dintre ei, chiar cand pool-ul de azi n-a avut nevoie de inlocuire. Antetul
+  pool-ului spune ca paranteza e frecventa pe istoricul folosit (cu lookback,
+  numai pe fereastra lui).
   Pe datele curente, 6/49 are secvente de 3-4 la fiecare pool 6..16, deci pool-ul
   jucat difera de top-K validat de bench; numai WF masoara pool-ul jucat. FARA
   avantaj statistic demonstrat (hipergeometric, ca la restrangere).
