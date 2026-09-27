@@ -8,11 +8,13 @@ calculează numai din extragerile cu dată anterioară.
 Analiza principală (fixată înainte de rezultate, vezi PREREGISTRATION.md): toate
 loteriile verificate la un loc, reușită = 3+ numere extrase în pool, test binomial
 exact unilateral față de rata hipergeometrică, pentru pool 6 și pool 12, cu
-α = 0,025 fiecare. Rezultatele pe fiecare loterie sunt secundare.
+α = 0,0125 fiecare. Rezultatele pe fiecare loterie sunt secundare.
 
 Rulare din rădăcina proiectului:
-    python scripts/analysis/forward_test/external_replication.py DIR_CU_CSV [...]
-Fiecare CSV: date (YYYY-MM-DD),n1..n6, cronologic. Datele nu se comit în repo.
+    python scripts/analysis/forward_test/external_replication.py CSV [CSV ...]
+Fiecare CSV: date,n1..n6, în formatul din `_ISTORIC/` (ZZ-LL-AAAA sau AAAA-LL-ZZ).
+Datele se citesc și se validează ca în `forward_test.load_history`: un rând
+nevalid, repetat sau cu dată necunoscută oprește rularea.
 """
 
 from __future__ import annotations
@@ -30,30 +32,22 @@ from scipy.stats import binomtest, hypergeom
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import forward_test  # noqa: E402
 import frozen_dmd  # noqa: E402
 
 POOLS = (6, 12)
 TARGET = 3
-ALPHA = 0.025
+ALPHA = 0.0125  # per pool: verdictul pe două pooluri rămâne la cel mult 2,5%
 WARMUP = 200
 
 
-def load(path: Path) -> tuple[list[str], np.ndarray]:
-    dates, rows = [], []
-    for line in path.read_text(encoding="utf-8").splitlines()[1:]:
-        if not line.strip():
-            continue
-        parts = [p.strip() for p in line.split(",")]
-        nums = [int(x) for x in parts[1:7]]
-        if len(set(nums)) != 6 or not all(1 <= x <= 49 for x in nums):
-            raise ValueError(f"{path.name}: rând invalid {line!r}")
-        dates.append(parts[0])
-        rows.append(nums)
-    order = sorted(range(len(dates)), key=lambda i: (dates[i], i))
-    return [dates[i] for i in order], np.asarray([rows[i] for i in order], dtype=int)
+def load(path: Path):
+    """Aceeași citire ca la testul pe extrageri viitoare: date calendaristice,
+    ordine cronologică, validare 6 numere distincte în 1..49."""
+    return forward_test.load_history(path, max_num=49, draw_n=6)
 
 
-def replicate(dates: list[str], draws: np.ndarray) -> dict:
+def replicate(dates, draws: np.ndarray) -> dict:
     hits = {k: [] for k in POOLS}
     prior = 0
     for i in range(len(draws)):
@@ -73,7 +67,7 @@ def summarize(h: np.ndarray, k: int) -> dict:
     n = int(h.size)
     s = int((h >= TARGET).sum())
     test = binomtest(s, n, p0, alternative="greater") if n else None
-    ci = test.proportion_ci(0.95) if n else None
+    ci = binomtest(s, n, p0).proportion_ci(0.95, method="exact") if n else None
     return {
         "n": n,
         "success": s,
@@ -87,6 +81,11 @@ def summarize(h: np.ndarray, k: int) -> dict:
 
 
 def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("csvs", nargs="+")
     ap.add_argument("--json", default="")
@@ -97,8 +96,8 @@ def main(argv=None) -> int:
         h = replicate(dates, draws)
         per[p.stem] = {
             "rows": len(draws),
-            "first": dates[0],
-            "last": dates[-1],
+            "first": dates[0].isoformat(),
+            "last": dates[-1].isoformat(),
             "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
             **{f"pool{k}": summarize(h[k], k) for k in POOLS},
         }

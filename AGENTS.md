@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 69 fisiere `test_*.py`, 1446 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1422 trec, 24 sarite (integrarea
+- teste: 69 fisiere `test_*.py`, 1458 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1434 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -919,9 +919,13 @@ pipeline-ului sau a contractului UI-worker.
   protocolul in `PREREGISTRATION.md`). Regula e copia inghetata `frozen_dmd.py`,
   cu hash-ul in `preregistration_2026-09-27.json`; se evalueaza numai extragerile
   cu data dupa 2026-09-27. `test_forward_test.py` cade daca regula sau istoricul
-  de dinaintea inregistrarii se schimba. Testul nu atinge productia. Pana la
-  decizie (mediana simulata: 2-5 ani de extrageri), metoda nu are avantaj
-  demonstrat si nu se promoveaza.
+  de dinaintea inregistrarii se schimba; parametrii deciziei sunt fixati si in
+  test. Caracteristicile de operare sunt calculate exact (`sprt_operating.py`):
+  fara avantaj real, jumatate din rulari se resping in ~2 ani; cu avantajul
+  afirmat real, jumatate confirma abia in 6-7 ani, iar plafonul de 1.000 de
+  extrageri coboara puterea la 70-76%. Testul nu atinge productia. Pana la
+  decizie, metoda nu are avantaj demonstrat si nu se promoveaza. Amendamentele
+  (numai inainte de prima extragere evaluata) sunt in `PREREGISTRATION.md`.
 
 Criteriu de iesire: orice schimbare de metoda vine cu experiment reproductibil si
 nu este descrisa drept garantie de castig.
