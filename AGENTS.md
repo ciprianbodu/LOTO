@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v5`;
-- teste: 69 fisiere `test_*.py`, 1467 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1443 trec, 24 sarite (integrarea
+- teste: 70 fisiere `test_*.py`, 1476 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1452 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -241,6 +241,13 @@ UI-ul face polling la o secunda, fara reload complet.
 - Engine, benchmark si walk-forward folosesc `draw_validation.py`.
 - Joker Urna 2 accepta numai valori intregi 1..20.
 - `_ISTORIC/` este versionat; fisierele de stare si cache nu sunt surse de adevar.
+- `_ISTORIC/externe/` tine istorice ale altor loterii din UE, in acelasi format
+  (`date,n1..n6`, ZZ-LL-AAAA), cu sursa si verificarea fiecarui fisier in
+  README-ul folderului. Nu pune un CSV strain direct in `_ISTORIC/`:
+  `discover_games` ia primul fisier cu „649” in nume, in ordine alfabetica, si
+  ar inlocui pe tacute Loto 6/49 in bench. `test_externe_history.py` permite la
+  nivelul de sus numai cele trei fisiere romanesti, iar numele straine nu contin
+  „joker”, „649”, „6_49”, „5_40”, dupa care codul vechi ghiceste jocul.
 
 ### 4.2 Scoruri si ranking
 
@@ -932,6 +939,9 @@ pipeline-ului sau a contractului UI-worker.
   extrageri coboara puterea la 70-76%. Testul nu atinge productia. Pana la
   decizie, metoda nu are avantaj demonstrat si nu se promoveaza. Amendamentele
   (numai inainte de prima extragere evaluata) sunt in `PREREGISTRATION.md`.
+  Replicarea preinregistrata pe Germania, Canada, Polonia si Spania (21.821 de
+  extrageri nevazute, `external_replication.md`): niciun avantaj, pool 6 1,96%
+  fata de 1,86% aleator (p = 0,16), pool 12 14,49% fata de 14,80% (p = 0,90).
 
 Criteriu de iesire: orice schimbare de metoda vine cu experiment reproductibil si
 nu este descrisa drept garantie de castig.
