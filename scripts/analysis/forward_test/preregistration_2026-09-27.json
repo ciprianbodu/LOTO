@@ -1,0 +1,43 @@
+{
+ "registered_at_utc": "2026-09-27",
+ "method": "dmd_forecast",
+ "frozen_method_file": "frozen_dmd.py",
+ "frozen_method_sha256": "baa069882903ab663578cc7b2dac98aa0d19692743b641a941445198f39552c5",
+ "game": "loto_6_49",
+ "max_num": 49,
+ "draw_n": 6,
+ "target_hits": 3,
+ "start_after_date": "2026-09-27",
+ "history_rows_at_registration": 2587,
+ "history_last_date_at_registration": "2026-09-24",
+ "history_sha256": "6ebbe63000a304ea656ce496732666785cbb1c302b9a49659c9e53c9eb9478d8",
+ "sprt": {
+  "6": {
+   "p0": 0.018637545002022343,
+   "p1": 0.03346203346203346,
+   "alpha": 0.0125,
+   "beta": 0.2
+  },
+  "12": {
+   "p0": 0.14797806264041233,
+   "p1": 0.1879021879021879,
+   "alpha": 0.0125,
+   "beta": 0.2
+  }
+ },
+ "max_forward_draws": 1000,
+ "golden_top12_at_registration": [
+  16,
+  11,
+  20,
+  32,
+  9,
+  28,
+  29,
+  23,
+  46,
+  40,
+  12,
+  44
+ ]
+}

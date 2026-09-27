@@ -4,3 +4,5 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 scripts/git-hooks/* text eol=lf
+# Amprenta copiei inghetate din testul preinregistrat se calculeaza pe LF.
+scripts/analysis/forward_test/* text eol=lf
