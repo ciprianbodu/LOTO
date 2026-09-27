@@ -216,13 +216,15 @@ if errorlevel 1 (
 )
 echo/
 
-echo [2b/4] Descarcare extrageri noi din loto49.ro...
+echo [2b/4] Descarcare extrageri noi din loto49.ro si istoricele externe UE...
 set "UPDATE_LOG=%TEMP%\loto_update_%RANDOM%.log"
 "%VENV_PY%" "%PROJECT_DIR%update_csv.py" > "%UPDATE_LOG%" 2>&1
+REM Istoricele externe din _ISTORIC\externe, inainte de push_istoric. Mereu exit 0.
+"%VENV_PY%" "%PROJECT_DIR%update_externe.py" >> "%UPDATE_LOG%" 2>&1
 powershell -NoProfile -Command "$log='%UPDATE_LOG%'; Get-Content $log | ForEach-Object { if ($_ -match 'extrageri noi') { Write-Host $_ -ForegroundColor Green } else { Write-Host $_ } }"
 findstr /C:"EROARE" "%UPDATE_LOG%" >nul 2>&1
 if not errorlevel 1 (
-    echo [WARN] update_csv.py a intampinat erori - offline? Continui cu istoricul existent.
+    echo [WARN] update_csv.py sau update_externe.py a intampinat erori - offline? Continui cu istoricul existent.
 )
 del "%UPDATE_LOG%" >nul 2>&1
 

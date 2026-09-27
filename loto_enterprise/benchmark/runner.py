@@ -96,8 +96,80 @@ def _list_istoric_dirs() -> list[Path]:
     return [p for p in candidates if p.exists()]
 
 
+# Numele exacte ale istoricelor românești. `discover_games` le ia ÎNAINTEA
+# oricărui alt CSV care s-ar potrivi după subșir: altfel un fișier străin cu
+# „649” în nume, sortat alfabetic înaintea lui, înlocuia pe tăcute Loto 6/49.
+_RO_EXACT_CSV_NAMES = ("loto_6_49.csv", "loto_5_40.csv", "joker.csv")
+
+
+def _ro_game_defs_for(p: Path, seen_keys: set) -> list[GameDef]:
+    """GameDef-urile românești pe care le-ar da fișierul `p` (după nume)."""
+    name = p.name.lower()
+    out: list[GameDef] = []
+    if "6_49" in name or "649" in name:
+        if "loto_6_49" not in seen_keys:
+            out.append(
+                GameDef(
+                    key="loto_6_49",
+                    label="Loto 6/49",
+                    csv_path=str(p),
+                    cols=["n1", "n2", "n3", "n4", "n5", "n6"],
+                    max_num=49,
+                    draw_n=6,
+                    pool_extra=14,  # K=6..20 (extins 2026-05-25)
+                )
+            )
+    elif "5_40" in name or "540" in name:
+        if "loto_5_40" not in seen_keys:
+            out.append(
+                GameDef(
+                    key="loto_5_40",
+                    label="Loto 5/40",
+                    csv_path=str(p),
+                    cols=["n1", "n2", "n3", "n4", "n5", "n6"],
+                    max_num=40,
+                    draw_n=6,  # hituri pe toate cele 6 numere extrase
+                    pick_n=5,  # biletul are 5 numere
+                    pool_extra=14,  # K=5..19 (extins 2026-05-25)
+                )
+            )
+    elif "joker" in name:
+        if "joker_urna1" not in seen_keys:
+            out.append(
+                GameDef(
+                    key="joker_urna1",
+                    label="Joker — Urna 1 (5/45)",
+                    csv_path=str(p),
+                    cols=["n1", "n2", "n3", "n4", "n5"],
+                    max_num=45,
+                    draw_n=5,
+                    pool_extra=14,  # K=5..19 (extins 2026-05-25)
+                )
+            )
+        if "joker_urna2" not in seen_keys:
+            out.append(
+                GameDef(
+                    key="joker_urna2",
+                    label="Joker — Urna 2 (1/20)",
+                    csv_path=str(p),
+                    cols=["joker"],
+                    max_num=20,
+                    draw_n=1,
+                    pool_extra=0,
+                    is_single_pick=True,
+                )
+            )
+    return out
+
+
 def discover_games(istoric_dir: str | None = None) -> list[GameDef]:
-    """Auto-detect game CSVs by filename pattern."""
+    """Detectează istoricele ROMÂNEȘTI după numele fișierului.
+
+    Numele exacte (`_RO_EXACT_CSV_NAMES`) au prioritate în fiecare folder; un
+    alt CSV se potrivește după subșir numai dacă jocul lui nu e deja găsit.
+    Orice CSV neluat în seamă (nume nerecunoscut sau joc deja acoperit) este
+    semnalat cu WARNING, nu ignorat în tăcere. Jocurile altor țări NU se
+    descoperă aici: vin din registru (`registry_games`)."""
     if istoric_dir:
         base = Path(istoric_dir)
         if not base.exists():
@@ -111,76 +183,99 @@ def discover_games(istoric_dir: str | None = None) -> list[GameDef]:
             )
 
     games: list[GameDef] = []
-    seen_keys = set()
+    seen_keys: set = set()
     for base in bases:
-        for p in sorted(base.glob("*.csv")):
-            name = p.name.lower()
-            if "6_49" in name or "649" in name:
-                key = "loto_6_49"
-                if key in seen_keys:
-                    continue
-                games.append(
-                    GameDef(
-                        key=key,
-                        label="Loto 6/49",
-                        csv_path=str(p),
-                        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
-                        max_num=49,
-                        draw_n=6,
-                        pool_extra=14,  # K=6..20 (extins 2026-05-25)
-                    )
+        csvs = sorted(base.glob("*.csv"))
+        exact = [p for p in csvs if p.name.lower() in _RO_EXACT_CSV_NAMES]
+        rest = [p for p in csvs if p.name.lower() not in _RO_EXACT_CSV_NAMES]
+        for p in exact + rest:
+            found = _ro_game_defs_for(p, seen_keys)
+            if not found:
+                logger.warning(
+                    "[bench] ignor %s: nume nerecunoscut sau joc deja luat din alt "
+                    "fișier (istoricele altor țări se aleg cu --country)",
+                    p,
                 )
-                seen_keys.add(key)
-            elif "5_40" in name or "540" in name:
-                key = "loto_5_40"
-                if key in seen_keys:
-                    continue
-                games.append(
-                    GameDef(
-                        key=key,
-                        label="Loto 5/40",
-                        csv_path=str(p),
-                        cols=["n1", "n2", "n3", "n4", "n5", "n6"],
-                        max_num=40,
-                        draw_n=6,  # hituri pe toate cele 6 numere extrase
-                        pick_n=5,  # biletul are 5 numere
-                        pool_extra=14,  # K=5..19 (extins 2026-05-25)
-                    )
-                )
-                seen_keys.add(key)
-            elif "joker" in name:
-                if "joker_urna1" not in seen_keys:
-                    games.append(
-                        GameDef(
-                            key="joker_urna1",
-                            label="Joker — Urna 1 (5/45)",
-                            csv_path=str(p),
-                            cols=["n1", "n2", "n3", "n4", "n5"],
-                            max_num=45,
-                            draw_n=5,
-                            pool_extra=14,  # K=5..19 (extins 2026-05-25)
-                        )
-                    )
-                    seen_keys.add("joker_urna1")
-                if "joker_urna2" not in seen_keys:
-                    games.append(
-                        GameDef(
-                            key="joker_urna2",
-                            label="Joker — Urna 2 (1/20)",
-                            csv_path=str(p),
-                            cols=["joker"],
-                            max_num=20,
-                            draw_n=1,
-                            pool_extra=0,
-                            is_single_pick=True,
-                        )
-                    )
-                    seen_keys.add("joker_urna2")
+                continue
+            for g in found:
+                games.append(g)
+                seen_keys.add(g.key)
     if not games:
         raise RuntimeError("Nu am detectat niciun CSV de joc.")
     order = {"loto_6_49": 0, "loto_5_40": 1, "joker_urna1": 2, "joker_urna2": 3}
     games.sort(key=lambda g: order.get(g.key, 99))
     return games
+
+
+def registry_games(country: str, istoric_dir: str | None = None) -> list[GameDef]:
+    """GameDef-urile unei țări, din registrul `core.lotteries` (nu din nume).
+
+    `istoric_dir` (opțional) caută fișierul fiecărui joc, după numele lui din
+    registru, în acel folder; implicit se citește calea din registru, relativă
+    la rădăcina proiectului. Un CSV lipsă ridică eroare: un bench străin nu
+    trece pe tăcute pe alt fișier."""
+    from loto_enterprise.core.lotteries import PROJECT_ROOT, games_for_country
+
+    games: list[GameDef] = []
+    for lot in games_for_country(country):
+        rel = Path(lot.csv)
+        csv = Path(istoric_dir) / rel.name if istoric_dir else PROJECT_ROOT / rel
+        if not csv.exists():
+            raise FileNotFoundError(f"{lot.game_id}: istoricul {csv} nu există")
+        geo = lot.geo
+        games.append(
+            GameDef(
+                key=lot.bench_key,
+                label=lot.display,
+                csv_path=str(csv),
+                cols=[f"n{i}" for i in range(1, geo.draw_n + 1)],
+                max_num=geo.max_n,
+                draw_n=geo.draw_n,
+                pick_n=0 if geo.pick_n == geo.draw_n else geo.pick_n,
+                pool_extra=14,
+            )
+        )
+        second = geo.second
+        if lot.bench_key_urna2 and second is not None:
+            games.append(
+                GameDef(
+                    key=lot.bench_key_urna2,
+                    label=f"{lot.display} — Urna 2 (1/{second.max_n})",
+                    csv_path=str(csv),
+                    cols=list(second.columns),
+                    max_num=second.max_n,
+                    draw_n=1,
+                    pool_extra=0,
+                    is_single_pick=True,
+                )
+            )
+    return games
+
+
+def _is_urna2_key(key: str) -> bool:
+    if key == "joker_urna2":
+        return True
+    try:
+        from loto_enterprise.core.lotteries import lottery_by_bench_key
+
+        lot = lottery_by_bench_key(key)
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(lot is not None and lot.bench_key_urna2 == key)
+
+
+# Istoric de referință pentru pragul watchdog-ului: ~ cel mai lung istoric
+# românesc. Rescorarea per extragere crește ~ n^2, deci pragul crește la fel
+# pentru istoricele mai lungi; la România rămâne 900 s, ca înainte.
+_STALL_REF_DRAWS = 3000
+_STALL_BASE_SEC = 900.0
+_STALL_MAX_SEC = 6 * 3600.0
+
+
+def default_stall_timeout(max_draws: int) -> float:
+    """Pragul watchdog-ului (s) când `LOTO_BENCH_STALL_TIMEOUT` lipsește."""
+    ratio = max(1.0, float(max_draws or 0) / _STALL_REF_DRAWS)
+    return min(_STALL_MAX_SEC, _STALL_BASE_SEC * ratio * ratio)
 
 
 def _align_urna2_with_engine(df: pd.DataFrame) -> pd.DataFrame:
@@ -210,7 +305,7 @@ def _align_urna2_with_engine(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_draws(game: GameDef) -> np.ndarray:
     df = chronological_history(pd.read_csv(game.csv_path))
-    if game.key == "joker_urna2":
+    if _is_urna2_key(game.key):
         df = _align_urna2_with_engine(df)
     try:
         draws, valid_mask = valid_draw_matrix(
@@ -929,9 +1024,14 @@ def run_benchmark(
     # declarăm restul "hung", le abandonăm și continuăm cu folds-urile deja strânse
     # (decizia tolerează lipsuri). Pragul e pe INACTIVITATE totală, nu pe durata unui
     # task. Configurabil prin LOTO_BENCH_STALL_TIMEOUT (sec).
-    _stall_timeout = float(
-        _os.environ.get("LOTO_BENCH_STALL_TIMEOUT", "900")
-    )  # 15 min fara NICIUN rezultat = hung
+    # Implicit 15 min fara NICIUN rezultat = hung; istoricele mai lungi decat
+    # cel romanesc (Germania, Polonia) primesc un prag scalat ~ n^2.
+    _stall_env = _os.environ.get("LOTO_BENCH_STALL_TIMEOUT", "").strip()
+    _stall_timeout = (
+        float(_stall_env)
+        if _stall_env
+        else default_stall_timeout(max(_n_by_game.values(), default=0))
+    )
     _hung = False
     if fut_kind:
         try:

@@ -60,9 +60,9 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v5`;
-- teste: 69 fisiere `test_*.py`, 1446 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1422 trec, 24 sarite (integrarea
+- cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
+- teste: 77 fisiere `test_*.py`, 1671 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1647 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -231,6 +231,7 @@ UI-ul face polling la o secunda, fara reload complet.
 | `loto_enterprise/core/score_validation.py` | validarea comuna a scorurilor bench/productie |
 | `loto_enterprise/core/walk_forward_adapter.py` | WF onest, cache, agregare si acoperire |
 | `loto_enterprise/core/draw_validation.py` | contract comun pentru extrageri valide |
+| `loto_enterprise/core/lotteries.py` | registrul loteriilor: identitate (tara, `game_id`, cheia de bench), geometrii, tarife, cai de decizie/bench per tara |
 | `_ISTORIC/` | sursa versionata a datelor de benchmark |
 
 ## 4. Contracte care nu se negociaza
@@ -241,6 +242,25 @@ UI-ul face polling la o secunda, fara reload complet.
 - Engine, benchmark si walk-forward folosesc `draw_validation.py`.
 - Joker Urna 2 accepta numai valori intregi 1..20.
 - `_ISTORIC/` este versionat; fisierele de stare si cache nu sunt surse de adevar.
+- `_ISTORIC/externe/` tine istorice ale altor loterii din UE, in acelasi format
+  (`date,n1..n6`, ZZ-LL-AAAA), cu sursa si verificarea fiecarui fisier in
+  README-ul folderului. Nu pune un CSV strain direct in `_ISTORIC/`:
+  `discover_games` ia primul fisier cu „649” in nume, in ordine alfabetica, si
+  ar inlocui pe tacute Loto 6/49 in bench. `test_externe_history.py` permite la
+  nivelul de sus numai cele trei fisiere romanesti, iar numele straine nu contin
+  „joker”, „649”, „6_49”, „5_40”, dupa care codul vechi ghiceste jocul.
+- Identitatea unui joc (tara ISO, `game_id`, cheia de bench) vine NUMAI din
+  registrul `loto_enterprise/core/lotteries.py`; `game_type` ramane GEOMETRIA
+  („6/49”, „5/40”, „joker”, „6/45”, „5/50”). Jocurile romanesti pastreaza
+  id-urile si cheile de dinainte (`6/49` → `loto_6_49` etc.). Un task fara
+  `country` este Romania, exact ca inainte; un task strain are `game_label` =
+  id-ul jocului si `country`, iar o tara/un joc necunoscut face jobul FAILED.
+  Decizia unei alte tari se citeste numai din `decisions/<CC>/best_methods.json`
+  (cu `_meta.country` = tara; altfel e tratata ca lipsa → `frequency`, marcat
+  in audit cu `fallback`/`no_decision`). Cheile pool_history/adaptive primesc
+  prefixul `<CC>_<game_id>_` numai in afara Romaniei.
+  `test_lotteries_registry.py` verifica fiecare tabel romanesc vechi fata de
+  registru.
 
 ### 4.2 Scoruri si ranking
 
@@ -499,18 +519,44 @@ limita de validitate din §5).
 
 ## 6. Pool unic
 
+- Selectorul de tara (sidebar „1. Date”, `country_val`, implicit România) si
+  jocurile tarii (`games_val`). „📂 Incarca istoricul <tara>” citeste CSV-urile
+  din registru si leaga fisierul de joc (`STATE['dataset_game']`). Se trimit
+  numai seturile tarii selectate; cu România selectata, config_json si hash-ul
+  sunt identice cu cele de dinainte. Rezultatele se identifica din ecoul
+  worker-ului (`_game_spec_for`): titlu „Tara · Joc”, tarif in moneda tarii sau
+  „tarif necunoscut”, scheme reduse LR numai la România, bilet fizic din
+  registru sau „bilet nemodelat”, iar jocurile care nu se joaca online din
+  România poarta „doar antrenament”. Re-Bench, clasamentul, ETA, curarea si
+  prospetimea citesc caile tarii selectate. Ramase: alte taburi deschise se
+  actualizeaza abia la reincarcare; cateva texte romanesti (nota de garantie,
+  ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
+
 - Pool-ul UI este limitat la 6..16.
-- Butonul „🎟️ Bilet complet" din sidebar face cate un bilet fizic per joc din
-  pool-ul rezultatului afisat: 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu
+- Lista de variante simple din rezultate arata `simple_variants_val` variante
+  (campul „Variante simple afisate in rezultate”, 1..500, implicit 10); costul
+  „Top N bilete simple” urmeaza acelasi numar. „Arata toate” ramane.
+- Butonul „🎟️ Bilet complet" din sidebar face 1-10 bilete fizice per joc
+  (campul „Bilete", `full_ticket_count_val`, implicit 1) din pool-ul
+  rezultatului afisat: pe bilet 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu
   numarul Joker pe fiecare). Variantele vin din wheel-ul cu buget
   (`core/full_ticket.py`, `generate_wheel` cu `max_variants`), iar acoperirea
-  afisata e a acestor variante, nu a wheel-ului complet. Nu trimite job si nu
+  afisata e a acestor variante, nu a wheel-ului complet. Cand garantia e
+  completa inainte de a umple biletele, locurile ramase acopera grupe mai mari
+  din acelasi pool (g+1, apoi pana la sistemul complet); rezumatul de sub
+  variante spune cu cate variante s-a completat garantia. Fiecare bloc si
+  fiecare bilet poarta tara si jocul (`core/lotteries.display_name`, ex.
+  „România · Loto 6/49"), si in textul copiat; la fel titlurile rezultatelor,
+  ale raportului, ale istoricului de hituri si ale mailului (`_game_title`). Nu trimite job si nu
   schimba rezultatul afisat. Pool-ul biletului se potriveste automat pe
   clasamentul metodei (`audit["timesfm_predictions"]`, deci cu restrangerea
-  bazei si penalizarea recenta deja aplicate): prea mic pentru variante
-  distincte (6/49 cu pool 6) -> se adauga urmatorul numar din clasament; mai
-  mare decat locurile de pe bilet (Joker peste 10) -> raman cele mai bine
-  clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
+  bazei si penalizarea recenta deja aplicate): prea mic pentru variantele
+  distincte cerute (6/49 cu pool 6: 7 numere la un bilet, 9 la zece) -> se
+  adauga urmatoarele numere din clasament, cu aceeasi verificare de completare
+  ca `limit_consecutive_run` (pool-ul afisat ramane intreg; limita creste numai
+  daca altfel s-ar pierde un numar din el; pe o baza ingusta se ia tot ce are
+  clasamentul); mai mare decat locurile de pe bilete
+  (Joker: 10 numere pe bilet) -> raman cele mai bine clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
   `rank_by_score` pe scorurile exacte; valorile sunt rotunjite la 6 zecimale si
   nu se reordoneaza (doua scoruri apropiate devin egale, iar tie-break-ul ar
   alege alt numar decat metoda). Fereastra spune ce s-a adaugat sau ce a ramas
@@ -723,11 +769,13 @@ decizia Urnei 2.
 |---|---:|---|
 | benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v27` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v5` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v6` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
-Randul ramane ca sa se stie ce s-ar bumpa daca se reactiveaza.
+Randul ramane ca sa se stie ce s-ar bumpa daca se reactiveaza. v6: fiecare
+rezultat de joc poarta `country`, `game_id`, `bench_key`, `geometry`; cheia
+unui job cu jocuri din alte tari include si fisierul de decizie al tarii.
 
 Un bump WF schimba numele fisierului, dar nu sterge cache-urile vechi. Foloseste
 API-urile de inventariere/curatare, nu stergeri recursive oarbe.
@@ -758,7 +806,12 @@ Instalarea canonica este:
 1. `ACTUALIZARI.bat` - instaleaza/actualizeaza Git for Windows prin winget,
    sincronizeaza `main` din copia temporara, instaleaza/actualizeaza Python
    3.14, recreeaza venv-ul daca patch-ul difera si instaleaza
-   `requirements_base.txt`;
+   `requirements_base.txt`; dupa `update_csv.py` ruleaza `update_externe.py`
+   (in acelasi log, inainte de auto-commit-ul `_ISTORIC`): cate o sursa per joc
+   strain din registru (sursele in `_ISTORIC/externe/README.md`), timeout 15 s,
+   verifica extragerile deja stocate din ultimele 60 de zile si, la orice
+   nepotrivire sau rand invalid, nu scrie nimic pentru jocul acela; adauga numai
+   extragerile mai noi, atomic, LF; iese mereu cu 0. START_8000 nu il ruleaza;
 2. `START_8000.bat` - sincronizeaza `main` din copia temporara daca e in urma, verifica mediul, curata procese vechi,
    porneste worker-ul si UI-ul.
 
@@ -919,9 +972,17 @@ pipeline-ului sau a contractului UI-worker.
   protocolul in `PREREGISTRATION.md`). Regula e copia inghetata `frozen_dmd.py`,
   cu hash-ul in `preregistration_2026-09-27.json`; se evalueaza numai extragerile
   cu data dupa 2026-09-27. `test_forward_test.py` cade daca regula sau istoricul
-  de dinaintea inregistrarii se schimba. Testul nu atinge productia. Pana la
-  decizie (mediana simulata: 2-5 ani de extrageri), metoda nu are avantaj
-  demonstrat si nu se promoveaza.
+  de dinaintea inregistrarii se schimba; parametrii deciziei sunt fixati si in
+  test. Caracteristicile de operare sunt calculate exact, PE FIECARE POOL
+  (`sprt_operating.py`): fara avantaj real, jumatate din rulari resping un pool
+  in ~2 ani; cu avantajul afirmat real, jumatate confirma un pool abia in 6-7
+  ani, iar plafonul de 1.000 de extrageri coboara puterea la 70-76%. Verdictul
+  pe metoda (confirmata daca un pool confirma) are alte cifre. Testul nu atinge productia. Pana la
+  decizie, metoda nu are avantaj demonstrat si nu se promoveaza. Amendamentele
+  (numai inainte de prima extragere evaluata) sunt in `PREREGISTRATION.md`.
+  Replicarea preinregistrata pe Germania, Canada, Polonia si Spania (21.821 de
+  extrageri nevazute, `external_replication.md`): niciun avantaj, pool 6 1,96%
+  fata de 1,86% aleator (p = 0,16), pool 12 14,49% fata de 14,80% (p = 0,90).
 
 Criteriu de iesire: orice schimbare de metoda vine cu experiment reproductibil si
 nu este descrisa drept garantie de castig.

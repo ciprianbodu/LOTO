@@ -61,8 +61,83 @@ warnings.filterwarnings("ignore")
 
 from covering.greedy import generate_combinatorial_wheel
 from covering.hypergeo import hypergeometric_hit_forecast
+from loto_enterprise.core.lotteries import (
+    GEOMETRIES,
+    Lottery,
+    UnknownLotteryError,
+    games_for_country,
+    lottery_by_bench_key,
+    normalize_country,
+    ro_lottery_for_geometry,
+)
 from loto_enterprise.engine.pipeline import PipelineMixin
 from loto_enterprise.engine.scoring import ScoringMixin
+
+# Câmpuri istorice din params, păstrate numai pe geometriile românești ca
+# `LotoEngine("6/49").params` să rămână exact cel de dinainte. Motorul consumă
+# doar max_n, draw_n și play_n; restul nu mai are efect.
+_LEGACY_PARAM_EXTRAS = {
+    "6/49": {"scheme": "2-2-2", "lookback": 20},
+    "5/40": {"scheme": "2-1-2", "lookback": 25},
+    "joker": {"scheme": "2-2-1", "lookback": 15, "max_joker": 20},
+}
+
+
+def game_params_for(geometry: str) -> dict | None:
+    """Parametrii motorului pentru o geometrie din registru (None = necunoscută).
+
+    draw_n = numere EXTRASE (5/40: 6), play_n = numere pe BILET (5/40: 5)."""
+    geo = GEOMETRIES.get(str(geometry))
+    if geo is None:
+        return None
+    params = {"max_n": geo.max_n, "draw_n": geo.draw_n, "play_n": geo.pick_n}
+    params.update(_LEGACY_PARAM_EXTRAS.get(geo.name, {}))
+    return params
+
+
+def resolve_engine_lottery(
+    game_type: str, game_key: str | None = None, country: str | None = None
+) -> Lottery | None:
+    """Identitatea jocului unui motor, din registru.
+
+    Fără `game_key` și fără `country` (apelanții vechi, WF, teste): None, adică
+    România dedusă din geometrie, exact ca înainte. O geometrie cunoscută care
+    nu are joc românesc (6/45, 5/50) cere însă identitate explicită: altfel ar
+    folosi tăcut decizia românească 6/49.
+
+    Cu identitate explicită, orice nepotrivire ridică eroare (țară/cheie
+    necunoscută, cheie din altă țară, geometrie diferită de cea a jocului,
+    țară cu mai multe jocuri pe aceeași geometrie fără `game_key`)."""
+    game_type = str(game_type)
+    if game_key is None and country is None:
+        if game_type in GEOMETRIES and ro_lottery_for_geometry(game_type) is None:
+            raise UnknownLotteryError(
+                f"geometria {game_type!r} nu are joc românesc: indicați "
+                "country/game_key (nu se folosește decizia românească)"
+            )
+        return None
+    cc = normalize_country(country) if country is not None else None
+    if game_key is not None:
+        lot = lottery_by_bench_key(game_key)
+        if lot is None or lot.bench_key != str(game_key):
+            raise UnknownLotteryError(f"cheie de joc necunoscută: {game_key!r}")
+        if cc is not None and lot.country != cc:
+            raise UnknownLotteryError(
+                f"cheia {game_key!r} aparține țării {lot.country}, nu {cc}"
+            )
+    else:
+        matches = [g for g in games_for_country(cc) if g.geometry == game_type]
+        if len(matches) != 1:
+            raise UnknownLotteryError(
+                f"{cc}: {len(matches)} jocuri cu geometria {game_type!r}; "
+                "indicați game_key"
+            )
+        lot = matches[0]
+    if lot.geometry != game_type:
+        raise UnknownLotteryError(
+            f"{lot.game_id} are geometria {lot.geometry!r}, nu {game_type!r}"
+        )
+    return lot
 
 
 class LotoEngine(PipelineMixin, ScoringMixin):
@@ -72,14 +147,35 @@ class LotoEngine(PipelineMixin, ScoringMixin):
     # forța fallback-ul pe frecvență (A/B).
     use_bench_winner: bool = bool(int(os.environ.get("LOTO_USE_BENCH_WINNER", "1")))
 
-    def __init__(self, game_type: str = "6/49"):
+    def __init__(
+        self,
+        game_type: str = "6/49",
+        *,
+        game_key: str | None = None,
+        country: str | None = None,
+    ):
+        """`game_type` = GEOMETRIA ("6/49", "5/40", "joker", "6/45", "5/50").
+
+        `game_key` (cheia de bench) și `country` (ISO) dau IDENTITATEA jocului:
+        decizia de bench (fișierul țării), cheile pool_history. Lipsă = România,
+        comportamentul de dinainte; vezi `resolve_engine_lottery`."""
         self.game_type = game_type
+        self.lottery: Lottery | None = resolve_engine_lottery(
+            game_type, game_key=game_key, country=country
+        )
+        self.country: str | None = self.lottery.country if self.lottery else None
+        self.game_key: str | None = self.lottery.bench_key if self.lottery else None
         self.params = self._get_game_params(game_type)
         self.audit: dict = {
             "python_version": sys.version.split()[0],
             "python_executable": sys.executable,
             "compute_device": "cpu",  # GPU eliminat complet — scoring exclusiv CPU
         }
+        if self.lottery is not None and not self.lottery.is_romanian:
+            # Numai în afara României: auditul românesc rămâne cel de dinainte.
+            self.audit["country"] = self.lottery.country
+            self.audit["game_id"] = self.lottery.game_id
+            self.audit["bench_key"] = self.lottery.bench_key
         self.hard_core: list = []
         self.hard_core_stats: dict = {}
         self.hard_core_joker_stats: dict = {}
@@ -90,34 +186,16 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         self._winner_pool_hint: int = 12
 
     def _get_game_params(self, game_type: str):
-        params = {
-            "6/49": {
-                "max_n": 49,
-                "draw_n": 6,
-                "play_n": 6,
-                "scheme": "2-2-2",
-                "lookback": 20,
-            },
-            "5/40": {
-                "max_n": 40,
-                # 5/40: se extrag 6 numere (hiturile se numără pe toate 6;
-                # categoria I = 5 din primele 5 nu e modelată separat), biletul
-                # are 5. draw_n = extragere, play_n = bilet.
-                "draw_n": 6,
-                "play_n": 5,
-                "scheme": "2-1-2",
-                "lookback": 25,
-            },
-            "joker": {
-                "max_n": 45,
-                "draw_n": 5,
-                "play_n": 5,
-                "scheme": "2-2-1",
-                "lookback": 15,
-                "max_joker": 20,
-            },
-        }
-        return params.get(game_type, params["6/49"])
+        """Parametrii geometriei, din registru (`game_params_for`).
+
+        Fără identitate explicită, o etichetă necunoscută rămâne pe 6/49 (apelanții
+        vechi); cu identitate, geometria a fost deja verificată la construcție."""
+        params = game_params_for(game_type)
+        if params is not None:
+            return params
+        if getattr(self, "lottery", None) is not None:
+            raise UnknownLotteryError(f"geometrie necunoscută: {game_type!r}")
+        return game_params_for("6/49")
 
     def load_data(self, csv_path: str) -> bool:
         """Încarcă date din CSV."""

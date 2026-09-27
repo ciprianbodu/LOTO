@@ -26,10 +26,12 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v5"
+PIPELINE_CACHE_VERSION = "v6"
 # v5: SES și theta_drift schimbă pool-ul serializat când câștigătorul e
 #     ses_opt_alpha, imapa_agg sau theta_drift. UI-ul ține use_cache=False;
 #     bump-ul acoperă apelanții care reactivează cache-ul.
+# v6: rezultatul fiecărui joc poartă identitatea lui (`country`, `game_id`,
+#     `bench_key`, `geometry`), iar jocurile din alte țări citesc decizia țării.
 
 # Identitate UNICĂ a acestei rulări de worker (regenerată la fiecare pornire).
 # Scrisă pe rândul revendicat (job_queue.fetch_pending_job/fetch_running_job) și
@@ -143,7 +145,9 @@ def _map_game_label(game_label: str) -> tuple[str, int]:
     extragerii: la 5/40 se extrag 6 numere, dar biletul are 5.
 
     Fallback implicit "6/49" — un label necunoscut nu are voie să blocheze
-    jobul, doar să ruleze pe geometria implicită."""
+    jobul, doar să ruleze pe geometria implicită. Se aplică NUMAI task-urilor
+    fără chei de identitate (România, coada veche); un task cu `country`
+    trece prin registru (`_resolve_task_lottery`) și nu cade niciodată aici."""
     label = game_label.lower()
     if "5/40" in label:
         return "5/40", 5
@@ -152,7 +156,50 @@ def _map_game_label(game_label: str) -> tuple[str, int]:
     return "6/49", 6
 
 
-def _normalize_task(task: dict, draw_n: int) -> dict:
+# Plafonul istoric al restrângerii pentru jocurile românești: cel mai mare
+# univers românesc (6/49). Engine-ul re-clampează la universul jocului curent.
+_RO_RESTRICT_BASE_CAP = 49
+
+
+def _resolve_task_lottery(task: dict):
+    """Identitatea (`Lottery` din registru) a jocului unui task.
+
+    - Task cu `country` (sau `game_id`): căutare STRICTĂ în registru; `game_label`
+      e id-ul jocului („de_lotto”; pentru România „6/49”/„5/40”/„joker”). O țară
+      sau un joc necunoscut ridică `UnknownLotteryError`: jobul eșuează, nu cade
+      pe România.
+    - Task fără chei de identitate (coada veche, UI-ul românesc): România, cu
+      eticheta ghicită exact ca înainte (`_map_game_label`, „ceva necunoscut”
+      → 6/49). Excepție: o etichetă care e chiar id-ul unui joc străin din
+      registru se rezolvă la acel joc — un id străin nu devine românesc.
+    """
+    from loto_enterprise.core.lotteries import (
+        UnknownLotteryError,
+        lottery_by_id,
+        require_lottery,
+        ro_lottery_for_geometry,
+    )
+
+    label = str(task.get("game_label", ""))
+    country = task.get("country") or None
+    game_id = task.get("game_id") or None
+    if country is not None or game_id is not None:
+        lot = require_lottery(game_id if game_id is not None else label, country)
+        if game_id is not None and label and label != lot.game_id:
+            raise UnknownLotteryError(
+                f"game_label {label!r} nu corespunde jocului {lot.game_id!r}"
+            )
+        return lot
+    lot = lottery_by_id(label)
+    if lot is not None and not lot.is_romanian:
+        return lot
+    geometry, _pick = _map_game_label(label)
+    return ro_lottery_for_geometry(geometry)
+
+
+def _normalize_task(
+    task: dict, draw_n: int, *, max_n: int = _RO_RESTRICT_BASE_CAP
+) -> dict:
     """Normalizează + clampează parametrii unui task de pipeline la intervalele
     valide. UI-ul le trimite deja clampate, dar workerul poate primi joburi
     vechi sau externe cu valori în afara plajei.
@@ -163,7 +210,10 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
     niciodată la pool) trece mai departe fără eroare — cheile în plus sunt pur
     și simplu ignorate, nu propagate în pipeline. `max_consecutive_run` e altă
     cheie, vie: limita de consecutive a utilizatorului; un task fără ea (coadă
-    veche) rulează fără limită, iar `filter_consecutives` rămâne ignorat."""
+    veche) rulează fără limită, iar `filter_consecutives` rămâne ignorat.
+
+    `max_n` = plafonul restrângerii bazei: 49 pentru jocurile românești (valoarea
+    de dinainte), universul jocului pentru celelalte (EuroMillions: 50)."""
     raw_pool = int(task.get("pool_size", 12))
     pool_size = max(6, min(16, raw_pool))  # aliniat cu UI (pool_size_val max 16)
 
@@ -203,14 +253,15 @@ def _normalize_task(task: dict, draw_n: int) -> dict:
 
     # Restrângere bază (preferință OPȚIONALĂ, 0 = oprit, implicit). Fără
     # avantaj statistic demonstrat — vezi loto_engine.run_institutional_pipeline.
-    # Plafon 49 (cel mai mare max_num dintre jocuri); engine-ul re-clampează la
-    # propriul max_num al jocului curent.
+    # Plafon `max_n` (49 = cel mai mare univers românesc; alt joc: universul
+    # lui); engine-ul re-clampează la propriul max_num al jocului curent.
+    cap = max(1, int(max_n))
     try:
-        restrict_base_max = max(0, min(49, int(task.get("restrict_base_max") or 0)))
+        restrict_base_max = max(0, min(cap, int(task.get("restrict_base_max") or 0)))
     except (TypeError, ValueError):
         restrict_base_max = 0
     try:
-        restrict_base_min = max(0, min(49, int(task.get("restrict_base_min") or 0)))
+        restrict_base_min = max(0, min(cap, int(task.get("restrict_base_min") or 0)))
     except (TypeError, ValueError):
         restrict_base_min = 0
 
@@ -270,6 +321,12 @@ def _set_bench_hit_target(task: dict) -> None:
         logging.warning(f"[worker] Nu s-a putut seta tinta de benchmark: {exc}")
 
 
+def _task_norm(task: dict, lot) -> dict:
+    """`_normalize_task` cu geometria și plafonul jocului din registru."""
+    cap = _RO_RESTRICT_BASE_CAP if lot.is_romanian else int(lot.max_n)
+    return _normalize_task(task, int(lot.pick_n), max_n=cap)
+
+
 def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
     cache_key = f"{PIPELINE_CACHE_VERSION}:{input_hash}" if input_hash else ""
     if not cache_key:
@@ -288,34 +345,62 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
             digest.update(path.read_bytes() if path.exists() else b"missing")
         from loto_enterprise.core.walk_forward_adapter import _wheel_sig
 
+        foreign_countries: set[str] = set()
         for dataset in config.get("datasets", []):
             for task in dataset.get("tasks", []):
-                game, pick = _map_game_label(str(task["game_label"]))
-                norm = _normalize_task(task, pick)
+                lot = _resolve_task_lottery(task)
+                if not lot.is_romanian:
+                    foreign_countries.add(lot.country)
+                norm = _task_norm(task, lot)
                 digest.update(
                     _wheel_sig(
                         norm["pool_size"],
-                        game,
+                        lot.geometry,
                         norm["guarantee"],
                         norm["wheel_condition"],
                         norm["max_variants"],
                     ).encode()
                 )
+        # Decizia fiecărei țări străine din job (România: best_methods.json, mai sus).
+        if foreign_countries:
+            from loto_enterprise.core.method_selector import decision_path_for
+
+            for cc in sorted(foreign_countries):
+                path = decision_path_for(cc)
+                digest.update(f"decision:{cc}".encode())
+                digest.update(path.read_bytes() if path.exists() else b"missing")
         cache_key += ":" + digest.hexdigest()
     return cache_key
 
 
 def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
+    from loto_enterprise.core.lotteries import UnknownLotteryError
+
     cfg = json.loads(job["config_json"])
     input_hash = str(cfg.get("input_hash", "") or "").strip()
     use_cache = bool(cfg.get("use_cache", True))
-    cache_key = _pipeline_cache_key(input_hash, cfg) if use_cache else ""
     datasets_cfg = list(cfg.get("datasets", []))
     job_id = int(job["id"])
 
     if not datasets_cfg:
         fail_job(job_id, "Job fără CSV — nimic de generat.", worker_token=WORKER_TOKEN)
         return None
+
+    # Identitatea fiecărui task, ÎNAINTE de orice calcul: o țară sau un joc
+    # necunoscut oprește jobul cu mesaj explicit, nu rulează ca România.
+    try:
+        lotteries_cfg = [
+            [_resolve_task_lottery(task) for task in ds.get("tasks", [])]
+            for ds in datasets_cfg
+        ]
+    except UnknownLotteryError as exc:
+        fail_job(
+            job_id,
+            f"Țară sau joc necunoscut în registru: {exc}",
+            worker_token=WORKER_TOKEN,
+        )
+        return None
+    cache_key = _pipeline_cache_key(input_hash, cfg) if use_cache else ""
 
     if update_job_progress(
         job_id, 3, "Încarc motorul de generare...", worker_token=WORKER_TOKEN
@@ -348,7 +433,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                 return None
             return str(cached)
 
-    for ds in datasets_cfg:
+    for ds, ds_lotteries in zip(datasets_cfg, lotteries_cfg, strict=True):
         fname = str(ds.get("fname", "dataset.csv"))
         # IMPORTANT: convert_dates=False — pandas altfel auto-detectează coloana
         # "date" și o parsează cu inferență month-first (default), ceea ce strică
@@ -366,10 +451,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             df.to_csv(tmp.name, index=False)
             temp_csv_path = tmp.name
 
-        for task in ds.get("tasks", []):
+        for task, lot in zip(ds.get("tasks", []), ds_lotteries, strict=True):
             game_label = str(task["game_label"])
-            game_mapped, draw_n = _map_game_label(game_label)
-            norm = _normalize_task(task, draw_n)
+            # Geometria și identitatea vin separat din registru. Task fără chei =
+            # România, cu aceeași geometrie ca `_map_game_label` de dinainte.
+            game_mapped = lot.geometry
+            norm = _task_norm(task, lot)
             if (norm["guarantee"], norm["max_variants"], norm["lookback"]) != (
                 norm["raw_guarantee"],
                 norm["raw_max_variants"],
@@ -391,6 +478,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
 
             logging.info(
                 f"[worker] Se procesează task pentru {game_label} "
+                f"[{lot.country} · {lot.game_id}, geometrie {lot.geometry}] "
                 f"(Pool: {task.get('pool_size')}, Garanție: {task.get('guarantee')})"
             )
             logging.debug(f"[worker] Full task: {task}")
@@ -418,7 +506,11 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     )  # altfel istoricul rămâne în %TEMP% la fiecare anulare
                     return "{}"
 
-                engine = LotoEngine(game_type=game_mapped)
+                engine = LotoEngine(
+                    game_type=game_mapped,
+                    game_key=lot.bench_key,
+                    country=lot.country,
+                )
                 # Valoarea de retur NU se ignoră: cu date necitibile/corupte
                 # pipeline-ul mergea până la capăt și scotea pool GOL / 0 bilete,
                 # iar jobul se încheia COMPLETED — „succes" fără niciun bilet și
@@ -474,6 +566,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "p90": p90,
                     "g_range": g_range,
                     "context": context,
+                    # Identitatea jocului (aditivă, v6): UI-ul o verifică față de
+                    # ce a trimis, în loc s-o ghicească din etichetă.
+                    "country": lot.country,
+                    "game_id": lot.game_id,
+                    "bench_key": lot.bench_key,
+                    "geometry": lot.geometry,
                 }
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):

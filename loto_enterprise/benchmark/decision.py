@@ -69,6 +69,7 @@ from loto_enterprise.benchmark.hit_target import (
     clamp_bench_hit_target,
     game_hit_target,
 )
+from loto_enterprise.core.lotteries import foreign_bench_max_num, lottery_by_bench_key
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,9 @@ KNOWN_GAME_MAX_NUM = {
     "joker_urna1": 45,
     "joker_urna2": 20,
 }
+# Jocurile din alte țări: universul vine din registru, ca decizia lor să aibă
+# tot referința hipergeometrică, nu pe cea empirică `random`.
+KNOWN_GAME_MAX_NUM.update(foreign_bench_max_num())
 
 # O metoda a carei selectie top-K cade in interiorul unui grup de scoruri EGALE
 # in cel putin aceasta fractie din blocurile evaluate nu alege pool-ul dupa scor,
@@ -1363,7 +1367,10 @@ def update_best_methods_with_auto_pilot(
     best_methods_path: str = "best_methods.json",
     folds_csv_path: str = "bench_results/folds.csv",
 ) -> dict:
-    """Read folds.csv, run decision algo, write `auto_pilot_per_pool` into best_methods.json."""
+    """Read folds.csv, run decision algo, write `auto_pilot_per_pool` into best_methods.json.
+
+    Lucrează pe fișierul dat: România `best_methods.json`, altă țară
+    `decisions/<CC>/best_methods.json` cu folds-ul din directorul ei."""
     bm_path = Path(best_methods_path)
     if not bm_path.exists():
         raise FileNotFoundError(f"{best_methods_path} not found")
@@ -1385,7 +1392,10 @@ def update_best_methods_with_auto_pilot(
             pick_n = int(gd.get("pick_n") or draw_n)
             if gk in GAME_DRAW_PICK:
                 draw_n, pick_n = GAME_DRAW_PICK[gk]
-            if gk == "joker_urna2":
+            _lot = lottery_by_bench_key(gk)
+            if gk == "joker_urna2" or (
+                _lot is not None and _lot.bench_key_urna2 == gk
+            ):
                 pool_range = [pick_n]
             else:
                 # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14

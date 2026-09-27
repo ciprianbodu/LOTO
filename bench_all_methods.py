@@ -24,6 +24,13 @@ Usage
     python bench_all_methods.py --percentiles 10,30,50,70,100
     python bench_all_methods.py --methods random,frequency
     python bench_all_methods.py --block-size 50               # walk-forward più fine
+    python bench_all_methods.py --country DE                  # altă țară (registru)
+
+`--country` (implicit RO) alege țara. România rulează exact ca înainte
+(`discover_games`, `bench_results/`, `best_methods.json`). Altă țară ia jocurile
+din registrul `core.lotteries`, scrie în `bench_results/countries/<CC>/` și în
+`decisions/<CC>/best_methods.json` (cu `_meta.country`), iar o rulare străină
+care ar ajunge pe căile românești este refuzată.
 """
 
 from __future__ import annotations
@@ -59,7 +66,11 @@ from loto_enterprise.benchmark.reporting import (
     render_per_game,
     render_regressive_table,
 )
-from loto_enterprise.benchmark.runner import discover_games, run_benchmark
+from loto_enterprise.benchmark.runner import (
+    discover_games,
+    registry_games,
+    run_benchmark,
+)
 from runtime_paths import BENCH_LOG_FILE
 
 
@@ -103,6 +114,55 @@ except Exception as _exc:  # noqa: BLE001
 QUICK_METHODS = ["random", "frequency"]
 
 
+def _ro_protected_paths() -> tuple[set[Path], set[Path]]:
+    """Căile românești (relative la directorul curent ȘI la rădăcina proiectului)
+    pe care o rulare străină nu are voie să scrie."""
+    from loto_enterprise.core.lotteries import (
+        RO,
+        bench_out_dir_for,
+        decision_path_for,
+    )
+
+    outs = {Path("bench_results").resolve(), bench_out_dir_for(RO).resolve()}
+    decisions = {Path("best_methods.json").resolve(), decision_path_for(RO).resolve()}
+    return outs, decisions
+
+
+def resolve_bench_paths(
+    country: str | None, out: str | None, decision: str | None
+) -> tuple[str, str, str]:
+    """(țara, directorul de ieșire, fișierul de decizie) pentru o rulare.
+
+    România: implicit exact `bench_results` și `best_methods.json` (relative,
+    ca înainte). Altă țară: implicit `bench_results/countries/<CC>/` și
+    `decisions/<CC>/best_methods.json`; dacă oricare ar ajunge pe o cale
+    românească (inclusiv printr-un `--out`/`--decision` explicit) → ValueError.
+    O țară necunoscută → `UnknownLotteryError` (niciodată fallback pe RO)."""
+    from loto_enterprise.core.lotteries import (
+        RO,
+        bench_out_dir_for,
+        decision_path_for,
+        normalize_country,
+    )
+
+    cc = normalize_country(country or RO)
+    if cc == RO:
+        return cc, out or "bench_results", decision or "best_methods.json"
+    out_s = str(out) if out else str(bench_out_dir_for(cc))
+    dec_s = str(decision) if decision else str(decision_path_for(cc))
+    ro_outs, ro_decisions = _ro_protected_paths()
+    if Path(out_s).resolve() in ro_outs:
+        raise ValueError(
+            f"{cc}: directorul de ieșire {out_s} este cel românesc — refuz "
+            "(folds.csv/report.json românești ar fi suprascrise)."
+        )
+    if Path(dec_s).resolve() in ro_decisions:
+        raise ValueError(
+            f"{cc}: fișierul de decizie {dec_s} este cel românesc — refuz."
+        )
+    return cc, out_s, dec_s
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Benchmark regresiv multi-model pentru predicție LOTO"
@@ -112,7 +172,23 @@ def main() -> int:
         default=None,
         help="Folder cu CSV-uri istorice (default: auto-detect)",
     )
-    parser.add_argument("--out", default="bench_results")
+    parser.add_argument(
+        "--country",
+        default="RO",
+        help="Țara (cod ISO din registru); implicit RO = comportamentul de dinainte",
+    )
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Director de ieșire (implicit bench_results; altă țară: "
+        "bench_results/countries/<CC>)",
+    )
+    parser.add_argument(
+        "--decision",
+        default=None,
+        help="Fișierul de decizie (implicit best_methods.json; altă țară: "
+        "decisions/<CC>/best_methods.json)",
+    )
     parser.add_argument(
         "--methods",
         default=None,
@@ -171,6 +247,14 @@ def main() -> int:
         "de producție cu low_confidence/frequency peste tot.",
     )
     args = parser.parse_args()
+    try:
+        country, args.out, decision_file = resolve_bench_paths(
+            args.country, args.out, args.decision
+        )
+    except ValueError as exc:
+        print(f"[bench] {exc}", file=sys.stderr)
+        return 2
+    is_foreign = country != "RO"
 
     # Benchmark exclusiv CPU → un singur log.
     _log_name = str(BENCH_LOG_FILE)
@@ -233,7 +317,11 @@ def main() -> int:
         )
     console.print()
 
-    games = discover_games(args.istoric)
+    games = (
+        registry_games(country, args.istoric)
+        if is_foreign
+        else discover_games(args.istoric)
+    )
     # `active` este uniunea tuturor jocurilor. În producție rulăm numai lista
     # `per_game` relevantă (+ baseline-urile structurale adăugate de resolver),
     # fiindcă decizia și UI-ul ignoră oricum restul uniunii pentru acel joc.
@@ -364,6 +452,9 @@ def main() -> int:
             "curated": dict(CURATION_INFO),
             "n_folds_total": report.get("n_folds_total", 0),
             "blacklist_rule": "numere absente din ultimele 50-200 extrageri (semnal independent de scorer)",
+            # Numai în afara României (fișierul românesc rămâne ca înainte):
+            # producția citește decizia unei țări doar dacă _meta.country = țara.
+            **({"country": country} if is_foreign else {}),
         },
         "games": {
             gk: {
@@ -437,7 +528,8 @@ def main() -> int:
     else:
         from ui_shared import atomic_write_json
 
-        atomic_write_json("best_methods.json", best)  # atomic: tmp+fsync+os.replace
+        Path(decision_file).parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(decision_file, best)  # atomic: tmp+fsync+os.replace
 
         # Stamp CSV signatures so freshness detection knows when cache is stale
         try:
@@ -445,7 +537,15 @@ def main() -> int:
                 write_signatures_to_best_methods,
             )
 
-            write_signatures_to_best_methods()
+            if is_foreign:
+                # Semnăturile CSV-urilor efectiv folosite (registru sau --istoric).
+                write_signatures_to_best_methods(
+                    decision_file,
+                    csv_map={g.key: [g.csv_path] for g in games},
+                    cols_map={g.key: list(g.cols) for g in games},
+                )
+            else:
+                write_signatures_to_best_methods(decision_file)
         except Exception as _e:
             logging.warning(f"[freshness] failed to stamp signatures: {_e}")
 
@@ -461,7 +561,14 @@ def main() -> int:
                 update_best_methods_with_auto_pilot,
             )
 
-            update_best_methods_with_auto_pilot(folds_csv_path=_folds_now)
+            if is_foreign:
+                update_best_methods_with_auto_pilot(
+                    best_methods_path=decision_file, folds_csv_path=_folds_now
+                )
+            else:
+                update_best_methods_with_auto_pilot(
+                    best_methods_path=decision_file, folds_csv_path=_folds_now
+                )
             logging.info("[auto-pilot] decizie construita din %s", _folds_now)
         except Exception as _e:
             logging.warning(f"[auto-pilot] failed to build decision matrix: {_e}")
@@ -528,7 +635,7 @@ def main() -> int:
         )
     else:
         console.print(
-            f"  • [cyan]best_methods.json[/cyan]  (consumed by method_selector)"
+            f"  • [cyan]{decision_file}[/cyan]  (consumed by method_selector)"
         )
     console.print()
     return 0

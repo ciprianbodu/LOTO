@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import logging
 
+from loto_enterprise.core.lotteries import (
+    foreign_bench_draw_pick,
+    foreign_min_hit_target,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +45,9 @@ def clamp_bench_hit_target(value, *, default: int = 3) -> int:
 # Ținta globală 3 nu coboară 5/40 sub 4; ținta globală 4 îl lasă tot pe 4.
 # Urna 2 (top-1) rămâne tratată separat de decizie.
 GAME_MIN_HIT_TARGET: dict[str, int] = {"loto_5_40": 4}
+# Jocurile din alte țări: din registru (azi toate cu 3 numere premiate, deci
+# nicio intrare; un joc cu prag mai mare apare aici fără cod nou).
+GAME_MIN_HIT_TARGET.update(foreign_min_hit_target())
 
 
 def game_hit_target(game_key: str, global_target) -> int:
@@ -57,3 +65,7 @@ GAME_DRAW_PICK: dict[str, tuple[int, int]] = {
     "joker_urna1": (5, 5),
     "joker_urna2": (1, 1),
 }
+# Cheile de bench ale jocurilor din alte țări, generate din registru (sursa
+# unică a geometriei). Tabelul românesc de mai sus rămâne literal; testul de
+# consistență al registrului verifică că cele două spun același lucru.
+GAME_DRAW_PICK.update(foreign_bench_draw_pick())

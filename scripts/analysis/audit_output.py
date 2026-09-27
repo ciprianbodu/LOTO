@@ -217,6 +217,8 @@ def audit_bundle(bundle):
                 restrict_base_max=opts["restrict_base_max"],
                 restrict_base_min=opts["restrict_base_min"],
                 max_consecutive_run=opts["max_consecutive_run"],
+                game_key=opts.get("game_key"),
+                country=opts.get("country"),
             )
             # Adâncimea intră în nume ca `float(...).hex()`, ca în
             # `run_honest_walk_forward`; cu `30` simplu cheia nu se potrivea niciodată.
@@ -226,6 +228,8 @@ def audit_bundle(bundle):
                 len(pool),
                 float(app_ui.WF_DEPTH_PERCENT).hex(),
                 sig,
+                game_key=opts.get("game_key"),
+                country=opts.get("country"),
             )
             item = {
                 "game": game,

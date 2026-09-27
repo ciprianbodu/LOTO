@@ -11,6 +11,7 @@ import pandas as pd
 from nicegui import ui
 
 from ui_runtime import *
+from loto_enterprise.core import lotteries as _LOT
 from ui_shared import PROJECT_ROOT, atomic_write_text, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
@@ -197,6 +198,10 @@ def _render_stages(audit: dict) -> None:
 
 
 def _render_cost(game: str, data: dict) -> None:
+    spec = _game_spec_for(game, data)
+    if not spec.is_romanian:
+        _render_cost_foreign(game, data, spec)
+        return
     gk = _game_label_for(game)
     price = PRICES.get(gk, 8.0)
     # Numere pe BILET (5/40 extrage 6, dar varianta are 5).
@@ -246,12 +251,12 @@ def _render_cost(game: str, data: dict) -> None:
     else:
         ui.markdown(
             f"💡 **Cost la agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
-            f"{game.upper()}. **{_full_lbl}** (toate combinațiile, exhaustiv)."
+            f"{_game_title(game)}. **{_full_lbl}** (toate combinațiile, exhaustiv)."
         ).classes("text-info")
 
     variants = data.get("variants") or []
     if variants:
-        n_simple = min(10, len(variants))
+        n_simple = min(_simple_variants_count(), len(variants))
         # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
         # schemele oficiale de mai sus; fallback pe cea cerută din setări.
         _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
@@ -283,13 +288,48 @@ def _render_cost(game: str, data: dict) -> None:
         ).classes("text-caption")
         if n_simple < len(variants):
             ui.label(
-                "Primele 10 variante sunt doar un subset; garanția afișată se referă la întregul wheel."
+                f"Primele {n_simple} variante sunt doar un subset; garanția afișată se referă la întregul wheel."
             ).classes("text-caption text-grey")
         for line in _wheel_probability_lines(game, data):
             ui.label(line).classes("text-caption")
 
         ui.label(
             f"Estimare la tariful standard {price:g} lei/variantă; tragerile speciale pot avea alt tarif. Taxa fizică pe bilet nu este inclusă."
+        ).classes("text-caption text-grey")
+
+
+def _render_cost_foreign(game: str, data: dict, spec) -> None:
+    """Costul unui joc din altă țară: tarif și monedă din registru; fără scheme
+    reduse (sunt ale Loteriei Române); tarif neverificat → fără cifre."""
+    pick = spec.pick_n
+    pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    full_vars = math.comb(pool_used, pick) if pool_used >= pick else 0
+    variants = data.get("variants") or []
+    if spec.price is None:
+        ui.markdown(
+            f"💡 **{spec.display}: tarif necunoscut** — costul nu se afișează. "
+            f"Sistem complet C({pool_used},{pick}) = {full_vars} var.; "
+            f"wheel-ul nostru: {len(variants)} var."
+        ).classes("text-info")
+    else:
+        cur = spec.currency
+        ui.markdown(
+            f"💡 **Cost {spec.display}:** sistem complet C({pool_used},{pick}) = "
+            f"{full_vars} var. ≈ {full_vars * spec.price:,.2f} {cur} în variante"
+            + (
+                f" | **Wheel-ul nostru:** {len(variants)} var. ≈ "
+                f"{len(variants) * spec.price:,.2f} {cur} în variante"
+                if variants
+                else ""
+            )
+            + "."
+        ).classes("text-info")
+    for line in _wheel_probability_lines(game, data):
+        ui.label(line).classes("text-caption")
+    if spec.price is not None:
+        ui.label(
+            f"Estimare la tariful {_fmt_price(spec)} ({spec.price_source}); "
+            "taxele pe bilet nu sunt incluse."
         ).classes("text-caption text-grey")
 
 
@@ -339,6 +379,10 @@ def _hypergeo_params(game: str) -> tuple[int, int] | None:
     "joker_urna1"). Urna 2 Joker are baseline exact separat în
     `_random_rate_hypergeo` (top-1 = 1/20)."""
     g = str(game).lower()
+    if "urna2" not in g:
+        lot = _LOT.lottery_by_id(str(game)) or _LOT.lottery_by_bench_key(str(game))
+        if lot is not None and not lot.is_romanian:
+            return (lot.draw_n, lot.max_n)
     if "6" in g and "49" in g:
         return (6, 49)
     if "5" in g and "40" in g:
@@ -352,6 +396,9 @@ def _hypergeo_params(game: str) -> tuple[int, int] | None:
 
 def _ticket_pick(game: str) -> int:
     """Numere pe BILET: 6 la 6/49, 5 la 5/40 și Joker (Urna 1)."""
+    lot = _LOT.lottery_by_id(str(game)) or _LOT.lottery_by_bench_key(str(game))
+    if lot is not None and not lot.is_romanian:
+        return lot.pick_n
     g = str(game).lower()
     return 6 if ("6" in g and "49" in g) else 5
 
@@ -745,7 +792,12 @@ def _build_report() -> str:
         out.append(f"\n{'#' * 72}\nFIȘIER: {fn}\n{'#' * 72}")
         for g, raw_data in _ordered_game_items(outs):
             d = _primary_pool_data(raw_data)
-            out.append(f"\n=================  JOC: {g.upper()}  =================")
+            out.append(f"\n=================  JOC: {_game_title(g, d)}  =================")
+            _sp = _game_spec_for(g, d)
+            if not _sp.is_romanian:
+                out.append(f"  Tarif: {_fmt_price(_sp)}")
+                if _sp.training_only:
+                    out.append(f"  ({_training_only_note(_sp)})")
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
             wf = _wf_summary(flat, d)
@@ -822,52 +874,104 @@ def _copy_feedback(e) -> None:
         )
 
 
+def _full_ticket_summary(t: dict, game: str) -> str:
+    """Linia de sub variante: câte, acoperirea garanției și costul."""
+    from loto_enterprise.core.ro_text import count
+
+    n = len(t["variants"])
+    _lot = _LOT.lottery_by_id(str(game))
+    if _lot is not None and not _lot.is_romanian:
+        cost_txt = (
+            "tarif necunoscut"
+            if _lot.price is None
+            else f"≈ {n * _lot.price:.2f} {_lot.currency}"
+        )
+    else:
+        cost_txt = f"≈ {n * PRICES.get(game, 0.0):.0f} Lei"
+    slip = "biletului" if t["tickets"] == 1 else "biletelor"
+    text = (
+        f"{n}/{count(t['requested'], 'variante')} ({t['tickets']} × {t['per_ticket']}) · "
+        f"acoperire garanție {t['guarantee']} pe cele {count(len(t['pool']), 'numere')} "
+        f"ale {slip}: {t['coverage']:.2f}%"
+    )
+    upper = t.get("upper_coverage")
+    if upper:
+        level, pct = upper
+        text += (
+            f" · garanția e completă cu {count(t['guarantee_variants'], 'variante', 'variantă')}; "
+            f"cu toate cele {n}, grupele de {level} sunt acoperite {pct:.2f}%"
+        )
+    return text + f" · {cost_txt}"
+
+
+def _simple_variants_count() -> int:
+    """Variantele simple afișate (setarea din sidebar), 1..500; câmp gol -> 10."""
+    try:
+        n = int(round(float(SETTINGS.get("simple_variants_val"))))
+    except (TypeError, ValueError, OverflowError):
+        return 10
+    return max(1, min(500, n))
+
+
 def _show_full_ticket() -> None:
-    """Câte un bilet complet per joc (3/4/2 variante) din pool-ul afișat."""
-    from loto_enterprise.core.full_ticket import TICKET_VARIANTS, build_full_ticket
+    """Bilete complete per joc (1-10 bilete × 3/4/2 variante) din pool-ul afișat."""
+    from loto_enterprise.core.full_ticket import build_full_ticket, clamp_tickets
+    from loto_enterprise.core.lotteries import display_name
 
     res = STATE.get("results")
     if not isinstance(res, tuple) or len(res) != 2:
         ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
         return
     rb, _ = res
+    tickets = clamp_tickets(SETTINGS.get("full_ticket_count_val"))
     copy_lines: list[str] = []
     with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
-        ui.label("🎟️ Bilet complet (un bilet fizic pe joc)").classes("text-bold")
+        title = "un bilet fizic" if tickets == 1 else f"{tickets} bilete fizice"
+        ui.label(f"🎟️ Bilet complet ({title} pe joc)").classes("text-bold")
         ui.label(
             "Variantele se aleg din pool-ul afișat, potrivit automat după "
-            "clasamentul metodei când e prea mic sau prea mare pentru bilet. "
-            "Acoperirea e cea a acestor câteva variante, nu a wheel-ului "
-            "complet; nu e o șansă de câștig."
+            "clasamentul metodei când e prea mic sau prea mare pentru bilete. "
+            "Acoperirea e cea a acestor variante, nu a wheel-ului complet; "
+            "nu e o șansă de câștig."
         ).classes("text-caption")
-        for _fn, outs in rb:
-            for g, raw in _ordered_game_items(outs):
-                game = _game_label_for(str(g))
-                t = build_full_ticket(game, _primary_pool_data(raw))
-                ui.separator()
-                ui.label(game.upper()).classes("text-bold")
-                if t.get("error"):
-                    ui.label(f"⚠️ {t['error']}").classes("text-warning")
-                    continue
-                if t.get("note"):
-                    ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
-                if copy_lines:
-                    copy_lines.append("")
-                copy_lines.append(game.upper())
-                for i, v in enumerate(t["variants"], 1):
-                    if t["joker"] is not None:
-                        txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
-                    else:
-                        txt = ", ".join(str(n) for n in v)
-                    ui.label(f"V{i}: {txt}").classes("font-mono")
-                    copy_lines.append(f"V{i}: {txt}")
-                n = len(t["variants"])
-                cost = n * PRICES.get(game, 0.0)
-                ui.label(
-                    f"{n}/{TICKET_VARIANTS[game]} variante · acoperire garanție "
-                    f"{t['guarantee']} pe cele {len(t['pool'])} numere ale "
-                    f"biletului: {t['coverage']:.2f}% · ≈ {cost:.0f} Lei"
-                ).classes("text-caption")
+        # Nu ui.scroll_area: NiceGUI îi fixează înălțimea la 16rem (256px).
+        with ui.column().classes("w-full no-wrap gap-1").style(
+            "max-height:65vh; overflow-y:auto"
+        ):
+            for _fn, outs in rb:
+                for g, raw in _ordered_game_items(outs):
+                    _data = _primary_pool_data(raw)
+                    _spec = _game_spec_for(g, _data)
+                    # România: eticheta de dinainte; străin: id-ul din registru.
+                    game = _game_label_for(str(g)) if _spec.is_romanian else _spec.game_id
+                    t = build_full_ticket(game, _data, tickets)
+                    lottery = display_name(game)  # = _game_title(g)
+                    ui.separator()
+                    ui.label(lottery).classes("text-bold")
+                    if _spec.training_only:
+                        ui.label(f"ℹ️ {_training_only_note(_spec)}").classes(
+                            "text-caption text-warning"
+                        )
+                    if t.get("error"):
+                        ui.label(f"⚠️ {t['error']}").classes("text-warning")
+                        continue
+                    if t.get("note"):
+                        ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
+                    if copy_lines:
+                        copy_lines.append("")
+                    copy_lines.append(lottery)
+                    for i, v in enumerate(t["variants"], 1):
+                        if tickets > 1 and (i - 1) % t["per_ticket"] == 0:
+                            slip = f"Biletul {(i - 1) // t['per_ticket'] + 1} · {lottery}"
+                            ui.label(slip).classes("text-caption text-bold q-mt-xs")
+                            copy_lines.append(slip)
+                        if t["joker"] is not None:
+                            txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
+                        else:
+                            txt = ", ".join(str(n) for n in v)
+                        ui.label(f"V{i}: {txt}").classes("font-mono")
+                        copy_lines.append(f"V{i}: {txt}")
+                    ui.label(_full_ticket_summary(t, game)).classes("text-caption")
         copy_text = "\n".join(copy_lines)
         with ui.row().classes("w-full justify-end gap-2"):
             copy_btn = ui.button("📋 Copiază numerele").props(
@@ -939,6 +1043,16 @@ def _render_pool_body(
 
     Walk-forward-ul NU se randează aici: statisticile lui apar o singură dată, în
     „📊 Analiză & Clasament" (`_render_analysis_menu` → `_render_hits_4plus`)."""
+    _lot_key = _LOT.lottery_by_id(str(game))
+    if _lot_key is not None and not _lot_key.is_romanian:
+        # Cheie străină: ecoul worker-ului trebuie să confirme jocul.
+        if str(data.get("game_id") or "") != _lot_key.game_id:
+            ui.label(
+                "⚠️ Worker vechi / nepotrivire țară: rezultatul nu confirmă jocul "
+                f"{_lot_key.display}."
+            ).classes("text-caption text-negative")
+        elif _lot_key.training_only:
+            ui.label(f"ℹ️ {_TRAINING_ONLY_NOTE}.").classes("text-caption text-warning")
     pool = data.get("hard_core") or []
     stats = data.get("hard_core_stats") or {}
     eff = data.get("pool_size")
@@ -1136,7 +1250,12 @@ def _render_pool_body(
         ui.html(
             render_html_safe(t"🎯 Metodă folosită la generare: ") + "<br>".join(parts)
         ).classes("text-caption")
-        _gk_pool = _LABEL_TO_FOLDS_GAME.get(_game_label_for(game), "")
+        _spec_p = _game_spec_for(game, data)
+        _gk_pool = (
+            _LABEL_TO_FOLDS_GAME.get(_game_label_for(game), "")
+            if _spec_p.is_romanian
+            else _spec_p.bench_key
+        )
         if _gk_pool:
             _dec_p = _decision_entry(
                 _gk_pool, int(eff or SETTINGS.get("pool_size_val") or 10)
@@ -1201,7 +1320,8 @@ def _render_pool_body(
         with ui.expansion(f"Variante simple ({len(variants)})", value=False).classes(
             "w-full"
         ):
-            shown = variants if show_all else variants[:10]
+            n_show = _simple_variants_count()
+            shown = variants if show_all else variants[:n_show]
             for i, v in enumerate(shown, 1):
                 if is_jk and len(v) == 6:
                     nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
@@ -1213,7 +1333,7 @@ def _render_pool_body(
                         t"<span style='color:#e5e7eb'>{nums}</span>"
                     )
                 ).classes("font-mono text-sm")
-            if len(variants) > 10:
+            if len(variants) > n_show:
 
                 def _toggle(k=skey):
                     STATE["show_all"][k] = not STATE["show_all"].get(k, False)

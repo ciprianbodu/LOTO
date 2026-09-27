@@ -70,5 +70,7 @@ uploaded_data/
 .wf_cache/
 raport_complet.txt
 best_methods.json
+# Deciziile de bench ale celorlalte țări (decisions/<CC>/best_methods.json)
+decisions/
 mail_config.json
 bench_results_gpu/

@@ -28,6 +28,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from loto_enterprise.core.lotteries import GEOMETRIES
+
 logger = logging.getLogger(__name__)
 
 # Locația fișierului de stare. Rădăcina proiectului = trei niveluri mai sus față
@@ -62,6 +64,9 @@ _GAME_GEOMETRY = {
     "5/40": (6, 40),  # 6 numere extrase; hiturile se numără pe toate 6
     "joker": (5, 45),
 }
+# Geometriile celorlalte țări (6/45, 5/50), din registru.
+for _name, _geo in GEOMETRIES.items():
+    _GAME_GEOMETRY.setdefault(_name, (_geo.draw_n, _geo.max_n))
 
 
 def _baseline_random_hits(game_type: str, pool_size: int) -> float:
@@ -71,8 +76,11 @@ def _baseline_random_hits(game_type: str, pool_size: int) -> float:
     return draw_n * pool_size / max_n
 
 
-def _state_key(game_type: str, pool_size: int) -> str:
-    return f"{game_type}_{pool_size}"
+def _state_key(game_type: str, pool_size: int, key_prefix: str = "") -> str:
+    """`6/49_12` pentru România; `DE_de_lotto_6/49_12` pentru alt joc (prefixul
+    vine din registru, `Lottery.history_key_prefix`), ca jocurile de aceeași
+    geometrie să nu-și suprascrie starea."""
+    return f"{key_prefix}{game_type}_{pool_size}"
 
 
 def _empty_entry() -> dict:
@@ -91,7 +99,9 @@ def _empty_entry() -> dict:
     }
 
 
-def load_adaptive_state(game_type: str, pool_size: int) -> dict:
+def load_adaptive_state(
+    game_type: str, pool_size: int, *, key_prefix: str = ""
+) -> dict:
     """Încarcă starea adaptivă pentru combinația (game_type, pool_size)."""
     if not _STATE_FILE.exists():
         return _empty_entry()
@@ -101,7 +111,7 @@ def load_adaptive_state(game_type: str, pool_size: int) -> dict:
         logger.warning(f"[ADAPTIVE] Nu pot citi {_STATE_FILE}: {e}. Pornesc gol.")
         return _empty_entry()
 
-    entry = raw.get(_state_key(game_type, pool_size))
+    entry = raw.get(_state_key(game_type, pool_size, key_prefix))
     if not entry:
         return _empty_entry()
 
@@ -111,7 +121,9 @@ def load_adaptive_state(game_type: str, pool_size: int) -> dict:
     return base
 
 
-def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
+def save_adaptive_state(
+    game_type: str, pool_size: int, entry: dict, *, key_prefix: str = ""
+) -> None:
     """Salvează starea adaptivă pe disc. Read-modify-write atomic + lock advisory
     cross-proces (worker vs UI) ca să nu se piardă update-uri pe alte chei."""
     serializable = {
@@ -134,7 +146,7 @@ def save_adaptive_state(game_type: str, pool_size: int, entry: dict) -> None:
                         f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie."
                     )
                     raw = {}
-            raw[_state_key(game_type, pool_size)] = serializable
+            raw[_state_key(game_type, pool_size, key_prefix)] = serializable
             atomic_write_json(_STATE_FILE, raw)  # atomic: tmp+fsync+os.replace
     except Exception as e:
         logger.error(f"[ADAPTIVE] Nu pot scrie {_STATE_FILE}: {e}")
@@ -266,6 +278,8 @@ def record_predicted_pool(
     pool: list[int],
     data_rows: int = 0,
     pool_date: str | None = None,
+    *,
+    key_prefix: str = "",
 ) -> None:
     """Marchează pool-ul curent prezis ca fiind cel asupra căruia se va aplica
     feedback la următoarea extragere reală.
@@ -273,18 +287,18 @@ def record_predicted_pool(
     data_rows: numărul de rânduri din CSV la momentul predicției (folosit pentru
     a detecta extrageri noi la rularea următoare).
     """
-    state = load_adaptive_state(game_type, pool_size)
+    state = load_adaptive_state(game_type, pool_size, key_prefix=key_prefix)
     state["last_pool"] = [int(n) for n in pool]
     state["last_pool_date"] = pool_date or datetime.now().isoformat(timespec="seconds")
     state["last_data_rows"] = int(data_rows)
-    save_adaptive_state(game_type, pool_size, state)
+    save_adaptive_state(game_type, pool_size, state, key_prefix=key_prefix)
 
 
-def get_state_summary(game_type: str, pool_size: int) -> dict:
+def get_state_summary(game_type: str, pool_size: int, *, key_prefix: str = "") -> dict:
     """
     Sumar pentru UI: ultimele evenimente, ajustări active, mod regim.
     """
-    state = load_adaptive_state(game_type, pool_size)
+    state = load_adaptive_state(game_type, pool_size, key_prefix=key_prefix)
     history = state.get("history", [])
     last = history[-1] if history else None
     regime_state = state.get("regime_state", {})

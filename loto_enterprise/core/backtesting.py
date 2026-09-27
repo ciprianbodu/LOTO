@@ -93,8 +93,13 @@ def _wf_report_progress(progress_cb, done: int, total: int) -> None:
         pass
 
 
-def _wf_worker_init(df_pickle: bytes, game_type: str, draws_tuples, dates) -> None:
-    """Initializer ProcessPool: încarcă DataFrame + extrageri o singură dată per proces."""
+def _wf_worker_init(
+    df_pickle: bytes, game_type: str, draws_tuples, dates, identity: dict | None = None
+) -> None:
+    """Initializer ProcessPool: încarcă DataFrame + extrageri o singură dată per proces.
+
+    `identity` = {"game_key": ..., "country": ...} (pe NUME, ca setările pașilor);
+    None/valori None = România fără identitate, comportamentul de dinainte."""
     import os
     import pickle
 
@@ -111,6 +116,8 @@ def _wf_worker_init(df_pickle: bytes, game_type: str, draws_tuples, dates) -> No
         "game_type": game_type,
         "draws": [list(t) for t in draws_tuples],
         "dates": dates,
+        "game_key": (identity or {}).get("game_key"),
+        "country": (identity or {}).get("country"),
     }
 
 
@@ -132,13 +139,19 @@ def _retroactive_step_stateless(
     adaptive_mode: str = "normal",
     adaptive_event: str | None = None,
     max_consecutive_run: int = 0,
+    *,
+    game_key: str | None = None,
+    country: str | None = None,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward — un singur loc pentru "un pas", folosit atât de
     calea paralelă/stateless (parametrii de stare rămân la implicit) cât și
     de calea secvențială cu adaptive feedback (apelantul
     calculează starea între pași și o pasează aici). Înainte, calea cu stare
     reimplementa manual acest bloc — o schimbare aici trebuia făcută în două
-    locuri, fără nimic care să garanteze că rămân sincronizate."""
+    locuri, fără nimic care să garanteze că rămân sincronizate.
+
+    `game_key`/`country`: identitatea jocului (decizia țării), pe nume; None =
+    România dedusă din geometrie, exact ca înainte."""
     if sim_idx >= len(draws) or sim_idx < 1:
         return None
     cutoffs = df.attrs.get("training_cutoffs")
@@ -153,7 +166,10 @@ def _retroactive_step_stateless(
     sim_date = dates[prefix_end - 1] if prefix_end > 0 else "Start"
 
     def _run_pipeline():
-        eng = LotoEngine(game_type)
+        if game_key is None and country is None:
+            eng = LotoEngine(game_type)
+        else:
+            eng = LotoEngine(game_type, game_key=game_key, country=country)
         eng.data = historical_df
         eng._build_draw_matrix()
         eng._adaptive_mode = adaptive_mode
@@ -202,7 +218,19 @@ def _retroactive_step_stateless(
         wheel_coverage=coverage_from_context(ctx),
         hard_core=list(engine.hard_core),
         joker_hit=_joker_hit(df, sim_idx, lines) if game_type == "joker" else None,
+        game_key=engine.game_key,
+        country=engine.country,
+        bench_method=_step_bench_method(engine),
     )
+
+
+def _step_bench_method(engine) -> str | None:
+    """Metoda pe care a scorat-o efectiv pasul (auditul motorului), sau None."""
+    try:
+        info = (engine.audit.get("bench_winner") or {}).get(engine._bench_game_key())
+        return (info or {}).get("method")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _wf_worker_step(args: dict):
@@ -222,6 +250,8 @@ def _wf_worker_step(args: dict):
             shared["dates"],
             shared["game_type"],
             **args,
+            game_key=shared.get("game_key"),
+            country=shared.get("country"),
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("[BACKTEST] WF worker sim_idx=%s: %s", args.get("sim_idx"), exc)
@@ -233,6 +263,8 @@ _GAME_PICK_N = {
     "6/49": 6,
     "5/40": 5,
     "joker": 5,
+    "6/45": 6,
+    "5/50": 5,
 }
 
 
@@ -340,6 +372,11 @@ class RetroactivePrediction:
     hard_core: list[int] | None = None
     # Joker: numarul din urna 2 de pe bilete a iesit? None = alt joc sau necunoscut.
     joker_hit: bool | None = None
+    # Identitatea motorului pasului (None = România fără identitate) și metoda
+    # pe care a scorat-o efectiv; observabile și din procesele WF paralele.
+    game_key: str | None = None
+    country: str | None = None
+    bench_method: str | None = None
 
 
 def _joker_hit(df, sim_idx: int, lines) -> bool | None:
@@ -363,14 +400,31 @@ class LotoBacktester:
     Evaluează performanța variantelor generate pe ultimele N% din extragerile istorice.
     """
 
-    def __init__(self, data_input: str | pd.DataFrame, game_type: str = "6/49"):
+    def __init__(
+        self,
+        data_input: str | pd.DataFrame,
+        game_type: str = "6/49",
+        *,
+        game_key: str | None = None,
+        country: str | None = None,
+    ):
         """
         Inițializează backtester-ul.
 
         Args:
             data_input: Calea către fișierul CSV sau un DataFrame deja încărcat
-            game_type: Tipul jocului ("6/49", "5/40", "joker")
+            game_type: GEOMETRIA ("6/49", "5/40", "joker", "6/45", "5/50")
+            game_key/country: identitatea jocului (cheia de bench, țara ISO).
+                Lipsă sau România = pașii rulează exact ca înainte (motor fără
+                identitate); alt joc = fiecare pas primește identitatea pe nume
+                și citește decizia țării. Identitate greșită = eroare imediată.
         """
+        from loto_engine import resolve_engine_lottery
+
+        lot = resolve_engine_lottery(game_type, game_key=game_key, country=country)
+        foreign = lot is not None and not lot.is_romanian
+        self.game_key: str | None = lot.bench_key if foreign else None
+        self.country: str | None = lot.country if foreign else None
         self.data_input = data_input
         self.game_type = game_type
         self.params = self._get_game_params(game_type)
@@ -408,6 +462,17 @@ class LotoBacktester:
             },
             "joker": {
                 "max_n": 45,
+                "draw_n": 5,
+                "num_cols": ["n1", "n2", "n3", "n4", "n5"],
+            },
+            "6/45": {
+                "max_n": 45,
+                "draw_n": 6,
+                "num_cols": ["n1", "n2", "n3", "n4", "n5", "n6"],
+            },
+            "5/50": {
+                # EuroMillions: stelele (s1, s2) nu intră în hituri.
+                "max_n": 50,
                 "draw_n": 5,
                 "num_cols": ["n1", "n2", "n3", "n4", "n5"],
             },
@@ -909,6 +974,8 @@ class LotoBacktester:
                     self.dates,
                     self.game_type,
                     **a,
+                    game_key=self.game_key,
+                    country=self.country,
                 )
 
             try:
@@ -986,7 +1053,13 @@ class LotoBacktester:
                     with ProcessPoolExecutor(
                         max_workers=n_workers,
                         initializer=_wf_worker_init,
-                        initargs=(df_pickle, self.game_type, draws_tuples, self.dates),
+                        initargs=(
+                            df_pickle,
+                            self.game_type,
+                            draws_tuples,
+                            self.dates,
+                            {"game_key": self.game_key, "country": self.country},
+                        ),
                     ) as ex:
                         for batch in batched(remaining, batch_size):
                             if should_cancel is not None and done_count > 0:
@@ -1179,6 +1252,8 @@ class LotoBacktester:
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None
                     ),
+                    game_key=self.game_key,
+                    country=self.country,
                 )
                 if retro_pred is None:
                     logger.warning(

@@ -69,6 +69,47 @@ GAMES_CSV_MAP = {
 }
 
 
+# Coloanele hash-uite per cheie românească (neschimbate).
+GAMES_COLS_MAP = {
+    "loto_6_49": ["n1", "n2", "n3", "n4", "n5", "n6"],
+    "loto_5_40": ["n1", "n2", "n3", "n4", "n5", "n6"],
+    "joker_urna1": ["n1", "n2", "n3", "n4", "n5"],
+    "joker_urna2": ["joker"],
+}
+
+
+def country_freshness_inputs(
+    country,
+) -> tuple[str, dict[str, list[str]], dict[str, list[str]] | None]:
+    """(fișier de decizie, csv_map, cols_map) pentru țara dată.
+
+    România: exact `best_methods.json` + tabelele vechi de mai sus. Celelalte
+    țări: `decisions/<CC>/best_methods.json` și CSV-urile din registru
+    (absolute, ca să nu depindă de directorul curent)."""
+    from loto_enterprise.core.lotteries import (
+        PROJECT_ROOT,
+        RO,
+        decision_path_for,
+        games_for_country,
+        normalize_country,
+    )
+
+    cc = normalize_country(country)
+    if cc == RO:
+        return "best_methods.json", GAMES_CSV_MAP, None
+    csv_map: dict[str, list[str]] = {}
+    cols_map: dict[str, list[str]] = {}
+    for lot in games_for_country(cc):
+        csv = str(PROJECT_ROOT / lot.csv)
+        csv_map[lot.bench_key] = [csv]
+        cols_map[lot.bench_key] = [f"n{i}" for i in range(1, lot.draw_n + 1)]
+        second = lot.geo.second
+        if lot.bench_key_urna2 and second is not None:
+            csv_map[lot.bench_key_urna2] = [csv]
+            cols_map[lot.bench_key_urna2] = list(second.columns)
+    return str(decision_path_for(cc)), csv_map, cols_map
+
+
 @dataclass
 class FreshnessReport:
     game_key: str
@@ -84,8 +125,10 @@ class FreshnessReport:
     )
 
 
-def _resolve_csv(game_key: str) -> Path | None:
-    for candidate in GAMES_CSV_MAP.get(game_key, []):
+def _resolve_csv(game_key: str, csv_map: dict | None = None) -> Path | None:
+    for candidate in (GAMES_CSV_MAP if csv_map is None else csv_map).get(
+        game_key, []
+    ):
         p = Path(candidate)
         if p.exists():
             return p
@@ -133,25 +176,39 @@ def compute_engine_signature() -> dict[str, str | int]:
     }
 
 
-def compute_csv_signature(game_key: str) -> tuple[str | None, str, int]:
+def compute_csv_signature(
+    game_key: str,
+    csv_map: dict | None = None,
+    cols_map: dict | None = None,
+) -> tuple[str | None, str, int]:
     """Return (csv_path, hash, n_rows). Path is None if CSV missing."""
-    p = _resolve_csv(game_key)
+    p = _resolve_csv(game_key, csv_map)
     if p is None:
         return None, "", 0
-    cols_map = {
-        "loto_6_49": ["n1", "n2", "n3", "n4", "n5", "n6"],
-        "loto_5_40": ["n1", "n2", "n3", "n4", "n5", "n6"],
-        "joker_urna1": ["n1", "n2", "n3", "n4", "n5"],
-        "joker_urna2": ["joker"],
-    }
-    h, n = _content_hash(p, cols_map.get(game_key))
+    cols = (GAMES_COLS_MAP if cols_map is None else cols_map).get(game_key)
+    h, n = _content_hash(p, cols)
     return str(p), h, n
+
+
+def _signature(gk, csv_map, cols_map):
+    # Apelul românesc rămâne `compute_csv_signature(gk)` (testele îl înlocuiesc
+    # cu funcții de un singur argument); tabelele explicite se transmit numai
+    # când diferă de cele românești.
+    if csv_map is GAMES_CSV_MAP and cols_map is None:
+        return compute_csv_signature(gk)
+    return compute_csv_signature(gk, csv_map, cols_map)
 
 
 def write_signatures_to_best_methods(
     best_methods_path: str = "best_methods.json",
+    csv_map: dict | None = None,
+    cols_map: dict | None = None,
 ) -> dict[str, dict]:
-    """Stamp the current CSV signatures into best_methods.json._meta.csv_signatures."""
+    """Stamp the current CSV signatures into best_methods.json._meta.csv_signatures.
+
+    `csv_map`/`cols_map` (implicit tabelele românești) aleg jocurile și
+    CSV-urile; o altă țară le primește din `country_freshness_inputs`."""
+    csv_map = GAMES_CSV_MAP if csv_map is None else csv_map
     bm = Path(best_methods_path)
     if not bm.exists():
         return {}
@@ -163,8 +220,8 @@ def write_signatures_to_best_methods(
     with file_lock(bm):
         cfg = json.loads(bm.read_text(encoding="utf-8"))
         sigs: dict[str, dict] = {}
-        for gk in GAMES_CSV_MAP:
-            path, h, n = compute_csv_signature(gk)
+        for gk in csv_map:
+            path, h, n = _signature(gk, csv_map, cols_map)
             sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
         cfg.setdefault("_meta", {})["csv_signatures"] = sigs
         cfg["_meta"]["engine_signature"] = compute_engine_signature()
@@ -174,12 +231,36 @@ def write_signatures_to_best_methods(
 
 def check_freshness(
     best_methods_path: str = "best_methods.json",
+    csv_map: dict | None = None,
+    cols_map: dict | None = None,
+    country: str | None = None,
 ) -> dict[str, FreshnessReport]:
-    """Compare current CSV signatures against the cached ones."""
+    """Compare current CSV signatures against the cached ones.
+
+    Cu `country` dat (altul decât RO), un fișier de decizie al cărui
+    `_meta.country` nu e acea țară se tratează ca LIPSĂ (full re-bench), exact
+    ca la citirea deciziei în producție."""
+    csv_map = GAMES_CSV_MAP if csv_map is None else csv_map
     bm = Path(best_methods_path)
     out: dict[str, FreshnessReport] = {}
-    if not bm.exists():
-        for gk in GAMES_CSV_MAP:
+    _foreign = bool(country) and str(country).strip().upper() != "RO"
+    _cfg = None
+    if bm.exists():
+        _cfg = json.loads(bm.read_text(encoding="utf-8"))
+        if _foreign:
+            _found = str(
+                (_cfg.get("_meta", {}) or {}).get("country") or ""
+            ).strip().upper()
+            if _found != str(country).strip().upper():
+                logger.warning(
+                    "[freshness] %s: _meta.country=%s, așteptat %s — tratat ca lipsă.",
+                    bm,
+                    _found or "lipsă",
+                    str(country).strip().upper(),
+                )
+                _cfg = None
+    if _cfg is None:
+        for gk in csv_map:
             out[gk] = FreshnessReport(
                 game_key=gk,
                 csv_path=None,
@@ -192,7 +273,7 @@ def check_freshness(
                 recommendation="full_rebench",
             )
         return out
-    cfg = json.loads(bm.read_text(encoding="utf-8"))
+    cfg = _cfg
     cached_sigs = cfg.get("_meta", {}).get("csv_signatures", {})
 
     # Motorul se compară ÎNAINTE de date: dacă scorurile sau setul de metode
@@ -219,8 +300,8 @@ def check_freshness(
                 _current_engine.get("n_methods"),
             )
 
-    for gk in GAMES_CSV_MAP:
-        path, current_hash, current_rows = compute_csv_signature(gk)
+    for gk in csv_map:
+        path, current_hash, current_rows = _signature(gk, csv_map, cols_map)
         cached = cached_sigs.get(gk, {})
         cached_hash = str(cached.get("hash", ""))
         cached_rows = int(cached.get("rows", 0))

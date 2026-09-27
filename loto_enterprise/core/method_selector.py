@@ -32,10 +32,65 @@ from loto_enterprise.core.score_validation import has_usable_score_variance
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
+# Rădăcina sub care stau deciziile celorlalte țări (`decisions/<CC>/...`).
+_DECISIONS_ROOT = Path(__file__).resolve().parents[2]
 _CACHE: dict[str, Callable] = {}
 _CONFIG: dict | None = None
 _CONFIG_MTIME: float = -1.0
 _CONFIG_PATH_USED: Path | None = None
+
+
+def decision_path_for(country) -> Path:
+    """Fișierul de decizie al unei țări.
+
+    România: `best_methods.json` (exact fișierul de dinainte, `_DEFAULT_CONFIG_PATH`).
+    Celelalte țări: `decisions/<CC>/best_methods.json`, niciodată fișierul
+    românesc. O țară necunoscută ridică `UnknownLotteryError`."""
+    from loto_enterprise.core.lotteries import RO, normalize_country
+    from loto_enterprise.core.lotteries import decision_path_for as _path_for
+
+    cc = normalize_country(country)
+    if cc == RO:
+        return _DEFAULT_CONFIG_PATH
+    return _path_for(cc, root=_DECISIONS_ROOT)
+
+
+def _expected_country(cfg_path: Path) -> str | None:
+    """Țara căreia îi aparține un fișier de decizie, după locul lui.
+
+    None pentru orice alt fișier (teste, `--out` explicit): acolo nu se verifică."""
+    try:
+        resolved = cfg_path.resolve()
+    except OSError:
+        resolved = cfg_path
+    try:
+        if resolved == Path(_DEFAULT_CONFIG_PATH).resolve():
+            return "RO"
+        from loto_enterprise.core.lotteries import RO, countries
+
+        for cc in countries():
+            if cc != RO and resolved == decision_path_for(cc).resolve():
+                return cc
+    except Exception:  # noqa: BLE001 — diagnostic, nu poate bloca încărcarea
+        return None
+    return None
+
+
+def _country_mismatch(cfg: dict, expected: str | None) -> str | None:
+    """Motivul pentru care decizia nu aparține țării fișierului, sau None.
+
+    Fișierul românesc vechi nu are `_meta.country` (acceptat); dacă îl are,
+    trebuie să fie RO. Fișierul unei alte țări TREBUIE să o numească: o copie a
+    deciziei românești pusă în `decisions/DE/` nu devine decizie germană."""
+    if expected is None:
+        return None
+    meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+    found = str(meta.get("country") or "").strip().upper()
+    if expected == "RO":
+        return None if found in ("", "RO") else f"_meta.country={found}, așteptat RO"
+    if found != expected:
+        return f"_meta.country={found or 'lipsă'}, așteptat {expected}"
+    return None
 
 
 def _load_config(path: str | None = None) -> dict:
@@ -44,6 +99,10 @@ def _load_config(path: str | None = None) -> dict:
     Cache-ul global e invalidat când mtime-ul fişierului se schimbă (ex. după un
     Re-Bench care rescrie decizia). Fără asta, worker-ul (Auto-Pilot) şi UI-ul
     (walk-forward) ar folosi decizia VECHE până la restart. `stat()` e ieftin.
+
+    Un fișier de decizie al unei țări (vezi `decision_path_for`) al cărui
+    `_meta.country` nu e țara lui e tratat ca LIPSĂ: frequency, nu decizia
+    altei țări.
     """
     global _CONFIG, _CONFIG_MTIME, _CONFIG_PATH_USED
     cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
@@ -68,7 +127,37 @@ def _load_config(path: str | None = None) -> dict:
     except Exception as exc:
         logger.error("[method_selector] failed to parse %s: %s", cfg_path, exc)
         _CONFIG = {"games": {}}
+        return _CONFIG
+    mismatch = _country_mismatch(_CONFIG, _expected_country(cfg_path))
+    if mismatch:
+        logger.error(
+            "[method_selector] %s nu aparține țării lui (%s) — îl tratez ca lipsă, "
+            "frequency baseline",
+            cfg_path,
+            mismatch,
+        )
+        _CONFIG = {"games": {}}
     return _CONFIG
+
+
+def _is_urna2_key(game_key) -> bool:
+    """Cheia unei a doua urne single-pick (Joker românesc sau un Joker străin
+    din registru): contract top-1, nu 3+/4+."""
+    if game_key == "joker_urna2":
+        return True
+    try:
+        from loto_enterprise.core.lotteries import lottery_by_bench_key
+
+        lot = lottery_by_bench_key(game_key)
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(lot and lot.bench_key_urna2 == str(game_key))
+
+
+def has_decision(game_key: str, config_path: str | None = None) -> bool:
+    """True dacă fișierul de decizie are o intrare pentru `game_key`."""
+    games = _load_config(config_path).get("games", {})
+    return bool(isinstance(games, dict) and games.get(game_key))
 
 
 def _production_forbidden() -> frozenset[str]:
@@ -254,9 +343,9 @@ def get_winner_name(
     g = cfg.get("games", {}).get(game_key, {})
     # Înainte de primul Re-Bench compatibil, Urna 2 nu are încă o decizie
     # stocată. Frequency rămâne fallback deterministic, fără warning recurent.
-    if game_key == "joker_urna2" and not g:
+    if not g and _is_urna2_key(game_key):
         logger.info(
-            "[method_selector] joker_urna2 fără benchmark top-1 — frequency fallback"
+            "[method_selector] %s fără benchmark top-1 — frequency fallback", game_key
         )
         return "frequency"
 
@@ -1124,7 +1213,7 @@ def recommend_optimal_config(
             ).strip(" |")
         # Urna 2 are mereu contract top-1; nu lăsăm un JSON vechi/manual cu
         # `hit_target: 3` să o prezinte drept aceeași metrică a pool-urilor.
-        if game_key == "joker_urna2":
+        if _is_urna2_key(game_key):
             hit_target = 1
             target_label = "top-1 (1/1)"
         else:
@@ -1169,8 +1258,8 @@ def recommend_optimal_config(
         "rationale": "fallback: no auto_pilot_per_pool entry - using per-pool winner",
         "pool_substituted": None,
         "ensemble": [{"method": scorer, "weight": 1.0}],
-        "hit_target": 1 if game_key == "joker_urna2" else 3,
-        "target_label": "top-1 (1/1)" if game_key == "joker_urna2" else "3+",
+        "hit_target": 1 if _is_urna2_key(game_key) else 3,
+        "target_label": "top-1 (1/1)" if _is_urna2_key(game_key) else "3+",
         # nu există intrare de decizie pentru (joc, pool) → alegerea nu e
         # susținută de nicio măsurătoare: un fallback E prin definiție low confidence
         "low_confidence": True,
