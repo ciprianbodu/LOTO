@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
-- teste: 77 fisiere `test_*.py`, 1670 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1646 trec, 24 sarite (integrarea
+- teste: 77 fisiere `test_*.py`, 1671 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1647 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -533,6 +533,9 @@ limita de validitate din §5).
   ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
 
 - Pool-ul UI este limitat la 6..16.
+- Lista de variante simple din rezultate arata `simple_variants_val` variante
+  (campul „Variante simple afisate in rezultate”, 1..500, implicit 10); costul
+  „Top N bilete simple” urmeaza acelasi numar. „Arata toate” ramane.
 - Butonul „🎟️ Bilet complet" din sidebar face 1-10 bilete fizice per joc
   (campul „Bilete", `full_ticket_count_val`, implicit 1) din pool-ul
   rezultatului afisat: pe bilet 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu

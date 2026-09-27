@@ -287,3 +287,15 @@ def test_romanian_numeral_agreement():
         "100 de variante", "101 variante", "119 variante", "120 de variante",
     ]
     assert count(1, "variante", "variantă") == "1 variantă"
+
+
+def test_simple_variants_count_is_a_setting_with_ten_as_default():
+    import ui_runtime
+    import ui_results
+
+    assert ui_runtime.DEFAULTS["simple_variants_val"] == 10
+    assert "simple_variants_val" in ui_runtime.UI_PERSIST_KEYS
+    for raw, want in ((None, 10), ("", 10), (3, 3), (2.6, 3), (0, 1), (9999, 500)):
+        ui_results.SETTINGS["simple_variants_val"] = raw
+        assert ui_results._simple_variants_count() == want
+    ui_results.SETTINGS["simple_variants_val"] = 10

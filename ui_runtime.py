@@ -245,6 +245,7 @@ UI_PERSIST_KEYS = [
         for bound in ("min", "max")
     ),
     "full_ticket_count_val",
+    "simple_variants_val",
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -296,6 +297,8 @@ DEFAULTS = {
     "max_consecutive_run_enabled_val": True,
     # Bilete fizice cerute de „🎟️ Bilet complet”, 1-10 (full_ticket.clamp_tickets).
     "full_ticket_count_val": 1,
+    # Câte variante simple arată lista din rezultate (implicit 10, ca înainte).
+    "simple_variants_val": 10,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,

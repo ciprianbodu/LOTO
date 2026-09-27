@@ -256,7 +256,7 @@ def _render_cost(game: str, data: dict) -> None:
 
     variants = data.get("variants") or []
     if variants:
-        n_simple = min(10, len(variants))
+        n_simple = min(_simple_variants_count(), len(variants))
         # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
         # schemele oficiale de mai sus; fallback pe cea cerută din setări.
         _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
@@ -288,7 +288,7 @@ def _render_cost(game: str, data: dict) -> None:
         ).classes("text-caption")
         if n_simple < len(variants):
             ui.label(
-                "Primele 10 variante sunt doar un subset; garanția afișată se referă la întregul wheel."
+                f"Primele {n_simple} variante sunt doar un subset; garanția afișată se referă la întregul wheel."
             ).classes("text-caption text-grey")
         for line in _wheel_probability_lines(game, data):
             ui.label(line).classes("text-caption")
@@ -904,6 +904,15 @@ def _full_ticket_summary(t: dict, game: str) -> str:
     return text + f" · {cost_txt}"
 
 
+def _simple_variants_count() -> int:
+    """Variantele simple afișate (setarea din sidebar), 1..500; câmp gol -> 10."""
+    try:
+        n = int(round(float(SETTINGS.get("simple_variants_val"))))
+    except (TypeError, ValueError, OverflowError):
+        return 10
+    return max(1, min(500, n))
+
+
 def _show_full_ticket() -> None:
     """Bilete complete per joc (1-10 bilete × 3/4/2 variante) din pool-ul afișat."""
     from loto_enterprise.core.full_ticket import build_full_ticket, clamp_tickets
@@ -1311,7 +1320,8 @@ def _render_pool_body(
         with ui.expansion(f"Variante simple ({len(variants)})", value=False).classes(
             "w-full"
         ):
-            shown = variants if show_all else variants[:10]
+            n_show = _simple_variants_count()
+            shown = variants if show_all else variants[:n_show]
             for i, v in enumerate(shown, 1):
                 if is_jk and len(v) == 6:
                     nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
@@ -1323,7 +1333,7 @@ def _render_pool_body(
                         t"<span style='color:#e5e7eb'>{nums}</span>"
                     )
                 ).classes("font-mono text-sm")
-            if len(variants) > 10:
+            if len(variants) > n_show:
 
                 def _toggle(k=skey):
                     STATE["show_all"][k] = not STATE["show_all"].get(k, False)

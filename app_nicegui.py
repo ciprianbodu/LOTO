@@ -2516,6 +2516,14 @@ def main_page() -> None:
             "🚀 Generează (setări manuale)",
             on_click=lambda: submit_generation(pure=False),
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
+        _sv = _bind_save(
+            ui.number(
+                "Variante simple afișate în rezultate", min=1, max=500, step=1,
+                precision=0, format="%.0f",
+            ).classes("w-full"),
+            "simple_variants_val",
+        )
+        _sv.on_value_change(lambda: results_panel.refresh())
         with ui.row().classes("w-full items-center no-wrap gap-2"):
             _bind_save(
                 ui.number(
