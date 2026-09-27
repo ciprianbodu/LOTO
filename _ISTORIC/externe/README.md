@@ -70,3 +70,23 @@ format, valori, ordine, fără rânduri repetate.
   1–12 de la 27.09.2016. Un model pe stele trebuie să țină cont de epocă.
 - Nu se poate juca de pe site-urile oficiale din România (toți operatorii cer
   domiciliu în țara lor): se păstrează ca istoric de antrenament.
+
+### `austria_lotto_6aus45.csv`: Austria, Lotto 6 aus 45
+
+- 3.685 de extrageri, 07.09.1986 – 23.09.2026 (la import), din fișierele
+  oficiale win2day.at; include extragerile bonus de vineri (din 2020), care fac
+  parte din aceeași numerotare oficială. Numere în ordine crescătoare.
+- Verificare: 814 extrageri comparate cu trei surse independente (6richtige.at,
+  theblueye.com, gewinnabfrage.at), zero diferențe.
+
+### `belgia_lotto_6din45.csv`: Belgia, Lotto 6/45
+
+- 1.565 de extrageri, 01.10.2011 – 26.09.2026 (la import), numai perioada 6/45
+  (înainte jocul era 6/42), din API-ul oficial Loterie Nationale.
+- Verificare: 1.553 de extrageri comparate cu o sursă independentă, zero diferențe.
+
+### `ungaria_hatoslotto_6din45.csv`: Ungaria, Hatoslottó
+
+- 1.850 de extrageri, 29.10.1988 – 24.09.2026 (la import), din fișierul oficial
+  Szerencsejáték.
+- Verificare: 1.763 de extrageri comparate cu o sursă independentă, zero diferențe.
