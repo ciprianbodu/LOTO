@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
-- teste: 75 fisiere `test_*.py`, 1628 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1604 trec, 24 sarite (integrarea
+- teste: 76 fisiere `test_*.py`, 1652 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1628 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -518,6 +518,19 @@ extrageri viitoare, un rezultat de clasament NU e dovada de avantaj (vezi
 limita de validitate din §5).
 
 ## 6. Pool unic
+
+- Selectorul de tara (sidebar „1. Date”, `country_val`, implicit România) si
+  jocurile tarii (`games_val`). „📂 Incarca istoricul <tara>” citeste CSV-urile
+  din registru si leaga fisierul de joc (`STATE['dataset_game']`). Se trimit
+  numai seturile tarii selectate; cu România selectata, config_json si hash-ul
+  sunt identice cu cele de dinainte. Rezultatele se identifica din ecoul
+  worker-ului (`_game_spec_for`): titlu „Tara · Joc”, tarif in moneda tarii sau
+  „tarif necunoscut”, scheme reduse LR numai la România, bilet fizic din
+  registru sau „bilet nemodelat”, iar jocurile care nu se joaca online din
+  România poarta „doar antrenament”. Re-Bench, clasamentul, ETA, curarea si
+  prospetimea citesc caile tarii selectate. Ramase: alte taburi deschise se
+  actualizeaza abia la reincarcare; cateva texte romanesti (nota de garantie,
+  ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
 
 - Pool-ul UI este limitat la 6..16.
 - Butonul „🎟️ Bilet complet" din sidebar face 1-10 bilete fizice per joc

@@ -8,6 +8,7 @@ import pandas as pd
 from nicegui import ui
 
 from ui_runtime import *
+from loto_enterprise.core import lotteries as _LOT
 from ui_shared import PROJECT_ROOT, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
@@ -66,7 +67,29 @@ _BENCH_DRAW_N = {
     "loto_5_40": 5,
     "joker_urna1": 5,
     "joker_urna2": 1,
+    # Cheile străine, din registru (numere pe bilet; Urna 2 = top-1).
+    **{
+        k: (1 if k == _g.bench_key_urna2 else _g.pick_n)
+        for _g in _LOT.GAMES
+        if not _g.is_romanian
+        for k in _g.bench_keys
+    },
 }
+
+
+def _decision_path_for_key(folds_game_key: str) -> str | None:
+    """Fișierul de decizie pentru o cheie de bench: None = cel românesc
+    (implicitul de dinainte), altfel `decisions/<CC>/best_methods.json`."""
+    lot = _LOT.lottery_by_bench_key(folds_game_key)
+    if lot is None or lot.is_romanian:
+        return None
+    return str(_LOT.decision_path_for(lot.country))
+
+
+def _country_folds_path(country=None) -> Path:
+    """folds.csv al țării: România `bench_results/folds.csv` (neschimbat)."""
+    cc = country or _selected_country()
+    return _LOT.bench_out_dir_for(cc, PROJECT_ROOT) / "folds.csv"
 
 
 def _baseline_methods() -> frozenset[str]:
@@ -103,7 +126,9 @@ def _decision_entry(folds_game_key: str, pool: int) -> dict:
     try:
         from loto_enterprise.core.method_selector import _auto_pilot_entry, _load_config
 
-        g = (_load_config().get("games") or {}).get(folds_game_key) or {}
+        g = (_load_config(_decision_path_for_key(folds_game_key)).get("games") or {}).get(
+            folds_game_key
+        ) or {}
         e = _auto_pilot_entry(g, int(pool))
         return e if isinstance(e, dict) else {}
     except Exception:  # noqa: BLE001
@@ -673,7 +698,9 @@ def _render_bench_leaderboard_slice(
     try:
         from loto_enterprise.core.method_selector import get_winner_name
 
-        chosen_name = get_winner_name(folds_game_key, pool)
+        chosen_name = get_winner_name(
+            folds_game_key, pool, config_path=_decision_path_for_key(folds_game_key)
+        )
     except Exception:  # noqa: BLE001
         chosen_name = winner[0]
     # Dacă există generare recentă, 🎯 = membrul ACTIV din audit (nu scorer
@@ -792,7 +819,10 @@ def _render_bench_leaderboard_slice(
                 _ens_names = [
                     (nm, float(wt))
                     for nm, _fn, wt in get_ensemble_for_game(
-                        folds_game_key, pool, max_methods=3
+                        folds_game_key,
+                        pool,
+                        config_path=_decision_path_for_key(folds_game_key),
+                        max_methods=3,
                     )
                 ]
                 _ens_source = (
@@ -1044,11 +1074,12 @@ def _last_csv_draw(fname: str):
         return None
     # 5/40 extrage 6 numere și hiturile se numără pe toate 6 (engine-ul citește
     # n1..n6); Joker are 5 în Urna 1, plus jokerul afișat separat.
-    label = _game_label_for(fname)
-    draw_n = 5 if label == "joker" else 6
+    spec = _game_spec_for(fname)
+    draw_n = spec.draw_n
     nums = nums[:draw_n]
     joker = None
-    if "joker" in cols:
+    _second = spec.geo.second
+    if "joker" in cols and _second is not None and "joker" in _second.columns:
         try:
             joker = int(last["joker"])
         except Exception:  # noqa: BLE001
@@ -1150,9 +1181,29 @@ def _render_urna2_benchmark_note() -> None:
 
 
 def _render_bench_leaderboard(
-    game_label: str, top_n: int = 20, pool_size: int | None = None
+    game_label: str, top_n: int = 20, pool_size: int | None = None, *, spec=None
 ) -> None:
-    """Top-N metode din ULTIMUL bench pentru acest joc (folds.csv). Joker = urne separate."""
+    """Top-N metode din ULTIMUL bench pentru acest joc (folds.csv). Joker = urne separate.
+
+    Joc străin (`spec`): folds.csv al țării lui; fără bench, un mesaj explicit —
+    niciodată felia românească de aceeași geometrie."""
+    if spec is not None and not spec.is_romanian:
+        fp = _country_folds_path(spec.country)
+        if not fp.exists():
+            ui.label(
+                f"{spec.country_name} nu are încă bench; până atunci generarea "
+                "folosește frequency."
+            ).classes("text-caption text-grey")
+            return
+        try:
+            df = _read_bench_folds_cached(fp)
+        except Exception:  # noqa: BLE001
+            return
+        if df.empty or "method" not in df.columns or "game" not in df.columns:
+            return
+        pool = int(pool_size) if pool_size is not None else _int_setting("pool_size_val")
+        _render_bench_leaderboard_slice(df, spec.bench_key, pool, spec.display, top_n=top_n)
+        return
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
         if game_label == "joker":
@@ -1215,8 +1266,12 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
     ~100 rezultate). Metodele apar pe măsură ce TERMINĂ. Câștigătorul final + Auto-Pilot
     se decid abia la sfârșit. Citește folds.csv O DATĂ pe render (parțial → mic).
     `progress` (0..1) — la ≥1.0 testele-s gata, dar procesul încă scrie decizia/raportul
-    → titlul NU mai zice „PARȚIAL" (inadvertență văzută în UI la 100%)."""
-    fp = PROJECT_ROOT / "bench_results" / "folds.csv"
+    → titlul NU mai zice „PARȚIAL" (inadvertență văzută în UI la 100%).
+
+    Țara bench-ului pornit (STATE['bench_country']): România citește
+    `bench_results/folds.csv`, celelalte ieșirea lor separată."""
+    _bcc = STATE.get("bench_country") or _LOT.RO
+    fp = _country_folds_path(_bcc)
     if not fp.exists():
         return
     # Până la primul flush al rulării CURENTE, folds.csv încă are rezultatele bench-ului
@@ -1259,11 +1314,16 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
             "ℹ️ Walk-forward: istoricul listează +3 și +4; targetul bench/alerte rămâne "
             f"≥{_bench_target()}."
         ).classes("text-caption text-grey")
-        for fk, kp, sect in [
-            ("loto_6_49", pool, "6/49"),
-            ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
-            ("loto_5_40", pool, "5/40"),
-        ]:
+        _sections = (
+            [
+                ("loto_6_49", pool, "6/49"),
+                ("joker_urna1", pool, "Joker Urna 1 (5/45)"),
+                ("loto_5_40", pool, "5/40"),
+            ]
+            if _bcc == _LOT.RO
+            else [(g.bench_key, pool, g.display) for g in _LOT.games_for_country(_bcc)]
+        )
+        for fk, kp, sect in _sections:
             _render_bench_leaderboard_slice(df, fk, kp, sect, top_n=20)
 
 

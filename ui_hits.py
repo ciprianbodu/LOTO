@@ -9,6 +9,7 @@ import pandas as pd
 from nicegui import ui
 
 from ui_runtime import *
+from loto_enterprise.core import lotteries as _LOT
 from ui_results import PRICES, _hypergeo_params, _random_rate_hypergeo, _bench_transform_note
 from ui_bench import _render_bench_leaderboard, _render_last_csv_draw
 from ui_shared import PROJECT_ROOT, render_html_safe
@@ -266,11 +267,18 @@ def _render_hits_4plus(
         ).classes("text-warning text-caption text-bold")
     # (1) Sumar comparabil: +3 / +4 pe pool, baseline hipergeometric și volumul
     # real de variante din WF. Premiile nu pot fi deduse din hiturile Urnei 1.
-    gk = _game_label_for(game)
+    _foreign = _LOT.lottery_by_id(str(game))
+    if _foreign is not None and _foreign.is_romanian:
+        _foreign = None
+    # Străin: id-ul din registru (geometria și ținta lui); România: eticheta veche.
+    gk = _foreign.game_id if _foreign is not None else _game_label_for(game)
     # Ținta per joc, ca decizia: 5/40 rămâne pe 4+ (3 numere nu aduc premiu).
     from loto_enterprise.benchmark.hit_target import game_hit_target
 
-    _TT = game_hit_target("loto_5_40" if gk == "5/40" else str(gk), _bench_target())
+    if _foreign is not None:
+        _TT = game_hit_target(_foreign.bench_key, _bench_target())
+    else:
+        _TT = game_hit_target("loto_5_40" if gk == "5/40" else str(gk), _bench_target())
     # Pool-ul REAL (nu string fix „din 16"): meta WF (salvat la rulare) are prioritate,
     # apoi rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
     _pn = int((meta or {}).get("pool_size") or pool_n or 0)
@@ -333,7 +341,16 @@ def _render_hits_4plus(
     _cap += f" Bilete evaluate = {n_tick:,} (extragere × variantă, {tick_avg:.2f}/extragere)."
     _cap += " Rândul de bilete numără extrageri cu cel puțin un bilet care atinge pragul; baseline-ul de pool nu este un baseline separat pentru bilete."
     _price = PRICES.get(gk, 8.0)
-    if n_tick:
+    if _foreign is not None:
+        if n_tick and _foreign.price is not None:
+            _cap += (
+                f" Cost estimat pe fereastra WF: {n_tick:,} × {_fmt_price(_foreign)} "
+                f"≈ {n_tick * _foreign.price:,.2f} {_foreign.currency} "
+                "(fără taxe pe bilet, fără câștig)."
+            )
+        elif n_tick:
+            _cap += " Cost: tarif necunoscut."
+    elif n_tick:
         _cap += (
             f" Cost estimat pe fereastra WF: {n_tick:,} × {_price:g} lei/variantă "
             f"≈ {n_tick * _price:,.0f} lei (tarif standard, fără taxă fizică, fără câștig)."
@@ -446,7 +463,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             for fname, game, raw_data in flat_games:
                 data = _primary_pool_data(raw_data)
                 ui.separator().classes("my-3")
-                ui.label(f"🎯 {_game_title(game)}").classes("text-bold text-lg")
+                ui.label(f"🎯 {_game_title(game, data)}").classes("text-bold text-lg")
 
                 # Reper: ultima extragere reală din CSV (deasupra clasamentului).
                 _render_last_csv_draw(
@@ -458,7 +475,11 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # Pool-ul din rezultatul afișat rămâne reperul și dacă utilizatorul
                 # a schimbat între timp setarea pentru următoarea generare.
                 _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
-                _render_bench_leaderboard(game, pool_size=_pn or None)
+                _spec = _game_spec_for(game, data)
+                if _spec.is_romanian:
+                    _render_bench_leaderboard(game, pool_size=_pn or None)
+                else:
+                    _render_bench_leaderboard(game, pool_size=_pn or None, spec=_spec)
                 _penalty_note = _bench_transform_note(data)
                 if _penalty_note:
                     ui.label(_penalty_note).classes("text-caption text-warning")

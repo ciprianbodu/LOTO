@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 
 from ui_shared import PROJECT_ROOT, atomic_write_json
+from loto_enterprise.core import lotteries as _LOT
 
 logger = logging.getLogger("app_nicegui")
 
@@ -184,7 +185,12 @@ def _active_restrict_base(game_label: str) -> tuple[int, int]:
         return 0, 0
     suffix = _RESTRICT_BASE_SUFFIX.get(game_label)
     if suffix is None:
-        return 0, 0
+        # Joc străin: cheia e id-ul lui din registru (`restrict_base_min_de_lotto_val`),
+        # niciodată perechea românească de aceeași geometrie.
+        lot = _LOT.lottery_by_id(game_label)
+        if lot is None or lot.is_romanian:
+            return 0, 0
+        suffix = lot.game_id
     return (
         _int_setting(f"restrict_base_min_{suffix}_val"),
         _int_setting(f"restrict_base_max_{suffix}_val"),
@@ -229,6 +235,15 @@ UI_PERSIST_KEYS = [
     # Fără ea în listă, bifa debifată revine pornită la fiecare repornire:
     # `_load_settings` citește numai cheile de aici, iar implicitul e True.
     "max_consecutive_run_enabled_val",
+    # Țara și jocurile ei (pasul 1). Praguri de restrângere proprii jocurilor străine.
+    "country_val",
+    "games_val",
+    *(
+        f"restrict_base_{bound}_{g.game_id}_val"
+        for g in _LOT.GAMES
+        if not g.is_romanian
+        for bound in ("min", "max")
+    ),
     "full_ticket_count_val",
     "shutdown_on_complete",
     "sim_depth_val",
@@ -265,6 +280,15 @@ DEFAULTS = {
     # tastat în câmpuri — un capăt lăsat din greșeală nediscutat nu ajunge
     # niciodată în producție cât bifa e oprită (vezi `_active_restrict_base`).
     "restrict_base_enabled_val": False,
+    **{
+        f"restrict_base_{bound}_{g.game_id}_val": 0
+        for g in _LOT.GAMES
+        if not g.is_romanian
+        for bound in ("min", "max")
+    },
+    # Țara aleasă (pasul 1) și jocurile ei; [] = toate jocurile țării.
+    "country_val": _LOT.RO,
+    "games_val": [],
     # Fără 3 numere consecutive în pool: PORNITĂ implicit, la cererea explicită a
     # utilizatorului (2026-09-26), spre deosebire de penalizare și restrângere,
     # oprite fiindcă ar schimba pool-ul fără nicio acțiune. Tot compoziție, FĂRĂ
@@ -321,6 +345,7 @@ def _int_setting(key: str, default: int | None = None) -> int:
 
 STATE: dict = {
     "datasets": [],  # list[(fname, DataFrame)]
+    "dataset_game": {},  # {fname: game_id} — legătură explicită (lipsă = ghicit RO)
     "active_job_id": None,
     "job_start_time": None,
     "job_elapsed": None,  # durata FIXĂ a ultimei generări (sec); setată la COMPLETED
@@ -368,6 +393,8 @@ def _load_settings() -> None:
     except (TypeError, ValueError):
         SETTINGS["pool_size_val"] = 10
 
+    _sanitize_country_settings()
+
     # Inițializează variabila din modulul decision și os.environ din setările salvate
     try:
         import loto_enterprise.benchmark.decision as decision
@@ -387,8 +414,46 @@ def _save_settings() -> None:
         logger.warning("save settings: %s", exc)
 
 
-def _game_label_for(fname: str) -> str:
-    low = fname.lower()
+def _sanitize_country_settings() -> None:
+    """Țară necunoscută → România; jocuri care nu sunt ale țării → scoase."""
+    try:
+        cc = _LOT.normalize_country(SETTINGS.get("country_val") or _LOT.RO)
+    except _LOT.UnknownLotteryError:
+        cc = _LOT.RO
+    SETTINGS["country_val"] = cc
+    own = {g.game_id for g in _LOT.games_for_country(cc)}
+    raw = SETTINGS.get("games_val") or []
+    if not isinstance(raw, (list, tuple)):
+        raw = []
+    SETTINGS["games_val"] = [str(g) for g in raw if str(g) in own]
+
+
+def _selected_country() -> str:
+    try:
+        return _LOT.normalize_country(SETTINGS.get("country_val") or _LOT.RO)
+    except _LOT.UnknownLotteryError:
+        return _LOT.RO
+
+
+def _selected_games() -> tuple:
+    """Jocurile (Lottery) alese pentru țara curentă; nimic ales = toate."""
+    games = _LOT.games_for_country(_selected_country())
+    chosen = {str(g) for g in (SETTINGS.get("games_val") or [])}
+    picked = tuple(g for g in games if g.game_id in chosen)
+    return picked or games
+
+
+def _country_label(country=None) -> str:
+    cc = country or _selected_country()
+    try:
+        return _LOT.country_name(cc)
+    except _LOT.UnknownLotteryError:
+        return str(cc)
+
+
+def _legacy_ro_label(name: str) -> str:
+    """Ghicitul vechi, NUMAI pentru România (fișiere fără legătură explicită)."""
+    low = str(name).lower()
     if "5_40" in low or "5/40" in low:
         return "5/40"
     if "joker" in low:
@@ -396,11 +461,104 @@ def _game_label_for(fname: str) -> str:
     return "6/49"
 
 
-def _game_title(game) -> str:
-    """Țara și jocul pentru titluri, rapoarte și mail: „România · Loto 6/49”."""
-    from loto_enterprise.core.lotteries import display_name
+def _dataset_binding(fname) -> str | None:
+    """Id-ul jocului legat explicit de fișier (STATE['dataset_game']), dacă există."""
+    try:
+        return (STATE.get("dataset_game") or {}).get(str(fname))
+    except Exception:  # noqa: BLE001
+        return None
 
-    return display_name(_game_label_for(str(game)))
+
+def _game_spec_for(key, data=None):
+    """Jocul (Lottery) al unei chei de rezultat / fișier / chei de bench.
+
+    Ordinea: ecoul worker-ului din rezultat (`data['game_id']`), id-ul din
+    registru, cheia de bench, legătura explicită a fișierului, apoi ghicitul
+    vechi românesc. Un rezultat fără ecou este România."""
+    if isinstance(data, dict):
+        gid = data.get("game_id")
+        if gid is not None:
+            lot = _LOT.lottery_by_id(gid)
+            if lot is not None:
+                return lot
+    k = str(key)
+    lot = _LOT.lottery_by_id(k) or _LOT.lottery_by_bench_key(k)
+    if lot is not None:
+        return lot
+    bound = _dataset_binding(k)
+    if bound is not None:
+        lot = _LOT.lottery_by_id(bound)
+        if lot is not None:
+            return lot
+    return _LOT.LOTTERIES[_legacy_ro_label(k)]
+
+
+def _game_label_for(fname: str) -> str:
+    """GEOMETRIA jocului ("6/49", "5/40", "joker", "6/45", "5/50").
+
+    Pentru România geometria coincide cu eticheta internă, deci apelanții vechi
+    primesc exact ce primeau. Un id străin sau un fișier legat explicit de un
+    joc străin întoarce geometria lui, niciodată identitatea românească."""
+    k = str(fname)
+    lot = _LOT.lottery_by_id(k)
+    if lot is None:
+        bound = _dataset_binding(k)
+        lot = _LOT.lottery_by_id(bound) if bound is not None else None
+    if lot is not None:
+        return lot.geometry
+    return _legacy_ro_label(k)
+
+
+def _game_title(game, data=None) -> str:
+    """Țara și jocul pentru titluri, rapoarte și mail: „România · Loto 6/49”."""
+    return _game_spec_for(game, data).display
+
+
+def _fmt_price(lot) -> str:
+    """„8 Lei/variantă”; tarif neverificat → „tarif necunoscut”."""
+    if lot is None or lot.price is None:
+        return "tarif necunoscut"
+    return f"{lot.price:g} {lot.currency}/variantă"
+
+
+_TRAINING_ONLY_NOTE = "doar antrenament: nu se joacă online din România"
+
+
+def _training_only_note(lot) -> str:
+    return _TRAINING_ONLY_NOTE if lot is not None and lot.training_only else ""
+
+
+def _restrict_games_for(country=None) -> tuple:
+    """(cheie joc, sufix SETTINGS, univers) pentru rândurile de restrângere ale
+    țării. România: tuplul de dinainte; celelalte: sufixul = id-ul jocului."""
+    cc = country or _selected_country()
+    if cc == _LOT.RO:
+        return _RESTRICT_BASE_GAMES
+    try:
+        games = _LOT.games_for_country(cc)
+    except _LOT.UnknownLotteryError:
+        return ()
+    return tuple((g.game_id, g.game_id, g.max_n) for g in games)
+
+
+def _next_draw_date_for(weekdays=(3, 6), today=None) -> str:
+    """Următoarea zi de extragere (astăzi inclusiv) pentru zilele date."""
+    from datetime import date as _date
+
+    base = today or _date.today()
+    o = base.toordinal()
+    for i in range(0, 8):
+        d = base.fromordinal(o + i)
+        if d.weekday() in tuple(weekdays):
+            return d.strftime("%d-%m-%Y")
+    return base.strftime("%d-%m-%Y")
+
+
+_WEEKDAY_RO = ("Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică")
+
+
+def _weekdays_text(weekdays) -> str:
+    return "/".join(_WEEKDAY_RO[int(d)] for d in weekdays)
 
 
 # Ordinea de AFIȘARE a jocurilor în UI / rapoarte: 6/49 primul, Joker al doilea, 5/40 al treilea.

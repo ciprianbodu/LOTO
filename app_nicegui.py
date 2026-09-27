@@ -67,6 +67,7 @@ from ui_runtime import *  # noqa: F403
 from ui_results import *  # noqa: F403
 from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
+from loto_enterprise.core import lotteries as _LOT
 
 def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
@@ -97,7 +98,18 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     # cache-uit sub regula veche (interval mai îngust decât un bilet aplicat, nu
     # ignorat) nu are voie să fie servit sub cea nouă. Fără nicio restricție,
     # hash-ul rămâne cel dinainte, deci cache-urile existente continuă să fie folosite.
-    if any(lo or hi for lo, hi in _rb_by_game.values()):
+    # Jocurile străine: praguri proprii (cheia = id-ul jocului), în hash NUMAI
+    # când sunt active, ca hash-ul românesc să rămână cel dinainte.
+    _selected = {g.game_id for g in _selected_games()}
+    _rb_foreign = {
+        g.game_id: _active_restrict_base(g.game_id)
+        for g in _LOT.GAMES
+        if not g.is_romanian and g.game_id in _selected
+    }
+    _rb_foreign = {k: v for k, v in _rb_foreign.items() if v[0] or v[1]}
+    if _rb_foreign:
+        h.update(f"restrict_foreign={sorted(_rb_foreign.items())}".encode("utf-8"))
+    if any(lo or hi for lo, hi in _rb_by_game.values()) or _rb_foreign:
         h.update(f"restrict_semantics={_RESTRICT_SEMANTICS}".encode("utf-8"))
     # Limita de consecutive, cu aceeași regulă: în hash numai când e activă, ca
     # hash-urile fără ea să rămână cele dinainte.
@@ -116,12 +128,20 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     # rezultat identic: cache ratat degeaba dacă `use_cache` ar fi True.
     datasets_cfg = []
     for fname, df in STATE["datasets"]:
-        g_label = _game_label_for(fname)
+        # Numai fișierele țării alese și ale jocurilor bifate intră în job.
+        _spec = _game_spec_for(fname)
+        if _spec.game_id not in _selected:
+            continue
+        # România: eticheta de dinainte ("6/49"...); străin: id-ul din registru.
+        g_label = _spec.game_id
         df_json = df.to_json(orient="split")
         # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
         _sd_pg = sim_depth_per_game.get(g_label)
         sd = int(_sd_pg) if _sd_pg is not None else _int_setting("sim_depth_val")
-        _rb_min, _rb_max = _rb_by_game.get(g_label, (0, 0))
+        if _spec.is_romanian:
+            _rb_min, _rb_max = _rb_by_game.get(g_label, (0, 0))
+        else:
+            _rb_min, _rb_max = _rb_foreign.get(g_label, (0, 0))
         task = {
             "game_label": g_label,
             "pool_size": _int_setting("pool_size_val"),
@@ -141,6 +161,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
         }
+        if not _spec.is_romanian:
+            task["country"] = _spec.country
+            h.update(f"country={_spec.country}|game_id={_spec.game_id}".encode("utf-8"))
         datasets_cfg.append(
             {
                 "fname": fname,
@@ -160,6 +183,14 @@ def submit_generation(
 ) -> None:
     if not STATE["datasets"]:
         ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
+        return
+    _selected = {g.game_id for g in _selected_games()}
+    if not any(_game_spec_for(fn).game_id in _selected for fn, _ in STATE["datasets"]):
+        ui.notify(
+            f"Niciun istoric încărcat pentru {_country_label()} (jocurile bifate). "
+            f"Folosește «📂 Încarcă istoricul {_country_label()}».",
+            type="negative",
+        )
         return
     if STATE["active_job_id"]:
         ui.notify("Există deja un job în rulare.", type="warning")
@@ -194,10 +225,32 @@ def apply_autopilot_and_generate() -> None:
         from loto_enterprise.core.method_selector import recommend_optimal_config
 
         recs = []
+        _selected = {g.game_id for g in _selected_games()}
         for fname, _ in STATE["datasets"]:
-            label = _game_label_for(fname)
-            gk = _LABEL_TO_KEY.get(label, "loto_6_49")
-            cfg = recommend_optimal_config(gk, _int_setting("pool_size_val"))
+            _spec = _game_spec_for(fname)
+            if _spec.game_id not in _selected:
+                continue
+            if _spec.is_romanian:
+                label = _game_label_for(fname)
+                gk = _LABEL_TO_KEY.get(label, "loto_6_49")
+                cfg = recommend_optimal_config(gk, _int_setting("pool_size_val"))
+            else:
+                # Decizia țării ei; fără bench → frequency (fallback), spus explicit.
+                label = _spec.game_id
+                gk = _spec.bench_key
+                from loto_enterprise.core.method_selector import decision_path_for
+
+                cfg = recommend_optimal_config(
+                    gk,
+                    _int_setting("pool_size_val"),
+                    config_path=str(decision_path_for(_spec.country)),
+                )
+                if not cfg or cfg.get("fallback"):
+                    recs.append(
+                        f"{_spec.display}: fără decizie bench pentru "
+                        f"{_spec.country_name} — frequency"
+                    )
+                    continue
             if cfg and not cfg.get("fallback"):
                 sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
                 per_game[label] = sd
@@ -354,7 +407,20 @@ def run_rebench() -> None:
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
-    if not _istoric_has_data():
+    if _selected_country() != _LOT.RO:
+        _missing = [
+            g.display
+            for g in _LOT.games_for_country(_selected_country())
+            if not (PROJECT_ROOT / g.csv).is_file()
+        ]
+        if _missing:
+            ui.notify(
+                "Lipsește istoricul pentru: " + ", ".join(_missing),
+                type="negative",
+                timeout=8000,
+            )
+            return
+    elif not _istoric_has_data():
         ui.notify(
             "Nu există date în _ISTORIC/ — adaugă CSV-urile cu extragerile "
             "(loto_6_49.csv, loto_5_40.csv, joker.csv) înainte de Re-Bench.",
@@ -373,17 +439,50 @@ def run_rebench() -> None:
     # best_methods.json. Dacă curarea este inactivă, CLI-ul revine la TOATE.
     # Re-score per extragere: selecția și avertismentul de onestitate măsoară
     # aceeași procedură, nu un pool înghețat la începutul întregului fold.
+    _cc = _selected_country()
+    _args = [
+        "--no-rich",
+        "--percentiles",
+        _PCTS,
+        "--block-size",
+        "1",
+        "--no-shuffled-control",
+    ]
+    if _cc != _LOT.RO:
+        # Altă țară: registrul ei, ieșire separată (bench_results/countries/<CC>/,
+        # decisions/<CC>/best_methods.json). România: argv-ul de dinainte.
+        _args += ["--country", _cc]
+    STATE["bench_country"] = _cc
     _launch_bench(
-        [
-            "--no-rich",
-            "--percentiles",
-            _PCTS,
-            "--block-size",
-            "1",
-            "--no-shuffled-control",
-        ],
-        "Re-Bench walk-forward real (metodele fiecărui joc)",
+        _args,
+        "Re-Bench walk-forward real (metodele fiecărui joc)"
+        if _cc == _LOT.RO
+        else f"Re-Bench {_country_label(_cc)}",
     )
+
+
+def _fmt_eta_seconds(total: float) -> str:
+    if total < 60:
+        return f"~{int(total)} sec"
+    if total < 3600:
+        return f"~{int(total / 60)} min"
+    return f"~{total / 3600:.1f} h"
+
+
+def _avg_fold_runtime(fp, game_key: str | None = None) -> float | None:
+    """Media runtime_sec a foldurilor reale din folds.csv (opțional pe un joc)."""
+    if not fp.exists():
+        return None
+    df = pd.read_csv(fp)
+    if df.empty or "runtime_sec" not in df.columns:
+        return None
+    if game_key is not None and "game" in df.columns:
+        df = df[df["game"].astype(str) == game_key]
+        if df.empty:
+            return None
+    mask = (df.get("failed", False) == False) & (df["runtime_sec"] > 0.05)  # noqa: E712
+    real = df[mask] if mask.any() else df
+    return float(real["runtime_sec"].mean())
 
 
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
@@ -395,20 +494,160 @@ def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
     if not fp.exists():
         return default
     try:
-        df = pd.read_csv(fp)
-        if df.empty or "runtime_sec" not in df.columns:
+        avg = _avg_fold_runtime(fp)
+        if avg is None:
             return default
-        mask = (df.get("failed", False) == False) & (df["runtime_sec"] > 0.05)  # noqa: E712
-        real = df[mask] if mask.any() else df
-        avg = float(real["runtime_sec"].mean())
-        total = avg * target_folds * overhead
-        if total < 60:
-            return f"~{int(total)} sec"
-        if total < 3600:
-            return f"~{int(total / 60)} min"
-        return f"~{total / 3600:.1f} h"
+        return _fmt_eta_seconds(avg * target_folds * overhead)
     except Exception:  # noqa: BLE001
         return default
+
+
+def _csv_rows(path) -> int:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return max(0, sum(1 for _ in fh) - 1)
+    except OSError:
+        return 0
+
+
+def _country_bench_texts(country: str) -> dict:
+    """Cele patru texte ale panoului de bench pentru o țară STRĂINĂ.
+
+    (1) introducerea cu țara și jocurile ei; (2) ETA-ul din ultima rulare a
+    țării sau, fără ea, o estimare scalată cu lungimea istoricului (rescorare
+    per extragere ~ n²), spusă ca atare; (3) matricea de curare a țării;
+    (4) prospețimea CSV-urilor ei față de fișierul ei de decizie."""
+    cc = _LOT.normalize_country(country)
+    name = _LOT.country_name(cc)
+    games = _LOT.games_for_country(cc)
+    names = ", ".join(g.name for g in games)
+    bt = _clamped_bench_target()
+    out: dict = {
+        "intro": (
+            f"{name} ({names}): un singur bench testează metodele fiecărui joc "
+            "(exclusiv CPU), pe toate nucleele (în paralel). În fiecare joc, "
+            f"metodele concurează în ACELAȘI clasament → UN câștigător (regula {bt}+) "
+            "→ UN Auto-Pilot → UN walk-forward. Rezultatele stau separat de România "
+            f"(bench_results/countries/{cc}/, decisions/{cc}/best_methods.json)."
+        )
+    }
+    n_keys = sum(len(g.bench_keys) for g in games)
+    n_urna2 = sum(1 for g in games if g.bench_key_urna2)
+    try:
+        from loto_enterprise.benchmark.curated import apply_curation
+        from loto_enterprise.benchmark.methods import list_methods, method_meta
+
+        avail = [m for m in list_methods() if method_meta(m).get("available", True)]
+        kept, _info = apply_curation(avail)
+        n_methods = len(kept)
+    except Exception:  # noqa: BLE001
+        n_methods = 0
+    n_main = len(games)
+    out["curation"] = (
+        f"{name}: {n_methods} metode × {n_main} "
+        + ("joc" if n_main == 1 else "jocuri")
+        + (f" + Urna 2 ({n_urna2})" if n_urna2 else "")
+        + ", plus baseline-ul random."
+    )
+    n_windows = len([p for p in _PCTS.split(",") if p.strip()])
+    target = (n_methods + 1) * n_keys * max(1, n_windows)
+    fp = _LOT.bench_out_dir_for(cc, PROJECT_ROOT) / "folds.csv"
+    eta = None
+    try:
+        avg = _avg_fold_runtime(fp)
+        if avg is not None:
+            eta = (
+                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25)} pentru "
+                f"{target} folduri — calculat din durata ultimei rulări {name}."
+            )
+    except Exception:  # noqa: BLE001
+        eta = None
+    if eta is None:
+        try:
+            ref = _avg_fold_runtime(
+                PROJECT_ROOT / "bench_results" / "folds.csv", "loto_6_49"
+            )
+            n_ref = _csv_rows(PROJECT_ROOT / "_ISTORIC" / "loto_6_49.csv")
+            n_here = max(_csv_rows(PROJECT_ROOT / g.csv) for g in games)
+            if ref and n_ref:
+                scaled = ref * (n_here / n_ref) ** 2
+                eta = (
+                    f"⏱ ETA estimat: {_fmt_eta_seconds(scaled * target * 1.25)} pentru "
+                    f"{target} folduri — estimare fără o rulare anterioară {name}, "
+                    f"scalată cu lungimea istoricului ({n_here} extrageri față de "
+                    f"{n_ref} la România · Loto 6/49)."
+                )
+        except Exception:  # noqa: BLE001
+            eta = None
+    out["eta"] = eta or (
+        f"⏱ ETA: fără o rulare anterioară {name} și fără referință românească — "
+        "nu se poate estima."
+    )
+    try:
+        from loto_enterprise.benchmark.freshness import (
+            aggregate_recommendation,
+            check_freshness,
+            country_freshness_inputs,
+        )
+
+        dec, csv_map, cols_map = country_freshness_inputs(cc)
+        if not Path(dec).exists():
+            out["freshness"] = (
+                f"{name} nu are încă bench; până atunci generarea folosește frequency."
+            )
+        else:
+            reports = check_freshness(dec, csv_map, cols_map, country=cc)
+            rec = aggregate_recommendation(reports)
+            delta = sum(
+                max(0, int(r.current_rows or 0) - int(r.cached_rows or 0))
+                for k, r in reports.items()
+                if not str(k).endswith("_urna2")
+            )
+            if rec in ("quick_rebench", "full_rebench"):
+                out["freshness"] = (
+                    f"🆕 {name}: +{delta} extrageri noi de la ultimul bench → "
+                    "Re-Bench recalculează complet."
+                )
+            else:
+                out["freshness"] = f"✅ {name}: date neschimbate de la ultimul bench."
+    except Exception as exc:  # noqa: BLE001
+        out["freshness"] = f"{name}: prospețimea bench-ului nu poate fi verificată ({exc})."
+    return out
+
+
+def _load_registry_histories(games) -> tuple[list, list]:
+    """Încarcă CSV-urile din registru pentru jocurile date (acțiune explicită).
+
+    Validare: coloanele n1..n<draw_n>, fiecare rând o extragere validă
+    (`valid_draw_matrix`) și date ZZ-LL-AAAA stricte. Leagă fișierul de joc în
+    STATE['dataset_game'], ca identitatea să nu mai fie ghicită din nume.
+    Întoarce (încărcate [(nume, id, n)], erori [text])."""
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+
+    loaded, errors = [], []
+    for g in games:
+        path = PROJECT_ROOT / g.csv
+        name = Path(g.csv).name
+        try:
+            df = pd.read_csv(path)
+            cols = [f"n{i}" for i in range(1, g.draw_n + 1)]
+            _draws, mask = valid_draw_matrix(df, cols, draw_n=g.draw_n, max_num=g.max_n)
+            if int(len(df)) == 0 or not bool(mask.all()):
+                raise ValueError(
+                    f"{int((~mask).sum())} rânduri invalide din {len(df)}"
+                )
+            if "date" in df.columns:
+                pd.to_datetime(df["date"], format="%d-%m-%Y", errors="raise")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{g.display}: {exc}")
+            continue
+        with STATE_LOCK:
+            STATE["datasets"] = [(f, d) for f, d in STATE["datasets"] if f != name] + [
+                (name, df)
+            ]
+            STATE.setdefault("dataset_game", {})[name] = g.game_id
+        loaded.append((name, g.game_id, len(df)))
+    return loaded, errors
 
 
 def _target_bench_folds() -> int:
@@ -661,6 +900,14 @@ def cancel_all() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _echo_mismatch(g_label, data) -> bool:
+    """True dacă o cheie străină nu e confirmată de ecoul worker-ului."""
+    lot = _LOT.lottery_by_id(str(g_label))
+    if lot is None or lot.is_romanian:
+        return False
+    return str((data or {}).get("game_id") or "") != lot.game_id
+
+
 def _start_walk_forward() -> None:
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -729,6 +976,13 @@ def _start_walk_forward() -> None:
                 df_source = ds_by_name.get(fname)
                 if df_source is None:
                     continue
+                if _echo_mismatch(g_label, data):
+                    logger.warning(
+                        "[WF] %s: rezultat fără ecoul jocului (worker vechi / "
+                        "nepotrivire țară) — walk-forward sărit.",
+                        g_label,
+                    )
+                    continue
                 done += 1
                 base = (done - 1) / max(1, total)
                 STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
@@ -774,7 +1028,8 @@ def _start_walk_forward() -> None:
                     )
                     flat, meta = run_honest_walk_forward(
                         df_source=df_source,
-                        game_type=g_label,
+                        # GEOMETRIA (străin: din ecoul rezultatului); România: eticheta.
+                        game_type=_game_spec_for(g_label, data).geometry,
                         pool_size=_wf_pool,
                         backtest_depth_percent=WF_DEPTH_PERCENT,
                         lookback_percent=_effective_lookback_pct(data),
@@ -1109,15 +1364,32 @@ SOUND_JS = (
 )
 
 
-def _next_draw_date() -> str:
-    """Următoarea extragere (Loteria Română: 6/49, 5/40, Joker — JOI și DUMINICĂ)."""
-    base = _dt.now().date()
-    o = base.toordinal()
-    for i in range(0, 8):
-        d = base.fromordinal(o + i)
-        if d.weekday() in (3, 6):  # 3 = Joi, 6 = Duminică
-            return d.strftime("%d-%m-%Y")
-    return base.strftime("%d-%m-%Y")
+def _next_draw_date(weekdays=(3, 6)) -> str:
+    """Următoarea extragere (Loteria Română: 6/49, 5/40, Joker — JOI și DUMINICĂ;
+    alt joc: zilele lui din registru)."""
+    return _next_draw_date_for(weekdays, _dt.now().date())
+
+
+def _results_specs() -> list:
+    """Jocurile (Lottery) din rezultatul afișat, din ecoul worker-ului."""
+    results = STATE.get("results")
+    if not (isinstance(results, tuple) and len(results) == 2):
+        return []
+    return [
+        _game_spec_for(g, _primary_pool_data(d))
+        for _fn, outs in results[0]
+        for g, d in outs.items()
+    ]
+
+
+def _mail_subject_date() -> str:
+    """Data din subiect: RO (sau fără rezultat) ca înainte; altfel cea mai
+    apropiată extragere dintre jocurile rezultatului."""
+    specs = _results_specs()
+    if not specs or all(sp.is_romanian for sp in specs):
+        return _next_draw_date()
+    dates = [_next_draw_date(sp.draw_weekdays) for sp in specs]
+    return min(dates, key=lambda d: _dt.strptime(d, "%d-%m-%Y"))
 
 
 def _build_mail_body() -> str:
@@ -1130,8 +1402,13 @@ def _build_mail_body() -> str:
     def _nums(seq):
         return " ".join(str(int(x)) for x in sorted(seq)) if seq else "—"
 
+    _all_ro = all(sp.is_romanian for sp in _results_specs())
     lines = [
-        f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}",
+        (
+            f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}"
+            if _all_ro
+            else "📅 Următoarea extragere: pe fiecare joc, mai jos"
+        ),
         f"(generat: {_dt.now().strftime('%d-%m-%Y %H:%M')})",
         "",
     ]
@@ -1144,7 +1421,15 @@ def _build_mail_body() -> str:
     for fn, g, d in games:
         primary = _primary_pool_data(d)
         joker = sorted(int(x) for x in (primary.get("hard_core_joker") or []))
-        lines.append(f"=== {_game_title(g)} ===")
+        _sp = _game_spec_for(g, primary)
+        lines.append(f"=== {_sp.display} ===")
+        if not _all_ro:
+            lines.append(
+                f"extragere: {_next_draw_date(_sp.draw_weekdays)} "
+                f"({_weekdays_text(_sp.draw_weekdays)})"
+            )
+            if _sp.training_only:
+                lines.append(f"({_training_only_note(_sp)})")
         info = _last_csv_draw(fn)
         if info:
             _ds, _dn, _dj = info
@@ -1211,7 +1496,7 @@ def _maybe_send_results_email() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("[MAIL] build body: %s", exc)
         body = "(eroare la construirea conținutului)"
-    subject = f"🎰 Loto — numere pentru extragerea {_next_draw_date()}"
+    subject = f"🎰 Loto — numere pentru extragerea {_mail_subject_date()}"
     try:
         send_email(cfg, subject, body)  # doar esențialul (data + pool), fără atașament
         logger.info("[MAIL] rezultate trimise la %s", cfg["mail_to"])
@@ -1380,7 +1665,9 @@ def _render_results_bundle(results_bundle, res_prefix: str = "") -> None:
             ui.label(f"📄 {fname}").classes("text-subtitle1 text-bold")
             for game, raw_data in _ordered_game_items(outs):
                 data = _primary_pool_data(raw_data)
-                with ui.expansion(f"🎯 {_game_title(game)}", value=True).classes("w-full"):
+                with ui.expansion(f"🎯 {_game_title(game, data)}", value=True).classes(
+                    "w-full"
+                ):
                     _render_pool_body(fname, game, data)
 
 
@@ -1569,6 +1856,19 @@ _BASE_TABLE_GAMES = (
     ("Joker — Urna 1 (5/45)", "joker.csv", 5, 45),
 )
 
+
+
+def _base_table_games(country=None) -> tuple:
+    """Jocurile tabelului de intervale pentru țara aleasă (România: tuplul vechi)."""
+    cc = country or _selected_country()
+    if cc == _LOT.RO:
+        return _BASE_TABLE_GAMES
+    return tuple(
+        (g.display, str(Path(g.csv).relative_to("_ISTORIC")), g.draw_n, g.max_n)
+        for g in _LOT.games_for_country(cc)
+    )
+
+
 _BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool) → (rânduri, n_extrageri)
 # 3 jocuri × pool 6..16 = 33 combinații. Sub atât, memo-ul se golea înainte să
 # apuce să fie folosit: o plimbare înainte și înapoi peste dimensiunile de pool
@@ -1650,7 +1950,7 @@ def _render_base_interval_tables() -> None:
         "întregul interval, nu rata unui pool de dimensiune fixă. Ultimul rând este "
         "jocul nerestrâns și cade pe referința teoretică."
     ).classes("text-caption text-grey")
-    for label, csv_name, draw_n, max_num in _BASE_TABLE_GAMES:
+    for label, csv_name, draw_n, max_num in _base_table_games():
         if pool > max_num:
             continue
         data = _base_interval_rows(csv_name, draw_n, max_num, pool)
@@ -1747,6 +2047,74 @@ def main_page() -> None:
     # ---- Sidebar (drawer stânga) ----
     with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3"):
         ui.label("1. Încărcare Date CSV").classes("text-bold")
+        _cc = _selected_country()
+        _cc_name = _country_label(_cc)
+
+        def _on_country(e) -> None:
+            try:
+                SETTINGS["country_val"] = _LOT.normalize_country(e.value)
+            except _LOT.UnknownLotteryError:
+                SETTINGS["country_val"] = _LOT.RO
+            SETTINGS["games_val"] = []
+            _save_settings()
+            # Tot ce depinde de țară (jocuri, praguri, texte de bench) se
+            # redesenează; rezultatul afișat rămâne neatins (e în STATE).
+            ui.navigate.reload()
+
+        ui.select(
+            {cc: _country_label(cc) for cc in _LOT.countries()},
+            value=_cc,
+            label="🌍 Țara",
+            on_change=_on_country,
+        ).classes("w-full")
+
+        def _on_games(e) -> None:
+            SETTINGS["games_val"] = [str(v) for v in (e.value or [])]
+            _save_settings()
+            datasets_label.refresh()
+
+        ui.select(
+            {
+                g.game_id: g.name + (" (doar antrenament)" if g.training_only else "")
+                for g in _LOT.games_for_country(_cc)
+            },
+            value=[g.game_id for g in _selected_games()],
+            multiple=True,
+            label="Jocuri",
+            on_change=_on_games,
+        ).classes("w-full")
+        if any(g.training_only for g in _LOT.games_for_country(_cc)):
+            ui.label(
+                f"„Doar antrenament”: {_TRAINING_ONLY_NOTE}; bench-ul, walk-forward-ul "
+                "și analizele funcționează."
+            ).classes("text-caption text-grey")
+
+        def _load_country_history() -> None:
+            loaded, errors = _load_registry_histories(_selected_games())
+            for err in errors:
+                ui.notify(f"Istoric respins: {err}", type="negative", timeout=8000)
+            if loaded:
+                ui.notify(
+                    "Încărcat: "
+                    + ", ".join(f"{n} ({k} extrageri)" for n, _g, k in loaded),
+                    type="positive",
+                )
+            datasets_label.refresh()
+
+        ui.button(
+            f"📂 Încarcă istoricul {_cc_name}", on_click=_load_country_history
+        ).props("outline no-caps").classes("w-full")
+
+        # Țară străină: fișierul încărcat manual se leagă de un joc ales aici
+        # (identitatea nu se ghicește din nume).
+        _upload_game = {"id": _selected_games()[0].game_id}
+        if _cc != _LOT.RO:
+            ui.select(
+                {g.game_id: g.name for g in _LOT.games_for_country(_cc)},
+                value=_upload_game["id"],
+                label="Fișierul încărcat manual este pentru",
+                on_change=lambda e: _upload_game.update(id=str(e.value)),
+            ).classes("w-full")
 
         async def _on_upload(e) -> None:
             # NiceGUI 3.12: e.file.read() e async. Încărcare DOAR manuală — nu
@@ -1758,6 +2126,27 @@ def main_page() -> None:
             except Exception as exc:  # noqa: BLE001
                 ui.notify(f"Nu pot citi fișierul: {exc}", type="negative")
                 return
+            if _selected_country() != _LOT.RO:
+                from loto_enterprise.core.draw_validation import valid_draw_matrix
+
+                _g = _LOT.require_lottery(_upload_game["id"], _selected_country())
+                try:
+                    _cols = [f"n{i}" for i in range(1, _g.draw_n + 1)]
+                    _dr, _mask = valid_draw_matrix(
+                        df, _cols, draw_n=_g.draw_n, max_num=_g.max_n
+                    )
+                    if len(df) == 0 or not bool(_mask.all()):
+                        raise ValueError(f"{int((~_mask).sum())} rânduri invalide")
+                except Exception as exc:  # noqa: BLE001
+                    ui.notify(
+                        f"{name} nu e un istoric valid {_g.display}: {exc}",
+                        type="negative",
+                    )
+                    return
+                STATE.setdefault("dataset_game", {})[name] = _g.game_id
+            else:
+                # România: ghicitul de dinainte, după nume.
+                STATE.setdefault("dataset_game", {}).pop(name, None)
             STATE["datasets"] = [(f, d) for f, d in STATE["datasets"] if f != name] + [
                 (name, df)
             ]
@@ -1771,8 +2160,16 @@ def main_page() -> None:
         @ui.refreshable
         def datasets_label() -> None:
             if STATE["datasets"]:
+                _sel = {g.game_id for g in _selected_games()}
                 ui.label(
-                    "Încărcate: " + ", ".join(fn for fn, _ in STATE["datasets"])
+                    "Încărcate: "
+                    + ", ".join(
+                        fn
+                        if _game_spec_for(fn).game_id in _sel
+                        else f"{fn} ({_game_spec_for(fn).display} — ignorat pentru "
+                        f"{_country_label()})"
+                        for fn, _ in STATE["datasets"]
+                    )
                 ).classes("text-caption text-positive")
                 with ui.expansion("📅 Istoric CSV", value=False).classes("w-full"):
                     for fn, df in STATE["datasets"]:
@@ -1877,7 +2274,7 @@ def main_page() -> None:
 
         def _on_restrict_base_toggle(event) -> None:
             if event.value:
-                for _label, suffix, max_num in _RESTRICT_BASE_GAMES:
+                for _label, suffix, max_num in _restrict_games_for(_cc):
                     lo_key = f"restrict_base_min_{suffix}_val"
                     hi_key = f"restrict_base_max_{suffix}_val"
                     if not SETTINGS.get(lo_key) and not SETTINGS.get(hi_key):
@@ -1905,9 +2302,12 @@ def main_page() -> None:
             "5/40": "5/40 (1–40)",
             "joker": "Joker Urna 1 (1–45)",
         }
-        for _label, _suffix, _max_num in _RESTRICT_BASE_GAMES:
+        for _label, _suffix, _max_num in _restrict_games_for(_cc):
+            _row_label = _RESTRICT_BASE_ROW_LABEL.get(_label) or (
+                f"{_LOT.GAMES_BY_ID[_label].name} (1–{_max_num})"
+            )
             with ui.row().classes("w-full items-center gap-2") as _rb_row:
-                ui.label(_RESTRICT_BASE_ROW_LABEL[_label]).classes(
+                ui.label(_row_label).classes(
                     "text-caption w-24"
                 )
                 _bind_save(
@@ -1985,6 +2385,55 @@ def main_page() -> None:
 
                 decision.BENCH_HIT_TARGET = target
                 os.environ["LOTO_BENCH_TARGET"] = str(target)
+                _cc = _selected_country()
+                if _cc != _LOT.RO:
+                    # Altă țară: decizia și folds-ul ei, nu fișierele României.
+                    _cname = _LOT.country_name(_cc)
+                    _dp = _LOT.decision_path_for(_cc, PROJECT_ROOT)
+                    _fp = _LOT.bench_out_dir_for(_cc, PROJECT_ROOT) / "folds.csv"
+                    if not (_fp.exists() and _dp.exists()):
+                        ui.notify(
+                            f"{_cname} nu are încă bench — rulează un Re-Bench "
+                            "ca ținta să fie aplicată.",
+                            type="warning",
+                        )
+                        return
+                    decision.update_best_methods_with_auto_pilot(str(_dp), str(_fp))
+                    _mismatch = False
+                    try:
+                        from loto_enterprise.core.method_selector import (
+                            recommend_optimal_config,
+                        )
+
+                        for _g in _LOT.games_for_country(_cc):
+                            for _gk in _g.bench_keys:
+                                if _gk == _g.bench_key_urna2:
+                                    continue
+                                _c = recommend_optimal_config(
+                                    _gk,
+                                    _int_setting("pool_size_val"),
+                                    config_path=str(_dp),
+                                )
+                                if _c.get("rate_col_mismatch"):
+                                    _mismatch = True
+                    except Exception:  # noqa: BLE001
+                        pass
+                    if _mismatch:
+                        ui.notify(
+                            f"Decizie {_cname} actualizată, DAR folds nu au coloane "
+                            f"{target}+ — s-a folosit 4+ (rate_col_mismatch). "
+                            "Rulează Re-Bench.",
+                            type="warning",
+                        )
+                    else:
+                        ui.notify(
+                            f"Decizia Auto-Pilot {_cname} a fost actualizată pentru "
+                            f"{target}+ hits!",
+                            type="info",
+                        )
+                    _refresh_status()
+                    results_panel.refresh()
+                    return
                 if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():
                     decision.update_best_methods_with_auto_pilot()
                     _mismatch = False
@@ -2074,8 +2523,17 @@ def main_page() -> None:
                 ).classes("w-20"),
                 "full_ticket_count_val",
             ).tooltip("Câte bilete fizice complete pe joc (1-10)")
+            if _cc == _LOT.RO:
+                _ft_label = "🎟️ Bilet complet (pe bilet: 6/49 3 · 5/40 4 · Joker 2 variante)"
+            else:
+                _ft_label = "🎟️ Bilet complet (pe bilet: " + " · ".join(
+                    f"{g.name} {g.per_ticket} variante"
+                    if g.per_ticket
+                    else f"{g.name} bilet nemodelat"
+                    for g in _LOT.games_for_country(_cc)
+                ) + ")"
             ui.button(
-                "🎟️ Bilet complet (pe bilet: 6/49 3 · 5/40 4 · Joker 2 variante)",
+                _ft_label,
                 on_click=lambda: _show_full_ticket(),
             ).props("color=positive no-caps").classes("grow").style(_BTN_STYLE)
 
@@ -2084,99 +2542,106 @@ def main_page() -> None:
             "color=orange no-caps"
         ).classes(_BTN).style(_BTN_STYLE)
         _bt = _clamped_bench_target()
-        ui.label(
-            "Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
-            "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
-            f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
-            "Vezi clasamentul complet la 🏆 Clasament bench."
-        ).classes("text-caption")
-        _eta_folds = _target_bench_folds()
-        if _eta_folds:
+        if _cc != _LOT.RO:
+            _ctx = _country_bench_texts(_cc)
+            ui.label(_ctx["intro"]).classes("text-caption")
+            ui.label(_ctx["eta"]).classes("text-caption text-grey")
+            ui.label(f"🎯 {_ctx['curation']}").classes("text-caption text-info")
+            ui.label(_ctx["freshness"]).classes("text-caption text-warning")
+        if _cc == _LOT.RO:
             ui.label(
-                f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
-                f"{_eta_folds} folduri — calculat din durata ultimei rulări; "
-                "prima estimare după o schimbare de matrice e optimistă."
-            ).classes("text-caption text-grey")
-        # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
-        # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
-        _cur = _curation_banner_info()
-        if _cur is not None:
-            _pg = _cur.get("per_game") or {}
-            _main_pg_txt = "/".join(
-                str(int(_pg[g]))
-                for g in ("loto_6_49", "loto_5_40", "joker_urna1")
-                if g in _pg
-            )
-            _urna2_n = _pg.get("joker_urna2")
-            if _main_pg_txt and _urna2_n is not None:
-                _pg_bit = (
-                    f"matrice Re-Bench = {_main_pg_txt} jocuri principale "
-                    f"+ {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
-                )
-            elif _main_pg_txt:
-                _pg_bit = f"matrice Re-Bench = {_main_pg_txt} per joc, plus baseline-urile structurale"
-            elif _urna2_n is not None:
-                _pg_bit = f"matrice Re-Bench = {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
-            else:
-                _pg_bit = "matrice Re-Bench = tot setul activ"
-            _n_after = _cur["n_after"]
-            ui.html(
-                render_html_safe(
-                    t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
-                    t"(uniune eligibilă; {_pg_bit})."
-                )
-            ).classes("text-caption text-info")
-            ui.label(
-                "Dezactivare (revine la toate metodele): șterge sau golește lista "
-                f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
-                "Nimic nu se pierde — nu e blacklist."
-            ).classes("text-caption text-grey")
-            if _cur["missing_required"]:
+                "Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
+                "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
+                f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
+                "Vezi clasamentul complet la 🏆 Clasament bench."
+            ).classes("text-caption")
+            _eta_folds = _target_bench_folds()
+            if _eta_folds:
                 ui.label(
-                    "⚠️ Lipsesc din curare metode structurale "
-                    f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
-                    "cădea pe low_confidence. Adaugă-le în curated_methods.json."
-                ).classes("text-caption text-negative")
-        # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
-        # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea
-        # paginii (se reîmprospătează la reload). Vezi _new_draws_summary / freshness.
-        _fresh = _new_draws_summary()
-        if _fresh is not None and _fresh["any_bench"]:
-            if _fresh["total"] > 0:
-                _g2l = {v: k for k, v in GK_MATRIX.items()}
-                _parts = ", ".join(
-                    f"{_g2l.get(gk, gk)} +{d}" for gk, d in _fresh["per"].items()
+                    f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
+                    f"{_eta_folds} folduri — calculat din durata ultimei rulări; "
+                    "prima estimare după o schimbare de matrice e optimistă."
+                ).classes("text-caption text-grey")
+            # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
+            # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
+            _cur = _curation_banner_info()
+            if _cur is not None:
+                _pg = _cur.get("per_game") or {}
+                _main_pg_txt = "/".join(
+                    str(int(_pg[g]))
+                    for g in ("loto_6_49", "loto_5_40", "joker_urna1")
+                    if g in _pg
                 )
-                _col = (
-                    "text-negative"
-                    if _fresh["rec"] == "full_rebench"
-                    else "text-warning"
-                )
-                _fresh_total = _fresh["total"]
+                _urna2_n = _pg.get("joker_urna2")
+                if _main_pg_txt and _urna2_n is not None:
+                    _pg_bit = (
+                        f"matrice Re-Bench = {_main_pg_txt} jocuri principale "
+                        f"+ {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
+                    )
+                elif _main_pg_txt:
+                    _pg_bit = f"matrice Re-Bench = {_main_pg_txt} per joc, plus baseline-urile structurale"
+                elif _urna2_n is not None:
+                    _pg_bit = f"matrice Re-Bench = {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
+                else:
+                    _pg_bit = "matrice Re-Bench = tot setul activ"
+                _n_after = _cur["n_after"]
                 ui.html(
                     render_html_safe(
-                        t"🆕 <b>+{_fresh_total} extrageri noi</b> de la ultimul bench ({_parts})."
+                        t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
+                        t"(uniune eligibilă; {_pg_bit})."
                     )
-                ).classes("text-caption " + _col)
+                ).classes("text-caption text-info")
                 ui.label(
-                    "⚠️ Datele noi invalidează cache-ul → Re-Bench = recalcul COMPLET (nu rapid). "
-                    "Pentru generarea zilnică NU e nevoie de re-bench: Auto-Pilot folosește deja "
-                    "datele noi, iar câștigătorul bench abia se schimbă la câteva extrageri."
-                ).classes("text-caption " + _col)
-            elif _fresh["rec"] in ("quick_rebench", "full_rebench"):
-                ui.label(
-                    "⚠️ Datele s-au schimbat de la ultimul bench → Re-Bench recalculează complet (fără cache)."
-                ).classes("text-caption text-warning")
-            elif _target_data_ready():
-                ui.label(
-                    "✅ Date neschimbate de la ultimul bench → Re-Bench folosește cache-ul (rapid)."
-                ).classes("text-caption text-positive")
-            else:
-                ui.label(
-                    f"⚠️ Următorul Re-Bench va fi COMPLET (~lent, nu din cache): datele pentru pragul "
-                    f"curent (≥{_bench_target()}) nu-s încă în cache (schemă nouă / prag schimbat). "
-                    "O singură dată — apoi redevine rapid."
-                ).classes("text-caption text-warning")
+                    "Dezactivare (revine la toate metodele): șterge sau golește lista "
+                    f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
+                    "Nimic nu se pierde — nu e blacklist."
+                ).classes("text-caption text-grey")
+                if _cur["missing_required"]:
+                    ui.label(
+                        "⚠️ Lipsesc din curare metode structurale "
+                        f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
+                        "cădea pe low_confidence. Adaugă-le în curated_methods.json."
+                    ).classes("text-caption text-negative")
+            # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
+            # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea
+            # paginii (se reîmprospătează la reload). Vezi _new_draws_summary / freshness.
+            _fresh = _new_draws_summary()
+            if _fresh is not None and _fresh["any_bench"]:
+                if _fresh["total"] > 0:
+                    _g2l = {v: k for k, v in GK_MATRIX.items()}
+                    _parts = ", ".join(
+                        f"{_g2l.get(gk, gk)} +{d}" for gk, d in _fresh["per"].items()
+                    )
+                    _col = (
+                        "text-negative"
+                        if _fresh["rec"] == "full_rebench"
+                        else "text-warning"
+                    )
+                    _fresh_total = _fresh["total"]
+                    ui.html(
+                        render_html_safe(
+                            t"🆕 <b>+{_fresh_total} extrageri noi</b> de la ultimul bench ({_parts})."
+                        )
+                    ).classes("text-caption " + _col)
+                    ui.label(
+                        "⚠️ Datele noi invalidează cache-ul → Re-Bench = recalcul COMPLET (nu rapid). "
+                        "Pentru generarea zilnică NU e nevoie de re-bench: Auto-Pilot folosește deja "
+                        "datele noi, iar câștigătorul bench abia se schimbă la câteva extrageri."
+                    ).classes("text-caption " + _col)
+                elif _fresh["rec"] in ("quick_rebench", "full_rebench"):
+                    ui.label(
+                        "⚠️ Datele s-au schimbat de la ultimul bench → Re-Bench recalculează complet (fără cache)."
+                    ).classes("text-caption text-warning")
+                elif _target_data_ready():
+                    ui.label(
+                        "✅ Date neschimbate de la ultimul bench → Re-Bench folosește cache-ul (rapid)."
+                    ).classes("text-caption text-positive")
+                else:
+                    ui.label(
+                        f"⚠️ Următorul Re-Bench va fi COMPLET (~lent, nu din cache): datele pentru pragul "
+                        f"curent (≥{_bench_target()}) nu-s încă în cache (schemă nouă / prag schimbat). "
+                        "O singură dată — apoi redevine rapid."
+                    ).classes("text-caption text-warning")
         _bind_save(
             ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"),
             "autopilot_after_bench",

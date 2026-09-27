@@ -219,8 +219,20 @@ def build_full_ticket(game: str, data: dict, tickets: int = 1) -> dict:
     `tickets` = bilete fizice (1-10); variantele cerute = bilete x variante pe bilet."""
     per_ticket = TICKET_VARIANTS.get(game)
     pick = PICK.get(game)
+    is_joker = game == "joker"
     if per_ticket is None:
-        return {"error": f"joc necunoscut: {game}"}
+        # Jocurile din registru (alte țări): variante pe bilet și geometrie de
+        # acolo; un bilet neverificat (`per_ticket=None`) nu se inventează.
+        from loto_enterprise.core.lotteries import lottery_by_id
+
+        lot = lottery_by_id(game)
+        if lot is None:
+            return {"error": f"joc necunoscut: {game}"}
+        if lot.per_ticket is None:
+            return {"error": f"bilet nemodelat: {lot.display}"}
+        per_ticket, pick = int(lot.per_ticket), int(lot.pick_n)
+        second = lot.geo.second
+        is_joker = bool(second and second.modelled and second.draw_n == 1)
     tickets = clamp_tickets(tickets)
     n_var = per_ticket * tickets
     pool = sorted({int(x) for x in (data.get("hard_core") or [])})
@@ -235,7 +247,7 @@ def build_full_ticket(game: str, data: dict, tickets: int = 1) -> dict:
     if len(variants) > n_base and guarantee < pick:
         upper = (guarantee + 1, compute_coverage_pct(variants, pool, guarantee + 1))
     joker = None
-    if game == "joker":
+    if is_joker:
         jk = data.get("hard_core_joker") or []
         if jk:
             joker = int(jk[0])

@@ -4,6 +4,8 @@ import ast
 import inspect
 from pathlib import Path
 
+from loto_enterprise.core import lotteries
+
 
 def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
     # Executăm doar handlerul: fără server NiceGUI sau procese de bench reale.
@@ -20,6 +22,10 @@ def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
         "STATE": {"datasets": [object()]},
         "_PCTS": "10,30,60,100",
         "_launch_bench": lambda args, label: calls.append((args, label)),
+        "_selected_country": lambda: "RO",
+        "_country_label": lambda cc=None: str(cc),
+        "_LOT": lotteries,
+        "PROJECT_ROOT": Path(".").resolve(),
     }
     exec(compile(ast.Module(body=[handler], type_ignores=[]), "handler", "exec"), scope)
     scope["run_rebench"]()
@@ -27,6 +33,13 @@ def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
     assert args[args.index("--block-size") + 1] == "1"
     assert "--no-shuffled-control" in args
     assert "--methods" not in args  # nu exclude baseline-ul random sau curarea
+    # România: argv-ul de dinainte, fără --country.
+    assert "--country" not in args
+    # Altă țară: aceeași rulare, cu registrul și ieșirea ei.
+    scope["_selected_country"] = lambda: "DE"
+    scope["run_rebench"]()
+    args_de, _ = calls[1]
+    assert args_de == args + ["--country", "DE"]
 
 
 def test_runner_defaults_to_per_draw_scoring():

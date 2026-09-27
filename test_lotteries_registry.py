@@ -257,7 +257,7 @@ def test_registry_is_unique_and_facts_are_well_formed():
         assert owner is None or key in owner.bench_keys
     for g in L.GAMES:
         assert g.geometry in L.GEOMETRIES
-        assert g.currency in {"Lei", "EUR", "PLN", "CAD", "GBP"}
+        assert g.currency in {"Lei", "EUR", "PLN", "HUF", "CZK"}
         assert g.price is None or g.price > 0
         assert g.per_ticket is None or g.per_ticket > 0
         assert g.draw_weekdays and all(0 <= d <= 6 for d in g.draw_weekdays)
@@ -298,6 +298,31 @@ def test_verified_facts_for_germany_poland_spain():
         None,
         False,
     )
+
+
+@pytest.mark.parametrize(
+    "gid,cc,name,geo,price,cur,per,days",
+    [
+        ("at_lotto", "AT", "Lotto 6 aus 45", "6/45", 1.5, "EUR", 12, (2, 6)),
+        ("be_lotto", "BE", "Lotto", "6/45", 1.5, "EUR", 14, (2, 5)),
+        ("hu_hatos", "HU", "Hatoslottó", "6/45", 500.0, "HUF", 20, (3, 6)),
+        ("cz_sportka", "CZ", "Sportka", "6/49", 30.0, "CZK", 8, (2, 4, 6)),
+        ("sk_loto", "SK", "Loto", "6/49", 1.2, "EUR", 10, (2, 6)),
+        ("eu_euromillions", "EU", "EuroMillions", "5/50", None, "EUR", None, (1, 4)),
+    ],
+)
+def test_verified_facts_for_the_other_eu_games(gid, cc, name, geo, price, cur, per, days):
+    g = L.GAMES_BY_ID[gid]
+    assert (g.country, g.name, g.geometry, g.price, g.currency) == (
+        cc,
+        name,
+        geo,
+        price,
+        cur,
+    )
+    assert (g.per_ticket, g.draw_weekdays, g.bench_key) == (per, days, gid)
+    assert g.training_only
+    assert g.playable_from_ro is (False if cc == "EU" else None)
 
 
 @pytest.mark.parametrize("game", [g.game_id for g in L.GAMES])
