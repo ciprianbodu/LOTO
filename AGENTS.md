@@ -60,9 +60,9 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v5`;
-- teste: 70 fisiere `test_*.py`, 1485 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1461 trec, 24 sarite (integrarea
+- cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
+- teste: 73 fisiere `test_*.py`, 1575 de teste (renumarat la 2026-09-27). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1551 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -231,6 +231,7 @@ UI-ul face polling la o secunda, fara reload complet.
 | `loto_enterprise/core/score_validation.py` | validarea comuna a scorurilor bench/productie |
 | `loto_enterprise/core/walk_forward_adapter.py` | WF onest, cache, agregare si acoperire |
 | `loto_enterprise/core/draw_validation.py` | contract comun pentru extrageri valide |
+| `loto_enterprise/core/lotteries.py` | registrul loteriilor: identitate (tara, `game_id`, cheia de bench), geometrii, tarife, cai de decizie/bench per tara |
 | `_ISTORIC/` | sursa versionata a datelor de benchmark |
 
 ## 4. Contracte care nu se negociaza
@@ -248,6 +249,18 @@ UI-ul face polling la o secunda, fara reload complet.
   ar inlocui pe tacute Loto 6/49 in bench. `test_externe_history.py` permite la
   nivelul de sus numai cele trei fisiere romanesti, iar numele straine nu contin
   „joker”, „649”, „6_49”, „5_40”, dupa care codul vechi ghiceste jocul.
+- Identitatea unui joc (tara ISO, `game_id`, cheia de bench) vine NUMAI din
+  registrul `loto_enterprise/core/lotteries.py`; `game_type` ramane GEOMETRIA
+  („6/49”, „5/40”, „joker”, „6/45”, „5/50”). Jocurile romanesti pastreaza
+  id-urile si cheile de dinainte (`6/49` → `loto_6_49` etc.). Un task fara
+  `country` este Romania, exact ca inainte; un task strain are `game_label` =
+  id-ul jocului si `country`, iar o tara/un joc necunoscut face jobul FAILED.
+  Decizia unei alte tari se citeste numai din `decisions/<CC>/best_methods.json`
+  (cu `_meta.country` = tara; altfel e tratata ca lipsa → `frequency`, marcat
+  in audit cu `fallback`/`no_decision`). Cheile pool_history/adaptive primesc
+  prefixul `<CC>_<game_id>_` numai in afara Romaniei.
+  `test_lotteries_registry.py` verifica fiecare tabel romanesc vechi fata de
+  registru.
 
 ### 4.2 Scoruri si ranking
 
@@ -740,11 +753,13 @@ decizia Urnei 2.
 |---|---:|---|
 | benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v27` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v5` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v6` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
-Randul ramane ca sa se stie ce s-ar bumpa daca se reactiveaza.
+Randul ramane ca sa se stie ce s-ar bumpa daca se reactiveaza. v6: fiecare
+rezultat de joc poarta `country`, `game_id`, `bench_key`, `geometry`; cheia
+unui job cu jocuri din alte tari include si fisierul de decizie al tarii.
 
 Un bump WF schimba numele fisierului, dar nu sterge cache-urile vechi. Foloseste
 API-urile de inventariere/curatare, nu stergeri recursive oarbe.

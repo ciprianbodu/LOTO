@@ -22,6 +22,10 @@ class ScoringMixin:
             self.game_type "5/40"  → game_key "loto_5_40"
             self.game_type "joker" → "joker_urna2" if is_joker_drum else "joker_urna1"
 
+        Cu identitate explicită (`LotoEngine(..., game_key=, country=)`), cheia
+        vine din registru, iar în afara României decizia se citește din fișierul
+        țării (`method_selector.decision_path_for`), niciodată din cel românesc.
+
         Reads best_methods.json via method_selector. Returns {} on any failure
         so the caller falls back to TimesFM.
         """
@@ -29,6 +33,7 @@ class ScoringMixin:
             from loto_enterprise.core.method_selector import (
                 get_ensemble_for_game,
                 combine_ensemble_scores,
+                has_decision,
             )
             from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
         except Exception as exc:
@@ -60,6 +65,23 @@ class ScoringMixin:
         else:
             draws_2d = self._draw_matrix.astype(np.int64)
 
+        # Joc din altă țară fără decizie de bench (încă niciun Re-Bench al țării,
+        # sau fișier care nu îi aparține): frequency, marcat explicit ca fallback
+        # în audit — nu ca un câștigător de bench.
+        config_path = self._decision_config_path()
+        if config_path is not None and not has_decision(game_key, config_path):
+            _lot = getattr(self, "lottery", None)
+            self._bench_winner_missing_reason = (
+                f"fără decizie bench pentru {_lot.display if _lot else game_key}"
+            )
+            logging.info(
+                "[ENGINE] %s: %s (%s) — frequency",
+                game_key,
+                self._bench_winner_missing_reason,
+                config_path,
+            )
+            return {}
+
         try:
             # max_methods explicit din decision.ENSEMBLE_MAX_METHODS (azi 1), NU
             # default-ul funcției (3, gândit pentru afișarea nominală din UI —
@@ -70,7 +92,10 @@ class ScoringMixin:
             # blendat tăcut aici — exact regresia măsurată în §5 pct. 8 (Joker k11:
             # blend 6.73% sub random 8.53%, față de 11.16% pentru câștigătorul unic).
             ensemble = get_ensemble_for_game(
-                game_key, pool_size=_pool_hint, max_methods=ENSEMBLE_MAX_METHODS
+                game_key,
+                pool_size=_pool_hint,
+                config_path=config_path,
+                max_methods=ENSEMBLE_MAX_METHODS,
             )
             if not ensemble:
                 return {}
@@ -179,7 +204,7 @@ class ScoringMixin:
             ):
                 if _ens_audit.get(_flag):
                     bench_winner_info[_flag] = True
-            if game_key == "joker_urna2":
+            if is_joker_drum:
                 bench_winner_info["single_pick"] = True
                 bench_winner_info["target_metric"] = "rate_1plus_k1"
             self.audit.setdefault("bench_winner", {})[game_key] = bench_winner_info
@@ -233,29 +258,59 @@ class ScoringMixin:
             # activa desi pool-ul vine din frecventa.
             _attempted = getattr(self, "_bench_winner_unusable_attempt", None)
             self._bench_winner_unusable_attempt = None
+            _missing = getattr(self, "_bench_winner_missing_reason", None)
+            self._bench_winner_missing_reason = None
             _fb_info = {
                 "method": "frequency",
                 "fallback": True,
                 "reason": (
-                    "bench-winner scoring unusable"
-                    if _attempted
-                    else "bench-winner scoring empty"
+                    _missing
+                    or (
+                        "bench-winner scoring unusable"
+                        if _attempted
+                        else "bench-winner scoring empty"
+                    )
                 ),
                 "pool_hint": _ph,
                 "family": "baseline",
             }
+            if _missing:
+                _fb_info["no_decision"] = True
             if _attempted:
                 _fb_info["attempted"] = _attempted
             self.audit.setdefault("bench_winner", {})[_gk] = _fb_info
         return self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
 
     def _bench_game_key(self, is_joker_drum: bool = False) -> str:
-        """Cheia de joc din best_methods.json pentru (game_type, is_joker_drum)."""
+        """Cheia de joc din decizie pentru (joc, is_joker_drum).
+
+        Joc din altă țară: cheia din registru (niciodată `loto_6_49`). România,
+        cu sau fără identitate explicită: maparea de dinainte, după geometrie
+        (registrul are aceleași chei, verificat în test_lotteries_registry)."""
+        lot = getattr(self, "lottery", None)
+        if lot is not None and not lot.is_romanian:
+            if is_joker_drum:
+                return lot.bench_key_urna2 or f"{lot.bench_key}_urna2"
+            return lot.bench_key
         if is_joker_drum:
             return "joker_urna2"
         return {"6/49": "loto_6_49", "5/40": "loto_5_40", "joker": "joker_urna1"}.get(
             self.game_type, "loto_6_49"
         )
+
+    def _decision_config_path(self) -> str | None:
+        """Fișierul de decizie al țării jocului; None = cel implicit (România)."""
+        lot = getattr(self, "lottery", None)
+        if lot is None or lot.is_romanian:
+            return None
+        from loto_enterprise.core.method_selector import decision_path_for
+
+        return str(decision_path_for(lot.country))
+
+    def _history_key_prefix(self) -> str:
+        """Prefixul cheilor pool_history/adaptive: gol pentru România."""
+        lot = getattr(self, "lottery", None)
+        return lot.history_key_prefix if lot is not None else ""
 
     def _frequency_fallback_scores(
         self, is_joker_drum: bool = False

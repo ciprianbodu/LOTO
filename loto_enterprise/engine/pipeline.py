@@ -174,7 +174,9 @@ class PipelineMixin:
         adaptive_info = None
         if enable_adaptive_persistence and _HAS_ADAPTIVE and self.data is not None:
             try:
-                state = load_adaptive_state(self.game_type, pool_size)
+                state = load_adaptive_state(
+                    self.game_type, pool_size, key_prefix=self._history_key_prefix()
+                )
                 last_rows = int(state.get("last_data_rows", 0))
                 current_rows = int(len(self.data))
                 last_pool = state.get("last_pool", [])
@@ -221,7 +223,12 @@ class PipelineMixin:
                                 adaptive_info.get("reset_duration", 0)
                             ),
                         }
-                        save_adaptive_state(self.game_type, pool_size, state)
+                        save_adaptive_state(
+                            self.game_type,
+                            pool_size,
+                            state,
+                            key_prefix=self._history_key_prefix(),
+                        )
                         logging.info(
                             f"[ADAPTIVE] Eveniment={adaptive_event} | hits={adaptive_info['pool_hits']} | "
                             f"streak_zero={adaptive_info['streak_zero']} | mode={adaptive_info['active_mode']} | "
@@ -294,14 +301,25 @@ class PipelineMixin:
         _score_lbl = "frecvență"
         if self.use_bench_winner:
             try:
-                from loto_enterprise.core.method_selector import get_winner_name
+                from loto_enterprise.core.method_selector import (
+                    get_winner_name,
+                    has_decision,
+                )
 
                 _gk = self._bench_game_key()
-                _wn = get_winner_name(
-                    _gk, pool_size=int(getattr(self, "_winner_pool_hint", 16))
-                )
-                if _wn:
-                    _score_lbl = _wn
+                _cp = self._decision_config_path()
+                if _cp is not None and not has_decision(_gk, _cp):
+                    _score_lbl = (
+                        f"frequency (fără bench pentru {self.lottery.display})"
+                    )
+                else:
+                    _wn = get_winner_name(
+                        _gk,
+                        pool_size=int(getattr(self, "_winner_pool_hint", 16)),
+                        config_path=_cp,
+                    )
+                    if _wn:
+                        _score_lbl = _wn
             except Exception:  # noqa: BLE001
                 pass
         if progress_cb:
@@ -720,7 +738,9 @@ class PipelineMixin:
                         )
                         history = {}
 
-                hist_key = f"{self.game_type}_{pool_size}"
+                # România: `6/49_12` (neschimbat). Altă țară: prefixată cu țara și
+                # jocul, ca un Lotto german să nu scrie peste Loto 6/49 românesc.
+                hist_key = f"{self._history_key_prefix()}{self.game_type}_{pool_size}"
                 legacy_key = f"{hist_key}_p1"
                 last_pool = (history.get(hist_key, {}) or {}).get("pool", [])
                 if not last_pool:
@@ -762,8 +782,11 @@ class PipelineMixin:
                     pool_size=pool_size,
                     pool=self.hard_core,
                     data_rows=full_rows,
+                    key_prefix=self._history_key_prefix(),
                 )
-                summary = get_state_summary(self.game_type, pool_size)
+                summary = get_state_summary(
+                    self.game_type, pool_size, key_prefix=self._history_key_prefix()
+                )
                 self.audit["adaptive_state"] = {
                     "event": adaptive_event,
                     "active_mode": self._adaptive_mode,

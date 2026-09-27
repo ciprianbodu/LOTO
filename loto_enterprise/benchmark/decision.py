@@ -69,6 +69,7 @@ from loto_enterprise.benchmark.hit_target import (
     clamp_bench_hit_target,
     game_hit_target,
 )
+from loto_enterprise.core.lotteries import foreign_bench_max_num
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,9 @@ KNOWN_GAME_MAX_NUM = {
     "joker_urna1": 45,
     "joker_urna2": 20,
 }
+# Jocurile din alte țări: universul vine din registru, ca decizia lor să aibă
+# tot referința hipergeometrică, nu pe cea empirică `random`.
+KNOWN_GAME_MAX_NUM.update(foreign_bench_max_num())
 
 # O metoda a carei selectie top-K cade in interiorul unui grup de scoruri EGALE
 # in cel putin aceasta fractie din blocurile evaluate nu alege pool-ul dupa scor,
