@@ -24,8 +24,10 @@ LEGACY_TOKENS = ("joker", "649", "6_49", "5_40", "5/40", "540")
 
 
 def _geometry(path: Path) -> tuple[int, int, bool]:
-    """(numere principale, maxim, are coloana joker) din numele fișierului."""
+    """(numere principale, maxim, a doua urnă) din numele fișierului."""
     name = path.stem
+    if "5din50" in name:
+        return 5, 50, "stars"
     if "5din45" in name:
         return 5, 45, True
     if "6din45" in name or "6aus45" in name:
@@ -70,7 +72,8 @@ def test_external_history_is_valid_and_chronological(path):
     raw = path.read_bytes()
     assert b"\r" not in raw, "terminații CRLF"
     rows = list(csv.reader(raw.decode("utf-8").splitlines()))
-    header = ["date"] + [f"n{i}" for i in range(1, draw_n + 1)] + (["joker"] if has_joker else [])
+    second = {True: ["joker"], "stars": ["s1", "s2"]}.get(has_joker, [])
+    header = ["date"] + [f"n{i}" for i in range(1, draw_n + 1)] + second
     assert rows[0] == header
     seen, per_day, prev = set(), {}, None
     for lineno, row in enumerate(rows[1:], start=2):
@@ -81,8 +84,13 @@ def test_external_history_is_valid_and_chronological(path):
         nums = [int(x) for x in row[1 : 1 + draw_n]]
         assert len(set(nums)) == draw_n, f"rândul {lineno}: numere repetate"
         assert all(1 <= n <= max_num for n in nums), f"rândul {lineno}: interval"
-        if has_joker:
+        if has_joker is True:
             assert 1 <= int(row[-1]) <= 20, f"rândul {lineno}: joker"
+        elif has_joker == "stars":
+            # EuroMillions: 1-9 stele până la 06.05.2011, 1-11 până la 23.09.2016, apoi 1-12.
+            top = 9 if day < dt.date(2011, 5, 10) else 11 if day < dt.date(2016, 9, 27) else 12
+            stars = [int(x) for x in row[-2:]]
+            assert len(set(stars)) == 2 and all(1 <= x <= top for x in stars), f"rândul {lineno}"
         key = (day, tuple(sorted(nums)))
         assert key not in seen, f"rândul {lineno}: extragere repetată"
         seen.add(key)
