@@ -294,3 +294,10 @@ def test_autoload_loads_missing_and_changed_histories_once(ui_state):
     name = Path(AT.csv).name
     ui_state["dataset_mtime"][name] -= 1
     assert [g for _n, g, _k in app._autoload_histories([AT])[0]] == ["at_lotto"]
+
+
+def test_loading_records_the_load_time(ui_state):
+    ui_state.pop("dataset_loaded_at", None)
+    app._load_registry_histories([AT])
+    stamp = ui_state["dataset_loaded_at"][Path(AT.csv).name]
+    assert len(stamp) == len("28-09-2026 04:10")
