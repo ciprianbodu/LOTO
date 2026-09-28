@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
-- teste: 78 fisiere `test_*.py`, 1689 de teste (renumarat la 2026-09-28). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1665 trec, 24 sarite (integrarea
+- teste: 78 fisiere `test_*.py`, 1690 de teste (renumarat la 2026-09-28). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1666 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -690,8 +690,8 @@ revine la greedy. Compara acoperirea EXACTA dupa completarea numerelor lipsa
 si pastreaza candidatul numai daca acopera mai multe tinte, cu cel mult
 acelasi numar de bilete. Nu demonstreaza optimalitate sau avantaj predictiv.
 Nu modifica default-urile. Activare explicita: `LOTO_WHEEL_METHOD=maxcover`.
-Cheia WF distinge deja numele metodei; workerul adauga exclusiv pentru aceasta
-optiune sufixul `:wheel=maxcover-v1`, fara invalidarea cache-urilor default.
+Cheia WF distinge deja numele metodei; cheia de pipeline a worker-ului primeste
+sufixul `:wheel=<metoda>` (implicit `auto`) pentru orice metoda.
 
 Experimentul reproductibil `scripts/analysis/bench_budget_cover.py` compara
 greedy, La Jolla, bilete aleatoare si maxcover: pool identic dupa frequency

@@ -85,5 +85,9 @@ def wheel_maxcover(pool, pick, guarantee, max_variants=0, scores=None):
     if candidate_count > len(covered(base)):
         from math import comb
 
-        return candidate, round(100 * candidate_count / comb(len(pool), guarantee), 2)
+        from covering.common import _coverage_ratio_pct
+
+        return candidate, _coverage_ratio_pct(
+            candidate_count, comb(len(pool), guarantee)
+        )
     return base, base_cov
