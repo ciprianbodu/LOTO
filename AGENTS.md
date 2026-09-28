@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
-- teste: 77 fisiere `test_*.py`, 1679 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1655 trec, 24 sarite (integrarea
+- teste: 78 fisiere `test_*.py`, 1687 de teste (renumarat la 2026-09-28). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1663 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -521,7 +521,10 @@ limita de validitate din §5).
 
 - Selectorul de tara (sidebar „1. Date”, `country_val`, implicit România) si
   jocurile tarii (`games_val`). „📂 Incarca istoricul <tara>” citeste CSV-urile
-  din registru si leaga fisierul de joc (`STATE['dataset_game']`). Se trimit
+  din registru si leaga fisierul de joc (`STATE['dataset_game']`). La deschiderea
+  paginii, `_autoload_histories` incarca singur CSV-urile tarii selectate care
+  lipsesc sau s-au schimbat pe disc (mtime in `STATE['dataset_mtime']`);
+  butonul ramane pentru reincarcare manuala. Se trimit
   numai seturile tarii selectate; cu România selectata, config_json si hash-ul
   sunt identice cu cele de dinainte. Rezultatele se identifica din ecoul
   worker-ului (`_game_spec_for`): titlu „Tara · Joc”, tarif in moneda tarii sau
@@ -815,6 +818,15 @@ Instalarea canonica este:
    verifica extragerile deja stocate din ultimele 60 de zile si, la orice
    nepotrivire sau rand invalid, nu scrie nimic pentru jocul acela; adauga numai
    extragerile mai noi, atomic, LF; iese mereu cu 0. START_8000 nu il ruleaza;
+   dupa curatarea cache-ului WF ruleaza `cleanup_residual.py` (pasul [2d/4]):
+   sterge numai o lista explicita de artefacte pe care codul nu le mai citeste
+   (venv-uri/cache-uri vechi GPU/numba, `disabled_methods.json`, backup-uri
+   `*.backup_overnight`/`*.pre_autopilot`/`best_methods.json.pre_*`, copii ramase
+   ale modulelor sterse, `__pycache__`, loguri vechi din radacina cand runtime-ul
+   e mutat, WF legacy deja migrat, foldurile bench de alte versiuni prin
+   `purge_stale_fold_cache`); sare orice fisier urmarit de git, iar fara git
+   sare si fisierele care ar putea fi urmarite; `--dry-run` doar listeaza; iese
+   mereu cu 0;
 2. `START_8000.bat` - sincronizeaza `main` din copia temporara daca e in urma, verifica mediul, curata procese vechi,
    porneste worker-ul si UI-ul.
 
