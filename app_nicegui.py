@@ -646,6 +646,9 @@ def _load_registry_histories(games) -> tuple[list, list]:
                 (name, df)
             ]
             STATE.setdefault("dataset_game", {})[name] = g.game_id
+            STATE.setdefault("dataset_loaded_at", {})[name] = _dt.now().strftime(
+                "%d-%m-%Y %H:%M"
+            )
         loaded.append((name, g.game_id, len(df)))
     return loaded, errors
 
@@ -2251,16 +2254,26 @@ def main_page() -> None:
         def datasets_label() -> None:
             if STATE["datasets"]:
                 _sel = {g.game_id for g in _selected_games()}
-                ui.label(
-                    "Încărcate: "
-                    + ", ".join(
-                        fn
-                        if _game_spec_for(fn).game_id in _sel
-                        else f"{fn} ({_game_spec_for(fn).display} — ignorat pentru "
-                        f"{_country_label()})"
-                        for fn, _ in STATE["datasets"]
-                    )
-                ).classes("text-caption text-positive")
+                _at = STATE.get("dataset_loaded_at") or {}
+                for fn, df in STATE["datasets"]:
+                    if _game_spec_for(fn).game_id not in _sel:
+                        continue
+                    _last = _csv_last_date(df)
+                    ui.label(
+                        f"✅ {fn}: {len(df)} extrageri"
+                        + (f", ultima extragere {_last}" if _last else "")
+                        + (f"; încărcat {_at[fn]}" if fn in _at else "")
+                    ).classes("text-caption text-positive")
+                _ignored = [
+                    fn
+                    for fn, _ in STATE["datasets"]
+                    if _game_spec_for(fn).game_id not in _sel
+                ]
+                if _ignored:
+                    ui.label(
+                        f"Încărcate, dar ignorate pentru {_country_label()}: "
+                        + ", ".join(_ignored)
+                    ).classes("text-caption text-grey")
                 with ui.expansion("📅 Istoric CSV", value=False).classes("w-full"):
                     for fn, df in STATE["datasets"]:
                         _last = _csv_last_date(df)
