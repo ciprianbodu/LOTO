@@ -59,6 +59,7 @@ def test_append_skips_exact_duplicate_rows(tmp_path):
     text = csv_path.read_text(encoding="utf-8")
     assert text.count("10-06-2026") == 1  # neduplicat
     assert "17-06-2026" in text
+    assert b"\r" not in csv_path.read_bytes()  # LF, ca istoricele externe
 
 
 def test_append_keeps_same_day_extra_with_different_numbers(tmp_path):

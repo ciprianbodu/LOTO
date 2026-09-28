@@ -269,8 +269,7 @@ def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
 
     Plafonată la `pick - 1` când jocul e cunoscut. `guarantee == pick` e o cerere
     DEGENERATĂ: singurul cover 100% e sistemul complet (5/40 pool 15 → C(15,5) =
-    3003 bilete), iar greedy-ul se oprește la 1000 de iterații → 1001 bilete la
-    33% acoperire. Formula `max(4, pool//3)` atinge 5 de la pool 15, iar la 5/40 și
+    3003 bilete), mult peste bugetul unui pas WF. Formula `max(4, pool//3)` atinge 5 de la pool 15, iar la 5/40 și
     Joker `pick` e tot 5 → degenerare la orice pool ≥ 15. Plafonul e intern (WF își
     alege singur garanția); garanția CERUTĂ DE UTILIZATOR în UI rămâne respectată
     întotdeauna, inclusiv `guarantee == pick` = sistem complet, deliberat.

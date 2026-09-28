@@ -504,7 +504,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     _remove_temp_csv(
                         temp_csv_path
                     )  # altfel istoricul rămâne în %TEMP% la fiecare anulare
-                    return "{}"
+                    return None  # oprit: nimic de scris în coadă
 
                 engine = LotoEngine(
                     game_type=game_mapped,
@@ -579,7 +579,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         f"[worker] Job {job_id} oprit la cerere (Stop Requested)."
                     )
                     _remove_temp_csv(temp_csv_path)
-                    return "{}"
+                    return None  # oprit (anulat, reprogramat sau șters)
                 logging.error(f"Eroare la procesarea task-ului {game_label}: {e}")
                 _remove_temp_csv(temp_csv_path)
                 raise

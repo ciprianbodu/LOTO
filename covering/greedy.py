@@ -10,7 +10,7 @@ import logging
 import math
 import time
 
-from covering.common import ensure_pool_numbers_on_tickets
+from covering.common import _coverage_ratio_pct, ensure_pool_numbers_on_tickets
 
 def generate_combinatorial_wheel(
     pool, pick=6, guarantee=4, max_variants=0, scores=None
@@ -53,11 +53,7 @@ def generate_combinatorial_wheel(
         wheel = [sorted(c) for c in combinations]
         if max_variants > 0:
             wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
-        coverage_pct = (
-            100.0
-            if len(wheel) >= n_full
-            else round(100.0 * len(wheel) / max(n_full, 1), 2)
-        )
+        coverage_pct = _coverage_ratio_pct(min(len(wheel), n_full), n_full)
         logging.info(
             "[WHEEL] Sistem complet C(%d,%d): %d bilete, acoperire %.2f%% în %.2fs.",
             pool_len,
@@ -173,17 +169,9 @@ def generate_combinatorial_wheel(
                 idx = target_index.get(sub)
                 if idx is not None:
                     covered_mask |= 1 << idx
-        coverage_pct = (
-            100.0
-            if total_targets == 0
-            else round(100.0 * covered_mask.bit_count() / total_targets, 2)
-        )
+        coverage_pct = _coverage_ratio_pct(covered_mask.bit_count(), total_targets)
     else:
-        coverage_pct = (
-            100.0
-            if total_targets == 0
-            else round((covered_count / total_targets) * 100, 2)
-        )
+        coverage_pct = _coverage_ratio_pct(covered_count, total_targets)
     logging.info(
         f"[WHEEL] Generare completă în {time.time() - start_time:.2f}s. Total variante: {len(wheel)}. Acoperire: {coverage_pct}%"
     )

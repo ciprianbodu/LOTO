@@ -251,7 +251,7 @@ def _append_rows_atomic(
     fd, tmp_path = tempfile.mkstemp(dir=str(dir_), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-            writer = csv.writer(f)
+            writer = csv.writer(f, lineterminator="\n")
             writer.writerow(header)
             writer.writerows(existing)
             writer.writerows(to_add)

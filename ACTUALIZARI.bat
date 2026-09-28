@@ -314,7 +314,7 @@ REM critice se importa (prinde coruptie binara .dll/.pyd de la sync OneDrive)?
 "%VENV_PY%" -c "import sys; print('  Python venv:', sys.version.split()[0])" 2>nul
 if errorlevel 1 (
     echo   [EROARE] Python din venv NU ruleaza - corupt/incomplet.
-    echo            Sterge venv-ul si reruleaza START_8000.bat: rmdir /s /q "%VENV_DIR%"
+    echo            Sterge venv-ul si reruleaza ACTUALIZARI.bat: rmdir /s /q "%VENV_DIR%"
     goto :eof
 )
 echo   - pip check - dependinte lipsa/incompatibile = install corupt...

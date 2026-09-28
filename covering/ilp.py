@@ -122,12 +122,8 @@ def wheel_ilp(
         chosen = [[pool[i] for i in blk] for blk in cover]
         # HiGHS poate returna o soluție feasibilă NEoptimă la limita de timp →
         # comparăm cu greedy. Criteriul e (ACOPERIRE, apoi bilete), nu doar numărul
-        # de bilete: greedy-ul se oprește la 1000 de iterații
-        # (`loto_engine.generate_combinatorial_wheel`), deci pe o cerere degenerată
-        # (`guarantee == pick`, unde doar sistemul complet acoperă 100%) întoarce
-        # 1001 bilete la ~33% acoperire. Comparate doar pe număr, „mai puține bilete"
-        # ar fi câștigat cu o acoperire de trei ori mai mică — iar comentariul de
-        # dinainte („ambele 100%") era fals exact în cazul ăsta.
+        # de bilete: comparat doar pe număr, un greedy cu acoperire parțială (ex.
+        # plafonat de `max_variants`) ar fi câștigat în fața unui cover complet.
         g_wheel, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)
         ilp_cov = _coverage_pct(chosen, pool, guarantee)
         g_cov = _coverage_pct(g_wheel, pool, guarantee)

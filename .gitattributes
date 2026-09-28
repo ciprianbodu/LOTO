@@ -8,3 +8,5 @@ scripts/git-hooks/* text eol=lf
 scripts/analysis/forward_test/* text eol=lf
 # Istoricele externe: testul si amprentele din external_replication.md cer LF.
 _ISTORIC/externe/*.csv text eol=lf
+# Istoricele romanesti: update_csv.py scrie LF.
+_ISTORIC/*.csv text eol=lf

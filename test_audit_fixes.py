@@ -672,3 +672,12 @@ def test_freshness_without_stamped_engine_signature_stays_quiet(tmp_path, monkey
     )
     r = freshness.check_freshness(str(bm))["loto_6_49"]
     assert (r.status, r.recommendation) == ("fresh", "use_cache")
+
+
+def test_full_system_one_ticket_short_is_not_reported_as_100():
+    from covering.greedy import generate_combinatorial_wheel
+
+    wheel, cov = generate_combinatorial_wheel(
+        list(range(1, 21)), 6, 6, max_variants=38759
+    )
+    assert len(wheel) == 38759 and cov < 100.0
