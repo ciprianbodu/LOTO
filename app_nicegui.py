@@ -650,6 +650,29 @@ def _load_registry_histories(games) -> tuple[list, list]:
     return loaded, errors
 
 
+def _autoload_histories(games) -> tuple[list, list]:
+    """Încarcă automat CSV-urile jocurilor date care lipsesc din STATE sau s-au
+    schimbat pe disc de la ultima încărcare (ex. după ACTUALIZARI.bat)."""
+    seen = STATE.setdefault("dataset_mtime", {})
+    loaded_names = {f for f, _ in STATE["datasets"]}
+    todo, stamps = [], {}
+    for g in games:
+        name = Path(g.csv).name
+        try:
+            mt = (PROJECT_ROOT / g.csv).stat().st_mtime_ns
+        except OSError:
+            continue
+        if name not in loaded_names or seen.get(name) != mt:
+            todo.append(g)
+            stamps[name] = mt
+    if not todo:
+        return [], []
+    loaded, errors = _load_registry_histories(todo)
+    for name, _gid, _n in loaded:
+        seen[name] = stamps[name]
+    return loaded, errors
+
+
 def _target_bench_folds() -> int:
     """Numărul de folduri pe care Re-Bench-ul UI (`run_rebench`, fără
     `--methods`/`--quick`) urmează să le ruleze — ținta pentru `_estimate_bench_eta`.
@@ -2111,6 +2134,11 @@ def main_page() -> None:
         ui.label("1. Încărcare Date CSV").classes("text-bold")
         _cc = _selected_country()
         _cc_name = _country_label(_cc)
+        # Istoricul țării selectate (implicit România) se încarcă singur, la
+        # fiecare deschidere a paginii dacă fișierul s-a schimbat pe disc.
+        _auto_loaded, _auto_errors = _autoload_histories(_selected_games())
+        for _err in _auto_errors:
+            ui.notify(f"Istoric respins: {_err}", type="negative", timeout=8000)
 
         def _on_country(e) -> None:
             try:

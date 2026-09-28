@@ -281,3 +281,16 @@ def test_play_note_replaces_the_training_only_note():
     bg = L.GAMES_BY_ID["bg_toto2"]
     assert app._training_only_note(bg) == bg.play_note
     assert "agenție" in app._training_only_note(bg)
+
+
+def test_autoload_loads_missing_and_changed_histories_once(ui_state):
+    ui_state["datasets"] = []
+    ui_state.pop("dataset_mtime", None)
+    loaded, errors = app._autoload_histories([AT])
+    assert errors == [] and [g for _n, g, _k in loaded] == ["at_lotto"]
+    # Fișier neschimbat: nu se reîncarcă.
+    assert app._autoload_histories([AT]) == ([], [])
+    # Schimbat pe disc (alt mtime): se reîncarcă.
+    name = Path(AT.csv).name
+    ui_state["dataset_mtime"][name] -= 1
+    assert [g for _n, g, _k in app._autoload_histories([AT])[0]] == ["at_lotto"]
