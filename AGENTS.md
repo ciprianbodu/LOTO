@@ -325,6 +325,9 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.5 Git
 
 - Lucrul de productie se integreaza pe `main`.
+- Utilizatorul a cerut (2026-09-28) ca orice schimbare terminata si verificata
+  (suita completa verde) sa fie integrata pe `main` fara sa astepte confirmare:
+  PR, apoi merge imediat.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
   pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). `START_8000.bat` si
   `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
