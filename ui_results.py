@@ -796,7 +796,7 @@ def _build_report() -> str:
             _sp = _game_spec_for(g, d)
             if not _sp.is_romanian:
                 out.append(f"  Tarif: {_fmt_price(_sp)}")
-                if _sp.training_only:
+                if _training_only_note(_sp):
                     out.append(f"  ({_training_only_note(_sp)})")
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
@@ -948,7 +948,7 @@ def _show_full_ticket() -> None:
                     lottery = display_name(game)  # = _game_title(g)
                     ui.separator()
                     ui.label(lottery).classes("text-bold")
-                    if _spec.training_only:
+                    if _training_only_note(_spec):
                         ui.label(f"ℹ️ {_training_only_note(_spec)}").classes(
                             "text-caption text-warning"
                         )
@@ -1051,8 +1051,8 @@ def _render_pool_body(
                 "⚠️ Worker vechi / nepotrivire țară: rezultatul nu confirmă jocul "
                 f"{_lot_key.display}."
             ).classes("text-caption text-negative")
-        elif _lot_key.training_only:
-            ui.label(f"ℹ️ {_TRAINING_ONLY_NOTE}.").classes("text-caption text-warning")
+        elif _training_only_note(_lot_key):
+            ui.label(f"ℹ️ {_training_only_note(_lot_key)}.").classes("text-caption text-warning")
     pool = data.get("hard_core") or []
     stats = data.get("hard_core_stats") or {}
     eff = data.get("pool_size")

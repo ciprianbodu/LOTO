@@ -36,6 +36,7 @@ jocul acela) și adaugă numai extragerile mai noi, atomic, cu LF. Manual:
 | `cehia_sportka_6din49.csv` | allwyn.cz/loterie/historie-cisel?game=sportka (oficial, CSV) |
 | `slovacia_loto_6din49.csv` | tipos.sk, arhivele `file=loto1` și `file=loto2` (oficial) |
 | `euromillions_5din50_stele.csv` | fdj.fr, arhiva zip a perioadei curente (oficial) |
+| `bulgaria_toto2_6din49.csv` | toto49.com, arhiva anuală (neoficială; toto.bg blochează accesul automat, tototiraj.bg s-a oprit la tirajul 35/2026) |
 
 ## Fișiere
 
@@ -76,6 +77,31 @@ jocul acela) și adaugă numai extragerile mai noi, atomic, cu LF. Manual:
   erau greșeli ale acelei surse, confirmate de a treia.
 - Pauza din pandemie: nicio extragere între 14.03.2020 și 21.05.2020.
 - Numere în ordine crescătoare.
+
+### `bulgaria_toto2_6din49.csv`: Bulgaria, Toto 2 6/49 (se joacă în agenție)
+
+- 702 extrageri, 02.01.2020 – 27.09.2026 (la import); joi și duminică, plus
+  extragerile de Anul Nou (ex. 31.12.2025, miercuri). Numere în ordine crescătoare.
+- Numerele 2020–2025: arhivele anuale oficiale de pe info.toto.bg/statistika/6x49
+  (fără date, numai număr de tiraj). Toate 627 de tiraje de acolo, minus unul.
+- Datele 2020–2025: toto49.com și tototiraj.bg, care concordă peste tot unde au
+  amândouă extragerea (dată și numere). O singură sursă datată (toto49.com) la:
+  1–8/2020, 90/2021, 2/2022, 0/2023, 59/2023, 78/2024, 1/2025, 19/2025.
+- Scos: tirajul 41/2024 (4 9 15 17 28 43, oficial), lipsă din ambele surse
+  datate; după program ar fi joi 23.05.2024, dar data nu e confirmată.
+- 2026: toto.bg nu publică încă arhiva anului, iar paginile de rezultate sunt
+  în spatele protecției anti-bot. Numerele vin din toto49.com, confirmate de
+  bgtoto.com (fără date) pentru toate tirajele și de tototiraj.bg pentru 0–35;
+  datele numai din toto49.com după 07.05.2026 (tototiraj.bg nu mai e la zi).
+  Oficial confirmate: tirajul 0/2026 (verificatorul de bilete info.toto.bg) și
+  76/2026 (27.09.2026, pagina oficială). Scos: tirajul 12/2026 (15.02.2026),
+  unde toto49.com dă 49, iar tototiraj.bg și bgtoto.com dau 46.
+- Anterior lui 2020 nu s-a importat nimic: arhiva oficială nu are date, iar
+  singura sursă datată (toto49.com) are erori de dată și rânduri greșite
+  (ex. T4 2008, două tiraje din 2016 cu aceeași dată); între 1998 și 2015
+  existau 2–3 trageri pe tiraj.
+- Bilet: 4 zone pe fișă (după utilizator, info.toto.bg/toto1-i-toto2/toto-2-6-ot-49);
+  tariful nu s-a putut citi automat și rămâne necunoscut. Moneda: EUR.
 
 ### `euromillions_5din50_stele.csv`: EuroMillions (doar antrenament)
 

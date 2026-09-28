@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
-- teste: 77 fisiere `test_*.py`, 1671 de teste (renumarat la 2026-09-27). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1647 trec, 24 sarite (integrarea
+- teste: 78 fisiere `test_*.py`, 1687 de teste (renumarat la 2026-09-28). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1663 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -521,13 +521,19 @@ limita de validitate din §5).
 
 - Selectorul de tara (sidebar „1. Date”, `country_val`, implicit România) si
   jocurile tarii (`games_val`). „📂 Incarca istoricul <tara>” citeste CSV-urile
-  din registru si leaga fisierul de joc (`STATE['dataset_game']`). Se trimit
+  din registru si leaga fisierul de joc (`STATE['dataset_game']`). La deschiderea
+  paginii, `_autoload_histories` incarca singur CSV-urile tarii selectate care
+  lipsesc sau s-au schimbat pe disc (mtime in `STATE['dataset_mtime']`);
+  butonul ramane pentru reincarcare manuala. Se trimit
   numai seturile tarii selectate; cu România selectata, config_json si hash-ul
   sunt identice cu cele de dinainte. Rezultatele se identifica din ecoul
   worker-ului (`_game_spec_for`): titlu „Tara · Joc”, tarif in moneda tarii sau
   „tarif necunoscut”, scheme reduse LR numai la România, bilet fizic din
   registru sau „bilet nemodelat”, iar jocurile care nu se joaca online din
-  România poarta „doar antrenament”. Re-Bench, clasamentul, ETA, curarea si
+  România poarta „doar antrenament”, afara de cele cu `play_note` in registru
+  (azi Bulgaria · Toto 2 6/49, „se joaca in agentie in Bulgaria”): acestea nu
+  sunt `training_only`, iar nota lor ia locul celei de antrenament
+  (`ui_runtime._training_only_note`); fara `play_note`, iesirea ramane identica. Re-Bench, clasamentul, ETA, curarea si
   prospetimea citesc caile tarii selectate. Ramase: alte taburi deschise se
   actualizeaza abia la reincarcare; cateva texte romanesti (nota de garantie,
   ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
@@ -812,6 +818,15 @@ Instalarea canonica este:
    verifica extragerile deja stocate din ultimele 60 de zile si, la orice
    nepotrivire sau rand invalid, nu scrie nimic pentru jocul acela; adauga numai
    extragerile mai noi, atomic, LF; iese mereu cu 0. START_8000 nu il ruleaza;
+   dupa curatarea cache-ului WF ruleaza `cleanup_residual.py` (pasul [2d/4]):
+   sterge numai o lista explicita de artefacte pe care codul nu le mai citeste
+   (venv-uri/cache-uri vechi GPU/numba, `disabled_methods.json`, backup-uri
+   `*.backup_overnight`/`*.pre_autopilot`/`best_methods.json.pre_*`, copii ramase
+   ale modulelor sterse, `__pycache__`, loguri vechi din radacina cand runtime-ul
+   e mutat, WF legacy deja migrat, foldurile bench de alte versiuni prin
+   `purge_stale_fold_cache`); sare orice fisier urmarit de git, iar fara git
+   sare si fisierele care ar putea fi urmarite; `--dry-run` doar listeaza; iese
+   mereu cu 0;
 2. `START_8000.bat` - sincronizeaza `main` din copia temporara daca e in urma, verifica mediul, curata procese vechi,
    porneste worker-ul si UI-ul.
 
