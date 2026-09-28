@@ -262,20 +262,19 @@ def test_mail_names_method_and_rating_for_the_pool(monkeypatch):
 
 
 def test_mail_names_last_draw_with_the_best_pool_result():
-    from types import SimpleNamespace as NS
+    from loto_enterprise.core.lotteries import lottery_by_id
 
-    import app_nicegui as app
-
-    flat = [
-        NS(draw_index=1, draw_date="01-09-2026", hits=2, hits_union=4),
-        NS(draw_index=2, draw_date="04-09-2026", hits=1, hits_union=2),
-        NS(draw_index=3, draw_date="08-09-2026", hits=3, hits_union=4),
-    ]
-    line = app._mail_best_draw_line(flat)
-    assert "4 numere în pool" in line and "08-09-2026" in line
+    spec = lottery_by_id("6/49")
+    df = pd.DataFrame(
+        {
+            "date": ["01-09-2026", "04-09-2026", "08-09-2026"],
+            **{f"n{i}": [i, i + 10, i + 20] for i in range(1, 7)},
+        }
+    )
+    line = app._mail_best_draw_line(spec, df, [1, 2, 3, 4, 21, 22, 23, 24])
+    assert "4 numere din pool" in line and "08-09-2026" in line
     assert "de 2 ori" in line and "3 extrageri" in line
-    assert "fără walk-forward" in app._mail_best_draw_line(None)
-
+    assert "indisponibil" in app._mail_best_draw_line(spec, None, [1])
 
 def test_play_note_replaces_the_training_only_note():
     bg = L.GAMES_BY_ID["bg_toto2"]
@@ -301,3 +300,15 @@ def test_loading_records_the_load_time(ui_state):
     app._load_registry_histories([AT])
     stamp = ui_state["dataset_loaded_at"][Path(AT.csv).name]
     assert len(stamp) == len("28-09-2026 04:10")
+
+
+def test_new_generation_makes_a_running_walk_forward_stale(ui_state, monkeypatch):
+    ui_state["datasets"] = [("loto_6_49.csv", _ro_df())]
+    ui_state.update(wf_seq=3, wf_running=True, retro={"x": [1]}, active_job_id=None)
+    monkeypatch.setattr(app, "ensure_worker_running", lambda: None)
+    monkeypatch.setattr(app, "submit_job", lambda kind, cfg: 7)
+    monkeypatch.setattr(app, "_refresh_status", lambda: None)
+    monkeypatch.setattr(app.ui, "notify", lambda *a, **k: None)
+    app.submit_generation()
+    assert ui_state["wf_seq"] == 4 and ui_state["wf_running"] is False
+    assert ui_state["retro"] == {} and ui_state["active_job_id"] == 7

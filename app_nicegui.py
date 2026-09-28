@@ -195,10 +195,15 @@ def submit_generation(
     if STATE["active_job_id"]:
         ui.notify("Există deja un job în rulare.", type="warning")
         return
-    STATE["pure_bench"] = pure
-    STATE["results"] = None
-    STATE["retro"] = {}
-    STATE["wf_status"] = ""
+    with STATE_LOCK:
+        # Un walk-forward încă în rulare aparține rezultatului vechi: îl facem
+        # „stale” (nu mai scrie în `retro`, nu rescrie raportul, nu oprește PC-ul).
+        STATE["wf_seq"] = int(STATE.get("wf_seq") or 0) + 1
+        STATE["wf_running"] = False
+        STATE["pure_bench"] = pure
+        STATE["results"] = None
+        STATE["retro"] = {}
+        STATE["wf_status"] = ""
     ensure_worker_running()
     cfg = _build_config_json(sim_depth_per_game)
     job_id = submit_job("pipeline", cfg)
@@ -1469,28 +1474,35 @@ def _build_mail_body() -> str:
             + (f"  | joker: {_nums(joker)}" if joker else "")
         )
         lines.extend(_mail_method_lines(_sp, primary))
-        lines.append(_mail_best_draw_line(STATE.get("retro", {}).get(f"{fn}_{g}")))
+        lines.append(
+            _mail_best_draw_line(
+                _sp, dict(STATE["datasets"]).get(fn), primary.get("hard_core")
+            )
+        )
         lines.append("")
     return "\n".join(lines).strip()
 
 
-def _mail_best_draw_line(flat) -> str:
-    """Ultima extragere din walk-forward cu cele mai multe numere din pool."""
-    if not flat:
-        return "CEL MAI BUN REZULTAT: fără walk-forward rulat pentru acest joc"
-    per = _wf_per_draw_stats(flat)
-    if not per:
-        return "CEL MAI BUN REZULTAT: fără walk-forward rulat pentru acest joc"
-    best = max(int(v.get("pool") or 0) for v in per.values())
-    di = max(k for k, v in per.items() if int(v.get("pool") or 0) == best)
-    row = per[di]
-    n_best = sum(1 for v in per.values() if int(v.get("pool") or 0) == best)
-    ticket = row.get("best_ticket")
+def _mail_best_draw_line(spec, df, pool) -> str:
+    """Cea mai bună extragere din istoric pentru pool-ul de azi și ultima ei dată.
+
+    Mailul pleacă înainte de walk-forward, deci linia se calculează pe CSV-ul
+    încărcat: câte numere din pool au ieșit la fiecare extragere. E o privire
+    retrospectivă (pool-ul e ales cu tot istoricul), nu o validare."""
+    pool = {int(x) for x in (pool or [])}
+    cols = [f"n{i}" for i in range(1, int(spec.draw_n) + 1)]
+    if df is None or not pool or any(c not in df.columns for c in cols):
+        return "CEL MAI BUN REZULTAT: istoric indisponibil pentru acest joc"
+    hits = df[cols].isin(pool).sum(axis=1).astype(int)
+    if hits.empty:
+        return "CEL MAI BUN REZULTAT: istoric indisponibil pentru acest joc"
+    best = int(hits.max())
+    idx = hits[hits == best].index
+    last = idx[-1]
+    when = str(df.at[last, "date"]) if "date" in df.columns else f"rândul {last + 1}"
     return (
-        f"CEL MAI BUN REZULTAT (walk-forward, {len(per)} extrageri): "
-        f"{best} numere în pool, ultima oară la {row['label']}"
-        + (f" (maxim {int(ticket)} pe un bilet)" if ticket is not None else "")
-        + f"; de {n_best} ori în total"
+        f"CEL MAI BUN REZULTAT pe istoric ({len(df)} extrageri, pool-ul de azi): "
+        f"{best} numere din pool, ultima oară la {when}; de {len(idx)} ori în total"
     )
 
 

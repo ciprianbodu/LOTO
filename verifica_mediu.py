@@ -203,7 +203,7 @@ def main():
 
     if not _is_in_venv():
         print("\n[ATENTIE] Ruleaza ACTUALIZARI.bat, nu direct verifica_mediu.py!")
-        print("          Cauta venv-ul: .venv\n")
+        print("          Venv-ul proiectului: D:\\_BUILD\\_LOTO\\.venv\n")
 
     check_scoring_stack()
     assets_ok = check_bench_assets()
