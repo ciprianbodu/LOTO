@@ -121,9 +121,11 @@ def wheel_ilp(
     try:
         chosen = [[pool[i] for i in blk] for blk in cover]
         # HiGHS poate returna o soluție feasibilă NEoptimă la limita de timp →
-        # comparăm cu greedy. Criteriul e (ACOPERIRE, apoi bilete), nu doar numărul
-        # de bilete: comparat doar pe număr, un greedy cu acoperire parțială (ex.
-        # plafonat de `max_variants`) ar fi câștigat în fața unui cover complet.
+        # comparăm cu greedy apelat fără plafon de bilete. Criteriul e
+        # (ACOPERIRE, apoi bilete): greedy-ul se oprește la 1000 de iterații,
+        # deci pe o cerere grea întoarce acoperire parțială. Comparate doar pe
+        # număr de bilete, acel greedy parțial ar fi câștigat în fața unui
+        # cover complet.
         g_wheel, _ = _greedy_fallback(pool, pick, guarantee, 0, scores)
         ilp_cov = _coverage_pct(chosen, pool, guarantee)
         g_cov = _coverage_pct(g_wheel, pool, guarantee)

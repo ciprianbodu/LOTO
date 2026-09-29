@@ -312,6 +312,10 @@ def _wheel_sig(
     ~54 → 41 bilete; `covering_designs/` are doar C_12_6_4 și C_12_5_4) a servit în
     continuare cache vechi, iar raportul amesteca numărul vechi de variante cu
     rezultate regenerate pe wheel-ul nou.
+
+    Sufixul ``rt1`` marchează tie-break-ul de poziție (scor, apoi numărul mai
+    mare). Un pickle de dinainte punea numărul mai mic pe poziția mai bună când
+    scorurile erau egale; cheia nouă nu îl mai servește.
     """
     requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
     g, condition, cap = _wf_geometry(
@@ -335,7 +339,7 @@ def _wheel_sig(
                 g,
                 condition,
             )
-            return f"lotto|{geometry}|cd{design_sig}"
+            return f"lotto|{geometry}|cd{design_sig}|rt1"
         if method in {"lajolla", "union34"}:
             design_guarantee = 4 if method == "union34" and g <= 4 else g
             design_sig = covering_design_source_signature(
@@ -343,8 +347,8 @@ def _wheel_sig(
                 int(_WF_PICK.get(game_type) or 6),
                 design_guarantee,
             )
-            return f"{method}|{geometry}|cd{design_sig}"
-        return f"{method}|{geometry}"
+            return f"{method}|{geometry}|cd{design_sig}|rt1"
+        return f"{method}|{geometry}|rt1"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)
         method = (
@@ -352,7 +356,7 @@ def _wheel_sig(
             if condition > g
             else requested or ("lajolla" if cap == 0 else "greedy")
         )
-        return f"{method}|{geometry}|cd-error"
+        return f"{method}|{geometry}|cd-error|rt1"
 
 
 def _penalty_sig(
