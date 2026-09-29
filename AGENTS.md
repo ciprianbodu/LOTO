@@ -154,7 +154,7 @@ Ramase de decis (nu s-au schimbat):
 
 - Acoperirea 100% a unui lotto design „t daca p" nu e acelasi lucru cu 100%
   clasic t-din-t (masurat: L(12,6,4,3) da 54,09% pe metrica clasica). Panoul de
-  rezultate avertizeaza, sumarul WF si nota de hituri nu.
+  rezultate, sumarul WF si nota de hituri o spun explicit.
 
 ### Audit global 2026-09-13
 
@@ -269,6 +269,9 @@ UI-ul face polling la o secunda, fara reload complet.
 - Validarea trece prin `has_usable_score_variance`.
 - Orice top-N dupa scor trece prin `core.ranking.rank_by_score`. Limita de
   consecutive (`limit_consecutive_run`) parcurge iesirea lui, fara sortare proprie.
+- Maparea pozițiilor unui covering design pe pool folosește aceeași ordine,
+  fără frecvență: scor descrescător, la egalitate numărul mai mare
+  (`covering.common._sorted_pool`).
 - Nu adauga sortari locale care pot schimba tie-break-ul dintre bench si productie.
 - Fallback-ul de productie este `frequency`, determinist.
 - `random` este baseline structural pentru benchmark si este interzis in productie.

@@ -1964,7 +1964,7 @@ def _base_table_games(country=None) -> tuple:
     if cc == _LOT.RO:
         return _BASE_TABLE_GAMES
     return tuple(
-        (g.display, str(Path(g.csv).relative_to("_ISTORIC")), g.draw_n, g.max_n)
+        (g.display, Path(g.csv).relative_to("_ISTORIC").as_posix(), g.draw_n, g.max_n)
         for g in _LOT.games_for_country(cc)
     )
 

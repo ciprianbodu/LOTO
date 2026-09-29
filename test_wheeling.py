@@ -176,6 +176,20 @@ def test_filter_preserving_coverage_keeps_guarantee():
     assert _covers_all(filtered, pool, 3), "filtrarea a spart garanția"
 
 
+def test_equal_scores_keep_the_larger_number_on_the_better_slot():
+    """La scor egal, poziția bună ia numărul mai mare, ca `rank_by_score`.
+
+    Pool-ul e sortat crescător înainte de wheel. O sortare stabilă doar după
+    scor lăsa 1..5 pe primul bilet și 3..7 pe dinafară.
+    """
+    pool = list(range(1, 8))
+    scores = {n: 1.0 for n in pool}
+    wheel, _cov = generate_combinatorial_wheel(
+        pool, pick=5, guarantee=5, max_variants=1, scores=scores
+    )
+    assert wheel == [[3, 4, 5, 6, 7]]
+
+
 def test_complete_system_guarantee_equals_pick_is_full_cover():
     """guarantee==pick nu mai trece prin greedy-ul cu cap 1000 iterații."""
     from math import comb

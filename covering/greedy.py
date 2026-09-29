@@ -10,7 +10,12 @@ import logging
 import math
 import time
 
-from covering.common import _coverage_ratio_pct, ensure_pool_numbers_on_tickets
+from covering.common import (
+    _coverage_ratio_pct,
+    _sorted_pool,
+    ensure_pool_numbers_on_tickets,
+)
+
 
 def generate_combinatorial_wheel(
     pool, pick=6, guarantee=4, max_variants=0, scores=None
@@ -32,10 +37,7 @@ def generate_combinatorial_wheel(
     if pool_len < pick:
         return [], 0.0
 
-    if scores:
-        pool = sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
-    else:
-        pool = sorted(list(pool))
+    pool = _sorted_pool(pool, scores)
 
     if int(guarantee) == int(pick):
         n_full = math.comb(pool_len, pick)

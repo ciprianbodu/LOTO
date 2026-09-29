@@ -2,6 +2,7 @@
 
 The golden hashes include every ticket, its order, and reported coverage.
 They protect score ties and budget repair as well as the combinatorial result.
+Ties follow the canonical rank: higher score, then the larger number.
 """
 
 import hashlib

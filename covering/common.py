@@ -21,10 +21,34 @@ def _greedy_fallback(pool, pick, guarantee, max_variants, scores):
     return generate_combinatorial_wheel(pool, pick, guarantee, max_variants, scores)
 
 
+def _pool_rank_key(number: int, scores) -> tuple[float, int]:
+    """Cheia canonică de rang, fără frecvență: scor, apoi numărul mai mare.
+
+    Aceeași ordine ca `rank_by_score` când nu există frecvență de departajare.
+    Un scor lipsă sau ne-finit cade la coadă, nu între două scoruri reale.
+    """
+    raw = scores.get(number, 0.0)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = float("-inf")
+    if not math.isfinite(value):
+        value = float("-inf")
+    return (value, number)
+
+
 def _sorted_pool(pool, scores) -> list[int]:
-    if scores:
-        return sorted(list(pool), key=lambda x: scores.get(x, 0), reverse=True)
-    return sorted(list(pool))
+    """Pozițiile unui design, de la cea mai bună la cea mai slabă.
+
+    La scor egal câștigă numărul mai mare. Sortarea stabilă doar după scor
+    lăsa numărul mai mic pe poziția mai bună: pool-ul ajunge aici deja
+    sortat crescător, iar egalitatea păstra ordinea aceea.
+    """
+    nums = [int(n) for n in pool]
+    if not scores:
+        return sorted(nums)
+    return sorted(nums, key=lambda n: _pool_rank_key(n, scores), reverse=True)
+
 
 def _coverage_ratio_pct(covered: int, total: int) -> float:
     """Procent rotunjit la 2 zecimale care NU poate urca la 100.0 dintr-un parțial.
