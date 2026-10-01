@@ -354,6 +354,7 @@ STATE: dict = {
     "job_elapsed": None,  # durata FIXĂ a ultimei generări (sec); setată la COMPLETED
     "wf_elapsed": None,  # durata FIXĂ generare+walk-forward (sec); setată la finalul WF
     "results": None,  # (results_bundle, count)
+    "result_sources": None,  # {fname: submitted DataFrame}; None = legacy/live source
     "results_recovered": None,  # etichetă „job #N · dată" dacă rezultatele-s recuperate (vechi)
     "retro": {},  # {f"{fname}_{game}": flat_walk_forward}
     "retro_meta": {},  # {aceeași cheie: {partial, n_test_draws, n_expected, from_cache}}
@@ -371,6 +372,15 @@ STATE: dict = {
 # vs thread-ul principal UI. (Operațiile simple pe dict sunt atomice prin GIL;
 # lock-ul protejează secvențele multi-pas / iterările.)
 STATE_LOCK = threading.RLock()
+
+
+def _result_source(fname: str):
+    """Source used by the displayed result, independent of subsequent uploads."""
+    with STATE_LOCK:
+        sources = STATE.get("result_sources")
+        if sources is not None:
+            return sources.get(fname)
+        return next((df for name, df in STATE.get("datasets", []) if name == fname), None)
 
 GK_MATRIX = {  # etichetă afișată → cheia jocului din bench (best_methods.json / folds.csv)
     "Loto 6/49": "loto_6_49",

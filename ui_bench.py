@@ -345,6 +345,17 @@ def _render_bench_leaderboard_slice(
     if metric not in sub.columns:
         return
     has_family = "family" in sub.columns
+    from loto_enterprise.benchmark.decision import (
+        common_window_percentiles,
+        filter_window_percentiles,
+    )
+
+    # Metodele se compară pe aceleași ferestre ca decizia. Un fold suplimentar
+    # al unei singure metode nu poate umfla ratele, Wilson-ul sau media afișată.
+    # Păstrăm sub brut pentru diagnosticul metodelor cu numai ferestre extra.
+    _expected_pcts = (
+        common_window_percentiles(sub, metric) if has_target_rate else set()
+    )
 
     def _rate_for(grp, n):
         """Rata de ≥n pentru o metodă, POOLED pe extragerile evaluate (coloana pe pool).
@@ -404,7 +415,9 @@ def _render_bench_leaderboard_slice(
                 pooled_mean as _pooled_mean_fn,
             )
 
-            _rnd_frame = sub[sub["method"] == "random"]
+            _rnd_frame = filter_window_percentiles(
+                sub[sub["method"] == "random"], _expected_pcts
+            )
             _gate_baseline = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
             if _rnd_frame.empty and _gate_baseline is None:
                 _lift_fn = _beat_fn = None
@@ -422,15 +435,6 @@ def _render_bench_leaderboard_slice(
         _alive_methods = None
         _pg_only = set()
     rows = []
-    _expected_pcts: set[int] = set()
-    if has_target_rate and "percentile" in sub.columns:
-        _valid_target = sub[pd.to_numeric(sub[metric], errors="coerce").notna()]
-        _expected_pcts = {
-            int(p)
-            for p in pd.to_numeric(
-                _valid_target["percentile"], errors="coerce"
-            ).dropna()
-        }
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
     _lift_ok = False  # lift+consistență calculabile → tie-break identic cu decizia
     _current_dec = {}
@@ -456,7 +460,8 @@ def _render_bench_leaderboard_slice(
             _memo[3],
         )
     else:
-        for m, grp in sub.groupby("method"):
+        for m, raw_grp in sub.groupby("method"):
+            grp = filter_window_percentiles(raw_grp, _expected_pcts)
             # Folds vechi pot lista metode eliminate — nu le arăta în clasament
             # (decizia le sare deja; UI trebuie să rămână aliniat).
             if _alive_methods is not None and str(m) not in _alive_methods:
@@ -482,7 +487,7 @@ def _render_bench_leaderboard_slice(
             avg = float(_avg_pool)
             fam = ""
             if has_family:
-                _f = grp["family"].dropna().astype(str)
+                _f = raw_grp["family"].dropna().astype(str)
                 fam = _f.iloc[0] if not _f.empty else ""
             # Wilson doar pe RATE (proporții). Când metrica e fallback-ul avg_hits_topk
             # (folds vechi fără coloane rate_*), nu e proporție → nu are sens.
@@ -776,9 +781,11 @@ def _render_bench_leaderboard_slice(
             if r4 is not None and not _is_single_pick:
                 _m4 = f" ({r4 / _rnd4:.2f}x random)" if _rnd4 else ""
                 parts.append(f"brut 4+: {r4 * 100:.1f}%{_m4}")
-            sc_txt = " · ".join(parts) if parts else f"medie: {score:.3f}"
+            sc_txt = " · ".join(parts) if parts else (
+                "date indisponibile" if pd.isna(score) else f"medie: {score:.3f}"
+            )
         else:
-            sc_txt = f"medie: {score:.3f}"
+            sc_txt = "date indisponibile" if pd.isna(score) else f"medie: {score:.3f}"
         is_base = m in _BASE
         is_excluded = (not is_base) and m in _structural_fail
         is_chosen = (not is_base) and (m == chosen_name)
@@ -810,8 +817,9 @@ def _render_bench_leaderboard_slice(
                 else "text-bold"
             )
             _pref = "baseline (referință, NU e candidat) · " if is_base else ""
+            avg_txt = "—" if pd.isna(avg) else f"{avg:.2f}"
             ui.label(
-                f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg:.2f}{_gate_txt}"
+                f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg_txt}{_gate_txt}"
             ).classes("text-caption text-grey")
 
     title = f"🏆 Clasament bench — {section_label} ({label})"
@@ -1082,48 +1090,52 @@ def draw_vs_production_pool(draw_nums, pool):
 
 
 def _last_csv_draw(fname: str):
-    """(date_str, [numere], joker|None) din ULTIMA linie a CSV-ului încărcat pentru
-    acest fișier; None dacă lipsește. Faithful la CSV (exact ultima extragere)."""
-    df = next((d for f, d in STATE.get("datasets", []) if f == fname), None)
+    """Ultima extragere validă cronologic, după același contract ca motorul."""
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+    from loto_enterprise.core.history import chronological_history
+
+    source = globals().get("_result_source")
+    df = (
+        source(fname)
+        if callable(source)
+        else next((d for f, d in STATE.get("datasets", []) if f == fname), None)
+    )
     if df is None or len(df) == 0:
         return None
     try:
-        last = df.iloc[-1]
-    except Exception:  # noqa: BLE001
+        # Un snapshot al rezultatului își păstrează identitatea, chiar dacă
+        # același nume de fișier a fost legat între timp de alt joc în UI.
+        spec = (
+            _LOT.require_lottery(df.attrs["game_id"], df.attrs.get("country"))
+            if "game_id" in df.attrs
+            else _game_spec_for(fname)
+        )
+        df = chronological_history(df)
+        cols = [f"n{i}" for i in range(1, spec.draw_n + 1)]
+        matrix, valid = valid_draw_matrix(
+            df, cols, draw_n=spec.draw_n, max_num=spec.max_n
+        )
+        if not len(matrix):
+            return None
+        last = df.loc[valid].iloc[-1]
+    except (TypeError, ValueError, OverflowError):
         return None
-    cols = [str(c) for c in df.columns]
-    num_cols = sorted(
-        (c for c in cols if len(c) > 1 and c[0] == "n" and c[1:].isdigit()),
-        key=lambda c: int(c[1:]),
-    )
-    nums = []
-    for c in num_cols:
-        try:
-            nums.append(int(last[c]))
-        except Exception:  # noqa: BLE001
-            pass
-    if not nums:
-        return None
-    # 5/40 extrage 6 numere și hiturile se numără pe toate 6 (engine-ul citește
-    # n1..n6); Joker are 5 în Urna 1, plus jokerul afișat separat.
-    spec = _game_spec_for(fname)
-    draw_n = spec.draw_n
-    nums = nums[:draw_n]
+    nums = [int(n) for n in matrix[-1]]
     joker = None
-    _second = spec.geo.second
-    if "joker" in cols and _second is not None and "joker" in _second.columns:
+    second = spec.geo.second
+    if second is not None and "joker" in second.columns and "joker" in df.columns:
         try:
-            joker = int(last["joker"])
-        except Exception:  # noqa: BLE001
-            joker = None
-    date_str = ""
-    for dc in ("date", "Data", "data", "Date"):
-        if dc in cols:
-            try:
-                date_str = str(last[dc])
-            except Exception:  # noqa: BLE001
-                date_str = ""
-            break
+            jk_matrix, jk_valid = valid_draw_matrix(
+                pd.DataFrame({"joker": [last["joker"]]}),
+                ["joker"],
+                draw_n=1,
+                max_num=second.max_n,
+            )
+            if bool(jk_valid.all()):
+                joker = int(jk_matrix[0, 0])
+        except (TypeError, ValueError, OverflowError):
+            pass
+    date_str = str(last["date"]) if "date" in df.columns else ""
     return (date_str, nums, joker)
 
 
@@ -1137,20 +1149,19 @@ def _fmt_score_time(ms) -> str:
 
 
 def _csv_last_date(df) -> str:
-    """Data ultimei extrageri dintr-un DataFrame încărcat (ultimul rând, aceeași
-    convenție ca `_last_csv_draw`: CSV-urile sunt cronologice, ultimul rând e cel
-    mai recent). Șir gol dacă nu există coloană de dată."""
+    """Data ultimei extrageri cronologice; fără date, ordinea rândurilor contează."""
+    from loto_enterprise.core.history import chronological_history
+
     if df is None or len(df) == 0:
         return ""
-    cols = [str(c) for c in df.columns]
-    for dc in ("date", "Data", "data", "Date"):
-        if dc in cols:
-            try:
-                val = str(df.iloc[-1][dc]).strip()
-            except Exception:  # noqa: BLE001
-                return ""
-            return "" if val.lower() in ("", "nan", "nat", "none") else val
-    return ""
+    try:
+        ordered = chronological_history(df)
+        if "date" not in ordered.columns:
+            return ""
+        val = str(ordered.iloc[-1]["date"]).strip()
+    except (TypeError, ValueError, OverflowError):
+        return ""
+    return "" if val.lower() in ("", "nan", "nat", "none") else val
 
 
 def _render_last_csv_draw(fname: str, pool=None, joker_pick=None) -> None:

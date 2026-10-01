@@ -188,7 +188,10 @@ def main():
     )
     parser.add_argument("--window-size", type=int, default=60)
     parser.add_argument("--windows", type=int, default=3)
+    parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("Use a positive worker count")
     if args.window_size < 1 or args.windows < 2:
         parser.error("Use a positive window size and at least two windows")
     args.output = args.output.resolve()
@@ -199,7 +202,7 @@ def main():
     before = {p: digest(ROOT / p) for p in PROTECTED}
     started = time.perf_counter()
     results = []
-    with ProcessPoolExecutor(max_workers=4) as executor:
+    with ProcessPoolExecutor(max_workers=args.workers) as executor:
         pending = [
             executor.submit(audit_game, game, args.window_size, args.windows)
             for game in discover_games(str(ROOT / "_ISTORIC"))

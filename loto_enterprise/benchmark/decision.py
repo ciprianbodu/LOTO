@@ -662,6 +662,58 @@ def _select_ensemble_members(
     return kept, dropped
 
 
+def common_window_percentiles(
+    real_folds: pd.DataFrame, rate_col: str | None
+) -> set[int]:
+    """Ferestrele comparabile: martorul random, altfel uniunea disponibilă.
+
+    Se primesc numai foldurile reale și valide ale jocului. Martorul definește
+    matricea când are suficiente ferestre cu rata cerută; o percentilă rămasă
+    doar la o metodă dintr-un bench vechi nu extinde acel contract.
+    """
+    if (
+        real_folds.empty
+        or "percentile" not in real_folds.columns
+        or rate_col is None
+        or rate_col not in real_folds.columns
+    ):
+        return set()
+    valid = real_folds[
+        pd.to_numeric(real_folds[rate_col], errors="coerce").notna()
+    ]
+
+    def _percentiles(frame: pd.DataFrame) -> set[int]:
+        return {
+            int(p)
+            for p in pd.to_numeric(frame["percentile"], errors="coerce").dropna()
+        }
+
+    random_rows = (
+        valid[valid["method"] == "random"]
+        if "method" in valid.columns
+        else valid.iloc[0:0]
+    )
+    random_pcts = _percentiles(random_rows)
+    if len(random_pcts) >= MIN_CONSISTENCY_WINDOWS:
+        return random_pcts
+    return _percentiles(valid)
+
+
+def filter_window_percentiles(
+    frame: pd.DataFrame, percentiles: set[int]
+) -> pd.DataFrame:
+    """Păstrează numai ferestrele contractului comun, fără a schimba rândurile.
+
+    Un set gol înseamnă contract indisponibil (folds vechi/sintetice), nu o
+    cerere de a șterge datele. Folosit identic de decizie și clasamentul UI.
+    """
+    if not percentiles or "percentile" not in frame.columns:
+        return frame
+    return frame[
+        pd.to_numeric(frame["percentile"], errors="coerce").isin(percentiles)
+    ]
+
+
 def tiebreak_fraction(frame: pd.DataFrame, pool_size: int) -> float | None:
     """Fraction of tied top-K cuts, weighted by evaluated blocks.
 
@@ -928,28 +980,13 @@ def decide_optimal_config_for_pool(
     # comparata pe alt subset de extrageri, cu o poarta mai usoara (2/3 in loc
     # de 3/4) si cu o rata pooled care ii omite exact fereastra in care a
     # esuat. Ea iese din decizie si este raportata in `incomplete_methods`.
-    _expected_pcts: set[int] = set()
-    if "percentile" in _all_real.columns and _frame_rate_col is not None:
-        _ok_rows = _all_real[
-            pd.to_numeric(_all_real[_frame_rate_col], errors="coerce").notna()
-        ]
-
-        def _pct_set(frame: pd.DataFrame) -> set[int]:
-            return {
-                int(p)
-                for p in pd.to_numeric(frame["percentile"], errors="coerce").dropna()
-            }
-
-        _random_rows = (
-            _ok_rows[_ok_rows["method"] == "random"]
-            if "method" in _ok_rows.columns
-            else _ok_rows.iloc[0:0]
-        )
-        _random_pcts = _pct_set(_random_rows)
-        if len(_random_pcts) >= MIN_CONSISTENCY_WINDOWS:
-            _expected_pcts = _random_pcts
-        else:
-            _expected_pcts = _pct_set(_ok_rows)
+    _expected_pcts = common_window_percentiles(_all_real, _frame_rate_col)
+    # Completența singură nu ajunge: datele suplimentare ale unei singure
+    # metode ar schimba consistența, Wilson/lift și fracția de egalități, deși
+    # expected_windows promite un set comun. Toate metricile consumă aceleași
+    # percentile, inclusiv fallback-ul și alegerea sim_depth.
+    _common_sub = filter_window_percentiles(sub, _expected_pcts)
+    real_random = filter_window_percentiles(real_random, _expected_pcts)
     incomplete_methods: list[dict] = []
     tiebreak_dependent: list[dict] = []
     tiebreak_gate_applied = tiebreak_col in sub.columns
@@ -1016,6 +1053,12 @@ def decide_optimal_config_for_pool(
         real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
         if real_m.empty:
             continue
+        real_m = filter_window_percentiles(real_m, _expected_pcts)
+        if real_m.empty:
+            incomplete_methods.append(
+                {"method": m, "missing_windows": sorted(_expected_pcts)}
+            )
+            continue
         # Poarta și sortarea trebuie să măsoare ACEEAȘI țintă. Înainte gate-ul
         # compara media de hituri (`kN`), apoi alegea câștigătorul după rata T+:
         # o metodă putea trece cu mai multe extrageri de 2 hituri, deși pierdea
@@ -1078,6 +1121,9 @@ def decide_optimal_config_for_pool(
             real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
             if real_m.empty:
                 continue
+            real_m = filter_window_percentiles(real_m, _expected_pcts)
+            if real_m.empty:
+                continue  # deja raportată ca incompletă pe ramura principală
             # O metodă fără date pe coloana comună nu poate câștiga cu Wilson=0
             # doar fiindcă e singura candidată rămasă într-un folds parțial.
             _gc = _rate_col_for(real_m)
@@ -1203,7 +1249,7 @@ def decide_optimal_config_for_pool(
         # min-max blend; vezi ENSEMBLE_MAX_METHODS.
         ordered = [(m, r4_conf) for m, _, _, _, _, r4_conf in qualifying]
         sig = _perf_signature_frame(
-            sub[sub["is_random"] == False],  # noqa: E712
+            _common_sub[_common_sub["is_random"] == False],  # noqa: E712
             [m for m, _ in ordered],
             target,
         )
@@ -1225,7 +1271,9 @@ def decide_optimal_config_for_pool(
         ensemble = _build_ensemble_weights(members)
 
     # Pick the best sim_depth for the chosen scorer based on target hit rate (percentage of drawings)
-    real_chosen = sub[(sub["method"] == scorer) & (sub["is_random"] == False)]  # noqa: E712
+    real_chosen = _common_sub[
+        (_common_sub["method"] == scorer) & (_common_sub["is_random"] == False)
+    ]  # noqa: E712
     rate_col = _rate_col_for(real_chosen) or _resolve_rate_col(real_chosen)
     if rate_col is None:
         rate_col = base_col  # fallback to avg_hits — tot un fallback de metrică

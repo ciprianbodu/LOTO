@@ -66,13 +66,39 @@ def gitless_env():
     return env
 
 
-def run_helper(local, mode='Sync', env=None):
+def run_helper(local, mode='Sync', env=None, *, git_processes=None):
+    args = [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass']
+    if git_processes is None:
+        args += ['-File', str(HELPER), '-Mode', mode, '-ProjectDir', str(local)]
+    else:
+        # Numai clonele fixture-ului folosesc acest inventar simulat. Helperul
+        # și comenzile Git sunt reale; procesele Git ale editorului nu pot
+        # schimba sensul testului și nu sunt nici oprite, nici inspectate aici.
+        inventory = 'present' if git_processes else 'empty'
+        result = (
+            "[pscustomobject]@{ ProcessName = 'git'; Id = -1 }"
+            if git_processes else 'return'
+        )
+        def ps_literal(value):
+            return "'" + str(value).replace("'", "''") + "'"
+        command = (
+            "function global:Get-Process { "
+            "[CmdletBinding()] param([string[]] $Name); "
+            "if ($Name -ne 'git') { throw 'Unexpected process query in test' }; "
+            f"Write-Host '[TEST] Git process inventory: {inventory}'; "
+            f"{result} }}; "
+            f"& {ps_literal(HELPER)} -Mode {ps_literal(mode)} "
+            f"-ProjectDir {ps_literal(local)}"
+        )
+        args += ['-Command', command]
     p = subprocess.run(
-        [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-         str(HELPER), '-Mode', mode, '-ProjectDir', str(local)],
-        capture_output=True, text=True, errors='replace', timeout=60, env=env,
+        args, capture_output=True, text=True, errors='replace', timeout=60, env=env,
     )
     assert p.returncode == 0, p.stdout + p.stderr
+    if git_processes is not None:
+        # Nu acceptăm un test verde dacă helperul a ocolit inventarul: markerul
+        # este emis exclusiv de funcția Get-Process consultată de gardă.
+        assert f'[TEST] Git process inventory: {inventory}' in p.stdout
     return p.stdout
 
 
@@ -143,9 +169,20 @@ def test_stale_packed_refs_lock_does_not_block_fast_forward(repos):
     advance(seed)
     lock = local / '.git' / 'packed-refs.lock'
     lock.write_text('', encoding='utf-8')
-    run_helper(local)
+    output = run_helper(local, git_processes=False)
+    assert '[GIT] Lock vechi eliminat: packed-refs.lock' in output
     assert not lock.exists()
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_git_process_preserves_packed_refs_lock(repos):
+    local, seed, _ = repos
+    advance(seed)
+    lock = local / '.git' / 'packed-refs.lock'
+    lock.write_text('owned by a running Git process', encoding='utf-8')
+    output = run_helper(local, git_processes=True)
+    assert lock.read_text(encoding='utf-8') == 'owned by a running Git process'
+    assert '[GIT] Lock vechi eliminat:' not in output
 
 
 def test_history_push_replays_draw_commit_onto_newer_main(repos):

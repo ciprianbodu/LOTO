@@ -163,7 +163,7 @@ def latest_bundle():
     with sqlite3.connect(Path(DB_PATH).resolve().as_uri() + "?mode=ro", uri=True) as db:
         db.row_factory = sqlite3.Row
         row = db.execute(
-            "SELECT id, completed_at, result_json FROM jobs WHERE status='COMPLETED' "
+            "SELECT id, completed_at, result_json, config_json FROM jobs WHERE status='COMPLETED' "
             "ORDER BY completed_at DESC,id DESC LIMIT 1"
         ).fetchone()
     if row is None:
@@ -172,12 +172,17 @@ def latest_bundle():
 
 
 
-def audit_history(fname, game, data):
+def audit_history(fname, game, data, source=None):
     """Resolve source and geometry through the result's registered identity."""
     from loto_enterprise.core.history import chronological_history
     from loto_enterprise.core.lotteries import require_lottery
 
     lot = require_lottery(data.get("game_id") or game, data.get("country") or "RO")
+    if source is not None:
+        source_game = source.attrs.get("game_id")
+        if source_game and require_lottery(source_game, source.attrs.get("country") or "RO") != lot:
+            raise ValueError("Snapshot-ul aparține altui joc")
+        return lot, chronological_history(source)
     if Path(fname).name != Path(lot.csv).name:
         raise ValueError(f"Istoric diferit de sursa înregistrată: {fname!r}")
     return lot, chronological_history(pd.read_csv(ROOT / lot.csv))
@@ -191,9 +196,24 @@ def audit_cached_hits(flat, source, lot, guarantee, condition):
         and r["best_ticket"] <= r["pool"] <= lot.draw_n
         for r in per.values()
     )
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+    from loto_enterprise.core.history import chronological_history
+
+    # draw_index este poziția în istoricul validat al backtesterului. Un rând
+    # invalid anterior țintei nu trebuie comparat în locul extragerii reale.
+    # Sursa originală rămâne intactă pentru cheia WF, calculată înainte de
+    # filtrarea rândurilor.
+    ordered = chronological_history(source)
+    _draws, valid = valid_draw_matrix(
+        ordered,
+        [f"n{i}" for i in range(1, lot.draw_n + 1)],
+        draw_n=lot.draw_n,
+        max_num=lot.max_n,
+    )
+    validated = ordered.loc[valid].reset_index(drop=True)
     actual = {
         i: set(int(row[f"n{j}"]) for j in range(1, lot.draw_n + 1))
-        for i, row in source.iterrows()
+        for i, row in validated.iterrows()
     }
     unions, complete = {}, {}
     for prediction in flat:
@@ -217,12 +237,15 @@ def audit_cached_hits(flat, source, lot, guarantee, condition):
     return per
 
 
-def audit_bundle(bundle):
+def audit_bundle(bundle, sources=None):
     summary = []
     for fname, outs in bundle[0]:
         for game, raw in outs.items():
             data = app_ui._primary_pool_data(raw)
-            lot, source = audit_history(fname, game, data)
+            if sources is not None and fname not in sources:
+                raise ValueError(f"Snapshot original indisponibil: {fname}")
+            original = sources.get(fname) if sources is not None else None
+            lot, source = audit_history(fname, game, data, original)
             pool = data["hard_core"]
             variants = data["variants"]
             audit = data.get("audit") or {}
@@ -319,7 +342,9 @@ def main():
     n = audit_rankings(df)
     row, bundle = latest_bundle()
     app_ui.STATE["results"] = bundle
-    summary = audit_bundle(bundle)
+    sources = app_ui._result_sources_from_job(dict(row))
+    app_ui.STATE["result_sources"] = sources
+    summary = audit_bundle(bundle, sources)
     report = app_ui._build_report()
     assert "timesfm_predictions" not in report
     assert "pure_bench_mode" not in report

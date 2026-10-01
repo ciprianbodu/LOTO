@@ -380,17 +380,19 @@ class RetroactivePrediction:
 
 
 def _joker_hit(df, sim_idx: int, lines) -> bool | None:
-    """Numarul Joker de pe bilete (ultimul element) fata de coloana `joker`."""
+    """Hit Urna 2 numai pentru o țintă și o predicție întregi, valide 1..20."""
     if not lines or len(lines[0]) <= 5 or "joker" not in df.columns:
         return None
     try:
-        actual = int(df.iloc[sim_idx]["joker"])
-        predicted = int(lines[0][5])
-    except (TypeError, ValueError, IndexError):
+        # Același contract ca istoricul scorerului: int(1.5) nu poate inventa
+        # un hit, iar o țintă infinită nu trebuie să piardă întreg pasul WF.
+        values = pd.DataFrame({"joker": [df.iloc[sim_idx]["joker"], lines[0][5]]})
+        matrix, valid = valid_draw_matrix(values, ["joker"], draw_n=1, max_num=20)
+    except (TypeError, ValueError, OverflowError, IndexError):
         return None
-    if not 1 <= actual <= 20:
+    if not bool(valid.all()):
         return None
-    return predicted == actual
+    return bool(matrix[0, 0] == matrix[1, 0])
 
 
 class LotoBacktester:

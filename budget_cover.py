@@ -49,6 +49,74 @@ def maximum_cover_positions(v, pick, target, budget):
     return tuple(blocks[j] for j in selected)
 
 
+@lru_cache(maxsize=128)
+def balanced_cover_positions(v, pick, budget, seed):
+    """Four-subset cover with three-subset gains as a geometric tie-break.
+
+    Three fixed local seeds diversify equal-gain choices, independent of pool
+    numbers, scores and draw history. A bounded three-pass swap search keeps
+    improvements in the same lexicographic objective. This is a candidate
+    heuristic only: the caller must certify the complete hit profile after
+    mapping and pool repair before using the result.
+    """
+    from random import Random
+
+    blocks, primary = candidate_geometry(v, pick, 4)
+    secondary = candidate_geometry(v, pick, 3)[1]
+    order = list(range(len(blocks)))
+    Random(seed).shuffle(order)
+    priority = [0] * len(order)
+    for i, j in enumerate(order):
+        priority[j] = len(order) - i
+
+    def best(covered, covered_secondary):
+        gains = [(mask & ~covered).bit_count() for mask in primary]
+        top = max(gains)
+        choices = (j for j, gain in enumerate(gains) if gain == top)
+        return max(
+            choices,
+            key=lambda j: (
+                (secondary[j] & ~covered_secondary).bit_count(),
+                priority[j],
+            ),
+        )
+
+    selected = []
+    covered = covered_secondary = 0
+    for _ in range(min(budget, len(blocks))):
+        j = best(covered, covered_secondary)
+        if not primary[j] & ~covered:
+            break
+        selected.append(j)
+        covered |= primary[j]
+        covered_secondary |= secondary[j]
+
+    for _ in range(3):
+        improved = False
+        for slot in range(len(selected)):
+            others = others_secondary = 0
+            for i, j in enumerate(selected):
+                if i != slot:
+                    others |= primary[j]
+                    others_secondary |= secondary[j]
+            old = selected[slot]
+            j = best(others, others_secondary)
+            incumbent = (
+                (primary[old] | others).bit_count(),
+                (secondary[old] | others_secondary).bit_count(),
+            )
+            candidate = (
+                (primary[j] | others).bit_count(),
+                (secondary[j] | others_secondary).bit_count(),
+            )
+            if candidate > incumbent:
+                selected[slot] = j
+                improved = True
+        if not improved:
+            break
+    return tuple(blocks[j] for j in selected)
+
+
 def wheel_maxcover(pool, pick, guarantee, max_variants=0, scores=None):
     """Keep the incumbent unless exact coverage improves after pool repair.
 
@@ -94,7 +162,7 @@ def wheel_maxcover(pool, pick, guarantee, max_variants=0, scores=None):
 
 
 def wheel_hitcover(pool, pick, guarantee, max_variants=0, scores=None):
-    """Opt-in budget optimization, accepted only with exact hit dominance.
+    """Budget optimization, accepted only with exact hit dominance.
 
     Keep the canonical greedy wheel unless a candidate uses the same number
     of tickets and covers at least as many pool intersections at EVERY hit
@@ -128,13 +196,22 @@ def wheel_hitcover(pool, pick, guarantee, max_variants=0, scores=None):
     if len(ordered) != len(pool):
         return base, base_cov
     incumbent, profile = base, wheel_hit_profile(pool, base)
-    for target in dict.fromkeys((guarantee, 3, 4)):
-        if not 1 <= target < pick:
-            continue
-        positions = maximum_cover_positions(len(pool), pick, target, len(base))
+    candidates = [
+        maximum_cover_positions(len(pool), pick, target, len(base))
+        for target in dict.fromkeys((guarantee, 3, 4))
+        if 1 <= target < pick
+    ]
+    if pick >= 5:
+        candidates.extend(
+            balanced_cover_positions(len(pool), pick, len(base), seed)
+            for seed in range(3)
+        )
+    for positions in candidates:
         candidate = [sorted(ordered[i] for i in block) for block in positions]
         candidate = ensure_pool_numbers_on_tickets(candidate, pool, pick)
-        if len(candidate) != len(base):
+        if len(candidate) != len(base) or len(set(map(tuple, candidate))) != len(
+            candidate
+        ):
             continue
         candidate_profile = wheel_hit_profile(pool, candidate)
         if any(

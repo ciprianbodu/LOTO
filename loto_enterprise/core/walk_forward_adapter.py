@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v27"
+CACHE_VERSION = "v28"
+# v28: candidați hitcover noi și validare strictă a hiturilor Joker din WF.
 # v27: Loto 5/40 numără hiturile pe toate cele 6 numere extrase (n1..n6), nu
 #      doar pe primele 5; scorerii învață din extrageri de 6. Biletul rămâne 5.
 # v26: SES corect (s_0 = x_0 pe toată seria) și `theta_drift` pe prognoza liniară
