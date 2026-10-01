@@ -828,8 +828,14 @@ def _render_bench_leaderboard_slice(
             "🏆 = primul în clasamentul eligibil; 🎯 = metoda din ultima generare sau decizia salvată. "
             "⛔ = exclusă structural: la tăietura top-K scorurile sunt egale în ≥50% din blocuri, "
             "deci pool-ul ar fi ales după număr, nu după semnal — nu e un defect al metodei. "
-            "Necalificată = a bătut random în <60% din ferestre (zgomot, nu evidență)."
+            "Necalificată = nu a trecut regula de consistență între ferestre."
         ).classes("text-caption text-grey")
+        if has_target_rate:
+            ui.label(
+                "Wilson afișat folosește z=1 ca scor de clasare; nu este un interval "
+                "de încredere de 95%. Calificarea este euristică. Un avantaj predictiv "
+                "necesită testare separată."
+            ).classes("text-caption text-grey")
         if _is_single_pick:
             ui.label(
                 "Urna 2: potrivire exactă a unei bile din 20; random = 5%."
@@ -924,12 +930,12 @@ def _render_bench_leaderboard_slice(
             # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există.
             if _conf_ok and _lift_ok:
                 _ord = (
-                    f"aceleași chei ca decizia (limita Wilson a ratei {_shown_t}+ pooled, pe "
+                    f"aceleași chei ca decizia (scor Wilson z=1 al ratei {_shown_t}+ pooled, pe "
                     f"extrageri efective → lift mediu vs random → consistență)"
                 )
             elif _conf_ok:
                 _ord = (
-                    f"limita Wilson a ratei {_shown_t}+ (pooled, pe extrageri efective); "
+                    f"scor Wilson z=1 al ratei {_shown_t}+ (pooled, pe extrageri efective); "
                     f"tie-break-ul secundar diferă de decizie (rată brută, nu lift)"
                 )
             else:
@@ -1198,11 +1204,13 @@ def _render_last_csv_draw(fname: str, pool=None, joker_pick=None) -> None:
         pred_txt = ", ".join(str(n) for n in pred)
         if joker in pred:
             ui.label(
-                f"Joker urna 2 (producție): extras {joker} — hit pe {pred_txt}."
+                f"Joker urna 2 (producție): extras {joker}, ales {pred_txt}. "
+                "Potrivire după antrenarea pe această extragere; nu rezultat predictiv."
             ).classes("text-caption text-positive")
         else:
             ui.label(
-                f"Joker urna 2 (producție): extras {joker}, prezis {pred_txt} — miss."
+                f"Joker urna 2 (producție): extras {joker}, ales {pred_txt}. "
+                "Fără potrivire după antrenarea pe această extragere; nu rezultat predictiv."
             ).classes("text-caption text-grey")
 
 
@@ -1216,8 +1224,9 @@ def _render_urna2_benchmark_note() -> None:
             "bila aleasă coincide exact cu cea extrasă. Baseline aleator: 1/20 = 5%."
         ).classes("text-caption")
         ui.label(
-            "Re-Bench compară metodele CPU pe ferestre walk-forward, cu aceeași poartă "
-            "de consistență și limită Wilson. Dacă nu există semnal peste random, aplicația "
+            "Re-Bench compară metodele CPU pe ferestre walk-forward. Calificarea este "
+            "euristică. Wilson cu z=1 este un scor de clasare, nu un interval de încredere "
+            "de 95%. Dacă nu există semnal peste random, aplicația "
             "marchează low confidence și alege conservator dintre metodele eligibile; "
             "frequency rămâne fallback-ul dacă nu există date utilizabile."
         ).classes("text-caption text-grey")

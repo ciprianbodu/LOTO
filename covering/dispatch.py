@@ -8,9 +8,11 @@ from budget_cover import wheel_hitcover, wheel_maxcover
 from covering.common import (
     _coverage_pct,
     _greedy_fallback,
+    _sorted_pool,
     ensure_pool_numbers_on_tickets,
 )
 from covering.designs import wheel_lajolla, wheel_lotto, wheel_union34
+from covering.higher_hits import improve_higher_hits
 from covering.ilp import wheel_ilp
 from covering.search import wheel_annealing, wheel_genetic
 
@@ -49,13 +51,17 @@ def generate_wheel(
     max_variants=0,
     scores=None,
     condition: int | None = None,
+    draw_n: int | None = None,
 ):
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic.
 
     `condition` (numărul de numere din pool care trebuie să cadă ca garanția să
     se aplice) > `guarantee` comută pe lotto design „t dacă p" (`wheel_lotto`),
     indiferent de `method`: designurile locale și coverele clasice există doar
-    pentru p == t. `condition` None sau egal cu garanția = comportamentul vechi.
+    pentru p == t. `condition` None sau egal cu garanția = cover clasic.
+    Un cover clasic 4 complet, fără plafon, este rafinat pentru hituri 5+ când
+    se extrag 6 numere. `draw_n` omis păstrează geometria `pick`; 5/40 transmite
+    explicit 6. Metoda greedy explicită păstrează construcția de referință.
     """
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
@@ -74,5 +80,17 @@ def generate_wheel(
         wheel, cov = fn(pool, pick, guarantee, max_variants, scores)
     if int(max_variants or 0) > 0:
         wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+        cov = _coverage_pct(wheel, pool, guarantee)
+    elif (
+        fn is not None
+        and int(max_variants or 0) == 0
+        and int(guarantee) == 4
+        and int(pick) in (5, 6)
+        and (int(pick) if draw_n is None else draw_n) == 6
+        and cov >= 100.0
+    ):
+        wheel, _higher_audit = improve_higher_hits(
+            _sorted_pool(pool, scores), wheel, draw_n=6
+        )
         cov = _coverage_pct(wheel, pool, guarantee)
     return wheel, cov

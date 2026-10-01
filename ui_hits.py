@@ -222,8 +222,10 @@ def _render_hits_4plus(
         return
     pool3 = sum(1 for d in per.values() if d["pool"] >= 3)
     pool4 = sum(1 for d in per.values() if d["pool"] >= 4)
+    pool5 = sum(1 for d in per.values() if d["pool"] >= 5)
     ticket3 = sum(1 for d in per.values() if d["best_ticket"] >= 3)
     ticket4 = sum(1 for d in per.values() if d["best_ticket"] >= 4)
+    ticket5 = sum(1 for d in per.values() if d["best_ticket"] >= 5)
 
     def _cell(k, denom):
         return f"{k} ({k / denom * 100:.2f}%)" if denom else "—"
@@ -265,7 +267,7 @@ def _render_hits_4plus(
             f"⚠️ Validare PARȚIALĂ: {meta.get('n_test_draws')} din "
             f"{meta.get('n_expected')} extrageri — extragerile CELE MAI RECENTE."
         ).classes("text-warning text-caption text-bold")
-    # (1) Sumar comparabil: +3 / +4 pe pool, baseline hipergeometric și volumul
+    # (1) Sumar comparabil: +3 / +4 / +5 pe pool, baseline hipergeometric și volumul
     # real de variante din WF. Premiile nu pot fi deduse din hiturile Urnei 1.
     _foreign = _LOT.lottery_by_id(str(game))
     if _foreign is not None and _foreign.is_romanian:
@@ -287,10 +289,12 @@ def _render_hits_4plus(
 
     # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
     def _bcell(K):
-        b3, b4 = _random_rate_hypergeo(gk, K, 3), _random_rate_hypergeo(gk, K, 4)
-        if b3 is None or b4 is None:
+        b3 = _random_rate_hypergeo(gk, K, 3)
+        b4 = _random_rate_hypergeo(gk, K, 4)
+        b5 = _random_rate_hypergeo(gk, K, 5)
+        if b3 is None or b4 is None or b5 is None:
             return "—"
-        return f"{b3 * 100:.1f}% / {b4 * 100:.2f}%"
+        return f"{b3 * 100:.1f}% / {b4 * 100:.2f}% / {b5 * 100:.3f}%"
 
     def _tick_cell(n_tick, avg):
         return f"{n_tick:,} ({avg:.2f}/extr.)"
@@ -300,6 +304,7 @@ def _render_hits_4plus(
             "src": f"🎯 Pool (din {_pn})" if _pn else "🎯 Pool",
             "p3": _cell(pool3, n),
             "p4": _cell(pool4, n),
+            "p5": _cell(pool5, n),
             "rnd": _bcell(_pn),
             "tick": _tick_cell(n_tick, tick_avg),
         },
@@ -307,6 +312,7 @@ def _render_hits_4plus(
             "src": "🎟️ Cel puțin un bilet WF",
             "p3": _cell(ticket3, n),
             "p4": _cell(ticket4, n),
+            "p5": _cell(ticket5, n),
             "rnd": "—",
             "tick": "același wheel",
         },
@@ -316,9 +322,10 @@ def _render_hits_4plus(
             {"name": "src", "label": "Sursă", "field": "src", "align": "left"},
             {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
             {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
+            {"name": "p5", "label": "+5 (extrageri)", "field": "p5", "align": "center"},
             {
                 "name": "rnd",
-                "label": "🎲 random (3+ / 4+)",
+                "label": "🎲 random (3+ / 4+ / 5+)",
                 "field": "rnd",
                 "align": "center",
             },
@@ -334,7 +341,7 @@ def _render_hits_4plus(
     _cap = (
         "🎟️ = variantele efectiv evaluate (o intrare walk-forward = o variantă la o extragere). "
         "🎲 = baseline PUR aleator (hipergeometric, calculat din parametrii jocului și "
-        "mărimea pool-ului). +3 / +4 = extrageri cu ≥3 / ≥4 numere nimerite. "
+        "mărimea pool-ului). +3 / +4 / +5 = extrageri cu ≥3 / ≥4 / ≥5 numere nimerite. "
         "Premiile și ROI-ul nu sunt estimate: CSV-ul nu conține categoria de premiu, "
         "iar Joker cere și validarea Urnei 2 pe același bilet. "
     )
@@ -356,6 +363,10 @@ def _render_hits_4plus(
             f"≈ {n_tick * _price:,.0f} lei (tarif standard, fără taxă fizică, fără câștig)."
         )
     ui.label(_cap).classes("text-caption text-grey")
+    ui.label(
+        "Garanția 4 nu asigură 5 pe un bilet; compară separat hiturile pool-ului "
+        "și ale biletelor."
+    ).classes("text-caption text-grey")
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
@@ -436,6 +447,21 @@ def _render_hits_4plus(
         gap_on=lambda d: d["pool"] >= _TT,
         gap_label=f"Δ → următorul ≥{_TT} / azi",
     )
+    with ui.expansion("🎟️ Bilete WF cu 4+ și 5+ — date și intervale", value=False).classes(
+        "w-full"
+    ):
+        ui.label(
+            "Fiecare rând este o extragere cu cel puțin un bilet la pragul indicat. "
+            "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții."
+        ).classes("text-caption text-grey")
+        for threshold in (4, 5):
+            _dates_table(
+                f"🎟️ BILET {threshold}+",
+                lambda d, t=threshold: d["best_ticket"] >= t,
+                lambda d: f"{int(d['best_ticket'])} numere",
+                f"Niciun bilet nu a prins ≥{threshold} în istoricul walk-forward.",
+                gap_label=f"Δ → următorul ≥{threshold} pe bilet / azi",
+            )
 
 
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
