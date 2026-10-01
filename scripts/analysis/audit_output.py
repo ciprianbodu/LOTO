@@ -171,21 +171,67 @@ def latest_bundle():
     return row, decode_queue_result(row["result_json"])
 
 
+
+def audit_history(fname, game, data):
+    """Resolve source and geometry through the result's registered identity."""
+    from loto_enterprise.core.history import chronological_history
+    from loto_enterprise.core.lotteries import require_lottery
+
+    lot = require_lottery(data.get("game_id") or game, data.get("country") or "RO")
+    if Path(fname).name != Path(lot.csv).name:
+        raise ValueError(f"Istoric diferit de sursa înregistrată: {fname!r}")
+    return lot, chronological_history(pd.read_csv(ROOT / lot.csv))
+
+
+def audit_cached_hits(flat, source, lot, guarantee, condition):
+    """Recalculate ticket hits against every drawn number in the main urn."""
+    per = wf.per_draw_hit_summary(flat)
+    assert all(
+        0 <= r["best_ticket"] <= lot.pick_n
+        and r["best_ticket"] <= r["pool"] <= lot.draw_n
+        for r in per.values()
+    )
+    actual = {
+        i: set(int(row[f"n{j}"]) for j in range(1, lot.draw_n + 1))
+        for i, row in source.iterrows()
+    }
+    unions, complete = {}, {}
+    for prediction in flat:
+        nums = set(prediction.variant[:lot.pick_n])
+        assert len(nums) == lot.pick_n
+        assert prediction.hits == len(nums & actual[prediction.draw_index]), (
+            lot.game_id, prediction.draw_index, prediction.hits,
+        )
+        unions.setdefault(prediction.draw_index, set()).update(nums)
+        complete[prediction.draw_index] = (
+            complete.get(prediction.draw_index, True)
+            and prediction.wheel_coverage == 100.0
+        )
+    for index, nums in unions.items():
+        played_hits = len(nums & actual[index])
+        assert played_hits <= per[index]["pool"]
+        # A conditional lotto design may leave pool numbers off every ticket.
+        # A complete classical cover necessarily plays every pool number.
+        if condition == guarantee and complete[index]:
+            assert played_hits == per[index]["pool"]
+    return per
+
+
 def audit_bundle(bundle):
     summary = []
     for fname, outs in bundle[0]:
-        source = pd.read_csv(ROOT / "_ISTORIC" / fname)
         for game, raw in outs.items():
             data = app_ui._primary_pool_data(raw)
+            lot, source = audit_history(fname, game, data)
             pool = data["hard_core"]
             variants = data["variants"]
             audit = data.get("audit") or {}
             guarantee = int(audit.get("wheel_guarantee_used") or data["guarantee"])
             condition = int(audit.get("wheel_condition_used") or guarantee)
-            wheel = [list(v[:5] if game == "joker" else v) for v in variants]
+            wheel = [list(v[:lot.pick_n]) for v in variants]
             assert len(pool) == len(set(pool)) == int(data["pool_size"])
             assert len(variants) == len({tuple(v) for v in variants})
-            assert all(len(v) == len(set(v)) and set(v) <= set(pool) for v in wheel)
+            assert all(len(v) == len(set(v)) == lot.pick_n and set(v) <= set(pool) for v in wheel)
             cov = compute_coverage_pct(wheel, pool, guarantee, condition)
             assert abs(cov - float(data["context"]["coverage_pct"])) < 1e-8
             rp = audit.get("recent_penalty") or {}
@@ -206,7 +252,7 @@ def audit_bundle(bundle):
             # cache-ul configurației nerestrânse.
             opts = app_ui._wf_generation_options(data)
             sig = wf._decision_sig(
-                game,
+                lot.geometry,
                 len(pool),
                 audit.get("lookback_pct") or 100,
                 rp.get("draws") or 0,
@@ -223,8 +269,8 @@ def audit_bundle(bundle):
             # Adâncimea intră în nume ca `float(...).hex()`, ca în
             # `run_honest_walk_forward`; cu `30` simplu cheia nu se potrivea niciodată.
             cache = wf._cache_path(
-                game,
-                wf._csv_hash(source, game),
+                lot.geometry,
+                wf._csv_hash(source, lot.geometry),
                 len(pool),
                 float(app_ui.WF_DEPTH_PERCENT).hex(),
                 sig,
@@ -240,40 +286,17 @@ def audit_bundle(bundle):
             if cache.exists():
                 cached = pickle_load_path(cache)
                 flat = cached["flat"]
-                per = wf.per_draw_hit_summary(flat)
-                assert all(
-                    0 <= r["best_ticket"] <= r["pool"] <= (6 if game == "6/49" else 5)
-                    for r in per.values()
-                )
+                per = audit_cached_hits(flat, source, lot, guarantee, condition)
                 assert len(per) == cached["n_test_draws"]
-                # Recalculăm fiecare hit de bilet direct din extragerea CSV;
-                # la cover complet, reuniunea numerelor de pe bilete e pool-ul.
-                draw_n = 6 if game == "6/49" else 5
-                actual = {
-                    i: set(int(row[f"n{j}"]) for j in range(1, draw_n + 1))
-                    for i, row in source.iterrows()
-                }
-                unions = {}
-                for p in flat:
-                    nums = set(p.variant[:draw_n])
-                    assert p.hits == len(nums & actual[p.draw_index]), (
-                        game,
-                        p.draw_index,
-                        p.hits,
-                    )
-                    unions.setdefault(p.draw_index, set()).update(nums)
-                if all(p.wheel_coverage == 100.0 for p in flat):
-                    assert all(
-                        len(nums & actual[i]) == per[i]["pool"]
-                        for i, nums in unions.items()
-                    )
+                item["wf_draws_checked"] = len(per)
+                item["wf_records_checked"] = len(flat)
                 app_ui.STATE["retro"][f"{fname}_{game}"] = flat
                 app_ui.STATE["retro_meta"][f"{fname}_{game}"] = cached
                 with capture_ui() as ui:
                     app_ui._render_hits_4plus(flat, game, cached, len(pool))
                 tables = [n for n in ui.walk() if n["kind"] == "table"]
                 assert len(tables[0]["kwargs"]["rows"]) == 2
-                item["wf"] = app_ui._wf_summary(flat)
+                item["wf"] = app_ui._wf_summary(flat, data)
             else:
                 item["wf"] = "Nu există cache pentru configurația și istoricul curente"
             with capture_ui() as ui:
@@ -284,6 +307,8 @@ def audit_bundle(bundle):
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()

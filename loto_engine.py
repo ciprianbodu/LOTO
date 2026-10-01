@@ -468,7 +468,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         # a UI-ului), altfel greedy. Comentariul de dinainte zicea „implicit greedy
         # (bit-identic)", ceea ce contrazicea codul de 5 rânduri mai jos.
         # Alternative selectabile prin env
-        # LOTO_WHEEL_METHOD = greedy|ilp|annealing|genetic|lajolla|union34
+        # LOTO_WHEEL_METHOD = greedy|hitcover|maxcover|ilp|annealing|genetic|lajolla|union34
         # (necunoscut → greedy). Lista completă: wheeling_methods.WHEEL_METHODS.
         _wheel_method_env = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
         if _wheel_method_env:

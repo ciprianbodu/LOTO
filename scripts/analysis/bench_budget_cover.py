@@ -5,7 +5,7 @@ last 30% of valid chronological draws, three consecutive reporting windows;
 all draws on the target date are excluded from scoring (unknown intra-day order);
 pool 11, budgets 7/10, targets 3/4. Same pool and actual ticket count for every
 method. Holdout is new to this experiment, NOT unseen by the wider project.
-Joker measures urn 1 only; 5/40 uses n1..n5, matching the application.
+Joker measures urn 1 only; 5/40 scores all six drawn numbers on five-number tickets.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from scipy.stats import binomtest, hypergeom
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from budget_cover import wheel_maxcover
+from budget_cover import wheel_hitcover, wheel_maxcover
 from loto_enterprise.benchmark.methods import score_frequency
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.ranking import rank_by_score
@@ -35,9 +35,9 @@ from ui_shared import atomic_write_json
 from wheeling_methods import compute_coverage_pct, generate_wheel
 
 GAMES = {
-    "6/49": ("loto_6_49.csv", 49, 6),
-    "5/40": ("loto_5_40.csv", 40, 5),
-    "Joker urn 1": ("joker.csv", 45, 5),
+    "6/49": ("loto_6_49.csv", 49, 6, 6),
+    "5/40": ("loto_5_40.csv", 40, 6, 5),
+    "Joker urn 1": ("joker.csv", 45, 5, 5),
 }
 
 
@@ -81,12 +81,12 @@ def holm(values):
     return result
 
 
-def exact_uniform_rate(wheel, v, pick, universe, target):
+def exact_uniform_rate(wheel, v, draw_n, universe, target):
     """Enumerate pool intersections; all outside-pool completions counted exactly."""
     masks = [sum(1 << n for n in ticket) for ticket in wheel]
     favorable = 0
-    for p in range(target, min(pick, v) + 1):
-        outside = pick - p
+    for p in range(target, min(draw_n, v) + 1):
+        outside = draw_n - p
         if outside > universe - v:
             continue
         covered = 0
@@ -94,36 +94,33 @@ def exact_uniform_rate(wheel, v, pick, universe, target):
             mask = sum(1 << n for n in subset)
             covered += any((mask & ticket).bit_count() >= target for ticket in masks)
         favorable += covered * math.comb(universe - v, outside)
-    return favorable / math.comb(universe, pick)
+    return favorable / math.comb(universe, draw_n)
 
 
 def geometry_table():
     rows = []
-    for v, pick, g, budget in itertools.product((11, 16), (5, 6), (3, 4), (7, 10)):
+    for v, (game, (_, universe, draw_n, pick)), g, budget in itertools.product(
+        (11, 16), GAMES.items(), (3, 4), (7, 10)
+    ):
         pool = list(range(v))
         scores = {n: float((n * 17) % 23) for n in pool}
-        for method in ("greedy", "lajolla", "maxcover"):
+        for method in ("greedy", "lajolla", "maxcover", "hitcover"):
             start = time.perf_counter()
-            wheel, coverage = (
-                wheel_maxcover(pool, pick, g, budget, scores)
-                if method == "maxcover"
-                else generate_wheel(method, pool, pick, g, budget, scores)
-            )
-            elapsed = time.perf_counter() - start
+            wheel, coverage = generate_wheel(method, pool, pick, g, budget, scores)
             rows.append(
                 dict(
+                    game=game,
                     pool=v,
                     pick=pick,
+                    draw_n=draw_n,
                     target=g,
                     budget=budget,
                     method=method,
-                    universe=49 if pick == 6 else 45,
+                    universe=universe,
                     tickets=len(wheel),
                     coverage=coverage,
-                    seconds=elapsed,
-                    uniform_rate=exact_uniform_rate(
-                        wheel, v, pick, 49 if pick == 6 else 45, g
-                    ),
+                    seconds=time.perf_counter() - start,
+                    uniform_rate=exact_uniform_rate(wheel, v, draw_n, universe, g),
                 )
             )
     return rows
@@ -139,13 +136,13 @@ def run(pool_size=11):
         "rows": [],
         "paired": [],
     }
-    for game, (filename, universe, pick) in GAMES.items():
+    for game, (filename, universe, draw_n, pick) in GAMES.items():
         path = ROOT / "_ISTORIC" / filename
         df = pd.read_csv(path)
         df["date"] = pd.to_datetime(df["date"], dayfirst=True, errors="raise")
         df = df.sort_values("date", kind="stable").reset_index(drop=True)
         draws, valid = valid_draw_matrix(
-            df, [f"n{i}" for i in range(1, pick + 1)], draw_n=pick, max_num=universe
+            df, [f"n{i}" for i in range(1, draw_n + 1)], draw_n=draw_n, max_num=universe
         )
         dates = df.loc[valid, "date"].reset_index(drop=True)
         start = max(100, int(len(draws) * 0.70))
@@ -153,6 +150,8 @@ def run(pool_size=11):
             raise ValueError("Insufficient history")
         result["sources"][game] = dict(
             sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            draw_n=draw_n,
+            pick_n=pick,
             valid=len(draws),
             rejected=int((~valid).sum()),
             evaluated=len(draws) - start,
@@ -165,7 +164,14 @@ def run(pool_size=11):
         for g, budget in itertools.product((3, 4), (7, 10)):
             rng = np.random.default_rng(20260912)
             metrics = {
-                name: [] for name in ("greedy", "lajolla", "random_tickets", "maxcover")
+                name: []
+                for name in (
+                    "greedy",
+                    "lajolla",
+                    "random_tickets",
+                    "maxcover",
+                    "hitcover",
+                )
             }
             for index, pool, scores in steps:
                 base, bc = generate_wheel("greedy", pool, pick, g, budget, scores)
@@ -180,6 +186,8 @@ def run(pool_size=11):
                         chosen = rng.choice(len(blocks), size=n, replace=False)
                         wheel = [[pool[i] for i in blocks[j]] for j in chosen]
                         coverage = compute_coverage_pct(wheel, pool, g)
+                    elif name == "hitcover":
+                        wheel, coverage = wheel_hitcover(pool, pick, g, n, scores)
                     elif name == "maxcover":
                         wheel, coverage = wheel_maxcover(pool, pick, g, n, scores)
                     else:
@@ -224,18 +232,21 @@ def run(pool_size=11):
                     )
                     row[f"pool_rate{target}"] = float((a[:, 6] >= target).mean())
                     row[f"uniform_pool_rate{target}"] = float(
-                        hypergeom.sf(target - 1, universe, pool_size, pick)
+                        hypergeom.sf(target - 1, universe, pool_size, draw_n)
                     )
                     row[f"uniform_single_ticket_rate{target}"] = float(
-                        hypergeom.sf(target - 1, universe, pick, pick)
+                        hypergeom.sf(target - 1, universe, pick, draw_n)
                     )
                 result["rows"].append(row)
-            for target in (3, 4):
-                candidate = np.asarray(metrics["maxcover"])[:, 0] >= target
+            for candidate_name, target in itertools.product(
+                ("maxcover", "hitcover"), (3, 4)
+            ):
+                candidate = np.asarray(metrics[candidate_name])[:, 0] >= target
                 baseline = np.asarray(metrics["greedy"])[:, 0] >= target
                 result["paired"].append(
                     dict(
                         game=game,
+                        method=candidate_name,
                         pool=pool_size,
                         target=g,
                         budget=budget,

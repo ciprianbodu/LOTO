@@ -662,6 +662,31 @@ def _select_ensemble_members(
     return kept, dropped
 
 
+def tiebreak_fraction(frame: pd.DataFrame, pool_size: int) -> float | None:
+    """Fraction of tied top-K cuts, weighted by evaluated blocks.
+
+    Shared with the leaderboard. A short window must not get the same
+    weight as the longest window; legacy frames without blocks use the mean.
+    None means no usable tie data, not a zero tie rate.
+    """
+    column = f"tiebreak_k{int(pool_size)}"
+    if column not in frame.columns:
+        return None
+    fraction = pd.to_numeric(frame[column], errors="coerce").dropna()
+    if fraction.empty:
+        return None
+    if "blocks" in frame.columns:
+        weights = pd.to_numeric(
+            frame.loc[fraction.index, "blocks"], errors="coerce"
+        ).fillna(0.0)
+        total = float(weights.sum())
+        if total > 0.0:
+            return float(
+                np.dot(fraction.to_numpy(dtype=float), weights.to_numpy()) / total
+            )
+    return float(fraction.mean())
+
+
 def decide_optimal_config_for_pool(
     folds_df: pd.DataFrame,
     game_key: str,
@@ -971,30 +996,10 @@ def decide_optimal_config_for_pool(
     def _tiebreak_ok(m: str, real_m: pd.DataFrame) -> bool:
         if not tiebreak_gate_applied:
             return True
-        raw_frac = pd.to_numeric(real_m[tiebreak_col], errors="coerce")
-        frac = raw_frac.dropna()
-        if frac.empty:
-            # Poarta e activă la nivel de cadru, dar metoda asta n-are nicio
-            # valoare — tratăm ca dependentă, nu ca „poarta nu se aplică",
-            # altfel o metodă ne-re-benchată ar ocoli-o permanent.
+        f = tiebreak_fraction(real_m, pool_size)
+        if f is None:
             tiebreak_dependent.append({"method": m, "tiebreak_fraction": None})
             return False
-        # Coloana e fracția din BLOCURILE ferestrei. Media neponderată dă
-        # ferestrei de 10% același vot ca celei de 100%. Cu `blocks` (numărul
-        # de blocuri din fold) media e fracția pe toate blocurile evaluate.
-        # La block_size sentinel (un bloc pe fereastră) ponderile sunt 1 și
-        # media rămâne cea veche. Fără coloană, folds de test: media simplă.
-        if "blocks" in real_m.columns:
-            weights = pd.to_numeric(
-                real_m.loc[frac.index, "blocks"], errors="coerce"
-            ).fillna(0.0)
-            wsum = float(weights.sum())
-            if wsum > 0.0:
-                f = float(np.dot(frac.to_numpy(dtype=float), weights.to_numpy()) / wsum)
-            else:
-                f = float(frac.mean())
-        else:
-            f = float(frac.mean())
         if f >= TIEBREAK_MAX_FRACTION:
             tiebreak_dependent.append({"method": m, "tiebreak_fraction": round(f, 3)})
             return False
@@ -1393,9 +1398,7 @@ def update_best_methods_with_auto_pilot(
             if gk in GAME_DRAW_PICK:
                 draw_n, pick_n = GAME_DRAW_PICK[gk]
             _lot = lottery_by_bench_key(gk)
-            if gk == "joker_urna2" or (
-                _lot is not None and _lot.bench_key_urna2 == gk
-            ):
+            if gk == "joker_urna2" or (_lot is not None and _lot.bench_key_urna2 == gk):
                 pool_range = [pick_n]
             else:
                 # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14

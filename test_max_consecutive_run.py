@@ -313,9 +313,16 @@ def test_wf_step_builds_the_same_pool_as_production(monkeypatch):
     _linear_scores(monkeypatch)
     df, draws, dates = _tail(12)
     step = bt._retroactive_step_stateless(
-        df, draws, dates, "6/49",
-        sim_idx=10, pool_size=12, guarantee=3, max_variants=2,
-        lookback_percent=100.0, max_consecutive_run=2,
+        df,
+        draws,
+        dates,
+        "6/49",
+        sim_idx=10,
+        pool_size=12,
+        guarantee=3,
+        max_variants=2,
+        lookback_percent=100.0,
+        max_consecutive_run=2,
     )
     assert step is not None
     assert sorted(step.hard_core) == [33, 34, 36, 37, 39, 40, 42, 43, 45, 46, 48, 49]
@@ -325,7 +332,9 @@ def test_wf_worker_step_takes_the_limit_by_name(monkeypatch):
     _linear_scores(monkeypatch)
     df, draws, dates = _tail(12)
     monkeypatch.setattr(
-        bt, "_WF_SHARED", {"df": df, "draws": draws, "dates": dates, "game_type": "6/49"}
+        bt,
+        "_WF_SHARED",
+        {"df": df, "draws": draws, "dates": dates, "game_type": "6/49"},
     )
     step = bt._wf_worker_step(
         {
@@ -363,7 +372,18 @@ def test_sequential_walk_forward_carries_the_limit(monkeypatch):
     assert predictions, "calea secvențială nu a produs niciun pas"
     for prediction in predictions:
         assert sorted(prediction.hard_core) == [
-            33, 34, 36, 37, 39, 40, 42, 43, 45, 46, 48, 49,
+            33,
+            34,
+            36,
+            37,
+            39,
+            40,
+            42,
+            43,
+            45,
+            46,
+            48,
+            49,
         ]
 
 
@@ -399,7 +419,9 @@ def _app_with_dataset(monkeypatch, rows=40):
     import app_nicegui as app
 
     df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(rows).reset_index(drop=True)
-    monkeypatch.setattr(app, "STATE", {**app.STATE, "datasets": [("loto_6_49.csv", df)]})
+    monkeypatch.setattr(
+        app, "STATE", {**app.STATE, "datasets": [("loto_6_49.csv", df)]}
+    )
     return app
 
 
@@ -422,7 +444,9 @@ def test_checkbox_sends_an_int_and_enters_the_hash_only_when_on(monkeypatch):
     assert json.loads(app._build_config_json())["input_hash"] != on["input_hash"]
 
 
-def test_checkbox_is_on_by_default_and_its_state_survives_a_restart(tmp_path, monkeypatch):
+def test_checkbox_is_on_by_default_and_its_state_survives_a_restart(
+    tmp_path, monkeypatch
+):
     """Implicit pornită; o bifă scoasă rămâne scoasă după repornire."""
     import ui_runtime
 
@@ -447,7 +471,10 @@ def test_wf_options_come_from_the_result_not_from_the_sidebar(monkeypatch):
     # Rezultat vechi, generat fără limită: WF nu are voie să o aplice.
     assert app._wf_generation_options({})["max_consecutive_run"] == 0
     monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", False)
-    assert app._wf_generation_options({"max_consecutive_run": 2})["max_consecutive_run"] == 2
+    assert (
+        app._wf_generation_options({"max_consecutive_run": 2})["max_consecutive_run"]
+        == 2
+    )
     # Fără ecoul worker-ului: limita CERUTĂ din audit, nu cea relaxată.
     relaxed = {"audit": {"consecutive_limit": {"requested": 2, "applied": 6}}}
     assert app._wf_generation_options(relaxed)["max_consecutive_run"] == 2
@@ -456,7 +483,9 @@ def test_wf_options_come_from_the_result_not_from_the_sidebar(monkeypatch):
     assert app._wf_generation_options(explicit)["max_consecutive_run"] == 0
 
 
-def test_run_honest_walk_forward_hands_the_limit_to_the_backtester(tmp_path, monkeypatch):
+def test_run_honest_walk_forward_hands_the_limit_to_the_backtester(
+    tmp_path, monkeypatch
+):
     """Adaptorul trece limita mai departe; meta o raportează."""
     seen = {}
 
@@ -468,7 +497,11 @@ def test_run_honest_walk_forward_hands_the_limit_to_the_backtester(tmp_path, mon
     monkeypatch.setattr(bt.LotoBacktester, "run_retroactive_backtest", _spy)
     df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(40).reset_index(drop=True)
     _flat, meta = wf.run_honest_walk_forward(
-        df, "6/49", 7, backtest_depth_percent=10.0, use_cache=False,
+        df,
+        "6/49",
+        7,
+        backtest_depth_percent=10.0,
+        use_cache=False,
         max_consecutive_run=2,
     )
     assert seen["max_consecutive_run"] == 2
@@ -508,7 +541,11 @@ def test_text_describes_the_result_and_its_ranks():
     # Limită relaxată: textul nu mai promite „fără 3 consecutive".
     relaxed = {
         "consecutive_limit": {
-            "requested": 2, "applied": 6, "relaxed": True, "removed": [], "added": [],
+            "requested": 2,
+            "applied": 6,
+            "relaxed": True,
+            "removed": [],
+            "added": [],
         }
     }
     for details in (True, False):
@@ -569,13 +606,20 @@ def test_wf_history_names_the_limit_it_used():
     assert "consecutive_limit_text=_consecutive_limit_text(" in src
     flat = [
         SimpleNamespace(
-            draw_index=1, draw_date="03-09-2026", hits_union=3, hits=2, wheel_coverage=100.0
+            draw_index=1,
+            draw_date="03-09-2026",
+            hits_union=3,
+            hits=2,
+            wheel_coverage=100.0,
         )
     ]
     audit = _limited_result([[4, 5]], [[9, 8]])["audit"]
     with capture_ui() as ui:
         app._render_hits_4plus(
-            flat, "6/49", meta={"pool_size": 10}, pool_n=10,
+            flat,
+            "6/49",
+            meta={"pool_size": 10},
+            pool_n=10,
             consecutive_limit_text=app._consecutive_limit_text(audit, details=False),
         )
     text = ui.text()
@@ -617,15 +661,22 @@ def test_submit_worker_result_and_wf_options_carry_the_limit(tmp_path, monkeypat
     jid = jq.submit_job("pipeline", app._build_config_json(), db_path=db)
     job = jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)
     assert job and job["id"] == jid
+    monkeypatch.setattr(
+        worker, "is_job_cancelled", functools.partial(jq.is_job_cancelled, db_path=db)
+    )
     monkeypatch.setattr(worker, "fail_job", functools.partial(jq.fail_job, db_path=db))
     monkeypatch.setattr(
-        worker, "update_job_progress", functools.partial(jq.update_job_progress, db_path=db)
+        worker,
+        "update_job_progress",
+        functools.partial(jq.update_job_progress, db_path=db),
     )
     result_json = worker._run_pipeline_job(job)
     assert result_json
-    assert jq.complete_job(jid, result_json, db_path=db, worker_token=worker.WORKER_TOKEN)
+    assert jq.complete_job(
+        jid, result_json, db_path=db, worker_token=worker.WORKER_TOKEN
+    )
     rb, _ = decode_queue_result(jq.get_job_status(jid, db_path=db)["result_json"])
-    (_fname, outs), = rb
+    ((_fname, outs),) = rb
     data = outs["6/49"]
     assert data["max_consecutive_run"] == 2
     assert data["audit"]["consecutive_limit"]["requested"] == 2
@@ -646,10 +697,12 @@ def test_submit_worker_result_and_wf_options_carry_the_limit(tmp_path, monkeypat
     assert "consecutive_limit" not in data_old["audit"]
 
 
-
 @pytest.mark.parametrize(
     "lookback,expected",
-    [(30, "în ultimele 30% din istoric:"), (0, "de câte ori a ieșit numărul în istoric:")],
+    [
+        (30, "în ultimele 30% din istoric:"),
+        (0, "de câte ori a ieșit numărul în istoric:"),
+    ],
 )
 def test_pool_header_says_where_the_frequency_was_counted(lookback, expected):
     """Paranteza e frecvența pe istoricul folosit; cu lookback, doar pe fereastră."""

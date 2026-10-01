@@ -1,13 +1,19 @@
 """Wheel method dispatcher."""
+
 from __future__ import annotations
 
-from budget_cover import wheel_maxcover
-from covering.common import _coverage_pct, _greedy_fallback, ensure_pool_numbers_on_tickets
+from budget_cover import wheel_hitcover, wheel_maxcover
+from covering.common import (
+    _coverage_pct,
+    _greedy_fallback,
+    ensure_pool_numbers_on_tickets,
+)
 from covering.designs import wheel_lajolla, wheel_lotto, wheel_union34
 from covering.ilp import wheel_ilp
 from covering.search import wheel_annealing, wheel_genetic
 
 WHEEL_METHODS = {
+    "hitcover": wheel_hitcover,
     "maxcover": wheel_maxcover,
     "ilp": wheel_ilp,
     "annealing": wheel_annealing,

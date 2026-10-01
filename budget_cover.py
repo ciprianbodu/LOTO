@@ -91,3 +91,67 @@ def wheel_maxcover(pool, pick, guarantee, max_variants=0, scores=None):
             candidate_count, comb(len(pool), guarantee)
         )
     return base, base_cov
+
+
+def wheel_hitcover(pool, pick, guarantee, max_variants=0, scores=None):
+    """Opt-in budget optimization, accepted only with exact hit dominance.
+
+    Keep the canonical greedy wheel unless a candidate uses the same number
+    of tickets and covers at least as many pool intersections at EVERY hit
+    threshold and EVERY intersection size. This protects 5/40's six-number
+    draws as well as other geometries without inferring odds from scores.
+    Classical guarantee coverage cannot fall, even when rounded percentages
+    are equal. No optimality or predictive advantage is claimed.
+    """
+    from covering.common import (
+        _coverage_ratio_pct,
+        ensure_pool_numbers_on_tickets,
+    )
+    from covering.greedy import generate_combinatorial_wheel
+    from covering.probability import wheel_hit_profile
+    from loto_enterprise.core.ranking import rank_by_score
+    from math import comb
+
+    pool = list(pool)
+    base, base_cov = generate_combinatorial_wheel(
+        pool, pick, guarantee, max_variants, scores
+    )
+    if not (
+        pick <= len(pool) <= 16
+        and len(set(pool)) == len(pool)
+        and 1 <= guarantee < pick <= 6
+        and 1 <= max_variants <= 64
+        and base_cov < 100.0
+    ):
+        return base, base_cov
+    ordered = rank_by_score({n: (scores or {}).get(n, 0.0) for n in pool}, len(pool))
+    if len(ordered) != len(pool):
+        return base, base_cov
+    incumbent, profile = base, wheel_hit_profile(pool, base)
+    for target in dict.fromkeys((guarantee, 3, 4)):
+        if not 1 <= target < pick:
+            continue
+        positions = maximum_cover_positions(len(pool), pick, target, len(base))
+        candidate = [sorted(ordered[i] for i in block) for block in positions]
+        candidate = ensure_pool_numbers_on_tickets(candidate, pool, pick)
+        if len(candidate) != len(base):
+            continue
+        candidate_profile = wheel_hit_profile(pool, candidate)
+        if any(
+            a < b
+            for a_row, b_row in zip(candidate_profile, profile)
+            for a, b in zip(a_row, b_row)
+        ):
+            continue
+        # A strict improvement must concern a possible 3+/4+ lottery event.
+        if not any(
+            candidate_profile[h][t] > profile[h][t]
+            for h in range(3, min(6, len(pool)) + 1)
+            for t in (3, 4)
+            if t <= h
+        ):
+            continue
+        incumbent, profile = candidate, candidate_profile
+    return incumbent, _coverage_ratio_pct(
+        profile[guarantee][guarantee], comb(len(pool), guarantee)
+    )

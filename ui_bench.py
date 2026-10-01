@@ -1,4 +1,5 @@
 """Bench leaderboard rendering."""
+
 from __future__ import annotations
 
 import logging
@@ -126,9 +127,9 @@ def _decision_entry(folds_game_key: str, pool: int) -> dict:
     try:
         from loto_enterprise.core.method_selector import _auto_pilot_entry, _load_config
 
-        g = (_load_config(_decision_path_for_key(folds_game_key)).get("games") or {}).get(
-            folds_game_key
-        ) or {}
+        g = (
+            _load_config(_decision_path_for_key(folds_game_key)).get("games") or {}
+        ).get(folds_game_key) or {}
         e = _auto_pilot_entry(g, int(pool))
         return e if isinstance(e, dict) else {}
     except Exception:  # noqa: BLE001
@@ -187,6 +188,16 @@ def _bench_structural_exclusion(
     tie-break-ul numeric. Returnează text gol când metoda rămâne eligibilă.
     """
     reasons: list[str] = []
+    if "n_eval" in grp.columns and "n_test" in grp.columns:
+        evaluated = pd.to_numeric(grp["n_eval"], errors="coerce")
+        requested = pd.to_numeric(grp["n_test"], errors="coerce")
+        if (evaluated.notna() & requested.notna() & (evaluated < requested)).any():
+            reasons.append("extrageri neevaluate")
+    if (
+        metric in grp.columns
+        and pd.to_numeric(grp[metric], errors="coerce").notna().sum() == 0
+    ):
+        reasons.append("lipsesc datele pentru rata țintei")
     if expected_pcts and "percentile" in grp.columns and metric in grp.columns:
         valid = grp[pd.to_numeric(grp[metric], errors="coerce").notna()]
         have = {
@@ -198,20 +209,20 @@ def _bench_structural_exclusion(
 
     tie_col = f"tiebreak_k{int(pool)}"
     if tie_col in grp.columns:
-        vals = pd.to_numeric(grp[tie_col], errors="coerce").dropna()
-        if not vals.empty:
-            frac = float(vals.mean())
-            try:
-                from loto_enterprise.benchmark.decision import TIEBREAK_MAX_FRACTION
+        from loto_enterprise.benchmark.decision import (
+            TIEBREAK_MAX_FRACTION,
+            tiebreak_fraction,
+        )
 
-                limit = float(TIEBREAK_MAX_FRACTION)
-            except Exception:  # noqa: BLE001
-                limit = 0.5
-            if frac >= limit:
-                reasons.append(
-                    f"scoruri egale la limita top-{int(pool)}: {frac * 100:.1f}% "
-                    f"blocuri, în medie pe ferestre (maxim admis < {limit * 100:.0f}%)"
-                )
+        frac = tiebreak_fraction(grp, pool)
+        limit = float(TIEBREAK_MAX_FRACTION)
+        if frac is None:
+            reasons.append("lipsesc datele despre egalitățile la limita top-K")
+        elif frac >= limit:
+            reasons.append(
+                f"scoruri egale la limita top-{int(pool)}: {frac * 100:.1f}% "
+                f"blocuri, ponderat pe ferestre (maxim admis < {limit * 100:.0f}%)"
+            )
     return "; ".join(reasons)
 
 
@@ -272,7 +283,7 @@ def _last_generation_bench_info(folds_game_key: str, pool: int | None = None) ->
             try:
                 if ph is not None and int(ph) == int(pool):
                     return info
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
     return {}
 
@@ -544,6 +555,28 @@ def _render_bench_leaderboard_slice(
     _structural_fail = {
         str(r[0]): str(r[10]) for r in rows if r[10] and r[0] not in _BASE
     }
+    if "ranked_methods" in _current_dec:
+        # Eligibilitatea provine din aceeași decizie ca ordinea rangurilor.
+        # Porțile locale puteau omite n_eval<n_test și lipsa ratei sau puteau
+        # exclude un câștigător folosind o medie neponderată a egalităților.
+        _structural_fail = {}
+        for item in _current_dec.get("incomplete_methods", []):
+            windows = ", ".join(f"{p}%" for p in item.get("missing_windows", []))
+            reason = (
+                "extrageri neevaluate"
+                if item.get("reason") == "unevaluated_draws"
+                else "ferestre lipsă"
+            )
+            _structural_fail[item["method"]] = f"{reason}: {windows}"
+        for item in _current_dec.get("tiebreak_dependent", []):
+            frac = item.get("tiebreak_fraction")
+            _structural_fail[item["method"]] = (
+                "lipsesc datele despre egalitățile la limita top-K"
+                if frac is None
+                else f"scoruri egale la limita top-{int(pool)}: {100 * frac:.1f}% blocuri, ponderat pe ferestre"
+            )
+        for item in _current_dec.get("rate_data_missing", []):
+            _structural_fail[item["method"]] = "lipsesc datele pentru rata țintei"
     _gate_applied = False
 
     def _sort_key_lift(r):
@@ -826,8 +859,7 @@ def _render_bench_leaderboard_slice(
                     )
                 ]
                 _ens_source = (
-                    "nominal, plafon 3 (producția aplică "
-                    "ENSEMBLE_MAX_METHODS, azi 1)"
+                    "nominal, plafon 3 (producția aplică ENSEMBLE_MAX_METHODS, azi 1)"
                 )
             except Exception:  # noqa: BLE001
                 _ens_names = []
@@ -1099,7 +1131,7 @@ def _fmt_score_time(ms) -> str:
     """Timp de scoring lizibil: sub 100 ms afișăm milisecunde, nu «0.0s»."""
     try:
         v = float(ms)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "?"
     return f"{v:.0f}ms" if v < 100 else f"{v / 1000:.1f}s"
 
@@ -1201,8 +1233,12 @@ def _render_bench_leaderboard(
             return
         if df.empty or "method" not in df.columns or "game" not in df.columns:
             return
-        pool = int(pool_size) if pool_size is not None else _int_setting("pool_size_val")
-        _render_bench_leaderboard_slice(df, spec.bench_key, pool, spec.display, top_n=top_n)
+        pool = (
+            int(pool_size) if pool_size is not None else _int_setting("pool_size_val")
+        )
+        _render_bench_leaderboard_slice(
+            df, spec.bench_key, pool, spec.display, top_n=top_n
+        )
         return
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
@@ -1333,4 +1369,3 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
 # Wilson) și nu citea deloc best_methods.json — deci putea anunța drept „câștigătoare"
 # altă metodă decât cea folosită efectiv la generare (și putea pune `random` pe podium).
 # Sursa UNICĂ de adevăr pentru „cine e câștigătorul" e `_render_bench_leaderboard_slice`.
-
