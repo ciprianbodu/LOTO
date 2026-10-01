@@ -202,6 +202,7 @@ def submit_generation(
         STATE["wf_running"] = False
         STATE["pure_bench"] = pure
         STATE["results"] = None
+        STATE["result_sources"] = None
         STATE["retro"] = {}
         STATE["wf_status"] = ""
     ensure_worker_running()
@@ -939,8 +940,43 @@ def _echo_mismatch(g_label, data) -> bool:
     return str((data or {}).get("game_id") or "") != lot.game_id
 
 
+def _result_sources_from_job(job: dict) -> dict | None:
+    """Decode the persisted input snapshot without changing the queue contract."""
+    raw = job.get("config_json")
+    if not raw:
+        return None  # compatibility with old/in-memory results lacking job metadata
+    sources = {}
+    try:
+        config = json.loads(raw)
+        for dataset in config.get("datasets", []):
+            fname = str(dataset["fname"])
+            if fname in sources:
+                raise ValueError(f"Duplicate dataset name: {fname}")
+            # Identic workerului: datele DD-MM rămân string-uri până la
+            # normalizarea cronologică; inferența pandas este month-first.
+            frame = pd.read_json(
+                io.StringIO(dataset["df_json"]), orient="split", convert_dates=False
+            )
+            identities = {
+                (str(task.get("game_label") or ""), str(task.get("country") or _LOT.RO))
+                for task in dataset.get("tasks", [])
+            }
+            if len(identities) == 1:
+                game_id, country = identities.pop()
+                spec = _LOT.require_lottery(game_id, country)
+                frame.attrs.update(game_id=spec.game_id, country=spec.country)
+            sources[fname] = frame
+    except (TypeError, ValueError, KeyError, AttributeError) as exc:
+        logger.warning("[RESULT] Original job source unavailable: %s", exc)
+        return {}  # never validate a broken snapshot against a replacement upload
+    return sources
+
+
 def _start_walk_forward() -> None:
-    results = STATE.get("results")
+    with STATE_LOCK:
+        results = STATE.get("results")
+        sources = STATE.get("result_sources")
+        ds_by_name = dict(sources) if sources is not None else dict(STATE.get("datasets", []))
     if not (isinstance(results, tuple) and len(results) == 2):
         _finalize_pipeline()  # fără rezultate → nu rulează WF; mail deja trimis mai sus, doar shutdown
         return
@@ -991,8 +1027,6 @@ def _start_walk_forward() -> None:
                 run_honest_walk_forward,
             )
 
-            with STATE_LOCK:
-                ds_by_name = {fn: df for fn, df in STATE["datasets"]}
             if not ds_by_name:
                 # Tipic la RECUPERARE după restart: CSV-urile nu-s reîncărcate (se încarcă
                 # manual). Walk-forward se va sări (df_source None) → fără stats de validare,
@@ -1223,6 +1257,7 @@ def status_panel() -> None:
                     if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
                         STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
                     STATE["results"] = payload
+                    STATE["result_sources"] = _result_sources_from_job(stt)
                     STATE["results_recovered"] = (
                         None  # rezultat PROASPĂT → fără marcaj „vechi"
                     )
@@ -1476,7 +1511,7 @@ def _build_mail_body() -> str:
         lines.extend(_mail_method_lines(_sp, primary))
         lines.append(
             _mail_best_draw_line(
-                _sp, dict(STATE["datasets"]).get(fn), primary.get("hard_core")
+                _sp, _result_source(fn), primary.get("hard_core")
             )
         )
         lines.append("")
@@ -2929,6 +2964,7 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
         when = str(last.get("completed_at") or "")[:16] or "sesiune anterioară"
         with STATE_LOCK:
             STATE["results"] = payload
+            STATE["result_sources"] = _result_sources_from_job(last)
             STATE["results_recovered"] = f"job #{jid} · {when}"
         SETTINGS["last_finalized_job_id"] = jid
         _save_settings()

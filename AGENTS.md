@@ -53,14 +53,14 @@ Snapshot verificat la 2026-09-15:
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
 - cache benchmark: `v21` (Loto 5/40 citeste toate cele 6 numere extrase);
-- cache walk-forward: `v27` (acelasi motiv: pool-ul si hiturile 5/40 se schimba);
+- cache walk-forward: `v28` (candidati hitcover noi si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
 - Loto 5/40 = 6 numere extrase din 40, bilet de 5. Istoricul scorerilor,
   hiturile de bench/WF/UI si baseline-ul random folosesc n1..n6 (`draw_n = 6`);
   biletul, garantia, sistemul complet, costul si pool-ul de baza (k5) folosesc
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v8` (hitcover implicit la buget pozitiv; v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v9` (candidati hitcover noi; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 78 fisiere `test_*.py`, 1690 de teste (renumarat la 2026-09-28). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1666 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -78,6 +78,35 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Audit global 2026-10-01, runda 2
+
+- Decizia si clasamentul UI calculeaza toate statisticile numai pe ferestrele
+  comune de evaluare (`common_window_percentiles` / `filter_window_percentiles`).
+  Ferestrele suplimentare ale unui candidat nu-i pot creste rata, Wilson,
+  consistenta sau sansele de selectie; nici fallback-ul si ensemble-ul.
+- UI, raportul si WF folosesc snapshot-ul dataset-ului din config_json al
+  jobului terminat, inclusiv la recuperare. Un upload ulterior nu schimba
+  istoricul rezultatului afisat; identitatea tara/joc ramane cea a jobului.
+  Snapshot corupt => indisponibil, fara substitutie tacita cu dataset-ul live.
+  Decodarea foloseste convert_dates=False, identic workerului, ca ZZ-LL sa
+  nu se transforme tacit in LL-ZZ pentru datele ambigue.
+- Auditorul WF recalculeaza hiturile pe aceeasi cronologie validata si acelasi
+  index dupa eliminarea randurilor invalide; sursa originala pentru hash ramane
+  intacta. Ultima extragere UI este ultima cronologic si valida, nu ultimul rand CSV.
+  Hitul Joker Urna 2 valideaza strict intregii 1..20, fara trunchiere.
+- Hitcover adauga candidati geometrici deterministi, cu 4-subset prioritar si
+  3-subset secundar, trei ordini locale si trei treceri de schimburi. Acceptarea
+  verifica profilul COMPLET dupa repararea pool-ului: aceleasi bilete distincte,
+  fara scadere la vreun prag/intersectie si crestere stricta la 3+/4+.
+  Candidatii vechi sunt evaluati primii; 15 din 32 configuratii masurate cresc,
+  restul raman identice. Scorerul si pool-ul nu se schimba. Memoizare limitata;
+  prima constructie pool 16/plafon 64 a durat pana la 6,752 s local.
+- Worker v9 si WF v28 invalideaza geometria si semantica vechi. Activarea
+  ramane automata la buget pozitiv, fara comanda PowerShell.
+- Raport si limite: `scripts/analysis/audit_application_report_2026-10-01_round2.md`.
+  Auditul ruleaza pe o copie izolata cand un Re-Bench scrie in paralel; starea
+  si fisierele benchmarkului utilizatorului sunt excluse din commit.
 
 ### Audit global 2026-09-15
 
@@ -800,8 +829,8 @@ decizia Urnei 2.
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
 | benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v27` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v7` | se schimba rezultatul serializat al pipeline-ului |
+| walk-forward | `v28` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| worker pipeline | `v9` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
