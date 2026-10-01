@@ -464,28 +464,12 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             self._attach_joker(variants)
             return variants, coverage_pct
 
-        # Wheeling: implicit **lajolla** când max_variants == 0 (setarea implicită
-        # a UI-ului), altfel greedy. Comentariul de dinainte zicea „implicit greedy
-        # (bit-identic)", ceea ce contrazicea codul de 5 rânduri mai jos.
-        # Alternative selectabile prin env
-        # LOTO_WHEEL_METHOD = greedy|hitcover|maxcover|ilp|annealing|genetic|lajolla|union34
-        # (necunoscut → greedy). Lista completă: wheeling_methods.WHEEL_METHODS.
-        _wheel_method_env = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
-        if _wheel_method_env:
-            # Override explicit — comportament neschimbat (backward-compat).
-            _wheel_method = _wheel_method_env
-        elif max_variants == 0:
-            # Implicit, fără cap de bilete ("garanție completă"): design de acoperire
-            # PRECALCULAT și validat 100% din covering_designs/ pentru geometriile UI: pool 6-16,
-            # pick 5/6 și garanție 3..pick-1. Orice geometrie fără fișier cade pe
-            # ILP, apoi pe greedy. Exemplu: 6/49 pool 12 / g4, 54→41 bilete;
-            # 5/40+Joker pool 12 / g4, 123→113.
-            _wheel_method = "lajolla"
-        else:
-            # Buget de bilete fix (max_variants>0): greedy + packing numere
-            # din pool pe bilete (ensure_pool_numbers_on_tickets). Default
-            # max_variants=0 e neschimbat.
-            _wheel_method = "greedy"
+        # Alegere automată: hitcover la buget pozitiv, La Jolla fără plafon.
+        # Hitcover păstrează greedy dacă nu găsește un candidat dominant exact.
+        # LOTO_WHEEL_METHOD rămâne un override opțional (necunoscut → greedy).
+        from wheeling_methods import resolve_wheel_method
+
+        _wheel_method = resolve_wheel_method(max_variants)
         if _wheel_method and _wheel_method != "greedy":
             from wheeling_methods import generate_wheel
 

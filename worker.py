@@ -26,7 +26,8 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v7"
+PIPELINE_CACHE_VERSION = "v8"
+# v8: hitcover implicit la buget pozitiv; v7 păstra greedy pe alegerea auto.
 # v7: auditul numerelor nejucate Joker exclude bila din urna 2.
 # v5: SES și theta_drift schimbă pool-ul serializat când câștigătorul e
 #     ses_opt_alpha, imapa_agg sau theta_drift. UI-ul ține use_cache=False;

@@ -60,7 +60,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v7` (auditul Joker al numerelor nejucate ignora Urna 2; v6 aduce identitatea jocului);
+- cache rezultat worker: `v8` (hitcover implicit la buget pozitiv; v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 78 fisiere `test_*.py`, 1690 de teste (renumarat la 2026-09-28). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1666 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -680,6 +680,8 @@ limita de validitate din §5).
 `wheeling_methods.py` este sursa unica pentru metodele disponibile:
 
 - `greedy`;
+- `hitcover`;
+- `maxcover`;
 - `ilp`;
 - `annealing`;
 - `genetic`;
@@ -696,15 +698,21 @@ Nu modifica default-urile. Activare explicita: `LOTO_WHEEL_METHOD=maxcover`.
 Cheia WF distinge deja numele metodei; cheia de pipeline a worker-ului primeste
 sufixul `:wheel=<metoda>` (implicit `auto`) pentru orice metoda.
 
-Metoda opt-in `hitcover` (audit 2026-10-01) optimizeaza sansele pe bilete
+Metoda `hitcover` (audit 2026-10-01) optimizeaza sansele pe bilete
 la acelasi buget. Accepta un candidat numai daca numarul de bilete este egal,
 acoperirea exacta si numarul intersectiilor favorabile nu scad pentru NICIUN
 prag de hituri si NICIO marime a intersectiei pool-extragere; cere un castig
 strict la 3+/4+. `covering.probability.wheel_hit_profile` compara numaratori
 intregi. Limite: pool <=16, pick <=6, garantie < pick, 1..64 variante,
-acoperire initiala incompleta; in afara lor ramane greedy. Activare explicita:
-`LOTO_WHEEL_METHOD=hitcover`, impreuna cu un buget pozitiv de variante.
-Nu modifica default-urile si nu afirma avantaj predictiv sau optimalitate.
+acoperire initiala incompleta; in afara lor ramane greedy. La cererea
+utilizatorului din 2026-10-01, este alegerea AUTOMATA la buget pozitiv, inclusiv
+pentru baza din „Bilet complet”. Nu necesita o comanda PowerShell sau o setare
+noua. Fara plafon ramane La Jolla; conditia > garantie ramane lotto design.
+`covering.dispatch.resolve_wheel_method` este comun motorului, biletelor fizice
+si semnaturii WF. `LOTO_WHEEL_METHOD` ramane override optional; `greedy` reface
+constructia anterioara. Baza cu garantie completa si completarea pe grupe mai
+mari a biletelor fizice raman identice. Worker v8 invalideaza payload-urile vechi,
+inclusiv cheile fara config. Nu afirma avantaj predictiv sau optimalitate.
 Raport: `scripts/analysis/audit_application_report_2026-10-01.md`.
 
 Experimentul reproductibil `scripts/analysis/bench_budget_cover.py` compara
@@ -721,7 +729,8 @@ hiturile 5/40 pe toate cele 6 numere extrase.
 Reguli:
 
 - fara plafon de bilete, productia prefera La Jolla;
-- cu `max_variants > 0`, se foloseste traseul cu buget si se recalculeaza
+- cu `max_variants > 0`, implicit hitcover incearca dominanta exacta fata de
+  greedy la acelasi numar de variante; se recalculeaza
   acoperirea dupa completarea numerelor lipsa;
 - designurile locale sunt validate la 100% inainte de utilizare;
 - fallback: La Jolla -> ILP -> greedy;

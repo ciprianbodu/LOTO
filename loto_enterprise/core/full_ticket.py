@@ -2,7 +2,7 @@
 
 Numarul de variante simple de pe un bilet: 3 la 6/49, 4 la 5/40, 2 la Joker;
 N bilete au de N ori mai multe. Variantele se aleg cu wheel-ul cu buget (acelasi
-traseu ca `max_variants` in productie), deci acoperirea e recalculata exact
+traseu ca `max_variants` in productie, implicit hitcover), deci acoperirea e recalculata exact
 pentru aceste variante. Cand garantia e completa inainte de a umple biletele,
 locurile ramase acopera grupe mai mari din acelasi pool (g+1 din g+1, apoi pana
 la sistemul complet), tot cu wheel-ul greedy; niciun numar nu vine din afara
@@ -32,7 +32,7 @@ from __future__ import annotations
 from math import comb
 
 from covering.common import compute_coverage_pct
-from covering.dispatch import generate_wheel
+from covering.dispatch import generate_wheel, resolve_wheel_method
 from loto_enterprise.core.ranking import limit_consecutive_run, longest_consecutive_run
 from loto_enterprise.core.ro_text import count
 
@@ -182,7 +182,7 @@ def _fill_variants(
     `n_var` combinatii (`_min_pool`), adica atunci cand clasamentul are destule
     numere; altfel ies toate combinatiile pool-ului."""
     base, _ = generate_wheel(
-        "greedy",
+        resolve_wheel_method(n_var),
         pool=pool,
         pick=pick,
         guarantee=guarantee,
