@@ -56,27 +56,27 @@ experimentului cu bugete 7/10 au 48 de comparații pereche; niciuna nu trece Hol
 la 5%. Avantajul descris în tabel provine din enumerarea exactă a geometriei,
 nu din semnificația unui backtest.
 
-Metoda este opțională. Pentru activare, în PowerShell, înainte de pornirea UI:
+La cererea utilizatorului, optimizarea este acum AUTOMATĂ pentru un buget
+pozitiv de variante, inclusiv în generatorul „Bilet complet”. Nu trebuie
+executată o comandă PowerShell la fiecare pornire și nu există o setare nouă
+de activat. Pornește aplicația normal, cu START_8000.bat.
 
-```powershell
-$env:LOTO_WHEEL_METHOD = 'hitcover'
-.\START_8000.bat
-```
+Limitele metodei sunt: pool ≤16, bilet ≤6, garanție mai mică decât biletul,
+buget 1..64 și acoperire inițială incompletă. În afara lor păstrează greedy;
+bugetul zero folosește designurile complete La Jolla. Condiția lotto mai mare
+decât garanția folosește în continuare designul condiționat.
 
-Alege în UI un buget pozitiv de variante, de exemplu 7. Limitele metodei sunt:
-pool ≤16, bilet ≤6, garanție mai mică decât biletul, buget 1..64 și acoperire
-inițială incompletă. În afara lor păstrează greedy; bugetul zero nu aplică această
-optimizare. Condiția lotto mai mare decât garanția folosește designul condiționat.
-Pentru revenire la alegerea implicită, elimină variabila înainte de repornire:
+Resolverul comun aliniază motorul, biletele fizice și semnătura WF. Worker v8
+invalidează rezultatele vechi, inclusiv cheia fără config. Baza deja completă
+și completarea g+1 a biletelor fizice păstrează construcția anterioară.
+`LOTO_WHEEL_METHOD` rămâne un override pentru utilizare avansată; nu este necesar
+pentru optimizarea automată. Un override explicit poate alege alt algoritm și
+nu moștenește dominanța matematică a alegerii automate.
 
-```powershell
-Remove-Item Env:LOTO_WHEEL_METHOD
-```
-
-Implicitul existent rămâne La Jolla fără buget și greedy cu buget. Semnăturile
-WF și worker disting `hitcover` de aceste alegeri. Optimizarea se aplică
-variantelor motorului; generatorul separat de formulare «Bilet complet»
-folosește în continuare propria construcție greedy.
+Exemplu suplimentar verificat pe biletul fizic 6/49: pool 16, garanție cerută 4,
+zece bilete × trei variante, scorurile fixe din exemplul anterior. Șansa exactă
+de 3+ pe cel puțin o variantă crește de la 21,889% la 27,000%, iar cea de 4+
+de la 2,350% la 2,587%, cu aceleași 30 de variante și același pool.
 
 ## Dovezi de execuție
 
@@ -91,12 +91,14 @@ folosește în continuare propria construcție greedy.
   niciun prag de hituri nu pierde șanse.
 - Worker separat, coadă SQLite izolată, 13 rezultate COMPLETED și decodate.
 - UI real pe port liber: HTTP 200, coadă și setări temporare separate.
+  Auditul E2E a fost reluat după activarea automată: toate verificările trec.
+- 138 teste țintite pentru activarea automată, bilete fizice, WF și coadă: trecute.
 - Hash-urile istoricului, deciziei, benchmarkului și stării de producție sunt
   identice înainte/după auditul de execuție și diagnosticul statistic.
 - 92 clasamente UI randate verificate; ultimul rezultat stocat este BG Toto 2,
   pool 16, 191 variante, acoperire 100%. Pentru această configurație nu există
   cache WF curent; auditorul îl raportează lipsă, fără a inventa o validare.
-- Suita completă: 1.733 trecute, 17 omise, zero eșecuri (310,89 s).
+- Suita completă: 1.743 trecute, 17 omise, zero eșecuri (297,49 s).
   Cele 272 avertismente sunt deprecieri NumPy în trei generatoare de date din teste.
   Compilarea fișierelor modificate și `git diff --check` trec.
 

@@ -58,7 +58,7 @@ def test_cache_separates_all_generation_settings_and_lotto_file(tmp_path, monkey
     (tmp_path / "L_10_6_4_3.txt").write_text("1 2 3 4 5 6\n", encoding="utf-8")
     after = wf._wheel_sig(10, "6/49", 3, 4, 2)
     assert before != after
-    assert wf._wheel_sig(10, "6/49", 3, 3, 2).startswith("greedy|")
+    assert wf._wheel_sig(10, "6/49", 3, 3, 2).startswith("hitcover|")
     assert wf._wheel_sig(10, "6/49", 3, 4, 2).startswith("lotto|")
     assert wf._wheel_sig(10, "6/49", 3, 3, 2).endswith("|rt1")
     # Cererea de sistem complet rămâne explicită; API-ul vechi rămâne plafonat.

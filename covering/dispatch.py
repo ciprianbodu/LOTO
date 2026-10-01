@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from budget_cover import wheel_hitcover, wheel_maxcover
 from covering.common import (
     _coverage_pct,
@@ -21,6 +23,22 @@ WHEEL_METHODS = {
     "lajolla": wheel_lajolla,
     "union34": wheel_union34,
 }
+
+
+def resolve_wheel_method(max_variants=0, requested: str | None = None) -> str:
+    """Production choice shared by engine, physical tickets and WF cache.
+
+    Fixed budgets automatically try exact hit dominance; uncapped generation
+    uses the validated covering designs. Explicit overrides remain available.
+    """
+    if requested is None:
+        requested = os.environ.get("LOTO_WHEEL_METHOD", "")
+    requested = requested.strip().lower()
+    if requested:
+        if requested in WHEEL_METHODS or requested == "greedy":
+            return requested
+        return "greedy"
+    return "hitcover" if int(max_variants or 0) > 0 else "lajolla"
 
 
 def generate_wheel(

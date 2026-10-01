@@ -304,7 +304,7 @@ def _wheel_sig(
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
     Aceeași ramură ca engine-ul: lotto la condiție > garanție; altfel override
-    din env, sau La Jolla fără plafon / greedy cu plafon.
+    din env, sau La Jolla fără plafon / hitcover cu plafon.
 
     DE CE intră în cheia de cache: numărul de BILETE, acoperirea şi hiturile per bilet
     depind de algoritmul de wheeling. Fără wheel în cheie, schimbarea ILP → La Jolla
@@ -323,15 +323,9 @@ def _wheel_sig(
     )
     geometry = f"g{g}|c{condition}|cap{cap}"
     try:
-        from wheeling_methods import WHEEL_METHODS, covering_design_source_signature
+        from wheeling_methods import covering_design_source_signature, resolve_wheel_method
 
-        method = (
-            requested
-            if requested in WHEEL_METHODS or requested == "greedy"
-            else "greedy"
-        )
-        if not requested:
-            method = "lajolla" if cap == 0 else "greedy"
+        method = resolve_wheel_method(cap, requested)
         if condition > g:
             design_sig = covering_design_source_signature(
                 int(pool_size),
@@ -354,7 +348,7 @@ def _wheel_sig(
         method = (
             "lotto"
             if condition > g
-            else requested or ("lajolla" if cap == 0 else "greedy")
+            else requested or ("lajolla" if cap == 0 else "hitcover")
         )
         return f"{method}|{geometry}|cd-error|rt1"
 

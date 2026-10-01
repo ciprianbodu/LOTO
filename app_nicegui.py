@@ -2341,6 +2341,10 @@ def main_page() -> None:
             ).classes("w-full"),
             "max_variants_val",
         )
+        ui.label(
+            "La buget limitat, aplicația caută automat o acoperire mai bună "
+            "fără să mărească numărul de variante. 0 folosește designurile complete."
+        ).classes("text-caption text-grey")
         _bind_save(
             ui.number(
                 "Penalizare numere extrase în ultimele N extrageri (0 = oprit)",

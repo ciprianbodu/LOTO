@@ -171,17 +171,19 @@ def test_budget_probability_uses_six_drawn_numbers_on_five_number_ticket():
     assert bench.GAMES["5/40"][2:] == (6, 5)
 
 
-def test_hitcover_cache_and_engine_override_preserve_default(monkeypatch):
+def test_hitcover_is_automatic_and_greedy_override_separates_cache(monkeypatch):
     from loto_enterprise.core import walk_forward_adapter as wf
     import worker
 
     monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
     default = wf._wheel_sig(11, "6/49", 4, None, 7)
     cache = worker._pipeline_cache_key("input")
-    assert default.startswith("greedy|")
-    monkeypatch.setenv("LOTO_WHEEL_METHOD", "hitcover")
-    assert wf._wheel_sig(11, "6/49", 4, None, 7).startswith("hitcover|")
+    assert default.startswith("hitcover|")
+    assert wf._wheel_sig(11, "6/49", 4, None, 0).startswith("lajolla|")
+    monkeypatch.setenv("LOTO_WHEEL_METHOD", "greedy")
+    assert wf._wheel_sig(11, "6/49", 4, None, 7).startswith("greedy|")
     assert worker._pipeline_cache_key("input") != cache
+    monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
     engine = LotoEngine("6/49")
     engine.hard_core = list(range(1, 12))
     scores = {n: float((n * 17) % 23) for n in engine.hard_core}
