@@ -460,11 +460,13 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 max_variants=max_variants,
                 scores=scores,
                 condition=_cond,
+                draw_n=self.params["draw_n"],
             )
             self._attach_joker(variants)
             return variants, coverage_pct
 
         # Alegere automată: hitcover la buget pozitiv, La Jolla fără plafon.
+        # Coverul 4 complet este rafinat pentru 5+ când jocul extrage 6 numere.
         # Hitcover păstrează greedy dacă nu găsește un candidat dominant exact.
         # LOTO_WHEEL_METHOD rămâne un override opțional (necunoscut → greedy).
         from wheeling_methods import resolve_wheel_method
@@ -480,6 +482,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 guarantee=guarantee,
                 max_variants=max_variants,
                 scores=scores,
+                draw_n=self.params["draw_n"],
             )
         else:
             variants, coverage_pct = generate_combinatorial_wheel(

@@ -516,6 +516,22 @@ def _csv_rows(path) -> int:
         return 0
 
 
+def _bench_target_rule_text(country: str) -> str:
+    """Descrie ținta efectivă pe joc, fără a schimba selectorul global."""
+    from loto_enterprise.benchmark.hit_target import game_hit_target
+
+    target = _clamped_bench_target()
+    if _LOT.normalize_country(country) == _LOT.RO:
+        return (
+            f"6/49 și Joker Urna 1: {target}+. Loto 5/40: minimum 4+ (mereu 4+ "
+            "cu selectorul 3/4). Joker Urna 2: top-1, potrivire exactă."
+        )
+    return "Ținte per joc: " + "; ".join(
+        f"{game.name}: {game_hit_target(game.bench_key, target)}+"
+        for game in _LOT.games_for_country(country)
+    ) + "."
+
+
 def _country_bench_texts(country: str) -> dict:
     """Cele patru texte ale panoului de bench pentru o țară STRĂINĂ.
 
@@ -527,13 +543,13 @@ def _country_bench_texts(country: str) -> dict:
     name = _LOT.country_name(cc)
     games = _LOT.games_for_country(cc)
     names = ", ".join(g.name for g in games)
-    bt = _clamped_bench_target()
     out: dict = {
         "intro": (
             f"{name} ({names}): un singur bench testează metodele fiecărui joc "
             "(exclusiv CPU), pe toate nucleele (în paralel). În fiecare joc, "
-            f"metodele concurează în ACELAȘI clasament → UN câștigător (regula {bt}+) "
-            "→ UN Auto-Pilot → UN walk-forward. Rezultatele stau separat de România "
+            "metodele concurează în ACELAȘI clasament → UN câștigător "
+            "→ UN Auto-Pilot → UN walk-forward. "
+            f"{_bench_target_rule_text(cc)} Rezultatele stau separat de România "
             f"(bench_results/countries/{cc}/, decisions/{cc}/best_methods.json)."
         )
     }
@@ -1570,7 +1586,7 @@ def _mail_method_lines(spec, data: dict) -> list[str]:
         line = f"RATING: rată {label} {100 * rate:.2f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
-        line += f"; limita Wilson {100 * wil:.2f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
+        line += f"; scor Wilson (z=1) {100 * wil:.2f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
         return [head, line]
     m = re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat)
     if m:
@@ -2354,8 +2370,9 @@ def main_page() -> None:
             "guarantee_val",
         )
         ui.label(
-            "6 este sistem complet pentru 6/49; la 5/40 și Joker garanția efectivă "
-            "este plafonată la 5 numere extrase."
+            "6 este sistem complet pentru 6/49. La 5/40 garanția este plafonată "
+            "la 5 numere pe bilet, din cele 6 extrase. Joker are 5 numere extrase "
+            "în Urna 1, deci garanția maximă este 5."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.number(
@@ -2639,9 +2656,12 @@ def main_page() -> None:
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
         ).classes("w-full")
+        ui.label(_bench_target_rule_text(_cc)).bind_text_from(
+            SETTINGS, "bench_hit_target", lambda _: _bench_target_rule_text(_cc)
+        ).classes("text-caption text-grey")
         ui.label(
-            "Ținta se aplică la 6/49 și Joker (Urna 1). Loto 5/40 rămâne mereu pe 4+: "
-            "hiturile se numără pe toate cele 6 numere extrase, iar 3 numere nu aduc premiu."
+            "Selecția după 3+ nu optimizează direct 4+ sau 5+. "
+            "Selecția după 4+ nu optimizează direct 5+."
         ).classes("text-caption text-grey")
         ui.label(
             f"Validarea pool-ului (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric): "
@@ -2703,7 +2723,6 @@ def main_page() -> None:
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
             "color=orange no-caps"
         ).classes(_BTN).style(_BTN_STYLE)
-        _bt = _clamped_bench_target()
         if _cc != _LOT.RO:
             _ctx = _country_bench_texts(_cc)
             ui.label(_ctx["intro"]).classes("text-caption")
@@ -2714,7 +2733,8 @@ def main_page() -> None:
             ui.label(
                 "Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
                 "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
-                f"ACELAȘI clasament → UN câștigător (regula {_bt}+) → UN Auto-Pilot → UN walk-forward. "
+                "ACELAȘI clasament → UN câștigător → UN Auto-Pilot → UN walk-forward. "
+                f"{_bench_target_rule_text(_cc)} "
                 "Vezi clasamentul complet la 🏆 Clasament bench."
             ).classes("text-caption")
             _eta_folds = _target_bench_folds()

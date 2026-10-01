@@ -111,7 +111,7 @@ app.ui.run(title="Loto Enterprise Wheeling", port=PORT, reload=False, show=False
 def run_audit(runtime):
     import numpy as np
     import pandas as pd
-    from covering.probability import wheel_hit_probabilities
+    from covering.probability import wheel_hit_probabilities, wheel_hit_profile
     from loto_engine import LotoEngine
     from loto_enterprise.benchmark.curated import load_curated, load_per_game
     from loto_enterprise.benchmark.methods import METHODS, METHOD_LOAD_ERRORS
@@ -122,7 +122,7 @@ def run_audit(runtime):
     from loto_enterprise.core.method_selector import combine_ensemble_scores
     from loto_enterprise.core.score_validation import has_usable_score_variance
     from scripts.analysis.audit_patterns_and_designs import audit_designs
-    from wheeling_methods import compute_coverage_pct, generate_wheel
+    from wheeling_methods import compute_coverage_pct, generate_wheel, resolve_wheel_method
 
     logging.disable(logging.CRITICAL)
     assert not METHOD_LOAD_ERRORS, METHOD_LOAD_ERRORS
@@ -135,6 +135,7 @@ def run_audit(runtime):
         "scorers": [],
         "pipelines": [],
         "budgets": [],
+        "complete_wheels": [],
     }
     frames = {}
     for lot in GAMES:
@@ -259,6 +260,30 @@ def run_audit(runtime):
                             after=b,
                         )
                     )
+    # Complete four-covers: compare the previous unmodified design/greedy
+    # construction with the automatic higher-hit swaps for every real geometry.
+    from covering.designs import wheel_lajolla
+    for lot in GAMES:
+        pool = list(range(1, 17))
+        scores = {n: float((n * 17) % 23) for n in pool}
+        base, cov = wheel_lajolla(pool, lot.pick_n, 4, 0, scores)
+        optimized, optimized_cov = generate_wheel(
+            resolve_wheel_method(0), pool, lot.pick_n, 4, 0, scores, draw_n=lot.draw_n
+        )
+        old_profile = wheel_hit_profile(pool, base)
+        new_profile = wheel_hit_profile(pool, optimized)
+        assert cov == optimized_cov == 100.0
+        assert len(base) == len(optimized)
+        assert all(new >= old for nr, br in zip(new_profile, old_profile)
+                   for new, old in zip(nr, br)), lot.game_id
+        before = wheel_hit_probabilities(pool, base, lot.draw_n, lot.max_n)
+        after = wheel_hit_probabilities(pool, optimized, lot.draw_n, lot.max_n)
+        report["complete_wheels"].append(dict(
+            game=lot.game_id, pool=16, draw_n=lot.draw_n, pick_n=lot.pick_n,
+            tickets=len(base), coverage=optimized_cov, before=before, after=after,
+            full_profile_dominates=True,
+        ))
+    print(f"Complete four-cover profiles validated: {len(report['complete_wheels'])}", flush=True)
     # A real worker process uses only this temporary queue/history/log directory.
     import job_queue as queue
     from ui_shared import decode_queue_result

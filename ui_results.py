@@ -357,7 +357,8 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
         " · ".join(
             f"{t}+ numere: în pool {100 * odds['pool'][t]:.3f}%; "
             f"pe cel puțin o variantă {100 * odds['ticket'][t]:.3f}%"
-            for t in (3, 4)
+            for t in (3, 4, 5)
+            if t <= draw_n
         ),
     ]
     if max_num == 40:
@@ -369,6 +370,7 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
     lines.append("Acoperirea 100% este o garanție condiționată de numerele prinse în pool, nu șansa de câștig.")
+    lines.append("Garanția 4 nu asigură 5 pe un bilet; compară probabilitățile separate.")
     return lines
 
 
@@ -615,8 +617,10 @@ def _wf_summary(flat, data: dict | None = None) -> str | None:
         cov_txt = f" | {_cond}" if _cond else " | acoperire wheel: 100%"
     p3 = sum(row["pool"] >= 3 for row in per_draw.values())
     p4 = sum(row["pool"] >= 4 for row in per_draw.values())
+    p5 = sum(row["pool"] >= 5 for row in per_draw.values())
     b3 = sum(row["best_ticket"] >= 3 for row in per_draw.values())
     b4 = sum(row["best_ticket"] >= 4 for row in per_draw.values())
+    b5 = sum(row["best_ticket"] >= 5 for row in per_draw.values())
     jk = [row.get("joker") for row in per_draw.values() if row.get("joker") is not None]
     jk_txt = (
         f" | Joker urna 2: {sum(jk)}/{len(jk)} ({sum(jk) / len(jk) * 100:.1f}%; "
@@ -627,7 +631,8 @@ def _wf_summary(flat, data: dict | None = None) -> str | None:
     return (
         f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
         f"| best pool={bp} | best bilet={bv} "
-        f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4}{cov_txt}{jk_txt}"
+        f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4} "
+        f"| pool 5+: {p5}; bilet 5+: {b5}{cov_txt}{jk_txt}"
     )
 
 

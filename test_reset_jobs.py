@@ -31,6 +31,8 @@ def isolated_db(tmp_path, monkeypatch):
     job_queue._INITIALIZED_DBS.discard(db_path)
     job_queue.init_job_queue(db_path)
     monkeypatch.setattr(reset_jobs, "DB", db_path)
+    # Both state helpers resolve their path from the script, including writes.
+    monkeypatch.setattr(reset_jobs, "__file__", str(tmp_path / "reset_jobs.py"))
     # Izolăm și .ui_state.json — nu citim/scriem starea reală a UI-ului din proiect.
     monkeypatch.setattr(reset_jobs, "_last_finalized_job_id", lambda: 0)
     yield db_path
@@ -360,3 +362,20 @@ def test_fresh_start_cancels_leftover_pending(isolated_db, monkeypatch):
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
     reset_jobs.main()
     assert job_queue.get_active_job(db_path=isolated_db) is None
+
+
+def test_force_reset_clears_only_the_isolated_ui_marker(
+    isolated_db, tmp_path, monkeypatch
+):
+    state_file = tmp_path / ".ui_state.json"
+    state_file.write_text(
+        json.dumps({"last_finalized_job_id": 2, "pool_size_val": 16}),
+        encoding="utf-8",
+    )
+    _insert_job(isolated_db, "PENDING")
+    monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
+    assert reset_jobs.main() == 0
+    assert json.loads(state_file.read_text(encoding="utf-8")) == {
+        "last_finalized_job_id": 0, "pool_size_val": 16
+    }
+    assert _job_ids(isolated_db) == set()
