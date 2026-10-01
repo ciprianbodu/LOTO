@@ -26,15 +26,16 @@ sys.path.insert(0, str(ROOT))
 from loto_engine import LotoEngine
 from loto_enterprise.benchmark.methods import score_frequency
 from loto_enterprise.core.draw_validation import valid_draw_matrix
+from loto_enterprise.core.history import training_cutoffs
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 from ui_shared import atomic_write_json, atomic_write_text
 from wheeling_methods import compute_coverage_pct, generate_wheel
 
 GAMES = {
-    "6/49": ("loto_6_49.csv", 49, 6),
-    "5/40": ("loto_5_40.csv", 40, 5),
-    "joker": ("joker.csv", 45, 5),
+    "6/49": ("loto_6_49.csv", 49, 6, 6),
+    "5/40": ("loto_5_40.csv", 40, 6, 5),
+    "joker": ("joker.csv", 45, 5, 5),
 }
 PENALTIES = {
     "penalty_1_050": (1, 0.5),
@@ -106,7 +107,7 @@ def metrics(hits, base_hits, universe, draw_n, pool):
 
 
 def audit_game(game, pool):
-    filename, universe, draw_n = GAMES[game]
+    filename, universe, draw_n, pick_n = GAMES[game]
     path = ROOT / "_ISTORIC" / filename
     df = pd.read_csv(path)
     dates = pd.to_datetime(df.date, format="%d-%m-%Y", errors="raise").tolist()
@@ -125,18 +126,14 @@ def audit_game(game, pool):
         _bad = np.flatnonzero(~_valid_mask).tolist()
         raise ValueError(f"{filename}: numere invalide (randuri {_bad})")
     start, split = len(draws) // 2, len(draws) * 7 // 10
-    hits, six_hits = {}, {}
+    cutoffs = training_cutoffs(df)
+    hits = {}
     for i in range(start, len(draws)):
-        scores = candidate_scores(draws[:i], dates[:i], dates[i], universe)
+        cutoff = cutoffs[i]
+        scores = candidate_scores(draws[:cutoff], dates[:cutoff], dates[i], universe)
         for name, score in scores.items():
             pool_nums = set(rank_by_score(score, pool))
             hits.setdefault(name, []).append(len(pool_nums & set(draws[i])))
-            if game == "5/40":
-                # Supliment distinct: categoria III folosește 4 din TOATE cele 6.
-                actual6 = set(int(df.iloc[i][f"n{j}"]) for j in range(1, 7))
-                if len(actual6) != 6 or min(actual6) < 1 or max(actual6) > universe:
-                    raise ValueError("5/40: al șaselea număr invalid")
-                six_hits.setdefault(name, []).append(len(pool_nums & actual6))
     validation_len = split - start
     validation = {
         name: metrics(
@@ -148,11 +145,12 @@ def audit_game(game, pool):
         )
         for name, h in hits.items()
     }
+    target = 4 if game == "5/40" else 3
     # Include baseline-ul ca posibil câștigător; nu forțează o modificare.
     selected = max(
         sorted(hits),
         key=lambda name: (
-            validation[name]["rate_3plus"],
+            validation[name][f"rate_{target}plus"],
             validation[name]["mean_hits"],
         ),
     )
@@ -167,17 +165,20 @@ def audit_game(game, pool):
         for name, h in hits.items()
     }
     for value in holdout.values():
-        value["half_rates_3plus"] = []
+        value[f"half_rates_{target}plus"] = []
     for name, h in hits.items():
         h = np.asarray(h[validation_len:])
-        holdout[name]["half_rates_3plus"] = [
-            float((part >= 3).mean()) for part in np.array_split(h, 2)
+        holdout[name][f"half_rates_{target}plus"] = [
+            float((part >= target).mean()) for part in np.array_split(h, 2)
         ]
     result = {
         "rows": len(draws),
         "csv_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "pool": pool,
         "draw_n_scored": draw_n,
+        "pick_n": pick_n,
+        "same_day_cutoffs": True,
+        "target": target,
         "last_date": dates[-1].isoformat(),
         "validation_start": dates[start].isoformat(),
         "holdout_start": dates[split].isoformat(),
@@ -185,20 +186,9 @@ def audit_game(game, pool):
         "validation": validation,
         "holdout": holdout,
     }
-    if six_hits:
-        result["holdout_all_six_540"] = {
-            name: metrics(
-                h[validation_len:],
-                six_hits["frequency"][validation_len:],
-                universe,
-                6,
-                pool,
-            )
-            for name, h in six_hits.items()
-        }
     print(
         f"{game}: n={len(draws)}; ales înainte de holdout={selected}; "
-        f"3+ holdout={holdout[selected]['rate_3plus']:.3%}",
+        f"{target}+ holdout={holdout[selected][f'rate_{target}plus']:.3%}",
         flush=True,
     )
     return result
@@ -284,14 +274,14 @@ def compare_wheels(pool):
     Suma ponderată e P(max hit pe bilet >= t), nu P(pool >= t).
     """
     result = {}
-    for game, (_, universe, draw_n) in GAMES.items():
+    for game, (_, universe, draw_n, pick_n) in GAMES.items():
         rows = []
-        # 5/40: șase numere la categoria III; primele cinci rămân axa aplicației.
+        # Geometria extragerii și cea a biletului sunt distincte la 5/40.
         for guarantee, condition in ((3, 3), (3, 4), (4, 4), (4, 5)):
             wheel, coverage = generate_wheel(
                 "lajolla",
                 list(range(1, pool + 1)),
-                draw_n,
+                pick_n,
                 guarantee,
                 condition=condition,
             )
@@ -301,7 +291,7 @@ def compare_wheels(pool):
                 "tickets": len(wheel),
                 "coverage": coverage,
             }
-            for actual_n in [draw_n, 6] if game == "5/40" else [draw_n]:
+            for actual_n in (draw_n,):
                 probabilities = {3: 0.0, 4: 0.0}
                 for h in range(3, min(actual_n, pool) + 1):
                     for target in (3, 4):
@@ -386,16 +376,16 @@ def main():
         "games": {game: audit_game(game, args.pool) for game in GAMES},
     }
     pvalues = {
-        f"{game}/{name}": m["p_3plus"]
+        f"{game}/{name}": m[f"p_{g['target']}plus"]
         for game, g in result["games"].items()
         for name, m in g["holdout"].items()
     }
-    result["exploratory_holm_3plus"] = holm(pvalues)
+    result["exploratory_holm_target"] = holm(pvalues)
     selected = {
-        game: g["holdout"][g["selected_on_validation"]]["p_3plus"]
+        game: g["holdout"][g["selected_on_validation"]][f"p_{g['target']}plus"]
         for game, g in result["games"].items()
     }
-    result["selected_holm_3plus"] = holm(selected)
+    result["selected_holm_target"] = holm(selected)
     result["designs"] = audit_designs()
     if args.prune_redundant:
         result["design_changes"] = prune_redundant_designs(result["designs"])

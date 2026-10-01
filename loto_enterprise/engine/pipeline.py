@@ -1,4 +1,5 @@
 """Institutional pipeline mixin (was LotoEngine.run_institutional_pipeline)."""
+
 from __future__ import annotations
 
 import json
@@ -146,7 +147,7 @@ class PipelineMixin:
         # Condiția lotto design: în [guarantee, draw_n]; lipsă/0 = cover clasic.
         try:
             _wc = int(wheel_condition) if wheel_condition is not None else 0
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             _wc = 0
         if _wc <= 0:
             _wc = int(guarantee)
@@ -309,9 +310,7 @@ class PipelineMixin:
                 _gk = self._bench_game_key()
                 _cp = self._decision_config_path()
                 if _cp is not None and not has_decision(_gk, _cp):
-                    _score_lbl = (
-                        f"frequency (fără bench pentru {self.lottery.display})"
-                    )
+                    _score_lbl = f"frequency (fără bench pentru {self.lottery.display})"
                 else:
                     _wn = get_winner_name(
                         _gk,
@@ -609,7 +608,8 @@ class PipelineMixin:
         # numerele acelea, care nu se joacă — diferența trebuie să fie vizibilă,
         # nu dedusă. Nu le forțăm pe bilete: o substituție ar strica exact
         # garanția pentru care a fost ales designul.
-        _played = {int(n) for line in (lines or []) for n in line}
+        _pick = int(self.params["play_n"])
+        _played = {int(n) for line in (lines or []) for n in line[:_pick]}
         _unplayed = sorted(int(n) for n in self.hard_core if int(n) not in _played)
         self.audit["pool_numbers_not_on_tickets"] = _unplayed
         if _unplayed:

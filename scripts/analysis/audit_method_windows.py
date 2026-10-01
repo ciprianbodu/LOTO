@@ -2,7 +2,7 @@
 
 These histories were available during method development: this is NOT an
 untouched holdout. Rates measure pool hits, not ticket prizes or profit.
-5/40 uses the first five drawn numbers, consistently with the scoring bench.
+5/40 uses all six drawn numbers; its tickets still contain five numbers.
 """
 
 from __future__ import annotations

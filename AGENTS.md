@@ -60,7 +60,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v6` (rezultatul poarta identitatea jocului);
+- cache rezultat worker: `v7` (auditul Joker al numerelor nejucate ignora Urna 2; v6 aduce identitatea jocului);
 - teste: 78 fisiere `test_*.py`, 1690 de teste (renumarat la 2026-09-28). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1666 trec, 24 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -696,6 +696,17 @@ Nu modifica default-urile. Activare explicita: `LOTO_WHEEL_METHOD=maxcover`.
 Cheia WF distinge deja numele metodei; cheia de pipeline a worker-ului primeste
 sufixul `:wheel=<metoda>` (implicit `auto`) pentru orice metoda.
 
+Metoda opt-in `hitcover` (audit 2026-10-01) optimizeaza sansele pe bilete
+la acelasi buget. Accepta un candidat numai daca numarul de bilete este egal,
+acoperirea exacta si numarul intersectiilor favorabile nu scad pentru NICIUN
+prag de hituri si NICIO marime a intersectiei pool-extragere; cere un castig
+strict la 3+/4+. `covering.probability.wheel_hit_profile` compara numaratori
+intregi. Limite: pool <=16, pick <=6, garantie < pick, 1..64 variante,
+acoperire initiala incompleta; in afara lor ramane greedy. Activare explicita:
+`LOTO_WHEEL_METHOD=hitcover`, impreuna cu un buget pozitiv de variante.
+Nu modifica default-urile si nu afirma avantaj predictiv sau optimalitate.
+Raport: `scripts/analysis/audit_application_report_2026-10-01.md`.
+
 Experimentul reproductibil `scripts/analysis/bench_budget_cover.py` compara
 greedy, La Jolla, bilete aleatoare si maxcover: pool identic dupa frequency
 canonic, bugete 7/10, tinte 3/4, ultimele 30% din istoric. Exclude inclusiv
@@ -781,7 +792,7 @@ decizia Urnei 2.
 |---|---:|---|
 | benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v27` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v6` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v7` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

@@ -26,7 +26,8 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v6"
+PIPELINE_CACHE_VERSION = "v7"
+# v7: auditul numerelor nejucate Joker exclude bila din urna 2.
 # v5: SES și theta_drift schimbă pool-ul serializat când câștigătorul e
 #     ses_opt_alpha, imapa_agg sau theta_drift. UI-ul ține use_cache=False;
 #     bump-ul acoperă apelanții care reactivează cache-ul.
@@ -229,7 +230,7 @@ def _normalize_task(
     # Lotto design „guarantee dacă condition": lipsă/0 = cover clasic.
     try:
         raw_condition = int(task.get("wheel_condition") or 0)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raw_condition = 0
     wheel_condition = (
         guarantee if raw_condition <= 0 else max(guarantee, min(draw_n, raw_condition))
@@ -240,11 +241,11 @@ def _normalize_task(
         recent_penalty_draws = max(
             0, min(50, int(task.get("recent_penalty_draws") or 0))
         )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         recent_penalty_draws = 0
     try:
         recent_penalty_factor = float(task.get("recent_penalty_factor", 0.5))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         recent_penalty_factor = 0.5
     recent_penalty_factor = max(0.0, min(0.99, recent_penalty_factor))
 
@@ -258,18 +259,18 @@ def _normalize_task(
     cap = max(1, int(max_n))
     try:
         restrict_base_max = max(0, min(cap, int(task.get("restrict_base_max") or 0)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         restrict_base_max = 0
     try:
         restrict_base_min = max(0, min(cap, int(task.get("restrict_base_min") or 0)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         restrict_base_min = 0
 
     # Limita de consecutive (preferință OPȚIONALĂ, 0 = oprit; UI-ul trimite 0
     # sau 2). Plafon 16 = pool-ul maxim: o limită cât pool-ul nu mai schimbă nimic.
     try:
         max_consecutive_run = max(0, min(16, int(task.get("max_consecutive_run") or 0)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         max_consecutive_run = 0
 
     return {
@@ -691,7 +692,7 @@ def main() -> None:
     for _sig in (signal.SIGTERM, signal.SIGINT):
         try:
             signal.signal(_sig, lambda s, f: (_requeue_on_terminate(), sys.exit(1)))
-        except (ValueError, OSError):
+        except ValueError, OSError:
             pass  # signal disponibil doar pe thread-ul principal
     try:
         recovered = requeue_running_jobs()
