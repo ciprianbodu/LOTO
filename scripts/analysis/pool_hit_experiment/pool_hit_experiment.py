@@ -17,7 +17,7 @@ import json
 import math
 import sys
 import warnings
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -235,12 +235,28 @@ def run(jobs: int) -> dict:
         h = prefix_hash(ROOT / DATASETS[name][0], info["rows"])
         if h != info["prefix_sha256"]:
             raise SystemExit(f"{name}: amprenta difera de preinregistrare")
+    # punct de reluare per set de date (numai calcul; nu schimba regulile)
+    import pickle
+
+    ck = HERE / ".checkpoint"
+    ck.mkdir(exist_ok=True)
+    evs = {}
+    for n in DATASETS:
+        f = ck / f"{n}_{reg['datasets'][n]['prefix_sha256'][:16]}.pkl"
+        if f.exists():
+            evs[n] = pickle.loads(f.read_bytes())
+    todo = [n for n in DATASETS if n not in evs]
     with ProcessPoolExecutor(max_workers=jobs) as ex:
-        futs = {
-            n: ex.submit(_evaluate_dataset, n, reg["datasets"][n]["rows"])
-            for n in DATASETS
-        }
-        evs = {n: f.result() for n, f in futs.items()}
+        futs = {ex.submit(_evaluate_dataset, n, reg["datasets"][n]["rows"]): n for n in todo}
+        for fu in as_completed(futs):
+            n = futs[fu]
+            evs[n] = fu.result()
+            f = ck / f"{n}_{reg['datasets'][n]['prefix_sha256'][:16]}.pkl"
+            tmp = f.with_suffix(".tmp")
+            tmp.write_bytes(pickle.dumps(evs[n]))
+            tmp.replace(f)
+            print(f"checkpoint {n}", flush=True)
+    evs = {n: evs[n] for n in DATASETS}
 
     # --- dezvoltare: cea mai buna metoda pe primele 70% (numai tinte dev) ---
     dev = {}

@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v10` (optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
-- teste: 87 fisiere `test_*.py`, 1949 de teste (renumarat la 2026-10-02). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1924 trec, 25 sarite (integrarea
+- teste: 88 fisiere `test_*.py`, 1963 de teste (renumarat la 2026-10-02). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1938 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -1080,6 +1080,14 @@ pipeline-ului sau a contractului UI-worker.
   Replicarea preinregistrata pe Germania, Canada, Polonia si Spania (21.821 de
   extrageri nevazute, `external_replication.md`): niciun avantaj, pool 6 1,96%
   fata de 1,86% aleator (p = 0,16), pool 12 14,49% fata de 14,80% (p = 0,90).
+- [x] Experiment preinregistrat 2026-10-02 pentru mai multe hituri IN POOL
+  (`scripts/analysis/pool_hit_experiment/`): selector meta pe ferestre
+  anterioare, Borda pe toate cele 47 de metode de productie, metoda castigatoare
+  pe dezvoltare (primele 70% romanesti), Borda pe top-5 recent. Test pe
+  Austria/Belgia/Ungaria (6/45), Cehia/Slovacia/Bulgaria (6/49) si ultimele 30%
+  romanesti; 32 de teste binomiale exacte, Holm alpha 0,05. Niciun candidat nu
+  supravietuieste (cel mai mic p Holm 0,56). Nimic promovat.
+  `test_pool_hit_experiment.py` fixeaza amprentele datelor si parametrii.
 
 Criteriu de iesire: orice schimbare de metoda vine cu experiment reproductibil si
 nu este descrisa drept garantie de castig.
