@@ -43,7 +43,11 @@ def test_hitcover_preserves_all_hit_thresholds_and_exact_coverage(v, pick, g, bu
     assert all(a >= b for ar, br in zip(candidate, baseline) for a, b in zip(ar, br))
     assert actual_cov >= cov
     assert actual_cov == compute_coverage_pct(actual, pool, g)
-    assert wheel_hitcover(pool, pick, g, budget, scores) == (actual, actual_cov)
+    # The dispatcher may add exact-dominance profile swaps on top of hitcover.
+    direct, _ = wheel_hitcover(pool, pick, g, budget, scores)
+    direct_profile = wheel_hit_profile(pool, direct)
+    assert len(direct) == len(actual)
+    assert all(a >= b for ar, br in zip(candidate, direct_profile) for a, b in zip(ar, br))
 
 
 def test_hitcover_improves_real_ticket_odds_at_equal_cost():
@@ -63,7 +67,16 @@ def test_hitcover_improves_real_ticket_odds_at_equal_cost():
 @pytest.mark.parametrize("cap,g", [(0, 3), (65, 3), (7, 5)])
 def test_hitcover_bounds_preserve_incumbent(cap, g):
     args = (list(range(1, 12)), 5, g, cap, None)
-    assert generate_wheel("hitcover", *args) == generate_wheel("greedy", *args)
+    from covering.common import _greedy_fallback
+
+    # Outside its bounds hitcover itself keeps greedy; the dispatcher's
+    # profile swaps may only dominate it at the same ticket count.
+    assert wheel_hitcover(*args) == _greedy_fallback(*args)
+    base, _ = generate_wheel("greedy", *args)
+    actual, _ = generate_wheel("hitcover", *args)
+    old, new = wheel_hit_profile(args[0], base), wheel_hit_profile(args[0], actual)
+    assert len(actual) == len(base)
+    assert all(a >= b for ar, br in zip(new, old) for a, b in zip(ar, br))
 
 
 def test_hitcover_rejects_candidate_that_sacrifices_higher_hits(monkeypatch):

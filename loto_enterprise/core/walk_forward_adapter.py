@@ -48,7 +48,9 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v29"
+CACHE_VERSION = "v30"
+# v30: swap-uri cu dominanta exacta a profilului de hituri (covere clasice, lotto,
+#      buget); sufixul |hp1 in semnatura wheel-ului marcheaza geometria noua.
 # v29: geometria coverelor complete de 4 optimizeaza automat hiturile de 5.
 # v28: candidați hitcover noi și validare strictă a hiturilor Joker din WF.
 # v27: Loto 5/40 numără hiturile pe toate cele 6 numere extrase (n1..n6), nu
@@ -335,7 +337,7 @@ def _wheel_sig(
                 g,
                 condition,
             )
-            return f"lotto|{geometry}|cd{design_sig}|rt1"
+            return f"lotto|{geometry}|cd{design_sig}|rt1|hp1"
         if method in {"lajolla", "union34"}:
             design_guarantee = 4 if method == "union34" and g <= 4 else g
             design_sig = covering_design_source_signature(
@@ -343,8 +345,8 @@ def _wheel_sig(
                 int(_WF_PICK.get(game_type) or 6),
                 design_guarantee,
             )
-            return f"{method}|{geometry}|cd{design_sig}|rt1"
-        return f"{method}|{geometry}|rt1"
+            return f"{method}|{geometry}|cd{design_sig}|rt1|hp1"
+        return f"{method}|{geometry}|rt1|hp1"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)
         method = (
@@ -352,7 +354,7 @@ def _wheel_sig(
             if condition > g
             else requested or ("lajolla" if cap == 0 else "hitcover")
         )
-        return f"{method}|{geometry}|cd-error|rt1"
+        return f"{method}|{geometry}|cd-error|rt1|hp1"
 
 
 def _penalty_sig(
