@@ -53,16 +53,16 @@ Snapshot verificat la 2026-09-15:
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
 - cache benchmark: `v21` (Loto 5/40 citeste toate cele 6 numere extrase);
-- cache walk-forward: `v29` (optimizarea 5+ a coverelor complete de 4; v28 candidati hitcover si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
+- cache walk-forward: `v30` (swap-uri cu dominanta exacta a profilului de hituri, sufix `|hp1`; v29 optimizarea 5+ a coverelor complete de 4; v28 candidati hitcover si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
 - Loto 5/40 = 6 numere extrase din 40, bilet de 5. Istoricul scorerilor,
   hiturile de bench/WF/UI si baseline-ul random folosesc n1..n6 (`draw_n = 6`);
   biletul, garantia, sistemul complet, costul si pool-ul de baza (k5) folosesc
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v10` (optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
-- teste: 88 fisiere `test_*.py`, 1963 de teste (renumarat la 2026-10-02). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1938 trec, 25 sarite (integrarea
+- cache rezultat worker: `v11` (swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -754,6 +754,21 @@ Nu modifica default-urile. Activare explicita: `LOTO_WHEEL_METHOD=maxcover`.
 Cheia WF distinge deja numele metodei; cheia de pipeline a worker-ului primeste
 sufixul `:wheel=<metoda>` (implicit `auto`) pentru orice metoda.
 
+Swap-uri de profil (2026-10-02, `covering/profile_swap.improve_hit_profile`):
+dupa orice metoda in afara de `greedy` explicit — cover clasic fara plafon (orice
+garantie), lotto design „t daca p", buget (inclusiv >64, unde hitcover ramane
+greedy) — si pe locurile ramase ale „Bilet complet" (baza `n_base` inghetata),
+se incearca schimbarea unui bilet cu oricare alt bloc din pool. Se accepta numai
+daca profilul EXACT `wheel_hit_profile` nu scade la NICIUN prag si NICIO marime
+a intersectiei si creste strict la 3+/4+/5+ posibile. Dominanta pastreaza singura
+garantiile: counts[t][t] (cover clasic), counts[p][t] (t daca p), counts[1][1]
+(numerele jucate). Acelasi numar de bilete distincte, acelasi pool. Limite:
+pool 5..16, pick 3..6, cel mult 512 bilete, doua treceri, 25000 candidati
+(cel mai rau caz masurat ~3 s, pool 16); memoizare limitata. Castiguri masurate
+in `scripts/analysis/hit_opt_report_2026-10-02.md` (`bench_hit_profile.py`);
+cele mai mari la lotto designs, mici la coverele clasice. Fara afirmatie
+predictiva: probabilitatea de hit a POOL-ului nu se schimba.
+
 Metoda `hitcover` (audit 2026-10-01) optimizeaza sansele pe bilete
 la acelasi buget. Accepta un candidat numai daca numarul de bilete este egal,
 acoperirea exacta si numarul intersectiilor favorabile nu scad pentru NICIUN
@@ -856,8 +871,8 @@ decizia Urnei 2.
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
 | benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v29` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v10` | se schimba rezultatul serializat al pipeline-ului |
+| walk-forward | `v30` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| worker pipeline | `v11` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
@@ -884,7 +899,7 @@ constante se tin sincron (exista un test pentru asta) si se incrementeaza
 impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 Limita de consecutive urmeaza acelasi contract cu `_CONSECUTIVE_SEMANTICS`
 (`walk_forward_adapter._consecutive_sig` si hash-ul din `_build_config_json`),
-fara bump de `v29`. Cum bifa e pornita implicit, primul WF dupa actualizare
+fara bump de `v30`. Cum bifa e pornita implicit, primul WF dupa actualizare
 calculeaza o cheie noua (poate iesi partial si continua prin `skip_indices`).
 
 ## 10. Mediu si rulare

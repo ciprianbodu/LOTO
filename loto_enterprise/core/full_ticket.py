@@ -210,6 +210,16 @@ def _fill_variants(
                 seen.add(t)
                 if len(chosen) == n_var:
                     break
+    if n_base < len(chosen):
+        # Leftover slots only: the base wheel (first n_base) stays intact.
+        from covering.common import _sorted_pool
+        from covering.profile_swap import improve_hit_profile
+
+        improved, audit = improve_hit_profile(
+            _sorted_pool(pool, scores), chosen, frozen=n_base
+        )
+        if audit["applied"]:
+            return improved, n_base
     return [list(v) for v in chosen], n_base
 
 

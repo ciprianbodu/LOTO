@@ -209,6 +209,7 @@ def test_dispatch_explicit_greedy_and_conditional_routes_bypass_new_search(monke
     assert dispatch.generate_wheel(
         "greedy", pool, 6, 4, 0, scores, draw_n=6
     ) == generate_combinatorial_wheel(pool, 6, 4, 0, scores)
+    monkeypatch.setattr(dispatch, "improve_hit_profile", lambda p, t, **k: (t, {"applied": False}))
     assert dispatch.generate_wheel(
         "lajolla", pool, 6, 4, 0, scores, condition=5, draw_n=6
     ) == wheel_lotto(pool, 6, 4, 5, 0, scores)
