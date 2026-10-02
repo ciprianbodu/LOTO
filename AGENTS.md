@@ -61,8 +61,8 @@ Snapshot verificat la 2026-09-15:
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
 - cache rezultat worker: `v10` (optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
-- teste: 78 fisiere `test_*.py`, 1690 de teste (renumarat la 2026-09-28). Pe
-  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1666 trec, 24 sarite (integrarea
+- teste: 87 fisiere `test_*.py`, 1949 de teste (renumarat la 2026-10-02). Pe
+  Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1924 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
   `test_launcher_ensure_git.py` sunt sarite (git-ul simulat e script shell). In
   containerele de audit, `uv` mai vechi de 0.9 stie doar 3.14.0rc2, pe care
@@ -884,7 +884,7 @@ constante se tin sincron (exista un test pentru asta) si se incrementeaza
 impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 Limita de consecutive urmeaza acelasi contract cu `_CONSECUTIVE_SEMANTICS`
 (`walk_forward_adapter._consecutive_sig` si hash-ul din `_build_config_json`),
-fara bump de `v27`. Cum bifa e pornita implicit, primul WF dupa actualizare
+fara bump de `v29`. Cum bifa e pornita implicit, primul WF dupa actualizare
 calculeaza o cheie noua (poate iesi partial si continua prin `skip_indices`).
 
 ## 10. Mediu si rulare
