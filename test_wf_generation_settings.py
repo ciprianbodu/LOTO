@@ -60,7 +60,7 @@ def test_cache_separates_all_generation_settings_and_lotto_file(tmp_path, monkey
     assert before != after
     assert wf._wheel_sig(10, "6/49", 3, 3, 2).startswith("hitcover|")
     assert wf._wheel_sig(10, "6/49", 3, 4, 2).startswith("lotto|")
-    assert wf._wheel_sig(10, "6/49", 3, 3, 2).endswith("|rt1")
+    assert wf._wheel_sig(10, "6/49", 3, 3, 2).endswith("|rt1|hp1")
     # Cererea de sistem complet rămâne explicită; API-ul vechi rămâne plafonat.
     assert wf._wf_geometry(16, "5/40", 5) == (5, 5, 0)
     assert wf._wf_geometry(16, "5/40") == (4, 4, 0)

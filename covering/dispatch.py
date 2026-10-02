@@ -9,11 +9,13 @@ from covering.common import (
     _coverage_pct,
     _greedy_fallback,
     _sorted_pool,
+    lotto_coverage_pct,
     ensure_pool_numbers_on_tickets,
 )
 from covering.designs import wheel_lajolla, wheel_lotto, wheel_union34
 from covering.higher_hits import improve_higher_hits
 from covering.ilp import wheel_ilp
+from covering.profile_swap import improve_hit_profile
 from covering.search import wheel_annealing, wheel_genetic
 
 WHEEL_METHODS = {
@@ -72,7 +74,16 @@ def generate_wheel(
     if condition is not None and int(condition) != int(guarantee):
         if int(condition) < int(guarantee):
             raise ValueError(f"condition={condition} < guarantee={guarantee}")
-        return wheel_lotto(pool, pick, guarantee, int(condition), max_variants, scores)
+        wheel, cov = wheel_lotto(
+            pool, pick, guarantee, int(condition), max_variants, scores
+        )
+        improved, audit = improve_hit_profile(
+            _sorted_pool(pool, scores), wheel, draw_n=draw_n
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = lotto_coverage_pct(wheel, pool, guarantee, int(condition))
+        return wheel, cov
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if fn is None:
         wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)
@@ -93,4 +104,13 @@ def generate_wheel(
             _sorted_pool(pool, scores), wheel, draw_n=6
         )
         cov = _coverage_pct(wheel, pool, guarantee)
+    if fn is not None:
+        # Generic exact-dominance swaps (any guarantee, any budget): same
+        # distinct ticket count, no profile entry lower, strict 3+/4+/5+ gain.
+        improved, audit = improve_hit_profile(
+            _sorted_pool(pool, scores), wheel, draw_n=draw_n
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
     return wheel, cov

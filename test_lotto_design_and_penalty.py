@@ -429,6 +429,13 @@ def test_pipeline_reports_pool_numbers_that_reach_no_ticket(monkeypatch):
         "_get_timesfm_scores",
         lambda self, **kw: {n: float(n) for n in range(1, 50)},
     )
+    # Profile swaps would put every pool number on a ticket here (dominance
+    # raises counts[1][1]); this test checks the reporting of the raw design.
+    import covering.dispatch as dispatch
+
+    monkeypatch.setattr(
+        dispatch, "improve_hit_profile", lambda p, t, **k: (t, {"applied": False})
+    )
     eng = LotoEngine("6/49")
     eng.data = df
     eng._build_draw_matrix()
