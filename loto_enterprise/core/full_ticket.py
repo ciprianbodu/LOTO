@@ -172,7 +172,13 @@ def _ticket_pool(
 
 
 def _fill_variants(
-    pool: list[int], pick: int, guarantee: int, n_var: int, scores
+    pool: list[int],
+    pick: int,
+    guarantee: int,
+    n_var: int,
+    scores,
+    *,
+    draw_n: int | None = None,
 ) -> tuple[list[list[int]], int]:
     """Variantele biletelor si cate dintre ele formeaza wheel-ul garantiei.
 
@@ -180,7 +186,12 @@ def _fill_variants(
     wheel-ul garantiei urmatoare (g+1, apoi g+2 ... pana la sistemul complet),
     sarind variantele deja alese. Biletele se umplu cand pool-ul are cel putin
     `n_var` combinatii (`_min_pool`), adica atunci cand clasamentul are destule
-    numere; altfel ies toate combinatiile pool-ului."""
+    numere; altfel ies toate combinatiile pool-ului.
+
+    Rafinarea pastreaza baza garantiei si incepe cu geometria `pick` deja
+    livrata. Daca `draw_n` e mai mare, urmeaza o rafinare suplimentara numai
+    pe locurile ramase, cu profil nedescrescator fata de rezultatul livrat.
+    """
     base, _ = generate_wheel(
         resolve_wheel_method(n_var),
         pool=pool,
@@ -215,11 +226,18 @@ def _fill_variants(
         from covering.common import _sorted_pool
         from covering.profile_swap import improve_hit_profile
 
-        improved, audit = improve_hit_profile(
-            _sorted_pool(pool, scores), chosen, frozen=n_base
-        )
-        if audit["applied"]:
-            return improved, n_base
+        # Preserve the delivered pick-number search before refining the real
+        # draw geometry. Replacing it outright can follow a different local
+        # optimum, with a lower profile than the previously delivered wheel.
+        geometries = [pick]
+        if draw_n is not None and int(draw_n) > pick:
+            geometries.append(int(draw_n))
+        for drawn in geometries:
+            improved, audit = improve_hit_profile(
+                _sorted_pool(pool, scores), chosen, draw_n=drawn, frozen=n_base
+            )
+            if audit["applied"]:
+                chosen = improved
     return [list(v) for v in chosen], n_base
 
 
@@ -227,15 +245,15 @@ def build_full_ticket(game: str, data: dict, tickets: int = 1) -> dict:
     """{variants, coverage, guarantee, joker, pool, note, error, ...} pentru un joc.
 
     `tickets` = bilete fizice (1-10); variantele cerute = bilete x variante pe bilet."""
+    from loto_enterprise.core.lotteries import lottery_by_id
+
+    lot = lottery_by_id(game)
     per_ticket = TICKET_VARIANTS.get(game)
     pick = PICK.get(game)
     is_joker = game == "joker"
     if per_ticket is None:
         # Jocurile din registru (alte țări): variante pe bilet și geometrie de
         # acolo; un bilet neverificat (`per_ticket=None`) nu se inventează.
-        from loto_enterprise.core.lotteries import lottery_by_id
-
-        lot = lottery_by_id(game)
         if lot is None:
             return {"error": f"joc necunoscut: {game}"}
         if lot.per_ticket is None:
@@ -251,7 +269,14 @@ def build_full_ticket(game: str, data: dict, tickets: int = 1) -> dict:
     scores = _pool_scores(data)
     pool, note = _ticket_pool(pool, scores, n_var, pick, _max_run(data), tickets)
     guarantee = max(1, min(int(data.get("guarantee") or 3), pick))
-    variants, n_base = _fill_variants(pool, pick, guarantee, n_var, scores)
+    variants, n_base = _fill_variants(
+        pool,
+        pick,
+        guarantee,
+        n_var,
+        scores,
+        draw_n=lot.draw_n if lot is not None else pick,
+    )
     coverage = compute_coverage_pct(variants, pool, guarantee)
     upper = None
     if len(variants) > n_base and guarantee < pick:

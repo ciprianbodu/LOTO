@@ -115,7 +115,7 @@ def select_pool_from_scores(
         else:
             audit["pool_selection"] = "top_score_pure"
             audit["pool_selection_note"] = (
-                "top-N după scor (regulă canonică ranking, aliniat bench / țintă 3+)"
+                "top-N după scorul final, cu departajarea canonică"
             )
         audit["pool_score_unique_levels"] = n_unique
         if n_unique < max(3, int(pool_size) // 2):

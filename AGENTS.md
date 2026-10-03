@@ -79,6 +79,25 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Audit global 2026-10-03
+
+- Reverificare dupa sincronizarea PR #133-135: istorice, scoreri, designuri,
+  pipeline-uri, worker separat si UI, pe copie locala izolata.
+- Bilet complet 5/40 rafineaza acum locurile suplimentare pentru toate cele
+  sase numere extrase. Pastreaza intai constructia livrata, apoi accepta numai
+  dominanta exacta; baza garantiei si numarul variantelor raman neschimbate.
+  Nu necesita bump worker/WF: actiunea este calculata la cerere, iar cache-ul
+  geometric include deja draw_n.
+- Nota bruta a selectiei pool-ului nu mai afirma tinta fixa 3+.
+- Runnerul experimentului de pool respinge scorurile plate prin validatorul
+  comun, numara fallback-urile si semneaza checkpointurile cu datele/codul/
+  registry-ul. Protocolul si JSON-ul original raman intacte; rezultatele din
+  2 octombrie NU au fost recalculate cu runnerul corectat. Nu se promoveaza
+  metode. Rerularile scriu implicit un rezultat separat.
+- Python 3.14.7 / Windows: 1978 teste trecute, 17 omise, zero esecuri.
+  Starea de productie si sursele verificate sunt intacte.
+- Raport: `scripts/analysis/audit_application_report_2026-10-03.md`.
+
 ### Audit global 2026-10-01, runda 3
 
 - Corectate explicatiile UI: tinta 3+/4+ per joc, minimum 4+ la 5/40,

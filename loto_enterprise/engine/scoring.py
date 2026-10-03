@@ -366,7 +366,7 @@ class ScoringMixin:
 
         max_num = int(self.params.get("max_n", 49))
 
-        # Selector top-N după scor (aliniat bench / țintă 3+), cu limita de
+        # Selector top-N după scor, cu departajarea canonică, cu limita de
         # consecutive când utilizatorul o cere — logică pură CPU.
         pool = select_pool_from_scores(
             scores,
