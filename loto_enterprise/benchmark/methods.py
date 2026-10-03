@@ -12,6 +12,10 @@ de producție) și cele 50 de metode din modulele:
     methods_wave2.py       20 metode (al doilea val, 14.09.2026): idei reluate din
                            vechea listă disabled + descompuneri, context propriu,
                            relații de ordinul 2, învățare ieftină
+    methods_experimental.py 1 metode: interval adaptiv, numai benchmark
+
+Metodele marcate `_uses_history_cutoffs` primesc opțional începutul zilei
+fiecărui rând prin `call_method`. Fără date, fiecare rând este un pas temporal.
 Cele 181 de metode anterioare (8 module: classical, coverage, graph,
 math_extra, ml, revived, search_649, top649 — nume unice numărate în
 registrele lor, la commit-ul dinaintea înlocuirii) au fost eliminate la
@@ -31,7 +35,7 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from typing import Callable
+from typing import Callable, Sequence
 
 import numpy as np
 
@@ -139,6 +143,7 @@ def _load_extra_methods() -> None:
         ("methods_relational", "RELATIONAL_METHODS"),
         ("methods_learning", "LEARNING_METHODS"),
         ("methods_wave2", "WAVE2_METHODS"),
+        ("methods_experimental", "EXPERIMENTAL_METHODS"),
     ):
         try:
             module = __import__(f"{__package__}.{modname}", fromlist=[attr])
@@ -239,6 +244,8 @@ def method_meta(name: str) -> dict:
         "notes": notes,
         "available": available,
     }
+    if getattr(fn, "_uses_history_cutoffs", False):
+        meta["uses_history_cutoffs"] = True
     reason = getattr(fn, "_unavailable_reason", None)
     if reason:
         meta["unavailable_reason"] = reason
@@ -246,14 +253,22 @@ def method_meta(name: str) -> dict:
 
 
 def call_method(
-    name: str, draws_2d: np.ndarray, max_num: int
+    name: str, draws_2d: np.ndarray, max_num: int, *,
+    history_cutoffs: Sequence[int] | None = None,
 ) -> tuple[dict[int, float], float]:
-    """Call a registered method; returns (scores_dict, wall_time_sec)."""
+    """Call a scorer, optionally with day boundaries aligned to its history.
+
+    Existing scorers retain the two-argument contract. A context-aware method
+    receives only boundaries for the supplied prefix, never target/future rows.
+    """
     name = resolve_method_name(name)
     if name not in METHODS:
         raise KeyError(f"method {name!r} not in METHODS (eliminat / necunoscut)")
     fn, _family, _train, _notes = METHODS[name]
     t0 = time.perf_counter()
-    scores = fn(draws_2d, max_num)
+    if getattr(fn, "_uses_history_cutoffs", False):
+        scores = fn(draws_2d, max_num, history_cutoffs=history_cutoffs)
+    else:
+        scores = fn(draws_2d, max_num)
     dt = time.perf_counter() - t0
     return scores, dt

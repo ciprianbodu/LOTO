@@ -54,10 +54,18 @@ def test_target_bench_folds_is_larger_without_curation():
     finally:
         curated.load_curated = original
     with_curation = app._target_bench_folds()
-    # De la 14.09.2026 curarea = tot registry-ul (30 + frequency, plus random adaugat
-    # de runner), deci cele doua tinte coincid; ramane garda ca niciuna nu e 0.
-    assert without >= with_curation > 0
-    assert with_curation == 52 * 4 * 4
+    # The interval experiment is measured only for 6/49 under curation.
+    # Count omitted method/game cells instead of freezing the old registry size.
+    from loto_enterprise.benchmark.methods import list_methods, method_meta
+
+    available = [m for m in list_methods() if method_meta(m).get("available", True)]
+    kept, _ = curated.apply_curation(available)
+    games = runner.discover_games()
+    matrix = curated.resolve_methods_per_game(kept, (g.key for g in games))
+    omitted = sum(len(available) - len(matrix.get(g.key, kept)) for g in games)
+    windows = len([p for p in app._PCTS.split(",") if p.strip()])
+    assert without > with_curation > 0
+    assert without - with_curation == omitted * max(1, windows)
 
 
 def test_target_bench_folds_falls_back_to_zero_without_istoric():

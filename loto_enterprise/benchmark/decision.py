@@ -176,6 +176,9 @@ EXCLUDED_FROM_PRODUCTION = frozenset(
         "repeat_last_draw",
         "rwr_last_draw",
         "haar_multiscale",
+        # Interval membership is an explicit experimental pool filter.
+        # Its retrospective signal is not externally confirmed.
+        "interval_extrema_k16",
     }
 )
 
