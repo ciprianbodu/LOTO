@@ -6,7 +6,7 @@ Nu atinge productia: citeste registry-ul METHODS, nu scrie nicio stare.
 
 Moduri:
     python pool_hit_experiment.py hashes      # amprentele prefixelor (pentru JSON)
-    python pool_hit_experiment.py run [--jobs 4]  # evaluarea completa -> results.json
+    python pool_hit_experiment.py run [--jobs 4]  # -> results_validated.json
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ import argparse
 import hashlib
 import json
 import math
+import os
+import pickle
 import sys
+import tempfile
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -26,6 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT))
 REG_PATH = HERE / "preregistration_2026-10-02.json"
+CHECKPOINT_VERSION = 2
 
 # --- parametri fixati inainte de evaluare (copiati si in JSON) -------------
 WARMUP = 200  # extrageri anterioare (cu data strict mai mica) cerute de o tinta
@@ -106,7 +110,10 @@ def production_methods() -> list[str]:
 def ranking(scores: dict, max_num: int) -> np.ndarray:
     """Ordinea canonica a aplicatiei (core.ranking.rank_by_score)."""
     from loto_enterprise.core.ranking import rank_by_score
+    from loto_enterprise.core.score_validation import has_usable_score_variance
 
+    if not has_usable_score_variance(scores):
+        raise ValueError("scor inutilizabil: fara variatie finita")
     top = [int(n) for n in rank_by_score(scores, max_num) if 1 <= int(n) <= max_num]
     if len(top) < max_num // 2:
         raise ValueError("scor inutilizabil")
@@ -126,6 +133,7 @@ def _evaluate_dataset(name: str, n_rows: int) -> dict:
     prior = np.searchsorted(dates, dates, side="left")  # exclude toata ziua tintei
     targets = [i for i in range(len(draws)) if prior[i] >= WARMUP]
     ranks = np.zeros((len(targets), len(methods), max_num), dtype=np.int16)
+    fallback_counts = {meth: 0 for meth in methods}
     freq = METHODS["frequency"][0]
     for t, i in enumerate(targets):
         hist = draws[: prior[i]]
@@ -134,7 +142,8 @@ def _evaluate_dataset(name: str, n_rows: int) -> dict:
                 sc = METHODS[meth][0](hist, max_num)
                 ranks[t, m] = ranking(sc, max_num)
             except Exception:
-                # scor inutilizabil -> fallback-ul de productie
+                # Orice fallback ramane vizibil in diagnosticul rerularii.
+                fallback_counts[meth] += 1
                 ranks[t, m] = ranking(freq(hist, max_num), max_num)
     return {
         "name": name,
@@ -146,6 +155,7 @@ def _evaluate_dataset(name: str, n_rows: int) -> dict:
         "ranks": ranks,
         "max_num": max_num,
         "n_rows": len(draws),
+        "fallback_counts": fallback_counts,
     }
 
 
@@ -227,34 +237,104 @@ def holm(pvals: dict) -> dict:
     return adj
 
 
+def checkpoint_identity(reg: dict) -> str:
+    """Invalidate rankings when the runner, source, registry or data change.
+
+    Historical checkpoints keyed only by a CSV prefix are deliberately ignored.
+    LF normalization keeps an unchanged checkout identical on Windows/Linux.
+    """
+    source_files = [("runner", Path(__file__))]
+    source_files.extend(
+        (path.relative_to(ROOT).as_posix(), path)
+        for path in sorted((ROOT / "loto_enterprise").rglob("*.py"))
+    )
+    source_hashes = {
+        name: hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        for name, path in source_files
+    }
+    payload = {
+        "version": CHECKPOINT_VERSION,
+        "registration": reg,
+        "methods": production_methods(),
+        "python": list(sys.version_info[:3]),
+        "numpy": np.__version__,
+        "sources": source_hashes,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def _read_checkpoint(path: Path, identity: str) -> dict | None:
+    try:
+        cached = pickle.loads(path.read_bytes())
+    except (OSError, EOFError, pickle.UnpicklingError, AttributeError, ValueError):
+        return None
+    if not isinstance(cached, dict) or cached.get("identity") != identity:
+        return None
+    evaluation = cached.get("evaluation")
+    if not isinstance(evaluation, dict) or not isinstance(
+        evaluation.get("fallback_counts"), dict
+    ):
+        return None
+    return evaluation
+
+
+def _write_checkpoint(path: Path, identity: str, evaluation: dict) -> None:
+    """Atomic, uniquely named temporary file; concurrent runs never share it."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            pickle.dump({"identity": identity, "evaluation": evaluation}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def run(jobs: int) -> dict:
     from scipy.stats import binomtest
 
     reg = json.loads(REG_PATH.read_text(encoding="utf-8"))
+    if production_methods() != reg["methods"]:
+        raise SystemExit("registry-ul difera de metodele preinregistrate")
     for name, info in reg["datasets"].items():
         h = prefix_hash(ROOT / DATASETS[name][0], info["rows"])
         if h != info["prefix_sha256"]:
             raise SystemExit(f"{name}: amprenta difera de preinregistrare")
-    # punct de reluare per set de date (numai calcul; nu schimba regulile)
-    import pickle
-
+    # Checkpointurile vechi nu valideaza scorurile si nu includ identitatea codului.
+    identity = checkpoint_identity(reg)
     ck = HERE / ".checkpoint"
     ck.mkdir(exist_ok=True)
+    checkpoint_paths = {
+        name: ck / (
+            f"{name}_{reg['datasets'][name]['prefix_sha256'][:16]}_{identity[:16]}.pkl"
+        )
+        for name in DATASETS
+    }
     evs = {}
-    for n in DATASETS:
-        f = ck / f"{n}_{reg['datasets'][n]['prefix_sha256'][:16]}.pkl"
-        if f.exists():
-            evs[n] = pickle.loads(f.read_bytes())
+    for name, path in checkpoint_paths.items():
+        cached = _read_checkpoint(path, identity)
+        if (
+            cached is not None
+            and cached.get("name") == name
+            and cached.get("methods") == reg["methods"]
+        ):
+            evs[name] = cached
     todo = [n for n in DATASETS if n not in evs]
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         futs = {ex.submit(_evaluate_dataset, n, reg["datasets"][n]["rows"]): n for n in todo}
         for fu in as_completed(futs):
             n = futs[fu]
             evs[n] = fu.result()
-            f = ck / f"{n}_{reg['datasets'][n]['prefix_sha256'][:16]}.pkl"
-            tmp = f.with_suffix(".tmp")
-            tmp.write_bytes(pickle.dumps(evs[n]))
-            tmp.replace(f)
+            _write_checkpoint(checkpoint_paths[n], identity, evs[n])
             print(f"checkpoint {n}", flush=True)
     evs = {n: evs[n] for n in DATASETS}
 
@@ -321,13 +401,39 @@ def run(jobs: int) -> dict:
     for (c, cell), p in adj.items():
         results[cell][c]["p_holm"] = p
         results[cell][c]["survives"] = p < ALPHA
-    return {"dev": dev, "test": results, "n_tests": len(pvals)}
+    return {
+        "dev": dev,
+        "test": results,
+        "n_tests": len(pvals),
+        "audit": {
+            "checkpoint_identity": identity,
+            "score_validation": "has_usable_score_variance",
+            "datasets": {
+                name: {
+                    "targets": len(ev["targets"]),
+                    "method_evaluations": len(ev["targets"]) * len(ev["methods"]),
+                    "scoring_calls": (
+                        len(ev["targets"]) * len(ev["methods"])
+                        + sum(ev["fallback_counts"].values())
+                    ),
+                    "fallback_counts": ev["fallback_counts"],
+                }
+                for name, ev in evs.items()
+            },
+        },
+    }
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["hashes", "run"])
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument(
+        "--output",
+        type=Path,
+        default=HERE / "results_validated.json",
+        help="separate result file; the original published JSON is preserved",
+    )
     a = ap.parse_args()
     if a.mode == "hashes":
         out = {}
@@ -337,7 +443,7 @@ def main() -> None:
         print(json.dumps(out, indent=2))
         return
     res = run(a.jobs)
-    (HERE / "results_2026-10-02.json").write_text(
+    a.output.write_text(
         json.dumps(res, indent=1, default=float), encoding="utf-8"
     )
     for cell, r in res["test"].items():
