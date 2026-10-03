@@ -25,6 +25,7 @@ import pandas as pd
 import pytest
 
 from loto_enterprise.benchmark.methods import METHODS, call_method
+from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
 
 HISTORY = 700  # suficient pentru ca fiecare metodă să iasă din ramurile de start
 MAX_NUM = 49
@@ -79,6 +80,10 @@ def _longest_run(nums: list[int]) -> int:
 
 @pytest.mark.parametrize("name", sorted(METHODS))
 def test_method_is_not_a_structural_filter(name: str, draws: np.ndarray) -> None:
+    if METHODS[name][1] == "experimental_interval":
+        # An explicitly labelled interval filter is measurable only in bench.
+        assert name in EXCLUDED_FROM_PRODUCTION
+        return
     scores, _ = call_method(name, draws, MAX_NUM)
     vec = np.array([scores.get(i + 1, 0.0) for i in range(MAX_NUM)], dtype=np.float64)
     rounded = np.round(vec, 9)

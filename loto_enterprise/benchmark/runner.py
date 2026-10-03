@@ -458,6 +458,7 @@ def _evaluate_fold(
         bl_sizes_seen: list[int] = []
         all_draws = np.concatenate([train_draws, test_draws], axis=0)
         history = train_draws
+        uses_day_context = method_meta(method_name).get("uses_history_cutoffs", False)
         pos = 0
         while pos < n_test:
             end = min(pos + block_size, n_test)
@@ -465,7 +466,13 @@ def _evaluate_fold(
             if game.history_cutoffs:
                 prefix_end = game.history_cutoffs[prefix_end]
             history = all_draws[:prefix_end]
-            scores, _t = call_method(method_name, history, game.max_num)
+            # Preserve complete-day exclusions inside experimental meta-scorers.
+            # Keep the original call contract for every existing scorer.
+            context = (
+                {"history_cutoffs": game.history_cutoffs[:prefix_end]}
+                if uses_day_context else {}
+            )
+            scores, _t = call_method(method_name, history, game.max_num, **context)
             blocks += 1
 
             if not has_usable_score_variance(scores):

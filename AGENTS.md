@@ -79,6 +79,40 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Interval adaptiv experimental — 2026-10-03
+
+- `interval_extrema_k16`, in `methods_experimental.py`, este un filtru de
+  interval explicit experimental, inregistrat in METHODS si exclus din
+  productie prin `EXCLUDED_FROM_PRODUCTION`. Curarea il adauga automat numai
+  la Re-Bench pentru Loto 6/49. Setul anterior de metode ramane intact.
+- Formula fixa: top16 dupa frecventa simpla pe 50 de extrageri, intr-un
+  interval ales din rezultatele 4+ ale ultimelor 300 de extrageri, conditionat
+  de minimul/maximul ultimei zile complete; warmup200 si regularizare50.
+  Alte pool-uri din benchmark masoara prefixele acestui ranking, nu o
+  optimizare pentru fiecare K. Fara tinte interne eligibile, scorul este plat
+  si pasul ramane ne-evaluat; nu se contabilizeaza un fallback ca metoda.
+- `call_method(..., history_cutoffs=...)` este context optional, transmis
+  numai scorerilor marcati `_uses_history_cutoffs`. Runnerul furnizeaza
+  inceputul zilei fiecarui rand, taiat la prefixul anterior tintei. Lipsa
+  datelor inseamna contractul explicit un rand = un pas. Nu schimba schema
+  cozii, decizia sau apelul scorerilor existenti. Nu necesita bump global de
+  cache: numele e nou, iar cache-ul bench include deja cutoff-urile.
+- UI eticheteaza rezultatele drept experimentale si afiseaza rata4+ separat
+  de eligibilitatea pentru productie. Un nume fortat in best_methods nu poate
+  reactiva experimentul.
+- Studiul retrospectiv pe 791 extrageri 6/49 (2019-01-13..2026-10-01):
+  87 evenimente pool4+ si 11 pool5+; p4+ brut0,001556, Holm51=0,07935.
+  Nu este confirmare externa, nici rata pe bilete. Rezultatul nu include
+  limita de consecutive a utilizatorului si nu se promoveaza automat.
+- Replay-ul integrat reproduce toate791 pool-uri si clasamentele studiului.
+  Rangurile16/17 sunt egale in481/791 pasi (60,81%); egalitatile nu sunt
+  mascate. Se pastreaza poarta existenta de dependenta de tie-break.
+- Inventar renumarat: 53 metode in registry/active; matricea efectiva
+  Re-Bench are 53 la6/49 si52 la fiecare dintre celelalte trei jocuri.
+  Integrare verificata pe Python3.14.7/Windows:2038 teste trecute,17 omise,
+  zero esecuri. Benchmark real in procese separate:32/32 pasi evaluati.
+- Detalii: `scripts/analysis/interval_extrema_method.md`.
+
 ### Audit global 2026-10-03
 
 - Reverificare dupa sincronizarea PR #133-135: istorice, scoreri, designuri,

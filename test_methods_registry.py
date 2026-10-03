@@ -21,11 +21,11 @@ def _dummy_fn(draws_2d, max_num):
     return {n: 0.0 for n in range(1, max_num + 1)}
 
 
-def test_registry_has_two_baselines_plus_fifty_methods():
-    """2 baseline-uri structurale (random, frequency) + 30 + 20 metode (14.09.2026)."""
-    assert len(methods.METHODS) == 52
+def test_registry_has_two_baselines_fifty_methods_and_one_experiment():
+    """Baseline-uri + metodele existente + un experiment exclus din productie."""
+    assert len(methods.METHODS) == 53
     assert "random" in methods.METHODS and "frequency" in methods.METHODS
-    assert len(methods.list_methods()) == 52
+    assert len(methods.list_methods()) == 53
 
 
 def test_renamed_method_still_resolves_from_saved_decisions():
@@ -55,6 +55,7 @@ def test_spatial_filters_stay_in_registry_but_excluded_from_production():
         "repeat_last_draw",
         "rwr_last_draw",
         "haar_multiscale",
+        "interval_extrema_k16",
     ):
         assert name in methods.METHODS
         assert name in EXCLUDED_FROM_PRODUCTION
@@ -179,13 +180,14 @@ def test_module_docstrings_state_the_real_method_counts():
     """Cifrele din docstring-uri se verifica programatic, nu din ochi."""
     import re
 
-    from loto_enterprise.benchmark import methods_learning, methods_wave2
+    from loto_enterprise.benchmark import methods_experimental, methods_learning, methods_wave2
 
     sizes = {
         "methods_recency": len(methods_recency.RECENCY_METHODS),
         "methods_relational": len(methods_relational.RELATIONAL_METHODS),
         "methods_learning": len(methods_learning.LEARNING_METHODS),
         "methods_wave2": len(methods_wave2.WAVE2_METHODS),
+        "methods_experimental": len(methods_experimental.EXPERIMENTAL_METHODS),
     }
     assert sum(sizes.values()) + 2 == len(methods.METHODS)
 

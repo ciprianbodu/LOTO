@@ -31,6 +31,7 @@ _FAMILY_LIBRARY = {
     "structure": "vecinătate numerică (numpy)",
     "learning": "învățare (numpy+scipy)",
     "ensemble": "ansamblu (mix de metode)",
+    "experimental_interval": "interval adaptiv experimental (pool 16 / 4+)",
 }
 
 
@@ -53,6 +54,27 @@ def _method_library(name: str, family: str = "") -> str:
         if meta:
             return _FAMILY_LIBRARY.get(meta[1], meta[1])
     return "necunoscută (metodă absentă din registry)"
+
+
+def _experimental_method_caption(name: str, pool: int, rate4=None) -> str:
+    """Describe a measured experiment without presenting it as a selectable winner."""
+    from loto_enterprise.benchmark.methods import method_meta
+
+    if method_meta(name).get("family") != "experimental_interval":
+        return ""
+    rate = (
+        "rată 4+ indisponibilă" if rate4 is None or pd.isna(rate4)
+        else f"rată 4+ în pool {pool}: {float(rate4) * 100:.2f}%"
+    )
+    scope = (
+        "Formula este optimizată pentru pool 16 / 4+."
+        if pool == 16 else
+        "Formula este optimizată pentru pool 16 / 4+; aici se măsoară prefixul aceluiași clasament."
+    )
+    return (
+        f"🧪 {name} — Interval adaptiv după minime/maxime, experimentală; {rate}. "
+        f"{scope} Exclusă din selecția automată; avantajul predictiv necesită confirmare pe date noi."
+    )
 
 
 # Eticheta UI/worker → cheia exactă din folds.csv / best_methods.json
@@ -114,6 +136,7 @@ def _baseline_methods() -> frozenset[str]:
                 "repeat_last_draw",
                 "rwr_last_draw",
                 "haar_multiscale",
+                "interval_extrema_k16",
             }
         )
 
@@ -672,6 +695,9 @@ def _render_bench_leaderboard_slice(
             ).classes("text-warning")
             for r in measured_methods[:top_n]:
                 ui.label(f"⛔ {r[0]}: {_structural_fail[r[0]]}").classes("text-caption")
+            for r in rows:
+                if caption := _experimental_method_caption(r[0], int(pool), r[5]):
+                    ui.label(caption).classes("text-caption text-orange")
         return
     # Slice afișat: primele `top_n` CANDIDATE + baseline-urile care cad printre ele.
     top_idx: list[int] = []
@@ -787,6 +813,7 @@ def _render_bench_leaderboard_slice(
         else:
             sc_txt = "date indisponibile" if pd.isna(score) else f"medie: {score:.3f}"
         is_base = m in _BASE
+        is_experimental = bool(_experimental_method_caption(m, int(pool), r4))
         is_excluded = (not is_base) and m in _structural_fail
         is_chosen = (not is_base) and (m == chosen_name)
         _gate_txt = ""
@@ -798,7 +825,9 @@ def _render_bench_leaderboard_slice(
             )
         with ui.row().classes("items-center gap-2 w-full"):
             _rank_badge = (
-                "🎲"
+                "🧪"
+                if is_experimental
+                else "🎲"
                 if is_base
                 else "⛔"
                 if is_excluded
@@ -816,7 +845,10 @@ def _render_bench_leaderboard_slice(
                 if is_excluded
                 else "text-bold"
             )
-            _pref = "baseline (referință, NU e candidat) · " if is_base else ""
+            _pref = (
+                "experimentală, exclusă din selecția automată · " if is_experimental
+                else "baseline (referință, NU e candidat) · " if is_base else ""
+            )
             avg_txt = "—" if pd.isna(avg) else f"{avg:.2f}"
             ui.label(
                 f"· {_pref}{lib} · {sc_txt} · medie/extragere {avg_txt}{_gate_txt}"
@@ -1012,6 +1044,9 @@ def _render_bench_leaderboard_slice(
             ui.label("Categorii: " + " · ".join(_cats)).classes(
                 "text-caption text-grey"
             )
+        for rec in rows:
+            if caption := _experimental_method_caption(rec[0], int(pool), rec[5]):
+                ui.label(caption).classes("text-caption text-orange")
         _rank = 0
         for rec in top_rows:
             if rec[0] in _BASE:
@@ -1027,6 +1062,8 @@ def _render_bench_leaderboard_slice(
         for _bi, _brec in enumerate(rows_by_score):
             if _brec[0] not in _BASE or _brec[0] in _shown_names:
                 continue
+            if _experimental_method_caption(_brec[0], int(pool), _brec[5]):
+                continue  # Already displayed above with its experimental status.
             # PE `rows_by_score` (ordinea Wilson), nu pe `rows`: acolo baseline-ul
             # e împins la coadă de poarta de consistență, deci ieșea mereu ultimul.
             _better = sum(1 for r in rows_by_score[:_bi] if r[0] not in _BASE)

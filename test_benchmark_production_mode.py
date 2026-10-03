@@ -54,14 +54,15 @@ def test_curated_benchmark_runs_only_relevant_methods_per_game():
     games = ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
     matrix = resolve_methods_per_game(load_curated(), games)
 
-    # De la 14.09.2026, curated per_game = toate cele 50 de metode noi + frequency
-    # pe fiecare joc (fără preselecție pe istoric), iar runner-ul adaugă `random`:
-    # 52 pe fiecare joc. Nu hardcodăm împrăștiat — verificăm că e chiar registry-ul.
+    # Existing methods remain on every game; the new experiment is scoped to
+    # 6/49. Validate membership, not only counts that can hide substitutions.
     from loto_enterprise.benchmark.methods import list_methods
 
-    n_reg = len(list_methods())  # 52 (random + frequency + 50)
-    assert {g: len(matrix[g]) for g in games} == {g: n_reg for g in games}
-    assert sum(map(len, matrix.values())) == n_reg * len(games)
+    registry = set(list_methods())
+    experimental = {"interval_extrema_k16"}
+    assert set(matrix["loto_6_49"]) == registry
+    for game in games[1:]:
+        assert set(matrix[game]) == registry - experimental
     for selected in matrix.values():
         assert "random" in selected
         assert "frequency" in selected
