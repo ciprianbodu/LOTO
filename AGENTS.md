@@ -538,6 +538,12 @@ Pentru fiecare joc si pool:
 
 ### Coerenta outputului
 
+- Textele din Control Executie urmeaza tinta selectata fara reincarcarea paginii.
+  Mesajele de prospetime se recalculeaza dupa Re-Bench, inclusiv cu Auto-Pilot
+  oprit, dupa schimbarea tintei si dupa reincarcarea manuala a istoricului.
+  Se redeseneaza numai aceste mesaje; controalele si sectiunile deschise
+  de rezultate raman intacte. O nepotrivire fara extrageri noi poate veni
+  si din metode, deci nu este descrisa automat drept CSV schimbat.
 - Clasamentul preia `ranked_methods` din decizia recalculata pe snapshot-ul
   afisat. Metodele excluse pentru egalitati la limita top-K sau ferestre lipsa
   raman vizibile cu motiv, fara rang. Trofeul arata primul eligibil; tinta arata

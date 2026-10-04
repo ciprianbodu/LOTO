@@ -375,7 +375,8 @@ _PCTS = (
 
 
 def _on_bench_finished() -> None:
-    """Re-Bench (unic) terminat → pornește Auto-Pilot automat (dacă e bifat)."""
+    """Actualizează starea bench-ului și pornește Auto-Pilot dacă e bifat."""
+    _bench_freshness_panel.refresh()
     if (
         SETTINGS.get("autopilot_after_bench")
         and not STATE.get("active_job_id")
@@ -532,6 +533,29 @@ def _bench_target_rule_text(country: str) -> str:
     ) + "."
 
 
+def _bench_intro_text(country: str) -> str:
+    """Text recalculabil la schimbarea țintei, fără citiri de fișiere."""
+    cc = _LOT.normalize_country(country)
+    if cc == _LOT.RO:
+        return (
+            "Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
+            "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
+            "ACELAȘI clasament → UN câștigător → UN Auto-Pilot → UN walk-forward. "
+            f"{_bench_target_rule_text(cc)} "
+            "Vezi clasamentul complet la 🏆 Clasament bench."
+        )
+    name = _LOT.country_name(cc)
+    names = ", ".join(g.name for g in _LOT.games_for_country(cc))
+    return (
+        f"{name} ({names}): un singur bench testează metodele fiecărui joc "
+        "(exclusiv CPU), pe toate nucleele (în paralel). În fiecare joc, "
+        "metodele concurează în ACELAȘI clasament → UN câștigător "
+        "→ UN Auto-Pilot → UN walk-forward. "
+        f"{_bench_target_rule_text(cc)} Rezultatele stau separat de România "
+        f"(bench_results/countries/{cc}/, decisions/{cc}/best_methods.json)."
+    )
+
+
 def _country_bench_texts(country: str) -> dict:
     """Cele patru texte ale panoului de bench pentru o țară STRĂINĂ.
 
@@ -542,17 +566,7 @@ def _country_bench_texts(country: str) -> dict:
     cc = _LOT.normalize_country(country)
     name = _LOT.country_name(cc)
     games = _LOT.games_for_country(cc)
-    names = ", ".join(g.name for g in games)
-    out: dict = {
-        "intro": (
-            f"{name} ({names}): un singur bench testează metodele fiecărui joc "
-            "(exclusiv CPU), pe toate nucleele (în paralel). În fiecare joc, "
-            "metodele concurează în ACELAȘI clasament → UN câștigător "
-            "→ UN Auto-Pilot → UN walk-forward. "
-            f"{_bench_target_rule_text(cc)} Rezultatele stau separat de România "
-            f"(bench_results/countries/{cc}/, decisions/{cc}/best_methods.json)."
-        )
-    }
+    out: dict = {"intro": _bench_intro_text(cc)}
     n_keys = sum(len(g.bench_keys) for g in games)
     n_urna2 = sum(1 for g in games if g.bench_key_urna2)
     try:
@@ -625,10 +639,15 @@ def _country_bench_texts(country: str) -> dict:
                 for k, r in reports.items()
                 if not str(k).endswith("_urna2")
             )
-            if rec in ("quick_rebench", "full_rebench"):
+            if rec in ("quick_rebench", "full_rebench") and delta > 0:
                 out["freshness"] = (
                     f"🆕 {name}: +{delta} extrageri noi de la ultimul bench → "
                     "Re-Bench recalculează complet."
+                )
+            elif rec in ("quick_rebench", "full_rebench"):
+                out["freshness"] = (
+                    f"⚠️ {name}: benchmarkul nu mai corespunde datelor sau "
+                    "metodelor curente. Rulează Re-Bench pentru actualizare."
                 )
             else:
                 out["freshness"] = f"✅ {name}: date neschimbate de la ultimul bench."
@@ -1859,6 +1878,52 @@ def _new_draws_summary():
     return {"total": total, "per": per, "rec": rec, "any_bench": any_bench}
 
 
+@ui.refreshable
+def _bench_freshness_panel(country: str) -> None:
+    """Actualizează numai mesajele bench, fără a recrea rezultatele sau controalele."""
+    if _LOT.normalize_country(country) != _LOT.RO:
+        text = _country_bench_texts(country)["freshness"]
+        color = "text-positive" if text.startswith("✅") else "text-warning"
+        ui.label(text).classes("text-caption " + color)
+        return
+    fresh = _new_draws_summary()
+    if fresh is None:
+        ui.label("⚠️ Starea benchmarkului nu poate fi verificată.").classes(
+            "text-caption text-warning"
+        )
+    elif not fresh["any_bench"]:
+        ui.label("Nu există încă un benchmark verificabil. Rulează Re-Bench.").classes(
+            "text-caption text-warning"
+        )
+    elif fresh["total"] > 0:
+        labels = {v: k for k, v in GK_MATRIX.items()}
+        parts = ", ".join(f"{labels.get(gk, gk)} +{d}" for gk, d in fresh["per"].items())
+        color = "text-negative" if fresh["rec"] == "full_rebench" else "text-warning"
+        total = fresh["total"]
+        ui.label(f"🆕 +{total} extrageri noi de la ultimul bench ({parts}).").classes(
+            "text-caption " + color
+        )
+        ui.label(
+            "⚠️ Datele noi invalidează cache-ul → Re-Bench recalculează complet. "
+            "Generarea poate folosi istoricul nou cu metoda aleasă anterior."
+        ).classes("text-caption " + color)
+    elif fresh["rec"] in ("quick_rebench", "full_rebench"):
+        ui.label(
+            "⚠️ Benchmarkul nu mai corespunde datelor sau metodelor curente. "
+            "Rulează Re-Bench pentru actualizare."
+        ).classes("text-caption text-warning")
+    elif _target_data_ready():
+        ui.label(
+            "✅ Benchmark la zi pentru istoricul și metodele curente. "
+            "Re-Bench poate reutiliza rezultatele din cache."
+        ).classes("text-caption text-positive")
+    else:
+        ui.label(
+            f"⚠️ Lipsesc rezultatele pentru ținta curentă (≥{_clamped_bench_target()}). "
+            "Rulează Re-Bench pentru a le calcula."
+        ).classes("text-caption text-warning")
+
+
 # Panoul de istoric adaptiv folosea două nume NEDEFINITE (NameError la orice
 # apel). Fișierul canonic e cel scris de core.adaptive_feedback (rădăcina repo);
 # pool-urile acceptate de UI sunt 6..16 (clamp-ul din worker/încărcare).
@@ -2256,6 +2321,7 @@ def main_page() -> None:
                     type="positive",
                 )
             datasets_label.refresh()
+            _bench_freshness_panel.refresh()
 
         ui.button(
             f"📂 Încarcă istoricul {_cc_name}", on_click=_load_country_history
@@ -2649,6 +2715,8 @@ def main_page() -> None:
             except Exception as exc:
                 logger.warning("Eroare la schimbarea țintei de hituri: %s", exc)
                 ui.notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
+            finally:
+                _bench_freshness_panel.refresh()
 
         ui.select(
             {3: "3+ Hits", 4: "4+ Hits"},
@@ -2723,20 +2791,14 @@ def main_page() -> None:
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
             "color=orange no-caps"
         ).classes(_BTN).style(_BTN_STYLE)
+        ui.label(_bench_intro_text(_cc)).bind_text_from(
+            SETTINGS, "bench_hit_target", lambda _: _bench_intro_text(_cc)
+        ).classes("text-caption")
         if _cc != _LOT.RO:
             _ctx = _country_bench_texts(_cc)
-            ui.label(_ctx["intro"]).classes("text-caption")
             ui.label(_ctx["eta"]).classes("text-caption text-grey")
             ui.label(f"🎯 {_ctx['curation']}").classes("text-caption text-info")
-            ui.label(_ctx["freshness"]).classes("text-caption text-warning")
         if _cc == _LOT.RO:
-            ui.label(
-                "Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
-                "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
-                "ACELAȘI clasament → UN câștigător → UN Auto-Pilot → UN walk-forward. "
-                f"{_bench_target_rule_text(_cc)} "
-                "Vezi clasamentul complet la 🏆 Clasament bench."
-            ).classes("text-caption")
             _eta_folds = _target_bench_folds()
             if _eta_folds:
                 ui.label(
@@ -2784,46 +2846,7 @@ def main_page() -> None:
                         f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
                         "cădea pe low_confidence. Adaugă-le în curated_methods.json."
                     ).classes("text-caption text-negative")
-            # Gard anti-surpriză: extrageri noi de la ultimul bench + avertisment că datele
-            # noi invalidează cache-ul (re-bench = recalcul complet). Snapshot la randarea
-            # paginii (se reîmprospătează la reload). Vezi _new_draws_summary / freshness.
-            _fresh = _new_draws_summary()
-            if _fresh is not None and _fresh["any_bench"]:
-                if _fresh["total"] > 0:
-                    _g2l = {v: k for k, v in GK_MATRIX.items()}
-                    _parts = ", ".join(
-                        f"{_g2l.get(gk, gk)} +{d}" for gk, d in _fresh["per"].items()
-                    )
-                    _col = (
-                        "text-negative"
-                        if _fresh["rec"] == "full_rebench"
-                        else "text-warning"
-                    )
-                    _fresh_total = _fresh["total"]
-                    ui.html(
-                        render_html_safe(
-                            t"🆕 <b>+{_fresh_total} extrageri noi</b> de la ultimul bench ({_parts})."
-                        )
-                    ).classes("text-caption " + _col)
-                    ui.label(
-                        "⚠️ Datele noi invalidează cache-ul → Re-Bench = recalcul COMPLET (nu rapid). "
-                        "Pentru generarea zilnică NU e nevoie de re-bench: Auto-Pilot folosește deja "
-                        "datele noi, iar câștigătorul bench abia se schimbă la câteva extrageri."
-                    ).classes("text-caption " + _col)
-                elif _fresh["rec"] in ("quick_rebench", "full_rebench"):
-                    ui.label(
-                        "⚠️ Datele s-au schimbat de la ultimul bench → Re-Bench recalculează complet (fără cache)."
-                    ).classes("text-caption text-warning")
-                elif _target_data_ready():
-                    ui.label(
-                        "✅ Date neschimbate de la ultimul bench → Re-Bench folosește cache-ul (rapid)."
-                    ).classes("text-caption text-positive")
-                else:
-                    ui.label(
-                        f"⚠️ Următorul Re-Bench va fi COMPLET (~lent, nu din cache): datele pentru pragul "
-                        f"curent (≥{_bench_target()}) nu-s încă în cache (schemă nouă / prag schimbat). "
-                        "O singură dată — apoi redevine rapid."
-                    ).classes("text-caption text-warning")
+        _bench_freshness_panel(_cc)
         _bind_save(
             ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"),
             "autopilot_after_bench",
