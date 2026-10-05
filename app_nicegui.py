@@ -2786,6 +2786,15 @@ def main_page() -> None:
                 _ft_label,
                 on_click=lambda: _show_full_ticket(),
             ).props("color=positive no-caps").classes("grow").style(_BTN_STYLE)
+        _bind_save(
+            ui.checkbox("🎯 Variante dispersate pe bilet").classes("w-full"),
+            "full_ticket_spread_val",
+        ).tooltip(
+            "Variantele biletului se întind pe numerele clasamentului, cu suprapuneri "
+            "minime, în loc să stea toate în pool. Media variantelor câștigătoare e "
+            "aceeași; șansa ca cel puțin o variantă să câștige nu scade la niciun prag "
+            "și crește cel mai mult la 3+. Dialogul arată șansele exacte."
+        )
 
         ui.separator()
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(

@@ -245,6 +245,7 @@ UI_PERSIST_KEYS = [
         for bound in ("min", "max")
     ),
     "full_ticket_count_val",
+    "full_ticket_spread_val",
     "simple_variants_val",
     "shutdown_on_complete",
     "sim_depth_val",
@@ -297,6 +298,10 @@ DEFAULTS = {
     "max_consecutive_run_enabled_val": True,
     # Bilete fizice cerute de „🎟️ Bilet complet”, 1-10 (full_ticket.clamp_tickets).
     "full_ticket_count_val": 1,
+    # „Bilet complet” cu variante dispersate (covering.spread): oprit implicit,
+    # ca biletul să rămână din pool-ul afișat până când utilizatorul alege altfel.
+    # Aceeași medie de variante câștigătoare; crește exact P(cel puțin una).
+    "full_ticket_spread_val": False,
     # Câte variante simple arată lista din rezultate (implicit 10, ca înainte).
     "simple_variants_val": 10,
     "lookback_val": 0,
