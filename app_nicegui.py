@@ -3116,7 +3116,10 @@ _sync_ui_namespace()
 
 app.on_startup(_startup)
 
-if __name__ in {"__main__", "__mp_main__"}:
+# Copiii ProcessPoolExecutor (spawn, Windows) sunt `__mp_main__`. Nu porni
+# UI-ul acolo: reluarea „Bilet complet” din Istoric hits pornește procese din
+# acest interpretor. `reload=False` — nu e reloaderul NiceGUI.
+if __name__ == "__main__":
     _port = int(os.environ.get("LOTO_UI_PORT", "8000"))
     # show=False: browserul e deschis de START_8000.bat (mai fiabil pe Windows).
     # reconnect_timeout mărit: cât rulează bench/walk-forward, event-loop-ul poate fi

@@ -148,6 +148,9 @@ class WalkForwardResult:
     wheel_coverage: float | None = None
     # Joker: numarul din urna 2 a iesit la aceasta extragere (None = alt joc/necunoscut).
     joker_hit: bool | None = None
+    # Contextul „Bilet complet” al pasului (backtesting._ticket_context), acelasi
+    # obiect pe toate intrarile extragerii. None = intrare scrisa inainte de camp.
+    ticket_context: dict | None = None
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -642,9 +645,19 @@ def expand_predictions_to_flat(
                     target_draw_date=p.target_draw_date,
                     wheel_coverage=getattr(p, "wheel_coverage", None),
                     joker_hit=getattr(p, "joker_hit", None),
+                    ticket_context=getattr(p, "ticket_context", None),
                 )
             )
     return flat
+
+
+def steps_without_ticket_context(flat) -> set[int]:
+    """Extragerile ale caror intrari nu au contextul „Bilet complet” (cache vechi)."""
+    return {
+        int(getattr(r, "draw_index", -1))
+        for r in flat or ()
+        if getattr(r, "ticket_context", None) is None
+    }
 
 
 def _merge_partial_coverage(
@@ -808,7 +821,8 @@ def run_honest_walk_forward(
             # Obiectele scrise înainte de un câmp ADITIV nu-l au deloc (unpickle-ul
             # nu trece prin __init__) → completează-l acum, o singură dată.
             _backfill_new_fields(cached.get("flat"))
-            if not cached.get("partial", False):
+            missing_ctx = steps_without_ticket_context(cached.get("flat"))
+            if not cached.get("partial", False) and not missing_ctx:
                 # COMPLET → servim direct (fast path neschimbat).
                 meta["from_cache"] = True
                 meta["n_predictions"] = cached["n_predictions"]
@@ -828,11 +842,22 @@ def run_honest_walk_forward(
             # acoperirile parțiale sunt cozi RECENTE ale aceleiași ferestre, dar pot
             # avea găuri diferite (pași crăpați/timeout), deci „cel mai lung îl
             # conține pe cel mai scurt" NU e garantat.
-            logger.info(
-                f"[WALK-FWD] Cache PARȚIAL pentru {game_type} pool={pool_size} "
-                f"({cached.get('n_test_draws')}/{cached.get('n_expected')}) → re-rulez "
-                f"pentru a extinde acoperirea (bugetul curent poate fi mai mare)."
-            )
+            # Pașii fără contextul „Bilet complet” (cache scris înaintea câmpului)
+            # se refac pe aceeași cale; până atunci intrările lor vechi rămân.
+            if cached.get("partial", False):
+                logger.info(
+                    f"[WALK-FWD] Cache PARȚIAL pentru {game_type} pool={pool_size} "
+                    f"({cached.get('n_test_draws')}/{cached.get('n_expected')}) → re-rulez "
+                    f"pentru a extinde acoperirea (bugetul curent poate fi mai mare)."
+                )
+            if missing_ctx:
+                logger.info(
+                    "[WALK-FWD] %s pool=%s: %d extrageri din cache fără contextul "
+                    "„Bilet complet” → le refac; intrările vechi rămân până atunci.",
+                    game_type,
+                    pool_size,
+                    len(missing_ctx),
+                )
         except Exception as exc:
             cached = None
             logger.warning(f"[WALK-FWD] Cache load failed: {exc} — re-run")
@@ -864,6 +889,7 @@ def run_honest_walk_forward(
         # loc și reuniunea nu aducea nimic — bugetul WF se consuma fără câștig.
         skip_indices=(
             {int(getattr(r, "draw_index", -1)) for r in (cached.get("flat") or [])}
+            - steps_without_ticket_context(cached.get("flat"))
             if cached is not None
             else None
         ),
