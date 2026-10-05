@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import threading
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 
@@ -10,6 +12,7 @@ from nicegui import ui
 
 from ui_runtime import *
 from loto_enterprise.core import lotteries as _LOT
+from loto_enterprise.core.ro_text import count
 from ui_results import PRICES, _hypergeo_params, _random_rate_hypergeo, _bench_transform_note
 from ui_bench import _render_bench_leaderboard, _render_last_csv_draw
 from ui_shared import PROJECT_ROOT, render_html_safe
@@ -136,6 +139,181 @@ def _n_extrageri(n: int) -> str:
     return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
 
 
+# Reluarea „Bilet complet” pe pașii WF rulează în fundal (sute de pași × două
+# moduri). Rezultatul se ține pe obiectul `flat` afișat: o listă nouă = calcul nou.
+_REPLAY_LOCK = threading.Lock()
+_REPLAY_DONE: dict = {}
+_REPLAY_PENDING: dict = {}
+_REPLAY_THREAD: dict = {"running": False}
+_REPLAY_KEEP = 12
+
+
+def _replay_workers() -> int:
+    return max(1, min(4, (os.cpu_count() or 2) // 2))
+
+
+def _replay_loop() -> None:
+    from loto_enterprise.core.ticket_replay import replay_full_tickets
+
+    while True:
+        with _REPLAY_LOCK:
+            if not _REPLAY_PENDING:
+                _REPLAY_THREAD["running"] = False
+                return
+            key = next(reversed(_REPLAY_PENDING))  # cererea cea mai recentă întâi
+            flat, game, tickets, guarantee = _REPLAY_PENDING.pop(key)
+        try:
+            res = replay_full_tickets(
+                flat, game, tickets, guarantee, workers=_replay_workers()
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[BILET] reluare în Istoric hits eșuată: %s", exc)
+            res = {"failed": str(exc)}
+        with _REPLAY_LOCK:
+            _REPLAY_DONE[key] = (flat, res)
+            while len(_REPLAY_DONE) > _REPLAY_KEEP:
+                _REPLAY_DONE.pop(next(iter(_REPLAY_DONE)))
+
+
+def _full_ticket_replay(flat, game: str, tickets: int, guarantee) -> dict | None:
+    """Reluarea memorată pentru acest `flat`, sau None după ce o cere în fundal."""
+    key = (id(flat), len(flat), str(game), int(tickets), guarantee)
+    with _REPLAY_LOCK:
+        done = _REPLAY_DONE.get(key)
+        if done is not None and done[0] is flat:
+            return done[1]
+        # Alt număr de bilete pe același istoric: cererea veche nu mai e afișată.
+        for old in [k for k in _REPLAY_PENDING if k[:3] == key[:3]]:
+            del _REPLAY_PENDING[old]
+        _REPLAY_PENDING[key] = (flat, str(game), int(tickets), guarantee)
+        if not _REPLAY_THREAD["running"]:
+            _REPLAY_THREAD["running"] = True
+            threading.Thread(target=_replay_loop, name="ticket-replay", daemon=True).start()
+    return None
+
+
+def _full_ticket_replay_rows(res: dict, tickets: int) -> tuple[list[dict], int]:
+    """Rândurile din pool / dispersat și numărul de extrageri reluate."""
+    best = res.get("best") or {}
+    uniform = res.get("uniform") or {}
+    m = len(best)
+    rows = []
+    for mode, label in (("pool", "🎟️ Bilet complet din pool"), ("spread", "🎯 Bilet complet dispersat")):
+        cells = {}
+        for t in (3, 4, 5):
+            k = sum(1 for row in best.values() if int(row.get(mode, 0)) >= t)
+            cells[f"p{t}"] = f"{k} ({k / m * 100:.2f}%)" if m else "—"
+        n_var = max((int(row.get(f"{mode}_variants", 0)) for row in best.values()), default=0)
+        exact = uniform.get(mode)
+        rnd = (
+            f"{exact.get(3, 0) * 100:.1f}% / {exact.get(4, 0) * 100:.2f}% / "
+            f"{exact.get(5, 0) * 100:.3f}%"
+            if exact
+            else "—"
+        )
+        rows.append(
+            {"src": label, **cells, "rnd": rnd, "var": count(n_var, "variante", "o variantă")}
+        )
+    return rows, m
+
+
+def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
+    """„Bilet complet” din pool și dispersat, refăcut pe aceleași extrageri WF."""
+    from loto_enterprise.core.full_ticket import clamp_tickets
+
+    box = ui.column().classes("w-full gap-1")
+    shown: dict = {"sig": None}
+
+    def _fill() -> None:
+        tickets = clamp_tickets(SETTINGS.get("full_ticket_count_val"))
+        res = _full_ticket_replay(flat, game, tickets, guarantee)
+        sig = (tickets, res is not None)
+        if sig == shown["sig"]:
+            return
+        shown["sig"] = sig
+        box.clear()
+        with box:
+            slips = "un bilet" if tickets == 1 else f"{tickets} bilete"
+            ui.label(
+                f"🎟️ „Bilet complet” pe aceleași extrageri ({slips} pe extragere):"
+            ).classes("text-bold text-caption mt-2")
+            if res is None:
+                ui.label(
+                    "⏳ Refac biletele la fiecare extragere din validare, din pool și "
+                    "dispersat…"
+                ).classes("text-caption text-grey")
+                return
+            if res.get("failed"):
+                ui.label(f"Reluarea a eșuat: {res['failed']}").classes(
+                    "text-caption text-warning"
+                )
+                return
+            rows, m = _full_ticket_replay_rows(res, tickets)
+            n_all = int(res.get("n_draws") or 0)
+            missing = int(res.get("missing") or 0)
+            if not m:
+                if missing:
+                    ui.label(
+                        "Indisponibil: validarea din cache a fost calculată înainte ca "
+                        "pașii să-și păstreze pool-ul și clasamentul. Pașii se refac la "
+                        "următoarea validare walk-forward, pornită după o generare."
+                    ).classes("text-caption text-grey")
+                else:
+                    reasons = "; ".join(sorted(res.get("errors") or {})) or "fără variante"
+                    ui.label(f"Indisponibil: {reasons}.").classes(
+                        "text-caption text-grey"
+                    )
+                return
+            ui.table(
+                columns=[
+                    {"name": "src", "label": "Mod", "field": "src", "align": "left"},
+                    {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
+                    {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
+                    {"name": "p5", "label": "+5 (extrageri)", "field": "p5", "align": "center"},
+                    {
+                        "name": "rnd",
+                        "label": "🎲 exact, extragere uniformă (3+ / 4+ / 5+)",
+                        "field": "rnd",
+                        "align": "center",
+                    },
+                    {"name": "var", "label": "Variante/extragere", "field": "var", "align": "center"},
+                ],
+                rows=rows,
+            ).classes("w-full").props("dense")
+            note = (
+                f"Extrageri cu cel puțin o variantă la prag, din {_n_extrageri(m)}. "
+                "La fiecare extragere, biletele sunt cele pe care le-ar fi dat butonul "
+                "„🎟️ Bilet complet” în ziua aceea: pool-ul și clasamentul pasului "
+                "walk-forward, garanția rezultatului afișat, același număr de variante "
+                "în ambele moduri. 🎲 = șansa exactă ca cel puțin o variantă să atingă "
+                "pragul la o extragere uniformă, calculată pe biletele celei mai recente "
+                "extrageri; nu depinde de numerele alese, ci de cum se suprapun "
+                "variantele. Media variantelor câștigătoare e aceeași în orice "
+                "aranjare. Rândul din pool urmează hiturile pool-ului din tabelul de "
+                "mai sus; metoda a fost aleasă pe același istoric, deci un pool peste "
+                "hazard aici nu e o validare externă. La pragurile rare (câteva "
+                "evenimente), frecvența observată variază mult în jurul valorii 🎲; "
+                "o diferență între rânduri acolo nu arată că un mod e mai bun."
+            )
+            if game == "joker":
+                note += " Joker: numai Urna 1; numărul Joker e același în ambele moduri."
+            if m < n_all:
+                parts = []
+                if missing:
+                    parts.append(
+                        f"{_n_extrageri(missing)} din cache-ul vechi, refăcute la "
+                        "următoarea validare"
+                    )
+                other = n_all - m - missing
+                if other:
+                    parts.append(f"{_n_extrageri(other)} fără bilet construibil")
+                note += f" Lipsesc {n_all - m} din {n_all}: " + "; ".join(parts) + "."
+            ui.label(note).classes("text-caption text-grey")
+
+    _fill()
+    ui.timer(1.0, _fill)
+
+
 def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     """(clase_css, text) de avertizare când hiturile de POOL ≠ hituri de BILET.
 
@@ -203,8 +381,12 @@ def _render_hits_4plus(
     pool_n: int | None = None,
     restrict_base_text: str = "",
     consecutive_limit_text: str = "",
+    full_ticket: dict | None = None,
 ) -> None:
     """Istoric hits pentru pool-ul unic; folosește mărimea efectivă din rezultat.
+
+    `full_ticket` = {"game", "guarantee"} adaugă „Bilet complet” din pool și
+    dispersat, refăcut pe aceleași extrageri (`_render_full_ticket_replay`).
 
     `restrict_base_text`: eticheta intervalului aplicat (din audit-ul aceluiași
     rezultat), sau "" fără restricție. `run_honest_walk_forward` primește exact
@@ -367,6 +549,8 @@ def _render_hits_4plus(
         "Garanția 4 nu asigură 5 pe un bilet; compară separat hiturile pool-ului "
         "și ale biletelor."
     ).classes("text-caption text-grey")
+    if full_ticket:
+        _render_full_ticket_replay(flat, full_ticket["game"], full_ticket.get("guarantee"))
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
@@ -537,5 +721,12 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                             consecutive_limit_text=_consecutive_limit_text(
                                 data.get("audit"), details=False
                             ),
+                            # Același joc și aceeași garanție ca „🎟️ Bilet complet”.
+                            full_ticket={
+                                "game": _game_label_for(str(game))
+                                if _spec.is_romanian
+                                else _spec.game_id,
+                                "guarantee": data.get("guarantee"),
+                            },
                         )
 

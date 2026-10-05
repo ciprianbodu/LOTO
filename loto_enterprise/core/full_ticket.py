@@ -299,12 +299,15 @@ def build_full_ticket(
     *,
     spread: bool = False,
     compare: bool = False,
+    with_chances: bool = True,
 ) -> dict:
     """{variants, coverage, guarantee, joker, pool, note, error, ...} pentru un joc.
 
     `tickets` = bilete fizice (1-10); variantele cerute = bilete x variante pe bilet.
     `spread` = variante dispersate (`mode` = "spread"); `compare` adauga in
-    `chances["other"]` probabilitatile celuilalt mod pe acelasi numar de variante."""
+    `chances["other"]` probabilitatile celuilalt mod pe acelasi numar de variante.
+    `with_chances=False` lasa `chances` None: enumerarea tuturor extragerilor
+    costa cat restul constructiei."""
     from loto_enterprise.core.lotteries import lottery_by_id
 
     lot = lottery_by_id(game)
@@ -383,7 +386,11 @@ def build_full_ticket(
     thresholds = chance_thresholds(min_target, pick, draw_n)
     chances = None
     try:
-        shown = ticket_hit_probabilities(chosen["variants"], draw_n, max_num)
+        shown = (
+            ticket_hit_probabilities(chosen["variants"], draw_n, max_num)
+            if with_chances
+            else None
+        )
     except ValueError:
         shown = None  # numere in afara universului jocului: fara sanse exacte
     if shown is not None:

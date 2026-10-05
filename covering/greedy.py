@@ -16,6 +16,8 @@ from covering.common import (
     ensure_pool_numbers_on_tickets,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def generate_combinatorial_wheel(
     pool, pick=6, guarantee=4, max_variants=0, scores=None
@@ -30,7 +32,7 @@ def generate_combinatorial_wheel(
         )
     start_time = time.time()
     pool_len = len(pool)
-    logging.info(
+    logger.info(
         f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}."
     )
 
@@ -43,7 +45,7 @@ def generate_combinatorial_wheel(
         n_full = math.comb(pool_len, pick)
         combinations = itertools.combinations(pool, pick)
         if max_variants > 0 and n_full > max_variants:
-            logging.warning(
+            logger.warning(
                 "[WHEEL] guarantee==pick cu max_variants=%d < C(%d,%d)=%d — "
                 "acoperirea NU poate fi 100%% (sistem incomplet).",
                 max_variants,
@@ -56,7 +58,7 @@ def generate_combinatorial_wheel(
         if max_variants > 0:
             wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         coverage_pct = _coverage_ratio_pct(min(len(wheel), n_full), n_full)
-        logging.info(
+        logger.info(
             "[WHEEL] Sistem complet C(%d,%d): %d bilete, acoperire %.2f%% în %.2fs.",
             pool_len,
             pick,
@@ -102,7 +104,7 @@ def generate_combinatorial_wheel(
 
     while covered_count < total_targets:
         if max_variants > 0 and len(wheel) >= max_variants:
-            logging.info(
+            logger.info(
                 f"[WHEEL] S-a atins limita maxima cerută de variante: {max_variants}."
             )
             break
@@ -148,17 +150,17 @@ def generate_combinatorial_wheel(
             covered_mask |= best_targets_covered
             covered_count = covered_mask.bit_count()
             if iteration % 20 == 0 or covered_count == total_targets:
-                logging.info(
+                logger.info(
                     f"[WHEEL] Progres {iteration}: Acoperite {covered_count}/{total_targets} ținte. Bilete: {len(wheel)}"
                 )
         else:
-            logging.warning(
+            logger.warning(
                 "[WHEEL] Nu am găsit acoperire suplimentară, oprire timpurie."
             )
             break
 
         if iteration > 1000:
-            logging.warning(f"[WHEEL] TIMEOUT: 1000 iterații.")
+            logger.warning("[WHEEL] TIMEOUT: 1000 iterații.")
             break
 
     if max_variants > 0:
@@ -174,7 +176,7 @@ def generate_combinatorial_wheel(
         coverage_pct = _coverage_ratio_pct(covered_mask.bit_count(), total_targets)
     else:
         coverage_pct = _coverage_ratio_pct(covered_count, total_targets)
-    logging.info(
+    logger.info(
         f"[WHEEL] Generare completă în {time.time() - start_time:.2f}s. Total variante: {len(wheel)}. Acoperire: {coverage_pct}%"
     )
     return wheel, coverage_pct

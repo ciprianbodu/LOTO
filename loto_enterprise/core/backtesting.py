@@ -174,7 +174,7 @@ def _retroactive_step_stateless(
         eng._build_draw_matrix()
         eng._adaptive_mode = adaptive_mode
         eng._adaptive_event = adaptive_event
-        out_lines, _, _, _, _ctx, _audit = eng.run_institutional_pipeline(
+        out_lines, _, _, _, _ctx, audit = eng.run_institutional_pipeline(
             progress_cb=None,
             pool_size=pool_size,
             guarantee=guarantee,
@@ -189,9 +189,9 @@ def _retroactive_step_stateless(
             wheel_condition=wheel_condition,
             max_consecutive_run=max_consecutive_run,
         )
-        return eng, out_lines, (_ctx or {})
+        return eng, out_lines, (_ctx or {}), audit
 
-    engine, lines, ctx = _run_pipeline()
+    engine, lines, ctx, audit = _run_pipeline()
 
     actual_draw = draws[sim_idx]
     actual_set = set(actual_draw)
@@ -221,7 +221,33 @@ def _retroactive_step_stateless(
         game_key=engine.game_key,
         country=engine.country,
         bench_method=_step_bench_method(engine),
+        ticket_context=_ticket_context(engine, audit, actual_draw),
     )
+
+
+# Cheile de audit pe care le citește `full_ticket.build_full_ticket`.
+_TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base")
+
+
+def _ticket_context(engine, audit, actual) -> dict:
+    """Ce îi trebuie lui „Bilet complet” ca să refacă biletele pasului.
+
+    Pool-ul, clasamentul din audit, numărul Joker și extragerea țintă. {} =
+    context indisponibil la acest pas (nu se recalculează); None rămâne
+    semnul unei intrări scrise înainte de câmp.
+    """
+    try:
+        audit = audit if isinstance(audit, dict) else {}
+        return {
+            "hard_core": [int(x) for x in engine.hard_core or []],
+            "hard_core_joker": [
+                int(x) for x in (getattr(engine, "hard_core_joker", None) or [])[:1]
+            ],
+            "audit": {k: audit[k] for k in _TICKET_AUDIT_KEYS if k in audit},
+            "actual": sorted(int(x) for x in actual),
+        }
+    except (TypeError, ValueError):
+        return {}
 
 
 def _step_bench_method(engine) -> str | None:
@@ -377,6 +403,8 @@ class RetroactivePrediction:
     game_key: str | None = None
     country: str | None = None
     bench_method: str | None = None
+    # Contextul „Bilet complet” al pasului (`_ticket_context`); None = necunoscut.
+    ticket_context: dict | None = None
 
 
 def _joker_hit(df, sim_idx: int, lines) -> bool | None:

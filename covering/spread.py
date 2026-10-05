@@ -74,18 +74,25 @@ def _pair_costs(max_num: int, draw_n: int, pick: int, target: int) -> tuple[floa
     return tuple(costs)
 
 
+def _excess_of(nums, max_run: int) -> int:
+    """Suma, pe secventele de consecutive din `nums`, a lungimii peste `max_run`."""
+    if max_run <= 0:
+        return 0
+    excess = 0
+    for n in nums:
+        if n - 1 in nums:
+            continue
+        length = 1
+        while n + length in nums:
+            length += 1
+        excess += max(0, length - max_run)
+    return excess
+
+
 def _run_excess(row: np.ndarray, numbers: np.ndarray, max_run: int) -> int:
     if max_run <= 0:
         return 0
-    chosen = np.sort(numbers[row.astype(bool)])
-    excess = run = 0
-    for i in range(1, len(chosen) + 1):
-        if i < len(chosen) and chosen[i] == chosen[i - 1] + 1:
-            run += 1
-            continue
-        excess += max(0, run + 1 - max_run)
-        run = 0
-    return excess
+    return _excess_of({int(n) for n in numbers[row.astype(bool)]}, max_run)
 
 
 def spread_variants(
@@ -118,11 +125,7 @@ def spread_variants(
     u = len(numbers)
     table = np.array(_pair_costs(max_num, draw_n, pick, target))
     rank_w = 1e-9 * np.arange(u) / max(1, u)  # departajare: numarul mai bine clasat
-    order = np.argsort(numbers)
-    adjacent = np.zeros((u, u), dtype=bool)
-    for a, b in zip(order[:-1], order[1:]):
-        if numbers[b] == numbers[a] + 1:
-            adjacent[a, b] = adjacent[b, a] = True
+    position = {int(n): j for j, n in enumerate(numbers)}
 
     def cost_of(member: np.ndarray) -> tuple[float, float]:
         overlap = member @ member.T
@@ -131,18 +134,31 @@ def spread_variants(
         runs = sum(_run_excess(row, numbers, max_run) for row in member)
         return pair + _RUN * runs, float((member * rank_w).sum())
 
+    def over(length: int) -> int:
+        return max(0, length - max_run)
+
     def run_after_adding(row: np.ndarray) -> np.ndarray:
         """Excesul de consecutive al randului dupa adaugarea fiecarui numar."""
         if max_run <= 0:
             return np.zeros(u)
-        out = np.full(u, float(_run_excess(row, numbers, max_run)))
-        inside = np.flatnonzero(row)
-        if not len(inside):
-            return out
-        for j in np.flatnonzero(adjacent[:, inside].any(axis=1) & (row == 0)):
-            trial = row.copy()
-            trial[j] = 1
-            out[j] = _run_excess(trial, numbers, max_run)
+        inside = [int(numbers[j]) for j in np.flatnonzero(row)]
+        nums = set(inside)
+        base = _excess_of(nums, max_run)
+        out = np.full(u, float(base))
+        # Numai vecinii unui numar din rand schimba excesul: x uneste secventa
+        # care se termina in x-1 cu cea care incepe in x+1.
+        for n in inside:
+            for x in (n - 1, n + 1):
+                j = position.get(x)
+                if j is None or x in nums:
+                    continue
+                left = 0
+                while x - left - 1 in nums:
+                    left += 1
+                right = 0
+                while x + right + 1 in nums:
+                    right += 1
+                out[j] = base - over(left) - over(right) + over(left + right + 1)
         return out
 
     best = None

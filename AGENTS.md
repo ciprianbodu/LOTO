@@ -103,6 +103,26 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
  17 omise, zero esecuri.
 - Raport: `scripts/analysis/hit_rate_study_2026-10-05.md`.
 
+### Audit global 2026-10-05
+
+- „📜 Istoric hits” afiseaza, sub tabelul WF, „Bilet complet” din pool si
+  dispersat pe aceleasi extrageri: context aditiv pe pas (`ticket_context`,
+  fara bump v30), reluare in fundal, coloana 🎲 de sansa exacta uniforma.
+  Cache-ul vechi isi pastreaza hiturile; pasii fara context se refac la
+  urmatoarea validare (`skip_indices`).
+- Corecturi din audit: jurnalul greedy nu mai umple consola la reluare
+  (logger de modul, WARNING pe durata calculului); UI-ul nu mai porneste
+  din copiii ProcessPoolExecutor (`__mp_main__`); nota de sub tabel nu
+  mai prezinta un pool peste hazard drept validare externa.
+- Verificat pe UI izolat (HTTP 200, worker separat, runtime temporar):
+  3 bilete si 10 bilete pe 6/49, Joker, 5/40; temporizatorul reface
+  blocul la schimbarea lui „Bilete”; procesele aplicatiei reale au ramas
+  neatinse. 151 designuri locale. Registry: 53 metode; curare 53 active,
+  per_game 52/51/51/51 (interval_extrema numai la 6/49).
+  Python 3.14.7 / Windows: 94 fisiere `test_*.py`, 2100 teste trecute,
+  17 omise, zero esecuri.
+- Raport: `scripts/analysis/audit_application_report_2026-10-05.md`.
+
 ### Interval adaptiv experimental — 2026-10-03
 
 - `interval_extrema_k16`, in `methods_experimental.py`, este un filtru de
@@ -729,6 +749,23 @@ limita de validitate din §5).
   sansa celuilalt mod pe acelasi numar de variante si nota ca media si marele
   premiu nu se schimba. Fara afirmatie predictiva; masurat in
   `scripts/analysis/hit_rate_study_2026-10-05.md`.
+- „📜 Istoric hits” are sub tabelul principal „Bilet complet” din pool si
+  dispersat, pe ACELEASI extrageri WF (`ticket_replay.replay_full_tickets`,
+  `ui_hits._render_full_ticket_replay`): la fiecare pas, biletele pe care le-ar
+  fi dat butonul in ziua aceea, din `ticket_context` (§8), cu numarul de
+  bilete din sidebar si garantia rezultatului afisat; Joker numai Urna 1;
+  la 5/40 intersectia e cu toate cele sase numere extrase. Ambele moduri au
+  acelasi numar de variante. Coloana 🎲 = P exacta (enumerare, extragere
+  uniforma) ca cel putin o varianta sa atinga 3+/4+/5+, calculata pe
+  biletele celei mai recente extrageri; nu e rata observata si nu depinde
+  de etichetele numerelor. Calculul ruleaza in fundal (pana la 4 procese,
+  `with_chances=False`, jurnalul greedy pe WARNING), memorat pe lista WF
+  afisata; un temporizator de 1 s umple sau reface numai acel bloc (si cand
+  se schimba „Bilete”), fara refresh-ul panoului. Pasii fara context sunt
+  numarati separat. Copiii ProcessPoolExecutor sunt `__mp_main__`:
+  `app_nicegui.py` porneste UI-ul numai din `__main__` (`reload=False`).
+  Masurat pe istoricul complet, UI izolat: 3 bilete instant dupa WF;
+  10 bilete × 3 jocuri ~90 s, cu „⏳”, sectiunile deschise neschimbate.
 - Selectia este top-N pura dupa scorul validat, cu o singura exceptie, limita
   de consecutive de mai jos.
 - Limita de consecutive este o OPTIUNE de utilizator (`max_consecutive_run` in
@@ -959,6 +996,15 @@ castigul depinde de geometrie, scoruri si hardware.
 - Joker: `joker_hit` = numarul din urna 2 de pe bilete a iesit la acea extragere
   (`None` = alt joc sau cache vechi). Sumarul WF il afiseaza fata de aleator 5%.
 - `wheel_coverage=None` inseamna necunoscut, nu 100%.
+- `ticket_context` (aditiv, fara bump) = pool-ul pasului, auditul citit de
+  „Bilet complet” (`timesfm_predictions`, `consecutive_limit`,
+  `restrict_base`), numarul Joker si extragerea tinta; acelasi obiect pe toate
+  intrarile unei extrageri. None = intrare dintr-un cache scris inainte de
+  camp; {} = context indisponibil la pas. Un cache, complet sau partial, cu
+  pasi fara context nu mai e servit direct: pasii aceia se refac pe calea
+  normala (`skip_indices` = pasii cu context), iar intrarile vechi raman prin
+  reuniunea `_merge_partial_coverage` pana la refacere. Prima validare dupa
+  actualizare reface deci pasii vechi, in bugetul WF.
 - Adancimea UI este 30% din istoric.
 - Bugetul implicit este 90 minute si permite rezultat partial; la urmatoarea
   rulare pasii deja validati din cache-ul partial sunt sariti (`skip_indices`),
