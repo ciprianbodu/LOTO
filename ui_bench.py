@@ -56,23 +56,98 @@ def _method_library(name: str, family: str = "") -> str:
     return "necunoscută (metodă absentă din registry)"
 
 
-def _experimental_method_caption(name: str, pool: int, rate4=None) -> str:
-    """Describe a measured experiment without presenting it as a selectable winner."""
+def _is_experimental_interval(name: str) -> bool:
     from loto_enterprise.benchmark.methods import method_meta
 
-    if method_meta(name).get("family") != "experimental_interval":
+    return method_meta(name).get("family") == "experimental_interval"
+
+
+def _pct(value) -> str | None:
+    """Procent cu două zecimale, aceeași precizie pentru Wilson și pentru brut."""
+    if value is None or pd.isna(value):
+        return None
+    return f"{float(value) * 100:.2f}%"
+
+
+def _bench_rate_line(
+    shown_t: int,
+    *,
+    single_pick: bool,
+    wilson,
+    raw_primary,
+    raw_4,
+    rnd_primary,
+    rnd_4,
+) -> str:
+    """Aceeași propoziție în clasament și la metoda experimentală.
+
+    Wilson (z=1) este scorul de clasare. Brut este rata observată pe aceleași
+    extrageri. Ambele sunt procente cu două zecimale.
+    """
+    parts = []
+    wilson_txt = _pct(wilson)
+    if wilson_txt is not None:
+        label = "top-1" if single_pick else f"{shown_t}+"
+        parts.append(f"Wilson {label}: {wilson_txt}")
+    primary_txt = _pct(raw_primary)
+    if primary_txt is not None:
+        if single_pick:
+            mult = (
+                f" ({float(raw_primary) / float(rnd_primary):.2f}x random)"
+                if rnd_primary
+                else ""
+            )
+            parts.append(f"brut top-1: {primary_txt}{mult}")
+        else:
+            mult = (
+                f" ({float(raw_primary) / float(rnd_primary):.2f}x random)"
+                if rnd_primary
+                else ""
+            )
+            parts.append(f"brut 3+: {primary_txt}{mult}")
+    four_txt = _pct(raw_4)
+    if four_txt is not None and not single_pick:
+        mult = f" ({float(raw_4) / float(rnd_4):.2f}x random)" if rnd_4 else ""
+        parts.append(f"brut 4+: {four_txt}{mult}")
+    return " · ".join(parts)
+
+
+def _experimental_method_caption(
+    name: str,
+    pool: int,
+    rate4=None,
+    *,
+    rate3=None,
+    wilson=None,
+    rnd3=None,
+    rnd4=None,
+    shown_t: int = 4,
+    single_pick: bool = False,
+) -> str:
+    """Experimentul măsurat, cu aceleași cifre ca rândul din clasament."""
+    if not _is_experimental_interval(name):
         return ""
-    rate = (
-        "rată 4+ indisponibilă" if rate4 is None or pd.isna(rate4)
-        else f"rată 4+ în pool {pool}: {float(rate4) * 100:.2f}%"
+    stats = _bench_rate_line(
+        shown_t,
+        single_pick=single_pick,
+        wilson=wilson,
+        raw_primary=rate3,
+        raw_4=rate4,
+        rnd_primary=rnd3,
+        rnd_4=rnd4,
     )
+    if not stats:
+        stats = "brut 4+ indisponibilă"
     scope = (
         "Formula este optimizată pentru pool 16 / 4+."
-        if pool == 16 else
-        "Formula este optimizată pentru pool 16 / 4+; aici se măsoară prefixul aceluiași clasament."
+        if pool == 16
+        else (
+            "Formula este optimizată pentru pool 16 / 4+; "
+            "aici se măsoară prefixul aceluiași clasament."
+        )
     )
     return (
-        f"🧪 {name} — Interval adaptiv după minime/maxime, experimentală; {rate}. "
+        f"🧪 {name} — Interval adaptiv după minime/maxime, experimentală; {stats}. "
         f"{scope} Exclusă din selecția automată; avantajul predictiv necesită confirmare pe date noi."
     )
 
@@ -686,6 +761,12 @@ def _render_bench_leaderboard_slice(
         r for r in rows if r[0] not in _BASE and r[0] not in _structural_fail
     ]
     measured_methods = [r for r in rows if r[0] not in _BASE]
+    # Aceleași referințe ca pe rândul câștigătorului, inclusiv pe ramura fără candidați.
+    _rnd3 = _random_rate_hypergeo(
+        folds_game_key, pool, _shown_t if _is_single_pick else 3
+    )
+    _rnd4 = _random_rate_hypergeo(folds_game_key, pool, 4)
+    _rnd_t = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
     if not competitors:
         with ui.expansion(f"Clasament bench — {section_label}", value=True).classes(
             "w-full"
@@ -696,7 +777,17 @@ def _render_bench_leaderboard_slice(
             for r in measured_methods[:top_n]:
                 ui.label(f"⛔ {r[0]}: {_structural_fail[r[0]]}").classes("text-caption")
             for r in rows:
-                if caption := _experimental_method_caption(r[0], int(pool), r[5]):
+                if caption := _experimental_method_caption(
+                    r[0],
+                    int(pool),
+                    r[5],
+                    rate3=r[4],
+                    wilson=r[6],
+                    rnd3=_rnd3,
+                    rnd4=_rnd4,
+                    shown_t=_shown_t,
+                    single_pick=_is_single_pick,
+                ):
                     ui.label(caption).classes("text-caption text-orange")
         return
     # Slice afișat: primele `top_n` CANDIDATE + baseline-urile care cad printre ele.
@@ -745,11 +836,6 @@ def _render_bench_leaderboard_slice(
     # Baseline-ul PUR aleator (hipergeometric) la acest pool — afișat O DATĂ în titlu
     # + multiplicator pe fiecare rată. Onestitate: „3+: 10%" pare edge, dar hazardul
     # singur dă ~9% la pool 10 pe 6/49 → diferența reală e mică (zgomot).
-    _rnd3 = _random_rate_hypergeo(
-        folds_game_key, pool, _shown_t if _is_single_pick else 3
-    )
-    _rnd4 = _random_rate_hypergeo(folds_game_key, pool, 4)
-    _rnd_t = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
     if has_target_rate and _rnd_t is not None:
         label += f" · baseline random = {_rnd_t * 100:.2f}%"
     if _structural_fail:
@@ -791,29 +877,20 @@ def _render_bench_leaderboard_slice(
         m, score, avg, lib = rec[:4]
         r3, r4, conf = rec[4], rec[5], rec[6]
         if has_target_rate:
-            parts = []
-            # Primul = criteriul REAL de ordonare/decizie (Wilson pooled); ratele brute
-            # rămân ca informație secundară.
-            if conf is not None:
-                parts.append(
-                    f"Wilson {'top-1' if _is_single_pick else f'{_shown_t}+'}: {conf * 100:.2f}%"
-                )
-            if _is_single_pick and r3 is not None:
-                _m1 = f" ({r3 / _rnd3:.2f}x random)" if _rnd3 else ""
-                parts.append(f"brut top-1: {r3 * 100:.1f}%{_m1}")
-            elif r3 is not None:
-                _m3 = f" ({r3 / _rnd3:.2f}x random)" if _rnd3 else ""
-                parts.append(f"brut 3+: {r3 * 100:.1f}%{_m3}")
-            if r4 is not None and not _is_single_pick:
-                _m4 = f" ({r4 / _rnd4:.2f}x random)" if _rnd4 else ""
-                parts.append(f"brut 4+: {r4 * 100:.1f}%{_m4}")
-            sc_txt = " · ".join(parts) if parts else (
-                "date indisponibile" if pd.isna(score) else f"medie: {score:.3f}"
-            )
+            # Aceleași nume și aceleași două zecimale ca nota metodei experimentale.
+            sc_txt = _bench_rate_line(
+                _shown_t,
+                single_pick=_is_single_pick,
+                wilson=conf,
+                raw_primary=r3,
+                raw_4=r4,
+                rnd_primary=_rnd3,
+                rnd_4=_rnd4,
+            ) or ("date indisponibile" if pd.isna(score) else f"medie: {score:.3f}")
         else:
             sc_txt = "date indisponibile" if pd.isna(score) else f"medie: {score:.3f}"
         is_base = m in _BASE
-        is_experimental = bool(_experimental_method_caption(m, int(pool), r4))
+        is_experimental = _is_experimental_interval(m)
         is_excluded = (not is_base) and m in _structural_fail
         is_chosen = (not is_base) and (m == chosen_name)
         _gate_txt = ""
@@ -864,9 +941,11 @@ def _render_bench_leaderboard_slice(
         ).classes("text-caption text-grey")
         if has_target_rate:
             ui.label(
-                "Wilson afișat folosește z=1 ca scor de clasare; nu este un interval "
-                "de încredere de 95%. Calificarea este euristică. Un avantaj predictiv "
-                "necesită testare separată."
+                "Wilson și brut sunt aceleași procente, cu două zecimale. Wilson folosește "
+                "z=1 ca scor de clasare și este mai mic decât rata observată; nu este un "
+                "interval de încredere de 95%. Brut este rata observată pe aceleași "
+                "extrageri. Calificarea este euristică. Un avantaj predictiv necesită "
+                "testare separată."
             ).classes("text-caption text-grey")
         if _is_single_pick:
             ui.label(
@@ -1045,7 +1124,17 @@ def _render_bench_leaderboard_slice(
                 "text-caption text-grey"
             )
         for rec in rows:
-            if caption := _experimental_method_caption(rec[0], int(pool), rec[5]):
+            if caption := _experimental_method_caption(
+                rec[0],
+                int(pool),
+                rec[5],
+                rate3=rec[4],
+                wilson=rec[6],
+                rnd3=_rnd3,
+                rnd4=_rnd4,
+                shown_t=_shown_t,
+                single_pick=_is_single_pick,
+            ):
                 ui.label(caption).classes("text-caption text-orange")
         _rank = 0
         for rec in top_rows:
@@ -1062,7 +1151,7 @@ def _render_bench_leaderboard_slice(
         for _bi, _brec in enumerate(rows_by_score):
             if _brec[0] not in _BASE or _brec[0] in _shown_names:
                 continue
-            if _experimental_method_caption(_brec[0], int(pool), _brec[5]):
+            if _is_experimental_interval(_brec[0]):
                 continue  # Already displayed above with its experimental status.
             # PE `rows_by_score` (ordinea Wilson), nu pe `rows`: acolo baseline-ul
             # e împins la coadă de poarta de consistență, deci ieșea mereu ultimul.
