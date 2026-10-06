@@ -104,7 +104,7 @@ def test_leaderboard_metrics_ignore_method_specific_extra_window(monkeypatch):
         ui_bench._render_bench_leaderboard_slice(pd.concat([frame, pd.DataFrame([extra])], ignore_index=True), "joker_urna1", 11, "Joker", 20)
     assert before.ranking() == after.ranking()
     assert before.text() == after.text()
-    assert "brut 3+: 11.0%" in after.text()
+    assert "brut 3+: 11.00%" in after.text()
 
 
 def test_leaderboard_method_with_only_extra_window_is_visible_and_excluded(monkeypatch):

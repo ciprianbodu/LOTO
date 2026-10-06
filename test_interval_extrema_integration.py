@@ -207,7 +207,31 @@ def test_ui_caption_separates_experiment_scope_from_measured_pool(rate):
         assert "indisponibilă" in caption
         assert "nan" not in caption.lower()
     else:
-        assert "12.34%" in caption
+        assert "brut 4+: 12.34%" in caption
+        assert "rată 4+" not in caption
+    same = ui_bench._experimental_method_caption(
+        METHOD,
+        16,
+        0.0948,
+        rate3=0.3012,
+        wilson=0.0848,
+        rnd3=0.2981,
+        rnd4=0.0796,
+        shown_t=4,
+    )
+    line = ui_bench._bench_rate_line(
+        4,
+        single_pick=False,
+        wilson=0.0848,
+        raw_primary=0.3012,
+        raw_4=0.0948,
+        rnd_primary=0.2981,
+        rnd_4=0.0796,
+    )
+    assert line in same
+    assert "Wilson 4+: 8.48%" in line
+    assert "brut 3+: 30.12%" in line
+    assert "brut 4+: 9.48%" in line
     projected = ui_bench._experimental_method_caption(METHOD, 11, rate)
     assert "prefixul aceluiași clasament" in projected
     assert ui_bench._experimental_method_caption("frequency", 16, rate) == ""
