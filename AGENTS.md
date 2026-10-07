@@ -671,11 +671,13 @@ UI-ul face polling la o secunda, fara reload complet.
   eliberat de sistem si la oprirea brusca); un al doilea lansator nu atinge
   nimic. Sync alege un plan:
   - `ff`: numai commit-uri noi pe `origin/main` -> `merge --ff-only`;
-  - `push`: numai commit-uri locale -> push;
+  - `push`: numai commit-uri locale -> push (si cu un commit de merge);
   - `rebase`: ambele -> commit-urile locale se repun peste `origin/main`, numai
     daca nu contin merge-uri si niciun commit nou de pe `origin/main` n-a fost
     varful lui `main` local (reflog-ul `refs/heads/main`: amend sau reset al
-    unui commit trimis); altfel integrare manuala, cu motivul;
+    unui commit trimis); altfel integrare manuala, cu motivul; un conflict
+    lasa codul neschimbat si spune pasii (`git rebase origin/main`, apoi
+    `--continue` si push);
   - `drop`: `main` trece pe `origin/main` (`reset --keep`, vechiul `main` in
     `refs/loto-sync/main-<data-ora>`) cand toate commit-urile locale au fost
     retrase de pe `origin/main` (force-push) sau numai adauga la

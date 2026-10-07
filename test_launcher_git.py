@@ -180,6 +180,7 @@ def test_sync_preserves_user_work(repos, state):
     assert not (local / '.git' / 'rebase-merge').exists()
     if state == 'diverged':
         assert 'nu se pot repune peste origin/main (conflict in code.txt)' in out
+        assert 'integrarea ramane manuala: git rebase origin/main' in out
 
 
 @pytest.mark.parametrize('git_on_path', [True, False])
@@ -754,6 +755,48 @@ def test_an_interruption_before_the_base_copy_still_restores_the_edit(repos):
     assert 'Conflict' not in out
     assert (local / 'code.txt').read_text() == 'personal\n'
     assert not folder.exists()
+
+
+def test_rows_already_upstream_are_dropped_after_an_upstream_correction(repos):
+    """origin/main a corectat un rand vechi si a primit aceeasi extragere noua:
+    commit-ul local care doar o adauga e redundant, nu un conflict permanent."""
+    local, seed, _ = repos
+    append(local, NEW_ROW)
+    commit(local, 'auto: update istoric extrageri')
+    first, last = ROWS.splitlines()
+    corrected = '01-10-2026,1,2,3,4,5,7'
+    (seed / DRAWS).write_bytes((HEADER + corrected + '\n' + last + '\n' + NEW_ROW
+                                + '07-10-2026,2,3,4,5,6,7\n').encode())
+    commit(seed, 'correct a row, add draws')
+    git(seed, 'push', 'origin', 'main')
+    out = run_helper(local)
+    assert 'adauga numai randuri de istoric care sunt deja pe origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert corrected in (local / DRAWS).read_text()
+
+
+def test_a_local_merge_with_nothing_new_upstream_is_pushed(repos):
+    local, _, origin = repos
+    git(local, 'checkout', '-q', '-b', 'side')
+    (local / 'side.txt').write_text('side\n')
+    commit(local, 'side work')
+    git(local, 'checkout', '-q', 'main')
+    (local / 'main.txt').write_text('main\n')
+    commit(local, 'main work')
+    git(local, 'merge', '-q', '--no-ff', '-m', 'local merge', 'side')
+    out = run_helper(local)
+    assert 'Integrarea ramane manuala' not in out
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+
+
+def test_an_interrupted_sync_on_another_branch_names_the_branch_not_a_rebase(repos):
+    local, _, _ = repos
+    folder = interrupted(local, 'code.txt', 'personal\n', 'old\n')
+    git(local, 'checkout', '-q', '-b', 'trying-a-pr')
+    out = run_helper(local)
+    assert 'git switch main' in out
+    assert 'rebase --abort' not in out
+    assert (folder / 'local' / 'code.txt').read_text() == 'personal\n'
 
 
 def test_a_second_launcher_waits_for_the_first(repos):

@@ -886,7 +886,8 @@ function Resolve-SyncLeftovers {
         $pending = Join-Path $dir.FullName 'PENDING'
         if (Test-Path -LiteralPath $pending -PathType Leaf) {
             if ($rebasing -or -not $onMain) {
-                Write-Host ('[GIT] [ATENTIE] O sincronizare anterioara s-a intrerupt; modificarile locale de atunci sunt in ' + $localDir + '. Le pun la loc la pornirea urmatoare, dupa git rebase --abort.')
+                $after = if ($rebasing) { 'de dupa git rebase --abort' } else { 'cu ramura main activa (git switch main)' }
+                Write-Host ('[GIT] [ATENTIE] O sincronizare anterioara s-a intrerupt; modificarile locale de atunci sunt in ' + $localDir + '. Le pun la loc la prima pornire ' + $after + '.')
                 continue
             }
             $items = @()
@@ -1036,15 +1037,16 @@ try {
         if ($nAhead -gt 0) {
             $merges = Invoke-LotoGit -GitArgs @('rev-list', '--merges', '--count', 'origin/main..HEAD')
             $withdrawn = @(Get-WithdrawnCommits)
-            if ($merges.Code -ne 0 -or [int]$merges.Text -gt 0) {
+            if ($withdrawn.Count -eq 0 -and $nBehind -eq 0) {
+                # Nimic nou pe origin/main: push simplu, si cu un commit de merge.
+                $plan = 'push'
+            } elseif ($merges.Code -ne 0 -or [int]$merges.Text -gt 0) {
                 $manual = 'contin un commit de merge'
             } elseif ($withdrawn.Count -gt 0 -and $withdrawn.Count -eq $nAhead) {
                 $plan = 'drop'
                 $dropWhy = 'au fost retrase de pe origin/main'
             } elseif ($withdrawn.Count -gt 0) {
                 $manual = 'contin ' + $withdrawn.Count + ' commit-uri retrase de pe origin/main (istoria de acolo s-a rescris) amestecate cu commit-uri proprii'
-            } elseif ($nBehind -eq 0) {
-                $plan = 'push'
             } else {
                 # Un commit nou de pe origin/main care a fost varful lui main aici
                 # inseamna amend/reset al unui commit trimis: rebase-ul l-ar pierde.
@@ -1056,7 +1058,7 @@ try {
                 if (-not $manual) {
                     if (Test-RedundantHistory) {
                         $plan = 'drop'
-                        $dropWhy = 'contin numai randuri de istoric care sunt deja pe origin/main'
+                        $dropWhy = 'adauga numai randuri de istoric care sunt deja pe origin/main'
                     } else {
                         $plan = 'rebase'
                     }
@@ -1130,7 +1132,9 @@ try {
                     $conflicts = @()
                     try { $conflicts = @(Get-ChangedPaths -DiffArgs @('--diff-filter=U')) } catch { }
                     $failure = 'Commit-urile locale nu se pot repune peste origin/main'
-                    if ($conflicts.Count -gt 0) { $failure += ' (conflict in ' + (Format-PathList $conflicts) + ')' }
+                    if ($conflicts.Count -gt 0) {
+                        $failure += ' (conflict in ' + (Format-PathList $conflicts) + '); integrarea ramane manuala: git rebase origin/main, rezolvati conflictul, git rebase --continue, git push'
+                    }
                     elseif ($integrate.Text) { Write-Host $integrate.Text }
                 }
             } elseif ($plan -eq 'drop') {
