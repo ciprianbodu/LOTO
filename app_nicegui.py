@@ -40,6 +40,7 @@ from job_queue import (
     init_job_queue,
     is_fresh_ui_start,
     is_unstarted_job,
+    mark_job_finalized,
     submit_job,
 )
 from runtime_paths import BENCH_LOG_FILE
@@ -260,7 +261,13 @@ def apply_autopilot_and_generate() -> None:
             if cfg and not cfg.get("fallback"):
                 sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
                 per_game[label] = sd
-                low = " · low_confidence" if cfg.get("low_confidence") else ""
+                low = (
+                    " · low_confidence"
+                    if cfg.get("low_confidence")
+                    else " · avantaj nedemonstrat (Holm)"
+                    if (cfg.get("multiplicity") or {}).get("proven") is False
+                    else ""
+                )
                 # Substituirea nearest-k: bench-ul n-a evaluat pool-ul cerut, deci
                 # scorer-ul (și cifrele lui) vin de la ALT pool. Până acum se vedea
                 # doar ca linie INFO în loto.log, iar notificarea îl prezenta ca și
@@ -1382,13 +1389,12 @@ def status_panel() -> None:
                 # `complete_job` și scriere). ACEEAȘI gardă ca `_recover_completed_job`
                 # — până acum ramura LIVE n-o avea și mergea mai departe cu `None`:
                 # `STATE["results"] = None`, dar mail trimis, walk-forward pornit și
-                # `last_finalized_job_id` setat, deci jobul nu se mai putea relua.
+                # jobul marcat finalizat, deci nu se mai putea relua.
                 # Marcăm văzut (altfel ecranul reintră aici la fiecare tick), dar
                 # FĂRĂ mail / WF / shutdown, și spunem de ce.
                 with STATE_LOCK:
                     STATE["active_job_id"] = None
-                    SETTINGS["last_finalized_job_id"] = int(job_id)
-                _save_settings()
+                _mark_job_finalized(int(job_id))
                 logger.error(
                     "[JOB] #%s COMPLETED cu payload invalid (%r) — "
                     "fără mail/walk-forward/shutdown.",
@@ -1419,13 +1425,12 @@ def status_panel() -> None:
                         None  # rezultat PROASPĂT → fără marcaj „vechi"
                     )
                     STATE["active_job_id"] = None
-                    SETTINGS["last_finalized_job_id"] = int(job_id)
             if not claimed:
                 ui.label("✅ Ultima generare e gata (vezi mai jos).").classes(
                     "text-positive"
                 )
                 return
-            _save_settings()
+            _mark_job_finalized(int(job_id))
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
 
             # Mail-ul conține doar pool-ul generat (fără stats WF, vezi _build_mail_body) →
@@ -3028,6 +3033,29 @@ def _completed_age_seconds(job: dict) -> float | None:
         return None
 
 
+def _mark_job_finalized(job_id: int) -> None:
+    """Jobul a fost preluat de UI; un eșec de scriere se loghează, nu blochează."""
+    try:
+        mark_job_finalized(int(job_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[JOB] marcaj finalizare #%s: %s", job_id, exc)
+
+
+def _migrate_legacy_finalized_marker() -> None:
+    """Marcajul vechi din `.ui_state.json` trece o dată în baza stației.
+
+    Regula veche: ultimul job COMPLETED cu id-ul marcajului era deja preluat.
+    Cheia nu se mai scrie: `_save_settings` rescrie fișierul fără ea."""
+    legacy = _legacy_finalized_job_id()
+    if legacy is None:
+        return
+    if legacy > 0:
+        last = get_latest_completed_job()
+        if last and int(last["id"]) == legacy:
+            _mark_job_finalized(legacy)
+    _save_settings()
+
+
 def _recover_completed_job(*, allow_finalize: bool = True) -> None:
     """get_active_job() vede DOAR PENDING/RUNNING. Dacă worker-ul a terminat un job
     cât UI-ul era complet jos, rezultatul (+ mail/shutdown de la final) ar rămâne
@@ -3037,23 +3065,18 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
       • VECHI / fără completed_at → DOAR afișare (fără shutdown-surpriză, fără mail vechi).
       • START_8000 (`allow_finalize=False`) → DOAR afișare chiar dacă e proaspăt:
         „sesiune nouă, fără job automat” nu are voie să trimită mail sau să oprească PC-ul.
-    `last_finalized_job_id` (persistat) împiedică re-procesarea la următoarea repornire."""
+    `ui_finalized_at` pe rândul jobului împiedică re-procesarea la următoarea repornire."""
     last = get_latest_completed_job()
     if not last:
         return
     jid = int(last["id"])
-    try:
-        already = int(SETTINGS.get("last_finalized_job_id") or 0)
-    except (TypeError, ValueError):
-        already = 0
-    if jid == already:
-        return  # deja dus prin finalize într-o sesiune anterioară
+    if last.get("ui_finalized_at"):
+        return  # deja preluat de UI într-o sesiune anterioară, pe această stație
 
     payload = decode_queue_result(str(last.get("result_json") or "{}"))
     if not (isinstance(payload, tuple) and len(payload) == 2):
         # payload gol/invalid (ex. cancel-race) → marcăm văzut, nu reîncercăm la infinit
-        SETTINGS["last_finalized_job_id"] = jid
-        _save_settings()
+        _mark_job_finalized(jid)
         return
 
     age = _completed_age_seconds(last)
@@ -3077,8 +3100,7 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
             STATE["results"] = payload
             STATE["result_sources"] = _result_sources_from_job(last)
             STATE["results_recovered"] = f"job #{jid} · {when}"
-        SETTINGS["last_finalized_job_id"] = jid
-        _save_settings()
+        _mark_job_finalized(jid)
         try:
             _save_report_file()
         except Exception as exc:  # noqa: BLE001
@@ -3103,6 +3125,10 @@ def _startup() -> None:
     # NU marcăm joburile RUNNING ca eșuate: worker.py e proces separat care
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
+    try:
+        _migrate_legacy_finalized_marker()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("migrare marcaj job finalizat: %s", exc)
     # NU auto-încărcăm CSV-uri: utilizatorul încarcă manual de fiecare dată.
     # La boot-ul procesului UI user-ul n-a apăsat încă Generează. Un job 0%
     # fără log e leftover — dacă îl reatașăm, ecranul rămâne pe

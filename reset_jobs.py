@@ -8,8 +8,8 @@ START_8000.bat omoară UI + worker + bench + copiii ProcessPool
 PENDING/RUNNING rămase sunt cadavre (procesele au fost deja omorâte) — dacă le
 păstrăm, noul worker le reia singur, iar UI-ul arată la o pornire goală:
   «⏳ Job în rulare (#1) — 0% / se inițializează...».
-Păstrăm DOAR cel mai recent job COMPLETED dacă NU a fost încă finalizat de UI
-(id ≠ `last_finalized_job_id` din .ui_state.json), ca rezultatul să nu se piardă.
+Păstrăm DOAR cel mai recent job COMPLETED dacă NU a fost încă preluat de UI
+(`ui_finalized_at` gol pe rândul lui), ca rezultatul să nu se piardă.
 Pe START_8000 recovery-ul e display-only (fără mail/WF/shutdown); finalizarea
 automată rămâne permisă doar la restart direct al UI-ului, fără fresh-start.
 Dacă nimic nu califică (cazul normal la început de sesiune) → golire COMPLETĂ +
@@ -22,11 +22,9 @@ Rulare:
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import sys
-from pathlib import Path
 
 # Consola CMD poate rămâne cp1252; mesajele românești și simbolurile de status
 # nu trebuie să transforme un reset reușit într-un exit 1.
@@ -42,57 +40,6 @@ try:
 except Exception:  # noqa: BLE001
     DB = "loto_jobs.db"
     _init_job_queue = None
-
-
-def _clear_last_finalized_job_id() -> bool:
-    """Zerează `last_finalized_job_id` din .ui_state.json. Întoarce True dacă a schimbat ceva.
-
-    OBLIGATORIU pe ramura de golire COMPLETĂ: `id INTEGER PRIMARY KEY` fără
-    AUTOINCREMENT înseamnă că după `DELETE FROM jobs` numerotarea reîncepe de la
-    1 (chiar asta promite mesajul „Următorul job va fi #1"), în timp ce markerul
-    din .ui_state.json supraviețuiește între sesiuni. Cele două lifetime-uri sunt
-    independente, deci un job NOU putea primi exact id-ul deja marcat ca
-    finalizat → `_recover_completed_job` ieșea pe `jid == already` și un rezultat
-    REAL nu mai era nici afișat, nici trecut prin mail/shutdown, fără nicio linie
-    de log care să explice de ce. Golirea tabelei face markerul lipsit de sens,
-    deci îl ștergem odată cu ea.
-    """
-    f = Path(__file__).resolve().parent / ".ui_state.json"
-    try:
-        if not f.exists():
-            return False
-        data = json.loads(f.read_text(encoding="utf-8"))
-        if not int(data.get("last_finalized_job_id", 0) or 0):
-            return False
-        data["last_finalized_job_id"] = 0
-        try:
-            from ui_shared import atomic_write_json  # scriere atomică (regula de aur 3)
-
-            atomic_write_json(f, data)
-        except Exception:  # noqa: BLE001 — ui_shared indisponibil: tmp+replace local
-            tmp = f.with_name(f"{f.name}.{os.getpid()}.reset.tmp")
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, indent=2, ensure_ascii=False)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, f)
-        return True
-    except Exception as exc:  # noqa: BLE001 — pornirea NU trebuie blocată de asta
-        print(f"⚠️  Nu am putut reseta last_finalized_job_id: {exc}")
-        return False
-
-
-def _last_finalized_job_id() -> int:
-    """Ultimul job dus prin finalize (mail/shutdown) de UI, din .ui_state.json.
-    Un job COMPLETED cu id ≠ ăsta = încă neprocesat → îl păstrăm pentru recuperare."""
-    try:
-        f = Path(__file__).resolve().parent / ".ui_state.json"
-        if f.exists():
-            data = json.loads(f.read_text(encoding="utf-8"))
-            return int(data.get("last_finalized_job_id", 0) or 0)
-    except Exception:  # noqa: BLE001
-        pass
-    return 0
 
 
 def main() -> int:
@@ -141,19 +88,18 @@ def main() -> int:
 
         total = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
 
-        # Păstrăm DOAR un rezultat COMPLETED pe care UI-ul nu l-a finalizat încă
+        # Păstrăm DOAR un rezultat COMPLETED pe care UI-ul nu l-a preluat încă
         # (mail/shutdown). PENDING/RUNNING nu: START_8000 a omorât worker-ul, deci
         # nu e muncă în curs — e un job-fantomă care ar reapărea la fiecare pornire.
+        # Marcajul stă pe rând: golirea tabelei îl șterge odată cu jobul, deci un
+        # job nou cu același id pornește nemarcat.
         keep: set[int] = set()
-        last_fin = _last_finalized_job_id()
         row = con.execute(
-            "SELECT id FROM jobs WHERE status = 'COMPLETED' "
+            "SELECT id, ui_finalized_at FROM jobs WHERE status = 'COMPLETED' "
             "ORDER BY (completed_at IS NULL), completed_at DESC, id DESC LIMIT 1"
         ).fetchone()
-        if row and int(row[0]) != last_fin:
-            keep.add(
-                int(row[0])
-            )  # terminat, neprocesat de UI → recuperarea are nevoie de el
+        if row and row[1] is None:
+            keep.add(int(row[0]))  # terminat, nepreluat de UI → recuperarea are nevoie de el
 
         if keep:
             placeholders = ",".join("?" * len(keep))
@@ -187,14 +133,9 @@ def main() -> int:
                     f"⚠️  VACUUM eșuat ({exc}) — coada e golită oricum; "
                     "numerotarea job-urilor s-ar putea sa nu reînceapă de la 1."
                 )
-            _cleared = _clear_last_finalized_job_id()
             msg = f"✅ Șterse {total} joburi din coadă."
             if next_is_one:
                 msg += " Următorul job va fi #1."
-            if _cleared:
-                msg += (
-                    "  (am resetat și last_finalized_job_id — id-urile reîncep de la 1)"
-                )
             print(msg)
         return 0
     finally:

@@ -251,7 +251,6 @@ UI_PERSIST_KEYS = [
     "sim_depth_val",
     "autopilot_after_bench",
     "mail_on_complete",
-    "last_finalized_job_id",
     "wf_budget_min",
     "bench_hit_target",
 ]
@@ -309,9 +308,6 @@ DEFAULTS = {
     "sim_depth_val": 40,
     "autopilot_after_bench": True,
     "mail_on_complete": False,
-    # NU e o bifă de UI: ultimul job dus prin finalize (mail/shutdown). Împiedică
-    # re-procesarea aceluiași job la fiecare repornire (altfel = shutdown repetat).
-    "last_finalized_job_id": 0,
     # Buget walk-forward (minute). Plafon de siguranță (anulare automată), NU timp real de rulare:
     # cu WF paralel (~80% CPU) validarea completă la 30% depth durează minute, nu ore.
     # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
@@ -423,6 +419,22 @@ def _load_settings() -> None:
         os.environ["LOTO_BENCH_TARGET"] = str(target)
     except Exception as exc:
         logger.warning("init bench_hit_target check: %s", exc)
+
+
+def _legacy_finalized_job_id() -> int | None:
+    """`last_finalized_job_id` scris de versiunile vechi; None = cheia lipsește.
+
+    Jobul preluat de UI se marchează acum în baza stației (`ui_finalized_at`)."""
+    try:
+        data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or "last_finalized_job_id" not in data:
+        return None
+    try:
+        return int(data["last_finalized_job_id"] or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _save_settings() -> None:

@@ -58,11 +58,17 @@ def test_curated_benchmark_runs_only_relevant_methods_per_game():
     # 6/49. Validate membership, not only counts that can hide substitutions.
     from loto_enterprise.benchmark.methods import list_methods
 
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_SINGLE_PICK
+
     registry = set(list_methods())
     experimental = {"interval_extrema_k16"}
     assert set(matrix["loto_6_49"]) == registry
-    for game in games[1:]:
+    for game in ("loto_5_40", "joker_urna1"):
         assert set(matrix[game]) == registry - experimental
+    # Urna 2: fără metodele „bila precedentă” și fără duplicatul markov_pairs.
+    assert set(matrix["joker_urna2"]) == (
+        registry - experimental - EXCLUDED_FROM_SINGLE_PICK - {"naive_bayes_last"}
+    )
     for selected in matrix.values():
         assert "random" in selected
         assert "frequency" in selected

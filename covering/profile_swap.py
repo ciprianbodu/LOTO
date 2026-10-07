@@ -31,13 +31,34 @@ MAX_TICKETS = 512
 TARGETS = (3, 4, 5)
 
 
-def _event(v: int, mask: int, t: int) -> int:
-    """Bitset over pool subsets that meet ``mask`` in at least ``t`` places."""
-    positions = [i for i in range(v) if mask >> i & 1]
-    result = 0
-    for subset in combinations(positions, t):
-        result |= _supersets(v, sum(1 << i for i in subset))
-    return result
+@lru_cache(maxsize=16)
+def _position_sets(v: int) -> tuple[int, ...]:
+    """Entry p: bitset of the pool subsets that contain position p."""
+    return tuple(_supersets(v, 1 << p) for p in range(v))
+
+
+def _add_position(level: list[int], x: int, top: int) -> list[int]:
+    """Event levels after one more ticket position (``x`` = its subsets).
+
+    A subset meets the longer ticket in >= t places when it met the shorter
+    one in >= t, or in >= t-1 and contains the new position."""
+    level = list(level)
+    for t in range(top, 1, -1):
+        level[t] |= level[t - 1] & x
+    level[1] |= x
+    return level
+
+
+def _threshold_events(v: int, mask: int, pick: int) -> list[int]:
+    """``ev[t]``, t = 0..pick: pool subsets meeting ``mask`` in >= t places."""
+    xs = _position_sets(v)
+    level = [(1 << (1 << v)) - 1] + [0] * pick
+    k = 0
+    for p in range(v):
+        if mask >> p & 1:
+            k += 1
+            level = _add_position(level, xs[p], min(k, pick))
+    return level
 
 
 def _row(v: int, event: int, t: int) -> tuple[int, ...]:
@@ -55,8 +76,10 @@ def _improve(
     max_candidates: int,
 ) -> tuple[tuple[int, ...], int, int]:
     thresholds = tuple(range(1, pick + 1))
+    layers = _layers(v)
+    everything = (1 << (1 << v)) - 1
     selected = list(masks)
-    tickets = [{t: _event(v, m, t) for t in thresholds} for m in selected]
+    tickets = [_threshold_events(v, m, pick) for m in selected]
     current = {t: 0 for t in thresholds}
     for ev in tickets:
         for t in thresholds:
@@ -67,9 +90,11 @@ def _improve(
     strict = {
         t: min(draw_n, v) - t + 1 for t in TARGETS if t <= pick and t <= draw_n
     }
-    # Check the thresholds that most often reject first (high t is cheap).
+    # Rows compared high t first, layers ascending (the tie-break order).
     order = tuple(sorted(thresholds, reverse=True))
-    blocks = tuple(sum(1 << i for i in b) for b in combinations(range(v), pick))
+    combos = tuple(combinations(range(v), pick))
+    blocks = tuple(sum(1 << i for i in b) for b in combos)
+    xs = _position_sets(v)
     occupied = set(selected)
     swaps = evaluated = 0
     for _ in range(MAX_PASSES):
@@ -88,51 +113,93 @@ def _improve(
             required = 0
             for t in thresholds:
                 if rows[t][0] == full[t]:
-                    lost = current[t] & ~others[t] & _layers(v)[t]
+                    lost = current[t] & ~others[t] & layers[t]
                     while lost:
                         low = lost & -lost
                         required |= low.bit_length() - 1
                         lost ^= low
             if required.bit_count() >= pick:
                 continue
-            best = None
-            best_key = None
-            for block in blocks:
+            # A candidate's row = the other tickets' row + what it adds outside
+            # them, layer by layer. It can fall below the current row only
+            # where removing the old ticket loses subsets.
+            base = {t: _row(v, others[t], t) for t in thresholds}
+            free = {
+                t: [(everything ^ others[t]) & layers[h] for h in range(t, v + 1)]
+                for t in thresholds
+            }
+            checks = [
+                (t, i) for t in order for i in range(v - t + 1) if rows[t][i] > base[t][i]
+            ]
+            checked = {pair: k for k, pair in enumerate(checks)}
+            gains = [
+                (t, i, checked.get((t, i))) for t, n in strict.items() for i in range(n)
+            ]
+            best = best_rows = None
+            best_gain = 0
+            # Blocks come in lexicographic order: consecutive ones share a
+            # prefix of positions, whose event levels are kept.
+            states = [[everything] + [0] * pick] + [None] * pick
+            prev = None
+            for index, block in enumerate(blocks):
                 if evaluated >= max_candidates:
                     break
                 if block in occupied or block & required != required:
                     continue
                 evaluated += 1
-                new_ev = {}
-                new_rows = {}
-                ok = True
-                for t in order:
-                    ev = _event(v, block, t)
-                    row = _row(v, others[t] | ev, t)
-                    if any(a < b for a, b in zip(row, rows[t])):
-                        ok = False
+                combo = combos[index]
+                depth = 0
+                if prev is not None:
+                    while combo[depth] == prev[depth]:
+                        depth += 1
+                for d in range(depth, pick):
+                    states[d + 1] = _add_position(states[d], xs[combo[d]], d + 1)
+                prev = combo
+                ev = states[pick]
+                values = []
+                for t, i in checks:
+                    value = base[t][i] + (ev[t] & free[t][i]).bit_count()
+                    if value < rows[t][i]:
                         break
-                    new_ev[t], new_rows[t] = ev, row
-                if not ok:
-                    continue
-                gain = sum(
-                    new_rows[t][i] - rows[t][i]
-                    for t, n in strict.items()
-                    for i in range(n)
-                )
-                if gain <= 0:
-                    continue
-                key = (gain, tuple(new_rows[t] for t in order))
-                if best_key is None or key > best_key:
-                    best, best_key = (block, new_ev, new_rows), key
+                    values.append(value)
+                else:
+                    gain = 0
+                    for t, i, k in gains:
+                        if k is None:
+                            value = base[t][i] + (ev[t] & free[t][i]).bit_count()
+                        else:
+                            value = values[k]
+                        gain += value - rows[t][i]
+                    if gain <= 0 or (best is not None and gain < best_gain):
+                        continue
+                    if best is not None and gain == best_gain:
+                        # Equal gain: the rows decide, high t first, layers
+                        # ascending; equal rows keep the earlier block.
+                        greater = False
+                        for t in order:
+                            for i, kept in enumerate(best_rows[t]):
+                                value = base[t][i] + (ev[t] & free[t][i]).bit_count()
+                                if value != kept:
+                                    greater = value > kept
+                                    break
+                            else:
+                                continue
+                            break
+                        if not greater:
+                            continue
+                    best, best_gain = block, gain
+                    best_rows = {
+                        t: tuple(
+                            base[t][i] + (ev[t] & free[t][i]).bit_count()
+                            for i in range(v - t + 1)
+                        )
+                        for t in thresholds
+                    }
             if best is not None:
-                block, new_ev, new_rows = best
                 occupied.discard(old)
-                occupied.add(block)
-                selected[slot] = block
-                tickets[slot] = {
-                    t: new_ev.get(t, _event(v, block, t)) for t in thresholds
-                }
+                occupied.add(best)
+                selected[slot] = best
+                tickets[slot] = _threshold_events(v, best, pick)
                 current = {t: others[t] | tickets[slot][t] for t in thresholds}
                 rows = {t: _row(v, current[t], t) for t in thresholds}
                 swaps += 1

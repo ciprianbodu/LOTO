@@ -191,6 +191,12 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
                 conn.execute("ALTER TABLE jobs ADD COLUMN completed_at TIMESTAMP")
             if "worker_token" not in cols:
                 conn.execute("ALTER TABLE jobs ADD COLUMN worker_token TEXT")
+            # ui_finalized_at: UI-ul a preluat rezultatul (afișare, mail, shutdown).
+            # Marcajul stă pe rândul jobului, în baza stației: id-urile reîncep de
+            # la 1 pe fiecare stație, iar `.ui_state.json` din checkout se poate
+            # sincroniza între stații, deci un id salvat acolo poate fi al alteia.
+            if "ui_finalized_at" not in cols:
+                conn.execute("ALTER TABLE jobs ADD COLUMN ui_finalized_at TIMESTAMP")
         except sqlite3.OperationalError as exc:
             # "duplicate column" = altă conexiune a adăugat-o deja (race UI↔worker) → benign.
             # Altceva (lock/I/O OneDrive cât fișierul se sincronizează) → NU marcăm DB-ul
@@ -399,6 +405,19 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
             (JOB_COMPLETED,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def mark_job_finalized(job_id: int, db_path: str = DB_PATH) -> bool:
+    """Marchează jobul ca preluat de UI. Prima marcare rămâne; False = rând absent."""
+    init_job_queue(db_path)
+    with _conn(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET ui_finalized_at = COALESCE(ui_finalized_at, CURRENT_TIMESTAMP) "
+            "WHERE id = ?",
+            (int(job_id),),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def fail_job(

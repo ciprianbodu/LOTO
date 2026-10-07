@@ -652,3 +652,190 @@ def test_mail_best_draw_line_follows_the_calendar_not_the_row_order():
     line = app_nicegui._mail_best_draw_line(spec, df, [1, 2, 3, 4, 5, 6, 7])
     assert "ultima oară la 05-03-2020" in line
     assert "(2 extrageri" in line and "de 2 ori" in line
+
+
+# --------------------------------------------------------------------------- #
+# Decizia: avantajul trebuie să treacă și corecția pentru candidați
+# --------------------------------------------------------------------------- #
+def test_holm_adjustment_and_binomial_excess():
+    import pandas as pd
+
+    from loto_enterprise.benchmark.decision import excess_p_value, holm_adjusted
+
+    adj = holm_adjusted({"a": 0.01, "b": 0.04, "c": 0.03})
+    assert adj == {"a": 0.03, "c": 0.06, "b": 0.06}
+    frame = pd.DataFrame(
+        [
+            {"percentile": 10, "rate_3plus_k12": 0.9, "n_eval": 10, "n_test": 10},
+            {"percentile": 100, "rate_3plus_k12": 0.2, "n_eval": 100, "n_test": 100},
+        ]
+    )
+    # Fereastra completă decide: 20 de evenimente din 100 la p0 = 0,2.
+    from scipy.stats import binom
+
+    assert abs(excess_p_value(frame, "rate_3plus_k12", 0.2) - binom.sf(19, 100, 0.2)) < 1e-12
+    assert excess_p_value(frame, "rate_3plus_k12", None) is None
+
+
+def _gate_folds(rates: dict[str, float], p0: float, pool: int = 12) -> "pd.DataFrame":
+    import pandas as pd
+
+    sizes = {10: 78, 30: 233, 60: 466, 100: 777}
+    rows = []
+    for method, rate in {"random": p0, **rates}.items():
+        for pct, n in sizes.items():
+            rows.append({
+                "game": "loto_6_49", "method": method, "percentile": pct,
+                "is_random": False, "failed": False, "n_test": n, "n_eval": n,
+                f"k{pool}": 1.5, "avg_hits_topk": 0.7, f"k{pool}_bl": 1.5,
+                f"rate_3plus_k{pool}": rate, f"tiebreak_k{pool}": 0.1, "runtime_sec": 0.1,
+            })
+    return pd.DataFrame(rows)
+
+
+def test_a_lucky_winner_among_many_candidates_is_flagged_but_still_chosen(monkeypatch):
+    from loto_enterprise.benchmark import decision
+    from loto_enterprise.benchmark.methods import METHODS
+
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    names = sorted(set(METHODS) - set(decision.EXCLUDED_FROM_PRODUCTION) - {"random"})[:40]
+    p0 = decision.expected_random_rate(49, 6, 12, 3)
+    # +0,8..1,2 pp peste rata aleatoare, la fiecare dintre 40 de candidați.
+    weak = {name: p0 + 0.008 + i * 1e-4 for i, name in enumerate(names)}
+    cfg = decision.decide_optimal_config_for_pool(_gate_folds(weak, p0), "loto_6_49", 12, 6)
+    assert cfg["scorer"] == names[-1] and cfg["low_confidence"] is False
+    assert cfg["multiplicity"]["candidates"] == 40
+    assert cfg["multiplicity"]["proven"] is False
+    assert "avantaj nedemonstrat" in cfg["rationale"]
+    assert ui_bench._multiplicity_note(cfg).startswith("⚠️ Avantaj nedemonstrat")
+
+    strong = {**weak, names[0]: p0 + 0.08}
+    cfg = decision.decide_optimal_config_for_pool(_gate_folds(strong, p0), "loto_6_49", 12, 6)
+    assert cfg["scorer"] == names[0] and cfg["multiplicity"]["proven"] is True
+    assert ui_bench._multiplicity_note(cfg) is None
+
+
+# --------------------------------------------------------------------------- #
+# Urna 2: metodele care repetă bila precedentă și duplicatul naive_bayes_last
+# --------------------------------------------------------------------------- #
+def test_urn2_decision_skips_methods_that_repeat_the_previous_ball(monkeypatch):
+    import pandas as pd
+
+    from loto_enterprise.benchmark import decision
+
+    rows = []
+    for method, rate in (("random", 0.05), ("markov_self_state", 0.30), ("ewma_hl30", 0.09)):
+        for pct, n in {10: 66, 30: 197, 60: 394, 100: 657}.items():
+            rows.append({
+                "game": "joker_urna2", "method": method, "percentile": pct,
+                "is_random": False, "failed": False, "n_test": n, "n_eval": n,
+                "k1": rate, "k1_bl": rate, "avg_hits_topk": rate, "rate_1plus_k1": rate,
+                "tiebreak_k1": 0.1, "runtime_sec": 0.1,
+            })
+    cfg = decision.decide_optimal_config_for_pool(pd.DataFrame(rows), "joker_urna2", 1, 1)
+    assert cfg["scorer"] == "ewma_hl30"
+    assert "markov_self_state" not in cfg["ranked_methods"]
+
+
+def test_stale_urn2_decision_with_a_previous_ball_method_falls_to_frequency(
+    monkeypatch, tmp_path
+):
+    entry = {"scorer": "markov_self_state", "ensemble": [{"method": "markov_self_state", "weight": 1.0}]}
+    ms = _decision_file(
+        monkeypatch,
+        tmp_path,
+        {
+            "joker_urna2": {"draw_n": 1, "auto_pilot_per_pool": {"k1": entry}},
+            "loto_6_49": {"draw_n": 6, "auto_pilot_per_pool": {"k12": entry}},
+        },
+    )
+    assert ms.get_winner_name("joker_urna2", 1) == "frequency"
+    assert ms.rejected_decision_scorer("joker_urna2", 1) == "markov_self_state"
+    # Pe jocurile cu pool rămâne o metodă de recență obișnuită.
+    assert ms.get_winner_name("loto_6_49", 12) == "markov_self_state"
+
+
+def test_urn2_curation_drops_excluded_and_duplicate_methods():
+    from loto_enterprise.benchmark.curated import load_per_game
+
+    urn2 = set(load_per_game()["joker_urna2"])
+    assert not urn2 & {"markov_self_state", "vlmm_self_k3", "naive_bayes_last"}
+    assert {"markov_pairs", "frequency"} <= urn2
+
+
+def _station_db(tmp_path, monkeypatch):
+    """Coada stației, izolată: citirile și marcajul UI-ului pe aceeași bază."""
+    import functools
+    import json
+
+    import job_queue as queue
+    from ui_shared import pack_queue_result
+
+    database = str(tmp_path / "station.db")
+    jid = queue.submit_job("pipeline", json.dumps({"datasets": []}), db_path=database)
+    queue.fetch_pending_job(db_path=database)
+    queue.complete_job(jid, pack_queue_result(([], 0)), db_path=database)
+    for name in ("get_latest_completed_job", "mark_job_finalized", "get_job_status"):
+        monkeypatch.setattr(
+            app_nicegui, name, functools.partial(getattr(queue, name), db_path=database)
+        )
+    for name in ("_save_report_file",):
+        monkeypatch.setattr(app_nicegui, name, lambda: None)
+    for key in ("active_job_id", "results", "result_sources", "results_recovered"):
+        monkeypatch.setitem(app_nicegui.STATE, key, None)
+    return database, jid
+
+
+def test_another_stations_marker_does_not_hide_this_stations_job(tmp_path, monkeypatch):
+    """`.ui_state.json` din checkout se sincronizează între stații, iar id-urile
+    pornesc de la 1 pe fiecare. Id-ul 1 salvat de altă stație nu mai ascunde
+    jobul #1 nepreluat al acestei stații: marcajul stă pe rândul din baza ei."""
+    import json
+
+    import job_queue as queue
+
+    database, jid = _station_db(tmp_path, monkeypatch)
+    app_nicegui.UI_STATE_FILE.write_text(
+        json.dumps({"last_finalized_job_id": jid + 1, "pool_size_val": 12}),
+        encoding="utf-8",
+    )
+    app_nicegui._migrate_legacy_finalized_marker()
+    saved = json.loads(app_nicegui.UI_STATE_FILE.read_text(encoding="utf-8"))
+    assert "last_finalized_job_id" not in saved
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"] is None
+
+    # A doua stație scrie din nou id-ul (versiune veche): nu mai contează.
+    app_nicegui.UI_STATE_FILE.write_text(
+        json.dumps({"last_finalized_job_id": jid}), encoding="utf-8"
+    )
+    app_nicegui._recover_completed_job(allow_finalize=False)
+    assert app_nicegui.STATE["results"] == ([], 0)
+    assert f"job #{jid}" in app_nicegui.STATE["results_recovered"]
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
+
+
+def test_legacy_marker_of_the_latest_job_is_migrated_once(tmp_path, monkeypatch):
+    """Prima pornire după actualizare păstrează regula veche o dată: jobul deja
+    preluat nu reapare. Apoi marcajul e pe rând, iar cheia veche dispare."""
+    import json
+
+    import job_queue as queue
+
+    database, jid = _station_db(tmp_path, monkeypatch)
+    app_nicegui.UI_STATE_FILE.write_text(
+        json.dumps({"last_finalized_job_id": jid}), encoding="utf-8"
+    )
+    app_nicegui._migrate_legacy_finalized_marker()
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
+    saved = json.loads(app_nicegui.UI_STATE_FILE.read_text(encoding="utf-8"))
+    assert "last_finalized_job_id" not in saved
+    app_nicegui._recover_completed_job(allow_finalize=False)
+    assert app_nicegui.STATE["results"] is None
+
+
+def test_settings_without_the_legacy_key_are_not_rewritten(tmp_path, monkeypatch):
+    _station_db(tmp_path, monkeypatch)
+    saves = []
+    monkeypatch.setattr(app_nicegui, "_save_settings", lambda: saves.append(1))
+    app_nicegui._migrate_legacy_finalized_marker()
+    assert saves == []

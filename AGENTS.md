@@ -45,7 +45,8 @@ Snapshot verificat la 2026-09-15:
   pe fiecare joc, fara preselectie pe istoric; Re-Bench ruleaza matricea completa
   (52 pe fiecare joc, cu `random` adaugat de runner);
 - `EXCLUDED_FROM_PRODUCTION` = `{random, neighbor_adjacent, repeat_last_draw,
-  rwr_last_draw, haar_multiscale}`;
+  rwr_last_draw, haar_multiscale, interval_extrema_k16}`; pe Urna 2 si
+  `EXCLUDED_FROM_SINGLE_PICK` = `{markov_self_state, vlmm_self_k3}` (§4.2);
   vechile filtre de clasa (parity_balance, prime_bias, 649_decade_hot etc.) nu
   mai exista ca metode. Un nume necunoscut sau exclus din `best_methods.json`
   cade determinist pe `frequency` (`_sanitize_production_name`);
@@ -78,6 +79,37 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Audit global 2026-10-07, runda 2
+
+- Randul 5/40 din 24-10-2024 a fost corectat separat (PR #144, sectiunea
+  urmatoare), iar validarea PushHistory e in PR #145; runda 2 trateaza
+  celelalte puncte ramase de decis si nu modifica lansatorul.
+- Decizie: `multiplicity` pe fiecare celula, test binomial pe fereastra
+  completa cu corectia Holm peste candidati (§5, punctul 10). Scorerul ales nu
+  se schimba; pe `folds.csv` versionat, 45 din 46 de celule raman cu avantaj
+  nedemonstrat.
+- Urna 2: `EXCLUDED_FROM_SINGLE_PICK` (`markov_self_state`, `vlmm_self_k3`,
+  bila precedenta in 66% si 63% din pasi pe extrageri uniforme, §4.2);
+  `per_game.joker_urna2` are 48 de metode, fara cele doua si fara
+  `naive_bayes_last` (duplicat al `markov_pairs`). Pe jocurile cu pool nu s-a
+  introdus poarta pe extragerea precedenta: ocupa cel mult 6 din K locuri, iar
+  restul pool-ului ramane clasamentul metodei.
+- Jobul preluat de UI se marcheaza in baza statiei, nu in checkout-ul
+  sincronizat (§4.4).
+- Swap-urile de profil dau acelasi rezultat de ~7 ori mai repede la garantia
+  egala cu biletul (pool 16, plafon 10: 9,41 s -> 1,43 s la pick 6), §7. Fara
+  bump de cache.
+- Panoul de rezultate ramane neredesenat la esecul recalcularii deciziei,
+  intentionat (§5, „Coerenta outputului”).
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 95 fisiere `test_*.py`,
+  2248 teste trecute, 25 sarite (lansatorul, numai pe Windows), zero esecuri;
+  `audit_application.py`: 13 istorice, 848 verificari de paritate, 151
+  designuri, 26 de pipeline-uri, worker separat pe 13 jocuri si UI HTTP 200,
+  fisierele de productie neatinse. Marcajul, cap-coada pe o baza izolata:
+  worker real, prima pornire UI recupereaza jobul o data si il marcheaza,
+  a doua nu-l mai reia, iar cheia veche dispare din `.ui_state.json`.
+- Raport: `scripts/analysis/audit_application_report_2026-10-07.md`, „Runda 2”.
 
 ### Corectura istoricului 5/40 — 2026-10-07
 
@@ -144,11 +176,9 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 - Afisare: acoperirea 99,95% nu mai apare 100.0%; pool-ul jucat in Istoric
   hits; raportul spune PARTIAL; variantele dispersate respecta limita de
   consecutive cand baza o permite, altfel nota spune limita atinsa.
-- Ramase de decis (raport): poarta de consistenta pe ferestre imbricate;
-  metode care reiau ultima extragere; duplicatul
-  `naive_bayes_last`/`markov_pairs` pe Urna 2; validarea PushHistory;
-  marcajul de job finalizat in checkout-ul sincronizat. Randul 24-10-2024 din
-  `_ISTORIC/loto_5_40.csv` a fost corectat in aceeasi zi (sectiunea de mai sus).
+- Ramasele de decis au fost tratate in aceeasi zi: randul 5/40 in „Corectura
+  istoricului 5/40”, validarea PushHistory in PR #145, celelalte in runda 2
+  (sectiunile de mai sus).
 - Verificat pe Python 3.14.7 / Linux, fara PowerShell: 95 fisiere `test_*.py`,
   2152 teste trecute, 40 sarite (lansatorul, numai pe Windows), zero esecuri;
   `audit_application.py`: 13 istorice, 848 verificari de paritate, 151
@@ -520,6 +550,14 @@ UI-ul face polling la o secunda, fara reload complet.
 - `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` si `haar_multiscale`
   raman in registry pentru bench si sunt interzise in productie
   (`EXCLUDED_FROM_PRODUCTION`).
+- Pe o urna cu o singura bila (Joker Urna 2 si echivalentele straine),
+  `markov_self_state` si `vlmm_self_k3` aleg bila precedenta in 66%, respectiv
+  63% din pasi chiar pe extrageri uniforme (5% la intamplare). Decizia le sare
+  la `draw_n == 1`, iar productia le respinge pe Urna 2
+  (`EXCLUDED_FROM_SINGLE_PICK`). Pe jocurile cu pool raman metode de recenta,
+  judecate de bench. `test_no_structural_filters` masoara rata pe extrageri
+  uniforme si opreste orice alta metoda care ar repeta bila in majoritatea
+  pasilor.
 
 ### 4.3 Metode active si curate
 
@@ -538,8 +576,11 @@ UI-ul face polling la o secunda, fara reload complet.
 - `test_no_structural_filters.py` masoara scorurile pentru clase statice;
   nu constituie dovada unui avantaj predictiv.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
-  azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
-  istoric). `random` si `frequency` trebuie sa ramana in lista activa.
+  azi contine toate metodele de productie + `frequency` pe fiecare joc (fara
+  preselectie pe istoric). Exceptie: `per_game.joker_urna2` nu are
+  `markov_self_state`, `vlmm_self_k3` (bila precedenta, §4.2) si
+  `naive_bayes_last`, care dadea pe Urna 2 acelasi clasament ca `markov_pairs`
+  (658 din 658 de pasi). `random` si `frequency` trebuie sa ramana in lista activa.
 - Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`),
   pe alt `--istoric` sau cu `--block-size` diferit de 1 nu trebuie sa rescrie
   decizia de productie fara `--force-decision` (`reduced_run_reason`).
@@ -551,6 +592,13 @@ UI-ul face polling la o secunda, fara reload complet.
   singur UPDATE atomic; `CANCELLED`, `PENDING` reprogramat sau jobul disparut
   cer workerului sa se opreasca si nu au voie sa-si piarda logul de stare.
 - Nu scrie `pool_history.json` din pasi WF/backtest.
+- Jobul preluat de UI (afisare, mail, shutdown) se marcheaza pe randul lui din
+  baza statiei (`jobs.ui_finalized_at`, `mark_job_finalized`), nu in
+  `.ui_state.json`: checkout-ul se poate sincroniza intre statii, iar id-urile
+  pornesc de la 1 pe fiecare. Golirea cozii sterge marcajul odata cu jobul.
+  Cheia veche `last_finalized_job_id` se migreaza o data la pornirea UI
+  (ultimul job COMPLETED cu acel id) si dispare din fisier. In teste,
+  `conftest.py` redirectioneaza marcarea spre o baza temporara.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.
 - Pasii walk-forward paraleli primesc setarile pe NUME (`_wf_worker_step` ia un
@@ -667,7 +715,18 @@ Pentru fiecare joc si pool:
    engine/UI/cache — plafonul creste numai daca benchmarkul ajunge sa evalueze
    blendul direct (scoruri/pool per pas), nu doar ratele individuale;
 9. lipsa metricei sau lipsa metodelor calificate produce `low_confidence` si
-   fallback conservator, nu o afirmatie de avantaj statistic.
+   fallback conservator, nu o afirmatie de avantaj statistic;
+10. poarta de consistenta pe ferestre imbricate spune putin: un singur
+   eveniment in ultimele 10% conteaza in 3 din 4 ferestre, iar dintre ~50 de
+   candidati unul trece aproape sigur din noroc. Fiecare celula primeste deci
+   `multiplicity`: test binomial unilateral pe fereastra completa fata de rata
+   aleatoare (`excess_p_value`), cu corectia Holm peste candidatii celulei
+   (`holm_adjusted`, `MULTIPLICITY_ALPHA = 0.05`). Scorerul ales si
+   `low_confidence` nu se schimba; `proven = false` apare in rationale, in
+   clasament, in panoul de rezultate si in notificarea Auto-Pilot („avantaj
+   nedemonstrat”). Corectia nu se face si peste celulele unui joc: pe
+   `folds.csv` versionat, 45 din 46 de celule sunt nedemonstrate, iar singura
+   sub prag (6/49 k11, Holm 0,029) nu ar trece una.
 
 ### Coerenta outputului
 
@@ -773,7 +832,9 @@ Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar
 14.09.2026; decizia se reface la primul Re-Bench pe cele 50 de metode noi.
 Poarta `tiebreak_k1` ramane: o metoda cu doar cateva niveluri de scor pe 1..20,
 care alege mereu acelasi numar prin tie-break, este exclusa ca dependenta de
-tie-break, nu transformata artificial in castigator. Pana la un Re-Bench pe
+tie-break, nu transformata artificial in castigator. `markov_self_state` si
+`vlmm_self_k3` nu intra in decizia si nici in curarea Urnei 2: top-1 e acolo
+bila precedenta (§4.2). Pana la un Re-Bench pe
 extrageri viitoare, un rezultat de clasament NU e dovada de avantaj (vezi
 limita de validitate din §5).
 
@@ -997,10 +1058,15 @@ daca profilul EXACT `wheel_hit_profile` nu scade la NICIUN prag si NICIO marime
 a intersectiei si creste strict la 3+/4+/5+ posibile. Dominanta pastreaza singura
 garantiile: counts[t][t] (cover clasic), counts[p][t] (t daca p), counts[1][1]
 (numerele jucate). Acelasi numar de bilete distincte, acelasi pool. Limite:
-pool 5..16, pick 3..6, cel mult 512 bilete, doua treceri, 25000 candidati
-(~2-3 s la pool 16 pe garantii sub bilet; cu garantia egala cu biletul si
-plafon, pool 16: ~9 s la pick 6 si ~6 s la pick 5, la fiecare pas WF, masurat
-pe Linux la auditul 2026-10-07); memoizare limitata. Castiguri masurate
+pool 5..16, pick 3..6, cel mult 512 bilete, doua treceri, 25000 candidati;
+memoizare limitata. Evenimentele unui candidat se construiesc dintr-o singura
+trecere peste pozitiile biletului, cu prefixul comun al blocurilor consecutive
+pastrat; dominanta se verifica numai pe straturile unde biletul scos pierde
+ceva, iar randurile complete se calculeaza numai la castig egal. Rezultatul e
+identic cu cautarea dinainte (`test_profile_swap.py` pastreaza cautarea de
+referinta si o compara). Pool 16, plafon 10, Linux: garantia egala cu biletul
+1,4 s la pick 6 si 1,3 s la pick 5 (inainte 9,4 s si 5,5 s), garantia 4 ~0,5 s,
+generarea completa a wheel-ului. Castiguri masurate
 in `scripts/analysis/hit_opt_report_2026-10-02.md` (`bench_hit_profile.py`);
 cele mai mari la lotto designs, mici la coverele clasice. Fara afirmatie
 predictiva: probabilitatea de hit a POOL-ului nu se schimba.

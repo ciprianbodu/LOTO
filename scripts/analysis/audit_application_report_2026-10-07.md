@@ -137,7 +137,10 @@ Nu se promovează nicio metodă și nu se afirmă avantaj predictiv.
 26. **Reluarea compara număr inegal de variante** pe pașii din fallback-ul de
     frecvență (1 față de 3). Pașii aceștia se numără acum indisponibili.
 
-## Rămase de decis
+## Rămase de decis după runda 1
+
+Punctul 1 a fost rezolvat separat, în PR #144, iar punctul 5 este în PR
+#145; celelalte, în runda 2 (secțiunea de la final).
 
 1. **`_ISTORIC/loto_5_40.csv`, rândul 1538.** `24-10-2024,13,34,11,16,10,39`
    copiază extragerea din 27-10-2024. Extragerea reală din 24-10-2024 este
@@ -208,3 +211,89 @@ oricum orice extragere nouă (hash-ul istoricului e în cheia foldurilor).
   (0 din 90 de cazuri), reluare o singură dată (3 calcule, nu 6), 0 diferențe
   de decizie la permutarea rândurilor, auditul rezervei pe toate cele șase
   scenarii.
+
+## Runda 2
+
+La cererea utilizatorului, punctele rămase au fost tratate în aceeași zi.
+Panoul de rezultate rămâne neredesenat la eșecul recalculării deciziei:
+secțiunile deschise se păstrează intenționat (AGENTS.md §5, commit `52b9523`).
+
+1. **Rândul 1538 din `_ISTORIC/loto_5_40.csv`** a fost corectat în PR #144,
+   integrat pe `main` înaintea rundei 2, împreună cu erata experimentului și
+   testul care respinge două rânduri consecutive identice
+   (AGENTS.md, „Corectura istoricului 5/40”). Runda 2 nu îl mai atinge.
+2. **Poarta de consistență.** Fiecare celulă a deciziei primește
+   `multiplicity`: test binomial unilateral pe fereastra completă, excesul de
+   evenimente față de rata aleatoare, cu corecția Holm peste candidații
+   celulei. Ferestrele sunt sufixe ale aceluiași walk-forward; fereastra
+   completă le conține pe celelalte, deci niciun eveniment nu se numără de două
+   ori. Scorerul ales și `low_confidence` nu se schimbă: o poartă mai strictă
+   ar trimite aproape toate celulele pe `frequency`, schimbare de metodologie
+   care nu s-a decis aici. Verdictul apare în rationale, în clasament, în
+   panoul de rezultate și în notificarea Auto-Pilot. Pe `folds.csv` versionat,
+   45 din 46 de celule rămân cu avantaj nedemonstrat. Singura sub prag, 6/49
+   k11 (`croston_interval`, p = 0,00068, Holm 0,029 pe 43 de candidați), nu ar
+   trece o corecție peste cele 46 de celule; corecția aceasta nu se aplică.
+3. **Metodele care reiau ultima extragere.** Pe Urna 2, top-1 este bila
+   precedentă la `markov_self_state` (66% din pași pe extrageri uniforme) și
+   la `vlmm_self_k3` (63%), față de 5% la întâmplare: clasa „ultima bilă”, ca
+   la `haar_multiscale`. Ambele intră în `EXCLUDED_FROM_SINGLE_PICK`. Decizia
+   le sare la `draw_n == 1`, iar producția le respinge pe Urna 2 și cade pe
+   `frequency` când un `best_methods.json` vechi le numește.
+   `test_no_structural_filters` măsoară rata pe 100 de istorii uniforme și
+   oprește orice altă metodă care ar alege bila precedentă în majoritatea
+   pașilor. Pe jocurile cu pool nu s-a introdus poartă `lastdraw_kN`:
+   extragerea precedentă ocupă cel mult 6 din cele K locuri, restul pool-ului
+   rămâne clasamentul metodei, iar bench-ul o compară cu rata
+   hipergeometrică. Poarta ar cere o coloană nouă în bench (bump și Re-Bench
+   complet) și ar exclude metode de recență pentru o proprietate care nu
+   constrânge combinația.
+4. **Urna 2 fără duplicat.** `per_game.joker_urna2` are 48 de metode: fără
+   `naive_bayes_last` (același clasament ca `markov_pairs` în 658 din 658 de
+   pași) și fără cele două metode de la punctul 3.
+5. **PushHistory** este tratat separat, în PR #145: `git add -u`, refuz per
+   fișier pentru rândurile șterse sau modificate, fișierele non-CSV și cele
+   noi, plus validarea rândurilor adăugate cu `verifica_istoric.py`, testate pe
+   Windows. Runda 2 nu modifică lansatorul, ca să nu existe două implementări.
+6. **Marcajul jobului preluat de UI** stă pe rândul jobului din baza stației
+   (`jobs.ui_finalized_at`, migrare aditivă, `mark_job_finalized`), nu în
+   `.ui_state.json` din checkout-ul sincronizat. Golirea cozii șterge marcajul
+   odată cu jobul, deci un job nou cu același id pornește nemarcat. Cheia
+   veche se migrează o dată la pornirea UI, cu regula veche (ultimul job
+   COMPLETED cu acel id), apoi dispare din fișier. `reset_jobs.py` păstrează
+   ultimul COMPLETED nemarcat. `conftest.py` redirecționează marcarea din teste
+   spre o bază temporară.
+7. **Swap-urile de profil**, mai rapide cu rezultat identic. Evenimentele unui
+   candidat se construiesc dintr-o singură trecere peste pozițiile biletului,
+   iar prefixul comun al blocurilor consecutive (ordine lexicografică) se
+   păstrează; dominanța se verifică numai pe straturile unde biletul scos
+   pierde ceva; rândurile complete se calculează numai la câștig egal.
+   Comparat cu căutarea veche pe 591 de cazuri (81 capturate din
+   `generate_wheel`, 400 aleatoare, 110 din designuri lotto și dispatch):
+   aceleași bilete, aceleași schimburi, același număr de candidați evaluați.
+   `test_profile_swap.py` păstrează căutarea de referință și o compară; testul
+   prinde mutațiile în departajare, în verificarea dominanței și în recurența
+   evenimentelor. Generarea completă, pool 16, plafon 10:
+
+   | Bilet / garanție | Înainte | Acum |
+   |---|---:|---:|
+   | 6 / 6 | 9,41 s | 1,43 s |
+   | 5 / 5 | 5,50 s | 1,27 s |
+   | 6 / 4 | 1,05 s | 0,51 s |
+   | 5 / 4 | 0,97 s | 0,40 s |
+
+   Fără bump de cache: rezultatul serializat nu se schimbă.
+
+Verificare, runda 2:
+
+- Suita completă pe Python 3.14.7 / Linux cu pwsh 7.6.2: 95 de fișiere
+  `test_*.py`, **2248 de teste trecute, 25 omise** (lansatorul, numai pe
+  Windows), zero eșecuri, 273 s.
+- `scripts/analysis/audit_application.py`: 53 de metode, curare 52/51/51/48,
+  13 istorice, 848 de verificări de paritate, 151 de designuri, 26 de
+  pipeline-uri, worker separat pe 13 jocuri, UI HTTP 200, fișierele de
+  producție neatinse.
+- Marcajul, cap-coadă pe o bază izolată: worker-ul real termină jobul, prima
+  pornire a UI-ului îl recuperează o singură dată și îl marchează, a doua nu-l
+  mai reia; cheia veche a altei stații dispare din `.ui_state.json`, iar
+  checkout-ul nu primește `raport_complet.txt` sau `.ui_state.json`.

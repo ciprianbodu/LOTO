@@ -153,3 +153,174 @@ def test_540_full_ticket_keeps_base_without_filler_slots():
     )
     assert n_base == 8 == result["guarantee_variants"]
     assert result["variants"] == before
+
+
+# --------------------------------------------------------------------------- #
+# Căutarea rapidă (2026-10-07) dă exact rezultatul căutării de referință.
+# --------------------------------------------------------------------------- #
+
+
+def _reference_event(v, mask, t):
+    """Definiția: subseturile pool-ului care ating `mask` în cel puțin t locuri."""
+    from covering.higher_hits import _supersets
+
+    positions = [i for i in range(v) if mask >> i & 1]
+    result = 0
+    for subset in combinations(positions, t):
+        result |= _supersets(v, sum(1 << i for i in subset))
+    return result
+
+
+def _reference_improve(v, pick, masks, draw_n, frozen, max_candidates):
+    """Căutarea dinaintea accelerării: evenimente prin reuniuni de supramulțimi,
+    rânduri complete pentru fiecare candidat, cheie (câștig, rânduri)."""
+    from math import comb
+
+    from covering.higher_hits import _layers
+    from covering.profile_swap import MAX_PASSES, TARGETS, _row
+
+    thresholds = tuple(range(1, pick + 1))
+    selected = list(masks)
+    tickets = [{t: _reference_event(v, m, t) for t in thresholds} for m in selected]
+    current = {t: 0 for t in thresholds}
+    for ev in tickets:
+        for t in thresholds:
+            current[t] |= ev[t]
+    rows = {t: _row(v, current[t], t) for t in thresholds}
+    full = {t: comb(v, t) for t in thresholds}
+    strict = {t: min(draw_n, v) - t + 1 for t in TARGETS if t <= pick and t <= draw_n}
+    order = tuple(sorted(thresholds, reverse=True))
+    blocks = tuple(sum(1 << i for i in b) for b in combinations(range(v), pick))
+    occupied = set(selected)
+    swaps = evaluated = 0
+    for _ in range(MAX_PASSES):
+        changed = False
+        for slot in range(frozen, len(selected)):
+            if evaluated >= max_candidates:
+                break
+            old = selected[slot]
+            others = {t: 0 for t in thresholds}
+            for i, ev in enumerate(tickets):
+                if i != slot:
+                    for t in thresholds:
+                        others[t] |= ev[t]
+            required = 0
+            for t in thresholds:
+                if rows[t][0] == full[t]:
+                    lost = current[t] & ~others[t] & _layers(v)[t]
+                    while lost:
+                        low = lost & -lost
+                        required |= low.bit_length() - 1
+                        lost ^= low
+            if required.bit_count() >= pick:
+                continue
+            best = best_key = None
+            for block in blocks:
+                if evaluated >= max_candidates:
+                    break
+                if block in occupied or block & required != required:
+                    continue
+                evaluated += 1
+                new_rows = {}
+                for t in order:
+                    row = _row(v, others[t] | _reference_event(v, block, t), t)
+                    if any(a < b for a, b in zip(row, rows[t])):
+                        break
+                    new_rows[t] = row
+                else:
+                    gain = sum(
+                        new_rows[t][i] - rows[t][i]
+                        for t, n in strict.items()
+                        for i in range(n)
+                    )
+                    key = (gain, tuple(new_rows[t] for t in order))
+                    if gain > 0 and (best_key is None or key > best_key):
+                        best, best_key = block, key
+            if best is not None:
+                occupied.discard(old)
+                occupied.add(best)
+                selected[slot] = best
+                tickets[slot] = {t: _reference_event(v, best, t) for t in thresholds}
+                current = {t: others[t] | tickets[slot][t] for t in thresholds}
+                rows = {t: _row(v, current[t], t) for t in thresholds}
+                swaps += 1
+                changed = True
+        if not changed or evaluated >= max_candidates:
+            break
+    return tuple(selected), swaps, evaluated
+
+
+def test_threshold_events_match_the_definition():
+    import random
+
+    from covering.profile_swap import _threshold_events
+
+    rng = random.Random(7)
+    for _ in range(40):
+        v = rng.randint(5, 12)
+        pick = rng.randint(3, min(6, v - 1))
+        mask = sum(1 << i for i in rng.sample(range(v), pick))
+        events = _threshold_events(v, mask, pick)
+        assert events[0] == (1 << (1 << v)) - 1
+        for t in range(1, pick + 1):
+            assert events[t] == _reference_event(v, mask, t)
+
+
+def _random_wheels(seed, count):
+    import random
+
+    rng = random.Random(seed)
+    for _ in range(count):
+        v = rng.randint(6, 12)
+        pick = rng.randint(3, min(6, v - 1))
+        blocks = list(combinations(range(v), pick))
+        chosen = rng.sample(blocks, rng.randint(2, min(24, len(blocks))))
+        masks = tuple(sum(1 << i for i in b) for b in chosen)
+        draw_n = rng.choice([pick, 5, 6])
+        frozen = rng.randint(0, len(masks) - 1)
+        yield v, pick, masks, max(3, draw_n), frozen, rng.choice([1500, 3000])
+
+
+def test_fast_search_returns_exactly_the_reference_result():
+    """Aceleași bilete, aceleași schimburi, același număr de candidați evaluați,
+    inclusiv prefix înghețat, extrageri de 5 și 6 și plafon de candidați."""
+    from covering.profile_swap import _improve
+
+    seen_swaps = 0
+    for args in _random_wheels(1, 16):
+        _improve.cache_clear()
+        fast = _improve(*args)
+        assert fast == _reference_improve(*args), args[:2]
+        seen_swaps += fast[1]
+    # Testul trebuie să conțină și schimburi, nu doar intrări lăsate neschimbate.
+    assert seen_swaps > 0
+
+
+def test_equal_rows_keep_the_first_block_like_the_reference():
+    """Două bilete: blocurile disjuncte de al doilea au rânduri identice. Ca în
+    căutarea de referință, rămâne primul în ordine lexicografică."""
+    from covering.profile_swap import _improve
+
+    args = (9, 4, (0b1111, 0b10111), 6, 0, 3000)
+    _improve.cache_clear()
+    assert _improve(*args) == _reference_improve(*args) == ((0b11101000, 0b10111), 1, 496)
+
+
+def test_fast_search_matches_the_reference_on_a_lotto_design(monkeypatch):
+    from covering.profile_swap import _improve
+
+    captured = []
+
+    def _capture(pool, tickets, draw_n=None, frozen=0, **kwargs):
+        captured.append((list(pool), [sorted(t) for t in tickets], draw_n, frozen))
+        return [sorted(t) for t in tickets], {"applied": False}
+
+    monkeypatch.setattr(dispatch, "improve_hit_profile", _capture)
+    dispatch.generate_wheel("auto", list(range(1, 12)), 6, 3, 0, None, condition=4, draw_n=6)
+    assert captured
+    pool, tickets, draw_n, frozen = captured[0]
+    pos = {n: i for i, n in enumerate(pool)}
+    masks = tuple(sum(1 << pos[n] for n in t) for t in tickets)
+    args = (len(pool), 6, masks, draw_n, frozen, 2000)
+    _improve.cache_clear()
+    assert _improve(*args) == _reference_improve(*args)

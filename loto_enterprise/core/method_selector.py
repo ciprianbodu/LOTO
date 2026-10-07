@@ -171,7 +171,7 @@ def has_decision(game_key: str, config_path: str | None = None) -> bool:
     return bool(isinstance(games, dict) and games.get(game_key))
 
 
-def _production_forbidden() -> frozenset[str]:
+def _production_forbidden(game_key: str | None = None) -> frozenset[str]:
     """Metode care NU au voie să scocheze pool-ul de producție.
 
     = EXCLUDED_FROM_PRODUCTION (`random` + filtrele de apartenență
@@ -190,9 +190,15 @@ def _production_forbidden() -> frozenset[str]:
         "haar_multiscale",
     }
     try:
-        from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+        from loto_enterprise.benchmark.decision import (
+            EXCLUDED_FROM_PRODUCTION,
+            EXCLUDED_FROM_SINGLE_PICK,
+        )
 
         forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
+        # Urna cu o singură bilă: metodele care repetă bila precedentă.
+        if game_key is not None and _is_urna2_key(game_key):
+            forbidden |= {str(m) for m in EXCLUDED_FROM_SINGLE_PICK}
     except Exception as exc:  # noqa: BLE001
         # "random" (hardcodat mai sus) tot blochează chiar dacă importul e spart.
         logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)
@@ -222,7 +228,9 @@ def _registry_gap_hint(registry_error: str | None = None) -> str:
     )
 
 
-def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
+def _sanitize_production_name(
+    name: str | None, *, context: str, game_key: str | None = None
+) -> str | None:
     """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
 
     Respinge: random, filtrele last-draw/spațiale, orice nume care nu e în
@@ -240,7 +248,7 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
         name = str(name)
         METHODS = {}
         registry_error = f"{type(exc).__name__}: {exc}"
-    if name in _production_forbidden():
+    if name in _production_forbidden(game_key):
         logger.warning(
             "[method_selector] %s %r interzis în producție (EXCLUDED_FROM_PRODUCTION) — skip",
             context,
@@ -262,7 +270,9 @@ def _sanitize_production_name(name: str | None, *, context: str) -> str | None:
     return name
 
 
-def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
+def _sanitize_ap_production(
+    entry: dict, game_key: str | None = None
+) -> tuple[str | None, list[dict], bool]:
     """Aliniază scorer + ensemble dintr-o intrare auto_pilot (sursă unică).
 
     Returnează ``(scorer, clean_ensemble, scor_salvaged)``.
@@ -274,14 +284,18 @@ def _sanitize_ap_production(entry: dict) -> tuple[str | None, list[dict], bool]:
     if not isinstance(entry, dict):
         return None, [], True
     raw_scorer = entry.get("scorer")
-    scorer = _sanitize_production_name(raw_scorer, context="ap scorer")
+    scorer = _sanitize_production_name(
+        raw_scorer, context="ap scorer", game_key=game_key
+    )
     salvaged = bool(raw_scorer) and scorer is None
 
     clean_ens: list[dict] = []
     for item in entry.get("ensemble") or []:
         if not isinstance(item, dict):
             continue
-        nm = _sanitize_production_name(item.get("method"), context="ap ensemble")
+        nm = _sanitize_production_name(
+            item.get("method"), context="ap ensemble", game_key=game_key
+        )
         if not nm:
             continue
         try:
@@ -359,7 +373,11 @@ def rejected_decision_scorer(
             ),
             None,
         )
-    if raw and _sanitize_production_name(raw, context="decizie") is None:
+    if (
+        raw
+        and _sanitize_production_name(raw, context="decizie", game_key=game_key)
+        is None
+    ):
         return str(raw)
     return None
 
@@ -391,14 +409,14 @@ def get_winner_name(
         return "frequency"
 
     def _ok(name) -> str | None:
-        return _sanitize_production_name(name, context="winner")
+        return _sanitize_production_name(name, context="winner", game_key=game_key)
 
     if pool_size is not None:
         ap = _auto_pilot_entry(g, pool_size)
         # Scorer + ensemble din aceeași sanitizare — altfel un scorer mort +
         # ensemble viu făcea get_winner_name→frequency dar engine→membru.
         if ap:
-            n, _ens, _salv = _sanitize_ap_production(ap)
+            n, _ens, _salv = _sanitize_ap_production(ap, game_key)
             if n:
                 return n
             # Decizia există, dar numele ei e interzis sau necunoscut. Câmpurile
@@ -500,8 +518,8 @@ def get_scorer_for_game(
         raise
 
     name = resolve_method_name(name)
-    if name not in METHODS or name in _production_forbidden():
-        if name in _production_forbidden():
+    if name not in METHODS or name in _production_forbidden(game_key):
+        if name in _production_forbidden(game_key):
             logger.warning(
                 "[method_selector] scorer %r interzis — falling back to frequency", name
             )
@@ -599,7 +617,7 @@ def get_ensemble_for_game(
     # vede get_winner_name/UI), altfel un membru interzis sau cu pondere
     # invalida in primele pozitii consuma un loc si blend-ul ramane cu mai
     # putini membri decat afiseaza UI-ul.
-    _, clean_list, _ = _sanitize_ap_production(entry)
+    _, clean_list, _ = _sanitize_ap_production(entry, game_key)
     out: list[tuple[str, Callable, float]] = []
     for item in clean_list[:max_methods]:
         name = item["method"]
@@ -1243,7 +1261,7 @@ def recommend_optimal_config(
                 pool_substituted = {"requested": int(pool_size), "used": int(nearest)}
 
     if entry and "scorer" in entry:
-        scorer, clean_ens, salvaged = _sanitize_ap_production(entry)
+        scorer, clean_ens, salvaged = _sanitize_ap_production(entry, game_key)
         if not scorer:
             scorer = get_winner_name(
                 game_key, pool_size=pool_size, config_path=config_path
@@ -1295,6 +1313,8 @@ def recommend_optimal_config(
             "rate_data_missing": entry.get("rate_data_missing") or [],
             "tiebreak_dependent": entry.get("tiebreak_dependent") or [],
             "incomplete_methods": entry.get("incomplete_methods") or [],
+            # Testul de exces cu corecția Holm (aditiv; None la decizii vechi).
+            "multiplicity": entry.get("multiplicity"),
         }
 
     scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
