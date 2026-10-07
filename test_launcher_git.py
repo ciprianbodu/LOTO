@@ -370,26 +370,6 @@ def test_sync_with_non_ascii_file_names(repos):
     assert 'combinate cu actualizarea' in out
 
 
-def test_failed_update_puts_the_local_edits_back(repos):
-    """Un fisier neurmarit pe care actualizarea l-ar adauga opreste git-ul;
-    modificarea pusa deoparte revine exact, iar HEAD ramane."""
-    local, seed, _ = repos
-    (seed / 'code.txt').write_text('new\n')
-    (seed / 'added.txt').write_text('remote\n')
-    commit(seed, 'remote update')
-    git(seed, 'push', 'origin', 'main')
-    (local / 'added.txt').write_text('mine, untracked\n')
-    (local / 'code.txt').write_text('personal\n')
-    head = git(local, 'rev-parse', 'HEAD')
-    out = run_helper(local)
-    assert 'Actualizarea nu a reusit. Codul local ramane neschimbat.' in out
-    assert 'puse la loc, neschimbate' in out
-    assert git(local, 'rev-parse', 'HEAD') == head
-    assert (local / 'code.txt').read_text() == 'personal\n'
-    assert (local / 'added.txt').read_text() == 'mine, untracked\n'
-    assert not backup_root(local).exists()
-
-
 def test_rebase_that_cannot_start_puts_the_local_edits_back(repos):
     """Rebase-ul refuzat de la inceput nu lasa stare de rebase; nu se apeleaza
     --abort, iar modificarile puse deoparte revin."""
@@ -581,18 +561,75 @@ def test_a_conflicting_replay_with_local_edits_leaves_everything_as_it_was(repos
     assert not backup_root(local).exists()
 
 
-def test_commits_withdrawn_from_origin_are_not_pushed_back(repos):
-    """origin/main derulat inapoi (force-push fara commit nou): Sync nu
-    retrimite commit-ul retras, iar PushHistory nici atat."""
+def test_an_untracked_file_the_update_brings_differently_stops_it(repos):
+    """origin/main aduce un fisier care exista local neurmarit, cu alt continut:
+    sync-ul se opreste inainte sa atinga ceva si numeste fisierul."""
+    local, seed, _ = repos
+    (seed / 'code.txt').write_text('new\n')
+    (seed / 'added.txt').write_text('remote\n')
+    commit(seed, 'remote update')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'added.txt').write_text('mine, untracked\n')
+    (local / 'code.txt').write_text('personal\n')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'aduce cu alt continut: added.txt' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert (local / 'code.txt').read_text() == 'personal\n'
+    assert (local / 'added.txt').read_text() == 'mine, untracked\n'
+    assert not backup_root(local).exists()
+
+
+def test_an_identical_untracked_leftover_does_not_block_the_update(repos):
+    """Ramas dintr-o actualizare oprita la jumatate: identic cu origin/main."""
+    local, seed, _ = repos
+    (seed / 'added.txt').write_text('remote\n')
+    commit(seed, 'remote adds a file')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'added.txt').write_text('remote\n')
+    out = run_helper(local)
+    assert 'identice cu origin/main): added.txt' in out
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_commits_withdrawn_from_origin_are_dropped_not_pushed_back(repos):
+    """origin/main derulat inapoi (force-push fara commit nou): statia nu
+    retrimite commit-ul retras, ci trece pe origin/main; vechiul main ramane
+    intr-o referinta de rezerva. PushHistory nu-l retrimite nici el."""
     local, seed, origin = repos
     advance(seed)
     git(local, 'pull', '-q', '--ff-only')
+    withdrawn_head = git(local, 'rev-parse', 'HEAD')
     git(seed, 'reset', '-q', '--hard', 'HEAD~1')
     git(seed, 'push', '-q', '--force', 'origin', 'main')
-    withdrawn = git(seed, 'rev-parse', 'HEAD')
+    rewound = git(seed, 'rev-parse', 'HEAD')
+    (local / 'notes.txt').write_text('untracked note\n')
     out = run_helper(local)
-    assert 'au fost deja pe origin/main' in out
-    assert git(origin, 'rev-parse', 'main') == withdrawn
+    assert 'au fost retrase de pe origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD') == rewound == git(origin, 'rev-parse', 'main')
+    assert (local / 'code.txt').read_text() == 'old\n'
+    assert (local / 'notes.txt').read_text() == 'untracked note\n'
+    kept = git(local, 'for-each-ref', '--format=%(objectname)', 'refs/loto-sync')
+    assert kept == withdrawn_head
+    out = run_helper(local, 'PushHistory')
+    assert git(origin, 'rev-parse', 'main') == rewound
+
+
+def test_local_commits_on_top_of_withdrawn_ones_stay_for_manual_integration(repos):
+    local, seed, origin = repos
+    advance(seed)
+    git(local, 'pull', '-q', '--ff-only')
+    (local / 'mine.txt').write_text('my own work\n')
+    commit(local, 'own work')
+    git(seed, 'reset', '-q', '--hard', 'HEAD~1')
+    (seed / 'other.txt').write_text('replacement\n')
+    commit(seed, 'replacement')
+    git(seed, 'push', '-q', '--force', 'origin', 'main')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'commit-uri retrase de pe origin/main' in out and 'Integrarea ramane manuala' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
     p = subprocess.run(
         [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
          str(HELPER), '-Mode', 'PushHistory', '-ProjectDir', str(local),
@@ -600,7 +637,155 @@ def test_commits_withdrawn_from_origin_are_not_pushed_back(repos):
         capture_output=True, text=True, errors='replace', timeout=60,
     )
     assert 'nu le trimit din nou' in p.stdout
-    assert git(origin, 'rev-parse', 'main') == withdrawn
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_the_auto_push_hook_does_not_push_withdrawn_commits(repos):
+    local, seed, origin = repos
+    advance(seed)
+    git(local, 'pull', '-q', '--ff-only')
+    git(seed, 'reset', '-q', '--hard', 'HEAD~1')
+    git(seed, 'push', '-q', '--force', 'origin', 'main')
+    git(local, 'fetch', '-q', 'origin')
+    hooks = local / 'scripts' / 'git-hooks'
+    hooks.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / 'scripts' / 'git-hooks' / 'post-commit', hooks / 'post-commit')
+    (hooks / 'post-commit').chmod(0o755)
+    (local / 'mine.txt').write_text('new work\n')
+    git(local, 'add', 'mine.txt')
+    p = subprocess.run(['git', '-c', 'core.hooksPath=scripts/git-hooks', 'commit', '-q', '-m', 'new'],
+                       cwd=local, capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    assert 'auto-push skipped' in p.stderr
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_history_commits_already_upstream_do_not_block_the_update(repos):
+    """Doua statii adauga aceleasi extrageri; commit-ul netrimis al uneia e
+    redundant: main trece pe origin/main in loc sa se opreasca la conflict."""
+    local, seed, origin = repos
+    append(local, NEW_ROW)
+    commit(local, 'auto: update istoric extrageri')
+    append(seed, NEW_ROW + '07-10-2026,2,3,4,5,6,7\n')
+    (seed / 'code.txt').write_text('new\n')
+    commit(seed, 'other station: rows and code')
+    git(seed, 'push', 'origin', 'main')
+    out = run_helper(local)
+    assert 'randuri de istoric care sunt deja pe origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'new\n'
+    assert (local / DRAWS).read_text().endswith('07-10-2026,2,3,4,5,6,7\n')
+
+
+def test_a_rebase_that_cannot_be_undone_is_reported_not_hidden(repos):
+    """Index blocat de alt proces git: rebase-ul si anularea lui esueaza. Sync
+    nu spune ca nimic nu s-a schimbat, iar pornirile urmatoare numesc rebase-ul."""
+    local, seed, _ = repos
+    (local / 'other.txt').write_text('committed locally\n')
+    commit(local, 'local work')
+    advance(seed)
+    hook(local, 'post-checkout', 'if [ "$3" = "1" ]; then : > "$(git rev-parse --git-dir)/index.lock"; fi')
+    other_git = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=local,
+                                 stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
+    try:
+        out = run_helper(local)
+        again = run_helper(local)
+    finally:
+        other_git.kill()
+        other_git.wait()
+    assert 'Repository-ul a ramas la jumatatea operatiei' in out
+    assert 'Codul local ramane neschimbat' not in out
+    assert 'Un rebase a ramas neterminat' in again
+
+
+def test_a_second_launcher_waits_for_the_first(repos):
+    local, seed, _ = repos
+    advance(seed)
+    lock = local / '.git' / 'loto-sync.lock'
+    holder = subprocess.Popen(
+        [str(POWERSHELL), '-NoProfile', '-Command',
+         f"$f = [IO.File]::Open('{lock}', 'OpenOrCreate', 'ReadWrite', 'None'); "
+         "Write-Host held; Start-Sleep -Seconds 20; $f.Close()"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    try:
+        assert holder.stdout.readline().strip() == 'held'
+        head = git(local, 'rev-parse', 'HEAD')
+        out = run_helper(local)
+        assert 'Alt lansator sincronizeaza acum' in out
+        assert git(local, 'rev-parse', 'HEAD') == head
+    finally:
+        holder.kill()
+        holder.wait()
+    run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+
+
+def interrupted(local, path, local_text, base_text):
+    """Starea lasata de o fereastra inchisa dupa Set-Aside: PENDING, copia locala,
+    versiunea din HEAD, iar fisierul de pe disc readus la HEAD."""
+    folder = backup_root(local) / '20260101-000000-1'
+    (folder / 'local').mkdir(parents=True)
+    (folder / 'base').mkdir(parents=True)
+    (folder / 'local' / path).write_text(local_text)
+    (folder / 'base' / path).write_text(base_text)
+    (folder / 'PENDING').write_text(path + '\n')
+    return folder
+
+
+def test_an_interrupted_sync_is_finished_at_the_next_start(repos):
+    local, _, _ = repos
+    folder = interrupted(local, 'code.txt', 'personal\n', 'old\n')
+    out = run_helper(local)
+    assert 'O sincronizare anterioara s-a intrerupt; pun la loc' in out
+    assert (local / 'code.txt').read_text() == 'personal\n'
+    assert not folder.exists()
+
+
+def test_an_interrupted_sync_after_the_update_merges_the_copy(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'code.txt', 'one\ntwo\nthree\nfour\n')
+    folder = interrupted(local, 'code.txt', 'one\ntwo\nthree\nFOUR\n', 'one\ntwo\nthree\nfour\n')
+    (local / 'code.txt').write_text('ONE\ntwo\nthree\nfour\n')  # actualizarea ajunsese pe disc
+    run_helper(local)
+    assert (local / 'code.txt').read_text() == 'ONE\ntwo\nthree\nFOUR\n'
+    assert not folder.exists()
+
+
+def test_a_conflict_copy_is_recalled_at_every_start(repos):
+    local, seed, _ = repos
+    (local / 'code.txt').write_text('personal\n')
+    advance(seed)
+    run_helper(local)
+    again = run_helper(local)
+    assert 'Versiuni locale pastrate dupa o sincronizare (conflict: code.txt)' in again
+    shutil.rmtree(backup_root(local))
+    assert 'Versiuni locale pastrate' not in run_helper(local)
+
+
+def test_a_case_only_rename_is_not_put_aside(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'Foo.txt', 'a\n')
+    remote_change(seed, 'Foo.txt', 'b\n')
+    git(local, 'mv', 'Foo.txt', 'foo.txt')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert '(redenumire doar de majuscule)' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(local, 'diff', '--cached', '--name-only', '--no-renames').splitlines() == ['Foo.txt', 'foo.txt']
+
+
+def test_a_force_added_ignored_file_stays_staged_after_a_replay(repos):
+    local, seed, origin = repos
+    tracked(seed, local, '.gitignore', '*.secret\n')
+    (local / 'notes.txt').write_text('committed locally\n')
+    commit(local, 'local work')
+    (local / 'keys.secret').write_text('staged on purpose\n')
+    git(local, 'add', '-f', 'keys.secret')
+    advance(seed)
+    run_helper(local)
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+    assert 'keys.secret' in git(local, 'diff', '--cached', '--name-only').splitlines()
 
 
 def test_local_merge_commits_are_not_replayed(repos):
@@ -616,25 +801,6 @@ def test_local_merge_commits_are_not_replayed(repos):
     head = git(local, 'rev-parse', 'HEAD')
     out = run_helper(local)
     assert 'contin un commit de merge' in out
-    assert git(local, 'rev-parse', 'HEAD') == head
-    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
-
-
-def test_commits_removed_from_origin_are_not_republished(repos):
-    """origin/main rescris (force-push) fara un commit deja publicat de aici:
-    rebase-ul l-ar trimite din nou."""
-    local, seed, origin = repos
-    (local / 'code.txt').write_text('published then withdrawn\n')
-    commit(local, 'withdrawn')
-    git(local, 'push', '-q', 'origin', 'main')
-    git(seed, 'pull', '-q', '--ff-only')
-    git(seed, 'reset', '-q', '--hard', 'HEAD~1')
-    (seed / 'other.txt').write_text('replacement\n')
-    commit(seed, 'replacement')
-    git(seed, 'push', '-q', '--force', 'origin', 'main')
-    head = git(local, 'rev-parse', 'HEAD')
-    out = run_helper(local)
-    assert 'au fost deja pe origin/main' in out
     assert git(local, 'rev-parse', 'HEAD') == head
     assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
 

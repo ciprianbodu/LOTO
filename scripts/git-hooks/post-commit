@@ -33,6 +33,19 @@ if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
     fi
 fi
 
+# Commits withdrawn from origin/main by a force-push are not pushed back: the
+# same rule as Get-WithdrawnCommits in scripts/launcher_git.ps1.
+former=$( { git reflog show --format=%H -n 200 refs/remotes/origin/main
+            git for-each-ref --format='%(objectname)' refs/loto/withdrawn; } 2>/dev/null | sort -u)
+if [ -n "$former" ] && git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+    total=$(git rev-list --count HEAD --not origin/main 2>/dev/null || echo 0)
+    fresh=$(git rev-list --count HEAD --not origin/main $former 2>/dev/null || echo 0)
+    if [ "$fresh" != "$total" ]; then
+        echo "[git] auto-push skipped: main contains commits withdrawn from origin/main" >&2
+        exit 0
+    fi
+fi
+
 GIT_TERMINAL_PROMPT=0
 export GIT_TERMINAL_PROMPT
 if git push --quiet origin main </dev/null; then

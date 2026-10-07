@@ -660,49 +660,59 @@ UI-ul face polling la o secunda, fara reload complet.
   (suita completa verde) sa fie integrata pe `main` fara sa astepte confirmare:
   PR, apoi merge imediat.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
-  pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). `START_8000.bat` si
+  pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste; nu retrimite
+  commit-uri retrase de pe `origin/main`). `START_8000.bat` si
   `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
 - Lansatoarele transfera executia FARA CALL intr-o copie temporara imuabila.
   `scripts/launcher_git.ps1 -Mode Sync`, copiat impreuna cu lansatorul, face un
   sync, apoi ruleaza lansatorul din repo actualizat. Codul si lansatoarele se
-  actualizeaza impreuna; nu se descarca fragmente cu curl. Sync = fetch cu
-  timeout, aplicarea `origin/main`, repunerea commit-urilor locale netrimise
-  peste el (`rebase`) si push. Modificarile necomise nu blocheaza si nu se
-  pierd. Fast-forward-ul le pastreaza singur in fisierele pe care actualizarea
-  nu le atinge. Fisierele schimbate si local, si pe `origin/main` (la rebase,
-  toate cele modificate) se copiaza octet cu octet in
-  `.git\loto-sync-backup\<data-ora>\local\`, impreuna cu versiunea din HEAD
-  (`base\`), revin la HEAD pentru actualizare, apoi revin peste ea: un fisier
-  neatins de actualizare isi ia copia exacta (si binar); celelalte se combina
-  cu `git merge-file` pe copii temporare, cu sfarsitul de linie normalizat
-  (CRLF din checkout fata de LF salvat de editor nu e conflict), iar
-  rezultatul ia sfarsitul de linie al versiunii noi. Niciun marker de conflict
-  nu ajunge in arborele de lucru. La conflict real codul ia `origin/main`,
-  iar copia locala ramane in `local\` si e numita in mesaj; `bench_results/`
-  (Re-Bench-ul statiei, din care s-a calculat decizia ei) nu se combina,
-  ramane cel local. Fara conflict, folderul de copie se sterge. Nu se pune
-  deoparte (sync-ul se opreste, cu motivul) un fisier inlocuit pe disc de un
-  folder ori aflat sub un fisier pus in locul unui folder (checkout-ul fortat
-  le-ar sterge continutul neurmarit), nici unul cu alta versiune in index
-  decat pe disc (copia ia numai discul). Orice esec (fisier neurmarit pe care
-  `origin/main` il adauga, rebase oprit la conflict sau la limita de timp)
-  anuleaza intai rebase-ul, apoi pune fisierele la loc exact, dintr-un
-  `finally`; dupa o eroare copia ramane si e numita. Daca rebase-ul nu se
-  poate anula, fisierele nu se scriu peste arbore: copia ramane cu `PENDING`
-  si pasii (`git rebase --abort`, apoi copierea inapoi). O rulare oprita brusc
-  lasa `PENDING`; o punere la loc esuata lasa `RESTORE-FAILED`; pornirea
-  urmatoare le anunta inaintea verificarii ramurii (un rebase intrerupt lasa
-  HEAD detasat). Rebase-ul ruleaza numai daca commit-urile locale nu contin
-  merge-uri, n-au fost niciodata pe `origin/main` (reflog-ul
-  `refs/remotes/origin/main`: istoria de acolo s-a rescris) si niciun commit
-  nou de pe `origin/main` n-a fost varful lui `main` local (reflog-ul
-  `refs/heads/main`: amend sau reset al unui commit trimis; un rebase anulat
-  sau alta ramura nu conteaza). Acelasi test al commit-urilor retrase de pe
-  `origin/main` opreste push-ul din Sync si din PushHistory. Iesirea git se
-  citeste in UTF-8 (diacritice in numele fisierelor). `LOTO_GIT_TIMEOUT_SECONDS`
-  scade limita de timp numai in teste. Alta ramura decat `main` nu se atinge.
-  Nu se sterg fisierele .bat personale si nu exista reset fortat sau
-  `git stash`.
+  actualizeaza impreuna; nu se descarca fragmente cu curl. Sync si PushHistory
+  ruleaza sub un lacat exclusiv (`.git\loto-sync.lock`, deschis fara partajare,
+  eliberat de sistem si la oprirea brusca); un al doilea lansator nu atinge
+  nimic. Sync alege un plan:
+  - `ff`: numai commit-uri noi pe `origin/main` -> `merge --ff-only`;
+  - `push`: numai commit-uri locale -> push;
+  - `rebase`: ambele -> commit-urile locale se repun peste `origin/main`, numai
+    daca nu contin merge-uri si niciun commit nou de pe `origin/main` n-a fost
+    varful lui `main` local (reflog-ul `refs/heads/main`: amend sau reset al
+    unui commit trimis); altfel integrare manuala, cu motivul;
+  - `drop`: `main` trece pe `origin/main` (`reset --keep`, vechiul `main` in
+    `refs/loto-sync/main-<data-ora>`) cand toate commit-urile locale au fost
+    retrase de pe `origin/main` (force-push) sau sunt numai randuri
+    `_ISTORIC/*.csv` deja prezente acolo (doua statii au trimis aceleasi
+    extrageri). Commit-urile retrase se recunosc din reflog-ul
+    `refs/remotes/origin/main` si se tin minte in `refs/loto/withdrawn/`, ca
+    regula sa nu expire; amestecate cu commit-uri proprii raman manuale. Nici
+    Sync, nici PushHistory (verificat inaintea rebase-ului lui), nici hook-ul
+    post-commit nu le retrimit.
+  Modificarile necomise nu blocheaza si nu se pierd. La `ff`, fisierele pe
+  care actualizarea nu le atinge raman pe loc; cele schimbate si local, si pe
+  `origin/main` (la `rebase`/`drop`, toate cele modificate) se copiaza octet
+  cu octet in `.git\loto-sync-backup\<data-ora>-<pid>\local\`, cu versiunea
+  din HEAD in `base\`, revin la HEAD, apoi revin peste actualizare: un fisier
+  neatins de ea isi ia copia exacta (si binar); celelalte se combina cu
+  `git merge-file` pe copii temporare, cu sfarsitul de linie normalizat (CRLF
+  din checkout fata de LF salvat de editor nu e conflict). Niciun marker de
+  conflict nu ajunge pe disc. La conflict real codul ia `origin/main`, copia
+  locala ramane in `local\`, iar marcajul `CONFLICTS` o reaminteste la
+  fiecare pornire pana la stergerea folderului; `bench_results/` (Re-Bench-ul
+  statiei) nu se combina, ramane cel local. Fisierele noi din index revin cu
+  `git add -f`; starea din index a celor modificate nu se pastreaza
+  (continutul, da). Sync-ul se opreste, cu motivul si fara sa atinga ceva,
+  pentru: un folder in locul unui fisier urmarit sau un fisier in locul unui
+  folder din cale, o versiune in index diferita de disc, o redenumire doar de
+  majuscule, un fisier neurmarit pe care `origin/main` il aduce cu alt
+  continut (cel identic, ramas dintr-o actualizare oprita, se sterge). Dupa
+  integrare se verifica starea reala: un rebase oprit (conflict, limita de
+  timp) se anuleaza intai; fisierele se pun la loc numai cu HEAD pe `main`, la
+  commit-ul de start sau la cel nou. Altfel copia ramane cu `PENDING`, iar
+  mesajul spune pasii (`git rebase --abort`). La pornirea urmatoare, inaintea
+  verificarii ramurii, un rebase neterminat se anunta, iar o copie `PENDING`
+  (fereastra inchisa la jumatate) se pune la loc automat prin aceeasi fuziune;
+  `RESTORE-FAILED` se reaminteste. Iesirea git se citeste in UTF-8 (diacritice
+  in numele fisierelor). `LOTO_GIT_TIMEOUT_SECONDS` scade limita de timp numai
+  in teste. Alta ramura decat `main` nu se atinge. Nu se sterg fisierele .bat
+  personale si nu exista reset fortat sau `git stash`.
 - Pe un folder sincronizat in cloud (Google Drive, OneDrive, Dropbox),
   `launcher_git.ps1` cere o data fixarea offline (`attrib +P /S /D`, marcaj in
   `.git\loto-offline-pin`) si ridica limita pe comanda git de la 45 la 180 s.
