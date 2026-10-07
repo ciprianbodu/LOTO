@@ -97,8 +97,11 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   teste: validarea altei metode la pornire, eticheta „cele mai recente” cand
   lipsesc tocmai cele mai noi extrageri, raportul rescris fara WF la
   repornire, cautarea inutila a prefixului, amprenta deciziei luata prea
-  tarziu.
-- Verificat pe Python 3.14.7 / Linux cu pwsh: 97 fisiere `test_*.py`, 2292
+  tarziu. Testele acopera si cheia: alta metoda, garantie, limita de
+  consecutive sau interval nu imprumuta pasi (pica daca potrivirea ignora
+  semnatura); `test_wf_incremental.py` importa UI-ul la nivel de modul, ca
+  izolarea marcajului din `conftest.py` sa se aplice si unui test rulat singur.
+- Verificat pe Python 3.14.7 / Linux cu pwsh: 97 fisiere `test_*.py`, 2301
   teste trecute, 38 sarite (lansatorul, numai pe Windows), zero esecuri.
   Cap-coada pe o baza izolata, cu worker si UI reale: jobul preluat intr-o
   sesiune anterioara reapare la doua porniri succesive cu validarea din cache

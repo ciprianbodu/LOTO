@@ -13,6 +13,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+# La nivel de modul: fixture-urile din conftest redirecționează marcajul de job
+# și setările UI numai dacă modulul e deja importat (și la rularea unui singur test).
+import app_nicegui as app
+
 
 def history(n: int = 60, seed: int = 20261007) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
@@ -206,11 +210,36 @@ def test_a_partial_validation_without_the_newest_draw_says_so(wf, monkeypatch, t
     assert shown["partial"] and shown["newest_missing"]
 
 
-def test_other_settings_do_not_borrow_steps(wf, computed):
+@pytest.mark.parametrize(
+    "other",
+    [
+        {"pool_size": 11},  # în numele fișierului, separat de semnătură
+        {"guarantee": 4},  # în semnătura deciziei (`dec_sig`)
+        {"max_consecutive_run": 2},
+        {"restrict_base_min": 5, "restrict_base_max": 45},
+    ],
+)
+def test_other_settings_do_not_borrow_steps(wf, computed, other):
     df = history(60)
     wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
     computed.clear()
-    _, meta = wf.run_honest_walk_forward(df, **{**ARGS, "pool_size": 11})
+    _, meta = wf.run_honest_walk_forward(df, **{**ARGS, **other})
+    assert "reused_previous_history" not in meta
+    assert len(set(computed)) == 12
+
+
+def test_another_scorer_does_not_borrow_steps(wf, computed, monkeypatch):
+    """Aceeași geometrie, altă metodă în decizie: semnătura diferă, nimic refolosit."""
+    import loto_enterprise.core.method_selector as ms
+
+    df = history(60)
+    wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
+    monkeypatch.setattr(
+        ms, "recommend_optimal_config",
+        lambda key, pool, **_: {"scorer": "ewma_hl30", "ensemble": []},
+    )
+    computed.clear()
+    _, meta = wf.run_honest_walk_forward(df, **ARGS)
     assert "reused_previous_history" not in meta
     assert len(set(computed)) == 12
 
@@ -240,8 +269,6 @@ def test_recovered_result_shows_the_cached_validation_without_running(
     monkeypatch, tmp_path
 ):
     """Pornirea reafișează „Istoric hits” din cache, fără calcul, mail sau oprire."""
-    import app_nicegui as app
-
     calls = []
 
     def fake_wf(**kwargs):
@@ -301,8 +328,6 @@ def _used(**methods):
 
 
 def test_the_result_scorer_is_compared_with_the_current_decision(decision_now):
-    import app_nicegui as app
-
     decision_now["loto_6_49"] = "ewma_hl30"
     assert app._result_scorers_match_decision("6/49", _used(loto_6_49="ewma_hl30"))
     # Generat cu ținta 4+ (altă metodă), ținta comutată apoi înapoi pe 3+.
@@ -321,8 +346,6 @@ def test_the_result_scorer_is_compared_with_the_current_decision(decision_now):
 
 
 def test_display_only_recovery_loads_the_cached_validation(monkeypatch):
-    import app_nicegui as app
-
     loads = []
     monkeypatch.setattr(app, "_load_cached_walk_forward", lambda: loads.append(1) or 0)
     monkeypatch.setattr(
@@ -341,8 +364,6 @@ def test_display_only_recovery_loads_the_cached_validation(monkeypatch):
 
 
 def test_the_report_names_the_missing_newest_draws(monkeypatch):
-    import app_nicegui as app
-
     data = {"pool_size": 10, "audit": {}}
     monkeypatch.setitem(app.STATE, "results", ([("loto_6_49.csv", {"6/49": data})], 1))
     monkeypatch.setattr(app, "_wf_summary", lambda flat, d=None: "3+: 1")
@@ -361,7 +382,6 @@ def test_a_job_taken_in_an_earlier_session_comes_back_without_finalizing(
     repornire rezultatul și validarea lui reapar; mail-ul și oprirea, nu."""
     import functools
 
-    import app_nicegui as app
     import job_queue as queue
     from ui_shared import pack_queue_result
 
