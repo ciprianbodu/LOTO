@@ -148,6 +148,9 @@ Nu se promovează nicio metodă și nu se afirmă avantaj predictiv.
    experimentului preînregistrat din 2 octombrie (prefixul de 1740 de rânduri
    conține rândul; ținta e în fereastra de test a `ro_540_k11`, una din 522).
    Testul `test_pool_hit_experiment.py` va cere o erată documentată.
+   *Rezolvat ulterior, în aceeași zi:* rândul a fost corectat după arhiva
+   oficială loto.ro, iar erata experimentului este în
+   `pool_hit_experiment/RESULTS_2026-10-02.md`.
 2. **Poarta de consistență pe ferestre imbricate** spune puțin: un singur
    eveniment 4+ în ultimele 10% contează în 3 din 4 ferestre. Pe 5/40 k5,
    trei metode se califică cu exact un eveniment în 1661 de extrageri. O
