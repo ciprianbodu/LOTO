@@ -799,6 +799,89 @@ def test_an_interrupted_sync_on_another_branch_names_the_branch_not_a_rebase(rep
     assert (folder / 'local' / 'code.txt').read_text() == 'personal\n'
 
 
+def once_on_ref(local, ref, state, action):
+    """reference-transaction: o singura data, la starea data a referintei."""
+    hook(local, 'reference-transaction',
+         f'[ "$1" = "{state}" ] || exit 0\n'
+         f'grep -q " {ref}$" || exit 0\n'
+         '[ -e "$(git rev-parse --git-dir)/hook-done" ] && exit 0\n'
+         ': > "$(git rev-parse --git-dir)/hook-done"\n'
+         + action)
+
+
+def test_a_fast_forward_stopped_halfway_is_undone(repos):
+    """Git scrie arborele, apoi nu muta main (aici: tranzactia refuzata; pe
+    statie, un fisier blocat): fisierele scrise revin, cele aduse dispar."""
+    local, seed, _ = repos
+    (seed / 'added.txt').write_text('remote\n')
+    advance(seed)
+    once_on_ref(local, 'refs/heads/main', 'prepared', 'exit 1')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'Git se oprise la jumatate' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert (local / 'code.txt').read_text() == 'old\n'
+    assert not (local / 'added.txt').exists()
+    assert git(local, 'status', '--porcelain', '--untracked-files=no') == ''
+
+
+def test_a_file_saved_during_the_sync_is_not_reverted(repos):
+    """Alt program (Re-Bench, editor) scrie un fisier urmarit dupa fetch: ff-ul
+    esueaza, iar salvarea ramane; nu e o scriere a lui git."""
+    local, seed, _ = repos
+    advance(seed)
+    once_on_ref(local, 'refs/remotes/origin/main', 'committed',
+                'printf "saved during sync\\n" >> code.txt')
+    out = run_helper(local)
+    assert 'Git se oprise la jumatate' not in out
+    assert (local / 'code.txt').read_text() == 'old\nsaved during sync\n'
+
+
+def test_a_file_untracked_by_a_local_commit_stops_the_replay(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'settings.ini', 'station\n')
+    git(local, 'rm', '-q', '--cached', 'settings.ini')
+    git(local, 'commit', '-q', '-m', 'stop tracking settings.ini')
+    (seed / 'other.txt').write_text('other station\n')
+    commit(seed, 'unrelated')
+    git(seed, 'push', 'origin', 'main')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'scoase din urmarire de commit-urile locale si pastrate pe disc: settings.ini' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert (local / 'settings.ini').read_text() == 'station\n'
+
+
+def test_an_identical_leftover_comes_back_when_the_replay_fails(repos):
+    local, seed, _ = repos
+    (local / 'code.txt').write_text('personal\n')
+    commit(local, 'personal work')
+    (seed / 'tool.py').write_text('print(1)\n')
+    advance(seed)
+    (local / 'tool.py').write_text('print(1)\n')
+    out = run_helper(local)
+    assert 'nu se pot repune peste origin/main' in out
+    assert (local / 'tool.py').read_text() == 'print(1)\n'
+    assert git(local, 'status', '--porcelain', 'tool.py') == '?? tool.py'
+
+
+def test_an_interruption_during_the_revert_keeps_the_files_not_yet_reverted(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'notes.txt', 'notes\n')
+    folder = backup_root(local) / '20260101-000000-3'
+    (folder / 'local').mkdir(parents=True)
+    (folder / 'local' / 'code.txt').write_text('personal code\n')
+    (folder / 'local' / 'notes.txt').write_text('personal notes\n')
+    (folder / 'HEAD').write_text(git(local, 'rev-parse', 'HEAD') + '\n')
+    (folder / 'PENDING').write_text('code.txt\nnotes.txt\n')
+    (local / 'notes.txt').write_text('personal notes\n')  # inca nereadus la HEAD
+    out = run_helper(local)
+    assert 'Conflict' not in out
+    assert (local / 'code.txt').read_text() == 'personal code\n'
+    assert (local / 'notes.txt').read_text() == 'personal notes\n'
+    assert not folder.exists()
+
+
 def test_a_second_launcher_waits_for_the_first(repos):
     local, seed, _ = repos
     advance(seed)

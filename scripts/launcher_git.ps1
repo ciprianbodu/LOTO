@@ -706,6 +706,7 @@ function Restore-Aside {
             if (-not $exists) { $report.Gone += $item.Path; continue }
             if (-not $item.Base) {
                 if ($atStart) { Copy-LotoFile -From $item.Local -To $full; $report.Merged += $item.Path }
+                elseif (Test-SameBytes $item.Local $full) { $report.Merged += $item.Path }  # inca nereadus la HEAD
                 else { $report.Conflicts += $item.Path }
                 continue
             }
@@ -1095,13 +1096,27 @@ try {
         # identice se sterg (vin oricum); celelalte ar fi suprascrise (rebase-ul
         # si trecerea pe origin/main scriu peste cele ignorate) si opresc sync-ul.
         $collide = Get-UntrackedCollisions
+        if ($plan -eq 'rebase') {
+            # Cale scoasa din urmarire de commit-urile locale (exista in baza
+            # comuna): rebase-ul trece prin origin/main, apoi repune stergerea si
+            # ia fisierul de pe disc cu ea.
+            $mb = Invoke-LotoGit -GitArgs @('merge-base', 'HEAD', 'origin/main')
+            $kept = @(@($collide.Same) + @($collide.Different) | Where-Object {
+                $mb.Code -ne 0 -or (Invoke-LotoGit -GitArgs @('cat-file', '-e', ($mb.Text + ':' + $_))).Code -eq 0
+            })
+            if ($kept.Count -gt 0) {
+                Write-Host ('[GIT] Fisiere scoase din urmarire de commit-urile locale si pastrate pe disc: ' + (Format-PathList $kept) + '. Repunerea commit-urilor le-ar sterge: mutati-le temporar in alt folder, reporniti, apoi aduceti-le inapoi. Codul local ramane neschimbat.')
+                exit 0
+            }
+        }
         if ($collide.Different.Count -gt 0) {
             Write-Host ('[GIT] Fisiere neurmarite pe care origin/main le aduce cu alt continut: ' + (Format-PathList $collide.Different) + '. Mutati-le sau stergeti-le, apoi reporniti. Codul local ramane neschimbat.')
             exit 0
         }
-        foreach ($path in $collide.Same) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force }
-        if ($collide.Same.Count -gt 0) {
-            Write-Host ('[GIT] Sterse inainte de actualizare (identice cu origin/main): ' + (Format-PathList $collide.Same) + '.')
+        $removedSame = @($collide.Same)
+        foreach ($path in $removedSame) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force }
+        if ($removedSame.Count -gt 0) {
+            Write-Host ('[GIT] Sterse inainte de actualizare (identice cu origin/main): ' + (Format-PathList $removedSame) + '.')
         }
 
         $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $PID
@@ -1187,14 +1202,45 @@ try {
             # poate lasa fisiere scrise cu versiunea noua, iar HEAD neschimbat.
             # Fisierele fara modificari locale inainte revin la HEAD; cele noi,
             # identice cu origin/main, se sterg (inainte nu existau).
+            # Numai ce putea scrie git: continutul exact de pe origin/main (sau
+            # sters, cand origin/main il sterge). O salvare facuta intre timp de
+            # alt program (Re-Bench, editor) ramane.
             $before = New-PathSet $local
-            $partial = @(Get-LocalChanges | Where-Object { -not $before.Contains($_) })
+            $upstream = New-PathSet @(Get-ChangedPaths -DiffArgs @('HEAD', 'origin/main'))
+            foreach ($path in @(Get-LocalChanges)) {
+                if ($before.Contains($path) -or -not $upstream.Contains($path)) { continue }
+                $full = Join-Path (Get-Location).Path $path
+                $theirs = Invoke-LotoGit -GitArgs @('rev-parse', ('origin/main:' + $path))
+                if ($theirs.Code -ne 0) {
+                    if (-not (Test-Path -LiteralPath $full)) { $partial += $path }
+                } elseif (Test-Path -LiteralPath $full -PathType Leaf) {
+                    $disk = Invoke-LotoGit -GitArgs @('hash-object', ('--path=' + $path), '--', $full)
+                    if ($disk.Code -eq 0 -and $disk.Text -eq $theirs.Text) { $partial += $path }
+                }
+            }
             if ($partial.Count -gt 0) {
-                [void](Invoke-LotoGitPaths -GitArgs @('checkout', 'HEAD') -Paths $partial)
+                # Din HEAD revin; cele aduse de origin/main (fara versiune in HEAD,
+                # eventual deja in index) ies din index si de pe disc.
+                $headTree = New-PathSet @((Invoke-LotoGit -GitArgs @('ls-tree', '-r', '--name-only', '-z', 'HEAD')).Out.Split([char]0))
+                $back = @($partial | Where-Object { $headTree.Contains($_) })
+                $brought = @($partial | Where-Object { -not $headTree.Contains($_) })
+                if ($back.Count -gt 0) { [void](Invoke-LotoGitPaths -GitArgs @('checkout', 'HEAD') -Paths $back) }
+                if ($brought.Count -gt 0) {
+                    [void](Invoke-LotoGitPaths -GitArgs @('rm', '-q', '--cached', '--ignore-unmatch') -Paths $brought)
+                    foreach ($path in $brought) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force -ErrorAction SilentlyContinue }
+                }
             }
             foreach ($path in (Get-UntrackedCollisions).Same) {
                 Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force -ErrorAction SilentlyContinue
                 $partial += $path
+            }
+        }
+        if ($outcome -eq 'unchanged' -and $removedSame.Count -gt 0) {
+            # Sterse inainte ca identice cu origin/main: actualizarea nu s-a facut,
+            # deci revin pe disc (numai in arbore, fara index), din origin/main.
+            $missing = @($removedSame | Where-Object { -not (Test-Path -LiteralPath (Join-Path (Get-Location).Path $_)) })
+            if ($missing.Count -gt 0) {
+                [void](Invoke-LotoGitPaths -GitArgs @('restore', '--source=origin/main', '--worktree') -Paths $missing)
             }
         }
         if ($outcome -eq 'updated' -and $plan -eq 'drop') {

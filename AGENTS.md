@@ -80,6 +80,25 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Sincronizarea lansatoarelor — 2026-10-07
+
+- START_8000 si ACTUALIZARI nu mai raspund „origin/main are commit-uri noi.
+  Nu le aplic peste modificarile necomise”. Sync (`launcher_git.ps1 -Mode
+  Sync`) aplica `origin/main` si peste modificarile necomise, repune
+  commit-urile locale netrimise si le trimite (planurile si garantiile in
+  §4.5): copie octet cu octet in `.git\loto-sync-backup\`, fuziune
+  `git merge-file`, `bench_results/` ramane al statiei, fara `git stash` si
+  fara reset fortat. Cand nu poate integra, spune de ce si nu atinge nimic.
+- Cinci runde de review adversarial pe Sync si PushHistory; fiecare
+  constatare confirmata are test care pica pe versiunea anterioara.
+  `test_launcher_git.py` ruleaza si pe Linux, sub PowerShell 7 (`LOTO_PWSH`).
+- Prima pornire dupa actualizare ruleaza tot helper-ul vechi: lansatorul il
+  copiaza din checkout-ul local inainte de sync. O statie cu modificari
+  necomise porneste deci sync-ul nou o data, manual (comanda din PR).
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 97 fisiere `test_*.py`,
+  2374 teste trecute, 11 sarite (lansatoarele CMD si PATH-ul Windows), zero
+  esecuri.
+
 ### Validarea WF tinuta minte — 2026-10-07
 
 - Ultimul rezultat reapare la fiecare pornire, cu avertismentul „Rezultate
@@ -708,18 +727,23 @@ UI-ul face polling la o secunda, fara reload complet.
   index cu `git rm --cached`, o redenumire doar de majuscule, un fisier
   neurmarit sau ignorat pe care `origin/main` il aduce cu alt continut (la
   orice plan si inaintea rebase-ului PushHistory: rebase-ul scrie tacut peste
-  cele ignorate; cel identic, ramas dintr-o actualizare oprita, se sterge; un
-  fisier urmarit sub alte majuscule nu se numara). Dupa integrare se verifica
+  cele ignorate; cel identic, ramas dintr-o actualizare oprita, se sterge si
+  revine daca actualizarea nu se face; un fisier urmarit sub alte majuscule nu
+  se numara), un fisier scos din urmarire de commit-urile locale si pastrat pe
+  disc (la `rebase`, repunerea stergerii l-ar lua). Dupa integrare se verifica
   starea reala: un rebase oprit (conflict, limita de timp) se anuleaza intai;
   fisierele se pun la loc numai cu HEAD pe `main`, la commit-ul de start sau
   la cel nou. Altfel copia ramane cu `PENDING`, iar mesajul spune pasii
   (`git rebase --abort`). Un `ff`/`drop` refuzat la jumatate (un CSV tinut
-  deschis in Excel) readuce la HEAD fisierele scrise deja si o spune. La
+  deschis in Excel) readuce la HEAD numai ce a scris git (continutul exact de
+  pe `origin/main`; o salvare facuta intre timp de Re-Bench sau de editor
+  ramane), scoate fisierele aduse si o spune. La
   pornirea urmatoare, inaintea verificarii ramurii, un rebase neterminat se
   anunta, iar o copie `PENDING` (fereastra inchisa la jumatate) se pune la loc
   automat prin aceeasi fuziune; commit-ul de start, scris in `HEAD` inaintea
   oricarei atingeri, recunoaste si fisierul readus la HEAD inainte de copia
-  `base\`. `RESTORE-FAILED` se reaminteste. Iesirea git se citeste in UTF-8 (diacritice
+  `base\`; cel inca nereadus are deja continutul local. `RESTORE-FAILED` se
+  reaminteste. Iesirea git se citeste in UTF-8 (diacritice
   in numele fisierelor). `LOTO_GIT_TIMEOUT_SECONDS` scade limita de timp numai
   in teste. Alta ramura decat `main` nu se atinge. Nu se sterg fisierele .bat
   personale si nu exista reset fortat sau `git stash`.
