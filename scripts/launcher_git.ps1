@@ -526,6 +526,8 @@ function Get-AsideBlockers {
     $diskVsIndex = New-PathSet @(Get-ChangedPaths -DiffArgs @())
     $indexVsHead = New-PathSet @(Get-ChangedPaths -DiffArgs @('--cached'))
     $wanted = New-PathSet $Paths
+    $index = New-PathSet @((Invoke-LotoGit -GitArgs @('ls-files', '-z')).Out.Split([char]0))
+    $head = New-PathSet @((Invoke-LotoGit -GitArgs @('ls-tree', '-r', '--name-only', '-z', 'HEAD')).Out.Split([char]0))
     $blocked = @()
     $folded = @{}
     foreach ($path in @($AllLocal) + @($Paths)) {
@@ -552,6 +554,12 @@ function Get-AsideBlockers {
         if ($clash) { $blocked += ($path + ' (pe disc ' + $clash + ' e fisier, nu folder)'); continue }
         if ($diskVsIndex.Contains($path) -and $indexVsHead.Contains($path)) {
             $blocked += ($path + ' (alta versiune in index decat pe disc)')
+            continue
+        }
+        if ($head.Contains($path) -and -not $index.Contains($path) -and
+            (Test-Path -LiteralPath (Join-Path $root $path) -PathType Leaf)) {
+            # git rm --cached: checkout HEAD l-ar pune inapoi in index.
+            $blocked += ($path + ' (scos din index cu git rm --cached)')
         }
     }
     return $blocked
@@ -568,6 +576,10 @@ function Set-Aside {
     $inHead = New-PathSet @($tree.Out.Split([char]0))
     if (Test-Path -LiteralPath $BackupDir) { throw ('Folderul de copie exista deja: ' + $BackupDir) }
     [void](New-Item -ItemType Directory -Force -Path $BackupDir)
+    # HEAD-ul de start, inaintea oricarei atingeri: o reluare dupa o oprire
+    # inainte de base\ recunoaste fisierul readus la HEAD si pune copia la loc.
+    $startSha = (Invoke-LotoGit -GitArgs @('rev-parse', 'HEAD')).Text
+    [IO.File]::WriteAllText((Join-Path $BackupDir 'HEAD'), ($startSha + "`n"), (New-Object Text.UTF8Encoding $false))
     [IO.File]::WriteAllText((Join-Path $BackupDir 'PENDING'), (($Paths -join "`n") + "`n"), (New-Object Text.UTF8Encoding $false))
     $items = @()
     foreach ($path in $Paths) {
@@ -577,7 +589,7 @@ function Set-Aside {
             $local = Join-Path (Join-Path $BackupDir 'local') $path
             Copy-LotoFile -From $full -To $local
         }
-        $items += [pscustomobject]@{ Path = $path; Local = $local; Base = $null; InHead = $inHead.Contains($path) }
+        $items += [pscustomobject]@{ Path = $path; Local = $local; Base = $null; InHead = $inHead.Contains($path); StartSha = $startSha }
     }
     $script:AsideItems = $items
     $tracked = @($items | Where-Object { $_.InHead } | ForEach-Object { $_.Path })
@@ -663,11 +675,19 @@ function Restore-Aside {
                 continue
             }
             $exists = Test-Path -LiteralPath $full -PathType Leaf
+            # Fara base\ (oprire inainte de copie): discul egal cu versiunea din
+            # HEAD-ul de start inseamna fisier neatins de actualizare.
+            $atStart = $false
+            if ($item.InHead -and -not $item.Base -and $exists -and $item.StartSha) {
+                $disk = Invoke-LotoGit -GitArgs @('hash-object', ('--path=' + $item.Path), '--', $full)
+                $then = Invoke-LotoGit -GitArgs @('rev-parse', ($item.StartSha + ':' + $item.Path))
+                $atStart = ($disk.Code -eq 0 -and $then.Code -eq 0 -and $disk.Text -eq $then.Text)
+            }
             if (-not $item.Local) {
                 # Sters local. Neatins de actualizare (la rebase, oricare
                 # fisier local trece pe aici): ramane sters; schimbat: ramane.
                 if (-not $exists) { $report.Merged += $item.Path }
-                elseif ($item.Base -and (Test-SameBytes $item.Base $full)) {
+                elseif ($atStart -or ($item.Base -and (Test-SameBytes $item.Base $full))) {
                     Remove-Item -LiteralPath $full -Force
                     $report.Merged += $item.Path
                 } else { $report.LocalDeleted += $item.Path }
@@ -684,6 +704,11 @@ function Restore-Aside {
                 continue
             }
             if (-not $exists) { $report.Gone += $item.Path; continue }
+            if (-not $item.Base) {
+                if ($atStart) { Copy-LotoFile -From $item.Local -To $full; $report.Merged += $item.Path }
+                else { $report.Conflicts += $item.Path }
+                continue
+            }
             if (Test-SameBytes $item.Base $full) {
                 # Actualizarea nu l-a atins: copia locala, exact (si binar).
                 Copy-LotoFile -From $item.Local -To $full
@@ -775,19 +800,27 @@ function Get-WithdrawnCommits {
 }
 
 function Test-RedundantHistory {
-    # Commit-uri locale numai pe _ISTORIC/*.csv ale caror randuri sunt toate
-    # deja pe origin/main (alta statie le-a trimis): se pot lasa deoparte fara
-    # pierderi, altfel rebase-ul s-ar opri la fiecare pornire pe aceleasi randuri.
-    $names = @(Get-Lines @('diff', '--name-only', '--no-renames', 'origin/main...HEAD'))
-    if ($names.Count -eq 0) { return $false }
-    foreach ($name in $names) {
-        if ($name -notlike '_ISTORIC/*.csv') { return $false }
-        $mine = Invoke-LotoGit -GitArgs @('show', ('HEAD:' + $name))
+    # Commit-uri locale care numai ADAUGA randuri la _ISTORIC/*.csv, toate deja
+    # pe origin/main (alta statie le-a trimis): se pot lasa deoparte fara
+    # pierderi, altfel rebase-ul s-ar opri la fiecare pornire pe aceleasi
+    # randuri. O stergere, o modificare sau o reordonare (corectura voita) nu
+    # e redundanta: merge la rebase.
+    $stats = @(Get-Lines @('diff', '--numstat', '--no-renames', 'origin/main...HEAD'))
+    if ($stats.Count -eq 0) { return $false }
+    foreach ($row in $stats) {
+        $fields = $row -split "`t", 3
+        if ($fields.Count -ne 3) { return $false }
+        $name = $fields[2]
+        if ($name -notlike '_ISTORIC/*.csv' -or $fields[0] -eq '-' -or $fields[1] -ne '0') { return $false }
         $theirs = Invoke-LotoGit -GitArgs @('show', ('origin/main:' + $name))
-        if ($mine.Code -ne 0 -or $theirs.Code -ne 0) { return $false }
+        if ($theirs.Code -ne 0) { return $false }
         $upstream = New-PathSet @($theirs.Out -split "`r?`n")
-        foreach ($line in @($mine.Out -split "`r?`n" | Where-Object { $_ })) {
-            if (-not $upstream.Contains($line)) { return $false }
+        $patch = Invoke-LotoGit -GitArgs @('diff', '-U0', '--no-color', '--no-renames', 'origin/main...HEAD', '--', (':(literal)' + $name))
+        if ($patch.Code -ne 0) { return $false }
+        foreach ($line in @($patch.Out -split "`r?`n")) {
+            if ($line.StartsWith('+') -and -not $line.StartsWith('+++') -and -not $upstream.Contains($line.Substring(1))) {
+                return $false
+            }
         }
     }
     return $true
@@ -800,11 +833,14 @@ function Get-UntrackedCollisions {
     # @{ Same = ...; Different = ... }.
     $same = @()
     $different = @()
+    # Urmarit sub orice majuscule: pe Windows, Foo.txt de pe disc e tot foo.txt
+    # din index (o redenumire doar de majuscule pe origin/main o face git).
+    $tracked = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($known in (Invoke-LotoGit -GitArgs @('ls-files', '-z')).Out.Split([char]0)) { if ($known) { [void]$tracked.Add($known) } }
     foreach ($path in @(Get-ChangedPaths -DiffArgs @('--diff-filter=A', 'HEAD', 'origin/main'))) {
         $full = Join-Path (Get-Location).Path $path
         if (-not (Test-Path -LiteralPath $full)) { continue }
-        $known = Invoke-LotoGit -GitArgs @('ls-files', '--', (':(literal)' + $path))
-        if ($known.Code -eq 0 -and $known.Text) { continue }  # in index: e o modificare locala
+        if ($tracked.Contains($path)) { continue }
         $isSame = $false
         if (Test-Path -LiteralPath $full -PathType Leaf) {
             $mine = Invoke-LotoGit -GitArgs @('hash-object', ('--path=' + $path), '--', $full)
@@ -854,15 +890,21 @@ function Resolve-SyncLeftovers {
                 continue
             }
             $items = @()
+            $startFile = Join-Path $dir.FullName 'HEAD'
+            $startSha = $null
+            if (Test-Path -LiteralPath $startFile -PathType Leaf) { $startSha = ([IO.File]::ReadAllText($startFile)).Trim() }
             foreach ($path in @([IO.File]::ReadAllLines($pending) | Where-Object { $_ })) {
                 $local = Join-Path $localDir $path
                 $base = Join-Path (Join-Path $dir.FullName 'base') $path
                 $hasBase = Test-Path -LiteralPath $base -PathType Leaf
+                $inHead = $hasBase
+                if ($startSha) { $inHead = ((Invoke-LotoGit -GitArgs @('cat-file', '-e', ($startSha + ':' + $path))).Code -eq 0) }
                 $items += [pscustomobject]@{
                     Path = $path
                     Local = $(if (Test-Path -LiteralPath $local -PathType Leaf) { $local } else { $null })
                     Base = $(if ($hasBase) { $base } else { $null })
-                    InHead = $hasBase
+                    InHead = $inHead
+                    StartSha = $startSha
                 }
             }
             Write-Host ('[GIT] O sincronizare anterioara s-a intrerupt; pun la loc modificarile locale din ' + $localDir + '.')
@@ -1047,19 +1089,17 @@ try {
                 exit 0
             }
         }
-        if ($plan -ne 'rebase') {
-            # Fisiere neurmarite pe care origin/main le aduce: cele identice se
-            # sterg (vin oricum); celelalte ar fi suprascrise de trecerea pe
-            # origin/main si opresc sync-ul, iar ff-ul le refuza oricum.
-            $collide = Get-UntrackedCollisions
-            if ($collide.Different.Count -gt 0) {
-                Write-Host ('[GIT] Fisiere neurmarite pe care origin/main le aduce cu alt continut: ' + (Format-PathList $collide.Different) + '. Mutati-le sau stergeti-le, apoi reporniti. Codul local ramane neschimbat.')
-                exit 0
-            }
-            foreach ($path in $collide.Same) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force }
-            if ($collide.Same.Count -gt 0) {
-                Write-Host ('[GIT] Sterse inainte de actualizare (identice cu origin/main): ' + (Format-PathList $collide.Same) + '.')
-            }
+        # Fisiere neurmarite (si ignorate) pe care origin/main le aduce: cele
+        # identice se sterg (vin oricum); celelalte ar fi suprascrise (rebase-ul
+        # si trecerea pe origin/main scriu peste cele ignorate) si opresc sync-ul.
+        $collide = Get-UntrackedCollisions
+        if ($collide.Different.Count -gt 0) {
+            Write-Host ('[GIT] Fisiere neurmarite pe care origin/main le aduce cu alt continut: ' + (Format-PathList $collide.Different) + '. Mutati-le sau stergeti-le, apoi reporniti. Codul local ramane neschimbat.')
+            exit 0
+        }
+        foreach ($path in $collide.Same) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force }
+        if ($collide.Same.Count -gt 0) {
+            Write-Host ('[GIT] Sterse inainte de actualizare (identice cu origin/main): ' + (Format-PathList $collide.Same) + '.')
         }
 
         $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $PID
@@ -1137,6 +1177,22 @@ try {
                 Remove-AsideDir -BackupDir $backupDir
             }
         }
+        $partial = @()
+        if ($outcome -eq 'unchanged' -and -not $crashed -and $plan -ne 'rebase') {
+            # Un ff/drop refuzat la jumatate (ex. fisier tinut deschis in Excel)
+            # poate lasa fisiere scrise cu versiunea noua, iar HEAD neschimbat.
+            # Fisierele fara modificari locale inainte revin la HEAD; cele noi,
+            # identice cu origin/main, se sterg (inainte nu existau).
+            $before = New-PathSet $local
+            $partial = @(Get-LocalChanges | Where-Object { -not $before.Contains($_) })
+            if ($partial.Count -gt 0) {
+                [void](Invoke-LotoGitPaths -GitArgs @('checkout', 'HEAD') -Paths $partial)
+            }
+            foreach ($path in (Get-UntrackedCollisions).Same) {
+                Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force -ErrorAction SilentlyContinue
+                $partial += $path
+            }
+        }
         if ($outcome -eq 'updated' -and $plan -eq 'drop') {
             Write-Host '[GIT] main local este acum origin/main: aplicatia si lansatoarele, impreuna.'
         } elseif ($outcome -eq 'updated') {
@@ -1152,6 +1208,9 @@ try {
             Write-Host ('[GIT] Sincronizarea s-a oprit: ' + $failure)
         } else {
             Write-Host ('[GIT] ' + $failure + '. Codul local ramane neschimbat.')
+            if ($partial.Count -gt 0) {
+                Write-Host ('[GIT] Git se oprise la jumatate; am readus la versiunea de dinainte: ' + (Format-PathList $partial) + '.')
+            }
         }
         if ($report) {
             if ($outcome -eq 'updated' -or $report.Failed.Count -gt 0) { Write-AsideReport -Report $report -BackupDir $backupDir }
@@ -1166,6 +1225,13 @@ try {
         }
         if ($outcome -eq 'updated' -and $plan -eq 'rebase') { Push-LotoMain }
     } else {
+        # Inaintea commit-ului automat: peste commit-uri retrase de pe origin/main,
+        # extragerile noi ar ramane blocate impreuna cu ele (Sync le lasa manuale).
+        $early = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
+        if ($early.Code -eq 0 -and @(Get-WithdrawnCommits).Count -gt 0) {
+            Write-Host '[GIT] main local contine commit-uri retrase de pe origin/main; nu comit extragerile noi peste ele. Sync trece intai pe origin/main.'
+            exit 0
+        }
         $changes = Invoke-LotoGit -GitArgs @('status', '--porcelain', '-z', '--', '_ISTORIC')
         if ($changes.Code -ne 0) { throw $changes.Text }
         if ($changes.Text) {
@@ -1220,6 +1286,10 @@ try {
             })
             if ($outside.Count -gt 0) {
                 throw 'main local are commit-uri in afara _ISTORIC. Integrarea cu origin/main ramane manuala.'
+            }
+            $collide = Get-UntrackedCollisions
+            if ($collide.Different.Count -gt 0) {
+                throw ('Fisiere neurmarite pe care origin/main le aduce cu alt continut: ' + (Format-PathList $collide.Different) + '. Commit-urile de istoric raman locale.')
             }
             Write-Host '[GIT] Repun commit-urile de istoric peste origin/main.'
             $rebase = Invoke-LotoGitRetry -GitArgs @('rebase', 'origin/main')

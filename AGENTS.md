@@ -678,13 +678,15 @@ UI-ul face polling la o secunda, fara reload complet.
     unui commit trimis); altfel integrare manuala, cu motivul;
   - `drop`: `main` trece pe `origin/main` (`reset --keep`, vechiul `main` in
     `refs/loto-sync/main-<data-ora>`) cand toate commit-urile locale au fost
-    retrase de pe `origin/main` (force-push) sau sunt numai randuri
-    `_ISTORIC/*.csv` deja prezente acolo (doua statii au trimis aceleasi
-    extrageri). Commit-urile retrase se recunosc din reflog-ul
+    retrase de pe `origin/main` (force-push) sau numai adauga la
+    `_ISTORIC/*.csv` randuri deja prezente acolo (doua statii au trimis
+    aceleasi extrageri). Un rand sters, modificat sau mutat e o corectura si
+    merge la `rebase`. Commit-urile retrase se recunosc din reflog-ul
     `refs/remotes/origin/main` si se tin minte in `refs/loto/withdrawn/`, ca
     regula sa nu expire; amestecate cu commit-uri proprii raman manuale. Nici
-    Sync, nici PushHistory (verificat inaintea rebase-ului lui), nici hook-ul
-    post-commit nu le retrimit.
+    Sync, nici PushHistory, nici hook-ul post-commit nu le retrimit;
+    PushHistory nu comite extragerile noi peste ele (verificare inaintea
+    commit-ului automat si inaintea rebase-ului).
   Modificarile necomise nu blocheaza si nu se pierd. La `ff`, fisierele pe
   care actualizarea nu le atinge raman pe loc; cele schimbate si local, si pe
   `origin/main` (la `rebase`/`drop`, toate cele modificate) se copiaza octet
@@ -700,16 +702,22 @@ UI-ul face polling la o secunda, fara reload complet.
   `git add -f`; starea din index a celor modificate nu se pastreaza
   (continutul, da). Sync-ul se opreste, cu motivul si fara sa atinga ceva,
   pentru: un folder in locul unui fisier urmarit sau un fisier in locul unui
-  folder din cale, o versiune in index diferita de disc, o redenumire doar de
-  majuscule, un fisier neurmarit pe care `origin/main` il aduce cu alt
-  continut (cel identic, ramas dintr-o actualizare oprita, se sterge). Dupa
-  integrare se verifica starea reala: un rebase oprit (conflict, limita de
-  timp) se anuleaza intai; fisierele se pun la loc numai cu HEAD pe `main`, la
-  commit-ul de start sau la cel nou. Altfel copia ramane cu `PENDING`, iar
-  mesajul spune pasii (`git rebase --abort`). La pornirea urmatoare, inaintea
-  verificarii ramurii, un rebase neterminat se anunta, iar o copie `PENDING`
-  (fereastra inchisa la jumatate) se pune la loc automat prin aceeasi fuziune;
-  `RESTORE-FAILED` se reaminteste. Iesirea git se citeste in UTF-8 (diacritice
+  folder din cale, o versiune in index diferita de disc, un fisier scos din
+  index cu `git rm --cached`, o redenumire doar de majuscule, un fisier
+  neurmarit sau ignorat pe care `origin/main` il aduce cu alt continut (la
+  orice plan si inaintea rebase-ului PushHistory: rebase-ul scrie tacut peste
+  cele ignorate; cel identic, ramas dintr-o actualizare oprita, se sterge; un
+  fisier urmarit sub alte majuscule nu se numara). Dupa integrare se verifica
+  starea reala: un rebase oprit (conflict, limita de timp) se anuleaza intai;
+  fisierele se pun la loc numai cu HEAD pe `main`, la commit-ul de start sau
+  la cel nou. Altfel copia ramane cu `PENDING`, iar mesajul spune pasii
+  (`git rebase --abort`). Un `ff`/`drop` refuzat la jumatate (un CSV tinut
+  deschis in Excel) readuce la HEAD fisierele scrise deja si o spune. La
+  pornirea urmatoare, inaintea verificarii ramurii, un rebase neterminat se
+  anunta, iar o copie `PENDING` (fereastra inchisa la jumatate) se pune la loc
+  automat prin aceeasi fuziune; commit-ul de start, scris in `HEAD` inaintea
+  oricarei atingeri, recunoaste si fisierul readus la HEAD inainte de copia
+  `base\`. `RESTORE-FAILED` se reaminteste. Iesirea git se citeste in UTF-8 (diacritice
   in numele fisierelor). `LOTO_GIT_TIMEOUT_SECONDS` scade limita de timp numai
   in teste. Alta ramura decat `main` nu se atinge. Nu se sterg fisierele .bat
   personale si nu exista reset fortat sau `git stash`.

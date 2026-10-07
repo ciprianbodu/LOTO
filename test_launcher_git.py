@@ -370,9 +370,9 @@ def test_sync_with_non_ascii_file_names(repos):
     assert 'combinate cu actualizarea' in out
 
 
-def test_rebase_that_cannot_start_puts_the_local_edits_back(repos):
-    """Rebase-ul refuzat de la inceput nu lasa stare de rebase; nu se apeleaza
-    --abort, iar modificarile puse deoparte revin."""
+def test_a_replay_blocked_by_an_untracked_file_changes_nothing(repos):
+    """origin/main aduce un fisier care exista local neurmarit: sync-ul se
+    opreste inainte de rebase, fara sa atinga commit-uri, index sau disc."""
     local, seed, origin = repos
     tracked(seed, local, 'notes.txt', 'a\n')
     (local / 'code.txt').write_text('committed locally\n')
@@ -387,7 +387,7 @@ def test_rebase_that_cannot_start_puts_the_local_edits_back(repos):
     git(local, 'add', 'staged.txt')
     head = git(local, 'rev-parse', 'HEAD')
     out = run_helper(local)
-    assert 'Commit-urile locale nu se pot repune peste origin/main' in out
+    assert 'aduce cu alt continut: added.txt' in out
     assert git(local, 'rev-parse', 'HEAD') == head
     assert (local / 'notes.txt').read_text() == 'uncommitted\n'
     assert (local / 'added.txt').read_text() == 'mine, untracked\n'
@@ -630,13 +630,11 @@ def test_local_commits_on_top_of_withdrawn_ones_stay_for_manual_integration(repo
     assert 'commit-uri retrase de pe origin/main' in out and 'Integrarea ramane manuala' in out
     assert git(local, 'rev-parse', 'HEAD') == head
     assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
-    p = subprocess.run(
-        [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-         str(HELPER), '-Mode', 'PushHistory', '-ProjectDir', str(local),
-         '-PythonExe', sys.executable],
-        capture_output=True, text=True, errors='replace', timeout=60,
-    )
-    assert 'nu le trimit din nou' in p.stdout
+    # PushHistory nu comite extrageri noi peste commit-ul retras.
+    append(local, NEW_ROW)
+    out = run_helper(local, 'PushHistory')
+    assert 'nu comit extragerile noi peste ele' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
     assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
 
 
@@ -696,6 +694,66 @@ def test_a_rebase_that_cannot_be_undone_is_reported_not_hidden(repos):
     assert 'Repository-ul a ramas la jumatatea operatiei' in out
     assert 'Codul local ramane neschimbat' not in out
     assert 'Un rebase a ramas neterminat' in again
+
+
+def test_a_history_correction_is_replayed_not_dropped(repos):
+    """Un rand sters de mana (corectura voita) nu e „deja pe origin/main”:
+    commit-ul se repune peste extragerea noua a celeilalte statii."""
+    local, seed, origin = repos
+    first, last = ROWS.splitlines()
+    (local / DRAWS).write_bytes((HEADER + last + '\n').encode())
+    commit(local, 'remove a wrong row')
+    append(seed, NEW_ROW)
+    commit(seed, 'auto: update istoric extrageri')
+    git(seed, 'push', 'origin', 'main')
+    out = run_helper(local)
+    assert 'deja pe origin/main' not in out
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + last + '\n' + NEW_ROW).strip()
+
+
+def test_an_ignored_file_a_replay_would_overwrite_stops_it(repos):
+    """Rebase-ul scrie peste fisierele ignorate pe care origin/main incepe sa le
+    urmareasca: sync-ul se opreste inainte si il numeste."""
+    local, seed, origin = repos
+    tracked(seed, local, '.gitignore', '*.local\n')
+    (local / 'station.local').write_text('this station only\n')
+    (local / 'notes.txt').write_text('committed locally\n')
+    commit(local, 'local work')
+    (seed / 'station.local').write_text('from origin\n')
+    git(seed, 'add', '-f', 'station.local')
+    git(seed, 'commit', '-q', '-m', 'track station.local')
+    git(seed, 'push', 'origin', 'main')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'aduce cu alt continut: station.local' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert (local / 'station.local').read_text() == 'this station only\n'
+
+
+def test_a_staged_untrack_is_not_put_aside(repos):
+    local, seed, _ = repos
+    git(local, 'rm', '-q', '--cached', 'code.txt')
+    advance(seed)
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'code.txt (scos din index cu git rm --cached)' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(local, 'ls-files', 'code.txt') == ''
+    assert (local / 'code.txt').read_text() == 'old\n'
+
+
+def test_an_interruption_before_the_base_copy_still_restores_the_edit(repos):
+    local, _, _ = repos
+    folder = backup_root(local) / '20260101-000000-2'
+    (folder / 'local').mkdir(parents=True)
+    (folder / 'local' / 'code.txt').write_text('personal\n')
+    (folder / 'HEAD').write_text(git(local, 'rev-parse', 'HEAD') + '\n')
+    (folder / 'PENDING').write_text('code.txt\n')
+    out = run_helper(local)
+    assert 'Conflict' not in out
+    assert (local / 'code.txt').read_text() == 'personal\n'
+    assert not folder.exists()
 
 
 def test_a_second_launcher_waits_for_the_first(repos):
