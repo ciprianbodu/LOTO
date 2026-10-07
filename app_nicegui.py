@@ -3033,26 +3033,35 @@ def _completed_age_seconds(job: dict) -> float | None:
         return None
 
 
-def _mark_job_finalized(job_id: int) -> None:
+def _mark_job_finalized(job_id: int) -> bool:
     """Jobul a fost preluat de UI; un eșec de scriere se loghează, nu blochează."""
     try:
-        mark_job_finalized(int(job_id))
+        return bool(mark_job_finalized(int(job_id)))
     except Exception as exc:  # noqa: BLE001
         logger.warning("[JOB] marcaj finalizare #%s: %s", job_id, exc)
+        return False
 
 
 def _migrate_legacy_finalized_marker() -> None:
     """Marcajul vechi din `.ui_state.json` trece o dată în baza stației.
 
     Regula veche: ultimul job COMPLETED cu id-ul marcajului era deja preluat.
-    Cheia nu se mai scrie: `_save_settings` rescrie fișierul fără ea."""
+    Cheia nu se mai scrie: `_save_settings` rescrie fișierul fără ea, dar numai
+    după ce marcajul a ajuns în bază. Altfel (bază blocată, I/O) cheia rămâne,
+    recuperarea din pornirea curentă o respectă, iar migrarea se reia data viitoare."""
     legacy = _legacy_finalized_job_id()
     if legacy is None:
         return
     if legacy > 0:
         last = get_latest_completed_job()
-        if last and int(last["id"]) == legacy:
-            _mark_job_finalized(legacy)
+        if (
+            last
+            and int(last["id"]) == legacy
+            and not last.get("ui_finalized_at")
+            and not _mark_job_finalized(legacy)
+        ):
+            STATE["legacy_finalized_job_id"] = legacy
+            return
     _save_settings()
 
 
@@ -3072,6 +3081,8 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
     jid = int(last["id"])
     if last.get("ui_finalized_at"):
         return  # deja preluat de UI într-o sesiune anterioară, pe această stație
+    if STATE.get("legacy_finalized_job_id") == jid:
+        return  # marcajul vechi nu s-a putut muta în bază; regula veche, o pornire
 
     payload = decode_queue_result(str(last.get("result_json") or "{}"))
     if not (isinstance(payload, tuple) and len(payload) == 2):

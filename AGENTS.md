@@ -598,7 +598,9 @@ UI-ul face polling la o secunda, fara reload complet.
   `.ui_state.json`: checkout-ul se poate sincroniza intre statii, iar id-urile
   pornesc de la 1 pe fiecare. Golirea cozii sterge marcajul odata cu jobul.
   Cheia veche `last_finalized_job_id` se migreaza o data la pornirea UI
-  (ultimul job COMPLETED cu acel id) si dispare din fisier. In teste,
+  (ultimul job COMPLETED cu acel id) si dispare din fisier numai dupa ce
+  marcajul a ajuns in baza; daca baza refuza scrierea, cheia ramane, iar
+  recuperarea din pornirea curenta ii respecta regula. In teste,
   `conftest.py` redirectioneaza marcarea spre o baza temporara.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.

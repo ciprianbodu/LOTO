@@ -781,7 +781,13 @@ def _station_db(tmp_path, monkeypatch):
         )
     for name in ("_save_report_file",):
         monkeypatch.setattr(app_nicegui, name, lambda: None)
-    for key in ("active_job_id", "results", "result_sources", "results_recovered"):
+    for key in (
+        "active_job_id",
+        "results",
+        "result_sources",
+        "results_recovered",
+        "legacy_finalized_job_id",
+    ):
         monkeypatch.setitem(app_nicegui.STATE, key, None)
     return database, jid
 
@@ -839,3 +845,30 @@ def test_settings_without_the_legacy_key_are_not_rewritten(tmp_path, monkeypatch
     monkeypatch.setattr(app_nicegui, "_save_settings", lambda: saves.append(1))
     app_nicegui._migrate_legacy_finalized_marker()
     assert saves == []
+
+
+def test_a_failed_migration_keeps_the_legacy_marker_and_its_rule(tmp_path, monkeypatch):
+    """Baza blocată la migrare: cheia veche rămâne în fișier, iar recuperarea din
+    aceeași pornire nu reia jobul deja preluat (fără mail sau oprire repetate)."""
+    import json
+    import sqlite3
+
+    import job_queue as queue
+
+    database, jid = _station_db(tmp_path, monkeypatch)
+    app_nicegui.UI_STATE_FILE.write_text(
+        json.dumps({"last_finalized_job_id": jid}), encoding="utf-8"
+    )
+
+    def _locked(*_args, **_kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(app_nicegui, "mark_job_finalized", _locked)
+    app_nicegui._migrate_legacy_finalized_marker()
+    saved = json.loads(app_nicegui.UI_STATE_FILE.read_text(encoding="utf-8"))
+    assert saved["last_finalized_job_id"] == jid
+
+    app_nicegui._recover_completed_job(allow_finalize=True)
+    assert app_nicegui.STATE["active_job_id"] is None
+    assert app_nicegui.STATE["results"] is None
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"] is None

@@ -260,7 +260,9 @@ secțiunile deschise se păstrează intenționat (AGENTS.md §5, commit `52b9523
    `.ui_state.json` din checkout-ul sincronizat. Golirea cozii șterge marcajul
    odată cu jobul, deci un job nou cu același id pornește nemarcat. Cheia
    veche se migrează o dată la pornirea UI, cu regula veche (ultimul job
-   COMPLETED cu acel id), apoi dispare din fișier. `reset_jobs.py` păstrează
+   COMPLETED cu acel id), și dispare din fișier numai după ce marcajul a
+   ajuns în bază; cu baza blocată rămâne, iar recuperarea din aceeași pornire
+   nu reia jobul (semnalat de review-ul Codex pe PR #146). `reset_jobs.py` păstrează
    ultimul COMPLETED nemarcat. `conftest.py` redirecționează marcarea din teste
    spre o bază temporară.
 7. **Swap-urile de profil**, mai rapide cu rezultat identic. Evenimentele unui
