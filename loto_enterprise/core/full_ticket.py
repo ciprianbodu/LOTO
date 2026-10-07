@@ -371,7 +371,15 @@ def build_full_ticket(
         if left_out:
             note += f" Pe {count(n_var, 'variante')} nu încap toate: în afara biletelor {_fmt(left_out)}."
         if max_run:
-            note += f" Nicio variantă nu are mai mult de {max_run} numere consecutive."
+            worst = max((longest_consecutive_run(v) for v in variants), default=0)
+            if worst <= max_run:
+                note += f" Nicio variantă nu are mai mult de {max_run} numere consecutive."
+            else:
+                # Baza permisă e prea îngustă: limita nu încape pe toate variantele.
+                note += (
+                    f" Limita de {max_run} numere consecutive nu încape pe toate "
+                    f"variantele în numerele permise: cel mult {worst} pe o variantă."
+                )
         return {
             "mode": "spread",
             "variants": variants,

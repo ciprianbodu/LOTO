@@ -7,7 +7,7 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
     markov_self_state               lanț cu două stări per număr: „a ieșit / n-a ieșit" data trecută
     cooc_last3 / anti_cooc_last     afinitate de co-apariție cu ultimele extrageri / contrariul
     pair_lift_last                  lift-ul perechilor față de independență, spre ultima extragere
-    pagerank_cooc                   centralitate PageRank în graful de co-apariție (ponderat recent)
+    pagerank_cooc                   PageRank în graful de co-apariție; urmează frecvența ponderată recent (200)
     knn_draw_similarity             ce a urmat după extragerile cele mai asemănătoare cu ultima
     neighbor_adjacent               vecinii numerici (±1, ±2) ai ultimei extrageri
                                     (filtru spațial: top-K = clasa de vecinătate;
@@ -181,6 +181,11 @@ def score_pair_lift_last(draws_2d, max_num):
 
 
 def score_pagerank_cooc(draws_2d, max_num, damping: float = 0.85, iters: int = 60):
+    """PageRank pe graful de co-apariție, cu ponderi recente (înjumătățire 200).
+
+    Fiecare extragere adaugă o clică între numerele ei, așa că centralitatea
+    urmează gradul ponderat, adică frecvența ponderată recent.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     if n == 0:
@@ -246,7 +251,7 @@ RELATIONAL_METHODS = make_registry(
         ("cooc_last3", score_cooc_last3, "cooccurrence", "co-apariție cu ultimele 3 extrageri"),
         ("anti_cooc_last", score_anti_cooc_last, "cooccurrence", "contrariul co-apariției cu ultima extragere"),
         ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere (plat pe 1 bilă)"),
-        ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție ponderat recent"),
+        ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție; o extragere e o clică, deci urmează frecvența ponderată recent (înjumătățire 200)"),
         ("knn_draw_similarity", score_knn_draw_similarity, "similarity", "ce a urmat după cele 40 de extrageri cele mai asemănătoare"),
         ("neighbor_adjacent", score_neighbor_adjacent, "structure", "filtru spațial: vecinii ±1/±2 ai ultimei extrageri (exclus din producție)"),
     ]

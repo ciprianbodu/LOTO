@@ -564,9 +564,11 @@ class PipelineMixin:
                     )
                     # Candidați informativi (top-5 după frecvență) și pe fallback,
                     # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
+                    # Aceeași departajare ca bila aleasă (`rank_by_score`), ca
+                    # primul candidat afișat să fie chiar numărul de pe bilete.
+                    _jf = {i + 1: float(v) for i, v in enumerate(freq_joker)}
                     self.audit["joker_predictions"] = {
-                        int(i) + 1: int(freq_joker[i])
-                        for i in np.argsort(freq_joker)[-5:][::-1]
+                        n: int(freq_joker[n - 1]) for n in rank_by_score(_jf, 5)
                     }
                     logging.info(
                         f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}"

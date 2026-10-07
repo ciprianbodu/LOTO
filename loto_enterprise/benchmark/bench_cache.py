@@ -47,7 +47,9 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v21"
+CACHE_VERSION = "v22"
+# v22: `rank_ensemble_core` dă rangul mediu la egalitate; rangul după poziție
+#      favoriza numerele mai mari (audit 2026-10-07). Scorurile metodei se schimbă.
 # v21: Loto 5/40 = 6 numere extrase (n1..n6, hituri pe toate 6), bilet de 5.
 # v20: SES pornește din x_0 pe toată seria (`_ses_series`), nu doar la primul
 #      pas; `theta_drift` scorează prognoza liniară a ratei glisante, nu media

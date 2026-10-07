@@ -111,3 +111,35 @@ def test_method_is_not_a_structural_filter(name: str, draws: np.ndarray) -> None
         f"{name}: pool-ul top-12 conține un bloc consecutiv de {_longest_run(top12)} "
         "numere — scorer degenerat pe axa valorilor"
     )
+
+
+@pytest.fixture(scope="module")
+def urn2_draws() -> np.ndarray:
+    df = pd.read_csv("_ISTORIC/joker.csv").tail(HISTORY)
+    return df[["joker"]].to_numpy(dtype=np.int64)
+
+
+@pytest.mark.parametrize(
+    "name", sorted(set(METHODS) - set(EXCLUDED_FROM_PRODUCTION) - {"random"})
+)
+def test_production_method_follows_the_numbers_not_their_labels(
+    name: str, draws: np.ndarray, urn2_draws: np.ndarray
+) -> None:
+    """Reetichetarea numerelor mută scorul odată cu ele.
+
+    Un scorer care folosește doar istoricul dă numărului π(j) din istoricul
+    reetichetat scorul pe care j îl avea în cel original. Altfel scorul depinde
+    de eticheta numărului, adică de o poziție pe axa 1..N: exact ce nu poate
+    măsura `levels`/`class_R²` când preferința e ascunsă în departajarea
+    internă a metodei (`rank_ensemble_core`, audit 2026-10-07).
+    """
+    rng = np.random.default_rng(2026)
+    for history, max_num in ((draws, MAX_NUM), (urn2_draws, 20)):
+        perm = rng.permutation(max_num) + 1  # π(j) = perm[j - 1]
+        scores, _ = call_method(name, history, max_num)
+        moved, _ = call_method(name, perm[history - 1], max_num)
+        diff = max(abs(moved[int(perm[j - 1])] - scores[j]) for j in range(1, max_num + 1))
+        assert diff < 1e-9, (
+            f"{name}: scorul depinde de eticheta numerelor (Δ={diff:.2e}, "
+            f"max_num={max_num}) — o preferință pe axa 1..N, nu un semnal"
+        )

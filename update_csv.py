@@ -205,14 +205,49 @@ def _extract_draws(
     return results
 
 
+def _draw_key(row: list) -> tuple:
+    """Identitatea unei extrageri: data, numerele principale ca mulțime, Joker.
+
+    Ordinea numerelor nu contează: același rând scris în altă ordine (import
+    vechi, sursă diferită) rămâne aceeași extragere, nu una nouă.
+    """
+    cells = [str(x).strip() for x in row]
+    try:
+        nums = tuple(sorted(int(x) for x in cells[1:]))
+    except ValueError:
+        return tuple(cells)
+    return (cells[0], nums)
+
+
+def _draw_key_with_joker(row: list, has_joker: bool) -> tuple:
+    if not has_joker or len(row) < 2:
+        return _draw_key(row)
+    return (*_draw_key(row[:-1]), str(row[-1]).strip())
+
+
+def _existing_draw_keys(csv_path: Path, has_joker: bool) -> set:
+    if not csv_path.exists():
+        return set()
+    with open(csv_path, encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    return {_draw_key_with_joker(r, has_joker) for r in rows[1:] if r}
+
+
+def _site_row(rec: dict, has_joker: bool) -> list:
+    row = [rec["date"].strftime("%d-%m-%Y")] + list(rec["main"])
+    if has_joker:
+        row.append(rec["joker"])
+    return [str(x) for x in row]
+
+
 def _append_rows_atomic(
     csv_path: Path, new_rows: list, has_joker: bool, num_main: int
 ) -> int:
     """Citește CSV existent, adaugă rândurile noi, rescrie atomic (tmp + rename).
     Întoarce numărul de rânduri EFECTIV scrise (poate fi mai mic decât
-    len(new_rows) dacă un rând identic — aceeași dată ȘI aceleași numere —
-    e deja în CSV; o a doua extragere în aceeași zi, cu numere diferite,
-    se adaugă)."""
+    len(new_rows) dacă aceeași extragere — aceeași dată ȘI aceleași numere,
+    în orice ordine — e deja în CSV; o a doua extragere în aceeași zi, cu
+    numere diferite, se adaugă)."""
     # Citește rândurile existente
     existing: list[list[str]] = []
     header: list[str] | None = None
@@ -229,19 +264,18 @@ def _append_rows_atomic(
         if has_joker:
             header.append("joker")
 
-    # Construiește rândurile noi
+    # Plasă de siguranță INDEPENDENTĂ de `_last_date_in_csv`: nu re-adăugăm
+    # o extragere deja stocată (dată + numere, în orice ordine). Zilele cu două
+    # extrageri diferite rămân permise — istoricul le stochează deja, WF le
+    # tratează separat.
+    seen = {_draw_key_with_joker(row, has_joker) for row in existing if row}
     to_add = []
     for rec in new_rows:
-        row = [rec["date"].strftime("%d-%m-%Y")] + rec["main"]
-        if has_joker:
-            row.append(rec["joker"])
-        to_add.append([str(x) for x in row])
-
-    # Plasă de siguranță INDEPENDENTĂ de `_last_date_in_csv`: nu re-adăugăm
-    # un rând identic (dată + numere). Zilele cu două extrageri diferite
-    # rămân permise — istoricul le stochează deja, WF le tratează separat.
-    existing_keys = {tuple(str(x) for x in row) for row in existing if row}
-    to_add = [row for row in to_add if tuple(str(x) for x in row) not in existing_keys]
+        row = _site_row(rec, has_joker)
+        key = _draw_key_with_joker(row, has_joker)
+        if key not in seen:
+            seen.add(key)
+            to_add.append(row)
     if not to_add:
         return 0
 
@@ -278,6 +312,7 @@ def update_all() -> int:
         return 0
 
     total_added = 0
+    not_updated: list[str] = []
     today = date.today()
     print(f"[UPDATE-CSV] Data curentă: {today.strftime('%d-%m-%Y')}")
 
@@ -302,6 +337,7 @@ def update_all() -> int:
         # Fetch MEREU site-ul ca să raportăm ultima extragere reală (best-effort).
         site_last = None
         new_draws = []
+        all_draws = []
         try:
             text = _get_page_text(cfg["recent_url"])
             all_draws = _extract_draws(
@@ -314,22 +350,56 @@ def update_all() -> int:
             )
             if all_draws:
                 site_last = all_draws[-1]["date"]
-            # Doar extragerile mai noi decât CSV-ul nostru
-            new_draws = [d for d in all_draws if (last is None or d["date"] > last)]
+            # Ziua ultimei extrageri stocate rămâne candidată: a doua extragere
+            # a zilei poate apărea pe site după ce prima a fost salvată. Cele
+            # deja stocate cad la comparația pe (dată, numere).
+            known = _existing_draw_keys(csv_path, cfg["has_joker"])
+            new_draws = [
+                d
+                for d in all_draws
+                if (last is None or d["date"] >= last)
+                and _draw_key_with_joker(_site_row(d, cfg["has_joker"]), cfg["has_joker"])
+                not in known
+            ]
         except Exception as exc:
             print(
                 f"  {cfg['display_name']:<12}: CSV={last_str} | site=EROARE ({type(exc).__name__}) — continuă cu datele existente."
             )
+            not_updated.append(cfg["display_name"])
             continue
 
         site_str = site_last.strftime("%d-%m-%Y") if site_last else "N/A"
         gap = (today - site_last).days if site_last else None
         gap_str = f"{gap} zile în urmă" if gap is not None else "?"
 
-        if new_draws:
-            written = _append_rows_atomic(
-                csv_path, new_draws, cfg["has_joker"], cfg["num_main"]
+        if last is not None and all_draws and all_draws[0]["date"] > last:
+            # Pagina recentă nu mai ajunge până la ultima extragere stocată:
+            # extragerile dintre ele nu se văd. Adăugate, ar lăsa o gaură pe care
+            # rulările următoare n-o mai completează (adaugă numai după ultima
+            # dată), iar PushHistory ar publica fișierul.
+            print(
+                f"  {cfg['display_name']:<12}: CSV={last_str} | site={site_str} — pagina "
+                f"începe la {all_draws[0]['date']:%d-%m-%Y}, după ultima extragere "
+                "stocată. NU scriu nimic: ar rămâne o gaură în istoric. Completează "
+                "manual extragerile lipsă."
             )
+            not_updated.append(cfg["display_name"])
+            continue
+
+        if new_draws:
+            try:
+                written = _append_rows_atomic(
+                    csv_path, new_draws, cfg["has_joker"], cfg["num_main"]
+                )
+            except OSError as exc:
+                # Fișier deschis în alt program (Excel pe Windows) sau disc plin:
+                # celelalte jocuri continuă, iar scriptul iese tot cu 0.
+                print(
+                    f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} | "
+                    f"NU am putut scrie CSV-ul ({type(exc).__name__}: {exc})."
+                )
+                not_updated.append(cfg["display_name"])
+                continue
             dates_str = ", ".join(r["date"].strftime("%d-%m-%Y") for r in new_draws)
             print(
                 f"  {cfg['display_name']:<12}: CSV={last_str} -> site={site_str} (azi: {gap_str}) | +{written} extrageri noi: {dates_str}"
@@ -340,7 +410,12 @@ def update_all() -> int:
                 f"  {cfg['display_name']:<12}: CSV={last_str} | site={site_str} (azi: {gap_str}) | la zi."
             )
 
-    if total_added > 0:
+    if not_updated:
+        print(
+            f"[UPDATE-CSV] Total adăugate: {total_added}. NEACTUALIZATE: "
+            f"{', '.join(not_updated)} (vezi motivul de mai sus)."
+        )
+    elif total_added > 0:
         print(
             f"[UPDATE-CSV] Total adăugate: {total_added} extrageri noi. CSV-urile din _ISTORIC/ sunt la zi."
         )

@@ -77,6 +77,10 @@ def replay_step(game: str, context: dict, tickets: int, guarantee) -> dict:
             return {"error": variants}
         best[mode] = max(len(set(v) & actual) for v in variants)
         best[f"{mode}_variants"] = len(variants)
+    if best["pool_variants"] != best["spread_variants"]:
+        # Pas fără clasament în context (pool din fallback-ul de frecvență): pool-ul
+        # nu se poate extinde și dă mai puține variante. Comparația ar fi inegală.
+        return {"error": "număr diferit de variante între moduri"}
     return best
 
 

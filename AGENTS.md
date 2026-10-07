@@ -52,15 +52,15 @@ Snapshot verificat la 2026-09-15:
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
   la ultimul audit;
-- cache benchmark: `v21` (Loto 5/40 citeste toate cele 6 numere extrase);
-- cache walk-forward: `v30` (swap-uri cu dominanta exacta a profilului de hituri, sufix `|hp1`; v29 optimizarea 5+ a coverelor complete de 4; v28 candidati hitcover si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
+- cache benchmark: `v22` (`rank_ensemble_core` cu rang mediu la egalitate; v21 Loto 5/40 citeste toate cele 6 numere extrase);
+- cache walk-forward: `v31` (rang mediu in `rank_ensemble_core`, ordinea scorului la factorul 0 al penalizarii, semnatura designurilor fara cale absoluta; v30 swap-uri cu dominanta exacta a profilului de hituri, sufix `|hp1`; v29 optimizarea 5+ a coverelor complete de 4; v28 candidati hitcover si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
 - Loto 5/40 = 6 numere extrase din 40, bilet de 5. Istoricul scorerilor,
   hiturile de bench/WF/UI si baseline-ul random folosesc n1..n6 (`draw_n = 6`);
   biletul, garantia, sistemul complet, costul si pool-ul de baza (k5) folosesc
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v11` (swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v12` (aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -78,6 +78,51 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Audit global 2026-10-07
+
+- Sapte zone revizuite in paralel (motor, covering si bilete, bench si
+  decizie, metode, walk-forward, worker si actualizatoare, UI); fiecare
+  constatare reprodusa, fiecare reparatie cu test care pica pe codul vechi
+  (`test_audit_2026_10_07.py`). Nucleul a rezistat: fara look-ahead, fara
+  mutatii ale intrarii, WF paralel = serial, hituri recalculate fara
+  diferente, 151 designuri la 100%, top-K bench = pool de productie.
+- Regresie din PR #142: `ui_bench._pct` inlocuia `ui_results._pct` prin
+  `_sync_ui_namespace` (5+ la 5/40, 0,00365%, aparea „0.00%”). Acum
+  `_rate_pct`; un test interzice doua definitii diferite sub acelasi nume
+  privat in modulele UI.
+- Date: `update_csv.py` refuza pagina care nu mai ajunge la ultima extragere
+  stocata (gaura permanenta), adauga a doua extragere a unei zile deja
+  stocate (deduplicare pe data + numere sortate), iar un fisier blocat nu mai
+  opreste celelalte jocuri. `update_externe.py` cere toti anii la Germania.
+- Decizie: scorer interzis/necunoscut → `frequency`, nu vechii castigatori
+  dupa `avg_hits`; schimbarea tintei cere un `folds.csv` complet si asteapta
+  finalul bench-ului; `--block-size` > 1 e rulare redusa; prospetimea
+  stampileaza CSV-urile de dinaintea bench-ului; rata pooled nu depinde de
+  ordinea randurilor (decizia pe `folds.csv` versionat ramane identica).
+- Motor: auditul marcheaza rezerva si la Romania (`no_decision`, `attempted`);
+  `rank_ensemble_core` folosea rangul dupa pozitie la egalitate (numerele mari
+  castigau, productie la 5/40 k6) — acum rang mediu, echivariant, cu test de
+  reetichetare pe toate metodele de productie; factorul 0 al penalizarii
+  pastreaza ordinea scorului. Bump bench `v22`, WF `v31`, worker `v12`.
+- WF si concurenta: pasii scorati de doua decizii nu se mai salveaza; cursa din
+  `_load_config` intre fire; semnatura designurilor fara cale absoluta;
+  reluarea „Bilet complet” o singura data; worker-ul altui checkout nu mai
+  trece drept al nostru.
+- Afisare: acoperirea 99,95% nu mai apare 100.0%; pool-ul jucat in Istoric
+  hits; raportul spune PARTIAL; variantele dispersate respecta limita de
+  consecutive cand baza o permite, altfel nota spune limita atinsa.
+- Ramase de decis (raport): randul 24-10-2024 din `_ISTORIC/loto_5_40.csv`
+  copiaza extragerea din 27-10 (corect: 14,15,28,10,25,26; modificarea
+  istoricului a fost refuzata de permisiunile sesiunii); poarta de consistenta
+  pe ferestre imbricate; metode care reiau ultima extragere; duplicatul
+  `naive_bayes_last`/`markov_pairs` pe Urna 2; validarea PushHistory;
+  marcajul de job finalizat in checkout-ul sincronizat.
+- Verificat pe Python 3.14.7 / Linux, fara PowerShell: 95 fisiere `test_*.py`,
+  2152 teste trecute, 40 sarite (lansatorul, numai pe Windows), zero esecuri;
+  `audit_application.py`: 13 istorice, 848 verificari de paritate, 151
+  designuri, worker separat si UI HTTP 200, fisierele de productie neatinse.
+- Raport: `scripts/analysis/audit_application_report_2026-10-07.md`.
 
 ### Studiu rate de hit si variante dispersate — 2026-10-05
 
@@ -426,7 +471,15 @@ UI-ul face polling la o secunda, fara reload complet.
   fără frecvență: scor descrescător, la egalitate numărul mai mare
   (`covering.common._sorted_pool`).
 - Nu adauga sortari locale care pot schimba tie-break-ul dintre bench si productie.
-- Fallback-ul de productie este `frequency`, determinist.
+  Nici in interiorul unei metode: o metoda de productie urmeaza numerele, nu
+  etichetele lor (reetichetarea istoricului muta scorul odata cu numarul,
+  `test_no_structural_filters.test_production_method_follows_the_numbers_not_their_labels`).
+- Fallback-ul de productie este `frequency`, determinist. O intrare Auto-Pilot
+  al carei scorer e interzis sau necunoscut cade pe `frequency`, nu pe vechii
+  castigatori dupa `avg_hits` (`winners_per_pool_best`, `overall_winner`), care
+  n-au trecut poarta fata de random; acestia raman rezerva numai fara
+  `auto_pilot_per_pool`. Auditul (`bench_winner`) marcheaza rezerva: `fallback`,
+  `no_decision` (si la Romania fara decizie) sau `attempted` (numele respins).
 - `random` este baseline structural pentru benchmark si este interzis in productie.
 - `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` si `haar_multiscale`
   raman in registry pentru bench si sunt interzise in productie
@@ -451,9 +504,9 @@ UI-ul face polling la o secunda, fara reload complet.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
   azi contine toate cele 50 + `frequency` pe fiecare joc (fara preselectie pe
   istoric). `random` si `frequency` trebuie sa ramana in lista activa.
-- Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`)
-  sau pe alt `--istoric` nu trebuie sa rescrie decizia de productie fara
-  `--force-decision`.
+- Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`),
+  pe alt `--istoric` sau cu `--block-size` diferit de 1 nu trebuie sa rescrie
+  decizia de productie fara `--force-decision` (`reduced_run_reason`).
 
 ### 4.4 Persistenta si concurenta
 
@@ -588,6 +641,12 @@ Pentru fiecare joc si pool:
   Se redeseneaza numai aceste mesaje; controalele si sectiunile deschise
   de rezultate raman intacte. O nepotrivire fara extrageri noi poate veni
   si din metode, deci nu este descrisa automat drept CSV schimbat.
+- Schimbarea tintei recalculeaza decizia numai pe un `folds.csv` care acopera
+  Re-Bench-ul deciziei (`_meta.methods_tested_per_game` × `_meta.percentiles`,
+  `decision.missing_decision_folds`, `require_complete=True`). Un flush partial
+  al runner-ului, un bench oprit sau `--quick` lasa decizia neatinsa, cu
+  avertisment. Cat ruleaza un bench, recalcularea se amana pana la
+  `_on_bench_finished`.
 - Clasamentul preia `ranked_methods` din decizia recalculata pe snapshot-ul
   afisat. Metodele excluse pentru egalitati la limita top-K sau ferestre lipsa
   raman vizibile cu motiv, fara rang. Trofeul arata primul eligibil; tinta arata
@@ -743,7 +802,10 @@ limita de validitate din §5).
   `covering.spread.spread_variants`). Universul are ordinea: pool-ul afisat,
   apoi restul clasamentului metodei, apoi celelalte numere permise (numarul
   mai mare intai). Respecta `audit.restrict_base` (fara `ignored`), limita de
-  consecutive PE FIECARE VARIANTA si numarul Joker. Renunta la garantia
+  consecutive PE FIECARE VARIANTA si numarul Joker. Pe o baza ingusta,
+  variantele peste limita ramase dupa cautarea locala se inlocuiesc cu
+  combinatii conforme nefolosite (`_repair_runs`, enumerare pana la 20000);
+  cand nu exista destule, nota spune limita atinsa, nu o pretinde. Renunta la garantia
   pool-ului. Dialogul afiseaza, pentru pragurile cu premiu, sansa EXACTA ca
   cel putin o varianta sa castige (`ticket_hit_probabilities`, enumerare),
   sansa celuilalt mod pe acelasi numar de variante si nota ca media si marele
@@ -755,13 +817,17 @@ limita de validitate din §5).
   fi dat butonul in ziua aceea, din `ticket_context` (§8), cu numarul de
   bilete din sidebar si garantia rezultatului afisat; Joker numai Urna 1;
   la 5/40 intersectia e cu toate cele sase numere extrase. Ambele moduri au
-  acelasi numar de variante. Coloana 🎲 = P exacta (enumerare, extragere
+  acelasi numar de variante; un pas la care difera (pool din fallback-ul de
+  frecventa, fara clasament de extins) se numara indisponibil. Pool-ul si
+  referinta aleatoare a tabelului principal folosesc marimea jucata la pasi
+  (`_wf_pool_size`), nu pe cea ceruta. Coloana 🎲 = P exacta (enumerare, extragere
   uniforma) ca cel putin o varianta sa atinga 3+/4+/5+, calculata pe
   biletele celei mai recente extrageri; nu e rata observata si nu depinde
   de etichetele numerelor. Calculul ruleaza in fundal (pana la 4 procese,
   `with_chances=False`, jurnalul greedy pe WARNING), memorat pe lista WF
   afisata; un temporizator de 1 s umple sau reface numai acel bloc (si cand
-  se schimba „Bilete”), fara refresh-ul panoului. Pasii fara context sunt
+  se schimba „Bilete”), fara refresh-ul panoului, si nu repune in coada
+  reluarea aflata in calcul (`_REPLAY_THREAD["current"]`). Pasii fara context sunt
   numarati separat. Copiii ProcessPoolExecutor sunt `__mp_main__`:
   `app_nicegui.py` porneste UI-ul numai din `__main__` (`reload=False`).
   Masurat pe istoricul complet, UI izolat: 3 bilete instant dupa WF;
@@ -896,7 +962,9 @@ a intersectiei si creste strict la 3+/4+/5+ posibile. Dominanta pastreaza singur
 garantiile: counts[t][t] (cover clasic), counts[p][t] (t daca p), counts[1][1]
 (numerele jucate). Acelasi numar de bilete distincte, acelasi pool. Limite:
 pool 5..16, pick 3..6, cel mult 512 bilete, doua treceri, 25000 candidati
-(cel mai rau caz masurat ~3 s, pool 16); memoizare limitata. Castiguri masurate
+(~2-3 s la pool 16 pe garantii sub bilet; cu garantia egala cu biletul si
+plafon, pool 16: ~9 s la pick 6 si ~6 s la pick 5, la fiecare pas WF, masurat
+pe Linux la auditul 2026-10-07); memoizare limitata. Castiguri masurate
 in `scripts/analysis/hit_opt_report_2026-10-02.md` (`bench_hit_profile.py`);
 cele mai mari la lotto designs, mici la coverele clasice. Fara afirmatie
 predictiva: probabilitatea de hit a POOL-ului nu se schimba.
@@ -990,6 +1058,9 @@ castigul depinde de geometrie, scoruri si hardware.
 
 - WF foloseste numai date anterioare extragerii validate.
 - UI valideaza onest pool-ul unic.
+- O decizie rescrisa in timpul rularii (Re-Bench terminat, tinta schimbata)
+  inseamna pasi scorati de doi scoreri: WF nu mai salveaza cache-ul
+  (`meta["decision_changed"]`), iar UI-ul si raportul o spun.
 - `hits` = maximul pe un singur bilet.
 - `hits_union` = intersectia pool-ului cu extragerea (la 5/40, cu toate cele
   6 numere extrase; biletul ramane de 5).
@@ -1024,9 +1095,9 @@ decizia Urnei 2.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v21` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
-| walk-forward | `v30` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v11` | se schimba rezultatul serializat al pipeline-ului |
+| benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
+| worker pipeline | `v12` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
@@ -1053,7 +1124,7 @@ constante se tin sincron (exista un test pentru asta) si se incrementeaza
 impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
 Limita de consecutive urmeaza acelasi contract cu `_CONSECUTIVE_SEMANTICS`
 (`walk_forward_adapter._consecutive_sig` si hash-ul din `_build_config_json`),
-fara bump de `v30`. Cum bifa e pornita implicit, primul WF dupa actualizare
+fara bump global de WF. Cum bifa e pornita implicit, primul WF dupa actualizare
 calculeaza o cheie noua (poate iesi partial si continua prin `skip_indices`).
 
 ## 10. Mediu si rulare

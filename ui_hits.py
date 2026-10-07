@@ -144,7 +144,9 @@ def _n_extrageri(n: int) -> str:
 _REPLAY_LOCK = threading.Lock()
 _REPLAY_DONE: dict = {}
 _REPLAY_PENDING: dict = {}
-_REPLAY_THREAD: dict = {"running": False}
+# `current` = (cheie, flat) aflată în calcul: temporizatorul de 1 s n-o mai pune
+# înapoi în coadă, altfel fiecare reluare se calcula de două ori.
+_REPLAY_THREAD: dict = {"running": False, "current": None}
 _REPLAY_KEEP = 12
 
 
@@ -159,9 +161,11 @@ def _replay_loop() -> None:
         with _REPLAY_LOCK:
             if not _REPLAY_PENDING:
                 _REPLAY_THREAD["running"] = False
+                _REPLAY_THREAD["current"] = None
                 return
             key = next(reversed(_REPLAY_PENDING))  # cererea cea mai recentă întâi
             flat, game, tickets, guarantee = _REPLAY_PENDING.pop(key)
+            _REPLAY_THREAD["current"] = (key, flat)
         try:
             res = replay_full_tickets(
                 flat, game, tickets, guarantee, workers=_replay_workers()
@@ -171,6 +175,10 @@ def _replay_loop() -> None:
             res = {"failed": str(exc)}
         with _REPLAY_LOCK:
             _REPLAY_DONE[key] = (flat, res)
+            again = _REPLAY_PENDING.get(key)
+            if again is not None and again[0] is flat:
+                del _REPLAY_PENDING[key]  # aceeași cerere, deja calculată
+            _REPLAY_THREAD["current"] = None
             while len(_REPLAY_DONE) > _REPLAY_KEEP:
                 _REPLAY_DONE.pop(next(iter(_REPLAY_DONE)))
 
@@ -182,6 +190,9 @@ def _full_ticket_replay(flat, game: str, tickets: int, guarantee) -> dict | None
         done = _REPLAY_DONE.get(key)
         if done is not None and done[0] is flat:
             return done[1]
+        current = _REPLAY_THREAD.get("current")
+        if current is not None and current[0] == key and current[1] is flat:
+            return None  # în calcul chiar acum
         # Alt număr de bilete pe același istoric: cererea veche nu mai e afișată.
         for old in [k for k in _REPLAY_PENDING if k[:3] == key[:3]]:
             del _REPLAY_PENDING[old]
@@ -333,7 +344,7 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
         return (
             "text-warning text-caption text-bold",
             f"⚠️ Wheel INCOMPLET{_sfx}: {cov['below_100']} din {_n_extrageri(cov['known'])} "
-            f"sub 100% acoperire (minim {cov['min']:.1f}%) — cifrele de POOL sunt un "
+            f"sub 100% acoperire (minim {cov['min']:.2f}%) — cifrele de POOL sunt un "
             "PLAFON, nu ce prinde un bilet. «Variante maxime» = 0 scoate doar plafonul; "
             "procentul măsurat rămâne decisiv.",
         )
@@ -351,6 +362,27 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
             f"{cov['unknown']} (cache WF mai vechi).",
         )
     return None
+
+
+def _wf_pool_size(flat, fallback: int) -> int:
+    """Mărimea pool-ului jucat la pașii WF (cea mai frecventă), altfel `fallback`.
+
+    Pool-ul cerut poate fi mai mare decât intervalul restrâns: atunci fiecare pas
+    joacă mai puține numere, iar referința aleatoare trebuie calculată pe ele.
+    """
+    sizes: dict[int, int] = {}
+    seen: set = set()
+    for row in flat or ():
+        di = getattr(row, "draw_index", None)
+        if di in seen:
+            continue
+        seen.add(di)
+        hard_core = (getattr(row, "ticket_context", None) or {}).get("hard_core")
+        if hard_core:
+            sizes[len(hard_core)] = sizes.get(len(hard_core), 0) + 1
+    if not sizes:
+        return int(fallback or 0)
+    return max(sizes, key=lambda k: (sizes[k], k))
 
 
 def _wf_per_draw_stats(flat) -> dict:
@@ -449,6 +481,12 @@ def _render_hits_4plus(
             f"⚠️ Validare PARȚIALĂ: {meta.get('n_test_draws')} din "
             f"{meta.get('n_expected')} extrageri — extragerile CELE MAI RECENTE."
         ).classes("text-warning text-caption text-bold")
+    if meta and meta.get("decision_changed"):
+        ui.label(
+            "⚠️ Decizia de bench s-a schimbat în timpul validării (Re-Bench terminat "
+            "sau țintă schimbată): pașii nu provin dintr-un singur scorer. Rezultatul "
+            "nu s-a salvat în cache; rulează din nou walk-forward-ul."
+        ).classes("text-warning text-caption text-bold")
     # (1) Sumar comparabil: +3 / +4 / +5 pe pool, baseline hipergeometric și volumul
     # real de variante din WF. Premiile nu pot fi deduse din hiturile Urnei 1.
     _foreign = _LOT.lottery_by_id(str(game))
@@ -463,9 +501,10 @@ def _render_hits_4plus(
         _TT = game_hit_target(_foreign.bench_key, _bench_target())
     else:
         _TT = game_hit_target("loto_5_40" if gk == "5/40" else str(gk), _bench_target())
-    # Pool-ul REAL (nu string fix „din 16"): meta WF (salvat la rulare) are prioritate,
-    # apoi rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
-    _pn = int((meta or {}).get("pool_size") or pool_n or 0)
+    # Pool-ul REAL (nu string fix „din 16"): mărimea jucată la pașii WF (o bază
+    # restrânsă mai îngustă decât pool-ul o micșorează), apoi meta WF, apoi
+    # rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
+    _pn = _wf_pool_size(flat, int((meta or {}).get("pool_size") or pool_n or 0))
     n_tick = len(flat)
     tick_avg = (n_tick / n) if n else 0.0
 

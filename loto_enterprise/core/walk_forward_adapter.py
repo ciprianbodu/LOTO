@@ -48,7 +48,10 @@ logger = logging.getLogger(__name__)
 
 CACHE_DIR = WF_CACHE_DIR
 LEGACY_CACHE_DIR = PROJECT_ROOT / "bench_results"
-CACHE_VERSION = "v30"
+CACHE_VERSION = "v31"
+# v31: `rank_ensemble_core` cu rang mediu la egalitate; penalizarea recentă cu
+#      factorul 0 păstrează ordinea scorului; semnătura designurilor fără calea
+#      absolută a checkout-ului (audit 2026-10-07).
 # v30: swap-uri cu dominanta exacta a profilului de hituri (covere clasice, lotto,
 #      buget); sufixul |hp1 in semnatura wheel-ului marcheaza geometria noua.
 # v29: geometria coverelor complete de 4 optimizeaza automat hiturile de 5.
@@ -872,6 +875,10 @@ def run_honest_walk_forward(
     bt = LotoBacktester(
         df_source, game_type=game_type, game_key=wf_key, country=wf_country
     )
+    # Pașii recitesc decizia la fiecare extragere. Dacă fișierul se rescrie în
+    # timpul rulării (Re-Bench terminat, ținta 3+/4+ schimbată), pașii de după
+    # folosesc alt scorer decât cheia `dec_sig` calculată la început.
+    _decision_before = _decision_file_stamp(wf_country)
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
         guarantee=g,
@@ -913,6 +920,8 @@ def run_honest_walk_forward(
     meta["n_test_draws"] = len(set(p.draw_index for p in predictions))
     meta["n_expected"] = n_expected
     meta["partial"] = meta["n_test_draws"] < n_expected
+    if _decision_file_stamp(wf_country) != _decision_before:
+        meta["decision_changed"] = True
 
     # Cache PARȚIAL existent → REUNIUNE, nu „câștigă cel mai lung": nicio extragere
     # deja validată nu se pierde, iar acoperirea se acumulează între sesiuni chiar
@@ -948,7 +957,17 @@ def run_honest_walk_forward(
     # Save cache (rezultatul reunit ⊇ cache → suprascriem; scriere atomică anti-corupere
     # la UI-restart în mijlocul pickle.dump — un cache trunchiat ar crăpa la load).
     try:
-        if should_skip_cache_write is not None and should_skip_cache_write():
+        if meta.get("decision_changed"):
+            # Pași amestecați (scorer vechi + scorer nou) sub cheia scorerului
+            # vechi: o generare ulterioară cu aceeași decizie i-ar servi drept
+            # istoricul ei. Nu se salvează; rularea următoare reface pașii.
+            logger.warning(
+                "[WALK-FWD] %s pool=%s: decizia s-a schimbat în timpul rulării — "
+                "nu salvez cache-ul (pașii nu provin dintr-un singur scorer).",
+                game_type,
+                pool_size,
+            )
+        elif should_skip_cache_write is not None and should_skip_cache_write():
             logger.info(
                 f"[WALK-FWD] Rulare înlocuită de una nouă pentru {game_type} pool={pool_size} "
                 "— sar scrierea cache-ului (evit suprascrierea rulării mai noi)."
@@ -960,6 +979,17 @@ def run_honest_walk_forward(
         logger.warning(f"[WALK-FWD] Cache save failed: {exc}")
 
     return flat, meta
+
+
+def _decision_file_stamp(country: str | None) -> tuple[int, int] | None:
+    """(mtime_ns, mărime) a fișierului de decizie citit de pașii WF; None = lipsă."""
+    try:
+        from loto_enterprise.core.method_selector import decision_path_for
+
+        st = Path(decision_path_for(country or "RO")).stat()
+    except Exception:  # noqa: BLE001 — lipsă/țară necunoscută: fără amprentă
+        return None
+    return (st.st_mtime_ns, st.st_size)
 
 
 def _stale_wf_cache_files() -> list[Path]:

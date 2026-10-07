@@ -504,6 +504,13 @@ def is_worker_running() -> bool:
                     continue
                 if norm_arg == target_norm:
                     return True
+                if not os.path.isabs(arg_s):
+                    # Relativ la directorul PROCESULUI, nu al UI-ului: un
+                    # `python worker.py` din alt checkout nu e workerul nostru.
+                    try:
+                        arg_s = os.path.join(proc.cwd(), arg_s)
+                    except (psutil.Error, OSError):
+                        continue
                 try:
                     if os.path.samefile(arg_s, WORKER_PATH):
                         return True

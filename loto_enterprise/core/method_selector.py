@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 from pathlib import Path
 from typing import Callable
 
@@ -38,6 +39,9 @@ _CACHE: dict[str, Callable] = {}
 _CONFIG: dict | None = None
 _CONFIG_MTIME: float = -1.0
 _CONFIG_PATH_USED: Path | None = None
+# Calea, mtime-ul și conținutul se publică împreună: firul WF și firul UI pot
+# citi decizii diferite (România și altă țară) în același timp.
+_CONFIG_LOCK = threading.Lock()
 
 
 def decision_path_for(country) -> Path:
@@ -110,25 +114,32 @@ def _load_config(path: str | None = None) -> dict:
         mtime = cfg_path.stat().st_mtime
     except OSError:
         mtime = -1.0
-    if _CONFIG is not None and cfg_path == _CONFIG_PATH_USED and mtime == _CONFIG_MTIME:
-        return _CONFIG
-    _CONFIG_PATH_USED = cfg_path
-    _CONFIG_MTIME = mtime
+    with _CONFIG_LOCK:
+        if (
+            _CONFIG is not None
+            and cfg_path == _CONFIG_PATH_USED
+            and mtime == _CONFIG_MTIME
+        ):
+            return _CONFIG
+        cfg = _read_config(cfg_path)
+        _CONFIG, _CONFIG_MTIME, _CONFIG_PATH_USED = cfg, mtime, cfg_path
+        return cfg
+
+
+def _read_config(cfg_path: Path) -> dict:
     if not cfg_path.exists():
         logger.warning(
             "[method_selector] %s missing — using frequency baseline", cfg_path
         )
-        _CONFIG = {"games": {}}
-        return _CONFIG
+        return {"games": {}}
     try:
-        _CONFIG = json.loads(cfg_path.read_text(encoding="utf-8"))
-        if not isinstance(_CONFIG, dict) or not isinstance(_CONFIG.get("games", {}), dict):
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        if not isinstance(cfg, dict) or not isinstance(cfg.get("games", {}), dict):
             raise ValueError("config must contain a games object")
     except Exception as exc:
         logger.error("[method_selector] failed to parse %s: %s", cfg_path, exc)
-        _CONFIG = {"games": {}}
-        return _CONFIG
-    mismatch = _country_mismatch(_CONFIG, _expected_country(cfg_path))
+        return {"games": {}}
+    mismatch = _country_mismatch(cfg, _expected_country(cfg_path))
     if mismatch:
         logger.error(
             "[method_selector] %s nu aparține țării lui (%s) — îl tratez ca lipsă, "
@@ -136,8 +147,8 @@ def _load_config(path: str | None = None) -> dict:
             cfg_path,
             mismatch,
         )
-        _CONFIG = {"games": {}}
-    return _CONFIG
+        return {"games": {}}
+    return cfg
 
 
 def _is_urna2_key(game_key) -> bool:
@@ -323,6 +334,36 @@ def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
     return entry if isinstance(entry, dict) else {}
 
 
+def rejected_decision_scorer(
+    game_key: str, pool_size: int | None, config_path: str | None = None
+) -> str | None:
+    """Numele scris în decizie pe care producția nu-l poate rula, altfel None.
+
+    Interzis (EXCLUDED_FROM_PRODUCTION) sau necunoscut registry-ului. Auditul
+    îl raportează ca `attempted`, ca rezultatul să nu prezinte rezerva drept
+    câștigătoarea bench-ului.
+    """
+    if pool_size is None:
+        return None
+    g = _load_config(config_path).get("games", {}).get(game_key, {})
+    ap = _auto_pilot_entry(g, pool_size)
+    if not ap:
+        return None
+    raw = ap.get("scorer")
+    if not raw:
+        raw = next(
+            (
+                item.get("method")
+                for item in ap.get("ensemble") or []
+                if isinstance(item, dict) and item.get("method")
+            ),
+            None,
+        )
+    if raw and _sanitize_production_name(raw, context="decizie") is None:
+        return str(raw)
+    return None
+
+
 def get_winner_name(
     game_key: str,
     pool_size: int | None = None,
@@ -360,6 +401,16 @@ def get_winner_name(
             n, _ens, _salv = _sanitize_ap_production(ap)
             if n:
                 return n
+            # Decizia există, dar numele ei e interzis sau necunoscut. Câmpurile
+            # vechi (winners_per_pool_best, overall_winner) clasează numai după
+            # avg_hits, fără poarta față de random și fără cea de tie-break:
+            # nu sunt o rezervă validată. Regula din AGENTS.md: frequency.
+            logger.warning(
+                "[method_selector] %s k%s: scorerul din decizie e respins — frequency",
+                game_key,
+                pool_size,
+            )
+            return "frequency"
         key = f"k{pool_size}"
         # v3 fallback: best of (no-bl, +bl)
         wpp_best = g.get("winners_per_pool_best", {})

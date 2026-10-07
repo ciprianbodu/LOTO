@@ -199,16 +199,31 @@ def _signature(gk, csv_map, cols_map):
     return compute_csv_signature(gk, csv_map, cols_map)
 
 
+def csv_signatures(
+    csv_map: dict | None = None, cols_map: dict | None = None
+) -> dict[str, dict]:
+    """Semnăturile CSV-urilor de acum, în forma din `_meta.csv_signatures`."""
+    csv_map = GAMES_CSV_MAP if csv_map is None else csv_map
+    sigs: dict[str, dict] = {}
+    for gk in csv_map:
+        path, h, n = _signature(gk, csv_map, cols_map)
+        sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
+    return sigs
+
+
 def write_signatures_to_best_methods(
     best_methods_path: str = "best_methods.json",
     csv_map: dict | None = None,
     cols_map: dict | None = None,
+    signatures: dict[str, dict] | None = None,
 ) -> dict[str, dict]:
-    """Stamp the current CSV signatures into best_methods.json._meta.csv_signatures.
+    """Stamp the CSV signatures into best_methods.json._meta.csv_signatures.
 
     `csv_map`/`cols_map` (implicit tabelele românești) aleg jocurile și
-    CSV-urile; o altă țară le primește din `country_freshness_inputs`."""
-    csv_map = GAMES_CSV_MAP if csv_map is None else csv_map
+    CSV-urile; o altă țară le primește din `country_freshness_inputs`.
+    `signatures` = semnăturile luate ÎNAINTE de bench (`csv_signatures`): o
+    extragere adăugată cât rula bench-ul nu e în folds, deci nu are voie să
+    apară ca „la zi". Fără ele, se calculează acum (comportamentul vechi)."""
     bm = Path(best_methods_path)
     if not bm.exists():
         return {}
@@ -219,10 +234,11 @@ def write_signatures_to_best_methods(
     # `write_text` direct și putea trunchia tocmai decizia scrisă atomic anterior.
     with file_lock(bm):
         cfg = json.loads(bm.read_text(encoding="utf-8"))
-        sigs: dict[str, dict] = {}
-        for gk in csv_map:
-            path, h, n = _signature(gk, csv_map, cols_map)
-            sigs[gk] = {"csv_path": path, "hash": h, "rows": n}
+        sigs = (
+            dict(signatures)
+            if signatures is not None
+            else csv_signatures(csv_map, cols_map)
+        )
         cfg.setdefault("_meta", {})["csv_signatures"] = sigs
         cfg["_meta"]["engine_signature"] = compute_engine_signature()
         atomic_write_json(bm, cfg)
