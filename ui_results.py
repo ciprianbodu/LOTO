@@ -813,7 +813,12 @@ def _build_report() -> str:
                 if _wm.get("partial"):
                     wf += (
                         f" | PARȚIAL: {_wm.get('n_test_draws')} din "
-                        f"{_wm.get('n_expected')} extrageri (cele mai recente)"
+                        f"{_wm.get('n_expected')} extrageri "
+                        + (
+                            "(lipsesc cele mai noi)"
+                            if _wm.get("newest_missing")
+                            else "(cele mai recente)"
+                        )
                     )
                 if _wm.get("decision_changed"):
                     wf += " | decizia s-a schimbat în timpul validării"

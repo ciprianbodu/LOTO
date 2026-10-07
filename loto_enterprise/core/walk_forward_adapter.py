@@ -18,6 +18,12 @@ Cache:
       şi hiturile per bilet; fără el, raportul ar evalua un wheel care nu mai există.
       Opțiunile de compoziție ale utilizatorului (penalizare recentă, bază
       restrânsă, limită de consecutive) intră în dec_sig numai când sunt active.
+    - O extragere nouă schimbă csv_hash. Pașii WF sunt fără stare (fiecare vede
+      numai extragerile dinaintea zilei țintei), deci când istoricul nou doar
+      adaugă rânduri la coada celui vechi, pașii cache-ului anterior al aceleiași
+      chei rămân valabili: se refolosesc (`_previous_history_steps`), iar rularea
+      calculează numai pașii lipsă. O corectură în trecut schimbă prefixul și
+      reface tot.
     - Un bump de CACHE_VERSION doar schimbă NUMELE fişierului: pickle-urile vechi
       rămân pe disc la nesfârşit. `purge_stale_wf_cache()` le inventariază (implicit
       dry-run) şi le poate şterge; `clear_walk_forward_cache()` şterge TOT, inclusiv
@@ -710,6 +716,135 @@ def _merge_partial_coverage(
     return merged, meta
 
 
+# Câte rânduri adăugate la coadă caută reutilizarea pentru un cache scris
+# înainte de câmpul `history_rows` (numărul de rânduri al istoricului validat).
+_PREFIX_SCAN_ROWS = 60
+# Câte cache-uri anterioare ale aceleiași chei se încearcă, cele mai noi întâi.
+_PREFIX_MAX_CANDIDATES = 4
+
+
+def _prefix_rows(
+    df: pd.DataFrame, game_type: str, old_hash: str, hinted: Any = None
+) -> int | None:
+    """Câte rânduri de la începutul lui `df` au amprenta istoricului vechi.
+
+    Amprenta include lungimea, deci cu `history_rows` (`hinted`) numai acea
+    lungime poate corespunde; fără câmp (cache vechi) se încearcă ultimele
+    `_PREFIX_SCAN_ROWS` lungimi."""
+    n = len(df)
+    if hinted is not None:
+        try:
+            tried = [int(hinted)] if 0 < int(hinted) < n else []
+        except (TypeError, ValueError):
+            tried = []
+    else:
+        tried = list(range(n - 1, max(0, n - 1 - _PREFIX_SCAN_ROWS), -1))
+    for k in tried:
+        if _csv_hash(df.iloc[:k], game_type) == old_hash:
+            return k
+    return None
+
+
+def _previous_history_steps(
+    bt,
+    df_source: pd.DataFrame,
+    game_type: str,
+    csv_hash: str,
+    cache_file: Path,
+    depth: float,
+    game_key: str | None = None,
+    country: str | None = None,
+) -> list | None:
+    """Pașii unei validări anterioare a ACELEIAȘI chei, pe un istoric-prefix.
+
+    Un pas walk-forward fără stare (`use_feedback=False`) vede numai
+    `df.iloc[:cutoff]` al extragerii țintă. Dacă istoricul intern al
+    backtester-ului (sortat, cu rândurile invalide scoase) începe exact cu cel
+    vechi, pașii vechi sunt identici cu cei pe care i-ar calcula rularea nouă.
+    Se verifică prefixul pe extrageri, date, cutoff-uri și amprentă, apoi data
+    țintă a fiecărui pas refolosit. Se întorc numai pașii din fereastra nouă.
+    None = nimic refolosibil (corectură în trecut, extragere inserată, alt
+    scorer, alte setări: toate schimbă prefixul sau cheia).
+    """
+    from loto_enterprise.core.backtesting import LotoBacktester
+
+    name = cache_file.name
+    parts = name.split(f"_{csv_hash}_")
+    if len(parts) != 2:
+        return None
+    head, tail = parts[0] + "_", "_" + parts[1]
+    candidates = []
+    try:
+        for f in cache_file.parent.iterdir():
+            middle = f.name[len(head) : len(f.name) - len(tail)]
+            if (
+                f.name != name
+                and f.name.startswith(head)
+                and f.name.endswith(tail)
+                and len(middle) == 12
+                and all(c in "0123456789abcdef" for c in middle)
+            ):
+                candidates.append((f.stat().st_mtime, f))
+    except OSError:
+        return None
+    if not candidates:
+        return None
+    cutoffs = [int(c) for c in bt.df.attrs["training_cutoffs"]]
+    window = set(simulation_indices(cutoffs, depth))
+    for _, path in sorted(candidates, key=lambda c: c[0], reverse=True)[
+        :_PREFIX_MAX_CANDIDATES
+    ]:
+        try:
+            old = pickle_load_path(path)
+            old_flat = list(old.get("flat") or [])
+            if not old_flat:
+                continue
+            old_hash = str(old.get("csv_hash") or path.name[len(head) : -len(tail)])
+            n_old = _prefix_rows(df_source, game_type, old_hash, old.get("history_rows"))
+            if n_old is None:
+                continue
+            bt_old = LotoBacktester(
+                df_source.iloc[:n_old],
+                game_type=game_type,
+                game_key=game_key,
+                country=country,
+            )
+            m = len(bt_old.draws)
+            if (
+                m > len(bt.draws)
+                or bt.draws[:m] != bt_old.draws
+                or bt.dates[:m] != bt_old.dates
+                or cutoffs[:m] != [int(c) for c in bt_old.df.attrs["training_cutoffs"]]
+                or _csv_hash(bt.df.iloc[:m], game_type) != _csv_hash(bt_old.df, game_type)
+            ):
+                continue
+            _backfill_new_fields(old_flat)
+            keep = [
+                r
+                for r in old_flat
+                if int(getattr(r, "draw_index", -1)) in window
+                and int(getattr(r, "draw_index", -1)) < m
+            ]
+            if not keep or any(
+                str(getattr(r, "target_draw_date", None))
+                != str(bt.dates[int(r.draw_index)])
+                for r in keep
+            ):
+                continue
+            logger.info(
+                "[WALK-FWD] %s: refolosesc %d extrageri validate pe istoricul "
+                "anterior (%d rânduri, %s).",
+                game_type,
+                len({int(r.draw_index) for r in keep}),
+                n_old,
+                path.name,
+            )
+            return keep
+        except Exception as exc:  # noqa: BLE001 — un cache ilizibil nu oprește WF
+            logger.warning("[WALK-FWD] cache anterior ignorat (%s): %s", path.name, exc)
+    return None
+
+
 def run_honest_walk_forward(
     df_source: pd.DataFrame,
     game_type: str,
@@ -732,6 +867,7 @@ def run_honest_walk_forward(
     *,
     game_key: str | None = None,
     country: str | None = None,
+    cache_only: bool = False,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -761,6 +897,10 @@ def run_honest_walk_forward(
     serializate de rulări, nu între rulări concurente care se suprapun pe disc).
     None (implicit) păstrează comportamentul vechi — scriere necondiționată.
 
+    `cache_only`: numai citire, fără niciun pas calculat și fără scriere
+    (reafișarea unui rezultat recuperat la pornire). Întoarce cache-ul exact,
+    complet sau parțial, altfel `([], meta)` cu `cache_miss=True`.
+
     Returns:
         (flat_results, meta_dict)
         meta_dict include: from_cache (bool), n_predictions, n_test_draws, csv_hash
@@ -770,6 +910,9 @@ def run_honest_walk_forward(
     wf_key = lot.bench_key if lot is not None else None
     wf_country = lot.country if lot is not None else None
     csv_hash = _csv_hash(df_source, game_type)
+    # Amprenta deciziei ÎNAINTE de semnătură: o rescriere oricând după acest punct
+    # (inclusiv în timpul căutării pașilor refolosibili) se vede la final.
+    _decision_before = _decision_file_stamp(wf_country)
     dec_sig = _decision_sig(
         game_type,
         pool_size,
@@ -810,6 +953,8 @@ def run_honest_walk_forward(
         "max_variants": cap,
         "max_consecutive_run": int(max_consecutive_run or 0),
         "selection_validation": "fixed_current_decision",
+        # Rândurile istoricului validat: o extragere nouă găsește direct prefixul.
+        "history_rows": int(len(df_source)),
     }
     if lot is not None:
         # Numai în afara României: meta-ul românesc rămâne cel de dinainte.
@@ -865,6 +1010,25 @@ def run_honest_walk_forward(
             cached = None
             logger.warning(f"[WALK-FWD] Cache load failed: {exc} — re-run")
 
+    if cache_only:
+        # Numai cache-ul EXACT. Pașii refolosibili ai unui istoric-prefix nu se
+        # arată aici: le lipsesc tocmai extragerile cele mai noi, iar eticheta
+        # validării parțiale („cele mai recente”) ar spune contrariul.
+        if cached is None:
+            meta.update(
+                cache_miss=True, n_predictions=0, n_test_draws=0, partial=True
+            )
+            return [], meta
+        flat_c = list(cached.get("flat") or [])
+        meta["from_cache"] = True
+        meta["n_predictions"] = cached.get("n_predictions")
+        meta["n_test_draws"] = cached.get("n_test_draws")
+        meta["n_expected"] = cached.get("n_expected", cached.get("n_test_draws"))
+        meta["partial"] = bool(cached.get("partial", False))
+        meta["newest_missing"] = bool(cached.get("newest_missing", False))
+        meta["wheel_coverage"] = wheel_coverage_summary(flat_c)
+        return flat_c, meta
+
     # Cache miss → rulează walk-forward genuin
     from loto_enterprise.core.backtesting import LotoBacktester
 
@@ -875,10 +1039,26 @@ def run_honest_walk_forward(
     bt = LotoBacktester(
         df_source, game_type=game_type, game_key=wf_key, country=wf_country
     )
+    if cached is None and use_cache and not force_refresh:
+        # Extragere nouă la coadă: pașii vechi ai aceleiași chei se refolosesc,
+        # rularea calculează numai pașii lipsă (de regulă cei noi).
+        reused = _previous_history_steps(
+            bt,
+            df_source,
+            game_type,
+            csv_hash,
+            cache_file,
+            backtest_depth_percent,
+            wf_key,
+            wf_country,
+        )
+        if reused:
+            cached = {"flat": reused}
+            meta["reused_previous_history"] = len({int(r.draw_index) for r in reused})
     # Pașii recitesc decizia la fiecare extragere. Dacă fișierul se rescrie în
     # timpul rulării (Re-Bench terminat, ținta 3+/4+ schimbată), pașii de după
-    # folosesc alt scorer decât cheia `dec_sig` calculată la început.
-    _decision_before = _decision_file_stamp(wf_country)
+    # folosesc alt scorer decât cheia `dec_sig` calculată la început
+    # (`_decision_before`, luată înaintea ei).
     predictions = bt.run_retroactive_backtest(
         pool_size=pool_size,
         guarantee=g,
@@ -912,9 +1092,8 @@ def run_honest_walk_forward(
     # rând invalid în CSV, backtester-ul simulează len(draws)*depth pași, deci un
     # n_expected calculat din len(df_source) era de neatins → cache-ul rămânea
     # marcat „partial" pentru totdeauna și se re-rula la fiecare Auto-Pilot.
-    n_expected = len(
-        simulation_indices(bt.df.attrs["training_cutoffs"], backtest_depth_percent)
-    )
+    window = simulation_indices(bt.df.attrs["training_cutoffs"], backtest_depth_percent)
+    n_expected = len(window)
     flat = expand_predictions_to_flat(predictions, game_type)
     meta["n_predictions"] = len(predictions)
     meta["n_test_draws"] = len(set(p.draw_index for p in predictions))
@@ -928,6 +1107,14 @@ def run_honest_walk_forward(
     # dacă rularea curentă a fost oprită devreme (buget/anulare) sau a sărit pași.
     if cached is not None:
         flat, meta = _merge_partial_coverage(cached, flat, meta)
+    # Rularea merge recent→vechi, deci o validare parțială are de regulă cele mai
+    # noi extrageri. Cu pași refolosiți, o anulare imediată ori un pas recent
+    # crăpat lasă tocmai cea mai nouă extragere neevaluată; UI-ul o spune.
+    meta["newest_missing"] = bool(
+        meta["partial"]
+        and window
+        and max(window) not in {int(getattr(r, "draw_index", -1)) for r in flat}
+    )
 
     # Acoperirea wheel-ului pe paşii validaţi. Se calculează DUPĂ reuniune, ca să
     # acopere şi paşii veniţi din cache. Sub 100% (sau necunoscută), `hits_union`

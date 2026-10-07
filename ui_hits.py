@@ -477,9 +477,14 @@ def _render_hits_4plus(
     if _cn:
         ui.label(_cn[1]).classes(_cn[0])
     if meta and meta.get("partial"):
+        _which = (
+            "lipsesc tocmai extragerile CELE MAI NOI"
+            if meta.get("newest_missing")
+            else "extragerile CELE MAI RECENTE"
+        )
         ui.label(
             f"⚠️ Validare PARȚIALĂ: {meta.get('n_test_draws')} din "
-            f"{meta.get('n_expected')} extrageri — extragerile CELE MAI RECENTE."
+            f"{meta.get('n_expected')} extrageri — {_which}."
         ).classes("text-warning text-caption text-bold")
     if meta and meta.get("decision_changed"):
         ui.label(

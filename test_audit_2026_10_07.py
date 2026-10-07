@@ -821,8 +821,8 @@ def test_another_stations_marker_does_not_hide_this_stations_job(tmp_path, monke
 
 
 def test_legacy_marker_of_the_latest_job_is_migrated_once(tmp_path, monkeypatch):
-    """Prima pornire după actualizare păstrează regula veche o dată: jobul deja
-    preluat nu reapare. Apoi marcajul e pe rând, iar cheia veche dispare."""
+    """Marcajul vechi trece pe rândul jobului, iar cheia veche dispare. Jobul
+    deja preluat se reafișează, fără finalizare (mail, oprire)."""
     import json
 
     import job_queue as queue
@@ -835,8 +835,10 @@ def test_legacy_marker_of_the_latest_job_is_migrated_once(tmp_path, monkeypatch)
     assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
     saved = json.loads(app_nicegui.UI_STATE_FILE.read_text(encoding="utf-8"))
     assert "last_finalized_job_id" not in saved
-    app_nicegui._recover_completed_job(allow_finalize=False)
-    assert app_nicegui.STATE["results"] is None
+    app_nicegui._recover_completed_job(allow_finalize=True)
+    assert app_nicegui.STATE["active_job_id"] is None
+    assert app_nicegui.STATE["results"] == ([], 0)
+    assert f"job #{jid}" in app_nicegui.STATE["results_recovered"]
 
 
 def test_settings_without_the_legacy_key_are_not_rewritten(tmp_path, monkeypatch):
@@ -849,7 +851,8 @@ def test_settings_without_the_legacy_key_are_not_rewritten(tmp_path, monkeypatch
 
 def test_a_failed_migration_keeps_the_legacy_marker_and_its_rule(tmp_path, monkeypatch):
     """Baza blocată la migrare: cheia veche rămâne în fișier, iar recuperarea din
-    aceeași pornire nu reia jobul deja preluat (fără mail sau oprire repetate)."""
+    aceeași pornire numai reafișează jobul deja preluat (fără mail sau oprire
+    repetate)."""
     import json
     import sqlite3
 
@@ -870,5 +873,5 @@ def test_a_failed_migration_keeps_the_legacy_marker_and_its_rule(tmp_path, monke
 
     app_nicegui._recover_completed_job(allow_finalize=True)
     assert app_nicegui.STATE["active_job_id"] is None
-    assert app_nicegui.STATE["results"] is None
+    assert app_nicegui.STATE["results"] == ([], 0)
     assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"] is None

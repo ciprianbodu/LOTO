@@ -80,6 +80,34 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Validarea WF tinuta minte — 2026-10-07
+
+- Ultimul rezultat reapare la fiecare pornire, cu avertismentul „Rezultate
+  RECUPERATE” si validarea WF citita din cache-ul exact (`cache_only`): fara
+  pas calculat, fara scriere, fara mail sau oprire, si numai daca decizia de
+  acum alege aceeasi metoda ca rezultatul. Pana acum, un job preluat de UI nu
+  se mai afisa dupa repornire, deci „📜 Istoric hits” ramanea gol (§4.4, §8).
+- La o extragere noua, WF refoloseste pasii validarii anterioare a aceleiasi
+  chei si calculeaza numai pasii noi (§8); o corectura in trecut reface tot.
+  Fara bump de cache.
+- Cost pe 6/49 (2590 de randuri): gasirea prefixului dupa `history_rows`
+  ~4 ms, o singura amprenta pe candidat; un cache scris fara camp, ~0,3 s pe
+  candidat (cel mult 4).
+- Review adversarial pe diff: constatarile confirmate sunt reparate, cu
+  teste: validarea altei metode la pornire, eticheta „cele mai recente” cand
+  lipsesc tocmai cele mai noi extrageri, raportul rescris fara WF la
+  repornire, cautarea inutila a prefixului, amprenta deciziei luata prea
+  tarziu. Testele acopera si cheia: alta metoda, garantie, limita de
+  consecutive sau interval nu imprumuta pasi (pica daca potrivirea ignora
+  semnatura); `test_wf_incremental.py` importa UI-ul la nivel de modul, ca
+  izolarea marcajului din `conftest.py` sa se aplice si unui test rulat singur.
+- Verificat pe Python 3.14.7 / Linux cu pwsh: 97 fisiere `test_*.py`, 2301
+  teste trecute, 38 sarite (lansatorul, numai pe Windows), zero esecuri.
+  Cap-coada pe o baza izolata, cu worker si UI reale: jobul preluat intr-o
+  sesiune anterioara reapare la doua porniri succesive cu validarea din cache
+  (36/36 pasi), fara „Cache miss”, fara pickle rescris; o extragere adaugata
+  refoloseste 35 de pasi si calculeaza unul.
+
 ### Audit global 2026-10-07, runda 2
 
 - Randul 5/40 din 24-10-2024 a fost corectat separat (PR #144, sectiunea
@@ -594,15 +622,21 @@ UI-ul face polling la o secunda, fara reload complet.
   singur UPDATE atomic; `CANCELLED`, `PENDING` reprogramat sau jobul disparut
   cer workerului sa se opreasca si nu au voie sa-si piarda logul de stare.
 - Nu scrie `pool_history.json` din pasi WF/backtest.
-- Jobul preluat de UI (afisare, mail, shutdown) se marcheaza pe randul lui din
+- Ultimul job COMPLETED se reafiseaza la fiecare pornire a UI-ului
+  (`_recover_completed_job`), cu avertismentul „Rezultate RECUPERATE” si
+  validarea WF din cache (§8); finalizarea (WF calculat, mail, shutdown) se
+  face cel mult o data. Jobul preluat de UI se marcheaza pe randul lui din
   baza statiei (`jobs.ui_finalized_at`, `mark_job_finalized`), nu in
   `.ui_state.json`: checkout-ul se poate sincroniza intre statii, iar id-urile
-  pornesc de la 1 pe fiecare. Golirea cozii sterge marcajul odata cu jobul.
+  pornesc de la 1 pe fiecare. Un job marcat se reafiseaza fara un nou marcaj
+  si fara a rescrie `raport_complet.txt` (raportul sesiunii care l-a
+  finalizat, cu WF-ul de atunci, ramane).
+  Golirea cozii sterge marcajul odata cu jobul.
   Cheia veche `last_finalized_job_id` se migreaza o data la pornirea UI
   (ultimul job COMPLETED cu acel id) si dispare din fisier numai dupa ce
   marcajul a ajuns in baza; daca baza refuza scrierea, cheia ramane, iar
-  recuperarea din pornirea curenta ii respecta regula. In teste,
-  `conftest.py` redirectioneaza marcarea spre o baza temporara.
+  recuperarea din pornirea curenta trateaza jobul ca preluat (numai afisare).
+  In teste, `conftest.py` redirectioneaza marcarea spre o baza temporara.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.
 - Pasii walk-forward paraleli primesc setarile pe NUME (`_wf_worker_step` ia un
@@ -1208,6 +1242,34 @@ castigul depinde de geometrie, scoruri si hardware.
 - Bugetul implicit este 90 minute si permite rezultat partial; la urmatoarea
   rulare pasii deja validati din cache-ul partial sunt sariti (`skip_indices`),
   deci acoperirea creste in loc sa se refaca de la zero.
+- O extragere noua schimba amprenta istoricului din cheie. Pasii fara stare
+  vad numai extragerile dinaintea zilei tintei, deci cand istoricul nou doar
+  adauga randuri la coada celui vechi, pasii cache-ului anterior al ACELEIASI
+  chei (joc, pool, adancime, decizie, setari; difera numai amprenta) raman
+  valabili: `_previous_history_steps` ii refoloseste, iar rularea calculeaza
+  numai pasii lipsa (`meta["reused_previous_history"]`). Conditii: istoricul
+  intern al backtester-ului (sortat, fara randurile invalide) incepe exact cu
+  cel vechi (extrageri, date, cutoff-uri, amprenta), iar data tinta a fiecarui
+  pas refolosit coincide. O corectura in trecut, ori o extragere veche adaugata
+  la coada CSV-ului si mutata de sortare in interior, reface tot.
+  Amprenta include lungimea, deci `meta["history_rows"]` e singura lungime
+  incercata; un cache scris fara camp se cauta pe ultimele 60. Amprenta
+  fisierului de decizie se ia inaintea semnaturii, ca o rescriere din timpul
+  cautarii sa marcheze `decision_changed`. Rezultatul refolosit e identic cu
+  o rulare completa (`test_wf_incremental.py`). Fara bump: cheia si structura
+  raman.
+- O validare partiala are de regula cele mai noi extrageri (pasii merg
+  recent→vechi). Cand tocmai cea mai noua lipseste (pas refolosit fara pasul
+  nou, pas recent crapat), `meta["newest_missing"]` o marcheaza, iar panoul si
+  raportul spun „lipsesc cele mai noi”, nu „cele mai recente”.
+- `cache_only=True` numai citeste cache-ul exact (complet sau partial), fara
+  pas calculat si fara scriere; pasii refolosibili nu se arata acolo, fiindca
+  le lipsesc tocmai extragerile cele mai noi. Rezultatul reafisat la pornire
+  isi incarca astfel validarea (`_load_cached_walk_forward`), numai daca
+  decizia de acum alege aceeasi metoda (si la Joker aceeasi Urna 2) ca auditul
+  rezultatului (`_result_scorers_match_decision`): cheia WF citeste decizia
+  curenta, iar dupa un Re-Bench sau o schimbare a tintei ar valida alta
+  metoda. Altfel, „📜 Istoric hits” ramane gol pana la generarea urmatoare.
 - Ordinea jocurilor este Joker, 5/40, 6/49.
 - Paralelizarea foloseste aproximativ 75% din nuclee, cu BLAS single-thread per
   proces.
