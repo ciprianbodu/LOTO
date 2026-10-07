@@ -83,15 +83,20 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 ### Validarea WF tinuta minte — 2026-10-07
 
 - Ultimul rezultat reapare la fiecare pornire, cu avertismentul „Rezultate
-  RECUPERATE” si validarea WF citita din cache (`cache_only`): fara pas
-  calculat, fara scriere, fara mail sau oprire. Pana acum, un job preluat de
-  UI nu se mai afisa dupa repornire, deci „📜 Istoric hits” ramanea gol
-  (§4.4).
+  RECUPERATE” si validarea WF citita din cache-ul exact (`cache_only`): fara
+  pas calculat, fara scriere, fara mail sau oprire, si numai daca decizia de
+  acum alege aceeasi metoda ca rezultatul. Pana acum, un job preluat de UI nu
+  se mai afisa dupa repornire, deci „📜 Istoric hits” ramanea gol (§4.4, §8).
 - La o extragere noua, WF refoloseste pasii validarii anterioare a aceleiasi
   chei si calculeaza numai pasii noi (§8); o corectura in trecut reface tot.
   Fara bump de cache.
 - Cost pe 6/49 (2590 de randuri): gasirea prefixului dupa `history_rows`
-  ~4 ms; un cache scris fara camp, ~0,3 s pe candidat (cel mult 4).
+  ~4 ms, o singura amprenta pe candidat; un cache scris fara camp, ~0,3 s pe
+  candidat (cel mult 4).
+- Review adversarial pe diff: patru constatari confirmate si reparate, cu
+  teste (validarea altei metode la pornire, eticheta „cele mai recente” pe
+  pasii refolosibili, cautarea inutila a prefixului, amprenta deciziei luata
+  prea tarziu).
 - Verificat pe Python 3.14.7 / Linux cu pwsh: 97 fisiere `test_*.py`, 2292
   teste trecute, 38 sarite (lansatorul, numai pe Windows), zero esecuri.
   Cap-coada pe o baza izolata, cu worker si UI reale: jobul preluat intr-o
@@ -1241,14 +1246,20 @@ castigul depinde de geometrie, scoruri si hardware.
   cel vechi (extrageri, date, cutoff-uri, amprenta), iar data tinta a fiecarui
   pas refolosit coincide. O corectura in trecut, ori o extragere veche adaugata
   la coada CSV-ului si mutata de sortare in interior, reface tot.
-  `meta["history_rows"]` gaseste direct prefixul; un cache fara camp se cauta
-  pe ultimele 60 de lungimi. Rezultatul refolosit e identic cu o rulare
-  completa (`test_wf_incremental.py`). Fara bump: cheia si structura raman.
-- `cache_only=True` numai citeste: cache-ul exact (complet sau partial),
-  altfel pasii refolosibili (marcati partial), altfel nimic; niciun pas
-  calculat, nicio scriere. Rezultatul reafisat la pornire isi incarca astfel
-  validarea (`_load_cached_walk_forward`); fara cache, „📜 Istoric hits”
-  ramane gol pana la generarea urmatoare.
+  Amprenta include lungimea, deci `meta["history_rows"]` e singura lungime
+  incercata; un cache scris fara camp se cauta pe ultimele 60. Amprenta
+  fisierului de decizie se ia inaintea semnaturii, ca o rescriere din timpul
+  cautarii sa marcheze `decision_changed`. Rezultatul refolosit e identic cu
+  o rulare completa (`test_wf_incremental.py`). Fara bump: cheia si structura
+  raman.
+- `cache_only=True` numai citeste cache-ul exact (complet sau partial), fara
+  pas calculat si fara scriere; pasii refolosibili nu se arata acolo, fiindca
+  le lipsesc tocmai extragerile cele mai noi. Rezultatul reafisat la pornire
+  isi incarca astfel validarea (`_load_cached_walk_forward`), numai daca
+  decizia de acum alege aceeasi metoda (si la Joker aceeasi Urna 2) ca auditul
+  rezultatului (`_result_scorers_match_decision`): cheia WF citeste decizia
+  curenta, iar dupa un Re-Bench sau o schimbare a tintei ar valida alta
+  metoda. Altfel, „📜 Istoric hits” ramane gol pana la generarea urmatoare.
 - Ordinea jocurilor este Joker, 5/40, 6/49.
 - Paralelizarea foloseste aproximativ 75% din nuclee, cu BLAS single-thread per
   proces.

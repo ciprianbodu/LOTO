@@ -1166,13 +1166,46 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
         }
 
 
+def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
+    """Metodele care au produs rezultatul sunt cele ale deciziei de acum.
+
+    Pașii WF și cheia cache-ului citesc decizia CURENTĂ. După un Re-Bench sau o
+    schimbare a țintei 3+/4+, cache-ul găsit sub decizia de acum validează altă
+    metodă decât cea care a produs pool-ul afișat. Se compară cu auditul
+    rezultatului (`bench_winner`), pe aceeași cale ca motorul; la Joker și Urna 2."""
+    from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
+    from loto_enterprise.core.method_selector import (
+        decision_path_for,
+        get_ensemble_for_game,
+        has_decision,
+    )
+
+    lot = _game_spec_for(g_label, data)
+    cfg = None if lot.is_romanian else str(decision_path_for(lot.country))
+    keys = [(lot.bench_key, _wf_run_kwargs(g_label, data)["pool_size"])]
+    if lot.geometry == "joker":
+        keys.append((lot.bench_key_urna2 or f"{lot.bench_key}_urna2", 1))
+    used = (data.get("audit") or {}).get("bench_winner") or {}
+    for key, hint in keys:
+        now = "frequency"
+        if has_decision(key, cfg):
+            ens = get_ensemble_for_game(
+                key, pool_size=hint, config_path=cfg, max_methods=ENSEMBLE_MAX_METHODS
+            )
+            if ens:
+                now = ens[0][0]
+        if (used.get(key) or {}).get("method") != now:
+            return False
+    return True
+
+
 def _load_cached_walk_forward() -> int:
     """Validarea WF a rezultatului recuperat, numai din cache-ul de pe disc.
 
     Fără niciun pas calculat, fără scriere, fără mail sau oprire: reafișează
-    „Istoric hits” după repornire. Cu o extragere nouă de la ultima validare
-    apar pașii refolosibili (parțial); generarea următoare îi completează.
-    Întoarce câte jocuri au primit validarea."""
+    „Istoric hits” după repornire. Numai cache-ul exact al istoricului
+    rezultatului și numai dacă decizia de acum alege aceeași metodă care a
+    produs rezultatul. Întoarce câte jocuri au primit validarea."""
     with STATE_LOCK:
         results = STATE.get("results")
         sources = STATE.get("result_sources")
@@ -1187,6 +1220,13 @@ def _load_cached_walk_forward() -> int:
         if df_source is None or _echo_mismatch(g_label, data):
             continue
         try:
+            if not _result_scorers_match_decision(g_label, data):
+                logger.info(
+                    "[WF] %s: decizia s-a schimbat de la generare — validarea din "
+                    "cache ar fi a altei metode; nu o afișez.",
+                    g_label,
+                )
+                continue
             flat, meta = run_honest_walk_forward(
                 df_source=df_source,
                 use_cache=True,

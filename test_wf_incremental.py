@@ -143,6 +143,45 @@ def test_an_inserted_draw_is_caught_even_when_target_dates_still_match(wf, compu
     assert computed
 
 
+def test_the_stored_row_count_is_the_only_length_tried(wf, monkeypatch):
+    """Amprenta include lungimea: cu `history_rows`, celelalte lungimi nu pot
+    corespunde, deci nu se mai calculează (un candidat străin costa ~0,3 s)."""
+    df = history(60)
+    old = wf._csv_hash(df.iloc[:58], "6/49")
+    real = wf._csv_hash
+    hashed = []
+    monkeypatch.setattr(wf, "_csv_hash", lambda d, g: hashed.append(len(d)) or real(d, g))
+    assert wf._prefix_rows(df, "6/49", old, 58) == 58 and hashed == [58]
+    hashed.clear()
+    assert wf._prefix_rows(df, "6/49", "nu-corespunde", 58) is None and hashed == [58]
+    hashed.clear()
+    assert wf._prefix_rows(df, "6/49", old, 60) is None and hashed == []
+    assert wf._prefix_rows(df, "6/49", old) == 58 and hashed == [59, 58]
+
+
+def test_a_decision_rewritten_during_the_reuse_search_is_flagged(
+    wf, computed, monkeypatch, tmp_path
+):
+    """Pașii refolosiți sunt ai scorerului vechi; dacă decizia se rescrie înainte
+    de pașii noi, rezultatul amestecat nu se salvează sub cheia veche."""
+    import loto_enterprise.core.method_selector as ms
+
+    df = history(60)
+    wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
+    real = wf._previous_history_steps
+
+    def rewrite_then_search(*args, **kwargs):
+        ms._DEFAULT_CONFIG_PATH.write_text(
+            json.dumps({"games": {}, "_meta": {"rewritten": True}}), encoding="utf-8"
+        )
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(wf, "_previous_history_steps", rewrite_then_search)
+    _, meta = wf.run_honest_walk_forward(df, **ARGS)
+    assert meta["reused_previous_history"] == 10 and meta["decision_changed"]
+    assert not any(wf._csv_hash(df, "6/49") in f.name for f in (tmp_path / "wf").iterdir())
+
+
 def test_other_settings_do_not_borrow_steps(wf, computed):
     df = history(60)
     wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
@@ -161,12 +200,11 @@ def test_cache_only_never_computes_or_writes(wf, computed, tmp_path):
     full, _ = wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
     files = sorted((tmp_path / "wf").glob("*.pkl"))
     computed.clear()
-    # Istoric cu două extrageri noi: pașii vechi din fereastră, marcați parțiali.
+    # Două extrageri noi: pașii refolosibili nu se arată (le lipsesc tocmai cele
+    # mai noi extrageri, iar validarea parțială s-ar citi „cele mai recente”).
     flat, meta = wf.run_honest_walk_forward(df, cache_only=True, **ARGS)
     assert computed == [] and sorted((tmp_path / "wf").glob("*.pkl")) == files
-    assert {int(r.draw_index) for r in flat} == set(range(48, 58))
-    assert meta["partial"] and meta["n_test_draws"] == 10 and meta["n_expected"] == 12
-    assert meta["from_cache"] and meta["reused_previous_history"] == 10
+    assert flat == [] and meta["cache_miss"] and not meta["from_cache"]
 
     # Cache exact: întors ca atare.
     exact, exact_meta = wf.run_honest_walk_forward(df.iloc[:58], cache_only=True, **ARGS)
@@ -190,6 +228,7 @@ def test_recovered_result_shows_the_cached_validation_without_running(
     import loto_enterprise.core.walk_forward_adapter as wfa
 
     monkeypatch.setattr(wfa, "run_honest_walk_forward", fake_wf)
+    monkeypatch.setattr(app, "_result_scorers_match_decision", lambda *_: True)
     finalized = []
     monkeypatch.setattr(app, "_finalize_pipeline", lambda: finalized.append(1))
     data = {"pool_size": 11, "guarantee": 3, "audit": {}}
@@ -206,6 +245,55 @@ def test_recovered_result_shows_the_cached_validation_without_running(
     assert app.STATE["retro"]["loto_6_49.csv_6/49"] == ["pas"]
     assert app.STATE["retro_meta"]["loto_6_49.csv_6/49"]["from_cache"] is True
     assert finalized == []
+
+    # Decizia de acum alege altă metodă: validarea din cache nu se arată.
+    calls.clear()
+    monkeypatch.setitem(app.STATE, "retro", {})
+    monkeypatch.setattr(app, "_result_scorers_match_decision", lambda *_: False)
+    assert app._load_cached_walk_forward() == 0
+    assert calls == [] and app.STATE["retro"] == {}
+
+
+@pytest.fixture
+def decision_now(monkeypatch):
+    """Metoda pe care decizia de acum o dă fiecărei chei; lipsă = fără decizie."""
+    import loto_enterprise.core.method_selector as ms
+
+    chosen: dict[str, str] = {}
+    monkeypatch.setattr(ms, "has_decision", lambda key, cfg=None: key in chosen)
+    monkeypatch.setattr(
+        ms,
+        "get_ensemble_for_game",
+        lambda key, pool_size=None, config_path=None, max_methods=None: [
+            (chosen[key], None, 1.0)
+        ],
+    )
+    return chosen
+
+
+def _used(**methods):
+    return {"pool_size": 11, "audit": {"bench_winner": {
+        k: {"method": m} for k, m in methods.items()}}}
+
+
+def test_the_result_scorer_is_compared_with_the_current_decision(decision_now):
+    import app_nicegui as app
+
+    decision_now["loto_6_49"] = "ewma_hl30"
+    assert app._result_scorers_match_decision("6/49", _used(loto_6_49="ewma_hl30"))
+    # Generat cu ținta 4+ (altă metodă), ținta comutată apoi înapoi pe 3+.
+    assert not app._result_scorers_match_decision("6/49", _used(loto_6_49="markov_pairs"))
+    assert not app._result_scorers_match_decision("6/49", {"pool_size": 11, "audit": {}})
+
+    # Fără decizie: frecvența, ca în motor.
+    assert app._result_scorers_match_decision("5/40", _used(loto_5_40="frequency"))
+
+    # Joker: contează și Urna 2, fiindcă bila ei e pe fiecare variantă.
+    decision_now.update(joker_urna1="ewma_hl30", joker_urna2="markov_pairs")
+    same = _used(joker_urna1="ewma_hl30", joker_urna2="markov_pairs")
+    assert app._result_scorers_match_decision("joker", same)
+    other_u2 = _used(joker_urna1="ewma_hl30", joker_urna2="frequency")
+    assert not app._result_scorers_match_decision("joker", other_u2)
 
 
 def test_display_only_recovery_loads_the_cached_validation(monkeypatch):
