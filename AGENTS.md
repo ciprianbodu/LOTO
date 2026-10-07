@@ -672,24 +672,37 @@ UI-ul face polling la o secunda, fara reload complet.
   nu le atinge. Fisierele schimbate si local, si pe `origin/main` (la rebase,
   toate cele modificate) se copiaza octet cu octet in
   `.git\loto-sync-backup\<data-ora>\local\`, impreuna cu versiunea din HEAD
-  (`base\`), revin la HEAD pentru actualizare, apoi se combina cu
-  `git merge-file` pe copii temporare: niciun marker de conflict nu ajunge in
-  arborele de lucru. La conflict real codul ia `origin/main`, iar copia locala
-  ramane in `local\` si e numita in mesaj; `bench_results/` (Re-Bench-ul
-  statiei, din care s-a calculat decizia ei) nu se combina, ramane cel local.
-  Fara conflict, folderul de copie se sterge. Orice esec (fisier neurmarit pe
-  care `origin/main` il adauga, rebase oprit, depasirea timpului) pune
-  fisierele la loc exact, dintr-un `finally`; o rulare oprita brusc lasa
-  `PENDING` langa copie, iar pornirea urmatoare o anunta. Starea din index a
-  fisierelor puse deoparte nu se pastreaza (continutul, da). Rebase-ul ruleaza
-  numai daca commit-urile locale nu contin merge-uri, n-au fost niciodata pe
-  `origin/main` (reflog-ul `refs/remotes/origin/main`: istoria de acolo s-a
-  rescris) si niciun commit nou de pe `origin/main` n-a fost HEAD local (amend
-  sau reset al unui commit trimis); altfel integrarea ramane manuala, cu
-  motivul. Un rebase oprit la conflict se anuleaza (`--abort` numai daca a
-  pornit). Iesirea git se citeste in UTF-8 (diacritice in numele fisierelor).
-  Alta ramura decat `main` nu se atinge. Nu se sterg fisierele .bat personale
-  si nu exista reset fortat sau `git stash`.
+  (`base\`), revin la HEAD pentru actualizare, apoi revin peste ea: un fisier
+  neatins de actualizare isi ia copia exacta (si binar); celelalte se combina
+  cu `git merge-file` pe copii temporare, cu sfarsitul de linie normalizat
+  (CRLF din checkout fata de LF salvat de editor nu e conflict), iar
+  rezultatul ia sfarsitul de linie al versiunii noi. Niciun marker de conflict
+  nu ajunge in arborele de lucru. La conflict real codul ia `origin/main`,
+  iar copia locala ramane in `local\` si e numita in mesaj; `bench_results/`
+  (Re-Bench-ul statiei, din care s-a calculat decizia ei) nu se combina,
+  ramane cel local. Fara conflict, folderul de copie se sterge. Nu se pune
+  deoparte (sync-ul se opreste, cu motivul) un fisier inlocuit pe disc de un
+  folder ori aflat sub un fisier pus in locul unui folder (checkout-ul fortat
+  le-ar sterge continutul neurmarit), nici unul cu alta versiune in index
+  decat pe disc (copia ia numai discul). Orice esec (fisier neurmarit pe care
+  `origin/main` il adauga, rebase oprit la conflict sau la limita de timp)
+  anuleaza intai rebase-ul, apoi pune fisierele la loc exact, dintr-un
+  `finally`; dupa o eroare copia ramane si e numita. Daca rebase-ul nu se
+  poate anula, fisierele nu se scriu peste arbore: copia ramane cu `PENDING`
+  si pasii (`git rebase --abort`, apoi copierea inapoi). O rulare oprita brusc
+  lasa `PENDING`; o punere la loc esuata lasa `RESTORE-FAILED`; pornirea
+  urmatoare le anunta inaintea verificarii ramurii (un rebase intrerupt lasa
+  HEAD detasat). Rebase-ul ruleaza numai daca commit-urile locale nu contin
+  merge-uri, n-au fost niciodata pe `origin/main` (reflog-ul
+  `refs/remotes/origin/main`: istoria de acolo s-a rescris) si niciun commit
+  nou de pe `origin/main` n-a fost varful lui `main` local (reflog-ul
+  `refs/heads/main`: amend sau reset al unui commit trimis; un rebase anulat
+  sau alta ramura nu conteaza). Acelasi test al commit-urilor retrase de pe
+  `origin/main` opreste push-ul din Sync si din PushHistory. Iesirea git se
+  citeste in UTF-8 (diacritice in numele fisierelor). `LOTO_GIT_TIMEOUT_SECONDS`
+  scade limita de timp numai in teste. Alta ramura decat `main` nu se atinge.
+  Nu se sterg fisierele .bat personale si nu exista reset fortat sau
+  `git stash`.
 - Pe un folder sincronizat in cloud (Google Drive, OneDrive, Dropbox),
   `launcher_git.ps1` cere o data fixarea offline (`attrib +P /S /D`, marcaj in
   `.git\loto-offline-pin`) si ridica limita pe comanda git de la 45 la 180 s.
@@ -735,8 +748,8 @@ UI-ul face polling la o secunda, fara reload complet.
   extrageri noi, inclusiv langa o schimbare refuzata. Inainte de push face
   `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat, commit-ul este
   repus peste `origin/main`; la conflict, `rebase --abort`. Modificarile
-  necomise, inclusiv o schimbare refuzata a unui fisier urmarit, tot blocheaza
-  merge-ul, dar Sync face fetch ca `origin/main` sa nu ramana vechi. Un
+  necomise, inclusiv o schimbare refuzata a unui fisier urmarit, opresc numai
+  acest rebase al PushHistory; Sync le pune deoparte si integreaza oricum. Un
   `packed-refs.lock` fara proces `git` este sters. Hook-ul de auto-push este
   oprit pentru acest commit: push-ul este executat o data. Testele
   (`test_launcher_git.py`) ruleaza validarea cu Python-ul suitei, pe un
