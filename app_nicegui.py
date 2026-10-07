@@ -1153,6 +1153,7 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
         STATE["retro"][rk] = flat
         STATE.setdefault("retro_meta", {})[rk] = {
             "partial": bool(meta.get("partial")),
+            "newest_missing": bool(meta.get("newest_missing")),
             "decision_changed": bool(meta.get("decision_changed")),
             "n_test_draws": meta.get("n_test_draws"),
             "n_expected": meta.get("n_expected"),
@@ -3211,10 +3212,13 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
             _load_cached_walk_forward()
         except Exception as exc:  # noqa: BLE001
             logger.warning("[RECOVERY] validare WF din cache: %s", exc)
-        try:
-            _save_report_file()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[RECOVERY] raport: %s", exc)
+        # Jobul deja preluat are raportul sesiunii care l-a finalizat, cu WF-ul
+        # de atunci; o rescriere fără validarea din cache l-ar pierde.
+        if not taken:
+            try:
+                _save_report_file()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[RECOVERY] raport: %s", exc)
         _why = (
             "deja preluat"
             if taken

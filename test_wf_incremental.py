@@ -182,6 +182,30 @@ def test_a_decision_rewritten_during_the_reuse_search_is_flagged(
     assert not any(wf._csv_hash(df, "6/49") in f.name for f in (tmp_path / "wf").iterdir())
 
 
+def test_a_partial_validation_without_the_newest_draw_says_so(wf, monkeypatch, tmp_path):
+    """Pașii refolosiți sunt cei vechi: dacă pasul celei mai noi extrageri
+    lipsește (aici crapă), validarea parțială nu se mai numește „cele mai
+    recente”, nici la reafișarea din cache."""
+    import loto_enterprise.core.backtesting as bt
+
+    df = history(60)
+    _, full_meta = wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
+    assert full_meta["newest_missing"] is False
+    real = bt._retroactive_step_stateless
+
+    def newest_fails(*args, **kwargs):
+        sim_idx = kwargs["sim_idx"] if "sim_idx" in kwargs else args[4]
+        return None if sim_idx == 59 else real(*args, **kwargs)
+
+    monkeypatch.setattr(bt, "_retroactive_step_stateless", newest_fails)
+    flat, meta = wf.run_honest_walk_forward(df, **ARGS)
+    assert meta["reused_previous_history"] == 10
+    assert {int(r.draw_index) for r in flat} == set(range(48, 59))
+    assert meta["partial"] and meta["newest_missing"]
+    _, shown = wf.run_honest_walk_forward(df, cache_only=True, **ARGS)
+    assert shown["partial"] and shown["newest_missing"]
+
+
 def test_other_settings_do_not_borrow_steps(wf, computed):
     df = history(60)
     wf.run_honest_walk_forward(df.iloc[:58], **ARGS)
@@ -307,12 +331,27 @@ def test_display_only_recovery_loads_the_cached_validation(monkeypatch):
         lambda: {"id": 5, "result_json": "x", "completed_at": "2026-01-01 10:00:00"},
     )
     monkeypatch.setattr(app, "decode_queue_result", lambda _raw: ([], 0))
-    monkeypatch.setattr(app, "_save_report_file", lambda: None)
+    reports = []
+    monkeypatch.setattr(app, "_save_report_file", lambda: reports.append(1))
     for key in ("active_job_id", "results", "result_sources", "results_recovered"):
         monkeypatch.setitem(app.STATE, key, None)
     app._recover_completed_job(allow_finalize=False)
-    assert loads == [1]
+    assert loads == [1] and reports == [1]
     assert app.STATE["results"] == ([], 0)
+
+
+def test_the_report_names_the_missing_newest_draws(monkeypatch):
+    import app_nicegui as app
+
+    data = {"pool_size": 10, "audit": {}}
+    monkeypatch.setitem(app.STATE, "results", ([("loto_6_49.csv", {"6/49": data})], 1))
+    monkeypatch.setattr(app, "_wf_summary", lambda flat, d=None: "3+: 1")
+    monkeypatch.setitem(app.STATE, "retro", {"loto_6_49.csv_6/49": ["pas"]})
+    meta = {"partial": True, "n_test_draws": 11, "n_expected": 12}
+    monkeypatch.setitem(app.STATE, "retro_meta", {"loto_6_49.csv_6/49": meta})
+    assert "11 din 12 extrageri (cele mai recente)" in app._build_report()
+    meta["newest_missing"] = True
+    assert "11 din 12 extrageri (lipsesc cele mai noi)" in app._build_report()
 
 
 def test_a_job_taken_in_an_earlier_session_comes_back_without_finalizing(
@@ -340,7 +379,8 @@ def test_a_job_taken_in_an_earlier_session_comes_back_without_finalizing(
     monkeypatch.setattr(app, "mark_job_finalized", marks.append)
     loads = []
     monkeypatch.setattr(app, "_load_cached_walk_forward", lambda: loads.append(1) or 0)
-    monkeypatch.setattr(app, "_save_report_file", lambda: None)
+    reports = []
+    monkeypatch.setattr(app, "_save_report_file", lambda: reports.append(1))
     for key in ("active_job_id", "results", "result_sources", "results_recovered",
                 "legacy_finalized_job_id"):
         monkeypatch.setitem(app.STATE, key, None)
@@ -351,4 +391,6 @@ def test_a_job_taken_in_an_earlier_session_comes_back_without_finalizing(
         assert app.STATE["results"] == ([], 0)
         assert f"job #{jid}" in app.STATE["results_recovered"]
     assert loads == [1, 1, 1] and marks == []
+    # Raportul sesiunii care a finalizat jobul (cu WF-ul de atunci) rămâne.
+    assert reports == []
     assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"] == stamp

@@ -93,10 +93,11 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 - Cost pe 6/49 (2590 de randuri): gasirea prefixului dupa `history_rows`
   ~4 ms, o singura amprenta pe candidat; un cache scris fara camp, ~0,3 s pe
   candidat (cel mult 4).
-- Review adversarial pe diff: patru constatari confirmate si reparate, cu
-  teste (validarea altei metode la pornire, eticheta „cele mai recente” pe
-  pasii refolosibili, cautarea inutila a prefixului, amprenta deciziei luata
-  prea tarziu).
+- Review adversarial pe diff: constatarile confirmate sunt reparate, cu
+  teste: validarea altei metode la pornire, eticheta „cele mai recente” cand
+  lipsesc tocmai cele mai noi extrageri, raportul rescris fara WF la
+  repornire, cautarea inutila a prefixului, amprenta deciziei luata prea
+  tarziu.
 - Verificat pe Python 3.14.7 / Linux cu pwsh: 97 fisiere `test_*.py`, 2292
   teste trecute, 38 sarite (lansatorul, numai pe Windows), zero esecuri.
   Cap-coada pe o baza izolata, cu worker si UI reale: jobul preluat intr-o
@@ -624,7 +625,9 @@ UI-ul face polling la o secunda, fara reload complet.
   face cel mult o data. Jobul preluat de UI se marcheaza pe randul lui din
   baza statiei (`jobs.ui_finalized_at`, `mark_job_finalized`), nu in
   `.ui_state.json`: checkout-ul se poate sincroniza intre statii, iar id-urile
-  pornesc de la 1 pe fiecare. Un job marcat se reafiseaza fara un nou marcaj.
+  pornesc de la 1 pe fiecare. Un job marcat se reafiseaza fara un nou marcaj
+  si fara a rescrie `raport_complet.txt` (raportul sesiunii care l-a
+  finalizat, cu WF-ul de atunci, ramane).
   Golirea cozii sterge marcajul odata cu jobul.
   Cheia veche `last_finalized_job_id` se migreaza o data la pornirea UI
   (ultimul job COMPLETED cu acel id) si dispare din fisier numai dupa ce
@@ -1252,6 +1255,10 @@ castigul depinde de geometrie, scoruri si hardware.
   cautarii sa marcheze `decision_changed`. Rezultatul refolosit e identic cu
   o rulare completa (`test_wf_incremental.py`). Fara bump: cheia si structura
   raman.
+- O validare partiala are de regula cele mai noi extrageri (pasii merg
+  recent→vechi). Cand tocmai cea mai noua lipseste (pas refolosit fara pasul
+  nou, pas recent crapat), `meta["newest_missing"]` o marcheaza, iar panoul si
+  raportul spun „lipsesc cele mai noi”, nu „cele mai recente”.
 - `cache_only=True` numai citeste cache-ul exact (complet sau partial), fara
   pas calculat si fara scriere; pasii refolosibili nu se arata acolo, fiindca
   le lipsesc tocmai extragerile cele mai noi. Rezultatul reafisat la pornire

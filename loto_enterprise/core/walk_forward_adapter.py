@@ -1025,6 +1025,7 @@ def run_honest_walk_forward(
         meta["n_test_draws"] = cached.get("n_test_draws")
         meta["n_expected"] = cached.get("n_expected", cached.get("n_test_draws"))
         meta["partial"] = bool(cached.get("partial", False))
+        meta["newest_missing"] = bool(cached.get("newest_missing", False))
         meta["wheel_coverage"] = wheel_coverage_summary(flat_c)
         return flat_c, meta
 
@@ -1091,9 +1092,8 @@ def run_honest_walk_forward(
     # rând invalid în CSV, backtester-ul simulează len(draws)*depth pași, deci un
     # n_expected calculat din len(df_source) era de neatins → cache-ul rămânea
     # marcat „partial" pentru totdeauna și se re-rula la fiecare Auto-Pilot.
-    n_expected = len(
-        simulation_indices(bt.df.attrs["training_cutoffs"], backtest_depth_percent)
-    )
+    window = simulation_indices(bt.df.attrs["training_cutoffs"], backtest_depth_percent)
+    n_expected = len(window)
     flat = expand_predictions_to_flat(predictions, game_type)
     meta["n_predictions"] = len(predictions)
     meta["n_test_draws"] = len(set(p.draw_index for p in predictions))
@@ -1107,6 +1107,14 @@ def run_honest_walk_forward(
     # dacă rularea curentă a fost oprită devreme (buget/anulare) sau a sărit pași.
     if cached is not None:
         flat, meta = _merge_partial_coverage(cached, flat, meta)
+    # Rularea merge recent→vechi, deci o validare parțială are de regulă cele mai
+    # noi extrageri. Cu pași refolosiți, o anulare imediată ori un pas recent
+    # crăpat lasă tocmai cea mai nouă extragere neevaluată; UI-ul o spune.
+    meta["newest_missing"] = bool(
+        meta["partial"]
+        and window
+        and max(window) not in {int(getattr(r, "draw_index", -1)) for r in flat}
+    )
 
     # Acoperirea wheel-ului pe paşii validaţi. Se calculează DUPĂ reuniune, ca să
     # acopere şi paşii veniţi din cache. Sub 100% (sau necunoscută), `hits_union`
