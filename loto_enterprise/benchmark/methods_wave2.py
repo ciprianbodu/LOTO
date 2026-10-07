@@ -6,10 +6,10 @@ este ultima extragere); `rwr_last_draw` e aceeași clasă cu costum de graf
 cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
 
     ses_opt_alpha          netezire exponențială simplă cu α optimizat per număr (fost `ses`)
-    croston_interval       Croston: intervalele dintre apariții netezite, rata = 1/interval (fost `croston_opt`)
+    croston_interval       Croston: rata 1/interval netezit × (1 + golul curent/interval), favorizează restanțele (fost `croston_opt`)
     theta_drift            Theta: prognoză liniară și SES(0.2) pe rata glisantă (fost `theta_auto`)
     weighted_recent_linear frecvență cu ponderi liniar descrescătoare pe 100 (fost `weighted_recent`)
-    drift_linear           tendința liniară a ratei glisante (CMMP pe 300), extrapolată (fost `drift`)
+    drift_linear           tendința liniară a ratei glisante de 50 (CMMP pe ultimele 350 de extrageri), extrapolată (fost `drift`)
     imapa_agg              SES la nivele de agregare 1/2/4/8 combinate (fost `imapa` / `adida`)
     haar_multiscale        coeficienți Haar la scările 2..16 (filtru last-draw; exclus)
     ssa_forecast           analiză spectrală singulară pe seria proprie, prognoză prin recurență (fost `ssa`)
@@ -24,7 +24,7 @@ cu `repeat_last_draw`. Toate trei rămân în bench, excluse din producție:
     knn_pattern_self       k-NN pe ferestrele proprii de 10 stări (fost `ml_knn_*`, pe serie)
     pair_transition        tranziții de ordinul 2: perechi din extragerea t → numere la t+1 (fost `assoc_rules`)
     rwr_last_draw          RWR pe co-apariție, semănat din ultima extragere (exclus)
-    hawkes_cross           excitație încrucișată cu decădere exponențială prin co-aparițiile normalizate
+    hawkes_cross           excitație încrucișată prin co-aparițiile normalizate; urmează frecvența pe tot istoricul
     nb_lags_pooled         Naive Bayes Bernoulli pe ultimele 10 stări, model comun (fost `ml_bernoulli_nb`)
     knn_feature_pooled     k-NN în spațiul celor 6 trăsături comune (fost `ml_knn_5`, pe trăsături)
     gbm_stumps_pooled      gradient boosting cu 30 de „stumps" pe cele 6 trăsături (fost `ml_gradient_boost`)
@@ -114,7 +114,11 @@ def score_ses_opt_alpha(draws_2d, max_num, window: int = 400):
 
 
 def score_croston_interval(draws_2d, max_num, alpha: float = 0.1):
-    """Croston pe serie binară: netezirea intervalelor dintre apariții; rata = 1/interval."""
+    """Croston pe serie binară: rata 1/interval netezit, înmulțită cu (1 + gol/interval).
+
+    Factorul golului curent domină clasamentul: scorul crește cu cât numărul
+    n-a mai ieșit de mult (numere „restante"), nu doar cu rata netezită.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     p0 = expected_rate(draws_2d, max_num)
@@ -172,7 +176,7 @@ def score_weighted_recent_linear(draws_2d, max_num, window: int = 100):
 
 
 def score_drift_linear(draws_2d, max_num, window: int = 300, rate_win: int = 50):
-    """CMMP pe rata glisantă (50) din ultimele 300 de extrageri; scor = valoarea extrapolată."""
+    """CMMP pe rata glisantă de 50, din ultimele 350 de extrageri (301 puncte); scor = valoarea extrapolată."""
     ind = indicator(draws_2d, max_num)
     x = ind[-(window + rate_win) :]
     n, m = x.shape
@@ -417,7 +421,12 @@ def score_rwr_last_draw(draws_2d, max_num, restart: float = 0.3, iters: int = 40
 
 
 def score_hawkes_cross(draws_2d, max_num, half_life: float = 20.0):
-    """λ_j = Σ_i Cn[i,j]·E_i, E_i = excitația proprie cu decădere exponențială."""
+    """λ_j = Σ_i Cn[i,j]·E_i, E_i = excitația proprie cu decădere exponențială.
+
+    Normalizarea pe rând face Cn[i, j] aproape proporțional cu frecvența lui j,
+    așa că decăderea de `half_life` extrageri se anulează în bună parte:
+    clasamentul urmează frecvența pe tot istoricul.
+    """
     ind = indicator(draws_2d, max_num)
     n, m = ind.shape
     if n < 2:
@@ -535,7 +544,7 @@ def score_gbm_stumps_pooled(draws_2d, max_num, rounds: int = 30, lr: float = 0.3
 WAVE2_METHODS = make_registry(
     [
         ("ses_opt_alpha", score_ses_opt_alpha, "timeseries", "SES cu α optimizat per număr"),
-        ("croston_interval", score_croston_interval, "gap", "Croston pe intervalele dintre apariții"),
+        ("croston_interval", score_croston_interval, "gap", "Croston pe intervalele dintre apariții, amplificat de golul curent (favorizează numerele restante)"),
         (
             "theta_drift",
             score_theta_drift,
@@ -555,7 +564,7 @@ WAVE2_METHODS = make_registry(
         ("knn_pattern_self", score_knn_pattern_self, "similarity", "k-NN pe ferestrele proprii de 10 stări"),
         ("pair_transition", score_pair_transition, "transition", "perechi din extragerea t → numere la t+1"),
         ("rwr_last_draw", score_rwr_last_draw, "graph", "RWR din ultima extragere (prefix last-draw); exclus din producție"),
-        ("hawkes_cross", score_hawkes_cross, "cooccurrence", "excitație încrucișată cu decădere"),
+        ("hawkes_cross", score_hawkes_cross, "cooccurrence", "excitație încrucișată prin co-apariții; în practică urmează frecvența pe tot istoricul"),
         ("nb_lags_pooled", score_nb_lags_pooled, "learning", "Naive Bayes Bernoulli pe 10 laguri, model comun"),
         ("knn_feature_pooled", score_knn_feature_pooled, "learning", "k-NN în spațiul trăsăturilor comune"),
         ("gbm_stumps_pooled", score_gbm_stumps_pooled, "learning", "boosting cu 30 de stumps, model comun"),

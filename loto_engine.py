@@ -82,6 +82,11 @@ _LEGACY_PARAM_EXTRAS = {
     "joker": {"scheme": "2-2-1", "lookback": 15, "max_joker": 20},
 }
 
+# Plafonul factorului efectiv când utilizatorul alege 0 (`apply_recent_penalty`
+# îl coboară cât e nevoie sub scorurile nepenalizate). Destul de mare ca f**k să
+# nu se anuleze la un k realist (1e-9**30 = 1e-270): ordinea scorului rămâne.
+_ZERO_PENALTY_FACTOR = 1e-9
+
 
 def game_params_for(geometry: str) -> dict | None:
     """Parametrii motorului pentru o geometrie din registru (None = necunoscută).
@@ -524,6 +529,11 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         valoare așteptată (vezi AGENTS.md §6): nu schimbă probabilitatea
         extragerii, doar compoziția pool-ului. Întoarce (scoruri_noi,
         {numar: aparitii}) — al doilea dict conține doar numerele penalizate.
+
+        Factorul 0 coboară numerele penalizate sub toate celelalte, dar le
+        păstrează ordinea scorului: cu înmulțirea exactă cu 0, toate ajungeau la
+        egalitate, iar locurile rămase în pool se umpleau după regula de
+        egalitate („numărul mai mare întâi"), nu după metodă.
         """
         n = int(n_draws or 0)
         try:
@@ -540,6 +550,16 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 vi = int(v)
                 if 1 <= vi <= int(max_num):
                     counts[vi] = counts.get(vi, 0) + 1
+        if f == 0.0:
+            # Factorul 0: sub orice scor nepenalizat pozitiv, ordinea păstrată.
+            # Cu k >= 1: scor * f**k <= max(penalizate) * f < min(nepenalizate).
+            f = _ZERO_PENALTY_FACTOR
+            free = [float(v) for num, v in scores.items() if not counts.get(int(num))]
+            hit = [float(v) for num, v in scores.items() if counts.get(int(num))]
+            free = [v for v in free if v > 0]
+            hit = [v for v in hit if v > 0]
+            if free and hit:
+                f = min(f, 0.5 * min(free) / max(hit))
         out = {}
         for num, sc in scores.items():
             k = counts.get(int(num), 0)

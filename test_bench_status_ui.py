@@ -258,7 +258,7 @@ def test_target_change_refreshes_notice_even_if_decision_update_fails(
     binding._refresh_step()
     _finish_ui_updates()
     text = "\n".join(_texts(client))
-    update.assert_called_once_with()
+    update.assert_called_once_with(require_complete=True)
     assert "Lipsesc rezultatele pentru ținta curentă (≥4)" in text
     assert "Benchmark la zi" not in text
     app.results_panel.refresh.assert_not_called()

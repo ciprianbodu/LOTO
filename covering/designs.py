@@ -40,7 +40,10 @@ def covering_design_source_signature(
 
     Un design se poate îmbunătăți fără să se schimbe numele metodei sau
     geometria. Hash-ul conținutului împiedică walk-forward-ul să reutilizeze
-    costuri și hit-uri calculate pe lista veche de bilete.
+    costuri și hit-uri calculate pe lista veche de bilete. Intră poziția
+    fișierului în ordinea de căutare, nu calea lui absolută: același design
+    într-un checkout mutat (recomandat, în afara folderelor din cloud) păstrează
+    cache-ul WF, care stă în afara repo-ului.
     """
     digest = hashlib.sha256(f"C({v},{pick},{guarantee})".encode("ascii"))
     found = False
@@ -50,7 +53,7 @@ def covering_design_source_signature(
         if condition is not None and int(condition) > int(guarantee)
         else f"C_{v}_{pick}_{guarantee}.txt"
     )
-    for directory in _LAJOLLA_DIRS:
+    for position, directory in enumerate(_LAJOLLA_DIRS):
         path = directory / name
         try:
             key = str(path.resolve())
@@ -59,14 +62,15 @@ def covering_design_source_signature(
         if key in seen:
             continue
         seen.add(key)
+        label = f"{position}:{name}"
         try:
             if not path.is_file():
                 continue
             found = True
-            digest.update(key.encode("utf-8", errors="surrogatepass"))
+            digest.update(label.encode("utf-8", errors="surrogatepass"))
             digest.update(path.read_bytes())
         except OSError as exc:
-            digest.update(f"{key}:{type(exc).__name__}".encode("utf-8"))
+            digest.update(f"{label}:{type(exc).__name__}".encode("utf-8"))
     return digest.hexdigest()[:12] if found else "missing"
 
 

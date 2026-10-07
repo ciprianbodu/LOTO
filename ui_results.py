@@ -608,7 +608,7 @@ def _wf_summary(flat, data: dict | None = None) -> str | None:
     elif cov["below_100"]:
         cov_txt = (
             f" | ⚠️ wheel INCOMPLET la {cov['below_100']}/{cov['known']} extrageri "
-            f"(min {cov['min']:.1f}%) → cifrele de pool sunt un PLAFON"
+            f"(min {cov['min']:.2f}%) → cifrele de pool sunt un PLAFON"
         )
     elif cov["unknown"]:
         cov_txt = f" | acoperire wheel: 100% pe {cov['known']}/{cov['n_draws']} extrageri (restul necunoscute)"
@@ -732,7 +732,7 @@ def _build_report() -> str:
             f"{indent}Nucleu dur (nr(frecvență)): "
             + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool)
         )
-        _cw = _consecutive_pool_warning(pool)
+        _cw = _consecutive_pool_warning(pool, d.get("audit"))
         if _cw:
             out.append(f"{indent}⚠️ {_cw}")
         _unplayed = (d.get("audit") or {}).get("pool_numbers_not_on_tickets") or []
@@ -807,6 +807,16 @@ def _build_report() -> str:
             _dump_pool(d, None, game=g)
             wf = _wf_summary(flat, d)
             if wf:
+                # Aceleași avertismente ca panoul: raportul nu prezintă o validare
+                # parțială sau amestecată drept completă.
+                _wm = (STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}
+                if _wm.get("partial"):
+                    wf += (
+                        f" | PARȚIAL: {_wm.get('n_test_draws')} din "
+                        f"{_wm.get('n_expected')} extrageri (cele mai recente)"
+                    )
+                if _wm.get("decision_changed"):
+                    wf += " | decizia s-a schimbat în timpul validării"
                 out.append(f"  Walk-forward: {wf}")
     return "\n".join(out)
 
@@ -1082,11 +1092,13 @@ def _method_desc(name: str) -> str:
     return ""
 
 
-def _consecutive_pool_warning(pool) -> str | None:
+def _consecutive_pool_warning(pool, audit: dict | None = None) -> str | None:
     """Avertisment dacă tot pool-ul e un interval fără găuri (ex. Joker 18–28).
 
     Calculat din numere, nu din audit — ca să apară și pe rezultate vechi,
-    generate înainte de flag-ul din pool_selection.
+    generate înainte de flag-ul din pool_selection. Excepție: pool-ul care ia
+    tot intervalul restrâns de utilizator. Blocul vine atunci din interval, iar
+    scorerul n-a avut ce alege.
     """
     from loto_enterprise.core.ranking import is_consecutive_block
 
@@ -1094,6 +1106,9 @@ def _consecutive_pool_warning(pool) -> str | None:
     if not is_consecutive_block(nums, min_size=6):
         return None
     lo, hi = min(nums), max(nums)
+    rb = (audit or {}).get("restrict_base") or {}
+    if rb and not rb.get("ignored") and (rb.get("min"), rb.get("max")) == (lo, hi):
+        return None
     return (
         f"POOL CONSECUTIV — {lo}–{hi} ({len(nums)} numere la rând). "
         "Asta e degenerare a scorer-ului pe axa 1…N, nu un pattern real."
@@ -1213,7 +1228,7 @@ def _render_pool_body(
                     )
                 ui.html(
                     render_html_safe(
-                        t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.1f}%</b> "
+                        t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.2f}%</b> "
                         t"<span style='opacity:.7'>({reason})</span>"
                     )
                 )
@@ -1342,7 +1357,7 @@ def _render_pool_body(
         f"Nucleu dur (pool) — în paranteză, de câte ori a ieșit numărul {_where}:"
     ).classes("text-bold mt-2")
     _badges(pool, stats)
-    _cw = _consecutive_pool_warning(pool)
+    _cw = _consecutive_pool_warning(pool, data.get("audit"))
     if _cw:
         ui.label(f"⚠️ {_cw}").classes("text-bold text-negative mt-1")
     _cl_text = _consecutive_limit_text(data.get("audit"))

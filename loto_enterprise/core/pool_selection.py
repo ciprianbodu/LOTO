@@ -96,7 +96,10 @@ def select_pool_from_scores(
     pool = apply_consecutive_limit(ranked_all, pool_size, max_consecutive_run, audit)
 
     if audit is not None:
-        n_unique = len({round(s, 9) for s in valid.values()})
+        # Rotunjire RELATIVĂ (12 cifre semnificative): zgomotul de virgulă
+        # mobilă rămâne egalitate, dar scorurile mici distincte (factorul 0 al
+        # penalizării recente) nu se mai contopesc într-un fals „nivel unic".
+        n_unique = len({float(f"{s:.12g}") for s in valid.values()})
         # Ordinea cheilor e clasamentul exact; `full_ticket` o citeste ca atare,
         # fiindca rotunjirea poate egala doua scoruri apropiate. Cu limita de
         # consecutive, un membru al pool-ului poate sta sub rangul 25: lista
@@ -126,7 +129,9 @@ def select_pool_from_scores(
         audit["pool_longest_consecutive_run"] = run
         block = is_consecutive_block(pool, min_size=6)
         audit["pool_is_consecutive_block"] = block
-        if block:
+        # Pool-ul care ia TOATE numerele permise (interval restrâns cât pool-ul)
+        # e un bloc prin construcție: scorerul n-a ales nimic.
+        if block and set(pool) != set(valid):
             lo, hi = min(pool), max(pool)
             audit["pool_consecutive_warning"] = (
                 f"pool-ul e un bloc consecutiv {lo}–{hi} ({len(pool)} numere) — "

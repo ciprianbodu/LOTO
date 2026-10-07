@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.signal import lfilter
+from scipy.stats import rankdata
 
 from .methods_common import expected_rate, indicator, make_registry, vector_to_scores
 
@@ -123,7 +124,14 @@ def score_online_logit_sgd(draws_2d, max_num, lr: float = 0.05):
 
 
 def score_rank_ensemble_core(draws_2d, max_num):
-    """Media rangurilor: freq_window_200, ewma_hl30, gap_hazard, markov_pairs, autocorr_lag."""
+    """Media rangurilor: freq_window_200, ewma_hl30, gap_hazard, markov_pairs, autocorr_lag.
+
+    La scoruri egale într-un membru, fiecare număr primește rangul mediu al
+    grupului. Rangul după poziție (argsort stabil) dădea numerelor mai mari un
+    rang mai bun la egalitate: o preferință ascunsă pe axa 1..N, nu un semnal
+    (`freq_window_200` are zeci de egalități pe apel). Zgomotul de virgulă
+    mobilă (`markov_pairs`, `ewma_hl30`) contează tot ca egalitate.
+    """
     from .methods_recency import (
         score_autocorr_lag,
         score_ewma_hl30,
@@ -144,9 +152,9 @@ def score_rank_ensemble_core(draws_2d, max_num):
     for fn in members:
         s = fn(draws_2d, max_num)
         vec = np.array([s.get(i + 1, 0.0) for i in range(m)], dtype=np.float64)
-        ranks = np.empty(m)
-        ranks[np.argsort(vec, kind="stable")] = np.arange(m, dtype=np.float64)
-        acc += ranks
+        # 12 zecimale (scoruri normalizate în [0, 1]): diferențele de ordinul
+        # 1e-15 dintre două etichetări ale aceluiași istoric sunt egalități.
+        acc += rankdata(np.round(vec, 12), method="average") - 1.0
     return vector_to_scores(acc / len(members), max_num)
 
 
@@ -155,7 +163,7 @@ LEARNING_METHODS = make_registry(
         ("ridge_pooled_feats", score_ridge_pooled_feats, "learning", "ridge pe 6 trăsături, model comun"),
         ("logit_pooled_feats", score_logit_pooled_feats, "learning", "logistică IRLS pe 6 trăsături, model comun"),
         ("online_logit_sgd", score_online_logit_sgd, "learning", "logistică online, o trecere, pas fix"),
-        ("rank_ensemble_core", score_rank_ensemble_core, "ensemble", "media rangurilor a 5 metode din familii diferite"),
+        ("rank_ensemble_core", score_rank_ensemble_core, "ensemble", "media rangurilor a 5 metode (recență, gap, Markov, autocorelație); la egalitate, rang mediu"),
     ]
 )
 

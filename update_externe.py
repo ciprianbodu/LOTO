@@ -122,7 +122,9 @@ def fetch_de_lotto(last: dt.date, today: dt.date) -> list[Draw]:
     hdr = {"User-Agent": UA_BROWSER, "Accept": "application/json"}
     start = last - dt.timedelta(days=14)
     dates: set[dt.date] = set()
-    for year in sorted({start.year, today.year}):
+    # Toți anii dintre capete: cu {start.year, today.year}, un istoric rămas în
+    # urmă peste un an întreg sărea anii din mijloc și scria o gaură tăcută.
+    for year in range(start.year, today.year + 1):
         data = json.loads(_get(f"{base}/history/{_cet_midnight_ms(dt.date(year, 12, 31))}", hdr))
         for day in data.get("days", []):
             d = dt.date.fromisoformat(day["date"])

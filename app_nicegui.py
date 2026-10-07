@@ -374,8 +374,129 @@ _PCTS = (
 # → rețelele grele fac 25-30 min/fold); 100% e cea mai ieftină. Tunabil aici.
 
 
+def _rebuild_decision_for_target(target: int) -> None:
+    """Recalculează decizia de producție pentru ținta 3+/4+ selectată.
+
+    Refuză un folds.csv care nu acoperă Re-Bench-ul deciziei (bench oprit,
+    `--quick`, flush parțial): decizia rămâne cea veche, cu avertisment.
+    """
+    try:
+        import loto_enterprise.benchmark.decision as decision
+
+        _cc = _selected_country()
+        if _cc != _LOT.RO:
+            # Altă țară: decizia și folds-ul ei, nu fișierele României.
+            _cname = _LOT.country_name(_cc)
+            _dp = _LOT.decision_path_for(_cc, PROJECT_ROOT)
+            _fp = _LOT.bench_out_dir_for(_cc, PROJECT_ROOT) / "folds.csv"
+            if not (_fp.exists() and _dp.exists()):
+                ui.notify(
+                    f"{_cname} nu are încă bench — rulează un Re-Bench "
+                    "ca ținta să fie aplicată.",
+                    type="warning",
+                )
+                return
+            decision.update_best_methods_with_auto_pilot(
+                str(_dp), str(_fp), require_complete=True
+            )
+            _mismatch = False
+            try:
+                from loto_enterprise.core.method_selector import (
+                    recommend_optimal_config,
+                )
+
+                for _g in _LOT.games_for_country(_cc):
+                    for _gk in _g.bench_keys:
+                        if _gk == _g.bench_key_urna2:
+                            continue
+                        _c = recommend_optimal_config(
+                            _gk,
+                            _int_setting("pool_size_val"),
+                            config_path=str(_dp),
+                        )
+                        if _c.get("rate_col_mismatch"):
+                            _mismatch = True
+            except Exception:  # noqa: BLE001
+                pass
+            if _mismatch:
+                ui.notify(
+                    f"Decizie {_cname} actualizată, DAR folds nu au coloane "
+                    f"{target}+ — s-a folosit 4+ (rate_col_mismatch). "
+                    "Rulează Re-Bench.",
+                    type="warning",
+                )
+            else:
+                ui.notify(
+                    f"Decizia Auto-Pilot {_cname} a fost actualizată pentru "
+                    f"{target}+ hits!",
+                    type="info",
+                )
+            _refresh_status()
+            results_panel.refresh()
+            return
+        if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():
+            decision.update_best_methods_with_auto_pilot(require_complete=True)
+            _mismatch = False
+            try:
+                from loto_enterprise.core.method_selector import (
+                    recommend_optimal_config,
+                )
+
+                for _gk in ("loto_6_49", "loto_5_40", "joker_urna1"):
+                    _c = recommend_optimal_config(_gk, _int_setting("pool_size_val"))
+                    if _c.get("rate_col_mismatch"):
+                        _mismatch = True
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+            if _mismatch:
+                ui.notify(
+                    f"Decizie actualizată, DAR folds nu au coloane {target}+ "
+                    f"— s-a folosit 4+ (rate_col_mismatch). Rulează Re-Bench.",
+                    type="warning",
+                )
+            else:
+                ui.notify(
+                    f"Decizia Auto-Pilot a fost actualizată pentru {target}+ hits!",
+                    type="info",
+                )
+            _refresh_status()
+            results_panel.refresh()
+    except FileNotFoundError:
+        # best_methods.json e gitignored: pe un clone proaspăt (sau după
+        # ștergere) nu există, iar `update_best_methods_with_auto_pilot`
+        # aruncă ÎNAINTE de `ui.notify`/`_refresh_status`, deci utilizatorul
+        # schimba ținta și nu vedea absolut nimic — nici succes, nici
+        # eroare — deși decizia NU fusese recalculată.
+        ui.notify(
+            "Nu există încă best_methods.json — rulează un Re-Bench "
+            "ca ținta să fie aplicată.",
+            type="warning",
+        )
+    except Exception as exc:  # noqa: BLE001
+        from loto_enterprise.benchmark.decision import IncompleteFoldsError
+
+        if isinstance(exc, IncompleteFoldsError):
+            logger.warning("Decizie nerecalculată: %s", exc)
+            ui.notify(
+                "folds.csv nu acoperă ultimul Re-Bench complet (bench oprit sau "
+                "rulare redusă): decizia de producție rămâne neschimbată. Rulează "
+                f"un Re-Bench complet ca ținta {target}+ să fie aplicată.",
+                type="warning",
+            )
+        else:
+            logger.warning("Eroare la schimbarea țintei de hituri: %s", exc)
+            ui.notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
+    finally:
+        _bench_freshness_panel.refresh()
+
+
 def _on_bench_finished() -> None:
     """Actualizează starea bench-ului și pornește Auto-Pilot dacă e bifat."""
+    if STATE.pop("bench_target_pending", False):
+        # Ținta s-a schimbat cât rula bench-ul, care și-a scris decizia cu
+        # ținta de la pornire. Acum folds.csv e complet.
+        _rebuild_decision_for_target(_clamped_bench_target())
     _bench_freshness_panel.refresh()
     if (
         SETTINGS.get("autopilot_after_bench")
@@ -1162,6 +1283,7 @@ def _start_walk_forward() -> None:
                         STATE["retro"][_rk] = flat
                         STATE.setdefault("retro_meta", {})[_rk] = {
                             "partial": bool(meta.get("partial")),
+                            "decision_changed": bool(meta.get("decision_changed")),
                             "n_test_draws": meta.get("n_test_draws"),
                             "n_expected": meta.get("n_expected"),
                             "from_cache": bool(meta.get("from_cache")),
@@ -1559,13 +1681,29 @@ def _mail_best_draw_line(spec, df, pool) -> str:
     Mailul pleacă înainte de walk-forward, deci linia se calculează pe CSV-ul
     încărcat: câte numere din pool au ieșit la fiecare extragere. E o privire
     retrospectivă (pool-ul e ales cu tot istoricul), nu o validare."""
+    import numpy as np
+
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+    from loto_enterprise.core.history import chronological_history
+
+    unavailable = "CEL MAI BUN REZULTAT: istoric indisponibil pentru acest joc"
     pool = {int(x) for x in (pool or [])}
     cols = [f"n{i}" for i in range(1, int(spec.draw_n) + 1)]
     if df is None or not pool or any(c not in df.columns for c in cols):
-        return "CEL MAI BUN REZULTAT: istoric indisponibil pentru acest joc"
-    hits = df[cols].isin(pool).sum(axis=1).astype(int)
-    if hits.empty:
-        return "CEL MAI BUN REZULTAT: istoric indisponibil pentru acest joc"
+        return unavailable
+    # Aceeași cronologie și aceleași extrageri valide ca ultima extragere din UI:
+    # un CSV încărcat în ordine descrescătoare dădea altfel „ultima oară" o dată veche.
+    try:
+        df = chronological_history(df)
+        matrix, valid = valid_draw_matrix(
+            df, cols, draw_n=int(spec.draw_n), max_num=int(spec.max_n)
+        )
+    except (TypeError, ValueError, OverflowError):
+        return unavailable
+    df = df.loc[valid].reset_index(drop=True)
+    if not len(matrix):
+        return unavailable
+    hits = pd.Series(np.isin(matrix, sorted(pool)).sum(axis=1), index=df.index)
     best = int(hits.max())
     idx = hits[hits == best].index
     last = idx[-1]
@@ -1590,10 +1728,12 @@ def _mail_method_lines(spec, data: dict) -> list[str]:
     if not method:
         return ["METODĂ: necunoscută (rezultat fără audit de metodă)"]
     if info.get("no_decision") or info.get("fallback"):
-        return [
-            f"METODĂ: {method} (fără bench pentru {spec.display}; "
-            "rezervă implicită, fără rating)"
-        ]
+        why = (
+            f"metoda din decizie, {info['attempted']}, nu a putut fi folosită"
+            if info.get("attempted") and not info.get("no_decision")
+            else f"fără bench pentru {spec.display}"
+        )
+        return [f"METODĂ: {method} ({why}; rezervă implicită, fără rating)"]
     entry = _decision_entry(spec.bench_key, int(pool)) if pool else {}
     head = f"METODĂ: {method} (câștigătoarea bench-ului la pool {pool})"
     rat = str(entry.get("rationale") or "")
@@ -2622,101 +2762,20 @@ def main_page() -> None:
 
                 decision.BENCH_HIT_TARGET = target
                 os.environ["LOTO_BENCH_TARGET"] = str(target)
-                _cc = _selected_country()
-                if _cc != _LOT.RO:
-                    # Altă țară: decizia și folds-ul ei, nu fișierele României.
-                    _cname = _LOT.country_name(_cc)
-                    _dp = _LOT.decision_path_for(_cc, PROJECT_ROOT)
-                    _fp = _LOT.bench_out_dir_for(_cc, PROJECT_ROOT) / "folds.csv"
-                    if not (_fp.exists() and _dp.exists()):
-                        ui.notify(
-                            f"{_cname} nu are încă bench — rulează un Re-Bench "
-                            "ca ținta să fie aplicată.",
-                            type="warning",
-                        )
-                        return
-                    decision.update_best_methods_with_auto_pilot(str(_dp), str(_fp))
-                    _mismatch = False
-                    try:
-                        from loto_enterprise.core.method_selector import (
-                            recommend_optimal_config,
-                        )
-
-                        for _g in _LOT.games_for_country(_cc):
-                            for _gk in _g.bench_keys:
-                                if _gk == _g.bench_key_urna2:
-                                    continue
-                                _c = recommend_optimal_config(
-                                    _gk,
-                                    _int_setting("pool_size_val"),
-                                    config_path=str(_dp),
-                                )
-                                if _c.get("rate_col_mismatch"):
-                                    _mismatch = True
-                    except Exception:  # noqa: BLE001
-                        pass
-                    if _mismatch:
-                        ui.notify(
-                            f"Decizie {_cname} actualizată, DAR folds nu au coloane "
-                            f"{target}+ — s-a folosit 4+ (rate_col_mismatch). "
-                            "Rulează Re-Bench.",
-                            type="warning",
-                        )
-                    else:
-                        ui.notify(
-                            f"Decizia Auto-Pilot {_cname} a fost actualizată pentru "
-                            f"{target}+ hits!",
-                            type="info",
-                        )
-                    _refresh_status()
-                    results_panel.refresh()
-                    return
-                if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():
-                    decision.update_best_methods_with_auto_pilot()
-                    _mismatch = False
-                    try:
-                        from loto_enterprise.core.method_selector import (
-                            recommend_optimal_config,
-                        )
-
-                        for _gk in ("loto_6_49", "loto_5_40", "joker_urna1"):
-                            _c = recommend_optimal_config(
-                                _gk, _int_setting("pool_size_val")
-                            )
-                            if _c.get("rate_col_mismatch"):
-                                _mismatch = True
-                                break
-                    except Exception:  # noqa: BLE001
-                        pass
-                    if _mismatch:
-                        ui.notify(
-                            f"Decizie actualizată, DAR folds nu au coloane {target}+ "
-                            f"— s-a folosit 4+ (rate_col_mismatch). Rulează Re-Bench.",
-                            type="warning",
-                        )
-                    else:
-                        ui.notify(
-                            f"Decizia Auto-Pilot a fost actualizată pentru {target}+ hits!",
-                            type="info",
-                        )
-                    _refresh_status()
-                    results_panel.refresh()
-            except FileNotFoundError:
-                # best_methods.json e gitignored: pe un clone proaspăt (sau după
-                # ștergere) nu există, iar `update_best_methods_with_auto_pilot`
-                # aruncă ÎNAINTE de `ui.notify`/`_refresh_status`, deci utilizatorul
-                # schimba ținta și nu vedea absolut nimic — nici succes, nici
-                # eroare — deși decizia NU fusese recalculată.
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Ținta de bench nu a putut fi aplicată: %s", exc)
+            if _bench_running():
+                # Bench-ul își scrie decizia cu ținta de la pornire, iar folds.csv
+                # e parțial până la final. Recalcularea vine după bench.
+                STATE["bench_target_pending"] = True
                 ui.notify(
-                    "Nu există încă best_methods.json — rulează un Re-Bench "
-                    "ca ținta să fie aplicată.",
+                    f"Re-Bench în curs: decizia se recalculează pentru {target}+ "
+                    "după ce se termină.",
                     type="warning",
                 )
-            except Exception as exc:
-                logger.warning("Eroare la schimbarea țintei de hituri: %s", exc)
-                ui.notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
-            finally:
                 _bench_freshness_panel.refresh()
+                return
+            _rebuild_decision_for_target(target)
 
         ui.select(
             {3: "3+ Hits", 4: "4+ Hits"},

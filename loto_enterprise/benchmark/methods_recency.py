@@ -272,7 +272,7 @@ def score_spectral_phase(draws_2d, max_num, window: int = 256):
 
 
 def score_hurst_persistence(draws_2d, max_num, window: int = 512):
-    """Persistență (Hurst prin varianța agregată) × semnul deviației recente.
+    """Persistență (Hurst prin varianța agregată) × deviația recentă.
 
     H > 0,5: seria-indicator e persistentă → o deviație recentă pozitivă
     continuă; H < 0,5: anti-persistentă → deviația se inversează. Scorul

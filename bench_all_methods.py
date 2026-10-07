@@ -163,6 +163,22 @@ def resolve_bench_paths(
     return cc, out_s, dec_s
 
 
+def reduced_run_reason(args, pcts, min_windows: int) -> str | None:
+    """De ce rularea nu poate rescrie decizia de producție, sau None.
+
+    Sub `min_windows` ferestre, alt istoric decât cel de producție sau
+    `--block-size` > 1 (scor recalculat o dată pe bloc: aproximare mai rapidă,
+    nu ce validează walk-forward-ul). `--quick`/`--methods` au garda lor.
+    """
+    if len(pcts) < min_windows:
+        return f"sub {min_windows} ferestre"
+    if getattr(args, "istoric", None):
+        return "--istoric explicit"
+    if int(getattr(args, "block_size", 1)) != 1:
+        return f"--block-size {int(args.block_size)}"
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Benchmark regresiv multi-model pentru predicție LOTO"
@@ -406,6 +422,23 @@ def main() -> int:
         except Exception:
             pass
 
+    # Semnăturile datelor pe care le citește bench-ul, luate ÎNAINTE de rulare:
+    # ACTUALIZARI.bat poate adăuga o extragere în orele de bench, iar decizia nu
+    # trebuie să o declare „la zi" (freshness compară exact aceste semnături).
+    _sig_maps: dict = {}
+    if is_foreign:
+        _sig_maps = {
+            "csv_map": {g.key: [g.csv_path] for g in games},
+            "cols_map": {g.key: list(g.cols) for g in games},
+        }
+    try:
+        from loto_enterprise.benchmark.freshness import csv_signatures
+
+        _pre_bench_sigs = csv_signatures(**_sig_maps)
+    except Exception as _sig_exc:  # noqa: BLE001
+        logging.warning(f"[freshness] semnături pre-bench indisponibile: {_sig_exc}")
+        _pre_bench_sigs = None
+
     with progress:
         report = run_benchmark(
             games=games,
@@ -494,18 +527,13 @@ def main() -> int:
         )
     except Exception:  # noqa: BLE001
         _MIN_WIN = 3
-    _reduced_windows = len(pcts) < _MIN_WIN
-    _other_istoric = bool(args.istoric)
-    if (
-        not _skip_decision
-        and (_reduced_windows or _other_istoric)
-        and not args.force_decision
-    ):
+    _reduced = reduced_run_reason(args, pcts, _MIN_WIN)
+    if not _skip_decision and _reduced and not args.force_decision:
         _skip_decision = True
         logging.warning(
             "[bench] run redus (%s): NU rescriu best_methods.json; "
             "foloseste --force-decision daca vrei asta explicit.",
-            "sub %d ferestre" % _MIN_WIN if _reduced_windows else "--istoric explicit",
+            _reduced,
         )
     if not _skip_decision and _explicit and not args.force_decision:
         # Gardă anti-footgun: un run cu set REDUS (--quick / --methods a,b) scrie un
@@ -537,15 +565,11 @@ def main() -> int:
                 write_signatures_to_best_methods,
             )
 
-            if is_foreign:
-                # Semnăturile CSV-urilor efectiv folosite (registru sau --istoric).
-                write_signatures_to_best_methods(
-                    decision_file,
-                    csv_map={g.key: [g.csv_path] for g in games},
-                    cols_map={g.key: list(g.cols) for g in games},
-                )
-            else:
-                write_signatures_to_best_methods(decision_file)
+            # Semnăturile CSV-urilor efectiv folosite (registru sau --istoric),
+            # din momentul în care bench-ul le-a citit.
+            write_signatures_to_best_methods(
+                decision_file, signatures=_pre_bench_sigs, **_sig_maps
+            )
         except Exception as _e:
             logging.warning(f"[freshness] failed to stamp signatures: {_e}")
 

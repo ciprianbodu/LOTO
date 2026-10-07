@@ -34,6 +34,7 @@ class ScoringMixin:
                 get_ensemble_for_game,
                 combine_ensemble_scores,
                 has_decision,
+                rejected_decision_scorer,
             )
             from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
         except Exception as exc:
@@ -65,11 +66,12 @@ class ScoringMixin:
         else:
             draws_2d = self._draw_matrix.astype(np.int64)
 
-        # Joc din altă țară fără decizie de bench (încă niciun Re-Bench al țării,
-        # sau fișier care nu îi aparține): frequency, marcat explicit ca fallback
-        # în audit — nu ca un câștigător de bench.
+        # Joc fără decizie de bench (România fără best_methods.json sau fără
+        # intrarea jocului; altă țară fără Re-Bench sau cu un fișier care nu îi
+        # aparține): frequency, marcat explicit ca fallback în audit — nu ca un
+        # câștigător de bench. Pool-ul e același: aceeași funcție de frecvență.
         config_path = self._decision_config_path()
-        if config_path is not None and not has_decision(game_key, config_path):
+        if not has_decision(game_key, config_path):
             _lot = getattr(self, "lottery", None)
             self._bench_winner_missing_reason = (
                 f"fără decizie bench pentru {_lot.display if _lot else game_key}"
@@ -150,6 +152,18 @@ class ScoringMixin:
                 "pool_hint": _pool_hint,
                 "family": family,
             }
+            # Decizia numește o metodă interzisă în producție sau necunoscută
+            # registry-ului: rulează rezerva, iar auditul o spune.
+            _rejected = rejected_decision_scorer(game_key, _pool_hint, config_path)
+            if _rejected and _rejected != winner:
+                bench_winner_info.update(
+                    fallback=True,
+                    attempted=_rejected,
+                    reason=(
+                        f"metoda din decizie ({_rejected}) este interzisă în "
+                        "producție sau necunoscută"
+                    ),
+                )
             if len(ensemble) > 1:
                 # Membrii EFECTIV folosiţi (ponderi renormalizate după eliminări),
                 # cu fallback la lista nominală dacă auditul lipseşte.
@@ -278,7 +292,14 @@ class ScoringMixin:
                 _fb_info["no_decision"] = True
             if _attempted:
                 _fb_info["attempted"] = _attempted
-            self.audit.setdefault("bench_winner", {})[_gk] = _fb_info
+            fallback = self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
+            if fallback:
+                self.audit.setdefault("bench_winner", {})[_gk] = _fb_info
+            else:
+                # Nici frecvența n-a avut date (Urna 2 fără coloana joker validă):
+                # auditul nu numește un scorer care n-a rulat.
+                (self.audit.get("bench_winner") or {}).pop(_gk, None)
+            return fallback
         return self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
 
     def _bench_game_key(self, is_joker_drum: bool = False) -> str:

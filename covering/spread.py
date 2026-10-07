@@ -18,6 +18,7 @@ Fara afirmatie predictiva: extragerea este presupusa uniforma.
 from __future__ import annotations
 
 from functools import lru_cache
+from itertools import combinations
 from math import comb
 
 import numpy as np
@@ -26,6 +27,9 @@ _SAME = 1e6  # doua variante identice
 _RUN = 1e3  # o varianta peste limita de consecutive
 _RESTARTS = 4
 _PASSES = 40
+# Până la atâtea combinații, o variantă peste limita de consecutive rămasă după
+# căutarea locală se înlocuiește prin enumerare (intervalele înguste ale bazei).
+_REPAIR_LIMIT = 20000
 
 
 def pair_joint_probability(max_num: int, draw_n: int, pick: int, overlap: int, threshold: int) -> float:
@@ -214,7 +218,48 @@ def spread_variants(
             best_cost = cost
             best = member.copy()
     assert best is not None
-    return [sorted(int(numbers[j]) for j in np.flatnonzero(row)) for row in best]
+    result = [sorted(int(numbers[j]) for j in np.flatnonzero(row)) for row in best]
+    if max_run > 0 and any(_excess_of(set(v), max_run) for v in result):
+        result = _repair_runs(result, [int(n) for n in numbers], pick, max_run, table)
+    return result
+
+
+def _repair_runs(variants, ranked, pick: int, max_run: int, table) -> list[list[int]]:
+    """Înlocuiește variantele peste `max_run` cu combinații conforme nefolosite.
+
+    Penalizarea din căutarea locală nu garantează limita pe un univers îngust
+    (bază restrânsă la 8-9 numere). Pentru fiecare variantă care o depășește se
+    alege, dintre combinațiile conforme încă nefolosite, cea cu suprapunerea cea
+    mai ieftină față de celelalte, apoi cu numerele mai bine clasate. Fără
+    combinație conformă disponibilă, varianta rămâne (limita e imposibilă).
+    """
+    if comb(len(ranked), pick) > _REPAIR_LIMIT:
+        return variants
+    position = {n: i for i, n in enumerate(ranked)}
+    compliant = [
+        c for c in combinations(sorted(ranked), pick) if not _excess_of(set(c), max_run)
+    ]
+    chosen = [tuple(v) for v in variants]
+    taken = set(chosen)
+    for i, v in enumerate(chosen):
+        if not _excess_of(set(v), max_run):
+            continue
+        others = [set(w) for j, w in enumerate(chosen) if j != i]
+        best = None
+        for c in compliant:
+            if c in taken:
+                continue
+            cset = set(c)
+            cost = float(sum(table[min(len(cset & o), pick)] for o in others))
+            key = (cost, sum(position[n] for n in c), c)
+            if best is None or key < best:
+                best = key
+        if best is None:
+            break
+        taken.discard(v)
+        taken.add(best[2])
+        chosen[i] = best[2]
+    return [list(c) for c in chosen]
 
 
 def max_consecutive_on_variant(variant) -> int:

@@ -45,6 +45,9 @@ def test_bench_winner_scoring_enforces_ensemble_max_methods_cap(monkeypatch):
         return []  # ensemble gol -> {} devreme, fără să mai avem nevoie de date reale
 
     monkeypatch.setattr(ms, "get_ensemble_for_game", _spy)
+    # Fără intrare de decizie, motorul nu mai cere ansamblul: cade direct pe
+    # frecvență, marcată `no_decision`. Garda de plafon privește decizia citită.
+    monkeypatch.setattr(ms, "has_decision", lambda *a, **k: True)
     eng = _engine(_joker_frame(with_joker=True))
     assert eng._scores_via_bench_winner(is_joker_drum=False) == {}
     assert captured.get("max_methods") == ENSEMBLE_MAX_METHODS

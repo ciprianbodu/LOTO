@@ -62,8 +62,14 @@ def _is_experimental_interval(name: str) -> bool:
     return method_meta(name).get("family") == "experimental_interval"
 
 
-def _pct(value) -> str | None:
-    """Procent cu două zecimale, aceeași precizie pentru Wilson și pentru brut."""
+def _rate_pct(value) -> str | None:
+    """Procent cu două zecimale, aceeași precizie pentru Wilson și pentru brut.
+
+    Numele diferă de `ui_results._pct`: `_sync_ui_namespace` copiază numele
+    private în toate modulele UI, iar ultimul definit le înlocuia pe celelalte.
+    Sub numele comun, șansele exacte din „Bilet complet” pierdeau zecimalele
+    (5+ la 5/40, 0,00365%, apărea „0.00%”).
+    """
     if value is None or pd.isna(value):
         return None
     return f"{float(value) * 100:.2f}%"
@@ -85,11 +91,11 @@ def _bench_rate_line(
     extrageri. Ambele sunt procente cu două zecimale.
     """
     parts = []
-    wilson_txt = _pct(wilson)
+    wilson_txt = _rate_pct(wilson)
     if wilson_txt is not None:
         label = "top-1" if single_pick else f"{shown_t}+"
         parts.append(f"Wilson {label}: {wilson_txt}")
-    primary_txt = _pct(raw_primary)
+    primary_txt = _rate_pct(raw_primary)
     if primary_txt is not None:
         if single_pick:
             mult = (
@@ -105,7 +111,7 @@ def _bench_rate_line(
                 else ""
             )
             parts.append(f"brut 3+: {primary_txt}{mult}")
-    four_txt = _pct(raw_4)
+    four_txt = _rate_pct(raw_4)
     if four_txt is not None and not single_pick:
         mult = f" ({float(raw_4) / float(rnd_4):.2f}x random)" if rnd_4 else ""
         parts.append(f"brut 4+: {four_txt}{mult}")

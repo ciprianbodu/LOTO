@@ -132,7 +132,8 @@ def test_module_load_failure_is_recorded_and_logged_as_error(monkeypatch, caplog
     assert "methods_wave2" in methods.METHOD_LOAD_ERRORS
     assert "scipy" in methods.METHOD_LOAD_ERRORS["methods_wave2"]
     # Modulul picat chiar lipseste din registry, nu doar din log.
-    assert "alternating_parity" not in fake_methods
+    # (`alternating_parity` e doar alias; cheia din registry e `season_period2`.)
+    assert "season_period2" not in fake_methods
     # ...iar celelalte module s-au incarcat normal (esecul e izolat).
     assert "neighbor_adjacent" in fake_methods
     assert any(

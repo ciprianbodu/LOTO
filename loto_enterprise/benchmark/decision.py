@@ -433,6 +433,11 @@ def pooled_rate_and_neff(
     pairs = pairs[pairs["n"] > 0]
     if pairs.empty:
         return None
+    # Ordinea sumării fixată pe valori, nu pe rândurile din folds.csv: altfel două
+    # metode cu aceleași evenimente pe fereastră difereau în ultima zecimală după
+    # ordinea rândurilor, iar departajarea finală după nume nu se mai aplica.
+    # Pe foldurile canonice ale runner-ului (ferestre crescătoare) ordinea e aceeași.
+    pairs = pairs.sort_values(["n", "r"], kind="stable")
     sizes = pairs["n"].astype(float).to_numpy()
     n_pooled = float(sizes.sum())
     if n_pooled <= 0:
@@ -1419,14 +1424,58 @@ def build_auto_pilot_matrix(
     return matrix
 
 
+class IncompleteFoldsError(ValueError):
+    """folds.csv nu acoperă Re-Bench-ul care a scris decizia de producție."""
+
+
+def missing_decision_folds(cfg: dict, folds: pd.DataFrame) -> list[tuple[str, str, int]]:
+    """(joc, metodă, fereastră) ale Re-Bench-ului deciziei care lipsesc din folds.
+
+    `_meta.methods_tested_per_game` și `_meta.percentiles` descriu rularea care
+    a scris decizia. Un folds.csv scris la jumătatea unui bench (runner-ul îl
+    rescrie la fiecare 100 de folduri), rămas după un bench oprit sau după
+    `--quick`/`--methods` nu le acoperă: o decizie recalculată pe el alege dintre
+    mai puține metode, fără niciun semn. Fără aceste câmpuri (decizie veche),
+    lista e goală: nu există reper.
+    """
+    meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+    per_game = meta.get("methods_tested_per_game") or {}
+    pcts = meta.get("percentiles") or []
+    if not isinstance(per_game, dict) or not per_game or not pcts:
+        return []
+    real = folds
+    if "is_random" in folds.columns:
+        real = folds[folds["is_random"] == False]  # noqa: E712
+    pct = pd.to_numeric(real.get("percentile"), errors="coerce")
+    present = {
+        (str(g), str(m), int(p))
+        for g, m, p in zip(real.get("game", []), real.get("method", []), pct)
+        if pd.notna(p)
+    }
+    return [
+        (str(g), str(m), int(p))
+        for g, methods in per_game.items()
+        for m in methods or []
+        for p in pcts
+        if (str(g), str(m), int(p)) not in present
+    ]
+
+
 def update_best_methods_with_auto_pilot(
     best_methods_path: str = "best_methods.json",
     folds_csv_path: str = "bench_results/folds.csv",
+    *,
+    require_complete: bool = False,
 ) -> dict:
     """Read folds.csv, run decision algo, write `auto_pilot_per_pool` into best_methods.json.
 
     Lucrează pe fișierul dat: România `best_methods.json`, altă țară
-    `decisions/<CC>/best_methods.json` cu folds-ul din directorul ei."""
+    `decisions/<CC>/best_methods.json` cu folds-ul din directorul ei.
+
+    `require_complete=True` (schimbarea țintei din UI) refuză un folds.csv care
+    nu acoperă Re-Bench-ul deciziei (`IncompleteFoldsError`), iar decizia
+    rămâne neatinsă. Bench-ul își scrie decizia fără această cerință: acolo
+    watchdog-ul tolerează intenționat task-urile blocate, raportate ca lipsă."""
     bm_path = Path(best_methods_path)
     if not bm_path.exists():
         raise FileNotFoundError(f"{best_methods_path} not found")
@@ -1441,6 +1490,14 @@ def update_best_methods_with_auto_pilot(
     with file_lock(bm_path):
         cfg = json.loads(bm_path.read_text(encoding="utf-8"))
         games = cfg.get("games", {})
+        if require_complete:
+            missing = missing_decision_folds(cfg, pd.read_csv(folds_csv_path))
+            if missing:
+                g, m, pct = missing[0]
+                raise IncompleteFoldsError(
+                    f"{folds_csv_path} nu acoperă Re-Bench-ul deciziei: lipsesc "
+                    f"{len(missing)} folduri (ex. {g}/{m}/{pct}%)"
+                )
 
         games_meta = {}
         for gk, gd in games.items():
