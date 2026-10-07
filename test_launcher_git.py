@@ -202,20 +202,31 @@ def tracked(seed, local, name, text):
     """Fisier urmarit in ambele clone, inainte de scenariu."""
     path = seed / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding='utf-8')
     commit(seed, f'add {name}')
     git(seed, 'push', 'origin', 'main')
     git(local, 'pull', '-q', '--ff-only')
 
 
-def stashes(local):
-    return git(local, 'stash', 'list')
+def remote_change(seed, name, text, message='remote edit'):
+    (seed / name).write_text(text, encoding='utf-8')
+    commit(seed, message)
+    git(seed, 'push', 'origin', 'main')
 
 
-def backups(local):
-    root = local / '.git' / 'loto-sync-backup'
-    return sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()) \
-        if root.exists() else []
+def backup_root(local):
+    return local / '.git' / 'loto-sync-backup'
+
+
+def local_copies(local):
+    """Copiile locale pastrate: {cale: continut}."""
+    root = backup_root(local)
+    found = {}
+    for path in root.glob('*/local/**/*') if root.exists() else []:
+        if path.is_file():
+            found[path.relative_to(path.parents[len(path.relative_to(root).parts) - 3]).as_posix()] = \
+                path.read_text(encoding='utf-8')
+    return found
 
 
 def test_sync_applies_update_and_keeps_edits_in_files_it_does_not_touch(repos):
@@ -227,24 +238,24 @@ def test_sync_applies_update_and_keeps_edits_in_files_it_does_not_touch(repos):
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
     assert (local / 'code.txt').read_text() == 'new\n'
     assert (local / 'notes.txt').read_text() == 'local note\n'
-    assert 'Nu le aplic' not in out and 'commit-uri noi' not in out
-    assert 'Modificarile locale au ramas neatinse (1 fisiere)' in out
-    assert stashes(local) == '' and backups(local) == []
+    assert 'Nu le aplic' not in out
+    assert 'Actualizat la origin/main (1 commit-uri noi)' in out
+    assert 'celelalte 1 fisiere au ramas neatinse' in out
+    assert not backup_root(local).exists()
 
 
 def test_sync_merges_a_local_edit_into_the_updated_file(repos):
     local, seed, _ = repos
     tracked(seed, local, 'code.txt', 'one\ntwo\nthree\nfour\nfive\n')
-    (seed / 'code.txt').write_text('ONE\ntwo\nthree\nfour\nfive\n')
-    commit(seed, 'remote edit')
-    git(seed, 'push', 'origin', 'main')
+    remote_change(seed, 'code.txt', 'ONE\ntwo\nthree\nfour\nfive\n')
     (local / 'code.txt').write_text('one\ntwo\nthree\nfour\nFIVE\n')
+    git(local, 'add', 'code.txt')  # o schimbare pusa si in index
     out = run_helper(local)
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
     assert (local / 'code.txt').read_text() == 'ONE\ntwo\nthree\nfour\nFIVE\n'
+    assert 'combinate cu actualizarea: code.txt' in out
     assert git(local, 'diff', '--cached', '--name-only') == ''
-    assert 'repuse peste actualizare' in out
-    assert stashes(local) == '' and backups(local) == []
+    assert not backup_root(local).exists()
 
 
 def test_sync_conflict_takes_the_update_and_keeps_the_local_copy(repos):
@@ -255,27 +266,22 @@ def test_sync_conflict_takes_the_update_and_keeps_the_local_copy(repos):
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
     assert (local / 'code.txt').read_text() == 'new\n'
     assert git(local, 'status', '--porcelain', '--untracked-files=no') == ''
-    assert 'Conflict intre modificarile locale si origin/main in code.txt' in out
-    copies = backups(local)
-    assert len(copies) == 1 and copies[0].endswith('/code.txt')
-    root = local / '.git' / 'loto-sync-backup'
-    assert (root / copies[0]).read_text() == 'personal\n'
-    assert 'loto-sync' in stashes(local)
-    assert 'personal' in git(local, 'stash', 'show', '-p', 'stash@{0}')
+    assert 'Conflict in code.txt: am pus versiunea de pe origin/main' in out
+    assert local_copies(local) == {'code.txt': 'personal\n'}
+    assert not list(backup_root(local).glob('*/PENDING'))
+    # Fara markeri de conflict nicaieri in arborele de lucru.
+    assert '<<<<<<<' not in (local / 'code.txt').read_text()
 
 
-def test_sync_keeps_the_local_rebench_results_on_conflict(repos):
+def test_sync_keeps_the_local_rebench_results(repos):
+    """bench_results nu se combina: doua Re-Bench-uri nu se amesteca."""
     local, seed, _ = repos
-    tracked(seed, local, 'bench_results/folds.csv', 'method,rate\nold,1\n')
-    (seed / 'bench_results' / 'folds.csv').write_text('method,rate\nremote,2\n')
-    (seed / 'code.txt').write_text('new\n')
-    commit(seed, 'remote rebench')
-    git(seed, 'push', 'origin', 'main')
-    (local / 'bench_results' / 'folds.csv').write_text('method,rate\nlocal,3\n')
+    tracked(seed, local, 'bench_results/folds.csv', 'method,rate\nm1,1\nm2,1\nm3,1\n')
+    remote_change(seed, 'bench_results/folds.csv', 'method,rate\nm1,2\nm2,1\nm3,1\n')
+    (local / 'bench_results' / 'folds.csv').write_text('method,rate\nm1,1\nm2,1\nm3,3\n')
     out = run_helper(local)
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
-    assert (local / 'code.txt').read_text() == 'new\n'
-    assert (local / 'bench_results' / 'folds.csv').read_text() == 'method,rate\nlocal,3\n'
+    assert (local / 'bench_results' / 'folds.csv').read_text() == 'method,rate\nm1,1\nm2,1\nm3,3\n'
     assert 'Rezultatele Re-Bench locale raman: bench_results/folds.csv' in out
     assert git(local, 'diff', '--cached', '--name-only') == ''
 
@@ -295,7 +301,27 @@ def test_sync_replays_local_commits_keeps_edits_and_pushes(repos):
     assert (local / 'code.txt').read_text() == 'new\n'
     assert (local / 'notes.txt').read_text() == 'committed locally\n'
     assert (local / 'todo.txt').read_text() == 'uncommitted\n'
-    assert stashes(local) == '' and backups(local) == []
+    assert not backup_root(local).exists()
+
+
+def test_replay_keeps_local_additions_and_deletions(repos):
+    """La rebase toate fisierele locale trec prin copie: un fisier nou pus in
+    index si o stergere locala, neatinse de origin/main, raman cum erau."""
+    local, seed, origin = repos
+    tracked(seed, local, 'gone.txt', 'to delete\n')
+    (local / 'notes.txt').write_text('committed locally\n')
+    commit(local, 'local work')
+    (local / 'brand_new.txt').write_text('staged new file\n')
+    git(local, 'add', 'brand_new.txt')
+    git(local, 'rm', '-q', 'gone.txt')
+    advance(seed)
+    out = run_helper(local)
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+    assert (local / 'brand_new.txt').read_text() == 'staged new file\n'
+    assert git(local, 'diff', '--cached', '--name-only') == 'brand_new.txt'
+    assert not (local / 'gone.txt').exists()
+    assert 'Sterse pe origin/main' not in out and 'nu s-a pastrat' not in out
+    assert not backup_root(local).exists()
 
 
 def test_sync_pushes_commits_that_are_only_local(repos):
@@ -314,11 +340,34 @@ def test_sync_file_deleted_upstream_keeps_the_local_copy(repos):
     git(seed, 'commit', '-q', '-m', 'remove old')
     git(seed, 'push', 'origin', 'main')
     (local / 'old.txt').write_text('edited\n')
-    run_helper(local)
+    out = run_helper(local)
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
     assert not (local / 'old.txt').exists()
-    assert [c for c in backups(local) if c.endswith('/old.txt')]
-    assert 'loto-sync' in stashes(local)
+    assert 'Sterse pe origin/main: old.txt' in out
+    assert local_copies(local) == {'old.txt': 'edited\n'}
+
+
+def test_sync_staged_deletion_of_an_updated_file(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'notes.txt', 'a\n')
+    remote_change(seed, 'notes.txt', 'b\n')
+    git(local, 'rm', '-q', 'notes.txt')
+    out = run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'notes.txt').read_text() == 'b\n'
+    assert 'Stergerea locala a fisierelor notes.txt nu s-a pastrat' in out
+
+
+def test_sync_with_non_ascii_file_names(repos):
+    local, seed, _ = repos
+    name = 'note\u0219\u0103 extragere.txt'
+    tracked(seed, local, name, 'one\ntwo\nthree\nfour\n')
+    remote_change(seed, name, 'ONE\ntwo\nthree\nfour\n')
+    (local / name).write_text('one\ntwo\nthree\nFOUR\n', encoding='utf-8')
+    out = run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / name).read_text(encoding='utf-8') == 'ONE\ntwo\nthree\nFOUR\n'
+    assert 'combinate cu actualizarea' in out
 
 
 def test_failed_update_puts_the_local_edits_back(repos):
@@ -333,11 +382,95 @@ def test_failed_update_puts_the_local_edits_back(repos):
     (local / 'code.txt').write_text('personal\n')
     head = git(local, 'rev-parse', 'HEAD')
     out = run_helper(local)
-    assert 'Actualizarea nu a reusit' in out
+    assert 'Actualizarea nu a reusit. Codul local ramane neschimbat.' in out
+    assert 'puse la loc, neschimbate' in out
     assert git(local, 'rev-parse', 'HEAD') == head
     assert (local / 'code.txt').read_text() == 'personal\n'
     assert (local / 'added.txt').read_text() == 'mine, untracked\n'
-    assert stashes(local) == ''
+    assert not backup_root(local).exists()
+
+
+def test_rebase_that_cannot_start_puts_the_local_edits_back(repos):
+    """Rebase-ul refuzat de la inceput nu lasa stare de rebase; nu se apeleaza
+    --abort, iar modificarile puse deoparte revin."""
+    local, seed, origin = repos
+    tracked(seed, local, 'notes.txt', 'a\n')
+    (local / 'code.txt').write_text('committed locally\n')
+    commit(local, 'local work')
+    (seed / 'added.txt').write_text('remote\n')
+    commit(seed, 'remote adds a file')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'added.txt').write_text('mine, untracked\n')
+    (local / 'notes.txt').write_text('uncommitted\n')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'Commit-urile locale nu se pot repune peste origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert (local / 'notes.txt').read_text() == 'uncommitted\n'
+    assert (local / 'added.txt').read_text() == 'mine, untracked\n'
+    assert not (local / '.git' / 'rebase-merge').exists()
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+    assert not backup_root(local).exists()
+
+
+def test_local_merge_commits_are_not_replayed(repos):
+    local, seed, origin = repos
+    git(local, 'checkout', '-q', '-b', 'side')
+    (local / 'side.txt').write_text('side\n')
+    commit(local, 'side work')
+    git(local, 'checkout', '-q', 'main')
+    (local / 'main.txt').write_text('main\n')
+    commit(local, 'main work')
+    git(local, 'merge', '-q', '--no-ff', '-m', 'local merge', 'side')
+    advance(seed)
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'contin un commit de merge' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_commits_removed_from_origin_are_not_republished(repos):
+    """origin/main rescris (force-push) fara un commit deja publicat de aici:
+    rebase-ul l-ar trimite din nou."""
+    local, seed, origin = repos
+    (local / 'code.txt').write_text('published then withdrawn\n')
+    commit(local, 'withdrawn')
+    git(local, 'push', '-q', 'origin', 'main')
+    git(seed, 'pull', '-q', '--ff-only')
+    git(seed, 'reset', '-q', '--hard', 'HEAD~1')
+    (seed / 'other.txt').write_text('replacement\n')
+    commit(seed, 'replacement')
+    git(seed, 'push', '-q', '--force', 'origin', 'main')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'au fost deja pe origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+
+
+def test_local_amend_of_a_pushed_commit_is_not_replayed(repos):
+    local, seed, origin = repos
+    (local / 'code.txt').write_text('first\n')
+    commit(local, 'pushed')
+    git(local, 'push', '-q', 'origin', 'main')
+    git(local, 'commit', '-q', '--amend', '-m', 'pushed, reworded')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'rescriu un commit deja trimis' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(origin, 'log', '-1', '--format=%s', 'main') == 'pushed'
+
+
+def test_an_interrupted_sync_is_reported(repos):
+    local, _, _ = repos
+    pending = backup_root(local) / '20260101-000000'
+    (pending / 'local').mkdir(parents=True)
+    (pending / 'local' / 'code.txt').write_text('lost?\n')
+    (pending / 'PENDING').write_text('code.txt\n')
+    out = run_helper(local)
+    assert 'O sincronizare anterioara s-a intrerupt' in out
+    assert (pending / 'local' / 'code.txt').read_text() == 'lost?\n'
 
 
 def test_stale_packed_refs_lock_does_not_block_fast_forward(repos):

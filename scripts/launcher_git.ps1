@@ -10,13 +10,14 @@ param(
 )
 
 # Sync is called ONLY from an immutable launcher copy outside the repository.
-# No downloaded fragments, forced reset or user-file deletion.
-# Sync = fetch, apply origin/main, replay unpushed local commits onto it (rebase,
-# aborted on conflict) and push. Uncommitted edits are never lost: files the
-# update does not touch keep them in place; files changed on both sides are
-# copied to .git\loto-sync-backup and stashed, then merged back by git. On a real
+# No downloaded fragments, forced reset, stash or user-file deletion.
+# Sync = fetch, apply origin/main, replay unpublished local commits onto it
+# (rebase, aborted on conflict) and push. Uncommitted edits are never lost:
+# files the update does not touch keep them in place; files changed on both
+# sides are copied byte for byte to .git\loto-sync-backup, reset to HEAD for the
+# update, then merged back with `git merge-file` on temporary copies. On a real
 # conflict the code takes origin/main, bench_results keeps the local Re-Bench,
-# and the stash and the copy stay for the user.
+# and the local copy stays in the backup folder. Any failure puts them back.
 $ErrorActionPreference = 'Stop'
 
 if ($Mode -eq 'Cleanup') {
@@ -269,6 +270,9 @@ function Invoke-LotoProcess {
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
     $info.RedirectStandardInput = $true
+    # Git scrie caile si mesajele in UTF-8 (diacritice in numele fisierelor).
+    $info.StandardOutputEncoding = New-Object Text.UTF8Encoding $false
+    $info.StandardErrorEncoding = New-Object Text.UTF8Encoding $false
     # Git children/hooks must find the same executable even when CMD has no Git in PATH.
     $info.EnvironmentVariables['PATH'] = (Split-Path -Parent $gitExe) + ';' + $env:PATH
     $info.EnvironmentVariables['GIT_TERMINAL_PROMPT'] = '0'
@@ -448,9 +452,30 @@ function Format-PathList {
     return $shown
 }
 
-# Rezultatele Re-Bench-ului local: la conflict raman cele ale statiei, din
-# care s-a calculat decizia ei (best_methods.json, runtime).
+# Rezultatele Re-Bench-ului local: raman cele ale statiei, din care s-a
+# calculat decizia ei (best_methods.json, runtime). Nu se combina doua bench-uri.
 $script:LocalWinsPrefix = 'bench_results/'
+# Fisierele puse deoparte in rularea curenta: blocul finally le pune la loc
+# chiar daca Set-Aside s-a oprit la jumatate.
+$script:AsideItems = $null
+$script:AsideDir = $null
+
+function New-PathSet {
+    param([string[]]$Paths)
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in $Paths) { if ($path) { [void]$set.Add($path) } }
+    return ,$set
+}
+
+function Get-LocalChanges {
+    # Fisierele urmarite schimbate fata de HEAD: pe disc sau numai in index.
+    $seen = New-PathSet @()
+    $paths = @()
+    foreach ($path in @(Get-ChangedPaths -DiffArgs @('HEAD')) + @(Get-ChangedPaths -DiffArgs @('--cached'))) {
+        if ($seen.Add($path)) { $paths += $path }
+    }
+    return $paths
+}
 
 function Invoke-LotoGitPaths {
     # Comanda git pe o lista de cai literale, din fisier: linia de comanda
@@ -467,56 +492,176 @@ function Invoke-LotoGitPaths {
     }
 }
 
-function Save-LocalCopies {
-    # Copie exacta (octeti) a fisierelor puse deoparte, in afara arborelui urmarit.
-    param([string[]]$Paths, [string]$BackupDir)
-    $saved = @{}
-    foreach ($path in $Paths) {
-        if (Test-Path -LiteralPath $path -PathType Leaf) {
-            $target = Join-Path $BackupDir $path
-            [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target))
-            [IO.File]::Copy((Join-Path (Get-Location).Path $path), $target, $true)
-            $saved[$path] = $target
-        }
-    }
-    return $saved
+function Copy-LotoFile {
+    param([string]$From, [string]$To)
+    $parent = Split-Path -Parent $To
+    if ($parent) { [void](New-Item -ItemType Directory -Force -Path $parent) }
+    [IO.File]::Copy($From, $To, $true)
 }
 
-function Restore-Stashed {
-    # Aplica modificarile puse deoparte peste HEAD-ul de acum (fuziune git in trei).
-    # La conflict: codul ia HEAD, bench_results ia copia locala. Intoarce caile
-    # in conflict; stash-ul ramane atunci in `git stash list`.
-    param([string]$StashSha, [string[]]$Paths, [hashtable]$Saved)
-    $apply = Invoke-LotoGit -GitArgs @('stash', 'apply', $StashSha)
-    $conflicts = @()
-    if ($apply.Code -ne 0) {
-        try { $conflicts = @(Get-ChangedPaths -DiffArgs @('--diff-filter=U')) } catch { }
-        if ($conflicts.Count -eq 0) { $conflicts = @($Paths) }
-        foreach ($path in $conflicts) {
-            if ($path.StartsWith($script:LocalWinsPrefix, [StringComparison]::OrdinalIgnoreCase) -and $Saved.ContainsKey($path)) {
-                [IO.File]::Copy($Saved[$path], (Join-Path (Get-Location).Path $path), $true)
+function Test-SameBytes {
+    param([string]$A, [string]$B)
+    $x = [IO.File]::ReadAllBytes($A)
+    $y = [IO.File]::ReadAllBytes($B)
+    if ($x.Length -ne $y.Length) { return $false }
+    for ($i = 0; $i -lt $x.Length; $i++) { if ($x[$i] -ne $y[$i]) { return $false } }
+    return $true
+}
+
+function Set-Aside {
+    # 1) copie octet cu octet a fiecarui fisier local (local\), 2) fisierele revin
+    # la HEAD ca actualizarea sa treaca, 3) copia versiunii din HEAD, in forma de
+    # pe disc (base\), pentru fuziunea in trei de dupa actualizare.
+    param([string[]]$Paths, [string]$BackupDir)
+    $root = (Get-Location).Path
+    $tree = Invoke-LotoGit -GitArgs @('ls-tree', '-r', '--name-only', '-z', 'HEAD')
+    if ($tree.Code -ne 0) { throw $tree.Text }
+    $inHead = New-PathSet @($tree.Out.Split([char]0))
+    [void](New-Item -ItemType Directory -Force -Path $BackupDir)
+    [IO.File]::WriteAllText((Join-Path $BackupDir 'PENDING'), (($Paths -join "`n") + "`n"), (New-Object Text.UTF8Encoding $false))
+    $items = @()
+    foreach ($path in $Paths) {
+        $full = Join-Path $root $path
+        $local = $null
+        if (Test-Path -LiteralPath $full -PathType Leaf) {
+            $local = Join-Path (Join-Path $BackupDir 'local') $path
+            Copy-LotoFile -From $full -To $local
+        }
+        $items += [pscustomobject]@{ Path = $path; Local = $local; Base = $null; InHead = $inHead.Contains($path) }
+    }
+    $script:AsideItems = $items
+    $script:AsideDir = $BackupDir
+    $tracked = @($items | Where-Object { $_.InHead } | ForEach-Object { $_.Path })
+    $added = @($items | Where-Object { -not $_.InHead } | ForEach-Object { $_.Path })
+    if ($tracked.Count -gt 0) {
+        $back = Invoke-LotoGitPaths -GitArgs @('checkout', 'HEAD') -Paths $tracked
+        if ($back.Code -ne 0) { throw $back.Text }
+    }
+    if ($added.Count -gt 0) {
+        $unstage = Invoke-LotoGitPaths -GitArgs @('rm', '--cached', '-q', '--ignore-unmatch') -Paths $added
+        if ($unstage.Code -ne 0) { throw $unstage.Text }
+        foreach ($path in $added) {
+            $full = Join-Path $root $path
+            if (Test-Path -LiteralPath $full -PathType Leaf) { Remove-Item -LiteralPath $full -Force }
+        }
+    }
+    foreach ($item in $items) {
+        $full = Join-Path $root $item.Path
+        if ($item.InHead -and (Test-Path -LiteralPath $full -PathType Leaf)) {
+            $item.Base = Join-Path (Join-Path $BackupDir 'base') $item.Path
+            Copy-LotoFile -From $full -To $item.Base
+        }
+    }
+    return $items
+}
+
+function Restore-Aside {
+    # Pune la loc fisierele puse deoparte. Fara actualizare: exact cum erau.
+    # Dupa actualizare: bench_results ia copia locala; codul se combina cu
+    # git merge-file pe o copie temporara; la conflict ramane origin/main, iar
+    # copia locala ramane in BackupDir\local. Intoarce ce s-a intamplat.
+    param([object[]]$Items, [string]$BackupDir, [bool]$Updated)
+    $root = (Get-Location).Path
+    $report = [ordered]@{ Merged = @(); Kept = @(); Conflicts = @(); Gone = @(); LocalDeleted = @(); Failed = @() }
+    $restage = @()
+    foreach ($item in $Items) {
+        $full = Join-Path $root $item.Path
+        try {
+            if (-not $Updated) {
+                if ($item.Local) {
+                    Copy-LotoFile -From $item.Local -To $full
+                    if (-not $item.InHead) { $restage += $item.Path }
+                } elseif (Test-Path -LiteralPath $full -PathType Leaf) {
+                    Remove-Item -LiteralPath $full -Force
+                }
                 continue
             }
-            $inHead = Invoke-LotoGit -GitArgs @('cat-file', '-e', ('HEAD:' + $path))
-            if ($inHead.Code -eq 0) {
-                $take = Invoke-LotoGit -GitArgs @('checkout', 'HEAD', '--', (':(literal)' + $path))
-                if ($take.Code -ne 0) { throw $take.Text }
-            } elseif (Test-Path -LiteralPath $path -PathType Leaf) {
-                # Sters pe origin/main: copia locala e salvata, fisierul pleaca.
-                Remove-Item -LiteralPath $path -Force
+            if ($item.Path.StartsWith($script:LocalWinsPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                if ($item.Local) { Copy-LotoFile -From $item.Local -To $full }
+                elseif (Test-Path -LiteralPath $full -PathType Leaf) { Remove-Item -LiteralPath $full -Force }
+                $report.Kept += $item.Path
+                continue
             }
+            $exists = Test-Path -LiteralPath $full -PathType Leaf
+            if (-not $item.Local) {
+                # Sters local. Neatins de actualizare (la rebase, oricare
+                # fisier local trece pe aici): ramane sters; schimbat: ramane.
+                if (-not $exists) { $report.Merged += $item.Path }
+                elseif ($item.Base -and (Test-SameBytes $item.Base $full)) {
+                    Remove-Item -LiteralPath $full -Force
+                    $report.Merged += $item.Path
+                } else { $report.LocalDeleted += $item.Path }
+                continue
+            }
+            if (-not $item.InHead) {
+                # Adaugat local: revine daca actualizarea nu aduce acelasi fisier.
+                if (-not $exists) {
+                    Copy-LotoFile -From $item.Local -To $full
+                    $restage += $item.Path
+                    $report.Merged += $item.Path
+                } elseif (Test-SameBytes $item.Local $full) { $report.Merged += $item.Path }
+                else { $report.Conflicts += $item.Path }
+                continue
+            }
+            if (-not $exists) { $report.Gone += $item.Path; continue }
+            $work = Join-Path (Join-Path $BackupDir 'merge') $item.Path
+            Copy-LotoFile -From $full -To $work
+            $merge = Invoke-LotoGit -GitArgs @('merge-file', '-q', $work, $item.Base, $item.Local)
+            if ($merge.Code -eq 0) {
+                Copy-LotoFile -From $work -To $full
+                $report.Merged += $item.Path
+            } else {
+                $report.Conflicts += $item.Path
+            }
+        } catch {
+            $report.Failed += $item.Path
         }
     }
-    # Index-ul revine la HEAD pe aceste cai; continutul ramane pe disc.
-    $reset = Invoke-LotoGitPaths -GitArgs @('reset', '-q') -Paths $Paths
-    if ($reset.Code -ne 0) { throw $reset.Text }
-    if ($conflicts.Count -eq 0) {
-        $top = Invoke-LotoGit -GitArgs @('rev-parse', '-q', '--verify', 'stash@{0}')
-        if ($top.Code -eq 0 -and $top.Text -eq $StashSha) {
-            Invoke-LotoGit -GitArgs @('stash', 'drop', '-q', 'stash@{0}') | Out-Null
-        }
+    if ($restage.Count -gt 0) {
+        [void](Invoke-LotoGitPaths -GitArgs @('add') -Paths $restage)
     }
-    return $conflicts
+    Remove-Item -LiteralPath (Join-Path $BackupDir 'merge') -Recurse -Force -ErrorAction SilentlyContinue
+    if ($report.Failed.Count -eq 0) {
+        Remove-Item -LiteralPath (Join-Path $BackupDir 'PENDING') -Force -ErrorAction SilentlyContinue
+        $keep = $report.Conflicts.Count + $report.Gone.Count
+        if ($keep -eq 0) { Remove-AsideDir -BackupDir $BackupDir }
+    }
+    $script:AsideItems = $null
+    return $report
+}
+
+function Remove-AsideDir {
+    # Copia fara conflicte nu mai trebuie; folderul comun dispare cand e gol.
+    param([string]$BackupDir)
+    Remove-Item -LiteralPath $BackupDir -Recurse -Force -ErrorAction SilentlyContinue
+    $parent = Split-Path -Parent $BackupDir
+    if ((Test-Path -LiteralPath $parent -PathType Container) -and
+        -not (Get-ChildItem -LiteralPath $parent -Force | Select-Object -First 1)) {
+        Remove-Item -LiteralPath $parent -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Write-AsideReport {
+    param($Report, [string]$BackupDir)
+    $localDir = Join-Path $BackupDir 'local'
+    if ($Report.Merged.Count -gt 0) {
+        Write-Host ('[GIT] Modificarile locale au fost combinate cu actualizarea: ' + (Format-PathList $Report.Merged) + '.')
+    }
+    if ($Report.Kept.Count -gt 0) {
+        Write-Host ('[GIT] Rezultatele Re-Bench locale raman: ' + (Format-PathList $Report.Kept) + '.')
+    }
+    if ($Report.Conflicts.Count -gt 0) {
+        Write-Host ('[GIT] Conflict in ' + (Format-PathList $Report.Conflicts) + ': am pus versiunea de pe origin/main; versiunea locala este in ' + $localDir + '.')
+    }
+    if ($Report.Gone.Count -gt 0) {
+        Write-Host ('[GIT] Sterse pe origin/main: ' + (Format-PathList $Report.Gone) + '; versiunea locala este in ' + $localDir + '.')
+    }
+    if ($Report.LocalDeleted.Count -gt 0) {
+        Write-Host ('[GIT] Stergerea locala a fisierelor ' + (Format-PathList $Report.LocalDeleted) + ' nu s-a pastrat: au fost schimbate pe origin/main.')
+    }
+    if ($Report.Failed.Count -gt 0) {
+        Write-Host ('[GIT] [ATENTIE] Nu am putut pune la loc ' + (Format-PathList $Report.Failed) + '; copia locala este in ' + $localDir + '.')
+    }
 }
 
 function Push-LotoMain {
@@ -561,18 +706,25 @@ try {
     if ($hooks.Code -ne 0) { throw $hooks.Text }
 
     if ($Mode -eq 'Sync') {
-        # Fisierele urmarite schimbate fata de HEAD (in index sau numai pe disc).
-        $local = @(Get-ChangedPaths -DiffArgs @('HEAD'))
+        # O sincronizare oprita la jumatate (fereastra inchisa) lasa marcajul
+        # PENDING langa copia modificarilor puse deoparte: o spunem la fiecare pornire.
+        $gitDir = (Invoke-LotoGit -GitArgs @('rev-parse', '--absolute-git-dir')).Text
+        $backupRoot = Join-Path $gitDir 'loto-sync-backup'
+        if (Test-Path -LiteralPath $backupRoot -PathType Container) {
+            foreach ($pending in @(Get-ChildItem -LiteralPath $backupRoot -Directory | Where-Object {
+                    Test-Path -LiteralPath (Join-Path $_.FullName 'PENDING') -PathType Leaf })) {
+                Write-Host ('[GIT] [ATENTIE] O sincronizare anterioara s-a intrerupt; modificarile locale de atunci sunt in ' + (Join-Path $pending.FullName 'local') + '.')
+            }
+        }
+        $local = @(Get-LocalChanges)
         if ($local.Count -gt 0) {
             Write-Host ('[GIT] Modificari locale necomise (' + $local.Count + '): ' + (Format-PathList $local) + ' - le pastrez.')
         }
         $fetch = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
         if ($fetch.Code -ne 0) {
-            if ($local.Count -gt 0) {
-                Write-Host '[GIT] Fetch esuat - fisierele locale raman neschimbate.'
-                exit 0
-            }
-            throw $fetch.Text
+            Write-Host '[GIT] Fetch esuat - codul si fisierele locale raman neschimbate.'
+            if ($fetch.Text) { Write-Host $fetch.Text }
+            exit 0
         }
         $ahead = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'origin/main..HEAD')
         $behind = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'HEAD..origin/main')
@@ -584,94 +736,124 @@ try {
             if ($nAhead -gt 0) { Push-LotoMain }
             exit 0
         }
+
         if ($nAhead -gt 0) {
-            # Istoria publicata nu se rescrie: rebase-ul atinge numai commit-urile
-            # din origin/main..HEAD. Un merge local ramane de integrat manual.
+            # Commit-uri locale netrimise: se repun peste origin/main numai daca
+            # nu au fost niciodata pe origin/main (altfel istoria de acolo s-a
+            # rescris si le-am republica) si daca niciun commit nou de pe
+            # origin/main nu a fost HEAD aici (altfel e un amend/reset local al
+            # unui commit trimis, pe care rebase-ul l-ar pierde fara urma).
+            $why = $null
             $merges = Invoke-LotoGit -GitArgs @('rev-list', '--merges', '--count', 'origin/main..HEAD')
             if ($merges.Code -ne 0 -or [int]$merges.Text -gt 0) {
-                Write-Host '[GIT] Commit-urile locale netrimise contin un merge; integrarea cu origin/main ramane manuala.'
+                $why = 'contin un commit de merge'
+            }
+            if (-not $why) {
+                $seenOrigin = Invoke-LotoGit -GitArgs @('reflog', 'show', '--format=%H', '-n', '200', 'refs/remotes/origin/main')
+                $former = @()
+                if ($seenOrigin.Code -eq 0) { $former = @($seenOrigin.Out -split "`r?`n" | Where-Object { $_ }) }
+                if ($former.Count -gt 0) {
+                    $fresh = Invoke-LotoGit -GitArgs (@('rev-list', '--count', 'HEAD', '--not', 'origin/main') + $former)
+                    if ($fresh.Code -ne 0 -or [int]$fresh.Text -lt $nAhead) {
+                        $why = 'au fost deja pe origin/main, iar istoria de acolo s-a rescris'
+                    }
+                }
+            }
+            if (-not $why) {
+                $upstream = New-PathSet @((Invoke-LotoGit -GitArgs @('rev-list', 'HEAD..origin/main')).Out -split "`r?`n")
+                $seenHead = Invoke-LotoGit -GitArgs @('reflog', 'show', '--format=%H', '-n', '200', 'HEAD')
+                if ($seenHead.Code -eq 0) {
+                    foreach ($sha in @($seenHead.Out -split "`r?`n" | Where-Object { $_ })) {
+                        if ($upstream.Contains($sha)) { $why = 'rescriu un commit deja trimis (amend sau reset)'; break }
+                    }
+                }
+            }
+            if ($why) {
+                Write-Host ('[GIT] main local are ' + $nAhead + ' commit-uri netrimise care ' + $why + '; origin/main are ' + $nBehind + ' commit-uri noi. Integrarea ramane manuala; codul local ramane neschimbat.')
                 exit 0
             }
-            # Rebase-ul cere arborele curat: se pun deoparte toate modificarile.
+            # Rebase-ul cere arborele curat: toate modificarile se pun deoparte.
             $aside = @($local)
         } else {
             # Fast-forward-ul pastreaza singur modificarile din fisierele pe care
             # nu le atinge; deoparte merg numai cele schimbate si pe origin/main.
-            $incoming = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-            foreach ($path in (Get-ChangedPaths -DiffArgs @('HEAD', 'origin/main'))) { [void]$incoming.Add($path) }
+            $incoming = New-PathSet @(Get-ChangedPaths -DiffArgs @('HEAD', 'origin/main'))
             $aside = @($local | Where-Object { $incoming.Contains($_) })
         }
 
-        $stashSha = $null
-        $saved = @{}
-        $backupDir = $null
-        if ($aside.Count -gt 0) {
-            $gitDir = (Invoke-LotoGit -GitArgs @('rev-parse', '--absolute-git-dir')).Text
-            $backupDir = Join-Path (Join-Path $gitDir 'loto-sync-backup') (Get-Date -Format 'yyyyMMdd-HHmmss')
-            $saved = Save-LocalCopies -Paths $aside -BackupDir $backupDir
-            $before = Invoke-LotoGit -GitArgs @('rev-parse', '-q', '--verify', 'refs/stash')
-            $stash = Invoke-LotoGitPaths -GitArgs @('stash', 'push', '-q', '-m', ('loto-sync ' + (Split-Path -Leaf $backupDir))) -Paths $aside
-            $after = Invoke-LotoGit -GitArgs @('rev-parse', '-q', '--verify', 'refs/stash')
-            if ($stash.Code -ne 0) {
-                if ($stash.Text) { Write-Host $stash.Text }
-                Write-Host '[GIT] Modificarile locale nu au putut fi puse deoparte; nu actualizez, fisierele raman neschimbate.'
-                exit 0
-            }
-            if ($after.Code -eq 0 -and $after.Text -ne $before.Text) { $stashSha = $after.Text }
-            $asideSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-            foreach ($path in $aside) { [void]$asideSet.Add($path) }
-            $still = @(Get-ChangedPaths -DiffArgs @('HEAD') | Where-Object { $asideSet.Contains($_) })
-            if ($still.Count -gt 0) {
-                if ($stashSha) { [void](Restore-Stashed -StashSha $stashSha -Paths $aside -Saved $saved) }
-                Write-Host ('[GIT] Nu am putut pune deoparte: ' + (Format-PathList $still) + '. Nu actualizez; fisierele raman neschimbate.')
-                exit 0
-            }
-            Write-Host ('[GIT] Pun deoparte ' + $aside.Count + ' fisiere schimbate si pe origin/main (copie in ' + $backupDir + ').')
-        }
-
-        if ($nAhead -gt 0) {
-            Write-Host ('[GIT] Repun ' + $nAhead + ' commit-uri locale peste origin/main (' + $nBehind + ' commit-uri noi).')
-            $integrate = Invoke-LotoGitRetry -GitArgs @('rebase', 'origin/main')
-            if ($integrate.Code -ne 0) {
-                # Lista e numai pentru mesaj: anularea ruleaza oricum.
-                $conflicts = @()
-                try { $conflicts = @(Get-ChangedPaths -DiffArgs @('--diff-filter=U')) } catch { }
-                $abort = Invoke-LotoGit -GitArgs @('rebase', '--abort')
-                if ($abort.Code -ne 0) { throw ('Rebase esuat, iar anularea lui a esuat: ' + $abort.Text) }
-                $where = if ($conflicts.Count -gt 0) { ' (conflict in ' + (Format-PathList $conflicts) + ')' } else { '' }
-                Write-Host ('[GIT] Commit-urile locale nu se pot repune peste origin/main' + $where + '. Raman neschimbate; integrarea ramane manuala.')
-            }
-        } else {
-            $integrate = Invoke-LotoGit -GitArgs @('merge', '--ff-only', 'origin/main')
-            if ($integrate.Text) { Write-Host $integrate.Text }
-            if ($integrate.Code -ne 0) { Write-Host '[GIT] Actualizarea nu a reusit.' }
-        }
-        if ($integrate.Code -eq 0) {
-            Write-Host '[GIT] Aplicatia si lansatoarele au fost actualizate impreuna.'
-        }
-
-        if ($stashSha) {
-            # Inapoi peste HEAD-ul de acum (actualizat sau, la esec, cel vechi).
-            $conflicts = @(Restore-Stashed -StashSha $stashSha -Paths $aside -Saved $saved)
-            if ($conflicts.Count -gt 0) {
-                $kept = @($conflicts | Where-Object { $_.StartsWith($script:LocalWinsPrefix, [StringComparison]::OrdinalIgnoreCase) })
-                $taken = @($conflicts | Where-Object { -not $_.StartsWith($script:LocalWinsPrefix, [StringComparison]::OrdinalIgnoreCase) })
-                if ($kept.Count -gt 0) {
-                    Write-Host ('[GIT] Rezultatele Re-Bench locale raman: ' + (Format-PathList $kept) + '.')
+        $backupDir = Join-Path $backupRoot (Get-Date -Format 'yyyyMMdd-HHmmss')
+        $updated = $false
+        $failure = $null
+        $crashed = $false
+        $report = $null
+        try {
+            if ($aside.Count -gt 0) {
+                if ($nAhead -gt 0) {
+                    Write-Host ('[GIT] Pun deoparte modificarile locale (' + $aside.Count + ' fisiere) cat repun commit-urile; copie in ' + $backupDir + '.')
+                } else {
+                    Write-Host ('[GIT] Schimbate si local, si pe origin/main: ' + (Format-PathList $aside) + '. Le pun deoparte (copie in ' + $backupDir + ') si le combin dupa actualizare.')
                 }
-                if ($taken.Count -gt 0) {
-                    Write-Host ('[GIT] Conflict intre modificarile locale si origin/main in ' + (Format-PathList $taken) + ': am pus versiunea de pe origin/main.')
+                [void](Set-Aside -Paths $aside -BackupDir $backupDir)
+                $asideSet = New-PathSet $aside
+                $still = @(Get-LocalChanges | Where-Object { $asideSet.Contains($_) })
+                if ($still.Count -gt 0) { throw ('Nu am putut pune deoparte: ' + (Format-PathList $still) + '.') }
+            }
+            if ($nAhead -gt 0) {
+                Write-Host ('[GIT] Repun ' + $nAhead + ' commit-uri locale peste origin/main (' + $nBehind + ' commit-uri noi).')
+                $integrate = Invoke-LotoGitRetry -GitArgs @('rebase', 'origin/main')
+                if ($integrate.Code -ne 0) {
+                    $conflicts = @()
+                    try { $conflicts = @(Get-ChangedPaths -DiffArgs @('--diff-filter=U')) } catch { }
+                    # --abort numai daca rebase-ul chiar a pornit (un esec la
+                    # inceput, ex. fisier neurmarit suprascris, nu lasa stare).
+                    foreach ($state in @('rebase-merge', 'rebase-apply')) {
+                        $statePath = Invoke-LotoGit -GitArgs @('rev-parse', '--git-path', $state)
+                        if ($statePath.Code -eq 0 -and (Test-Path -LiteralPath $statePath.Text)) {
+                            $abort = Invoke-LotoGit -GitArgs @('rebase', '--abort')
+                            if ($abort.Code -ne 0) { throw ('Anularea rebase-ului a esuat: ' + $abort.Text) }
+                            break
+                        }
+                    }
+                    $failure = 'Commit-urile locale nu se pot repune peste origin/main'
+                    if ($conflicts.Count -gt 0) { $failure += ' (conflict in ' + (Format-PathList $conflicts) + ')' }
+                    elseif ($integrate.Text) { $failure += ' (' + (@($integrate.Text -split "`r?`n")[0]) + ')' }
                 }
-                Write-Host ('[GIT] Versiunea locala a fisierelor in conflict ramane in ' + $backupDir + ' si in git stash list (loto-sync).')
             } else {
-                if ($backupDir) { Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction SilentlyContinue }
-                Write-Host '[GIT] Modificarile locale au fost repuse peste actualizare.'
+                $integrate = Invoke-LotoGit -GitArgs @('merge', '--ff-only', 'origin/main')
+                if ($integrate.Code -ne 0) {
+                    $failure = 'Actualizarea nu a reusit'
+                    if ($integrate.Text) { Write-Host $integrate.Text }
+                }
             }
-        } elseif ($local.Count -gt 0 -and $integrate.Code -eq 0) {
-            Write-Host ('[GIT] Modificarile locale au ramas neatinse (' + $local.Count + ' fisiere).')
+            $updated = -not $failure
+        } catch {
+            $failure = $_.Exception.Message
+            $crashed = $true
+        } finally {
+            if ($null -ne $script:AsideItems) {
+                $report = Restore-Aside -Items $script:AsideItems -BackupDir $backupDir -Updated $updated
+            } elseif (Test-Path -LiteralPath $backupDir -PathType Container) {
+                # Set-Aside s-a oprit inainte sa atinga vreun fisier: copia e inutila.
+                Remove-AsideDir -BackupDir $backupDir
+            }
         }
-        if ($integrate.Code -ne 0) { exit 0 }
-        if ($nAhead -gt 0) { Push-LotoMain }
+        if ($updated) {
+            Write-Host ('[GIT] Actualizat la origin/main (' + $nBehind + ' commit-uri noi): aplicatia si lansatoarele, impreuna.')
+        } elseif ($crashed) {
+            Write-Host ('[GIT] Sincronizarea s-a oprit: ' + $failure)
+        } else {
+            Write-Host ('[GIT] ' + $failure + '. Codul local ramane neschimbat.')
+        }
+        if ($report) {
+            if ($updated) { Write-AsideReport -Report $report -BackupDir $backupDir }
+            elseif ($report.Failed.Count -gt 0) { Write-AsideReport -Report $report -BackupDir $backupDir }
+            else { Write-Host '[GIT] Modificarile locale au fost puse la loc, neschimbate.' }
+        }
+        $untouched = $local.Count - $aside.Count
+        if ($updated -and $untouched -gt 0) {
+            Write-Host ('[GIT] Modificarile locale din celelalte ' + $untouched + ' fisiere au ramas neatinse.')
+        }
+        if ($updated -and $nAhead -gt 0) { Push-LotoMain }
     } else {
         $changes = Invoke-LotoGit -GitArgs @('status', '--porcelain', '-z', '--', '_ISTORIC')
         if ($changes.Code -ne 0) { throw $changes.Text }
