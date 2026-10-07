@@ -439,7 +439,8 @@ def test_fresh_start_recovery_is_display_only(monkeypatch):
     monkeypatch.setattr(app_ui, "decode_queue_result", lambda _raw: ([], 0))
     monkeypatch.setattr(app_ui, "_save_settings", lambda: None)
     monkeypatch.setattr(app_ui, "_save_report_file", lambda: None)
-    monkeypatch.setitem(app_ui.SETTINGS, "last_finalized_job_id", 0)
+    marked = []
+    monkeypatch.setattr(app_ui, "mark_job_finalized", marked.append)
     monkeypatch.setitem(app_ui.STATE, "active_job_id", None)
     monkeypatch.setitem(app_ui.STATE, "results", None)
     monkeypatch.setitem(app_ui.STATE, "results_recovered", None)
@@ -449,7 +450,7 @@ def test_fresh_start_recovery_is_display_only(monkeypatch):
     assert app_ui.STATE["active_job_id"] is None
     assert app_ui.STATE["results"] == ([], 0)
     assert "job #77" in app_ui.STATE["results_recovered"]
-    assert app_ui.SETTINGS["last_finalized_job_id"] == 77
+    assert marked == [77]
 
 
 def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):

@@ -1344,6 +1344,8 @@ def _render_pool_body(
                     "⚠️ Decizie low_confidence: nicio metodă n-a bătut random consistent "
                     "pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
                 ).classes("text-caption text-warning")
+            elif _mult := _multiplicity_note(_dec_p):
+                ui.label(_mult).classes("text-caption text-warning")
     else:
         ui.label(
             "🎯 Metodă scorer: fallback implicit (fără decizie bench disponibilă)"

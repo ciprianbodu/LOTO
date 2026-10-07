@@ -75,6 +75,13 @@ logger = logging.getLogger(__name__)
 
 
 CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
+# Poarta de consistență pe ferestre imbricate (10/30/60/100%) spune puțin: un
+# singur eveniment în ultimele 10% contează în 3 din 4 ferestre, iar cu ~50 de
+# candidați una trece aproape sigur din noroc. Avantajul se consideră demonstrat
+# numai dacă excesul de evenimente pe fereastra completă trece testul binomial
+# unilateral față de rata aleatoare, cu corecția Holm peste candidații celulei.
+# Verdictul stă în `multiplicity.proven`; scorerul ales rămâne același.
+MULTIPLICITY_ALPHA = 0.05
 
 # Câte ferestre cu date finite trebuie să existe ca poarta de consistență să
 # însemne ceva. `_windows_method_beats_random` numără ferestrele pe care le
@@ -181,6 +188,14 @@ EXCLUDED_FROM_PRODUCTION = frozenset(
         "interval_extrema_k16",
     }
 )
+
+# Pe o urnă cu o singură bilă (Joker Urna 2 și echivalentele străine), aceste
+# metode aleg bila precedentă în majoritatea pașilor chiar pe extrageri uniforme:
+# markov_self_state 66%, vlmm_self_k3 63%, față de 5% la întâmplare (audit
+# 2026-10-07; garda din `test_no_structural_filters`). Top-1 e acolo clasa
+# „ultima bilă", ca la haar_multiscale. Pe jocurile cu pool rămân metode de
+# recență obișnuite, judecate de bench.
+EXCLUDED_FROM_SINGLE_PICK = frozenset({"markov_self_state", "vlmm_self_k3"})
 
 # Geometria jocurilor cunoscute (max_num). Folosita cand apelantul nu poate da
 # `max_num` (folds.csv nu contine geometria). Pentru chei necunoscute decizia
@@ -342,6 +357,49 @@ def _windows_method_beats_random(
         if method_by_pct[p] > ref_by_pct[p]:
             n_beat += 1
     return n_beat, len(common_pcts)
+
+
+def excess_p_value(frame: pd.DataFrame, rate_col: str, p0: float | None) -> float | None:
+    """P(X >= k), X ~ Bin(n, p0), pe fereastra cea mai mare a metodei.
+
+    Ferestrele sunt sufixe ale aceluiași walk-forward (fiecare țintă e scorată
+    numai din extragerile anterioare), deci cea mai mare le conține pe celelalte:
+    k = rata × n extrageri evaluate. None fără referință sau fără date.
+    """
+    if p0 is None or not 0.0 < float(p0) < 1.0 or frame.empty:
+        return None
+    if rate_col not in frame.columns or "percentile" not in frame.columns:
+        return None
+    pct = pd.to_numeric(frame["percentile"], errors="coerce")
+    row = frame.loc[pct == pct.max()]
+    if row.empty:
+        return None
+    rate = pd.to_numeric(row[rate_col], errors="coerce").iloc[0]
+    n = None
+    for col in ("n_eval", "n_test"):
+        if col in row.columns:
+            val = pd.to_numeric(row[col], errors="coerce").iloc[0]
+            if pd.notna(val) and val > 0:
+                n = int(val)
+                break
+    if n is None or pd.isna(rate):
+        return None
+    k = int(round(float(rate) * n))
+    from scipy.stats import binom
+
+    return float(binom.sf(k - 1, n, float(p0)))
+
+
+def holm_adjusted(p_values: dict[str, float]) -> dict[str, float]:
+    """Valorile p ajustate Holm (pas cu pas, monotone), pe nume."""
+    items = sorted(p_values.items(), key=lambda kv: (kv[1], kv[0]))
+    m = len(items)
+    out: dict[str, float] = {}
+    running = 0.0
+    for i, (name, p) in enumerate(items):
+        running = max(running, min(1.0, (m - i) * float(p)))
+        out[name] = running
+    return out
 
 
 def _weighted_mean_lift(
@@ -816,10 +874,13 @@ def decide_optimal_config_for_pool(
         _alive = set(_METHODS_NOW)
     except Exception:  # noqa: BLE001
         _alive = None
+    _excluded = EXCLUDED_FROM_PRODUCTION | (
+        EXCLUDED_FROM_SINGLE_PICK if int(draw_n) == 1 else frozenset()
+    )
     methods = [
         m
         for m in sub["method"].unique()
-        if m not in EXCLUDED_FROM_PRODUCTION and (_alive is None or m in _alive)
+        if m not in _excluded and (_alive is None or m in _alive)
     ]
     try:
         from loto_enterprise.benchmark.curated import load_per_game as _load_pg
@@ -1057,6 +1118,9 @@ def decide_optimal_config_for_pool(
         return round(float(got[0]), 5) if got is not None else None
 
     qualifying: list[tuple[str, float, int, int, float, float]] = []
+    # Candidații evaluați de poartă (ferestre complete, fără tie-break) și
+    # valoarea p a excesului lor; numărul lor intră în corecția Holm.
+    excess_p: dict[str, float] = {}
     for m in methods:
         real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
         if real_m.empty:
@@ -1079,6 +1143,9 @@ def decide_optimal_config_for_pool(
             continue
         if not _tiebreak_ok(m, real_m):
             continue
+        _p = excess_p_value(real_m, gate_col, baseline_rate)
+        if _p is not None:
+            excess_p[m] = _p
         n_beat, n_total = _windows_method_beats_random(
             real_m, real_random, gate_col, baseline_rate
         )
@@ -1342,6 +1409,23 @@ def decide_optimal_config_for_pool(
             f"decizie luată pe {', '.join(sorted(_mismatch_cols_used))}; re-rulează bench-ul]"
         )
 
+    multiplicity = None
+    if scorer in excess_p:
+        _holm = holm_adjusted(excess_p)
+        multiplicity = {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": len(excess_p),
+            "p_value": round(excess_p[scorer], 6),
+            "holm_p": round(_holm[scorer], 6),
+            "alpha": MULTIPLICITY_ALPHA,
+            "proven": _holm[scorer] < MULTIPLICITY_ALPHA,
+        }
+        if not multiplicity["proven"]:
+            rationale += (
+                f" [după corecția Holm pentru {len(excess_p)} candidați: "
+                f"p={_holm[scorer]:.3f} ≥ {MULTIPLICITY_ALPHA} — avantaj nedemonstrat]"
+            )
+
     return {
         "scorer": scorer,
         "ensemble": ensemble,
@@ -1371,6 +1455,11 @@ def decide_optimal_config_for_pool(
         # alegerea e conservatoare, iar diferențele dintre metode sunt zgomot.
         # Numărul de celule afectate se renumără după fiecare Re-Bench.
         "low_confidence": low_confidence,
+        # Testul de exces cu corecția Holm, separat de `low_confidence` (care
+        # rămâne „nicio metodă n-a trecut poarta de consistență"): `proven`
+        # False = scorerul ales poate fi doar cel mai norocos dintre candidați.
+        # None = fără referință hipergeometrică.
+        "multiplicity": multiplicity,
         # Membri săriți de la ensemble fiindcă erau cvasi-identici cu unul deja
         # păstrat (decorelare pe RATE; decorelarea pe SCORURI e în method_selector).
         "ensemble_dropped_redundant": dropped_redundant,

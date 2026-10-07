@@ -143,3 +143,42 @@ def test_production_method_follows_the_numbers_not_their_labels(
             f"{name}: scorul depinde de eticheta numerelor (Δ={diff:.2e}, "
             f"max_num={max_num}) — o preferință pe axa 1..N, nu un semnal"
         )
+
+
+def _urn2_repeat_share(name: str, histories: list[np.ndarray]) -> float:
+    from loto_enterprise.core.ranking import rank_by_score
+
+    hits = 0
+    for history in histories:
+        scores, _ = call_method(name, history, 20)
+        top = rank_by_score(scores, 1)
+        hits += bool(top) and top[0] == int(history[-1, 0])
+    return hits / len(histories)
+
+
+@pytest.fixture(scope="module")
+def uniform_urn2() -> list[np.ndarray]:
+    rng = np.random.default_rng(20261007)
+    return [rng.integers(1, 21, size=(200, 1)) for _ in range(100)]
+
+
+@pytest.mark.parametrize("name", sorted(set(METHODS) - {"random"}))
+def test_single_pick_scorer_is_not_the_previous_ball(name: str, uniform_urn2) -> None:
+    """Pe o urnă cu o bilă, top-1 nu are voie să fie de regulă bila precedentă.
+
+    Pe extrageri uniforme, la întâmplare top-1 repetă bila precedentă în 5% din
+    pași. O metodă care o face în majoritatea pașilor este clasa „ultima bilă"
+    (ca `haar_multiscale`), nu un clasament: e exclusă din producție pe urnele cu
+    o singură bilă (`EXCLUDED_FROM_SINGLE_PICK`).
+    """
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_SINGLE_PICK
+
+    share = _urn2_repeat_share(name, uniform_urn2)
+    excluded = name in EXCLUDED_FROM_PRODUCTION or name in EXCLUDED_FROM_SINGLE_PICK
+    if name in EXCLUDED_FROM_SINGLE_PICK:
+        assert share >= 0.5, f"{name}: {share:.0%} — excluderea nu mai e justificată"
+    if not excluded:
+        assert share < 0.5, (
+            f"{name}: top-1 repetă bila precedentă în {share:.0%} din pași pe "
+            "extrageri uniforme — clasa „ultima bilă”, nu un clasament"
+        )

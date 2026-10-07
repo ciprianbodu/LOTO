@@ -259,6 +259,28 @@ def _decision_low_confidence(entry: dict) -> bool | None:
     return None
 
 
+def _multiplicity_note(entry: dict) -> str | None:
+    """Avertismentul pentru un avantaj care nu trece corecția pentru candidați.
+
+    `decision.multiplicity.proven` False: excesul metodei alese pe fereastra
+    completă nu trece testul binomial după corecția Holm pentru toți candidații
+    pool-ului. None când decizia nu are câmpul (bench vechi) sau avantajul trece.
+    """
+    mu = (entry or {}).get("multiplicity") or {}
+    if mu.get("proven") is not False:
+        return None
+    try:
+        holm_p = float(mu.get("holm_p"))
+    except (TypeError, ValueError):
+        return None
+    return (
+        f"⚠️ Avantaj nedemonstrat: după corecția Holm pentru cei "
+        f"{mu.get('candidates')} candidați testați pe acest pool, p = {holm_p:.2f} "
+        f"(prag {mu.get('alpha', 0.05)}). Metoda aleasă poate fi doar cea mai "
+        "norocoasă dintre ei."
+    )
+
+
 def _consistency_pct(entry: dict) -> int:
     """Pragul de consistență al deciziei, în %, ca ÎNTREG (60 = „≥60% din ferestre").
 
@@ -1104,6 +1126,9 @@ def _render_bench_leaderboard_slice(
                 f"bătut random în ≥{_cons_pct}% din ferestre. "
                 f"Alegerea e conservatoare — diferențele dintre metode sunt zgomot."
             ).classes("text-caption text-warning")
+        _mult = _multiplicity_note(_current_dec or _dec)
+        if _mult and _dec_low is not True:
+            ui.label(_mult).classes("text-caption text-warning")
         if not has_family:
             ui.label(
                 "ℹ️ Librăria e estimată din nume (folds.csv vechi). Rulează un Re-Bench "

@@ -43,7 +43,6 @@ def isolated_result_state(monkeypatch):
         "wf_seq": 0, "wf_user_cancel": False, "job_start_time": None,
     }.items():
         monkeypatch.setitem(app.STATE, key, value)
-    monkeypatch.setitem(app.SETTINGS, "last_finalized_job_id", 0)
     for name in ("_save_settings", "_save_report_file", "_maybe_send_results_email",
                  "_shutdown_banner", "_finalize_pipeline"):
         monkeypatch.setattr(app, name, lambda: None)
@@ -67,6 +66,8 @@ def test_live_completion_walk_forward_uses_the_submitted_queue_snapshot(
     monkeypatch.setitem(app.STATE, "datasets", [("loto_6_49.csv", replacement)])
     monkeypatch.setitem(app.STATE, "active_job_id", jid)
     monkeypatch.setattr(app, "get_job_status", functools.partial(queue.get_job_status, db_path=database))
+    monkeypatch.setattr(app, "mark_job_finalized",
+                        functools.partial(queue.mark_job_finalized, db_path=database))
     received = []
     def run_wf(**kwargs):
         received.append(kwargs["df_source"].copy())
@@ -82,6 +83,7 @@ def test_live_completion_walk_forward_uses_the_submitted_queue_snapshot(
     assert received[0].attrs["game_id"] == "6/49"
     assert app._result_source("loto_6_49.csv") is not replacement
     assert app._last_csv_draw("loto_6_49.csv")[1] == list(range(11, 17))
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
 
 
 def test_recovered_result_keeps_source_even_after_another_upload(
@@ -95,7 +97,10 @@ def test_recovered_result_keeps_source_even_after_another_upload(
                        db_path=database)
     monkeypatch.setattr(app, "get_latest_completed_job",
                         functools.partial(queue.get_latest_completed_job, db_path=database))
+    monkeypatch.setattr(app, "mark_job_finalized",
+                        functools.partial(queue.mark_job_finalized, db_path=database))
     app._recover_completed_job(allow_finalize=False)
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
     monkeypatch.setitem(app.STATE, "datasets", [("loto_6_49.csv", pd.DataFrame({"n1": [49]}))])
     assert app._result_source("loto_6_49.csv")["n1"].tolist() == [1, 11]
     assert app._result_source("other.csv") is None
