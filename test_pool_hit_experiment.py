@@ -24,6 +24,54 @@ def test_registered_prefix_of_each_file_is_unchanged(name):
     assert phe.prefix_hash(ROOT / info["file"], info["rows"]) == info["prefix_sha256"]
 
 
+def test_errata_touch_only_the_documented_rows():
+    """Fisierul are deja randul corectat; experimentul vede randul inregistrat,
+    numai pe liniile documentate si numai in prefixul inregistrat."""
+    registered_rows = {info["file"]: info["rows"] for info in REG["datasets"].values()}
+    for rel, fixes in phe.ERRATA.items():
+        current = phe._lines(ROOT / rel)
+        registered = phe._registered_lines(ROOT / rel)
+        assert len(registered) == len(current)
+        changed = {
+            line_no
+            for line_no, (now, then) in enumerate(zip(current, registered), start=1)
+            if now != then
+        }
+        assert changed == set(fixes)
+        for line_no, (registered_row, corrected_row) in fixes.items():
+            assert 2 <= line_no <= registered_rows[rel] + 1
+            assert current[line_no - 1] == corrected_row
+            assert registered[line_no - 1] == registered_row
+
+
+def test_load_rebuilds_the_registered_5_40_row(monkeypatch):
+    """24-10-2024 a fost inregistrat ca o copie a extragerii din 27-10-2024."""
+    rows = REG["datasets"]["ro_540"]["rows"]
+    dates, registered, _, _ = phe.load("ro_540", rows)
+    monkeypatch.setattr(phe, "ERRATA", {})
+    fixed_dates, fixed, _, _ = phe.load("ro_540", rows)
+    assert np.array_equal(dates, fixed_dates)
+    changed = np.flatnonzero((registered != fixed).any(axis=1))
+    assert [str(dates[i])[:10] for i in changed] == ["2024-10-24"]
+    i = changed[0]
+    assert registered[i].tolist() == [13, 34, 11, 16, 10, 39]
+    assert registered[i + 1].tolist() == registered[i].tolist()
+    assert fixed[i].tolist() == [14, 15, 28, 10, 25, 26]
+
+
+def test_errata_refuse_an_undocumented_change(tmp_path, monkeypatch):
+    path = tmp_path / "a.csv"
+    monkeypatch.setattr(phe, "ROOT", tmp_path)
+    monkeypatch.setattr(phe, "ERRATA", {"a.csv": {2: ("01-01-2000,1", "01-01-2000,9")}})
+    path.write_bytes(b"date,n1\n01-01-2000,1\n02-01-2000,2\n")
+    registered = phe.prefix_hash(path, 2)
+    path.write_bytes(b"date,n1\n01-01-2000,9\n02-01-2000,2\n")
+    assert phe.prefix_hash(path, 2) == registered
+    path.write_bytes(b"date,n1\n01-01-2000,5\n02-01-2000,2\n")
+    with pytest.raises(ValueError, match="nici randul inregistrat"):
+        phe.prefix_hash(path, 2)
+
+
 def test_prefix_hash_ignores_crlf_and_appended_rows(tmp_path):
     lf = tmp_path / "a.csv"
     lf.write_bytes(b"date,n1\n01-01-2000,1\n02-01-2000,2\n")

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
 import os
@@ -72,14 +73,47 @@ DEV_SOURCE = {
 }
 ALPHA = 0.05
 
+# Erata datelor corectate in _ISTORIC dupa inregistrare:
+# fisier -> {linie (antetul = linia 1): (randul inregistrat, randul corectat)}.
+# prefix_hash si load refac in memorie randul inregistrat, deci experimentul
+# publicat ruleaza pe exact datele preinregistrate. Detalii: RESULTS_2026-10-02.md.
+ERRATA = {
+    # 24-10-2024 copia extragerea din 27-10-2024; corect dupa arhiva loto.ro.
+    "_ISTORIC/loto_5_40.csv": {
+        1538: ("24-10-2024,13,34,11,16,10,39", "24-10-2024,14,15,28,10,25,26"),
+    },
+}
+
 
 def _lines(path: Path) -> list[str]:
     return path.read_bytes().replace(b"\r\n", b"\n").decode("utf-8").splitlines()
 
 
+def _registered_lines(path: Path) -> list[str]:
+    """Liniile fisierului, cu randurile din ERRATA readuse la forma inregistrata.
+
+    O linie documentata care nu mai contine nici randul inregistrat, nici pe cel
+    corectat inseamna o schimbare nedocumentata: se refuza, nu se mascheaza.
+    """
+    lines = _lines(path)
+    resolved = Path(path).resolve()
+    for rel, fixes in ERRATA.items():
+        if (ROOT / rel).resolve() != resolved:
+            continue
+        for line_no, (registered, corrected) in fixes.items():
+            current = lines[line_no - 1] if line_no <= len(lines) else None
+            if current not in (registered, corrected):
+                raise ValueError(
+                    f"{rel}:{line_no}: {current!r} nu este nici randul inregistrat, "
+                    "nici cel corectat din ERRATA"
+                )
+            lines[line_no - 1] = registered
+    return lines
+
+
 def prefix_hash(path: Path, n_rows: int) -> str:
-    """SHA-256 al antetului + primelor n_rows randuri, cu LF."""
-    lines = _lines(path)[: n_rows + 1]
+    """SHA-256 al antetului + primelor n_rows randuri inregistrate, cu LF."""
+    lines = _registered_lines(path)[: n_rows + 1]
     return hashlib.sha256(("\n".join(lines) + "\n").encode("utf-8")).hexdigest()
 
 
@@ -87,7 +121,8 @@ def load(name: str, n_rows: int | None = None):
     import pandas as pd
 
     rel, max_num, draw_n, cols, _ = DATASETS[name]
-    df = pd.read_csv(ROOT / rel, dtype=str)
+    text = "\n".join(_registered_lines(ROOT / rel)) + "\n"
+    df = pd.read_csv(io.StringIO(text), dtype=str)
     if n_rows is not None:
         df = df.iloc[:n_rows]
     cols = cols or [f"n{i}" for i in range(1, draw_n + 1)]

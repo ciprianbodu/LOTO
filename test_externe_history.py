@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent
 ISTORIC = ROOT / "_ISTORIC"
 EXTERNE = ISTORIC / "externe"
 FILES = sorted(EXTERNE.glob("*.csv"))
+ALL_FILES = sorted(ISTORIC.glob("*.csv")) + FILES
 # Cuvinte după care codul vechi ghicește un joc românesc din numele fișierului.
 LEGACY_TOKENS = ("joker", "649", "6_49", "5_40", "5/40", "540")
 
@@ -97,3 +98,21 @@ def test_external_history_is_valid_and_chronological(path):
         per_day[day] = per_day.get(day, 0) + 1
     assert max(per_day.values()) <= 2
     assert prev >= dt.date(2026, 9, 1), "istoric oprit înainte de import"
+
+
+@pytest.mark.parametrize("path", ALL_FILES, ids=[p.name for p in ALL_FILES])
+def test_no_draw_repeats_the_previous_one(path):
+    """Două rânduri consecutive cu aceleași numere sunt o copie, nu o extragere.
+
+    La întâmplare, șansa pe rând este 1/C(N, k), sub 1e-6 la orice joc de aici
+    (5/40: 2,6e-7). Așa a intrat 24-10-2024 la 5/40, copiat din 27-10-2024, cum
+    apare și pe loto49.ro. O repetare reală se confirmă întâi pe arhiva oficială.
+    """
+    rows = list(csv.reader(path.read_bytes().decode("utf-8").splitlines()))
+    main = [i for i, name in enumerate(rows[0]) if re.fullmatch(r"n\d+", name)]
+    assert main, f"{path.name}: lipsesc coloanele n1..nK"
+    prev = None
+    for lineno, row in enumerate(rows[1:], start=2):
+        nums = frozenset(int(row[i]) for i in main)
+        assert nums != prev, f"{path.name}, rândul {lineno}: repetă rândul {lineno - 1}"
+        prev = nums
