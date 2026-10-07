@@ -331,6 +331,8 @@ def test_history_refuses_only_the_bad_file(repos):
     ('10.09.2026;1;2;3;4;5;6\n', 'randul 4: astept 7 valori separate prin virgula'),
     ('05-10-2026,1,2,3,4,5,50\n', 'randul 4: numere invalide pentru 6/49'),
     ('5 oct 2026,1,2,3,4,5,6\n', 'randul 4: data nu e ZZ-LL-AAAA'),
+    # Copia randului anterior (AGENTS.md §4.1), ca 24-10-2024 la 5/40.
+    ('05-10-2026,12,11,10,9,8,7\n', 'randul 4 repeta numerele randului 3'),
 ])
 def test_history_validation_refuses_malformed_appended_row(repos, row, reason):
     """Numai adaugari, deci git le lasa; validarea proiectului le opreste."""

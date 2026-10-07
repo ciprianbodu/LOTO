@@ -4,7 +4,8 @@
 trecut de verificarea git (numai randuri adaugate). Fiecare trebuie sa fie
 istoricul unui joc din registrul loteriilor, cu antetul geometriei lui, date
 ZZ-LL-AAAA si extrageri valide dupa `valid_draw_matrix`, inclusiv a doua urna,
-pe tot fisierul. Istoricele versionate trec toate; un fisier respins ramane
+pe tot fisierul, fara doua randuri consecutive cu aceleasi numere principale
+(AGENTS.md §4.1). Istoricele versionate trec toate; un fisier respins ramane
 local, necomis.
 
 Iesire: cate o linie pe stdout pentru fiecare argument, in aceeasi ordine,
@@ -20,6 +21,7 @@ import io
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -71,7 +73,7 @@ def check_history(path: str, root: Path | None = None) -> str | None:
     except csv.Error as exc:
         return f"CSV ilizibil la randul {reader.line_num}: {exc}"
     df = pd.DataFrame(rows, columns=header)
-    _, valid = valid_draw_matrix(df, main, draw_n=geo.draw_n, max_num=geo.max_n)
+    drawn, valid = valid_draw_matrix(df, main, draw_n=geo.draw_n, max_num=geo.max_n)
     if geo.second:
         _, valid_second = valid_draw_matrix(
             df, second, draw_n=geo.second.draw_n, max_num=geo.second.max_n
@@ -82,6 +84,15 @@ def check_history(path: str, root: Path | None = None) -> str | None:
         return (
             f"randul {lines[bad]}: numere invalide pentru {geo.name}: "
             f"{_shown(rows[bad])}"
+        )
+    # AGENTS.md §4.1: aceleasi numere principale ca randul anterior = copie.
+    ordered = np.sort(drawn, axis=1)
+    repeats = np.flatnonzero((ordered[1:] == ordered[:-1]).all(axis=1))
+    if repeats.size:
+        copy = int(repeats[0]) + 1
+        return (
+            f"randul {lines[copy]} repeta numerele randului {lines[copy - 1]} "
+            "(copie, nu extragere)"
         )
     return None
 

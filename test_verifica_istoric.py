@@ -45,6 +45,8 @@ def test_versioned_histories_pass(lottery):
         (L649, "05-10-2026,49,1,13,22,30,41\n"),
         (JOKER, "05-10-2026,45,1,13,22,30,1\n"),
         (STARS, "03-10-2026,50,1,13,22,30,1,2\n"),
+        # Aceleasi numere ca un rand mai vechi, dar nu ca cel anterior.
+        (L649, "05-10-2026,1,2,3,4,5,6\n"),
     ],
 )
 def test_appended_valid_rows_pass(tmp_path, name, row):
@@ -71,6 +73,9 @@ def test_appended_valid_rows_pass(tmp_path, name, row):
         (L649, "05-10-2026,1,2,3,4,5,x\n", "randul 4: numere invalide pentru 6/49"),
         (JOKER, "05-10-2026,1,2,3,4,5,21\n", "randul 3: numere invalide pentru joker"),
         (STARS, "03-10-2026,1,2,3,4,5,7,7\n", "randul 3: numere invalide pentru 5/50"),
+        # §4.1: aceleasi numere principale ca randul anterior, in orice ordine.
+        (L649, "05-10-2026,12,11,10,9,8,7\n", "randul 4 repeta numerele randului 3"),
+        (JOKER, "05-10-2026,5,4,3,2,1,7\n", "randul 3 repeta numerele randului 2"),
     ],
 )
 def test_malformed_appended_row_is_refused_with_its_line(tmp_path, name, row, reason):

@@ -613,8 +613,9 @@ UI-ul face polling la o secunda, fara reload complet.
   modificata (rand sters ori trunchiat, CSV rescris de Excel cu `;` si date
   `10.09.2026`): actualizatoarele doar adauga randuri. CSV-urile ramase trec prin
   `verifica_istoric.py` (registrul loteriilor, antetul geometriei, date
-  ZZ-LL-AAAA, `valid_draw_matrix` pe tot fisierul, inclusiv a doua urna), cu
-  Python-ul venv-ului primit de la lansatoare prin `-PythonExe`. Fara venv raman
+  ZZ-LL-AAAA, `valid_draw_matrix` pe tot fisierul, inclusiv a doua urna, fara
+  rand care repeta numerele celui anterior, §4.1), cu Python-ul venv-ului primit
+  de la lansatoare prin `-PythonExe`. Fara venv raman
   verificarile git, cu mesaj; o validare care nu ruleaza pana la capat (cod de
   iesire nenul, timeout) nu accepta nimic. Fiecare refuz apare ca
   `[GIT] [REFUZAT] <fisier> - <motiv>`, iese din index (`reset -q`; fisierul
