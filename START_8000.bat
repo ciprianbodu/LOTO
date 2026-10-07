@@ -194,5 +194,5 @@ endlocal & exit /b %RC%
 
 
 :push_istoric
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode PushHistory -ProjectDir "%PROJECT_DIR%."
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\launcher_git.ps1" -Mode PushHistory -ProjectDir "%PROJECT_DIR%." -PythonExe "%VENV_DIR%\Scripts\python.exe"
 goto :eof

@@ -4,7 +4,9 @@ param(
     [string]$Mode,
     [Parameter(Mandatory = $true)]
     [string]$ProjectDir,
-    [string]$SnapshotDir
+    [string]$SnapshotDir,
+    # PushHistory: Python-ul venv-ului, pentru verifica_istoric.py.
+    [string]$PythonExe
 )
 
 # Sync is called ONLY from an immutable launcher copy outside the repository.
@@ -213,6 +215,7 @@ Write-Host ('[GIT] Executabil: ' + $gitExe)
 # iar git status le citeste pe toate: limita de 45 s nu ajunge la prima trecere.
 $cloudFolder = (Get-Location).Path -match 'My Drive|Google Drive|OneDrive|Dropbox'
 $script:GitTimeoutSeconds = if ($cloudFolder) { 180 } else { 45 }
+$script:HistoryRefused = $false
 
 function Request-OfflinePin {
     # attrib +P cere furnizorului cloud sa pastreze fisierele pe disc
@@ -247,14 +250,14 @@ function Request-OfflinePin {
     }
 }
 
-function Invoke-LotoGit {
-    param([string[]]$GitArgs, [int]$TimeoutSeconds = 0)
-    if ($TimeoutSeconds -le 0) { $TimeoutSeconds = $script:GitTimeoutSeconds }
+function Invoke-LotoProcess {
+    # $null la depasirea limitei: apelantul spune ce comanda a expirat.
+    param([string]$Exe, [string[]]$ArgList, [int]$TimeoutSeconds)
     $info = New-Object System.Diagnostics.ProcessStartInfo
-    $info.FileName = $gitExe
+    $info.FileName = $Exe
     $info.WorkingDirectory = (Get-Location).Path
     # Arguments are fixed below; quote separately, never run through a shell.
-    $info.Arguments = (($GitArgs | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ' ')
+    $info.Arguments = (($ArgList | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ' ')
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
@@ -272,20 +275,33 @@ function Invoke-LotoGit {
     $stdout = $process.StandardOutput.ReadToEndAsync()
     $stderr = $process.StandardError.ReadToEndAsync()
     if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-        # Only this Git invocation and its children; never an application worker.
+        # Only this invocation and its children; never an application worker.
         & "$env:SystemRoot\System32\taskkill.exe" /F /T /PID $process.Id 2>&1 | Out-Null
         $process.Dispose()
-        $message = 'Git a depasit ' + $TimeoutSeconds + ' s la "git ' + ($GitArgs -join ' ') + '"; operatia s-a oprit.'
-        if ($info.WorkingDirectory -match 'My Drive|Google Drive|OneDrive|Dropbox') {
-            $message += ' Proiectul este intr-un folder sincronizat in cloud (' + $info.WorkingDirectory + '); acolo git citeste lent fiecare fisier. Tineti repository-ul pe disc local.'
-        }
-        throw $message
+        return $null
     }
     $result = [pscustomobject]@{
         Code = $process.ExitCode
         Text = ($stdout.Result + $stderr.Result).Trim()
+        # Numai stdout, netaiat: inregistrarile -z ale git, fara avertismente.
+        Out = $stdout.Result
     }
     $process.Dispose()
+    return $result
+}
+
+function Invoke-LotoGit {
+    param([string[]]$GitArgs, [int]$TimeoutSeconds = 0)
+    if ($TimeoutSeconds -le 0) { $TimeoutSeconds = $script:GitTimeoutSeconds }
+    $result = Invoke-LotoProcess -Exe $gitExe -ArgList $GitArgs -TimeoutSeconds $TimeoutSeconds
+    if ($null -eq $result) {
+        $workDir = (Get-Location).Path
+        $message = 'Git a depasit ' + $TimeoutSeconds + ' s la "git ' + ($GitArgs -join ' ') + '"; operatia s-a oprit.'
+        if ($workDir -match 'My Drive|Google Drive|OneDrive|Dropbox') {
+            $message += ' Proiectul este intr-un folder sincronizat in cloud (' + $workDir + '); acolo git citeste lent fiecare fisier. Tineti repository-ul pe disc local.'
+        }
+        throw $message
+    }
     return $result
 }
 
@@ -324,6 +340,91 @@ function Invoke-LotoGitRetry {
         $result = Invoke-LotoGit -GitArgs $GitArgs -TimeoutSeconds $TimeoutSeconds
     }
     return $result
+}
+
+function Test-HistoryRows {
+    # Validarea proiectului (verifica_istoric.py: registrul loteriilor, antet,
+    # date, valid_draw_matrix) pe CSV-urile trecute de git. Intoarce motivul pe
+    # cale, 'ok' = valid; $null fara Python, iar atunci raman verificarile git.
+    param([string[]]$Paths)
+    $checker = Join-Path (Split-Path -Parent $PSScriptRoot) 'verifica_istoric.py'
+    if (-not $PythonExe -or -not (Test-Path -LiteralPath $PythonExe -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $checker -PathType Leaf)) {
+        Write-Host '[GIT] Validarea istoricului cu Python nu e disponibila (lipseste Python-ul venv-ului sau verifica_istoric.py); raman verificarile git.'
+        return $null
+    }
+    $verdicts = @{}
+    $failure = $null
+    try {
+        $check = Invoke-LotoProcess -Exe $PythonExe -ArgList (@($checker) + $Paths) -TimeoutSeconds $script:GitTimeoutSeconds
+        if ($null -eq $check) {
+            $failure = 'a depasit ' + $script:GitTimeoutSeconds + ' s'
+        } else {
+            $lines = @($check.Out -split "`r?`n" | Where-Object { $_ })
+            if ($check.Code -ne 0 -or $lines.Count -ne $Paths.Count) {
+                $failure = 'cod ' + $check.Code
+                $last = @($check.Text -split "`r?`n")[-1]
+                if ($last) { $failure += ': ' + $last }
+            } else {
+                for ($i = 0; $i -lt $Paths.Count; $i++) { $verdicts[$Paths[$i]] = $lines[$i] }
+            }
+        }
+    } catch {
+        $failure = $_.Exception.Message
+    }
+    if ($failure) {
+        # O validare care nu a rulat nu accepta nimic; fisierele se reiau la
+        # urmatoarea pornire.
+        foreach ($path in $Paths) { $verdicts[$path] = 'validarea istoricului nu a rulat (' + $failure + ')' }
+    }
+    return $verdicts
+}
+
+function Select-HistoryAppends {
+    # Actualizatoarele (update_csv.py, update_externe.py) numai adauga randuri
+    # la CSV-urile urmarite. Orice alta schimbare pregatita de add -u e refuzata
+    # cu fisierul si motivul: rand sters sau trunchiat, CSV rescris de Excel,
+    # fisier sters, binar sau care nu e CSV. Intoarce caile acceptate.
+    $stat = Invoke-LotoGit -GitArgs @('diff', '--cached', '--numstat', '--no-renames', '-z', '--', '_ISTORIC')
+    if ($stat.Code -ne 0) { throw $stat.Text }
+    $refused = [ordered]@{}
+    $appends = @()
+    foreach ($record in $stat.Out.Split([char]0)) {
+        # adaugate <TAB> sterse <TAB> cale; '-' la fisierele binare.
+        $fields = $record -split "`t", 3
+        if ($fields.Count -ne 3) { continue }
+        $path = $fields[2]
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            $refused[$path] = 'fisier sters'
+        } elseif ($path -notlike '*.csv') {
+            $refused[$path] = 'nu e CSV'
+        } elseif ($fields[0] -eq '-') {
+            $refused[$path] = 'continut binar'
+        } elseif ([int]$fields[1] -gt 0) {
+            $refused[$path] = 'linii sterse sau modificate: ' + $fields[1] + ' (actualizatoarele doar adauga randuri)'
+        } else {
+            $appends += $path
+        }
+    }
+    $accepted = @()
+    if ($appends.Count -gt 0) {
+        $verdicts = Test-HistoryRows -Paths $appends
+        foreach ($path in $appends) {
+            if ($null -eq $verdicts -or $verdicts[$path] -eq 'ok') { $accepted += $path }
+            else { $refused[$path] = $verdicts[$path] }
+        }
+    }
+    if ($refused.Count -gt 0) {
+        foreach ($path in $refused.Keys) {
+            Write-Host ('[GIT] [REFUZAT] ' + $path + ' - ' + $refused[$path])
+        }
+        # Pe disc raman neatinse; din index ies, ca un commit manual ulterior
+        # sa nu preia pe tacute o schimbare refuzata.
+        $reset = Invoke-LotoGit -GitArgs (@('reset', '-q', '--') + @($refused.Keys))
+        if ($reset.Code -ne 0) { throw $reset.Text }
+        $script:HistoryRefused = $true
+    }
+    return $accepted
 }
 
 try {
@@ -393,15 +494,29 @@ try {
         if ($merge.Code -ne 0) { throw 'Actualizarea nu a reusit; fisierele locale sunt pastrate.' }
         Write-Host '[GIT] Aplicatia si lansatoarele au fost actualizate impreuna.'
     } else {
-        $changes = Invoke-LotoGit -GitArgs @('status', '--porcelain', '--', '_ISTORIC')
+        $changes = Invoke-LotoGit -GitArgs @('status', '--porcelain', '-z', '--', '_ISTORIC')
         if ($changes.Code -ne 0) { throw $changes.Text }
         if ($changes.Text) {
-            $add = Invoke-LotoGit -GitArgs @('add', '-A', '--', '_ISTORIC')
+            foreach ($entry in $changes.Out.Split([char]0)) {
+                if ($entry.StartsWith('?? ', [StringComparison]::Ordinal)) {
+                    Write-Host ('[GIT] [REFUZAT] ' + $entry.Substring(3) + ' - neurmarit: commit-ul automat ia numai fisierele urmarite')
+                    $script:HistoryRefused = $true
+                }
+            }
+            # -u, nu -A: o copie de conflict din cloud sau un fisier nou nu ajung pe main.
+            $add = Invoke-LotoGit -GitArgs @('add', '-u', '--', '_ISTORIC')
             if ($add.Code -ne 0) { throw $add.Text }
-            # --only protects code already staged by the user from the auto-commit.
-            $commit = Invoke-LotoGit -GitArgs @('commit', '--only', '-m', 'auto: update istoric extrageri', '--', '_ISTORIC')
-            if ($commit.Text) { Write-Host $commit.Text }
-            if ($commit.Code -ne 0) { throw 'Commit istoric esuat.' }
+            $accepted = @(Select-HistoryAppends)
+            if ($script:HistoryRefused) {
+                Write-Host '[GIT] Ce e refuzat ramane local, necomis, iar pornirea continua. O schimbare voita se verifica (git status / git diff -- _ISTORIC) si se comite manual.'
+            }
+            if ($accepted.Count -gt 0) {
+                # --only protects code already staged by the user from the auto-commit;
+                # explicit paths keep refused files out (it reads the working tree).
+                $commit = Invoke-LotoGit -GitArgs (@('commit', '--only', '-m', 'auto: update istoric extrageri', '--') + $accepted)
+                if ($commit.Text) { Write-Host $commit.Text }
+                if ($commit.Code -ne 0) { throw 'Commit istoric esuat.' }
+            }
         }
         # Fetch inainte de numarare: Sync putut fi sarit, iar origin/main local e vechi.
         $fetch = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
@@ -411,7 +526,8 @@ try {
         $behind = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'HEAD..origin/main')
         if ($ahead.Code -ne 0 -or $behind.Code -ne 0) { throw 'origin/main indisponibil.' }
         if ([int]$ahead.Text -eq 0) {
-            Write-Host '[GIT] Istoric la zi.'
+            if ($script:HistoryRefused) { Write-Host '[GIT] Nimic de trimis pe origin/main.' }
+            else { Write-Host '[GIT] Istoric la zi.' }
             exit 0
         }
         if ([int]$behind.Text -gt 0) {
