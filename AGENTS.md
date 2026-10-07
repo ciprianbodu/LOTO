@@ -79,6 +79,38 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Corectura istoricului 5/40 — 2026-10-07
+
+- `_ISTORIC/loto_5_40.csv`, linia 1538 (antetul = linia 1): 24-10-2024 copia
+  extragerea din 27-10-2024 (13,34,11,16,10,39, in aceeasi ordine). Corect:
+  14,15,28,10,25,26, in ordinea extragerii, dupa arhiva oficiala loto.ro,
+  fanatik.ro si stiripesurse.ro. Pe loto.ro, octombrie 2024 coincide acum
+  integral cu CSV-urile la toate trei jocurile (9 extrageri fiecare). Copia
+  exista si pe loto49.ro, sursa `update_csv.py`: scraperul adauga numai
+  extrageri cu data >= ultima stocata, deci nu o reintroduce; un import
+  complet de acolo ar face-o.
+- `test_externe_history.py::test_no_draw_repeats_the_previous_one` respinge doua
+  randuri consecutive cu aceleasi numere principale in toate cele 13 CSV-uri din
+  `_ISTORIC/` si `_ISTORIC/externe/` (§4.1). Era singura pereche.
+- Experimentul preinregistrat din 2 octombrie: `ERRATA` in
+  `pool_hit_experiment.py` (fisier -> {linie: (rand inregistrat, rand
+  corectat)}). `prefix_hash` si `load` refac in memorie randul inregistrat,
+  deci amprentele raman valide si `run` evalueaza datele preinregistrate; o
+  linie documentata cu alt continut e refuzata. Erata, masurata cu
+  `erratum_2026-10-07.py`, e in `RESULTS_2026-10-02.md`: pe fisierul corectat,
+  `ro_540_k11` da 17/23/23/21 din 522 (pe cel inregistrat 20/24/26/21, exact
+  tabelul publicat), p brut minim 0,28. Verdictul ramane: niciun supravietuitor.
+- Bench si WF: cheile includ datele (`draws_2d.tobytes()`, continutul `df`),
+  deci foldurile si cache-ul WF 5/40 se refac. Prospetimea (hash pe numere si
+  date) vede 5/40 schimbat fara randuri noi (`moderate_drift`), iar UI-ul cere
+  Re-Bench. Decizia 5/40 si `bench_results/` raman cele de dinainte pana la un
+  Re-Bench complet, neexecutat aici.
+- Verificat pe Python 3.14.8 / Windows: 95 fisiere `test_*.py`, 2191 teste
+  trecute, 17 sarite, zero esecuri. Sesiunile Claude Code seteaza
+  `NoDefaultCurrentDirectoryInExePath=1`; cu ea, 6 cazuri din
+  `test_launcher_git.py` nu gasesc lansatorul in directorul curent. Variabila se
+  scoate pentru procesul pytest.
+
 ### Audit global 2026-10-07
 
 - Sapte zone revizuite in paralel (motor, covering si bilete, bench si
@@ -112,12 +144,11 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 - Afisare: acoperirea 99,95% nu mai apare 100.0%; pool-ul jucat in Istoric
   hits; raportul spune PARTIAL; variantele dispersate respecta limita de
   consecutive cand baza o permite, altfel nota spune limita atinsa.
-- Ramase de decis (raport): randul 24-10-2024 din `_ISTORIC/loto_5_40.csv`
-  copiaza extragerea din 27-10 (corect: 14,15,28,10,25,26; modificarea
-  istoricului a fost refuzata de permisiunile sesiunii); poarta de consistenta
-  pe ferestre imbricate; metode care reiau ultima extragere; duplicatul
+- Ramase de decis (raport): poarta de consistenta pe ferestre imbricate;
+  metode care reiau ultima extragere; duplicatul
   `naive_bayes_last`/`markov_pairs` pe Urna 2; validarea PushHistory;
-  marcajul de job finalizat in checkout-ul sincronizat.
+  marcajul de job finalizat in checkout-ul sincronizat. Randul 24-10-2024 din
+  `_ISTORIC/loto_5_40.csv` a fost corectat in aceeasi zi (sectiunea de mai sus).
 - Verificat pe Python 3.14.7 / Linux, fara PowerShell: 95 fisiere `test_*.py`,
   2152 teste trecute, 40 sarite (lansatorul, numai pe Windows), zero esecuri;
   `audit_application.py`: 13 istorice, 848 verificari de paritate, 151
@@ -437,6 +468,11 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.1 Date
 
 - O extragere valida are exact `draw_n` valori intregi, distincte si in interval.
+- Doua randuri consecutive cu aceleasi numere principale sunt o copie, nu o
+  extragere: `test_externe_history.py::test_no_draw_repeats_the_previous_one`
+  le respinge in toate CSV-urile din `_ISTORIC/` si `_ISTORIC/externe/`. O
+  repetare reala (sub 1e-6 pe rand la orice joc de acolo) se confirma intai pe
+  arhiva oficiala.
 - Engine, benchmark si walk-forward folosesc `draw_validation.py`.
 - Joker Urna 2 accepta numai valori intregi 1..20.
 - `_ISTORIC/` este versionat; fisierele de stare si cache nu sunt surse de adevar.
@@ -1328,6 +1364,9 @@ pipeline-ului sau a contractului UI-worker.
   romanesti; 32 de teste binomiale exacte, Holm alpha 0,05. Niciun candidat nu
   supravietuieste (cel mai mic p Holm 0,56). Nimic promovat.
   `test_pool_hit_experiment.py` fixeaza amprentele datelor si parametrii.
+  Erata 2026-10-07: randul 5/40 din 24-10-2024, corectat in `_ISTORIC`, e
+  refacut in memorie din `ERRATA`, deci amprentele raman valide; pe datele
+  corectate verdictul ramane acelasi (`RESULTS_2026-10-02.md`).
 - [x] Ecran predictiv 2026-10-05 (`scripts/analysis/prediction_screen_2026-10-05.py`):
   491 de scoreri, 6.355 de teste, nul sintetic iid cu reluarea cautarii,
   confirmare pe 30% romanesti si replicare externa. Nimic promovat (§2).
