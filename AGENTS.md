@@ -103,8 +103,9 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   bump de cache.
 - Panoul de rezultate ramane neredesenat la esecul recalcularii deciziei,
   intentionat (§5, „Coerenta outputului”).
-- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 95 fisiere `test_*.py`,
-  2248 teste trecute, 25 sarite (lansatorul, numai pe Windows), zero esecuri;
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2, impreuna cu PR #145: 96
+  fisiere `test_*.py`, 2283 teste trecute, 38 sarite (lansatorul, numai pe
+  Windows), zero esecuri;
   `audit_application.py`: 13 istorice, 848 verificari de paritate, 151
   designuri, 26 de pipeline-uri, worker separat pe 13 jocuri si UI HTTP 200,
   fisierele de productie neatinse. Marcajul, cap-coada pe o baza izolata:

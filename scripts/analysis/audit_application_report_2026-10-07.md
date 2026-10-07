@@ -288,9 +288,9 @@ secțiunile deschise se păstrează intenționat (AGENTS.md §5, commit `52b9523
 
 Verificare, runda 2:
 
-- Suita completă pe Python 3.14.7 / Linux cu pwsh 7.6.2: 95 de fișiere
-  `test_*.py`, **2248 de teste trecute, 25 omise** (lansatorul, numai pe
-  Windows), zero eșecuri, 273 s.
+- Suita completă pe Python 3.14.7 / Linux cu pwsh 7.6.2, împreună cu PR #145:
+  96 de fișiere `test_*.py`, **2283 de teste trecute, 38 omise** (lansatorul,
+  numai pe Windows), zero eșecuri, 273 s.
 - `scripts/analysis/audit_application.py`: 53 de metode, curare 52/51/51/48,
   13 istorice, 848 de verificări de paritate, 151 de designuri, 26 de
   pipeline-uri, worker separat pe 13 jocuri, UI HTTP 200, fișierele de
