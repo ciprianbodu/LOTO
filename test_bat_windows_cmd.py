@@ -415,11 +415,18 @@ def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
 def test_history_commit_is_scoped_and_guarded():
     for name in ("START_8000.bat", "ACTUALIZARI.bat"):
         text = (ROOT / name).read_text(encoding="utf-8")
-        assert "-Mode PushHistory" in text
+        push = [line for line in text.splitlines() if "-Mode PushHistory" in line]
+        # Python-ul venv-ului, pentru verifica_istoric.py pe CSV-urile schimbate.
+        assert len(push) == 1 and "-PythonExe" in push[0], name
     helper = (ROOT / "scripts" / "launcher_git.ps1").read_text(encoding="utf-8")
     assert "'commit', '--only'" in helper
     assert "$branch.Text -ne 'main'" in helper
     assert "LOTO_SKIP_AUTO_PUSH" in helper
+    # Numai fisierele urmarite; orice nu e rand adaugat ramane local.
+    assert "'add', '-u', '--', '_ISTORIC'" in helper
+    assert "'add', '-A'" not in helper
+    assert "'diff', '--cached', '--numstat'" in helper
+    assert "verifica_istoric.py" in helper and (ROOT / "verifica_istoric.py").exists()
 
 
 

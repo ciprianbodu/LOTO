@@ -83,8 +83,9 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 ### Audit global 2026-10-07, runda 2
 
 - Randul 5/40 din 24-10-2024 a fost corectat separat (PR #144, sectiunea
-  urmatoare), iar validarea PushHistory e in PR #145; runda 2 trateaza
-  celelalte puncte ramase de decis si nu modifica lansatorul.
+  urmatoare), iar PushHistory publica numai randuri adaugate din PR #145
+  (§4.5); runda 2 trateaza celelalte puncte ramase de decis si nu modifica
+  lansatorul.
 - Decizie: `multiplicity` pe fiecare celula, test binomial pe fereastra
   completa cu corectia Holm peste candidati (§5, punctul 10). Scorerul ales nu
   se schimba; pe `folds.csv` versionat, 45 din 46 de celule raman cu avantaj
@@ -177,7 +178,7 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   hits; raportul spune PARTIAL; variantele dispersate respecta limita de
   consecutive cand baza o permite, altfel nota spune limita atinsa.
 - Ramasele de decis au fost tratate in aceeasi zi: randul 5/40 in „Corectura
-  istoricului 5/40”, validarea PushHistory in PR #145, celelalte in runda 2
+  istoricului 5/40”, PushHistory in §4.5 (PR #145), celelalte in runda 2
   (sectiunile de mai sus).
 - Verificat pe Python 3.14.7 / Linux, fara PowerShell: 95 fisiere `test_*.py`,
   2152 teste trecute, 40 sarite (lansatorul, numai pe Windows), zero esecuri;
@@ -652,13 +653,35 @@ UI-ul face polling la o secunda, fara reload complet.
   Testele de lansator folosesc un winget simulat (`LOTO_WINGET_EXE`), ca sa nu
   actualizeze Git-ul statiei, si numara rularile EnsureGit dupa linia de antet
   „[GIT] Verific Git for Windows", nu dupa apelurile winget.
-- Auto-commit-ul de istoric foloseste `commit --only -- _ISTORIC`, verifica `main`,
- nu include cod deja staged si reincearca un push esuat chiar fara extrageri noi.
- Inainte de push face `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat,
- commit-ul este repus peste `origin/main`; la conflict, `rebase --abort`.
- Modificarile necomise tot blocheaza merge-ul, dar Sync face fetch ca `origin/main`
- sa nu ramana vechi. Un `packed-refs.lock` fara proces `git` este sters.
- Hook-ul de auto-push este oprit pentru acest commit: push-ul este executat o data.
+- Auto-commit-ul de istoric (`launcher_git.ps1 -Mode PushHistory`) publica numai
+  extrageri ADAUGATE. Pregateste doar fisierele urmarite (`git add -u -- _ISTORIC`):
+  o copie de conflict din cloud (`loto_6_49 (1).csv`) sau orice fisier nou ramane
+  local. Apoi `git diff --cached --numstat --no-renames -z` refuza, per fisier,
+  calea care nu e CSV, continutul binar, fisierul sters si orice linie stearsa sau
+  modificata (rand sters ori trunchiat, CSV rescris de Excel cu `;` si date
+  `10.09.2026`): actualizatoarele doar adauga randuri. CSV-urile ramase trec prin
+  `verifica_istoric.py` (registrul loteriilor, antetul geometriei, date
+  ZZ-LL-AAAA, `valid_draw_matrix` pe tot fisierul, inclusiv a doua urna, fara
+  rand care repeta numerele celui anterior, §4.1), cu Python-ul venv-ului primit
+  de la lansatoare prin `-PythonExe`. Fara venv raman
+  verificarile git, cu mesaj; o validare care nu ruleaza pana la capat (cod de
+  iesire nenul, timeout) nu accepta nimic. Fiecare refuz apare ca
+  `[GIT] [REFUZAT] <fisier> - <motiv>`, iese din index (`reset -q`; fisierul
+  ramane neatins pe disc, iar un commit manual nu-l preia pe tacute) si nu
+  opreste pornirea (exit 0); refuzul se repeta la fiecare pornire, pana la
+  rezolvare. O corectura voita (un rand gresit) se comite manual.
+  Fisierele acceptate se comit cu `commit --only -- <fisiere>`: verifica `main`,
+  nu include cod deja staged, iar caile explicite tin afara fisierele refuzate
+  (`--only` citeste arborele de lucru). Push-ul esuat se reincearca chiar fara
+  extrageri noi, inclusiv langa o schimbare refuzata. Inainte de push face
+  `fetch`. Daca doar `_ISTORIC` a divergat si arborele e curat, commit-ul este
+  repus peste `origin/main`; la conflict, `rebase --abort`. Modificarile
+  necomise, inclusiv o schimbare refuzata a unui fisier urmarit, tot blocheaza
+  merge-ul, dar Sync face fetch ca `origin/main` sa nu ramana vechi. Un
+  `packed-refs.lock` fara proces `git` este sters. Hook-ul de auto-push este
+  oprit pentru acest commit: push-ul este executat o data. Testele
+  (`test_launcher_git.py`, numai Windows) ruleaza validarea cu Python-ul suitei,
+  pe un `loto_6_49.csv` din registru.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.

@@ -139,8 +139,8 @@ Nu se promovează nicio metodă și nu se afirmă avantaj predictiv.
 
 ## Rămase de decis după runda 1
 
-Punctul 1 a fost rezolvat separat, în PR #144, iar punctul 5 este în PR
-#145; celelalte, în runda 2 (secțiunea de la final).
+Punctul 1 a fost rezolvat separat, în PR #144, iar punctul 5 în PR #145;
+celelalte, în runda 2 (secțiunea de la final).
 
 1. **`_ISTORIC/loto_5_40.csv`, rândul 1538.** `24-10-2024,13,34,11,16,10,39`
    copiază extragerea din 27-10-2024. Extragerea reală din 24-10-2024 este
