@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -11,6 +12,13 @@ HELPER = ROOT / 'scripts' / 'launcher_git.ps1'
 POWERSHELL = (Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' /
               'WindowsPowerShell' / 'v1.0' / 'powershell.exe')
 pytestmark = pytest.mark.skipif(os.name != 'nt', reason='Windows launcher integration')
+
+# Istoric real din registru: verifica_istoric.py il valideaza ca pe cel versionat.
+DRAWS = '_ISTORIC/loto_6_49.csv'
+README = '_ISTORIC/externe/README.md'
+HEADER = 'date,n1,n2,n3,n4,n5,n6\n'
+ROWS = '01-10-2026,1,2,3,4,5,6\n04-10-2026,7,8,9,10,11,12\n'
+NEW_ROW = '05-10-2026,13,21,28,34,40,49\n'
 
 
 def git(cwd, *args):
@@ -27,6 +35,12 @@ def commit(repo, message):
     git(repo, 'commit', '-m', message)
 
 
+def append(repo, text, name=DRAWS):
+    """Ca update_csv.py / update_externe.py: randuri noi la finalul fisierului."""
+    path = repo / name
+    path.write_bytes(path.read_bytes() + text.encode())
+
+
 @pytest.fixture
 def repos(tmp_path):
     origin = tmp_path / 'origin.git'
@@ -36,8 +50,11 @@ def repos(tmp_path):
     git(seed, 'checkout', '-b', 'main')
     for key, value in [('user.name', 'Audit test'), ('user.email', 'audit@example.invalid')]:
         git(seed, 'config', key, value)
-    (seed / '_ISTORIC').mkdir()
-    (seed / '_ISTORIC' / 'draws.csv').write_text('old\n')
+    (seed / '_ISTORIC' / 'externe').mkdir(parents=True)
+    # Ca in repo: LF pe CSV-uri, indiferent de core.autocrlf al statiei.
+    (seed / '.gitattributes').write_text('_ISTORIC/*.csv text eol=lf\n')
+    (seed / DRAWS).write_bytes((HEADER + ROWS).encode())
+    (seed / README).write_bytes(b'Sursele istoricelor externe.\n')
     (seed / 'code.txt').write_text('old\n')
     (seed / 'scripts').mkdir()
     shutil.copyfile(HELPER, seed / 'scripts' / HELPER.name)
@@ -66,10 +83,14 @@ def gitless_env():
     return env
 
 
-def run_helper(local, mode='Sync', env=None, *, git_processes=None):
+def run_helper(local, mode='Sync', env=None, *, git_processes=None, python=True):
     args = [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass']
+    # Ca START_8000 / ACTUALIZARI: PushHistory primeste Python-ul venv-ului.
+    python_exe = sys.executable if mode == 'PushHistory' and python else None
     if git_processes is None:
         args += ['-File', str(HELPER), '-Mode', mode, '-ProjectDir', str(local)]
+        if python_exe:
+            args += ['-PythonExe', python_exe]
     else:
         # Numai clonele fixture-ului folosesc acest inventar simulat. Helperul
         # și comenzile Git sunt reale; procesele Git ale editorului nu pot
@@ -90,6 +111,8 @@ def run_helper(local, mode='Sync', env=None, *, git_processes=None):
             f"& {ps_literal(HELPER)} -Mode {ps_literal(mode)} "
             f"-ProjectDir {ps_literal(local)}"
         )
+        if python_exe:
+            command += f" -PythonExe {ps_literal(python_exe)}"
         args += ['-Command', command]
     p = subprocess.run(
         args, capture_output=True, text=True, errors='replace', timeout=60, env=env,
@@ -145,11 +168,12 @@ def test_history_auto_commit_does_not_include_staged_code(
     local, _, origin = repos
     (local / 'code.txt').write_text('unfinished code\n')
     git(local, 'add', 'code.txt')
-    (local / '_ISTORIC' / 'draws.csv').write_text('new draw\n')
-    run_helper(local, 'PushHistory', env=None if git_on_path else gitless_env)
+    append(local, NEW_ROW)
+    out = run_helper(local, 'PushHistory', env=None if git_on_path else gitless_env)
     assert git(local, 'show', 'HEAD:code.txt') == 'old'
     assert git(local, 'diff', '--cached', '--name-only') == 'code.txt'
-    assert git(origin, 'show', 'main:_ISTORIC/draws.csv') == 'new draw'
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
+    assert '[REFUZAT]' not in out
 
 
 def test_sync_with_local_edits_fetches_without_touching_files(repos):
@@ -188,10 +212,10 @@ def test_git_process_preserves_packed_refs_lock(repos):
 def test_history_push_replays_draw_commit_onto_newer_main(repos):
     local, seed, origin = repos
     advance(seed)
-    (local / '_ISTORIC' / 'draws.csv').write_text('local draw\n', encoding='utf-8')
+    append(local, NEW_ROW)
     out = run_helper(local, 'PushHistory')
     assert 'Repun commit-urile de istoric' in out
-    assert git(origin, 'show', 'main:_ISTORIC/draws.csv') == 'local draw'
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
     assert git(origin, 'show', 'main:code.txt') == 'new'
     assert git(local, 'rev-parse', 'HEAD') == git(origin, 'rev-parse', 'main')
     assert not (local / '.git' / 'rebase-merge').exists()
@@ -202,11 +226,12 @@ def test_history_push_leaves_diverged_code_commits_untouched(repos):
     (local / 'code.txt').write_text('personal\n', encoding='utf-8')
     commit(local, 'personal work')
     advance(seed)
-    (local / '_ISTORIC' / 'draws.csv').write_text('draw\n', encoding='utf-8')
+    append(local, NEW_ROW)
     head = git(local, 'rev-parse', 'HEAD')
     p = subprocess.run(
         [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-         str(HELPER), '-Mode', 'PushHistory', '-ProjectDir', str(local)],
+         str(HELPER), '-Mode', 'PushHistory', '-ProjectDir', str(local),
+         '-PythonExe', sys.executable],
         capture_output=True, text=True, errors='replace', timeout=60,
     )
     assert p.returncode != 0, p.stdout + p.stderr
@@ -220,10 +245,145 @@ def test_history_push_leaves_diverged_code_commits_untouched(repos):
 
 def test_history_retries_unpushed_commit_with_no_csv_changes(repos):
     local, _, origin = repos
-    (local / '_ISTORIC' / 'draws.csv').write_text('retry draw\n')
+    append(local, NEW_ROW)
     commit(local, 'local only')
     run_helper(local, 'PushHistory')
     assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+
+
+def _worktree(local):
+    path = local / DRAWS
+    return path.read_bytes() if path.exists() else None
+
+
+@pytest.mark.parametrize('change, reason', [
+    # Rand sters (si unul nou adaugat dupa el, cum ar face actualizatorul).
+    ('deleted_row', 'linii sterse sau modificate: 1'),
+    # Ultimul rand taiat la jumatate.
+    ('truncated_row', 'linii sterse sau modificate: 1'),
+    # Excel: separator ';', date ZZ.LL.AAAA - antetul si fiecare rand se schimba.
+    ('excel', 'linii sterse sau modificate: 3'),
+    ('deleted_file', 'fisier sters'),
+])
+def test_history_refuses_anything_but_appended_rows(repos, change, reason):
+    local, _, origin = repos
+    path = local / DRAWS
+    first, last = ROWS.splitlines()
+    if change == 'deleted_row':
+        path.write_bytes((HEADER + first + '\n' + NEW_ROW).encode())
+    elif change == 'truncated_row':
+        path.write_bytes((HEADER + first + '\n' + last[:12]).encode())
+    elif change == 'excel':
+        excel = (HEADER + ROWS).replace(',', ';').replace('-10-', '.10.')
+        path.write_bytes(excel.encode())
+    else:
+        path.unlink()
+    on_disk = _worktree(local)
+    head = git(local, 'rev-parse', 'HEAD')
+
+    out = run_helper(local, 'PushHistory')  # exit 0: pornirea continua
+
+    assert f'[GIT] [REFUZAT] {DRAWS} - {reason}' in out
+    assert 'Ce e refuzat ramane local, necomis' in out
+    assert '[GIT] Nimic de trimis pe origin/main.' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    assert git(origin, 'rev-parse', 'main') == head
+    # Schimbarea ramane pe disc, neatinsa, dar nu si in index.
+    assert _worktree(local) == on_disk
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+    assert git(local, 'diff', '--name-only') == DRAWS
+
+
+def test_history_commits_only_tracked_files(repos):
+    """Copia de conflict din cloud nu ajunge pe main; extragerea noua, da."""
+    local, _, origin = repos
+    conflict = local / '_ISTORIC' / 'loto_6_49 (1).csv'
+    conflict.write_bytes((HEADER + ROWS + NEW_ROW).encode())
+    append(local, NEW_ROW)
+
+    out = run_helper(local, 'PushHistory')
+
+    assert '[GIT] [REFUZAT] _ISTORIC/loto_6_49 (1).csv - neurmarit' in out
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
+    pushed = git(origin, 'ls-tree', '-r', '--name-only', 'main').splitlines()
+    assert sorted(pushed) == ['.gitattributes', README, DRAWS, 'code.txt',
+                              'scripts/launcher_git.ps1']
+    assert conflict.read_bytes() == (HEADER + ROWS + NEW_ROW).encode()
+    assert git(local, 'ls-files', '--', '_ISTORIC/loto_6_49 (1).csv') == ''
+    assert git(local, 'rev-parse', 'HEAD') == git(origin, 'rev-parse', 'main')
+
+
+def test_history_refuses_only_the_bad_file(repos):
+    local, _, origin = repos
+    (local / README).write_bytes(b'Editat de mana.\n')
+    append(local, NEW_ROW)
+
+    out = run_helper(local, 'PushHistory')
+
+    assert f'[GIT] [REFUZAT] {README} - nu e CSV' in out
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
+    assert git(origin, 'show', f'main:{README}') == 'Sursele istoricelor externe.'
+    assert git(local, 'diff', '--name-only') == README
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+
+
+@pytest.mark.parametrize('row, reason', [
+    ('10.09.2026;1;2;3;4;5;6\n', 'randul 4: astept 7 valori separate prin virgula'),
+    ('05-10-2026,1,2,3,4,5,50\n', 'randul 4: numere invalide pentru 6/49'),
+    ('5 oct 2026,1,2,3,4,5,6\n', 'randul 4: data nu e ZZ-LL-AAAA'),
+])
+def test_history_validation_refuses_malformed_appended_row(repos, row, reason):
+    """Numai adaugari, deci git le lasa; validarea proiectului le opreste."""
+    local, _, origin = repos
+    append(local, row)
+    head = git(local, 'rev-parse', 'HEAD')
+
+    out = run_helper(local, 'PushHistory')
+
+    assert f'[GIT] [REFUZAT] {DRAWS} - {reason}' in out
+    assert git(origin, 'rev-parse', 'main') == head
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+
+
+def test_history_validation_that_cannot_run_commits_nothing(repos):
+    """Python care nu porneste nu valideaza nimic; extragerea se comite data viitoare."""
+    local, _, origin = repos
+    append(local, NEW_ROW)
+    head = git(local, 'rev-parse', 'HEAD')
+    broken = dict(os.environ, PYTHONHOME=str(local.parent / 'no-python-home'))
+
+    out = run_helper(local, 'PushHistory', env=broken)
+
+    assert f'[GIT] [REFUZAT] {DRAWS} - validarea istoricului nu a rulat (cod ' in out
+    assert git(origin, 'rev-parse', 'main') == head
+    run_helper(local, 'PushHistory')
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
+
+
+def test_history_without_python_keeps_the_git_checks(repos):
+    local, _, origin = repos
+    (local / README).write_bytes(b'Editat de mana.\n')
+    append(local, NEW_ROW)
+
+    out = run_helper(local, 'PushHistory', python=False)
+
+    assert 'Validarea istoricului cu Python nu e disponibila' in out
+    assert f'[GIT] [REFUZAT] {README} - nu e CSV' in out
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
+
+
+def test_refused_change_does_not_block_pushing_earlier_history(repos):
+    local, _, origin = repos
+    append(local, NEW_ROW)
+    commit(local, 'local only')
+    (local / DRAWS).write_bytes((HEADER + NEW_ROW).encode())
+
+    out = run_helper(local, 'PushHistory')
+
+    assert f'[GIT] [REFUZAT] {DRAWS} - linii sterse sau modificate: 2' in out
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+    assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
+    assert git(local, 'diff', '--name-only') == DRAWS
 
 
 @pytest.fixture
