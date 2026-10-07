@@ -663,11 +663,24 @@ UI-ul face polling la o secunda, fara reload complet.
   pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste). `START_8000.bat` si
   `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
 - Lansatoarele transfera executia FARA CALL intr-o copie temporara imuabila.
-  `scripts/launcher_git.ps1`, copiat impreuna cu lansatorul, face fetch cu timeout
-  si `merge --ff-only origin/main`, apoi ruleaza lansatorul din repo actualizat.
-  Codul si lansatoarele se actualizeaza impreuna; nu se descarca fragmente cu curl.
-  Modificari necomise, commit-uri divergente sau alta ramura: se pastreaza local,
-  cu mesaj explicit. Nu se sterg fisierele .bat personale si nu exista reset fortat.
+  `scripts/launcher_git.ps1 -Mode Sync`, copiat impreuna cu lansatorul, face un
+  sync, apoi ruleaza lansatorul din repo actualizat. Codul si lansatoarele se
+  actualizeaza impreuna; nu se descarca fragmente cu curl. Sync = fetch cu
+  timeout, aplicarea `origin/main`, repunerea commit-urilor locale netrimise
+  peste el (`rebase`, numai `origin/main..HEAD`, fara commit-uri de merge;
+  conflictul face `rebase --abort` si lasa totul cum era) si push. Modificarile
+  necomise nu blocheaza si nu se pierd: fast-forward-ul le pastreaza singur in
+  fisierele pe care actualizarea nu le atinge; fisierele schimbate si local, si
+  pe `origin/main` (la rebase, toate cele modificate) se copiaza octet cu octet
+  in `.git\loto-sync-backup\<data-ora>\`, se pun in `git stash` si revin prin
+  fuziunea git in trei. La conflict real, codul ia versiunea de pe
+  `origin/main`, iar `bench_results/` (Re-Bench-ul statiei, din care s-a
+  calculat decizia ei) ramane local; copia si stash-ul (`loto-sync <data-ora>`)
+  raman pentru utilizator, iar mesajul le numeste. Fara conflict, stash-ul si
+  copia se sterg. O actualizare care esueaza (ex. un fisier neurmarit pe care
+  `origin/main` il adauga) repune modificarile peste HEAD-ul neschimbat. Alta
+  ramura decat `main` nu se atinge. Nu se sterg fisierele .bat personale si nu
+  exista reset fortat.
 - Pe un folder sincronizat in cloud (Google Drive, OneDrive, Dropbox),
   `launcher_git.ps1` cere o data fixarea offline (`attrib +P /S /D`, marcaj in
   `.git\loto-offline-pin`) si ridica limita pe comanda git de la 45 la 180 s.
@@ -717,8 +730,10 @@ UI-ul face polling la o secunda, fara reload complet.
   merge-ul, dar Sync face fetch ca `origin/main` sa nu ramana vechi. Un
   `packed-refs.lock` fara proces `git` este sters. Hook-ul de auto-push este
   oprit pentru acest commit: push-ul este executat o data. Testele
-  (`test_launcher_git.py`, numai Windows) ruleaza validarea cu Python-ul suitei,
-  pe un `loto_6_49.csv` din registru.
+  (`test_launcher_git.py`) ruleaza validarea cu Python-ul suitei, pe un
+  `loto_6_49.csv` din registru. Pe Linux/macOS helper-ul ruleaza sub PowerShell
+  7 (`pwsh` in PATH sau `LOTO_PWSH`), cu Git dat prin `LOTO_GIT_EXE`; numai
+  lansatoarele CMD si modelul PATH-ului Windows raman teste de Windows.
 - Nu include in commit stari locale sau cache-uri fara cerere explicita.
 - `best_methods.json`, `pool_history.json`, `raport_complet.txt`, logurile,
   baza SQLite si pickle-urile WF sunt runtime state.

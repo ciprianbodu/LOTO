@@ -1,4 +1,7 @@
-"""Real Windows/Git integration, isolated from the user's repo and network."""
+"""Real Windows/Git integration, isolated from the user's repo and network.
+
+On Linux/macOS the helper runs under PowerShell 7 (`pwsh` in PATH or LOTO_PWSH),
+with Git given through LOTO_GIT_EXE; the CMD launchers stay Windows-only."""
 import os
 from pathlib import Path
 import shutil
@@ -9,9 +12,23 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent
 HELPER = ROOT / 'scripts' / 'launcher_git.ps1'
-POWERSHELL = (Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' /
-              'WindowsPowerShell' / 'v1.0' / 'powershell.exe')
-pytestmark = pytest.mark.skipif(os.name != 'nt', reason='Windows launcher integration')
+WINDOWS = os.name == 'nt'
+POWERSHELL = (
+    Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32' /
+    'WindowsPowerShell' / 'v1.0' / 'powershell.exe'
+    if WINDOWS else os.environ.get('LOTO_PWSH') or shutil.which('pwsh')
+)
+pytestmark = pytest.mark.skipif(
+    not WINDOWS and not POWERSHELL, reason='launcher helper needs PowerShell'
+)
+windows_only = pytest.mark.skipif(not WINDOWS, reason='CMD launcher / Windows PATH')
+
+
+@pytest.fixture(autouse=True)
+def git_for_helper(monkeypatch):
+    """Outside Windows the helper finds Git only through LOTO_GIT_EXE."""
+    if not WINDOWS:
+        monkeypatch.setenv('LOTO_GIT_EXE', shutil.which('git'))
 
 # Istoric real din registru: verifica_istoric.py il valideaza ca pe cel versionat.
 DRAWS = '_ISTORIC/loto_6_49.csv'
@@ -70,6 +87,8 @@ def repos(tmp_path):
 @pytest.fixture
 def gitless_env():
     """Model Explorer's stale PATH while supplying an installed Git explicitly."""
+    if not WINDOWS:
+        pytest.skip('Windows PATH model')
     git_exe = shutil.which('git')
     if not git_exe:
         pytest.skip('Git is required to prepare the isolated repositories')
@@ -133,59 +152,192 @@ def advance(seed):
 
 @pytest.mark.parametrize('git_on_path', [True, False])
 def test_fast_forward_updates_whole_checkout_and_keeps_local_files(
-    repos, gitless_env, git_on_path,
+    repos, request, git_on_path,
 ):
     local, seed, _ = repos
     extra = local / 'personal.bat'
     extra.write_text('do not delete')
     advance(seed)
-    run_helper(local, env=None if git_on_path else gitless_env)
+    run_helper(local, env=None if git_on_path else request.getfixturevalue('gitless_env'))
     assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
     assert (local / 'code.txt').read_text() == 'new\n'
     assert extra.read_text() == 'do not delete'
 
 
-@pytest.mark.parametrize('state', ['dirty', 'ahead', 'diverged', 'other_branch'])
+@pytest.mark.parametrize('state', ['diverged', 'other_branch'])
 def test_sync_preserves_user_work(repos, state):
+    """Commit-uri locale in conflict cu origin/main sau alta ramura: neatinse."""
     local, seed, _ = repos
     if state == 'other_branch':
         git(local, 'checkout', '-b', 'personal')
     (local / 'code.txt').write_text('personal\n')
-    if state != 'dirty':
-        commit(local, 'personal work')
-    if state != 'ahead':
-        advance(seed)
+    commit(local, 'personal work')
+    advance(seed)
     head = git(local, 'rev-parse', 'HEAD')
-    run_helper(local)
+    out = run_helper(local)
     assert git(local, 'rev-parse', 'HEAD') == head
     assert (local / 'code.txt').read_text() == 'personal\n'
+    assert not (local / '.git' / 'rebase-merge').exists()
+    if state == 'diverged':
+        assert 'nu se pot repune peste origin/main (conflict in code.txt)' in out
 
 
 @pytest.mark.parametrize('git_on_path', [True, False])
 def test_history_auto_commit_does_not_include_staged_code(
-    repos, gitless_env, git_on_path,
+    repos, request, git_on_path,
 ):
     local, _, origin = repos
     (local / 'code.txt').write_text('unfinished code\n')
     git(local, 'add', 'code.txt')
     append(local, NEW_ROW)
-    out = run_helper(local, 'PushHistory', env=None if git_on_path else gitless_env)
+    env = None if git_on_path else request.getfixturevalue('gitless_env')
+    out = run_helper(local, 'PushHistory', env=env)
     assert git(local, 'show', 'HEAD:code.txt') == 'old'
     assert git(local, 'diff', '--cached', '--name-only') == 'code.txt'
     assert git(origin, 'show', f'main:{DRAWS}') == (HEADER + ROWS + NEW_ROW).strip()
     assert '[REFUZAT]' not in out
 
 
-def test_sync_with_local_edits_fetches_without_touching_files(repos):
+def tracked(seed, local, name, text):
+    """Fisier urmarit in ambele clone, inainte de scenariu."""
+    path = seed / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    commit(seed, f'add {name}')
+    git(seed, 'push', 'origin', 'main')
+    git(local, 'pull', '-q', '--ff-only')
+
+
+def stashes(local):
+    return git(local, 'stash', 'list')
+
+
+def backups(local):
+    root = local / '.git' / 'loto-sync-backup'
+    return sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()) \
+        if root.exists() else []
+
+
+def test_sync_applies_update_and_keeps_edits_in_files_it_does_not_touch(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'notes.txt', 'a\n')
+    (local / 'notes.txt').write_text('local note\n')
+    advance(seed)
+    out = run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'new\n'
+    assert (local / 'notes.txt').read_text() == 'local note\n'
+    assert 'Nu le aplic' not in out and 'commit-uri noi' not in out
+    assert 'Modificarile locale au ramas neatinse (1 fisiere)' in out
+    assert stashes(local) == '' and backups(local) == []
+
+
+def test_sync_merges_a_local_edit_into_the_updated_file(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'code.txt', 'one\ntwo\nthree\nfour\nfive\n')
+    (seed / 'code.txt').write_text('ONE\ntwo\nthree\nfour\nfive\n')
+    commit(seed, 'remote edit')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'code.txt').write_text('one\ntwo\nthree\nfour\nFIVE\n')
+    out = run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'ONE\ntwo\nthree\nfour\nFIVE\n'
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+    assert 'repuse peste actualizare' in out
+    assert stashes(local) == '' and backups(local) == []
+
+
+def test_sync_conflict_takes_the_update_and_keeps_the_local_copy(repos):
     local, seed, _ = repos
     (local / 'code.txt').write_text('personal\n')
     advance(seed)
     out = run_helper(local)
-    assert 'pastrez fisierele locale' in out
-    assert 'commit-uri noi' in out
-    assert git(local, 'rev-parse', 'HEAD') != git(seed, 'rev-parse', 'HEAD')
-    assert git(local, 'rev-parse', 'origin/main') == git(seed, 'rev-parse', 'HEAD')
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'new\n'
+    assert git(local, 'status', '--porcelain', '--untracked-files=no') == ''
+    assert 'Conflict intre modificarile locale si origin/main in code.txt' in out
+    copies = backups(local)
+    assert len(copies) == 1 and copies[0].endswith('/code.txt')
+    root = local / '.git' / 'loto-sync-backup'
+    assert (root / copies[0]).read_text() == 'personal\n'
+    assert 'loto-sync' in stashes(local)
+    assert 'personal' in git(local, 'stash', 'show', '-p', 'stash@{0}')
+
+
+def test_sync_keeps_the_local_rebench_results_on_conflict(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'bench_results/folds.csv', 'method,rate\nold,1\n')
+    (seed / 'bench_results' / 'folds.csv').write_text('method,rate\nremote,2\n')
+    (seed / 'code.txt').write_text('new\n')
+    commit(seed, 'remote rebench')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'bench_results' / 'folds.csv').write_text('method,rate\nlocal,3\n')
+    out = run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'new\n'
+    assert (local / 'bench_results' / 'folds.csv').read_text() == 'method,rate\nlocal,3\n'
+    assert 'Rezultatele Re-Bench locale raman: bench_results/folds.csv' in out
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+
+
+def test_sync_replays_local_commits_keeps_edits_and_pushes(repos):
+    local, seed, origin = repos
+    tracked(seed, local, 'notes.txt', 'a\n')
+    tracked(seed, local, 'todo.txt', 'x\n')
+    (local / 'notes.txt').write_text('committed locally\n')
+    commit(local, 'local work')
+    (local / 'todo.txt').write_text('uncommitted\n')
+    advance(seed)
+    out = run_helper(local)
+    assert 'Repun 1 commit-uri locale peste origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD~1') == git(seed, 'rev-parse', 'HEAD')
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+    assert (local / 'code.txt').read_text() == 'new\n'
+    assert (local / 'notes.txt').read_text() == 'committed locally\n'
+    assert (local / 'todo.txt').read_text() == 'uncommitted\n'
+    assert stashes(local) == '' and backups(local) == []
+
+
+def test_sync_pushes_commits_that_are_only_local(repos):
+    local, _, origin = repos
+    (local / 'code.txt').write_text('personal\n')
+    commit(local, 'personal work')
+    out = run_helper(local)
+    assert 'Cod la zi' in out
+    assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+
+
+def test_sync_file_deleted_upstream_keeps_the_local_copy(repos):
+    local, seed, _ = repos
+    tracked(seed, local, 'old.txt', 'a\n')
+    git(seed, 'rm', '-q', 'old.txt')
+    git(seed, 'commit', '-q', '-m', 'remove old')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'old.txt').write_text('edited\n')
+    run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert not (local / 'old.txt').exists()
+    assert [c for c in backups(local) if c.endswith('/old.txt')]
+    assert 'loto-sync' in stashes(local)
+
+
+def test_failed_update_puts_the_local_edits_back(repos):
+    """Un fisier neurmarit pe care actualizarea l-ar adauga opreste git-ul;
+    modificarea pusa deoparte revine exact, iar HEAD ramane."""
+    local, seed, _ = repos
+    (seed / 'code.txt').write_text('new\n')
+    (seed / 'added.txt').write_text('remote\n')
+    commit(seed, 'remote update')
+    git(seed, 'push', 'origin', 'main')
+    (local / 'added.txt').write_text('mine, untracked\n')
+    (local / 'code.txt').write_text('personal\n')
+    head = git(local, 'rev-parse', 'HEAD')
+    out = run_helper(local)
+    assert 'Actualizarea nu a reusit' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
     assert (local / 'code.txt').read_text() == 'personal\n'
+    assert (local / 'added.txt').read_text() == 'mine, untracked\n'
+    assert stashes(local) == ''
 
 
 def test_stale_packed_refs_lock_does_not_block_fast_forward(repos):
@@ -406,6 +558,7 @@ def _without_git_check(bootstrap):
     )
 
 
+@windows_only
 @pytest.mark.parametrize('launcher', ['START_8000.bat', 'ACTUALIZARI.bat'])
 @pytest.mark.parametrize('git_on_path', [True, False])
 @pytest.mark.parametrize('old_has_git_check', [True, False])

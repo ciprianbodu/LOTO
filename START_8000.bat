@@ -18,6 +18,9 @@ goto :main
 :sync_copy
 set "PROJECT_DIR=%~2\"
 set "BOOT_DIR=%~3"
+REM Sync, nu pull: aplica origin/main si peste modificarile necomise (cele
+REM atinse si de actualizare trec prin copie + stash), repune commit-urile
+REM locale netrimise peste el si le trimite. Nimic local nu se pierde.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOT_DIR%\launcher_git.ps1" -Mode Sync -ProjectDir "%PROJECT_DIR%."
 REM Chiar la eroare de retea, repo-ul ramane integral pe versiunea locala.
 "%PROJECT_DIR%START_8000.bat" --post-sync "%PROJECT_DIR%." "%BOOT_DIR%"
