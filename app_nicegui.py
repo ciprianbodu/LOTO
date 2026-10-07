@@ -1135,6 +1135,75 @@ def _result_sources_from_job(job: dict) -> dict | None:
     return sources
 
 
+def _wf_run_kwargs(g_label: str, data: dict) -> dict:
+    """Parametrii walk-forward ai rezultatului afișat (aceeași cheie de cache)."""
+    return {
+        # GEOMETRIA (străin: din ecoul rezultatului); România: eticheta.
+        "game_type": _game_spec_for(g_label, data).geometry,
+        "pool_size": int(data.get("pool_size_requested") or data.get("pool_size") or 10),
+        "backtest_depth_percent": WF_DEPTH_PERCENT,
+        "lookback_percent": _effective_lookback_pct(data),
+        **_wf_generation_options(data),
+    }
+
+
+def _store_wf_result(rk: str, flat, meta: dict) -> None:
+    """Pașii WF și meta lor pentru „Istoric hits” și raport."""
+    with STATE_LOCK:
+        STATE["retro"][rk] = flat
+        STATE.setdefault("retro_meta", {})[rk] = {
+            "partial": bool(meta.get("partial")),
+            "decision_changed": bool(meta.get("decision_changed")),
+            "n_test_draws": meta.get("n_test_draws"),
+            "n_expected": meta.get("n_expected"),
+            "from_cache": bool(meta.get("from_cache")),
+            # pool-ul REAL cu care a rulat WF (pt afișare corectă în istoric)
+            "pool_size": meta.get("pool_size"),
+            "wheel_guarantee": meta.get("wheel_guarantee"),
+            "wheel_condition": meta.get("wheel_condition"),
+            "max_variants": meta.get("max_variants"),
+            "max_consecutive_run": meta.get("max_consecutive_run"),
+        }
+
+
+def _load_cached_walk_forward() -> int:
+    """Validarea WF a rezultatului recuperat, numai din cache-ul de pe disc.
+
+    Fără niciun pas calculat, fără scriere, fără mail sau oprire: reafișează
+    „Istoric hits” după repornire. Cu o extragere nouă de la ultima validare
+    apar pașii refolosibili (parțial); generarea următoare îi completează.
+    Întoarce câte jocuri au primit validarea."""
+    with STATE_LOCK:
+        results = STATE.get("results")
+        sources = STATE.get("result_sources")
+        ds_by_name = dict(sources) if sources is not None else dict(STATE.get("datasets", []))
+    if not (isinstance(results, tuple) and len(results) == 2) or not ds_by_name:
+        return 0
+    from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
+
+    loaded = 0
+    for fname, g_label, data in _iter_wf_jobs(results[0]):
+        df_source = ds_by_name.get(fname)
+        if df_source is None or _echo_mismatch(g_label, data):
+            continue
+        try:
+            flat, meta = run_honest_walk_forward(
+                df_source=df_source,
+                use_cache=True,
+                cache_only=True,
+                **_wf_run_kwargs(g_label, data),
+            )
+        except Exception as exc:  # noqa: BLE001 — reafișarea nu blochează pornirea
+            logger.warning("[WF] validare din cache indisponibilă pentru %s: %s", g_label, exc)
+            continue
+        if flat:
+            _store_wf_result(f"{fname}_{g_label}", flat, meta)
+            loaded += 1
+    if loaded:
+        logger.info("[WF] validare reîncărcată din cache pentru %d joc(uri).", loaded)
+    return loaded
+
+
 def _start_walk_forward() -> None:
     with STATE_LOCK:
         results = STATE.get("results")
@@ -1251,16 +1320,8 @@ def _start_walk_forward() -> None:
                     return _wf_cancel_all() or time.time() > _gd
 
                 try:
-                    _wf_pool = int(
-                        data.get("pool_size_requested") or data.get("pool_size") or 10
-                    )
                     flat, meta = run_honest_walk_forward(
                         df_source=df_source,
-                        # GEOMETRIA (străin: din ecoul rezultatului); România: eticheta.
-                        game_type=_game_spec_for(g_label, data).geometry,
-                        pool_size=_wf_pool,
-                        backtest_depth_percent=WF_DEPTH_PERCENT,
-                        lookback_percent=_effective_lookback_pct(data),
                         use_cache=True,
                         progress_cb=_wf_cb,
                         should_cancel=_wf_should_cancel,
@@ -1269,7 +1330,7 @@ def _start_walk_forward() -> None:
                         # (asta e scopul acoperirii parțiale). Fără el, o rulare veche
                         # care termină DUPĂ una nouă i-ar suprascrie cache-ul mai complet.
                         should_skip_cache_write=lambda: STATE.get("wf_seq") != my_seq,
-                        **_wf_generation_options(data),
+                        **_wf_run_kwargs(g_label, data),
                     )
                     if STATE.get("wf_seq") != my_seq:
                         # A pornit alt walk-forward: nu-i suprascriem retro/status.
@@ -1285,22 +1346,7 @@ def _start_walk_forward() -> None:
                             meta.get("n_test_draws"),
                             meta.get("n_expected"),
                         )
-                    _rk = f"{_pfx}{fname}_{g_label}"
-                    with STATE_LOCK:
-                        STATE["retro"][_rk] = flat
-                        STATE.setdefault("retro_meta", {})[_rk] = {
-                            "partial": bool(meta.get("partial")),
-                            "decision_changed": bool(meta.get("decision_changed")),
-                            "n_test_draws": meta.get("n_test_draws"),
-                            "n_expected": meta.get("n_expected"),
-                            "from_cache": bool(meta.get("from_cache")),
-                            # pool-ul REAL cu care a rulat WF (pt afișare corectă în istoric)
-                            "pool_size": meta.get("pool_size"),
-                            "wheel_guarantee": meta.get("wheel_guarantee"),
-                            "wheel_condition": meta.get("wheel_condition"),
-                            "max_variants": meta.get("max_variants"),
-                            "max_consecutive_run": meta.get("max_consecutive_run"),
-                        }
+                    _store_wf_result(f"{_pfx}{fname}_{g_label}", flat, meta)
                 except Exception as exc:  # noqa: BLE001
                     logger.error("walk-forward %s: %s", g_label, exc)
                 STATE["wf_progress"] = done / max(1, total)
@@ -3066,32 +3112,40 @@ def _migrate_legacy_finalized_marker() -> None:
 
 
 def _recover_completed_job(*, allow_finalize: bool = True) -> None:
-    """get_active_job() vede DOAR PENDING/RUNNING. Dacă worker-ul a terminat un job
-    cât UI-ul era complet jos, rezultatul (+ mail/shutdown de la final) ar rămâne
-    orfan. Îl readucem în flux O SINGURĂ DATĂ:
-      • PROASPĂT (în fereastră și allow_finalize) → flux COMPLET: afișare +
+    """get_active_job() vede DOAR PENDING/RUNNING. Ultimul job terminat se
+    reafișează la fiecare pornire, cu validarea WF din cache; mail-ul și oprirea
+    PC-ului se fac cel mult O DATĂ:
+      • PROASPĂT, nepreluat încă de UI și allow_finalize → flux COMPLET: afișare +
         walk-forward + mail + shutdown (ca o finalizare normală pe care UI-ul a ratat-o);
       • VECHI / fără completed_at → DOAR afișare (fără shutdown-surpriză, fără mail vechi).
       • START_8000 (`allow_finalize=False`) → DOAR afișare chiar dacă e proaspăt:
         „sesiune nouă, fără job automat” nu are voie să trimită mail sau să oprească PC-ul.
-    `ui_finalized_at` pe rândul jobului împiedică re-procesarea la următoarea repornire."""
+      • deja preluat (`ui_finalized_at` pe rândul jobului, ori marcajul vechi
+        nemigrat) → DOAR afișare, fără un nou marcaj."""
     last = get_latest_completed_job()
     if not last:
         return
     jid = int(last["id"])
-    if last.get("ui_finalized_at"):
-        return  # deja preluat de UI într-o sesiune anterioară, pe această stație
-    if STATE.get("legacy_finalized_job_id") == jid:
-        return  # marcajul vechi nu s-a putut muta în bază; regula veche, o pornire
+    # Preluat de UI într-o sesiune anterioară, pe această stație; sau marcajul
+    # vechi pe care baza l-a refuzat la migrare (regula veche, o pornire).
+    taken = bool(last.get("ui_finalized_at")) or (
+        STATE.get("legacy_finalized_job_id") == jid
+    )
 
     payload = decode_queue_result(str(last.get("result_json") or "{}"))
     if not (isinstance(payload, tuple) and len(payload) == 2):
         # payload gol/invalid (ex. cancel-race) → marcăm văzut, nu reîncercăm la infinit
-        _mark_job_finalized(jid)
+        if not taken:
+            _mark_job_finalized(jid)
         return
 
     age = _completed_age_seconds(last)
-    if allow_finalize and age is not None and age <= RECOVERY_FINALIZE_WINDOW_S:
+    if (
+        not taken
+        and allow_finalize
+        and age is not None
+        and age <= RECOVERY_FINALIZE_WINDOW_S
+    ):
         # Proaspăt → status_panel îl preia exact ca pe o finalizare normală (decode +
         # STATE["results"] + walk-forward + mail + shutdown) și setează last_finalized.
         # NU pornim worker-ul (jobul e gata).
@@ -3103,7 +3157,7 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
             int(age),
         )
     else:
-        # Vechi sau fără completed_at → doar afișăm numerele, fără mail/shutdown.
+        # Vechi, fără completed_at sau deja preluat → doar afișăm, fără mail/shutdown.
         # Marcăm CLAR că-s dintr-o sesiune anterioară (la loto, a juca numere vechi
         # crezându-le curente e o eroare reală) — afișat ca avertisment în status_panel.
         when = str(last.get("completed_at") or "")[:16] or "sesiune anterioară"
@@ -3111,13 +3165,20 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
             STATE["results"] = payload
             STATE["result_sources"] = _result_sources_from_job(last)
             STATE["results_recovered"] = f"job #{jid} · {when}"
-        _mark_job_finalized(jid)
+        if not taken:
+            _mark_job_finalized(jid)
+        try:
+            _load_cached_walk_forward()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[RECOVERY] validare WF din cache: %s", exc)
         try:
             _save_report_file()
         except Exception as exc:  # noqa: BLE001
             logger.warning("[RECOVERY] raport: %s", exc)
         _why = (
-            "START_8000 fresh"
+            "deja preluat"
+            if taken
+            else "START_8000 fresh"
             if not allow_finalize
             else "necunoscut"
             if age is None
