@@ -1888,6 +1888,8 @@ def _build_mail_body() -> str:
             + (f"  | joker: {_nums(joker)}" if joker else "")
         )
         lines.extend(_mail_method_lines(_sp, primary))
+        if joker:
+            lines.extend(_mail_method_lines(_sp, primary, urna2=True))
         lines.append(
             _mail_best_draw_line(
                 _sp, _result_source(fn), primary.get("hard_core")
@@ -1936,59 +1938,65 @@ def _mail_best_draw_line(spec, df, pool) -> str:
     )
 
 
-def _mail_method_lines(spec, data: dict) -> list[str]:
+def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
     """Metoda folosită la generare și ratingul ei din bench, pe pool-ul generat.
 
     Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
     țării pentru pool-ul cu care s-a ales metoda (`pool_hint`; `rationale` scris
     de decision.py), cu avertismentul Holm ca panoul de rezultate. Ratingul se
     dă numai dacă decizia de acum alege aceeași metodă: după un Re-Bench sau o
-    schimbare a țintei 3+/4+ ar fi al altui scorer."""
+    schimbare a țintei 3+/4+ ar fi al altui scorer. Cu `urna2`, același lucru
+    pentru numărul Joker: metoda Urnei 2, top-1, față de 5% la întâmplare."""
     import re
 
+    key = (spec.bench_key_urna2 or f"{spec.bench_key}_urna2") if urna2 else spec.bench_key
+    tag, where = (" JOKER", "pe Urna 2, top-1") if urna2 else ("", "la pool {pool}")
     audit = data.get("audit") or {}
-    info = (audit.get("bench_winner") or {}).get(spec.bench_key) or {}
+    info = (audit.get("bench_winner") or {}).get(key) or {}
     pool = (
-        info.get("pool_hint")
+        1
+        if urna2
+        else info.get("pool_hint")
         or data.get("pool_size_requested")
         or data.get("pool_size")
         or len(data.get("hard_core") or [])
         or None
     )
+    where = where.format(pool=pool)
     method = info.get("method") or (info.get("ensemble") or [{}])[0].get("method")
     if not method:
-        return ["METODĂ: necunoscută (rezultat fără audit de metodă)"]
+        return [f"METODĂ{tag}: necunoscută (rezultat fără audit de metodă)"]
     if info.get("no_decision") or info.get("fallback"):
         why = (
             f"metoda din decizie, {info['attempted']}, nu a putut fi folosită"
             if info.get("attempted") and not info.get("no_decision")
             else f"fără bench pentru {spec.display}"
         )
-        return [f"METODĂ: {method} ({why}; rezervă implicită, fără rating)"]
-    entry = _decision_entry(spec.bench_key, int(pool)) if pool else {}
-    head = f"METODĂ: {method} (câștigătoarea bench-ului la pool {pool})"
-    now = _decision_entry_method(entry, spec.bench_key) if entry else method
+        return [f"METODĂ{tag}: {method} ({why}; rezervă implicită, fără rating)"]
+    entry = _decision_entry(key, int(pool)) if pool else {}
+    head = f"METODĂ{tag}: {method} (câștigătoarea bench-ului {where})"
+    now = _decision_entry_method(entry, key) if entry else method
     if now != method:
         return [
             head,
-            "RATING: indisponibil — decizia de bench s-a schimbat după generare "
-            f"(acum alege {now or 'altă metodă'} la pool {pool}); ratingul ei nu "
+            f"RATING{tag}: indisponibil — decizia de bench s-a schimbat după generare "
+            f"(acum alege {now or 'altă metodă'} {where}); ratingul ei nu "
             "descrie metoda care a produs aceste numere",
         ]
     rat = str(entry.get("rationale") or "")
     base = entry.get("baseline_rate")
-    label = entry.get("target_label") or "3+"
-    lines = [head, "RATING: indisponibil în decizia salvată"]
+    label = "top-1" if urna2 else entry.get("target_label") or "3+"
+    lines = [head, f"RATING{tag}: indisponibil în decizia salvată"]
     m = re.search(r"= ([0-9.]+) \(Wilson_lb=([0-9.]+)\).*?in (\d+)/(\d+) windows", rat)
     if m:
         rate, wil, w_ok, w_all = float(m[1]), float(m[2]), m[3], m[4]
-        line = f"RATING: rată {label} {100 * rate:.2f}%"
+        line = f"RATING{tag}: rată {label} {100 * rate:.2f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
         line += f"; scor Wilson (z=1) {100 * wil:.2f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
         lines[1] = line
     elif m := re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat):
-        line = f"RATING: rată {label} {100 * float(m[1]):.2f}%"
+        line = f"RATING{tag}: rată {label} {100 * float(m[1]):.2f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
         lines[1] = (
