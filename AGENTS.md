@@ -1119,6 +1119,12 @@ limita de validitate din §5).
   conteaza cea mai noua dintre jocuri, un joc strain se dateaza dupa propriul
   istoric. Generat joi seara, cu extragerea de joi in CSV, subiectul spune
   duminica.
+- Sub pool-ul fiecarui joc, mailul numeste metoda din decizia bench si
+  ratingul ei: rata pe tinta, rata la intamplare, scorul Wilson (z=1),
+  ferestrele batute si nota Holm (`_mail_method_lines`). La Joker urmeaza
+  aceleasi linii pentru numarul Joker (`METODĂ JOKER`, `RATING JOKER`: Urna 2,
+  top-1 fata de 5%), din 2026-10-08. Pe rezerva `frequency` sau dupa o
+  decizie mutata, ratingul lipseste, cu motivul.
 - Lista de variante simple din rezultate arata `simple_variants_val` variante
   (campul „Variante simple afisate in rezultate”, 1..500, implicit 10); costul
   „Top N bilete simple” urmeaza acelasi numar. „Arata toate” ramane.

@@ -355,3 +355,93 @@ def test_generate_buttons_do_not_suggest_that_one_skips_the_bench_decision():
     assert auto == "⚡ Auto-Pilot (arată metoda pe joc + generează)"
     assert "manual" not in manual
     assert not app.apply_autopilot_and_generate.__doc__.startswith("Aplică scorer")
+
+
+# --------------------------------------------------------------------------- #
+# Numărul Joker: metoda Urnei 2, cu rata și scorul Wilson
+# --------------------------------------------------------------------------- #
+
+
+def _urna2_entry(scorer: str) -> dict:
+    """Intrarea deciziei pentru Urna 2 (top-1, 5% la întâmplare), ca decision.py."""
+    return {
+        "scorer": scorer,
+        "ensemble": [{"method": scorer, "weight": 1.0}],
+        "rationale": (
+            f"{scorer}: rată top-1 (1/1) @ k1 = 0.071 (Wilson_lb=0.062), beat random "
+            "(hipergeometric 0.0500) in 3/4 windows on the same top-1 (1/1) target "
+            "(lift +0.0210) [după corecția Holm pentru 48 candidați: p=0.600 ≥ 0.05 "
+            "— avantaj nedemonstrat]"
+        ),
+        "baseline_rate": 0.05,
+        "target_label": "top-1 (1/1)",
+        "low_confidence": False,
+        "multiplicity": {"candidates": 48, "holm_p": 0.6, "alpha": 0.05, "proven": False},
+    }
+
+
+def _joker_result(urna2: dict | None) -> dict:
+    winners = {"joker_urna1": {"method": "frequency", "pool_hint": 16}}
+    if urna2 is not None:
+        winners["joker_urna2"] = urna2
+    return {
+        **_result("frequency"),
+        "hard_core_joker": [9],
+        "audit": {"bench_winner": winners},
+    }
+
+
+def test_mail_names_the_joker_number_method_with_its_rate_and_wilson(monkeypatch):
+    spec = lottery_by_id("joker")
+    asked = []
+
+    def _decision(key, pool):
+        asked.append((key, pool))
+        return _urna2_entry("markov_pairs")
+
+    monkeypatch.setattr(app, "_decision_entry", _decision)
+    data = _joker_result({"method": "markov_pairs", "pool_hint": 1, "single_pick": True})
+    lines = app._mail_method_lines(spec, data, urna2=True)
+    assert asked == [("joker_urna2", 1)]
+    assert lines[0] == (
+        "METODĂ JOKER: markov_pairs (câștigătoarea bench-ului pe Urna 2, top-1)"
+    )
+    assert lines[1] == (
+        "RATING JOKER: rată top-1 7.10% față de 5.00% la întâmplare; "
+        "scor Wilson (z=1) 6.20%; a bătut hazardul în 3/4 ferestre"
+    )
+    assert "Avantaj nedemonstrat" in lines[2] and "48" in lines[2]
+
+    # Decizia Urnei 2 s-a mutat după generare: ratingul celeilalte metode nu apare.
+    monkeypatch.setattr(app, "_decision_entry", lambda k, p: _urna2_entry("frequency"))
+    lines = app._mail_method_lines(spec, data, urna2=True)
+    assert len(lines) == 2 and "s-a schimbat după generare" in lines[1]
+    assert "7.10%" not in lines[1]
+
+
+def test_mail_joker_number_on_the_fallback_has_no_rating(monkeypatch):
+    spec = lottery_by_id("joker")
+    monkeypatch.setattr(app, "_decision_entry", lambda k, p: _urna2_entry("x"))
+    data = _joker_result(
+        {"method": "frequency", "fallback": True, "no_decision": True, "pool_hint": 1}
+    )
+    assert app._mail_method_lines(spec, data, urna2=True) == [
+        "METODĂ JOKER: frequency (fără bench pentru România · Joker; "
+        "rezervă implicită, fără rating)"
+    ]
+
+
+def test_mail_body_carries_the_joker_number_method_only_for_joker(monkeypatch):
+    entries = {"joker_urna1": _entry("frequency", proven=False, holm_p=0.125)}
+    entries["joker_urna2"] = _urna2_entry("markov_pairs")
+    monkeypatch.setattr(app, "_decision_entry", lambda key, pool: entries.get(key, {}))
+    data = _joker_result({"method": "markov_pairs", "pool_hint": 1, "single_pick": True})
+    _mail_state(monkeypatch, "joker.csv", _history(["01-10-2026", "04-10-2026"]), {"joker": data})
+    body = app._build_mail_body()
+    assert "METODĂ: frequency (câștigătoarea bench-ului la pool 16)" in body
+    assert "METODĂ JOKER: markov_pairs" in body
+    assert "RATING JOKER: rată top-1 7.10% față de 5.00% la întâmplare" in body
+    assert body.index("POOL:") < body.index("METODĂ JOKER") < body.index("CEL MAI BUN")
+
+    _ro_mail_state(monkeypatch, _history(["01-10-2026", "04-10-2026"]))
+    assert "JOKER" not in app._build_mail_body()
