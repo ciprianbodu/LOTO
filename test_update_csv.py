@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 import update_csv as uc
 
 
@@ -181,3 +183,191 @@ def test_update_all_bootstraps_normally_when_file_genuinely_missing(
     total = uc.update_all()
     assert total == 3  # cate un rand nou pentru fiecare din cele 3 jocuri
     assert (istoric / "loto_6_49.csv").exists()
+
+
+# --------------------------------------------------------------------------- #
+# update_all — verificarea paginii înainte de scriere (audit 2026-10-08).
+# Fiecare caz scria altfel un istoric greșit, publicat apoi de PushHistory.
+# --------------------------------------------------------------------------- #
+HEADERS = {
+    "loto_6_49": "date,n1,n2,n3,n4,n5,n6\n",
+    "joker": "date,n1,n2,n3,n4,n5,joker\n",
+    "loto_5_40": "date,n1,n2,n3,n4,n5,n6\n",
+}
+
+
+def _run(tmp_path, monkeypatch, rows: dict, pages: dict):
+    """CSV-uri cu `rows` per joc (celelalte doar antet: sărite fără fetch) și
+    paginile `pages` per joc; întoarce (adăugate, ieșire, conținut înainte)."""
+    istoric = tmp_path / "_ISTORIC"
+    istoric.mkdir()
+    for key, cfg in uc.GAME_CONFIGS.items():
+        text = HEADERS[key] + "".join(r + "\n" for r in rows.get(key, ()))
+        (istoric / cfg["csv_name"]).write_text(text, encoding="utf-8")
+    before = {p.name: p.read_bytes() for p in istoric.iterdir()}
+    url_to_game = {cfg["recent_url"]: key for key, cfg in uc.GAME_CONFIGS.items()}
+    monkeypatch.setattr(uc, "_find_istoric_dir", lambda: istoric)
+    monkeypatch.setattr(
+        uc, "_get_page_text", lambda url: pages.get(url_to_game[url], "")
+    )
+    added = uc.update_all()
+    return added, before, istoric
+
+
+def _unchanged(istoric, before):
+    return {p.name: p.read_bytes() for p in istoric.iterdir()} == before
+
+
+@pytest.mark.parametrize(
+    "key, rows, page, day",
+    [
+        # Site-ul corectează rândul ultimei zile stocate (40 -> 41): nu e a doua
+        # extragere a zilei.
+        (
+            "loto_6_49",
+            ["01-10-2026,3,19,49,48,2,8", "04-10-2026,24,10,12,15,32,40"],
+            "2026-10-01 3 19 49 48 2 8 2026-10-04 24 10 12 15 32 41",
+            "04-10-2026",
+        ),
+        # Numai numărul Joker corectat.
+        (
+            "joker",
+            ["01-10-2026,1,2,3,4,5,7", "04-10-2026,6,7,8,9,10,9"],
+            "2026-10-01 1 2 3 4 5 + 7 2026-10-04 6 7 8 9 10 + 19",
+            "04-10-2026",
+        ),
+        # O zi mai veche din fereastră, corectată pe site, lângă o extragere nouă.
+        (
+            "loto_5_40",
+            ["27-09-2026,1,2,3,4,5,6", "01-10-2026,7,8,9,10,11,12"],
+            "2026-09-27 1 2 3 4 5 7 2026-10-01 7 8 9 10 11 12 2026-10-04 13 14 15 16 17 18",
+            "27-09-2026",
+        ),
+    ],
+)
+def test_update_all_refuses_when_the_site_changed_a_stored_draw(
+    tmp_path, monkeypatch, capsys, key, rows, page, day
+):
+    added, before, istoric = _run(tmp_path, monkeypatch, {key: rows}, {key: page})
+    out = capsys.readouterr().out
+    assert added == 0, out
+    assert _unchanged(istoric, before)
+    assert f"EROARE verificare: extragerile din {day} diferă" in out
+    assert f"NEACTUALIZATE: {uc.GAME_CONFIGS[key]['display_name']}" in out
+
+
+def test_update_all_ignores_site_differences_older_than_the_window(
+    tmp_path, monkeypatch, capsys
+):
+    """Pagina 5/40 merge până în 1995 și păstrează rânduri greșite vechi
+    (24-10-2024, corectat local): ele nu blochează update-ul."""
+    rows = [
+        "24-10-2024,14,15,28,10,25,26",
+        "27-10-2024,13,34,11,16,10,39",
+        "01-10-2026,1,2,3,4,5,6",
+    ]
+    page = (
+        "2024-10-24 13 34 11 16 10 39 2024-10-27 13 34 11 16 10 39 "
+        "2026-10-01 1 2 3 4 5 6 2026-10-04 7 8 9 10 11 12"
+    )
+    added, _, istoric = _run(
+        tmp_path, monkeypatch, {"loto_5_40": rows}, {"loto_5_40": page}
+    )
+    assert added == 1, capsys.readouterr().out
+    lines = (istoric / "loto_5_40.csv").read_text(encoding="utf-8").splitlines()
+    assert lines[-1] == "04-10-2026,7,8,9,10,11,12"
+
+
+@pytest.mark.parametrize(
+    "bad, reason",
+    [
+        ("2026-10-01 3 19 49 49 2 8", "numere repetate"),  # 48 scris 49
+        ("2026-10-01 3 19 49 48 2 50", "număr în afara 1..49"),
+        ("2062-10-01 3 19 49 48 2 8", "dată în viitor"),  # anul greșit pe site
+        # Rânduri pe care modelul nu le mai potrivea deloc: o cifră în plus și o
+        # celulă lipsă (care împrumuta „20” din anul datei următoare).
+        ("2026-10-01 3 19 490 48 2 8", "rând necitibil"),
+        ("2026-10-01 3 19 48 2 8", "rând necitibil"),
+    ],
+)
+def test_update_all_refuses_an_invalid_site_row_after_the_last_stored_draw(
+    tmp_path, monkeypatch, capsys, bad, reason
+):
+    """Rândul invalid era sărit tăcut, iar extragerea de după el intra: după
+    corectura site-ului, extragerea lui (dinaintea ultimei date) nu mai venea."""
+    rows = ["24-09-2026,1,2,3,4,5,6", "27-09-2026,7,8,9,10,11,12"]
+    page = f"2026-09-24 1 2 3 4 5 6 2026-09-27 7 8 9 10 11 12 {bad} 2026-10-04 24 10 12 15 32 40"
+    added, before, istoric = _run(
+        tmp_path, monkeypatch, {"loto_6_49": rows}, {"loto_6_49": page}
+    )
+    out = capsys.readouterr().out
+    assert added == 0, out
+    assert _unchanged(istoric, before)
+    assert (
+        "EROARE verificare: rândul de pe site" in out and f"e invalid ({reason})" in out
+    )
+
+
+@pytest.mark.parametrize(
+    "rows, page, previous",
+    [
+        # Rândul nou copiază ultimul rând stocat (în altă ordine).
+        (
+            ["01-10-2026,1,2,3,4,5,6", "04-10-2026,32,14,4,7,28,34"],
+            "2026-10-01 1 2 3 4 5 6 2026-10-04 32 14 4 7 28 34 2026-10-07 34 28 14 7 4 32",
+            "04-10-2026",
+        ),
+        # Două rânduri noi, al doilea copie a primului (ca 24-10-2024 = 27-10-2024).
+        (
+            ["01-10-2026,1,2,3,4,5,6"],
+            "2026-10-01 1 2 3 4 5 6 2026-10-04 13 34 11 16 10 39 2026-10-07 13 34 11 16 10 39",
+            "04-10-2026",
+        ),
+    ],
+)
+def test_update_all_refuses_a_new_draw_that_copies_the_previous_row(
+    tmp_path, monkeypatch, capsys, rows, page, previous
+):
+    """AGENTS.md §4.1: verifica_istoric refuză fișierul abia după scriere, iar
+    CSV-ul local (citit de UI, bench, WF) rămânea cu copia."""
+    added, before, istoric = _run(
+        tmp_path, monkeypatch, {"loto_5_40": rows}, {"loto_5_40": page}
+    )
+    out = capsys.readouterr().out
+    assert added == 0, out
+    assert _unchanged(istoric, before)
+    assert (
+        "EROARE verificare: extragerea din 07-10-2026 repetă numerele rândului "
+        f"din {previous} (copie, nu extragere)" in out
+    )
+
+
+def test_update_all_reports_an_error_when_the_page_has_no_draws(
+    tmp_path, monkeypatch, capsys
+):
+    """Pagina de protecție servită cu 200 sau altă structură a tabelului:
+    înainte „la zi”, iar ACTUALIZARI.bat nu avertiza (caută „EROARE”)."""
+    rows = {key: ["01-10-2026,1,2,3,4,5,6"] for key in uc.GAME_CONFIGS}
+    page = "Checking your browser before accessing loto49.ro ... Please wait"
+    pages = {key: page for key in uc.GAME_CONFIGS}
+    added, before, istoric = _run(tmp_path, monkeypatch, rows, pages)
+    out = capsys.readouterr().out
+    assert added == 0 and _unchanged(istoric, before)
+    assert out.count("EROARE verificare: pagina nu conține nicio extragere") == 3
+    assert "NEACTUALIZATE: Loto 6/49, Joker, Loto 5/40" in out
+    assert "la zi" not in out
+
+
+def test_a_stored_date_without_leading_zero_is_the_same_draw(tmp_path, monkeypatch, capsys):
+    """Un rând adăugat de mână ca „4-10-2026” nu e altă extragere decât
+    „2026-10-04” de pe site: nici refuz fals, nici dublură; extragerea nouă intră."""
+    rows = ["01-10-2026,1,2,3,4,5,6", "4-10-2026,24,10,12,15,32,40"]
+    page = (
+        "2026-10-01 1 2 3 4 5 6 2026-10-04 24 10 12 15 32 40 "
+        "2026-10-08 7 8 9 10 11 13"
+    )
+    added, _before, istoric = _run(tmp_path, monkeypatch, {"loto_6_49": rows}, {"loto_6_49": page})
+    out = capsys.readouterr().out
+    assert added == 1, out
+    lines = (istoric / uc.GAME_CONFIGS["loto_6_49"]["csv_name"]).read_text().splitlines()
+    assert lines[-2:] == ["4-10-2026,24,10,12,15,32,40", "08-10-2026,7,8,9,10,11,13"]

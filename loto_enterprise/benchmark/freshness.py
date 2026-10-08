@@ -234,14 +234,31 @@ def write_signatures_to_best_methods(
     # `write_text` direct și putea trunchia tocmai decizia scrisă atomic anterior.
     with file_lock(bm):
         cfg = json.loads(bm.read_text(encoding="utf-8"))
-        sigs = (
-            dict(signatures)
-            if signatures is not None
-            else csv_signatures(csv_map, cols_map)
-        )
-        cfg.setdefault("_meta", {})["csv_signatures"] = sigs
-        cfg["_meta"]["engine_signature"] = compute_engine_signature()
+        sigs = stamp_signatures(cfg, csv_map, cols_map, signatures)
         atomic_write_json(bm, cfg)
+    return sigs
+
+
+def stamp_signatures(
+    cfg: dict,
+    csv_map: dict | None = None,
+    cols_map: dict | None = None,
+    signatures: dict[str, dict] | None = None,
+) -> dict[str, dict]:
+    """Pune semnăturile CSV și pe cea a motorului în `cfg["_meta"]`, în memorie.
+
+    Bench-ul le scrie odată cu decizia, într-o singură scriere: semnăturile
+    ștampilate înaintea matricei Auto-Pilot declarau „la zi" o decizie pe care
+    un bench oprit sau o eroare o lăsa fără matrice. Ambele semnături se
+    calculează înainte de a atinge `cfg`, ca o eroare să nu lase numai una."""
+    sigs = (
+        dict(signatures)
+        if signatures is not None
+        else csv_signatures(csv_map, cols_map)
+    )
+    engine = compute_engine_signature()
+    cfg.setdefault("_meta", {})["csv_signatures"] = sigs
+    cfg["_meta"]["engine_signature"] = engine
     return sigs
 
 

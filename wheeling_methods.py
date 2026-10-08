@@ -26,12 +26,18 @@ from covering.designs import (
     wheel_lotto,
     wheel_union34,
 )
-from covering.dispatch import WHEEL_METHODS, generate_wheel, resolve_wheel_method
+from covering.dispatch import (
+    WHEEL_METHODS,
+    budget_buys_complete_design,
+    generate_wheel,
+    resolve_wheel_method,
+)
 from covering.ilp import _ILP_COVER_CACHE, _ilp_cover_positions, wheel_ilp
 from covering.search import wheel_annealing, wheel_genetic
 
 __all__ = [
     "WHEEL_METHODS",
+    "budget_buys_complete_design",
     "compute_coverage_pct",
     "covering_design_source_signature",
     "ensure_pool_numbers_on_tickets",

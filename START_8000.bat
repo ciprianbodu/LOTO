@@ -49,11 +49,15 @@ REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 >> "%LOGFILE%" echo Computer: %COMPUTERNAME%
 >> "%LOGFILE%" echo/
 
-REM ===== Auto-update CSV extrageri, best-effort, silent =====
+REM ===== Auto-update CSV extrageri, best-effort =====
 REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC fara sa
-REM blocheze pornirea. Exit 0 mereu, chiar si la eroare de retea.
+REM blocheze pornirea. Exit 0 mereu, chiar si la eroare de retea. Un joc
+REM neactualizat (refuz, CSV deschis in Excel, eroare de retea) apare in consola.
 if exist "%VENV_DIR%\Scripts\python.exe" (
-    "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%update_csv.py" >> "%LOGFILE%" 2>&1
+    "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%update_csv.py" > "%LOGFILE%.update.tmp" 2>&1
+    type "%LOGFILE%.update.tmp" >> "%LOGFILE%"
+    findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp" >nul 2>&1 && echo [WARN] update_csv.py nu a actualizat un joc - motivul e in %LOGFILE%
+    del "%LOGFILE%.update.tmp" >nul 2>&1
 )
 
 REM ===== Auto-commit + push extrageri noi din _ISTORIC, best-effort =====
@@ -165,10 +169,11 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr /C:":8
 )
 timeout /t 3 /nobreak >nul 2>&1
 
-REM Golire coada de joburi la FIECARE pornire -> mereu fresh, fara joburi
-REM reziduale care se reiau singure (procesele vechi sunt deja omorate la [2/4],
-REM deci putem reseta in siguranta). Numerotarea reincepe de la #1.
-echo [2b/4] Golire coada de joburi - fresh start
+REM Golire coada de joburi la FIECARE pornire: fara joburi reziduale care se
+REM reiau singure (procesele vechi sunt deja omorate la [2/4]). Ultimul job
+REM COMPLETED ramane, ca rezultatul sa reapara in UI; numerotarea reincepe de
+REM la #1 numai fara niciun job COMPLETED.
+echo [2b/4] Golire coada de joburi - ultimul rezultat ramane
 "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%reset_jobs.py" --force
 if errorlevel 1 (
     echo [EROARE] Resetarea cozii de joburi a esuat. Nu pornesc worker-ul peste o baza inconsistenta.

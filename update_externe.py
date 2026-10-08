@@ -169,7 +169,8 @@ def fetch_es_primitiva(last: dt.date, today: dt.date) -> list[Draw]:
         text = raw.decode("latin-1")
     out = []
     for line in text.splitlines():
-        m = re.match(r"^\s*\w{3}-(\d{2}-\d{2}-\d{4})\s*;(.*)$", line)
+        # Ziua (și luna) fără zero în față în zilele 1-9: 'Jue-1-10-2026'.
+        m = re.match(r"^\s*\w{3}-(\d{1,2}-\d{1,2}-\d{4})\s*;(.*)$", line)
         if m:
             f = [x.strip() for x in m.group(2).split(";")]
             out.append(Draw(_dmy(m.group(1)), tuple(int(x) for x in f[:6])))
@@ -489,6 +490,14 @@ def plan_update(lottery, have: list[Draw], src: list[Draw], today: dt.date) -> t
         stored.setdefault(d.date, []).append(_key(lottery, d.nums))
     last = have[-1].date
     check_from = max(have[0].date, last - dt.timedelta(days=CHECK_DAYS))
+    # O zi stocată pe care sursa o acoperă, dar n-o mai listează: parserul a
+    # pierdut rânduri (ex. zilele 1-9 la Spania) sau sursa s-a schimbat.
+    # Altfel o asemenea zi nu se compară deloc, iar rândurile noi ar intra peste
+    # o gaură pe care rulările următoare n-o mai completează.
+    span_from, span_to = max(check_from, src[0].date), min(last, src[-1].date)
+    for day in sorted(stored):
+        if span_from <= day <= span_to and day not in by_src:
+            raise SourceError(f"sursa nu are extragerea din {day:%d-%m-%Y} stocata in CSV")
     new: list[Draw] = []
     checked = 0
     for day in sorted(by_src):

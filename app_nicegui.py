@@ -205,6 +205,7 @@ def submit_generation(
         STATE["results"] = None
         STATE["result_sources"] = None
         STATE["retro"] = {}
+        STATE["retro_meta"] = {}
         STATE["wf_status"] = ""
     ensure_worker_running()
     cfg = _build_config_json(sim_depth_per_game)
@@ -218,11 +219,14 @@ def submit_generation(
 
 
 def apply_autopilot_and_generate() -> None:
-    """Aplică scorer-ul (și sim_depth de telemetrie) din best_methods.json, apoi generează.
+    """Arată metoda deciziei de bench pentru fiecare joc, apoi generează.
 
-    sim_depth e fereastra de bench unde avg_hits a picat — se stochează în audit,
-    NU taie pool-ul și NU schimbă biletele. Mesajul de notify nu mai pretinde
-    că «@ 50%» modifică tichetele.
+    NU aplică scorerul: motorul îl citește din best_methods.json la ORICE
+    generare, deci butonul „Generează” dă același pool și aceleași bilete.
+    Diferențele: notificarea per joc (metoda, low_confidence / avantaj
+    nedemonstrat, pool-ul substituit) și sim_depth de telemetrie — fereastra de
+    bench unde avg_hits a picat, stocată în audit; NU taie pool-ul și NU schimbă
+    biletele.
     """
     # best_methods.json folosește CHEIA jocului (loto_6_49 ...), nu eticheta scurtă
     # (6/49) întoarsă de _game_label_for → altfel lookup-ul eșua mereu → fallback.
@@ -381,12 +385,20 @@ _PCTS = (
 # → rețelele grele fac 25-30 min/fold); 100% e cea mai ieftină. Tunabil aici.
 
 
-def _rebuild_decision_for_target(target: int) -> None:
+def _log_notify(message, type: str = "info", **_kw) -> None:  # noqa: A002
+    """`ui.notify` fără pagină (pornirea UI-ului): mesajul ajunge în log."""
+    log = logger.info if type in ("info", "positive") else logger.warning
+    log("[decizie] %s", message)
+
+
+def _rebuild_decision_for_target(target: int, notify=None) -> None:
     """Recalculează decizia de producție pentru ținta 3+/4+ selectată.
 
     Refuză un folds.csv care nu acoperă Re-Bench-ul deciziei (bench oprit,
     `--quick`, flush parțial): decizia rămâne cea veche, cu avertisment.
+    `notify` înlocuiește `ui.notify` acolo unde nu există pagină (pornirea).
     """
+    notify = notify or ui.notify
     try:
         import loto_enterprise.benchmark.decision as decision
 
@@ -397,7 +409,7 @@ def _rebuild_decision_for_target(target: int) -> None:
             _dp = _LOT.decision_path_for(_cc, PROJECT_ROOT)
             _fp = _LOT.bench_out_dir_for(_cc, PROJECT_ROOT) / "folds.csv"
             if not (_fp.exists() and _dp.exists()):
-                ui.notify(
+                notify(
                     f"{_cname} nu are încă bench — rulează un Re-Bench "
                     "ca ținta să fie aplicată.",
                     type="warning",
@@ -426,14 +438,14 @@ def _rebuild_decision_for_target(target: int) -> None:
             except Exception:  # noqa: BLE001
                 pass
             if _mismatch:
-                ui.notify(
+                notify(
                     f"Decizie {_cname} actualizată, DAR folds nu au coloane "
                     f"{target}+ — s-a folosit 4+ (rate_col_mismatch). "
                     "Rulează Re-Bench.",
                     type="warning",
                 )
             else:
-                ui.notify(
+                notify(
                     f"Decizia Auto-Pilot {_cname} a fost actualizată pentru "
                     f"{target}+ hits!",
                     type="info",
@@ -457,13 +469,13 @@ def _rebuild_decision_for_target(target: int) -> None:
             except Exception:  # noqa: BLE001
                 pass
             if _mismatch:
-                ui.notify(
+                notify(
                     f"Decizie actualizată, DAR folds nu au coloane {target}+ "
                     f"— s-a folosit 4+ (rate_col_mismatch). Rulează Re-Bench.",
                     type="warning",
                 )
             else:
-                ui.notify(
+                notify(
                     f"Decizia Auto-Pilot a fost actualizată pentru {target}+ hits!",
                     type="info",
                 )
@@ -475,7 +487,7 @@ def _rebuild_decision_for_target(target: int) -> None:
         # aruncă ÎNAINTE de `ui.notify`/`_refresh_status`, deci utilizatorul
         # schimba ținta și nu vedea absolut nimic — nici succes, nici
         # eroare — deși decizia NU fusese recalculată.
-        ui.notify(
+        notify(
             "Nu există încă best_methods.json — rulează un Re-Bench "
             "ca ținta să fie aplicată.",
             type="warning",
@@ -485,7 +497,7 @@ def _rebuild_decision_for_target(target: int) -> None:
 
         if isinstance(exc, IncompleteFoldsError):
             logger.warning("Decizie nerecalculată: %s", exc)
-            ui.notify(
+            notify(
                 "folds.csv nu acoperă ultimul Re-Bench complet (bench oprit sau "
                 "rulare redusă): decizia de producție rămâne neschimbată. Rulează "
                 f"un Re-Bench complet ca ținta {target}+ să fie aplicată.",
@@ -493,16 +505,18 @@ def _rebuild_decision_for_target(target: int) -> None:
             )
         else:
             logger.warning("Eroare la schimbarea țintei de hituri: %s", exc)
-            ui.notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
+            notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
     finally:
         _bench_freshness_panel.refresh()
 
 
 def _on_bench_finished() -> None:
     """Actualizează starea bench-ului și pornește Auto-Pilot dacă e bifat."""
-    if STATE.pop("bench_target_pending", False):
+    if STATE.pop("bench_target_pending", False) or _decision_target_mismatch():
         # Ținta s-a schimbat cât rula bench-ul, care și-a scris decizia cu
-        # ținta de la pornire. Acum folds.csv e complet.
+        # ținta de la pornire. Acum folds.csv e complet. Fără marcaj (UI-ul a
+        # fost repornit cât rula bench-ul), decizia scrisă pe altă țintă decât
+        # cea selectată e singurul semn.
         _rebuild_decision_for_target(_clamped_bench_target())
     _bench_freshness_panel.refresh()
     if (
@@ -512,6 +526,46 @@ def _on_bench_finished() -> None:
     ):
         ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
         apply_autopilot_and_generate()
+
+
+def _reconcile_decision_target() -> None:
+    """La pornire: decizia salvată pe altă țintă decât cea selectată se recalculează.
+
+    Un bench pornit din consolă cu altă țintă, o schimbare de țintă refuzată
+    (folds.csv incomplet) sau UI-ul oprit cât rula un bench lăsau decizia pe
+    3+ cu 4+ selectat, fără niciun semn. Cu un bench în curs, recalcularea vine
+    la finalul lui (`_on_bench_finished`); pe un folds.csv incomplet decizia
+    rămâne, iar panoul de prospețime o spune până la un Re-Bench complet.
+    """
+    stale = _decision_target_mismatch()
+    if not stale:
+        return
+    target = _clamped_bench_target()
+    logger.warning(
+        "[STARTUP] decizia salvată e pe altă țintă decât %s+ (%s).",
+        target,
+        ", ".join(f"{gk}={t}+" for gk, t in stale.items()),
+    )
+    if _bench_running():
+        STATE["bench_target_pending"] = True
+        return
+    _rebuild_decision_for_target(target, notify=_log_notify)
+
+
+def _after_server_start(fn) -> None:
+    """`fn` pe bucla UI imediat după pornire, nu în lifespan.
+
+    Recalcularea deciziei durează ~10 s; în `on_startup` ținea portul închis,
+    iar START_8000 deschide browserul după 12 s fixe. Așa cererile așteaptă,
+    nu sunt refuzate."""
+    app.timer(0.1, fn, once=True)
+
+
+def _reconcile_decision_target_logged() -> None:
+    try:
+        _reconcile_decision_target()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("verificare țintă decizie la pornire: %s", exc)
 
 
 def _istoric_has_data() -> bool:
@@ -1200,6 +1254,23 @@ def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
     return True
 
 
+def _decision_moved_since_generation(g_label: str, data: dict) -> bool:
+    """Decizia de acum alege altă metodă decât cea care a produs pool-ul afișat.
+
+    Numai când auditul rezultatului numește metoda (`bench_winner`); un rezultat
+    vechi fără ea nu se poate verifica și rulează ca înainte. WF-ul citește
+    decizia CURENTĂ, deci după un Re-Bench sau o schimbare a țintei 3+/4+ ar
+    măsura altă metodă sub pool-ul generat."""
+    used = (data.get("audit") or {}).get("bench_winner") or {}
+    if not any((v or {}).get("method") for v in used.values()):
+        return False
+    try:
+        return not _result_scorers_match_decision(g_label, data)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WF] %s: nu pot compara decizia cu rezultatul: %s", g_label, exc)
+        return False
+
+
 def _load_cached_walk_forward() -> int:
     """Validarea WF a rezultatului recuperat, numai din cache-ul de pe disc.
 
@@ -1322,6 +1393,22 @@ def _start_walk_forward() -> None:
                     )
                     continue
                 done += 1
+                rk = f"{_pfx}{fname}_{g_label}"
+                with STATE_LOCK:
+                    # Marcajul unui rezultat anterior nu rămâne pe cel nou.
+                    STATE.setdefault("retro_meta", {}).pop(rk, None)
+                if _decision_moved_since_generation(g_label, data):
+                    # Pașii ar fi scorați de altă metodă decât cea care a produs
+                    # pool-ul afișat; nu se rulează și nu se afișează drept ai lui.
+                    logger.warning(
+                        "[WF] %s: decizia de bench s-a schimbat după generare — "
+                        "walk-forward sărit.",
+                        g_label,
+                    )
+                    with STATE_LOCK:
+                        STATE["retro"].pop(rk, None)
+                        STATE.setdefault("retro_meta", {})[rk] = {"decision_moved": True}
+                    continue
                 base = (done - 1) / max(1, total)
                 STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
                 STATE["wf_progress"] = base
@@ -1387,7 +1474,12 @@ def _start_walk_forward() -> None:
                             meta.get("n_test_draws"),
                             meta.get("n_expected"),
                         )
-                    _store_wf_result(f"{_pfx}{fname}_{g_label}", flat, meta)
+                    if not meta.get("decision_changed") and _decision_moved_since_generation(
+                        g_label, data
+                    ):
+                        # Decizia s-a schimbat chiar înaintea pornirii WF-ului acestui joc.
+                        meta = {**meta, "decision_changed": True}
+                    _store_wf_result(rk, flat, meta)
                 except Exception as exc:  # noqa: BLE001
                     logger.error("walk-forward %s: %s", g_label, exc)
                 STATE["wf_progress"] = done / max(1, total)
@@ -1679,31 +1771,71 @@ SOUND_JS = (
 )
 
 
-def _next_draw_date(weekdays=(3, 6)) -> str:
+def _next_draw_date(weekdays=(3, 6), last_draw=None) -> str:
     """Următoarea extragere (Loteria Română: 6/49, 5/40, Joker — JOI și DUMINICĂ;
-    alt joc: zilele lui din registru)."""
-    return _next_draw_date_for(weekdays, _dt.now().date())
+    alt joc: zilele lui din registru), de azi inclusiv.
+
+    `last_draw` = ziua ultimei extrageri din istoricul rezultatului: căutarea
+    pornește STRICT după ea. Generat joi seara, după ce extragerea de joi a
+    intrat în CSV, pool-ul e pentru duminică, nu pentru extragerea de azi, deja
+    trasă. Fără dată (istoric fără date, mail de test): de azi, ca înainte."""
+    from datetime import timedelta
+
+    start = _dt.now().date()
+    if last_draw is not None:
+        start = max(start, last_draw + timedelta(days=1))
+    return _next_draw_date_for(weekdays, start)
 
 
-def _results_specs() -> list:
-    """Jocurile (Lottery) din rezultatul afișat, din ecoul worker-ului."""
+def _result_last_draw_day(fname: str):
+    """Ziua ultimei extrageri valide din snapshot-ul rezultatului, sau None."""
+    from loto_enterprise.core.history import history_dates
+
+    info = _last_csv_draw(fname)
+    if not info or not info[0]:
+        return None
+    try:
+        return history_dates(pd.DataFrame({"date": [info[0]]})).iloc[0].date()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _results_games() -> list:
+    """(fișier, Lottery) pentru jocurile rezultatului afișat, din ecoul worker-ului."""
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
         return []
     return [
-        _game_spec_for(g, _primary_pool_data(d))
-        for _fn, outs in results[0]
+        (fn, _game_spec_for(g, _primary_pool_data(d)))
+        for fn, outs in results[0]
         for g, d in outs.items()
     ]
 
 
+def _results_specs() -> list:
+    """Jocurile (Lottery) din rezultatul afișat, din ecoul worker-ului."""
+    return [sp for _fn, sp in _results_games()]
+
+
+def _ro_next_draw_date() -> str:
+    """Extragerea românească pentru care sunt numerele rezultatului.
+
+    Cele trei jocuri se trag în aceeași seară: o extragere aflată în oricare
+    istoric al rezultatului a avut deja loc."""
+    days = [d for d in (_result_last_draw_day(fn) for fn, _sp in _results_games()) if d]
+    return _next_draw_date(last_draw=max(days) if days else None)
+
+
 def _mail_subject_date() -> str:
-    """Data din subiect: RO (sau fără rezultat) ca înainte; altfel cea mai
-    apropiată extragere dintre jocurile rezultatului."""
-    specs = _results_specs()
-    if not specs or all(sp.is_romanian for sp in specs):
-        return _next_draw_date()
-    dates = [_next_draw_date(sp.draw_weekdays) for sp in specs]
+    """Data din subiect: RO (sau fără rezultat) = antetul mailului; altfel cea
+    mai apropiată extragere dintre jocurile rezultatului, fiecare după ultima
+    extragere din istoricul lui."""
+    games = _results_games()
+    if not games or all(sp.is_romanian for _fn, sp in games):
+        return _ro_next_draw_date()
+    dates = [
+        _next_draw_date(sp.draw_weekdays, _result_last_draw_day(fn)) for fn, sp in games
+    ]
     return min(dates, key=lambda d: _dt.strptime(d, "%d-%m-%Y"))
 
 
@@ -1720,7 +1852,7 @@ def _build_mail_body() -> str:
     _all_ro = all(sp.is_romanian for sp in _results_specs())
     lines = [
         (
-            f"📅 Extragere (următoarea, Joi/Duminică): {_next_draw_date()}"
+            f"📅 Extragere (următoarea, Joi/Duminică): {_ro_next_draw_date()}"
             if _all_ro
             else "📅 Următoarea extragere: pe fiecare joc, mai jos"
         ),
@@ -1739,10 +1871,8 @@ def _build_mail_body() -> str:
         _sp = _game_spec_for(g, primary)
         lines.append(f"=== {_sp.display} ===")
         if not _all_ro:
-            lines.append(
-                f"extragere: {_next_draw_date(_sp.draw_weekdays)} "
-                f"({_weekdays_text(_sp.draw_weekdays)})"
-            )
+            _next = _next_draw_date(_sp.draw_weekdays, _result_last_draw_day(fn))
+            lines.append(f"extragere: {_next} ({_weekdays_text(_sp.draw_weekdays)})")
             if _training_only_note(_sp):
                 lines.append(f"({_training_only_note(_sp)})")
         info = _last_csv_draw(fn)
@@ -1810,12 +1940,21 @@ def _mail_method_lines(spec, data: dict) -> list[str]:
     """Metoda folosită la generare și ratingul ei din bench, pe pool-ul generat.
 
     Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
-    țării pentru același pool (`rationale` scris de decision.py)."""
+    țării pentru pool-ul cu care s-a ales metoda (`pool_hint`; `rationale` scris
+    de decision.py), cu avertismentul Holm ca panoul de rezultate. Ratingul se
+    dă numai dacă decizia de acum alege aceeași metodă: după un Re-Bench sau o
+    schimbare a țintei 3+/4+ ar fi al altui scorer."""
     import re
 
     audit = data.get("audit") or {}
-    pool = data.get("pool_size") or len(data.get("hard_core") or []) or None
     info = (audit.get("bench_winner") or {}).get(spec.bench_key) or {}
+    pool = (
+        info.get("pool_hint")
+        or data.get("pool_size_requested")
+        or data.get("pool_size")
+        or len(data.get("hard_core") or [])
+        or None
+    )
     method = info.get("method") or (info.get("ensemble") or [{}])[0].get("method")
     if not method:
         return ["METODĂ: necunoscută (rezultat fără audit de metodă)"]
@@ -1828,9 +1967,18 @@ def _mail_method_lines(spec, data: dict) -> list[str]:
         return [f"METODĂ: {method} ({why}; rezervă implicită, fără rating)"]
     entry = _decision_entry(spec.bench_key, int(pool)) if pool else {}
     head = f"METODĂ: {method} (câștigătoarea bench-ului la pool {pool})"
+    now = _decision_entry_method(entry, spec.bench_key) if entry else method
+    if now != method:
+        return [
+            head,
+            "RATING: indisponibil — decizia de bench s-a schimbat după generare "
+            f"(acum alege {now or 'altă metodă'} la pool {pool}); ratingul ei nu "
+            "descrie metoda care a produs aceste numere",
+        ]
     rat = str(entry.get("rationale") or "")
     base = entry.get("baseline_rate")
     label = entry.get("target_label") or "3+"
+    lines = [head, "RATING: indisponibil în decizia salvată"]
     m = re.search(r"= ([0-9.]+) \(Wilson_lb=([0-9.]+)\).*?in (\d+)/(\d+) windows", rat)
     if m:
         rate, wil, w_ok, w_all = float(m[1]), float(m[2]), m[3], m[4]
@@ -1838,14 +1986,20 @@ def _mail_method_lines(spec, data: dict) -> list[str]:
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
         line += f"; scor Wilson (z=1) {100 * wil:.2f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
-        return [head, line]
-    m = re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat)
-    if m:
+        lines[1] = line
+    elif m := re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat):
         line = f"RATING: rată {label} {100 * float(m[1]):.2f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
-        return [head, line + "; nicio metodă nu a bătut hazardul constant (încredere redusă)"]
-    return [head, "RATING: indisponibil în decizia salvată"]
+        lines[1] = (
+            line + "; nicio metodă nu a bătut hazardul constant (încredere redusă)"
+        )
+    # Ca panoul de rezultate: pe low_confidence ajunge mesajul de mai sus; altfel
+    # o rată peste hazard care nu trece corecția Holm e spusă explicit.
+    note = _multiplicity_note(entry)
+    if note and _decision_low_confidence(entry) is not True:
+        lines.append(note)
+    return lines
 
 
 def _send_test_email() -> None:
@@ -2113,8 +2267,14 @@ def _new_draws_summary():
 @ui.refreshable
 def _bench_freshness_panel(country: str) -> None:
     """Actualizează numai mesajele bench, fără a recrea rezultatele sau controalele."""
+    stale_target = _decision_target_text(country)
+    if stale_target:
+        # Persistent: dispare numai când decizia ajunge pe ținta selectată.
+        ui.label(stale_target).classes("text-caption text-negative")
     if _LOT.normalize_country(country) != _LOT.RO:
         text = _country_bench_texts(country)["freshness"]
+        if stale_target and text.startswith("✅"):
+            return  # „la zi” ar contrazice avertismentul despre țintă
         color = "text-positive" if text.startswith("✅") else "text-warning"
         ui.label(text).classes("text-caption " + color)
         return
@@ -2144,6 +2304,8 @@ def _bench_freshness_panel(country: str) -> None:
             "⚠️ Benchmarkul nu mai corespunde datelor sau metodelor curente. "
             "Rulează Re-Bench pentru actualizare."
         ).classes("text-caption text-warning")
+    elif stale_target:
+        pass  # „la zi” ar contrazice avertismentul despre țintă de mai sus
     elif _target_data_ready():
         ui.label(
             "✅ Benchmark la zi pentru istoricul și metodele curente. "
@@ -2901,12 +3063,14 @@ def main_page() -> None:
         ui.label("3. Control Execuție").classes("text-bold")
         _BTN = "w-full"
         _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
+        # Ambele butoane generează cu metoda din decizia bench (motorul o citește
+        # din best_methods.json la orice job); Auto-Pilot doar o arată întâi.
         ui.button(
-            "⚡ Auto-Pilot (decizie bench + generează)",
+            "⚡ Auto-Pilot (arată metoda pe joc + generează)",
             on_click=apply_autopilot_and_generate,
         ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
         ui.button(
-            "🚀 Generează (setări manuale)",
+            "🚀 Generează (metoda din decizia bench)",
             on_click=lambda: submit_generation(pure=False),
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
         _sv = _bind_save(
@@ -3120,6 +3284,22 @@ def _completed_age_seconds(job: dict) -> float | None:
         return None
 
 
+def _completed_local_text(job: dict) -> str:
+    """Ora finalizării jobului în ora locală a stației, ZZ-LL-AAAA HH:MM.
+
+    `completed_at` e UTC (CURRENT_TIMESTAMP), fără fus; afișat ca atare, un job
+    terminat la 07:38 în România apărea la 04:38, iar după miezul nopții cu ziua
+    precedentă. Șir gol dacă lipsește sau nu se poate citi."""
+    ts = job.get("completed_at")
+    if not ts:
+        return ""
+    try:
+        t = _dt.strptime(str(ts)[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=_tz.utc)
+        return t.astimezone().strftime("%d-%m-%Y %H:%M")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
 def _mark_job_finalized(job_id: int) -> bool:
     """Jobul a fost preluat de UI; un eșec de scriere se loghează, nu blochează."""
     try:
@@ -3201,7 +3381,7 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
         # Vechi, fără completed_at sau deja preluat → doar afișăm, fără mail/shutdown.
         # Marcăm CLAR că-s dintr-o sesiune anterioară (la loto, a juca numere vechi
         # crezându-le curente e o eroare reală) — afișat ca avertisment în status_panel.
-        when = str(last.get("completed_at") or "")[:16] or "sesiune anterioară"
+        when = _completed_local_text(last) or "sesiune anterioară"
         with STATE_LOCK:
             STATE["results"] = payload
             STATE["result_sources"] = _result_sources_from_job(last)
@@ -3241,6 +3421,12 @@ def _startup() -> None:
     # NU marcăm joburile RUNNING ca eșuate: worker.py e proces separat care
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
+    try:
+        # Verificarea e ieftină; recalcularea, dacă trebuie, după pornirea serverului.
+        if _decision_target_mismatch():
+            _after_server_start(_reconcile_decision_target_logged)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("verificare țintă decizie la pornire: %s", exc)
     try:
         _migrate_legacy_finalized_marker()
     except Exception as exc:  # noqa: BLE001

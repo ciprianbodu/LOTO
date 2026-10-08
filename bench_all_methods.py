@@ -36,7 +36,9 @@ care ar ajunge pe căile românești este refuzată.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -71,7 +73,11 @@ from loto_enterprise.benchmark.runner import (
     registry_games,
     run_benchmark,
 )
-from runtime_paths import BENCH_LOG_FILE
+from runtime_paths import BENCH_LOG_FILE, PROJECT_ROOT
+
+# Setările UI-ului (ținta 3+/4+ aleasă în sidebar), citite de un bench pornit
+# din linia de comandă fără LOTO_BENCH_TARGET.
+UI_STATE_FILE = PROJECT_ROOT / ".ui_state.json"
 
 
 # Lista bench = TOATE metodele disponibile din registry (exclusiv CPU).
@@ -161,6 +167,77 @@ def resolve_bench_paths(
             f"{cc}: fișierul de decizie {dec_s} este cel românesc — refuz."
         )
     return cc, out_s, dec_s
+
+
+def resolve_bench_target(environ=None, ui_state_file=None) -> tuple[int, str]:
+    """Ținta deciziei (3 sau 4) și de unde vine.
+
+    `LOTO_BENCH_TARGET` (pus de UI la Re-Bench) are prioritate. Fără ea, ținta
+    salvată de UI în `.ui_state.json`: ACTUALIZARI.bat și verifica_mediu.py
+    recomandă `bench_all_methods.py` din linia de comandă, iar implicitul 3
+    scria decizia pe 3+ cu 4+ selectat în UI. Fără niciuna, 3."""
+    from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+
+    env = os.environ if environ is None else environ
+    raw = env.get("LOTO_BENCH_TARGET")
+    if raw is not None and str(raw).strip():
+        return clamp_bench_hit_target(raw), "LOTO_BENCH_TARGET"
+    path = Path(UI_STATE_FILE if ui_state_file is None else ui_state_file)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    if isinstance(data, dict) and data.get("bench_hit_target") is not None:
+        return clamp_bench_hit_target(data["bench_hit_target"]), path.name
+    return 3, "implicit"
+
+
+def write_bench_decision(
+    decision_file,
+    best: dict,
+    folds_csv,
+    *,
+    signatures: dict | None = None,
+    sig_maps: dict | None = None,
+) -> bool:
+    """Scrie decizia bench-ului într-o SINGURĂ scriere atomică, sub lacătul ei.
+
+    Matricea Auto-Pilot se construiește întâi în memorie (~9 s pe folds.csv
+    complet); câștigătorii, matricea și semnăturile ajung apoi pe disc
+    împreună. Înainte, fișierul se scria întâi fără `auto_pilot_per_pool`
+    (producția juca vechii câștigători după avg_hits, fără poarta față de
+    random), cu semnăturile ștampilate înaintea matricei: o generare în
+    fereastra aceea juca vechii câștigători, iar un bench oprit acolo sau o
+    eroare la matrice lăsa starea definitiv, raportată „la zi". Dacă matricea
+    nu se poate construi, decizia anterioară rămâne neatinsă și semnăturile nu
+    se ștampilează. Întoarce True dacă decizia a fost scrisă."""
+    from loto_enterprise.benchmark.decision import attach_auto_pilot_matrix
+    from ui_shared import atomic_write_json, file_lock
+
+    try:
+        attach_auto_pilot_matrix(best, str(folds_csv))
+    except Exception as exc:  # noqa: BLE001
+        logging.error(
+            "[auto-pilot] matricea de decizie nu s-a putut construi din %s (%s): "
+            "%s rămâne neschimbat.",
+            folds_csv,
+            exc,
+            decision_file,
+        )
+        return False
+    try:
+        from loto_enterprise.benchmark.freshness import stamp_signatures
+
+        # Semnăturile CSV-urilor efectiv folosite (registru sau --istoric),
+        # din momentul în care bench-ul le-a citit.
+        stamp_signatures(best, signatures=signatures, **(sig_maps or {}))
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(f"[freshness] failed to stamp signatures: {exc}")
+    Path(decision_file).parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(decision_file):
+        atomic_write_json(decision_file, best)  # atomic: tmp+fsync+os.replace
+    logging.info("[auto-pilot] decizie construita din %s", folds_csv)
+    return True
 
 
 def reduced_run_reason(args, pcts, min_windows: int) -> str | None:
@@ -284,6 +361,16 @@ def main() -> int:
         ],
     )
 
+    # Ținta deciziei: aceeași ca în UI și când bench-ul pornește din consolă.
+    bench_target, _target_source = resolve_bench_target()
+    os.environ["LOTO_BENCH_TARGET"] = str(bench_target)
+    import loto_enterprise.benchmark.decision as _decision_mod
+
+    _decision_mod.BENCH_HIT_TARGET = bench_target
+    logging.info(
+        "[bench] ținta deciziei: %s+ (din %s)", bench_target, _target_source
+    )
+
     # Starea curării în log (acum că handler-ele există). --methods/--quick sunt
     # override-uri EXPLICITE ale utilizatorului → ocolesc curarea, deliberat.
     _explicit = bool(args.quick or args.methods)
@@ -320,6 +407,10 @@ def main() -> int:
 
     hw = hw_snapshot()
     render_hardware(console, hw)
+    console.print(
+        f"[bold]🎯 Ținta deciziei: {bench_target}+[/bold] [dim](din {_target_source}; "
+        "Loto 5/40 rămâne minimum 4+, Joker Urna 2 top-1)[/dim]"
+    )
     console.print()
 
     meta_map = {m: method_meta(m) for m in methods}
@@ -518,6 +609,7 @@ def main() -> int:
     out_path.mkdir(exist_ok=True, parents=True)
 
     _skip_decision = bool(args.no_decision)
+    _decision_failed = False
     # Un run cu prea putine ferestre (sub MIN_CONSISTENCY_WINDOWS) sau pe alt
     # istoric decat cel de productie este tot un run REDUS: decizia ar iesi
     # low_confidence peste tot / pe alte date si ar rescrie best_methods.json.
@@ -554,48 +646,18 @@ def main() -> int:
         # decizia (best_methods.json) se ia separat dupa combinarea folds-urilor.
         logging.info("[bench] sar scrierea best_methods.json (no-decision/set redus).")
     else:
-        from ui_shared import atomic_write_json
-
-        Path(decision_file).parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(decision_file, best)  # atomic: tmp+fsync+os.replace
-
-        # Stamp CSV signatures so freshness detection knows when cache is stale
-        try:
-            from loto_enterprise.benchmark.freshness import (
-                write_signatures_to_best_methods,
-            )
-
-            # Semnăturile CSV-urilor efectiv folosite (registru sau --istoric),
-            # din momentul în care bench-ul le-a citit.
-            write_signatures_to_best_methods(
-                decision_file, signatures=_pre_bench_sigs, **_sig_maps
-            )
-        except Exception as _e:
-            logging.warning(f"[freshness] failed to stamp signatures: {_e}")
-
-        # Build per-(game, pool) auto-pilot matrix from folds.csv.
-        # ATENTIE: folds-ul rularii CURENTE, din --out (nu default-ul
+        # Folds-ul rularii CURENTE, din --out (nu default-ul
         # "bench_results/folds.csv"). Fara asta, `--out alt_folder` producea un
         # best_methods.json HIBRID: winners din rularea noua, dar
         # auto_pilot_per_pool (partea pe care o citeste PRODUCTIA) recalculat pe
         # un folds.csv vechi/strain — inclusiv peste un bump de CACHE_VERSION.
-        _folds_now = str(out_path / "folds.csv")
-        try:
-            from loto_enterprise.benchmark.decision import (
-                update_best_methods_with_auto_pilot,
-            )
-
-            if is_foreign:
-                update_best_methods_with_auto_pilot(
-                    best_methods_path=decision_file, folds_csv_path=_folds_now
-                )
-            else:
-                update_best_methods_with_auto_pilot(
-                    best_methods_path=decision_file, folds_csv_path=_folds_now
-                )
-            logging.info("[auto-pilot] decizie construita din %s", _folds_now)
-        except Exception as _e:
-            logging.warning(f"[auto-pilot] failed to build decision matrix: {_e}")
+        _decision_failed = not write_bench_decision(
+            decision_file,
+            best,
+            out_path / "folds.csv",
+            signatures=_pre_bench_sigs,
+            sig_maps=_sig_maps,
+        )
 
     # ─── Final summary panel ────────────────────────────────────────────────
     console.print()
@@ -637,14 +699,14 @@ def main() -> int:
     # „Saved: • best_methods.json", adică exact fișierul rămas neatins.
     _panel_title = (
         "[bold]câștigător per pool (NU s-a scris best_methods.json)[/bold]"
-        if _skip_decision
+        if _skip_decision or _decision_failed
         else "[bold]best_methods.json[/bold]"
     )
     console.print(
         Panel(
             "\n".join(lines),
             title=_panel_title,
-            border_style="yellow" if _skip_decision else "green",
+            border_style="yellow" if _skip_decision or _decision_failed else "green",
         )
     )
 
@@ -657,12 +719,18 @@ def main() -> int:
             "  • [yellow]best_methods.json NU a fost rescris[/yellow] "
             "(set redus de metode / --no-decision; forțează cu --force-decision)"
         )
+    elif _decision_failed:
+        console.print(
+            "  • [bold red]best_methods.json NU a fost rescris[/bold red]: matricea "
+            "de decizie nu s-a putut construi (vezi logul); rămâne decizia anterioară"
+        )
     else:
         console.print(
-            f"  • [cyan]{decision_file}[/cyan]  (consumed by method_selector)"
+            f"  • [cyan]{decision_file}[/cyan]  (consumed by method_selector; "
+            f"ținta {bench_target}+)"
         )
     console.print()
-    return 0
+    return 1 if _decision_failed else 0
 
 
 if __name__ == "__main__":

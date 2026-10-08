@@ -250,7 +250,10 @@ def test_mail_names_method_and_rating_for_the_pool(monkeypatch):
     from loto_enterprise.core.lotteries import lottery_by_id
 
     spec = lottery_by_id("6/49")
-    entry = {"rationale": "dmd_forecast: rată 3+ @ k12 = 0.162 (Wilson_lb=0.151), beat random (hipergeometric 0.1480) in 3/4 windows on the same 3+ target (lift +0.0100)",
+    # Intrarea deciziei pentru metoda rezultatului: ratingul se dă numai cât
+    # decizia de acum alege aceeași metodă (`scorer`).
+    entry = {"scorer": "dmd_forecast",
+             "rationale": "dmd_forecast: rată 3+ @ k12 = 0.162 (Wilson_lb=0.151), beat random (hipergeometric 0.1480) in 3/4 windows on the same 3+ target (lift +0.0100)",
              "baseline_rate": 0.1480, "target_label": "3+"}
     monkeypatch.setattr(app, "_decision_entry", lambda k, pool: entry)
     data = {"pool_size": 12, "audit": {"bench_winner": {"loto_6_49": {"method": "dmd_forecast"}}}}
@@ -304,7 +307,13 @@ def test_loading_records_the_load_time(ui_state):
 
 def test_new_generation_makes_a_running_walk_forward_stale(ui_state, monkeypatch):
     ui_state["datasets"] = [("loto_6_49.csv", _ro_df())]
-    ui_state.update(wf_seq=3, wf_running=True, retro={"x": [1]}, active_job_id=None)
+    ui_state.update(
+        wf_seq=3,
+        wf_running=True,
+        retro={"x": [1]},
+        retro_meta={"x": {"decision_moved": True}},
+        active_job_id=None,
+    )
     monkeypatch.setattr(app, "ensure_worker_running", lambda: None)
     monkeypatch.setattr(app, "submit_job", lambda kind, cfg: 7)
     monkeypatch.setattr(app, "_refresh_status", lambda: None)
@@ -312,3 +321,5 @@ def test_new_generation_makes_a_running_walk_forward_stale(ui_state, monkeypatch
     app.submit_generation()
     assert ui_state["wf_seq"] == 4 and ui_state["wf_running"] is False
     assert ui_state["retro"] == {} and ui_state["active_job_id"] == 7
+    # Marcajele rezultatului vechi („decizia s-a schimbat”) nu trec pe cel nou.
+    assert ui_state["retro_meta"] == {}

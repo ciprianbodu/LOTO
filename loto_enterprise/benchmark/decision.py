@@ -1550,6 +1550,85 @@ def missing_decision_folds(cfg: dict, folds: pd.DataFrame) -> list[tuple[str, st
     ]
 
 
+def _decision_games_meta(games: dict) -> dict[str, dict]:
+    """Geometria și pool-urile deciziei pentru fiecare joc din `games`."""
+    games_meta = {}
+    for gk, gd in games.items():
+        draw_n = int(gd.get("draw_n", 6))
+        pick_n = int(gd.get("pick_n") or draw_n)
+        if gk in GAME_DRAW_PICK:
+            draw_n, pick_n = GAME_DRAW_PICK[gk]
+        _lot = lottery_by_bench_key(gk)
+        if gk == "joker_urna2" or (_lot is not None and _lot.bench_key_urna2 == gk):
+            pool_range = [pick_n]
+        else:
+            # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14
+            # (2026-05-26: extins de la +6 → +14 ca să acopere pool size sweep
+            # K=15/18/20 cerut de user pentru testare 4+ hits stable).
+            pool_range = list(range(pick_n, pick_n + 15))  # pick_n .. pick_n+14
+        _mx = gd.get("max_num") or KNOWN_GAME_MAX_NUM.get(gk)
+        games_meta[gk] = {
+            "draw_n": draw_n,
+            "pick_n": pick_n,
+            "pool_range": pool_range,
+            "max_num": int(_mx) if _mx else None,
+        }
+    return games_meta
+
+
+def attach_auto_pilot_matrix(cfg: dict, folds_csv_path: str) -> dict:
+    """Construiește matricea Auto-Pilot ÎN MEMORIE și o pune în `cfg`, fără scriere.
+
+    `_meta.bench_hit_target` = ținta globală cu care s-a construit (3 sau 4).
+    Bench-ul scrie apoi câștigătorii, matricea și semnăturile într-o singură
+    scriere: un fișier fără `auto_pilot_per_pool` juca vechii câștigători după
+    `avg_hits`, fără poarta față de random."""
+    games = cfg.get("games", {})
+    matrix = build_auto_pilot_matrix(folds_csv_path, _decision_games_meta(games))
+    for gk in games:
+        games[gk]["auto_pilot_per_pool"] = matrix.get(gk, {})
+    if not isinstance(cfg.get("_meta"), dict):
+        cfg["_meta"] = {}
+    cfg["_meta"]["bench_hit_target"] = int(BENCH_HIT_TARGET)
+    return matrix
+
+
+def decision_target_mismatch(cfg: dict, target) -> dict[str, int]:
+    """{joc: ținta deciziei} pentru jocurile decise pe altă țintă decât `target`.
+
+    Ținta așteptată a fiecărui joc e cea pe care ar folosi-o decizia acum
+    (`game_hit_target`: 5/40 rămâne 4+ cu orice selector); Urna 2 (top-1) nu
+    depinde de selector. Celula fără `hit_target` (decizie veche) folosește
+    `_meta.bench_hit_target`; fără niciuna, nu există reper. Un bench din linia
+    de comandă pe altă țintă, o schimbare de țintă refuzată (folds incomplet)
+    sau UI-ul oprit cât rula bench-ul lăsau decizia pe 3+ cu 4+ selectat."""
+    games = cfg.get("games") if isinstance(cfg, dict) else None
+    if not isinstance(games, dict):
+        return {}
+    meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+    stamp = meta.get("bench_hit_target")
+    out: dict[str, int] = {}
+    for gk, gmeta in _decision_games_meta(games).items():
+        if int(gmeta["draw_n"]) == 1:
+            continue
+        cells = games[gk].get("auto_pilot_per_pool")
+        if not isinstance(cells, dict):
+            continue
+        want = game_hit_target(gk, target)
+        for cell in cells.values():
+            found = cell.get("hit_target") if isinstance(cell, dict) else None
+            if found is None and stamp is not None:
+                found = game_hit_target(gk, stamp)
+            try:
+                found = int(found)
+            except (TypeError, ValueError):
+                continue
+            if found != want:
+                out[gk] = found
+                break
+    return out
+
+
 def update_best_methods_with_auto_pilot(
     best_methods_path: str = "best_methods.json",
     folds_csv_path: str = "bench_results/folds.csv",
@@ -1578,7 +1657,6 @@ def update_best_methods_with_auto_pilot(
     # a UI-ului intre citire si scriere pierdea campurile celeilalte parti.
     with file_lock(bm_path):
         cfg = json.loads(bm_path.read_text(encoding="utf-8"))
-        games = cfg.get("games", {})
         if require_complete:
             missing = missing_decision_folds(cfg, pd.read_csv(folds_csv_path))
             if missing:
@@ -1588,32 +1666,7 @@ def update_best_methods_with_auto_pilot(
                     f"{len(missing)} folduri (ex. {g}/{m}/{pct}%)"
                 )
 
-        games_meta = {}
-        for gk, gd in games.items():
-            draw_n = int(gd.get("draw_n", 6))
-            pick_n = int(gd.get("pick_n") or draw_n)
-            if gk in GAME_DRAW_PICK:
-                draw_n, pick_n = GAME_DRAW_PICK[gk]
-            _lot = lottery_by_bench_key(gk)
-            if gk == "joker_urna2" or (_lot is not None and _lot.bench_key_urna2 == gk):
-                pool_range = [pick_n]
-            else:
-                # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14
-                # (2026-05-26: extins de la +6 → +14 ca să acopere pool size sweep
-                # K=15/18/20 cerut de user pentru testare 4+ hits stable).
-                pool_range = list(range(pick_n, pick_n + 15))  # pick_n .. pick_n+14
-            _mx = gd.get("max_num") or KNOWN_GAME_MAX_NUM.get(gk)
-            games_meta[gk] = {
-                "draw_n": draw_n,
-                "pick_n": pick_n,
-                "pool_range": pool_range,
-                "max_num": int(_mx) if _mx else None,
-            }
-
-        matrix = build_auto_pilot_matrix(folds_csv_path, games_meta)
-
-        for gk in games:
-            games[gk]["auto_pilot_per_pool"] = matrix.get(gk, {})
+        matrix = attach_auto_pilot_matrix(cfg, folds_csv_path)
 
         atomic_write_json(bm_path, cfg)  # atomic: tmp+fsync+os.replace
     return matrix

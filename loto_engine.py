@@ -471,6 +471,8 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             return variants, coverage_pct
 
         # Alegere automată: hitcover la buget pozitiv, La Jolla fără plafon.
+        # Peste 64 de bilete, bugetul care cuprinde designul complet ia designul;
+        # altfel biletele trec prin căutarea exactă pe șanse (`max_num`).
         # Coverul 4 complet este rafinat pentru 5+ când jocul extrage 6 numere.
         # Hitcover păstrează greedy dacă nu găsește un candidat dominant exact.
         # LOTO_WHEEL_METHOD rămâne un override opțional (necunoscut → greedy).
@@ -488,6 +490,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 max_variants=max_variants,
                 scores=scores,
                 draw_n=self.params["draw_n"],
+                max_num=self.params["max_n"],
             )
         else:
             variants, coverage_pct = generate_combinatorial_wheel(

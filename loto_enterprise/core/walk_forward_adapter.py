@@ -339,7 +339,11 @@ def _wheel_sig(
     )
     geometry = f"g{g}|c{condition}|cap{cap}"
     try:
-        from wheeling_methods import covering_design_source_signature, resolve_wheel_method
+        from wheeling_methods import (
+            budget_buys_complete_design,
+            covering_design_source_signature,
+            resolve_wheel_method,
+        )
 
         method = resolve_wheel_method(cap, requested)
         if condition > g:
@@ -357,7 +361,18 @@ def _wheel_sig(
                 int(_WF_PICK.get(game_type) or 6),
                 design_guarantee,
             )
-            return f"{method}|{geometry}|cd{design_sig}|rt1|hp1"
+            # `tg1`: la egalitate de bilete, greedy-ul care domină designul
+            # (union34 trece și el prin wheel_lajolla).
+            return f"{method}|{geometry}|cd{design_sig}|rt1|hp1|tg1"
+        if method == "hitcover":
+            # Designul complet când încape în buget (`bf1`); altfel, peste 64 de
+            # bilete, căutarea exactă pe șanse din `covering.budget_climb` (`bc1`).
+            pick = int(_WF_PICK.get(game_type) or 6)
+            if budget_buys_complete_design(int(pool_size), pick, g, cap):
+                design_sig = covering_design_source_signature(int(pool_size), pick, g)
+                return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1"
+            if cap >= 65:
+                return f"{method}|{geometry}|rt1|hp1|bc1"
         return f"{method}|{geometry}|rt1|hp1"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)
@@ -391,6 +406,26 @@ _MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45, "6/45": 45, "5/50": 50}
 # v2: intervalele mai înguste decât un bilet sunt ignorate, nu aplicate — sub v1
 # produceau un pool trunchiat cu variante mai scurte decât biletul.
 _RESTRICT_SEMANTICS = "2"
+
+
+def _effective_pool_size(
+    pool_size: int,
+    game_type: str | None,
+    restrict_base_max: int = 0,
+    restrict_base_min: int = 0,
+) -> int:
+    """Pool-ul pe care îl roțește fiecare pas: un interval mai îngust decât
+    pool-ul, dar cel puțin cât un bilet, îl taie (pipeline). Cheia wheel-ului
+    (designul complet, hash-ul lui) trebuie să urmeze acest pool, nu cel cerut."""
+    max_num = _MAX_NUM.get(game_type or "")
+    if not max_num:
+        return int(pool_size)
+    lo = max(1, int(restrict_base_min or 0))
+    hi = min(int(restrict_base_max or 0) or max_num, max_num)
+    span = hi - lo + 1
+    if span < int(_WF_PICK.get(game_type) or 6):
+        return int(pool_size)  # interval inversat sau mai îngust decât un bilet: ignorat
+    return min(int(pool_size), span)
 
 
 def _restrict_base_sig(
@@ -489,6 +524,9 @@ def _decision_sig(
     byte cu byte. Alt joc: decizia se citește din fișierul țării, iar semnătura
     primește `|country=..|key=..|dp=..` (și pe ramura de eroare).
     """
+    _wheel_pool = _effective_pool_size(
+        pool_size, game_type, restrict_base_max, restrict_base_min
+    )
     lot = _wf_lottery(game_type, game_key, country)
     foreign_sfx = _foreign_decision_suffix(lot) if lot is not None else ""
     try:
@@ -531,7 +569,7 @@ def _decision_sig(
         raw = (
             f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
             f"{game_hit_target(gk, BENCH_HIT_TARGET)}|{_ens_sig}{urna2_sig}|"
-            f"{_wheel_sig(pool_size, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
+            f"{_wheel_sig(_wheel_pool, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
@@ -547,7 +585,7 @@ def _decision_sig(
             + hashlib.md5(
                 (
                     _wheel_sig(
-                        pool_size, game_type, guarantee, wheel_condition, max_variants
+                        _wheel_pool, game_type, guarantee, wheel_condition, max_variants
                     )
                     + f"|lb{lookback_pct(lookback_percent)}"
                     + _penalty_sig(recent_penalty_draws, recent_penalty_factor)

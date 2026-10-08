@@ -116,6 +116,47 @@ def _load_lajolla(v: int, pick: int, guarantee: int) -> list[list[int]] | None:
     return None
 
 
+def _profile_dominates(pool, candidate, incumbent) -> bool:
+    """Profilul exact al `candidate` nu scade nicăieri și crește undeva.
+
+    La același număr de bilete, greedy-ul cu scoruri poate domina designul
+    (audit 2026-10-08: 5/40 pool 16, garanție 3, 77 de bilete): atunci are
+    aceeași garanție și șanse mai mari la 4+/5+.
+    """
+    from covering.probability import wheel_hit_profile
+
+    a, b = wheel_hit_profile(pool, candidate), wheel_hit_profile(pool, incumbent)
+    pairs = [(x, y) for ra, rb in zip(a, b) for x, y in zip(ra, rb)]
+    return all(x >= y for x, y in pairs) and any(x > y for x, y in pairs)
+
+
+_DESIGN_SIZE_CACHE: dict[tuple, int | None] = {}
+
+
+def complete_design_size(v: int, pick: int, guarantee: int) -> int | None:
+    """Blocurile designului local valid C(v, pick, guarantee), sau None.
+
+    Un buget cel puțin atât de mare cumpără coverul complet: dispatch-ul și
+    semnătura WF citesc aceeași valoare, ca să aleagă aceeași ramură. Memorat pe
+    data modificării fișierelor candidate: un pas WF nu recitește și nu
+    revalidează designul, iar un fișier înlocuit se citește din nou.
+    """
+    name = f"C_{int(v)}_{int(pick)}_{int(guarantee)}.txt"
+    stamps = []
+    for directory in _LAJOLLA_DIRS:
+        try:
+            stamps.append((str(directory), (directory / name).stat().st_mtime_ns))
+        except OSError:
+            stamps.append((str(directory), None))
+    key = (int(v), int(pick), int(guarantee), tuple(stamps))
+    if key not in _DESIGN_SIZE_CACHE:
+        if len(_DESIGN_SIZE_CACHE) > 256:
+            _DESIGN_SIZE_CACHE.clear()
+        design = _load_lajolla(int(v), int(pick), int(guarantee))
+        _DESIGN_SIZE_CACHE[key] = len(design) if design is not None else None
+    return _DESIGN_SIZE_CACHE[key]
+
+
 def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
     pool = _sorted_pool(pool, scores)
     v = len(pool)
@@ -157,7 +198,10 @@ def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
                 # consultat aici. Deci: același rezultat la fiecare rulare, și
                 # niciodată mai multe bilete decât înainte.
                 _gw, _gc = _greedy_fallback(pool, pick, guarantee, 0, scores)
-                if _gc >= 100.0 and len(_gw) < len(wheel):
+                if _gc >= 100.0 and (
+                    len(_gw) < len(wheel)
+                    or (len(_gw) == len(wheel) and _profile_dominates(pool, _gw, wheel))
+                ):
                     logger.info(
                         "[WHEEL-LaJolla] greedy bate designul C(%d,%d,%d): %d < %d bilete",
                         v,

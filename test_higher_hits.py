@@ -9,6 +9,21 @@ from covering.greedy import generate_combinatorial_wheel
 from covering.probability import wheel_hit_probabilities, wheel_hit_profile
 
 
+def _slack_designs(monkeypatch):
+    """Coverul greedy (cu bilete de prisos) în locul fișierelor din covering_designs.
+
+    Designurile livrate se pot strânge până nu mai lasă niciun schimb 5+ (C(16,6,4)
+    are 172 de bilete); rafinarea se verifică pe un cover complet care are loc de ea.
+    """
+    from covering import designs
+
+    def greedy_design(v, pick, guarantee):
+        wheel, _ = generate_combinatorial_wheel(list(range(1, v + 1)), pick, guarantee, 0, None)
+        return [sorted(t) for t in wheel]
+
+    monkeypatch.setattr(designs, "_load_lajolla", greedy_design)
+
+
 def _fixture(v, pick, guarantee=4, cap=0):
     pool = list(range(1, v + 1))
     scores = {n: float((n * 17) % 23) for n in pool}
@@ -163,9 +178,11 @@ def test_partial_cover_is_preserved():
 
 
 @pytest.mark.parametrize("pick,draw_n", [(6, None), (6, 6), (5, 6)])
-def test_dispatch_refines_complete_four_cover_automatically(pick, draw_n):
+def test_dispatch_refines_complete_four_cover_automatically(pick, draw_n, monkeypatch):
     from covering.designs import wheel_lajolla
     from covering.dispatch import generate_wheel
+
+    _slack_designs(monkeypatch)
 
     pool = list(range(1, 17))
     scores = {n: float((n * 17) % 23) for n in pool}
@@ -224,6 +241,7 @@ def test_engine_forwards_draw_geometry_for_uncapped_generation(
     from covering.dispatch import generate_wheel
 
     monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
+    _slack_designs(monkeypatch)
     engine = LotoEngine(game)
     engine.hard_core = list(range(1, 17))
     engine.hard_core_joker = [7]
