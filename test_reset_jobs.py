@@ -1,13 +1,14 @@
 """
 Test pentru `reset_jobs.py` — START_8000.bat omoară worker-ul, apoi --force:
 
-  1. Sesiune curată (nimic de recuperat) → golire COMPLETĂ + VACUUM → următorul
+  1. Sesiune curată (niciun job COMPLETED) → golire COMPLETĂ + VACUUM → următorul
      job devine #1.
   2. PENDING/RUNNING rămase după kill NU se păstrează (sunt cadavre; altfel UI-ul
      arată «Job în rulare (#1) — 0% / se inițializează...» la o pornire goală).
-  3. Ultimul job COMPLETED NU a fost încă preluat de UI (`ui_finalized_at` gol)
-     → e PĂSTRAT, ca `_recover_completed_job` să-l poată afișa.
-     START_8000 îl recuperează display-only; restartul direct al UI poate finaliza.
+  3. Ultimul job COMPLETED e PĂSTRAT, preluat sau nu de UI (`ui_finalized_at`),
+     ca `_recover_completed_job` să-l reafișeze la fiecare pornire; joburile
+     COMPLETED mai vechi pleacă. Marcajul de pe rând oprește un al doilea mail,
+     WF sau oprire; START_8000 îl recuperează display-only.
 
 Plus: fără --force, refuză ștergerea dacă există joburi RUNNING.
 """
@@ -64,7 +65,9 @@ def _job_ids(db_path: str) -> set[int]:
 
 
 def test_force_clean_session_deletes_everything(isolated_db, monkeypatch):
-    jid = _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
+    # Niciun rezultat de reafișat: joburi eșuate / anulate.
+    jid = _insert_job(isolated_db, "FAILED")
+    _insert_job(isolated_db, "CANCELLED")
     assert jid == 1
 
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
@@ -76,8 +79,8 @@ def test_force_clean_session_deletes_everything(isolated_db, monkeypatch):
 
 def test_force_clean_session_resets_autoincrement(isolated_db, monkeypatch):
     """După golire completă, next id trebuie să fie #1 (VACUUM + tabelă goală)."""
-    # Job deja preluat de UI → nu califică pentru păstrare.
-    _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
+    # Fără job COMPLETED → nimic de păstrat.
+    _insert_job(isolated_db, "CANCELLED")
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
     reset_jobs.main()
 
@@ -91,7 +94,7 @@ def test_force_survives_vacuum_failure_queue_still_cleared(isolated_db, monkeypa
     rezidual imediat după kill-ul workerului vechi, disc plin) nu are voie să
     propage o excepție care ar opri toată pornirea START_8000.bat peste o coadă
     deja corect goală."""
-    _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
+    _insert_job(isolated_db, "FAILED")
 
     # sqlite3.Connection e un tip C imutabil — nu poate fi patch-uit direct;
     # injectam o subclasa prin `factory=` la connect().
@@ -124,9 +127,7 @@ def test_force_deletes_pending_and_running_jobs(isolated_db, monkeypatch):
     """START_8000 a omorât worker-ul: PENDING/RUNNING sunt cadavre, nu muncă în curs."""
     pending_id = _insert_job(isolated_db, "PENDING")
     running_id = _insert_job(isolated_db, "RUNNING")
-    old_completed_id = _insert_job(
-        isolated_db, "COMPLETED", completed=True, finalized=True
-    )
+    completed_id = _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
 
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
     rc = reset_jobs.main()
@@ -135,8 +136,8 @@ def test_force_deletes_pending_and_running_jobs(isolated_db, monkeypatch):
     remaining = _job_ids(isolated_db)
     assert pending_id not in remaining
     assert running_id not in remaining
-    assert old_completed_id not in remaining  # deja finalizat de UI → nu se păstrează
-    assert remaining == set()
+    # Ultimul rezultat rămâne, chiar preluat de UI: se reafișează la pornire.
+    assert remaining == {completed_id}
 
 
 def test_without_force_refuses_when_running_present(isolated_db, monkeypatch):
@@ -150,14 +151,13 @@ def test_without_force_refuses_when_running_present(isolated_db, monkeypatch):
 
 
 def test_without_force_succeeds_when_no_running(isolated_db, monkeypatch):
-    # Job deja preluat de UI → nu califică pentru păstrare.
-    completed_id = _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
+    failed_id = _insert_job(isolated_db, "FAILED")
 
     monkeypatch.setattr("sys.argv", ["reset_jobs.py"])
     rc = reset_jobs.main()
 
     assert rc == 0
-    assert completed_id not in _job_ids(isolated_db)
+    assert failed_id not in _job_ids(isolated_db)
 
 
 def test_running_check_and_delete_are_one_atomic_transaction(isolated_db, monkeypatch):
@@ -214,7 +214,7 @@ def test_running_check_and_delete_are_one_atomic_transaction(isolated_db, monkey
 
 
 # --------------------------------------------------------------------------- #
-# Scenariul 3: ultimul COMPLETED nefinalizat de UI → păstrat pentru recuperare
+# Scenariul 3: ultimul COMPLETED, preluat sau nu de UI → păstrat pentru recuperare
 # --------------------------------------------------------------------------- #
 
 
@@ -260,14 +260,31 @@ def test_force_ghost_pending_resets_autoincrement(isolated_db, monkeypatch):
     assert new_id == 1
 
 
-def test_force_deletes_completed_job_already_finalized(isolated_db, monkeypatch):
-    completed_id = _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
+def test_force_keeps_latest_completed_job_already_finalized(isolated_db, monkeypatch):
+    """START_8000 rulează `reset_jobs.py --force` la fiecare pornire. Jobul
+    terminat cu UI-ul deschis e marcat imediat; dacă reset-ul îl ștergea,
+    `_recover_completed_job` nu mai găsea nimic a doua zi: fără pool, fără
+    bilete, „Istoric hits” gol. Rămâne ultimul COMPLETED, iar numerotarea
+    continuă; pleacă numai joburile COMPLETED mai vechi și cadavrele."""
+    older = _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
+    latest = _insert_job(isolated_db, "COMPLETED", completed=True)
+    with sqlite3.connect(isolated_db) as con:
+        con.execute(
+            "UPDATE jobs SET completed_at = '2026-07-02 09:00:00' WHERE id = ?",
+            (latest,),
+        )
+    ghost = _insert_job(isolated_db, "PENDING")
+    assert job_queue.mark_job_finalized(latest, db_path=isolated_db)
 
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
-    rc = reset_jobs.main()
+    assert reset_jobs.main() == 0
 
-    assert rc == 0
-    assert completed_id not in _job_ids(isolated_db)
+    assert _job_ids(isolated_db) == {latest}
+    assert older not in _job_ids(isolated_db) and ghost not in _job_ids(isolated_db)
+    kept = job_queue.get_latest_completed_job(db_path=isolated_db)
+    assert kept["id"] == latest and kept["ui_finalized_at"]
+    # Numerotarea nu se resetează cât jobul păstrat ocupă un id.
+    assert job_queue.submit_job("pipeline", "{}", db_path=isolated_db) == latest + 1
 
 
 def test_no_db_file_returns_zero_without_touching_anything(tmp_path, monkeypatch):
@@ -372,14 +389,16 @@ def test_fresh_start_cancels_leftover_pending(isolated_db, monkeypatch):
     assert job_queue.get_active_job(db_path=isolated_db) is None
 
 
-def test_marker_lives_on_the_row_so_a_reused_id_starts_unmarked(isolated_db, monkeypatch):
-    """Golirea tabelei șterge și marcajul: jobul nou #1 nu moștenește starea
-    vechiului #1, cum se întâmpla cu id-ul salvat în `.ui_state.json`."""
+def test_marker_lives_on_the_row_so_a_new_job_starts_unmarked(isolated_db, monkeypatch):
+    """Marcajul stă pe rândul jobului: jobul nou nu moștenește starea celui
+    preluat, cum se întâmpla cu id-ul salvat în `.ui_state.json`. Rezultatul
+    preluat rămâne până îl înlocuiește unul nou, apoi pleacă cu marcaj cu tot."""
     old = _insert_job(isolated_db, "COMPLETED", completed=True, finalized=True)
     monkeypatch.setattr("sys.argv", ["reset_jobs.py", "--force"])
     assert reset_jobs.main() == 0
+    assert _job_ids(isolated_db) == {old}
     new = job_queue.submit_job("pipeline", "{}", db_path=isolated_db)
-    assert new == old == 1
+    assert new == old + 1
     with sqlite3.connect(isolated_db) as con:
         con.execute(
             "UPDATE jobs SET status = 'COMPLETED', completed_at = '2026-07-02 09:00:00' "

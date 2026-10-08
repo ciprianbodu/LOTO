@@ -7,6 +7,7 @@ ramas local; de aceea istoricele versionate trebuie sa treaca toate.
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,8 @@ def test_versioned_histories_pass(lottery):
         (STARS, "03-10-2026,50,1,13,22,30,1,2\n"),
         # Aceleasi numere ca un rand mai vechi, dar nu ca cel anterior.
         (L649, "05-10-2026,1,2,3,4,5,6\n"),
+        # A doua extragere a aceleiasi zile.
+        (L649, "04-10-2026,13,14,15,16,17,18\n"),
     ],
 )
 def test_appended_valid_rows_pass(tmp_path, name, row):
@@ -76,11 +79,28 @@ def test_appended_valid_rows_pass(tmp_path, name, row):
         # §4.1: aceleasi numere principale ca randul anterior, in orice ordine.
         (L649, "05-10-2026,12,11,10,9,8,7\n", "randul 4 repeta numerele randului 3"),
         (JOKER, "05-10-2026,5,4,3,2,1,7\n", "randul 3 repeta numerele randului 2"),
+        # Anul tastat gresit: ar deveni ultima extragere pe toate statiile.
+        (L649, "27-09-2062,6,7,18,43,40,22\n", "randul 4: data e in viitor"),
+        # strptime accepta ziua fara zero; actualizatoarele compara data scrisa.
+        (L649, "5-10-2026,13,14,15,16,17,18\n", "randul 4: data nu e ZZ-LL-AAAA"),
+        (
+            L649,
+            "03-10-2026,13,14,15,16,17,18\n",
+            "randul 4: data e inaintea randului 3 (04-10-2026)",
+        ),
     ],
 )
 def test_malformed_appended_row_is_refused_with_its_line(tmp_path, name, row, reason):
     name = _history(tmp_path, name, BASE[name] + row)
     assert reason in check_history(name, tmp_path)
+
+
+def test_dates_may_reach_tomorrow_but_not_later(tmp_path):
+    """O zi de toleranta pentru ceasul statiei, ca update_externe."""
+    name = _history(tmp_path, L649, BASE[L649] + "05-10-2026,13,14,15,16,17,18\n")
+    assert check_history(name, tmp_path, today=dt.date(2026, 10, 4)) is None
+    got = check_history(name, tmp_path, today=dt.date(2026, 10, 3))
+    assert got.startswith("randul 4: data e in viitor: 05-10-2026")
 
 
 def test_blank_lines_are_ignored_like_the_history_loader(tmp_path):

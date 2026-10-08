@@ -8,12 +8,13 @@ START_8000.bat omoară UI + worker + bench + copiii ProcessPool
 PENDING/RUNNING rămase sunt cadavre (procesele au fost deja omorâte) — dacă le
 păstrăm, noul worker le reia singur, iar UI-ul arată la o pornire goală:
   «⏳ Job în rulare (#1) — 0% / se inițializează...».
-Păstrăm DOAR cel mai recent job COMPLETED dacă NU a fost încă preluat de UI
-(`ui_finalized_at` gol pe rândul lui), ca rezultatul să nu se piardă.
-Pe START_8000 recovery-ul e display-only (fără mail/WF/shutdown); finalizarea
-automată rămâne permisă doar la restart direct al UI-ului, fără fresh-start.
-Dacă nimic nu califică (cazul normal la început de sesiune) → golire COMPLETĂ +
-VACUUM → următorul job e #1.
+Păstrăm DOAR cel mai recent job COMPLETED, preluat sau nu de UI: ultimul
+rezultat se reafișează la fiecare pornire (`_recover_completed_job`), cu validarea
+WF din cache. Marcajul `ui_finalized_at` de pe rândul lui oprește deja un al
+doilea mail, un al doilea WF calculat sau o oprire a PC-ului. Pe START_8000
+recovery-ul e display-only (fără mail/WF/shutdown); finalizarea automată rămâne
+permisă doar la restart direct al UI-ului, fără fresh-start.
+Fără niciun job COMPLETED → golire COMPLETĂ + VACUUM → următorul job e #1.
 
 Rulare:
     .venv\\Scripts\\python reset_jobs.py            # refuză dacă există RUNNING
@@ -88,18 +89,21 @@ def main() -> int:
 
         total = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
 
-        # Păstrăm DOAR un rezultat COMPLETED pe care UI-ul nu l-a preluat încă
-        # (mail/shutdown). PENDING/RUNNING nu: START_8000 a omorât worker-ul, deci
+        # Păstrăm DOAR cel mai recent rezultat COMPLETED, chiar preluat de UI:
+        # recuperarea îl reafișează la fiecare pornire, iar marcajul de pe rând
+        # oprește un al doilea mail, WF calculat sau oprire. Dacă l-am șterge după
+        # prima afișare, START_8000 de a doua zi ar porni fără pool și fără
+        # „Istoric hits”. PENDING/RUNNING nu: START_8000 a omorât worker-ul, deci
         # nu e muncă în curs — e un job-fantomă care ar reapărea la fiecare pornire.
         # Marcajul stă pe rând: golirea tabelei îl șterge odată cu jobul, deci un
         # job nou cu același id pornește nemarcat.
         keep: set[int] = set()
         row = con.execute(
-            "SELECT id, ui_finalized_at FROM jobs WHERE status = 'COMPLETED' "
+            "SELECT id FROM jobs WHERE status = 'COMPLETED' "
             "ORDER BY (completed_at IS NULL), completed_at DESC, id DESC LIMIT 1"
         ).fetchone()
-        if row and row[1] is None:
-            keep.add(int(row[0]))  # terminat, nepreluat de UI → recuperarea are nevoie de el
+        if row:
+            keep.add(int(row[0]))  # ultimul rezultat → recuperarea îl reafișează
 
         if keep:
             placeholders = ",".join("?" * len(keep))
@@ -109,8 +113,8 @@ def main() -> int:
             )
             con.commit()
             print(
-                f"✅ Șterse {total - len(keep)} joburi; PĂSTRAT {len(keep)} "
-                f"rezultat nefinalizat: {sorted(keep)}. "
+                f"✅ Șterse {total - len(keep)} joburi; PĂSTRAT ultimul rezultat: "
+                f"{sorted(keep)}. "
                 f"(Nu resetez numerotarea — recuperarea UI are nevoie de id-ul ăsta.)"
             )
         else:

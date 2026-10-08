@@ -71,11 +71,15 @@ def _pool_scores(data: dict) -> dict[int, float] | None:
         return None
 
 
-def _max_run(data: dict) -> int:
-    """Limita de consecutive a rezultatului afisat (0 = generat fara limita)."""
+def _max_run(data: dict, key: str = "applied") -> int:
+    """Limita de consecutive a rezultatului afisat (0 = generat fara limita).
+
+    `applied` e limita pool-ului (relaxata cand pool-ul nu incape in baza
+    restransa); `requested` e cea ceruta de utilizator, pe care o respecta
+    fiecare varianta dispersata (5-6 numere, nu un pool de 16)."""
     cl = (data.get("audit") or {}).get("consecutive_limit") or {}
     try:
-        return max(0, int(cl.get("applied") or 0))
+        return max(0, int(cl.get(key) or cl.get("applied") or 0))
     except (TypeError, ValueError):
         return 0
 
@@ -355,6 +359,7 @@ def build_full_ticket(
         }
 
     def spread_mode() -> dict:
+        max_run = _max_run(data, "requested")
         universe = _spread_universe(shown_pool, scores, _allowed_numbers(data, max_num))
         variants = spread_variants(
             universe, n_var, pick, draw_n, max_num, min_target, max_run=max_run

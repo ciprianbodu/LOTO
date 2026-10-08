@@ -3,10 +3,10 @@
 `scripts/launcher_git.ps1 -Mode PushHistory` trimite aici CSV-urile care au
 trecut de verificarea git (numai randuri adaugate). Fiecare trebuie sa fie
 istoricul unui joc din registrul loteriilor, cu antetul geometriei lui, date
-ZZ-LL-AAAA si extrageri valide dupa `valid_draw_matrix`, inclusiv a doua urna,
-pe tot fisierul, fara doua randuri consecutive cu aceleasi numere principale
-(AGENTS.md §4.1). Istoricele versionate trec toate; un fisier respins ramane
-local, necomis.
+ZZ-LL-AAAA in ordine nedescrescatoare si cel mult cu o zi dupa azi, extrageri
+valide dupa `valid_draw_matrix`, inclusiv a doua urna, pe tot fisierul, fara
+doua randuri consecutive cu aceleasi numere principale (AGENTS.md §4.1).
+Istoricele versionate trec toate; un fisier respins ramane local, necomis.
 
 Iesire: cate o linie pe stdout pentru fiecare argument, in aceeasi ordine,
 `ok` sau motivul refuzului, numai ASCII. Cod 0 cand verificarea a rulat; orice
@@ -33,8 +33,12 @@ def _shown(cells: list[str]) -> str:
     return text if len(text) <= 60 else text[:57] + "..."
 
 
-def check_history(path: str, root: Path | None = None) -> str | None:
+def check_history(
+    path: str, root: Path | None = None, today: dt.date | None = None
+) -> str | None:
     """Motivul refuzului sau None. `path` e relativ la radacina, ca in git."""
+    # O zi de toleranta, ca update_externe.validate_draw (ceasul statiei).
+    latest = (today or dt.date.today()) + dt.timedelta(days=1)
     lottery = next((lot for lot in GAMES if lot.csv == path), None)
     if lottery is None:
         return "nu e istoricul unui joc din registrul loteriilor"
@@ -51,6 +55,7 @@ def check_history(path: str, root: Path | None = None) -> str | None:
     reader = csv.reader(io.StringIO(text, newline=""))
     rows: list[list[str]] = []
     lines: list[int] = []
+    previous: dt.date | None = None
     try:
         first = next(reader, None)
         if first != header:
@@ -65,9 +70,22 @@ def check_history(path: str, root: Path | None = None) -> str | None:
                     f"prin virgula, am gasit {len(row)}: {_shown(row)}"
                 )
             try:
-                dt.datetime.strptime(row[0], "%d-%m-%Y")
+                day = dt.datetime.strptime(row[0], "%d-%m-%Y").date()
             except ValueError:
                 return f"randul {reader.line_num}: data nu e ZZ-LL-AAAA: {_shown(row)}"
+            # strptime accepta si "4-10-2026"; actualizatoarele compara data scrisa.
+            if row[0] != day.strftime("%d-%m-%Y"):
+                return f"randul {reader.line_num}: data nu e ZZ-LL-AAAA: {_shown(row)}"
+            # Un an gresit tastat de mana (27-09-2062) devenea ultima extragere:
+            # update_csv raporta apoi "la zi" pe toate statiile, pentru totdeauna.
+            if day > latest:
+                return f"randul {reader.line_num}: data e in viitor: {_shown(row)}"
+            if previous is not None and day < previous:
+                return (
+                    f"randul {reader.line_num}: data e inaintea randului "
+                    f"{lines[-1]} ({rows[-1][0]}): {_shown(row)}"
+                )
+            previous = day
             rows.append(row)
             lines.append(reader.line_num)
     except csv.Error as exc:

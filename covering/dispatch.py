@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 from budget_cover import wheel_hitcover, wheel_maxcover
+from covering.budget_climb import MIN_TICKETS, improve_budget_hits
 from covering.common import (
     _coverage_pct,
     _greedy_fallback,
@@ -12,7 +14,12 @@ from covering.common import (
     lotto_coverage_pct,
     ensure_pool_numbers_on_tickets,
 )
-from covering.designs import wheel_lajolla, wheel_lotto, wheel_union34
+from covering.designs import (
+    complete_design_size,
+    wheel_lajolla,
+    wheel_lotto,
+    wheel_union34,
+)
 from covering.higher_hits import improve_higher_hits
 from covering.ilp import wheel_ilp
 from covering.profile_swap import improve_hit_profile
@@ -45,6 +52,39 @@ def resolve_wheel_method(max_variants=0, requested: str | None = None) -> str:
     return "hitcover" if int(max_variants or 0) > 0 else "lajolla"
 
 
+def budget_buys_complete_design(v: int, pick: int, guarantee: int, max_variants) -> bool:
+    """Bugetul automat (hitcover) cuprinde designul complet validat.
+
+    Atunci biletele sunt exact cele fără plafon: garanție 100%, cu cel mult
+    atâtea bilete cât greedy-ul plafonat (care putea rămâne sub 100% la buget
+    egal cu designul sau plăti bilete în plus). Comun dispatch-ului și
+    semnăturii WF.
+    """
+    budget = int(max_variants or 0)
+    if budget <= 0 or int(guarantee) >= int(pick):
+        return False
+    size = complete_design_size(int(v), int(pick), int(guarantee))
+    return size is not None and size <= budget
+
+
+@lru_cache(maxsize=16)
+def _canonical_budget_start(v: int, pick: int, guarantee: int, max_variants: int, draw_n):
+    """Pozițiile wheel-ului cu buget pe un pool fără scoruri (1 = cea mai bună).
+
+    Punctul de plecare al căutării e același pentru orice pool cu aceeași
+    geometrie, deci rezultatul ei se memorează o singură dată pe proces.
+    """
+    pool = list(range(1, v + 1))
+    ordered = _sorted_pool(pool, None)
+    wheel, _ = wheel_hitcover(pool, pick, guarantee, max_variants, None)
+    wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+    improved, audit = improve_hit_profile(ordered, wheel, draw_n=draw_n)
+    if audit["applied"]:
+        wheel = improved
+    index = {n: i for i, n in enumerate(ordered)}
+    return tuple(sum(1 << index[n] for n in t) for t in wheel)
+
+
 def generate_wheel(
     method: str,
     pool,
@@ -54,6 +94,7 @@ def generate_wheel(
     scores=None,
     condition: int | None = None,
     draw_n: int | None = None,
+    max_num: int | None = None,
 ):
     """Selectează algoritmul de wheeling. 'greedy' (sau necunoscut) → canonic.
 
@@ -64,6 +105,11 @@ def generate_wheel(
     Un cover clasic 4 complet, fără plafon, este rafinat pentru hituri 5+ când
     se extrag 6 numere. `draw_n` omis păstrează geometria `pick`; 5/40 transmite
     explicit 6. Metoda greedy explicită păstrează construcția de referință.
+
+    `max_num` (dat de motor) activează rafinările bugetului automat (hitcover):
+    coverul complet când designul validat încape în buget; altfel, peste 64 de
+    bilete, `budget_climb`, acceptat numai cu dominanță exactă de profil. Fără
+    `max_num` (biletele fizice) ieșirea rămâne cea de dinainte.
     """
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
@@ -85,6 +131,14 @@ def generate_wheel(
             cov = lotto_coverage_pct(wheel, pool, guarantee, int(condition))
         return wheel, cov
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
+    if (
+        fn is wheel_hitcover
+        and max_num
+        and budget_buys_complete_design(len(set(pool)), pick, guarantee, max_variants)
+    ):
+        return generate_wheel(
+            "lajolla", pool, pick, guarantee, 0, scores, None, draw_n, max_num
+        )
     if fn is None:
         wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)
     else:
@@ -109,6 +163,28 @@ def generate_wheel(
         # distinct ticket count, no profile entry lower, strict 3+/4+/5+ gain.
         improved, audit = improve_hit_profile(
             _sorted_pool(pool, scores), wheel, draw_n=draw_n
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    if (
+        fn is wheel_hitcover
+        and max_num
+        and int(max_variants or 0) >= MIN_TICKETS
+        and cov < 100.0
+        and len(set(pool)) == len(pool) <= 16
+    ):
+        draws = int(pick) if draw_n is None else int(draw_n)
+        start = _canonical_budget_start(
+            len(pool), int(pick), int(guarantee), int(max_variants), draw_n
+        )
+        improved, audit = improve_budget_hits(
+            _sorted_pool(pool, scores),
+            wheel,
+            int(guarantee),
+            draws,
+            int(max_num),
+            start=start,
         )
         if audit["applied"]:
             wheel = improved

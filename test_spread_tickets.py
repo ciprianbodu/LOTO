@@ -133,6 +133,17 @@ def test_spread_applies_the_consecutive_limit_per_variant():
     assert "consecutive" in t["note"]
 
 
+def test_spread_keeps_the_requested_limit_when_only_the_pool_was_relaxed():
+    """Audit 2026-10-08: pool-ul de 16 nu încăpea în bază cu limita 2 (aplicată 3);
+    fiecare variantă de 5-6 numere respectă totuși limita cerută."""
+    data = _result("6/49")
+    data["audit"]["consecutive_limit"] = {"requested": 2, "applied": 16, "relaxed": True}
+    t = build_full_ticket("6/49", data, 10, spread=True)
+    assert all(max_consecutive_on_variant(v) <= 2 for v in t["variants"])
+    assert "mai mult de 2 numere consecutive" in t["note"]
+    assert "16" not in t["note"]
+
+
 def test_default_full_ticket_stays_in_the_pool():
     data = _result("6/49")
     t = build_full_ticket("6/49", data, 2)

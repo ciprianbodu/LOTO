@@ -281,6 +281,25 @@ def _multiplicity_note(entry: dict) -> str | None:
     )
 
 
+def _decision_entry_method(entry: dict, folds_game_key: str) -> str | None:
+    """Metoda pe care producția o rulează din intrarea deciziei, sau None.
+
+    Aceeași curățare ca `method_selector` (alias rezolvat; o metodă interzisă
+    sau necunoscută cade), deci se compară direct cu metoda din auditul
+    rezultatului (`bench_winner`). Nota Holm / low_confidence și ratingul din
+    mail descriu intrarea; după un Re-Bench sau o schimbare a țintei 3+/4+ ea
+    poate fi a altei metode decât cea care a produs pool-ul afișat."""
+    if not entry:
+        return None
+    try:
+        from loto_enterprise.core.method_selector import _sanitize_ap_production
+
+        scorer, clean, _salvaged = _sanitize_ap_production(entry, folds_game_key)
+    except Exception:  # noqa: BLE001
+        return None
+    return clean[0]["method"] if clean else scorer
+
+
 def _consistency_pct(entry: dict) -> int:
     """Pragul de consistență al deciziei, în %, ca ÎNTREG (60 = „≥60% din ferestre").
 

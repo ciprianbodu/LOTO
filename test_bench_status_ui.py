@@ -263,3 +263,210 @@ def test_target_change_refreshes_notice_even_if_decision_update_fails(
     assert "Benchmark la zi" not in text
     app.results_panel.refresh.assert_not_called()
     ui.navigate.reload.assert_not_called()
+
+
+# --------------------------------------------------------------------------- #
+# Decizia salvată pe altă țintă decât cea selectată (audit 2026-10-08)
+# --------------------------------------------------------------------------- #
+_TARGET_RATES = {  # (rata 3+, rata 4+) pe k6: 3+ alege frequency, 4+ markov_lag2
+    "frequency": (0.05, 0.0),
+    "markov_lag2": (0.03, 0.01),
+    "random": (0.018, 0.001),
+}
+
+
+def _decision_built_for_3(monkeypatch, root, *, complete=True):
+    """best_methods.json scris pe 3+ (bench din consolă fără LOTO_BENCH_TARGET)."""
+    import json
+
+    import pandas as pd
+
+    pcts = (10, 30, 60, 100)
+    rows = [
+        {
+            "game": "loto_6_49",
+            "method": m,
+            "percentile": p,
+            "is_random": False,
+            "n_test": 1000,
+            "n_eval": 1000,
+            "k6": 0.7,
+            "rate_3plus_k6": r3,
+            "rate_4plus_k6": r4,
+            "runtime_sec": 0.1,
+            "failed": False,
+        }
+        for m, (r3, r4) in _TARGET_RATES.items()
+        for p in pcts
+    ]
+    folds = root / "bench_results" / "folds.csv"
+    folds.parent.mkdir(exist_ok=True)
+    pd.DataFrame(rows).to_csv(folds, index=False)
+    tested = sorted(_TARGET_RATES) + ([] if complete else ["ses_opt_alpha"])
+    bm = root / "best_methods.json"
+    bm.write_text(
+        json.dumps(
+            {
+                "_meta": {
+                    "methods_tested_per_game": {"loto_6_49": tested},
+                    "percentiles": list(pcts),
+                },
+                "games": {"loto_6_49": {"label": "Loto 6/49", "draw_n": 6, "pick_n": 6}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    decision.update_best_methods_with_auto_pilot(str(bm), str(folds))
+    # Directorul curent = rădăcina, ca la START_8000 (căile implicite ale deciziei).
+    monkeypatch.chdir(root)
+    return bm
+
+
+def _k6(bm):
+    import json
+
+    cells = json.loads(bm.read_text(encoding="utf-8"))["games"]["loto_6_49"][
+        "auto_pilot_per_pool"
+    ]
+    return cells["k6"]["scorer"], cells["k6"]["hit_target"]
+
+
+def _startup_without_queue(monkeypatch):
+    for name in ("init_job_queue", "_migrate_legacy_finalized_marker", "_recover_completed_job"):
+        monkeypatch.setattr(app, name, Mock())
+    monkeypatch.setattr(app, "is_fresh_ui_start", lambda: True)
+    monkeypatch.setattr(app, "cancel_pending_running_jobs", Mock(return_value=0))
+    monkeypatch.setattr(app, "_bench_running", lambda: False)
+    monkeypatch.setattr(app, "_after_server_start", lambda fn: fn())
+
+
+def test_startup_does_not_hold_the_port_while_rebuilding(
+    sidebar_context, monkeypatch, tmp_path
+):
+    """Recalcularea (~10 s) nu rulează în lifespan: portul se deschide întâi."""
+    _client, settings, _state = sidebar_context
+    bm = _decision_built_for_3(monkeypatch, tmp_path)
+    before = bm.read_bytes()
+    settings["bench_hit_target"] = 4
+    _startup_without_queue(monkeypatch)
+    scheduled = []
+    monkeypatch.setattr(app, "_after_server_start", scheduled.append)
+    app._startup()
+    assert bm.read_bytes() == before
+    assert len(scheduled) == 1
+    scheduled[0]()
+    assert _k6(bm) == ("markov_lag2", 4)
+
+
+def test_startup_rebuilds_a_decision_built_for_another_target(
+    sidebar_context, monkeypatch, tmp_path
+):
+    _client, settings, _state = sidebar_context
+    bm = _decision_built_for_3(monkeypatch, tmp_path)
+    assert _k6(bm) == ("frequency", 3)
+    settings["bench_hit_target"] = 4  # 4+ salvat în UI
+    _startup_without_queue(monkeypatch)
+    app._startup()
+    assert decision.BENCH_HIT_TARGET == 4
+    assert _k6(bm) == ("markov_lag2", 4)
+    import json
+
+    assert json.loads(bm.read_text(encoding="utf-8"))["_meta"]["bench_hit_target"] == 4
+
+
+def test_startup_keeps_an_incomplete_decision_and_warns_until_rebench(
+    sidebar_context, monkeypatch, tmp_path
+):
+    client, settings, _state = sidebar_context
+    bm = _decision_built_for_3(monkeypatch, tmp_path, complete=False)
+    before = bm.read_bytes()
+    settings["bench_hit_target"] = 4
+    _startup_without_queue(monkeypatch)
+    app._startup()
+    # folds.csv nu acoperă bench-ul deciziei: decizia rămâne cea veche...
+    assert bm.read_bytes() == before
+    # ... iar panoul o spune, în locul lui „Benchmark la zi”.
+    monkeypatch.setattr(app, "_new_draws_summary", lambda: _fresh_summary())
+    app._bench_freshness_panel("RO")
+    text = "\n".join(_texts(client))
+    assert "nu e pe ținta selectată (4+): Loto 6/49 pe 3+" in text
+    assert "Benchmark la zi" not in text
+
+
+def test_bench_finished_after_ui_restart_rebuilds_for_the_selected_target(
+    sidebar_context, monkeypatch, tmp_path
+):
+    _client, settings, state = sidebar_context
+    bm = _decision_built_for_3(monkeypatch, tmp_path)
+    # UI-ul repornit cât rula bench-ul: marcajul din memorie s-a pierdut.
+    settings["bench_hit_target"] = 4
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 4)
+    assert "bench_target_pending" not in state
+    monkeypatch.setattr(app, "_new_draws_summary", lambda: _fresh_summary())
+    app._on_bench_finished()
+    assert _k6(bm) == ("markov_lag2", 4)
+
+
+def test_startup_defers_the_rebuild_while_a_bench_runs(
+    sidebar_context, monkeypatch, tmp_path
+):
+    _client, settings, state = sidebar_context
+    bm = _decision_built_for_3(monkeypatch, tmp_path)
+    before = bm.read_bytes()
+    settings["bench_hit_target"] = 4
+    _startup_without_queue(monkeypatch)
+    monkeypatch.setattr(app, "_bench_running", lambda: True)
+    app._startup()
+    assert bm.read_bytes() == before  # folds.csv e parțial cât rulează bench-ul
+    assert state.get("bench_target_pending") is True
+
+
+def test_matching_decision_keeps_the_fresh_banner(
+    sidebar_context, monkeypatch, tmp_path
+):
+    client, _settings, _state = sidebar_context
+    bm = _decision_built_for_3(monkeypatch, tmp_path)
+    before = bm.read_bytes()
+    _startup_without_queue(monkeypatch)
+    app._startup()
+    assert bm.read_bytes() == before
+    monkeypatch.setattr(app, "_new_draws_summary", lambda: _fresh_summary())
+    app._bench_freshness_panel("RO")
+    text = "\n".join(_texts(client))
+    assert "Benchmark la zi" in text
+    assert "ținta selectată" not in text
+
+
+@pytest.mark.parametrize("country_meta, warned", [("AT", True), ("PL", False)])
+def test_foreign_panel_warns_only_for_the_country_own_decision(
+    sidebar_context, monkeypatch, tmp_path, country_meta, warned
+):
+    import json
+
+    client, settings, _state = sidebar_context
+    settings["bench_hit_target"] = 4
+    dp = tmp_path / "decisions" / "AT" / "best_methods.json"
+    dp.parent.mkdir(parents=True)
+    dp.write_text(
+        json.dumps(
+            {
+                "_meta": {"country": country_meta, "bench_hit_target": 3},
+                "games": {
+                    "at_lotto": {
+                        "draw_n": 6,
+                        "auto_pilot_per_pool": {"k6": {"scorer": "frequency", "hit_target": 3}},
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        app, "_country_bench_texts", lambda cc: {"freshness": "✅ Austria la zi"}
+    )
+    app._bench_freshness_panel("AT")
+    text = "\n".join(_texts(client))
+    # Decizia altei țări e tratată de producție ca lipsă: niciun avertisment de țintă.
+    assert ("Lotto 6 aus 45 pe 3+" in text) is warned
+    assert ("✅ Austria la zi" in text) is not warned

@@ -284,3 +284,56 @@ def test_bg_toto49_year_table_parses_rows_and_refuses_multi_draw_rows(monkeypatc
     monkeypatch.setattr(ue, "_http_get", lambda url, headers=None: page.encode())
     got = ue.fetch_bg_toto2(dt.date(2026, 9, 1), dt.date(2026, 9, 27))
     assert [d.date for d in got] == [dt.date(2026, 9, 24), dt.date(2026, 9, 27)]
+
+
+# Exportul lawebdelaprimitiva.com (format real, prescurtat): în zilele 1-9 ziua
+# n-are zero în față. Parserul vechi cerea două cifre și pierdea aceste zile.
+ES_HEADER = "date,n1,n2,n3,n4,n5,n6\n"
+ES_ROWS = [
+    "24-09-2026,6,9,21,32,38,45\n",
+    "26-09-2026,3,9,10,30,36,45\n",
+    "28-09-2026,2,10,20,29,34,49\n",
+]
+ES_EXPORT = (
+    "﻿\r\n"
+    "***---- 8/10/2026  7:6 Archivo generado en https://LaWebdelaPrimitiva.com ----***\r\n"
+    "Histórico de sorteos de La Primitiva\r\n"
+    "\r\n"
+    "FECHA; N1;N2;N3;N4;N5;N6;C;R;Joker;Pares/Impares;Decenas;Bajos/Altos;Repiten\r\n"
+    "Jue-24-09-2026 ; 6; 9;21;32;38;45;28;9;7206235;(3/3);'20121';(3/3);0\r\n"
+    "Sab-26-09-2026 ; 3; 9;10;30;36;45;26;4;7368894;(3/3);'21021';(3/3);2\r\n"
+    "Lun-28-09-2026 ; 2;10;20;29;34;49; 6;4;3545277;(4/2);'11211';(3/3);1\r\n"
+    "Jue-1-10-2026 ; 4;14;16;22;33;45;46;7;6965325;(4/2);'12111';(4/2);0\r\n"
+    "Sab-3-10-2026 ; 6;20;24;27;44;45;12;2;7407593;(4/2);'10302';(3/3);1\r\n"
+    "Lun-5-10-2026 ; 4;10;20;25;40;49;29;3;7459175;(4/2);'11202';(4/2);1\r\n"
+).encode("utf-8-sig")
+
+
+def test_spanish_export_keeps_single_digit_days(tmp_path, monkeypatch):
+    path = _root(tmp_path, "es_primitiva", ES_HEADER, ES_ROWS)
+    _serve(monkeypatch, {"lawebdelaprimitiva.com": ES_EXPORT})
+    added, line = ue.update_game(GAMES_BY_ID["es_primitiva"], tmp_path, dt.date(2026, 10, 8))
+    assert added == 3, line
+    assert "+3 extrageri noi: 01-10-2026, 03-10-2026, 05-10-2026" in line
+    assert path.read_text().splitlines()[-3:] == [
+        "01-10-2026,4,14,16,22,33,45",
+        "03-10-2026,6,20,24,27,44,45",
+        "05-10-2026,4,10,20,25,40,49",
+    ]
+
+
+def test_source_that_skips_a_stored_day_writes_nothing(tmp_path, monkeypatch):
+    """Un parser care pierde rânduri (zilele 1-9 la Spania) nu mai trece drept
+    „la zi”: o zi stocată pe care sursa o acoperă, dar n-o listează, oprește
+    jocul, iar rândurile noi nu intră peste gaură."""
+    lot = GAMES_BY_ID["at_lotto"]
+    have = [
+        ue.Draw(dt.date(2026, 9, 3), (1, 2, 3, 4, 5, 6)),
+        ue.Draw(dt.date(2026, 9, 6), (7, 8, 9, 10, 11, 12)),
+        ue.Draw(dt.date(2026, 9, 10), (13, 14, 15, 16, 17, 18)),
+    ]
+    new = ue.Draw(dt.date(2026, 9, 13), (19, 20, 21, 22, 23, 24))
+    with pytest.raises(ue.SourceError, match="nu are extragerea din 06-09-2026"):
+        ue.plan_update(lot, have, [have[0], have[2], new], TODAY)
+    # O sursă care începe după o zi stocată (fereastra ei) nu e o gaură.
+    assert ue.plan_update(lot, have, [have[1], have[2], new], TODAY) == ([new], 2)

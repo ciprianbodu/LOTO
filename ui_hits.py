@@ -134,6 +134,56 @@ def _target_data_ready() -> bool:
         return False
 
 
+def _decision_target_mismatch(country=None) -> dict[str, int]:
+    """{joc: ținta deciziei} unde decizia salvată nu e pe ținta selectată.
+
+    `_target_data_ready` vede numai coloanele din folds.csv; decizia scrisă de
+    un bench din consolă, de o schimbare de țintă refuzată sau de un bench
+    terminat după repornirea UI-ului putea rămâne pe 3+ cu 4+ selectat, iar
+    panoul spunea „Benchmark la zi”. Fișier lipsă sau ilizibil: {} (prospețimea
+    are mesajele ei pentru asta)."""
+    import json
+
+    try:
+        from loto_enterprise.benchmark.decision import decision_target_mismatch
+
+        cc = _selected_country() if country is None else country
+        path = _LOT.decision_path_for(cc, PROJECT_ROOT)
+        if not path.exists():
+            return {}
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+        cc = _LOT.normalize_country(cc)
+        meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+        if cc != _LOT.RO and str(meta.get("country") or "").strip().upper() != cc:
+            return {}  # producția o tratează ca lipsă (frequency), nu ca decizie
+        return decision_target_mismatch(cfg, _bench_target())
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _decision_target_text(country=None) -> str | None:
+    """Avertismentul persistent pentru decizia salvată pe altă țintă, sau None."""
+    stale = _decision_target_mismatch(country)
+    if not stale:
+        return None
+    names = {v: k for k, v in GK_MATRIX.items()}
+
+    def _name(gk: str) -> str:
+        if gk in names:
+            return names[gk]
+        lot = _LOT.lottery_by_bench_key(gk)
+        return lot.name if lot is not None else gk
+
+    parts = ", ".join(f"{_name(gk)} pe {t}+" for gk, t in stale.items())
+    return (
+        f"⚠️ Decizia Auto-Pilot salvată nu e pe ținta selectată "
+        f"({_bench_target()}+): {parts}. Generarea joacă metoda aleasă pentru "
+        "ținta veche. Decizia se recalculează singură la pornirea UI-ului sau la "
+        "finalul Re-Bench-ului, dacă folds.csv acoperă bench-ul deciziei; altfel "
+        "rulează un Re-Bench complet."
+    )
+
+
 def _n_extrageri(n: int) -> str:
     """„1 extragere" / „2 extrageri" — acordul românesc, nu «1 extrageri»."""
     return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
@@ -741,6 +791,15 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
                 # Pool-ul EFECTIV din REZULTAT, nu din setarea care se poate schimba ulterior.
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
+                if (STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}).get(
+                    "decision_moved"
+                ):
+                    ui.label(
+                        "⚠️ Walk-forward sărit: decizia de bench s-a schimbat după generare "
+                        "(Re-Bench terminat sau țintă 3+/4+ schimbată). Validarea ar fi "
+                        "măsurat altă metodă decât cea care a produs pool-ul afișat; "
+                        "generează din nou."
+                    ).classes("text-warning text-caption text-bold")
                 if flat:
                     # Deschis implicit (apare după ce termină walk-forward), dar pliabil
                     # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).

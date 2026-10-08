@@ -74,6 +74,9 @@ from pathlib import Path
 import app_nicegui as app
 import ui_runtime
 ui_runtime.UI_STATE_FILE = app.UI_STATE_FILE = Path(os.environ["LOTO_AUDIT_UI_STATE"])
+# Setările izolate au ținta implicită: pornirea nu are voie să recalculeze
+# decizia de producție pe ea (auditul nu modifică fișierele de producție).
+app._reconcile_decision_target = lambda: None
 app.ui.run(title="Loto Enterprise Wheeling", port=PORT, reload=False, show=False)
 """.replace("PORT", str(port))
     log = runtime / "ui_http.log"

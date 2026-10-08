@@ -806,6 +806,10 @@ def _build_report() -> str:
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
             wf = _wf_summary(flat, d)
+            if ((STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}).get("decision_moved"):
+                out.append(
+                    "  Walk-forward: sărit — decizia de bench s-a schimbat după generare."
+                )
             if wf:
                 # Aceleași avertismente ca panoul: raportul nu prezintă o validare
                 # parțială sau amestecată drept completă.
@@ -1341,10 +1345,34 @@ def _render_pool_body(
             else _spec_p.bench_key
         )
         if _gk_pool:
+            # Intrarea deciziei pentru pool-ul cu care s-a ales metoda (`pool_hint`),
+            # nu pentru pool-ul efectiv: restrângerea bazei îl poate micșora.
+            _info_p = bw.get(_gk_pool) or {}
+            _m_p = _info_p.get("method")
+            _hint_p = _info_p.get("pool_hint") or req or eff
             _dec_p = _decision_entry(
-                _gk_pool, int(eff or SETTINGS.get("pool_size_val") or 10)
+                _gk_pool, int(_hint_p or SETTINGS.get("pool_size_val") or 10)
             )
-            if _decision_low_confidence(_dec_p) is True:
+            _fb_p = bool(_info_p.get("fallback"))
+            _now_p = (
+                _decision_entry_method(_dec_p, _gk_pool)
+                if _dec_p and _m_p and not _fb_p
+                else _m_p
+            )
+            if _fb_p:
+                # Rezerva motorului: motivul e afișat mai sus. Nota deciziei
+                # descrie metoda care NU a produs pool-ul, deci nu se aplică.
+                pass
+            elif _now_p != _m_p:
+                # Nota de încredere ar fi a altei metode decât cea care a dat pool-ul.
+                ui.label(
+                    "ℹ️ Decizia de bench s-a schimbat după generare (Re-Bench "
+                    "terminat sau țintă 3+/4+ schimbată): acum alege "
+                    f"{_now_p or 'altă metodă'} la pool {_hint_p}, nu {_m_p}. "
+                    "Nota ei de încredere nu descrie metoda care a produs acest "
+                    "pool; generează din nou pentru decizia de acum."
+                ).classes("text-caption text-warning")
+            elif _decision_low_confidence(_dec_p) is True:
                 ui.label(
                     "⚠️ Decizie low_confidence: nicio metodă n-a bătut random consistent "
                     "pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
