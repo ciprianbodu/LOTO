@@ -1,5 +1,11 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Teste noi, 09.10.2026:** [aleatorism, semnale între jocuri, „urmărește liderul”, era curentă](hit_screen_2026-10-09.md).
+131 de teste de aleatorism pe 14 serii și 492 de combinații metodă × pool, cu nul
+al căutării, confirmare și replicare externă. Nicio metodă promovată; Joker
+Urna 1 are o concentrare retrospectivă peste hazard, instabilă în timp.
+Reproducere: `python scripts/analysis/hit_screen_2026-10-09.py`.
+
 **Teste noi, 21.09.2026:** [contracte și ferestre distincte pentru toate cele 52 de metode](raport_test_metode_2026-09-21.md).
 375 teste noi; diagnostic pe 180 extrageri/joc, pool 6/8/10/12/16, inclusiv Joker
 Urna 2. Niciun avantaj confirmat după corecția comparațiilor multiple; fără
