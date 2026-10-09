@@ -588,9 +588,18 @@ def bh(pvals: list[float]) -> list[float]:
     return [float(x) for x in adj]
 
 
+def data_fingerprint() -> dict[str, str]:
+    """sha256 pentru fiecare CSV citit, ca rezultatul sa poata fi legat de date."""
+    import hashlib
+
+    paths = {cfg["path"] for cfg in GAMES.values()}
+    paths |= {path for rows in EXTERNAL.values() for _l, path, _c, _n in rows}
+    return {str(p.relative_to(ps.ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths)}
+
+
 def main() -> None:
     t0 = time.time()
-    report: dict = {"protocol": __doc__}
+    report: dict = {"protocol": __doc__, "data_sha256": data_fingerprint()}
     labels = [lab for lab, _ in all_series()]
 
     # ---- A
@@ -760,6 +769,8 @@ def main() -> None:
         if c["promote"]
     ]
     report["runtime_sec"] = time.time() - t0
+    if report["data_sha256"] != data_fingerprint():
+        raise SystemExit("Istoricul s-a schimbat in timpul rularii; rezultatul nu se scrie.")
     dest = HERE / "hit_screen_2026-10-09.json"
     dest.write_text(json.dumps(report, indent=1, default=float), encoding="utf-8")
     print(f"done {time.time() - t0:.0f}s promoted={report['promoted']}", flush=True)

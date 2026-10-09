@@ -43,4 +43,5 @@ for ga, gb in (("ro_649", "ro_540"), ("ro_649", "ro_joker1"), ("ro_540", "ro_jok
         "null_blocks_mean": float(sims[:, 1].mean()), "null_blocks_sd": float(sims[:, 1].std()),
     }
     print(f"{ga}~{gb}", json.dumps(out[f'{ga}~{gb}']), flush=True)
+out["data_sha256"] = hs.data_fingerprint()
 (HERE / "shared_bias_2026-10-09.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
