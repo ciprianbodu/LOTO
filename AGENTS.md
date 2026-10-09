@@ -80,6 +80,33 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Teste pentru rata de hit — 2026-10-09
+
+- Ecran nou, protocol fixat inainte de rulare
+  (`scripts/analysis/hit_screen_2026-10-09.py`, raport `hit_screen_2026-10-09.md`):
+  - aleatorism: 131 de teste pe 14 serii (Romania si 10 straine). 7 au
+    p < 0,05, cat se asteapta din intamplare (6,6); Holm 1,00. Nicio abatere:
+    frecventa, deriva, zi, pozitie, repetari, perechi, serii, legaturi intre
+    jocurile romanesti;
+  - puterea: un dezechilibru de bile care ar ridica 4+ la pool 16 cu 20-26%
+    relativ ar fi fost detectat cu probabilitate de 65-82%;
+  - metode noi: semnale intre jocurile romanesti, „urmareste liderul” peste
+    cei ~490 de scoreri din 2026-10-05 si frecventa pe era curenta. 492 de
+    combinatii, p-ul cautarii 0,28-0,92, Holm minim 0,099 pe confirmare.
+    Nimic promovat.
+- Joker Urna 1: cele mai frecvente 16 numere pe tot istoricul ating 4+ in
+  7,34% din extrageri, peste maximul obtinut pe istorii aleatoare (p 0,002;
+  Holm pe 13 serii 0,026). Efectul nu e stabil: pool-ul ales pe prima jumatate
+  pierde pe a doua, iar frecventa cauzala sta la nivelul hazardului pana in
+  2023 si urca la 8,84% in 2024-2026. Productia joaca deja `frequency` la
+  Joker k16 4+; fara schimbare.
+- 5/40 -> 6/49 la pool 16 (frecventa 5/40 pe 50 de zile): 10,94% fata de
+  7,96% pe confirmare, Holm pe eveniment 0,056, pe hituri 0,795. Nu trece;
+  o extragere in plus il muta peste prag. `shared_bias_2026-10-09.py`:
+  frecventele jocurilor romanesti nu sunt corelate pe blocuri de timp.
+- Rezultatul poarta amprentele CSV-urilor (`data_sha256`) si nu se scrie daca
+  istoricul se schimba in timpul rularii. Ecranul complet: 56 min pe 4 nuclee.
+
 ### Pool 16 tinta 4+ si audit global — 2026-10-08
 
 - Rata 4+ a pool-ului nu se ridica prin cod: e hipergeometrica (16 numere:
@@ -1772,6 +1799,11 @@ pipeline-ului sau a contractului UI-worker.
   confirmare pe 30% romanesti si replicare externa. Nimic promovat (§2).
   Geometria biletelor (`ticket_geometry_2026-10-05.py`) a dat variantele
   dispersate, optiune in „Bilet complet”.
+- [x] Ecran 2026-10-09 (`scripts/analysis/hit_screen_2026-10-09.py`): bateria
+  de aleatorism pe 14 serii, puterea unui dezechilibru de bile, semnale intre
+  jocuri, „urmareste liderul”, era curenta si plafonul retrospectiv. Nimic
+  promovat (§2). Ramas deschis: Joker Urna 1, `frequency` la k16 4+, numai pe
+  extrageri viitoare.
 
 Criteriu de iesire: orice schimbare de metoda vine cu experiment reproductibil si
 nu este descrisa drept garantie de castig.
