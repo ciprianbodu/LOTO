@@ -1,0 +1,35 @@
+{
+ "ro_649~ro_540": {
+  "common_days": 1064,
+  "numbers": 40,
+  "blocks": 10,
+  "corr_full": 0.20121062541466422,
+  "p_full": 0.095952023988006,
+  "corr_blocks_mean": 0.03434226353048049,
+  "p_blocks": 0.248375812093953,
+  "null_blocks_mean": -0.00016675811553500887,
+  "null_blocks_sd": 0.05071538202718372
+ },
+ "ro_649~ro_joker1": {
+  "common_days": 1677,
+  "numbers": 45,
+  "blocks": 16,
+  "corr_full": 0.23259492447957195,
+  "p_full": 0.059470264867566215,
+  "corr_blocks_mean": -0.034999134771779065,
+  "p_blocks": 0.823088455772114,
+  "null_blocks_mean": 0.0007831182556653616,
+  "null_blocks_sd": 0.03813370446686446
+ },
+ "ro_540~ro_joker1": {
+  "common_days": 1431,
+  "numbers": 40,
+  "blocks": 14,
+  "corr_full": 0.16577001457267712,
+  "p_full": 0.18140929535232383,
+  "corr_blocks_mean": 0.008151949002772024,
+  "p_blocks": 0.42478760619690153,
+  "null_blocks_mean": 0.00031889247784627664,
+  "null_blocks_sd": 0.042389131024700474
+ }
+}
