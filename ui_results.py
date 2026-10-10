@@ -914,15 +914,6 @@ def _full_ticket_summary(t: dict, game: str) -> str:
         cost_txt = f"≈ {n * PRICES.get(game, 0.0):.0f} Lei"
     slip = "biletului" if t["tickets"] == 1 else "biletelor"
     head = f"{n}/{count(t['requested'], 'variante')} ({t['tickets']} × {t['per_ticket']})"
-    if t.get("mode") == "spread":
-        overlap = int(t.get("max_overlap") or 0)
-        if overlap == 0:
-            shared = "fără numere comune între variante"
-        elif overlap == 1:
-            shared = "cel mult un număr comun între două variante"
-        else:
-            shared = f"cel mult {count(overlap, 'numere')} comune între două variante"
-        return f"{head} · dispersate pe {count(len(t['pool']), 'numere')}, {shared} · {cost_txt}"
     text = (
         f"{head} · "
         f"acoperire garanție {t['guarantee']} pe cele {count(len(t['pool']), 'numere')} "
@@ -944,7 +935,7 @@ def _pct(p: float) -> str:
 
 
 def _full_ticket_chances(t: dict, is_joker: bool) -> list[str]:
-    """Șansele exacte (extragere uniformă) ale variantelor afișate și ale celuilalt mod."""
+    """Șansa exactă (extragere uniformă) ca cel puțin o variantă afișată să prindă."""
     ch = t.get("chances") or {}
     ts = ch.get("thresholds") or []
     if not ts:
@@ -954,23 +945,7 @@ def _full_ticket_chances(t: dict, is_joker: bool) -> list[str]:
     def fmt(values) -> str:
         return " · ".join(f"{k}+ {_pct(values[k])}" for k in ts)
 
-    lines = [
-        f"Șansa exactă ca cel puțin o variantă să prindă{urn}: {fmt(ch['shown'])}."
-    ]
-    other = ch.get("other")
-    if other:
-        if ch.get("other_mode") == "spread":
-            lines.append(
-                f"Aceleași {len(t['variants'])} variante dispersate (bifa „🎯 Variante "
-                f"dispersate”): {fmt(other)}."
-            )
-        else:
-            lines.append(f"Variantele din pool, pe același număr: {fmt(other)}.")
-    lines.append(
-        "Media variantelor câștigătoare e aceeași în orice aranjare; diferă doar cât "
-        "de des cade cel puțin un câștig. Marele premiu are aceeași șansă."
-    )
-    return lines
+    return [f"Șansa exactă ca cel puțin o variantă să prindă{urn}: {fmt(ch['shown'])}."]
 
 
 def _simple_variants_count() -> int:
@@ -993,24 +968,16 @@ def _show_full_ticket() -> None:
         return
     rb, _ = res
     tickets = clamp_tickets(SETTINGS.get("full_ticket_count_val"))
-    spread = bool(SETTINGS.get("full_ticket_spread_val"))
     copy_lines: list[str] = []
     with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
         title = "un bilet fizic" if tickets == 1 else f"{tickets} bilete fizice"
         ui.label(f"🎟️ Bilet complet ({title} pe joc)").classes("text-bold")
-        if spread:
-            ui.label(
-                "Variante dispersate: se întind pe pool-ul afișat și pe următoarele "
-                "numere din clasamentul metodei, cu suprapuneri minime. Nu prezic "
-                "nimic; aceeași medie, mai des cel puțin un câștig."
-            ).classes("text-caption")
-        else:
-            ui.label(
-                "Variantele se aleg din pool-ul afișat, potrivit automat după "
-                "clasamentul metodei când e prea mic sau prea mare pentru bilete. "
-                "Acoperirea e cea a acestor variante, nu a wheel-ului complet; "
-                "nu e o șansă de câștig."
-            ).classes("text-caption")
+        ui.label(
+            "Variantele se aleg din pool-ul afișat, potrivit automat după "
+            "clasamentul metodei când e prea mic sau prea mare pentru bilete. "
+            "Acoperirea e cea a acestor variante, nu a wheel-ului complet; "
+            "nu e o șansă de câștig."
+        ).classes("text-caption")
         # Nu ui.scroll_area: NiceGUI îi fixează înălțimea la 16rem (256px).
         with ui.column().classes("w-full no-wrap gap-1").style(
             "max-height:65vh; overflow-y:auto"
@@ -1021,9 +988,7 @@ def _show_full_ticket() -> None:
                     _spec = _game_spec_for(g, _data)
                     # România: eticheta de dinainte; străin: id-ul din registru.
                     game = _game_label_for(str(g)) if _spec.is_romanian else _spec.game_id
-                    t = build_full_ticket(
-                        game, _data, tickets, spread=spread, compare=True
-                    )
+                    t = build_full_ticket(game, _data, tickets)
                     lottery = display_name(game)  # = _game_title(g)
                     ui.separator()
                     ui.label(lottery).classes("text-bold")

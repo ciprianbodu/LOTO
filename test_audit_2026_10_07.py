@@ -524,45 +524,8 @@ def test_a_draw_added_during_the_bench_keeps_the_decision_stale(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Covering: dispersie cu limită de consecutive, semnătura designurilor, reluare
+# Covering: semnătura designurilor, reluare
 # --------------------------------------------------------------------------- #
-def _spread_ticket(lo, hi, pool_size, tickets, seed):
-    import random
-
-    from loto_enterprise.core.full_ticket import build_full_ticket
-    from loto_enterprise.core.pool_selection import select_pool_from_scores
-
-    rnd = random.Random(seed)
-    scores = {n: rnd.random() for n in range(1, 50)}
-    excluded = set(range(1, lo)) | set(range(hi + 1, 50))
-    audit = {"restrict_base": {"min": lo, "max": hi, "excluded": sorted(excluded)}}
-    pool = select_pool_from_scores(scores, pool_size, excluded, audit, max_num=49, max_consecutive_run=2)
-    data = {"hard_core": pool, "guarantee": 3, "audit": audit, "hard_core_joker": []}
-    t = build_full_ticket("6/49", data, tickets, spread=True, with_chances=False)
-    return t, audit["consecutive_limit"]["applied"]
-
-
-def test_spread_variants_keep_the_consecutive_limit_when_the_base_allows_it():
-    from loto_enterprise.core.ranking import longest_consecutive_run
-
-    # Baza 10..18 are 10 combinații conforme de 6 numere; 3 bilete = 9 variante.
-    t, limit = _spread_ticket(10, 18, 6, 3, 180)
-    assert len(t["variants"]) == 9 and limit == 2
-    assert max(longest_consecutive_run(v) for v in t["variants"]) <= 2
-    assert "Nicio variantă nu are mai mult de 2 numere consecutive" in t["note"]
-
-
-def test_spread_note_does_not_claim_a_limit_that_cannot_fit():
-    from loto_enterprise.core.ranking import longest_consecutive_run
-
-    # Baza 10..16 are o singură combinație conformă pentru limita 3: 3 variante nu încap.
-    t, limit = _spread_ticket(10, 16, 6, 1, 160)
-    worst = max(longest_consecutive_run(v) for v in t["variants"])
-    assert worst > limit
-    assert "Nicio variantă" not in t["note"]
-    assert f"cel mult {worst} pe o variantă" in t["note"]
-
-
 def test_design_signature_follows_content_not_checkout_location(monkeypatch, tmp_path):
     import shutil
 
@@ -581,7 +544,7 @@ def test_design_signature_follows_content_not_checkout_location(monkeypatch, tmp
     assert designs.covering_design_source_signature(12, 6, 4) != here
 
 
-def test_replay_skips_a_step_where_the_two_modes_have_different_variant_counts():
+def test_replay_skips_a_step_whose_ticket_has_fewer_variants_than_requested():
     from loto_enterprise.core.ticket_replay import replay_step
 
     # Pas din fallback-ul de frecvență: fără clasament, pool-ul de 6 nu se extinde.
@@ -591,7 +554,9 @@ def test_replay_skips_a_step_where_the_two_modes_have_different_variant_counts()
         "audit": {"consecutive_limit": {"requested": 2, "applied": 2}},
         "actual": [3, 9, 17, 20, 30, 44],
     }
-    assert replay_step("6/49", context, 1, 3) == {"error": "număr diferit de variante între moduri"}
+    assert replay_step("6/49", context, 1, 3) == {
+        "error": "mai puține variante decât biletele cerute"
+    }
 
 
 def test_istoric_hits_uses_the_pool_size_actually_played():

@@ -1,4 +1,4 @@
-"""„Bilet complet” refăcut pe pașii walk-forward, din pool și dispersat."""
+"""„Bilet complet” refăcut pe pașii walk-forward."""
 
 from __future__ import annotations
 
@@ -73,11 +73,10 @@ def test_replay_is_the_full_ticket_button_on_each_step(game, tickets, tmp_path, 
             "hard_core": ctx["hard_core"], "guarantee": 3, "audit": ctx["audit"],
             "hard_core_joker": ctx["hard_core_joker"],
         }
-        for mode, spread in (("pool", False), ("spread", True)):
-            t = build_full_ticket(game, data, tickets, spread=spread)
-            urn1 = [v[:5] if game == "joker" else v for v in t["variants"]]
-            assert res["best"][di][mode] == max(len(set(v) & set(ctx["actual"])) for v in urn1)
-            assert res["best"][di][f"{mode}_variants"] == len(t["variants"])
+        t = build_full_ticket(game, data, tickets)
+        urn1 = [v[:5] if game == "joker" else v for v in t["variants"]]
+        assert res["best"][di]["hits"] == max(len(set(v) & set(ctx["actual"])) for v in urn1)
+        assert res["best"][di]["variants"] == len(t["variants"])
 
 
 @pytest.mark.parametrize("game", ["6/49", "joker", "5/40"])
@@ -91,11 +90,10 @@ def test_uniform_rates_are_the_dialog_chances_of_the_latest_step(game, tmp_path,
         "hard_core": ctx["hard_core"], "guarantee": 3, "audit": ctx["audit"],
         "hard_core_joker": ctx["hard_core_joker"],
     }
-    for mode, spread in (("pool", False), ("spread", True)):
-        shown = build_full_ticket(game, data, 3, spread=spread)["chances"]["shown"]
-        assert shown
-        for threshold, p in shown.items():
-            assert res["uniform"][mode][threshold] == pytest.approx(p, abs=1e-15)
+    shown = build_full_ticket(game, data, 3)["chances"]["shown"]
+    assert shown
+    for threshold, p in shown.items():
+        assert res["uniform"][threshold] == pytest.approx(p, abs=1e-15)
 
 
 def _strip_context(cache_file):
@@ -220,24 +218,23 @@ def _replay(best, uniform=None):
 
 def test_history_rows_count_draws_with_a_winning_variant(monkeypatch):
     best = {
-        1: {"pool": 3, "spread": 2, "pool_variants": 3, "spread_variants": 3},
-        2: {"pool": 2, "spread": 4, "pool_variants": 3, "spread_variants": 3},
-        3: {"pool": 5, "spread": 3, "pool_variants": 3, "spread_variants": 3},
-        4: {"pool": 1, "spread": 1, "pool_variants": 3, "spread_variants": 3},
+        1: {"hits": 3, "variants": 3},
+        2: {"hits": 2, "variants": 3},
+        3: {"hits": 5, "variants": 3},
+        4: {"hits": 1, "variants": 3},
     }
-    uniform = {"pool": {3: 0.0547, 4: 0.0029, 5: 0.00005}, "spread": {3: 0.0559, 4: 0.003, 5: 0.00006}}
+    uniform = {3: 0.0547, 4: 0.0029, 5: 0.00005}
     monkeypatch.setattr(ui_hits, "_full_ticket_replay", lambda *a: _replay(best, uniform))
     monkeypatch.setitem(ui_hits.SETTINGS, "full_ticket_count_val", 1)
     with capture_ui() as ui:
         ui_hits._render_full_ticket_replay([], "6/49", 3)
     table = next(n for n in ui.walk() if n["kind"] == "table")
-    pool, spread = table["kwargs"]["rows"]
-    assert (pool["p3"], pool["p4"], pool["p5"]) == ("2 (50.00%)", "1 (25.00%)", "1 (25.00%)")
-    assert (spread["p3"], spread["p4"], spread["p5"]) == ("2 (50.00%)", "1 (25.00%)", "0 (0.00%)")
-    assert pool["var"] == spread["var"] == "3 variante"
-    assert pool["rnd"] == "5.5% / 0.29% / 0.005%"
-    assert spread["rnd"] == "5.6% / 0.30% / 0.006%"
+    (row,) = table["kwargs"]["rows"]
+    assert (row["p3"], row["p4"], row["p5"]) == ("2 (50.00%)", "1 (25.00%)", "1 (25.00%)")
+    assert row["var"] == "3 variante"
+    assert row["rnd"] == "5.5% / 0.29% / 0.005%"
     text = ui.text()
+    assert "dispers" not in text
     assert "un bilet pe extragere" in text
     assert "Lipsesc 2 din 6: 2 extrageri din cache-ul vechi" in text
     assert any("extragere uniformă" in c.get("label", "") for c in table["kwargs"]["columns"])
