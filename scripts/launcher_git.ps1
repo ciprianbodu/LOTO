@@ -462,6 +462,12 @@ function Format-PathList {
 # Rezultatele Re-Bench-ului local: raman cele ale statiei, din care s-a
 # calculat decizia ei (best_methods.json, runtime). Nu se combina doua bench-uri.
 $script:LocalWinsPrefix = 'bench_results/'
+
+function Test-StationFile {
+    # Fisier al Re-Bench-ului statiei: ramane local, nu e o modificare de cod.
+    param([string]$Path)
+    return $Path.StartsWith($script:LocalWinsPrefix, [StringComparison]::OrdinalIgnoreCase)
+}
 # Fisierele puse deoparte in rularea curenta: blocul finally le pune la loc
 # chiar daca Set-Aside s-a oprit la jumatate.
 $script:AsideItems = $null
@@ -666,7 +672,7 @@ function Restore-Aside {
                 }
                 continue
             }
-            if ($item.Path.StartsWith($script:LocalWinsPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            if (Test-StationFile $item.Path) {
                 if ($item.Local) {
                     Copy-LotoFile -From $item.Local -To $full
                     if (-not $item.InHead) { $restage += $item.Path }
@@ -1009,8 +1015,13 @@ try {
         $gitDir = (Invoke-LotoGit -GitArgs @('rev-parse', '--absolute-git-dir')).Text
         $backupRoot = Join-Path $gitDir 'loto-sync-backup'
         $local = @(Get-LocalChanges)
-        if ($local.Count -gt 0) {
-            Write-Host ('[GIT] Modificari locale necomise (' + $local.Count + '): ' + (Format-PathList $local) + '.')
+        $own = @($local | Where-Object { -not (Test-StationFile $_) })
+        $station = @($local | Where-Object { Test-StationFile $_ })
+        if ($own.Count -gt 0) {
+            Write-Host ('[GIT] Modificari locale necomise (' + $own.Count + '): ' + (Format-PathList $own) + '.')
+        }
+        if ($station.Count -gt 0) {
+            Write-Host ('[GIT] Re-Bench-ul statiei ramane local: ' + (Format-PathList $station) + '.')
         }
         $fetch = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
         if ($fetch.Code -ne 0) {
@@ -1269,7 +1280,8 @@ try {
                 Write-Host ('[GIT] Copia lor ramane si in ' + (Join-Path $backupDir 'local') + '.')
             }
         }
-        $untouched = $local.Count - $aside.Count
+        $asidePaths = New-PathSet $aside
+        $untouched = @($own | Where-Object { -not $asidePaths.Contains($_) }).Count
         if ($outcome -eq 'updated' -and $untouched -gt 0) {
             Write-Host ('[GIT] Modificarile locale din celelalte ' + $untouched + ' fisiere au ramas neatinse.')
         }
