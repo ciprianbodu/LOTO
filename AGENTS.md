@@ -828,7 +828,9 @@ UI-ul face polling la o secunda, fara reload complet.
   conflict nu ajunge pe disc. La conflict real codul ia `origin/main`, copia
   locala ramane in `local\`, iar marcajul `CONFLICTS` o reaminteste la
   fiecare pornire pana la stergerea folderului; `bench_results/` (Re-Bench-ul
-  statiei) nu se combina, ramane cel local. Fisierele noi din index revin cu
+  statiei) nu se combina, ramane cel local. La pornire, fisierele lui apar
+  separat („Re-Bench-ul statiei ramane local”), nu printre „Modificari locale
+  necomise”, si nu intra in numaratoarea de la final („celelalte N fisiere”). Fisierele noi din index revin cu
   `git add -f`; starea din index a celor modificate nu se pastreaza
   (continutul, da). Sync-ul se opreste, cu motivul si fara sa atinga ceva,
   pentru: un folder in locul unui fisier urmarit sau un fisier in locul unui

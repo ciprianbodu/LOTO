@@ -287,6 +287,29 @@ def test_sync_keeps_the_local_rebench_results(repos):
     assert git(local, 'diff', '--cached', '--name-only') == ''
 
 
+def test_sync_reports_the_station_rebench_apart_from_local_edits(repos):
+    """Re-Bench-ul statiei nu apare drept modificare locala necomisa, nici la
+    numaratoarea de la final; o modificare de cod apare ca inainte."""
+    local, seed, _ = repos
+    tracked(seed, local, 'bench_results/folds.csv', 'method,rate\nm1,1\n')
+    tracked(seed, local, 'notes.txt', 'a\n')
+    (local / 'bench_results' / 'folds.csv').write_text('method,rate\nm1,2\n')
+    out = run_helper(local)
+    assert '[GIT] Cod la zi.' in out
+    assert '[GIT] Re-Bench-ul statiei ramane local: bench_results/folds.csv.' in out
+    assert 'Modificari locale necomise' not in out
+
+    (local / 'notes.txt').write_text('local note\n')
+    advance(seed)
+    out = run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert '[GIT] Modificari locale necomise (1): notes.txt.' in out
+    assert '[GIT] Re-Bench-ul statiei ramane local: bench_results/folds.csv.' in out
+    assert 'celelalte 1 fisiere au ramas neatinse' in out
+    assert (local / 'bench_results' / 'folds.csv').read_text() == 'method,rate\nm1,2\n'
+    assert (local / 'notes.txt').read_text() == 'local note\n'
+
+
 def test_sync_replays_local_commits_keeps_edits_and_pushes(repos):
     local, seed, origin = repos
     tracked(seed, local, 'notes.txt', 'a\n')
