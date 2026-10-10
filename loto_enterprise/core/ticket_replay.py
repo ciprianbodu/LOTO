@@ -1,11 +1,10 @@
-"""„Bilet complet” refacut pe pasii walk-forward, din pool si dispersat.
+"""„Bilet complet” refacut pe pasii walk-forward.
 
 Fiecare pas WF pastreaza contextul biletului (`ticket_context`): pool-ul,
 clasamentul metodei din audit, numarul Joker si extragerea tinta. Pentru
-fiecare pas se reface ce ar fi dat „🎟️ Bilet complet” in ziua aceea, cu
-acelasi numar de bilete in ambele moduri, si se retine cel mai bun hit pe o
-varianta. Joker: numai Urna 1; numarul Joker e acelasi in ambele moduri.
-Garantia este cea a rezultatului afisat, ca la butonul din sidebar.
+fiecare pas se reface ce ar fi dat „🎟️ Bilet complet” in ziua aceea si se
+retine cel mai bun hit pe o varianta. Joker: numai Urna 1. Garantia este cea
+a rezultatului afisat, ca la butonul din sidebar.
 """
 
 from __future__ import annotations
@@ -34,9 +33,6 @@ def _quiet_wheel():
         log.setLevel(prev)
 
 
-MODES = (("pool", False), ("spread", True))
-
-
 def step_contexts(flat) -> dict[int, dict | None]:
     """Contextul fiecarei extrageri WF (None = intrare scrisa inainte de camp)."""
     out: dict[int, dict | None] = {}
@@ -47,7 +43,7 @@ def step_contexts(flat) -> dict[int, dict | None]:
     return out
 
 
-def _tickets(game: str, context: dict, tickets: int, guarantee, spread: bool):
+def _tickets(game: str, context: dict, tickets: int, guarantee):
     """Variantele Urnei 1 ale biletului pasului, sau textul erorii."""
     data = {
         "hard_core": list(context["hard_core"]),
@@ -55,33 +51,29 @@ def _tickets(game: str, context: dict, tickets: int, guarantee, spread: bool):
         "audit": dict(context.get("audit") or {}),
         "hard_core_joker": list(context.get("hard_core_joker") or []),
     }
-    t = build_full_ticket(game, data, tickets, spread=spread, with_chances=False)
+    t = build_full_ticket(game, data, tickets, with_chances=False)
     if t.get("error") or not t.get("variants"):
         return t.get("error") or "fără variante"
+    if len(t["variants"]) < t["requested"]:
+        # Pas fără clasament în context (pool din fallback-ul de frecvență): pool-ul
+        # nu se poate extinde și dă mai puține variante decât biletele afișate.
+        return "mai puține variante decât biletele cerute"
     cut = -1 if t.get("joker") is not None else None
     return [list(v[:cut]) for v in t["variants"]]
 
 
 def replay_step(game: str, context: dict, tickets: int, guarantee) -> dict:
-    """{"pool": h, "spread": h} = cele mai multe numere nimerite pe o varianta.
+    """{"hits": h, "variants": n} = cele mai multe numere nimerite pe o varianta.
 
     {"error": text} cand biletul nu se poate construi (bilet nemodelat, pool
     prea mic, context incomplet)."""
     actual = {int(x) for x in context.get("actual") or []}
     if not actual or not context.get("hard_core"):
         return {"error": "context incomplet"}
-    best: dict = {}
-    for mode, spread in MODES:
-        variants = _tickets(game, context, tickets, guarantee, spread)
-        if isinstance(variants, str):
-            return {"error": variants}
-        best[mode] = max(len(set(v) & actual) for v in variants)
-        best[f"{mode}_variants"] = len(variants)
-    if best["pool_variants"] != best["spread_variants"]:
-        # Pas fără clasament în context (pool din fallback-ul de frecvență): pool-ul
-        # nu se poate extinde și dă mai puține variante. Comparația ar fi inegală.
-        return {"error": "număr diferit de variante între moduri"}
-    return best
+    variants = _tickets(game, context, tickets, guarantee)
+    if isinstance(variants, str):
+        return {"error": variants}
+    return {"hits": max(len(set(v) & actual) for v in variants), "variants": len(variants)}
 
 
 def uniform_rates(game: str, context: dict, tickets: int, guarantee) -> dict | None:
@@ -95,16 +87,13 @@ def uniform_rates(game: str, context: dict, tickets: int, guarantee) -> dict | N
     lot = lottery_by_id(game)
     if lot is None or not context or not context.get("hard_core"):
         return None
-    out = {}
-    for mode, spread in MODES:
-        variants = _tickets(game, context, tickets, guarantee, spread)
-        if isinstance(variants, str):
-            return None
-        try:
-            out[mode] = ticket_hit_probabilities(variants, lot.draw_n, lot.max_n)
-        except ValueError:
-            return None
-    return out
+    variants = _tickets(game, context, tickets, guarantee)
+    if isinstance(variants, str):
+        return None
+    try:
+        return ticket_hit_probabilities(variants, lot.draw_n, lot.max_n)
+    except ValueError:
+        return None
 
 
 def replay_chunk(game: str, items, tickets: int, guarantee) -> list[tuple[int, dict]]:
@@ -114,7 +103,7 @@ def replay_chunk(game: str, items, tickets: int, guarantee) -> list[tuple[int, d
 def replay_full_tickets(flat, game: str, tickets: int, guarantee, workers: int = 1) -> dict:
     """Reluarea pe toti pasii cu context.
 
-    `best` = {draw_index: {"pool": h, "spread": h, ...}}; `missing` = pasi fara
+    `best` = {draw_index: {"hits": h, "variants": n}}; `missing` = pasi fara
     context (cache WF vechi); `errors` = {motiv: numar de pasi}."""
     tickets = clamp_tickets(tickets)
     contexts = step_contexts(flat)

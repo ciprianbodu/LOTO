@@ -1,9 +1,12 @@
-"""Variante dispersate: probabilitati exacte si dominanta fata de variantele din pool."""
+"""`covering.spread`: probabilitati exacte si variante dispersate (studiul din
+2026-10-05); „Bilet complet” ia variantele numai din pool (bifa scoasa 2026-10-10)."""
 
 from __future__ import annotations
 
+import inspect
 from itertools import combinations
 from math import comb
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -94,99 +97,48 @@ def _result(game, size=10, **audit_extra):
 
 @pytest.mark.parametrize("game", sorted(GEOMETRY))
 @pytest.mark.parametrize("tickets", [1, 3, 10])
-def test_spread_dominates_pool_variants_at_every_threshold(game, tickets):
-    t_pool = build_full_ticket(game, _result(game), tickets, compare=True)
-    t_spread = build_full_ticket(game, _result(game), tickets, spread=True, compare=True)
-    assert t_pool["mode"] == "pool" and t_spread["mode"] == "spread"
-    assert len(t_spread["variants"]) == len(t_pool["variants"]) == t_pool["requested"]
-    pool_p, spread_p = t_pool["chances"]["shown"], t_spread["chances"]["shown"]
-    assert t_pool["chances"]["other"] == pytest.approx(spread_p, abs=1e-15)
-    assert t_spread["chances"]["other"] == pytest.approx(pool_p, abs=1e-15)
-    for t in t_pool["chances"]["thresholds"]:
-        assert spread_p[t] >= pool_p[t] - 1e-15
-    if tickets >= 3:
-        low = t_pool["chances"]["thresholds"][0]
-        assert spread_p[low] > pool_p[low]
+def test_full_ticket_variants_come_only_from_the_ticket_pool(game, tickets):
+    t = build_full_ticket(game, _result(game), tickets)
+    assert len(t["variants"]) == t["requested"]
+    pick = GEOMETRY[game][2]
+    plain = [v[:pick] for v in t["variants"]]
+    assert {n for v in plain for n in v} <= set(t["pool"])
+    assert set(t["chances"]) == {"thresholds", "shown"}
+    assert t["chances"]["shown"] == pytest.approx(
+        {k: v for k, v in ticket_hit_probabilities(plain, GEOMETRY[game][1], GEOMETRY[game][0]).items()
+         if k in t["chances"]["thresholds"]},
+        abs=1e-15,
+    )
 
 
-def test_spread_plays_the_displayed_pool_first():
-    data = _result("6/49", size=12)
-    t = build_full_ticket("6/49", data, 1, spread=True)
-    assert set(data["hard_core"]) <= set(t["pool"])
-    assert len(t["pool"]) == 18 and t["max_overlap"] == 0
+def test_full_ticket_has_no_spread_mode():
+    params = inspect.signature(build_full_ticket).parameters
+    assert "spread" not in params and "compare" not in params
 
 
-def test_spread_keeps_the_restricted_base_and_the_joker_ball():
-    data = _result("joker", restrict_base={"min": 10, "max": 40, "excluded": []})
-    data["hard_core"] = [n for n in range(31, 41)]
-    data["audit"]["timesfm_predictions"] = {n: 1.0 for n in range(40, 9, -1)}
-    t = build_full_ticket("joker", data, 10, spread=True)
-    assert t["joker"] == 7 and all(v[-1] == 7 for v in t["variants"])
-    assert set(t["pool"]) <= set(range(10, 41))
+def test_ui_has_no_spread_checkbox_and_ignores_the_old_setting():
+    """`_load_settings` citește numai UI_PERSIST_KEYS: bifa salvată pornită de
+    versiunea veche nu mai ajunge în SETTINGS și dispare la următoarea salvare."""
+    import ui_runtime
+
+    assert "full_ticket_spread_val" not in ui_runtime.UI_PERSIST_KEYS
+    assert "full_ticket_spread_val" not in ui_runtime.DEFAULTS
+    src = Path(__file__).with_name("app_nicegui.py").read_text(encoding="utf-8")
+    assert "Variante dispersate" not in src and "full_ticket_spread_val" not in src
 
 
-def test_spread_applies_the_consecutive_limit_per_variant():
-    data = _result("6/49")
-    data["audit"]["consecutive_limit"] = {"requested": 2, "applied": 2}
-    t = build_full_ticket("6/49", data, 10, spread=True)
-    assert all(max_consecutive_on_variant(v) <= 2 for v in t["variants"])
-    assert "consecutive" in t["note"]
+def test_ui_texts_describe_the_pool_ticket():
+    import ui_results
 
-
-def test_spread_keeps_the_requested_limit_when_only_the_pool_was_relaxed():
-    """Audit 2026-10-08: pool-ul de 16 nu încăpea în bază cu limita 2 (aplicată 3);
-    fiecare variantă de 5-6 numere respectă totuși limita cerută."""
-    data = _result("6/49")
-    data["audit"]["consecutive_limit"] = {"requested": 2, "applied": 16, "relaxed": True}
-    t = build_full_ticket("6/49", data, 10, spread=True)
-    assert all(max_consecutive_on_variant(v) <= 2 for v in t["variants"])
-    assert "mai mult de 2 numere consecutive" in t["note"]
-    assert "16" not in t["note"]
-
-
-def test_default_full_ticket_stays_in_the_pool():
-    data = _result("6/49")
-    t = build_full_ticket("6/49", data, 2)
-    assert t["mode"] == "pool" and t["chances"]["other"] is None
-    assert {n for v in t["variants"] for n in v} <= set(t["pool"])
+    t = build_full_ticket("6/49", _result("6/49"), 2)
+    summary = ui_results._full_ticket_summary(t, "6/49")
+    assert "acoperire garanție" in summary and "Lei" in summary
+    lines = ui_results._full_ticket_chances(t, False)
+    assert lines == [lines[0]]
+    assert lines[0].startswith("Șansa exactă ca cel puțin o variantă să prindă: 3+")
 
 
 def test_chance_thresholds_skip_the_invariant_jackpot():
     assert chance_thresholds(3, 6, 6) == [3, 4, 5]
     assert chance_thresholds(4, 5, 6) == [4, 5]
     assert chance_thresholds(3, 5, 5) == [3, 4]
-
-
-def test_ui_setting_is_persisted_and_off_by_default():
-    import ui_runtime
-
-    assert "full_ticket_spread_val" in ui_runtime.UI_PERSIST_KEYS
-    assert ui_runtime.DEFAULTS["full_ticket_spread_val"] is False
-
-
-def test_ui_texts_describe_the_spread_ticket():
-    import ui_results
-
-    t = build_full_ticket("6/49", _result("6/49"), 2, spread=True, compare=True)
-    summary = ui_results._full_ticket_summary(t, "6/49")
-    assert "dispersate pe" in summary and "Lei" in summary
-    lines = ui_results._full_ticket_chances(t, False)
-    assert lines[0].startswith("Șansa exactă ca cel puțin o variantă să prindă: 3+")
-    assert "din pool" in lines[1]
-    assert "Media variantelor câștigătoare e aceeași" in lines[-1]
-
-
-@pytest.mark.parametrize(
-    "overlap, text",
-    [
-        (0, "fără numere comune între variante"),
-        (1, "cel mult un număr comun între două variante"),
-        (2, "cel mult 2 numere comune între două variante"),
-    ],
-)
-def test_spread_summary_states_the_overlap_in_words(overlap, text):
-    import ui_results
-
-    t = build_full_ticket("joker", _result("joker"), 1, spread=True)
-    summary = ui_results._full_ticket_summary({**t, "max_overlap": overlap}, "joker")
-    assert text in summary

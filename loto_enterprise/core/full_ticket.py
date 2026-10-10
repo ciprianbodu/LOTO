@@ -26,14 +26,8 @@ Daca rezultatul a fost generat cu limita de consecutive a utilizatorului
 (`audit["consecutive_limit"]`), extinderea o respecta: numarul care ar forma
 secventa e sarit, iar nota il numeste. Rezultatele fara limita raman neschimbate.
 
-Optional, `spread=True` (variante dispersate, `covering.spread`): variantele se
-intind pe primele numere ale clasamentului (pool-ul afisat intai, apoi restul
-clasamentului, apoi restul numerelor permise de intervalul rezultatului), cu
-suprapuneri minime. Media variantelor castigatoare e aceeasi; creste numai
-probabilitatea ca CEL PUTIN O varianta sa prinda t numere, la fiecare prag.
-Limita de consecutive se aplica atunci pe fiecare varianta. `chances` da
-probabilitatile exacte ale variantelor afisate si, cu `compare=True`, ale
-celuilalt mod, pe aceleasi bilete.
+`chances` da probabilitatea exacta (extragere uniforma) ca cel putin o
+varianta afisata sa prinda t numere, la fiecare prag cu premiu.
 """
 
 from __future__ import annotations
@@ -42,7 +36,7 @@ from math import comb
 
 from covering.common import compute_coverage_pct
 from covering.dispatch import generate_wheel, resolve_wheel_method
-from covering.spread import spread_variants, ticket_hit_probabilities
+from covering.spread import ticket_hit_probabilities
 from loto_enterprise.core.ranking import limit_consecutive_run, longest_consecutive_run
 from loto_enterprise.core.ro_text import count
 
@@ -71,15 +65,14 @@ def _pool_scores(data: dict) -> dict[int, float] | None:
         return None
 
 
-def _max_run(data: dict, key: str = "applied") -> int:
-    """Limita de consecutive a rezultatului afisat (0 = generat fara limita).
+def _max_run(data: dict) -> int:
+    """Limita de consecutive aplicata pool-ului afisat (0 = generat fara limita).
 
-    `applied` e limita pool-ului (relaxata cand pool-ul nu incape in baza
-    restransa); `requested` e cea ceruta de utilizator, pe care o respecta
-    fiecare varianta dispersata (5-6 numere, nu un pool de 16)."""
+    Limita aplicata, nu cea ceruta: pe o baza restransa ea se relaxeaza ca
+    pool-ul sa incapa."""
     cl = (data.get("audit") or {}).get("consecutive_limit") or {}
     try:
-        return max(0, int(cl.get(key) or cl.get("applied") or 0))
+        return max(0, int(cl.get("applied") or 0))
     except (TypeError, ValueError):
         return 0
 
@@ -255,45 +248,9 @@ def _fill_variants(
     return [list(v) for v in chosen], n_base
 
 
-def _allowed_numbers(data: dict, max_num: int) -> list[int]:
-    """Numerele permise de restrangerea bazei a rezultatului (toate, fara ea)."""
-    rb = (data.get("audit") or {}).get("restrict_base") or {}
-    lo, hi = 1, max_num
-    if rb and not rb.get("ignored"):
-        try:
-            lo = max(1, int(rb.get("min") or 1))
-            hi = min(max_num, int(rb.get("max") or max_num))
-        except (TypeError, ValueError):
-            lo, hi = 1, max_num
-    return list(range(lo, hi + 1))
-
-
-def _spread_universe(pool: list[int], scores, allowed: list[int]) -> list[int]:
-    """Pool-ul afisat (in ordinea clasamentului), restul clasamentului, restul permis.
-
-    Numerele fara loc in clasament urmeaza departajarea canonica (numarul mai
-    mare intai), ca la scoruri egale.
-    """
-    ok = set(allowed) | set(pool)
-    ranked = [n for n in (scores or {}) if n in ok]
-    in_pool = set(pool)
-    first = [n for n in ranked if n in in_pool]
-    first += sorted(in_pool - set(first), reverse=True)
-    rest = [n for n in ranked if n not in in_pool]
-    tail = sorted(set(allowed) - in_pool - set(rest), reverse=True)
-    return first + rest + tail
-
-
 def chance_thresholds(min_target: int, pick: int, draw_n: int) -> list[int]:
     """Pragurile afisate; marele premiu (t = pick = draw_n) e acelasi pentru orice aranjare."""
     return [t for t in range(max(1, min_target), pick + 1) if not (t == pick == draw_n)]
-
-
-def _max_overlap(variants) -> int:
-    sets = [set(v) for v in variants]
-    return max(
-        (len(a & b) for i, a in enumerate(sets) for b in sets[i + 1 :]), default=0
-    )
 
 
 def build_full_ticket(
@@ -301,15 +258,11 @@ def build_full_ticket(
     data: dict,
     tickets: int = 1,
     *,
-    spread: bool = False,
-    compare: bool = False,
     with_chances: bool = True,
 ) -> dict:
     """{variants, coverage, guarantee, joker, pool, note, error, ...} pentru un joc.
 
     `tickets` = bilete fizice (1-10); variantele cerute = bilete x variante pe bilet.
-    `spread` = variante dispersate (`mode` = "spread"); `compare` adauga in
-    `chances["other"]` probabilitatile celuilalt mod pe acelasi numar de variante.
     `with_chances=False` lasa `chances` None: enumerarea tuturor extragerilor
     costa cat restul constructiei."""
     from loto_enterprise.core.lotteries import lottery_by_id
@@ -340,85 +293,24 @@ def build_full_ticket(
     max_num = lot.max_n if lot is not None else max(shown_pool)
     min_target = lot.min_hit_target if lot is not None else 3
 
-    def pool_mode() -> dict:
-        pool, note = _ticket_pool(shown_pool, scores, n_var, pick, max_run, tickets)
-        variants, n_base = _fill_variants(
-            pool, pick, guarantee, n_var, scores, draw_n=draw_n
-        )
-        upper = None
-        if len(variants) > n_base and guarantee < pick:
-            upper = (guarantee + 1, compute_coverage_pct(variants, pool, guarantee + 1))
-        return {
-            "mode": "pool",
-            "variants": variants,
-            "coverage": float(compute_coverage_pct(variants, pool, guarantee)),
-            "pool": pool,
-            "note": note,
-            "guarantee_variants": n_base,
-            "upper_coverage": upper,
-        }
-
-    def spread_mode() -> dict:
-        max_run = _max_run(data, "requested")
-        universe = _spread_universe(shown_pool, scores, _allowed_numbers(data, max_num))
-        variants = spread_variants(
-            universe, n_var, pick, draw_n, max_num, min_target, max_run=max_run
-        )
-        used = sorted({n for v in variants for n in v})
-        note = (
-            f"Variante dispersate pe {count(len(used), 'numere')}: pool-ul afișat, "
-            "apoi următoarele din clasamentul metodei"
-        )
-        if set(used) - set(scores or {}) - set(shown_pool):
-            note += " și restul numerelor permise (fără loc în clasament, numărul mai mare întâi)"
-        note += "."
-        left_out = sorted(set(shown_pool) - set(used))
-        if left_out:
-            note += f" Pe {count(n_var, 'variante')} nu încap toate: în afara biletelor {_fmt(left_out)}."
-        if max_run:
-            worst = max((longest_consecutive_run(v) for v in variants), default=0)
-            if worst <= max_run:
-                note += f" Nicio variantă nu are mai mult de {max_run} numere consecutive."
-            else:
-                # Baza permisă e prea îngustă: limita nu încape pe toate variantele.
-                note += (
-                    f" Limita de {max_run} numere consecutive nu încape pe toate "
-                    f"variantele în numerele permise: cel mult {worst} pe o variantă."
-                )
-        return {
-            "mode": "spread",
-            "variants": variants,
-            "coverage": None,
-            "pool": used,
-            "note": note,
-            "guarantee_variants": 0,
-            "upper_coverage": None,
-        }
-
-    chosen = spread_mode() if spread else pool_mode()
+    pool, note = _ticket_pool(shown_pool, scores, n_var, pick, max_run, tickets)
+    plain, n_base = _fill_variants(pool, pick, guarantee, n_var, scores, draw_n=draw_n)
+    upper = None
+    if len(plain) > n_base and guarantee < pick:
+        upper = (guarantee + 1, compute_coverage_pct(plain, pool, guarantee + 1))
     thresholds = chance_thresholds(min_target, pick, draw_n)
     chances = None
     try:
         shown = (
-            ticket_hit_probabilities(chosen["variants"], draw_n, max_num)
+            ticket_hit_probabilities(plain, draw_n, max_num)
             if with_chances
             else None
         )
     except ValueError:
         shown = None  # numere in afara universului jocului: fara sanse exacte
     if shown is not None:
-        chances = {
-            "thresholds": thresholds,
-            "shown": {t: shown[t] for t in thresholds},
-            "other": None,
-            "other_mode": None,
-        }
-        if compare:
-            alt = pool_mode() if spread else spread_mode()
-            other = ticket_hit_probabilities(alt["variants"], draw_n, max_num)
-            chances["other"] = {t: other[t] for t in thresholds}
-            chances["other_mode"] = alt["mode"]
-    variants = chosen["variants"]
+        chances = {"thresholds": thresholds, "shown": {t: shown[t] for t in thresholds}}
+    variants = plain
     joker = None
     if is_joker:
         jk = data.get("hard_core_joker") or []
@@ -426,14 +318,17 @@ def build_full_ticket(
             joker = int(jk[0])
             variants = [v + [joker] for v in variants]
     return {
-        **chosen,
         "variants": variants,
+        "coverage": float(compute_coverage_pct(plain, pool, guarantee)),
+        "pool": pool,
+        "note": note,
+        "guarantee_variants": n_base,
+        "upper_coverage": upper,
         "guarantee": guarantee,
         "joker": joker,
         "error": None,
         "tickets": tickets,
         "per_ticket": per_ticket,
         "requested": n_var,
-        "max_overlap": _max_overlap(chosen["variants"]),
         "chances": chances,
     }

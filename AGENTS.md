@@ -319,9 +319,9 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
  productie (pool 6..16, garantie 2..4) si „Bilet complet”. Exemplu 6/49,
  9 variante, 3+: 16,54% fata de 8,77% (Bilet complet). Media variantelor
  castigatoare si sansa marelui premiu sunt identice in orice aranjare.
-- Implementat ca optiune, implicit OPRITA (§6, `covering/spread.py`). Nu
- schimba scorerul, pool-ul, wheel-ul principal, bench-ul, WF sau coada.
- Nu necesita bump de cache.
+- Implementat ca optiune, implicit OPRITA (`covering/spread.py`), scoasa la
+ 2026-10-10 (§6). Nu schimba scorerul, pool-ul, wheel-ul principal, bench-ul,
+ WF sau coada. Nu necesita bump de cache.
 - Teste: 93 fisiere `test_*.py`. Pe Python 3.14.7 / Windows: 2073 trec,
  17 omise, zero esecuri.
 - Raport: `scripts/analysis/hit_rate_study_2026-10-05.md`.
@@ -1187,30 +1187,23 @@ limita de validitate din §5).
   fara limita ramane pe regula veche.
   „📋 Copiaza numerele" copiaza in browser, chiar in click: Safari/iOS scriu in
   clipboard numai in timpul gestului, nu dupa un drum pana la server.
-- Bifa „🎯 Variante dispersate pe bilet” (`full_ticket_spread_val`, implicit
-  OPRITA, persistata) schimba numai „Bilet complet”: acelasi numar de
-  variante, intinse cu suprapuneri minime (`build_full_ticket(spread=True)`,
-  `covering.spread.spread_variants`). Universul are ordinea: pool-ul afisat,
-  apoi restul clasamentului metodei, apoi celelalte numere permise (numarul
-  mai mare intai). Respecta `audit.restrict_base` (fara `ignored`), limita de
-  consecutive CERUTA (`consecutive_limit.requested`, nu cea relaxata pentru
-  pool-ul de 16) PE FIECARE VARIANTA si numarul Joker. Pe o baza ingusta,
-  variantele peste limita ramase dupa cautarea locala se inlocuiesc cu
-  combinatii conforme nefolosite (`_repair_runs`, enumerare pana la 20000);
-  cand nu exista destule, nota spune limita atinsa, nu o pretinde. Renunta la garantia
-  pool-ului. Dialogul afiseaza, pentru pragurile cu premiu, sansa EXACTA ca
-  cel putin o varianta sa castige (`ticket_hit_probabilities`, enumerare),
-  sansa celuilalt mod pe acelasi numar de variante si nota ca media si marele
-  premiu nu se schimba. Fara afirmatie predictiva; masurat in
-  `scripts/analysis/hit_rate_study_2026-10-05.md`.
-- „📜 Istoric hits” are sub tabelul principal „Bilet complet” din pool si
-  dispersat, pe ACELEASI extrageri WF (`ticket_replay.replay_full_tickets`,
+- „Bilet complet” ia variantele numai din pool. Bifa „🎯 Variante dispersate
+  pe bilet” a fost scoasa la 2026-10-10, la cererea utilizatorului: variantele
+  dispersate ieseau din pool (6/49, 2 bilete: 36 de numere, ultimele doua
+  variante din numere nealese de metoda), iar avantajul lor la 3+ (11,14% fata
+  de 10,05% la 6 variante, extrageri uniforme) nu se vede pe 778 de extrageri
+  WF (diferenta asteptata 8-9 extrageri, abaterea standard 11). Cheia
+  `full_ticket_spread_val` din `.ui_state.json` nu se mai citeste si dispare
+  la urmatoarea salvare. Dialogul afiseaza, pentru pragurile cu premiu, sansa
+  EXACTA ca cel putin o varianta sa castige (`ticket_hit_probabilities`).
+- „📜 Istoric hits” are sub tabelul principal „Bilet complet” pe ACELEASI
+  extrageri WF (`ticket_replay.replay_full_tickets`,
   `ui_hits._render_full_ticket_replay`): la fiecare pas, biletele pe care le-ar
   fi dat butonul in ziua aceea, din `ticket_context` (§8), cu numarul de
   bilete din sidebar si garantia rezultatului afisat; Joker numai Urna 1;
-  la 5/40 intersectia e cu toate cele sase numere extrase. Ambele moduri au
-  acelasi numar de variante; un pas la care difera (pool din fallback-ul de
-  frecventa, fara clasament de extins) se numara indisponibil. Pool-ul si
+  la 5/40 intersectia e cu toate cele sase numere extrase. Un pas cu mai
+  putine variante decat biletele cerute (pool din fallback-ul de frecventa,
+  fara clasament de extins) se numara indisponibil. Pool-ul si
   referinta aleatoare a tabelului principal folosesc marimea jucata la pasi
   (`_wf_pool_size`), nu pe cea ceruta. Coloana 🎲 = P exacta (enumerare, extragere
   uniforma) ca cel putin o varianta sa atinga 3+/4+/5+, calculata pe
@@ -1408,7 +1401,8 @@ bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, pe care il da numai motorul
   Masurare: `scripts/analysis/bench_budget_climb.py`; raport
   `scripts/analysis/pool16_4plus_2026-10-08.md`.
 
-Variante dispersate (2026-10-05, `covering/spread.py`): cautare locala
+Variante dispersate (2026-10-05, `covering/spread.py`, scoase din aplicatie la
+2026-10-10, §6; raman pentru studiul `ticket_geometry_2026-10-05.py`): cautare locala
 determinista pe probabilitatea EXACTA ca doua variante sa castige impreuna
 (`pair_joint_probability`; pondere 1 la tinta, 1e-3 la pragurile mai mari,
 1e-9 la cele mai mici). Prefera numerele mai bine clasate la egalitate si
@@ -1417,9 +1411,8 @@ exact cand doua variante au cel mult `2t - extrase - 1` numere comune (6/49 si
 5/40 4+: 1; Joker 3+: 0). `ticket_hit_probabilities` enumereaza toate
 extragerile (max_num <= 64). Pe extrageri uniforme, dispersia domina la
 fiecare prag cea mai buna configuratie de productie masurata (pool 6..16,
-garantie 2..4) la acelasi numar de variante. Se foloseste
-numai in „Bilet complet” (§6). Wheel-ul principal ramane cover pe pool, cu
-garantia lui.
+garantie 2..4) la acelasi numar de variante. Aplicatia foloseste din modul
+numai `ticket_hit_probabilities` (sansele din „Bilet complet” si coloana 🎲).
 
 Experimentul reproductibil `scripts/analysis/bench_budget_cover.py` compara
 greedy, La Jolla, bilete aleatoare si maxcover: pool identic dupa frequency
@@ -1800,7 +1793,7 @@ pipeline-ului sau a contractului UI-worker.
   491 de scoreri, 6.355 de teste, nul sintetic iid cu reluarea cautarii,
   confirmare pe 30% romanesti si replicare externa. Nimic promovat (§2).
   Geometria biletelor (`ticket_geometry_2026-10-05.py`) a dat variantele
-  dispersate, optiune in „Bilet complet”.
+  dispersate, optiune in „Bilet complet” pana la 2026-10-10 (§6).
 - [x] Ecran 2026-10-09 (`scripts/analysis/hit_screen_2026-10-09.py`): bateria
   de aleatorism pe 14 serii, puterea unui dezechilibru de bile, semnale intre
   jocuri, „urmareste liderul”, era curenta si plafonul retrospectiv. Nimic
