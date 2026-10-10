@@ -1,5 +1,11 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Teste noi, 10.10.2026:** [1.002 metode noi față de liderul clasamentului](method_screen_2026-10-10.md).
+19 familii, 16 celule ale clasamentului, nul al căutării pe 200 de istorii,
+McNemar față de lider și binomial față de hazard pe confirmare, Holm, replicare
+externă. Nicio metodă nu intră în aplicație.
+Reproducere: `python scripts/analysis/method_screen_2026-10-10.py`.
+
 **Teste noi, 09.10.2026:** [aleatorism, semnale între jocuri, „urmărește liderul”, era curentă](hit_screen_2026-10-09.md).
 131 de teste de aleatorism pe 14 serii și 492 de combinații metodă × pool, cu nul
 al căutării, confirmare și replicare externă. Nicio metodă promovată; Joker

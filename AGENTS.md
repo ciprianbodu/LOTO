@@ -80,6 +80,40 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### 1.002 metode noi fata de liderul clasamentului — 2026-10-10
+
+- Cerinta: metodele care depasesc clasamentul intra in aplicatie. Ecran cu
+  protocol fixat inainte de rulare (`scripts/analysis/method_screen_2026-10-10.py`,
+  raport `method_screen_2026-10-10.md`): 1.002 scoreri noi in 19 familii (840
+  la Urna 2), toti verificati fara date viitoare si echivarianti; 16 celule ca
+  in clasament (6/49 si Joker Urna 1 pe trei pool-uri la 3+ si 4+, 5/40 la 4+,
+  Urna 2 top-1), liderul = decizia din `folds.csv`, rulat ca in productie.
+- 48 de candidati inghetati pe dezvoltare. Pe confirmare (ultimele 30%):
+  McNemar fata de lider Holm minim 1,00, binomial fata de hazard Holm minim
+  0,84. Nimic in aplicatie. Nulul cautarii: p 0,18-1,00 in 14 din 16 celule;
+  la Joker Urna 1 pool 16 (4+ p 0,010, 3+ 0,055) candidatii cad pe confirmare.
+- De urmarit, nepromovat: `ens_win100+winall+ewma0.01` la Joker Urna 1, pool 8,
+  3+: confirmare 4,96% fata de lider 3,14% si hazard 3,27%, extern p 0,010.
+- Rulare: 6.473 s pe 4 nuclee, cu amprentele CSV-urilor si ale `folds.csv`.
+  Suita: 102 fisiere `test_*.py`, 2451 teste trecute, 11 sarite, zero esecuri.
+
+### Bilet complet numai din pool — 2026-10-10
+
+- Bifa „🎯 Variante dispersate pe bilet” e scoasa, la cererea utilizatorului:
+  „Bilet complet” face variantele numai din pool (§6). Dispersia iesea din
+  pool (6/49, 2 bilete: 36 de numere, V5-V6 din numere nealese de metoda), iar
+  avantajul ei, 3+ 11,14% fata de 10,05% la 6 variante pe extrageri uniforme,
+  nu se vede pe 778 de extrageri WF: diferenta asteptata 8-9 extrageri,
+  abaterea standard 11; istoricul arata pool-ul egal sau inainte in 24% din
+  cazuri cu 2 bilete si 48% cu un bilet. O dispersie strict in pool da 10,03%,
+  cat modul normal.
+- „📜 Istoric hits” reface numai „Bilet complet” din pool; dialogul nu mai
+  compara cu celalalt mod. `covering/spread.py` ramane: `ticket_hit_probabilities`
+  da sansele exacte, iar `spread_variants` studiul din 2026-10-05.
+- Fara bump de cache: nici worker-ul, nici WF nu depindeau de bifa.
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 101 fisiere `test_*.py`,
+  2446 teste trecute, 11 sarite, zero esecuri.
+
 ### Teste pentru rata de hit — 2026-10-09
 
 - Ecran nou, protocol fixat inainte de rulare
@@ -1794,6 +1828,11 @@ pipeline-ului sau a contractului UI-worker.
   confirmare pe 30% romanesti si replicare externa. Nimic promovat (§2).
   Geometria biletelor (`ticket_geometry_2026-10-05.py`) a dat variantele
   dispersate, optiune in „Bilet complet” pana la 2026-10-10 (§6).
+- [x] Ecran 2026-10-10 (`scripts/analysis/method_screen_2026-10-10.py`): 1.002
+  metode noi fata de liderul fiecarei celule a clasamentului, McNemar si
+  binomial cu Holm, replicare externa. Nimic promovat (§2). Ramas deschis:
+  `ens_win100+winall+ewma0.01`, Joker Urna 1 pool 8 3+, numai pe extrageri
+  viitoare.
 - [x] Ecran 2026-10-09 (`scripts/analysis/hit_screen_2026-10-09.py`): bateria
   de aleatorism pe 14 serii, puterea unui dezechilibru de bile, semnale intre
   jocuri, „urmareste liderul”, era curenta si plafonul retrospectiv. Nimic
