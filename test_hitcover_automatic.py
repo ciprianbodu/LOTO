@@ -70,13 +70,21 @@ def test_physical_tickets_automatically_preserve_all_thresholds(game, pick, monk
         "hard_core": pool, "guarantee": 4, "hard_core_joker": [7],
         "audit": {"timesfm_predictions": scores},
     }
+    max_num, draw_n = {"6/49": (49, 6), "5/40": (40, 6), "joker": (45, 5)}[game]
     monkeypatch.setenv("LOTO_WHEEL_METHOD", "greedy")
     base = build_full_ticket(game, data, 10)
     monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
     actual = build_full_ticket(game, data, 10)
-    before, after = assert_dominates(
-        pool, [v[:pick] for v in base["variants"]], [v[:pick] for v in actual["variants"]]
-    )
+    base_v = [v[:pick] for v in base["variants"]]
+    actual_v = [v[:pick] for v in actual["variants"]]
+    assert len(actual_v) == len(base_v)
+    # Din 2026-10-11 biletele fizice trec și prin recoacerea pe șansa exactă,
+    # certificată pe geometria jocului: niciun prag afișat (3+ și mai sus) nu
+    # scade față de greedy, iar acoperirea garanției nu scade.
+    a = wheel_hit_probabilities(pool, base_v, draw_n, max_num)["ticket"]
+    b = wheel_hit_probabilities(pool, actual_v, draw_n, max_num)["ticket"]
+    for t in range(3, min(pick, draw_n) + 1):
+        assert b[t] >= a[t] - 1e-15
     assert actual["error"] is None
     assert actual["pool"] == base["pool"] == pool
     assert actual["requested"] == base["requested"] == len(actual["variants"])
@@ -84,11 +92,8 @@ def test_physical_tickets_automatically_preserve_all_thresholds(game, pick, monk
     assert actual["guarantee_variants"] == base["guarantee_variants"]
     assert len(set(map(tuple, actual["variants"]))) == len(actual["variants"])
     if game == "6/49":
-        assert any(after[h][3] > before[h][3] for h in range(3, 7))
-        a = wheel_hit_probabilities(pool, base["variants"], 6, 49)
-        b = wheel_hit_probabilities(pool, actual["variants"], 6, 49)
-        assert b["ticket"][3] > a["ticket"][3]
-        assert b["ticket"][4] > a["ticket"][4]
+        assert b[3] > a[3]
+        assert b[4] > a[4]
     if game == "joker":
         assert all(v[-1] == 7 for v in actual["variants"])
 

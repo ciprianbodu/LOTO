@@ -61,7 +61,12 @@ def test_one_more_ticket_no_longer_lowers_the_chances():
     assert p[65][3] >= p[64][3] - 0.01
 
 
-def test_hitcover_range_is_unchanged():
+def test_hitcover_range_is_left_to_the_annealing_stage(monkeypatch):
+    """1..64 de bilete nu trec prin budget_climb: fără recoacere (2026-10-11),
+    rezultatul cu `max_num` e cel fără `max_num`."""
+    import covering.dispatch as dispatch
+
+    monkeypatch.setattr(dispatch, "improve_ticket_chances", lambda *a, **k: (a[1], {"applied": False}))
     pick, draw, max_num = GAMES["6/49"]
     scores = scores_for(POOL)
     for budget in (10, 64):
@@ -148,7 +153,7 @@ def test_engine_passes_the_universe_to_the_climb():
 
 
 def test_walk_forward_key_names_the_budget_branch():
-    assert wf._wheel_sig(16, "6/49", 4, None, 64).endswith("|rt1|hp1")
+    assert wf._wheel_sig(16, "6/49", 4, None, 64).endswith("|rt1|hp1|sa1")
     assert wf._wheel_sig(16, "6/49", 4, None, 100).startswith("hitcover|")
     assert wf._wheel_sig(16, "6/49", 4, None, 100).endswith("|bc1")
     size = complete_design_size(16, 6, 4)
@@ -158,7 +163,7 @@ def test_walk_forward_key_names_the_budget_branch():
     small = complete_design_size(16, 6, 3)
     assert wf._wheel_sig(16, "6/49", 3, None, small).endswith("|bf1")
     assert wf._wheel_sig(16, "6/49", 3, None, small - 1) == (
-        f"hitcover|g3|c3|cap{small - 1}|rt1|hp1"
+        f"hitcover|g3|c3|cap{small - 1}|rt1|hp1|sa1"
     )
 
 

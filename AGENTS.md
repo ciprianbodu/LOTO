@@ -61,7 +61,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v13` (bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v14` (recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -79,6 +79,33 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Recoacere pe sansa exacta a biletelor — 2026-10-11
+
+- Cerinta: cod care sa dea mai multe hituri. Rata pool-ului nu se poate
+  ridica prin cod (hipergeometrica, extrageri uniforme pe toate testele);
+  singurul loc e asezarea numerelor pe bilete, la acelasi pool si acelasi
+  numar de bilete. Masurat pe 155 de configuratii (3 jocuri, pool 10-16,
+  garantie 3-4, bugete sub designul complet, inclusiv bugetele „Biletului
+  complet”): etapele de pana acum lasau loc de 0-2,8% relativ la pragul tinta.
+- Etapa noua, `covering/anneal_hits.py` (§7): recoacere simulata pe
+  probabilitatea exacta a geometriei jocului, pornita din wheel-ul hitcover,
+  memorata pe geometrie, determinista. Intra in productie numai certificata:
+  acelasi numar de bilete distincte, numerele jucate raman jucate, P(>= t pe
+  un bilet) nu scade la niciun t de la 3 la numarul extras, creste strict la
+  cel putin unul, acoperirea garantiei nu scade. Se aplica la bugete de 1..64
+  de bilete pe calea motorului si pe „Bilet complet” sub garantia completa;
+  `greedy` explicit ramane referinta.
+- Rezultat (`scripts/analysis/anneal_hits_2026-10-11.md`): bilete schimbate
+  in 98 din 155 de configuratii, castig la tinta in 83, maxim 2,76%
+  (Joker pool 14, 40 de bilete), mediana 0,20%; nicio scadere la vreun prag
+  afisat. Bilet complet 6/49 pool 16: un bilet 3+ 5,466% -> 5,530%, trei
+  bilete 13,431% -> 13,554%. 1,6 s pe geometrie in medie, cel mult 3,9 s.
+- Chei: WF sufixul `sa1` pe bugetele 1..64 ale hitcover (§8); worker `v14`.
+  Primul WF dupa actualizare recalculeaza cheile cu plafon (partial, apoi
+  `skip_indices`).
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 104 fisiere `test_*.py`,
+  2477 teste trecute, 11 sarite, zero esecuri.
 
 ### Test pe extrageri viitoare, Joker Urna 1 — 2026-10-11
 
@@ -1244,7 +1271,9 @@ limita de validitate din §5).
   afara, iar acoperirea numeste pe cate numere ale biletului e calculata.
   Extinderea respecta limita de consecutive a rezultatului
   (`audit.consecutive_limit.applied`) si spune ce numar a sarit; un rezultat
-  fara limita ramane pe regula veche.
+  fara limita ramane pe regula veche. Cand garantia nu e completa in buget,
+  variantele trec prin recoacerea pe sansa exacta (§7), certificata fara
+  scadere la vreun prag afisat.
   „📋 Copiaza numerele" copiaza in browser, chiar in click: Safari/iOS scriu in
   clipboard numai in timpul gestului, nu dupa un drum pana la server.
 - „Bilet complet” ia variantele numai din pool. Bifa „🎯 Variante dispersate
@@ -1461,6 +1490,23 @@ bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, pe care il da numai motorul
   Masurare: `scripts/analysis/bench_budget_climb.py`; raport
   `scripts/analysis/pool16_4plus_2026-10-08.md`.
 
+Recoacerea pe sansa exacta (2026-10-11, `covering/anneal_hits.py`): dupa
+hitcover si schimburile de profil, la 1..64 de bilete pe calea motorului
+(`max_num` dat) si pe „Bilet complet” cand garantia nu e completa in buget,
+cu alegerea automata (`greedy` explicit ramane referinta). Muta cate un numar
+al unui bilet, accepta si pierderi mici cu temperatura in scadere, obiectiv
+P exacta (extragere uniforma de `draw_n` din `max_num`) cu garantia intai si
+penalizare de 100x pentru orice scadere sub biletele de plecare la pragurile
+3..`draw_n` sau la acoperirea garantiei. Buget fix de mutari (20.000, mai
+putine la bugete mari), seed din geometrie, `lru_cache` pe geometrie si
+biletele de plecare in pozitii. Certificare exacta la iesire: acelasi numar
+de bilete distincte, numerele jucate raman jucate, P(>= t) nu scade la niciun
+t de la 3 la `draw_n`, creste strict la cel putin unul, `counts[g][g]` nu
+scade; altfel biletele raman. Spre deosebire de etapele anterioare, certifica
+pe probabilitatile geometriei jocului, nu pe numaratori la fiecare marime a
+intersectiei: o numaratoare la 1-2 hituri poate scadea. Masurare:
+`scripts/analysis/bench_anneal_hits.py`, raport `anneal_hits_2026-10-11.md`.
+
 Variante dispersate (2026-10-05, `covering/spread.py`, scoase din aplicatie la
 2026-10-10, §6; raman pentru studiul `ticket_geometry_2026-10-05.py`): cautare locala
 determinista pe probabilitatea EXACTA ca doua variante sa castige impreuna
@@ -1603,8 +1649,9 @@ Cheia include istoricul complet, lookback, scorer, ensemble, tinta, wheel,
 hash-ul designului, limita de consecutive (numai activa) si, pentru Joker,
 decizia Urnei 2. Semnatura wheel-ului cu buget poarta `bf1` cu hash-ul
 designului cand bugetul ia coverul complet si `bc1` peste 64 de bilete
-(cautarea exacta); celelalte bugete pastreaza cheia veche. La La Jolla si
-union34 (fara plafon) semnatura poarta `tg1`, regula la egalitate de bilete.
+(cautarea exacta) si `sa1` la 1..64 de bilete (recoacerea pe sansa exacta,
+§7). La La Jolla si union34 (fara plafon) semnatura poarta `tg1`, regula la
+egalitate de bilete.
 Designul semnat e al pool-ului rotit efectiv (`_effective_pool_size`): un
 interval restrans mai ingust decat pool-ul, dar cel putin cat un bilet, il
 taie.
@@ -1615,7 +1662,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v13` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v14` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

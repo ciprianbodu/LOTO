@@ -1,5 +1,10 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Mai multe hituri pe bilete la același cost, 11.10.2026:** [recoacerea pe șansa exactă](anneal_hits_2026-10-11.md).
+155 de configurații: bilete schimbate în 98, câștig la țintă în 83, maxim 2,76%,
+nicio scădere la vreun prag. Rata pool-ului rămâne a hazardului.
+Reproducere: `python scripts/analysis/bench_anneal_hits.py`.
+
 **Test pe extrageri viitoare, 11.10.2026:** [`ens_win100+winall+ewma0.01`, Joker Urna 1, pool 8, 3+](forward_test_joker/PREREGISTRATION.md).
 Candidatul rămas deschis din ecranul de pe 10.10, înghețat și testat secvențial
 (SPRT) numai pe extragerile de după înregistrare. Nu atinge producția.
