@@ -1,5 +1,10 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Test pe extrageri viitoare, 11.10.2026:** [`ens_win100+winall+ewma0.01`, Joker Urna 1, pool 8, 3+](forward_test_joker/PREREGISTRATION.md).
+Candidatul rămas deschis din ecranul de pe 10.10, înghețat și testat secvențial
+(SPRT) numai pe extragerile de după înregistrare. Nu atinge producția.
+Rulare: `python scripts/analysis/forward_test_joker/forward_test_joker.py`.
+
 **Teste noi, 10.10.2026:** [1.002 metode noi față de liderul clasamentului](method_screen_2026-10-10.md).
 19 familii, 16 celule ale clasamentului, nul al căutării pe 200 de istorii,
 McNemar față de lider și binomial față de hazard pe confirmare, Holm, replicare
