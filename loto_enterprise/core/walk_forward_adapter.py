@@ -373,6 +373,9 @@ def _wheel_sig(
                 return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1"
             if cap >= 65:
                 return f"{method}|{geometry}|rt1|hp1|bc1"
+            # `sa1`: recoacerea pe șansa exactă (`covering.anneal_hits`) la
+            # 1..64 de bilete, acceptată numai fără scădere la vreun prag.
+            return f"{method}|{geometry}|rt1|hp1|sa1"
         return f"{method}|{geometry}|rt1|hp1"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)

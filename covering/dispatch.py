@@ -6,6 +6,8 @@ import os
 from functools import lru_cache
 
 from budget_cover import wheel_hitcover, wheel_maxcover
+from covering.anneal_hits import MAX_TICKETS as ANNEAL_MAX_TICKETS
+from covering.anneal_hits import improve_ticket_chances
 from covering.budget_climb import MIN_TICKETS, improve_budget_hits
 from covering.common import (
     _coverage_pct,
@@ -108,8 +110,10 @@ def generate_wheel(
 
     `max_num` (dat de motor) activează rafinările bugetului automat (hitcover):
     coverul complet când designul validat încape în buget; altfel, peste 64 de
-    bilete, `budget_climb`, acceptat numai cu dominanță exactă de profil. Fără
-    `max_num` (biletele fizice) ieșirea rămâne cea de dinainte.
+    bilete, `budget_climb`, acceptat numai cu dominanță exactă de profil, iar
+    la 1..64 de bilete recoacerea pe șansa exactă (`covering.anneal_hits`),
+    acceptată numai dacă niciun prag afișat nu scade. Fără `max_num`
+    (biletele fizice) ieșirea rămâne cea de dinainte.
     """
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
@@ -185,6 +189,20 @@ def generate_wheel(
             draws,
             int(max_num),
             start=start,
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    if (
+        fn is wheel_hitcover
+        and max_num
+        and 1 <= int(max_variants or 0) <= ANNEAL_MAX_TICKETS
+        and cov < 100.0
+        and len(set(pool)) == len(pool) <= 16
+    ):
+        draws = int(pick) if draw_n is None else int(draw_n)
+        improved, audit = improve_ticket_chances(
+            _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
         )
         if audit["applied"]:
             wheel = improved

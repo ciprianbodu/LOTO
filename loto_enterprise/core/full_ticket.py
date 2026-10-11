@@ -186,6 +186,7 @@ def _fill_variants(
     scores,
     *,
     draw_n: int | None = None,
+    max_num: int | None = None,
 ) -> tuple[list[list[int]], int]:
     """Variantele biletelor si cate dintre ele formeaza wheel-ul garantiei.
 
@@ -198,9 +199,17 @@ def _fill_variants(
     Rafinarea pastreaza baza garantiei si incepe cu geometria `pick` deja
     livrata. Daca `draw_n` e mai mare, urmeaza o rafinare suplimentara numai
     pe locurile ramase, cu profil nedescrescator fata de rezultatul livrat.
+
+    Cand bugetul nu ajunge la garantia completa (toate variantele sunt baza)
+    si alegerea e cea automata (hitcover), `max_num` porneste recoacerea pe
+    sansa exacta (`covering.anneal_hits`): aceleasi variante ca numar,
+    acceptate numai daca niciun prag afisat nu scade. Fara `max_num`, sau cu
+    o metoda ceruta explicit (`LOTO_WHEEL_METHOD`), biletul ramane cel de
+    dinainte.
     """
+    method = resolve_wheel_method(n_var)
     base, _ = generate_wheel(
-        resolve_wheel_method(n_var),
+        method,
         pool=pool,
         pick=pick,
         guarantee=guarantee,
@@ -209,6 +218,21 @@ def _fill_variants(
     )
     chosen = [tuple(sorted(int(x) for x in v)) for v in base][:n_var]
     n_base = len(chosen)
+    if (
+        max_num is not None
+        and method == "hitcover"
+        and n_base == n_var
+        and compute_coverage_pct(chosen, pool, guarantee) < 100.0
+    ):
+        from covering.anneal_hits import improve_ticket_chances
+        from covering.common import _sorted_pool
+
+        drawn = pick if draw_n is None else int(draw_n)
+        improved, audit = improve_ticket_chances(
+            _sorted_pool(pool, scores), chosen, guarantee, drawn, int(max_num)
+        )
+        if audit["applied"]:
+            chosen = [tuple(v) for v in improved]
     seen = set(chosen)
     level = guarantee
     while len(chosen) < n_var and level < pick:
@@ -294,7 +318,9 @@ def build_full_ticket(
     min_target = lot.min_hit_target if lot is not None else 3
 
     pool, note = _ticket_pool(shown_pool, scores, n_var, pick, max_run, tickets)
-    plain, n_base = _fill_variants(pool, pick, guarantee, n_var, scores, draw_n=draw_n)
+    plain, n_base = _fill_variants(
+        pool, pick, guarantee, n_var, scores, draw_n=draw_n, max_num=max_num
+    )
     upper = None
     if len(plain) > n_base and guarantee < pick:
         upper = (guarantee + 1, compute_coverage_pct(plain, pool, guarantee + 1))
