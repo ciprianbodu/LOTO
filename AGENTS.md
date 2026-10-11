@@ -80,6 +80,32 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Test pe extrageri viitoare, Joker Urna 1 — 2026-10-11
+
+- La cererea utilizatorului, candidatul ramas deschis din ecranul de pe
+  2026-10-10 e inregistrat ca test pe extrageri viitoare
+  (`scripts/analysis/forward_test_joker/`, protocolul in `PREREGISTRATION.md`):
+  `ens_win100+winall+ewma0.01`, Joker Urna 1, pool 8, 3+, SPRT cu α 0,025 si
+  β 0,20, H0 3,269% (hipergeometric), H1 4,959% (30/605, confirmarea din
+  ecran), plafon 1.000 de extrageri cu test binomial final. Se evalueaza numai
+  extragerile cu data dupa 2026-10-11.
+- Regula e copia inghetata `frozen_ens.py` (trasaturi pe zile de extragere,
+  rang mediu la egalitate, departajare scor / aparitii totale / numar mai
+  mare), verificata la inregistrare: pool-ul de 8 al ecranului la fiecare
+  dintre cele 2.194 de extrageri. `test_forward_test_joker.py` cade daca
+  regula, parametrii sau istoricul de dinaintea inregistrarii se schimba;
+  mecanica SPRT, verdictul si avertismentele sunt importate din testul
+  `dmd_forecast`.
+- Caracteristici de operare exacte (`sprt_operating.py` pe fisierul de aici):
+  fara avantaj real, respins in 89,8% din rulari (mediana 312 extrageri, ~3
+  ani); cu avantajul afirmat real, confirmat in 71,4% cu testul final (mediana
+  735 extrageri, ~7 ani). Nu atinge productia; pana la verdict metoda nu se
+  promoveaza.
+- Evaluatorul se numeste `forward_test_joker.py`: pytest colecteaza si
+  `*_test.py`, iar al doilea `forward_test.py` ar intra in coliziune cu cel
+  din 2026-09-27. Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 103
+  fisiere `test_*.py`, 2467 teste trecute, 11 sarite, zero esecuri.
+
 ### 1.002 metode noi fata de liderul clasamentului — 2026-10-10
 
 - Cerinta: metodele care depasesc clasamentul intra in aplicatie. Ecran cu
@@ -1830,9 +1856,13 @@ pipeline-ului sau a contractului UI-worker.
   dispersate, optiune in „Bilet complet” pana la 2026-10-10 (§6).
 - [x] Ecran 2026-10-10 (`scripts/analysis/method_screen_2026-10-10.py`): 1.002
   metode noi fata de liderul fiecarei celule a clasamentului, McNemar si
-  binomial cu Holm, replicare externa. Nimic promovat (§2). Ramas deschis:
-  `ens_win100+winall+ewma0.01`, Joker Urna 1 pool 8 3+, numai pe extrageri
-  viitoare.
+  binomial cu Holm, replicare externa. Nimic promovat (§2).
+- [ ] Test preinregistrat pe extrageri viitoare, pornit 2026-10-11:
+  `ens_win100+winall+ewma0.01`, Joker Urna 1, pool 8, 3+, SPRT
+  (`scripts/analysis/forward_test_joker/`, protocolul in `PREREGISTRATION.md`,
+  regula inghetata `frozen_ens.py` cu hash in `preregistration_2026-10-11.json`;
+  se evalueaza numai extragerile cu data dupa 2026-10-11). Nu atinge productia;
+  pana la decizie metoda nu are avantaj demonstrat si nu se promoveaza (§2).
 - [x] Ecran 2026-10-09 (`scripts/analysis/hit_screen_2026-10-09.py`): bateria
   de aleatorism pe 14 serii, puterea unui dezechilibru de bile, semnale intre
   jocuri, „urmareste liderul”, era curenta si plafonul retrospectiv. Nimic
