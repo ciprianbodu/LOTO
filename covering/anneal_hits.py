@@ -16,6 +16,15 @@ din pool rămân jucate, P(cel puțin t pe un bilet) nu scade la NICIUN prag de
 la 3 la ``draw_n`` și crește strict la cel puțin unul, iar acoperirea clasică
 a garanției nu scade. Altfel biletele de plecare rămân neschimbate.
 
+A doua formă, ``improve_full_cover_variants`` (2026-10-12), e pentru „Bilet
+complet” când garanția e deja completă înainte de a umple biletele: acolo
+P(cel puțin ``guarantee``) e la maximul hipergeometric al pool-ului și nu se
+mai poate mișca, deci căutarea urmărește pragul următor (g+1), pe TOATE
+variantele, iar o mutare care ar strica acoperirea 100% e respinsă pe loc.
+Se ține minte cel mai bun design care trece certificarea, nu cel mai bun
+obiectiv. După ea, garanția e asigurată de toate variantele împreună, nu de
+primele ``n_base``.
+
 Numai geometrie: pozițiile din pool urmează ordinea canonică a scorurilor;
 niciun istoric, nicio valoare de scor și nicio afirmație predictivă nu intră
 în căutare. Determinist: buget fix de mutări, generator seedat din geometrie,
@@ -60,23 +69,46 @@ def _weights(thresholds: list[int], primary: int) -> dict[int, float]:
     return out
 
 
-@lru_cache(maxsize=64)
-def _anneal(
+def _lex_greater(a: tuple[float, ...], b: tuple[float, ...], tol: float = 1e-15) -> bool:
+    for x, y in zip(a, b):
+        if abs(x - y) > tol:
+            return x > y
+    return False
+
+
+def _search(
     v: int,
     pick: int,
     draw_n: int,
     max_num: int,
     guarantee: int,
     start: tuple[int, ...],
+    *,
+    primary: int | None = None,
+    hard_coverage: bool = False,
+    certified_best: bool = False,
+    seed_tag: str = "anneal-hits",
 ) -> tuple[tuple[int, ...], int, int]:
-    """(bilete găsite ca măști pe poziții, mutări acceptate, mutări încercate)."""
+    """(bilete găsite ca măști pe poziții, mutări acceptate, mutări încercate).
+
+    ``primary`` e pragul urmărit întâi (implicit garanția). Cu ``hard_coverage``
+    o mutare care scade acoperirea garanției sub cea de plecare e respinsă pe
+    loc. Cu ``certified_best`` se întoarce cel mai bun design vizitat care nu
+    scade la niciun prag și nici la acoperire (ordinea: pragul principal, apoi
+    cele mai mari, apoi cele mai mici), nu cel cu obiectivul penalizat maxim.
+    """
     masks, sizes, weights, _member = _subsets(v, draw_n, max_num)
     masks = masks.astype(np.int64)
     prob = weights.astype(np.float64) / comb(max_num, draw_n)
     top = min(pick, draw_n)
     thresholds = list(range(MIN_THRESHOLD, top + 1))
-    primary = min(max(int(guarantee), MIN_THRESHOLD), top)
+    if primary is None:
+        primary = int(guarantee)
+    primary = min(max(int(primary), MIN_THRESHOLD), top)
     w = _weights(thresholds, primary)
+    order = [primary] + [t for t in thresholds if t > primary] + [
+        t for t in sorted(thresholds, reverse=True) if t < primary
+    ]
     guarantee_rows = np.flatnonzero(sizes == guarantee)
 
     def column(ticket: int) -> np.ndarray:
@@ -103,13 +135,14 @@ def _anneal(
     base_p, base_cov = measure(H.max(axis=0))
     cur_f = objective(base_p, base_cov, base_p, base_cov)
     best_f, best_masks = cur_f, tuple(current)
+    best_key = tuple(base_p[t] for t in order)
     played = [sum((m >> p) & 1 for m in current) for p in range(v)]
     present = set(current)
     moves = _move_budget(len(masks), len(current))
     t0 = max(0.05 * base_p[primary], 1e-7)
     t1 = t0 / 1000.0
     seed = hashlib.sha256(
-        f"anneal-hits|{v}|{pick}|{draw_n}|{max_num}|{guarantee}|{start}".encode()
+        f"{seed_tag}|{v}|{pick}|{draw_n}|{max_num}|{guarantee}|{start}".encode()
     ).digest()
     rng = np.random.default_rng(int.from_bytes(seed[:8], "little"))
     accepted = 0
@@ -129,6 +162,9 @@ def _anneal(
             continue
         H[i] = column(moved)
         p, cov = measure(H.max(axis=0))
+        if hard_coverage and cov < base_cov:
+            H[i] = column(mask)
+            continue
         f = objective(p, cov, base_p, base_cov)
         delta = f - cur_f
         if delta >= 0.0 or rng.random() < float(np.exp(delta / temp)):
@@ -139,11 +175,126 @@ def _anneal(
             played[y] += 1
             cur_f = f
             accepted += 1
-            if cur_f > best_f + 1e-15:
+            if certified_best:
+                if cov >= base_cov and all(p[t] >= base_p[t] - 1e-15 for t in thresholds):
+                    key = tuple(p[t] for t in order)
+                    if _lex_greater(key, best_key):
+                        best_key, best_masks = key, tuple(current)
+            elif cur_f > best_f + 1e-15:
                 best_f, best_masks = cur_f, tuple(current)
         else:
             H[i] = column(mask)
     return best_masks, accepted, moves
+
+
+@lru_cache(maxsize=64)
+def _anneal(
+    v: int,
+    pick: int,
+    draw_n: int,
+    max_num: int,
+    guarantee: int,
+    start: tuple[int, ...],
+) -> tuple[tuple[int, ...], int, int]:
+    """Calea motorului și a biletului fizic cu garanția incompletă (ținta întâi)."""
+    return _search(v, pick, draw_n, max_num, guarantee, start)
+
+
+@lru_cache(maxsize=64)
+def _anneal_full_cover(
+    v: int,
+    pick: int,
+    draw_n: int,
+    max_num: int,
+    guarantee: int,
+    start: tuple[int, ...],
+) -> tuple[tuple[int, ...], int, int]:
+    """Biletul fizic cu garanția completă: pragul următor întâi, acoperirea
+    ținută la cea de plecare, cel mai bun design certificat."""
+    return _search(
+        v,
+        pick,
+        draw_n,
+        max_num,
+        guarantee,
+        start,
+        primary=int(guarantee) + 1,
+        hard_coverage=True,
+        certified_best=True,
+        seed_tag="anneal-hits-cover",
+    )
+
+
+def _check_input(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
+    """(pool, bilete, pick, motiv): motivul e gol când intrarea e în limite."""
+    pool = [int(n) for n in ordered_pool]
+    v = len(pool)
+    tickets = [sorted(int(n) for n in t) for t in wheel]
+    if not tickets:
+        return pool, tickets, 0, "no tickets"
+    pick = len(tickets[0])
+    distinct = {tuple(t) for t in tickets}
+    if not (
+        1 <= len(tickets) <= MAX_TICKETS
+        and MIN_THRESHOLD <= pick <= v <= MAX_POOL
+        and len(set(pool)) == v
+        and len(distinct) == len(tickets)
+        and all(len(set(t)) == len(t) == pick for t in tickets)
+        and 1 <= int(guarantee) <= pick
+        and MIN_THRESHOLD <= int(draw_n)
+        and v < int(max_num)
+    ):
+        return pool, tickets, pick, "outside limits"
+    if any(n not in set(pool) for t in tickets for n in t):
+        return pool, tickets, pick, "ticket outside pool"
+    return pool, tickets, pick, ""
+
+
+def _certify(pool, tickets, candidate, guarantee: int, draw_n: int, max_num: int):
+    """(motiv, câștig pe prag, acoperirea garanției după): motivul e gol la
+    certificare reușită. Aceeași regulă pentru ambele forme ale etapei."""
+    pick = len(tickets[0])
+    if len({tuple(t) for t in candidate}) != len(tickets):
+        return "duplicate tickets", {}, None
+    played_before = {n for t in tickets for n in t}
+    played_after = {n for t in candidate for n in t}
+    if not played_before <= played_after:
+        return "pool number dropped", {}, None
+    before = wheel_hit_probabilities(pool, tickets, draw_n, max_num)["ticket"]
+    after = wheel_hit_probabilities(pool, candidate, draw_n, max_num)["ticket"]
+    top = min(pick, draw_n)
+    thresholds = range(MIN_THRESHOLD, top + 1)
+    if any(after[t] < before[t] - 1e-15 for t in thresholds):
+        return "chance falls at a threshold", {}, None
+    if not any(after[t] > before[t] + 1e-15 for t in thresholds):
+        return "no strict gain", {}, None
+    cov_before = wheel_hit_profile(pool, tickets)[guarantee][guarantee]
+    cov_after = wheel_hit_profile(pool, candidate)[guarantee][guarantee]
+    if cov_after < cov_before:
+        return "guarantee coverage falls", {}, None
+    return "", {t: after[t] - before[t] for t in thresholds}, cov_after
+
+
+def _apply(search, ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int, audit: dict):
+    pool, tickets, pick, why = _check_input(ordered_pool, wheel, guarantee, draw_n, max_num)
+    if why:
+        audit["reason"] = why
+        return wheel, audit
+    v = len(pool)
+    index = {n: i for i, n in enumerate(pool)}
+    start = tuple(sum(1 << index[n] for n in t) for t in tickets)
+    found, accepted, moves = search(v, pick, int(draw_n), int(max_num), int(guarantee), start)
+    audit.update(moves=moves, accepted=accepted)
+    if found == start:
+        audit["reason"] = "no better design"
+        return wheel, audit
+    candidate = [sorted(pool[p] for p in range(v) if (m >> p) & 1) for m in found]
+    why, gain, _cov = _certify(pool, tickets, candidate, int(guarantee), int(draw_n), int(max_num))
+    if why:
+        audit["reason"] = why
+        return wheel, audit
+    audit.update(applied=True, reason="", gain=gain)
+    return candidate, audit
 
 
 def improve_ticket_chances(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
@@ -154,64 +305,26 @@ def improve_ticket_chances(ordered_pool, wheel, guarantee: int, draw_n: int, max
     aplicare, câștigul exact pe fiecare prag.
     """
     audit = {"applied": False, "reason": "", "moves": 0, "accepted": 0, "gain": {}}
-    pool = [int(n) for n in ordered_pool]
-    v = len(pool)
-    tickets = [sorted(int(n) for n in t) for t in wheel]
-    if not tickets:
-        audit["reason"] = "no tickets"
+    return _apply(_anneal, ordered_pool, wheel, guarantee, draw_n, max_num, audit)
+
+
+def improve_full_cover_variants(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
+    """„Bilet complet” cu garanția completă: ``(variante, audit)``.
+
+    Se aplică numai când biletele de plecare acoperă 100% garanția și există un
+    prag peste ea (``guarantee`` sub bilet și sub numerele extrase); altfel
+    motivul spune de ce. Certificarea e cea comună, iar acoperirea completă nu
+    poate scădea (căutarea respinge mutările care o strică).
+    """
+    audit = {"applied": False, "reason": "", "moves": 0, "accepted": 0, "gain": {}}
+    pool, tickets, pick, why = _check_input(ordered_pool, wheel, guarantee, draw_n, max_num)
+    if why:
+        audit["reason"] = why
         return wheel, audit
-    pick = len(tickets[0])
-    distinct = {tuple(t) for t in tickets}
-    guarantee, draw_n, max_num = int(guarantee), int(draw_n), int(max_num)
-    if not (
-        1 <= len(tickets) <= MAX_TICKETS
-        and MIN_THRESHOLD <= pick <= v <= MAX_POOL
-        and len(set(pool)) == v
-        and len(distinct) == len(tickets)
-        and all(len(set(t)) == len(t) == pick for t in tickets)
-        and 1 <= guarantee <= pick
-        and MIN_THRESHOLD <= draw_n
-        and v < max_num
-    ):
-        audit["reason"] = "outside limits"
+    if int(guarantee) >= min(pick, int(draw_n)):
+        audit["reason"] = "no threshold above the guarantee"
         return wheel, audit
-    index = {n: i for i, n in enumerate(pool)}
-    if any(n not in index for t in tickets for n in t):
-        audit["reason"] = "ticket outside pool"
+    if wheel_hit_profile(pool, tickets)[int(guarantee)][int(guarantee)] < comb(len(pool), int(guarantee)):
+        audit["reason"] = "guarantee incomplete"
         return wheel, audit
-    start = tuple(sum(1 << index[n] for n in t) for t in tickets)
-    found, accepted, moves = _anneal(v, pick, draw_n, max_num, guarantee, start)
-    audit.update(moves=moves, accepted=accepted)
-    if found == start:
-        audit["reason"] = "no better design"
-        return wheel, audit
-    candidate = [sorted(pool[p] for p in range(v) if (m >> p) & 1) for m in found]
-    if len({tuple(t) for t in candidate}) != len(tickets):
-        audit["reason"] = "duplicate tickets"
-        return wheel, audit
-    played_before = {n for t in tickets for n in t}
-    played_after = {n for t in candidate for n in t}
-    if not played_before <= played_after:
-        audit["reason"] = "pool number dropped"
-        return wheel, audit
-    before = wheel_hit_probabilities(pool, tickets, draw_n, max_num)["ticket"]
-    after = wheel_hit_probabilities(pool, candidate, draw_n, max_num)["ticket"]
-    top = min(pick, draw_n)
-    thresholds = range(MIN_THRESHOLD, top + 1)
-    if any(after[t] < before[t] - 1e-15 for t in thresholds):
-        audit["reason"] = "chance falls at a threshold"
-        return wheel, audit
-    if not any(after[t] > before[t] + 1e-15 for t in thresholds):
-        audit["reason"] = "no strict gain"
-        return wheel, audit
-    cov_before = wheel_hit_profile(pool, tickets)[guarantee][guarantee]
-    cov_after = wheel_hit_profile(pool, candidate)[guarantee][guarantee]
-    if cov_after < cov_before:
-        audit["reason"] = "guarantee coverage falls"
-        return wheel, audit
-    audit.update(
-        applied=True,
-        reason="",
-        gain={t: after[t] - before[t] for t in thresholds},
-    )
-    return candidate, audit
+    return _apply(_anneal_full_cover, ordered_pool, wheel, guarantee, draw_n, max_num, audit)

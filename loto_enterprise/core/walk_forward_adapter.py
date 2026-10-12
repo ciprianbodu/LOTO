@@ -372,7 +372,13 @@ def _wheel_sig(
                 design_sig = covering_design_source_signature(int(pool_size), pick, g)
                 return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1"
             if cap >= 65:
-                return f"{method}|{geometry}|rt1|hp1|bc1"
+                # `bd<amprenta>`: designul cu buget precalculat
+                # (`covering_designs/budget/`) când există pentru acest buget.
+                from covering.budget_designs import budget_design_signature
+
+                stored = budget_design_signature(int(pool_size), pick, g, cap)
+                suffix = f"|bd{stored}" if stored else ""
+                return f"{method}|{geometry}|rt1|hp1|bc1{suffix}"
             # `sa1`: recoacerea pe șansa exactă (`covering.anneal_hits`) la
             # 1..64 de bilete, acceptată numai fără scădere la vreun prag.
             return f"{method}|{geometry}|rt1|hp1|sa1"

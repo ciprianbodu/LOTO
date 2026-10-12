@@ -148,3 +148,133 @@ def test_coverage_of_the_guarantee_never_falls():
         before, cov0 = generate_wheel("greedy", pool, 6, 3, B, scores)
         after, audit = ah.improve_ticket_chances(pool, before, 3, 6, 49)
         assert compute_coverage_pct(after, pool, 3) >= compute_coverage_pct(before, pool, 3) - 1e-9
+
+
+# --------------------------------------------------------------------------- #
+# „Bilet complet” cu garanția completă înainte de umplere (2026-10-12):
+# recoacere pe toate variantele, acoperirea 100% ținută, pragul următor.
+# --------------------------------------------------------------------------- #
+
+
+def _filled(game, v, g, n_var, monkeypatch):
+    """Variantele biletului fizic fără rearanjarea pe toate variantele."""
+    from loto_enterprise.core import full_ticket as ft
+
+    max_num, draw_n, pick = GEOMETRY[game]
+    pool, scores = _pool(v)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(ah, "improve_full_cover_variants", lambda *a, **k: (a[1], {"applied": False}))
+        chosen, n_base = ft._fill_variants(pool, pick, g, n_var, scores, draw_n=draw_n, max_num=max_num)
+    return pool, scores, [list(t) for t in chosen], n_base
+
+
+@pytest.mark.parametrize(
+    "game, v, g, n_var, min_rel",
+    [("6/49", 10, 3, 15, 1.02), ("joker", 9, 3, 18, 1.02), ("6/49", 10, 4, 30, 1.02)],
+)
+def test_full_cover_variants_raise_the_next_threshold(game, v, g, n_var, min_rel, monkeypatch):
+    """Garanția e la maximul hipergeometric și rămâne acolo; pragul următor
+    crește certificat, fără scădere la vreun prag și cu acoperirea 100%."""
+    from covering.common import _sorted_pool
+
+    max_num, draw_n, pick = GEOMETRY[game]
+    pool, scores, chosen, n_base = _filled(game, v, g, n_var, monkeypatch)
+    assert n_base < n_var and compute_coverage_pct(chosen, pool, g) == 100.0
+    out, audit = ah.improve_full_cover_variants(_sorted_pool(pool, scores), chosen, g, draw_n, max_num)
+    assert audit["applied"], audit
+    assert len(out) == len(chosen) == len({tuple(t) for t in out})
+    assert {n for t in out for n in t} == set(pool)
+    assert compute_coverage_pct(out, pool, g) == 100.0
+    p0 = wheel_hit_probabilities(pool, chosen, draw_n, max_num)["ticket"]
+    p1 = wheel_hit_probabilities(pool, out, draw_n, max_num)["ticket"]
+    assert abs(p1[g] - p0[g]) < 1e-15
+    assert p1[g + 1] > p0[g + 1] * min_rel
+    for t in range(3, min(pick, draw_n) + 1):
+        assert p1[t] >= p0[t] - 1e-15
+
+
+def test_full_cover_stage_refuses_an_incomplete_guarantee_or_no_threshold_above():
+    pool, scores = _pool(16)
+    base, _ = generate_wheel("greedy", pool, 6, 3, 9, scores)
+    out, audit = ah.improve_full_cover_variants(pool, base, 3, 6, 49)
+    assert out == base and audit["reason"] == "guarantee incomplete"
+    small, scores = _pool(8)
+    system, _ = generate_wheel("greedy", small, 6, 6, 0, scores)  # sistemul complet
+    out, audit = ah.improve_full_cover_variants(small, system, 6, 6, 49)
+    assert out == system and audit["reason"] == "no threshold above the guarantee"
+    joker, scores = _pool(7)
+    system, _ = generate_wheel("greedy", joker, 5, 5, 0, scores)  # 21 de variante
+    out, audit = ah.improve_full_cover_variants(joker, system, 5, 5, 45)
+    assert out == system and audit["reason"] == "no threshold above the guarantee"
+    # Joker cu garanția 4: pragul 5 există, dar la același număr de variante
+    # distincte P(5 din 5) nu se mișcă, deci nu există design mai bun.
+    joker, scores = _pool(9)
+    cover, _ = generate_wheel("greedy", joker, 5, 4, 0, scores)
+    out, audit = ah.improve_full_cover_variants(joker, cover, 4, 5, 45)
+    assert out == cover and audit["reason"] == "no better design"
+    assert ah.improve_full_cover_variants(pool, [], 3, 6, 49)[1]["reason"] == "no tickets"
+
+
+def test_full_cover_search_follows_positions_and_is_cached(monkeypatch):
+    pool_a, scores, chosen, _ = _filled("6/49", 10, 3, 15, monkeypatch)
+    pool_b = [2, 5, 9, 14, 20, 27, 33, 38, 44, 49]
+    chosen_b = [[pool_b[pool_a.index(n)] for n in t] for t in chosen]
+    ah._anneal_full_cover.cache_clear()
+    out_a, audit_a = ah.improve_full_cover_variants(pool_a, chosen, 3, 6, 49)
+    out_b, audit_b = ah.improve_full_cover_variants(pool_b, chosen_b, 3, 6, 49)
+    assert audit_a["applied"] and audit_a["gain"] == audit_b["gain"]
+    assert [[pool_b[pool_a.index(n)] for n in t] for t in out_a] == out_b
+    assert ah._anneal_full_cover.cache_info().misses == 1
+    again, _ = ah.improve_full_cover_variants(pool_a, chosen, 3, 6, 49)
+    assert again == out_a and ah._anneal_full_cover.cache_info().hits >= 1
+
+
+@pytest.mark.parametrize(
+    "game, v, g, n_var", [("6/49", 11, 3, 30), ("6/49", 9, 4, 18), ("joker", 8, 3, 12), ("5/40", 8, 4, 24)]
+)
+def test_full_cover_search_returns_only_designs_that_never_fall(game, v, g, n_var, monkeypatch):
+    """Căutarea ține minte cel mai bun design CERTIFICAT: ce întoarce nu scade la
+    niciun prag și nici la acoperire față de biletele de plecare."""
+    max_num, draw_n, pick = GEOMETRY[game]
+    pool, scores, chosen, _ = _filled(game, v, g, n_var, monkeypatch)
+    index = {n: i for i, n in enumerate(pool)}
+    start = tuple(sum(1 << index[n] for n in t) for t in chosen)
+    found, _acc, _moves = ah._anneal_full_cover(v, pick, draw_n, max_num, g, start)
+    candidate = [sorted(pool[p] for p in range(v) if (m >> p) & 1) for m in found]
+    why, _gain, cov = ah._certify(pool, chosen, candidate, g, draw_n, max_num)
+    assert why in {"", "no strict gain"}, why
+    assert compute_coverage_pct(candidate, pool, g) == 100.0
+
+
+def test_physical_ticket_runs_the_full_cover_stage_only_when_the_base_is_complete(monkeypatch):
+    from loto_enterprise.core import full_ticket as ft
+    from loto_enterprise.core.full_ticket import build_full_ticket
+
+    calls = []
+    real = ah.improve_full_cover_variants
+
+    def spy(*a, **k):
+        calls.append(a)
+        return real(*a, **k)
+
+    monkeypatch.setattr(ah, "improve_full_cover_variants", spy)
+    pool, scores = _pool(10)
+    audit = {}
+    chosen, n_base = ft._fill_variants(pool, 6, 3, 15, scores, draw_n=6, max_num=49, audit=audit)
+    assert len(calls) == 1 and calls[0][2:] == (3, 6, 49)
+    assert audit["full_cover"]["applied"] and n_base == len(chosen) == 15
+    calls.clear()
+    big, scores16 = _pool(16)
+    ft._fill_variants(big, 6, 3, 9, scores16, draw_n=6, max_num=49)
+    assert calls == []  # baza nu e completă în 9 variante: calea recoacerii pe țintă
+    ft._fill_variants(pool, 6, 3, 15, scores, draw_n=6)
+    assert calls == []  # fără max_num, biletul rămâne cel de dinainte
+    monkeypatch.setenv("LOTO_WHEEL_METHOD", "greedy")
+    ft._fill_variants(pool, 6, 3, 15, scores, draw_n=6, max_num=49)
+    assert calls == []  # construcția de referință cerută explicit rămâne neatinsă
+    monkeypatch.delenv("LOTO_WHEEL_METHOD")
+    data = {"hard_core": pool, "guarantee": 3, "audit": {"timesfm_predictions": scores}}
+    t = build_full_ticket("6/49", data, 5)
+    assert t["refined"] and t["guarantee_variants"] == 15 == len(t["variants"])
+    assert t["coverage"] == 100.0 and t["upper_coverage"][0] == 4
+    assert t["chances"]["shown"][4] > 0.0104  # pool 10, 5 bilete: 0,9885% -> 1,0465%

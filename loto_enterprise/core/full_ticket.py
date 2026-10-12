@@ -5,8 +5,12 @@ N bilete au de N ori mai multe. Variantele se aleg cu wheel-ul cu buget (acelasi
 traseu ca `max_variants` in productie, implicit hitcover), deci acoperirea e recalculata exact
 pentru aceste variante. Cand garantia e completa inainte de a umple biletele,
 locurile ramase acopera grupe mai mari din acelasi pool (g+1 din g+1, apoi pana
-la sistemul complet), tot cu wheel-ul greedy; niciun numar nu vine din afara
-pool-ului biletului.
+la sistemul complet), tot cu wheel-ul greedy, iar apoi toate variantele trec
+prin recoacerea pe sansa exacta cu acoperirea 100% tinuta in cautare
+(`covering.anneal_hits.improve_full_cover_variants`, 2026-10-12): garantia o
+asigura toate variantele impreuna (`guarantee_variants` = toate, `refined`),
+iar sansa pragului urmator creste, certificat, fara scadere la vreun prag.
+Niciun numar nu vine din afara pool-ului biletului.
 
 Pool-ul biletului se potriveste automat pe clasamentul metodei, in aceeasi
 ordine ca pool-ul afisat:
@@ -187,6 +191,7 @@ def _fill_variants(
     *,
     draw_n: int | None = None,
     max_num: int | None = None,
+    audit: dict | None = None,
 ) -> tuple[list[list[int]], int]:
     """Variantele biletelor si cate dintre ele formeaza wheel-ul garantiei.
 
@@ -206,6 +211,15 @@ def _fill_variants(
     acceptate numai daca niciun prag afisat nu scade. Fara `max_num`, sau cu
     o metoda ceruta explicit (`LOTO_WHEEL_METHOD`), biletul ramane cel de
     dinainte.
+
+    Cand garantia e completa inainte de a umple biletele (baza mai mica decat
+    bugetul), tot cu `max_num` si alegerea automata, urmeaza recoacerea pe
+    TOATE variantele (`improve_full_cover_variants`, 2026-10-12): P(garantie)
+    e deja la maximul pool-ului, deci se urmareste pragul urmator, cu
+    acoperirea 100% tinuta in cautare si certificata la iesire. Dupa ea,
+    garantia e asigurata de toate variantele (numarul intors e `n_var`), nu
+    de primele `n_base`. `audit`, daca e dat, primeste auditul etapei sub
+    cheia `full_cover`.
     """
     method = resolve_wheel_method(n_var)
     base, _ = generate_wheel(
@@ -228,10 +242,12 @@ def _fill_variants(
         from covering.common import _sorted_pool
 
         drawn = pick if draw_n is None else int(draw_n)
-        improved, audit = improve_ticket_chances(
+        improved, anneal_audit = improve_ticket_chances(
             _sorted_pool(pool, scores), chosen, guarantee, drawn, int(max_num)
         )
-        if audit["applied"]:
+        if audit is not None:
+            audit["anneal"] = anneal_audit
+        if anneal_audit["applied"]:
             chosen = [tuple(v) for v in improved]
     seen = set(chosen)
     level = guarantee
@@ -264,11 +280,23 @@ def _fill_variants(
         if draw_n is not None and int(draw_n) > pick:
             geometries.append(int(draw_n))
         for drawn in geometries:
-            improved, audit = improve_hit_profile(
+            improved, swap_audit = improve_hit_profile(
                 _sorted_pool(pool, scores), chosen, draw_n=drawn, frozen=n_base
             )
-            if audit["applied"]:
+            if swap_audit["applied"]:
                 chosen = improved
+        if max_num is not None and method == "hitcover":
+            from covering.anneal_hits import improve_full_cover_variants
+
+            drawn = pick if draw_n is None else int(draw_n)
+            improved, cover_audit = improve_full_cover_variants(
+                _sorted_pool(pool, scores), chosen, guarantee, drawn, int(max_num)
+            )
+            if audit is not None:
+                audit["full_cover"] = cover_audit
+            if cover_audit["applied"]:
+                chosen = [tuple(v) for v in improved]
+                n_base = len(chosen)
     return [list(v) for v in chosen], n_base
 
 
@@ -318,11 +346,15 @@ def build_full_ticket(
     min_target = lot.min_hit_target if lot is not None else 3
 
     pool, note = _ticket_pool(shown_pool, scores, n_var, pick, max_run, tickets)
+    fill_audit: dict = {}
     plain, n_base = _fill_variants(
-        pool, pick, guarantee, n_var, scores, draw_n=draw_n, max_num=max_num
+        pool, pick, guarantee, n_var, scores, draw_n=draw_n, max_num=max_num, audit=fill_audit
     )
+    # Garanția completă înainte de umplere, apoi rearanjată pe toate variantele
+    # (§6): o asigură toate împreună, iar grupele de g+1 rămân de raportat.
+    refined = bool((fill_audit.get("full_cover") or {}).get("applied"))
     upper = None
-    if len(plain) > n_base and guarantee < pick:
+    if guarantee < pick and (len(plain) > n_base or refined):
         upper = (guarantee + 1, compute_coverage_pct(plain, pool, guarantee + 1))
     thresholds = chance_thresholds(min_target, pick, draw_n)
     chances = None
@@ -350,6 +382,7 @@ def build_full_ticket(
         "note": note,
         "guarantee_variants": n_base,
         "upper_coverage": upper,
+        "refined": refined,
         "guarantee": guarantee,
         "joker": joker,
         "error": None,

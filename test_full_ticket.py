@@ -150,19 +150,30 @@ def test_every_ticket_is_filled_with_distinct_variants():
             assert abs(t["coverage"] - _cov(main, t["pool"], t["guarantee"])) < 0.02
 
 
-def test_tickets_beyond_the_guarantee_cover_bigger_groups():
+def test_tickets_beyond_the_guarantee_cover_bigger_groups(monkeypatch):
     """Pool 9 la 6/49: garanția 3 e completă cu 7 variante; celelalte 23 din
-    cele 30 (10 bilete) acoperă grupe de 4 din același pool, nu numere noi."""
+    cele 30 (10 bilete) acoperă grupe de 4 din același pool, nu numere noi.
+    Din 2026-10-12 toate cele 30 sunt apoi rearanjate (garanția rămâne 100%,
+    o asigură toate împreună), iar grupele de 4 nu pot fi acoperite mai puțin."""
+    import covering.anneal_hits as ah
+
     pool = list(range(1, 10))
+    monkeypatch.setattr(ah, "improve_full_cover_variants", lambda *a, **k: (a[1], {"applied": False}))
+    plain = build_full_ticket("6/49", _data(pool), 10)
+    monkeypatch.undo()
     t = build_full_ticket("6/49", _data(pool), 10)
-    main = [v[:6] for v in t["variants"]]
-    assert len(main) == 30 and t["pool"] == pool
-    assert t["coverage"] == 100.0
-    assert t["guarantee_variants"] < 30
-    level, pct = t["upper_coverage"]
-    assert level == 4 and abs(pct - _cov(main, pool, 4)) < 0.02
-    base_only = _cov(main[: t["guarantee_variants"]], pool, 4)
-    assert pct > base_only
+    for res in (plain, t):
+        main = [v[:6] for v in res["variants"]]
+        assert len(main) == 30 and res["pool"] == pool
+        assert res["coverage"] == 100.0
+        level, pct = res["upper_coverage"]
+        assert level == 4 and abs(pct - _cov(main, pool, 4)) < 0.02
+    assert not plain["refined"] and plain["guarantee_variants"] < 30
+    base_only = _cov([v[:6] for v in plain["variants"]][: plain["guarantee_variants"]], pool, 4)
+    assert plain["upper_coverage"][1] > base_only
+    assert t["refined"] and t["guarantee_variants"] == 30
+    assert t["upper_coverage"][1] >= plain["upper_coverage"][1]
+    assert {tuple(v) for v in t["variants"]} != {tuple(v) for v in plain["variants"]}
 
 
 def test_more_tickets_extend_a_small_pool_from_the_ranking():
@@ -204,9 +215,15 @@ def test_summary_names_the_tickets_and_the_extra_groups():
     text = ui_results._full_ticket_summary(t, "6/49")
     assert text.startswith("30/30 de variante (10 × 3)")
     assert "ale biletelor" in text
-    assert f"garanția e completă cu {t['guarantee_variants']} variante" in text
-    assert "cu toate cele 30, grupele de 4 sunt acoperite" in text
+    assert t["refined"] and t["guarantee_variants"] == 30
+    assert "garanția e completă cu toate cele 30, rearanjate pentru grupele de 4: acoperite" in text
     assert text.endswith("≈ 240 Lei")
+    # 5/40 g4, pool 8: rearanjarea nu găsește nimic certificat, baza rămâne prefix.
+    base = build_full_ticket("5/40", _data(list(range(1, 9)), guarantee=4), 6)
+    text = ui_results._full_ticket_summary(base, "5/40")
+    assert not base["refined"] and base["guarantee_variants"] < 24
+    assert f"garanția e completă cu {base['guarantee_variants']} de variante" in text
+    assert "cu toate cele 24, grupele de 5 sunt acoperite" in text
     one = build_full_ticket("6/49", _data(list(range(1, 13))), 1)
     assert "grupele" not in ui_results._full_ticket_summary(one, "6/49")
 

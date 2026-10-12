@@ -920,7 +920,15 @@ def _full_ticket_summary(t: dict, game: str) -> str:
         f"ale {slip}: {t['coverage']:.2f}%"
     )
     upper = t.get("upper_coverage")
-    if upper:
+    if upper and t.get("refined"):
+        # Garanția era completă înainte de umplere; variantele au fost apoi
+        # rearanjate toate, cu acoperirea păstrată, pentru grupele următoare.
+        level, pct = upper
+        text += (
+            f" · garanția e completă cu toate cele {n}, rearanjate pentru "
+            f"grupele de {level}: acoperite {pct:.2f}%"
+        )
+    elif upper:
         level, pct = upper
         text += (
             f" · garanția e completă cu {count(t['guarantee_variants'], 'variante', 'variantă')}; "
