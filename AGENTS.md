@@ -80,6 +80,34 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Mai multe hituri pe bilete, runda a doua — 2026-10-12
+
+- Cerinta repetata: cod care sa dea mai multe hituri. Cautare exhaustiva pe
+  cinci parghii (mai mult calcul in recoacerea existenta, bugete peste 64,
+  biletul fizic cu garantia completa, contabilizarea hiturilor, configuratia
+  la cost egal), 23 de agenti, fiecare constatare reprodusa de un verificator
+  independent. Contabilizarea: zero hituri pierdute (27 de pasi WF reali
+  recalculati din CSV). Configuratia: pool 16 / g4 e la 0-1,07% de cea mai
+  buna din UI; nimic de schimbat. Mai mult calcul la 1..64 de bilete:
+  castiguri reale, dar mediana 0,16% la cost 5x; varianta „cel mai bun design
+  certificat” castiga in 3 din 155 de configuratii si nu pierde nicaieri —
+  nu merita invalidarea cache-ului WF; calea ramane bit cu bit cea veche.
+- Livrat 1, „Bilet complet” cu garantia completa inainte de umplere (§6, §7):
+  toate variantele trec prin recoacere cu pragul urmator intai si acoperirea
+  100% tinuta (`improve_full_cover_variants`); castig la g+1 in 39 din 67 de
+  configuratii cu parghie, maxim +6,92% (6/49 g4 pool 10, 10 bilete, 5+),
+  +5,87% la 6/49 g3 pool 10 cu 5 bilete (4+), 0 la 5/40 g4; 0,5-1,3 s; fara
+  bump de cache. Garantia o asigura apoi toate variantele (`refined`).
+  Raport: `scripts/analysis/full_cover_anneal_2026-10-12.md`.
+- Livrat 2, designuri cu buget pentru 65+ bilete (§7, §8): 6/49 g4, pool
+  13..16, toate cele 194 de bugete sub designul complet, cautate offline in C
+  si certificate la fiecare apel; pool 16 mediana +7,25% la 4+, maxim +15,56%
+  (112 bilete), pool 15 +3,63%, pool 14 +5,48%; niciun prag nu scade. Cheia
+  WF `bd<amprenta>` dupa `bc1`; worker `v15`. Biletul de 5 masurat si
+  nelivrat (cel mult +2,6%). Raport: `scripts/analysis/budget_designs_2026-10-12.md`.
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 105 fisiere `test_*.py`,
+  2502 teste trecute, 11 sarite, zero esecuri.
+
 ### Recoacere pe sansa exacta a biletelor — 2026-10-11
 
 - Cerinta: cod care sa dea mai multe hituri. Rata pool-ului nu se poate
@@ -1500,6 +1528,25 @@ bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, pe care il da numai motorul
   celelalte metode explicite nu trec prin ele. Cheile WF sunt in §8.
   Masurare: `scripts/analysis/bench_budget_climb.py`; raport
   `scripts/analysis/pool16_4plus_2026-10-08.md`.
+- dupa `budget_climb`, designul cu buget precalculat
+  (`covering/budget_designs.py`, 2026-10-12): `budget_climb` ramane intr-un
+  optim local, iar o recoacere lunga pe aceeasi functie exacta
+  (`scripts/analysis/budget_anneal.c`, 3M mutari, ~50 s pe buget in C; in
+  numpy ~15 min pe geometrie) ridica P(4+ pe un bilet) la 6/49 pool 16 g4 cu
+  pana la +15,6% relativ (100 de bilete: 6,03% -> 6,73%, impachetare perfecta
+  a grupelor de 4). Designurile se genereaza offline
+  (`scripts/analysis/gen_budget_designs.py`) si stau in
+  `covering_designs/budget/H_<v>_<pick>_<g>.txt` (sectiuni `B n`, pozitii
+  1..v); azi 6/49 g4, pool 13..16, toate cele 194 de bugete intre 65 si
+  designul complet. La fiecare apel designul se pune pe pozitiile
+  clasamentului si intra numai certificat cu regula recoacerii
+  (`anneal_hits._certify`): acelasi numar de bilete distincte, numerele
+  jucate pastrate, niciun prag 3..extrase in scadere, castig strict,
+  acoperirea garantiei nu scade; altfel ramane wheel-ul din proces (~2 ms).
+  O sectiune invalida e sarita de loader. Biletul de 5 (5/40, Joker) e
+  masurat si nelivrat: productia e deja impachetare perfecta la bugetele mici
+  si medii, cel mult +2,6% langa designul complet. Raport:
+  `scripts/analysis/budget_designs_2026-10-12.md`.
 
 Recoacerea pe sansa exacta (2026-10-11, `covering/anneal_hits.py`): dupa
 hitcover si schimburile de profil, la 1..64 de bilete pe calea motorului

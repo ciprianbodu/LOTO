@@ -1,5 +1,12 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Designuri cu buget pentru 65+ bilete, 12.10.2026:** [recoacere lungă în C, livrată ca fișiere](budget_designs_2026-10-12.md).
+6/49, garanția 4, pool 13-16, toate cele 194 de bugete sub designul complet:
+P(4+ pe un bilet) crește cu mediana +7,25% la pool 16 (maxim +15,56%), niciun
+prag nu scade; certificate la fiecare apel față de căutarea din proces. Biletul
+de 5 măsurat și nelivrat (cel mult +2,6%).
+Reproducere: `python scripts/analysis/gen_budget_designs.py` (gcc, ~1 h pe 3 procese).
+
 **„Bilet complet” cu garanția completă, 12.10.2026:** [rearanjarea tuturor variantelor](full_cover_anneal_2026-10-12.md).
 Când baza garanției e completă înainte de a umple biletele, pragul-țintă nu se
 mai mișcă; recoacerea pe toate variantele, cu acoperirea 100% ținută, ridică

@@ -29,20 +29,37 @@ def dominates(pool, after, before):
 
 
 @pytest.mark.parametrize("game,budget", [("6/49", 100), ("5/40", 150), ("joker", 200)])
-def test_budget_climb_dominates_and_raises_four_plus(game, budget):
+def test_budget_climb_dominates_and_raises_four_plus(game, budget, monkeypatch):
+    import covering.budget_designs as bd
+
     pick, draw, max_num = GAMES[game]
     scores = scores_for(POOL)
     before, _ = generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw)
-    after, cov = generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw, max_num)
-    assert len(after) == len(before) == budget
-    assert len({tuple(sorted(t)) for t in after}) == budget
-    assert all(len(set(t)) == pick and set(t) <= set(POOL) for t in after)
-    assert {n for t in after for n in t} == set(POOL)
-    assert dominates(POOL, after, before)
+    # Căutarea din proces singură (fără designul precalculat): dominanță
+    # completă de profil față de greedy.
+    monkeypatch.setattr(bd, "load_budget_design", lambda *a, **k: None)
+    climbed, cov = generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw, max_num)
+    monkeypatch.undo()
+    assert len(climbed) == len(before) == budget
+    assert len({tuple(sorted(t)) for t in climbed}) == budget
+    assert all(len(set(t)) == pick and set(t) <= set(POOL) for t in climbed)
+    assert {n for t in climbed for n in t} == set(POOL)
+    assert dominates(POOL, climbed, before)
     p_before = wheel_hit_probabilities(POOL, before, draw, max_num)["ticket"]
-    p_after = wheel_hit_probabilities(POOL, after, draw, max_num)["ticket"]
-    assert p_after[4] > p_before[4] * 1.03
+    p_climbed = wheel_hit_probabilities(POOL, climbed, draw, max_num)["ticket"]
+    assert p_climbed[4] > p_before[4] * 1.03
     assert 0.0 < cov < 100.0
+    # Cu designul precalculat (2026-10-12), când există: certificat pe
+    # probabilități față de căutarea din proces, niciun prag 3..extrase nu scade.
+    after, cov2 = generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw, max_num)
+    assert len(after) == budget == len({tuple(sorted(t)) for t in after})
+    assert {n for t in after for n in t} == set(POOL)
+    p_after = wheel_hit_probabilities(POOL, after, draw, max_num)["ticket"]
+    for t in range(3, min(pick, draw) + 1):
+        assert p_after[t] >= p_climbed[t] - 1e-15
+    assert cov2 >= cov - 1e-9
+    if bd.load_budget_design(16, pick, 4, budget) is not None:
+        assert p_after[4] > p_climbed[4]
 
 
 def test_one_more_ticket_no_longer_lowers_the_chances():
