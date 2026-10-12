@@ -153,13 +153,25 @@ def test_engine_passes_the_universe_to_the_climb():
 
 
 def test_walk_forward_key_names_the_budget_branch():
+    import re
+
+    from covering.budget_designs import budget_design_signature
+
     assert wf._wheel_sig(16, "6/49", 4, None, 64).endswith("|rt1|hp1|sa1")
-    assert wf._wheel_sig(16, "6/49", 4, None, 100).startswith("hitcover|")
-    assert wf._wheel_sig(16, "6/49", 4, None, 100).endswith("|bc1")
+    key = wf._wheel_sig(16, "6/49", 4, None, 100)
+    assert key.startswith("hitcover|") and "|bc1" in key
+    # Din 2026-10-12 designul cu buget precalculat, când există, își pune
+    # amprenta secțiunii în cheie; fără design (5/40 pool 16) cheia se oprește la `bc1`.
+    stored = budget_design_signature(16, 6, 4, 100)
+    if stored:
+        assert key.endswith(f"|bc1|bd{stored}") and re.fullmatch(r"[0-9a-f]{12}", stored)
+    else:
+        assert key.endswith("|bc1")
+    assert wf._wheel_sig(16, "5/40", 4, None, 100).endswith("|bc1")
     size = complete_design_size(16, 6, 4)
     full = wf._wheel_sig(16, "6/49", 4, None, size)
     assert full.startswith("lajolla|") and full.endswith("|bf1") and "|cd" in full
-    assert wf._wheel_sig(16, "6/49", 4, None, size - 1).endswith("|bc1")
+    assert "|bc1" in wf._wheel_sig(16, "6/49", 4, None, size - 1)
     small = complete_design_size(16, 6, 3)
     assert wf._wheel_sig(16, "6/49", 3, None, small).endswith("|bf1")
     assert wf._wheel_sig(16, "6/49", 3, None, small - 1) == (

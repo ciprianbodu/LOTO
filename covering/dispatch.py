@@ -9,6 +9,7 @@ from budget_cover import wheel_hitcover, wheel_maxcover
 from covering.anneal_hits import MAX_TICKETS as ANNEAL_MAX_TICKETS
 from covering.anneal_hits import improve_ticket_chances
 from covering.budget_climb import MIN_TICKETS, improve_budget_hits
+from covering.budget_designs import improve_with_budget_design
 from covering.common import (
     _coverage_pct,
     _greedy_fallback,
@@ -189,6 +190,14 @@ def generate_wheel(
             draws,
             int(max_num),
             start=start,
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+        # Designul cu buget precalculat offline (`covering_designs/budget/`),
+        # certificat exact față de wheel-ul de mai sus (2026-10-12).
+        improved, audit = improve_with_budget_design(
+            _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
         )
         if audit["applied"]:
             wheel = improved

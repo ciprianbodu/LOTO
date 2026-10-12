@@ -61,7 +61,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v14` (recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v15` (designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -1273,7 +1273,18 @@ limita de validitate din §5).
   (`audit.consecutive_limit.applied`) si spune ce numar a sarit; un rezultat
   fara limita ramane pe regula veche. Cand garantia nu e completa in buget,
   variantele trec prin recoacerea pe sansa exacta (§7), certificata fara
-  scadere la vreun prag afisat.
+  scadere la vreun prag afisat. Cand garantia e completa inainte de a umple
+  biletele (baza mai mica decat bugetul; pool 8..12 cu 2..10 bilete), toate
+  variantele trec prin a doua forma a recoacerii
+  (`improve_full_cover_variants`, 2026-10-12): P(garantie) e deja rata
+  pool-ului si nu se poate misca, deci se urmareste pragul urmator, cu
+  acoperirea 100% tinuta in cautare si certificata la iesire; garantia o
+  asigura apoi toate variantele impreuna (`guarantee_variants` = toate,
+  `refined`), iar rezumatul spune „garantia e completa cu toate cele N,
+  rearanjate pentru grupele de g+1”. Masurat pe pool canonic
+  (`scripts/analysis/full_cover_anneal_2026-10-12.md`): castig la g+1 in 39
+  din 67 de configuratii cu parghie, maxim +6,92% relativ (6/49 g4 pool 10,
+  10 bilete, 5+), 0 la 5/40 g4; 0,5-1,3 s pe geometrie; fara bump de cache.
   „📋 Copiaza numerele" copiaza in browser, chiar in click: Safari/iOS scriu in
   clipboard numai in timpul gestului, nu dupa un drum pana la server.
 - „Bilet complet” ia variantele numai din pool. Bifa „🎯 Variante dispersate
@@ -1506,6 +1517,15 @@ scade; altfel biletele raman. Spre deosebire de etapele anterioare, certifica
 pe probabilitatile geometriei jocului, nu pe numaratori la fiecare marime a
 intersectiei: o numaratoare la 1-2 hituri poate scadea. Masurare:
 `scripts/analysis/bench_anneal_hits.py`, raport `anneal_hits_2026-10-11.md`.
+A doua forma, `improve_full_cover_variants` (2026-10-12), numai pentru „Bilet
+complet” cu garantia completa inainte de umplere: aceeasi bucla (`_search`),
+cu pragul principal g+1, mutarile care scad acoperirea garantiei respinse pe
+loc si cel mai bun design CERTIFICAT tinut minte (nu cel cu obiectivul
+penalizat maxim); seed propriu (`anneal-hits-cover`), memorare separata
+(`_anneal_full_cover`). Calea motorului si cea a biletului cu garantia
+incompleta (`_anneal`) dau bit cu bit rezultatul de dinainte. Masurare:
+`scripts/analysis/bench_full_cover_anneal.py`, raport
+`full_cover_anneal_2026-10-12.md`.
 
 Variante dispersate (2026-10-05, `covering/spread.py`, scoase din aplicatie la
 2026-10-10, §6; raman pentru studiul `ticket_geometry_2026-10-05.py`): cautare locala
@@ -1649,8 +1669,10 @@ Cheia include istoricul complet, lookback, scorer, ensemble, tinta, wheel,
 hash-ul designului, limita de consecutive (numai activa) si, pentru Joker,
 decizia Urnei 2. Semnatura wheel-ului cu buget poarta `bf1` cu hash-ul
 designului cand bugetul ia coverul complet si `bc1` peste 64 de bilete
-(cautarea exacta) si `sa1` la 1..64 de bilete (recoacerea pe sansa exacta,
-§7). La La Jolla si union34 (fara plafon) semnatura poarta `tg1`, regula la
+(cautarea exacta), urmat de `bd<amprenta>` cand exista un design cu buget
+precalculat pentru acel buget (amprenta sectiunii din
+`covering_designs/budget/H_v_pick_g.txt`, §7; fara design cheia se opreste la
+`bc1`), si `sa1` la 1..64 de bilete (recoacerea pe sansa exacta, §7). La La Jolla si union34 (fara plafon) semnatura poarta `tg1`, regula la
 egalitate de bilete.
 Designul semnat e al pool-ului rotit efectiv (`_effective_pool_size`): un
 interval restrans mai ingust decat pool-ul, dar cel putin cat un bilet, il
@@ -1662,7 +1684,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v14` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v15` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

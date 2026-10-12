@@ -98,16 +98,32 @@ def test_physical_tickets_automatically_preserve_all_thresholds(game, pick, monk
         assert all(v[-1] == 7 for v in actual["variants"])
 
 
-def test_completed_physical_base_and_extra_groups_stay_identical(monkeypatch):
+def test_completed_physical_base_and_extra_groups_dominate_greedy(monkeypatch):
+    """Garanția completă înainte de umplere: construcția de referință (greedy)
+    și cea automată dau aceleași bilete până la rearanjarea din 2026-10-12;
+    aceea ține garanția la 100% și nu scade șansa la niciun prag."""
+    import covering.anneal_hits as ah
+
+    pool = list(range(1, 10))
     data = {
-        "hard_core": list(range(1, 10)), "guarantee": 3,
+        "hard_core": pool, "guarantee": 3,
         "audit": {"timesfm_predictions": {n: float(26 - n) for n in range(1, 26)}},
     }
     monkeypatch.setenv("LOTO_WHEEL_METHOD", "greedy")
     base = build_full_ticket("6/49", data, 10)
     monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
+    monkeypatch.setattr(ah, "improve_full_cover_variants", lambda *a, **k: (a[1], {"applied": False}))
+    unrefined = build_full_ticket("6/49", data, 10)
+    assert unrefined == base
+    assert base["coverage"] == 100.0 and not base["refined"]
+    assert base["guarantee_variants"] < len(base["variants"]) == 30
+    assert base["upper_coverage"][0] == 4
+    monkeypatch.undo()
     actual = build_full_ticket("6/49", data, 10)
-    assert actual == base
-    assert actual["coverage"] == 100.0
-    assert actual["guarantee_variants"] < len(actual["variants"]) == 30
+    assert actual["coverage"] == 100.0 and actual["refined"]
+    assert actual["guarantee_variants"] == len(actual["variants"]) == 30
     assert actual["upper_coverage"][0] == 4
+    a = wheel_hit_probabilities(pool, [v[:6] for v in base["variants"]], 6, 49)["ticket"]
+    b = wheel_hit_probabilities(pool, [v[:6] for v in actual["variants"]], 6, 49)["ticket"]
+    assert all(b[t] >= a[t] - 1e-15 for t in (3, 4, 5, 6))
+    assert abs(b[3] - a[3]) < 1e-15 and any(b[t] > a[t] for t in (4, 5))

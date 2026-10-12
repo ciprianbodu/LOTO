@@ -74,3 +74,6 @@ best_methods.json
 decisions/
 mail_config.json
 bench_results_gpu/
+
+# lucrul generatorului de designuri cu buget (scripts/analysis/gen_budget_designs.py)
+scripts/analysis/budget_designs_work/
