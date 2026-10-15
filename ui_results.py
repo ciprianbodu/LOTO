@@ -732,6 +732,9 @@ def _build_report() -> str:
             f"{indent}Nucleu dur (nr(frecvență)): "
             + ", ".join(f"{n}({stats.get(str(n), stats.get(n, '?'))})" for n in pool)
         )
+        _cd = _consecutive_pool_diagnostic(d)
+        if _cd:
+            out.append(f"{indent}{_cd}")
         _cw = _consecutive_pool_warning(pool, d.get("audit"))
         if _cw:
             out.append(f"{indent}⚠️ {_cw}")
@@ -1074,6 +1077,51 @@ def _method_desc(name: str) -> str:
     return ""
 
 
+def _consecutive_pool_diagnostic(data: dict) -> str:
+    """Describe actual runs in the played pool and its recorded raw selection.
+
+    The sidebar describes the next generation, not this result. Legacy payloads
+    without the raw stage cannot reconstruct it from a rounded top-25 ranking.
+    """
+    from loto_enterprise.core.ranking import longest_consecutive_run
+
+    pool = data.get("hard_core")
+    if not isinstance(pool, (list, tuple)) or not pool:
+        return ""
+    try:
+        played_run = longest_consecutive_run(pool)
+    except (TypeError, ValueError):
+        return ""
+    if not played_run:
+        return ""
+    unit = "număr" if played_run == 1 else "numere"
+    parts = [f"Secvența consecutivă maximă în pool-ul jucat: {played_run} {unit}."]
+    audit = data.get("audit") or {}
+    raw = (audit.get("pipeline_stages") or {}).get("1_nqi_raw")
+    if isinstance(raw, (list, tuple)) and raw:
+        try:
+            raw_run = longest_consecutive_run(raw)
+        except (TypeError, ValueError):
+            raw_run = 0
+        if raw_run:
+            raw_unit = "număr" if raw_run == 1 else "numere"
+            parts.append(f"În selecția inițială după scor: {raw_run} {raw_unit}.")
+            if raw_run != played_run:
+                parts.append(
+                    "Auditul arată și selecția inițială; variantele sistemului folosesc pool-ul jucat."
+                )
+    requested = data.get("max_consecutive_run")
+    if requested is None:
+        requested = (audit.get("consecutive_limit") or {}).get("requested")
+    try:
+        is_off = requested is not None and int(requested) == 0
+    except (TypeError, ValueError):
+        is_off = False
+    if is_off:
+        parts.append("Limita de consecutive era oprită la generarea acestui rezultat.")
+    return " ".join(parts)
+
+
 def _consecutive_pool_warning(pool, audit: dict | None = None) -> str | None:
     """Avertisment dacă tot pool-ul e un interval fără găuri (ex. Joker 18–28).
 
@@ -1365,6 +1413,9 @@ def _render_pool_body(
         f"Nucleu dur (pool) — în paranteză, de câte ori a ieșit numărul {_where}:"
     ).classes("text-bold mt-2")
     _badges(pool, stats)
+    _cd = _consecutive_pool_diagnostic(data)
+    if _cd:
+        ui.label(_cd).classes("text-caption text-grey mt-1")
     _cw = _consecutive_pool_warning(pool, data.get("audit"))
     if _cw:
         ui.label(f"⚠️ {_cw}").classes("text-bold text-negative mt-1")

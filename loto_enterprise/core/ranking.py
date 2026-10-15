@@ -15,8 +15,9 @@ Regula CANONICĂ de sortare (în această ordine, toate DESCRESCĂTOR):
      call-site-urile actuale (bench + producție) pasează None: regula trebuie să
      fie aplicabilă IDENTIC în ambele, iar bench-ul nu pasează frecvențe —
      consistența bate frecvența ca tie-break;
-  3. numărul însuși — determinist; „număr mare întâi" evită degenerarea
-     „1,2,3…K" / „cele mai mici compuse" la egalitate de scor.
+  3. numărul însuși — descrescător, pentru o departajare deterministă.
+     La scoruri egale poate produce blocuri consecutive; ordinea nu oferă
+     un avantaj predictiv.
 
 Contract: modulul e PUR (doar stdlib) — importabil din benchmark/ ȘI core/
 fără risc de import circular — iar funcția e simplă, la nivel de modul
@@ -95,27 +96,36 @@ def _max_addable(chosen: set[int], optional: set[int], max_run: int) -> int:
     """Câte numere din ``optional`` încap lângă ``chosen`` fără o secvență de
     peste ``max_run`` consecutive; -1 dacă ``chosen`` depășește deja limita.
 
-    Programare dinamică pe axa numerelor: starea este lungimea secvenței care se
-    termină la x (0..max_run); numerele din ``chosen`` sunt obligatorii.
+    Fiecare secvență de ``max_run + 1`` poziții disponibile cere eliminarea
+    unui număr opțional. La prima secvență prea lungă îl eliminăm pe cel mai
+    din dreapta: orice soluție trebuie să elimine unul din acea secvență, iar
+    alegerea cea mai din dreapta acoperă cel puțin aceleași secvențe viitoare.
+    Este regula greedy exactă pentru intersectarea intervalelor, cu pozițiile
+    obligatorii excluse dintre eliminări. O pauză numerică începe alt interval.
+
+    După sortare, parcurgerea este liniară în numărul pozițiilor disponibile;
+    nu parcurge golurile numerice și nu ține câte o stare pentru fiecare run.
     """
     universe = chosen | optional
     if not universe:
         return 0
-    dp = [0] + [-1] * max_run
-    for x in range(min(universe), max(universe) + 2):
-        forced, allowed = x in chosen, x in optional
-        new = [-1] * (max_run + 1)
-        for run, best in enumerate(dp):
-            if best < 0:
-                continue
-            if not forced:
-                new[0] = max(new[0], best)
-            if (forced or allowed) and run < max_run:
-                new[run + 1] = max(new[run + 1], best + (0 if forced else 1))
-        dp = new
-        if max(dp) < 0:
-            return -1
-    return max(dp)
+    skipped = run = 0
+    previous = last_optional = None
+    for x in sorted(universe):
+        if previous is None or x != previous + 1:
+            run = 0
+            last_optional = None
+        run += 1
+        if x not in chosen:
+            last_optional = x
+        if run > max_run:
+            if last_optional is None or last_optional < x - max_run:
+                return -1
+            skipped += 1
+            run = x - last_optional
+            last_optional = None
+        previous = x
+    return len(optional - chosen) - skipped
 
 
 def limit_consecutive_run(

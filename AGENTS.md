@@ -80,6 +80,36 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Audit consecutive si selectie mai rapida — 2026-10-16
+
+- Problema verificata pe ultimul job local 6/49: clasamentul initial contine
+  2..6 si 14..16, dar pool-ul jucat si toate cele 152 de variante respecta
+  limita 2. UI-ul are deja optiunea pornita implicit si salvata; taskul,
+  worker-ul si WF primesc aceeasi limita. Nu s-a gasit o pierdere a setarii.
+- Scorerul curent `markov_lag2` are 49 de scoruri distincte, inclusiv la
+  granita pool-ului 16; seriile nu provin din departajare. Pentru un pool
+  uniform de 16 din 49, probabilitatea unei serii de minimum 3 este 74,458%,
+  fata de 4,770% la 6 numere. Istoricul: 123/2593 = 4,744%. Seria observata
+  nu justifica modificarea scorerului sau promovarea filtrului ca avantaj.
+- Capacitatea din `ranking._max_addable` foloseste acum eliminarea celui
+  mai din dreapta numar optional la prima secventa prea lunga (intersectare
+  exacta de intervale), in locul programarii dinamice. Nicio schimbare de
+  pool, limita aplicata sau numere sarite: 78.732 cazuri de capacitate si
+  1.500 selectii comparate cu versiunea anterioara. Pool 16 / univers 49:
+  1,537 -> 0,235 ms, 6,53 ori mai rapid NUMAI calculul limitei.
+- UI-ul si raportul disting secventa maxima consecutiva in pool-ul jucat de
+  cea din selectia initiala inregistrata. Nu reconstruiesc clasamentul brut
+  din top25 rotunjit si nu folosesc bifa curenta pentru rezultate vechi.
+  Optiunea spune explicit ca este activata implicit, se memoreaza si se
+  aplica la generarea urmatoare. Preferintele salvate nu se modifica.
+- Fara bump de cache: rezultatele, scorurile si biletele sunt identice.
+  Raport reproductibil: `scripts/analysis/audit_consecutive_2026_10_16.md`.
+- Verificat pe Python 3.14.8 / Windows, copie izolata: 109 fisiere de teste,
+  2560 teste trecute, 20 omise, zero esecuri (16 min 29 s). Auditul aplicatiei:
+  13 istorice, 848 verificari de paritate, 151 designuri, 26 pipeline-uri,
+  13 profile de cover complet, worker separat pe 13 jocuri si UI HTTP 200.
+  Fisierele si preferintele locale ale utilizatorului au ramas intacte.
+
 ### Cover design, prioritar Loto 6/49 — 2026-10-15
 
 - Cele 52 de covere clasice au fost comparate cu arhiva oficiala La Jolla,

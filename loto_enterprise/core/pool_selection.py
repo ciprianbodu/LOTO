@@ -81,8 +81,9 @@ def select_pool_from_scores(
     """Selectează top ``pool_size`` numere după scor (fără filtre de diversitate).
 
     Regula canonică `rank_by_score`: la scoruri egale, număr descrescător —
-    IDENTIC cu bench `runner._top_k` (evită degenerarea „1,2,3…K” / „cele mai
-    mici compuse”). ``draw_matrix`` rămâne în semnătură pentru compatibilitate
+    IDENTIC cu bench `runner._top_k`. Este doar o departajare deterministă:
+    la egalitate, ordinea numerică poate produce blocuri consecutive și nu
+    constituie un filtru de geometrie. ``draw_matrix`` rămâne în semnătură pentru compatibilitate
     cu apelantul din loto_engine, dar NU mai influențează selecția.
     ``max_consecutive_run`` > 0 aplică opțiunea utilizatorului descrisă în
     docstring-ul modulului; 0 lasă top-N pur, bit cu bit ca înainte.
