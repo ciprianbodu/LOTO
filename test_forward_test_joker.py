@@ -212,8 +212,18 @@ def test_script_reports_without_writing_anything(tmp_path, capsys):
     assert sorted(p.name for p in HERE.iterdir() if p.name != "__pycache__") == before
 
 
-def test_no_next_pool_before_the_first_evaluated_draw(capsys):
-    assert fj.main([]) == 0
+def test_no_next_pool_before_the_first_evaluated_draw(tmp_path, capsys):
+    # Istoricul real crește după înregistrare. Scenariul fără extrageri viitoare
+    # folosește prefixul înregistrat, nu presupune că CSV-ul curent se oprește acolo.
+    n = REG["history_rows_at_registration"]
+    lines = ISTORIC.read_text(encoding="utf-8").splitlines()
+    csv = tmp_path / "registered_history.csv"
+    csv.write_text("\n".join(lines[: n + 1]) + "\n", encoding="utf-8")
+    dates, draws = fj.load_history(csv)
+    assert len(draws) == n
+    assert ft.history_hash(dates, draws, n) == REG["history_sha256"]
+    assert dates[-1].isoformat() == REG["history_last_date_at_registration"]
+    assert fj.main(["--csv", str(csv)]) == 0
     out = capsys.readouterr().out
     assert "Extrageri evaluate (după 2026-10-11): 0" in out
     assert "prima extragere evaluată" in out

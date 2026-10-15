@@ -26,7 +26,9 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v15"
+PIPELINE_CACHE_VERSION = "v16"
+# v16: covere complete mai mici si designuri cu buget imbunatatite;
+#      invalideaza si apelurile legacy fara config/semnatura designului.
 # v15: peste 64 de bilete, designul cu buget precalculat offline
 #      (`covering_designs/budget/`), certificat exact față de căutarea din proces.
 # v14: la 1..64 de bilete, recoacerea pe șansa exactă (`covering.anneal_hits`)
