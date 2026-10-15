@@ -61,7 +61,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v15` (designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v16` (covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -79,6 +79,48 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Cover design, prioritar Loto 6/49 — 2026-10-15
+
+- Cele 52 de covere clasice au fost comparate cu arhiva oficiala La Jolla,
+  Zenodo 19735294 (CC BY 4.0). 12 fisiere mai mici, fiecare verificat
+  exhaustiv la 100%: 6/49 g4, pool 14: 86 -> 80, pool 15: 130 -> 117,
+  pool 16: 172 -> 152 (-11,63%); g5 pool 16: 986 -> 808 (-18,05%).
+  Pick 5 g4 pool 16: 416 -> 404. Provenienta, contributorii, intervalele
+  exacte din arhiva si amprentele sunt in
+  `scripts/analysis/ljcr_designs_2026_10_15.json`; import verificabil prin
+  `import_ljcr_designs.py`, fara descarcari la pornirea aplicatiei.
+- Coverele complete reduc costul aceleiasi garantii. Nu afirma dominanta
+  la pragurile mai mari: de exemplu, 6/49 pool 16 g4 pastreaza P(4+)
+  7,960002%, dar P(5+) a fisierelor brute scade 0,292188% -> 0,251434%
+  cand se cumpara 152 in loc de 172 variante. Raport:
+  `scripts/analysis/complete_covers_2026-10-15.md`.
+- La buget fix, 6/49 pool 16 g4: 51 din cele 87 de sectiuni (65..151)
+  imbunatatite prin eliminari/adaugari marginale din designuri existente;
+  38 cresc 4+, 13 cresc numai 5+. La 150 variante: P(4+) 7,616405% ->
+  7,861831%; maxim relativ +5,046% la 136 variante. Certificare exacta,
+  inclusiv independenta de motor, pe 6/49 si 6/45: acelasi numar de variante
+  distincte, toate pozitiile jucate, niciun prag 3..6 si nicio acoperire a
+  grupelor de 4 in scadere. Cautarea este numai offline (~225 s), prin
+  `scripts/analysis/refine_budget_designs.py`; productia citeste designurile
+  si le certifica la fiecare apel. Nu apare un cost suplimentar de cautare.
+- Semnaturile existente ale fisierelor C si sectiunilor H invalideaza numai
+  cheile WF afectate, fara bump global v31. Bugetul care cuprinde acum
+  coverul complet trece automat pe garantia 100%. Sectiunile H la sau peste
+  noua dimensiune completa sunt eliminate (nu mai sunt accesate).
+  Worker v16 acopera inclusiv apelantii vechi fara configuratie; UI-ul
+  continua sa trimita `use_cache=False`. Modul automat „Bilet complet”
+  nu citeste aceste fisiere si ramane neschimbat.
+- Testul Joker pentru zero extrageri viitoare foloseste acum o copie temporara
+  a celor 2.194 de randuri inregistrate, verificata prin amprenta protocolului.
+  Apelul pe istoricul curent esua dupa prima extragere noua din 15 octombrie;
+  metoda inghetata, evaluatorul, protocolul si istoricul real raman intacte.
+- Verificat pe Python 3.14.8 / Windows, intr-o copie izolata: 107 fisiere
+  `test_*.py`, 2533 teste trecute, 20 omise, zero esecuri (22 min 17 s).
+  Audit: 13 istorice, 848 verificari de paritate, 151 designuri C/L,
+  26 de pipeline-uri, 13 profile de cover complet, worker separat pentru
+  13 jocuri si UI HTTP 200. Benchmarkul local in curs ramane separat; suita
+  foloseste fixture-urile complete versionate.
 
 ### Mai multe hituri pe bilete, runda a doua — 2026-10-12
 
@@ -1731,7 +1773,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v15` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v16` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
