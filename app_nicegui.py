@@ -2887,12 +2887,14 @@ def main_page() -> None:
             "Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
         _bind_save(
-            ui.checkbox("🔗 Fără 3 numere consecutive în pool (ex. 4-5-6)").classes(
+            ui.checkbox("🔗 Fără 3 numere consecutive în pool (activ implicit)").classes(
                 "w-full"
             ),
             "max_consecutive_run_enabled_val",
         )
         ui.label(
+            "Opțiunea este deja activă la prima pornire, iar alegerea ta se păstrează "
+            "la repornire. Setarea se aplică la următoarea generare. "
             "Pool-ul se ia tot după clasamentul metodei. Numărul care ar forma al "
             "treilea consecutiv este sărit, iar locul lui îl ia următorul număr din "
             "clasament care nu formează o secvență. Fereastra rezultatului arată ce "
