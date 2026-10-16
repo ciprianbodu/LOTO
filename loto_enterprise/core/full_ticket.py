@@ -327,7 +327,8 @@ def _fill_variants(
             # canonice), pus pe clasamentul pasului si certificat fata de
             # variantele lui. Ramane cel mai bun dintre cele certificate.
             canon, canon_audit = _full_cover_from_canonical(
-                ranked, chosen, pick, guarantee, n_var, draw_n, int(max_num)
+                ranked, chosen, pick, guarantee, n_var, draw_n, int(max_num),
+                search=improve_full_cover_variants,
             )
             if canon_audit["applied"] and (
                 not cover_audit["applied"]
@@ -345,7 +346,7 @@ def _fill_variants(
 
 @lru_cache(maxsize=32)
 def _canonical_full_cover(
-    v: int, pick: int, guarantee: int, n_var: int, draw_n: int | None, max_num: int
+    v: int, pick: int, guarantee: int, n_var: int, draw_n: int | None, max_num: int, search
 ) -> tuple[tuple[int, ...], ...] | None:
     """Variantele „Bilet complet” cu garantia completa, pe pozitii 1..v (1 = cel
     mai bine clasat), dupa recoacerea pe toate variantele; None = nimic de pus.
@@ -356,9 +357,9 @@ def _canonical_full_cover(
     geometrie, e al doilea candidat: masurat pe 79 de pasi (6/49 pool 8..14,
     5/40 pool 8..12, Joker pool 8..9, 3..10 bilete), la pragul de peste
     garantie bate cautarea pasului cu pana la 3,3% sau pierde cu pana la 3,7%,
-    deci se pastreaza cel mai bun dintre ele (audit 2026-10-16)."""
-    from covering.anneal_hits import improve_full_cover_variants
-
+    deci se pastreaza cel mai bun dintre ele (audit 2026-10-16). `search` e
+    cautarea folosita si pe pas (`improve_full_cover_variants`): face parte din
+    cheie, ca o etapa oprita sa le opreasca pe amandoua."""
     pool = list(range(1, v + 1))
     scores = {n: float(v - i) for i, n in enumerate(pool)}
     chosen, n_base = _fill_variants(
@@ -367,7 +368,7 @@ def _canonical_full_cover(
     if n_base >= len(chosen):
         return None
     drawn = pick if draw_n is None else int(draw_n)
-    improved, audit = improve_full_cover_variants(pool, chosen, guarantee, drawn, max_num)
+    improved, audit = search(pool, chosen, guarantee, drawn, max_num)
     if not audit["applied"]:
         return None
     return tuple(tuple(sorted(int(x) for x in t)) for t in improved)
@@ -386,7 +387,7 @@ def _cover_key(ranked, variants, guarantee, pick, drawn, max_num) -> tuple[float
     return tuple(p[t] for t in order)
 
 
-def _full_cover_from_canonical(ranked, chosen, pick, guarantee, n_var, draw_n, max_num):
+def _full_cover_from_canonical(ranked, chosen, pick, guarantee, n_var, draw_n, max_num, *, search):
     """``(variante, audit)``: designul canonic pe clasamentul pasului, numai
     certificat fata de variantele pasului (`covering.anneal_hits._certify`:
     acelasi numar distinct, numerele jucate raman, niciun prag 3..extrase in
@@ -394,7 +395,7 @@ def _full_cover_from_canonical(ranked, chosen, pick, guarantee, n_var, draw_n, m
     from covering.anneal_hits import _certify
 
     audit = {"applied": False, "reason": "", "source": "canonical", "gain": {}}
-    canon = _canonical_full_cover(len(ranked), pick, guarantee, n_var, draw_n, max_num)
+    canon = _canonical_full_cover(len(ranked), pick, guarantee, n_var, draw_n, max_num, search)
     if canon is None:
         audit["reason"] = "no canonical design"
         return chosen, audit

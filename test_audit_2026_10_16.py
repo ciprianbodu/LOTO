@@ -120,7 +120,7 @@ def test_full_cover_keeps_the_better_of_the_step_and_canonical_designs(monkeypat
         data = {"hard_core": list(scores)[:10], "guarantee": 3, "audit": {"timesfm_predictions": scores}}
         both = build_full_ticket("6/49", data, 6, with_chances=False)
         with monkeypatch.context() as m:
-            m.setattr(ft, "_full_cover_from_canonical", lambda r, chosen, *a: (chosen, {"applied": False}))
+            m.setattr(ft, "_full_cover_from_canonical", lambda r, chosen, *a, **k: (chosen, {"applied": False}))
             step = build_full_ticket("6/49", data, 6, with_chances=False)
         assert both["refined"] and step["refined"] and both["coverage"] == 100.0
         pool = both["pool"]
