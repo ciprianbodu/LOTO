@@ -231,19 +231,21 @@ def main():
     parser.add_argument("--input-dir", type=Path, default=ROOT / "covering_designs/budget")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--seed-dir", type=Path)
-    parser.add_argument("--pools", type=int, nargs="+", default=[16])
+    parser.add_argument("--pools", type=int, nargs="+", default=[14, 15, 16])
     parser.add_argument("--source-stride", type=int, default=5, help="Try every Nth descending budget as pruning seed")
     parser.add_argument("--extension-step", type=int, default=10, help="Try multiples of N as extension seeds; 0 disables")
+    parser.add_argument("--max-rounds", type=int, default=1, help="Maximum pruning/extension passes until convergence")
     args = parser.parse_args()
     source, destination = args.input_dir.resolve(), args.output_dir.resolve()
     if source == destination or destination == (ROOT / "covering_designs/budget").resolve():
         parser.error("Choose a separate output directory; production and input files must not be overwritten")
-    if args.source_stride < 1 or args.extension_step < 0 or any(not 6 < v <= 16 for v in args.pools):
-        parser.error("Expected positive source stride, nonnegative extension step, and pools 7..16")
+    if args.source_stride < 1 or args.extension_step < 0 or args.max_rounds < 1 or any(not 6 < v <= 16 for v in args.pools):
+        parser.error("Expected positive source stride, nonnegative extension step, positive max rounds, and pools 7..16")
     destination.mkdir(parents=True, exist_ok=True)
     wall, cpu = time.perf_counter(), time.process_time()
     report = {"universes": UNIVERSES, "pick": PICK, "guarantee": GUARANTEE,
               "source_stride": args.source_stride, "extension_step": args.extension_step,
+              "max_rounds": args.max_rounds,
               "inputs": {}, "outputs": {}, "changed": []}
     input_paths = {}
     for v in sorted(set(args.pools)):
@@ -257,13 +259,19 @@ def main():
             report["inputs"][seed.name] = _sha(seed)
             input_paths[seed] = _sha(seed)
         search = Search(v, _read_budget(path, v), complete)
-        search.prune(args.source_stride)
-        if args.extension_step:
-            search.extend(args.extension_step)
+        rounds = 0
+        while True:
+            rounds += 1
+            before = len(search.origins)
+            search.prune(args.source_stride)
+            if args.extension_step:
+                search.extend(args.extension_step)
+            if len(search.origins) == before or rounds >= args.max_rounds:
+                break
         report["changed"].extend(search.write(destination))
         output = destination / path.name
         report["outputs"][output.name] = _sha(output)
-        print(f"pool {v}: {len(search.origins)} improved sections", flush=True)
+        print(f"pool {v}: {len(search.origins)} improved sections (in {rounds} round(s))", flush=True)
     if any(_sha(path) != digest for path, digest in input_paths.items()):
         raise RuntimeError("Input changed during refinement; discard generated files and retry")
     report["wall_seconds"] = time.perf_counter()-wall

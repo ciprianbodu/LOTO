@@ -80,6 +80,25 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Optimizare cover design si hituri pe bugete fixe (pool 14, 15, 16) — 2026-10-16
+
+- Dupa reducerea coverelor complete La Jolla C(14,6,4) la 80 de variante si C(15,6,4)
+  la 117 variante, designurile cu buget `H_14_6_4.txt` si `H_15_6_4.txt` au fost
+  re-prunate si extinse recursiv din noile baze, iar `H_16_6_4.txt` a fost optimizat
+  suplimentar prin pasul fin de extindere si pasul unitar de prunare.
+- `scripts/analysis/refine_budget_designs.py` a primit suport pentru iterare
+  automata pana la convergenta (`--max-rounds`), cu default pe bazinele 14, 15, 16.
+- 62 de sectiuni de buget sunt imbunatatite strict si certificate:
+  - Pool 14: 14 din cele 15 sectiuni (65..79) imbunatatite (93,3%), castig 4+ pana la +1,795%;
+  - Pool 15: 38 din cele 52 de sectiuni (65..116) imbunatatite (73,1%), castig 4+ pana la +5,014% si 5+ pana la +2,082%;
+  - Pool 16: 10 din cele 87 de sectiuni (65..151) imbunatatite suplimentar prin cautare exhaustiva iterativa.
+- Fiecare sectiune respecta strict certificarea exacta pe 6/49 si 6/45: acelasi numar de
+  variante, toate pozitiile jucate, nicio probabilitate in scadere la vreun prag 3+..6+,
+  acoperirea garantiei pastrata la nivelul incumbentului sau 100%.
+- Semnaturile existente ale sectiunilor H invalideaza numai cheile WF afectate,
+  fara bump global de WF. Raport complet: `scripts/analysis/budget_refinement_2026-10-16.md`
+  si datele in `scripts/analysis/budget_refinement_2026-10-16.json`.
+
 ### Audit consecutive si selectie mai rapida — 2026-10-16
 
 - Problema verificata pe ultimul job local 6/49: clasamentul initial contine
