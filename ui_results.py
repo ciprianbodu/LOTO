@@ -968,17 +968,51 @@ def _simple_variants_count() -> int:
     return max(1, min(500, n))
 
 
-def _show_full_ticket() -> None:
-    """Bilete complete per joc (1-10 bilete × 3/4/2 variante) din pool-ul afișat."""
-    from loto_enterprise.core.full_ticket import build_full_ticket, clamp_tickets
+# Un singur calcul „Bilet complet” odată: un al doilea clic cât rulează primul
+# ar porni încă o recoacere rece pe aceleași geometrii.
+_FULL_TICKET_RUN: dict = {"busy": False}
+
+
+async def _show_full_ticket() -> None:
+    """Bilete complete per joc (1-10 bilete × 3/4/2 variante) din pool-ul afișat.
+
+    Biletele se calculează într-un fir (`run.io_bound`), nu pe bucla NiceGUI: la
+    pool 16 primul clic costă ~14 s pe trei jocuri, iar un handler sincron oprea
+    temporizatoarele, progresul WF și celelalte taburi cât dura."""
+    from nicegui import run
+
+    from loto_enterprise.core import full_ticket as _ft
+    from loto_enterprise.core.full_ticket import clamp_tickets
     from loto_enterprise.core.lotteries import display_name
 
     res = STATE.get("results")
     if not isinstance(res, tuple) or len(res) != 2:
         ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
         return
+    if _FULL_TICKET_RUN["busy"]:
+        ui.notify("⏳ Biletele se calculează deja.")
+        return
     rb, _ = res
     tickets = clamp_tickets(SETTINGS.get("full_ticket_count_val"))
+    items = []
+    for _fn, outs in rb:
+        for g, raw in _ordered_game_items(outs):
+            _data = _primary_pool_data(raw)
+            _spec = _game_spec_for(g, _data)
+            # România: eticheta de dinainte; străin: id-ul din registru.
+            game = _game_label_for(str(g)) if _spec.is_romanian else _spec.game_id
+            items.append((game, _data, _spec))
+    _FULL_TICKET_RUN["busy"] = True
+    wait = ui.notification("⏳ Calculez biletele…", spinner=True, timeout=None)
+    try:
+        built = await run.io_bound(
+            lambda: [_ft.build_full_ticket(game, d, tickets) for game, d, _s in items]
+        )
+    finally:
+        _FULL_TICKET_RUN["busy"] = False
+        wait.dismiss()
+    if built is None:  # aplicația se oprește
+        return
     copy_lines: list[str] = []
     with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
         title = "un bilet fizic" if tickets == 1 else f"{tickets} bilete fizice"
@@ -993,44 +1027,38 @@ def _show_full_ticket() -> None:
         with ui.column().classes("w-full no-wrap gap-1").style(
             "max-height:65vh; overflow-y:auto"
         ):
-            for _fn, outs in rb:
-                for g, raw in _ordered_game_items(outs):
-                    _data = _primary_pool_data(raw)
-                    _spec = _game_spec_for(g, _data)
-                    # România: eticheta de dinainte; străin: id-ul din registru.
-                    game = _game_label_for(str(g)) if _spec.is_romanian else _spec.game_id
-                    t = build_full_ticket(game, _data, tickets)
-                    lottery = display_name(game)  # = _game_title(g)
-                    ui.separator()
-                    ui.label(lottery).classes("text-bold")
-                    if _training_only_note(_spec):
-                        ui.label(f"ℹ️ {_training_only_note(_spec)}").classes(
-                            "text-caption text-warning"
-                        )
-                    if t.get("error"):
-                        ui.label(f"⚠️ {t['error']}").classes("text-warning")
-                        continue
-                    if t.get("note"):
-                        ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
-                    if copy_lines:
-                        copy_lines.append("")
-                    copy_lines.append(lottery)
-                    for i, v in enumerate(t["variants"], 1):
-                        if tickets > 1 and (i - 1) % t["per_ticket"] == 0:
-                            slip = f"Biletul {(i - 1) // t['per_ticket'] + 1} · {lottery}"
-                            ui.label(slip).classes("text-caption text-bold q-mt-xs")
-                            copy_lines.append(slip)
-                        if t["joker"] is not None:
-                            txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
-                        else:
-                            txt = ", ".join(str(n) for n in v)
-                        ui.label(f"V{i}: {txt}").classes("font-mono")
-                        copy_lines.append(f"V{i}: {txt}")
-                    ui.label(_full_ticket_summary(t, game)).classes("text-caption")
-                    for line in _full_ticket_chances(
-                        t, t["joker"] is not None or game == "joker"
-                    ):
-                        ui.label(line).classes("text-caption")
+            for (game, _data, _spec), t in zip(items, built):
+                lottery = display_name(game)  # = _game_title(g)
+                ui.separator()
+                ui.label(lottery).classes("text-bold")
+                if _training_only_note(_spec):
+                    ui.label(f"ℹ️ {_training_only_note(_spec)}").classes(
+                        "text-caption text-warning"
+                    )
+                if t.get("error"):
+                    ui.label(f"⚠️ {t['error']}").classes("text-warning")
+                    continue
+                if t.get("note"):
+                    ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
+                if copy_lines:
+                    copy_lines.append("")
+                copy_lines.append(lottery)
+                for i, v in enumerate(t["variants"], 1):
+                    if tickets > 1 and (i - 1) % t["per_ticket"] == 0:
+                        slip = f"Biletul {(i - 1) // t['per_ticket'] + 1} · {lottery}"
+                        ui.label(slip).classes("text-caption text-bold q-mt-xs")
+                        copy_lines.append(slip)
+                    if t["joker"] is not None:
+                        txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
+                    else:
+                        txt = ", ".join(str(n) for n in v)
+                    ui.label(f"V{i}: {txt}").classes("font-mono")
+                    copy_lines.append(f"V{i}: {txt}")
+                ui.label(_full_ticket_summary(t, game)).classes("text-caption")
+                for line in _full_ticket_chances(
+                    t, t["joker"] is not None or game == "joker"
+                ):
+                    ui.label(line).classes("text-caption")
         copy_text = "\n".join(copy_lines)
         with ui.row().classes("w-full justify-end gap-2"):
             copy_btn = ui.button("📋 Copiază numerele").props(

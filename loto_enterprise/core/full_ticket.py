@@ -249,6 +249,18 @@ def _fill_variants(
             audit["anneal"] = anneal_audit
         if anneal_audit["applied"]:
             chosen = [tuple(v) for v in improved]
+        from covering.guarantee_portfolio import applies, improve_with_lower_guarantees
+
+        if applies(len(pool), pick, guarantee, len(chosen)) and len(set(pool)) == len(pool):
+            # Garanția egală cu biletul: biletele unei garanții mai mici,
+            # certificate pe garanția cerută (2026-10-16).
+            improved, lower_audit = improve_with_lower_guarantees(
+                _sorted_pool(pool, scores), chosen, guarantee, drawn, int(max_num)
+            )
+            if audit is not None:
+                audit["lower_guarantee"] = lower_audit
+            if lower_audit["applied"]:
+                chosen = [tuple(v) for v in improved]
     seen = set(chosen)
     level = guarantee
     while len(chosen) < n_var and level < pick:

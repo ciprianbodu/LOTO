@@ -117,15 +117,28 @@ def _designs(v: int, pick: int, guarantee: int):
     return {}
 
 
+def _stored(v: int, pick: int, guarantee: int, budget: int):
+    """Secțiunea pentru buget: întâi la garanția cerută, apoi la cea mai mare
+    garanție mai mică, până la 4 (2026-10-16). Un design de garanție 4 fără
+    două bilete cu 5 numere comune trece și certificarea pe garanția 5 sau 6
+    (aceleași bilete distincte, niciun prag în scădere); certificarea se face
+    oricum la apel, pe garanția cerută."""
+    for source in [int(guarantee), *range(int(guarantee) - 1, 3, -1)]:
+        entry = _designs(int(v), int(pick), source).get(int(budget))
+        if entry:
+            return entry
+    return None
+
+
 def load_budget_design(v: int, pick: int, guarantee: int, budget: int):
     """Blocurile (poziții 1..v) pentru bugetul cerut, sau None."""
-    entry = _designs(int(v), int(pick), int(guarantee)).get(int(budget))
+    entry = _stored(v, pick, guarantee, budget)
     return [list(b) for b in entry[0]] if entry else None
 
 
 def budget_design_signature(v: int, pick: int, guarantee: int, budget: int) -> str | None:
     """Amprenta secțiunii livrate pentru cheia WF; None când nu există design."""
-    entry = _designs(int(v), int(pick), int(guarantee)).get(int(budget))
+    entry = _stored(v, pick, guarantee, budget)
     return entry[1] if entry else None
 
 

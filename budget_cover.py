@@ -195,7 +195,8 @@ def wheel_hitcover(pool, pick, guarantee, max_variants=0, scores=None):
     ordered = rank_by_score({n: (scores or {}).get(n, 0.0) for n in pool}, len(pool))
     if len(ordered) != len(pool):
         return base, base_cov
-    incumbent, profile = base, wheel_hit_profile(pool, base)
+    # Profilul pe clasament: aceleași măști la fiecare pas cu aceleași poziții.
+    incumbent, profile = base, wheel_hit_profile(ordered, base)
     candidates = [
         maximum_cover_positions(len(pool), pick, target, len(base))
         for target in dict.fromkeys((guarantee, 3, 4))
@@ -213,7 +214,7 @@ def wheel_hitcover(pool, pick, guarantee, max_variants=0, scores=None):
             candidate
         ):
             continue
-        candidate_profile = wheel_hit_profile(pool, candidate)
+        candidate_profile = wheel_hit_profile(ordered, candidate)
         if any(
             a < b
             for a_row, b_row in zip(candidate_profile, profile)

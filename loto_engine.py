@@ -466,6 +466,7 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 scores=scores,
                 condition=_cond,
                 draw_n=self.params["draw_n"],
+                max_num=self.params["max_n"],
             )
             self._attach_joker(variants)
             return variants, coverage_pct

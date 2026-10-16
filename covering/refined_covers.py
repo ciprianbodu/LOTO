@@ -24,6 +24,7 @@ import logging
 from pathlib import Path
 
 from covering.anneal_hits import _certify
+from covering.probability import wheel_hit_profile
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,22 @@ _REFINED_DIRS = [
 _FILE_CACHE: dict[tuple, tuple[tuple[tuple[int, ...], ...], str] | None] = {}
 
 
-def refined_cover_path(v: int, pick: int, guarantee: int, draw_n: int, max_num: int) -> str:
+def refined_cover_path(
+    v: int, pick: int, guarantee: int, draw_n: int, max_num: int, condition: int | None = None
+) -> str:
+    """Numele fișierului: `R_...` pentru coverul clasic, `RL_..._<c>_...` pentru
+    designul lotto „g dacă c” (garanția se aplică dacă în pool cad c numere)."""
+    if condition is not None and int(condition) > int(guarantee):
+        return f"RL_{int(v)}_{int(pick)}_{int(guarantee)}_{int(condition)}_{int(draw_n)}_{int(max_num)}.txt"
     return f"R_{int(v)}_{int(pick)}_{int(guarantee)}_{int(draw_n)}_{int(max_num)}.txt"
 
 
-def _parse(text: str, v: int, pick: int):
-    """(blocuri în poziții, amprentă) sau None pentru un fișier invalid."""
+def _parse(text: str, v: int, pick: int, all_played: bool = True):
+    """(blocuri în poziții, amprentă) sau None pentru un fișier invalid.
+
+    Coverul clasic joacă toate pozițiile; un design lotto poate lăsa poziții
+    nejucate (ca unele fișiere `L_` La Jolla), iar certificarea cere doar ca
+    numerele jucate de wheel-ul din proces să rămână jucate."""
     lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
     blocks = []
     for line in lines:
@@ -50,14 +61,15 @@ def _parse(text: str, v: int, pick: int):
         blocks.append(tuple(sorted(nums)))
     if not blocks or len(set(blocks)) != len(blocks):
         return None
-    if {p for b in blocks for p in b} != set(range(1, v + 1)):
+    if all_played and {p for b in blocks for p in b} != set(range(1, v + 1)):
         return None
     digest = hashlib.sha256("\n".join(lines).encode("ascii")).hexdigest()[:12]
     return tuple(blocks), digest
 
 
-def _entry(v: int, pick: int, guarantee: int, draw_n: int, max_num: int):
-    name = refined_cover_path(v, pick, guarantee, draw_n, max_num)
+def _entry(v: int, pick: int, guarantee: int, draw_n: int, max_num: int, condition: int | None = None):
+    name = refined_cover_path(v, pick, guarantee, draw_n, max_num, condition)
+    lotto = condition is not None and int(condition) > int(guarantee)
     for directory in _REFINED_DIRS:
         path = directory / name
         try:
@@ -71,7 +83,7 @@ def _entry(v: int, pick: int, guarantee: int, draw_n: int, max_num: int):
             if len(_FILE_CACHE) > 128:
                 _FILE_CACHE.clear()
             try:
-                parsed = _parse(path.read_text(encoding="utf-8-sig"), int(v), int(pick))
+                parsed = _parse(path.read_text(encoding="utf-8-sig"), int(v), int(pick), all_played=not lotto)
             except (OSError, ValueError) as exc:
                 logger.warning("[WHEEL-refined] ignor %s: %s", path, exc)
                 parsed = None
@@ -82,20 +94,29 @@ def _entry(v: int, pick: int, guarantee: int, draw_n: int, max_num: int):
     return None
 
 
-def load_refined_cover(v: int, pick: int, guarantee: int, draw_n: int, max_num: int):
+def load_refined_cover(
+    v: int, pick: int, guarantee: int, draw_n: int, max_num: int, condition: int | None = None
+):
     """Blocurile (poziții 1..v) ale coverului rafinat pentru geometrie, sau None."""
-    entry = _entry(int(v), int(pick), int(guarantee), int(draw_n), int(max_num))
+    entry = _entry(int(v), int(pick), int(guarantee), int(draw_n), int(max_num), condition)
     return [list(b) for b in entry[0]] if entry else None
 
 
-def refined_cover_signature(v: int, pick: int, guarantee: int, draw_n: int, max_num: int) -> str | None:
+def refined_cover_signature(
+    v: int, pick: int, guarantee: int, draw_n: int, max_num: int, condition: int | None = None
+) -> str | None:
     """Amprenta coverului rafinat pentru cheia WF; None când nu există."""
-    entry = _entry(int(v), int(pick), int(guarantee), int(draw_n), int(max_num))
+    entry = _entry(int(v), int(pick), int(guarantee), int(draw_n), int(max_num), condition)
     return entry[1] if entry else None
 
 
-def improve_with_refined_cover(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
-    """``(wheel, audit)``: coverul rafinat pe pozițiile pool-ului, dacă e certificat."""
+def improve_with_refined_cover(
+    ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int, condition: int | None = None
+):
+    """``(wheel, audit)``: coverul rafinat pe pozițiile pool-ului, dacă e certificat.
+
+    Cu `condition` > garanție, designul lotto „g dacă c” trebuie în plus să nu
+    acopere mai puține grupe de c numere cu g pe un bilet (counts[c][g])."""
     audit = {"applied": False, "reason": "", "gain": {}}
     pool = [int(n) for n in ordered_pool]
     tickets = [sorted(int(n) for n in t) for t in wheel]
@@ -107,7 +128,7 @@ def improve_with_refined_cover(ordered_pool, wheel, guarantee: int, draw_n: int,
     if len(set(pool)) != v or any(len(t) != pick for t in tickets) or v >= int(max_num):
         audit["reason"] = "outside limits"
         return wheel, audit
-    design = load_refined_cover(v, pick, int(guarantee), int(draw_n), int(max_num))
+    design = load_refined_cover(v, pick, int(guarantee), int(draw_n), int(max_num), condition)
     if design is None:
         audit["reason"] = "no refined cover"
         return wheel, audit
@@ -116,5 +137,10 @@ def improve_with_refined_cover(ordered_pool, wheel, guarantee: int, draw_n: int,
     if why:
         audit["reason"] = why
         return wheel, audit
+    if condition is not None and int(condition) > int(guarantee):
+        c, g = int(condition), int(guarantee)
+        if wheel_hit_profile(pool, candidate)[c][g] < wheel_hit_profile(pool, tickets)[c][g]:
+            audit["reason"] = "lotto coverage falls"
+            return wheel, audit
     audit.update(applied=True, gain=gain)
     return candidate, audit

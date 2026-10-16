@@ -368,7 +368,18 @@ def _wheel_sig(
                 g,
                 condition,
             )
-            return f"lotto|{geometry}|cd{design_sig}|rt1|hp1"
+            # `rl<amprenta>`: designul lotto rafinat (fără plafon); `lc1`: cu plafon,
+            # wheel-ul clasic certificat față de designul trunchiat.
+            extra = "|lc1" if cap > 0 else ""
+            if cap == 0 and game_type in _WF_DRAW_UNIVERSE:
+                from covering.refined_covers import refined_cover_signature
+
+                draw_n, max_num = _WF_DRAW_UNIVERSE[game_type]
+                stored = refined_cover_signature(
+                    int(pool_size), int(_WF_PICK.get(game_type) or 6), g, draw_n, max_num, condition
+                )
+                extra = f"|rl{stored}" if stored else ""
+            return f"lotto|{geometry}|cd{design_sig}|rt1|hp1{extra}"
         if method in {"lajolla", "union34"}:
             design_guarantee = 4 if method == "union34" and g <= 4 else g
             design_sig = covering_design_source_signature(
@@ -388,6 +399,9 @@ def _wheel_sig(
                 design_sig = covering_design_source_signature(int(pool_size), pick, g)
                 refined = _refined_cover_suffix("lajolla", int(pool_size), game_type, g)
                 return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1{refined}"
+            # `lg1`: garanția egală cu biletul primește biletele certificate ale
+            # unei garanții mai mici (`covering.guarantee_portfolio`).
+            lower = "|lg1" if g >= pick else ""
             if cap >= 65:
                 # `bd<amprenta>`: designul cu buget precalculat
                 # (`covering_designs/budget/`) când există pentru acest buget.
@@ -395,10 +409,10 @@ def _wheel_sig(
 
                 stored = budget_design_signature(int(pool_size), pick, g, cap)
                 suffix = f"|bd{stored}" if stored else ""
-                return f"{method}|{geometry}|rt1|hp1|bc1{suffix}"
+                return f"{method}|{geometry}|rt1|hp1|bc1{suffix}{lower}"
             # `sa1`: recoacerea pe șansa exactă (`covering.anneal_hits`) la
             # 1..64 de bilete, acceptată numai fără scădere la vreun prag.
-            return f"{method}|{geometry}|rt1|hp1|sa1"
+            return f"{method}|{geometry}|rt1|hp1|sa1{lower}"
         return f"{method}|{geometry}|rt1|hp1"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)

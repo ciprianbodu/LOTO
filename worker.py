@@ -26,7 +26,10 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v17"
+PIPELINE_CACHE_VERSION = "v18"
+# v18: garanția egală cu biletul ia biletele certificate ale unei garanții mai
+#      mici; designurile cu buget cad pe garanția mai mică; ramura lotto „g dacă
+#      c” primește designul rafinat (fără plafon) sau wheel-ul clasic certificat.
 # v17: fără plafon, coverul complet rafinat pentru pragul de peste garanție
 #      (`covering_designs/refined/`), certificat față de designul La Jolla.
 # v16: covere complete mai mici si designuri cu buget imbunatatite;
