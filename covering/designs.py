@@ -145,9 +145,10 @@ def complete_design_size(v: int, pick: int, guarantee: int) -> int | None:
     stamps = []
     for directory in _LAJOLLA_DIRS:
         try:
-            stamps.append((str(directory), (directory / name).stat().st_mtime_ns))
+            info = (directory / name).stat()
+            stamps.append((str(directory), info.st_mtime_ns, info.st_size))
         except OSError:
-            stamps.append((str(directory), None))
+            stamps.append((str(directory), None, None))
     key = (int(v), int(pick), int(guarantee), tuple(stamps))
     if key not in _DESIGN_SIZE_CACHE:
         if len(_DESIGN_SIZE_CACHE) > 256:

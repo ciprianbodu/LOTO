@@ -61,10 +61,12 @@ def _entry(v: int, pick: int, guarantee: int, draw_n: int, max_num: int):
     for directory in _REFINED_DIRS:
         path = directory / name
         try:
-            stamp = path.stat().st_mtime_ns
+            info = path.stat()
         except OSError:
             continue
-        key = (str(path), stamp)
+        # Data și mărimea: un fișier înlocuit în aceeași secundă, cu altă
+        # lungime, nu mai e servit din memorie.
+        key = (str(path), info.st_mtime_ns, info.st_size)
         if key not in _FILE_CACHE:
             if len(_FILE_CACHE) > 128:
                 _FILE_CACHE.clear()

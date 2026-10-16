@@ -73,7 +73,11 @@ def _parse(text: str, v: int, pick: int) -> dict[int, tuple[tuple[tuple[int, ...
         blocks = []
         ok = True
         for line in lines:
-            nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
+            try:
+                nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
+            except ValueError:
+                ok = False  # un caracter nenumeric strică numai secțiunea lui
+                break
             if len(nums) != pick or len(set(nums)) != pick or any(n < 1 or n > v for n in nums):
                 ok = False
                 break
@@ -95,10 +99,12 @@ def _designs(v: int, pick: int, guarantee: int):
     for directory in _BUDGET_DIRS:
         path = directory / name
         try:
-            stamp = path.stat().st_mtime_ns
+            info = path.stat()
         except OSError:
             continue
-        key = (str(path), stamp)
+        # Data și mărimea: un fișier înlocuit în aceeași secundă, cu altă
+        # lungime, nu mai e servit din memorie.
+        key = (str(path), info.st_mtime_ns, info.st_size)
         if key not in _FILE_CACHE:
             if len(_FILE_CACHE) > 64:
                 _FILE_CACHE.clear()
