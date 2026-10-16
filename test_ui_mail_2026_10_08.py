@@ -72,7 +72,7 @@ def test_mail_rating_says_when_holm_does_not_confirm_the_advantage(monkeypatch):
     monkeypatch.setattr(app, "_decision_entry", lambda key, pool: entry)
     lines = app._mail_method_lines(spec, _result("markov_lag2"))
     assert lines[0] == "METODĂ: markov_lag2 (câștigătoarea bench-ului la pool 16)"
-    assert "9.10%" in lines[1] and "7.96%" in lines[1] and "3/4" in lines[1]
+    assert "rată 4+ 9.1%" in lines[1] and "7.96%" in lines[1] and "Wilson (z=1) 8.5%" in lines[1] and "3/4" in lines[1]
     assert len(lines) == 3
     assert "Avantaj nedemonstrat" in lines[2] and "p = 0.43" in lines[2]
     assert lines[2] == app._multiplicity_note(entry)
@@ -101,7 +101,7 @@ def test_mail_rating_is_not_another_methods_after_the_decision_changed(monkeypat
     assert len(lines) == 2
     assert "s-a schimbat după generare" in lines[1]
     assert "ridge_pooled_feats" in lines[1]
-    assert "9.10%" not in lines[1] and "p = 0.41" not in lines[1]
+    assert "9.1%" not in lines[1] and "p = 0.41" not in lines[1]
 
 
 def test_mail_reads_the_decision_for_the_pool_the_method_was_chosen_for(monkeypatch):
@@ -407,8 +407,8 @@ def test_mail_names_the_joker_number_method_with_its_rate_and_wilson(monkeypatch
         "METODĂ JOKER: markov_pairs (câștigătoarea bench-ului pe Urna 2, top-1)"
     )
     assert lines[1] == (
-        "RATING JOKER: rată top-1 7.10% față de 5.00% la întâmplare; "
-        "scor Wilson (z=1) 6.20%; a bătut hazardul în 3/4 ferestre"
+        "RATING JOKER: rată top-1 7.1% față de 5.00% la întâmplare; "
+        "scor Wilson (z=1) 6.2%; a bătut hazardul în 3/4 ferestre"
     )
     assert "Avantaj nedemonstrat" in lines[2] and "48" in lines[2]
 
@@ -416,7 +416,7 @@ def test_mail_names_the_joker_number_method_with_its_rate_and_wilson(monkeypatch
     monkeypatch.setattr(app, "_decision_entry", lambda k, p: _urna2_entry("frequency"))
     lines = app._mail_method_lines(spec, data, urna2=True)
     assert len(lines) == 2 and "s-a schimbat după generare" in lines[1]
-    assert "7.10%" not in lines[1]
+    assert "7.1%" not in lines[1]
 
 
 def test_mail_joker_number_on_the_fallback_has_no_rating(monkeypatch):
@@ -440,7 +440,7 @@ def test_mail_body_carries_the_joker_number_method_only_for_joker(monkeypatch):
     body = app._build_mail_body()
     assert "METODĂ: frequency (câștigătoarea bench-ului la pool 16)" in body
     assert "METODĂ JOKER: markov_pairs" in body
-    assert "RATING JOKER: rată top-1 7.10% față de 5.00% la întâmplare" in body
+    assert "RATING JOKER: rată top-1 7.1% față de 5.00% la întâmplare" in body
     assert body.index("POOL:") < body.index("METODĂ JOKER") < body.index("CEL MAI BUN")
 
     _ro_mail_state(monkeypatch, _history(["01-10-2026", "04-10-2026"]))

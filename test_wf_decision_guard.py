@@ -99,3 +99,54 @@ def test_a_failed_run_does_not_keep_the_previous_mark(wf_state, monkeypatch):
     app._start_walk_forward()
     assert "loto_6_49.csv_6/49" not in app.STATE["retro_meta"]
     assert "decizia de bench s-a schimbat după generare" not in app._build_report()
+
+
+def test_a_budget_stop_marks_the_games_that_never_started(wf_state, monkeypatch):
+    """Audit 2026-10-16: cu bugetul terminat după Joker, 5/40 și 6/49 nu aveau
+    nicio intrare: panoul și raportul tăceau, iar starea WF se golea."""
+    import time as _time
+
+    class Clock:
+        now = 1_000_000.0
+
+        def time(self):
+            return self.now
+
+        def __getattr__(self, name):
+            return getattr(_time, name)
+
+    clock = Clock()
+    monkeypatch.setattr(app, "time", clock)
+    frame = app.STATE["result_sources"]["loto_6_49.csv"]
+    joker = {
+        "hard_core": list(range(1, 17)),
+        "pool_size": 16,
+        "guarantee": 4,
+        "hard_core_joker": [7],
+        "audit": {"bench_winner": {"joker_urna1": {"method": "frequency"}}},
+    }
+    six = app.STATE["results"][0][0][1]
+    monkeypatch.setitem(
+        app.STATE,
+        "results",
+        ([("joker.csv", {"joker": joker}), ("loto_6_49.csv", six)], 1),
+    )
+    monkeypatch.setitem(
+        app.STATE, "result_sources", {"joker.csv": frame, "loto_6_49.csv": frame}
+    )
+    monkeypatch.setattr(app, "_result_scorers_match_decision", lambda *_: True)
+    real = wf.run_honest_walk_forward
+
+    def slow(**kwargs):
+        clock.now += 10_000.0  # bugetul de timp se termină în primul joc
+        return real(**kwargs)
+
+    monkeypatch.setattr(wf, "run_honest_walk_forward", slow)
+    app._start_walk_forward()
+    assert len(wf_state) == 1  # numai Joker
+    assert app.STATE["retro"]["joker.csv_joker"] == [{"draw_index": 1}]
+    assert app.STATE["retro_meta"]["loto_6_49.csv_6/49"] == {"budget_skipped": True}
+    assert "loto_6_49.csv_6/49" not in app.STATE["retro"]
+    assert "un joc" not in app.STATE["wf_status"]
+    assert "1 joc fără validare" in app.STATE["wf_status"]
+    assert "neînceput — bugetul de timp" in app._build_report()

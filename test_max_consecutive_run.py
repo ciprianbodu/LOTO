@@ -106,8 +106,9 @@ def test_selector_on_replaces_and_records_ranks():
     assert pool == [33, 34, 36, 37, 39, 40, 42, 43, 45, 46, 48, 49]
     cl = audit["consecutive_limit"]
     assert (cl["requested"], cl["applied"], cl["relaxed"]) == (2, 2, False)
-    assert cl["removed"] == [[38, 12], [41, 9], [44, 6], [47, 3]]
-    assert cl["added"] == [[33, 17], [34, 16], [36, 14], [37, 13]]
+    # În ordinea clasamentului (audit 2026-10-16), nu după număr.
+    assert cl["removed"] == [[47, 3], [44, 6], [41, 9], [38, 12]]
+    assert cl["added"] == [[37, 13], [36, 14], [34, 16], [33, 17]]
     assert audit["pool_selection"] == "top_score_max_run"
     json.dumps(audit["consecutive_limit"])  # raportul și emailul trec prin JSON
 

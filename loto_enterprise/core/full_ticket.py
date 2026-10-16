@@ -36,7 +36,7 @@ varianta afisata sa prinda t numere, la fiecare prag cu premiu.
 
 from __future__ import annotations
 
-from math import comb
+from math import comb, inf, nextafter
 
 from covering.common import compute_coverage_pct
 from covering.dispatch import generate_wheel, resolve_wheel_method
@@ -59,14 +59,29 @@ def clamp_tickets(value) -> int:
 
 
 def _pool_scores(data: dict) -> dict[int, float] | None:
+    """Clasamentul din audit, cu valorile strict descrescatoare in ordinea cheilor.
+
+    Valorile sunt rotunjite la 6 zecimale; doua scoruri distincte pot deveni
+    egale, iar `_sorted_pool` le-ar departaja dupa numarul mai mare, deci altfel
+    decat metoda (Joker, cusum_burst: 18 si 38 schimbau pozitiile din design).
+    Valoarea egala sau mai mare decat cea dinainte coboara cu un ulp sub ea:
+    ordinea pozitiilor e ordinea cheilor, iar valorile raman practic aceleasi.
+    """
     audit = data.get("audit") or {}
     raw = audit.get("ranking_scores_top25") or audit.get("timesfm_predictions")
     if not isinstance(raw, dict) or not raw:
         return None
     try:
-        return {int(k): float(v) for k, v in raw.items()}
+        scores = {int(k): float(v) for k, v in raw.items()}
     except (TypeError, ValueError):
         return None
+    prev = None
+    for n, value in scores.items():
+        if prev is not None and not value < prev:
+            value = nextafter(prev, -inf)
+            scores[n] = value
+        prev = value
+    return scores
 
 
 def _max_run(data: dict) -> int:

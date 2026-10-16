@@ -363,7 +363,7 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
             path = PROJECT_ROOT / filename
             digest.update(filename.encode())
             digest.update(path.read_bytes() if path.exists() else b"missing")
-        from loto_enterprise.core.walk_forward_adapter import _wheel_sig
+        from loto_enterprise.core.walk_forward_adapter import _effective_pool_size, _wheel_sig
 
         foreign_countries: set[str] = set()
         for dataset in config.get("datasets", []):
@@ -372,9 +372,17 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
                 norm = _task_norm(task, lot)
+                # Designul pool-ului jucat: o bază restrânsă mai îngustă decât
+                # pool-ul îl taie (ca la cheia WF), iar designul semnat e al lui.
+                played = _effective_pool_size(
+                    norm["pool_size"],
+                    lot.geometry,
+                    norm["restrict_base_max"],
+                    norm["restrict_base_min"],
+                )
                 digest.update(
                     _wheel_sig(
-                        norm["pool_size"],
+                        played,
                         lot.geometry,
                         norm["guarantee"],
                         norm["wheel_condition"],

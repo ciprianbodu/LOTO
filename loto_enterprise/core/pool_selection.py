@@ -63,8 +63,11 @@ def apply_consecutive_limit(
             "requested": limit,
             "applied": applied,
             "relaxed": applied != limit,
-            "removed": [[n, rank[n]] for n in sorted(set(top_n) - set(pool))],
-            "added": [[n, rank[n]] for n in sorted(set(pool) - set(top_n))],
+            # În ordinea clasamentului, ca „scos” și „pus în loc” să se citească
+            # pereche cu pereche (audit 2026-10-16: 9 (locul 18) apărea înaintea
+            # lui 18 (locul 17)).
+            "removed": [[n, rank[n]] for n in sorted(set(top_n) - set(pool), key=rank.__getitem__)],
+            "added": [[n, rank[n]] for n in sorted(set(pool) - set(top_n), key=rank.__getitem__)],
         }
     return pool
 

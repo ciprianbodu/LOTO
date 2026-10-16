@@ -15,6 +15,7 @@ from covering.guarantee_portfolio import improve_with_lower_guarantees
 from covering.common import (
     _coverage_pct,
     _greedy_fallback,
+    _order_by_scores,
     _sorted_pool,
     lotto_coverage_pct,
     ensure_pool_numbers_on_tickets,
@@ -130,6 +131,32 @@ def _improve_lotto(pool, pick, guarantee, condition, max_variants, scores, wheel
 
 
 def generate_wheel(
+    method: str,
+    pool,
+    pick,
+    guarantee,
+    max_variants=0,
+    scores=None,
+    condition: int | None = None,
+    draw_n: int | None = None,
+    max_num: int | None = None,
+):
+    """`_generate_wheel`; pe calea motorului (`max_num` și scoruri date) biletele
+    ies în ordinea sumei scorurilor, ca după La Jolla: etapele care înlocuiesc
+    wheel-ul (designul cu buget, recoacerea, coverul rafinat, swap-urile) își
+    întorc candidatul în ordinea proprie, iar UI-ul afișează primele N variante
+    și costul „Top N bilete simple”. Mulțimea biletelor, acoperirea și hiturile
+    nu se schimbă. Biletele fizice (fără `max_num`) își păstrează ordinea: baza
+    garanției stă în primele variante."""
+    wheel, cov = _generate_wheel(
+        method, pool, pick, guarantee, max_variants, scores, condition, draw_n, max_num
+    )
+    if max_num and scores and wheel:
+        wheel = _order_by_scores(wheel, scores)
+    return wheel, cov
+
+
+def _generate_wheel(
     method: str,
     pool,
     pick,

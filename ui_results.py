@@ -813,6 +813,11 @@ def _build_report() -> str:
                 out.append(
                     "  Walk-forward: sărit — decizia de bench s-a schimbat după generare."
                 )
+            if ((STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}).get("budget_skipped"):
+                out.append(
+                    "  Walk-forward: neînceput — bugetul de timp s-a terminat înaintea "
+                    "acestui joc."
+                )
             if wf:
                 # Aceleași avertismente ca panoul: raportul nu prezintă o validare
                 # parțială sau amestecată drept completă.

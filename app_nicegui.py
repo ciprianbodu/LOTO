@@ -69,6 +69,7 @@ from ui_results import *  # noqa: F403
 from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
 from loto_enterprise.core import lotteries as _LOT
+from loto_enterprise.core.ro_text import count
 
 def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
@@ -1379,9 +1380,11 @@ def _start_walk_forward() -> None:
                     "[WF] datasets goale (probabil recuperare după restart) → "
                     "walk-forward sărit; mail/shutdown continuă fără stats de validare."
                 )
-            total = _count_wf_jobs(results_bundle)
+            jobs = list(_iter_wf_jobs(results_bundle))
+            total = len(jobs)
             done = 0
-            for fname, g_label, data in _iter_wf_jobs(results_bundle):
+            budget_skipped = 0
+            for i_job, (fname, g_label, data) in enumerate(jobs):
                 df_source = ds_by_name.get(fname)
                 if df_source is None:
                     continue
@@ -1489,9 +1492,29 @@ def _start_walk_forward() -> None:
                         done,
                         total,
                     )
+                    if STATE.get("wf_seq") == my_seq and not STATE.get("wf_user_cancel"):
+                        # Bugetul s-a terminat: jocurile neîncepute primesc un
+                        # marcaj, ca panoul și raportul să spună de ce lipsesc.
+                        for fn_left, g_left, _d_left in jobs[i_job + 1 :]:
+                            if ds_by_name.get(fn_left) is None:
+                                continue
+                            rk_left = f"{_pfx}{fn_left}_{g_left}"
+                            budget_skipped += 1
+                            with STATE_LOCK:
+                                STATE["retro"].pop(rk_left, None)
+                                STATE.setdefault("retro_meta", {})[rk_left] = {
+                                    "budget_skipped": True
+                                }
                     break
             if STATE.get("wf_seq") == my_seq and not STATE.get("wf_user_cancel"):
-                STATE["wf_status"] = ""
+                STATE["wf_status"] = (
+                    f"⏱ Walk-forward oprit de bugetul de timp: "
+                    f"{count(budget_skipped, 'jocuri', 'joc')} fără validare. "
+                    "Mărește „⏱ Buget walk-forward”; la generarea următoare pașii "
+                    "deja validați se iau din cache."
+                    if budget_skipped
+                    else ""
+                )
                 STATE["wf_progress"] = 1.0
         except Exception as exc:  # noqa: BLE001
             STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
@@ -1987,16 +2010,19 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
     base = entry.get("baseline_rate")
     label = "top-1" if urna2 else entry.get("target_label") or "3+"
     lines = [head, f"RATING{tag}: indisponibil în decizia salvată"]
+    # Rata și Wilson vin din `rationale`, scrise ca fracții cu 3 zecimale: în
+    # procente, o zecimală, cât are sursa (6.2%, nu 6.20% lângă 6.15% din
+    # clasament). Rata la întâmplare e exactă și rămâne cu două.
     m = re.search(r"= ([0-9.]+) \(Wilson_lb=([0-9.]+)\).*?in (\d+)/(\d+) windows", rat)
     if m:
         rate, wil, w_ok, w_all = float(m[1]), float(m[2]), m[3], m[4]
-        line = f"RATING{tag}: rată {label} {100 * rate:.2f}%"
+        line = f"RATING{tag}: rată {label} {100 * rate:.1f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
-        line += f"; scor Wilson (z=1) {100 * wil:.2f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
+        line += f"; scor Wilson (z=1) {100 * wil:.1f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
         lines[1] = line
     elif m := re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat):
-        line = f"RATING{tag}: rată {label} {100 * float(m[1]):.2f}%"
+        line = f"RATING{tag}: rată {label} {100 * float(m[1]):.1f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
         lines[1] = (

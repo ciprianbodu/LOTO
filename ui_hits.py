@@ -796,6 +796,14 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # Pool-ul EFECTIV din REZULTAT, nu din setarea care se poate schimba ulterior.
                 flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
                 if (STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}).get(
+                    "budget_skipped"
+                ):
+                    ui.label(
+                        "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea "
+                        "acestui joc. Mărește „⏱ Buget walk-forward”; la generarea "
+                        "următoare pașii deja validați se iau din cache."
+                    ).classes("text-warning text-caption text-bold")
+                if (STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}).get(
                     "decision_moved"
                 ):
                     ui.label(
