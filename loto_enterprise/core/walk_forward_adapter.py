@@ -275,6 +275,8 @@ def _csv_hash(df: pd.DataFrame, game_type: str) -> str:
 # Câte numere are un BILET (= `pick`-ul wheel-ului). La 5/40 se extrag 6, dar
 # biletul are 5; hiturile se numără pe toate cele 6 extrase.
 _WF_PICK = {"6/49": 6, "5/40": 5, "joker": 5, "6/45": 6, "5/50": 5}
+# (extrase, univers) pentru coverele rafinate pe geometria jocului (`rc<amprenta>`).
+_WF_DRAW_UNIVERSE = {"6/49": (6, 49), "5/40": (6, 40), "joker": (5, 45), "6/45": (6, 45), "5/50": (5, 50)}
 
 
 def _wf_guarantee(pool_size: int, pick: int | None = None) -> int:
@@ -308,6 +310,19 @@ def _wf_geometry(
     )
     c = int(wheel_condition or 0)
     return g, (g if c <= 0 else max(g, min(pick, c))), max(0, int(max_variants or 0))
+
+
+def _refined_cover_suffix(method: str, pool_size: int, game_type, guarantee: int) -> str:
+    """`|rc<amprenta>` când coverul complet La Jolla e înlocuit de unul rafinat
+    pentru geometria jocului (`covering.refined_covers`); altfel nimic."""
+    if method != "lajolla" or game_type not in _WF_DRAW_UNIVERSE:
+        return ""
+    from covering.refined_covers import refined_cover_signature
+
+    draw_n, max_num = _WF_DRAW_UNIVERSE[game_type]
+    pick = int(_WF_PICK.get(game_type) or 6)
+    stored = refined_cover_signature(int(pool_size), pick, int(guarantee), draw_n, max_num)
+    return f"|rc{stored}" if stored else ""
 
 
 def _wheel_sig(
@@ -363,14 +378,16 @@ def _wheel_sig(
             )
             # `tg1`: la egalitate de bilete, greedy-ul care domină designul
             # (union34 trece și el prin wheel_lajolla).
-            return f"{method}|{geometry}|cd{design_sig}|rt1|hp1|tg1"
+            refined = _refined_cover_suffix(method, int(pool_size), game_type, g)
+            return f"{method}|{geometry}|cd{design_sig}|rt1|hp1|tg1{refined}"
         if method == "hitcover":
             # Designul complet când încape în buget (`bf1`); altfel, peste 64 de
             # bilete, căutarea exactă pe șanse din `covering.budget_climb` (`bc1`).
             pick = int(_WF_PICK.get(game_type) or 6)
             if budget_buys_complete_design(int(pool_size), pick, g, cap):
                 design_sig = covering_design_source_signature(int(pool_size), pick, g)
-                return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1"
+                refined = _refined_cover_suffix("lajolla", int(pool_size), game_type, g)
+                return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1{refined}"
             if cap >= 65:
                 # `bd<amprenta>`: designul cu buget precalculat
                 # (`covering_designs/budget/`) când există pentru acest buget.

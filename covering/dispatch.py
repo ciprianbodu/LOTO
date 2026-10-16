@@ -26,6 +26,7 @@ from covering.designs import (
 from covering.higher_hits import improve_higher_hits
 from covering.ilp import wheel_ilp
 from covering.profile_swap import improve_hit_profile
+from covering.refined_covers import improve_with_refined_cover
 from covering.search import wheel_annealing, wheel_genetic
 
 WHEEL_METHODS = {
@@ -114,7 +115,10 @@ def generate_wheel(
     bilete, `budget_climb`, acceptat numai cu dominanță exactă de profil, iar
     la 1..64 de bilete recoacerea pe șansa exactă (`covering.anneal_hits`),
     acceptată numai dacă niciun prag afișat nu scade. Fără `max_num`
-    (biletele fizice) ieșirea rămâne cea de dinainte.
+    (biletele fizice) ieșirea rămâne cea de dinainte. Tot cu `max_num`, fără
+    plafon, coverul La Jolla e înlocuit de coverul rafinat al geometriei
+    jocului (`covering.refined_covers`), numai certificat: aceeași garanție
+    100%, aceleași bilete ca număr, niciun prag în scădere, câștig strict.
     """
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
@@ -168,6 +172,22 @@ def generate_wheel(
         # distinct ticket count, no profile entry lower, strict 3+/4+/5+ gain.
         improved, audit = improve_hit_profile(
             _sorted_pool(pool, scores), wheel, draw_n=draw_n
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    if (
+        fn is wheel_lajolla
+        and max_num
+        and int(max_variants or 0) == 0
+        and cov >= 100.0
+        and len(set(pool)) == len(pool) <= 16
+    ):
+        # Coverul complet rafinat offline pentru pragul de peste garanție
+        # (`covering_designs/refined/`), certificat față de wheel-ul de mai sus.
+        draws = int(pick) if draw_n is None else int(draw_n)
+        improved, audit = improve_with_refined_cover(
+            _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
         )
         if audit["applied"]:
             wheel = improved
