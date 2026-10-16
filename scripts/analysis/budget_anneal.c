@@ -7,7 +7,10 @@
 //
 //   gcc -O2 -o budget_anneal budget_anneal.c -lm
 //   ./budget_anneal v pick draw_n max_num g moves seed targeted_frac t0_factor
-//                   t_ratio penalty cycles start.txt out.txt
+//                   t_ratio penalty cycles start.txt out.txt [primary]
+// `primary` (optional, implicit g): pragul urmarit intai. Pentru un cover
+// complet (P(>= g) e deja maximul pool-ului) se da g+1: mutarile care strica
+// acoperirea sunt penalizate, iar cel mai bun design fezabil o pastreaza.
 // start.txt / out.txt: un bilet pe linie, pozitii 1..v (1 = cea mai buna).
 // Cel mai bun design FEZABIL (W[t] >= baza la fiecare t de la 3 la top si
 // acoperirea garantiei >= baza) e scris; altfel se scrie biletul de start.
@@ -97,7 +100,9 @@ int main(int argc, char **argv) {
     for (int s = 0; s < n; s++) unc_pos[s] = -1;
     for (int j = 0; j < ng; j++) { int s = gidx[j]; if (cnt[g * n + s] > 0) cov++; else unc_add(s); }
     memcpy(baseW, W, sizeof W); basecov = cov;
-    int primary = g < 3 ? 3 : (g > top ? top : g);
+    int primary = argc > 15 ? atoi(argv[15]) : g;
+    if (primary < 3) primary = 3;
+    if (primary > top) primary = top;
     for (int t = 3; t <= top; t++) wt[t] = (t == primary) ? 1.0 : (t > primary ? pow(1e-3, t - primary) : pow(1e-4, primary - t));
     printf("start T=%d n=%d base", T, n); for (int t = 3; t <= top; t++) printf(" P%d=%.9f", t, (double)W[t] / total); printf(" cov=%d/%d\n", cov, nG);
     double curf = objective(W, cov), bestf = curf; uint32_t *best = malloc(T * sizeof(uint32_t)); memcpy(best, tick, T * sizeof(uint32_t));
