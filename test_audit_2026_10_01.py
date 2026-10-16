@@ -200,9 +200,11 @@ def test_hitcover_is_automatic_and_greedy_override_separates_cache(monkeypatch):
     engine = LotoEngine("6/49")
     engine.hard_core = list(range(1, 12))
     scores = {n: float((n * 17) % 23) for n in engine.hard_core}
-    assert engine.generate_predictions(4, 7, scores) == generate_wheel(
-        "hitcover", engine.hard_core, 6, 4, 7, scores
-    )
+    # Din 2026-10-16 motorul livrează biletele în ordinea sumei scorurilor.
+    from covering.common import _order_by_scores
+
+    ref, ref_cov = generate_wheel("hitcover", engine.hard_core, 6, 4, 7, scores)
+    assert engine.generate_predictions(4, 7, scores) == (_order_by_scores(ref, scores), ref_cov)
 
 
 def test_leaderboard_weighted_ties_match_decision(monkeypatch):

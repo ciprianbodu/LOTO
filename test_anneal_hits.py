@@ -260,9 +260,14 @@ def test_physical_ticket_runs_the_full_cover_stage_only_when_the_base_is_complet
     monkeypatch.setattr(ah, "improve_full_cover_variants", spy)
     pool, scores = _pool(10)
     audit = {}
+    ft._canonical_full_cover.cache_clear()
     chosen, n_base = ft._fill_variants(pool, 6, 3, 15, scores, draw_n=6, max_num=49, audit=audit)
-    assert len(calls) == 1 and calls[0][2:] == (3, 6, 49)
+    # Variantele pasului și, o dată pe geometrie, designul canonic (2026-10-16).
+    assert len(calls) == 2 and all(c[2:] == (3, 6, 49) for c in calls)
     assert audit["full_cover"]["applied"] and n_base == len(chosen) == 15
+    calls.clear()
+    ft._fill_variants(pool, 6, 3, 15, scores, draw_n=6, max_num=49)
+    assert len(calls) == 1  # designul canonic e ținut minte
     calls.clear()
     big, scores16 = _pool(16)
     ft._fill_variants(big, 6, 3, 9, scores16, draw_n=6, max_num=49)

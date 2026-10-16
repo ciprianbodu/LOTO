@@ -86,10 +86,13 @@ def test_hitcover_range_is_left_to_the_annealing_stage(monkeypatch):
     monkeypatch.setattr(dispatch, "improve_ticket_chances", lambda *a, **k: (a[1], {"applied": False}))
     pick, draw, max_num = GAMES["6/49"]
     scores = scores_for(POOL)
+    from covering.common import _order_by_scores
+
     for budget in (10, 64):
-        assert generate_wheel(
-            "hitcover", POOL, pick, 4, budget, scores, None, draw, max_num
-        ) == generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw)
+        with_max, cov = generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw, max_num)
+        plain, plain_cov = generate_wheel("hitcover", POOL, pick, 4, budget, scores, None, draw)
+        # Aceleași bilete; cu `max_num` ies în ordinea scorului (2026-10-16).
+        assert (with_max, cov) == (_order_by_scores(plain, scores), plain_cov)
 
 
 def test_a_budget_that_fits_the_complete_design_buys_it():

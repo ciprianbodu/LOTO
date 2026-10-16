@@ -36,6 +36,7 @@ varianta afisata sa prinda t numere, la fiecare prag cu premiu.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from math import comb, inf, nextafter
 
 from covering.common import compute_coverage_pct
@@ -207,6 +208,7 @@ def _fill_variants(
     draw_n: int | None = None,
     max_num: int | None = None,
     audit: dict | None = None,
+    full_cover: bool = True,
 ) -> tuple[list[list[int]], int]:
     """Variantele biletelor si cate dintre ele formeaza wheel-ul garantiei.
 
@@ -312,19 +314,102 @@ def _fill_variants(
             )
             if swap_audit["applied"]:
                 chosen = improved
-        if max_num is not None and method == "hitcover":
+        if max_num is not None and method == "hitcover" and full_cover:
             from covering.anneal_hits import improve_full_cover_variants
 
             drawn = pick if draw_n is None else int(draw_n)
+            ranked = _sorted_pool(pool, scores)
             improved, cover_audit = improve_full_cover_variants(
-                _sorted_pool(pool, scores), chosen, guarantee, drawn, int(max_num)
+                ranked, chosen, guarantee, drawn, int(max_num)
             )
+            cover_audit["source"] = "step"
+            # Al doilea candidat: designul cautat o data pe geometrie (pozitii
+            # canonice), pus pe clasamentul pasului si certificat fata de
+            # variantele lui. Ramane cel mai bun dintre cele certificate.
+            canon, canon_audit = _full_cover_from_canonical(
+                ranked, chosen, pick, guarantee, n_var, draw_n, int(max_num)
+            )
+            if canon_audit["applied"] and (
+                not cover_audit["applied"]
+                or _cover_key(ranked, canon, guarantee, pick, drawn, int(max_num))
+                > _cover_key(ranked, improved, guarantee, pick, drawn, int(max_num))
+            ):
+                improved, cover_audit = canon, canon_audit
             if audit is not None:
                 audit["full_cover"] = cover_audit
             if cover_audit["applied"]:
                 chosen = [tuple(v) for v in improved]
                 n_base = len(chosen)
     return [list(v) for v in chosen], n_base
+
+
+@lru_cache(maxsize=32)
+def _canonical_full_cover(
+    v: int, pick: int, guarantee: int, n_var: int, draw_n: int | None, max_num: int
+) -> tuple[tuple[int, ...], ...] | None:
+    """Variantele „Bilet complet” cu garantia completa, pe pozitii 1..v (1 = cel
+    mai bine clasat), dupa recoacerea pe toate variantele; None = nimic de pus.
+
+    Variantele unui pas depind de valorile scorurilor (greedy-ul ordoneaza
+    tintele dupa suma lor), deci recoacerea porneste la fiecare pas din alt
+    punct si gaseste alt optim local. Designul canonic, cautat o data pe
+    geometrie, e al doilea candidat: masurat pe 79 de pasi (6/49 pool 8..14,
+    5/40 pool 8..12, Joker pool 8..9, 3..10 bilete), la pragul de peste
+    garantie bate cautarea pasului cu pana la 3,3% sau pierde cu pana la 3,7%,
+    deci se pastreaza cel mai bun dintre ele (audit 2026-10-16)."""
+    from covering.anneal_hits import improve_full_cover_variants
+
+    pool = list(range(1, v + 1))
+    scores = {n: float(v - i) for i, n in enumerate(pool)}
+    chosen, n_base = _fill_variants(
+        pool, pick, guarantee, n_var, scores, draw_n=draw_n, max_num=max_num, full_cover=False
+    )
+    if n_base >= len(chosen):
+        return None
+    drawn = pick if draw_n is None else int(draw_n)
+    improved, audit = improve_full_cover_variants(pool, chosen, guarantee, drawn, max_num)
+    if not audit["applied"]:
+        return None
+    return tuple(tuple(sorted(int(x) for x in t)) for t in improved)
+
+
+def _cover_key(ranked, variants, guarantee, pick, drawn, max_num) -> tuple[float, ...]:
+    """Ordinea intre doua seturi certificate: pragul de peste garantie intai,
+    apoi cele mai mari, apoi cele de sub garantie."""
+    from covering.probability import wheel_hit_probabilities
+
+    p = wheel_hit_probabilities(
+        list(ranked), [sorted(int(x) for x in t) for t in variants], drawn, max_num
+    )["ticket"]
+    top = min(pick, drawn)
+    order = [*range(int(guarantee) + 1, top + 1), *range(int(guarantee), 2, -1)]
+    return tuple(p[t] for t in order)
+
+
+def _full_cover_from_canonical(ranked, chosen, pick, guarantee, n_var, draw_n, max_num):
+    """``(variante, audit)``: designul canonic pe clasamentul pasului, numai
+    certificat fata de variantele pasului (`covering.anneal_hits._certify`:
+    acelasi numar distinct, numerele jucate raman, niciun prag 3..extrase in
+    scadere, castig strict, acoperirea garantiei nu scade, deci ramane 100%)."""
+    from covering.anneal_hits import _certify
+
+    audit = {"applied": False, "reason": "", "source": "canonical", "gain": {}}
+    canon = _canonical_full_cover(len(ranked), pick, guarantee, n_var, draw_n, max_num)
+    if canon is None:
+        audit["reason"] = "no canonical design"
+        return chosen, audit
+    candidate = [sorted(ranked[p - 1] for p in t) for t in canon]
+    tickets = [sorted(int(x) for x in t) for t in chosen]
+    drawn = pick if draw_n is None else int(draw_n)
+    if len(candidate) != len(tickets):
+        audit["reason"] = "different variant count"
+        return chosen, audit
+    why, gain, _cov = _certify(list(ranked), tickets, candidate, int(guarantee), drawn, int(max_num))
+    if why:
+        audit["reason"] = why
+        return chosen, audit
+    audit.update(applied=True, gain=gain)
+    return candidate, audit
 
 
 def chance_thresholds(min_target: int, pick: int, draw_n: int) -> list[int]:

@@ -99,3 +99,35 @@ def test_rounded_ties_keep_the_audit_order_in_the_design():
     assert sum(18 in v for v in shown) >= sum(38 in v for v in shown)
     p = wheel_hit_probabilities(order, shown, 5, 45)["ticket"]
     assert p[3] > 0
+
+
+# --------------------------------------------------------------------------- #
+# „Bilet complet” cu garanția completă: designul canonic e al doilea candidat.
+# --------------------------------------------------------------------------- #
+
+
+def test_full_cover_keeps_the_better_of_the_step_and_canonical_designs(monkeypatch):
+    import random
+
+    import loto_enterprise.core.full_ticket as ft
+
+    gains = 0
+    for seed in range(6):
+        rng = random.Random(seed)
+        nums = rng.sample(range(1, 50), 25)
+        scores = {x: 1.0 - k * 0.013 + rng.random() * 1e-3 for k, x in enumerate(nums)}
+        scores = dict(sorted(scores.items(), key=lambda kv: -kv[1]))
+        data = {"hard_core": list(scores)[:10], "guarantee": 3, "audit": {"timesfm_predictions": scores}}
+        both = build_full_ticket("6/49", data, 6, with_chances=False)
+        with monkeypatch.context() as m:
+            m.setattr(ft, "_full_cover_from_canonical", lambda r, chosen, *a: (chosen, {"applied": False}))
+            step = build_full_ticket("6/49", data, 6, with_chances=False)
+        assert both["refined"] and step["refined"] and both["coverage"] == 100.0
+        pool = both["pool"]
+        pa = wheel_hit_probabilities(pool, [v[:6] for v in both["variants"]], 6, 49)["ticket"]
+        pb = wheel_hit_probabilities(pool, [v[:6] for v in step["variants"]], 6, 49)["ticket"]
+        # Ambele sunt certificate față de variantele pasului; rămâne cel mai bun
+        # la pragul de peste garanție.
+        assert pa[3] == pb[3] and pa[4] >= pb[4] - 1e-15
+        gains += pa[4] > pb[4] + 1e-15
+    assert gains >= 1  # pe cel puțin un pas designul canonic e mai bun
