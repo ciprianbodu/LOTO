@@ -72,7 +72,7 @@ def test_uncapped_and_conditional_generation_keep_their_designs(monkeypatch):
     assert all(p_new[t] >= p_old[t] - 1e-15 for t in range(3, 7))
     assert lotto_coverage_pct([t[:6] for t in lines], engine.hard_core, 3, 4) >= old_cov
     assert wf._wheel_sig(16, "6/49", 3, 4, 10).startswith("lotto|")
-    assert wf._wheel_sig(16, "6/49", 3, 4, 10).endswith("|lc1")
+    assert "|lc1:" in wf._wheel_sig(16, "6/49", 3, 4, 10)
 
 
 @pytest.mark.parametrize("game,pick", [("6/49", 6), ("5/40", 5), ("joker", 5)])

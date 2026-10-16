@@ -120,11 +120,43 @@ def test_physical_ticket_at_guarantee_equal_to_pick_uses_the_lower_guarantee():
 
 
 def test_guarantee_portfolio_walk_forward_key():
-    assert wf._wheel_sig(16, "6/49", 6, None, 30).endswith("|sa1|lg1")
-    assert wf._wheel_sig(16, "5/40", 6, None, 30).endswith("|sa1|lg1")  # garanția tăiată la 5
-    assert wf._wheel_sig(16, "6/49", 6, None, 100).endswith("|lg1")
+    assert "|sa1|lg1:" in wf._wheel_sig(16, "6/49", 6, None, 30)
+    assert "|sa1|lg1:" in wf._wheel_sig(16, "5/40", 6, None, 30)  # garanția tăiată la 5
+    assert "|lg1:" in wf._wheel_sig(16, "6/49", 6, None, 100)
     assert "lg1" not in wf._wheel_sig(16, "6/49", 4, None, 30)
     assert "lg1" not in wf._wheel_sig(16, "6/49", 5, None, 30)
+
+
+def test_guarantee_portfolio_key_signs_the_lower_guarantee_designs(monkeypatch):
+    """Revizie 2026-10-16: `lg1` era constant, deși biletele vin din fișierele C,
+    R și H ale garanțiilor mai mici (5/40 pool 12, g5, 113 bilete = C(12,5,4))."""
+    before = wf._wheel_sig(12, "5/40", 5, None, 113)
+    assert "|lg1:" in before
+    monkeypatch.setattr(rc, "refined_cover_signature", lambda *a, **k: "altul")
+    assert wf._wheel_sig(12, "5/40", 5, None, 113) != before
+    monkeypatch.undo()
+    with_h = wf._wheel_sig(16, "6/49", 6, None, 100)
+    monkeypatch.setattr(bd, "budget_design_signature", lambda *a, **k: None)
+    assert wf._wheel_sig(16, "6/49", 6, None, 100) != with_h
+
+
+def test_capped_lotto_key_signs_the_classic_wheel_it_can_adopt(monkeypatch):
+    """Revizie 2026-10-16: cu plafon, ramura lotto poate livra wheel-ul clasic,
+    care la 65+ bilete citește secțiunea H; cheia `lc1` era constantă."""
+    key = wf._wheel_sig(16, "6/49", 5, 6, 100)
+    assert "|lc1:" in key
+    monkeypatch.setattr(bd, "budget_design_signature", lambda *a, **k: None)
+    assert wf._wheel_sig(16, "6/49", 5, 6, 100) != key
+
+
+def test_lotto_cap_holding_the_whole_design_gets_the_refined_design():
+    """Revizie 2026-10-16: un plafon cât designul întreg (6/49 pool 16, 3 dacă 5:
+    10 bilete) livra designul nerafinat, cu șanse mai mici decât fără plafon."""
+    free, free_cov = generate_wheel("lotto", POOL, 6, 3, 0, SCORES, condition=5, draw_n=6, max_num=49)
+    for cap in (10, 20, 64):
+        capped, cov = generate_wheel("lotto", POOL, 6, 3, cap, SCORES, condition=5, draw_n=6, max_num=49)
+        assert sorted(map(tuple, capped)) == sorted(map(tuple, free)) and cov == free_cov == 100.0
+    assert _p(free, 6, 49)[3] > 0.145
 
 
 # --------------------------------------------------------------------------- #
@@ -191,7 +223,10 @@ def test_refined_lotto_walk_forward_key_and_engine_path():
     stored = rc.refined_cover_signature(16, 6, 3, 6, 49, condition=5)
     assert stored
     assert wf._wheel_sig(16, "6/49", 3, 5, 0).endswith(f"|rl{stored}")
-    assert "|rl" not in wf._wheel_sig(16, "5/40", 3, 5, 0) or rc.refined_cover_signature(16, 5, 3, 6, 40, condition=5)
+    on_540 = rc.refined_cover_signature(16, 5, 3, 6, 40, condition=5)
+    assert on_540 and on_540 != stored
+    assert wf._wheel_sig(16, "5/40", 3, 5, 0).endswith(f"|rl{on_540}")
+    assert f"rl{stored}" not in wf._wheel_sig(16, "5/40", 3, 5, 0)
     engine = LotoEngine("6/49")
     engine.hard_core = list(POOL)
     lines, cov = engine.generate_predictions(3, 0, SCORES, condition=5)

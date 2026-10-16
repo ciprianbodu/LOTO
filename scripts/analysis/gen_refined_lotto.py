@@ -49,6 +49,7 @@ from covering.refined_covers import refined_cover_path  # noqa: E402
 HERE = Path(__file__).resolve().parent
 WORK = HERE / "refined_covers_work" / "lotto"
 REPORT = HERE / "refined_lotto_2026-10-16.json"
+OUT_DIR = ROOT / "covering_designs" / "refined"
 GAMES = {"6/49": (6, 6, 49), "5/40": (5, 6, 40), "joker": (5, 5, 45)}  # bilet, extrase, univers
 MIN_T = 3
 # (eticheta, prag principal = g + decalaj, garanție tare, penalizare, mutări țintite, t0, seed)
@@ -130,6 +131,7 @@ def run_one(job) -> dict:
     wheel, _ = generate_wheel("lotto", pool, pick, g, 0, scores, condition=c, draw_n=draw)
     before = [sorted(int(x) for x in t[:pick]) for t in wheel]
     tag = f"{game.replace('/', '')}_{v}_{g}_{c}"
+    WORK.mkdir(parents=True, exist_ok=True)
     start = WORK / f"start_{tag}.txt"
     _write(start, before)
     exe = _binary()
@@ -158,12 +160,12 @@ def run_one(job) -> dict:
         row["status"] = "fără design certificat"
         return row
     pb, pa = _probs(v, before, draw, mx), _probs(v, best, draw, mx)
-    path = refined_cover_path(v, pick, g, draw, mx, condition=c)
+    path = OUT_DIR / refined_cover_path(v, pick, g, draw, mx, condition=c)
     path.parent.mkdir(parents=True, exist_ok=True)
     header = (
         f"# Design lotto {g} daca {c}, pool {v}, bilet {pick}, rafinat pentru {draw} extrase din {mx}\n"
-        "# (pozitii 1..v, 1 = cel mai bine clasat). Derivat din wheel-ul de productie prin\n"
-        "# recoacere in C (scripts/analysis/lotto_anneal.c); aceeasi garantie, acelasi numar de bilete.\n"
+        f"# (pozitii 1..{v}, 1 = cel mai bine clasat). Derivat din covering_designs/L_{v}_{pick}_{c}_{g}.txt\n"
+        "# prin recoacere in C (scripts/analysis/lotto_anneal.c); aceeasi garantie, acelasi numar de bilete.\n"
     )
     path.write_text(header + "".join(" ".join(str(x) for x in t) + "\n" for t in best))
     row.update(

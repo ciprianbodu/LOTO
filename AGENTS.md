@@ -120,7 +120,11 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   zecimala; 5+ mic in reluare cu cifre semnificative; auditul limitei de
   consecutive in ordinea clasamentului; singularul in testele pe extrageri
   viitoare; jurnalul `cache_only`.
-- Chei: WF `rc`, `rl`, `lc1`, `lg1` (§8), fara bump global; worker `v18`.
+- Chei: WF `rc`, `rl`, `lc1:`, `lg1:` (§8), fara bump global; worker `v18`.
+  Revizia adversariala a diff-ului (4 zone, fiecare constatare verificata
+  separat): `lc1` si `lg1` semneaza acum fisierele pe care ramura le poate
+  adopta; plafonul care cuprinde designul lotto intreg ia designul rafinat;
+  generatorul lotto refacut si verificat octet cu octet pe doua geometrii.
 - Rapoarte: `scripts/analysis/audit_hits_2026-10-16.md`,
   `refined_covers_2026-10-16.md`, `refined_lotto_2026-10-16.json`;
   generatoare `gen_refined_covers.py`, `gen_refined_lotto.py` (gcc).
@@ -1796,9 +1800,10 @@ Reguli:
   ramura (`wheel_condition` intra in cheie); hiturile de pool nu depind de
   wheel. Din 2026-10-16 motorul da universul jocului si aici: fara plafon,
   designul rafinat `covering_designs/refined/RL_<v>_<pick>_<g>_<c>_<extrase>_<univers>.txt`,
-  certificat si cu garantia „g daca c” completa; cu plafon, wheel-ul clasic
-  al motorului la acelasi buget, certificat, numai daca acoperirea „g daca c”
-  nu scade (`dispatch._improve_lotto`);
+  certificat si cu garantia „g daca c” completa (si la un plafon care cuprinde
+  designul intreg); cu plafon mai mic, wheel-ul clasic al motorului la acelasi
+  buget, certificat, numai daca acoperirea „g daca c” nu scade
+  (`dispatch._improve_lotto`);
 - nu compara algoritmi numai dupa numarul de bilete; ordinea este acoperire,
   apoi cost;
 - orice filtru post-wheel trebuie sa foloseasca
@@ -1902,9 +1907,12 @@ precalculat pentru acel buget (amprenta sectiunii din
 `covering_designs/budget/H_v_pick_g.txt`, §7; fara design cheia se opreste la
 `bc1`), si `sa1` la 1..64 de bilete (recoacerea pe sansa exacta, §7).
 Din 2026-10-16: `rc<amprenta>` pe `lajolla` si `bf1` cand geometria are cover
-rafinat, `lg1` la garantia egala cu biletul cu plafon (dupa `bc1`/`sa1`),
-`lc1` pe ramura lotto cu plafon si `rl<amprenta>` pe cea fara plafon, cand
-exista designul rafinat. La La Jolla si union34 (fara plafon) semnatura poarta `tg1`, regula la
+rafinat; `lg1:<amprenta>` la garantia egala cu biletul cu plafon (dupa
+`bc1`/`sa1`), cu semnaturile wheel-urilor garantiilor 3..g-1 pe care le poate
+livra; pe ramura lotto, `rl<amprenta>` cand exista designul rafinat (la orice
+plafon) si, cu plafon, `lc1:<amprenta>` cu semnatura wheel-ului clasic la
+acelasi buget. Asa, o schimbare intr-un fisier C, R sau H pe care o ramura il
+poate adopta invalideaza exact cheile ei. La La Jolla si union34 (fara plafon) semnatura poarta `tg1`, regula la
 egalitate de bilete.
 Designul semnat e al pool-ului rotit efectiv (`_effective_pool_size`): un
 interval restrans mai ingust decat pool-ul, dar cel putin cat un bilet, il

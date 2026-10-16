@@ -325,12 +325,19 @@ def _refined_cover_suffix(method: str, pool_size: int, game_type, guarantee: int
     return f"|rc{stored}" if stored else ""
 
 
+def _sources_digest(*sigs: str) -> str:
+    """Amprentă scurtă a semnăturilor wheel-urilor pe care o ramură le poate adopta."""
+    return hashlib.sha256("|".join(sigs).encode()).hexdigest()[:12]
+
+
 def _wheel_sig(
     pool_size: int,
     game_type: str | None = None,
     guarantee=None,
     wheel_condition=None,
     max_variants=0,
+    *,
+    method_override: str | None = None,
 ) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
@@ -348,7 +355,11 @@ def _wheel_sig(
     mare). Un pickle de dinainte punea numărul mai mic pe poziția mai bună când
     scorurile erau egale; cheia nouă nu îl mai servește.
     """
-    requested = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
+    requested = (
+        method_override
+        if method_override is not None
+        else os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower()
+    )
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
     )
@@ -368,10 +379,12 @@ def _wheel_sig(
                 g,
                 condition,
             )
-            # `rl<amprenta>`: designul lotto rafinat (fără plafon); `lc1`: cu plafon,
-            # wheel-ul clasic certificat față de designul trunchiat.
-            extra = "|lc1" if cap > 0 else ""
-            if cap == 0 and game_type in _WF_DRAW_UNIVERSE:
+            # `rl<amprenta>`: designul lotto rafinat, încercat la orice plafon (intră
+            # numai certificat, deci când plafonul cuprinde designul întreg);
+            # `lc1:<amprenta>`: cu plafon, wheel-ul clasic certificat față de
+            # designul trunchiat, cu fișierele lui (C, R, H) în amprentă.
+            extra = ""
+            if game_type in _WF_DRAW_UNIVERSE:
                 from covering.refined_covers import refined_cover_signature
 
                 draw_n, max_num = _WF_DRAW_UNIVERSE[game_type]
@@ -379,6 +392,11 @@ def _wheel_sig(
                     int(pool_size), int(_WF_PICK.get(game_type) or 6), g, draw_n, max_num, condition
                 )
                 extra = f"|rl{stored}" if stored else ""
+            if cap > 0:
+                classic = _wheel_sig(
+                    pool_size, game_type, g, None, cap, method_override="hitcover"
+                )
+                extra += f"|lc1:{_sources_digest(classic)}"
             return f"lotto|{geometry}|cd{design_sig}|rt1|hp1{extra}"
         if method in {"lajolla", "union34"}:
             design_guarantee = 4 if method == "union34" and g <= 4 else g
@@ -399,9 +417,16 @@ def _wheel_sig(
                 design_sig = covering_design_source_signature(int(pool_size), pick, g)
                 refined = _refined_cover_suffix("lajolla", int(pool_size), game_type, g)
                 return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1{refined}"
-            # `lg1`: garanția egală cu biletul primește biletele certificate ale
-            # unei garanții mai mici (`covering.guarantee_portfolio`).
-            lower = "|lg1" if g >= pick else ""
+            # `lg1:<amprenta>`: garanția egală cu biletul primește biletele
+            # certificate ale unei garanții mai mici (`covering.guarantee_portfolio`);
+            # amprenta poartă semnăturile acelor candidați (fișierele C, R, H).
+            lower = ""
+            if g >= pick:
+                candidates = [
+                    _wheel_sig(pool_size, game_type, t, None, cap, method_override="hitcover")
+                    for t in range(pick - 1, 2, -1)
+                ]
+                lower = f"|lg1:{_sources_digest(*candidates)}"
             if cap >= 65:
                 # `bd<amprenta>`: designul cu buget precalculat
                 # (`covering_designs/budget/`) când există pentru acest buget.

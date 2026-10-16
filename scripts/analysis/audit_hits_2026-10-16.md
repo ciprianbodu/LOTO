@@ -33,11 +33,13 @@ clasat), nu rate observate.
 câștig la g+1 între +0,26% și +7,33% relativ (6/49 pool 13 g3, 21 de bilete:
 4+ 1,6129% → 1,7311%). Tabelul complet: `refined_covers_2026-10-16.md`.
 
-### 2. Designuri lotto „g dacă c” rafinate (fără plafon, pool 10..16)
+### 2. Designuri lotto „g dacă c” rafinate (pool 10..16)
 
-`covering_designs/refined/RL_*.txt`, 66 de geometrii din 84; celelalte 18 sunt
-designuri rigide (două bilete disjuncte, 3 dacă 6 la pool 15-16). Garanția
-„g dacă c” rămâne 100%.
+`covering_designs/refined/RL_*.txt`, 66 de geometrii din 84. La celelalte 18,
+căutarea n-a dat un rezultat certificat: 9 au numai două bilete, 2 sunt
+„3 dacă 6” la pool 15-16, iar 7 sunt designuri mici (4..14 bilete) la pool
+10..12. Garanția „g dacă c” rămâne 100%. Designul rafinat intră fără plafon și
+la orice plafon care cuprinde designul întreg.
 
 | Joc | Pool | g dacă c | Bilete | 3+ | 4+ | 5+ |
 |---|---:|---|---:|---:|---:|---:|
@@ -92,8 +94,10 @@ distincte, deci pragurile mici rămâneau la voia întâmplării.
 | 5/40 | 100 | 32,99% → 45,56% | 3,27% → 6,23% |
 | Joker | 80 | 15,20% → 23,09% | +63,5% |
 
-Efect secundar reparat: la garanția 6, 65 de bilete aveau șanse mai mici decât
-64; acum niciun prag nu scade când bugetul crește.
+Efect secundar reparat: la garanția 6, 65 de bilete dădeau 3+ 22,39%, sub
+28,72% la 64; acum 29,81% față de 29,73%. Monotonia nu e garantată pe toate
+bugetele: 6/49 garanția 6, 57 → 58 de bilete, 3+ 29,65% → 29,61%; 5/40 și
+Joker garanția 5, 64 → 65 de bilete, 3+ scade cu ~0,3-0,5% relativ.
 
 ### 6. „Bilet complet” cu garanția completă înainte de umplere
 
@@ -139,9 +143,11 @@ apare.
 ## Chei și cache
 
 - WF: `|rc<amprentă>` (cover rafinat pe `lajolla` și `bf1`), `|rl<amprentă>`
-  (lotto fără plafon), `|lc1` (lotto cu plafon), `|lg1` (garanția egală cu
-  biletul, cu plafon). Fără bump global `v31`: se recalculează numai cheile
-  atinse.
+  (lotto, designul rafinat), `|lc1:<amprentă>` (lotto cu plafon: semnătura
+  wheel-ului clasic pe care îl poate adopta), `|lg1:<amprentă>` (garanția egală
+  cu biletul, cu plafon: semnăturile candidaților de la garanțiile mai mici).
+  O schimbare într-un fișier C, R sau H adoptabil schimbă exact cheile atinse;
+  fără bump global `v31`.
 - Worker `v18` (v17 coverele rafinate). Stratul e inert în UI (`use_cache=False`).
 
 ## Limite
@@ -155,5 +161,5 @@ apare.
 
 - Covere complete: `python scripts/analysis/gen_refined_covers.py [mutări] [procese] [pool-uri]`.
 - Lotto: `python scripts/analysis/gen_refined_lotto.py [mutări] [procese] [pool-uri]`
-  (refăcut identic pe Joker pool 10, 3 dacă 4).
+  (refăcut octet cu octet pe Joker pool 10, 3 dacă 4, și pe 6/49 pool 12, 4 dacă 5).
 - Ambele cer gcc; producția recertifică fișierele la fiecare apel.

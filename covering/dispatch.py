@@ -95,20 +95,22 @@ def _canonical_budget_start(v: int, pick: int, guarantee: int, max_variants: int
 def _improve_lotto(pool, pick, guarantee, condition, max_variants, scores, wheel, cov, draw_n, max_num):
     """Ramura „g dacă c” cu universul jocului (2026-10-16).
 
-    Fără plafon: designul lotto rafinat offline (`covering_designs/refined/RL_*`),
-    certificat. Cu plafon: wheel-ul clasic al motorului la aceeași garanție și
-    același buget, păstrat numai dacă e certificat față de designul trunchiat
-    (aceleași bilete distincte, niciun prag în scădere, câștig strict) și nu
-    acoperă mai puține grupe de c numere cu g pe un bilet (counts[c][g]).
+    Întâi designul lotto rafinat offline (`covering_designs/refined/RL_*`),
+    certificat față de designul livrat: intră fără plafon și la un plafon care
+    cuprinde designul întreg (altfel numărul de bilete diferă). Apoi, cu
+    plafon, wheel-ul clasic al motorului la aceeași garanție și același buget,
+    păstrat numai dacă e certificat față de designul trunchiat (aceleași bilete
+    distincte, niciun prag în scădere, câștig strict) și nu acoperă mai puține
+    grupe de c numere cu g pe un bilet (counts[c][g]).
     """
     draws = int(pick) if draw_n is None else int(draw_n)
     ordered = _sorted_pool(pool, scores)
+    improved, audit = improve_with_refined_cover(
+        ordered, wheel, guarantee, draws, max_num, condition=condition
+    )
+    if audit["applied"]:
+        return improved, lotto_coverage_pct(improved, pool, guarantee, condition)
     if int(max_variants or 0) <= 0:
-        improved, audit = improve_with_refined_cover(
-            ordered, wheel, guarantee, draws, max_num, condition=condition
-        )
-        if audit["applied"]:
-            return improved, lotto_coverage_pct(improved, pool, guarantee, condition)
         return wheel, cov
     from covering.anneal_hits import _certify
     from covering.probability import wheel_hit_profile
