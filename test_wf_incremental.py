@@ -265,6 +265,28 @@ def test_cache_only_never_computes_or_writes(wf, computed, tmp_path):
     assert _rows(exact) == _rows(full)
 
 
+def test_cache_only_on_a_partial_cache_does_not_announce_a_rerun(wf, computed, tmp_path, caplog):
+    """Audit 2026-10-16: citirea la pornire a unui cache parțial scria în jurnal
+    „→ re-rulez pentru a extinde acoperirea”, deși nu calcula nimic."""
+    from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
+
+    df = history(60)
+    wf.run_honest_walk_forward(df, **ARGS)
+    (path,) = sorted((tmp_path / "wf").glob("*.pkl"))
+    cached = pickle_load_path(path)
+    cached["partial"] = True
+    pickle_store_path_atomic(path, cached)
+    computed.clear()
+    with caplog.at_level("INFO", logger=wf.logger.name):
+        flat, meta = wf.run_honest_walk_forward(df, cache_only=True, **ARGS)
+    assert computed == [] and meta["from_cache"] and meta["partial"] and flat
+    assert "re-rulez" not in caplog.text
+    caplog.clear()
+    with caplog.at_level("INFO", logger=wf.logger.name):
+        wf.run_honest_walk_forward(df, **ARGS)
+    assert "re-rulez" in caplog.text
+
+
 def test_recovered_result_shows_the_cached_validation_without_running(
     monkeypatch, tmp_path
 ):

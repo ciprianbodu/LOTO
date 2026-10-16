@@ -1070,13 +1070,13 @@ def run_honest_walk_forward(
             # conține pe cel mai scurt" NU e garantat.
             # Pașii fără contextul „Bilet complet” (cache scris înaintea câmpului)
             # se refac pe aceeași cale; până atunci intrările lor vechi rămân.
-            if cached.get("partial", False):
+            if cached.get("partial", False) and not cache_only:
                 logger.info(
                     f"[WALK-FWD] Cache PARȚIAL pentru {game_type} pool={pool_size} "
                     f"({cached.get('n_test_draws')}/{cached.get('n_expected')}) → re-rulez "
                     f"pentru a extinde acoperirea (bugetul curent poate fi mai mare)."
                 )
-            if missing_ctx:
+            if missing_ctx and not cache_only:
                 logger.info(
                     "[WALK-FWD] %s pool=%s: %d extrageri din cache fără contextul "
                     "„Bilet complet” → le refac; intrările vechi rămân până atunci.",

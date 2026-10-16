@@ -253,6 +253,14 @@ def _full_ticket_replay(flat, game: str, tickets: int, guarantee) -> dict | None
     return None
 
 
+def _five_plus_pct(p) -> str:
+    """Șansa 5+ în procente: trei zecimale de la 0,1% în sus, altfel două cifre
+    semnificative. La Joker cu un bilet (2 variante) 5+ e 0,00016%, iar cu trei
+    zecimale apărea „0.000%”, ca și cum n-ar exista."""
+    value = 100.0 * float(p or 0.0)
+    return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
+
+
 def _full_ticket_replay_rows(res: dict, tickets: int) -> tuple[list[dict], int]:
     """Rândul „Bilet complet” și numărul de extrageri reluate."""
     best = res.get("best") or {}
@@ -265,7 +273,7 @@ def _full_ticket_replay_rows(res: dict, tickets: int) -> tuple[list[dict], int]:
     n_var = max((int(row.get("variants", 0)) for row in best.values()), default=0)
     rnd = (
         f"{exact.get(3, 0) * 100:.1f}% / {exact.get(4, 0) * 100:.2f}% / "
-        f"{exact.get(5, 0) * 100:.3f}%"
+        f"{_five_plus_pct(exact.get(5, 0))}"
         if exact
         else "—"
     )
@@ -566,7 +574,7 @@ def _render_hits_4plus(
         b5 = _random_rate_hypergeo(gk, K, 5)
         if b3 is None or b4 is None or b5 is None:
             return "—"
-        return f"{b3 * 100:.1f}% / {b4 * 100:.2f}% / {b5 * 100:.3f}%"
+        return f"{b3 * 100:.1f}% / {b4 * 100:.2f}% / {_five_plus_pct(b5)}"
 
     def _tick_cell(n_tick, avg):
         return f"{n_tick:,} ({avg:.2f}/extr.)"

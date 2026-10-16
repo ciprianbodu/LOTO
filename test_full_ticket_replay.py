@@ -299,3 +299,18 @@ def test_ui_entrypoint_does_not_start_under_child_processes():
     src = Path("app_nicegui.py").read_text(encoding="utf-8")
     assert 'if __name__ in {"__main__", "__mp_main__"}:' not in src
     assert 'if __name__ == "__main__":' in src
+
+
+def test_joker_five_plus_chance_is_not_shown_as_zero(monkeypatch):
+    """Audit 2026-10-16: la Joker cu un bilet, 5+ e 0,00016%; cu trei zecimale
+    coloana 🎲 arăta „0.000%”."""
+    best = {1: {"hits": 2, "variants": 2}}
+    uniform = {3: 0.00198, 4: 0.0000465, 5: 0.0000016}
+    monkeypatch.setattr(ui_hits, "_full_ticket_replay", lambda *a: _replay(best, uniform))
+    monkeypatch.setitem(ui_hits.SETTINGS, "full_ticket_count_val", 1)
+    with capture_ui() as ui:
+        ui_hits._render_full_ticket_replay([], "joker", 3)
+    (row,) = next(n for n in ui.walk() if n["kind"] == "table")["kwargs"]["rows"]
+    assert row["rnd"].endswith(" / 0.00016%")
+    assert ui_hits._five_plus_pct(0.01088) == "1.088%"
+    assert ui_hits._five_plus_pct(0.00005) == "0.005%"
