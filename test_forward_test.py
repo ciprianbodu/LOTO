@@ -329,3 +329,12 @@ def test_replication_verdict_uses_the_amended_alpha_and_a_two_sided_interval():
     res = er.summarize(np.array([3] * 30 + [0] * 970), 6)
     assert res["ci95"][1] < 1.0
     assert math.isclose(res["random_rate"], REG["sprt"]["6"]["p0"], rel_tol=1e-12)
+
+
+def test_count_uses_the_singular_at_one():
+    # Audit 2026-10-16: „după 1 extrageri, 1 reușite la decizie”.
+    assert ft.count(1, "extrageri") == "1 extragere"
+    assert ft.count(1, "reușite") == "1 reușită"
+    assert ft.count(2, "extrageri") == "2 extrageri"
+    assert ft.count(20, "reușite") == "20 de reușite"
+    assert ft.count(101, "extrageri") == "101 extrageri"

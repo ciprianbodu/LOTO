@@ -121,6 +121,29 @@ def test_invalid_sections_are_skipped(tmp_path, monkeypatch):
     bd._FILE_CACHE.clear()
     assert bd.load_budget_design(9, 6, 4, 2) == [[1, 2, 3, 4, 5, 6], [4, 5, 6, 7, 8, 9]]
     assert bd.budget_design_signature(9, 6, 4, 2) and bd.budget_design_signature(9, 6, 4, 3) is None
+    # Un caracter nenumeric strică numai secțiunea lui, nu tot fișierul.
+    (tmp_path / "H_9_6_4.txt").write_text(
+        "B 2\n1 2 3 4 5 6\n4 5 6 7 8 9\nB 3\n1 2 3 4 5 x\n4 5 6 7 8 9\n2 3 4 5 6 7\n", encoding="utf-8"
+    )
+    bd._FILE_CACHE.clear()
+    assert set(bd._designs(9, 6, 4)) == {2}
+
+
+def test_a_file_replaced_with_the_same_date_is_read_again(tmp_path, monkeypatch):
+    """Memoria fișierelor ține cont și de mărime: `cp -p` sau o sincronizare
+    care păstrează data nu mai servește designul vechi în procesul pornit."""
+    import os
+
+    monkeypatch.setattr(bd, "_BUDGET_DIRS", [tmp_path])
+    bd._FILE_CACHE.clear()
+    path = tmp_path / "H_9_6_4.txt"
+    path.write_text("B 2\n1 2 3 4 5 6\n4 5 6 7 8 9\n", encoding="utf-8")
+    stamp = path.stat().st_mtime_ns
+    assert bd.load_budget_design(9, 6, 4, 2) == [[1, 2, 3, 4, 5, 6], [4, 5, 6, 7, 8, 9]]
+    path.write_text("B 2\n1 2 3 4 5 6\n4 5 6 7 8 9\nB 3\n1 2 3 4 5 6\n4 5 6 7 8 9\n2 3 4 5 6 7\n", encoding="utf-8")
+    os.utime(path, ns=(stamp, stamp))
+    assert bd.load_budget_design(9, 6, 4, 3) == [[1, 2, 3, 4, 5, 6], [4, 5, 6, 7, 8, 9], [2, 3, 4, 5, 6, 7]]
+    bd._FILE_CACHE.clear()
 
 
 def test_walk_forward_key_carries_the_stored_section_fingerprint(monkeypatch):

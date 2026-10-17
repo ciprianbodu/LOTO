@@ -132,7 +132,7 @@ def test_cache_key_is_v16_and_covers_the_foreign_decision_file(tmp_path, monkeyp
     de_cfg = {"datasets": [{"tasks": [{"game_label": "de_lotto", "country": "DE"}]}]}
     ro_key = worker._pipeline_cache_key("h", ro_cfg)
     de_key = worker._pipeline_cache_key("h", de_cfg)
-    assert ro_key.startswith("v16:h:") and de_key != ro_key
+    assert ro_key.startswith("v18:h:") and de_key != ro_key
     decision = ms.decision_path_for("DE")
     decision.parent.mkdir(parents=True)
     decision.write_text('{"_meta": {"country": "DE"}, "games": {}}', encoding="utf-8")

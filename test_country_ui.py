@@ -259,7 +259,7 @@ def test_mail_names_method_and_rating_for_the_pool(monkeypatch):
     data = {"pool_size": 12, "audit": {"bench_winner": {"loto_6_49": {"method": "dmd_forecast"}}}}
     lines = app._mail_method_lines(spec, data)
     assert lines[0] == "METODĂ: dmd_forecast (câștigătoarea bench-ului la pool 12)"
-    assert "16.20%" in lines[1] and "14.80%" in lines[1] and "3/4" in lines[1]
+    assert "16.2%" in lines[1] and "14.80%" in lines[1] and "3/4" in lines[1]
     data["audit"]["bench_winner"]["loto_6_49"]["fallback"] = True
     assert "fără bench" in app._mail_method_lines(spec, data)[0]
 

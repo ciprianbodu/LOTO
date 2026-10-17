@@ -18,7 +18,11 @@ def _wheel_masks(pool, tickets):
     pool = tuple(_integer(n) for n in pool)
     if not 0 < len(pool) <= 16 or len(set(pool)) != len(pool):
         raise ValueError("Pool must contain 1..16 distinct numbers")
-    positions = {n: i for i, n in enumerate(sorted(pool))}
+    # Pozițiile urmează ordinea dată: numărătorile nu depind de etichete (orice
+    # permutare a pool-ului dă același profil), iar un apelant care dă
+    # clasamentul primește aceleași măști la fiecare pas WF, deci memoria
+    # `_hit_counts` / `_probabilities` le refolosește.
+    positions = {n: i for i, n in enumerate(pool)}
     masks = set()
     for ticket in tickets:
         numbers = tuple(_integer(n) for n in ticket)

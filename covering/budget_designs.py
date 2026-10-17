@@ -73,7 +73,11 @@ def _parse(text: str, v: int, pick: int) -> dict[int, tuple[tuple[tuple[int, ...
         blocks = []
         ok = True
         for line in lines:
-            nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
+            try:
+                nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
+            except ValueError:
+                ok = False  # un caracter nenumeric strică numai secțiunea lui
+                break
             if len(nums) != pick or len(set(nums)) != pick or any(n < 1 or n > v for n in nums):
                 ok = False
                 break
@@ -95,10 +99,12 @@ def _designs(v: int, pick: int, guarantee: int):
     for directory in _BUDGET_DIRS:
         path = directory / name
         try:
-            stamp = path.stat().st_mtime_ns
+            info = path.stat()
         except OSError:
             continue
-        key = (str(path), stamp)
+        # Data și mărimea: un fișier înlocuit în aceeași secundă, cu altă
+        # lungime, nu mai e servit din memorie.
+        key = (str(path), info.st_mtime_ns, info.st_size)
         if key not in _FILE_CACHE:
             if len(_FILE_CACHE) > 64:
                 _FILE_CACHE.clear()
@@ -111,15 +117,28 @@ def _designs(v: int, pick: int, guarantee: int):
     return {}
 
 
+def _stored(v: int, pick: int, guarantee: int, budget: int):
+    """Secțiunea pentru buget: întâi la garanția cerută, apoi la cea mai mare
+    garanție mai mică, până la 4 (2026-10-16). Un design de garanție 4 fără
+    două bilete cu 5 numere comune trece și certificarea pe garanția 5 sau 6
+    (aceleași bilete distincte, niciun prag în scădere); certificarea se face
+    oricum la apel, pe garanția cerută."""
+    for source in [int(guarantee), *range(int(guarantee) - 1, 3, -1)]:
+        entry = _designs(int(v), int(pick), source).get(int(budget))
+        if entry:
+            return entry
+    return None
+
+
 def load_budget_design(v: int, pick: int, guarantee: int, budget: int):
     """Blocurile (poziții 1..v) pentru bugetul cerut, sau None."""
-    entry = _designs(int(v), int(pick), int(guarantee)).get(int(budget))
+    entry = _stored(v, pick, guarantee, budget)
     return [list(b) for b in entry[0]] if entry else None
 
 
 def budget_design_signature(v: int, pick: int, guarantee: int, budget: int) -> str | None:
     """Amprenta secțiunii livrate pentru cheia WF; None când nu există design."""
-    entry = _designs(int(v), int(pick), int(guarantee)).get(int(budget))
+    entry = _stored(v, pick, guarantee, budget)
     return entry[1] if entry else None
 
 

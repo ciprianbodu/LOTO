@@ -77,3 +77,6 @@ bench_results_gpu/
 
 # lucrul generatorului de designuri cu buget (scripts/analysis/gen_budget_designs.py)
 scripts/analysis/budget_designs_work/
+
+# lucrul generatorului de covere rafinate (scripts/analysis/gen_refined_covers.py)
+scripts/analysis/refined_covers_work/

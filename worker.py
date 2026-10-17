@@ -26,7 +26,12 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v16"
+PIPELINE_CACHE_VERSION = "v18"
+# v18: garanția egală cu biletul ia biletele certificate ale unei garanții mai
+#      mici; designurile cu buget cad pe garanția mai mică; ramura lotto „g dacă
+#      c” primește designul rafinat (fără plafon) sau wheel-ul clasic certificat.
+# v17: fără plafon, coverul complet rafinat pentru pragul de peste garanție
+#      (`covering_designs/refined/`), certificat față de designul La Jolla.
 # v16: covere complete mai mici si designuri cu buget imbunatatite;
 #      invalideaza si apelurile legacy fara config/semnatura designului.
 # v15: peste 64 de bilete, designul cu buget precalculat offline
@@ -358,7 +363,7 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
             path = PROJECT_ROOT / filename
             digest.update(filename.encode())
             digest.update(path.read_bytes() if path.exists() else b"missing")
-        from loto_enterprise.core.walk_forward_adapter import _wheel_sig
+        from loto_enterprise.core.walk_forward_adapter import _effective_pool_size, _wheel_sig
 
         foreign_countries: set[str] = set()
         for dataset in config.get("datasets", []):
@@ -367,9 +372,17 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
                 norm = _task_norm(task, lot)
+                # Designul pool-ului jucat: o bază restrânsă mai îngustă decât
+                # pool-ul îl taie (ca la cheia WF), iar designul semnat e al lui.
+                played = _effective_pool_size(
+                    norm["pool_size"],
+                    lot.geometry,
+                    norm["restrict_base_max"],
+                    norm["restrict_base_min"],
+                )
                 digest.update(
                     _wheel_sig(
-                        norm["pool_size"],
+                        played,
                         lot.geometry,
                         norm["guarantee"],
                         norm["wheel_condition"],

@@ -1,5 +1,15 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Audit și mai multe hituri pe bilete, 16.10.2026:** [pârghii certificate și frontiera pool-ului 16](audit_hits_2026-10-16.md).
+Configurația 6/49 pool 16, garanția 4, fără plafon e la frontieră (3+ și 4+ la
+maximul pool-ului, nicio rearanjare certificată a coverului de 152 pentru 5+).
+Livrate: covere complete rafinate la pool 9..14 ([detalii](refined_covers_2026-10-16.md)),
+66 de designuri lotto „g dacă c” rafinate (mediana +4,65% la pragul garanției),
+ramura lotto cu plafon pe wheel-ul clasic certificat, garanția 5-6 peste 64 de
+bilete pe designurile garanției 4, garanția egală cu biletul pe biletele unei
+garanții mai mici (5/40, 100 de bilete: 3+ 32,99% → 45,56%).
+Reproducere: `gen_refined_covers.py`, `gen_refined_lotto.py` (gcc).
+
 **Designuri cu buget pentru 65+ bilete, 12.10.2026:** [recoacere lungă în C, livrată ca fișiere](budget_designs_2026-10-12.md).
 6/49, garanția 4, pool 13-16, toate cele 194 de bugete sub designul complet:
 P(4+ pe un bilet) crește cu mediana +7,25% la pool 16 (maxim +15,56%), niciun

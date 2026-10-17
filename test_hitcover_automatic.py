@@ -56,10 +56,23 @@ def test_uncapped_and_conditional_generation_keep_their_designs(monkeypatch):
         "lajolla", engine.hard_core, 6, 4, 0, scores
     )
     assert wf._wheel_sig(16, "6/49", 4, None, 0).startswith("lajolla|")
-    assert engine.generate_predictions(3, 10, scores, condition=4) == generate_wheel(
-        "lotto", engine.hard_core, 6, 3, 10, scores, condition=4
+    # Din 2026-10-16 motorul dă universul și pe ramura lotto: cu plafon, wheel-ul
+    # clasic certificat ia locul designului trunchiat, fără scădere la vreun prag
+    # și fără să acopere mai puține grupe „3 dacă 4”.
+    from covering.common import lotto_coverage_pct
+
+    lines, cov = engine.generate_predictions(3, 10, scores, condition=4)
+    assert (lines, cov) == generate_wheel(
+        "lotto", engine.hard_core, 6, 3, 10, scores, condition=4, draw_n=6, max_num=49
     )
+    old, old_cov = generate_wheel("lotto", engine.hard_core, 6, 3, 10, scores, condition=4)
+    p_new = wheel_hit_probabilities(engine.hard_core, [t[:6] for t in lines], 6, 49)["ticket"]
+    p_old = wheel_hit_probabilities(engine.hard_core, old, 6, 49)["ticket"]
+    assert len(lines) == len(old) == 10
+    assert all(p_new[t] >= p_old[t] - 1e-15 for t in range(3, 7))
+    assert lotto_coverage_pct([t[:6] for t in lines], engine.hard_core, 3, 4) >= old_cov
     assert wf._wheel_sig(16, "6/49", 3, 4, 10).startswith("lotto|")
+    assert "|lc1:" in wf._wheel_sig(16, "6/49", 3, 4, 10)
 
 
 @pytest.mark.parametrize("game,pick", [("6/49", 6), ("5/40", 5), ("joker", 5)])

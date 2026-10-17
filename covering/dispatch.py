@@ -10,9 +10,12 @@ from covering.anneal_hits import MAX_TICKETS as ANNEAL_MAX_TICKETS
 from covering.anneal_hits import improve_ticket_chances
 from covering.budget_climb import MIN_TICKETS, improve_budget_hits
 from covering.budget_designs import improve_with_budget_design
+from covering.guarantee_portfolio import applies as _portfolio_applies
+from covering.guarantee_portfolio import improve_with_lower_guarantees
 from covering.common import (
     _coverage_pct,
     _greedy_fallback,
+    _order_by_scores,
     _sorted_pool,
     lotto_coverage_pct,
     ensure_pool_numbers_on_tickets,
@@ -26,6 +29,7 @@ from covering.designs import (
 from covering.higher_hits import improve_higher_hits
 from covering.ilp import wheel_ilp
 from covering.profile_swap import improve_hit_profile
+from covering.refined_covers import improve_with_refined_cover
 from covering.search import wheel_annealing, wheel_genetic
 
 WHEEL_METHODS = {
@@ -88,7 +92,122 @@ def _canonical_budget_start(v: int, pick: int, guarantee: int, max_variants: int
     return tuple(sum(1 << index[n] for n in t) for t in wheel)
 
 
+def classic_sources(v: int, pick: int, guarantee: int, budget: int, draw_n, max_num) -> tuple:
+    """Amprentele fișierelor din care poate veni wheel-ul clasic al motorului la
+    acest buget (C, R, H): intră în cheia memoriei candidaților canonici, ca un
+    fișier schimbat în timpul procesului să nu servească un candidat vechi."""
+    from covering.budget_designs import budget_design_signature
+    from covering.designs import covering_design_source_signature
+    from covering.refined_covers import refined_cover_signature
+
+    draws = int(pick) if draw_n is None else int(draw_n)
+    return (
+        covering_design_source_signature(int(v), int(pick), int(guarantee)),
+        refined_cover_signature(int(v), int(pick), int(guarantee), draws, int(max_num)),
+        budget_design_signature(int(v), int(pick), int(guarantee), int(budget)),
+    )
+
+
+@lru_cache(maxsize=64)
+def _canonical_classic(v: int, pick: int, guarantee: int, budget: int, draw_n, max_num: int, _sources):
+    """Wheel-ul clasic al motorului pe poziții 1..v (1 = cel mai bine clasat)."""
+    pool = list(range(1, v + 1))
+    scores = {n: float(v - i) for i, n in enumerate(pool)}
+    wheel, _ = generate_wheel("hitcover", pool, pick, guarantee, budget, scores, None, draw_n, max_num)
+    return tuple(tuple(sorted(int(n) for n in t)) for t in wheel)
+
+
+def _improve_lotto(pool, pick, guarantee, condition, max_variants, scores, wheel, cov, draw_n, max_num):
+    """Ramura „g dacă c” cu universul jocului (2026-10-16).
+
+    Candidații, fiecare certificat față de designul livrat (aceleași bilete
+    distincte, niciun prag în scădere, câștig strict) și cu cel puțin atâtea
+    grupe de c numere cu g pe un bilet (counts[c][g]):
+    - designul lotto rafinat offline (`covering_designs/refined/RL_*`); intră
+      când plafonul cuprinde designul întreg (altfel numărul de bilete diferă);
+    - wheel-ul clasic al motorului la același număr de bilete: la plafonul
+      care taie designul, construit pe scorurile pasului; altfel (fără plafon
+      sau cu un plafon cât designul întreg), construit o dată pe geometrie, pe
+      poziții canonice. Fără plafon, cu plafon cât designul sau mai mare, se
+      livrează deci aceleași bilete.
+    Dintre cei certificați rămâne cel mai bun pe pragul garanției, apoi pe cele
+    mai mari, apoi pe cele mai mici.
+    """
+    from covering.anneal_hits import _certify
+    from covering.designs import lotto_design_size
+    from covering.probability import wheel_hit_probabilities, wheel_hit_profile
+
+    draws = int(pick) if draw_n is None else int(draw_n)
+    ordered = _sorted_pool(pool, scores)
+    tickets = [sorted(int(n) for n in t) for t in wheel]
+    if not tickets:
+        return wheel, cov
+    base_cover = wheel_hit_profile(ordered, tickets)[condition][guarantee]
+    candidates = []
+    improved, audit = improve_with_refined_cover(
+        ordered, wheel, guarantee, draws, max_num, condition=condition
+    )
+    if audit["applied"]:
+        candidates.append([sorted(int(n) for n in t) for t in improved])
+    cap = int(max_variants or 0)
+    full = lotto_design_size(len(ordered), int(pick), int(guarantee), int(condition))
+    classic = None
+    if cap > 0 and (full is None or cap < full):
+        classic, _ = generate_wheel(
+            "hitcover", pool, pick, guarantee, cap, scores, None, draw_n, max_num
+        )
+    elif full is not None and len(tickets) == full:
+        sources = classic_sources(len(ordered), pick, guarantee, full, draw_n, max_num)
+        positions = _canonical_classic(
+            len(ordered), int(pick), int(guarantee), full, draw_n, int(max_num), sources
+        )
+        classic = [sorted(ordered[p - 1] for p in t) for t in positions]
+    if classic is not None:
+        candidate = [sorted(int(n) for n in t) for t in classic]
+        if len(candidate) == len(tickets):
+            why, _gain, _c = _certify(ordered, tickets, candidate, guarantee, draws, max_num)
+            if not why and wheel_hit_profile(ordered, candidate)[condition][guarantee] >= base_cover:
+                candidates.append(candidate)
+    if not candidates:
+        return wheel, cov
+    top = min(int(pick), draws)
+    order = [*range(int(guarantee), top + 1), *range(int(guarantee) - 1, 2, -1)]
+
+    def key(t):
+        p = wheel_hit_probabilities(ordered, t, draws, int(max_num))["ticket"]
+        return tuple(p[k] for k in order if k >= 3)
+
+    best = max(candidates, key=key)
+    return best, lotto_coverage_pct(best, pool, guarantee, condition)
+
+
 def generate_wheel(
+    method: str,
+    pool,
+    pick,
+    guarantee,
+    max_variants=0,
+    scores=None,
+    condition: int | None = None,
+    draw_n: int | None = None,
+    max_num: int | None = None,
+):
+    """`_generate_wheel`; pe calea motorului (`max_num` și scoruri date) biletele
+    ies în ordinea sumei scorurilor, ca după La Jolla: etapele care înlocuiesc
+    wheel-ul (designul cu buget, recoacerea, coverul rafinat, swap-urile) își
+    întorc candidatul în ordinea proprie, iar UI-ul afișează primele N variante
+    și costul „Top N bilete simple”. Mulțimea biletelor, acoperirea și hiturile
+    nu se schimbă. Biletele fizice (fără `max_num`) își păstrează ordinea: baza
+    garanției stă în primele variante."""
+    wheel, cov = _generate_wheel(
+        method, pool, pick, guarantee, max_variants, scores, condition, draw_n, max_num
+    )
+    if max_num and scores and wheel:
+        wheel = _order_by_scores(wheel, scores)
+    return wheel, cov
+
+
+def _generate_wheel(
     method: str,
     pool,
     pick,
@@ -114,7 +233,10 @@ def generate_wheel(
     bilete, `budget_climb`, acceptat numai cu dominanță exactă de profil, iar
     la 1..64 de bilete recoacerea pe șansa exactă (`covering.anneal_hits`),
     acceptată numai dacă niciun prag afișat nu scade. Fără `max_num`
-    (biletele fizice) ieșirea rămâne cea de dinainte.
+    (biletele fizice) ieșirea rămâne cea de dinainte. Tot cu `max_num`, fără
+    plafon, coverul La Jolla e înlocuit de coverul rafinat al geometriei
+    jocului (`covering.refined_covers`), numai certificat: aceeași garanție
+    100%, aceleași bilete ca număr, niciun prag în scădere, câștig strict.
     """
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
@@ -134,6 +256,11 @@ def generate_wheel(
         if audit["applied"]:
             wheel = improved
             cov = lotto_coverage_pct(wheel, pool, guarantee, int(condition))
+        if max_num and len(set(pool)) == len(pool) <= 16:
+            wheel, cov = _improve_lotto(
+                pool, pick, int(guarantee), int(condition), max_variants, scores,
+                wheel, cov, draw_n, int(max_num),
+            )
         return wheel, cov
     fn = WHEEL_METHODS.get((method or "greedy").strip().lower())
     if (
@@ -168,6 +295,22 @@ def generate_wheel(
         # distinct ticket count, no profile entry lower, strict 3+/4+/5+ gain.
         improved, audit = improve_hit_profile(
             _sorted_pool(pool, scores), wheel, draw_n=draw_n
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    if (
+        fn is wheel_lajolla
+        and max_num
+        and int(max_variants or 0) == 0
+        and cov >= 100.0
+        and len(set(pool)) == len(pool) <= 16
+    ):
+        # Coverul complet rafinat offline pentru pragul de peste garanție
+        # (`covering_designs/refined/`), certificat față de wheel-ul de mai sus.
+        draws = int(pick) if draw_n is None else int(draw_n)
+        improved, audit = improve_with_refined_cover(
+            _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
         )
         if audit["applied"]:
             wheel = improved
@@ -211,6 +354,23 @@ def generate_wheel(
     ):
         draws = int(pick) if draw_n is None else int(draw_n)
         improved, audit = improve_ticket_chances(
+            _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    if (
+        fn is wheel_hitcover
+        and max_num
+        and int(max_variants or 0) > 0
+        and cov < 100.0
+        and len(set(pool)) == len(pool)
+        and _portfolio_applies(len(pool), int(pick), int(guarantee), len(wheel))
+    ):
+        # Garanția egală cu biletul, cu plafon: biletele de la o garanție mai
+        # mică, certificate pe garanția cerută (`covering.guarantee_portfolio`).
+        draws = int(pick) if draw_n is None else int(draw_n)
+        improved, audit = improve_with_lower_guarantees(
             _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
         )
         if audit["applied"]:

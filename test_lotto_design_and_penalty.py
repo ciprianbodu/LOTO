@@ -436,6 +436,9 @@ def test_pipeline_reports_pool_numbers_that_reach_no_ticket(monkeypatch):
     monkeypatch.setattr(
         dispatch, "improve_hit_profile", lambda p, t, **k: (t, {"applied": False})
     )
+    # La fel wheel-ul clasic certificat din 2026-10-16 (cele 2 bilete disjuncte
+    # joacă toate cele 12 numere); aici contează raportarea designului brut.
+    monkeypatch.setattr(dispatch, "_canonical_classic", lambda *a, **k: ())
     eng = LotoEngine("6/49")
     eng.data = df
     eng._build_draw_matrix()

@@ -36,9 +36,14 @@ REJECTED = "fără avantaj (respins)"
 UNCONFIRMED = "neconfirmat la plafon"
 
 
+_SINGULAR = {"extrageri": "extragere", "reușite": "reușită"}
+
+
 def count(n: int, noun: str) -> str:
-    """„5 extrageri”, „20 de extrageri”, „101 extrageri”: „de” după numeralele
-    care se termină în 00 sau 20-99."""
+    """„1 extragere”, „5 extrageri”, „20 de extrageri”, „101 extrageri”: „de”
+    după numeralele care se termină în 00 sau 20-99, singularul la 1."""
+    if n == 1 and noun in _SINGULAR:
+        return f"1 {_SINGULAR[noun]}"
     last = n % 100
     return f"{n} {noun}" if n < 20 or 1 <= last <= 19 else f"{n} de {noun}"
 

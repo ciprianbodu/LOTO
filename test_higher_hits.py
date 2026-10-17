@@ -250,7 +250,10 @@ def test_engine_forwards_draw_geometry_for_uncapped_generation(
     expected, expected_cov = generate_wheel(
         "lajolla", engine.hard_core, pick, 4, 0, scores, draw_n=draw_n
     )
-    assert [v[:pick] for v in actual] == expected
+    # Motorul (cu `max_num`) livrează biletele în ordinea scorului (2026-10-16).
+    from covering.common import _order_by_scores
+
+    assert [v[:pick] for v in actual] == _order_by_scores(expected, scores)
     assert cov == expected_cov == 100.0
     baseline, _ = wheel_lajolla(engine.hard_core, pick, 4, 0, scores)
     if draw_n == 6:
