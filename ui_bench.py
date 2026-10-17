@@ -10,6 +10,7 @@ from nicegui import ui
 
 from ui_runtime import *
 from loto_enterprise.core import lotteries as _LOT
+from loto_enterprise.core.ro_text import count
 from ui_shared import PROJECT_ROOT, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
@@ -259,6 +260,15 @@ def _decision_low_confidence(entry: dict) -> bool | None:
     return None
 
 
+def _candidates_text(n) -> str:
+    """„cei 42 de candidați”, „cei 8 candidați”, „un candidat”."""
+    try:
+        k = int(n)
+    except (TypeError, ValueError):
+        return f"cei {n} candidați"
+    return "un candidat" if k == 1 else f"cei {count(k, 'candidați')}"
+
+
 def _multiplicity_note(entry: dict) -> str | None:
     """Avertismentul pentru un avantaj care nu trece corecția pentru candidați.
 
@@ -274,8 +284,8 @@ def _multiplicity_note(entry: dict) -> str | None:
     except (TypeError, ValueError):
         return None
     return (
-        f"⚠️ Avantaj nedemonstrat: după corecția Holm pentru cei "
-        f"{mu.get('candidates')} candidați testați pe acest pool, p = {holm_p:.2f} "
+        f"⚠️ Avantaj nedemonstrat: după corecția Holm pentru "
+        f"{_candidates_text(mu.get('candidates'))} testați pe acest pool, p = {holm_p:.2f} "
         f"(prag {mu.get('alpha', 0.05)}). Metoda aleasă poate fi doar cea mai "
         "norocoasă dintre ei."
     )
@@ -1085,9 +1095,12 @@ def _render_bench_leaderboard_slice(
                 "ℹ️ Decizia a sărit ca redundanți (semnătură de performanță): "
                 + "; ".join(_dparts)
             ).classes("text-caption text-grey")
-        # Scorerul deciziei de acum; 🎯 poate fi al unei generări de dinaintea ei.
-        _dec_scorer = (_current_dec or _dec or {}).get("scorer")
-        _gen_before_dec = bool(_gen_usable and _dec_scorer and chosen_name != _dec_scorer)
+        # Metoda pe care o joacă producția acum (decizia salvată, curățată ca în
+        # motor); 🎯 poate fi al unei generări de dinaintea ei. Decizia recalculată
+        # din folds.csv poate diferi de cea salvată (bench oprit, folds parțial).
+        _saved_method = _decision_entry_method(_saved_entry, folds_game_key)
+        _gen_before_dec = bool(_gen_usable and _saved_method and chosen_name != _saved_method)
+        _note_scorer = (_current_dec or _dec or {}).get("scorer")
         if chosen_name != winner[0]:
             # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există.
             if _conf_ok and _lift_ok:
@@ -1111,7 +1124,7 @@ def _render_bench_leaderboard_slice(
                 _why = (
                     "rezultatul afișat a fost generat înaintea deciziei de acum (Re-Bench "
                     "terminat sau țintă 3+/4+ schimbată), care alege "
-                    f"{_dec_scorer}; generează din nou pentru decizia de acum"
+                    f"{_saved_method}; generează din nou pentru decizia de acum"
                 )
             elif not _gen_usable and not _saved_entry:
                 _why = (
@@ -1154,9 +1167,9 @@ def _render_bench_leaderboard_slice(
             ).classes("text-caption text-warning")
         _mult = _multiplicity_note(_current_dec or _dec)
         if _mult and _dec_low is not True:
-            if _gen_before_dec:
-                # Nota e a metodei din decizia de acum, nu a celei marcate 🎯.
-                _mult = _mult.replace("⚠️ ", f"⚠️ {_dec_scorer} (decizia de acum): ", 1)
+            if _note_scorer and _note_scorer != chosen_name:
+                # Nota e a metodei pe care o alege clasamentul, nu a celei marcate 🎯.
+                _mult = _mult.replace("⚠️ ", f"⚠️ {_note_scorer} (clasamentul de acum): ", 1)
             ui.label(_mult).classes("text-caption text-warning")
         if not has_family:
             ui.label(

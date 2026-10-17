@@ -12,6 +12,7 @@ from nicegui import ui
 
 from ui_runtime import *
 from loto_enterprise.core import lotteries as _LOT
+from loto_enterprise.core.ro_text import count
 from ui_shared import PROJECT_ROOT, atomic_write_text, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
@@ -620,6 +621,18 @@ def _thousands(x, decimals: int = 0) -> str:
     return f"{float(x):,.{int(decimals)}f}".replace(",", "\u202f")
 
 
+def _method_from_bench(data: dict | None) -> bool:
+    """Pool-ul vine dintr-o decizie bench, nu din rezerva `frequency`.
+
+    Rezerva (`fallback` în `bench_winner`, fără Urna 2) nu a fost aleasă pe
+    extragerile validate; un rezultat vechi fără `bench_winner` rămâne pe
+    formularea cu decizia, ca înainte."""
+    bw = ((data or {}).get("audit") or {}).get("bench_winner") or {}
+    return not any(
+        (v or {}).get("fallback") for k, v in bw.items() if not str(k).endswith("_urna2")
+    )
+
+
 def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str | None:
     if not flat:
         return None
@@ -678,11 +691,16 @@ def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str 
             rnd_txt = (
                 f" | la întâmplare (pool {k_pool}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
                 f"{rates[1] * 100:.2f}%/{_five_plus_pct(rates[2])} pe extragere"
-                " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"
-                " cuprind aceste extrageri: nu e o validare externă"
+                + (
+                    " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"
+                    " cuprind aceste extrageri: nu e o validare externă"
+                    if _method_from_bench(data)
+                    else " | metoda e rezerva frequency (fără decizie bench), nu o"
+                    " alegere pe aceste extrageri"
+                )
             )
     return (
-        f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
+        f"{count(nn, 'extrageri', 'extragere')} | avg pool={ap:.2f} | avg best bilet={av:.2f} "
         f"| best pool={bp} | best bilet={bv} "
         f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4} "
         f"| pool 5+: {p5}; bilet 5+: {b5}{cov_txt}{jk_txt}{rnd_txt}"
@@ -986,7 +1004,6 @@ def _copy_feedback(e) -> None:
 
 def _full_ticket_summary(t: dict, game: str) -> str:
     """Linia de sub variante: câte, acoperirea garanției și costul."""
-    from loto_enterprise.core.ro_text import count
 
     n = len(t["variants"])
     _lot = _LOT.lottery_by_id(str(game))

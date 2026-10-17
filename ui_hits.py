@@ -19,6 +19,7 @@ from ui_results import (
     _five_plus_pct,
     _guarantee_gap_line,
     _hypergeo_params,
+    _method_from_bench,
     _random_rate_hypergeo,
     _thousands,
     _ticket_pick,
@@ -261,7 +262,7 @@ def _full_ticket_replay(flat, game: str, tickets: int, guarantee) -> dict | None
 
 
 def _full_ticket_replay_rows(res: dict, tickets: int) -> tuple[list[dict], int]:
-    """Rândul „Bilet complet” și numărul de extrageri reluate."""
+    """Un rând pe prag (+3/+4/+5) pentru „Bilet complet” și extragerile reluate."""
     best = res.get("best") or {}
     exact = res.get("uniform")
     m = len(best)
@@ -362,8 +363,8 @@ def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
                 "walk-forward, garanția rezultatului afișat. 🎲 = șansa exactă ca cel "
                 "puțin o variantă să atingă pragul la o extragere uniformă, calculată pe "
                 "biletele celei mai recente extrageri; nu depinde de numerele alese, ci "
-                "de cum se suprapun variantele. Rândul urmează hiturile pool-ului din "
-                "tabelul de mai sus; metoda a fost aleasă pe același istoric, deci un "
+                "de cum se suprapun variantele. Coloana „Bilet complet” urmează hiturile "
+                "pool-ului din tabelul de mai sus; metoda a fost aleasă pe același istoric, deci un "
                 "rezultat peste 🎲 aici nu e o validare externă. La pragurile rare "
                 "(câteva evenimente), frecvența observată variază mult în jurul valorii 🎲."
             )
@@ -473,7 +474,8 @@ def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
                 **hits[int(di)],
                 "pool_numbers": sorted(int(x) for x in (ctx.get("hard_core") or [])),
                 "drawn": sorted(int(x) for x in (ctx.get("actual") or [])),
-                "best_variant": None,
+                # Fără extragere în context nu se poate marca nimic: „—”, ca extragerea.
+                "best_variant": None if ctx.get("actual") else [],
             }
         row = per[di]
         if row["best_variant"] is None and int(getattr(p, "hits", 0) or 0) == int(
@@ -523,8 +525,12 @@ def _render_hits_4plus(
     restrict_base_text: str = "",
     consecutive_limit_text: str = "",
     full_ticket: dict | None = None,
+    method_from_bench: bool = True,
 ) -> None:
     """Istoric hits pentru pool-ul unic; folosește mărimea efectivă din rezultat.
+
+    `method_from_bench` = False când pool-ul vine din rezerva `frequency` (fără
+    decizie bench): atunci metoda nu a fost aleasă pe aceste extrageri.
 
     `full_ticket` = {"game", "guarantee"} adaugă „Bilet complet” refăcut pe
     aceleași extrageri (`_render_full_ticket_replay`).
@@ -700,7 +706,7 @@ def _render_hits_4plus(
     if _jk:
         ui.label(
             f"🃏 Numărul Joker (Urna 2, un singur număr pe bilet): nimerit la "
-            f"{sum(_jk)} din {len(_jk)} extrageri ({sum(_jk) / len(_jk) * 100:.2f}%; "
+            f"{sum(_jk)} din {_n_extrageri(len(_jk))} ({sum(_jk) / len(_jk) * 100:.2f}%; "
             "la întâmplare 5%)."
         ).classes("text-caption")
     _hp = _hypergeo_params(gk)
@@ -740,9 +746,14 @@ def _render_hits_4plus(
         ui.label(
             f"ℹ️ Peste hazard (≥{_TT}): "
             + " · ".join(_winners)
-            + ". Metoda e cea din decizia de azi, aleasă de bench pe ferestre care "
-            "cuprind și aceste extrageri, deci nu e o validare externă; un p mic aici "
-            "nu dovedește un avantaj."
+            + (
+                ". Metoda e cea din decizia de azi, aleasă de bench pe ferestre care "
+                "cuprind și aceste extrageri, deci nu e o validare externă; un p mic "
+                "aici nu dovedește un avantaj."
+                if method_from_bench
+                else ". Metoda e rezerva frequency, fără decizie bench, deci nu a fost "
+                "aleasă pe aceste extrageri."
+            )
         ).classes("text-caption text-grey")
     if _losers:
         ui.label(
@@ -845,18 +856,23 @@ def _render_hits_4plus(
     _star_leg = (
         ("⭐ = exact 3; " if _TT == 4 else f"⭐ = 3–{_TT - 1}; ") if _TT > 3 else ""
     )
+    _chosen_txt = (
+        "metoda e cea din decizia de azi, aleasă pe ferestre bench care cuprind și "
+        "aceste extrageri"
+        if method_from_bench
+        else "metoda e rezerva frequency, fără decizie bench"
+    )
     ui.label(
         f"🗓️ Istoric: extrageri cu ≥3 în pool-ul walk-forward de LA DATA extragerii "
-        f"(scorerul vede numai extragerile de dinainte; metoda e cea din decizia de "
-        f"azi, aleasă pe ferestre bench care cuprind și aceste extrageri). "
+        f"(scorerul vede numai extragerile de dinainte; {_chosen_txt}). "
         f"🔥 = target bench (≥{_TT}); "
         f"{_star_leg}Δ pe cel mai recent rând care atinge ținta = „acum X zile”; "
         f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent. "
         f"Nucleul de producție de lângă ultima extragere CSV e ALT set — nu compara 🔥 cu el."
     ).classes("text-caption text-grey mt-2")
-    _pool_n_txt = f"{_pn} numere" if _pn else "numerele lui"
+    _pool_n_txt = f"cele {_pn} numere" if _pn else "numerele"
     ui.label(
-        f"„Pool-ul de atunci” = cele {_pool_n_txt} alese de metodă la data extragerii, "
+        f"„Pool-ul de atunci” = {_pool_n_txt} alese de metodă la data extragerii, "
         "numai din extragerile de dinainte, cu setările rezultatului afișat (nu "
         "pool-ul de azi). Numerele care au ieșit sunt îngroșate."
     ).classes("text-caption text-grey")
@@ -1002,6 +1018,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                             consecutive_limit_text=_consecutive_limit_text(
                                 data.get("audit"), details=False
                             ),
+                            method_from_bench=_method_from_bench(data),
                             # Același joc și aceeași garanție ca „🎟️ Bilet complet”.
                             full_ticket={
                                 "game": _game_label_for(str(game))

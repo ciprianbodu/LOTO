@@ -103,9 +103,12 @@ def _wf_entries():
     # Mai multe variante pe extragere: trei pool-uri cu 5+, dar un singur bilet cu 5+.
     for index, day, pool, best in ((1, 1, 5, 4), (2, 5, 5, 5), (3, 8, 5, 4), (4, 15, 4, 4), (5, 25, 3, 3)):
         for hits in (best - 1, best):
+            # Ca un cache scris înainte de `ticket_context`: varianta există,
+            # extragerea și pool-ul pasului nu.
             flat.append(SimpleNamespace(
                 draw_index=index, draw_date=f"{day:02d}-09-2026", hits_union=pool,
-                hits=hits, wheel_coverage=100.0,
+                hits=hits, wheel_coverage=100.0, variant=[2, 10, 20, 30, 40, 49],
+                ticket_context=None,
             ))
     return flat
 

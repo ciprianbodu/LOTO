@@ -698,6 +698,11 @@ def _bench_workers() -> int:
         return 1
 
 
+def _workers_text(n: int) -> str:
+    """„pe 4 procese în paralel”, „pe 21 de procese în paralel”, „într-un singur proces”."""
+    return "într-un singur proces" if int(n) <= 1 else f"pe {count(n, 'procese')} în paralel"
+
+
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
     """ETA bench pe baza ULTIMEI rulări (bench_results/folds.csv): avg runtime_sec
     al folds-urilor reale × nr. folds × overhead, împărțit la procesele în care
@@ -804,10 +809,11 @@ def _country_bench_texts(country: str) -> dict:
     try:
         avg = _avg_fold_runtime(fp)
         if avg is not None:
+            workers = _bench_workers()
             eta = (
-                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25 / _bench_workers())} "
-                f"pentru {target} folduri pe {_bench_workers()} procese — din durata "
-                f"medie a unui fold la ultima rulare {name}."
+                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25 / workers)} "
+                f"pentru {count(target, 'folduri', 'un fold')} {_workers_text(workers)} "
+                f"— din durata medie a unui fold la ultima rulare {name}."
             )
     except Exception:  # noqa: BLE001
         eta = None
@@ -820,9 +826,11 @@ def _country_bench_texts(country: str) -> dict:
             n_here = max(_csv_rows(PROJECT_ROOT / g.csv) for g in games)
             if ref and n_ref:
                 scaled = ref * (n_here / n_ref) ** 2
+                workers = _bench_workers()
                 eta = (
-                    f"⏱ ETA estimat: {_fmt_eta_seconds(scaled * target * 1.25)} pentru "
-                    f"{target} folduri — estimare fără o rulare anterioară {name}, "
+                    f"⏱ ETA estimat: {_fmt_eta_seconds(scaled * target * 1.25 / workers)} "
+                    f"pentru {count(target, 'folduri', 'un fold')} {_workers_text(workers)} "
+                    f"— estimare fără o rulare anterioară {name}, "
                     f"scalată cu lungimea istoricului ({n_here} extrageri față de "
                     f"{n_ref} la România · Loto 6/49)."
                 )
@@ -1997,11 +2005,13 @@ def _mail_best_draw_line(spec, df, pool) -> str:
 
     k, n, m = len(pool), int(spec.draw_n), int(spec.max_n)
     chance = len(df) * comb(k, best) * comb(m - k, n - best) / comb(m, n)
+    # Sub 1, cifre semnificative: „~0.0” s-ar citi „imposibil la întâmplare”.
+    chance_txt = f"{chance:.1f}" if chance >= 0.95 else f"{chance:.2g}"
     times = "o dată" if len(idx) == 1 else f"de {count(len(idx), 'ori')}"
     return (
         f"CEL MAI BUN REZULTAT pe istoric ({count(len(df), 'extrageri', 'extragere')}, "
         f"pool-ul de azi): {best} numere din pool, ultima oară la {when}; {times} în "
-        f"total, față de ~{chance:.1f} pentru un pool oarecare de {k} numere. Privire "
+        f"total, față de ~{chance_txt} pentru un pool oarecare de {k} numere. Privire "
         "înapoi, nu validare: pool-ul e ales pe aceleași extrageri."
     )
 
@@ -2569,6 +2579,15 @@ _BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11 * 2
 _BASE_TABLE_OPENED = {"value": False}
 
 
+def _weaker_text(n: int) -> str:
+    """„niciunul n-a ieșit mai slab”, „unul a ieșit mai slab”, „5 au ieșit mai slabe”."""
+    if int(n) == 0:
+        return "niciunul n-a ieșit mai slab"
+    if int(n) == 1:
+        return "unul a ieșit mai slab"
+    return f"{int(n)} au ieșit mai slabe"
+
+
 def _base_interval_rows(
     csv_name: str, draw_n: int, max_num: int, pool_size: int, target: int = 3
 ):
@@ -2715,8 +2734,7 @@ def _render_base_interval_tables() -> None:
                 f"Referință teoretică, identică pentru ORICE pool de {pool} numere: "
                 f"{theoretical_rate(max_num, pool, draw_n, _t):.2f}%. "
                 f"Din {count(len(rows) - 1, 'intervale', 'un interval')} alese pe tot "
-                f"istoricul, {'unul a' if _moved == 1 else f'{_moved} au'} ieșit mai "
-                "slabe pe a doua jumătate decât pe prima."
+                f"istoricul, {_weaker_text(_moved)} pe a doua jumătate decât pe prima."
             ).classes("text-caption text-grey")
     ui.label(
         "Cum se citește: un pool de dimensiune fixă are aceeași probabilitate "
@@ -3118,6 +3136,8 @@ def main_page() -> None:
             target = _clamped_bench_target(e.value)
             SETTINGS["bench_hit_target"] = target
             _save_settings()
+            # Tabelul de intervale se ordonează pe ținta jocului.
+            _render_base_interval_tables.refresh()
             try:
                 import loto_enterprise.benchmark.decision as decision
 
@@ -3226,9 +3246,9 @@ def main_page() -> None:
             if _eta_folds:
                 ui.label(
                     f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
-                    f"{_eta_folds} folduri pe {_bench_workers()} procese în paralel — "
-                    "din durata medie a unui fold la ultima rulare; după o schimbare "
-                    "de matrice estimarea e aproximativă."
+                    f"{count(_eta_folds, 'folduri', 'un fold')} "
+                    f"{_workers_text(_bench_workers())} — din durata medie a unui fold "
+                    "la ultima rulare; după o schimbare de matrice estimarea e aproximativă."
                 ).classes("text-caption text-grey")
             # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
             # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.

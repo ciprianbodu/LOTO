@@ -1533,15 +1533,19 @@ limita de validitate din §5).
   langa data si hiturile fiecarei extrageri, „Extragerea” si „Pool-ul de
   atunci”, din `ticket_context` al pasului (§8): pool-ul jucat la acel pas,
   ales numai din extragerile de dinainte, cu setarile rezultatului afisat, nu
-  pool-ul de azi. Numerele iesite sunt ingrosate. Tabelele „🎟️ BILET 4+/5+” arata
-  „Biletul” (prima varianta cu cele mai multe numere prinse, la Joker fara
-  numarul Urnei 2, `scored_variant_numbers`) si extragerea
-  (`ui_hits._wf_per_draw_stats`, `_wf_marked_numbers`, 2026-10-17). Un pas
-  dintr-un cache fara context arata „—”, cu nota ca se completeaza la
-  urmatoarea validare. Titlul spune cate extrageri are fiecare nivel (6/49
-  pool 16: 161 cu 3, 57 cu 4, 8 cu 5), iar selectorul „toate / ≥4 / ≥5”
+  pool-ul de azi. Numerele iesite sunt ingrosate. Tabelele „🎟️ VARIANTĂ 4+/5+”
+  (expansion-ul „🎟️ Variante WF cu 4+ și 5+”) arata „Varianta” (prima varianta
+  cu cele mai multe numere prinse, la Joker fara numarul Urnei 2,
+  `scored_variant_numbers`) si extragerea (`ui_hits._wf_per_draw_stats`,
+  `_wf_marked_numbers`, 2026-10-17). Un pas dintr-un cache fara context arata
+  „—” la extragere, pool si varianta; nota spune ca se completeaza la
+  urmatoarea validare (un pas cu context `{}` ramane „—”). Titlul spune cate
+  extrageri are fiecare nivel (6/49 pool 16: 161 cu 3, 57 cu 4, 8 cu 5), iar
+  selectorul „toate”, apoi „≥k” pentru fiecare nivel prezent (la 5/40 si ≥6),
   filtreaza randurile de la pagina 1 (`_wf_level_counts`): cu 15 randuri pe
-  pagina, cele 8 extrageri cu 5 erau pe paginile 1, 2 si 9-16. La Joker,
+  pagina, cele 8 extrageri cu 5 erau pe paginile 1, 2, 9, 10 si 14-16. Cand
+  pool-ul vine din rezerva `frequency`, textele nu mai spun ca metoda a fost
+  aleasa pe aceste extrageri (`ui_results._method_from_bench`). La Joker,
   panoul arata si numarul din Urna 2 (nimerit la N din M extrageri, fata de
   5%), care aparea pana atunci numai in raport.
 - „📜 Istoric hits” are sub tabelul principal „Bilet complet” pe ACELEASI

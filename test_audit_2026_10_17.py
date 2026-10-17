@@ -185,7 +185,7 @@ def test_mail_best_draw_line_compares_with_any_pool_of_the_same_size():
     line = app_nicegui._mail_best_draw_line(spec, df, pool)
     expected = 25 * comb(16, 6) / comb(49, 6)
     assert "(25 de extrageri, pool-ul de azi): 6 numere din pool" in line
-    assert f"de 2 ori în total, față de ~{expected:.1f} pentru un pool oarecare de 16 numere" in line
+    assert f"de 2 ori în total, față de ~{expected:.2g} pentru un pool oarecare de 16 numere" in line
     assert "nu validare: pool-ul e ales pe aceleași extrageri" in line
     one = app_nicegui._mail_best_draw_line(spec, df.iloc[1:], pool)
     assert "; o dată în total" in one
@@ -298,6 +298,8 @@ def test_leaderboard_names_a_generation_made_before_the_current_decision(monkeyp
     monkeypatch.setattr(
         ui_bench, "_last_generation_bench_info", lambda *_a, **_k: {"method": "croston_interval"}
     )
+    saved = {"scorer": "frequency", "ensemble": [{"method": "frequency", "weight": 1.0}]}
+    monkeypatch.setattr(ui_bench, "_decision_entry", lambda *_a, **_k: saved)
     with capture_ui() as ui:
         ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
     text = ui.text()
@@ -305,7 +307,7 @@ def test_leaderboard_names_a_generation_made_before_the_current_decision(monkeyp
     assert "ensemble-ul de scoring a rămas pe alt cap de listă" not in text
     for line in text.splitlines():
         if "Avantaj nedemonstrat" in line:
-            assert line.startswith("⚠️ frequency (decizia de acum): ")
+            assert line.startswith("⚠️ frequency (clasamentul de acum): ")
 
 
 def test_autopilot_notification_names_the_joker_number_method(monkeypatch):
@@ -369,3 +371,175 @@ def test_hits_header_says_which_pool_and_settings_are_counted(monkeypatch):
     assert "Fără limită de consecutive" not in ui.text()
     summary = next(n for n in ui.walk() if n["kind"] == "table")
     assert summary["kwargs"]["columns"][1]["label"] == "🎯 Pool de atunci (din 16)"
+
+
+# --------------------------------------------------------------------------- #
+# Revizia adversarială a diff-ului (2026-10-17).
+# --------------------------------------------------------------------------- #
+
+
+def test_report_has_each_urns_method_and_note_and_the_joker_penalty(monkeypatch):
+    entries = {
+        "joker_urna1": _holm("frequency", 0.12, 42),
+        "joker_urna2": _holm("ridge_pooled_feats", 0.79, 38),
+    }
+    monkeypatch.setattr(ui_results, "_decision_entry", lambda key, pool: entries[key])
+    data = {
+        "pool_size": 16,
+        "pool_size_requested": 16,
+        "hard_core": list(range(1, 17)),
+        "hard_core_joker": [9],
+        "variants": [],
+        "guarantee": 4,
+        "context": {"coverage_pct": 100.0},
+        "audit": {
+            "bench_winner": {
+                "joker_urna1": {"method": "frequency", "pool_hint": 16},
+                "joker_urna2": {"method": "ridge_pooled_feats", "pool_hint": 1, "single_pick": True},
+            },
+            "recent_penalty": {"draws": 3, "factor": 0.5, "penalized": {"4": 0.5}, "penalized_urna2": {"9": 0.5}},
+        },
+    }
+    monkeypatch.setitem(ui_results.STATE, "results", ([("joker.csv", {"joker": data})], {}))
+    monkeypatch.setitem(ui_results.STATE, "retro", {})
+    monkeypatch.setitem(ui_results.STATE, "retro_meta", {})
+    report = ui_results._build_report()
+    assert "Metodă (joker_urna2): ridge_pooled_feats" in report
+    assert "⚠️ Urna 1: Avantaj nedemonstrat: după corecția Holm pentru cei 42 de candidați" in report
+    assert "⚠️ Urna 2: Avantaj nedemonstrat" in report
+    assert "numărul Joker penalizat: 9" in report
+
+    from scripts.analysis.audit_output import capture_ui
+
+    with capture_ui() as ui:
+        ui_results._render_pool_body("joker.csv", "joker", data)
+    assert "Urna 2 (numărul Joker): 9" in ui.text()
+
+    # Urna 2 pe rezervă: motivul în raport, fără nota ei.
+    data["audit"]["bench_winner"]["joker_urna2"].update(fallback=True, reason="metodă interzisă")
+    report = ui_results._build_report()
+    assert "Metodă (joker_urna2): ridge_pooled_feats — rezervă: metodă interzisă" in report
+    assert "Urna 2: Avantaj nedemonstrat" not in report
+
+
+def test_old_cache_variant_is_not_shown_unmarked():
+    import ui_hits
+
+    flat = _wf_flat([5, 4])
+    for p in flat:
+        p.ticket_context = None  # cache vechi: varianta există, extragerea nu
+    stats = ui_hits._wf_per_draw_stats(flat, "6/49")
+    assert all(d["best_variant"] == [] and d["drawn"] == [] for d in stats.values())
+
+
+def test_counts_and_wording_in_the_new_texts(monkeypatch):
+    import ui_hits
+    from scripts.analysis.audit_output import capture_ui
+
+    flat = [p for p in _wf_flat([1] * 25)]
+    for i, p in enumerate(flat):
+        p.joker_hit = i == 0
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(flat, "joker", None)
+    text = ui.text()
+    assert "nimerit la 1 din 25 de extrageri" in text
+    assert "cele numerele" not in text
+    assert app_nicegui._weaker_text(0) == "niciunul n-a ieșit mai slab"
+    assert app_nicegui._weaker_text(1) == "unul a ieșit mai slab"
+    assert app_nicegui._weaker_text(25) == "25 au ieșit mai slabe"
+    assert app_nicegui._workers_text(1) == "într-un singur proces"
+    assert app_nicegui._workers_text(21) == "pe 21 de procese în paralel"
+    assert ui_results._wf_summary(_wf_flat([1]), {"pool_size": 16}, "6/49").startswith("1 extragere |")
+
+
+def test_fallback_pool_is_not_called_a_bench_selection():
+    import ui_hits
+    from scripts.analysis.audit_output import capture_ui
+
+    fb = {"audit": {"bench_winner": {"loto_6_49": {"method": "frequency", "fallback": True}}}}
+    assert ui_results._method_from_bench(fb) is False
+    assert ui_results._method_from_bench({}) is True
+    line = ui_results._wf_summary(_wf_flat([4] * 10 + [1] * 90), dict(fb, pool_size=16), "6/49")
+    assert "rezerva frequency (fără decizie bench)" in line and "decizia de azi" not in line
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(
+            _wf_flat([4] * 10 + [1] * 90), "6/49", {"pool_size": 16}, pool_n=16,
+            method_from_bench=False,
+        )
+    text = ui.text()
+    assert "metoda e rezerva frequency, fără decizie bench" in text
+    assert "aleasă pe ferestre bench" not in text
+
+
+def test_mail_chance_baseline_keeps_significant_digits():
+    from loto_enterprise.core.lotteries import lottery_by_id
+
+    spec = lottery_by_id("6/49")
+    rows = [[1, 2, 3, 4, 5, 40]] + [[30, 31, 32, 33, 34, 35]] * 9
+    df = pd.DataFrame(
+        {
+            "date": [f"{1 + i:02d}-01-2026" for i in range(10)],
+            **{f"n{j + 1}": [r[j] for r in rows] for j in range(6)},
+        }
+    )
+    line = app_nicegui._mail_best_draw_line(spec, df, [1, 2, 3, 4, 5, 6])
+    assert "~0.0 " not in line and "~0.00018 " in line  # 10 · C(6,5) · 43 / C(49,6)
+
+
+def test_eta_is_wired_to_the_runner_and_divides_the_foreign_fallback(monkeypatch, tmp_path):
+    import loto_enterprise.benchmark.runner as runner
+
+    monkeypatch.setattr(runner, "bench_worker_count", lambda: 4)
+    assert app_nicegui._bench_workers() == 4
+    src = open(app_nicegui.__file__, encoding="utf-8").read()
+    assert "scaled * target * 1.25 / workers" in src
+
+
+def test_leaderboard_labels_render_random_and_witnesses_differently(monkeypatch):
+    import ui_bench
+    from loto_enterprise.benchmark import decision
+    from scripts.analysis.audit_output import capture_ui
+    from test_output_consistency import _folds
+
+    df = _folds()
+    witness = df[df["method"] == "random"].copy()
+    witness["method"] = "neighbor_adjacent"
+    witness["rate_3plus_k11"] = 0.30
+    witness["tiebreak_k11"] = 0.1
+    df = pd.concat([df, witness], ignore_index=True)
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(app_nicegui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
+    with capture_ui() as ui:
+        ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 1)
+    text = ui.text()
+    assert "🎲 baseline «random» (realizare empirică a hazardului" in text
+    assert "🚫 martor «neighbor_adjacent» (filtru exclus din producție" in text
+    assert "baseline «neighbor_adjacent»" not in text
+
+
+def test_leaderboard_reason_uses_the_saved_decision_not_the_recomputed_one(monkeypatch):
+    # Generarea a folosit decizia salvată (croston_interval); folds.csv recalculat
+    # alege frequency. Regenerarea ar juca tot croston_interval: nu „generat
+    # înaintea deciziei de acum”.
+    import ui_bench
+    from loto_enterprise.benchmark import decision
+    from scripts.analysis.audit_output import capture_ui
+    from test_output_consistency import _folds
+
+    df = _folds()
+    extra = df[df["method"] == "frequency"].copy()
+    extra["method"] = "croston_interval"
+    extra["rate_3plus_k11"] = 0.095
+    df = pd.concat([df, extra], ignore_index=True)
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(app_nicegui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
+    monkeypatch.setattr(
+        ui_bench, "_last_generation_bench_info", lambda *_a, **_k: {"method": "croston_interval"}
+    )
+    saved = {"scorer": "croston_interval", "ensemble": [{"method": "croston_interval", "weight": 1.0}]}
+    monkeypatch.setattr(ui_bench, "_decision_entry", lambda *_a, **_k: saved)
+    with capture_ui() as ui:
+        ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
+    assert "generat înaintea deciziei de acum" not in ui.text()
