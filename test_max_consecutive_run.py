@@ -628,7 +628,9 @@ def test_wf_history_names_the_limit_it_used():
     assert "scos din pool" not in text
     with capture_ui() as ui_off:
         app._render_hits_4plus(flat, "6/49", meta={"pool_size": 10}, pool_n=10)
-    assert "consecutive" not in ui_off.text()
+    # Fără limită la generare: istoricul nu pretinde regula, ci spune că lipsește.
+    assert "Fără 3 numere consecutive" not in ui_off.text()
+    assert "Fără limită de consecutive." in ui_off.text()
 
 
 # --- biletul complet respectă limita rezultatului ------------------------------
