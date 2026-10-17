@@ -478,6 +478,14 @@ def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
     return per
 
 
+def _wf_level_counts(levels) -> dict[int, int]:
+    """Numărul de extrageri pe fiecare nivel de hituri, crescător."""
+    out: dict[int, int] = {}
+    for k in sorted(int(x) for x in levels):
+        out[k] = out.get(k, 0) + 1
+    return out
+
+
 def _wf_marked_numbers(numbers, marked) -> tuple[str, list[dict]]:
     """Text simplu și lista pentru celula cu numerele ieșite îngroșate."""
     nums = [int(x) for x in numbers or []]
@@ -683,6 +691,14 @@ def _render_hits_4plus(
             f"≈ {n_tick * _price:,.0f} lei (tarif standard, fără taxă fizică, fără câștig)."
         )
     ui.label(_cap).classes("text-caption text-grey")
+    # Joker: numărul din Urna 2 (top-1) e pe toate biletele pasului.
+    _jk = [bool(d["joker"]) for d in per.values() if d.get("joker") is not None]
+    if _jk:
+        ui.label(
+            f"🃏 Numărul Joker (Urna 2, un singur număr pe bilet): nimerit la "
+            f"{sum(_jk)} din {len(_jk)} extrageri ({sum(_jk) / len(_jk) * 100:.2f}%; "
+            "la întâmplare 5%)."
+        ).classes("text-caption")
     ui.label(
         "Garanția 4 nu asigură 5 pe un bilet; compară separat hiturile pool-ului "
         "și ale biletelor."
@@ -713,7 +729,14 @@ def _render_hits_4plus(
         return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
 
     def _dates_table(
-        title, pred, badge, empty_msg, gap_on=None, gap_label=None, details=()
+        title,
+        pred,
+        badge,
+        empty_msg,
+        gap_on=None,
+        gap_label=None,
+        details=(),
+        level=None,
     ):
         items = [(di, d) for di, d in per.items() if pred(d)]
         if not items:
@@ -724,7 +747,7 @@ def _render_hits_4plus(
         gap_items = [(di, d) for di, d in items if _gp(d)]
         gap_txt = {di: g for di, _d, g in _hit_gap_rows(gap_items)}
         _gl = gap_label or f"Δ până la următorul ≥{_TT} (sau azi)"
-        rows = []
+        rows, levels = [], []
         for di, d in sorted(items, key=lambda kv: kv[0], reverse=True):
             row = {
                 "draw": d["label"],
@@ -734,9 +757,33 @@ def _render_hits_4plus(
             for name, _label, numbers, marked in details:
                 row[name], row[f"{name}_marks"] = _wf_marked_numbers(numbers(d), marked(d))
             rows.append(row)
-        ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes(
+            levels.append(int(level(d)) if level else 0)
+        # Câte extrageri pe fiecare nivel: pe pagina întâi încap numai 15 rânduri.
+        counts = _wf_level_counts(levels) if level else {}
+        head = "1 extragere" if len(rows) == 1 else f"{len(rows)} extrageri"
+        if len(counts) > 1:
+            head += ": " + ", ".join(f"{c} cu {k}" for k, c in counts.items())
+        ui.label(f"{title} ({head}; cele mai recente întâi):").classes(
             "text-bold text-caption mt-3"
         )
+        shown = {}
+        if len(counts) > 1:
+            _low = min(counts)
+
+            def _only_from(e):
+                at = int(e.value if e.value is not None else _low)
+                table = shown["table"]
+                table.rows = [r for r, k in zip(rows, levels) if k >= at]
+                # Filtrul nou începe de la prima pagină, nu din mijlocul listei.
+                pag = table.pagination if isinstance(table.pagination, dict) else {}
+                table.pagination = {**pag, "page": 1}
+                table.update()
+
+            ui.toggle(
+                {_low: "toate", **{k: f"≥{k}" for k in list(counts)[1:]}},
+                value=_low,
+                on_change=_only_from,
+            ).props("dense no-caps size=sm")
         # Data și nimeritele pe un rând; numerele și intervalul se rup pe telefon.
         _nw = {"classes": "text-no-wrap"}
         table = ui.table(
@@ -758,6 +805,7 @@ def _render_hits_4plus(
             rows=rows,
             pagination=15,
         ).classes("w-full").props("dense wrap-cells")
+        shown["table"] = table
         for name, _label, _numbers, _marked in details:
             table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
@@ -791,6 +839,7 @@ def _render_hits_4plus(
         "Pool-ul n-a prins ≥3 în istoricul walk-forward.",
         gap_on=lambda d: d["pool"] >= _TT,
         gap_label=f"Δ → următorul ≥{_TT} / azi",
+        level=lambda d: d["pool"],
         details=(
             ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["pool_numbers"]),
             (
@@ -817,6 +866,7 @@ def _render_hits_4plus(
                 lambda d: f"{int(d['best_ticket'])} numere",
                 f"Niciun bilet nu a prins ≥{threshold} în istoricul walk-forward.",
                 gap_label=f"Δ → următorul ≥{threshold} pe bilet / azi",
+                level=lambda d: d["best_ticket"],
                 details=(
                     (
                         "ticket",

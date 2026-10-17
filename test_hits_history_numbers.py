@@ -38,6 +38,7 @@ def _entries(game="6/49", context=True):
                     hits=len(set(t) & set(drawn)),
                     hits_union=pool_hits,
                     wheel_coverage=100.0,
+                    joker_hit=(di == 11) if game == "joker" else None,
                     ticket_context=ctx,
                 )
             )
@@ -101,3 +102,57 @@ def test_marked_numbers_helper():
     text, marks = ui_hits._wf_marked_numbers([3, 7, 9], [7])
     assert text == "3 [7] 9"
     assert marks == [{"v": 3, "hit": False}, {"v": 7, "hit": True}, {"v": 9, "hit": False}]
+
+
+def _title(ui, prefix):
+    return next(
+        str(n["args"][0])
+        for n in ui.walk()
+        if n["kind"] == "label" and n["args"] and str(n["args"][0]).startswith(prefix)
+    )
+
+
+def test_pool_title_counts_each_level_and_the_filter_keeps_the_fives():
+    # Utilizatorul a văzut un singur 5 pe prima pagină din 16; titlul spune
+    # acum câte extrageri are fiecare nivel, iar filtrul le arată pe toate.
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(_entries(), "6/49", {"pool_size": 16}, pool_n=16)
+    assert _title(ui, "🗓️ POOL") == (
+        "🗓️ POOL (2 extrageri: 1 cu 3, 1 cu 5; cele mai recente întâi):"
+    )
+    nodes = list(ui.walk())
+    start = next(i for i, n in enumerate(nodes) if str((n["args"] or [""])[0]).startswith("🗓️ POOL"))
+    toggle = next(n for n in nodes[start:] if n["kind"] == "toggle")
+    table = next(n for n in nodes[start:] if n["kind"] == "table")
+    assert toggle["args"][0] == {3: "toate", 5: "≥5"}
+    assert toggle["kwargs"]["value"] == 3
+
+    class _Event:
+        value = 5
+
+    toggle["kwargs"]["on_change"](_Event())
+    assert [r["draw"] for r in table["attrs"]["rows"]] == ["06-08-2026"]
+    assert table["attrs"]["pagination"]["page"] == 1  # filtrul pornește de la pagina 1
+    _Event.value = 3
+    toggle["kwargs"]["on_change"](_Event())
+    assert [r["draw"] for r in table["attrs"]["rows"]] == ["09-08-2026", "06-08-2026"]
+
+
+def test_single_level_tables_have_no_filter_and_singular_title():
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(_entries(), "6/49", {"pool_size": 16}, pool_n=16)
+    assert _title(ui, "🎟️ BILET 5+") == "🎟️ BILET 5+ (1 extragere; cele mai recente întâi):"
+    assert _title(ui, "🎟️ BILET 4+") == "🎟️ BILET 4+ (1 extragere; cele mai recente întâi):"
+    assert sum(n["kind"] == "toggle" for n in ui.walk()) == 1  # numai la POOL
+
+
+def test_joker_number_hits_are_shown_in_the_panel():
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(_entries("joker"), "joker", {"pool_size": 16}, pool_n=16)
+    assert (
+        "🃏 Numărul Joker (Urna 2, un singur număr pe bilet): nimerit la 1 din 3 "
+        "extrageri (33.33%; la întâmplare 5%)."
+    ) in ui.text()
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(_entries(), "6/49", {"pool_size": 16}, pool_n=16)
+    assert "Numărul Joker" not in ui.text()
