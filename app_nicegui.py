@@ -2017,7 +2017,7 @@ def _mail_best_draw_line(spec, df, pool) -> str:
 
 
 def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
-    """Metoda folosită la generare și ratingul ei din bench, pe pool-ul generat.
+    """Metoda folosită la generare și ratingul ei din bench (top-K brut al metodei).
 
     Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
     țării pentru pool-ul cu care s-a ales metoda (`pool_hint`; `rationale` scris
@@ -2088,6 +2088,17 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
     note = _multiplicity_note(entry)
     if note and _decision_low_confidence(entry) is not True:
         lines.append(note)
+    # Ca nota de sub clasament: ratingul e al top-K brut, iar pool-ul de mai sus
+    # poate fi schimbat de limita de consecutive, penalizare sau restrângere.
+    if urna2:
+        _rp = (data.get("audit") or {}).get("recent_penalty") or {}
+        if int(_rp.get("draws") or 0) > 0 and _rp.get("penalized_urna2"):
+            lines.append(
+                "Numărul Joker include penalizarea recentă; ratingul măsoară "
+                "scorerul fără ea."
+            )
+    elif _transform := _bench_transform_note(data):
+        lines.append(_transform)
     return lines
 
 

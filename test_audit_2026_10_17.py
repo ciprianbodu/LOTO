@@ -543,3 +543,21 @@ def test_leaderboard_reason_uses_the_saved_decision_not_the_recomputed_one(monke
     with capture_ui() as ui:
         ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
     assert "generat înaintea deciziei de acum" not in ui.text()
+
+
+def test_mail_rating_says_it_measures_the_raw_top_k_when_the_pool_was_adjusted(monkeypatch):
+    # Criticul auditului: RATING-ul din mail e al top-K brut, sub pool-ul jucat cu
+    # limita de consecutive, fără nicio precizare (panoul o avea).
+    from loto_enterprise.core.lotteries import lottery_by_id
+    from test_ui_mail_2026_10_08 import _entry, _result
+
+    spec = lottery_by_id("6/49")
+    entry = _entry("markov_lag2", proven=True, holm_p=0.01)
+    monkeypatch.setattr(app_nicegui, "_decision_entry", lambda key, pool: entry)
+    plain = app_nicegui._mail_method_lines(spec, _result("markov_lag2"))
+    assert len(plain) == 2 and not any("Clasamentul bench" in x for x in plain)
+    data = _result("markov_lag2")
+    data["audit"]["consecutive_limit"] = {"requested": 2, "applied": 2, "removed": [], "added": []}
+    lines = app_nicegui._mail_method_lines(spec, data)
+    assert lines[-1].startswith("Configurația generată include limita de consecutive")
+    assert "Clasamentul bench măsoară scorerul fără aceste ajustări" in lines[-1]

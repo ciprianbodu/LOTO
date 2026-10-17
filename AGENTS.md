@@ -107,6 +107,8 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
     (nu e validare externa), si peste hazard, cu p-ul binomial; antetul spune
     ca se numara pool-ul de atunci, cu setarile rezultatului afisat;
   - mailul „CEL MAI BUN REZULTAT” are numarul asteptat pentru un pool oarecare;
+    sub RATING, mailul spune ca ratingul e al top-K brut cand pool-ul jucat
+    are limita de consecutive, penalizare sau restrangere (ca nota de bench);
   - sub 1024 px, butonul plutitor „☰” deschide sertarul cu comenzile (antetul
     neschimbat); pe telefon, tabelele din Istoric hits incap (un rand pe prag);
   - clasamentul: numai `random` e realizarea hazardului, filtrele excluse sunt
