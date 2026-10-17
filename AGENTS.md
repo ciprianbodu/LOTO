@@ -132,7 +132,7 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   `refined_covers_2026-10-16.md`, `refined_lotto_2026-10-16.json`;
   generatoare `gen_refined_covers.py`, `gen_refined_lotto.py` (gcc).
 - Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 114 fisiere `test_*.py`,
-  2702 teste trecute, 11 sarite, zero esecuri (16 min 32 s). `audit_application.py`:
+  2708 teste trecute, 11 sarite, zero esecuri (16 min 15 s). `audit_application.py`:
   13 istorice, 848 verificari de paritate, 151 designuri, 26 de pipeline-uri,
   13 profile de cover complet, worker separat pe 13 jocuri si UI HTTP 200,
   fisierele de productie neatinse.
