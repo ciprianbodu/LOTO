@@ -345,7 +345,8 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     pick = _ticket_pick(game)
     is_joker = "joker" in str(game).lower()
     try:
-        if any(len(v) != pick + int(is_joker) for v in variants):
+        # Joker fără numărul Urnei 2 (coloana lipsă sau invalidă): 5 numere.
+        if any(len(v) not in {pick, pick + int(is_joker)} for v in variants):
             raise ValueError("lungime variantă invalidă")
         odds = wheel_hit_probabilities(
             pool, [v[:pick] for v in variants], draw_n, max_num
@@ -370,8 +371,24 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
     lines.append("Acoperirea 100% este o garanție condiționată de numerele prinse în pool, nu șansa de câștig.")
-    lines.append("Garanția 4 nu asigură 5 pe un bilet; compară probabilitățile separate.")
+    _g = (data.get("audit") or {}).get("wheel_guarantee_used")
+    gap = _guarantee_gap_line(data.get("guarantee") if _g is None else _g, pick, draw_n)
+    if gap:
+        lines.append(gap)
     return lines
+
+
+def _guarantee_gap_line(
+    guarantee, pick: int, draw_n: int, tail: str = "compară probabilitățile separate"
+) -> str:
+    """„Garanția g nu asigură g+1”, cu garanția efectivă; "" când nu mai e prag peste ea."""
+    try:
+        g = int(guarantee)
+    except (TypeError, ValueError):
+        return ""
+    if not 1 <= g < min(int(pick), int(draw_n)):
+        return ""
+    return f"Garanția {g} nu asigură {g + 1} pe o variantă; {tail}."
 
 
 def _hypergeo_params(game: str) -> tuple[int, int] | None:
@@ -586,7 +603,15 @@ def _conditional_cover_note(data: dict | None) -> str:
     return ""
 
 
-def _wf_summary(flat, data: dict | None = None) -> str | None:
+def _five_plus_pct(p) -> str:
+    """Șansa 5+ în procente: trei zecimale de la 0,1% în sus, altfel două cifre
+    semnificative. La Joker cu un bilet (2 variante) 5+ e 0,00016%, iar cu trei
+    zecimale apărea „0.000%”, ca și cum n-ar exista."""
+    value = 100.0 * float(p or 0.0)
+    return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
+
+
+def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str | None:
     if not flat:
         return None
     from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
@@ -628,11 +653,30 @@ def _wf_summary(flat, data: dict | None = None) -> str | None:
         if jk
         else ""
     )
+    # Ca panoul: rata la întâmplare a unui pool de aceeași mărime și limita
+    # selecției (metoda din decizia de azi a fost aleasă pe aceste extrageri).
+    rnd_txt = ""
+    sizes = [
+        len((getattr(p, "ticket_context", None) or {}).get("hard_core") or ())
+        for p in flat
+    ]
+    k_pool = max(set(sizes) - {0}, key=sizes.count, default=0) or int(
+        (data or {}).get("pool_size") or len((data or {}).get("hard_core") or ())
+    )
+    if game and k_pool:
+        rates = [_random_rate_hypergeo(game, k_pool, t) for t in (3, 4, 5)]
+        if None not in rates:
+            rnd_txt = (
+                f" | la întâmplare (pool {k_pool}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
+                f"{rates[1] * 100:.2f}%/{_five_plus_pct(rates[2])} pe extragere"
+                " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"
+                " cuprind aceste extrageri: nu e o validare externă"
+            )
     return (
         f"{nn} extrageri | avg pool={ap:.2f} | avg best bilet={av:.2f} "
         f"| best pool={bp} | best bilet={bv} "
         f"| pool 3+/4+: {p3}/{p4}; bilet 3+/4+: {b3}/{b4} "
-        f"| pool 5+: {p5}; bilet 5+: {b5}{cov_txt}{jk_txt}"
+        f"| pool 5+: {p5}; bilet 5+: {b5}{cov_txt}{jk_txt}{rnd_txt}"
     )
 
 
@@ -696,6 +740,24 @@ def _build_report() -> str:
             + (f"{float(cov):.2f}%" if cov is not None else "necunoscută")
         )
         out.extend(f"{indent}{line}" for line in _wheel_probability_lines(game, d))
+        # Metoda și nota ei de încredere, ca în panou (Urna 2 cu nota ei).
+        _bw = (d.get("audit") or {}).get("bench_winner") or {}
+        for _key, _info in _bw.items():
+            out.append(
+                f"{indent}Metodă ({_key}): {_info.get('method', '?')}"
+                + (f" — rezervă: {_info.get('reason') or 'fallback'}" if _info.get("fallback") else "")
+            )
+        if game and _bw:
+            _sp_d = _game_spec_for(game, d)
+            _gk_d = (
+                _LABEL_TO_FOLDS_GAME.get(_game_label_for(game), "")
+                if _sp_d.is_romanian
+                else _sp_d.bench_key
+            )
+            out.extend(
+                f"{indent}{note}"
+                for note in _decision_notes(_bw, _gk_d, d.get("pool_size_requested") or eff)
+            )
         transform_note = _bench_transform_note(d)
         if transform_note:
             out.append(f"{indent}{transform_note}")
@@ -808,7 +870,7 @@ def _build_report() -> str:
                     out.append(f"  ({_training_only_note(_sp)})")
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
-            wf = _wf_summary(flat, d)
+            wf = _wf_summary(flat, d, g)
             if ((STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}).get("decision_moved"):
                 out.append(
                     "  Walk-forward: sărit — decizia de bench s-a schimbat după generare."
@@ -1178,6 +1240,47 @@ def _consecutive_pool_warning(pool, audit: dict | None = None) -> str | None:
     )
 
 
+def _decision_notes(bw: dict, game_key: str, pool_fallback) -> list[str]:
+    """Nota de încredere a deciziei, pe fiecare urnă din `bench_winner`.
+
+    Pool-ul jocului (`game_key`) și, la Joker, Urna 2 (top-1), fiecare cu
+    intrarea deciziei ei. Intrarea e cea a pool-ului cu care s-a ales metoda
+    (`pool_hint`), nu a pool-ului efectiv: restrângerea bazei îl poate micșora.
+    La rezervă nota lipsește (motivul e afișat deja): ar descrie o metodă care
+    nu a produs pool-ul.
+    """
+    if not game_key:
+        return []
+    keys = [game_key] + [k for k in bw if k != game_key and str(k).endswith("_urna2")]
+    notes = []
+    for key in keys:
+        info = bw.get(key) or {}
+        method = info.get("method")
+        if info.get("fallback"):
+            continue
+        hint = info.get("pool_hint") or (1 if info.get("single_pick") else pool_fallback)
+        entry = _decision_entry(key, int(hint or SETTINGS.get("pool_size_val") or 10))
+        now = _decision_entry_method(entry, key) if entry and method else method
+        prefix = ("Urna 2: " if key.endswith("_urna2") else "Urna 1: ") if len(keys) > 1 else ""
+        if now != method:
+            # Nota de încredere ar fi a altei metode decât cea care a dat pool-ul.
+            notes.append(
+                f"ℹ️ {prefix}Decizia de bench s-a schimbat după generare (Re-Bench "
+                "terminat sau țintă 3+/4+ schimbată): acum alege "
+                f"{now or 'altă metodă'} la pool {hint}, nu {method}. "
+                "Nota ei de încredere nu descrie metoda care a produs acest "
+                "pool; generează din nou pentru decizia de acum."
+            )
+        elif _decision_low_confidence(entry) is True:
+            notes.append(
+                f"⚠️ {prefix}Decizie low_confidence: nicio metodă n-a bătut random "
+                "consistent pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
+            )
+        elif mult := _multiplicity_note(entry):
+            notes.append(mult.replace("⚠️ ", f"⚠️ {prefix}", 1))
+    return notes
+
+
 def _render_pool_body(
     fname: str, game: str, data: dict, *, skey_suffix: str = ""
 ) -> None:
@@ -1357,7 +1460,8 @@ def _render_pool_body(
                     t"<br><span style='opacity:.7;font-size:.85em'>Urna 2: benchmark separat "
                     t"top-1 (1/1), cu baseline random 5%.</span>"
                 )
-            elif info.get("fallback"):
+            # Rezerva se spune și pe Urna 2: altfel `frequency` apărea drept câștigător.
+            if info.get("fallback"):
                 _why = info.get("reason") or "fallback"
                 tail += render_html_safe(
                     t"<br><span style='opacity:.7;font-size:.85em'>fallback: {_why}</span>"
@@ -1398,41 +1502,8 @@ def _render_pool_body(
             if _spec_p.is_romanian
             else _spec_p.bench_key
         )
-        if _gk_pool:
-            # Intrarea deciziei pentru pool-ul cu care s-a ales metoda (`pool_hint`),
-            # nu pentru pool-ul efectiv: restrângerea bazei îl poate micșora.
-            _info_p = bw.get(_gk_pool) or {}
-            _m_p = _info_p.get("method")
-            _hint_p = _info_p.get("pool_hint") or req or eff
-            _dec_p = _decision_entry(
-                _gk_pool, int(_hint_p or SETTINGS.get("pool_size_val") or 10)
-            )
-            _fb_p = bool(_info_p.get("fallback"))
-            _now_p = (
-                _decision_entry_method(_dec_p, _gk_pool)
-                if _dec_p and _m_p and not _fb_p
-                else _m_p
-            )
-            if _fb_p:
-                # Rezerva motorului: motivul e afișat mai sus. Nota deciziei
-                # descrie metoda care NU a produs pool-ul, deci nu se aplică.
-                pass
-            elif _now_p != _m_p:
-                # Nota de încredere ar fi a altei metode decât cea care a dat pool-ul.
-                ui.label(
-                    "ℹ️ Decizia de bench s-a schimbat după generare (Re-Bench "
-                    "terminat sau țintă 3+/4+ schimbată): acum alege "
-                    f"{_now_p or 'altă metodă'} la pool {_hint_p}, nu {_m_p}. "
-                    "Nota ei de încredere nu descrie metoda care a produs acest "
-                    "pool; generează din nou pentru decizia de acum."
-                ).classes("text-caption text-warning")
-            elif _decision_low_confidence(_dec_p) is True:
-                ui.label(
-                    "⚠️ Decizie low_confidence: nicio metodă n-a bătut random consistent "
-                    "pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
-                ).classes("text-caption text-warning")
-            elif _mult := _multiplicity_note(_dec_p):
-                ui.label(_mult).classes("text-caption text-warning")
+        for _note in _decision_notes(bw, _gk_pool, req or eff):
+            ui.label(_note).classes("text-caption text-warning")
     else:
         ui.label(
             "🎯 Metodă scorer: fallback implicit (fără decizie bench disponibilă)"

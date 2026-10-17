@@ -13,7 +13,15 @@ from nicegui import ui
 from ui_runtime import *
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
-from ui_results import PRICES, _hypergeo_params, _random_rate_hypergeo, _bench_transform_note
+from ui_results import (
+    PRICES,
+    _bench_transform_note,
+    _five_plus_pct,
+    _guarantee_gap_line,
+    _hypergeo_params,
+    _random_rate_hypergeo,
+    _ticket_pick,
+)
 from ui_bench import _render_bench_leaderboard, _render_last_csv_draw
 from ui_shared import PROJECT_ROOT, render_html_safe
 
@@ -251,14 +259,6 @@ def _full_ticket_replay(flat, game: str, tickets: int, guarantee) -> dict | None
             _REPLAY_THREAD["running"] = True
             threading.Thread(target=_replay_loop, name="ticket-replay", daemon=True).start()
     return None
-
-
-def _five_plus_pct(p) -> str:
-    """Șansa 5+ în procente: trei zecimale de la 0,1% în sus, altfel două cifre
-    semnificative. La Joker cu un bilet (2 variante) 5+ e 0,00016%, iar cu trei
-    zecimale apărea „0.000%”, ca și cum n-ar exista."""
-    value = 100.0 * float(p or 0.0)
-    return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
 
 
 def _full_ticket_replay_rows(res: dict, tickets: int) -> tuple[list[dict], int]:
@@ -699,22 +699,47 @@ def _render_hits_4plus(
             f"{sum(_jk)} din {len(_jk)} extrageri ({sum(_jk) / len(_jk) * 100:.2f}%; "
             "la întâmplare 5%)."
         ).classes("text-caption")
-    ui.label(
-        "Garanția 4 nu asigură 5 pe un bilet; compară separat hiturile pool-ului "
-        "și ale biletelor."
-    ).classes("text-caption text-grey")
+    _hp = _hypergeo_params(gk)
+    _gap = (
+        _guarantee_gap_line(
+            _wg, _ticket_pick(gk), _hp[0], "compară separat hiturile pool-ului și ale variantelor"
+        )
+        if _hp
+        else ""
+    )
+    if _gap:
+        ui.label(_gap).classes("text-caption text-grey")
     if full_ticket:
         _render_full_ticket_replay(flat, full_ticket["game"], full_ticket.get("guarantee"))
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
-    _losers = []
+    _losers, _winners = [], []
     for _lbl3, _cnt, _den, _K in _tt_checks:
         _b = _random_rate_hypergeo(gk, _K, _TT) if _K else None
-        if _b is not None and _den and (_cnt / _den) <= _b:
+        if _b is None or not _den:
+            continue
+        if (_cnt / _den) <= _b:
             _losers.append(
-                f"{_lbl3}: {_cnt / _den * 100:.1f}% ≤ random {_b * 100:.1f}%"
+                f"{_lbl3}: {_cnt / _den * 100:.2f}% ≤ random {_b * 100:.2f}%"
             )
+        else:
+            from scipy.stats import binom
+
+            _p = float(binom.sf(_cnt - 1, _den, _b))
+            _winners.append(
+                f"{_lbl3}: {_cnt / _den * 100:.2f}% față de random {_b * 100:.2f}% "
+                f"(p = {_p:.2f}, test binomial unilateral)"
+            )
+    if _winners:
+        # Peste hazard nu înseamnă validat: metoda a fost aleasă pe aceste extrageri.
+        ui.label(
+            f"ℹ️ Peste hazard (≥{_TT}): "
+            + " · ".join(_winners)
+            + ". Metoda e cea din decizia de azi, aleasă de bench pe ferestre care "
+            "cuprind și aceste extrageri, deci nu e o validare externă; un p mic aici "
+            "nu dovedește un avantaj."
+        ).classes("text-caption text-grey")
     if _losers:
         ui.label(
             f"⚠️ Onestitate (≥{_TT}): "
@@ -816,7 +841,9 @@ def _render_hits_4plus(
     )
     ui.label(
         f"🗓️ Istoric: extrageri cu ≥3 în pool-ul walk-forward de LA DATA extragerii "
-        f"(antrenat doar pe trecut, fără lookahead). 🔥 = target bench (≥{_TT}); "
+        f"(scorerul vede numai extragerile de dinainte; metoda e cea din decizia de "
+        f"azi, aleasă pe ferestre bench care cuprind și aceste extrageri). "
+        f"🔥 = target bench (≥{_TT}); "
         f"{_star_leg}Δ pe cel mai recent rând care atinge ținta = „acum X zile”; "
         f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent. "
         f"Nucleul de producție de lângă ultima extragere CSV e ALT set — nu compara 🔥 cu el."

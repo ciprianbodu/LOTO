@@ -85,7 +85,9 @@ def _at_least_five(max_num, draw_n, selected_n):
 ])
 def test_five_plus_odds_are_exact_and_keep_pool_separate_from_ticket(game, draw_n, max_num, pick):
     ticket = list(range(1, pick + 1)) + ([7] if game == "joker" else [])
-    lines = ui_results._wheel_probability_lines(game, {"hard_core": list(range(1, 9)), "variants": [ticket]})
+    lines = ui_results._wheel_probability_lines(
+        game, {"hard_core": list(range(1, 9)), "variants": [ticket], "guarantee": 4}
+    )
     expected_pool = 100 * _at_least_five(max_num, draw_n, 8)
     expected_ticket = 100 * _at_least_five(max_num, draw_n, pick)
     assert expected_pool > expected_ticket
@@ -93,7 +95,7 @@ def test_five_plus_odds_are_exact_and_keep_pool_separate_from_ticket(game, draw_
         f"5+ numere: în pool {expected_pool:.3f}%; pe cel puțin o variantă {expected_ticket:.3f}%" in line
         for line in lines
     )
-    assert "Garanția 4 nu asigură 5 pe un bilet; compară probabilitățile separate." in lines
+    assert "Garanția 4 nu asigură 5 pe o variantă; compară probabilitățile separate." in lines
 
 
 def _wf_entries():
