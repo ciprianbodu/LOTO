@@ -88,12 +88,16 @@ def test_estimate_bench_eta_uses_the_last_runs_average_runtime(tmp_path, monkeyp
     import pandas as pd
 
     monkeypatch.setattr(app, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(app, "_bench_workers", lambda: 1)
     (tmp_path / "bench_results").mkdir()
     pd.DataFrame(
         {"runtime_sec": [1.0, 2.0, 3.0], "failed": [False, False, False]}
     ).to_csv(tmp_path / "bench_results" / "folds.csv", index=False)
     # avg=2.0, target=100, overhead implicit 1.25 -> 250s -> "~4 min"
     assert app._estimate_bench_eta(100) == "~4 min"
+    # Foldurile rulează în paralel: pe 4 procese, un sfert din timp.
+    monkeypatch.setattr(app, "_bench_workers", lambda: 4)
+    assert app._estimate_bench_eta(100) == app._fmt_eta_seconds(62.5)
 
 
 def test_estimate_bench_eta_falls_back_without_prior_bench(tmp_path, monkeypatch):
@@ -115,8 +119,9 @@ def test_sidebar_label_text_matches_what_the_button_block_renders():
     with capture_ui() as ui:
         app.ui.label(
             f"⏱ ETA estimat: {eta} pentru "
-            f"{folds} folduri — calculat din durata ultimei rulări; "
-            "prima estimare după o schimbare de matrice e optimistă."
+            f"{folds} folduri pe {app._bench_workers()} procese în paralel — "
+            "din durata medie a unui fold la ultima rulare; după o schimbare "
+            "de matrice estimarea e aproximativă."
         ).classes("text-caption text-grey")
     text = ui.text()
     assert "ETA estimat" in text

@@ -1085,6 +1085,9 @@ def _render_bench_leaderboard_slice(
                 "ℹ️ Decizia a sărit ca redundanți (semnătură de performanță): "
                 + "; ".join(_dparts)
             ).classes("text-caption text-grey")
+        # Scorerul deciziei de acum; 🎯 poate fi al unei generări de dinaintea ei.
+        _dec_scorer = (_current_dec or _dec or {}).get("scorer")
+        _gen_before_dec = bool(_gen_usable and _dec_scorer and chosen_name != _dec_scorer)
         if chosen_name != winner[0]:
             # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există.
             if _conf_ok and _lift_ok:
@@ -1104,6 +1107,12 @@ def _render_bench_leaderboard_slice(
                     f"selecția folosită provine dintr-o decizie anterioară, iar bench-ul curent "
                     f"o exclude structural: {_structural_fail[chosen_name]}"
                 )
+            elif _gen_before_dec:
+                _why = (
+                    "rezultatul afișat a fost generat înaintea deciziei de acum (Re-Bench "
+                    "terminat sau țintă 3+/4+ schimbată), care alege "
+                    f"{_dec_scorer}; generează din nou pentru decizia de acum"
+                )
             elif not _gen_usable and not _saved_entry:
                 _why = (
                     "nu există decizie salvată (best_methods.json lipsește sau fără acest "
@@ -1117,10 +1126,7 @@ def _render_bench_leaderboard_slice(
                     "superioritate, diferențele sunt zgomot"
                 )
             elif _gate_applied:
-                _why = (
-                    "decizia e dintr-un bench mai vechi decât folds.csv, sau "
-                    "ensemble-ul de scoring a rămas pe alt cap de listă"
-                )
+                _why = "decizia e dintr-un bench mai vechi decât folds.csv"
             elif _dec_low is False:
                 _why = (
                     f"decizia aplică ÎN PLUS filtrul de consistență (să bată random în ≥"
@@ -1148,6 +1154,9 @@ def _render_bench_leaderboard_slice(
             ).classes("text-caption text-warning")
         _mult = _multiplicity_note(_current_dec or _dec)
         if _mult and _dec_low is not True:
+            if _gen_before_dec:
+                # Nota e a metodei din decizia de acum, nu a celei marcate 🎯.
+                _mult = _mult.replace("⚠️ ", f"⚠️ {_dec_scorer} (decizia de acum): ", 1)
             ui.label(_mult).classes("text-caption text-warning")
         if not has_family:
             ui.label(

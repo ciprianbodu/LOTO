@@ -782,6 +782,14 @@ def _build_report() -> str:
                     )
                     or "niciunul"
                 )
+                + (
+                    "; numărul Joker penalizat: "
+                    + ", ".join(
+                        str(k) for k in sorted(int(x) for x in _rp["penalized_urna2"])
+                    )
+                    if _rp.get("penalized_urna2")
+                    else ""
+                )
             )
         _rb = (d.get("audit") or {}).get("restrict_base") or {}
         _rb_text = _restrict_base_text(d.get("audit"))
@@ -1345,9 +1353,16 @@ def _render_pool_body(
         _rp = (data.get("audit") or {}).get("recent_penalty") or {}
         if int(_rp.get("draws") or 0) > 0:
             _pen = _rp.get("penalized") or {}
+            _pen_j = _rp.get("penalized_urna2") or {}
             ui.label(
                 f"Penalizare recentă: ultimele {int(_rp['draws'])} extrageri × {float(_rp.get('factor', 0.5)):.2f}"
                 f" ({len(_pen)} numere: {', '.join(str(k) for k in sorted(int(x) for x in _pen))})"
+                + (
+                    f"; Urna 2 (numărul Joker): "
+                    f"{', '.join(str(k) for k in sorted(int(x) for x in _pen_j))}"
+                    if _pen_j
+                    else ""
+                )
             ).classes("text-caption")
         _rb = (data.get("audit") or {}).get("restrict_base") or {}
         _rb_text = _restrict_base_text(data.get("audit"))

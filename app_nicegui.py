@@ -284,6 +284,19 @@ def apply_autopilot_and_generate() -> None:
                     else ""
                 )
                 recs.append(f"{gk}: {cfg.get('scorer')}{low}{sub}")
+            # Numărul Joker are decizia lui (Urna 2, top-1), cu nota ei.
+            if _spec.is_romanian and _spec.geometry == "joker":
+                gk2 = _spec.bench_key_urna2 or f"{gk}_urna2"
+                cfg2 = recommend_optimal_config(gk2, 1)
+                if cfg2 and not cfg2.get("fallback"):
+                    low2 = (
+                        " · low_confidence"
+                        if cfg2.get("low_confidence")
+                        else " · avantaj nedemonstrat (Holm)"
+                        if (cfg2.get("multiplicity") or {}).get("proven") is False
+                        else ""
+                    )
+                    recs.append(f"{gk2}: {cfg2.get('scorer')}{low2}")
         if recs:
             ui.notify(
                 "Auto-Pilot (scorer per joc, din Re-Bench): " + " | ".join(recs),
@@ -675,10 +688,21 @@ def _avg_fold_runtime(fp, game_key: str | None = None) -> float | None:
     return float(real["runtime_sec"].mean())
 
 
+def _bench_workers() -> int:
+    """Procesele în care rulează bench-ul pe această stație (același calcul ca runner-ul)."""
+    try:
+        from loto_enterprise.benchmark.runner import bench_worker_count
+
+        return bench_worker_count()
+    except Exception:  # noqa: BLE001
+        return 1
+
+
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
     """ETA bench pe baza ULTIMEI rulări (bench_results/folds.csv): avg runtime_sec
-    al folds-urilor reale × nr. folds × overhead. Fallback la estimarea implicită
-    dacă nu există bench anterior."""
+    al folds-urilor reale × nr. folds × overhead, împărțit la procesele în care
+    rulează în paralel (`runtime_sec` e timpul unui fold într-un proces).
+    Fallback la estimarea implicită dacă nu există bench anterior."""
     default = "~50 min" if target_folds >= 1000 else "~5 min"
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
@@ -687,7 +711,7 @@ def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
         avg = _avg_fold_runtime(fp)
         if avg is None:
             return default
-        return _fmt_eta_seconds(avg * target_folds * overhead)
+        return _fmt_eta_seconds(avg * target_folds * overhead / _bench_workers())
     except Exception:  # noqa: BLE001
         return default
 
@@ -698,6 +722,11 @@ def _csv_rows(path) -> int:
             return max(0, sum(1 for _ in fh) - 1)
     except OSError:
         return 0
+
+
+def _new_draws_text(n: int) -> str:
+    """„1 extragere nouă”, „5 extrageri noi”, „20 de extrageri noi”."""
+    return "1 extragere nouă" if int(n) == 1 else f"{count(n, 'extrageri')} noi"
 
 
 def _bench_target_rule_text(country: str) -> str:
@@ -776,8 +805,9 @@ def _country_bench_texts(country: str) -> dict:
         avg = _avg_fold_runtime(fp)
         if avg is not None:
             eta = (
-                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25)} pentru "
-                f"{target} folduri — calculat din durata ultimei rulări {name}."
+                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25 / _bench_workers())} "
+                f"pentru {target} folduri pe {_bench_workers()} procese — din durata "
+                f"medie a unui fold la ultima rulare {name}."
             )
     except Exception:  # noqa: BLE001
         eta = None
@@ -824,7 +854,7 @@ def _country_bench_texts(country: str) -> dict:
             )
             if rec in ("quick_rebench", "full_rebench") and delta > 0:
                 out["freshness"] = (
-                    f"🆕 {name}: +{delta} extrageri noi de la ultimul bench → "
+                    f"🆕 {name}: +{_new_draws_text(delta)} de la ultimul bench → "
                     "Re-Bench recalculează complet."
                 )
             elif rec in ("quick_rebench", "full_rebench"):
@@ -1299,6 +1329,12 @@ def _load_cached_walk_forward() -> int:
                     "cache ar fi a altei metode; nu o afișez.",
                     g_label,
                 )
+                if _decision_moved_since_generation(g_label, data):
+                    # Același aviz ca la calea live, nu o secțiune care lipsește.
+                    with STATE_LOCK:
+                        STATE.setdefault("retro_meta", {})[f"{fname}_{g_label}"] = {
+                            "decision_moved": True
+                        }
                 continue
             flat, meta = run_honest_walk_forward(
                 df_source=df_source,
@@ -2336,7 +2372,7 @@ def _bench_freshness_panel(country: str) -> None:
         parts = ", ".join(f"{labels.get(gk, gk)} +{d}" for gk, d in fresh["per"].items())
         color = "text-negative" if fresh["rec"] == "full_rebench" else "text-warning"
         total = fresh["total"]
-        ui.label(f"🆕 +{total} extrageri noi de la ultimul bench ({parts}).").classes(
+        ui.label(f"🆕 +{_new_draws_text(total)} de la ultimul bench ({parts}).").classes(
             "text-caption " + color
         )
         ui.label(
@@ -2523,17 +2559,19 @@ def _base_table_games(country=None) -> tuple:
     )
 
 
-_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool) → (rânduri, n_extrageri)
-# 3 jocuri × pool 6..16 = 33 combinații. Sub atât, memo-ul se golea înainte să
-# apuce să fie folosit: o plimbare înainte și înapoi peste dimensiunile de pool
-# recalcula tot de fiecare dată.
-_BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11
+_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool, țintă) → (rânduri, n)
+# 3 jocuri × pool 6..16 × ținta 3/4 = 66 de combinații. Sub atât, memo-ul se
+# golea înainte să apuce să fie folosit: o plimbare înainte și înapoi peste
+# dimensiunile de pool recalcula tot de fiecare dată.
+_BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11 * 2
 # Tabelul se calculează abia când submeniul e deschis: ~0.7 s pentru trei jocuri
 # ar fi fost plătiți la fiecare încărcare de pagină, chiar fără să fie deschis.
 _BASE_TABLE_OPENED = {"value": False}
 
 
-def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int):
+def _base_interval_rows(
+    csv_name: str, draw_n: int, max_num: int, pool_size: int, target: int = 3
+):
     """Tabelul de intervale al unui joc, memoizat pe fișier + geometrie + pool.
 
     Calculul e exact (hipergeometric per extragere), nu simulare, și durează sub
@@ -2554,7 +2592,7 @@ def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int
         stat = path.stat()
     except OSError:
         return None
-    key = (str(path), stat.st_mtime_ns, stat.st_size, draw_n, max_num, pool_size)
+    key = (str(path), stat.st_mtime_ns, stat.st_size, draw_n, max_num, pool_size, target)
     if key in _BASE_TABLE_MEMO:
         return _BASE_TABLE_MEMO[key]
     try:
@@ -2564,7 +2602,10 @@ def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int
             draw_n=draw_n,
             max_num=max_num,
         )
-        result = (interval_table(draws, max_num, pool_size, draw_n), len(draws))
+        result = (
+            interval_table(draws, max_num, pool_size, draw_n, target=target),
+            len(draws),
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("tabel intervale %s: %s", csv_name, exc)
         return None
@@ -2595,10 +2636,13 @@ def _render_base_interval_tables() -> None:
     # `ui.number` își aplică min/max abia la blur, deci în timpul tastării pot
     # ajunge aici valori ca 0 sau 1. Fără plafonare, geometria era invalidă și
     # tabelul raporta „istoric indisponibil" pentru un istoric perfect valid.
+    from loto_enterprise.benchmark.hit_target import game_hit_target
+
     pool = max(6, min(16, _int_setting("pool_size_val")))
     ui.label(
-        f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată de 3+ "
-        f"la un pool de {pool} numere. Calcul exact (hipergeometric per extragere), "
+        f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată la ținta "
+        f"jocului (ca bench-ul: Loto 5/40 minimum 4+), la un pool de {pool} numere. "
+        "Calcul exact (hipergeometric per extragere), "
         "nu simulare. Coloana «Toată extragerea» e altceva: de câte ori au încăput "
         "TOATE numerele extrase în interval — plafonul unui sistem care ar juca "
         "întregul interval, nu rata unui pool de dimensiune fixă. Ultimul rând este "
@@ -2607,14 +2651,17 @@ def _render_base_interval_tables() -> None:
     for label, csv_name, draw_n, max_num in _base_table_games():
         if pool > max_num:
             continue
-        data = _base_interval_rows(csv_name, draw_n, max_num, pool)
+        _t = game_hit_target(_game_spec_for(csv_name).bench_key, _clamped_bench_target())
+        data = _base_interval_rows(csv_name, draw_n, max_num, pool, _t)
         if data is None:
             ui.label(f"· {label}: istoric indisponibil.").classes(
                 "text-caption text-grey"
             )
             continue
         rows, n_draws = data
-        with ui.expansion(f"{label} — {n_draws} extrageri", value=False).classes(
+        with ui.expansion(
+            f"{label} — {count(n_draws, 'extrageri')}, ținta {_t}+", value=False
+        ).classes(
             "w-full"
         ):
             ui.table(
@@ -2666,7 +2713,7 @@ def _render_base_interval_tables() -> None:
             )
             ui.label(
                 f"Referință teoretică, identică pentru ORICE pool de {pool} numere: "
-                f"{theoretical_rate(max_num, pool, draw_n):.2f}%. "
+                f"{theoretical_rate(max_num, pool, draw_n, _t):.2f}%. "
                 f"Din {count(len(rows) - 1, 'intervale', 'un interval')} alese pe tot "
                 f"istoricul, {'unul a' if _moved == 1 else f'{_moved} au'} ieșit mai "
                 "slabe pe a doua jumătate decât pe prima."
@@ -2930,7 +2977,7 @@ def main_page() -> None:
             "Scorul unui număr extras de k ori în ultimele N extrageri se înmulțește cu factor^k. "
             "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
             "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
-            "Walk-forward aplică aceeași setare."
+            "La Joker se aplică și numărului din Urna 2. Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.checkbox("🔗 Fără 3 numere consecutive în pool (activ implicit)").classes(
@@ -2943,7 +2990,7 @@ def main_page() -> None:
             "la repornire. Setarea se aplică la următoarea generare. "
             "Pool-ul se ia tot după clasamentul metodei. Numărul care ar forma al "
             "treilea consecutiv este sărit, iar locul lui îl ia următorul număr din "
-            "clasament care nu formează o secvență. Fereastra rezultatului arată ce "
+            "clasament care nu formează trei numere consecutive. Fereastra rezultatului arată ce "
             "număr a fost scos din pool și ce număr i-a luat locul. Preferință de "
             "compoziție, fără avantaj statistic demonstrat; walk-forward aplică "
             "aceeași regulă."
@@ -3175,8 +3222,9 @@ def main_page() -> None:
             if _eta_folds:
                 ui.label(
                     f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
-                    f"{_eta_folds} folduri — calculat din durata ultimei rulări; "
-                    "prima estimare după o schimbare de matrice e optimistă."
+                    f"{_eta_folds} folduri pe {_bench_workers()} procese în paralel — "
+                    "din durata medie a unui fold la ultima rulare; după o schimbare "
+                    "de matrice estimarea e aproximativă."
                 ).classes("text-caption text-grey")
             # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
             # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.

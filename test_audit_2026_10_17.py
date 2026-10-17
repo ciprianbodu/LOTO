@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import app_nicegui  # noqa: F401  (importul leagă numele UI, ca aplicația)
+import pandas as pd
 import ui_results
 
 
@@ -245,3 +246,126 @@ def test_romanian_counts_in_the_hits_panel():
     assert ui_hits._n_extrageri(777) == "777 de extrageri"
     assert ui_hits._n_extrageri(1) == "1 extragere"
     assert ui_hits._n_extrageri(15) == "15 extrageri"
+
+
+def test_recovery_with_a_moved_decision_says_why_the_history_is_missing(monkeypatch):
+    # Înainte: secțiunea lipsea fără aviz; calea live scria „Walk-forward sărit”.
+    import loto_enterprise.core.walk_forward_adapter as wfa
+    import pandas as pd
+
+    calls = []
+    monkeypatch.setattr(wfa, "run_honest_walk_forward", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(app_nicegui, "_result_scorers_match_decision", lambda *_: False)
+    data = {
+        "pool_size": 16,
+        "guarantee": 4,
+        "audit": {"bench_winner": {"loto_6_49": {"method": "markov_lag2", "pool_hint": 16}}},
+    }
+    for key, value in {
+        "results": ([("loto_6_49.csv", {"6/49": data})], 1),
+        "result_sources": {"loto_6_49.csv": pd.DataFrame({"n1": [1]})},
+        "retro": {},
+        "retro_meta": {},
+    }.items():
+        monkeypatch.setitem(app_nicegui.STATE, key, value)
+    assert app_nicegui._load_cached_walk_forward() == 0
+    assert calls == []
+    assert app_nicegui.STATE["retro_meta"]["loto_6_49.csv_6/49"] == {"decision_moved": True}
+
+
+def test_new_draws_count_agrees_in_romanian():
+    assert app_nicegui._new_draws_text(1) == "1 extragere nouă"
+    assert app_nicegui._new_draws_text(3) == "3 extrageri noi"
+    assert app_nicegui._new_draws_text(25) == "25 de extrageri noi"
+
+
+def test_leaderboard_names_a_generation_made_before_the_current_decision(monkeypatch):
+    # Înainte: 🎯 rămânea pe metoda veche, nota Holm era a câștigătorului nou,
+    # iar motivul invocat era un ensemble imposibil cu ENSEMBLE_MAX_METHODS = 1.
+    import ui_bench
+    from loto_enterprise.benchmark import decision
+    from scripts.analysis.audit_output import capture_ui
+    from test_output_consistency import _folds
+
+    df = _folds()
+    extra = df[df["method"] == "frequency"].copy()
+    extra["method"] = "croston_interval"
+    extra["rate_3plus_k11"] = 0.095
+    df = pd.concat([df, extra], ignore_index=True)
+    monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
+    monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
+    monkeypatch.setattr(app_nicegui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
+    monkeypatch.setattr(
+        ui_bench, "_last_generation_bench_info", lambda *_a, **_k: {"method": "croston_interval"}
+    )
+    with capture_ui() as ui:
+        ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
+    text = ui.text()
+    assert "generat înaintea deciziei de acum" in text and "care alege frequency" in text
+    assert "ensemble-ul de scoring a rămas pe alt cap de listă" not in text
+    for line in text.splitlines():
+        if "Avantaj nedemonstrat" in line:
+            assert line.startswith("⚠️ frequency (decizia de acum): ")
+
+
+def test_autopilot_notification_names_the_joker_number_method(monkeypatch):
+    # AGENTS §5.10: „avantaj nedemonstrat” și în notificarea Auto-Pilot; Urna 2 lipsea.
+    import loto_enterprise.core.method_selector as ms
+    from loto_enterprise.core.lotteries import lottery_by_id
+
+    asked, notes = [], []
+
+    def _rec(key, pool, **_kw):
+        asked.append((key, pool))
+        proven = key != "joker_urna2"
+        return {"scorer": f"m_{key}", "multiplicity": {"proven": proven}, "sim_depth_pct": 30}
+
+    monkeypatch.setattr(ms, "recommend_optimal_config", _rec)
+    monkeypatch.setattr(app_nicegui, "_selected_games", lambda: [lottery_by_id("joker")])
+    monkeypatch.setattr(app_nicegui, "submit_generation", lambda **_kw: None)
+    monkeypatch.setattr(app_nicegui.ui, "notify", lambda msg, **_kw: notes.append(msg))
+    monkeypatch.setitem(app_nicegui.STATE, "datasets", [("joker.csv", None)])
+    app_nicegui.apply_autopilot_and_generate()
+    assert ("joker_urna2", 1) in asked
+    assert "joker_urna1: m_joker_urna1 | joker_urna2: m_joker_urna2 · avantaj nedemonstrat (Holm)" in notes[0]
+
+
+def test_interval_table_ranks_by_the_games_target(monkeypatch):
+    # Înainte: mereu 3+, și la 5/40, unde 3 numere nu aduc premiu (ținta 4+).
+    from scripts.analysis.audit_output import capture_ui
+
+    seen = []
+    real = app_nicegui._base_interval_rows
+
+    def _spy(csv_name, draw_n, max_num, pool, target=3):
+        seen.append((csv_name, target))
+        return real(csv_name, draw_n, max_num, pool, target)
+
+    monkeypatch.setattr(app_nicegui, "_base_interval_rows", _spy)
+    monkeypatch.setitem(app_nicegui._BASE_TABLE_OPENED, "value", True)
+    monkeypatch.setitem(app_nicegui.SETTINGS, "pool_size_val", 12)
+    monkeypatch.setitem(app_nicegui.SETTINGS, "bench_hit_target", 3)
+    with capture_ui() as ui:
+        app_nicegui._render_base_interval_tables.func()
+    targets = dict(seen)
+    assert targets["loto_5_40.csv"] == 4 and targets["loto_6_49.csv"] == 3
+    assert any("ținta 4+" in str(n["args"][0]) for n in ui.walk() if n["kind"] == "expansion")
+
+
+def test_hits_header_says_which_pool_and_settings_are_counted(monkeypatch):
+    import ui_hits
+    from scripts.analysis.audit_output import capture_ui
+
+    flat = _wf_flat([3, 1, 4])
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(flat, "6/49", {"pool_size": 16}, pool_n=16)
+    text = ui.text()
+    assert "numărată pe pool-ul ales ATUNCI, numai din extragerile de dinainte, nu pe pool-ul de azi" in text
+    assert "Fără limită de consecutive. Fără restrângerea bazei." in text
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(
+            flat, "6/49", {"pool_size": 16}, pool_n=16, consecutive_limit_text="limita 2"
+        )
+    assert "Fără limită de consecutive" not in ui.text()
+    summary = next(n for n in ui.walk() if n["kind"] == "table")
+    assert summary["kwargs"]["columns"][1]["label"] == "🎯 Pool de atunci (din 16)"

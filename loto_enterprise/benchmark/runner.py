@@ -631,6 +631,36 @@ def _methods_for_game(
     return list(dict.fromkeys(m for m in methods_per_game[game_key] if m in allowed))
 
 
+_PER_PROC_GB = 0.6
+
+
+def _bench_worker_budget() -> tuple[float, int, int]:
+    """(RAM disponibil GB, buget de procese după RAM, plafon CPU ~75% din nuclee).
+
+    Același calcul pentru bench și pentru ETA-ul din UI. 0.6 GB/proces a fost
+    calibrat când registry-ul aducea sklearn+statsmodels; de la 14.09.2026
+    stack-ul e doar numpy+scipy, deci estimarea e CONSERVATOARE (pornesc mai
+    puține procese decât ar încăpea). Rămâne așa până la o măsurătoare reală a
+    RSS-ului per worker: o scădere ghicită readuce eroarea de commit-limit."""
+    import os as _os
+
+    try:
+        import psutil as _ps
+
+        avail_gb = _ps.virtual_memory().available / (1024**3)
+    except Exception:  # noqa: BLE001
+        avail_gb = 8.0
+    proc_budget = max(2, int((avail_gb * 0.50) / _PER_PROC_GB))  # ~50% din RAM liber
+    nc = _os.cpu_count() or 4
+    return avail_gb, proc_budget, nc - max(2, nc // 4)
+
+
+def bench_worker_count() -> int:
+    """Câte procese folosește bench-ul pe această stație (ca `run_benchmark`)."""
+    _avail, proc_budget, cpu_cap = _bench_worker_budget()
+    return max(1, min(cpu_cap, proc_budget))
+
+
 def run_benchmark(
     games: list[GameDef],
     methods: list[str],
@@ -922,25 +952,11 @@ def run_benchmark(
     # Fiecare fold rulează într-un proces izolat → starea globală (RNG numpy) NU se
     # contaminează între folds concurente → rezultat determinist, identic cu rularea
     # secvențială (spre deosebire de thread-uri care ar partaja RNG-ul global).
-    _nc = _os.cpu_count() or 4
-
     # ── BUGET DE MEMORIE pentru procese (evită commit-limit Windows 0xc000012d) ──────
     # Worker-ele CPU importă registry-ul de metode (numpy + scipy) și își țin
-    # propriile matrice-indicator. Limităm numărul de procese după RAM-ul
-    # DISPONIBIL ca să nu-l epuizăm.
-    # 0.6 GB/proces a fost calibrat când registry-ul aducea sklearn+statsmodels;
-    # de la 14.09.2026 stack-ul e doar numpy+scipy, deci estimarea e acum
-    # CONSERVATOARE (pornesc mai puține procese decât ar încăpea). Rămâne așa
-    # până la o măsurătoare reală a RSS-ului per worker — o scădere ghicită
-    # readuce exact eroarea de commit-limit pentru care există plafonul.
-    _PER_PROC_GB = 0.6
-    try:
-        import psutil as _ps
-
-        _avail_gb = _ps.virtual_memory().available / (1024**3)
-    except Exception:  # noqa: BLE001
-        _avail_gb = 8.0
-    _proc_budget = max(2, int((_avail_gb * 0.50) / _PER_PROC_GB))  # ~50%% din RAM liber
+    # propriile matrice-indicator; procesele se limitează după RAM-ul DISPONIBIL
+    # și la ~75% din nuclee (`_bench_worker_budget`, același calcul ca ETA-ul din UI).
+    _avail_gb, _proc_budget, _cpu_cap = _bench_worker_budget()
 
     # Worker-e SINGLE-THREAD BLAS → N procese = N nuclee CURAT (fără oversubscription).
     # Metodele-s independente → paralelismul pe PROCESE bate threading-ul BLAS intra-metodă.
@@ -951,7 +967,6 @@ def run_benchmark(
         "NUMEXPR_NUM_THREADS",
     ):
         _os.environ.setdefault(_tv, "1")
-    _cpu_cap = _nc - max(2, _nc // 4)  # ~75% din nuclee
     n_workers = max(1, min(_cpu_cap, _proc_budget))
     logger.info(
         "[bench] RAM disp %.1f GB → buget %d procese (CPU=%d) "

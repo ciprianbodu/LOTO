@@ -556,6 +556,21 @@ def _render_hits_4plus(
     ui.label(f"🎯 Istoric hits (din {_n_extrageri(n)} walk-forward):").classes(
         "text-bold text-caption mt-2"
     )
+    # Ce se numără: pool-ul fiecărei extrageri, refăcut atunci; setările sunt ale
+    # rezultatului afișat, nu cele din stânga (care pot fi schimbate între timp).
+    _off = "".join(
+        txt
+        for on, txt in (
+            (not consecutive_limit_text, " Fără limită de consecutive."),
+            (not restrict_base_text, " Fără restrângerea bazei."),
+        )
+        if on
+    )
+    ui.label(
+        "Fiecare extragere e numărată pe pool-ul ales ATUNCI, numai din extragerile "
+        "de dinainte, nu pe pool-ul de azi. Setările sunt ale rezultatului afișat; "
+        f"cele din stânga se aplică la generarea următoare.{_off}"
+    ).classes("text-caption text-grey")
     if restrict_base_text:
         ui.label(
             f"{restrict_base_text[0].upper() + restrict_base_text[1:]} — istoricul "
@@ -638,7 +653,7 @@ def _render_hits_4plus(
             {"name": "prag", "label": "Extrageri cu", "field": "prag", "align": "left"},
             {
                 "name": "pool",
-                "label": f"🎯 Pool (din {_pn})" if _pn else "🎯 Pool",
+                "label": f"🎯 Pool de atunci (din {_pn})" if _pn else "🎯 Pool de atunci",
                 "field": "pool",
                 "align": "center",
             },

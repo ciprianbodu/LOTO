@@ -271,16 +271,20 @@ def test_memo_survives_a_walk_over_every_pool_size():
 
     app._BASE_TABLE_MEMO.clear()
     app._BASE_TABLE_OPENED["value"] = True
-    for pool in range(6, 17):
-        for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES:
-            assert app._base_interval_rows(csv_name, draw_n, max_num, pool) is not None
+    walk = [
+        (csv_name, draw_n, max_num, pool, target)
+        for target in (3, 4)  # ținta jocului: 3+ sau 4+
+        for pool in range(6, 17)
+        for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES
+    ]
+    for args in walk:
+        assert app._base_interval_rows(*args) is not None
     filled = len(app._BASE_TABLE_MEMO)
     assert filled == app._BASE_TABLE_MEMO_MAX
     # A doua trecere peste aceleasi valori nu mai are voie sa evacueze nimic.
     snapshot = dict(app._BASE_TABLE_MEMO)
-    for pool in range(6, 17):
-        for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES:
-            app._base_interval_rows(csv_name, draw_n, max_num, pool)
+    for args in walk:
+        app._base_interval_rows(*args)
     assert app._BASE_TABLE_MEMO == snapshot
 
 
