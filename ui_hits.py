@@ -439,13 +439,20 @@ def _wf_pool_size(flat, fallback: int) -> int:
     return max(sizes, key=lambda k: (sizes[k], k))
 
 
-def _wf_per_draw_stats(flat) -> dict:
+def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
     """Dedup walk-forward pe extragere: pool hits_union.
 
     `flat` are o intrare per (extragere × variantă); aici păstrăm o singură
     intrare per extragere, fiindcă `hits_union` (câte numere din POOL au ieșit)
-    e identic pentru toate variantele aceleiași extrageri."""
+    e identic pentru toate variantele aceleiași extrageri.
+
+    Din `ticket_context` al pasului vin și numerele: `pool_numbers` (pool-ul
+    jucat ATUNCI, ales numai din extragerile de dinainte), `drawn` (extragerea)
+    și `best_variant` (primul bilet cu cele mai multe numere prinse; la Joker
+    fără numărul Joker, `game_type` = geometria). Liste goale = pas dintr-un
+    cache scris înainte de context."""
     per: dict = {}
+    from loto_enterprise.core.backtesting import scored_variant_numbers
     from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
 
     hits = per_draw_hit_summary(flat)
@@ -453,11 +460,44 @@ def _wf_per_draw_stats(flat) -> dict:
         di = getattr(p, "draw_index", 0)
         if di not in per:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+            ctx = getattr(p, "ticket_context", None) or {}
             per[di] = {
                 "label": str(dd) if dd and str(dd) != "None" else f"#{di}",
                 **hits[int(di)],
+                "pool_numbers": sorted(int(x) for x in (ctx.get("hard_core") or [])),
+                "drawn": sorted(int(x) for x in (ctx.get("actual") or [])),
+                "best_variant": None,
             }
+        row = per[di]
+        if row["best_variant"] is None and int(getattr(p, "hits", 0) or 0) == int(
+            row["best_ticket"]
+        ):
+            variant = list(getattr(p, "variant", None) or [])
+            nums = scored_variant_numbers(variant, game_type) if game_type else variant
+            row["best_variant"] = sorted(int(x) for x in nums)
     return per
+
+
+def _wf_marked_numbers(numbers, marked) -> tuple[str, list[dict]]:
+    """Text simplu și lista pentru celula cu numerele ieșite îngroșate."""
+    nums = [int(x) for x in numbers or []]
+    if not nums:
+        return "—", []
+    hit = {int(x) for x in marked or []}
+    text = " ".join(f"[{n}]" if n in hit else str(n) for n in nums)
+    return text, [{"v": n, "hit": n in hit} for n in nums]
+
+
+# Celulă Quasar care îngroașă numerele ieșite; fără listă, textul simplu.
+_WF_MARKED_CELL = r"""
+<q-td :props="props">
+  <template v-if="props.row[props.col.name + '_marks'] && props.row[props.col.name + '_marks'].length">
+    <span v-for="(m, i) in props.row[props.col.name + '_marks']" :key="i"
+          :class="m.hit ? 'text-weight-bolder text-positive' : ''">{{ m.v }}{{ i + 1 < props.row[props.col.name + '_marks'].length ? ' ' : '' }}</span>
+  </template>
+  <span v-else>{{ props.value }}</span>
+</q-td>
+"""
 
 
 def _render_hits_4plus(
@@ -483,7 +523,7 @@ def _render_hits_4plus(
     """
     if not flat:
         return
-    per = _wf_per_draw_stats(flat)
+    per = _wf_per_draw_stats(flat, _game_label_for(game))
     n = len(per)
     if not n:
         ui.label("Niciun istoric walk-forward.").classes("text-caption text-grey")
@@ -672,7 +712,9 @@ def _render_hits_4plus(
         h = int(d["pool"])
         return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
 
-    def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label=None):
+    def _dates_table(
+        title, pred, badge, empty_msg, gap_on=None, gap_label=None, details=()
+    ):
         items = [(di, d) for di, d in per.items() if pred(d)]
         if not items:
             ui.label(empty_msg).classes("text-caption text-grey mt-2")
@@ -684,30 +726,40 @@ def _render_hits_4plus(
         _gl = gap_label or f"Δ până la următorul ≥{_TT} (sau azi)"
         rows = []
         for di, d in sorted(items, key=lambda kv: kv[0], reverse=True):
-            rows.append(
-                {
-                    "draw": d["label"],
-                    "hits": badge(d),
-                    "gap": gap_txt.get(di, "—") if _gp(d) else "—",
-                }
-            )
+            row = {
+                "draw": d["label"],
+                "hits": badge(d),
+                "gap": gap_txt.get(di, "—") if _gp(d) else "—",
+            }
+            for name, _label, numbers, marked in details:
+                row[name], row[f"{name}_marks"] = _wf_marked_numbers(numbers(d), marked(d))
+            rows.append(row)
         ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes(
             "text-bold text-caption mt-3"
         )
-        ui.table(
+        # Data și nimeritele pe un rând; numerele și intervalul se rup pe telefon.
+        _nw = {"classes": "text-no-wrap"}
+        table = ui.table(
             columns=[
-                {"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                {"name": "draw", "label": "Data", "field": "draw", "align": "left", **_nw},
                 {
                     "name": "hits",
                     "label": "Nimerite",
                     "field": "hits",
                     "align": "center",
+                    **_nw,
                 },
+                *(
+                    {"name": name, "label": label, "field": name, "align": "left"}
+                    for name, label, _numbers, _marked in details
+                ),
                 {"name": "gap", "label": _gl, "field": "gap", "align": "center"},
             ],
             rows=rows,
             pagination=15,
-        ).classes("w-full").props("dense")
+        ).classes("w-full").props("dense wrap-cells")
+        for name, _label, _numbers, _marked in details:
+            table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
     # Legendă condiționată de țintă: la _TT==3 orice ≥3 primește 🔥, deci ⭐ nu
     # apare niciodată → mențiunea lui ar fi text mort/contradictoriu.
@@ -721,6 +773,17 @@ def _render_hits_4plus(
         f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent. "
         f"Nucleul de producție de lângă ultima extragere CSV e ALT set — nu compara 🔥 cu el."
     ).classes("text-caption text-grey mt-2")
+    _pool_n_txt = f"{_pn} numere" if _pn else "numerele lui"
+    ui.label(
+        f"„Pool-ul de atunci” = cele {_pool_n_txt} alese de metodă la data extragerii, "
+        "numai din extragerile de dinainte, cu setările rezultatului afișat (nu "
+        "pool-ul de azi). Numerele care au ieșit sunt îngroșate."
+    ).classes("text-caption text-grey")
+    if any(not d["pool_numbers"] for d in per.values() if d["pool"] >= 3):
+        ui.label(
+            "Unele extrageri vin dintr-o validare salvată înainte ca pool-ul pasului "
+            "să fie păstrat („—”); se completează la următoarea validare walk-forward."
+        ).classes("text-caption text-grey")
     _dates_table(
         "🗓️ POOL",
         lambda d: d["pool"] >= 3,
@@ -728,13 +791,24 @@ def _render_hits_4plus(
         "Pool-ul n-a prins ≥3 în istoricul walk-forward.",
         gap_on=lambda d: d["pool"] >= _TT,
         gap_label=f"Δ → următorul ≥{_TT} / azi",
+        details=(
+            ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["pool_numbers"]),
+            (
+                "pool_nums",
+                "Pool-ul de atunci",
+                lambda d: d["pool_numbers"],
+                lambda d: d["drawn"],
+            ),
+        ),
     )
     with ui.expansion("🎟️ Bilete WF cu 4+ și 5+ — date și intervale", value=False).classes(
         "w-full"
     ):
         ui.label(
             "Fiecare rând este o extragere cu cel puțin un bilet la pragul indicat. "
-            "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții."
+            "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții. "
+            "„Biletul” = varianta jucată atunci cu cele mai multe numere prinse; "
+            "numerele ieșite sunt îngroșate."
         ).classes("text-caption text-grey")
         for threshold in (4, 5):
             _dates_table(
@@ -743,6 +817,15 @@ def _render_hits_4plus(
                 lambda d: f"{int(d['best_ticket'])} numere",
                 f"Niciun bilet nu a prins ≥{threshold} în istoricul walk-forward.",
                 gap_label=f"Δ → următorul ≥{threshold} pe bilet / azi",
+                details=(
+                    (
+                        "ticket",
+                        "Biletul",
+                        lambda d: d["best_variant"],
+                        lambda d: d["drawn"],
+                    ),
+                    ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["best_variant"]),
+                ),
             )
 
 

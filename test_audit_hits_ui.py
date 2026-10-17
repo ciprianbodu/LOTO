@@ -134,7 +134,11 @@ def test_wf_table_and_ticket_gaps_use_each_threshold_separately(monkeypatch):
     five = tables[1]["kwargs"]["rows"]
     assert [row["draw"] for row in four] == ["15-09-2026", "08-09-2026", "05-09-2026", "01-09-2026"]
     assert [row["gap"] for row in four] == ["acum 16 zile", "7 zile", "3 zile", "4 zile"]
-    assert five == [{"draw": "05-09-2026", "hits": "5 numere", "gap": "acum 26 zile"}]
+    assert [{k: r[k] for k in ("draw", "hits", "gap")} for r in five] == [
+        {"draw": "05-09-2026", "hits": "5 numere", "gap": "acum 26 zile"}
+    ]
+    # Fixture fără `ticket_context`: biletul și extragerea lipsesc, nu se inventează.
+    assert five[0]["ticket"] == five[0]["drawn"] == "—"
 
 
 def test_five_plus_probabilities_and_counts_are_shared_with_saved_report(monkeypatch):
