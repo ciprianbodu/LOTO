@@ -2,8 +2,8 @@
 # numere: 10
 # variante: 51
 # Sursa: https://www.loto.ro/images/upload/pages/extras_brosura_Loto540.pdf (sha256 e7b8775508e3445b610c375fd36faa9461dfe4d0718609ede598bc97f7c8efcc)
-# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare (brosura 6/49,
-# exemplul 3: numerele teoretice 1..n fata de numerele jucate, crescator).
+# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare, ca la 6/49
+# (brosura 6/49, exemplul 3); brosura acestui joc nu spune ordinea.
 # Verificat exact pe indexul de castiguri tiparit (scripts/analysis/import_lr_schemes.py).
 1 2 3 4 5
 1 2 3 4 6

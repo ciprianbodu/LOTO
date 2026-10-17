@@ -557,10 +557,19 @@ def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: floa
     res = _lr_replay(per, game_label)
     if not res:
         sizes = sorted({s.n for s in lr_schemes(game_label)})
-        if sizes and pool_n:
+        here = lr_schemes(game_label, pool_n) if pool_n else []
+        if here:
+            # Codul există, dar pașii n-au pool-ul în context (validare veche).
             ui.label(
-                f"📋 Schemă redusă LR: Loteria Română nu are cod pentru {pool_n} numere "
-                f"la acest joc (are pentru {', '.join(map(str, sizes))})."
+                f"📋 {', '.join(s.label for s in here)}: reluarea cere pool-ul fiecărei "
+                "extrageri, păstrat numai de validările noi; apare la următoarea "
+                "validare walk-forward."
+            ).classes("text-caption text-grey")
+        elif sizes and pool_n:
+            ui.label(
+                f"📋 Schemă redusă LR: Loteria Română nu are schemă cu variante întregi "
+                f"pentru {pool_n} numere la acest joc (are pentru "
+                f"{', '.join(map(str, sizes))})."
             ).classes("text-caption text-grey")
         return
     for r in res:

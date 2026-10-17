@@ -94,9 +94,14 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   - 6/49: 7 scheme;
   - 5/40: 16 scheme;
   - Joker: 10 scheme.
-  Fisierele sunt `covering_designs/lr/LR_<joc>_cod<NN>.txt` (pozitii 1..n,
-  1 = cel mai mic numar jucat, ca la terminal), iar indexurile tiparite sunt in
-  `index_oficial.json`. `test_lr_schemes.py` le recalculeaza din fisiere.
+  Cele 18 scheme 6/49 cu variante de 2-4 numere (combinate compuse) sunt sarite
+  si listate. Fisierele sunt `covering_designs/lr/LR_<joc>_cod<NN>.txt` (pozitii
+  1..n, 1 = cel mai mic numar jucat; brosura 6/49, exemplul 3, o arata, iar la
+  5/40 si Joker e presupusa si spusa in panou). `index_oficial.json` tine
+  indexurile tiparite si amprenta variantelor verificate (`rows_sha256`): indexul
+  nu fixeaza singur desfasurarea (o reetichetare il pastreaza, tabelul Joker pe
+  intervale accepta si cateva variante schimbate). `test_lr_schemes.py`
+  recalculeaza indexul si compara amprenta.
 - Analiza (`scripts/analysis/lr_schemes_2026-10-17.md`):
   - Cod 59 (6/49, 16 numere, 112 variante, 896 lei) are exact sansele celui
     mai bun wheel al aplicatiei cu 112 variante: 4+ 7,43%, 5+ 0,207%;
@@ -114,6 +119,18 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
     desfasurarea pe pool;
   - „📜 Istoric hits” rejoaca schema pe pool-ul fiecarui pas;
   - raportul si mailul numesc codul.
+- Revizia adversariala a diff-ului (5 zone, fiecare constatare verificata
+  separat): 17 confirmate, minore sau marunte, toate reparate, cu teste care pica
+  pe commit-ul anterior. Amprenta variantelor; geometria 5/40 si Joker testata;
+  incarcarea accepta BOM, respinge schemele goale si codurile dublate, iar un
+  fisier necitibil e numit ca atare, nu drept „fara schema”; sansele mici fara
+  exponent (`_five_plus_pct`: 0,000086%, nu „8.6e-05%”); „cel putin o varianta”
+  si urna 1 la Joker; „fara schema cu variante intregi” (la 6/49 exista si scheme
+  cu variante de 2-4 numere); pool gol si baza restransa cu aceeasi marime in tot
+  panoul; Istoric hits nu mai neaga codul cand pasii n-au pool-ul in context;
+  raportul: derivarea celor 60 de extrageri cu 4+ (57 cu exact 4 in pool, 52
+  prinse; 8 cu 5, toate), datele pe praguri in JSON, nota Joker 5 -> 4 (sigur la
+  LR, 92,86-99,33% la wheel-ul aplicatiei).
 
 ### Istoric hits cu pool-ul de atunci si audit pe module — 2026-10-17
 
@@ -1624,10 +1641,13 @@ limita de validitate din §5).
   - diferenta fata de variantele generate, la fiecare prag si in lei.
   `_render_lr_layouts` arata variantele schemei pe pool, sortat crescator, ca la
   terminal; la Joker, numarul din campul 2 intra pe toate. Fara cod pentru
-  marimea pool-ului, panoul spune marimile care au. „📜 Istoric hits”
-  (`ui_hits._render_lr_replay`) pune schema pe pool-ul fiecarui pas WF
-  (`ticket_context`) si numara extragerile cu 3+/4+/5+/6 pe o varianta. Le
-  compara cu variantele WF pe aceiasi pasi si cu sansa exacta. Mailul are linia
+  marimea pool-ului, panoul spune marimile care au scheme cu variante intregi;
+  un fisier necitibil e numit (`unloaded_schemes`), nu raportat ca lipsa.
+  „📜 Istoric hits” (`ui_hits._render_lr_replay`) pune schema pe pool-ul
+  fiecarui pas WF (`ticket_context`) si numara extragerile cu 3+/4+/5+/6 pe o
+  varianta. Le compara cu variantele WF pe aceiasi pasi si cu sansa exacta;
+  fara pool-ul pasilor in context, spune ca reluarea apare la urmatoarea
+  validare. Mailul are linia
   `SCHEMĂ LR`. Profilul exact merge pana la 16 numere; schemele 5/40 de 17-19
   numere raman numai ca date. Schemele nu intra in `generate_wheel` si nici in
   cheile de cache.

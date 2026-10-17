@@ -61,6 +61,28 @@ def test_the_printed_win_index_is_recomputed_from_the_file(entry):
     )
 
 
+@pytest.mark.parametrize("entry", MANIFEST, ids=lambda e: f"{e['game']}_cod{e['code']}")
+def test_the_variants_are_the_ones_verified_at_import(entry):
+    """Amprenta scrisă la import, după grilă, lista din stânga și index."""
+    scheme = _scheme(LABEL[entry["game"]], entry["code"])
+    assert importer.rows_sha256(scheme.variants) == entry["rows_sha256"]
+
+
+def test_the_row_hash_catches_what_the_index_cannot():
+    """O reetichetare a pozițiilor păstrează indexul tipărit; amprenta, nu."""
+    entry = next(e for e in MANIFEST if e["game"] == "649" and e["code"] == 59)
+    swap = {15: 16, 16: 15}
+    variants = [sorted(swap.get(p, p) for p in v) for v in _scheme("6/49", 59).variants]
+    assert importer.index_errors("649", 16, variants, entry["index"]) == []
+    assert importer.rows_sha256(variants) != entry["rows_sha256"]
+    joker = next(e for e in MANIFEST if e["game"] == "joker" and e["code"] == 35)
+    variants = [list(v) for v in _scheme("joker", 35).variants]
+    assert variants[0] == [1, 2, 3, 4, 6]
+    variants[0] = [1, 3, 4, 6, 7]
+    assert importer.joker_index_errors(8, variants, joker["index"]) == []
+    assert importer.rows_sha256(variants) != joker["rows_sha256"]
+
+
 def test_a_changed_variant_breaks_the_printed_index():
     entry = next(e for e in MANIFEST if e["game"] == "649" and e["code"] == 59)
     variants = [list(v) for v in _scheme("6/49", 59).variants]
@@ -81,9 +103,32 @@ def test_a_broken_file_is_skipped_alone(tmp_path, caplog):
     (tmp_path / "LR_joker_cod45.txt").write_text(
         "# numere: 7\n# variante: 1\n1 2 3 4 8\n", encoding="utf-8"
     )
+    (tmp_path / "LR_649_cod057.txt").write_text("# numere: 0\n# variante: 0\n")
+    (tmp_path / "LR_649_cod048.txt").write_text(good, encoding="utf-8")  # cod dublat
+    (tmp_path / "LR_joker_cod34.txt").write_text(
+        "\ufeff" + (lr.LR_DIR / "LR_joker_cod34.txt").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )  # BOM de editor Windows
     loaded = lr._load(str(tmp_path))
-    assert [(s.game, s.code) for s in loaded] == [("6/49", 48)]
-    assert "LR_649_cod49.txt" in caplog.text and "LR_joker_cod45.txt" in caplog.text
+    assert [(s.game, s.code) for s in loaded] == [("6/49", 48), ("joker", 34)]
+    for name in ("LR_649_cod49.txt", "LR_joker_cod45.txt", "LR_649_cod057.txt"):
+        assert name in caplog.text
+    assert "codul apare de două ori" in caplog.text
+
+
+def test_an_unreadable_file_is_not_reported_as_a_missing_code(monkeypatch, tmp_path):
+    for f in lr.LR_DIR.iterdir():
+        (tmp_path / f.name).write_bytes(f.read_bytes())
+    (tmp_path / "LR_649_cod59.txt").write_text("stricat\n", encoding="utf-8")
+    monkeypatch.setattr(lr, "LR_DIR", tmp_path)
+    assert lr.lr_schemes("6/49", 16) == []
+    assert lr.unloaded_schemes("6/49", 16) == ["Cod 59"]
+    with capture_ui() as ui:
+        ui_results._render_cost("6/49", _data())
+    text = ui.text()
+    assert "schema redusă LR Cod 59 pentru 16 nr. nu s-a putut citi" in text
+    assert "fără schemă" not in text
+    assert lr.unloaded_schemes("6/49", 14) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -120,6 +165,27 @@ def test_cod59_odds_and_guarantees_match_the_brochure():
     # 3+ pe o variantă = 3+ în pool: trei numere ieșite sunt mereu pe o variantă.
     pool3 = sum(comb(16, k) * comb(33, 6 - k) for k in range(3, 7)) / comb(49, 6)
     assert odds[3] == pytest.approx(pool3, abs=1e-12)
+
+
+def test_540_and_joker_odds_use_their_own_geometry():
+    """5/40: 6 extrase din 40, bilet de 5; Joker: 5 din 45 (urna 1)."""
+    s = _scheme("5/40", 37)
+    odds, g = lr.scheme_odds(s), lr.scheme_guarantees(s)
+    assert [round(100 * odds[t], 4) for t in (3, 4, 5)] == [45.5557, 14.912, 0.3142]
+    assert sorted(g) == [3, 4, 5, 6]
+    assert round(100 * g[4][4], 2) == 91.48 and round(100 * g[6][5], 2) == 46.30
+    j = _scheme("joker", 12)
+    odds, g = lr.scheme_odds(j), lr.scheme_guarantees(j)
+    assert [round(100 * odds[t], 4) for t in (3, 4, 5)] == [19.7975, 1.5791, 0.0097]
+    assert sorted(g) == [3, 4, 5] and g[5][4] == 1.0
+    assert round(100 * g[4][4], 2) == 39.78 and round(100 * g[5][5], 2) == 3.93
+
+
+def test_small_odds_print_without_an_exponent():
+    assert ui_results._five_plus_pct(12 / 13983816) == "0.000086%"
+    assert ui_results._five_plus_pct(0.00005) == "0.005%"
+    lines = ui_results._lr_scheme_lines("6/49", _data(POOL16[:9]))
+    assert "6 0.000086%" in lines[1] and "e-" not in " ".join(lines)
 
 
 def test_best_hits_counts_the_best_variant_by_brute_force():
@@ -168,7 +234,11 @@ def test_panel_shows_what_cod59_guarantees_and_how_it_compares():
         "3 ieșite → 3 sigur; 4 → 3 sigur, 4 în 92.31%; 5 → 4 sigur, 5 în 15.38%; "
         "6 → 4 sigur, 5+ în 85.31%, 6 în 1.40%"
     ) in text
-    assert "3+ 29.809% · 4+ 7.431% · 5+ 0.207% · 6 0.0008%" in text
+    assert (
+        "Cod 59, șansa ca cel puțin o variantă să prindă, la o extragere uniformă: "
+        "3+ 29.809% · 4+ 7.431% · 5+ 0.207% · 6 0.0008%"
+    ) in text
+    assert "(broșura 6/49 loto.ro, exemplul 3)" in text
     assert (
         "Cod 59 față de wheel-ul nostru (152 var.): cu 40 de variante mai puține "
         "(320 Lei); 4+ 7.431% față de 7.960%; 5+ 0.207% față de 0.251%"
@@ -187,8 +257,25 @@ def test_pool_without_a_code_lists_the_sizes_that_have_one():
     with capture_ui() as ui:
         ui_results._render_cost("6/49", _data(pool))
     text = ui.text()
-    assert "fără schemă redusă oficială pentru 14 nr." in text
-    assert "Loteria Română are scheme reduse pentru 9, 10, 11, 12, 16 numere." in text
+    assert "fără schemă redusă oficială cu variante întregi pentru 14 nr." in text
+    assert (
+        "Loteria Română are scheme reduse cu variante întregi pentru "
+        "9, 10, 11, 12, 16 numere."
+    ) in text
+    assert "Sistem complet C(14,6) = 3003 var." in text
+
+
+def test_empty_or_restricted_pool_sizes_agree():
+    with capture_ui() as ui:
+        ui_results._render_cost("6/49", {**_data([]), "pool_size": 16})
+    text = ui.text()
+    assert "pool gol" in text and "are scheme reduse" not in text
+    # Bază restrânsă: 12 numere jucate, pool_size cerut 16.
+    pool = POOL16[:12]
+    with capture_ui() as ui:
+        ui_results._render_cost("6/49", {**_data(pool), "pool_size": 16})
+    text = ui.text()
+    assert "(12 nr.)" in text and "Sistem complet C(12,6) = 924 var." in text
 
 
 def test_joker_layout_carries_the_joker_number_on_every_variant():
@@ -201,7 +288,12 @@ def test_joker_layout_carries_the_joker_number_on_every_variant():
     )
     lines = str(layout["args"][0]).split("\n")
     assert len(lines) == 118 and all(line.endswith("  +7") for line in lines)
-    assert "Numărul Joker (câmpul 2) intră pe toate variantele schemei." in ui.text()
+    text = ui.text()
+    assert "Numărul Joker (câmpul 2) intră pe toate variantele schemei." in text
+    assert (
+        "șansa ca cel puțin o variantă să prindă (urna 1, fără numărul Joker)" in text
+    )
+    assert "broșura acestui joc nu spune ordinea" in text
 
 
 def test_foreign_results_get_no_lr_scheme():
@@ -270,11 +362,64 @@ def test_history_replays_cod59_on_the_pool_of_each_draw():
     )
     table = next(n for n in nodes[title:] if n["kind"] == "table")
     rows = {r["prag"]: r for r in table["kwargs"]["rows"]}
+    wf_best = [
+        max(len(set(t) & set(d)) for t in (POOL16[:6], POOL16[6:12])) for _, d in draws
+    ]
     for t in (3, 4, 5):
         k = sum(1 for h in expected if h >= t)
         assert rows[f"+{t}"]["lr"] == f"{k} ({k / 3 * 100:.2f}%)"
+        k = sum(1 for h in wf_best if h >= t)
+        assert rows[f"+{t}"]["tick"] == f"{k} ({k / 3 * 100:.2f}%)"
     assert rows["6"]["rnd"] == "0.0008%"
+    cols = {c["name"]: c["label"] for c in table["kwargs"]["columns"]}
+    assert cols["tick"] == "🎟️ Variantele WF (2 var.)"
     assert "pusă pe pool-ul de atunci în ordine crescătoare" in ui.text()
+
+
+def test_history_540_counts_all_six_drawn_numbers():
+    pool = [1, 3, 4, 7, 9, 12, 15, 18, 20, 23, 26, 29, 31, 34, 37, 40]
+    s37 = _scheme("5/40", 37)
+    first = lr.scheme_tickets(s37, pool)[0]
+    draws = [
+        ("06-08-2026", first + [2]),  # o variantă întreagă + un număr din afară
+        ("09-08-2026", [1, 3, 4, 7, 9, 12]),  # 6 din pool
+        ("13-08-2026", [2, 5, 6, 8, 10, 11]),  # 0 din pool
+    ]
+    flat = _wf(pool, draws, game="5/40")
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(flat, "5/40", {"pool_size": 16}, pool_n=16)
+    nodes = list(ui.walk())
+    for s in lr.lr_schemes("5/40", 16):
+        title = next(
+            i
+            for i, n in enumerate(nodes)
+            if n["kind"] == "label"
+            and str(n["args"][0]).startswith(f"📋 {s.label} ({s.size} var.)")
+        )
+        rows = {
+            r["prag"]: r
+            for r in next(n for n in nodes[title:] if n["kind"] == "table")["kwargs"][
+                "rows"
+            ]
+        }
+        tickets = lr.scheme_tickets(s, pool)
+        best = [max(len(set(t) & set(d)) for t in tickets) for _, d in draws]
+        if s.code == 37:
+            assert best[0] == 5
+        for t, label in ((3, "+3"), (4, "+4"), (5, "5")):
+            k = sum(1 for h in best if h >= t)
+            assert rows[label]["lr"] == f"{k} ({k / 3 * 100:.2f}%)"
+
+
+def test_history_without_stored_pools_does_not_deny_the_code():
+    flat = _wf(POOL16, [("06-08-2026", [2, 5, 9, 13, 17, 1])])
+    for row in flat:
+        row.ticket_context = None
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(flat, "6/49", {"pool_size": 16}, pool_n=16)
+    text = ui.text()
+    assert "Cod 59: reluarea cere pool-ul fiecărei extrageri" in text
+    assert "nu are schemă" not in text
 
 
 def test_history_says_when_the_pool_has_no_code():
@@ -283,8 +428,8 @@ def test_history_says_when_the_pool_has_no_code():
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(flat, "joker", {"pool_size": 16}, pool_n=16)
     assert (
-        "Loteria Română nu are cod pentru 16 numere la acest joc "
-        "(are pentru 7, 8, 9, 10, 11, 12, 13, 15)"
+        "Loteria Română nu are schemă cu variante întregi pentru 16 numere la acest "
+        "joc (are pentru 7, 8, 9, 10, 11, 12, 13, 15)"
     ) in ui.text()
 
 

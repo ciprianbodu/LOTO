@@ -6,6 +6,7 @@ import logging
 import math
 import time
 from datetime import datetime as _dt, timezone as _tz
+from decimal import Decimal
 
 import pandas as pd
 from nicegui import ui
@@ -198,7 +199,10 @@ def _render_cost(game: str, data: dict) -> None:
     price = PRICES.get(gk, 8.0)
     # Numere pe BILET (5/40 extrage 6, dar varianta are 5).
     draw_n = _ticket_pick(gk)
-    pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    # Mărimea pool-ului = numerele lui distincte (o bază restrânsă poate da mai
+    # puține decât pool_size); pool_size numai fără numere.
+    _nums = {int(x) for x in (data.get("hard_core") or [])}
+    pool_used = len(_nums) or int(data.get("pool_size") or 0)
 
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
     full_cost = full_vars * price
@@ -234,15 +238,31 @@ def _render_cost(game: str, data: dict) -> None:
             ui.label(line).classes("text-caption")
         _render_lr_layouts(game, data, schemes)
     else:
+        from covering.lr_schemes import unloaded_schemes
+
         _sizes = sorted(LR_SCHEMES.get(gk, {}))
+        _bad = unloaded_schemes(gk, pool_used) if _nums else []
+        if not _nums:
+            _none = f"pool gol la {_game_title(game)}."
+        elif _bad:
+            _none = (
+                f"schema redusă LR {', '.join(_bad)} pentru {pool_used} nr. nu s-a putut "
+                "citi din covering_designs/lr (vezi jurnalul)."
+            )
+        else:
+            _none = (
+                f"fără schemă redusă oficială cu variante întregi pentru {pool_used} nr. "
+                f"la {_game_title(game)}."
+            )
         _have = (
-            f" Loteria Română are scheme reduse pentru {', '.join(map(str, _sizes))} numere."
-            if _sizes
+            f" Loteria Română are scheme reduse cu variante întregi pentru "
+            f"{', '.join(map(str, _sizes))} numere."
+            if _sizes and _nums and not _bad
             else ""
         )
         ui.markdown(
-            f"💡 **Cost la agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
-            f"{_game_title(game)}. **{_full_lbl}** (toate combinațiile, exhaustiv).{_have}"
+            f"💡 **Cost la agenție:** {_none} **{_full_lbl}** (toate combinațiile, "
+            f"exhaustiv).{_have}"
         ).classes("text-info")
 
     variants = data.get("variants") or []
@@ -387,7 +407,9 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
             f"{s.n}: {_lr_guarantee_text(s)} (procentul = partea cazurilor)."
         )
         lines.append(
-            f"{s.label}, șansa ca o variantă să prindă, la o extragere uniformă: "
+            f"{s.label}, șansa ca cel puțin o variantă să prindă"
+            f"{' (urna 1, fără numărul Joker)' if gk == 'joker' else ''}, "
+            "la o extragere uniformă: "
             + " · ".join(
                 f"{t}{'+' if t < max(odds) else ''} {_five_plus_pct(p)}"
                 for t, p in odds.items()
@@ -414,9 +436,15 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
                 + ("; ".join(diff) if diff else "aceleași șanse la fiecare prag")
                 + "."
             )
+    _order = (
+        "(broșura 6/49 loto.ro, exemplul 3)"
+        if gk == "6/49"
+        else "(așa arată broșura 6/49, exemplul 3; broșura acestui joc nu spune "
+        "ordinea, deci desfășurarea de mai jos presupune aceeași regulă)"
+    )
     lines.append(
         "La agenție schema se joacă după cod: terminalul pune numerele jucate în ordine "
-        "crescătoare pe pozițiile 1..n ale schemei (broșura loto.ro). Desfășurările sunt "
+        f"crescătoare pe pozițiile 1..n ale schemei {_order}. Desfășurările sunt "
         "verificate pe indexul de câștiguri tipărit; pe extrageri uniforme șansele nu "
         "depind de numerele din pool."
     )
@@ -723,7 +751,9 @@ def _five_plus_pct(p) -> str:
     semnificative. La Joker cu un bilet (2 variante) 5+ e 0,00016%, iar cu trei
     zecimale apărea „0.000%”, ca și cum n-ar exista."""
     value = 100.0 * float(p or 0.0)
-    return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
+    # Decimal: două cifre semnificative fără exponent (6 la 6/49, 0,000086%,
+    # ieșea „8.6e-05%”).
+    return f"{value:.3f}%" if value >= 0.1 else f"{Decimal(f'{value:.2g}'):f}%"
 
 
 def _thousands(x, decimals: int = 0) -> str:

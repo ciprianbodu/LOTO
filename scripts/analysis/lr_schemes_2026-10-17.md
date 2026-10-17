@@ -30,11 +30,19 @@ Toate cele 33 de scheme cu variante întregi au trecut verificarea:
 - 5/40: 16 scheme;
 - Joker: 10 scheme.
 
-Schemele cu variante de 2–5 numere (combinate compuse) nu sunt importate.
+Cele 18 scheme 6/49 cu variante de 2, 3 sau 4 numere (pentru combinatele
+compuse) nu sunt importate; importatorul le listează ca sărite. Broșurile 5/40
+și Joker au numai scheme cu variante întregi.
 
 Poziția 1 a schemei este cel mai mic număr jucat. Broșura 6/49, exemplul 3,
 pune „numerele teoretice” 1..13 în dreptul numerelor jucate în ordine
-crescătoare. Pe extrageri uniforme, așezarea nu schimbă șansele.
+crescătoare. Broșurile 5/40 și Joker nu spun ordinea; aplicația presupune aceeași
+regulă și o spune în panou. Pe extrageri uniforme, așezarea nu schimbă șansele.
+
+Indexul tipărit nu fixează singur desfășurarea: o reetichetare a pozițiilor îl
+păstrează, iar tabelul Joker pe intervale acceptă și câteva variante schimbate.
+Importatorul scrie de aceea și amprenta variantelor verificate (`rows_sha256`),
+pe care testul o compară cu fișierele.
 
 ## Ce garantează schemele 6/49
 
@@ -89,10 +97,14 @@ jucat schema pe pool-ul de atunci:
 | 5+ | 8 | 0 | 1 | 1,6 |
 | 6 | 0 | 0 | 0 | 0,006 |
 
-- Diferența la 4+ (60 față de 65) e cea prescrisă de index: 65 × 92,31% ≈ 60.
-- Din cele 8 extrageri cu 5 numere în pool, Cod 59 ar fi dus în medie 1,2 pe o
-  variantă. Observat: 0. Probabilitatea ca acest lucru să se întâmple la
-  întâmplare este de circa 26%.
+- Diferența la 4+ (60 față de 65) e în limita indexului. 57 de extrageri au
+  avut exact 4 numere în pool: la 92,31% erau așteptate 52,6, iar Cod 59 a
+  prins 4 pe o variantă la 52. Celelalte 8 au avut 5 în pool, unde 4 pe o
+  variantă e sigur, și le-a prins pe toate.
+- La aceleași 8 extrageri, Cod 59 ar fi pus toate cele 5 numere pe aceeași
+  variantă, în medie, la 1,2 dintre ele (2/13 la fiecare). Observat: la niciuna.
+  Pe extrageri uniforme, zero din 8 are probabilitatea de circa 26%
+  ((11/13)^8).
 - Rezultatul schemei depinde de pool. Pool-ul nu bate hazardul (226 de
   extrageri cu 3+, față de 231,6 așteptate).
 
@@ -116,8 +128,12 @@ aplicației cu 118 variante dă 4+ 1,69%, față de 1,58% la Cod 12.
 
 ## Toate schemele față de aplicație, la același număr de variante
 
-Verdictul compară probabilitățile exacte la fiecare prag (3 până la numerele
-extrase), cu tot atâtea variante:
+Codurile 5/40 45, 46, 47 și 48 (17, 17, 18 și 19 numere) nu sunt comparate:
+pool-ul aplicației are cel mult 16 numere, iar profilul exact se calculează
+numai până la 16. Lipsesc și din `lr_schemes_2026-10-17.json`.
+
+Verdictul compară probabilitățile exacte la fiecare prag (3 până la
+min(bilet, extrase)), cu tot atâtea variante:
 
 - „identic”: aceleași șanse la fiecare prag;
 - „LR domină”: schema nu e sub aplicație la niciun prag;
@@ -137,6 +153,12 @@ extrase), cu tot atâtea variante:
 | Joker | 15 | 11 | 22 | LR domină (4+ 0,344% față de 0,328%) |
 | Joker | 35, 34, 14, 13, 12 | 8, 9, 12, 13, 15 | 6, 9, 38, 54, 118 | aplicația domină (Cod 34: 3+ 4,40% față de 3,94%) |
 | Joker | 24 | 10 | 14 | compromis (aplicația 3+ 5,93% față de 5,74%) |
+
+La Joker, verdictul privește șansele necondiționate. Schemele LR de mai sus dau
+sigur 4 pe o variantă când ies 5 dintre numerele jucate; wheel-ul aplicației cu
+tot atâtea variante, numai în 92,86% (Cod 34) până la 99,33% (Cod 12) din
+cazuri. Câștigul aplicației vine din cazul cu exact 4 numere ieșite (Cod 12:
+43,22% față de 39,78%), mult mai frecvent decât cel cu 5.
 
 Rezultatul complet, cu toate garanțiile și toate wheel-urile pe fiecare garanție,
 este în `lr_schemes_2026-10-17.json`. Se reproduce cu:

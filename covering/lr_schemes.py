@@ -19,6 +19,7 @@ Numai geometrie: o schemă nu schimbă rata pool-ului (hipergeometrică), ci fel
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -58,10 +59,11 @@ class LRScheme:
 
 
 def _parse(path: Path, game: str, code: int) -> LRScheme:
-    pick = _GAMES[game][1]
+    pick, universe = _GAMES[game][1], _GAMES[game][3]
     header: dict[str, int] = {}
     rows: list[tuple[int, ...]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    # utf-8-sig: un fișier salvat cu BOM de un editor Windows rămâne citibil.
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
         if not line:
             continue
@@ -74,6 +76,10 @@ def _parse(path: Path, game: str, code: int) -> LRScheme:
     n = header.get("numere")
     if n is None or header.get("variante") != len(rows):
         raise ValueError("antet fără numere sau cu alt număr de variante")
+    if not rows or not pick < n <= universe:
+        raise ValueError(
+            f"schemă fără variante sau cu {n} numere în afara {pick + 1}..{universe}"
+        )
     if any(
         len(r) != pick or len(set(r)) != pick or not all(1 <= p <= n for p in r)
         for r in rows
@@ -93,16 +99,47 @@ def _load(directory: str) -> tuple[LRScheme, ...]:
     if not base.is_dir():
         return ()
     labels = {key: label for label, (key, *_rest) in _GAMES.items()}
+    seen: set[tuple[str, int]] = set()
     for path in sorted(base.iterdir()):
         m = _FILE.match(path.name)
         if not m:
             continue
+        key = (labels[m.group(1)], int(m.group(2)))
+        if key in seen:
+            logger.warning("Schema LR %s ignorată: codul apare de două ori", path.name)
+            continue
         try:
-            out.append(_parse(path, labels[m.group(1)], int(m.group(2))))
+            out.append(_parse(path, *key))
+            seen.add(key)
         except (OSError, ValueError) as exc:
             # Un fișier stricat e sărit singur; celelalte scheme rămân.
             logger.warning("Schema LR %s ignorată: %s", path.name, exc)
     return tuple(sorted(out, key=lambda s: (s.game, s.n, s.size, s.code)))
+
+
+@lru_cache(maxsize=4)
+def _manifest(directory: str) -> tuple[tuple[str, int, int], ...]:
+    """(joc, cod, numere) din `index_oficial.json`, scris de import."""
+    labels = {key: label for label, (key, *_rest) in _GAMES.items()}
+    try:
+        entries = json.loads(
+            (Path(directory) / "index_oficial.json").read_text("utf-8")
+        )
+        return tuple((labels[e["game"]], int(e["code"]), int(e["n"])) for e in entries)
+    except OSError, ValueError, KeyError, TypeError:
+        return ()
+
+
+def unloaded_schemes(game: str, n: int) -> list[str]:
+    """Codurile importate pentru (joc, numere) al căror fișier nu s-a putut citi.
+
+    Panoul spune atunci că schema nu s-a încărcat, nu că Loteria Română n-o are."""
+    loaded = {s.code for s in lr_schemes(game, n)}
+    return [
+        f"Cod {code}"
+        for g, code, size in _manifest(str(LR_DIR))
+        if g == game and size == int(n) and code not in loaded
+    ]
 
 
 def lr_schemes(game: str | None = None, n: int | None = None) -> list[LRScheme]:
@@ -146,6 +183,7 @@ def scheme_guarantees(scheme: LRScheme) -> dict[int, dict[int, float]]:
     """{k ieșite din cele n: {t: fracția cazurilor cu cel puțin t pe o variantă}}.
 
     k merge de la 3 la min(n, extrase); t de la 3 la min(k, bilet). 1.0 = sigur.
+    Ca la `scheme_odds`, profilul exact e limitat la 16 numere.
     """
     from covering.probability import wheel_hit_profile
 

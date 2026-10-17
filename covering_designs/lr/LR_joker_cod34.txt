@@ -2,8 +2,8 @@
 # numere: 9
 # variante: 9
 # Sursa: https://www.loto.ro/images/upload/pages/extras_brosura_joker.pdf (sha256 d7a07dff71026e8ee4513a0b55e24171eaa0a362b6c816861c9e07535f5e6f08)
-# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare (brosura 6/49,
-# exemplul 3: numerele teoretice 1..n fata de numerele jucate, crescator).
+# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare, ca la 6/49
+# (brosura 6/49, exemplul 3); brosura acestui joc nu spune ordinea.
 # Verificat exact pe indexul de castiguri tiparit (scripts/analysis/import_lr_schemes.py).
 1 2 3 6 9
 1 2 4 6 7

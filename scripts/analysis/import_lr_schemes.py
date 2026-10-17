@@ -148,6 +148,17 @@ def joker_index_errors(n: int, variants, rows) -> list[str]:
     return errors
 
 
+def rows_sha256(variants) -> str:
+    """Amprenta variantelor, în ordinea broșurii.
+
+    Indexul tipărit nu fixează desfășurarea: o reetichetare a pozițiilor îl
+    păstrează, iar la Joker tabelul pe intervale acceptă și câteva variante
+    schimbate. Amprenta scrisă la import (după grilă, lista din stânga și
+    index) fixează exact variantele verificate."""
+    text = "\n".join(" ".join(str(int(x)) for x in v) for v in variants)
+    return hashlib.sha256(text.encode("ascii")).hexdigest()
+
+
 def index_errors(game: str, n: int, variants, rows) -> list[str]:
     """Diferențele dintre indexul recalculat și cel tipărit; [] = identic."""
     if game == "joker":
@@ -359,13 +370,18 @@ def _index_rows_joker(rows):
 
 
 def extract(game: str, bbox_path: Path):
-    """[(cod, n, variante, rânduri de index, erori)] pentru schemele cu variante întregi."""
+    """Schemele cu variante întregi și codurile sărite.
+
+    Întoarce ([(cod, n, variante, rânduri de index, erori)], [(cod, numere pe
+    variantă)]). Sar numai schemele 6/49 cu variante de 2, 3 sau 4 numere, pentru
+    combinatele compuse; broșurile 5/40 și Joker au numai variante întregi."""
     pick, _, _ = GAMES[game]
-    out = []
+    out, skipped = [], []
     for code, sec in _sections(_lines(_load_words(bbox_path))):
         n, v, in_variant = _meta(sec)
         if in_variant is not None and in_variant != pick:
-            continue  # scheme cu variante de 2..5 numere (combinate compuse)
+            skipped.append((code, in_variant))
+            continue
         res, why = _grid(sec, n, pick)
         if res is None:
             out.append((code, n, [], [], [why]))
@@ -389,7 +405,7 @@ def extract(game: str, bbox_path: Path):
         )
         errs += index_errors(game, n, tickets, rows)
         out.append((code, n, tickets, rows, errs))
-    return out
+    return out, skipped
 
 
 def scheme_file_text(
@@ -400,8 +416,17 @@ def scheme_file_text(
         f"# numere: {n}",
         f"# variante: {len(tickets)}",
         f"# Sursa: {source} (sha256 {sha})",
-        "# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare (brosura 6/49,",
-        "# exemplul 3: numerele teoretice 1..n fata de numerele jucate, crescator).",
+        *(
+            [
+                "# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare (brosura 6/49,",
+                "# exemplul 3: numerele teoretice 1..n fata de numerele jucate, crescator).",
+            ]
+            if game == "649"
+            else [
+                "# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare, ca la 6/49",
+                "# (brosura 6/49, exemplul 3); brosura acestui joc nu spune ordinea.",
+            ]
+        ),
         "# Verificat exact pe indexul de castiguri tiparit (scripts/analysis/import_lr_schemes.py).",
     ]
     return "\n".join(head + [" ".join(map(str, t)) for t in tickets]) + "\n"
@@ -426,7 +451,10 @@ def main(argv=None) -> int:
             sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
             bbox = Path(tmp) / f"{game}.bbox.html"
             subprocess.run(["pdftotext", "-bbox", str(pdf), str(bbox)], check=True)
-            for code, n, tickets, rows, errs in extract(game, bbox):
+            schemes, skipped = extract(game, bbox)
+            for code, per_variant in skipped:
+                print(f"{game} Cod {code}: variante de {per_variant} numere — sărită")
+            for code, n, tickets, rows, errs in schemes:
                 status = "OK" if not errs else "; ".join(errs)
                 print(
                     f"{game} Cod {code}: {n} numere, {len(tickets)} variante — {status}"
@@ -445,6 +473,7 @@ def main(argv=None) -> int:
                         "variants": len(tickets),
                         "source": url,
                         "sha256": sha,
+                        "rows_sha256": rows_sha256(tickets),
                         "index": rows,
                     }
                 )

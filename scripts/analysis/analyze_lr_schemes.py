@@ -2,16 +2,20 @@
 
 Pentru fiecare schemă din ``covering_designs/lr`` cu cel mult 16 numere:
 
-- șansa exactă, pe o extragere uniformă, ca o variantă să prindă 3+, 4+, 5+, 6;
+- șansa exactă, pe o extragere uniformă, ca cel puțin o variantă să prindă 3+,
+  4+, 5+ (și 6 la 6/49);
 - ce garantează schema: din k numere ieșite dintre cele n, în ce parte a
   cazurilor ajung cel puțin t pe aceeași variantă;
-- wheel-ul aplicației pe aceleași n numere, cu exact atâtea variante, pentru
-  fiecare garanție 2..bilet-1 (`generate_wheel("hitcover", ...)`, calea
-  motorului), și verdictul de dominanță pe pragurile 3..extrase.
+- wheel-ul aplicației pe aceleași n numere, cu bugetul egal cu numărul de
+  variante al schemei, pentru fiecare garanție 2..bilet-1
+  (`generate_wheel("hitcover", ...)`, calea motorului); o garanție acoperită
+  complet cu mai puține variante le are numai pe acelea. Verdictul de dominanță,
+  pe pragurile 3..min(bilet, extrase), se dă numai la tot atâtea variante.
 
 Cu ``--wf FIȘIER.pkl`` (cache walk-forward v31) refă și istoricul: la fiecare
 pas, schema pusă pe pool-ul de atunci (sortat crescător), față de variantele
-validate în WF. Rezultatul: ``scripts/analysis/lr_schemes_2026-10-17.json``.
+validate în WF: extrageri pe praguri, defalcate după câte numere au fost în
+pool, și datele extragerilor cu cel puțin bilet-1 pe o variantă. Rezultatul: ``scripts/analysis/lr_schemes_2026-10-17.json``.
 
     python scripts/analysis/analyze_lr_schemes.py [--wf CACHE.pkl ...] [--out FIȘIER]
 """
@@ -140,9 +144,31 @@ def wf_replay(path: Path) -> dict:
                         t: sum(1 for h in best.values() if h >= t) for t in thresholds
                     },
                     "expected": {t: odds[t] * len(best) for t in thresholds},
-                    "top_dates": sorted(
-                        steps[i][0] for i, h in best.items() if h >= top - 1
-                    ),
+                    # Extrageri după câte numere au fost în pool: câte au ajuns
+                    # la cel puțin t pe o variantă a schemei.
+                    "by_pool_hits": {
+                        k: {
+                            "draws": sum(1 for i in best if hits[i]["pool"] == k),
+                            **{
+                                t: sum(
+                                    1
+                                    for i, h in best.items()
+                                    if hits[i]["pool"] == k and h >= t
+                                )
+                                for t in thresholds
+                                if t <= k
+                            },
+                        }
+                        for k in range(3, draw_n + 1)
+                    },
+                    "dates": {
+                        t: sorted(
+                            (steps[i][0] for i, h in best.items() if h >= t),
+                            key=lambda d: (d[6:], d[3:5], d[:2]),
+                        )
+                        for t in thresholds
+                        if t >= top - 1
+                    },
                 }
             )
     return out
