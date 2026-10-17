@@ -381,8 +381,8 @@ def _wheel_sig(
             )
             # `rl<amprenta>`: designul lotto rafinat, încercat la orice plafon (intră
             # numai certificat, deci când plafonul cuprinde designul întreg);
-            # `lc1:<amprenta>`: cu plafon, wheel-ul clasic certificat față de
-            # designul trunchiat, cu fișierele lui (C, R, H) în amprentă.
+            # `lc1:<amprenta>`: wheel-ul clasic certificat față de designul livrat,
+            # cu fișierele lui (C, R, H) în amprentă.
             extra = ""
             if game_type in _WF_DRAW_UNIVERSE:
                 from covering.refined_covers import refined_cover_signature
@@ -392,9 +392,17 @@ def _wheel_sig(
                     int(pool_size), int(_WF_PICK.get(game_type) or 6), g, draw_n, max_num, condition
                 )
                 extra = f"|rl{stored}" if stored else ""
-            if cap > 0:
+            # Wheel-ul clasic la același număr de bilete: la plafonul care taie
+            # designul, cel al plafonului; altfel cel al designului întreg.
+            from covering.designs import lotto_design_size
+
+            full = lotto_design_size(
+                int(pool_size), int(_WF_PICK.get(game_type) or 6), g, condition
+            )
+            budget = cap if cap > 0 and (full is None or cap < full) else (full or 0)
+            if budget > 0:
                 classic = _wheel_sig(
-                    pool_size, game_type, g, None, cap, method_override="hitcover"
+                    pool_size, game_type, g, None, budget, method_override="hitcover"
                 )
                 extra += f"|lc1:{_sources_digest(classic)}"
             return f"lotto|{geometry}|cd{design_sig}|rt1|hp1{extra}"

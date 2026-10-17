@@ -92,44 +92,93 @@ def _canonical_budget_start(v: int, pick: int, guarantee: int, max_variants: int
     return tuple(sum(1 << index[n] for n in t) for t in wheel)
 
 
+def classic_sources(v: int, pick: int, guarantee: int, budget: int, draw_n, max_num) -> tuple:
+    """Amprentele fișierelor din care poate veni wheel-ul clasic al motorului la
+    acest buget (C, R, H): intră în cheia memoriei candidaților canonici, ca un
+    fișier schimbat în timpul procesului să nu servească un candidat vechi."""
+    from covering.budget_designs import budget_design_signature
+    from covering.designs import covering_design_source_signature
+    from covering.refined_covers import refined_cover_signature
+
+    draws = int(pick) if draw_n is None else int(draw_n)
+    return (
+        covering_design_source_signature(int(v), int(pick), int(guarantee)),
+        refined_cover_signature(int(v), int(pick), int(guarantee), draws, int(max_num)),
+        budget_design_signature(int(v), int(pick), int(guarantee), int(budget)),
+    )
+
+
+@lru_cache(maxsize=64)
+def _canonical_classic(v: int, pick: int, guarantee: int, budget: int, draw_n, max_num: int, _sources):
+    """Wheel-ul clasic al motorului pe poziții 1..v (1 = cel mai bine clasat)."""
+    pool = list(range(1, v + 1))
+    scores = {n: float(v - i) for i, n in enumerate(pool)}
+    wheel, _ = generate_wheel("hitcover", pool, pick, guarantee, budget, scores, None, draw_n, max_num)
+    return tuple(tuple(sorted(int(n) for n in t)) for t in wheel)
+
+
 def _improve_lotto(pool, pick, guarantee, condition, max_variants, scores, wheel, cov, draw_n, max_num):
     """Ramura „g dacă c” cu universul jocului (2026-10-16).
 
-    Întâi designul lotto rafinat offline (`covering_designs/refined/RL_*`),
-    certificat față de designul livrat: intră fără plafon și la un plafon care
-    cuprinde designul întreg (altfel numărul de bilete diferă). Apoi, cu
-    plafon, wheel-ul clasic al motorului la aceeași garanție și același buget,
-    păstrat numai dacă e certificat față de designul trunchiat (aceleași bilete
-    distincte, niciun prag în scădere, câștig strict) și nu acoperă mai puține
-    grupe de c numere cu g pe un bilet (counts[c][g]).
+    Candidații, fiecare certificat față de designul livrat (aceleași bilete
+    distincte, niciun prag în scădere, câștig strict) și cu cel puțin atâtea
+    grupe de c numere cu g pe un bilet (counts[c][g]):
+    - designul lotto rafinat offline (`covering_designs/refined/RL_*`); intră
+      când plafonul cuprinde designul întreg (altfel numărul de bilete diferă);
+    - wheel-ul clasic al motorului la același număr de bilete: la plafonul
+      care taie designul, construit pe scorurile pasului; altfel (fără plafon
+      sau cu un plafon cât designul întreg), construit o dată pe geometrie, pe
+      poziții canonice. Fără plafon, cu plafon cât designul sau mai mare, se
+      livrează deci aceleași bilete.
+    Dintre cei certificați rămâne cel mai bun pe pragul garanției, apoi pe cele
+    mai mari, apoi pe cele mai mici.
     """
+    from covering.anneal_hits import _certify
+    from covering.designs import lotto_design_size
+    from covering.probability import wheel_hit_probabilities, wheel_hit_profile
+
     draws = int(pick) if draw_n is None else int(draw_n)
     ordered = _sorted_pool(pool, scores)
+    tickets = [sorted(int(n) for n in t) for t in wheel]
+    if not tickets:
+        return wheel, cov
+    base_cover = wheel_hit_profile(ordered, tickets)[condition][guarantee]
+    candidates = []
     improved, audit = improve_with_refined_cover(
         ordered, wheel, guarantee, draws, max_num, condition=condition
     )
     if audit["applied"]:
-        return improved, lotto_coverage_pct(improved, pool, guarantee, condition)
-    if int(max_variants or 0) <= 0:
+        candidates.append([sorted(int(n) for n in t) for t in improved])
+    cap = int(max_variants or 0)
+    full = lotto_design_size(len(ordered), int(pick), int(guarantee), int(condition))
+    classic = None
+    if cap > 0 and (full is None or cap < full):
+        classic, _ = generate_wheel(
+            "hitcover", pool, pick, guarantee, cap, scores, None, draw_n, max_num
+        )
+    elif full is not None and len(tickets) == full:
+        sources = classic_sources(len(ordered), pick, guarantee, full, draw_n, max_num)
+        positions = _canonical_classic(
+            len(ordered), int(pick), int(guarantee), full, draw_n, int(max_num), sources
+        )
+        classic = [sorted(ordered[p - 1] for p in t) for t in positions]
+    if classic is not None:
+        candidate = [sorted(int(n) for n in t) for t in classic]
+        if len(candidate) == len(tickets):
+            why, _gain, _c = _certify(ordered, tickets, candidate, guarantee, draws, max_num)
+            if not why and wheel_hit_profile(ordered, candidate)[condition][guarantee] >= base_cover:
+                candidates.append(candidate)
+    if not candidates:
         return wheel, cov
-    from covering.anneal_hits import _certify
-    from covering.probability import wheel_hit_profile
+    top = min(int(pick), draws)
+    order = [*range(int(guarantee), top + 1), *range(int(guarantee) - 1, 2, -1)]
 
-    classic, _ = generate_wheel(
-        "hitcover", pool, pick, guarantee, max_variants, scores, None, draw_n, max_num
-    )
-    tickets = [sorted(int(n) for n in t) for t in wheel]
-    candidate = [sorted(int(n) for n in t) for t in classic]
-    if not tickets or len(candidate) != len(tickets):
-        return wheel, cov
-    why, _gain, _c = _certify(ordered, tickets, candidate, guarantee, draws, max_num)
-    if why:
-        return wheel, cov
-    if wheel_hit_profile(ordered, candidate)[condition][guarantee] < wheel_hit_profile(
-        ordered, tickets
-    )[condition][guarantee]:
-        return wheel, cov
-    return candidate, lotto_coverage_pct(candidate, pool, guarantee, condition)
+    def key(t):
+        p = wheel_hit_probabilities(ordered, t, draws, int(max_num))["ticket"]
+        return tuple(p[k] for k in order if k >= 3)
+
+    best = max(candidates, key=key)
+    return best, lotto_coverage_pct(best, pool, guarantee, condition)
 
 
 def generate_wheel(

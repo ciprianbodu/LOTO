@@ -31,8 +31,13 @@ MAX_POOL = 16
 
 
 @lru_cache(maxsize=64)
-def _canonical_candidate(v: int, pick: int, guarantee: int, budget: int, draw_n: int, max_num: int):
-    """Biletele motorului la garanția dată, pe poziții 1..v (1 = cel mai bine clasat)."""
+def _canonical_candidate(
+    v: int, pick: int, guarantee: int, budget: int, draw_n: int, max_num: int, _sources=()
+):
+    """Biletele motorului la garanția dată, pe poziții 1..v (1 = cel mai bine clasat).
+
+    `_sources` (amprentele fișierelor C, R, H ale acestei geometrii) intră în
+    cheia memoriei: un fișier schimbat în timpul procesului reface candidatul."""
     from covering.dispatch import generate_wheel
 
     pool = list(range(1, v + 1))
@@ -69,7 +74,12 @@ def improve_with_lower_guarantees(ordered_pool, wheel, guarantee: int, draw_n: i
     order = [t for t in order if MIN_THRESHOLD <= t <= top]
     best, best_key, best_source = None, None, None
     for lower in range(pick - 1, MIN_THRESHOLD - 1, -1):
-        positions = _canonical_candidate(v, pick, lower, len(tickets), int(draw_n), int(max_num))
+        from covering.dispatch import classic_sources
+
+        sources = classic_sources(v, pick, lower, len(tickets), int(draw_n), int(max_num))
+        positions = _canonical_candidate(
+            v, pick, lower, len(tickets), int(draw_n), int(max_num), sources
+        )
         candidate = [sorted(pool[p - 1] for p in block) for block in positions]
         why, _gain, _cov = _certify(pool, tickets, candidate, int(guarantee), int(draw_n), int(max_num))
         if why:

@@ -135,9 +135,13 @@ def test_guarantee_portfolio_key_signs_the_lower_guarantee_designs(monkeypatch):
     monkeypatch.setattr(rc, "refined_cover_signature", lambda *a, **k: "altul")
     assert wf._wheel_sig(12, "5/40", 5, None, 113) != before
     monkeypatch.undo()
-    with_h = wf._wheel_sig(16, "6/49", 6, None, 100)
-    monkeypatch.setattr(bd, "budget_design_signature", lambda *a, **k: None)
-    assert wf._wheel_sig(16, "6/49", 6, None, 100) != with_h
+    with_h = wf._wheel_sig(16, "6/49", 6, None, 100).split("|lg1:")[1]
+    real = bd.budget_design_signature
+    # Numai garanțiile mai mici: segmentul `lg1:` trebuie să urmărească H-ul lor.
+    monkeypatch.setattr(
+        bd, "budget_design_signature", lambda v, pick, g, n: None if g < 6 else real(v, pick, g, n)
+    )
+    assert wf._wheel_sig(16, "6/49", 6, None, 100).split("|lg1:")[1] != with_h
 
 
 def test_capped_lotto_key_signs_the_classic_wheel_it_can_adopt(monkeypatch):
@@ -147,6 +151,39 @@ def test_capped_lotto_key_signs_the_classic_wheel_it_can_adopt(monkeypatch):
     assert "|lc1:" in key
     monkeypatch.setattr(bd, "budget_design_signature", lambda *a, **k: None)
     assert wf._wheel_sig(16, "6/49", 5, 6, 100) != key
+
+
+def test_capped_lotto_key_carries_the_refined_design_too(monkeypatch):
+    """Revizie 2026-10-16, runda 2: designul rafinat intră și la un plafon care
+    cuprinde designul întreg, deci și cheia cu plafon îl semnează."""
+    stored = rc.refined_cover_signature(16, 6, 3, 6, 49, condition=5)
+    assert f"|rl{stored}|" in wf._wheel_sig(16, "6/49", 3, 5, 10)
+    key = wf._wheel_sig(16, "6/49", 3, 5, 10)
+    monkeypatch.setattr(rc, "refined_cover_signature", lambda *a, **k: "altul")
+    assert wf._wheel_sig(16, "6/49", 3, 5, 10) != key
+
+
+@pytest.mark.parametrize("game", ["5/40", "joker"])
+def test_lotto_tickets_do_not_depend_on_a_cap_that_holds_the_design(game, monkeypatch):
+    """Revizie 2026-10-16, runda 2: pool 9, „3 dacă 4” (5 bilete) dădea biletele
+    clasice certificate numai la plafonul 5; fără plafon sau la 6, 10 rămânea
+    designul nerafinat, cu 3+ mai mic."""
+    mx, dn, pick = GAMES[game]
+    pool = list(range(1, 10))
+    scores = {n: float(10 - n) for n in pool}
+    outs = {
+        cap: generate_wheel("lotto", pool, pick, 3, cap, scores, condition=4, draw_n=dn, max_num=mx)
+        for cap in (0, 5, 6, 10)
+    }
+    first = sorted(map(tuple, outs[0][0]))
+    assert all(sorted(map(tuple, w)) == first and cov == 100.0 for w, cov in outs.values())
+    monkeypatch.setattr(dispatch, "_canonical_classic", lambda *a, **k: ())
+    old, _ = generate_wheel("lotto", pool, pick, 3, 0, scores, condition=4, draw_n=dn, max_num=mx)
+    p_new, p_old = _p(outs[0][0], dn, mx, pool), _p(old, dn, mx, pool)
+    assert _dominates(p_new, p_old, min(pick, dn)) and p_new[3] > p_old[3] * 1.01
+    segments = {cap: wf._wheel_sig(9, game, 3, 4, cap).split("|lc1:")[1] for cap in (0, 5, 10)}
+    assert len(set(segments.values())) == 1  # același wheel clasic adoptabil
+    assert wf._wheel_sig(9, game, 3, 4, 3).split("|lc1:")[1] != segments[0]  # plafonul taie designul
 
 
 def test_lotto_cap_holding_the_whole_design_gets_the_refined_design():
@@ -210,7 +247,9 @@ def test_every_refined_lotto_design_keeps_the_guarantee_and_beats_production(pat
     assert blocks is not None
     assert wheel_hit_profile(pool, blocks)[c][g] == comb(v, c)
     after, cov = generate_wheel("lotto", pool, pick, g, 0, scores, condition=c, draw_n=draw, max_num=mx)
+    # Referința: designul lotto livrat, fără niciun candidat (rafinat sau clasic).
     monkeypatch.setattr(rc, "load_refined_cover", lambda *a, **k: None)
+    monkeypatch.setattr(dispatch, "_canonical_classic", lambda *a, **k: ())
     before, _ = generate_wheel("lotto", pool, pick, g, 0, scores, condition=c, draw_n=draw, max_num=mx)
     assert cov == lotto_coverage_pct(after, pool, g, c) == 100.0
     assert len(after) == len(before) == len({tuple(sorted(t)) for t in after})
@@ -222,10 +261,10 @@ def test_refined_lotto_walk_forward_key_and_engine_path():
 
     stored = rc.refined_cover_signature(16, 6, 3, 6, 49, condition=5)
     assert stored
-    assert wf._wheel_sig(16, "6/49", 3, 5, 0).endswith(f"|rl{stored}")
+    assert f"|rl{stored}|lc1:" in wf._wheel_sig(16, "6/49", 3, 5, 0)
     on_540 = rc.refined_cover_signature(16, 5, 3, 6, 40, condition=5)
     assert on_540 and on_540 != stored
-    assert wf._wheel_sig(16, "5/40", 3, 5, 0).endswith(f"|rl{on_540}")
+    assert f"|rl{on_540}|" in wf._wheel_sig(16, "5/40", 3, 5, 0)
     assert f"rl{stored}" not in wf._wheel_sig(16, "5/40", 3, 5, 0)
     engine = LotoEngine("6/49")
     engine.hard_core = list(POOL)

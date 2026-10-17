@@ -5,6 +5,7 @@ import hashlib
 import itertools
 import logging
 import math
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -435,6 +436,22 @@ def _load_lotto_design(
         except Exception as exc:  # noqa: BLE001
             logger.warning("[WHEEL-LOTTO] ignor design invalid %s: %s", f, exc)
     return None
+
+
+def lotto_design_size(v: int, pick: int, guarantee: int, condition: int) -> int | None:
+    """Biletele designului lotto local întreg (None = fără fișier valid).
+
+    Memorat pe amprenta fișierului: un design schimbat se recitește."""
+    return _lotto_design_size(
+        int(v), int(pick), int(guarantee), int(condition),
+        covering_design_source_signature(int(v), int(pick), int(guarantee), int(condition)),
+    )
+
+
+@lru_cache(maxsize=256)
+def _lotto_design_size(v: int, pick: int, guarantee: int, condition: int, _sig: str) -> int | None:
+    blocks = _load_lotto_design(v, pick, guarantee, condition)
+    return len(blocks) if blocks else None
 
 
 def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):

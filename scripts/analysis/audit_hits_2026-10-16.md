@@ -39,7 +39,11 @@ câștig la g+1 între +0,26% și +7,33% relativ (6/49 pool 13 g3, 21 de bilete:
 căutarea n-a dat un rezultat certificat: 9 au numai două bilete, 2 sunt
 „3 dacă 6” la pool 15-16, iar 7 sunt designuri mici (4..14 bilete) la pool
 10..12. Garanția „g dacă c” rămâne 100%. Designul rafinat intră fără plafon și
-la orice plafon care cuprinde designul întreg.
+la orice plafon care cuprinde designul întreg. Tot acolo, al doilea candidat e
+wheel-ul clasic al motorului la același număr de bilete, construit o dată pe
+geometrie; rămâne cel mai bun dintre cei certificați. Pe 96 de geometrii
+(pool 9..16, garanția 3+) schimbă numai pool 9 „3 dacă 4” la 5/40 (3+ +1,67%)
+și Joker (3+ +1,87%), unde nu există design rafinat.
 
 | Joc | Pool | g dacă c | Bilete | 3+ | 4+ | 5+ |
 |---|---:|---|---:|---:|---:|---:|
@@ -143,8 +147,9 @@ apare.
 ## Chei și cache
 
 - WF: `|rc<amprentă>` (cover rafinat pe `lajolla` și `bf1`), `|rl<amprentă>`
-  (lotto, designul rafinat), `|lc1:<amprentă>` (lotto cu plafon: semnătura
-  wheel-ului clasic pe care îl poate adopta), `|lg1:<amprentă>` (garanția egală
+  (lotto, designul rafinat), `|lc1:<amprentă>` (lotto: semnătura wheel-ului
+  clasic pe care îl poate adopta, la plafonul care taie designul sau la mărimea
+  designului), `|lg1:<amprentă>` (garanția egală
   cu biletul, cu plafon: semnăturile candidaților de la garanțiile mai mici).
   O schimbare într-un fișier C, R sau H adoptabil schimbă exact cheile atinse;
   fără bump global `v31`.
