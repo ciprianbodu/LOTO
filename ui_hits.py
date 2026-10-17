@@ -517,6 +517,113 @@ _WF_MARKED_CELL = r"""
 """
 
 
+def _lr_replay(per: dict, game_label: str) -> list[dict]:
+    """Schemele reduse LR pe pool-ul de atunci al fiecărei extrageri WF.
+
+    Schema se pune pe pool-ul pasului sortat crescător, ca la terminal; intră
+    numai pașii cu pool și extragere în context și cu atâtea numere câte cere
+    schema. `observed`/`tickets` numără extragerile cu cel puțin t pe o variantă
+    (schema, respectiv variantele validate în WF, pe aceiași pași)."""
+    from covering.lr_schemes import best_hits, lr_schemes, scheme_odds
+
+    by_n: dict[int, list[dict]] = {}
+    for d in per.values():
+        if d.get("pool_numbers") and d.get("drawn"):
+            by_n.setdefault(len(d["pool_numbers"]), []).append(d)
+    out = []
+    for n, rows in sorted(by_n.items()):
+        for scheme in lr_schemes(game_label, n):
+            best = [(d, best_hits(scheme, d["pool_numbers"], d["drawn"])) for d in rows]
+            odds = scheme_odds(scheme)
+            out.append(
+                {
+                    "scheme": scheme,
+                    "draws": len(best),
+                    "odds": odds,
+                    "observed": {t: sum(1 for _, h in best if h >= t) for t in odds},
+                    "tickets": {t: sum(1 for d, _ in best if d["best_ticket"] >= t) for t in odds},
+                    "five": [d["label"] for d, h in best if h >= 5],
+                }
+            )
+    return out
+
+
+def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: float = 0) -> None:
+    """Tabelul „schemă LR pe pool-ul de atunci”; o notă când pool-ul n-are cod.
+
+    `wf_variants` = variante WF pe extragere, ca schema să se compare la cost."""
+    from covering.lr_schemes import lr_schemes
+
+    res = _lr_replay(per, game_label)
+    if not res:
+        sizes = sorted({s.n for s in lr_schemes(game_label)})
+        here = lr_schemes(game_label, pool_n) if pool_n else []
+        if here:
+            # Codul există, dar pașii n-au pool-ul în context (validare veche).
+            ui.label(
+                f"📋 {', '.join(s.label for s in here)}: reluarea cere pool-ul fiecărei "
+                "extrageri, păstrat numai de validările noi; apare la următoarea "
+                "validare walk-forward."
+            ).classes("text-caption text-grey")
+        elif sizes and pool_n:
+            ui.label(
+                f"📋 Schemă redusă LR: Loteria Română nu are schemă cu variante întregi "
+                f"pentru {pool_n} numere la acest joc (are pentru "
+                f"{', '.join(map(str, sizes))})."
+            ).classes("text-caption text-grey")
+        return
+    for r in res:
+        s, n_d = r["scheme"], r["draws"]
+        top = max(r["odds"])
+        ui.label(
+            f"📋 {s.label} ({s.size} var.) jucat pe pool-ul de atunci, "
+            f"{_n_extrageri(n_d)}:"
+        ).classes("text-bold text-caption mt-2")
+        rows = [
+            {
+                "prag": f"+{t}" if t < top else f"{t}",
+                "lr": f"{r['observed'][t]} ({r['observed'][t] / n_d * 100:.2f}%)",
+                "tick": f"{r['tickets'][t]} ({r['tickets'][t] / n_d * 100:.2f}%)",
+                "rnd": _threshold_pct(t, p),
+            }
+            for t, p in r["odds"].items()
+        ]
+        ui.table(
+            columns=[
+                {"name": "prag", "label": "Extrageri cu", "field": "prag", "align": "left"},
+                {"name": "lr", "label": f"📋 {s.label}", "field": "lr", "align": "center"},
+                {
+                    "name": "tick",
+                    "label": (
+                        f"🎟️ Variantele WF ({wf_variants:.4g} var.)"
+                        if wf_variants
+                        else "🎟️ Variantele WF"
+                    ),
+                    "field": "tick",
+                    "align": "center",
+                },
+                {
+                    "name": "rnd",
+                    "label": f"🎲 {s.label} la întâmplare",
+                    "field": "rnd",
+                    "align": "center",
+                },
+            ],
+            rows=rows,
+        ).classes("w-full").props("dense wrap-cells")
+        ui.label(
+            f"📋 = extrageri în care o variantă din {s.label}, pusă pe pool-ul de atunci "
+            "în ordine crescătoare (ca la terminal), atinge pragul. 🎟️ = variantele "
+            "validate în WF, pe aceleași extrageri. 🎲 = șansa exactă a schemei la o "
+            "extragere uniformă."
+            + (
+                f" Cu {'5+' if top > 5 else '5'} pe o variantă: {', '.join(r['five'])}."
+                if r["five"]
+                else ""
+            )
+        ).classes("text-caption text-grey")
+
+
 def _render_hits_4plus(
     flat,
     game: str,
@@ -721,6 +828,8 @@ def _render_hits_4plus(
         ui.label(_gap).classes("text-caption text-grey")
     if full_ticket:
         _render_full_ticket_replay(flat, full_ticket["game"], full_ticket.get("guarantee"))
+    if _foreign is None:
+        _render_lr_replay(per, gk, _pn, tick_avg)
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
