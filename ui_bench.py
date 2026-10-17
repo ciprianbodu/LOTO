@@ -971,7 +971,8 @@ def _render_bench_leaderboard_slice(
             )
             _pref = (
                 "experimentală, exclusă din selecția automată · " if is_experimental
-                else "baseline (referință, NU e candidat) · " if is_base else ""
+                else "baseline aleator (referință, NU e candidat) · " if is_base and m == "random"
+                else "martor exclus din producție (NU e candidat) · " if is_base else ""
             )
             avg_txt = "—" if pd.isna(avg) else f"{avg:.2f}"
             ui.label(
@@ -988,7 +989,7 @@ def _render_bench_leaderboard_slice(
         ).classes("text-caption text-grey")
         if has_target_rate:
             ui.label(
-                "Wilson și brut sunt aceleași procente, cu două zecimale. Wilson folosește "
+                "Wilson și brut apar în același format (procente, două zecimale). Wilson folosește "
                 "z=1 ca scor de clasare și este mai mic decât rata observată; nu este un "
                 "interval de încredere de 95%. Brut este rata observată pe aceleași "
                 "extrageri. Calificarea este euristică. Un avantaj predictiv necesită "
@@ -1227,10 +1228,16 @@ def _render_bench_leaderboard_slice(
                 if _below_theory is not None
                 else ""
             )
+            # Numai `random` e o realizare a hazardului; ceilalți sunt filtre
+            # deterministe excluse din producție, păstrați ca martori de bench.
+            _what = (
+                f"🎲 baseline «{_brec[0]}» (realizare empirică a hazardului, NU candidat)"
+                if _brec[0] == "random"
+                else f"🚫 martor «{_brec[0]}» (filtru exclus din producție, NU candidat)"
+            )
             ui.label(
-                f"🎲 baseline «{_brec[0]}» (realizare empirică, NU candidat) — locul "
-                f"{_better + 1} din {len(measured_methods) + 1} după Wilson."
-                f"{_theory_txt}"
+                f"{_what} — locul {_better + 1} din {len(measured_methods) + 1} după "
+                f"Wilson.{_theory_txt}"
             ).classes("text-caption text-grey")
         # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
         # slice, spune unde cade. Altfel 🎯 lipsește complet din listă, fără niciun
@@ -1543,8 +1550,8 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
                 "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului."
             ).classes("text-caption text-grey")
         ui.label(
-            "ℹ️ Walk-forward: istoricul listează +3 și +4; targetul bench/alerte rămâne "
-            f"≥{_bench_target()}."
+            "ℹ️ Walk-forward: istoricul listează +3, +4 și +5; ținta bench/alerte: "
+            f"≥{_bench_target()} (Loto 5/40 minimum 4+, Joker Urna 2 top-1)."
         ).classes("text-caption text-grey")
         _sections = (
             [

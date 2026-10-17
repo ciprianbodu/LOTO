@@ -81,7 +81,7 @@ def test_pool_table_shows_the_pool_and_the_draw_of_each_hit():
 def test_ticket_tables_show_the_best_ticket_without_the_joker_number():
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(_entries("joker"), "joker", {"pool_size": 16}, pool_n=16)
-    table = _table_after(ui, "🎟️ BILET 5+")
+    table = _table_after(ui, "🎟️ VARIANTĂ 5+")
     (row,) = table["kwargs"]["rows"]
     # Biletul cu 5 prinse, fără numărul Joker (7) din Urna 2.
     assert row["ticket"] == "[5] [12] [23] [33] [45]"
@@ -141,8 +141,8 @@ def test_pool_title_counts_each_level_and_the_filter_keeps_the_fives():
 def test_single_level_tables_have_no_filter_and_singular_title():
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(_entries(), "6/49", {"pool_size": 16}, pool_n=16)
-    assert _title(ui, "🎟️ BILET 5+") == "🎟️ BILET 5+ (1 extragere; cele mai recente întâi):"
-    assert _title(ui, "🎟️ BILET 4+") == "🎟️ BILET 4+ (1 extragere; cele mai recente întâi):"
+    assert _title(ui, "🎟️ VARIANTĂ 5+") == "🎟️ VARIANTĂ 5+ (1 extragere; cele mai recente întâi):"
+    assert _title(ui, "🎟️ VARIANTĂ 4+") == "🎟️ VARIANTĂ 4+ (1 extragere; cele mai recente întâi):"
     assert sum(n["kind"] == "toggle" for n in ui.walk()) == 1  # numai la POOL
 
 

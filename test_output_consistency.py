@@ -143,10 +143,9 @@ def test_wf_output_distinguishes_pool_hits_from_incomplete_tickets():
     with capture_ui() as ui:
         app_ui._render_hits_4plus(flat, "6/49", {"pool_size": 11})
     table = next(n for n in ui.walk() if n["kind"] == "table")
-    pool, tickets = table["kwargs"]["rows"]
-    assert pool["p3"] == pool["p4"] == "1 (100.00%)"
-    assert tickets["p3"] == tickets["p4"] == "0 (0.00%)"
-    assert tickets["rnd"] == "—"
+    three, four, _five = table["kwargs"]["rows"]
+    assert three["pool"] == four["pool"] == "1 (100.00%)"
+    assert three["tick"] == four["tick"] == "0 (0.00%)"
 
 
 def test_report_uses_audited_guarantee_not_the_requested_one(monkeypatch):

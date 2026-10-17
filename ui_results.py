@@ -112,12 +112,15 @@ def _fmt_num(x) -> str:
         return str(x)
 
 
-def _fmt_g_range(g) -> str:
-    if g is None:
-        return "—"
-    if isinstance(g, (list, tuple)) and len(g) >= 2:
-        return f"[{_fmt_num(g[0])}, {_fmt_num(g[1])}]"
-    return str(g)
+def _unplayed_reason(data: dict) -> str:
+    """De ce lipsesc numere de pe bilete: designul (garanție întreagă) sau plafonul."""
+    try:
+        complete = float((data.get("context") or {}).get("coverage_pct")) >= 100.0
+    except (TypeError, ValueError):
+        complete = False
+    if complete:
+        return "designul își ține garanția fără ele"
+    return "nu au încăput în limita de variante, iar garanția nu e completă"
 
 
 def _render_audit(audit: dict) -> None:
@@ -225,13 +228,13 @@ def _render_cost(game: str, data: dict) -> None:
     # un cover la garanția cerută; minimalitatea nu este demonstrată în general.
     _full_lbl = (
         f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} "
-        f"≈ {full_cost:,.0f} Lei în variante"
+        f"≈ {_thousands(full_cost)} Lei în variante"
     )
     if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
         parts = []
         for code, base in LR_SCHEMES[gk][pool_used]:
             parts.append(
-                f"**{code}** ({base} var.{_jk_txt} ≈ {base * price:,.0f} Lei în variante)"
+                f"**{code}** ({base} var.{_jk_txt} ≈ {_thousands(base * price)} Lei în variante)"
             )
         ui.markdown(
             f"💡 **Scheme reduse oficiale la agenție** ({pool_used} nr.): "
@@ -282,9 +285,9 @@ def _render_cost(game: str, data: dict) -> None:
         )
         ui.markdown(
             f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
-            f"{n_simple * price:,.0f} Lei în variante "
+            f"{_thousands(n_simple * price)} Lei în variante "
             f"| **Wheel-ul nostru** ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
-            f"{len(variants) * price:,.0f} Lei în variante."
+            f"{_thousands(len(variants) * price)} Lei în variante."
         ).classes("text-caption")
         if n_simple < len(variants):
             ui.label(
@@ -315,10 +318,10 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
         cur = spec.currency
         ui.markdown(
             f"💡 **Cost {spec.display}:** sistem complet C({pool_used},{pick}) = "
-            f"{full_vars} var. ≈ {full_vars * spec.price:,.2f} {cur} în variante"
+            f"{full_vars} var. ≈ {_thousands(full_vars * spec.price, 2)} {cur} în variante"
             + (
                 f" | **Wheel-ul nostru:** {len(variants)} var. ≈ "
-                f"{len(variants) * spec.price:,.2f} {cur} în variante"
+                f"{_thousands(len(variants) * spec.price, 2)} {cur} în variante"
                 if variants
                 else ""
             )
@@ -611,6 +614,12 @@ def _five_plus_pct(p) -> str:
     return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
 
 
+def _thousands(x, decimals: int = 0) -> str:
+    """Sume și numărători lungi cu spațiu îngust la mii: „1 216”, nu „1,216”,
+    pe care un cititor român îl ia drept 1,2."""
+    return f"{float(x):,.{int(decimals)}f}".replace(",", "\u202f")
+
+
 def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str | None:
     if not flat:
         return None
@@ -805,8 +814,8 @@ def _build_report() -> str:
             out.append(
                 f"{indent}⚠️ Numere din pool care NU apar pe niciun bilet: "
                 + ", ".join(str(int(n)) for n in _unplayed)
-                + " — garanția designului rămâne validă, dar hiturile de pool "
-                "le numără, iar biletele nu le pot prinde."
+                + f" — {_unplayed_reason(d)}, dar hiturile de pool le numără, iar "
+                "biletele nu le pot prinde."
             )
         if d.get("hard_core_joker"):
             out.append(
@@ -816,8 +825,7 @@ def _build_report() -> str:
         if d.get("p10") is not None:
             out.append(
                 f"{indent}Interval p10–p90 (frecvențe pe tot universul, nu pe pool): "
-                f"{_fmt_num(d.get('p10'))} – {_fmt_num(d.get('p90'))} "
-                f"(g_range={_fmt_g_range(d.get('g_range'))})"
+                f"{_fmt_num(d.get('p10'))} – {_fmt_num(d.get('p90'))}"
             )
         au = dict(d.get("audit") or {})
         # Alias de afișare pentru payload-urile istorice: aplicația nu rulează
@@ -1534,8 +1542,8 @@ def _render_pool_body(
         ui.label(
             "⚠️ Nu apar pe niciun bilet: "
             + ", ".join(str(int(n)) for n in _unplayed)
-            + " — designul își ține garanția fără ele, dar hiturile de pool le "
-            "numără, iar biletele nu le pot prinde."
+            + f" — {_unplayed_reason(data)}, dar hiturile de pool le numără, iar "
+            "biletele nu le pot prinde."
         ).classes("text-caption text-warning mt-1")
     if data.get("hard_core_joker"):
         ui.label("Joker:").classes("text-bold mt-1")
@@ -1544,8 +1552,7 @@ def _render_pool_body(
     if data.get("p10") is not None:
         ui.label(
             f"Interval p10–p90 (frecvențe pe tot universul, nu pe pool): "
-            f"{_fmt_num(data.get('p10'))} – {_fmt_num(data.get('p90'))} "
-            f"(g_range={_fmt_g_range(data.get('g_range'))})"
+            f"{_fmt_num(data.get('p10'))} – {_fmt_num(data.get('p90'))}"
         ).classes("text-caption")
 
     audit = data.get("audit") or {}
@@ -1611,7 +1618,7 @@ def wf_progress_panel() -> None:
             if _rem > _budget_left:
                 _eta = (
                     f"  ·  rămas ≤{_fmt_dur(_budget_left)} (buget; estimare liniară "
-                    f"~{_fmt_dur(_rem)} → jocurile rămase pot ieși PARȚIALE)"
+                    f"~{_fmt_dur(_rem)} → validarea poate ieși PARȚIALĂ)"
                 )
             else:
                 _eta = f"  ·  rămas ~{_fmt_dur(_rem)}"
@@ -1621,11 +1628,15 @@ def wf_progress_panel() -> None:
         # Text final („anulat"/„eșuat") fără bară și ETA: WF nu mai rulează.
         ui.label(STATE["wf_status"]).classes("text-warning")
         return
-    ui.label(STATE["wf_status"] + _eta).classes("text-info")
+    # Rândul de stare are procentul jocului curent; bara, pe cel al tuturor
+    # jocurilor. Timpul rămas apare o singură dată, lângă total.
+    ui.label(STATE["wf_status"]).classes("text-info")
     ui.linear_progress(value=_wfp, show_value=False).props(
         "instant-feedback rounded"
     ).classes("w-full")
-    ui.label(f"{int(_wfp * 100)}%" + _eta).classes("text-caption text-info")
+    ui.label(f"Total walk-forward, toate jocurile: {int(_wfp * 100)}%" + _eta).classes(
+        "text-caption text-info"
+    )
 
 
 @ui.refreshable

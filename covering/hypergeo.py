@@ -47,7 +47,9 @@ def hypergeometric_hit_forecast(
         if target_k > draw_n:
             continue
         rec_pool = None
-        for trial_pool in range(pool_size, min(max_n, pool_size + 20) + 1):
+        # Cel mai mic pool, nu primul de la cel curent: altfel orice pool deja
+        # suficient se „recomanda” pe sine.
+        for trial_pool in range(draw_n, max_n + 1):
             p_k = sum(
                 comb(trial_pool, j)
                 * comb(max_n - trial_pool, draw_n - j)

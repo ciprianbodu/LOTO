@@ -123,13 +123,13 @@ def test_wf_table_and_ticket_gaps_use_each_threshold_separately(monkeypatch):
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(_wf_entries(), "6/49", {"pool_size": 16})
     summary = next(node for node in ui.walk() if node["kind"] == "table")
-    pool, ticket = summary["kwargs"]["rows"]
-    assert pool["p5"] == "3 (60.00%)"
-    assert ticket["p5"] == "1 (20.00%)"
-    assert ticket["rnd"] == "—"
+    five_row = summary["kwargs"]["rows"][2]
+    assert five_row["prag"] == "+5"
+    assert five_row["pool"] == "3 (60.00%)"
+    assert five_row["tick"] == "1 (20.00%)"
     # Random pool 16, 6/49, 5+ rămâne probabilitatea exactă hipergeometrică.
-    assert pool["rnd"].endswith(f"{100 * _at_least_five(49, 6, 16):.3f}%")
-    details = next(node for node in ui.walk() if node["kind"] == "expansion" and "Bilete WF" in node["args"][0])
+    assert five_row["rnd"] == f"{100 * _at_least_five(49, 6, 16):.3f}%"
+    details = next(node for node in ui.walk() if node["kind"] == "expansion" and "Variante WF" in node["args"][0])
     assert details["kwargs"]["value"] is False
     tables = [node for node in details["children"] if node["kind"] == "table"]
     four = tables[0]["kwargs"]["rows"]

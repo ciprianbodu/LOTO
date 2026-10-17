@@ -1955,9 +1955,18 @@ def _mail_best_draw_line(spec, df, pool) -> str:
     idx = hits[hits == best].index
     last = idx[-1]
     when = str(df.at[last, "date"]) if "date" in df.columns else f"rândul {last + 1}"
+    # Cât ar avea un pool oarecare de aceeași mărime: pool-ul de azi e ales pe
+    # aceleași extrageri, deci numărătoarea singură ar părea un palmares.
+    from math import comb
+
+    k, n, m = len(pool), int(spec.draw_n), int(spec.max_n)
+    chance = len(df) * comb(k, best) * comb(m - k, n - best) / comb(m, n)
+    times = "o dată" if len(idx) == 1 else f"de {count(len(idx), 'ori')}"
     return (
-        f"CEL MAI BUN REZULTAT pe istoric ({len(df)} extrageri, pool-ul de azi): "
-        f"{best} numere din pool, ultima oară la {when}; de {len(idx)} ori în total"
+        f"CEL MAI BUN REZULTAT pe istoric ({count(len(df), 'extrageri', 'extragere')}, "
+        f"pool-ul de azi): {best} numere din pool, ultima oară la {when}; {times} în "
+        f"total, față de ~{chance:.1f} pentru un pool oarecare de {k} numere. Privire "
+        "înapoi, nu validare: pool-ul e ales pe aceleași extrageri."
     )
 
 
@@ -2048,7 +2057,8 @@ def _send_test_email() -> None:
     body = (
         "Test e-mail Loto Enterprise — configurarea funcționează ✅\n"
         f"Următoarea extragere: {_next_draw_date()}\n"
-        "La finalul bench-ului vei primi: data + pool-ul fiecărui joc."
+        "După fiecare generare vei primi data extragerii, pool-ul fiecărui joc, "
+        "metoda și ratingul ei."
     )
     try:
         send_email(cfg, "🎰 Loto — mail de test", body)
@@ -2617,14 +2627,16 @@ def _render_base_interval_tables() -> None:
                         "align": "center",
                     },
                     {"name": "whole", "label": "Tot", "field": "whole", "align": "center"},
-                    {"name": "h1", "label": "Jum. 1", "field": "h1", "align": "center"},
-                    {"name": "h2", "label": "Jum. 2", "field": "h2", "align": "center"},
+                    # Controlul uniform lângă „Tot”: în sertarul de 360 px încap
+                    # primele patru coloane, iar comparația lor e rostul tabelului.
                     {
                         "name": "ctrl",
                         "label": "🎲 Uniform",
                         "field": "ctrl",
                         "align": "center",
                     },
+                    {"name": "h1", "label": "Jum. 1", "field": "h1", "align": "center"},
+                    {"name": "h2", "label": "Jum. 2", "field": "h2", "align": "center"},
                     {
                         "name": "full",
                         "label": "Toată extragerea",
@@ -2655,8 +2667,9 @@ def _render_base_interval_tables() -> None:
             ui.label(
                 f"Referință teoretică, identică pentru ORICE pool de {pool} numere: "
                 f"{theoretical_rate(max_num, pool, draw_n):.2f}%. "
-                f"Din {len(rows) - 1} intervale alese pe tot istoricul, {_moved} au "
-                "ieșit mai slabe pe a doua jumătate decât pe prima."
+                f"Din {count(len(rows) - 1, 'intervale', 'un interval')} alese pe tot "
+                f"istoricul, {'unul a' if _moved == 1 else f'{_moved} au'} ieșit mai "
+                "slabe pe a doua jumătate decât pe prima."
             ).classes("text-caption text-grey")
     ui.label(
         "Cum se citește: un pool de dimensiune fixă are aceeași probabilitate "
@@ -2679,9 +2692,16 @@ def main_page() -> None:
     # Chevron-ul expansion-urilor: vârful în JOS când e DESCHIS (arată spre conținut),
     # în sus când e închis — invers față de implicitul Quasar. Inversăm rotația global
     # pentru toate expansion-urile (q-expansion-item) printr-o singură regulă.
+    # Pe telefon, fiecare card și expansion imbricat lua câte 32 px din lățime:
+    # tabelele din „Istoric hits” rămâneau cu 230 px din 390.
     ui.add_css("""
         .q-expansion-item__toggle-icon { transform: rotate(180deg) !important; }
         .q-expansion-item__toggle-icon--rotated { transform: rotate(0deg) !important; }
+        @media (max-width: 599.98px) {
+            .loto-main, .loto-main .nicegui-card, .loto-main .nicegui-expansion-content {
+                padding: 4px !important;
+            }
+        }
     """)
 
     with ui.header().classes("items-center justify-between"):
@@ -2689,7 +2709,7 @@ def main_page() -> None:
         ui.label("NiceGUI — stare persistentă, fără reload").classes("text-caption")
 
     # ---- Sidebar (drawer stânga) ----
-    with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3"):
+    with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3") as drawer:
         ui.label("1. Încărcare Date CSV").classes("text-bold")
         _cc = _selected_country()
         _cc_name = _country_label(_cc)
@@ -3089,7 +3109,8 @@ def main_page() -> None:
             ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete"
         )
         _bind_save(
-            ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete"
+            ui.checkbox("📧 Trimite rezultatele pe mail după fiecare generare"),
+            "mail_on_complete",
         )
         ui.button("📧 Trimite mail de test", on_click=_send_test_email).props(
             "outline no-caps size=sm"
@@ -3211,8 +3232,15 @@ def main_page() -> None:
             "🗑️ Șterge Log", on_click=lambda: (clear_logs(), logs_panel.refresh())
         ).props("outline no-caps").classes("w-full").style(_BTN_STYLE)
 
+    # Sub 1024 px sertarul iese din ecran și toate comenzile odată cu el; butonul
+    # plutitor îl aduce înapoi (antetul rămâne neschimbat).
+    with ui.page_sticky(position="top-left", x_offset=8, y_offset=8).classes("lt-md"):
+        ui.button(icon="menu", on_click=drawer.toggle).props(
+            "round color=primary aria-label=Setări"
+        ).tooltip("Setări și comenzi")
+
     # ---- Zona principală ----
-    with ui.column().classes("w-full p-4 gap-2"):
+    with ui.column().classes("w-full p-4 gap-2 loto-main"):
         status_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"

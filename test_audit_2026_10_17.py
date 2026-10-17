@@ -158,3 +158,90 @@ def test_report_walk_forward_line_has_the_chance_rate_and_the_selection_caveat()
     line = ui_results._wf_summary(_wf_flat([4] * 10 + [1] * 90), {"pool_size": 16}, "6/49")
     assert "la întâmplare (pool 16) 3+/4+/5+: 29.8%/7.96%/1.088% pe extragere" in line
     assert "nu e o validare externă" in line
+
+
+# --------------------------------------------------------------------------- #
+# Mailul: „CEL MAI BUN REZULTAT” are rata la întâmplare și spune că nu validează.
+# --------------------------------------------------------------------------- #
+
+
+def test_mail_best_draw_line_compares_with_any_pool_of_the_same_size():
+    from math import comb
+
+    import pandas as pd
+
+    from loto_enterprise.core.lotteries import lottery_by_id
+
+    spec = lottery_by_id("6/49")
+    rows = [[1, 2, 3, 4, 5, 6]] * 2 + [[30, 31, 32, 33, 34, 35]] * 23
+    df = pd.DataFrame(
+        {
+            "date": [f"{1 + i:02d}-01-2026" for i in range(25)],
+            **{f"n{j + 1}": [r[j] for r in rows] for j in range(6)},
+        }
+    )
+    pool = list(range(1, 17))
+    line = app_nicegui._mail_best_draw_line(spec, df, pool)
+    expected = 25 * comb(16, 6) / comb(49, 6)
+    assert "(25 de extrageri, pool-ul de azi): 6 numere din pool" in line
+    assert f"de 2 ori în total, față de ~{expected:.1f} pentru un pool oarecare de 16 numere" in line
+    assert "nu validare: pool-ul e ales pe aceleași extrageri" in line
+    one = app_nicegui._mail_best_draw_line(spec, df.iloc[1:], pool)
+    assert "; o dată în total" in one
+
+
+# --------------------------------------------------------------------------- #
+# Mărunte: recomandarea de pool, sumele în lei, meniul pe ecran îngust, etichete.
+# --------------------------------------------------------------------------- #
+
+
+def test_hit_forecast_recommends_the_smallest_pool_not_the_current_one():
+    from covering.hypergeo import hypergeometric_hit_forecast
+
+    rec = hypergeometric_hit_forecast(16, 6, 49, 130)["recommendations"]
+    # 3+ la 6/49: ~3 evenimente în 130 de extrageri apar deja de la pool 8.
+    assert rec["pool_for_3_events_3+"] < 16
+    small = hypergeometric_hit_forecast(8, 6, 49, 130)["recommendations"]
+    assert small == rec  # recomandarea nu mai depinde de pool-ul curent
+
+
+def test_money_amounts_use_a_narrow_space_for_thousands():
+    assert ui_results._thousands(1216) == "1 216"
+    assert ui_results._thousands(64064.0) == "64 064"
+    assert ui_results._thousands(1234.5, 2) == "1 234.50"
+    assert ui_results._thousands(152) == "152"
+
+
+def test_narrow_screens_have_a_button_that_opens_the_controls():
+    from pathlib import Path
+
+    src = Path(app_nicegui.__file__).read_text(encoding="utf-8")
+    assert "as drawer:" in src and "on_click=drawer.toggle" in src
+    # Vizibil numai sub 1024 px, unde Quasar scoate sertarul din ecran.
+    assert 'ui.page_sticky(position="top-left", x_offset=8, y_offset=8).classes("lt-md")' in src
+
+
+def test_bench_labels_only_random_as_a_realisation_of_chance():
+    from pathlib import Path
+
+    src = Path(ui_results.__file__).with_name("ui_bench.py").read_text(encoding="utf-8")
+    assert "realizare empirică a hazardului" in src
+    assert "martor «{_brec[0]}» (filtru exclus din producție" in src
+    assert "Wilson și brut sunt aceleași procente" not in src
+    assert "istoricul listează +3 și +4;" not in src
+
+
+def test_unplayed_numbers_reason_depends_on_the_coverage():
+    full = {"context": {"coverage_pct": 100.0}}
+    capped = {"context": {"coverage_pct": 0.82}}
+    assert ui_results._unplayed_reason(full) == "designul își ține garanția fără ele"
+    assert "nu au încăput în limita de variante" in ui_results._unplayed_reason(capped)
+    assert "nu au încăput" in ui_results._unplayed_reason({})
+
+
+def test_romanian_counts_in_the_hits_panel():
+    import ui_hits
+
+    assert ui_hits._n_extrageri(777) == "777 de extrageri"
+    assert ui_hits._n_extrageri(1) == "1 extragere"
+    assert ui_hits._n_extrageri(15) == "15 extrageri"
