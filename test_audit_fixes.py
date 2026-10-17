@@ -1,0 +1,684 @@
+"""Teste pentru corecturile de audit (FAILED msg, ILP cache, payload invalid, flag-uri moarte).
+
+Fiecare test e scris ca să PICE pe codul de dinainte de fix — nu ca să confirme
+ce face codul de azi.
+"""
+
+import os
+import tempfile
+
+import pandas as pd
+import pytest
+
+
+# --------------------------------------------------------------------------
+# 1. Mesajul de FAILED chiar ajunge în coadă, pe câmpuri care EXISTĂ în schemă
+# --------------------------------------------------------------------------
+def test_fail_job_message_is_readable_from_status():
+    """`fail_job` scrie motivul; UI-ul trebuie să-l poată citi din `get_job_status`.
+
+    Bug-ul reparat: panoul citea `stt["error_msg"]` — cheie care nu e coloană în
+    tabelul `jobs`, deci mereu None → „Job FAILED:" fără niciun motiv.
+    """
+    import job_queue as jq
+
+    with tempfile.TemporaryDirectory() as d:
+        db = os.path.join(d, "t.db")
+        jid = jq.submit_job("pipeline", "{}", db_path=db)
+        jq.fetch_pending_job(db_path=db)
+        assert jq.fail_job(jid, "CSV corupt: 0 extrageri valide", db_path=db)
+
+        stt = jq.get_job_status(jid, db_path=db)
+        assert stt["status"] == "FAILED"
+        # cheia veche NU există în schemă — de asta era mesajul mereu gol
+        assert "error_msg" not in stt
+        # ...dar textul e acolo, pe câmpurile reale
+        assert "CSV corupt" in str(stt["result_json"])
+        assert "CSV corupt" in str(stt["log_tail"])
+
+
+def test_ui_failed_label_uses_existing_columns():
+    """Sursa UI-ului nu mai are voie să citească `error_msg` pe ramura FAILED."""
+    # doar codul, fără comentarii (comentariul explică tocmai bug-ul reparat)
+    code = "\n".join(
+        ln
+        for ln in open("app_nicegui.py", encoding="utf-8").read().splitlines()
+        if not ln.lstrip().startswith("#")
+    )
+    assert "error_msg" not in code, (
+        "UI-ul citește iar o cheie inexistentă în schema `jobs`"
+    )
+
+
+# --------------------------------------------------------------------------
+# 2. ILP nu memoizează eșecurile de MEDIU (timeout / excepție)
+# --------------------------------------------------------------------------
+def test_ilp_does_not_memoize_timeout():
+    """Un timeout nu are voie să dezactiveze ILP pentru tot restul procesului.
+
+    Înainte: `res.x is None` → `_ILP_COVER_CACHE[key] = None` permanent, deci
+    toți cei ~1940 de pași de walk-forward cădeau tăcut pe greedy.
+    """
+    import covering.ilp as wm
+
+    key = (9, 5, 3)
+    wm._ILP_COVER_CACHE.pop(key, None)
+    # time_limit ridicol de mic → solver-ul nu apucă să întoarcă o soluție
+    wm._ilp_cover_positions(*key, time_limit=1e-9)
+    assert key not in wm._ILP_COVER_CACHE, (
+        "timeout-ul a fost memoizat — ILP rămâne mort pentru tot procesul"
+    )
+
+
+def test_ilp_still_memoizes_too_big_geometry():
+    """Pragul de DIMENSIUNE rămâne memoizat: ăla chiar e o proprietate stabilă."""
+    import covering.ilp as wm
+
+    v = 60  # C(60, 6) depășește _ILP_MAX_BLOCKS
+    key = (v, 6, 4)
+    wm._ILP_COVER_CACHE.pop(key, None)
+    assert wm._ilp_cover_positions(*key, time_limit=15.0) is None
+    assert wm._ILP_COVER_CACHE.get(key, "absent") is None
+
+
+def test_ilp_success_is_memoized():
+    """Cazul bun (optimizarea din #81) rămâne memoizat."""
+    scipy = pytest.importorskip("scipy")  # noqa: F841
+    import covering.ilp as wm
+
+    key = (8, 4, 3)
+    wm._ILP_COVER_CACHE.pop(key, None)
+    cover = wm._ilp_cover_positions(*key, time_limit=30.0)
+    if cover is None:
+        pytest.skip("solver-ul n-a găsit soluție în buget pe mașina asta")
+    assert wm._ILP_COVER_CACHE[key] == cover
+    assert (
+        wm._ilp_cover_positions(*key, time_limit=30.0) is cover
+    )  # al doilea apel = cache
+
+
+def test_ilp_does_not_memoize_incomplete_cover(monkeypatch):
+    """Un vector HiGHS incomplet nu are voie să blocheze un apel ulterior."""
+    scipy = pytest.importorskip("scipy")  # noqa: F841
+    import covering.ilp as wm
+    import numpy as np
+    from types import SimpleNamespace
+
+    key = (6, 4, 3)
+    wm._ILP_COVER_CACHE.pop(key, None)
+
+    def _partial_milp(*_args, **kwargs):
+        nb = int(kwargs["c"].shape[0])
+        x = np.zeros(nb)
+        x[0] = 1.0
+        return SimpleNamespace(x=x, success=False)
+
+    monkeypatch.setattr("scipy.optimize.milp", _partial_milp)
+    cover = wm._ilp_cover_positions(*key, time_limit=15.0)
+    assert cover is not None
+    assert key not in wm._ILP_COVER_CACHE
+
+
+# --------------------------------------------------------------------------
+# 3. Payload invalid la COMPLETED nu declanșează mail / WF / shutdown
+# --------------------------------------------------------------------------
+def test_decode_invalid_payload_is_not_a_pair():
+    """Premisa gărzii: un payload gol/corupt NU trece de testul de tuplu-de-2."""
+    from ui_shared import decode_queue_result
+
+    for bad in ("{}", "", "nu-i base64", "e30="):
+        got = decode_queue_result(bad)
+        assert not (isinstance(got, tuple) and len(got) == 2), bad
+
+
+def test_completed_branch_guards_payload():
+    """Ramura LIVE COMPLETED are aceeași gardă ca recovery-ul, ÎNAINTE de mail/WF."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index('if state == "COMPLETED":')
+    j = src.index("_maybe_send_results_email()", i)
+    head = src[i:j]
+    assert "isinstance(payload, tuple) and len(payload) == 2" in head, (
+        "garda de payload lipsește sau e după trimiterea mailului"
+    )
+
+
+# --------------------------------------------------------------------------
+# 4. Flag-uri moarte: nu mai poluează cheia de cache
+# --------------------------------------------------------------------------
+def test_pure_bench_mode_not_in_input_hash():
+    """`pure` nu schimbă biletele → nu are ce căuta în `input_hash`."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("def _build_config_json")
+    body = src[i : src.index("def submit_generation", i)]
+    assert "h.update(str(pure)" not in body
+
+
+def test_ui_does_not_turn_urna1_hits_into_fixed_prizes_or_due_alerts():
+    """Premiile depind de categoria istorică/Joker, iar „due" e eroarea jucătorului."""
+    source = open("app_nicegui.py", encoding="utf-8").read()
+    assert "PRIZE_MAP" not in source
+    assert "Câștig brut (WF)" not in source
+    assert "_render_due_alerts" not in source
+
+
+def test_should_use_blacklist_docstring_is_truthful():
+    """Docstring-ul nu mai are voie să pretindă că producția aplică blacklist-ul."""
+    from loto_enterprise.core.method_selector import should_use_blacklist
+
+    doc = should_use_blacklist.__doc__ or ""
+    assert "NU SE APLICĂ ÎN PRODUCȚIE" in doc
+    assert "production rulează blacklist-ul oricum" not in doc
+
+
+def test_engine_really_ignores_blacklist():
+    """Faptul din spatele docstring-ului: pipeline-ul chiar golește blacklist-ul."""
+    src = open("loto_enterprise/engine/pipeline.py", encoding="utf-8").read()
+    assert "blacklist = set()" in src
+    assert 'self.audit["filters_disabled"] = True' in src
+    # Logul NU mai pretinde că exclude numerele (filtrul e mort).
+    assert "excludem temporar" not in src
+    # Blacklist-ul temporar (Hard Inversion) nu se mai calculează deloc în
+    # pipeline: se calcula, se loga „NU se aplică" și se arunca. Un calcul mort
+    # care se re-citește ca funcționalitate activă e mai rău decât absența lui.
+    assert "compute_temp_blacklist" not in src
+    assert "_temp_blacklist" not in src
+
+
+def test_pipeline_has_no_dead_filter_plumbing():
+    """Filtrele post-scoring șterse nu au voie să reapară ca parametri inerți.
+
+    `filter_consecutives` / `smart_reduction` erau acceptate de la UI până în
+    engine fără să atingă vreodată pool-ul (fallback-ul `_get_initial_hard_core`
+    era apelat FĂRĂ flag), iar filtrul anti-secvență rămânea în cod ca și cum ar
+    fi fost o opțiune activă. Vezi și AGENTS.md §4.2: un filtru structural
+    constrânge combinația, nu prezice un număr.
+    """
+    import inspect
+
+    from loto_enterprise.engine.pipeline import PipelineMixin
+
+    params = inspect.signature(PipelineMixin.run_institutional_pipeline).parameters
+    assert "filter_consecutives" not in params
+    assert "smart_reduction" not in params
+
+    eng_src = open("loto_engine.py", encoding="utf-8").read()
+    assert "_apply_consecutive_filter" not in eng_src
+    assert "_consecutive_filter_applied" not in eng_src
+    assert 'audit["consecutive_filter"]' not in eng_src
+
+    # Nicăieri pe traseul UI → coadă → worker → engine → backtest nu mai există
+    # plumbing pentru cele două flaguri: nici cheie de task, nici argument de
+    # apel. (O mențiune în comentariu/docstring care explică de ce au dispărut e
+    # permisă — de asta căutăm formele sintactice, nu simplul cuvânt.)
+    for path in (
+        "worker.py",
+        "app_nicegui.py",
+        "loto_enterprise/core/backtesting.py",
+        "loto_enterprise/core/walk_forward_adapter.py",
+    ):
+        body = open(path, encoding="utf-8").read()
+        for flag in ("filter_consecutives", "smart_reduction"):
+            assert f"{flag}=" not in body, f"{path}: {flag} încă se pasează"
+            assert f'"{flag}"' not in body, f"{path}: {flag} încă e cheie de task"
+
+
+# --------------------------------------------------------------------------
+# 5. Audit 2026-09-01: pool unic, abandon, mail, NaN, worker spawn
+# --------------------------------------------------------------------------
+def test_worker_and_ui_no_longer_offer_second_pool():
+    worker = open("worker.py", encoding="utf-8").read()
+    ui_src = open("app_nicegui.py", encoding="utf-8").read()
+    assert "auto_invert" not in worker
+    assert "auto_invert_val" not in ui_src
+    assert "Inversare automată" not in ui_src
+
+
+def test_curation_banner_includes_joker_urna2_quota():
+    """Bannerul nu trebuie să raporteze doar cele trei urne principale."""
+    ui_src = open("app_nicegui.py", encoding="utf-8").read()
+    marker = '            _pg = _cur.get("per_game") or {}'
+    start = ui_src.index(marker)
+    body = ui_src[
+        start : ui_src.index('            if _cur["missing_required"]', start)
+    ]
+    assert '_pg.get("joker_urna2")' in body
+    assert "Urna 2" in body
+
+
+def test_abandon_unstarted_scopes_to_active_job():
+    """Abandonul de 0% nu anulează un job aflat în lucru."""
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("def _abandon_unstarted_ui_job")
+    body = src[i : src.index("def status_panel", i)]
+    assert "job_ids=" in body
+    assert "job_ids=[int(jid)]" in body.replace(" ", "")
+
+
+def test_mail_body_contains_only_one_pool_per_game():
+    src = open("app_nicegui.py", encoding="utf-8").read()
+    i = src.index("def _build_mail_body")
+    body = src[i : src.index("def _send_test_email", i)]
+    # Substringul, nu neapărat lipit de `lines.append(` — formatarea poate
+    # rupe apelul pe mai multe linii fără să schimbe comportamentul.
+    assert '"POOL:   "' in body
+    assert "POOL 2" not in body
+
+
+def test_normalize_nan_does_not_poison_all_scores():
+    """Un singur NaN nu mai face tot dict-ul NaN (min/max otrăvite)."""
+    from loto_enterprise.benchmark.methods import _normalize
+    import math
+
+    out = _normalize({1: 0.0, 2: 1.0, 3: float("nan")}, 3)
+    assert all(math.isfinite(v) for v in out.values())
+    assert out[1] == 0.0
+    assert out[2] == 1.0
+    assert out[3] == 0.0
+
+
+def test_normalize_all_finite_bit_identical():
+    """Pe scoruri finite, garda NaN nu schimbă output-ul."""
+    from loto_enterprise.benchmark.methods import _normalize
+
+    raw = {1: 2.0, 2: 4.0, 3: 6.0}
+    out = _normalize(raw, 3)
+    assert out[1] == 0.0
+    assert out[2] == 0.5
+    assert out[3] == 1.0
+
+
+def test_fail_running_jobs_closes_connection():
+    """fail_running_jobs folosește `_conn` (închide), nu `_connect` gol."""
+    src = open("job_queue.py", encoding="utf-8").read()
+    i = src.index("def fail_running_jobs")
+    body = src[i : src.index("def get_pipeline_cache", i)]
+    assert "with _conn(" in body
+    assert "conn_context = _connect" not in body
+
+
+def test_worker_spawn_has_cooldown():
+    src = open("ui_shared.py", encoding="utf-8").read()
+    assert "_WORKER_SPAWN_TS" in src
+    assert "_WORKER_SPAWN_COOLDOWN_S" in src
+    assert "now - _WORKER_SPAWN_TS" in src
+
+
+def test_wf_decision_sig_omits_inert_use_blacklist():
+    src = open("loto_enterprise/core/walk_forward_adapter.py", encoding="utf-8").read()
+    i = src.index("def _decision_sig")
+    body = src[i : src.index("def _cache_path", i)]
+    assert "use_blacklist" not in body or "INERT" in body
+    assert "bool(c.get('use_blacklist'" not in body
+    assert "BENCH_HIT_TARGET" in body
+
+
+def test_leaderboard_excludes_tiebreak_dependent_methods_like_decision():
+    """Un Wilson bun nu poate promova un ranking dictat de egalități."""
+    import app_nicegui as app_ui
+
+    grp = pd.DataFrame(
+        {
+            "percentile": [10, 30, 60, 100],
+            "rate_3plus_k11": [0.10, 0.11, 0.10, 0.10],
+            "tiebreak_k11": [0.50, 0.60, 0.55, 0.562],
+        }
+    )
+    reason = app_ui._bench_structural_exclusion(
+        grp,
+        "rate_3plus_k11",
+        11,
+        {10, 30, 60, 100},
+    )
+
+    assert "EXCLUS" not in reason  # helperul întoarce motivul, UI adaugă eticheta
+    assert "55.3%" in reason
+    assert "maxim admis < 50%" in reason
+
+
+def test_leaderboard_reports_missing_benchmark_windows():
+    import app_nicegui as app_ui
+
+    grp = pd.DataFrame(
+        {
+            "percentile": [10, 30, 100],
+            "rate_3plus_k11": [0.10, 0.11, 0.10],
+            "tiebreak_k11": [0.0, 0.0, 0.0],
+        }
+    )
+
+    reason = app_ui._bench_structural_exclusion(
+        grp,
+        "rate_3plus_k11",
+        11,
+        {10, 30, 60, 100},
+    )
+    assert reason == "ferestre lipsă: 60%"
+
+
+# --------------------------------------------------------------------------
+# 6. Audit 2026-08-31: I/O live, recovery fresh-start, scrieri atomice
+# --------------------------------------------------------------------------
+def test_bench_progress_reads_only_log_tail(tmp_path, monkeypatch):
+    """Logul de zeci de MB nu este recitit integral la fiecare tick UI."""
+    import app_nicegui as app_ui
+    from pathlib import Path
+
+    log = tmp_path / "bench_full.log"
+    log.write_text(
+        ("x" * (1024 * 1024)) + "\n[50/100] [loto_6_49/frequency/60%/REAL/CPU] gata\n",
+        encoding="utf-8",
+    )
+
+    def _full_read_forbidden(*_args, **_kwargs):
+        raise AssertionError("Path.read_text ar citi integral bench_full.log")
+
+    monkeypatch.setattr(Path, "read_text", _full_read_forbidden)
+    frac, text = app_ui._bench_progress_from(log)
+    assert frac == pytest.approx(0.5)
+    assert "50/100" in text
+    assert "frequency" in text
+
+
+def test_live_folds_reader_caches_unchanged_file(tmp_path, monkeypatch):
+    """Între două flush-uri ale bench-ului, folds.csv este parsată o singură dată."""
+    import app_nicegui as app_ui
+    import ui_bench
+
+    folds = tmp_path / "folds.csv"
+    folds.write_text("game,method\nloto_6_49,frequency\n", encoding="utf-8")
+    ui_bench._BENCH_FOLDS_CACHE.update({"signature": None, "df": None})
+    app_ui._BENCH_FOLDS_CACHE.update({"signature": None, "df": None})
+
+    real_read_csv = app_ui.pd.read_csv
+    calls = []
+
+    def _counted_read_csv(*args, **kwargs):
+        calls.append(args[0])
+        return real_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(app_ui.pd, "read_csv", _counted_read_csv)
+    first = app_ui._read_bench_folds_cached(folds)
+    second = app_ui._read_bench_folds_cached(folds)
+
+    assert len(calls) == 1
+    assert second is first
+
+
+def test_target_data_ready_fails_closed(tmp_path, monkeypatch):
+    """Un folds corupt/blocat nu produce bannerul fals «cache rapid»."""
+    import app_nicegui as app_ui
+    import ui_hits
+
+    bench_dir = tmp_path / "bench_results"
+    bench_dir.mkdir()
+    (bench_dir / "folds.csv").write_text("corupt", encoding="utf-8")
+    monkeypatch.setattr(ui_hits, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(app_ui, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        app_ui.pd,
+        "read_csv",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("locked")),
+    )
+
+    assert app_ui._target_data_ready() is False
+
+
+def test_fresh_start_recovery_is_display_only(monkeypatch):
+    """START_8000 nu finalizează automat jobul recent (mail/WF/shutdown)."""
+    import app_nicegui as app_ui
+
+    monkeypatch.setattr(
+        app_ui,
+        "get_latest_completed_job",
+        lambda: {
+            "id": 77,
+            "result_json": "payload",
+            "completed_at": "2026-08-31 10:00:00",
+        },
+    )
+    monkeypatch.setattr(app_ui, "decode_queue_result", lambda _raw: ([], 0))
+    monkeypatch.setattr(app_ui, "_save_settings", lambda: None)
+    monkeypatch.setattr(app_ui, "_save_report_file", lambda: None)
+    marked = []
+    monkeypatch.setattr(app_ui, "mark_job_finalized", marked.append)
+    monkeypatch.setitem(app_ui.STATE, "active_job_id", None)
+    monkeypatch.setitem(app_ui.STATE, "results", None)
+    monkeypatch.setitem(app_ui.STATE, "results_recovered", None)
+
+    app_ui._recover_completed_job(allow_finalize=False)
+
+    assert app_ui.STATE["active_job_id"] is None
+    assert app_ui.STATE["results"] == ([], 0)
+    assert "job #77" in app_ui.STATE["results_recovered"]
+    assert marked == [77]
+
+
+def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):
+    """Stampila CSV nu rescrie best_methods.json prin Path.write_text."""
+    import json
+    import ui_shared
+    from loto_enterprise.benchmark import freshness
+
+    bm = tmp_path / "best_methods.json"
+    bm.write_text(json.dumps({"auto_pilot_per_pool": {}}), encoding="utf-8")
+    monkeypatch.setattr(
+        freshness,
+        "compute_csv_signature",
+        lambda gk: (f"{gk}.csv", "abc123", 10),
+    )
+    real_atomic = ui_shared.atomic_write_json
+    calls = []
+
+    def _counted_atomic(path, obj, **kwargs):
+        calls.append(path)
+        return real_atomic(path, obj, **kwargs)
+
+    monkeypatch.setattr(ui_shared, "atomic_write_json", _counted_atomic)
+    freshness.write_signatures_to_best_methods(str(bm))
+
+    assert calls == [bm]
+    saved = json.loads(bm.read_text(encoding="utf-8"))
+    assert saved["_meta"]["csv_signatures"]["loto_6_49"]["hash"] == "abc123"
+
+
+def test_freshness_hash_mismatch_with_unchanged_row_count_never_says_use_cache(
+    tmp_path, monkeypatch
+):
+    """O extragere istorica corectata IN LOC (fara sa schimbe numarul de randuri)
+    schimba hash-ul, dar delta_pct al randurilor ramane 0 — vechea logica
+    raporta "slight_drift"/use_cache (cache-ul e OK), contrazicand exact ce
+    tocmai verificase (hash DIFERIT). Severitatea trebuie sa porneasca minim
+    de la moderate_drift/quick_rebench, niciodata use_cache, cand hash-ul difera."""
+    import json
+    from loto_enterprise.benchmark import freshness
+
+    bm = tmp_path / "best_methods.json"
+    bm.write_text(
+        json.dumps(
+            {
+                "_meta": {
+                    "csv_signatures": {
+                        "loto_6_49": {
+                            "csv_path": "x.csv",
+                            "hash": "old_hash",
+                            "rows": 1000,
+                        },
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_sig(gk):
+        # Acelasi numar de randuri, hash DIFERIT — extragere corectata in loc.
+        return ("x.csv", "new_hash", 1000)
+
+    monkeypatch.setattr(freshness, "compute_csv_signature", _fake_sig)
+    reports = freshness.check_freshness(str(bm))
+    r = reports["loto_6_49"]
+    assert r.row_delta_pct == 0.0
+    assert r.status != "fresh"
+    assert r.recommendation != "use_cache"
+    assert r.status == "moderate_drift"
+    assert r.recommendation == "quick_rebench"
+
+
+def test_requirements_txt_delegates_to_authoritative_cpu_list():
+    text = open("requirements.txt", encoding="utf-8").read()
+    assert "-r requirements_base.txt" in text
+    active = "\n".join(
+        line
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    assert "streamlit" not in active
+    assert "numba" not in active
+
+
+def test_ui_split_binds_private_helpers_on_facade():
+    """`from ui_* import *` nu aduce numele `_`; sync-ul de la import le leagă."""
+    import app_nicegui as app_ui
+    import ui_bench
+    import ui_results
+    import ui_runtime
+
+    assert callable(app_ui._active_restrict_base)
+    assert callable(app_ui._int_setting)
+    assert callable(app_ui._game_label_for)
+    assert "loto_6_49" in app_ui._LABEL_TO_FOLDS_GAME.values()
+    assert callable(ui_results._render_results_bundle)
+    assert callable(ui_results._fmt_dur)
+    assert callable(ui_bench._random_rate_hypergeo)
+    assert app_ui._BENCH_FOLDS_CACHE is ui_bench._BENCH_FOLDS_CACHE
+    assert app_ui.SETTINGS is ui_runtime.SETTINGS
+    assert ui_results.time is app_ui.time
+
+
+def test_method_desc_uses_registry_not_graveyard():
+    """Etichetele de lângă scorer vin din METHODS, nu din nume șterse +21.7%."""
+    import ui_results
+    from loto_enterprise.benchmark.methods import METHODS
+
+    overlay = ui_results._METHOD_DESC
+    for dead in (
+        "parity_balance",
+        "649_last_neighbors",
+        "649_katz12_gap88",
+        "ml_passive_aggressive",
+    ):
+        assert dead not in overlay
+    assert "+21.7%" not in str(overlay)
+    desc = ui_results._method_desc("croston_interval")
+    assert desc
+    assert "croston" in desc.lower() or "interval" in desc.lower()
+    for name in METHODS:
+        text = ui_results._method_desc(name)
+        assert "21.7%" not in text
+        assert "KatzCommunity" not in text
+
+
+def test_wf_hits_caption_does_not_label_ticket_volume_as_pool():
+    source = open("ui_hits.py", encoding="utf-8").read()
+    assert "Pool = {n_tick" not in source
+    assert "Bilete evaluate" in source
+
+
+def test_freshness_flags_stale_decision_when_engine_changed(tmp_path, monkeypatch):
+    """CSV-uri neatinse + alt motor (bump de cache / alt set de metode) = STALE.
+
+    Semnătura acoperea doar conținutul CSV, iar docstring-ul promitea „Same hash
+    → cached decision still 100% valid". Fals la orice bump de
+    `bench_cache.CACHE_VERSION` — care se face tocmai fiindcă scorurile s-au
+    schimbat — și la orice ștergere sau redenumire de metodă: cu CSV-urile
+    identice, freshness raporta „fresh / use_cache" pentru o decizie calculată cu
+    alt sistem.
+    """
+    import json
+
+    from loto_enterprise.benchmark import freshness
+
+    def _fake_sig(gk):
+        return ("x.csv", "same_hash", 1000)
+
+    monkeypatch.setattr(freshness, "compute_csv_signature", _fake_sig)
+
+    def _write(engine: dict) -> str:
+        bm = tmp_path / f"bm_{engine['bench_cache_version']}.json"
+        bm.write_text(
+            json.dumps(
+                {
+                    "_meta": {
+                        "csv_signatures": {
+                            gk: {"csv_path": "x.csv", "hash": "same_hash", "rows": 1000}
+                            for gk in freshness.GAMES_CSV_MAP
+                        },
+                        "engine_signature": engine,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        return str(bm)
+
+    current = freshness.compute_engine_signature()
+    assert set(current) == {"bench_cache_version", "methods_hash", "n_methods"}
+
+    # Același motor → fresh, ca înainte.
+    r_same = freshness.check_freshness(_write(dict(current)))["loto_6_49"]
+    assert (r_same.status, r_same.recommendation) == ("fresh", "use_cache")
+
+    # Versiune de cache veche → decizia e stale deși datele nu s-au clintit.
+    r_ver = freshness.check_freshness(
+        _write(dict(current, bench_cache_version="v1"))
+    )["loto_6_49"]
+    assert (r_ver.status, r_ver.recommendation) == ("stale", "full_rebench")
+
+    # Alt set de metode (registry șters/redenumit) → la fel.
+    r_meth = freshness.check_freshness(
+        _write(dict(current, bench_cache_version="v0", methods_hash="deadbeef", n_methods=999))
+    )["loto_6_49"]
+    assert (r_meth.status, r_meth.recommendation) == ("stale", "full_rebench")
+
+
+def test_freshness_without_stamped_engine_signature_stays_quiet(tmp_path, monkeypatch):
+    """best_methods.json scris înainte de 15.09.2026 n-are semnătura motorului.
+
+    N-avem cu ce compara, deci nu inventăm o nepotrivire: comportamentul rămâne
+    cel vechi, iar semnătura se stampilează la primul bench.
+    """
+    import json
+
+    from loto_enterprise.benchmark import freshness
+
+    monkeypatch.setattr(
+        freshness, "compute_csv_signature", lambda gk: ("x.csv", "same_hash", 1000)
+    )
+    bm = tmp_path / "best_methods.json"
+    bm.write_text(
+        json.dumps(
+            {
+                "_meta": {
+                    "csv_signatures": {
+                        "loto_6_49": {
+                            "csv_path": "x.csv",
+                            "hash": "same_hash",
+                            "rows": 1000,
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = freshness.check_freshness(str(bm))["loto_6_49"]
+    assert (r.status, r.recommendation) == ("fresh", "use_cache")
+
+
+def test_full_system_one_ticket_short_is_not_reported_as_100():
+    from covering.greedy import generate_combinatorial_wheel
+
+    wheel, cov = generate_combinatorial_wheel(
+        list(range(1, 21)), 6, 6, max_variants=38759
+    )
+    assert len(wheel) == 38759 and cov < 100.0

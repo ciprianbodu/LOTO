@@ -1,0 +1,39 @@
+# =============================================================================
+# requirements_base.txt — TOATE dependențele aplicației (exclusiv CPU).
+# Python țintă: ultimul 3.14.x stabil (py -3.14, venv D:\_BUILD\_LOTO\.venv).
+# Instalate de ACTUALIZARI.bat. Suportul GPU/neural (torch / TimesFM / Chronos /
+# NeuralForecast / foundation models) a fost ELIMINAT complet din aplicație.
+# =============================================================================
+
+# UI + utilitare
+nicegui                  # UI principal (app_nicegui.py)
+# streamlit: ELIMINAT. Era pentru „UI legacy (app.py)" — un fișier care nu
+# există în repo și nu apare nici în istoricul git.
+# requests: ELIMINAT (15.09.2026). Zero consumatori — niciun `import requests`
+# in .py, .bat sau scripts/; ramasese din suportul de retea scos odata cu
+# TimesFM/foundation models.
+psutil
+
+# Tabular / numeric (C-extensions; nu se update-eaza fara grija).
+# Acesta ESTE și stack-ul de scoring: după înlocuirea întregului set de metode
+# (14.09.2026), cele 52 de intrări din registry se sprijină exclusiv pe numpy
+# și scipy (scipy.signal.lfilter, scipy.sparse.csr_matrix, scipy.spatial.cKDTree).
+pandas>=2.2,<3
+numpy
+scipy
+# numba: ELIMINAT. `loto_engine` importa `jit` fara sa-l foloseasca nicaieri
+# (un singur `jit` in tot fisierul: importul insusi) — costa ~424 ms per
+# proces la import si aducea numba+llvmlite ca dependinta HARD, degeaba.
+
+# Benchmark / lab utilitare
+rich
+
+# scikit-learn / statsmodels / statsforecast / hmmlearn / xgboost / lightgbm /
+# catboost: ELIMINATE (14.09.2026). Descriau setul vechi de ~183 de metode,
+# șters odată cu înlocuirea registry-ului. Niciun modul nu le mai importă —
+# verificat cu grep pe instrucțiuni `import`/`from` reale, nu pe text liber.
+# matplotlib: ELIMINAT. Zero consumatori în repo: aplicația nu desenează nimic,
+# nu există niciun `import matplotlib` și niciun grafic generat.
+
+# Teste unitare (test_decision.py, test_method_selector.py)
+pytest

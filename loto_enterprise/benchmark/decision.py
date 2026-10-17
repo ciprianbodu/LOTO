@@ -1,0 +1,1672 @@
+"""Decision algorithm: pick the optimal (scorer, sim_depth, use_blacklist) per
+(game, urna, pool_size) — for the auto-pilot.
+
+Selection rules (in priority order):
+    1. Method must BEAT the random baseline consistently — at least 60% of
+       sim_depth windows must show lift > 0 on the SAME T+ target used to
+       choose the winner, at the same (game, pool, window). Using mean hits
+       here would allow extra 2-hit draws to qualify a method that loses to
+       random exactly on the requested 3+/4+ event.
+    2. Among qualifying methods, sort by the POOLED WILSON LOWER BOUND of the
+       T+ rate first; mean lift vs random is only the SECOND key and window
+       consistency the third (`qualifying.sort` — vezi `pooled_wilson_distinct`
+       și `_weighted_mean_lift`). ⚠️ Regula asta spunea până acum „highest mean
+       lift", ceea ce NU mai e ce face codul din 2026-08: cine „repară" sortarea
+       după docstring strică exact garda statistică. Clasamentul din UI importă
+       ACELEAȘI chei, deliberat.
+    3. For the chosen method, pick the optimal sim_depth window — the one
+       that maximises the **target T+ rate**, then avg_hits, among windows
+       with at least 30 evaluated draws (`MIN_TEST_DRAWS_FOR_STABILITY`).
+       Nu există tie-break pe fereastra mai lungă. ⚠️ `sim_depth` e TELEMETRIE:
+       producția taie istoricul doar cu `lookback`, nu cu fereastra asta.
+    4. Use blacklist if the +BL variant beats the no-BL variant at that
+       chosen (method, window). ⚠️ Bit-ul e INERT în producție: pool-ul se
+       construiește pe `blacklist` pornită goală în
+       `loto_enterprise/engine/pipeline.py` (filtre oprite deliberat,
+       2026-07-08), iar singurul lucru care o mai poate umple este restrângerea
+       de interval cerută EXPLICIT de utilizator (`restrict_base`), nu bitul
+       ăsta. Vezi `method_selector.should_use_blacklist`.
+
+The output is written to best_methods.json under `auto_pilot_per_pool[gk][kN]`
+with full traceability (rationale + supporting numbers).
+
+Invarianți (NU strica):
+    * Baseline-urile NEDETERMINISTE și filtrele de clasă (`EXCLUDED_FROM_PRODUCTION`)
+      sunt doar REFERINȚĂ / registry — nu pot deveni niciodată scorer de
+      producție, nici pe ramura de fallback.
+    * Producția folosește câștigătorul unic evaluat direct. Ratele individuale
+      din folds.csv NU permit reconstruirea performanței pool-ului obținut prin
+      blend; un ensemble nevalidat poate pierde chiar dacă fiecare membru a
+      trecut separat poarta față de random.
+
+Cât prinde EFECTIV stratul de decorelare de aici (ca să nu pară mai puternic
+decât e): semnătura se măsoară pe RATE din folds.csv, CENTRATE pe coloane, deci
+prinde doar redundanța aproape perfectă. Măsurat pe `bench_results/folds.csv`
+(20.07.2026): la loto_6_49 doar 7 perechi din 5565 ating r≥0.99, iar pe toată
+matricea de decizie rezultă o SINGURĂ eliminare (loto_5_40 k16:
+`croston_sba` ~ `croston_classic`, r=1.0). Contra-exemplul care contează:
+`649_katz15_gap85` vs `649_katz25_gap75` dau r=0.93 pe RATE — sub prag, deci NU
+se elimină aici — deși pe SCORURI au r=0.996. Redundanța de tip "generează
+practic același pool" rămâne pe seama stratului următor,
+`method_selector._select_decorrelated` (MAX_MEMBER_CORR=0.95, pe vectorii de
+scor reali). Stratul de aici e o plasă ieftină pe datele pe care le AVEM în
+folds.csv, NU garanția de decorelare.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import math
+import os
+import re
+from pathlib import Path
+import numpy as np
+import pandas as pd
+
+from loto_enterprise.benchmark.hit_target import (
+    GAME_DRAW_PICK,
+    clamp_bench_hit_target,
+    game_hit_target,
+)
+from loto_enterprise.core.lotteries import foreign_bench_max_num, lottery_by_bench_key
+
+logger = logging.getLogger(__name__)
+
+
+CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
+# Poarta de consistență pe ferestre imbricate (10/30/60/100%) spune puțin: un
+# singur eveniment în ultimele 10% contează în 3 din 4 ferestre, iar cu ~50 de
+# candidați una trece aproape sigur din noroc. Avantajul se consideră demonstrat
+# numai dacă excesul de evenimente pe fereastra completă trece testul binomial
+# unilateral față de rata aleatoare, cu corecția Holm peste candidații celulei.
+# Verdictul stă în `multiplicity.proven`; scorerul ales rămâne același.
+MULTIPLICITY_ALPHA = 0.05
+
+# Câte ferestre cu date finite trebuie să existe ca poarta de consistență să
+# însemne ceva. `_windows_method_beats_random` numără ferestrele pe care le
+# compară; cu una singură, „bate random în ≥60% din ferestre" degenerează într-o
+# comparație unică — adică 1/1 = 100%, deci poarta lasă să treacă orice.
+# ⚠️ Experimentul de mai jos e reproductibil DOAR pe ramura `empirical_random`
+# (joc fără geometrie cunoscută), unde referința chiar vine din rândurile
+# `random`. Pe cele patru jocuri reale, `KNOWN_GAME_MAX_NUM` le acoperă pe
+# toate, deci referința e hipergeometrică și `_reference_by_pct` o întinde pe
+# percentilele METODEI: ștergerea rândurilor `random` nu mai schimbă poarta.
+# Pe ramura empirică, pe folds.csv real (loto_6_49 k12), ștergând rândurile
+# `random` de la 3 din 4 percentile, numărul de metode calificate sare de la 3
+# la 17 (random doar @100), 12 (@30) sau 4 cu ALT câștigător (@10) — și
+# `low_confidence` rămâne False în toate cazurile.
+# Nu e doar teoretic: `runner._flush_folds` rescrie folds.csv la fiecare ~100 de
+# folds terminate, iar future-urile se termină în altă ordine decât au fost
+# trimise, deci un bench întrerupt lasă un folds.csv în care `random` are 1-3
+# percentile, iar metodele de dinainte au 4.
+MIN_CONSISTENCY_WINDOWS = 3
+MIN_TEST_DRAWS_FOR_STABILITY = 30
+
+# Doar metoda câștigătoare intră în producție. folds.csv conține ratele
+# INDIVIDUALE, nu scorurile/pool-urile fiecărui pas necesare ca să validăm un
+# blend. Măsurat pe Joker k11 (02.09.2026, walk-forward real, 654 extrageri):
+# membrii aleși separat treceau benchmarkul rapid, dar blendul lor obținea
+# 44/654 = 6.73%, sub random 8.53%; un alt blend de trei candidați care bat
+# separat baseline-ul (mom_15_60 + ewma_40 + mod7_hot) cobora la 48/654 = 7.34%,
+# deși primul membru avea 73/654 = 11.16%.
+#
+# Păstrăm schema `ensemble` cu un singur membru pentru compatibilitate cu
+# engine/UI/cache. Dacă pe viitor benchmarkul persistă scorurile per pas și
+# evaluează DIRECT combinația, limita poate fi mărită pe baza acelei dovezi.
+ENSEMBLE_MAX_METHODS = 1
+
+# Corelația maximă acceptată între semnăturile de performanță a doi membri de
+# ensemble. Peste prag => membrii sunt redundanți (aceeași serie de rate pe
+# aceleași folduri) și "variance-reduction" ar fi o etichetă FALSĂ: media a două
+# metode cvasi-identice are aceeași varianță ca una singură. Vezi
+# `_select_ensemble_members`.
+ENSEMBLE_MAX_CORR = 0.99
+
+# Eșantion minim (metode × puncte) sub care dedup-ul de ensemble se DEZACTIVEAZĂ.
+# Corelația Pearson degenerează pe puține puncte: pe 2 coloane dă mereu ±1.0
+# indiferent de valori (verificat: `_signature_corr([0.1,-0.1], [0.3,-0.3])` →
+# +1.0000, iar cu semne opuse → -1.0000), deci am elimina membri fără nicio
+# dovadă. Simetric, cu puține METODE "consensul" scăzut la centrare e estimat
+# din prea puține observații (cu 2 metode rândurile centrate sunt exact opuse →
+# r=-1 mereu), deci nici acolo nu merită încredere.
+# ⚠️ ACTUALIZAT 2026-07-27 — garda NU mai e inertă. Înainte de curarea de metode
+# (`curated_methods.json`), pe folds.csv cu 107 metode semnătura era (106, 60) pe
+# toate cele 3 jocuri, deci garda nu se declanșa niciodată. Cu setul curat
+# numărul de metode CALIFICATE per pool scade la 2-4 → sub prag
+# → dedup-ul pe semnătura de performanță e SĂRIT sistematic (vezi log-ul
+# "[decision] dedup ensemble dezactivat"). Consecință: `ensemble_dropped_redundant`
+# rămâne gol. Setul curent (52 de intrări în registry: 2 baseline-uri + 50 de
+# metode, 14.09.2026) NU garantează decorelare totală (măsurat
+# 2026-08-26: există perechi cu |Spearman| ≥ 0.95), deci filtrul runtime
+# `method_selector._select_decorrelated` rămâne obligatoriu și poate reduce
+# ensemble-ul nominal. Dacă se revine la toate metodele, garda de aici redevine
+# inertă singură.
+ENSEMBLE_MIN_SIGNATURE_POINTS = 5
+
+# Baseline-uri care NU au voie să devină NICIODATĂ scorer de producție.
+# `random` (methods.py: `np.random.default_rng(seed)`, seed derivat prin
+# blake2b din `draws_2d` + `max_num`) e SEEDAT determinist din istoric: pe
+# ACELAȘI istoric, două rulări dau ACELAȘI pool (necesar ca folds.csv să nu
+# depindă de care realizare a fost cache-uită prima — vezi CACHE_VERSION).
+# Nu asta îl face permis ca scorer: la fiecare extragere nouă, istoricul (deci
+# seed-ul) se schimbă complet, deci pool-ul rămâne la fel de imprevizibil în
+# timp ca înainte de seed — doar reproductibil PE UN SNAPSHOT fix, nu STABIL
+# între snapshot-uri. Poziția lui în clasament e pur zgomot (pe folds.csv din
+# 20.07.2026, cu metrica PROPRIE a deciziei — Wilson-lb pe `rate_3plus_k{K}`,
+# pooled pe n_test — `random` urca până la #6/107 pe loto_5_40 k5, #14/107 pe
+# joker_urna1 k15, #40/107 pe loto_6_49 k20; exact dovada că diferențele dintre
+# metode sunt zgomot, nu semnal. Cifrele se RENUMĂRĂ după fiecare bench, nu se
+# citează din memorie).
+# Rolul lui e DOAR de podea de sanitate în bench ("cât înseamnă pură șansă"),
+# niciodată de generator.
+# `frequency` rămâne permisă ca scorer: e baseline DETERMINIST și SAFE_FALLBACK.
+# `recency` a fost blacklistată și ELIMINATĂ din METHODS (2026-08-25).
+# `random` e EXCLUS din producție (fără semnal real, seed instabil în timp).
+# (aceleași date → același scor), reproductibile și explicabile pentru
+# utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
+# "numere date cu zarul" nu.
+EXCLUDED_FROM_PRODUCTION = frozenset(
+    {
+        # `random` e martorul structural (fără semnal, seed instabil în timp).
+        "random",
+        # Filtre de apartenență pe ultima extragere: top-K e o clasă geometrică,
+        # nu un ranking. Rămân în METHODS (bench le măsoară ca martori), dar nu
+        # pot fi scorer de producție — același tratament ca vechile
+        # parity_balance / 649_last_neighbors.
+        # neighbor_adjacent: vecinii numerici ±1/±2 (câștiga 5/40 k10–k14).
+        # repeat_last_draw: naive last; la k=draw_n copiază ultima extragere.
+        # rwr_last_draw: RWR restart 0.3 semănat din ultima extragere — prefix
+        #   last-draw garantat (urna1 k6/k8–k10 câștigător pe 1e8076a).
+        # haar_multiscale: Haar pe fereastra recentă; pe Urna 2 top-1 ≡ repeat.
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
+        # Interval membership is an explicit experimental pool filter.
+        # Its retrospective signal is not externally confirmed.
+        "interval_extrema_k16",
+    }
+)
+
+# Pe o urnă cu o singură bilă (Joker Urna 2 și echivalentele străine), aceste
+# metode aleg bila precedentă în majoritatea pașilor chiar pe extrageri uniforme:
+# markov_self_state 66%, vlmm_self_k3 63%, față de 5% la întâmplare (audit
+# 2026-10-07; garda din `test_no_structural_filters`). Top-1 e acolo clasa
+# „ultima bilă", ca la haar_multiscale. Pe jocurile cu pool rămân metode de
+# recență obișnuite, judecate de bench.
+EXCLUDED_FROM_SINGLE_PICK = frozenset({"markov_self_state", "vlmm_self_k3"})
+
+# Geometria jocurilor cunoscute (max_num). Folosita cand apelantul nu poate da
+# `max_num` (folds.csv nu contine geometria). Pentru chei necunoscute decizia
+# cade pe referinta EMPIRICA `random` din folds.csv.
+KNOWN_GAME_MAX_NUM = {
+    "loto_6_49": 49,
+    "loto_5_40": 40,
+    "joker_urna1": 45,
+    "joker_urna2": 20,
+}
+# Jocurile din alte țări: universul vine din registru, ca decizia lor să aibă
+# tot referința hipergeometrică, nu pe cea empirică `random`.
+KNOWN_GAME_MAX_NUM.update(foreign_bench_max_num())
+
+# O metoda a carei selectie top-K cade in interiorul unui grup de scoruri EGALE
+# in cel putin aceasta fractie din blocurile evaluate nu alege pool-ul dupa scor,
+# ci dupa regula de tie-break („numarul mare intai"). Rata ei T+ este atunci
+# rata unei reguli fixe, nu a unui semnal — AGENTS.md §12 P3 cere respingerea
+# metodelor care castiga doar prin tie-break. Coloana `tiebreak_kN` exista in
+# folds.csv de la bench cache v17; pe folds vechi (coloana lipsa) poarta nu se
+# aplica si celula o spune in `tiebreak_gate_applied`.
+TIEBREAK_MAX_FRACTION = 0.5
+
+# Plasă de siguranță DETERMINISTĂ când nu rămâne nicio metodă reală în
+# folds.csv (niciodată `random` — vezi EXCLUDED_FROM_PRODUCTION).
+SAFE_FALLBACK_SCORER = "frequency"
+DEFAULT_SIM_DEPTH_PCT = 40  # identic cu default-ul din method_selector
+
+# Pragul de hituri pe care bench-ul ALEGE metoda câștigătoare (rata extragerilor cu
+# ≥ acest număr de numere ghicite). Implicit 3 (rată mai densă → selecție mai stabilă).
+# NU schimbă șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul.
+# Reversibil: schimbă aici, sau setează LOTO_BENCH_TARGET=4.
+# Pentru jocurile de pool sunt acceptate doar 3 sau 4; Urna 2 suprascrie local
+# ținta la top-1 și consumă `rate_1plus_k1`. Orice altă valoare globală făcea
+# `_resolve_rate_col` să cadă TĂCUT pe 4+ (doar WARNING în log) — decizia se lua
+# pe altă țintă decât cea cerută.
+# `clamp_bench_hit_target` e importat din `hit_target` (stdlib) — re-exportat aici.
+
+BENCH_HIT_TARGET = clamp_bench_hit_target(os.environ.get("LOTO_BENCH_TARGET", "3"))
+
+
+def _safe_lift(method_hits: float, random_hits: float) -> float:
+    return float(method_hits) - float(random_hits)
+
+
+def _wilson_lower_bound(successes: float, n: float, z: float = 1.0) -> float:
+    """Limită inferioară de încredere (Wilson score) pt o proporție.
+
+    Evenimentele T+ (implicit 3+) pe pool-uri mici pot fi rare (puține evenimente în
+    sute de extrageri de test) — o comparație pe medie brută poate favoriza o
+    metodă cu 1 eveniment din pură șansă în fața uneia cu 0, fără nicio
+    semnificație statistică. Wilson reduce increderea în proporții estimate din
+    puține evenimente, PUR determinist (fără aleatorism nou) pe datele existente
+    din folds.csv. z=1.0 ≈ interval unilateral ~84%, conservator dar nu excesiv.
+    """
+    n = float(n)
+    if n <= 0:
+        return 0.0
+    phat = max(0.0, min(1.0, float(successes) / n))
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    center = phat + z2 / (2.0 * n)
+    margin = z * math.sqrt(phat * (1.0 - phat) / n + z2 / (4.0 * n * n))
+    return max(0.0, (center - margin) / denom)
+
+
+def expected_random_rate(
+    max_num: int, draw_n: int, pool_size: int, target: int
+) -> float:
+    """P(|pool ∩ extragere| >= target) pentru un pool ALEATOR de `pool_size` numere.
+
+    Distributie hipergeometrica exacta: pool-ul fixat (K din N), extragerea
+    uniforma (n din N). Este exact valoarea asteptata a ratei pe care o
+    masoara randul `random` din folds.csv, fara zgomotul unei singure realizari.
+    Pentru Urna 2 (N=20, n=1, K=1, target=1) da 0.05.
+    """
+    N, n, K, t = int(max_num), int(draw_n), int(pool_size), int(target)
+    if N <= 0 or n <= 0 or K <= 0 or K > N or n > N:
+        return 0.0
+    if t <= 0:
+        return 1.0
+    total = math.comb(N, n)
+    if total == 0:
+        return 0.0
+    hi = min(K, n)
+    if t > hi:
+        return 0.0
+    hits = sum(math.comb(K, k) * math.comb(N - K, n - k) for k in range(t, hi + 1))
+    return float(hits) / float(total)
+
+
+def _reference_by_pct(
+    sub_real_random: pd.DataFrame,
+    metric_col: str,
+    baseline_rate: float | None,
+    method_pcts,
+) -> "pd.Series | None":
+    """Referinta per fereastra: constanta analitica sau realizarea `random`.
+
+    Cu `baseline_rate` dat, referinta este aceeasi in fiecare fereastra a
+    metodei (rata asteptata hipergeometric). Fara el, cade pe media randurilor
+    `random` din folds.csv, pe ferestrele comune.
+    """
+    if baseline_rate is not None:
+        return pd.Series({p: float(baseline_rate) for p in method_pcts}, dtype=float)
+    if sub_real_random is None or sub_real_random.empty:
+        return None
+    if (
+        "percentile" not in sub_real_random.columns
+        or metric_col not in sub_real_random.columns
+    ):
+        return None
+    return (
+        pd.to_numeric(sub_real_random[metric_col], errors="coerce")
+        .groupby(sub_real_random["percentile"])
+        .mean()
+        .dropna()
+    )
+
+
+def _windows_method_beats_random(
+    sub_real_method: pd.DataFrame,
+    sub_real_random: pd.DataFrame,
+    metric_col: str,
+    baseline_rate: float | None = None,
+) -> tuple[int, int]:
+    """Return (n_windows_beat, n_windows_total) on the requested metric.
+
+    `baseline_rate` = rata asteptata a unui pool aleator (hipergeometric). Cand
+    este data, fiecare fereastra a metodei se compara cu ea; altfel cu randul
+    `random` din folds.csv (o singura realizare, zgomotoasa). Only windows with
+    finite data on BOTH sides count. A partial/mixed folds.csv must not turn a
+    missing rate into an implicit loss while still increasing the denominator
+    of the consistency gate.
+    """
+    if sub_real_method.empty:
+        return 0, 0
+    if (
+        "percentile" not in sub_real_method.columns
+        or metric_col not in sub_real_method.columns
+    ):
+        return 0, 0
+    method_by_pct = (
+        pd.to_numeric(sub_real_method[metric_col], errors="coerce")
+        .groupby(sub_real_method["percentile"])
+        .mean()
+        .dropna()
+    )
+    ref_by_pct = _reference_by_pct(
+        sub_real_random, metric_col, baseline_rate, method_by_pct.index
+    )
+    if ref_by_pct is None:
+        return 0, 0
+    common_pcts = sorted(set(method_by_pct.index) & set(ref_by_pct.index))
+    if not common_pcts:
+        return 0, 0
+    n_beat = 0
+    for p in common_pcts:
+        if method_by_pct[p] > ref_by_pct[p]:
+            n_beat += 1
+    return n_beat, len(common_pcts)
+
+
+def excess_p_value(frame: pd.DataFrame, rate_col: str, p0: float | None) -> float | None:
+    """P(X >= k), X ~ Bin(n, p0), pe fereastra cea mai mare a metodei.
+
+    Ferestrele sunt sufixe ale aceluiași walk-forward (fiecare țintă e scorată
+    numai din extragerile anterioare), deci cea mai mare le conține pe celelalte:
+    k = rata × n extrageri evaluate. None fără referință sau fără date.
+    """
+    if p0 is None or not 0.0 < float(p0) < 1.0 or frame.empty:
+        return None
+    if rate_col not in frame.columns or "percentile" not in frame.columns:
+        return None
+    pct = pd.to_numeric(frame["percentile"], errors="coerce")
+    row = frame.loc[pct == pct.max()]
+    if row.empty:
+        return None
+    rate = pd.to_numeric(row[rate_col], errors="coerce").iloc[0]
+    n = None
+    for col in ("n_eval", "n_test"):
+        if col in row.columns:
+            val = pd.to_numeric(row[col], errors="coerce").iloc[0]
+            if pd.notna(val) and val > 0:
+                n = int(val)
+                break
+    if n is None or pd.isna(rate):
+        return None
+    k = int(round(float(rate) * n))
+    from scipy.stats import binom
+
+    return float(binom.sf(k - 1, n, float(p0)))
+
+
+def holm_adjusted(p_values: dict[str, float]) -> dict[str, float]:
+    """Valorile p ajustate Holm (pas cu pas, monotone), pe nume."""
+    items = sorted(p_values.items(), key=lambda kv: (kv[1], kv[0]))
+    m = len(items)
+    out: dict[str, float] = {}
+    running = 0.0
+    for i, (name, p) in enumerate(items):
+        running = max(running, min(1.0, (m - i) * float(p)))
+        out[name] = running
+    return out
+
+
+def _weighted_mean_lift(
+    sub_real_method: pd.DataFrame,
+    sub_real_random: pd.DataFrame,
+    metric_col: str,
+    baseline_rate: float | None = None,
+) -> float:
+    """Compute metric lift weighted by sim_depth (larger windows weigh more)."""
+    if sub_real_method.empty:
+        return 0.0
+    if (
+        "percentile" not in sub_real_method.columns
+        or metric_col not in sub_real_method.columns
+    ):
+        return 0.0
+    method_by_pct = (
+        pd.to_numeric(sub_real_method[metric_col], errors="coerce")
+        .groupby(sub_real_method["percentile"])
+        .mean()
+        .dropna()
+    )
+    ref_by_pct = _reference_by_pct(
+        sub_real_random, metric_col, baseline_rate, method_by_pct.index
+    )
+    if ref_by_pct is None:
+        return 0.0
+    common_pcts = sorted(set(method_by_pct.index) & set(ref_by_pct.index))
+    if not common_pcts:
+        return 0.0
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for p in common_pcts:
+        weight = float(p)  # 100% window weighs 10x more than 10% window
+        lift = float(method_by_pct[p]) - float(ref_by_pct[p])
+        weighted_sum += weight * lift
+        weight_total += weight
+    return weighted_sum / weight_total if weight_total > 0 else 0.0
+
+
+def pooled_rate_and_neff(
+    frame: pd.DataFrame, rate_col: str
+) -> tuple[float, float] | None:
+    """(rată pooled, n EFECTIV) pentru o rată T+ măsurată pe ferestre sim_depth.
+
+    Ferestrele sunt sufixe CUIBĂRITE (10% ⊂ 30% ⊂ 60% ⊂ 100% în configurația de
+    producție a UI-ului; 10%…100% la default-ul CLI), deci o extragere recentă
+    apare în MAI MULTE ferestre. Consecințe, tratate separat:
+
+    • RATA rămâne pooled peste toate ferestrele (Σ rate·n / Σ n). Ponderarea
+      implicită pe recență e DELIBERATĂ (aceeași filozofie ca `_weighted_mean_lift`).
+    • DOVADA (n-ul dat lui Wilson) NU e Σ n — asta ar număra aceeași extragere de
+      mai multe ori (măsurat pe folds de producție: Σn/max ≈ 2.03 la 4 ferestre;
+      ~5.5 la default-ul CLI de 10 ferestre) → limite sistematic supraîncrezătoare.
+      Nici max(n) nu e corect: rata e o medie PONDERATĂ, deci n-ul corect e cel
+      EFECTIV (Kish) al ponderilor. Cu m_j = în câte ferestre intră extragerea j,
+      Var(phat) = p(1-p)·Σm² / (Σm)² ⟹ n_eff = (Σm)²/Σm². Pe ferestre-sufix
+      Σm = Σ n_i și Σm² = Σ_i Σ_k min(n_i, n_k), deci n_eff se calculează direct
+      din dimensiunile ferestrelor, fără să reconstruim multiplicitățile.
+
+    Calibrare verificată prin simulație (40k replici, n=2497, p=0.09, z=1, nominal
+    0.8413): acoperirea reală a limitei inferioare = 0.743 cu Σn (varianta veche),
+    0.814 cu max(n), 0.844 cu n_eff Kish. `n_eff ≈ 0.805 × n_max` pe ferestrele
+    de producție.
+
+    Denominatorul per RÂND: `n_eval` (v13 — extrageri efectiv evaluate, exact
+    denominatorul ratelor) cu fallback pe `n_test` FIECARE rând în parte. Alegerea
+    pe frame ar arunca tăcut rândurile vechi dintr-un folds.csv mixt (faze de bench
+    combinate peste un bump de versiune).
+
+    None = incalculabil (fără coloane / fără rânduri cu n > 0).
+    """
+    if rate_col not in frame.columns:
+        return None
+    has_eval, has_test = "n_eval" in frame.columns, "n_test" in frame.columns
+    if not (has_eval or has_test):
+        return None
+    rate = pd.to_numeric(frame[rate_col], errors="coerce")
+    n_eval = pd.to_numeric(frame["n_eval"], errors="coerce") if has_eval else None
+    n_test = pd.to_numeric(frame["n_test"], errors="coerce") if has_test else None
+    # coalesce PE RÂND: n_eval dacă e valid și > 0, altfel n_test
+    if n_eval is None:
+        n = n_test
+    elif n_test is None:
+        n = n_eval
+    else:
+        n = n_eval.where(n_eval.notna() & (n_eval > 0), n_test)
+    pairs = pd.DataFrame({"r": rate, "n": n}).dropna()
+    pairs = pairs[pairs["n"] > 0]
+    if pairs.empty:
+        return None
+    # Ordinea sumării fixată pe valori, nu pe rândurile din folds.csv: altfel două
+    # metode cu aceleași evenimente pe fereastră difereau în ultima zecimală după
+    # ordinea rândurilor, iar departajarea finală după nume nu se mai aplica.
+    # Pe foldurile canonice ale runner-ului (ferestre crescătoare) ordinea e aceeași.
+    pairs = pairs.sort_values(["n", "r"], kind="stable")
+    sizes = pairs["n"].astype(float).to_numpy()
+    n_pooled = float(sizes.sum())
+    if n_pooled <= 0:
+        return None
+    phat = float((pairs["r"].astype(float).to_numpy() * sizes).sum()) / n_pooled
+    # Σ_i Σ_k min(n_i, n_k) — exact pentru ferestre-sufix (|W_i ∩ W_k| = min).
+    sum_m2 = float(np.minimum.outer(sizes, sizes).sum())
+    n_eff = (n_pooled**2) / sum_m2 if sum_m2 > 0 else n_pooled
+    return phat, float(n_eff)
+
+
+def pooled_mean(frame: pd.DataFrame, value_col: str) -> float | None:
+    """Media per extragere, ponderată cu denominatorul real al fiecărei ferestre.
+
+    Coloanele ``kN`` și ``avg_hits_topk`` sunt medii per extragere, exact ca
+    ratele T+. Prin urmare agregarea corectă peste ferestre cu dimensiuni diferite
+    este aceeași ``Σ medie·n / Σn`` din :func:`pooled_rate_and_neff`. Dacă un
+    folds.csv foarte vechi nu are ``n_eval``/``n_test``, păstrăm fallback-ul pe
+    media simplă, în loc să pierdem complet telemetria.
+    """
+    got = pooled_rate_and_neff(frame, value_col)
+    if got is not None:
+        return float(got[0])
+    if value_col not in frame.columns:
+        return None
+    values = pd.to_numeric(frame[value_col], errors="coerce").dropna()
+    return float(values.mean()) if not values.empty else None
+
+
+def pooled_wilson_distinct(frame: pd.DataFrame, rate_col: str) -> float | None:
+    """Limita inferioară Wilson pe rata pooled, cu n EFECTIV (Kish).
+
+    Sursă UNICĂ de adevăr pentru „cât de sigură e rata T+ a acestei metode":
+    folosită de decizie (`_rate_target_confidence`) ȘI de clasamentul UI
+    (`app_nicegui._wilson_pooled_rate`) — nu re-implementa agregarea în alt loc.
+    Detaliile agregării: vezi `pooled_rate_and_neff`.
+    """
+    got = pooled_rate_and_neff(frame, rate_col)
+    if got is None:
+        return None
+    phat, n_eff = got
+    return _wilson_lower_bound(phat * n_eff, n_eff)
+
+
+def _build_ensemble_weights(entries: list[tuple[str, float]]) -> list[dict]:
+    """Transformă [(method, confidence), ...] (deja ordonate, top-K) în
+    [{"method": m, "weight": w}, ...] cu ponderi proporționale cu confidence
+    (limita Wilson), normalizate la sumă 1. Floor mic (1e-6) ca metodele cu
+    confidence=0 (evenimente insuficiente) să nu fie complet excluse — cad la
+    ponderi egale între ele, nu la zero."""
+    if not entries:
+        return []
+    floored = [(m, max(float(c), 1e-6)) for m, c in entries]
+    total = sum(c for _, c in floored)
+    if total <= 0:
+        w = 1.0 / len(floored)
+        return [{"method": m, "weight": round(w, 4)} for m, _ in floored]
+    return [{"method": m, "weight": round(c / total, 4)} for m, c in floored]
+
+
+def _perf_signature_frame(
+    sub_real: pd.DataFrame,
+    methods: list[str],
+    target: int,
+) -> pd.DataFrame | None:
+    """Semnătura de performanță a fiecărei metode, din folds.csv.
+
+    decision.py NU are vectorii de scor bruți (lucrează pe folds.csv), deci
+    redundanța se măsoară pe ce EXISTĂ: ratele T+ pe toate pool-urile × toate
+    ferestrele sim_depth (pivot `method` × `(rate_col, percentile)`). Două
+    metode care produc practic același pool au și aceeași serie de rate.
+
+    Coloanele sunt CENTRATE pe metode (se scade media pe coloană) — altfel
+    "forma" comună tuturor metodelor (k20 are inevitabil rată mai mare decât
+    k6) ar împinge orice pereche spre corelație 1 și am elimina membri
+    legitimi. După centrare rămâne doar cum DEVIAZĂ o metodă de la consens.
+
+    Semnătura e POOL-AGNOSTICĂ, DELIBERAT: `rate_cols` ia TOATE coloanele
+    `rate_{target}plus_k*` ale jocului, nu doar pool-ul pentru care se decide,
+    deci frame-ul e IDENTIC pentru toți k ai aceluiași joc (verificat pe
+    folds.csv: shape (106, 60) = 15 pool-uri × 4 ferestre percentile, iar
+    `sig(k6).equals(sig(k20))` → True). Motivul e statistic, nu neatenție:
+    restrânsă la coloana pool-ului CURENT, semnătura ar avea 4 puncte (cele 4
+    ferestre) — sub `ENSEMBLE_MIN_SIGNATURE_POINTS`, adică fix zona în care
+    Pearson degenerează și am elimina membri pe zgomot. Consecința ACCEPTATĂ:
+    două metode care coincid la k7..k20 dar diferă la k6 sunt tratate ca
+    redundante și la k6 (redundanța se măsoară PE TOT JOCUL, nu per pool).
+    Recalcularea de 15 ori per joc e intenționat nememoizată: costă ~3 ms/apel
+    (măsurat), adică sub 1.5% din cei ~3.3 s ai unei `build_auto_pilot_matrix`.
+
+    Returnează None dacă nu se poate construi o semnătură utilizabilă
+    (fără coloane de rată, sub 2 puncte pe metodă) → dedup dezactivat.
+    """
+    rate_cols = [
+        c
+        for c in sub_real.columns
+        if c.startswith(f"rate_{target}plus_k") and sub_real[c].notna().any()
+    ]
+    if not rate_cols:  # folds.csv vechi (doar 4+) — vezi _resolve_rate_col
+        rate_cols = [
+            c
+            for c in sub_real.columns
+            if c.startswith("rate_4plus_k") and sub_real[c].notna().any()
+        ]
+    if not rate_cols:
+        return None
+    frame = sub_real[sub_real["method"].isin(methods)]
+    if frame.empty:
+        return None
+    try:
+        piv = frame.pivot_table(
+            index="method",
+            columns="percentile",
+            values=rate_cols,
+            aggfunc="mean",
+        )
+    except Exception as exc:  # date malformate — dedup e best-effort, nu blocant
+        logger.warning("[decision] semnătura de performanță indisponibilă: %s", exc)
+        return None
+    piv = piv.dropna(axis=1, how="any")  # doar coloane complete → comparabile 1:1
+    if piv.shape[0] < 2 or piv.shape[1] < 2:
+        return None
+    return piv - piv.mean(axis=0)
+
+
+def _signature_corr(v: np.ndarray, w: np.ndarray) -> float | None:
+    """Corelație Pearson între două semnături; None dacă nu e definită.
+
+    Scurtătura `np.allclose` acoperă DOAR identitatea (serii EGALE → 1.0), NU
+    varianța nulă în general. Două serii CONSTANTE dar diferite rămân
+    necalculabile: `_signature_corr([1,1,1], [2,2,2])` → None, nu 1.0 (verificat);
+    la fel `_signature_corr([1,1,1], [1,2,3])` → None. Motivul e că `corrcoef`
+    dă NaN când o serie are varianță zero (ex. o metodă exact pe consens după
+    centrare), iar None înseamnă aici "necalculabil", nu "necorelat":
+    `_select_ensemble_members` NU elimină pe baza lui — la îndoială păstrăm
+    membrul, ca să nu tăiem din lipsă de dovezi.
+    Corelația e SEMNATĂ; apelantul decide ce face cu semnul. Atenție: pe SCORURI
+    (`method_selector._select_decorrelated`) anti-corelația NU e complementaritate —
+    după min-max normalizare blend-ul devine monoton în membrul mai greu, deci
+    membrul anti-corelat nu aduce informație. Aici măsurăm însă RATE pe folduri,
+    unde semnul are altă semnificație: două metode care câștigă pe folduri diferite
+    chiar se completează. Cele două straturi au deci praguri și semantici diferite
+    în mod DELIBERAT — vezi ENSEMBLE_MAX_CORR (rate, semnat) vs MAX_MEMBER_CORR
+    (scoruri, modul).
+    """
+    if v.shape != w.shape or v.size < 2:
+        return None
+    if np.allclose(v, w, rtol=1e-9, atol=1e-12):
+        return 1.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        c = np.corrcoef(v, w)[0, 1]
+    return None if not np.isfinite(c) else float(c)
+
+
+def _select_ensemble_members(
+    ordered: list[tuple[str, float]],
+    sig: pd.DataFrame | None,
+    max_members: int = ENSEMBLE_MAX_METHODS,
+    max_corr: float = ENSEMBLE_MAX_CORR,
+) -> tuple[list[tuple[str, float]], list[dict]]:
+    """Alege membrii ensemble-ului cu DECORELARE, nu prin simplă feliere top-K.
+
+    `ordered` = [(metodă, confidence Wilson), ...] deja sortate descrescător.
+    Se parcurge lista în ordine și se păstrează o metodă doar dacă semnătura ei
+    de performanță nu e cvasi-identică (corelație ≥ `max_corr`) cu a unui membru
+    deja păstrat — adică se ține mereu cea cu Wilson mai bun, iar duplicatul se
+    sare. Fără asta, top-K poate conține variante ale aceleiași metode
+    (ex. blend-uri pe aceleași două componente), iar eticheta
+    "variance-reduction" ar fi falsă.
+
+    Pragul e SEMNAT (`c >= max_corr`), nu în modul: pe RATE, doi membri
+    anti-corelați câștigă pe folduri diferite, deci se completează — îi
+    păstrăm. Stratul următor (`method_selector._select_decorrelated`) lucrează
+    pe SCORURI și elimină în MODUL (|r| ≥ MAX_MEMBER_CORR), inclusiv
+    anti-corelații. Diferența e deliberată (vezi `_signature_corr`), dar are o
+    consecință de reținut: ensemble-ul + ponderile Wilson scrise în
+    best_methods.json sunt NOMINALE — la generare pot fi reduse tacit de
+    method_selector, deci nu sunt neapărat cele folosite efectiv.
+
+    Returnează (membri_păstrați, eliminați_ca_redundanți). Al doilea element
+    reia CHEILE din method_selector.describe_ensemble ({method, vs, r, reason}),
+    ca UI-ul să poată explica uniform de ce lipsește o metodă din blend — DAR
+    valoarea `reason` e "perf_signature", care nu apare în enum-ul documentat
+    acolo ({"empty", "flat", "correlated", "anticorrelated"}): acolo axa e
+    SCORURILE (engine), aici sunt RATELE pe folduri (decizie). Un consumator de
+    UI trebuie deci să trateze `reason` ca enum DESCHIS, nu închis.
+    """
+    kept: list[tuple[str, float]] = []
+    dropped: list[dict] = []
+    # Gardă de eșantion: pe semnături prea scurte (puține ferestre/pool-uri) sau
+    # cu prea puține metode, corelația degenerează spre ±1 și am elimina membri
+    # pe zgomot — vezi ENSEMBLE_MIN_SIGNATURE_POINTS. Dedup dezactivat, NU
+    # aproximat. ⚠️ NU mai e inert: după curarea din 14.09.2026 rămân 2-4 metode
+    # calificate per pool, deci garda se declanșează practic la fiecare celulă
+    # (vezi nota din capul fișierului). Oricum, cu ENSEMBLE_MAX_METHODS = 1
+    # bucla iese înainte de orice comparație de semnătură.
+    if sig is not None and min(sig.shape) < ENSEMBLE_MIN_SIGNATURE_POINTS:
+        logger.info(
+            "[decision] dedup ensemble dezactivat: semnătură prea mică %s "
+            "(prag %d pe ambele axe) — corelația ar fi nefiabilă",
+            tuple(sig.shape),
+            ENSEMBLE_MIN_SIGNATURE_POINTS,
+        )
+        sig = None
+    for m, conf in ordered:
+        if len(kept) >= max_members:
+            break
+        redundant_with: str | None = None
+        redundant_r: float | None = None
+        if sig is not None and m in sig.index:
+            v = sig.loc[m].to_numpy(dtype=float)
+            for kept_m, _kept_conf in kept:
+                if kept_m not in sig.index:
+                    continue
+                c = _signature_corr(v, sig.loc[kept_m].to_numpy(dtype=float))
+                if c is not None and c >= max_corr:
+                    redundant_with, redundant_r = kept_m, c
+                    break
+        if redundant_with is None:
+            kept.append((m, conf))
+        else:
+            dropped.append(
+                {
+                    "method": m,
+                    "vs": redundant_with,
+                    "r": round(float(redundant_r), 4),
+                    "reason": "perf_signature",
+                }
+            )
+    return kept, dropped
+
+
+def common_window_percentiles(
+    real_folds: pd.DataFrame, rate_col: str | None
+) -> set[int]:
+    """Ferestrele comparabile: martorul random, altfel uniunea disponibilă.
+
+    Se primesc numai foldurile reale și valide ale jocului. Martorul definește
+    matricea când are suficiente ferestre cu rata cerută; o percentilă rămasă
+    doar la o metodă dintr-un bench vechi nu extinde acel contract.
+    """
+    if (
+        real_folds.empty
+        or "percentile" not in real_folds.columns
+        or rate_col is None
+        or rate_col not in real_folds.columns
+    ):
+        return set()
+    valid = real_folds[
+        pd.to_numeric(real_folds[rate_col], errors="coerce").notna()
+    ]
+
+    def _percentiles(frame: pd.DataFrame) -> set[int]:
+        return {
+            int(p)
+            for p in pd.to_numeric(frame["percentile"], errors="coerce").dropna()
+        }
+
+    random_rows = (
+        valid[valid["method"] == "random"]
+        if "method" in valid.columns
+        else valid.iloc[0:0]
+    )
+    random_pcts = _percentiles(random_rows)
+    if len(random_pcts) >= MIN_CONSISTENCY_WINDOWS:
+        return random_pcts
+    return _percentiles(valid)
+
+
+def filter_window_percentiles(
+    frame: pd.DataFrame, percentiles: set[int]
+) -> pd.DataFrame:
+    """Păstrează numai ferestrele contractului comun, fără a schimba rândurile.
+
+    Un set gol înseamnă contract indisponibil (folds vechi/sintetice), nu o
+    cerere de a șterge datele. Folosit identic de decizie și clasamentul UI.
+    """
+    if not percentiles or "percentile" not in frame.columns:
+        return frame
+    return frame[
+        pd.to_numeric(frame["percentile"], errors="coerce").isin(percentiles)
+    ]
+
+
+def tiebreak_fraction(frame: pd.DataFrame, pool_size: int) -> float | None:
+    """Fraction of tied top-K cuts, weighted by evaluated blocks.
+
+    Shared with the leaderboard. A short window must not get the same
+    weight as the longest window; legacy frames without blocks use the mean.
+    None means no usable tie data, not a zero tie rate.
+    """
+    column = f"tiebreak_k{int(pool_size)}"
+    if column not in frame.columns:
+        return None
+    fraction = pd.to_numeric(frame[column], errors="coerce").dropna()
+    if fraction.empty:
+        return None
+    if "blocks" in frame.columns:
+        weights = pd.to_numeric(
+            frame.loc[fraction.index, "blocks"], errors="coerce"
+        ).fillna(0.0)
+        total = float(weights.sum())
+        if total > 0.0:
+            return float(
+                np.dot(fraction.to_numpy(dtype=float), weights.to_numpy()) / total
+            )
+    return float(fraction.mean())
+
+
+def decide_optimal_config_for_pool(
+    folds_df: pd.DataFrame,
+    game_key: str,
+    pool_size: int,
+    draw_n: int,
+    max_num: int | None = None,
+    pick_n: int | None = None,
+) -> dict:
+    """Run the decision algorithm for one (game, pool_size) pair.
+
+    `draw_n` = numere EXTRASE (baseline hipergeometric), `pick_n` = numere pe
+    BILET (pool-ul de bază al coloanelor fără `_kN`). Pentru jocurile cunoscute
+    ambele vin din `GAME_DRAW_PICK` (5/40: 6 extrase, bilet de 5), indiferent de
+    ce trimite apelantul — un `best_methods.json` vechi cu draw_n=5 nu mai poate
+    calcula pragul random pe 5 numere extrase.
+
+    `max_num` = universul jocului; cu el, referinta portii de consistenta este
+    rata asteptata hipergeometric a unui pool aleator (determinista). Lipsa lui
+    pentru un joc necunoscut cade pe randul `random` din folds.csv.
+
+    Returns a dict with the chosen scorer, sim_depth, use_blacklist + rationale.
+    """
+    base_col = f"k{pool_size}"
+    base_col_bl = f"k{pool_size}_bl"
+    # Urna 2 Joker este un joc categoric single-pick: +3/+4 sunt imposibile.
+    # O evaluăm separat pe singura întrebare semnificativă, top-1 (1/1). Celelalte
+    # jocuri păstrează ținta globală +3 sau +4, fără a dilua benchmark-ul de cover.
+    _known_geometry = GAME_DRAW_PICK.get(str(game_key))
+    if _known_geometry is not None:
+        draw_n, base_pool = _known_geometry
+    else:
+        base_pool = int(pick_n or draw_n)
+    # Ținta per joc: 5/40 rămâne pe 4+ (3 numere nu aduc premiu), oricare ar fi
+    # ținta globală; celelalte jocuri de pool urmează ținta globală 3/4.
+    target = 1 if int(draw_n) == 1 else game_hit_target(game_key, BENCH_HIT_TARGET)
+    target_label = "top-1 (1/1)" if target == 1 else f"{target}+"
+    rate_target_col = f"rate_{target}plus_k{pool_size}"
+    tiebreak_col = f"tiebreak_k{pool_size}"
+
+    if max_num is None:
+        max_num = KNOWN_GAME_MAX_NUM.get(game_key)
+    baseline_rate: float | None = None
+    if max_num is not None and int(max_num) >= int(pool_size):
+        baseline_rate = expected_random_rate(
+            int(max_num), int(draw_n), int(pool_size), target
+        )
+    baseline_source = (
+        "hypergeometric" if baseline_rate is not None else "empirical_random"
+    )
+
+    if base_col not in folds_df.columns:
+        return {"error": f"column {base_col} missing in folds.csv"}
+
+    sub = folds_df[(folds_df["game"] == game_key) & (folds_df["failed"] != True)]  # noqa: E712
+    if sub.empty:
+        return {"error": f"no folds for game {game_key}"}
+
+    real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
+    # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
+    # candidați (vezi EXCLUDED_FROM_PRODUCTION): nu are voie să ajungă scorer de
+    # producție. Plus: sare metodele care nu mai există în METHODS (folds mai
+    # vechi decât registry-ul). Mecanismul de tombstone a fost eliminat la
+    # 14.09.2026: un nume necunoscut cade oricum, fiindcă nu e în METHODS.
+    try:
+        from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
+
+        _alive = set(_METHODS_NOW)
+    except Exception:  # noqa: BLE001
+        _alive = None
+    _excluded = EXCLUDED_FROM_PRODUCTION | (
+        EXCLUDED_FROM_SINGLE_PICK if int(draw_n) == 1 else frozenset()
+    )
+    methods = [
+        m
+        for m in sub["method"].unique()
+        if m not in _excluded and (_alive is None or m in _alive)
+    ]
+    try:
+        from loto_enterprise.benchmark.curated import load_per_game as _load_pg
+
+        _pg = [m for m in (_load_pg().get(game_key) or []) if m in methods]
+        if _pg:
+            methods = _pg
+            logger.info(
+                "[decision] %s k%d: candidați restrânși la per_game (%d metode)",
+                game_key,
+                pool_size,
+                len(methods),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[decision] per_game neaplicat: %s", exc)
+
+    # Coloane candidate pt rata țintei, în ordine de preferință; sare peste coloane
+    # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.
+    # Coloana FĂRĂ `_kN` reprezintă EXCLUSIV pool-ul de bază (K=draw_n), deci
+    # este validă doar când decidem chiar acea geometrie. Folosită la k12, de
+    # exemplu, ar puncta toate metodele pe k5/k6 și ar produce un câștigător
+    # pentru alt pool decât cel cerut.
+    _candidate_cols = [rate_target_col]
+    if int(pool_size) == int(base_pool):
+        _candidate_cols.append(f"rate_{target}plus")
+    # Pentru 3+/4+ păstrăm fallback-ul compatibil cu folds vechi. Pentru top-1
+    # nu există o metrică echivalentă în cache vechi: cădem explicit pe frequency
+    # cu low_confidence, nu pretindem că rate_4plus=0 e dovadă.
+    if target != 1:
+        _candidate_cols.append(f"rate_4plus_k{pool_size}")
+        if int(pool_size) == int(base_pool):
+            _candidate_cols.append("rate_4plus")
+    _rate_target_candidate_cols = tuple(dict.fromkeys(_candidate_cols))
+    # Coloanele care CORESPUND țintei curente; orice rezoluție în afara lor =
+    # fallback de metrică (ex. ținta 3+ dar folds.csv vechi are doar 4+) —
+    # trebuie SEMNALIZAT (rate_col_mismatch + rationale), nu tăcut.
+    # ATENȚIE la ce e „mismatch": `rate_{T}plus` FĂRĂ sufix `_kN` NU e rata
+    # pool-ului curent — `runner._evaluate_fold` o scrie ca rata la pool-ul de
+    # BAZĂ (K = draw_n). E deci un fallback de POOL, nu doar de țintă, și trebuie
+    # semnalizat la fel ca trecerea pe 4+.
+    _target_cols = {rate_target_col}
+    if int(pool_size) == int(base_pool):
+        _target_cols.add(f"rate_{target}plus")
+    _mismatch_cols_used: set[str] = set()
+
+    def _resolve_rate_col(frame: pd.DataFrame) -> str | None:
+        for c in _rate_target_candidate_cols:
+            if c in frame.columns and frame[c].notna().any():
+                if c not in _target_cols and c not in _mismatch_cols_used:
+                    _mismatch_cols_used.add(c)  # log O DATĂ per (game, pool, coloană)
+                    logger.warning(
+                        "[decision] %s k%d: %r lipsește/e all-NaN în folds.csv — "
+                        "decizia cade pe %r. Ținta e %s @ k%d. Re-rulează bench-ul.",
+                        game_key,
+                        pool_size,
+                        rate_target_col,
+                        c,
+                        target_label,
+                        pool_size,
+                    )
+                return c
+        return None
+
+    # Coloana se rezolvă O SINGURĂ DATĂ, pe TOT frame-ul (game, pool) — nu per
+    # metodă. Rezolvată per metodă, un folds.csv asamblat din două faze de bench
+    # (unele metode fără coloanele per-pool) făcea ca rânduri din ACELAȘI
+    # `qualifying.sort` să fie punctate pe coloane DIFERITE și incomparabile:
+    # metodele „vechi" cădeau pe rata pool-ului de bază, structural mai mică
+    # (măsurat pe date reale: 0.023 vs 0.154 la k12), deci erau îngropate tăcut.
+    # Pe un folds.csv omogen (cazul normal) rezoluția e aceeași pentru toată
+    # lumea, deci decizia rămâne neschimbată.
+    _thin_gate_warned: list[
+        tuple[str, int]
+    ] = []  # rezumat, o SINGURĂ linie per (joc, pool)
+    _all_real = sub[sub["is_random"] == False]  # noqa: E712
+    _frame_rate_col = _resolve_rate_col(_all_real) if not _all_real.empty else None
+    if _frame_rate_col is None:
+        _missing_marker = f"missing:{rate_target_col}"
+        _mismatch_cols_used.add(_missing_marker)
+        logger.warning(
+            "[decision] %s k%d: nicio coloană de rată compatibilă cu pool-ul "
+            "cerut; metodele fără %s nu intră în decizie.",
+            game_key,
+            pool_size,
+            target_label,
+        )
+
+    # Pragul random trebuie să măsoare ACEEAȘI țintă ca și coloana pe care se
+    # judecă metodele. `baseline_rate` de mai sus e calculat pentru `target`
+    # (3+ de regulă), dar `_resolve_rate_col` poate cădea pe `rate_4plus_*` când
+    # coloana cerută lipsește dintr-un folds.csv vechi. Fără realinierea de aici,
+    # poarta compara rate de 4+ (~0,02 la 6/49 k12) cu P(≥3) ≈ 0,11: nicio metodă
+    # nu putea trece, întreaga matrice devenea `low_confidence`, iar `lift` era o
+    # diferență între două mărimi diferite — semnalizată doar ca
+    # `rate_col_mismatch`, nu ca poartă invalidă.
+    if _frame_rate_col is not None and max_num is not None:
+        _resolved_target = None
+        _m = re.match(r"rate_(\d+)plus", str(_frame_rate_col))
+        if _m:
+            _resolved_target = int(_m.group(1))
+        if _resolved_target is not None and _resolved_target != target:
+            # Coloana fără sufix `_kN` e rata pool-ului de BAZĂ (K = draw_n);
+            # pragul ei se calculează pe acea geometrie, nu pe pool_size.
+            _base_pool = (
+                int(pool_size)
+                if str(_frame_rate_col).endswith(f"_k{pool_size}")
+                else int(base_pool)
+            )
+            if int(max_num) >= _base_pool:
+                baseline_rate = expected_random_rate(
+                    int(max_num), int(draw_n), _base_pool, _resolved_target
+                )
+                logger.warning(
+                    "[decision] %s k%d: pragul random realiniat la %s (%.4f) — "
+                    "decizia se judecă pe %r, nu pe ținta %s.",
+                    game_key,
+                    pool_size,
+                    f"{_resolved_target}+ @ k{_base_pool}",
+                    baseline_rate,
+                    _frame_rate_col,
+                    target_label,
+                )
+
+    def _rate_col_for(frame: pd.DataFrame) -> str | None:
+        """Coloana comună dacă metoda are date în ea; altfel None (metoda e sărită)."""
+        if _frame_rate_col is None:
+            return None
+        if _frame_rate_col in frame.columns and frame[_frame_rate_col].notna().any():
+            return _frame_rate_col
+        return None
+
+    def _rate_target_mean(frame: pd.DataFrame) -> float:
+        # Rata POOLED — ACELAȘI estimator punctual pe care se calculează Wilson
+        # (`pooled_rate_and_neff`). Înainte era media NEPONDERATĂ pe ferestre, deci
+        # rationale-ul putea tipări o limită INFERIOARĂ mai mare decât „rata" de
+        # lângă ea (măsurat: 86 de celule joc×pool×metodă). Cei doi estimatori
+        # trebuie să fie ai aceleiași mărimi. Fallback pe media brută doar dacă
+        # lipsesc coloanele de n (folds foarte vechi).
+        c = _rate_col_for(frame)
+        if c is None:
+            return 0.0
+        got = pooled_rate_and_neff(frame, c)
+        if got is not None:
+            return float(got[0])
+        v = float(frame[c].mean())
+        return v if v == v else 0.0  # nu e NaN (NaN != NaN)
+
+    def _rate_target_confidence(frame: pd.DataFrame) -> float:
+        # Limită inferioară Wilson pe proporția agregată — mai robustă la zgomot
+        # decât media brută pe evenimente rare (4+ hituri). Agregarea (rata pooled
+        # + n EFECTIV Kish, nu suma ferestrelor cuibărite) e canonică în
+        # `pooled_rate_and_neff` — vezi docstring-ul ei; înainte n-ul era suma
+        # (măsurat pe folds de producție: ≈2.03× n real) → limite supraîncrezătoare.
+        c = _rate_col_for(frame)
+        if c is None:
+            return 0.0
+        v = pooled_wilson_distinct(frame, c)
+        return float(v) if v is not None else 0.0
+
+    # Toti candidatii se judeca pe ACELASI set de ferestre. Contractul e setul
+    # lui `random` (martorul prezent pe fiecare fereastra a matricei). Un
+    # percentile aparut doar la o metoda — fold vechi amestecat sau flush
+    # intrerupt — nu mai declara incomplete toate celelalte. Fara suficiente
+    # ferestre la `random`, ramane uniunea (folds sintetice / vechi).
+    # O metoda cu o fereastra lipsa (fold `failed`, n_eval=0) ar fi altfel
+    # comparata pe alt subset de extrageri, cu o poarta mai usoara (2/3 in loc
+    # de 3/4) si cu o rata pooled care ii omite exact fereastra in care a
+    # esuat. Ea iese din decizie si este raportata in `incomplete_methods`.
+    _expected_pcts = common_window_percentiles(_all_real, _frame_rate_col)
+    # Completența singură nu ajunge: datele suplimentare ale unei singure
+    # metode ar schimba consistența, Wilson/lift și fracția de egalități, deși
+    # expected_windows promite un set comun. Toate metricile consumă aceleași
+    # percentile, inclusiv fallback-ul și alegerea sim_depth.
+    _common_sub = filter_window_percentiles(sub, _expected_pcts)
+    real_random = filter_window_percentiles(real_random, _expected_pcts)
+    incomplete_methods: list[dict] = []
+    tiebreak_dependent: list[dict] = []
+    tiebreak_gate_applied = tiebreak_col in sub.columns
+    # Metode cu rânduri dar fără valoare pe coloana de rată rezolvată la nivel
+    # de cadru — înainte dispăreau tăcut din tot (qualifying, ranked_methods),
+    # fără niciun motiv raportat. `_rate_missing_seen` deduplichează între
+    # ramura calificată și cea de fallback (ambele iterează peste `methods`).
+    rate_data_missing: list[dict] = []
+    _rate_missing_seen: set[str] = set()
+
+    def _flag_rate_missing(m: str) -> None:
+        if _frame_rate_col is not None and m not in _rate_missing_seen:
+            _rate_missing_seen.add(m)
+            rate_data_missing.append({"method": m})
+
+    def _complete_windows(m: str, real_m: pd.DataFrame, gate_col: str) -> bool:
+        if "n_eval" in real_m.columns and "n_test" in real_m.columns:
+            evaluated = pd.to_numeric(real_m["n_eval"], errors="coerce")
+            requested = pd.to_numeric(real_m["n_test"], errors="coerce")
+            partial = evaluated.notna() & requested.notna() & (evaluated < requested)
+            if partial.any():
+                incomplete_methods.append(
+                    {
+                        "method": m,
+                        "missing_windows": sorted(
+                            map(int, real_m.loc[partial, "percentile"])
+                        ),
+                        "reason": "unevaluated_draws",
+                    }
+                )
+                return False
+        if not _expected_pcts:
+            return True
+        _have = real_m[pd.to_numeric(real_m[gate_col], errors="coerce").notna()]
+        have_pcts = {
+            int(p) for p in pd.to_numeric(_have["percentile"], errors="coerce").dropna()
+        }
+        missing = sorted(_expected_pcts - have_pcts)
+        if missing:
+            incomplete_methods.append({"method": m, "missing_windows": missing})
+            return False
+        return True
+
+    def _tiebreak_ok(m: str, real_m: pd.DataFrame) -> bool:
+        if not tiebreak_gate_applied:
+            return True
+        f = tiebreak_fraction(real_m, pool_size)
+        if f is None:
+            tiebreak_dependent.append({"method": m, "tiebreak_fraction": None})
+            return False
+        if f >= TIEBREAK_MAX_FRACTION:
+            tiebreak_dependent.append({"method": m, "tiebreak_fraction": round(f, 3)})
+            return False
+        return True
+
+    def _random_empirical_rate() -> float | None:
+        if real_random.empty or _frame_rate_col is None:
+            return None
+        got = pooled_rate_and_neff(real_random, _frame_rate_col)
+        return round(float(got[0]), 5) if got is not None else None
+
+    qualifying: list[tuple[str, float, int, int, float, float]] = []
+    # Candidații evaluați de poartă (ferestre complete, fără tie-break) și
+    # valoarea p a excesului lor; numărul lor intră în corecția Holm.
+    excess_p: dict[str, float] = {}
+    for m in methods:
+        real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
+        if real_m.empty:
+            continue
+        real_m = filter_window_percentiles(real_m, _expected_pcts)
+        if real_m.empty:
+            incomplete_methods.append(
+                {"method": m, "missing_windows": sorted(_expected_pcts)}
+            )
+            continue
+        # Poarta și sortarea trebuie să măsoare ACEEAȘI țintă. Înainte gate-ul
+        # compara media de hituri (`kN`), apoi alegea câștigătorul după rata T+:
+        # o metodă putea trece cu mai multe extrageri de 2 hituri, deși pierdea
+        # față de random exact la 3+/4+, adică metrica cerută de utilizator.
+        gate_col = _rate_col_for(real_m)
+        if gate_col is None:
+            _flag_rate_missing(m)
+            continue
+        if not _complete_windows(m, real_m, gate_col):
+            continue
+        if not _tiebreak_ok(m, real_m):
+            continue
+        _p = excess_p_value(real_m, gate_col, baseline_rate)
+        if _p is not None:
+            excess_p[m] = _p
+        n_beat, n_total = _windows_method_beats_random(
+            real_m, real_random, gate_col, baseline_rate
+        )
+        if 0 < n_total < MIN_CONSISTENCY_WINDOWS:
+            _thin_gate_warned.append((m, n_total))
+        if n_total < MIN_CONSISTENCY_WINDOWS:
+            continue
+        consistency = n_beat / n_total
+        if consistency < CONSISTENCY_THRESHOLD:
+            continue
+        w_lift = _weighted_mean_lift(real_m, real_random, gate_col, baseline_rate)
+        # Rata țintei: +3/+4 pentru pool-uri, top-1 pentru Urna 2.
+        # `target_conf` (Wilson) decide, rata brută e doar pentru afișare.
+        r4 = _rate_target_mean(real_m)
+        r4_conf = _rate_target_confidence(real_m)
+        qualifying.append((m, w_lift, n_beat, n_total, r4, r4_conf))
+
+    # Decizia e "low confidence" când nicio metodă nu a trecut pragul de
+    # consistență față de random — alegem tot o metodă REALĂ (nu baseline-ul
+    # nedeterminist), dar marcăm explicit că diferențele sunt zgomot.
+    if _thin_gate_warned:
+        _wmin = min(n for _, n in _thin_gate_warned)
+        _wmax = max(n for _, n in _thin_gate_warned)
+        logger.warning(
+            "[decision] %s k%d: %d metode au doar %s fereastră(e) comună(e) cu `random` "
+            "(prag %d) — poarta de consistență nu e concludentă, le sar. folds.csv pare "
+            "PARȚIAL (bench întrerupt?) — re-rulează bench-ul. Ex.: %s",
+            game_key,
+            pool_size,
+            len(_thin_gate_warned),
+            f"{_wmin}" if _wmin == _wmax else f"{_wmin}-{_wmax}",
+            MIN_CONSISTENCY_WINDOWS,
+            ", ".join(m for m, _ in _thin_gate_warned[:5]),
+        )
+
+    low_confidence = False
+    dropped_redundant: list[dict] = []
+
+    if not qualifying:
+        # Fallback: nicio metodă nu a bătut random ≥60% din ferestre.
+        # Prioritizăm tot regula T+ (robust, via Wilson), apoi avg_hits (la egalitate).
+        # `random` NU e candidat aici (EXCLUDED_FROM_PRODUCTION): faptul că
+        # nimeni nu-l bate consistent NU îl face scorer legitim — ar însemna să
+        # generăm pool-uri nedeterministe, nereproductibile.
+        low_confidence = True
+        ranked = []
+        for m in methods:
+            real_m = sub[(sub["method"] == m) & (sub["is_random"] == False)]  # noqa: E712
+            if real_m.empty:
+                continue
+            real_m = filter_window_percentiles(real_m, _expected_pcts)
+            if real_m.empty:
+                continue  # deja raportată ca incompletă pe ramura principală
+            # O metodă fără date pe coloana comună nu poate câștiga cu Wilson=0
+            # doar fiindcă e singura candidată rămasă într-un folds parțial.
+            _gc = _rate_col_for(real_m)
+            if _gc is None:
+                _flag_rate_missing(m)
+                continue
+            # Aceleasi doua porti structurale ca pe ramura calificata: fara ele
+            # fallback-ul ar promova exact metodele incomplete/degenerate pe care
+            # poarta principala le-a scos.
+            if m in {d["method"] for d in incomplete_methods} or m in {
+                d["method"] for d in tiebreak_dependent
+            }:
+                continue
+            if not _complete_windows(m, real_m, _gc) or not _tiebreak_ok(m, real_m):
+                continue
+            r4 = _rate_target_mean(real_m)
+            r4_conf = _rate_target_confidence(real_m)
+            _avg_hits = pooled_mean(real_m, base_col)
+            ranked.append(
+                (
+                    m,
+                    r4_conf,
+                    r4,
+                    float(_avg_hits if _avg_hits is not None else 0.0),
+                )
+            )
+        # Numele ca ULTIM criteriu: egalitatile exacte pe Wilson sunt frecvente
+        # si altfel ordinea depindea de ordinea randurilor din folds.csv, adica
+        # de ordinea in care s-au terminat procesele bench-ului.
+        ranked.sort(key=lambda kv: (-kv[1], -kv[3], kv[0]))
+        if not ranked:
+            # Nicio metodă reală utilizabilă în folds.csv → cădem pe baseline-ul
+            # DETERMINIST, niciodată pe `random`. Nu mai putem calcula sim_depth
+            # (nu există rânduri pt scorer) → valori implicite + low_confidence.
+            logger.warning(
+                "[decision] %s k%d: nicio metodă reală cu rată %s utilizabilă "
+                "în folds.csv — fallback determinist %r",
+                game_key,
+                pool_size,
+                target_label,
+                SAFE_FALLBACK_SCORER,
+            )
+            return {
+                "scorer": SAFE_FALLBACK_SCORER,
+                "ensemble": _build_ensemble_weights([(SAFE_FALLBACK_SCORER, 1.0)]),
+                "sim_depth_pct": DEFAULT_SIM_DEPTH_PCT,
+                # True, NU False: înainte celula degenerată întorcea {"error": ...}
+                # (fără cheia "scorer"), deci `recommend_optimal_config` cădea pe
+                # ramura fallback → `should_use_blacklist`, a cărei politică
+                # documentată e "default True (safe — producția rulează
+                # blacklist-ul oricum)". Cheia asta e citită PRIMA de
+                # `should_use_blacklist` (auto_pilot_per_pool[kN].use_blacklist),
+                # deci un False aici ar fi schimbat TACIT politica exact pe cazul
+                # cel mai degradat (nicio metodă reală în folds.csv), unde n-avem
+                # nicio măsurătoare care să justifice renunțarea la blacklist.
+                "use_blacklist": True,
+                # 0.0, NU None: `method_selector.recommend_optimal_config` și UI-ul
+                # citesc `avg_hits` și îl formatează cu :.3f — None ar arunca
+                # TypeError exact pe calea de fallback, adică fix când totul merge
+                # deja prost. `low_confidence` marchează că cifra nu e măsurată.
+                "avg_hits": 0.0,
+                "avg_hits_with_blacklist": 0.0,
+                "rationale": (
+                    f"FALLBACK: nicio metodă reală cu rată {target_label} utilizabilă în "
+                    f"folds.csv pentru k{pool_size}; "
+                    f"selecție conservatoare pe baseline-ul DETERMINIST "
+                    f"{SAFE_FALLBACK_SCORER} (baseline-urile nedeterministe "
+                    f"{sorted(EXCLUDED_FROM_PRODUCTION)} nu pot fi scorer de producție)"
+                ),
+                "rate_col_used": None,
+                "rate_col_mismatch": bool(_mismatch_cols_used),
+                "hit_target": target,
+                "target_label": target_label,
+                "qualifying_methods": 0,
+                "ranked_methods": [],
+                "consistency_threshold": CONSISTENCY_THRESHOLD,
+                "low_confidence": True,
+                "ensemble_dropped_redundant": [],
+                "baseline_rate": baseline_rate,
+                "baseline_source": baseline_source,
+                "random_empirical_rate": _random_empirical_rate(),
+                "expected_windows": sorted(_expected_pcts),
+                "incomplete_methods": incomplete_methods,
+                "rate_data_missing": rate_data_missing,
+                "tiebreak_gate_applied": tiebreak_gate_applied,
+                "tiebreak_dependent": tiebreak_dependent,
+            }
+        scorer = ranked[0][0]
+        rationale = (
+            f"FALLBACK: no method consistently beat random "
+            f"(≥{int(CONSISTENCY_THRESHOLD * 100)}% of windows); "
+            f"picked highest {target_label} rate (raw={ranked[0][2]:.3f}, "
+            f"Wilson_lb={ranked[0][1]:.3f}) + avg_hits "
+            f"[nicio metodă nu bate random; selecție conservatoare, "
+            f"diferențele sunt zgomot]"
+        )
+        # Fallback: NICIO metodă a bătut random — conservator, ensemble cu un
+        # singur membru (nu combinăm metode neconfirmate statistic).
+        ensemble = _build_ensemble_weights([(scorer, 1.0)])
+    else:
+        # Sortăm întâi după limita Wilson a ratei țintei (+3/+4 sau top-1)
+        # (robustă la evenimente rare/zgomot — nu doar rata brută), apoi după
+        # lift mediu, apoi consistență. Metoda care prinde T+ cel mai des ȘI cu
+        # dovezi suficiente câștigă, nu cea cu 1 eveniment norocos.
+        # Numele ca ULTIM criteriu (determinist indiferent de ordinea randurilor).
+        qualifying.sort(key=lambda r: (-r[5], -r[1], -(r[2] / max(r[3], 1)), r[0]))
+        scorer = qualifying[0][0]
+        _ref_txt = (
+            f"random (hipergeometric {baseline_rate:.4f})"
+            if baseline_rate is not None
+            else "random (empiric, folds.csv)"
+        )
+        rationale = (
+            f"{scorer}: rată {target_label} @ k{pool_size} = {qualifying[0][4]:.3f} "
+            f"(Wilson_lb={qualifying[0][5]:.3f}), beat {_ref_txt} in "
+            f"{qualifying[0][2]}/{qualifying[0][3]} windows on the same "
+            f"{target_label} target (lift {qualifying[0][1]:+.4f}); "
+            f"din {len(qualifying)} metode calificate [prioritate: {target_label}, robust]"
+        )
+        # Configurația păstrează schema `ensemble`, dar limita de producție este
+        # 1: numai scorerul pe care folds.csv l-a evaluat DIRECT. Agregatele de
+        # rată ale membrilor nu dovedesc performanța rankingului rezultat prin
+        # min-max blend; vezi ENSEMBLE_MAX_METHODS.
+        ordered = [(m, r4_conf) for m, _, _, _, _, r4_conf in qualifying]
+        sig = _perf_signature_frame(
+            _common_sub[_common_sub["is_random"] == False],  # noqa: E712
+            [m for m, _ in ordered],
+            target,
+        )
+        members, dropped_redundant = _select_ensemble_members(
+            ordered,
+            sig,
+            ENSEMBLE_MAX_METHODS,
+            ENSEMBLE_MAX_CORR,
+        )
+        if dropped_redundant:
+            logger.info(
+                "[decision] %s k%d: %d membri ensemble eliminați ca redundanți (r≥%.2f): %s",
+                game_key,
+                pool_size,
+                len(dropped_redundant),
+                ENSEMBLE_MAX_CORR,
+                ", ".join(f"{d['method']}~{d['vs']}" for d in dropped_redundant),
+            )
+        ensemble = _build_ensemble_weights(members)
+
+    # Pick the best sim_depth for the chosen scorer based on target hit rate (percentage of drawings)
+    real_chosen = _common_sub[
+        (_common_sub["method"] == scorer) & (_common_sub["is_random"] == False)
+    ]  # noqa: E712
+    rate_col = _rate_col_for(real_chosen) or _resolve_rate_col(real_chosen)
+    if rate_col is None:
+        rate_col = base_col  # fallback to avg_hits — tot un fallback de metrică
+        _mismatch_cols_used.add(base_col)
+
+    # Poarta de stabilitate se aplică pe EXTRAGERILE EVALUATE (n_eval, cu fallback
+    # pe rând la n_test): `target_rate` și `avg_hits` sunt ambele denominate în
+    # n_eval de la v13, deci a filtra pe n_test ar valida o fereastră pe extrageri
+    # care poate n-au fost niciodată evaluate (scorer care întoarce {} pe blocuri).
+    _rc = real_chosen.copy()
+    _nt = (
+        pd.to_numeric(_rc["n_test"], errors="coerce")
+        if "n_test" in _rc.columns
+        else None
+    )
+    if "n_eval" in _rc.columns:
+        _ne = pd.to_numeric(_rc["n_eval"], errors="coerce")
+        _rc["_n_stab"] = (
+            _ne.where(_ne.notna() & (_ne > 0), _nt) if _nt is not None else _ne
+        )
+    else:
+        _rc["_n_stab"] = _nt
+    by_pct = _rc.groupby("percentile").agg(
+        target_rate=(rate_col, "mean"),
+        avg_hits=(base_col, "mean"),
+        n_test=("_n_stab", "mean"),
+        runtime=("runtime_sec", "mean"),
+    )
+    # Filter to windows with enough EVALUATED draws
+    stable = by_pct[by_pct["n_test"] >= MIN_TEST_DRAWS_FOR_STABILITY]
+    if stable.empty:
+        stable = by_pct
+    # Sort by target_rate desc (optimizing percentage of hits), tiebreak on avg_hits desc
+    stable = stable.sort_values(
+        by=["target_rate", "avg_hits"], ascending=[False, False]
+    )
+    best_pct = int(stable.index[0])
+    best_avg = float(stable.iloc[0]["avg_hits"])
+
+    # Decide use_blacklist at the chosen (method, sim_depth)
+    use_bl = False
+    bl_avg = None
+    if base_col_bl in real_chosen.columns:
+        at_pct = real_chosen[real_chosen["percentile"] == best_pct]
+        if not at_pct.empty:
+            no_bl = float(at_pct[base_col].mean())
+            bl_avg = float(at_pct[base_col_bl].mean())
+            if bl_avg > no_bl:
+                use_bl = True
+
+    # Semnalizare fallback de metrică: dacă ORICE rezoluție a folosit o coloană
+    # din afara țintei (3+ absent → 4+), o marcăm în rezultat + rationale — ca
+    # UI-ul și logurile să nu pretindă că decizia s-a luat pe metrica "T+".
+    rate_col_mismatch = bool(_mismatch_cols_used)
+    if rate_col_mismatch:
+        rationale += (
+            f" [ATENȚIE: metrica {target_label} indisponibilă în folds.csv — "
+            f"decizie luată pe {', '.join(sorted(_mismatch_cols_used))}; re-rulează bench-ul]"
+        )
+
+    multiplicity = None
+    if scorer in excess_p:
+        _holm = holm_adjusted(excess_p)
+        multiplicity = {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": len(excess_p),
+            "p_value": round(excess_p[scorer], 6),
+            "holm_p": round(_holm[scorer], 6),
+            "alpha": MULTIPLICITY_ALPHA,
+            "proven": _holm[scorer] < MULTIPLICITY_ALPHA,
+        }
+        if not multiplicity["proven"]:
+            rationale += (
+                f" [după corecția Holm pentru {len(excess_p)} candidați: "
+                f"p={_holm[scorer]:.3f} ≥ {MULTIPLICITY_ALPHA} — avantaj nedemonstrat]"
+            )
+
+    return {
+        "scorer": scorer,
+        "ensemble": ensemble,
+        "sim_depth_pct": best_pct,
+        "use_blacklist": use_bl,
+        "avg_hits": best_avg,
+        "avg_hits_with_blacklist": bl_avg,
+        "rationale": rationale,
+        "rate_col_used": rate_col,
+        "rate_col_mismatch": rate_col_mismatch,
+        "hit_target": target,
+        "target_label": target_label,
+        "qualifying_methods": len(qualifying),
+        # Ordinea eligibilă este expusă UI-ului, inclusiv fallback-ul. Astfel
+        # clasamentul nu reconstruiește aproximativ porțile deciziei.
+        "ranked_methods": [r[0] for r in (ranked if low_confidence else qualifying)],
+        "consistency_threshold": CONSISTENCY_THRESHOLD,
+        # ATENȚIE: următoarele două chei sunt TELEMETRIE ADITIVĂ în
+        # best_methods.json (debug / inspecție manuală), NU un contract de UI.
+        # Verificat prin grep pe tot repo-ul: niciun consumator în afara acestui
+        # fișier — `method_selector.recommend_optimal_config` întoarce o listă
+        # ALBĂ de chei și nu le propagă, deci UI-ul nu le vede. Sunt păstrate
+        # fiindcă nu strică nimic (JSON aditiv) și fiindcă un consumator viitor
+        # le poate citi; până atunci NU te baza pe ele pentru afișare.
+        #
+        # True = nicio metodă nu bate random consistent pe aceeași rată T+ →
+        # alegerea e conservatoare, iar diferențele dintre metode sunt zgomot.
+        # Numărul de celule afectate se renumără după fiecare Re-Bench.
+        "low_confidence": low_confidence,
+        # Testul de exces cu corecția Holm, separat de `low_confidence` (care
+        # rămâne „nicio metodă n-a trecut poarta de consistență"): `proven`
+        # False = scorerul ales poate fi doar cel mai norocos dintre candidați.
+        # None = fără referință hipergeometrică.
+        "multiplicity": multiplicity,
+        # Membri săriți de la ensemble fiindcă erau cvasi-identici cu unul deja
+        # păstrat (decorelare pe RATE; decorelarea pe SCORURI e în method_selector).
+        "ensemble_dropped_redundant": dropped_redundant,
+        # Referinta portii: rata asteptata a unui pool aleator (hipergeometric)
+        # sau, pentru jocuri cu geometrie necunoscuta, randul `random` empiric.
+        # `random_empirical_rate` ramane afisata ca verificare de sanitate.
+        "baseline_rate": baseline_rate,
+        "baseline_source": baseline_source,
+        "random_empirical_rate": _random_empirical_rate(),
+        # Ferestrele pe care s-au judecat TOTI candidatii + cine a lipsit.
+        "expected_windows": sorted(_expected_pcts),
+        "incomplete_methods": incomplete_methods,
+        # Metode cu randuri dar fara nicio valoare pe coloana de rata rezolvata
+        # la nivel de (joc, pool), desi alte metode din acelasi cadru au date.
+        "rate_data_missing": rate_data_missing,
+        # Metode a caror selectie top-K a fost dictata de tie-break, nu de scor.
+        "tiebreak_gate_applied": tiebreak_gate_applied,
+        "tiebreak_dependent": tiebreak_dependent,
+    }
+
+
+def build_auto_pilot_matrix(
+    folds_csv_path: str,
+    games_meta: dict[str, dict],
+) -> dict[str, dict[str, dict]]:
+    """Build the full {game_key: {pool_key: config}} matrix from folds.csv.
+
+    Args:
+        folds_csv_path: path to bench_results/folds.csv
+        games_meta: {game_key: {"draw_n": int, "pool_range": [int]}}
+
+    Returns:
+        Nested dict suitable for embedding in best_methods.json.
+    """
+    df = pd.read_csv(folds_csv_path)
+    if "failed" not in df.columns:
+        df["failed"] = False
+    matrix: dict[str, dict[str, dict]] = {}
+    for gk, meta in games_meta.items():
+        matrix[gk] = {}
+        for k in meta["pool_range"]:
+            cfg = decide_optimal_config_for_pool(
+                df,
+                gk,
+                pool_size=k,
+                draw_n=meta["draw_n"],
+                max_num=meta.get("max_num"),
+                pick_n=meta.get("pick_n"),
+            )
+            matrix[gk][f"k{k}"] = cfg
+    return matrix
+
+
+class IncompleteFoldsError(ValueError):
+    """folds.csv nu acoperă Re-Bench-ul care a scris decizia de producție."""
+
+
+def missing_decision_folds(cfg: dict, folds: pd.DataFrame) -> list[tuple[str, str, int]]:
+    """(joc, metodă, fereastră) ale Re-Bench-ului deciziei care lipsesc din folds.
+
+    `_meta.methods_tested_per_game` și `_meta.percentiles` descriu rularea care
+    a scris decizia. Un folds.csv scris la jumătatea unui bench (runner-ul îl
+    rescrie la fiecare 100 de folduri), rămas după un bench oprit sau după
+    `--quick`/`--methods` nu le acoperă: o decizie recalculată pe el alege dintre
+    mai puține metode, fără niciun semn. Fără aceste câmpuri (decizie veche),
+    lista e goală: nu există reper.
+    """
+    meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+    per_game = meta.get("methods_tested_per_game") or {}
+    pcts = meta.get("percentiles") or []
+    if not isinstance(per_game, dict) or not per_game or not pcts:
+        return []
+    real = folds
+    if "is_random" in folds.columns:
+        real = folds[folds["is_random"] == False]  # noqa: E712
+    pct = pd.to_numeric(real.get("percentile"), errors="coerce")
+    present = {
+        (str(g), str(m), int(p))
+        for g, m, p in zip(real.get("game", []), real.get("method", []), pct)
+        if pd.notna(p)
+    }
+    return [
+        (str(g), str(m), int(p))
+        for g, methods in per_game.items()
+        for m in methods or []
+        for p in pcts
+        if (str(g), str(m), int(p)) not in present
+    ]
+
+
+def _decision_games_meta(games: dict) -> dict[str, dict]:
+    """Geometria și pool-urile deciziei pentru fiecare joc din `games`."""
+    games_meta = {}
+    for gk, gd in games.items():
+        draw_n = int(gd.get("draw_n", 6))
+        pick_n = int(gd.get("pick_n") or draw_n)
+        if gk in GAME_DRAW_PICK:
+            draw_n, pick_n = GAME_DRAW_PICK[gk]
+        _lot = lottery_by_bench_key(gk)
+        if gk == "joker_urna2" or (_lot is not None and _lot.bench_key_urna2 == gk):
+            pool_range = [pick_n]
+        else:
+            # Aligned with runner.py pool_extra=14 → K=draw_n..draw_n+14
+            # (2026-05-26: extins de la +6 → +14 ca să acopere pool size sweep
+            # K=15/18/20 cerut de user pentru testare 4+ hits stable).
+            pool_range = list(range(pick_n, pick_n + 15))  # pick_n .. pick_n+14
+        _mx = gd.get("max_num") or KNOWN_GAME_MAX_NUM.get(gk)
+        games_meta[gk] = {
+            "draw_n": draw_n,
+            "pick_n": pick_n,
+            "pool_range": pool_range,
+            "max_num": int(_mx) if _mx else None,
+        }
+    return games_meta
+
+
+def attach_auto_pilot_matrix(cfg: dict, folds_csv_path: str) -> dict:
+    """Construiește matricea Auto-Pilot ÎN MEMORIE și o pune în `cfg`, fără scriere.
+
+    `_meta.bench_hit_target` = ținta globală cu care s-a construit (3 sau 4).
+    Bench-ul scrie apoi câștigătorii, matricea și semnăturile într-o singură
+    scriere: un fișier fără `auto_pilot_per_pool` juca vechii câștigători după
+    `avg_hits`, fără poarta față de random."""
+    games = cfg.get("games", {})
+    matrix = build_auto_pilot_matrix(folds_csv_path, _decision_games_meta(games))
+    for gk in games:
+        games[gk]["auto_pilot_per_pool"] = matrix.get(gk, {})
+    if not isinstance(cfg.get("_meta"), dict):
+        cfg["_meta"] = {}
+    cfg["_meta"]["bench_hit_target"] = int(BENCH_HIT_TARGET)
+    return matrix
+
+
+def decision_target_mismatch(cfg: dict, target) -> dict[str, int]:
+    """{joc: ținta deciziei} pentru jocurile decise pe altă țintă decât `target`.
+
+    Ținta așteptată a fiecărui joc e cea pe care ar folosi-o decizia acum
+    (`game_hit_target`: 5/40 rămâne 4+ cu orice selector); Urna 2 (top-1) nu
+    depinde de selector. Celula fără `hit_target` (decizie veche) folosește
+    `_meta.bench_hit_target`; fără niciuna, nu există reper. Un bench din linia
+    de comandă pe altă țintă, o schimbare de țintă refuzată (folds incomplet)
+    sau UI-ul oprit cât rula bench-ul lăsau decizia pe 3+ cu 4+ selectat."""
+    games = cfg.get("games") if isinstance(cfg, dict) else None
+    if not isinstance(games, dict):
+        return {}
+    meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+    stamp = meta.get("bench_hit_target")
+    out: dict[str, int] = {}
+    for gk, gmeta in _decision_games_meta(games).items():
+        if int(gmeta["draw_n"]) == 1:
+            continue
+        cells = games[gk].get("auto_pilot_per_pool")
+        if not isinstance(cells, dict):
+            continue
+        want = game_hit_target(gk, target)
+        for cell in cells.values():
+            found = cell.get("hit_target") if isinstance(cell, dict) else None
+            if found is None and stamp is not None:
+                found = game_hit_target(gk, stamp)
+            try:
+                found = int(found)
+            except (TypeError, ValueError):
+                continue
+            if found != want:
+                out[gk] = found
+                break
+    return out
+
+
+def update_best_methods_with_auto_pilot(
+    best_methods_path: str = "best_methods.json",
+    folds_csv_path: str = "bench_results/folds.csv",
+    *,
+    require_complete: bool = False,
+) -> dict:
+    """Read folds.csv, run decision algo, write `auto_pilot_per_pool` into best_methods.json.
+
+    Lucrează pe fișierul dat: România `best_methods.json`, altă țară
+    `decisions/<CC>/best_methods.json` cu folds-ul din directorul ei.
+
+    `require_complete=True` (schimbarea țintei din UI) refuză un folds.csv care
+    nu acoperă Re-Bench-ul deciziei (`IncompleteFoldsError`), iar decizia
+    rămâne neatinsă. Bench-ul își scrie decizia fără această cerință: acolo
+    watchdog-ul tolerează intenționat task-urile blocate, raportate ca lipsă."""
+    bm_path = Path(best_methods_path)
+    if not bm_path.exists():
+        raise FileNotFoundError(f"{best_methods_path} not found")
+    if not Path(folds_csv_path).exists():
+        raise FileNotFoundError(f"{folds_csv_path} not found")
+
+    from ui_shared import atomic_write_json, file_lock
+
+    # Read-modify-write sub ACELASI lock pe care il foloseste
+    # `freshness.write_signatures_to_best_methods`: altfel o scriere concurenta
+    # a UI-ului intre citire si scriere pierdea campurile celeilalte parti.
+    with file_lock(bm_path):
+        cfg = json.loads(bm_path.read_text(encoding="utf-8"))
+        if require_complete:
+            missing = missing_decision_folds(cfg, pd.read_csv(folds_csv_path))
+            if missing:
+                g, m, pct = missing[0]
+                raise IncompleteFoldsError(
+                    f"{folds_csv_path} nu acoperă Re-Bench-ul deciziei: lipsesc "
+                    f"{len(missing)} folduri (ex. {g}/{m}/{pct}%)"
+                )
+
+        matrix = attach_auto_pilot_matrix(cfg, folds_csv_path)
+
+        atomic_write_json(bm_path, cfg)  # atomic: tmp+fsync+os.replace
+    return matrix

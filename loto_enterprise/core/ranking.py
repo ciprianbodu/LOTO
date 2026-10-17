@@ -1,0 +1,170 @@
+"""Ranking canonic „top-N după scor" — sursa UNICĂ de adevăr pentru tie-break.
+
+De ce există modulul: până în 2026-07 existau implementări divergente ale
+selecției „top-N după scor" — bench (`runner._top_k`), producție
+(`pool_selection.select_pool_from_scores`) și un al treilea apelant scos din
+cod — fiecare cu ALT tie-break la scoruri egale (număr mare /
+frecvență / ordinea de iterare a set-ului). Pe scoreri cu puține nivele
+distincte, pool-ul VALIDAT de bench diferea de pool-ul GENERAT în producție
+(6/16 numere diferite pe un scorer cu 2 nivele), încălcând regula din AGENTS.md:
+„pool_selection = top-N pur după scor (identic cu bench _top_k)".
+
+Regula CANONICĂ de sortare (în această ordine, toate DESCRESCĂTOR):
+  1. scor;
+  2. frecvență — OPȚIONALĂ (0.0 pentru toți dacă ``freq`` e None). Toate
+     call-site-urile actuale (bench + producție) pasează None: regula trebuie să
+     fie aplicabilă IDENTIC în ambele, iar bench-ul nu pasează frecvențe —
+     consistența bate frecvența ca tie-break;
+  3. numărul însuși — descrescător, pentru o departajare deterministă.
+     La scoruri egale poate produce blocuri consecutive; ordinea nu oferă
+     un avantaj predictiv.
+
+Contract: modulul e PUR (doar stdlib) — importabil din benchmark/ ȘI core/
+fără risc de import circular — iar funcția e simplă, la nivel de modul
+(picklabilă pentru workerii ProcessPoolExecutor din bench/walk-forward).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable
+
+
+def longest_consecutive_run(nums: Iterable[int]) -> int:
+    """Lungimea celei mai lungi secvențe de întregi consecutivi din ``nums``.
+
+    Folosit ca gardă de degenerare: un scorer unimodal pe axa 1…N (ex. vechea
+    ``sum_affinity`` = gaussiană pe |k − medie/n|) produce un pool care e un
+    singur bloc consecutiv. Nu e semnal, e geometria formulei. Tot el măsoară
+    limita de consecutive a utilizatorului (`limit_consecutive_run`).
+    """
+    s = sorted({int(x) for x in nums})
+    if not s:
+        return 0
+    best = cur = 1
+    for a, b in zip(s, s[1:]):
+        if b == a + 1:
+            cur += 1
+            best = max(best, cur)
+        else:
+            cur = 1
+    return best
+
+
+def is_consecutive_block(nums: Iterable[int], *, min_size: int = 6) -> bool:
+    """True dacă tot setul e un interval [min, max] fără găuri și are ≥ min_size elemente."""
+    s = sorted({int(x) for x in nums})
+    if len(s) < min_size:
+        return False
+    return s[-1] - s[0] + 1 == len(s)
+
+
+def rank_by_score(
+    scores: dict[int, float],
+    k: int,
+    *,
+    freq: dict[int, float] | None = None,
+) -> list[int]:
+    """Primele ``k`` numere după regula canonică, ÎN ORDINEA RANGULUI.
+
+    NU sortează crescător — apelanții care vor listă numerică fac ``sorted()``
+    singuri; cei care vor doar apartenența fac ``set()`` (dar tie-break-ul
+    decide APARTENENȚA la egalitate de scor, nu doar ordinea!). Filtrarea
+    (blacklist, interval 1..max_num) rămâne responsabilitatea apelantului —
+    helperul nu filtrează nimic ÎN AFARA scorurilor nefinite: intrările cu
+    NaN/±inf sunt ELIMINATE înainte de sortare (comparația de tuple cu NaN
+    scurt-circuitează pe primul element și rezultatul devenea dependent de
+    ordinea de inserare în dict — nedeterminist). Pe scoruri toate-finite
+    (contractul oricărui scorer valid) output-ul e bit-identic cu înainte.
+    Dict gol, toate-nefinite sau ``k <= 0`` -> [].
+    """
+    if not scores or k <= 0:
+        return []
+    f = freq or {}
+    finite = [(n, s) for n, s in scores.items() if math.isfinite(s)]
+    return [
+        n
+        for n, _ in sorted(
+            finite,
+            key=lambda kv: (kv[1], f.get(kv[0], 0.0), kv[0]),
+            reverse=True,
+        )[: int(k)]
+    ]
+
+
+def _max_addable(chosen: set[int], optional: set[int], max_run: int) -> int:
+    """Câte numere din ``optional`` încap lângă ``chosen`` fără o secvență de
+    peste ``max_run`` consecutive; -1 dacă ``chosen`` depășește deja limita.
+
+    Fiecare secvență de ``max_run + 1`` poziții disponibile cere eliminarea
+    unui număr opțional. La prima secvență prea lungă îl eliminăm pe cel mai
+    din dreapta: orice soluție trebuie să elimine unul din acea secvență, iar
+    alegerea cea mai din dreapta acoperă cel puțin aceleași secvențe viitoare.
+    Este regula greedy exactă pentru intersectarea intervalelor, cu pozițiile
+    obligatorii excluse dintre eliminări. O pauză numerică începe alt interval.
+
+    După sortare, parcurgerea este liniară în numărul pozițiilor disponibile;
+    nu parcurge golurile numerice și nu ține câte o stare pentru fiecare run.
+    """
+    universe = chosen | optional
+    if not universe:
+        return 0
+    skipped = run = 0
+    previous = last_optional = None
+    for x in sorted(universe):
+        if previous is None or x != previous + 1:
+            run = 0
+            last_optional = None
+        run += 1
+        if x not in chosen:
+            last_optional = x
+        if run > max_run:
+            if last_optional is None or last_optional < x - max_run:
+                return -1
+            skipped += 1
+            run = x - last_optional
+            last_optional = None
+        previous = x
+    return len(optional - chosen) - skipped
+
+
+def limit_consecutive_run(
+    ranked: list[int], k: int, max_run: int
+) -> tuple[list[int], int, list[int]]:
+    """Primele ``k`` numere din ``ranked`` fără mai mult de ``max_run`` consecutive.
+
+    ``ranked`` este ieșirea lui ``rank_by_score``; funcția nu sortează nimic, deci
+    tie-break-ul canonic rămâne cel al clasamentului. Un număr intră în pool dacă
+    pool-ul se mai poate completa până la ``k`` din numerele clasate după el;
+    altfel este sărit și locul lui îl ia următorul care încape. Rezultatul este cel
+    mai bun set după rang care respectă limita: dacă primele ``k`` o respectă deja,
+    ele sunt pool-ul. Verificarea de completare contează pe o bază restrânsă:
+    acolo parcurgerea simplă (ia orice număr care nu formează o secvență) poate
+    rămâne fără numere, deși un pool valid există.
+
+    Dacă niciun set de ``k`` nu respectă limita (interval restrâns mai îngust decât
+    pool-ul permite), limita crește cu câte 1 până devine posibilă; valoarea
+    folosită se întoarce ca ``applied``. ``max_run <= 0`` înseamnă fără limită.
+
+    Întoarce ``(pool în ordinea rangului, limita aplicată, numere sărite în
+    ordinea rangului)``.
+    """
+    ranked = [int(n) for n in ranked]
+    k = max(0, min(int(k), len(ranked)))
+    if int(max_run) <= 0 or k == 0:
+        return ranked[:k], 0, []
+    applied = int(max_run)
+    while _max_addable(set(), set(ranked), applied) < k:
+        applied += 1
+    pool: list[int] = []
+    skipped: list[int] = []
+    for i, n in enumerate(ranked):
+        if len(pool) == k:
+            break
+        trial = set(pool) | {n}
+        room = _max_addable(trial, set(ranked[i + 1 :]), applied)
+        if room >= 0 and len(trial) + room >= k:
+            pool.append(n)
+        else:
+            skipped.append(n)
+    return pool, applied, skipped

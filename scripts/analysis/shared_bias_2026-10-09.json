@@ -1,0 +1,50 @@
+{
+ "ro_649~ro_540": {
+  "common_days": 1065,
+  "numbers": 40,
+  "blocks": 10,
+  "corr_full": 0.20552127892133978,
+  "p_full": 0.10644677661169415,
+  "corr_blocks_mean": 0.03434226353048049,
+  "p_blocks": 0.25987006496751625,
+  "null_blocks_mean": 0.0002686529699376179,
+  "null_blocks_sd": 0.050857738724431736
+ },
+ "ro_649~ro_joker1": {
+  "common_days": 1678,
+  "numbers": 45,
+  "blocks": 16,
+  "corr_full": 0.2368398032292368,
+  "p_full": 0.059470264867566215,
+  "corr_blocks_mean": -0.034999134771779065,
+  "p_blocks": 0.815592203898051,
+  "null_blocks_mean": -0.00036640431623620234,
+  "null_blocks_sd": 0.038231758052648133
+ },
+ "ro_540~ro_joker1": {
+  "common_days": 1432,
+  "numbers": 40,
+  "blocks": 14,
+  "corr_full": 0.17325556031541822,
+  "p_full": 0.13993003498250875,
+  "corr_blocks_mean": 0.008151949002772024,
+  "p_blocks": 0.44577711144427784,
+  "null_blocks_mean": 0.0008345189365520175,
+  "null_blocks_sd": 0.04246169603196944
+ },
+ "data_sha256": {
+  "_ISTORIC/externe/austria_lotto_6aus45.csv": "7be3b356c344e56d71dfc28dc9d20374825db9ad4c6429cc6521cbaf21645927",
+  "_ISTORIC/externe/belgia_lotto_6din45.csv": "ac91f8f3fc08f5ec99217acf3389bbbd1a54732553b469d89024a1d12185f154",
+  "_ISTORIC/externe/bulgaria_toto2_6din49.csv": "26edbe6e1a00f5c0eeaac0d2cf153f71a52e89f9159908c3782c5aa35c91639c",
+  "_ISTORIC/externe/cehia_sportka_6din49.csv": "bf67ef757e2af1d3eb80ee79c1cb4f0c0cbc7d6a4bfaf24f29b59c8f99d3ee7f",
+  "_ISTORIC/externe/euromillions_5din50_stele.csv": "7cd6c5d5264a4b5adc33916650fcbe78ec79cf8aa6a05cd60509c377e59a8ab4",
+  "_ISTORIC/externe/germania_lotto_6aus49.csv": "6f178d38b58082cf85d690b2fb0dc13915be5d10acf64a68c043dccc17d7403e",
+  "_ISTORIC/externe/polonia_lotto_6din49.csv": "21c574f8259dbd91f33ee5e04f75aaff4a13f93a2d30562f63524a47ba62d2c8",
+  "_ISTORIC/externe/slovacia_loto_6din49.csv": "ee28c3e886059dae87c40b394fc263f8febfa8681ff0cfe6b621aefac0f56df9",
+  "_ISTORIC/externe/spania_la_primitiva_6din49.csv": "82b628b6e929b7eac3d803a62a1c7bb434ee8c376f8baa83fd22ca24e23c9a25",
+  "_ISTORIC/externe/ungaria_hatoslotto_6din45.csv": "2786c4044e56390b13029945a94f9dededa9dd626e7f3c8b1d71ff8af30e7f35",
+  "_ISTORIC/joker.csv": "e194195f71932a97f17122b41322f3d530ed6a8251dff1e925110af81d287b64",
+  "_ISTORIC/loto_5_40.csv": "4f87cf5027756c187baba782ca664951464b460e066f8379d5ddb6e19085facd",
+  "_ISTORIC/loto_6_49.csv": "8bbf6a68eb2d92f37746bb30b18d3b137457fdc5e946d7c6e7a0467d31e667fb"
+ }
+}

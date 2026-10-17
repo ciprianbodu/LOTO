@@ -1,0 +1,1363 @@
+"""Pick the winning scorer per game (and optionally per pool size).
+
+best_methods.json schema (v2 — per-pool winners):
+
+    {
+      "_meta": {...},
+      "games": {
+        "loto_6_49": {
+          "label": "Loto 6/49",
+          "draw_n": 6,
+          "overall_winner": "ewma_hl30",
+          "winners_per_pool": {"k6": "ewma_hl30", "k7": "gap_hazard", ...},
+          "winner_details": { "k6": {"winner":"ewma_hl30","avg_hits":0.79,...}, ...}
+        },
+        ...
+      }
+    }
+
+Old schema (v1, with `winner` field) is still supported as fallback.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import math
+import threading
+from pathlib import Path
+from typing import Callable
+
+from loto_enterprise.core.score_validation import has_usable_score_variance
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "best_methods.json"
+# Rădăcina sub care stau deciziile celorlalte țări (`decisions/<CC>/...`).
+_DECISIONS_ROOT = Path(__file__).resolve().parents[2]
+_CACHE: dict[str, Callable] = {}
+_CONFIG: dict | None = None
+_CONFIG_MTIME: float = -1.0
+_CONFIG_PATH_USED: Path | None = None
+# Calea, mtime-ul și conținutul se publică împreună: firul WF și firul UI pot
+# citi decizii diferite (România și altă țară) în același timp.
+_CONFIG_LOCK = threading.Lock()
+
+
+def decision_path_for(country) -> Path:
+    """Fișierul de decizie al unei țări.
+
+    România: `best_methods.json` (exact fișierul de dinainte, `_DEFAULT_CONFIG_PATH`).
+    Celelalte țări: `decisions/<CC>/best_methods.json`, niciodată fișierul
+    românesc. O țară necunoscută ridică `UnknownLotteryError`."""
+    from loto_enterprise.core.lotteries import RO, normalize_country
+    from loto_enterprise.core.lotteries import decision_path_for as _path_for
+
+    cc = normalize_country(country)
+    if cc == RO:
+        return _DEFAULT_CONFIG_PATH
+    return _path_for(cc, root=_DECISIONS_ROOT)
+
+
+def _expected_country(cfg_path: Path) -> str | None:
+    """Țara căreia îi aparține un fișier de decizie, după locul lui.
+
+    None pentru orice alt fișier (teste, `--out` explicit): acolo nu se verifică."""
+    try:
+        resolved = cfg_path.resolve()
+    except OSError:
+        resolved = cfg_path
+    try:
+        if resolved == Path(_DEFAULT_CONFIG_PATH).resolve():
+            return "RO"
+        from loto_enterprise.core.lotteries import RO, countries
+
+        for cc in countries():
+            if cc != RO and resolved == decision_path_for(cc).resolve():
+                return cc
+    except Exception:  # noqa: BLE001 — diagnostic, nu poate bloca încărcarea
+        return None
+    return None
+
+
+def _country_mismatch(cfg: dict, expected: str | None) -> str | None:
+    """Motivul pentru care decizia nu aparține țării fișierului, sau None.
+
+    Fișierul românesc vechi nu are `_meta.country` (acceptat); dacă îl are,
+    trebuie să fie RO. Fișierul unei alte țări TREBUIE să o numească: o copie a
+    deciziei românești pusă în `decisions/DE/` nu devine decizie germană."""
+    if expected is None:
+        return None
+    meta = cfg.get("_meta") if isinstance(cfg.get("_meta"), dict) else {}
+    found = str(meta.get("country") or "").strip().upper()
+    if expected == "RO":
+        return None if found in ("", "RO") else f"_meta.country={found}, așteptat RO"
+    if found != expected:
+        return f"_meta.country={found or 'lipsă'}, așteptat {expected}"
+    return None
+
+
+def _load_config(path: str | None = None) -> dict:
+    """Încarcă best_methods.json, cu reîncărcare automată la schimbarea fişierului.
+
+    Cache-ul global e invalidat când mtime-ul fişierului se schimbă (ex. după un
+    Re-Bench care rescrie decizia). Fără asta, worker-ul (Auto-Pilot) şi UI-ul
+    (walk-forward) ar folosi decizia VECHE până la restart. `stat()` e ieftin.
+
+    Un fișier de decizie al unei țări (vezi `decision_path_for`) al cărui
+    `_meta.country` nu e țara lui e tratat ca LIPSĂ: frequency, nu decizia
+    altei țări.
+    """
+    global _CONFIG, _CONFIG_MTIME, _CONFIG_PATH_USED
+    cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
+    try:
+        mtime = cfg_path.stat().st_mtime
+    except OSError:
+        mtime = -1.0
+    with _CONFIG_LOCK:
+        if (
+            _CONFIG is not None
+            and cfg_path == _CONFIG_PATH_USED
+            and mtime == _CONFIG_MTIME
+        ):
+            return _CONFIG
+        cfg = _read_config(cfg_path)
+        _CONFIG, _CONFIG_MTIME, _CONFIG_PATH_USED = cfg, mtime, cfg_path
+        return cfg
+
+
+def _read_config(cfg_path: Path) -> dict:
+    if not cfg_path.exists():
+        logger.warning(
+            "[method_selector] %s missing — using frequency baseline", cfg_path
+        )
+        return {"games": {}}
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        if not isinstance(cfg, dict) or not isinstance(cfg.get("games", {}), dict):
+            raise ValueError("config must contain a games object")
+    except Exception as exc:
+        logger.error("[method_selector] failed to parse %s: %s", cfg_path, exc)
+        return {"games": {}}
+    mismatch = _country_mismatch(cfg, _expected_country(cfg_path))
+    if mismatch:
+        logger.error(
+            "[method_selector] %s nu aparține țării lui (%s) — îl tratez ca lipsă, "
+            "frequency baseline",
+            cfg_path,
+            mismatch,
+        )
+        return {"games": {}}
+    return cfg
+
+
+def _is_urna2_key(game_key) -> bool:
+    """Cheia unei a doua urne single-pick (Joker românesc sau un Joker străin
+    din registru): contract top-1, nu 3+/4+."""
+    if game_key == "joker_urna2":
+        return True
+    try:
+        from loto_enterprise.core.lotteries import lottery_by_bench_key
+
+        lot = lottery_by_bench_key(game_key)
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(lot and lot.bench_key_urna2 == str(game_key))
+
+
+def has_decision(game_key: str, config_path: str | None = None) -> bool:
+    """True dacă fișierul de decizie are o intrare pentru `game_key`."""
+    games = _load_config(config_path).get("games", {})
+    return bool(isinstance(games, dict) and games.get(game_key))
+
+
+def _production_forbidden(game_key: str | None = None) -> frozenset[str]:
+    """Metode care NU au voie să scocheze pool-ul de producție.
+
+    = EXCLUDED_FROM_PRODUCTION (`random` + filtrele de apartenență
+    last-draw: `neighbor_adjacent` / `repeat_last_draw` / `rwr_last_draw` /
+    `haar_multiscale`). best_methods.json vechi/manual putea totuși să numească
+    `random` — fără gardă aici, pool-ul devenea nedeterminist. Mecanismul de
+    tombstone (disabled_methods.json) a fost eliminat la 14.09.2026: un nume
+    necunoscut e respins oricum de gărzile din `_sanitize_production_name`
+    (nu e în METHODS), nu mai e nevoie de o listă separată de blacklist.
+    """
+    forbidden: set[str] = {
+        "random",
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
+    }
+    try:
+        from loto_enterprise.benchmark.decision import (
+            EXCLUDED_FROM_PRODUCTION,
+            EXCLUDED_FROM_SINGLE_PICK,
+        )
+
+        forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
+        # Urna cu o singură bilă: metodele care repetă bila precedentă.
+        if game_key is not None and _is_urna2_key(game_key):
+            forbidden |= {str(m) for m in EXCLUDED_FROM_SINGLE_PICK}
+    except Exception as exc:  # noqa: BLE001
+        # "random" (hardcodat mai sus) tot blochează chiar dacă importul e spart.
+        logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)
+    return frozenset(forbidden)
+
+
+def _registry_gap_hint(registry_error: str | None = None) -> str:
+    """Sufix de mesaj care numește modulele de metode care NU s-au încărcat.
+
+    Gol când registry-ul e întreg. Defensiv (import în try/except, ca restul
+    fișierului): diagnosticul nu are voie să arunce peste o cale de fallback.
+    """
+    if registry_error:
+        return f" — CAUZĂ: registry-ul de metode nu s-a putut importa ({registry_error})"
+    try:
+        from loto_enterprise.benchmark.methods import METHOD_LOAD_ERRORS
+
+        failed = dict(METHOD_LOAD_ERRORS)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not failed:
+        return ""
+    detail = "; ".join(f"{mod}: {err}" for mod, err in sorted(failed.items()))
+    return (
+        " — CAUZĂ PROBABILĂ: module de metode neîncărcate, deci numele lipsește "
+        f"din registry, nu neapărat din decizie ({detail})"
+    )
+
+
+def _sanitize_production_name(
+    name: str | None, *, context: str, game_key: str | None = None
+) -> str | None:
+    """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
+
+    Respinge: random, filtrele last-draw/spațiale, orice nume care nu e în
+    registry. Altfel UI/audit pretindea un scorer inexistent când rulează de
+    fapt frequency.
+    """
+    if not name:
+        return None
+    registry_error: str | None = None
+    try:
+        from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
+
+        name = resolve_method_name(str(name))
+    except Exception as exc:  # noqa: BLE001
+        name = str(name)
+        METHODS = {}
+        registry_error = f"{type(exc).__name__}: {exc}"
+    if name in _production_forbidden(game_key):
+        logger.warning(
+            "[method_selector] %s %r interzis în producție (EXCLUDED_FROM_PRODUCTION) — skip",
+            context,
+            name,
+        )
+        return None
+    if name not in METHODS:
+        # Un nume poate lipsi din registry din două motive foarte diferite:
+        # metoda chiar a fost ștearsă, SAU modulul care o definește nu s-a
+        # încărcat (dependență lipsă). Fără a doua explicație, diagnosticul
+        # afișa „metodă necunoscută" când cauza reală era un import picat.
+        logger.warning(
+            "[method_selector] %s %r necunoscut (eliminat din METHODS)%s — skip",
+            context,
+            name,
+            _registry_gap_hint(registry_error),
+        )
+        return None
+    return name
+
+
+def _sanitize_ap_production(
+    entry: dict, game_key: str | None = None
+) -> tuple[str | None, list[dict], bool]:
+    """Aliniază scorer + ensemble dintr-o intrare auto_pilot (sursă unică).
+
+    Returnează ``(scorer, clean_ensemble, scor_salvaged)``.
+    Dacă scorer-ul din JSON e mort dar ensemble-ul are membri vii → scorer =
+    primul membru (ca ``get_winner_name`` și engine-ul să spună același lucru).
+    ``scor_salvaged`` e True când numele scorer-ului s-a schimbat față de JSON
+    (UI poate marca fallback).
+    """
+    if not isinstance(entry, dict):
+        return None, [], True
+    raw_scorer = entry.get("scorer")
+    scorer = _sanitize_production_name(
+        raw_scorer, context="ap scorer", game_key=game_key
+    )
+    salvaged = bool(raw_scorer) and scorer is None
+
+    clean_ens: list[dict] = []
+    for item in entry.get("ensemble") or []:
+        if not isinstance(item, dict):
+            continue
+        nm = _sanitize_production_name(
+            item.get("method"), context="ap ensemble", game_key=game_key
+        )
+        if not nm:
+            continue
+        try:
+            wt = float(item.get("weight", 0) or 0)
+        except (TypeError, ValueError):
+            wt = 0.0
+        if not math.isfinite(wt) or wt <= 0:
+            continue
+        clean_ens.append({"method": nm, "weight": wt})
+    if clean_ens:
+        tw = sum(e["weight"] for e in clean_ens) or 1.0
+        clean_ens = [
+            {"method": e["method"], "weight": e["weight"] / tw} for e in clean_ens
+        ]
+
+    if scorer is None and clean_ens:
+        scorer = clean_ens[0]["method"]
+        salvaged = True
+    if scorer is not None and not clean_ens:
+        clean_ens = [{"method": scorer, "weight": 1.0}]
+    return scorer, clean_ens, salvaged
+
+
+def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
+    """Intrarea auto_pilot_per_pool[kN], cu fallback la cel mai apropiat k."""
+    if pool_size is None or not isinstance(g, dict):
+        return {}
+    apm = g.get("auto_pilot_per_pool") or {}
+    if not isinstance(apm, dict):
+        return {}
+    entry = apm.get(f"k{int(pool_size)}") or {}
+    if isinstance(entry, dict) and (entry.get("scorer") or entry.get("ensemble")):
+        return entry
+    avail = sorted(
+        int(k[1:])
+        for k in apm
+        if isinstance(k, str) and k.startswith("k") and k[1:].isdigit()
+    )
+    if not avail:
+        return entry if isinstance(entry, dict) else {}
+    nearest = min(avail, key=lambda k: abs(k - int(pool_size)))
+    cand = apm.get(f"k{nearest}") or {}
+    if isinstance(cand, dict) and (cand.get("scorer") or cand.get("ensemble")):
+        logger.info(
+            "[method_selector] pool k%d absent → folosesc k%d (cel mai apropiat decis)",
+            int(pool_size),
+            nearest,
+        )
+        return cand
+    return entry if isinstance(entry, dict) else {}
+
+
+def rejected_decision_scorer(
+    game_key: str, pool_size: int | None, config_path: str | None = None
+) -> str | None:
+    """Numele scris în decizie pe care producția nu-l poate rula, altfel None.
+
+    Interzis (EXCLUDED_FROM_PRODUCTION) sau necunoscut registry-ului. Auditul
+    îl raportează ca `attempted`, ca rezultatul să nu prezinte rezerva drept
+    câștigătoarea bench-ului.
+    """
+    if pool_size is None:
+        return None
+    g = _load_config(config_path).get("games", {}).get(game_key, {})
+    ap = _auto_pilot_entry(g, pool_size)
+    if not ap:
+        return None
+    raw = ap.get("scorer")
+    if not raw:
+        raw = next(
+            (
+                item.get("method")
+                for item in ap.get("ensemble") or []
+                if isinstance(item, dict) and item.get("method")
+            ),
+            None,
+        )
+    if (
+        raw
+        and _sanitize_production_name(raw, context="decizie", game_key=game_key)
+        is None
+    ):
+        return str(raw)
+    return None
+
+
+def get_winner_name(
+    game_key: str,
+    pool_size: int | None = None,
+    config_path: str | None = None,
+) -> str:
+    """Resolve the configured winner method for (game, pool_size).
+
+    Priority order (v4 — Auto-Pilot consistency first):
+      1. auto_pilot_per_pool[kN].scorer  (decision algorithm — preferred,
+         consistent cu ce afișează butonul Auto-Pilot în UI)
+      2. winners_per_pool_best (best of no-BL vs +BL)
+      3. winners_per_pool (no-BL only)
+      4. overall_winner / overall_winner_bl (game-level)
+      5. legacy v1 'winner' field
+      6. 'frequency' baseline (last resort)
+    """
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    # Înainte de primul Re-Bench compatibil, Urna 2 nu are încă o decizie
+    # stocată. Frequency rămâne fallback deterministic, fără warning recurent.
+    if not g and _is_urna2_key(game_key):
+        logger.info(
+            "[method_selector] %s fără benchmark top-1 — frequency fallback", game_key
+        )
+        return "frequency"
+
+    def _ok(name) -> str | None:
+        return _sanitize_production_name(name, context="winner", game_key=game_key)
+
+    if pool_size is not None:
+        ap = _auto_pilot_entry(g, pool_size)
+        # Scorer + ensemble din aceeași sanitizare — altfel un scorer mort +
+        # ensemble viu făcea get_winner_name→frequency dar engine→membru.
+        if ap:
+            n, _ens, _salv = _sanitize_ap_production(ap, game_key)
+            if n:
+                return n
+            # Decizia există, dar numele ei e interzis sau necunoscut. Câmpurile
+            # vechi (winners_per_pool_best, overall_winner) clasează numai după
+            # avg_hits, fără poarta față de random și fără cea de tie-break:
+            # nu sunt o rezervă validată. Regula din AGENTS.md: frequency.
+            logger.warning(
+                "[method_selector] %s k%s: scorerul din decizie e respins — frequency",
+                game_key,
+                pool_size,
+            )
+            return "frequency"
+        key = f"k{pool_size}"
+        # v3 fallback: best of (no-bl, +bl)
+        wpp_best = g.get("winners_per_pool_best", {})
+        if isinstance(wpp_best, dict) and wpp_best.get(key, {}).get("winner"):
+            n = _ok(wpp_best[key]["winner"])
+            if n:
+                return n
+        wpp = g.get("winners_per_pool", {})
+        if isinstance(wpp, dict) and wpp.get(key):
+            n = _ok(wpp[key])
+            if n:
+                return n
+
+    for fld in ("overall_winner", "overall_winner_bl", "winner"):
+        if g.get(fld):
+            n = _ok(g[fld])
+            if n:
+                return n
+    logger.warning(
+        "[method_selector] no winner for %s — defaulting to frequency", game_key
+    )
+    return "frequency"
+
+
+def should_use_blacklist(
+    game_key: str,
+    pool_size: int | None = None,
+    config_path: str | None = None,
+) -> bool:
+    """Ce spune bench-ul despre blacklist pentru acest (joc, pool).
+
+    ⚠️ **VALOAREA ASTA NU SE APLICĂ ÎN PRODUCȚIE.**
+    `loto_enterprise/engine/pipeline.py` pornește cu `blacklist = set()` și scrie
+    `audit["filters_disabled"] = True` — filtrele post-scoring au fost oprite
+    DELIBERAT (cerere utilizator, 2026-07-08): scoring → top-N → wheel, fără
+    filtre automate între (limita de consecutive a utilizatorului lucrează pe
+    clasament, nu pe blacklist). Singurul lucru care mai poate umple acea
+    mulțime e restrângerea de interval cerută explicit din UI (`restrict_base`),
+    care n-are legătură cu bitul de aici și e aplicată identic în walk-forward.
+    Deci bit-ul e
+    TELEMETRIE de bench, exact ca `sim_depth_pct`, nu un buton de configurare.
+    Docstring-ul de dinainte pretindea invers („production rulează blacklist-ul
+    oricum") și era pur și simplu fals.
+
+    Cine vrea să-l RECONECTEZE: locul e `pool_selection.select_pool_from_scores`
+    (filtrarea rămâne la apelant, vezi „Tie-break canonic" din AGENTS.md), și
+    cere bump de `CACHE_VERSION` în `walk_forward_adapter` — altfel WF-ul servește
+    pool-uri vechi, nefiltrate, sub o cheie care pretinde că include bit-ul.
+
+    Prioritate (consistentă cu get_winner_name):
+      1. auto_pilot_per_pool[kN].use_blacklist  (v4 — preferat)
+      2. winners_per_pool_best[kN].use_blacklist  (v3 fallback)
+      3. default True (valoarea istorică; fără efect, vezi mai sus)
+    """
+    if pool_size is None:
+        return True
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    # v4: auto_pilot decision (consistent cu UI)
+    entry = _auto_pilot_entry(g, pool_size)
+    if "use_blacklist" in entry:
+        return bool(entry["use_blacklist"])
+    # v3 fallback
+    wpp_best = g.get("winners_per_pool_best", {})
+    if not isinstance(wpp_best, dict):
+        return True
+    entry = wpp_best.get(f"k{pool_size}", {})
+    if "use_blacklist" not in entry:
+        return True
+    return bool(entry["use_blacklist"])
+
+
+def get_scorer_for_game(
+    game_key: str,
+    pool_size: int | None = None,
+    config_path: str | None = None,
+) -> Callable:
+    """Return the chosen scoring function for a given (game, pool_size)."""
+    name = get_winner_name(game_key, pool_size, config_path)
+    cache_key = f"{name}#{pool_size or 'overall'}"
+    if cache_key in _CACHE:
+        return _CACHE[cache_key]
+    try:
+        from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
+    except Exception as exc:
+        logger.error("[method_selector] benchmark.methods import failed: %s", exc)
+        raise
+
+    name = resolve_method_name(name)
+    if name not in METHODS or name in _production_forbidden(game_key):
+        if name in _production_forbidden(game_key):
+            logger.warning(
+                "[method_selector] scorer %r interzis — falling back to frequency", name
+            )
+        else:
+            logger.warning(
+                "[method_selector] unknown winner %r, falling back to frequency", name
+            )
+        name = "frequency"
+    fn, _family, _train, _notes = METHODS[name]
+    if getattr(fn, "_unavailable_reason", None):
+        logger.warning(
+            "[method_selector] winner %r unavailable (%s) — falling back to frequency",
+            name,
+            fn._unavailable_reason,
+        )
+        fn = METHODS["frequency"][0]
+        name = "frequency"
+    # Cache DOAR sub numele FINAL (post-fallback). Sub numele ORIGINAL, un winner
+    # indisponibil otrăvea cache-ul: get_ensemble_for_game găsea "X#pool" → servea
+    # frequency ETICHETAT ca X în blend (ponderi/audit greșite), în loc să-l sară.
+    _CACHE[f"{name}#{pool_size or 'overall'}"] = fn
+    return fn
+
+
+def get_ensemble_for_game(
+    game_key: str,
+    pool_size: int | None = None,
+    config_path: str | None = None,
+    max_methods: int | None = None,
+) -> list[tuple[str, Callable, float]]:
+    """Return [(method_name, scorer_fn, weight), ...] — pondere ∝ limita Wilson
+    a ratei țintei din decizie (+3/+4, iar Urna 2 top-1).
+
+    Ideea blend-ului e reducerea varianței: diferența dintre metode e majoritar
+    zgomot, deci combinarea mai multor metode calificate ar limita influența
+    uneia norocoase pe datele de test. Măsurat însă pe Joker k11, blend-ul a
+    ieșit SUB random (6,73% față de 8,53%), de unde plafonul
+    `decision.ENSEMBLE_MAX_METHODS` (azi 1). `max_methods=None` (implicit) ia
+    chiar acel plafon: default-ul fix 3 de dinainte contrazicea tăcut plafonul
+    de producție, iar `ui_bench` explica diferența 3→1 prin decorelare, deși ea
+    venea din plafonul aplicat în `engine/scoring.py`.
+
+    Fallback (best_methods.json vechi, fără câmp 'ensemble', sau toate metodele
+    din ensemble indisponibile la runtime) → listă cu UN SINGUR membru
+    (get_winner_name + get_scorer_for_game, weight=1.0) — identic cu
+    comportamentul dinaintea ensemble-ului.
+    """
+    if max_methods is None:
+        try:
+            from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
+
+            max_methods = int(ENSEMBLE_MAX_METHODS)
+        except Exception:  # noqa: BLE001
+            max_methods = 1
+
+    def _single_fallback() -> list[tuple[str, Callable, float]]:
+        # Numele și callable-ul TREBUIE să coincidă. `get_scorer_for_game` cade
+        # pe `frequency` când scorerul ales e indisponibil la runtime, dar
+        # numele rămânea cel original — audit-ul și UI-ul anunțau atunci un
+        # scorer care nu rulase. Verificăm identitatea funcției și corectăm
+        # numele, ca raportul să spună ce s-a jucat.
+        name = get_winner_name(game_key, pool_size, config_path)
+        fn = get_scorer_for_game(game_key, pool_size, config_path)
+        try:
+            from loto_enterprise.benchmark.methods import METHODS
+
+            if name and fn is METHODS.get("frequency", (None,))[0] and name != "frequency":
+                logger.warning(
+                    "[method_selector] %s: scorerul %r e indisponibil la runtime "
+                    "— rulează `frequency`; raportez `frequency`, nu %r.",
+                    game_key,
+                    name,
+                    name,
+                )
+                name = "frequency"
+        except Exception:  # noqa: BLE001
+            pass
+        return [(name, fn, 1.0)]
+
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    entry: dict = _auto_pilot_entry(g, pool_size) if pool_size is not None else {}
+
+    raw_list = entry.get("ensemble") if isinstance(entry, dict) else None
+    if not raw_list:
+        return _single_fallback()
+
+    try:
+        from loto_enterprise.benchmark.methods import METHODS, resolve_method_name
+    except Exception as exc:
+        logger.error("[method_selector] benchmark.methods import failed: %s", exc)
+        raise
+
+    # Plafonul de membri se aplica DUPA sanitizare (aceeasi lista pe care o
+    # vede get_winner_name/UI), altfel un membru interzis sau cu pondere
+    # invalida in primele pozitii consuma un loc si blend-ul ramane cu mai
+    # putini membri decat afiseaza UI-ul.
+    _, clean_list, _ = _sanitize_ap_production(entry, game_key)
+    out: list[tuple[str, Callable, float]] = []
+    for item in clean_list[:max_methods]:
+        name = item["method"]
+        weight = float(item["weight"])
+        if weight <= 0:
+            continue
+        cache_key = f"{name}#{pool_size or 'overall'}"
+        fn = _CACHE.get(cache_key)
+        if fn is None:
+            meta = METHODS.get(name)
+            if meta is None:
+                logger.warning(
+                    "[method_selector] ensemble member %r unknown — skip", name
+                )
+                continue
+            fn = meta[0]
+            if getattr(fn, "_unavailable_reason", None):
+                logger.warning(
+                    "[method_selector] ensemble member %r unavailable (%s) — skip",
+                    name,
+                    fn._unavailable_reason,
+                )
+                continue
+            _CACHE[cache_key] = fn
+        out.append((name, fn, weight))
+
+    if not out:
+        logger.warning(
+            "[method_selector] toate metodele din ensemble %s indisponibile — fallback winner unic",
+            game_key,
+        )
+        return _single_fallback()
+
+    total_w = sum(w for _, _, w in out)
+    if total_w <= 0:
+        return [(n, fn, 1.0 / len(out)) for n, fn, _ in out]
+    return [(n, fn, w / total_w) for n, fn, w in out]
+
+
+def _has_variance(raw: dict) -> bool:
+    """Scoruri PLATE (toate egale) = fără informație de ranking — filtrate din blend.
+
+    Tot aici cad și scorurile NE-FINITE (NaN/inf): un singur NaN otrăvește
+    min-max-ul membrului ȘI suma ponderată (numărul respectiv iese NaN în pool),
+    iar `core.ranking.rank_by_score` devine dependent de ordinea de inserare pe
+    NaN. Un membru cu scoruri ne-finite = metodă DEFECTĂ, nu semnal slab → afară
+    din blend, la fel ca unul plat (același motiv raportat: „flat").
+    """
+    return has_usable_score_variance(raw)
+
+
+# --- Decorelare membri ensemble -------------------------------------------
+# Prag peste care doi membri sunt considerați REDUNDANȚI (aceeași informație de
+# ranking) — auditul a arătat perechi cu |Spearman| ∈ {0.98, 1.00} în ensemble-
+# urile scrise de decision.py. Exemplele măsurate atunci (`649_katz15_gap85` +
+# `649_katz25_gap75`, două blend-uri pe ACELEAȘI componente; respectiv
+# `cover_positional_bands` + `frequency` la 5/40, r=+0.98) sunt din setul vechi,
+# șters la 14.09.2026 — tiparul rămâne, numele nu mai există în registry.
+# Un asemenea "ensemble" e un no-op: nu reduce varianța, doar dublează un semnal.
+MAX_MEMBER_CORR = 0.95
+# Sub atâtea numere comune, Spearman e degenerat (cu 2 puncte e mereu ±1) —
+# nu filtrăm nimic. Atenție: eșantionul e UNIVERSUL de numere scorate, nu
+# pool-ul: 20 (joker_urna2, single-pick — loto_engine.py fixează max_num=20),
+# 40 (5/40), 45 (joker_urna1), 49 (6/49). Deci pragul de 8 NU se atinge în
+# producție (protejează apelurile sintetice: teste, scoruri parțiale), DAR pe
+# universuri mici (20) un |Spearman| >= MAX_MEMBER_CORR se atinge mult mai ușor
+# din întâmplare decât pe 49 — mai ales cu scorere care produc platouri de
+# egalități. Dacă vreodată eliminările pe joker_urna2 par arbitrare, criteriul
+# corect e un p-value (sau un prag scalat cu n), nu doar |r|.
+_MIN_CORR_SAMPLE = 8
+
+_SPEARMAN_FN: Callable | None = None
+_SPEARMAN_TRIED = False
+
+
+def _get_spearman() -> Callable | None:
+    """scipy.stats.spearmanr dacă e disponibil (import LEAZY, o singură dată).
+
+    scipy e dependență obligatorie a aplicației (24 din cele 50 de metode îl
+    importă), dar method_selector e importat și în contexte minimale → îl
+    tratăm ca opțional: la eșec cădem pe implementarea numpy.
+    """
+    global _SPEARMAN_FN, _SPEARMAN_TRIED
+    if not _SPEARMAN_TRIED:
+        _SPEARMAN_TRIED = True
+        try:
+            from scipy.stats import spearmanr
+
+            _SPEARMAN_FN = spearmanr
+        except Exception as exc:
+            logger.debug(
+                "[method_selector] scipy.stats indisponibil (%s) — Spearman pe numpy",
+                exc,
+            )
+            _SPEARMAN_FN = None
+    return _SPEARMAN_FN
+
+
+def _rank_avg(vals: list[float]) -> list[float]:
+    """Ranguri cu MEDIA pe egalități (echivalent rankdata(..., method='average')).
+
+    Egalitățile sunt frecvente la scorurile de loto (multe metode dau platouri),
+    deci rangul „competition" ar introduce corelații artificiale.
+    """
+    order = sorted(range(len(vals)), key=lambda i: vals[i])
+    ranks = [0.0] * len(vals)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and vals[order[j + 1]] == vals[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0 + 1.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg
+        i = j + 1
+    return ranks
+
+
+def _spearman_numpy(a: list[float], b: list[float]) -> float | None:
+    """Fallback: Pearson pe ranguri (= Spearman) cu numpy; None dacă e degenerat."""
+    ra, rb = _rank_avg(a), _rank_avg(b)
+    try:
+        import numpy as _np
+
+        x = _np.asarray(ra, dtype=float)
+        y = _np.asarray(rb, dtype=float)
+        xc = x - x.mean()
+        yc = y - y.mean()
+        den = float(_np.sqrt(float((xc * xc).sum()) * float((yc * yc).sum())))
+        if den <= 0.0:
+            return None
+        return float((xc * yc).sum() / den)
+    except Exception:
+        # nici numpy nu e disponibil → Python pur (≤49 numere, cost neglijabil)
+        n = len(ra)
+        if n < 2:
+            return None
+        ma, mb = sum(ra) / n, sum(rb) / n
+        sxy = sum((ra[i] - ma) * (rb[i] - mb) for i in range(n))
+        sxx = sum((v - ma) ** 2 for v in ra)
+        syy = sum((v - mb) ** 2 for v in rb)
+        den = (sxx * syy) ** 0.5
+        if den <= 0.0:
+            return None
+        return sxy / den
+
+
+def _pair_corr(raw_a: dict, raw_b: dict) -> float | None:
+    """Spearman SEMNAT între două seturi de scoruri, pe numerele COMUNE.
+
+    Valoarea NU e în modul: semnul e semnificativ mai departe (apelantul aplică
+    `abs()` pentru prag, iar `describe_ensemble` folosește semnul ca să eticheteze
+    eliminarea „correlated" vs „anticorrelated").
+
+    None = necalculabil → perechea nu poate justifica o eliminare:
+      - mai puține de `_MIN_CORR_SAMPLE` numere comune;
+      - valori ne-finite (NaN/inf) în oricare dintre seturi;
+      - varianță nulă pe ranguri (numitor 0) sau eșec de calcul.
+    """
+    common = sorted(set(raw_a.keys()) & set(raw_b.keys()))
+    if len(common) < _MIN_CORR_SAMPLE:
+        return None
+    a = [float(raw_a[k]) for k in common]
+    b = [float(raw_b[k]) for k in common]
+    # NaN/inf: scipy întoarce NaN (deci am cădea pe fallback-ul numpy), iar
+    # `_rank_avg` sortează NaN-urile pe o poziție arbitrară dar STABILĂ → ar
+    # rezulta o corelație FINITĂ și BOGUS (ex. 1.0000 pentru două seturi care
+    # diferă doar printr-un NaN) care ar justifica o eliminare reală. Un scor
+    # ne-finit înseamnă „metodă defectă", nu „membru redundant".
+    if not all(math.isfinite(v) for v in a) or not all(math.isfinite(v) for v in b):
+        logger.debug(
+            "[method_selector] corelație sărită: scoruri ne-finite pe %d numere comune",
+            len(common),
+        )
+        return None
+    sp = _get_spearman()
+    if sp is not None:
+        try:
+            res = sp(a, b)
+            r = getattr(res, "statistic", None)
+            if r is None:
+                r = res[0]
+            r = float(r)
+            if r == r:  # nu NaN
+                return r
+        except Exception as exc:
+            logger.debug(
+                "[method_selector] spearmanr a eșuat (%s) — fallback numpy", exc
+            )
+    r = _spearman_numpy(a, b)
+    if r is None or r != r:
+        return None
+    return r
+
+
+# Ordinea de lectură a etapelor = ordinea de execuție din `_resolve_members`:
+#   1. `_split_active`        — filtru de varianță (goale/plate)
+#   2. `_select_decorrelated` — decorelare greedy Spearman
+#   3. `_resolve_members`     — pipeline-ul care le înlănțuie (+ memo + logare)
+
+
+def _split_active(
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, str]]]:
+    """Împarte contribuțiile în (active, dropped) — logica UNICĂ de filtrare,
+    partajată de combine_ensemble_scores și describe_ensemble (ca UI-ul să vadă
+    EXACT aceeași listă pe care blend-ul o folosește efectiv).
+
+    Ignoră scoruri goale SAU plate (toate egale) — altfel un Ridge defect
+    (toate 0) combinat cu un scorer cu două nivele dădea pool = „cele mai mici
+    compuse" (măsurat pe vechiul `prime_bias`, șters la 14.09.2026).
+    „flat" acoperă și scorurile NE-FINITE (vezi `_has_variance`).
+    dropped = [(nume, motiv)], motiv ∈ {"empty", "flat"}."""
+    active: list[tuple[str, dict[int, float], float]] = []
+    dropped: list[tuple[str, str]] = []
+    for name, raw, w in contributions:
+        if not raw:
+            dropped.append((name, "empty"))
+        elif not _has_variance(raw):
+            dropped.append((name, "flat"))
+        else:
+            active.append((name, raw, w))
+    return active, dropped
+
+
+def _select_decorrelated(
+    active: list[tuple[str, dict[int, float], float]],
+) -> tuple[list[tuple[str, dict[int, float], float]], list[tuple[str, float, str]]]:
+    """Selecție GREEDY decorelată peste membrii activi (deja filtrați de plate).
+
+    Parcurge membrii în ordinea DESCRESCĂTOARE a ponderii și acceptă unul doar
+    dacă |Spearman| față de TOȚI membrii deja acceptați e sub `MAX_MEMBER_CORR`.
+    Două cazuri, ambele nocive:
+      - r >= +0.95 → redundant: blend-ul e un no-op (aceeași informație de două ori);
+      - r <= -0.95 → ANTI-corelat: tot redundant, dar din alt motiv. După min-max
+        normalizare, y ≈ 1 - x, deci blend-ul devine w2 + (w1-w2)*x — o funcţie
+        MONOTONĂ de x. Ranking-ul rezultat e identic cu al membrului mai greu, iar
+        la ponderi egale (w1 == w2) degenerează în scor CONSTANT (pool degenerat).
+        În ambele cazuri membrul nu aduce informaţie nouă → EXCLUS.
+
+    NU loghează nimic: logarea e a apelantului (`_resolve_members`), ca
+    `describe_ensemble` să poată reface calculul fără să reemită WARNING-urile.
+
+    Returnează (kept, dropped) unde dropped = [(nume, r_max_semnat, față_de_cine)].
+    `kept` păstrează ORDINEA ORIGINALĂ a listei `active` — când nu se elimină
+    nimic, suma ponderată rămâne bit-identică cu cea dinaintea acestui filtru.
+    """
+    if len(active) < 2:
+        return active, []
+    # Tie-break pe NUME, nu pe indice: ponderile Wilson ies frecvent egale
+    # (34/33/33), iar ordinea listei depinde de ordinea cheilor din
+    # best_methods.json → acelaşi ensemble ar fi dat pool-uri diferite după o
+    # simplă reserializare a JSON-ului. Numele e stabil între rulări.
+    order = sorted(range(len(active)), key=lambda i: (-active[i][2], active[i][0]))
+    kept_idx: list[int] = []
+    dropped: list[tuple[str, float, str]] = []
+    for i in order:
+        name, raw, _w = active[i]
+        worst_r = 0.0
+        worst_vs = ""
+        for j in kept_idx:
+            r = _pair_corr(raw, active[j][1])
+            if r is None:
+                continue
+            if abs(r) > abs(worst_r):
+                worst_r, worst_vs = r, active[j][0]
+        if worst_vs and abs(worst_r) >= MAX_MEMBER_CORR:
+            dropped.append((name, round(worst_r, 4), worst_vs))
+            continue
+        kept_idx.append(i)
+    kept = [active[i] for i in sorted(kept_idx)]
+    return kept, dropped
+
+
+# Perechile (eliminat, față_de_cine, tip) deja raportate la nivel WARNING/INFO.
+# În walk-forward `combine_ensemble_scores` e apelat de sute de ori cu ACELAȘI
+# ensemble → aceeași eliminare ar produce sute de linii identice în loto.log.
+# Prima apariție se loghează normal, restul cad pe DEBUG.
+_LOGGED_DROPS: set[tuple[str, str, str]] = set()
+
+# Memo cu O SINGURĂ intrare pentru ultimul apel la `_resolve_members`:
+# `describe_ensemble` (API pt UI) și `combine_ensemble_scores` refac exact
+# același pipeline pe aceleași contribuții — fără memo s-ar plăti de două ori
+# costul O(k²) de spearmanr. `logged` reține dacă rezultatul a fost deja
+# raportat, ca un `describe` (silențios) urmat de un `combine` să nu piardă
+# WARNING-ul, iar un `combine` urmat de `describe` să nu-l dubleze.
+# Tuplu (nu dict): rebindarea unei singure variabile globale e atomică sub GIL,
+# deci nu poate exista o stare intermediară „cheie nouă + valoare veche".
+_RESOLVE_MEMO: tuple | None = None  # (key, (active, dropped, dropped_corr), logged)
+
+
+def _memo_key(contributions: list[tuple[str, dict[int, float], float]]):
+    """Cheie hashabilă pentru memo (None = necalculabilă → fără memo).
+
+    Include scorurile, nu doar numele: în walk-forward același ensemble e
+    rulat pe ferestre diferite, deci pool-ul rezultat DIFERĂ.
+    """
+    try:
+        return tuple(
+            (
+                str(n),
+                float(w),
+                tuple(sorted((int(k), float(v)) for k, v in raw.items())),
+            )
+            for n, raw, w in contributions
+        )
+    except Exception:
+        return None
+
+
+def _log_decorrelation(dropped_corr: list[tuple[str, float, str]]) -> None:
+    """Raportează eliminările de corelație, o SINGURĂ dată per (pereche, tip)."""
+    for name, r, vs in dropped_corr:
+        anti = r <= -MAX_MEMBER_CORR
+        key = (name, vs, "anti" if anti else "redundant")
+        first = key not in _LOGGED_DROPS
+        _LOGGED_DROPS.add(key)
+        if anti:
+            log = logger.warning if first else logger.debug
+            log(
+                "[method_selector] ensemble: %r ANTI-corelat cu %r (Spearman=%.4f) — "
+                "EXCLUS (blend-ul devine monoton în celălalt membru; la ponderi "
+                "egale → scor constant / pool degenerat)",
+                name,
+                vs,
+                r,
+            )
+        else:
+            log = logger.info if first else logger.debug
+            log(
+                "[method_selector] ensemble: %r redundant cu %r (Spearman=%.4f) — exclus",
+                name,
+                vs,
+                r,
+            )
+
+
+def _resolve_members(
+    contributions: list[tuple[str, dict[int, float], float]],
+    log: bool = True,
+) -> tuple[
+    list[tuple[str, dict[int, float], float]],
+    list[tuple[str, str]],
+    list[tuple[str, float, str]],
+]:
+    """Pipeline-ul COMPLET de selecție a membrilor: varianță → decorelare.
+
+    Sursa UNICĂ de adevăr pentru combine_ensemble_scores și describe_ensemble
+    (UI-ul trebuie să vadă exact membrii pe care blend-ul îi folosește efectiv).
+
+    `log=False` (folosit de `describe_ensemble`) = calcul pur, fără efecte în
+    log: afișarea în UI nu trebuie să pară o a doua decizie de excludere.
+    """
+    global _RESOLVE_MEMO
+    key = _memo_key(contributions)
+    memo = _RESOLVE_MEMO
+    if key is not None and memo is not None and key == memo[0]:
+        result = memo[1]
+        if log and not memo[2]:
+            _log_decorrelation(result[2])
+            _RESOLVE_MEMO = (key, result, True)
+        return result
+
+    active, dropped = _split_active(contributions)
+    active, dropped_corr = _select_decorrelated(active)
+    result = (active, dropped, dropped_corr)
+    if log:
+        _log_decorrelation(dropped_corr)
+    if key is not None:
+        _RESOLVE_MEMO = (key, result, log)
+    return result
+
+
+def describe_ensemble(
+    contributions: list[tuple[str, dict[int, float], float]],
+) -> dict:
+    """Metadata pt afișare (UI): cine e EFECTIV activ în blend vs. nominal.
+
+    Aplică exact filtrarea din combine_ensemble_scores (goale/plate afară,
+    apoi decorelarea greedy) FĂRĂ să combine scorurile — UI-ul o poate apela
+    ca să afișeze membrii reali + ponderile efectiv folosite, nu cele nominale.
+    Apel PUR: nu loghează nimic (vezi `_resolve_members(log=False)`) și
+    refolosește memo-ul, deci nu re-plătește costul O(k²) de spearmanr.
+
+    Returnează:
+        active  — [{"method", "weight"}] ponderi RENORMALIZATE pe membrii activi
+        dropped — [{"method", "reason", "r", "vs"}] TOATE eliminările, în
+            ordinea etapelor. Schema e UNIFORMĂ: pentru „empty"/„flat" (unde
+            corelația nici nu se calculează) "r" și "vs" sunt None, ca un
+            consumator să poată itera fără garda de KeyError.
+            reason ∈ {"empty", "flat", "correlated", "anticorrelated"}.
+        dropped_correlated — doar eliminările de corelație, aceleași câmpuri
+            (comod pt UI: „redundant cu X, r=0.98")
+        nominal_count / active_count — dimensiunile listelor
+        single_active_normalized — True când nominal >1 dar 1 activ (scorurile
+            supraviețuitorului sunt min-max normalizate, nu brute)
+        fallback_flat — True când NICIUN membru nu are varianță și blend-ul
+            cade pe primul nevid (chiar plat)
+
+    ⚠️ Vocabularul de `reason` NU e închis la nivel de proiect: decizia de bench
+    (`decision._select_ensemble_members`) emite, cu ACELEAȘI chei
+    {method, vs, r, reason}, o a cincea valoare — "perf_signature" — scrisă în
+    best_methods.json sub `ensemble_dropped_redundant`. Sunt DOUĂ straturi cu
+    axe diferite: aici se măsoară corelația între SCORURI (per număr, la
+    generare), acolo între SEMNĂTURILE DE PERFORMANȚĂ (rate T+ pe folds). Un
+    consumator de UI care traduce `reason` trebuie deci să acopere
+    {"empty", "flat", "correlated", "anticorrelated", "perf_signature"}.
+    """
+    active, dropped, dropped_corr = _resolve_members(contributions, log=False)
+    if len(active) == 1:
+        active_out = [{"method": active[0][0], "weight": 1.0}]
+    elif active:
+        total_w = sum(w for _, _, w in active) or 1.0
+        active_out = [{"method": n, "weight": w / total_w} for n, _raw, w in active]
+    else:
+        active_out = []
+    corr_out = [
+        {
+            "method": n,
+            "reason": "anticorrelated" if r <= -MAX_MEMBER_CORR else "correlated",
+            "r": r,
+            "vs": vs,
+        }
+        for n, r, vs in dropped_corr
+    ]
+    return {
+        "active": active_out,
+        # schemă uniformă: „empty"/„flat" primesc r/vs = None (nu s-a calculat
+        # nicio corelație pentru ele), ca `dropped` să fie iterabilă uniform
+        "dropped": (
+            [
+                {"method": n, "reason": reason, "r": None, "vs": None}
+                for n, reason in dropped
+            ]
+            + corr_out
+        ),
+        "dropped_correlated": corr_out,
+        "nominal_count": len(contributions),
+        "active_count": len(active),
+        "single_active_normalized": len(contributions) > 1 and len(active) == 1,
+        "fallback_flat": not active and any(raw for _n, raw, _w in contributions),
+    }
+
+
+def combine_ensemble_scores(
+    contributions: list[tuple[str, dict[int, float], float]],
+    audit: dict | None = None,
+) -> dict[int, float]:
+    """Combină scorurile brute ale mai multor metode într-un singur scor per
+    număr, ponderat. Fiecare metodă e normalizată min-max la [0,1] ÎNAINTE de
+    combinare — altfel o metodă cu scala de valori mai mare ar domina artificial
+    suma, indiferent de calitatea ei relativă.
+
+    `contributions` = [(method_name, {num: raw_score}, weight), ...] — ponderile
+    NU trebuie să fie deja normalizate la sumă 1 (se renormalizează aici pe baza
+    metodelor care au produs efectiv scoruri, ca metodele eșuate/goale să nu
+    reducă artificial suma ponderilor active).
+
+    DECORELARE: după filtrul de varianță se aplică o selecție GREEDY
+    (`_select_decorrelated`) — un membru intră în blend doar dacă |Spearman|
+    față de toți cei deja acceptați e sub `MAX_MEMBER_CORR`. Fără ea, „ensemble-
+    ul" putea fi un no-op în două feluri: doi membri cu r=+0.98 = același semnal
+    numărat de două ori; doi membri cu r=-1.0 → la ponderi ~EGALE blend-ul
+    devine CONSTANT (pool degenerat), iar la ponderi inegale degenerează în
+    ranking-ul membrului DOMINANT (blend = w2 + (w1-w2)·x, monoton în x) — în
+    ambele cazuri al doilea membru nu aduce informație.
+    Ponderile se renormalizează pe membrii RĂMAȘI.
+
+    `audit` (opțional) — dict în care se scriu membrii EFECTIV folosiți, ca
+    filtrarea să fie OBSERVABILĂ din UI, nu tăcută:
+        audit["ensemble_active"]  = [(nume, pondere_renormalizată), ...]
+        audit["ensemble_dropped"] = [nume, ...]  — doar goale/plate (semantică
+            neschimbată față de versiunea dinaintea decorelării)
+        audit["ensemble_dropped_correlated"] = [(nume, r_max, față_de_cine), ...]
+        + flag-urile single_active_normalized / fallback_flat când e cazul.
+
+    Bit-identitate: DOAR cu ensemble NOMINAL de exact 1 membru (decizia n-a
+    construit un blend real) scorurile lui se întorc BRUTE, NEnormalizate —
+    identic cu apelul direct al scorer-ului (AGENTS.md regula 1); cu un singur
+    membru nu se calculează nicio corelație. Când nominal >1 dar rămâne 1 singur
+    membru ACTIV, scorurile lui sunt min-max normalizate (rank-preserving, pool
+    identic) — exact „membru normalizat înainte de combinare", nu un scorer
+    diferit pe tăcute.
+    """
+    active, dropped, dropped_corr = _resolve_members(contributions)
+
+    if audit is not None:
+        if len(active) == 1:
+            audit["ensemble_active"] = [(active[0][0], 1.0)]
+        elif active:
+            _tw = sum(w for _, _, w in active) or 1.0
+            audit["ensemble_active"] = [(n, w / _tw) for n, _raw, w in active]
+        else:
+            audit["ensemble_active"] = []
+        audit["ensemble_dropped"] = [n for n, _reason in dropped]
+        audit["ensemble_dropped_correlated"] = [(n, r, vs) for n, r, vs in dropped_corr]
+
+    if not active:
+        # Fallback doar pe scoruri FINITE și plate (toate egale). Un dict cu NaN
+        # otrăvea rank_by_score (tie-break pe număr nu intră niciodată) și apărea
+        # simultan în dropped ȘI active. Fără fallback finit → {} → frequency.
+        for name, raw, w in contributions:
+            if not raw:
+                continue
+            vals = [float(v) for v in raw.values()]
+            if vals and all(math.isfinite(v) for v in vals):
+                if audit is not None:
+                    audit["ensemble_active"] = [(name, 1.0)]
+                    audit["ensemble_fallback_flat"] = True
+                return {int(k): float(v) for k, v in raw.items()}
+        if audit is not None:
+            audit["ensemble_active"] = []
+            audit["ensemble_fallback_empty"] = True
+        return {}
+    if len(active) == 1:
+        _name, raw, _w = active[0]
+        if len(contributions) == 1:
+            # ensemble NOMINAL cu 1 membru → scoruri BRUTE (bit-identic, vezi docstring)
+            return {int(k): float(v) for k, v in raw.items()}
+        # nominal >1 dar 1 activ → min-max normalize (monoton → același pool),
+        # consecvent cu tratamentul membrilor dintr-un blend real
+        if audit is not None:
+            audit["ensemble_single_active_normalized"] = True
+        vals = list(raw.values())
+        lo, hi = min(vals), max(vals)
+        span = (hi - lo) or 1.0
+        return {int(k): (float(v) - lo) / span for k, v in raw.items()}
+
+    total_w = sum(w for _, _, w in active) or 1.0
+    combined: dict[int, float] = {}
+    for _name, raw, weight in active:
+        w_norm = weight / total_w
+        vals = list(raw.values())
+        lo, hi = min(vals), max(vals)
+        span = (hi - lo) or 1.0
+        for num, v in raw.items():
+            scaled = (float(v) - lo) / span
+            combined[int(num)] = combined.get(int(num), 0.0) + w_norm * scaled
+    return combined
+
+
+def summary_line(
+    game_key: str, pool_size: int | None = None, config_path: str | None = None
+) -> str:
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    label = g.get("label", game_key)
+    if pool_size is not None:
+        winner = get_winner_name(game_key, pool_size, config_path)
+        details = g.get("winner_details", {}).get(f"k{pool_size}", {})
+        suffix = (
+            f" (bench avg_hits={details['avg_hits']:.3f})"
+            if "avg_hits" in details
+            else ""
+        )
+        return f"[{label} · pool K={pool_size}] scorer = {winner}{suffix}"
+    winner = get_winner_name(game_key, config_path=config_path)
+    return f"[{label}] overall scorer = {winner}"
+
+
+def all_per_pool_winners(
+    game_key: str, config_path: str | None = None
+) -> dict[int, str]:
+    """Map pool_size_int -> winner_method_name for this game."""
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    wpp = g.get("winners_per_pool", {}) or {}
+    out: dict[int, str] = {}
+    for k, v in wpp.items():
+        if not isinstance(k, str) or not k.startswith("k"):
+            continue
+        try:
+            out[int(k[1:])] = v
+        except ValueError:
+            continue
+    return out
+
+
+def recommend_optimal_config(
+    game_key: str,
+    pool_size: int,
+    config_path: str | None = None,
+) -> dict:
+    """Return the optimal (scorer, sim_depth_pct, use_blacklist) for (game, pool).
+
+    Consumed by the auto-pilot - reads `auto_pilot_per_pool[kN]` from
+    Ce face decizia pe calea NORMALĂ (metode calificate):
+        - scorerul bate random pe rata țintei în ≥60% din ferestre;
+        - sim_depth_pct e fereastra cu rata țintei maximă, dintre cele cu ≥30 de
+          extrageri evaluate — dacă NICIUNA nu ajunge la 30, filtrul se anulează
+          și se alege din toate (`decision.py`, ramura `if stable.empty`);
+        - use_blacklist reflectă comparația +BL / no-BL la acea fereastră.
+
+    Nu sunt garanții pe toate ramurile, iar apelantul trebuie să citească
+    `low_confidence` / `fallback` înainte de a le presupune. Ies din ele:
+    `low_confidence` (prin definiție, nicio metodă n-a bătut random),
+    celula degenerată care cade pe SAFE_FALLBACK_SCORER (acolo `use_blacklist`
+    se scrie True necondiționat), substituția pe pool-ul vecin
+    (`pool_substituted` — cifrele sunt ale altui pool) și ramura fără intrare în
+    best_methods.json. ⚠️ `use_blacklist` rămâne oricum INERT în producție.
+
+    `avg_hits` e valoarea de la fereastra ALEASĂ pentru că maximizează rata
+    țintei, deci e o statistică selectată prin maxim — optimistă prin
+    construcție, de citit ca reper, nu ca estimare nepărtinitoare.
+
+    Returns dict with keys: scorer, sim_depth_pct, use_blacklist, avg_hits,
+    rationale, ensemble, rate_col_used, rate_col_mismatch, low_confidence,
+    ensemble_dropped_redundant, fallback.
+
+    E SINGURUL API prin care UI-ul citește decizia → lista de chei e o listă
+    ALBĂ: orice câmp nou scris de `decision.py` care trebuie afișat se adaugă
+    EXPLICIT aici, altfel rămâne invizibil (date moarte în best_methods.json).
+    """
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    apm = g.get("auto_pilot_per_pool", {})
+    entry = apm.get(f"k{pool_size}", {})
+    pool_substituted: dict | None = None
+
+    # Pool cerut în afara gamei decise de bench (ex. k24, dar bench-ul a evaluat
+    # doar k6..k20) → folosim cel mai APROPIAT pool decis, în loc de fallback.
+    if not (entry and "scorer" in entry) and apm:
+        avail = sorted(int(k[1:]) for k in apm if k.startswith("k") and k[1:].isdigit())
+        if avail:
+            nearest = min(avail, key=lambda k: abs(k - pool_size))
+            cand = apm.get(f"k{nearest}", {})
+            if cand and "scorer" in cand:
+                logger.info(
+                    "[method_selector] %s: pool k%d absent → folosesc k%d (cel mai apropiat decis)",
+                    game_key,
+                    pool_size,
+                    nearest,
+                )
+                entry = cand
+                # Substituirea era TĂCUTĂ în valoarea de retur: doar un log INFO,
+                # iar `rationale` se copia VERBATIM din intrarea substituită. UI-ul
+                # îl afișează lângă 🏆, deci tipărea cifrele Wilson măsurate la k12
+                # ca și cum ar fi ale pool-ului k16 cerut — nu „lipsește o notă",
+                # ci o afirmație numerică falsă. Marcăm substituția în dict ca UI-ul
+                # și raportul să o poată spune. Alegerea de scorer NU se schimbă.
+                pool_substituted = {"requested": int(pool_size), "used": int(nearest)}
+
+    if entry and "scorer" in entry:
+        scorer, clean_ens, salvaged = _sanitize_ap_production(entry, game_key)
+        if not scorer:
+            scorer = get_winner_name(
+                game_key, pool_size=pool_size, config_path=config_path
+            )
+            clean_ens = [{"method": scorer, "weight": 1.0}]
+            salvaged = True
+        rationale = entry.get("rationale", "") or ""
+        if pool_substituted:
+            rationale = (
+                f"⚠ măsurat la pool {pool_substituted['used']}, nu la "
+                f"{pool_substituted['requested']} (bench-ul n-a evaluat pool-ul cerut)"
+                + (f" | {rationale}" if rationale else "")
+            )
+        if salvaged:
+            rationale = (
+                (rationale + " | " if rationale else "")
+                + "scorer/ensemble sanitizat (nume eliminat din METHODS)"
+            ).strip(" |")
+        # Urna 2 are mereu contract top-1; nu lăsăm un JSON vechi/manual cu
+        # `hit_target: 3` să o prezinte drept aceeași metrică a pool-urilor.
+        if _is_urna2_key(game_key):
+            hit_target = 1
+            target_label = "top-1 (1/1)"
+        else:
+            try:
+                hit_target = int(entry.get("hit_target", 3))
+            except (TypeError, ValueError):
+                hit_target = 3
+            if hit_target not in (3, 4):
+                hit_target = 3
+            target_label = str(entry.get("target_label") or f"{hit_target}+")
+        return {
+            "scorer": scorer,
+            "sim_depth_pct": int(entry.get("sim_depth_pct", 40)),
+            "use_blacklist": bool(entry.get("use_blacklist", False)),
+            "avg_hits": float(entry.get("avg_hits", 0.0)),
+            "rationale": rationale,
+            "ensemble": clean_ens,
+            "pool_substituted": pool_substituted,
+            "rate_col_used": entry.get("rate_col_used"),
+            "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
+            "hit_target": hit_target,
+            "target_label": target_label,
+            "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
+            "ensemble_dropped_redundant": entry.get("ensemble_dropped_redundant") or [],
+            "fallback": salvaged,
+            # Aditive (decision.py) — metode excluse cu motiv, vizibile UI-ului
+            # in loc sa dispara tacut intre best_methods.json si audit_output.py.
+            "rate_data_missing": entry.get("rate_data_missing") or [],
+            "tiebreak_dependent": entry.get("tiebreak_dependent") or [],
+            "incomplete_methods": entry.get("incomplete_methods") or [],
+            # Testul de exces cu corecția Holm (aditiv; None la decizii vechi).
+            "multiplicity": entry.get("multiplicity"),
+        }
+
+    scorer = get_winner_name(game_key, pool_size=pool_size, config_path=config_path)
+    use_bl = should_use_blacklist(
+        game_key, pool_size=pool_size, config_path=config_path
+    )
+    return {
+        "scorer": scorer,
+        "sim_depth_pct": 40,
+        "use_blacklist": use_bl,
+        "avg_hits": 0.0,
+        "rationale": "fallback: no auto_pilot_per_pool entry - using per-pool winner",
+        "pool_substituted": None,
+        "ensemble": [{"method": scorer, "weight": 1.0}],
+        "hit_target": 1 if _is_urna2_key(game_key) else 3,
+        "target_label": "top-1 (1/1)" if _is_urna2_key(game_key) else "3+",
+        # nu există intrare de decizie pentru (joc, pool) → alegerea nu e
+        # susținută de nicio măsurătoare: un fallback E prin definiție low confidence
+        "low_confidence": True,
+        "ensemble_dropped_redundant": [],
+        "fallback": True,
+        "rate_data_missing": [],
+        "tiebreak_dependent": [],
+        "incomplete_methods": [],
+    }
+
+
+def get_all_auto_pilot_configs(
+    game_key: str, config_path: str | None = None
+) -> dict[int, dict]:
+    """Return {pool_size: optimal_config} for this game - for UI rendering."""
+    cfg = _load_config(config_path)
+    g = cfg.get("games", {}).get(game_key, {})
+    apm = g.get("auto_pilot_per_pool", {}) or {}
+    out: dict[int, dict] = {}
+    for k, c in apm.items():
+        if not isinstance(k, str) or not k.startswith("k"):
+            continue
+        try:
+            ps = int(k[1:])
+        except ValueError:
+            continue
+        if "error" in c:
+            continue
+        out[ps] = c
+    return out

@@ -1,0 +1,182 @@
+"""Greedy covering wheel — extracted from loto_engine (cycle break).
+
+loto_engine.generate_combinatorial_wheel re-exports this function.
+"""
+
+from __future__ import annotations
+
+import itertools
+import logging
+import math
+import time
+
+from covering.common import (
+    _coverage_ratio_pct,
+    _sorted_pool,
+    ensure_pool_numbers_on_tickets,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def generate_combinatorial_wheel(
+    pool, pick=6, guarantee=4, max_variants=0, scores=None
+):
+    """
+    Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
+    Optimizat pentru hit-uri de 4 și 5 numere prin prioritizarea scorurilor NQI/Frecvență.
+    """
+    if int(guarantee) > int(pick):
+        raise ValueError(
+            f"guarantee={guarantee} > pick={pick}: garanția nu poate depăși numerele extrase"
+        )
+    start_time = time.time()
+    pool_len = len(pool)
+    logger.info(
+        f"[WHEEL] Inițializare sistem Wheeling pentru pool de {pool_len} numere. Pick={pick}, Guarantee={guarantee}."
+    )
+
+    if pool_len < pick:
+        return [], 0.0
+
+    pool = _sorted_pool(pool, scores)
+
+    if int(guarantee) == int(pick):
+        n_full = math.comb(pool_len, pick)
+        combinations = itertools.combinations(pool, pick)
+        if max_variants > 0 and n_full > max_variants:
+            logger.warning(
+                "[WHEEL] guarantee==pick cu max_variants=%d < C(%d,%d)=%d — "
+                "acoperirea NU poate fi 100%% (sistem incomplet).",
+                max_variants,
+                pool_len,
+                pick,
+                n_full,
+            )
+            combinations = itertools.islice(combinations, max_variants)
+        wheel = [sorted(c) for c in combinations]
+        if max_variants > 0:
+            wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+        coverage_pct = _coverage_ratio_pct(min(len(wheel), n_full), n_full)
+        logger.info(
+            "[WHEEL] Sistem complet C(%d,%d): %d bilete, acoperire %.2f%% în %.2fs.",
+            pool_len,
+            pick,
+            len(wheel),
+            coverage_pct,
+            time.time() - start_time,
+        )
+        return wheel, coverage_pct
+
+    all_targets_list = [
+        tuple(sorted(t)) for t in itertools.combinations(pool, guarantee)
+    ]
+
+    if scores:
+        all_targets_list.sort(
+            key=lambda t: sum(scores.get(n, 0) for n in t), reverse=True
+        )
+
+    total_targets = len(all_targets_list)
+    target_index = {t: i for i, t in enumerate(all_targets_list)}
+    covered_mask = 0
+    covered_count = 0
+    wheel = []
+
+    iteration = 0
+    max_search_per_iter = 10000 if pool_len <= 15 else 50000
+
+    _tm_cache: dict = {}
+    target_cursor = 0
+    max_ticket_coverage = math.comb(pick, guarantee)
+
+    def _ticket_mask(ticket):
+        cached = _tm_cache.get(ticket)
+        if cached is not None:
+            return cached
+        m = 0
+        for sub in itertools.combinations(ticket, guarantee):
+            idx = target_index.get(sub)
+            if idx is not None:
+                m |= 1 << idx
+        _tm_cache[ticket] = m
+        return m
+
+    while covered_count < total_targets:
+        if max_variants > 0 and len(wheel) >= max_variants:
+            logger.info(
+                f"[WHEEL] S-a atins limita maxima cerută de variante: {max_variants}."
+            )
+            break
+
+        iteration += 1
+        best_ticket = None
+        best_coverage = -1
+        best_targets_covered = 0
+
+        while target_cursor < total_targets and (
+            covered_mask >> target_cursor
+        ) & 1:
+            target_cursor += 1
+        target_to_cover = (
+            all_targets_list[target_cursor] if target_cursor < total_targets else None
+        )
+
+        if not target_to_cover:
+            break
+        base_ticket = set(target_to_cover)
+        remaining_pool = [n for n in pool if n not in base_ticket]
+
+        search_count = 0
+        if len(remaining_pool) >= (pick - guarantee):
+            for extra_nums in itertools.combinations(remaining_pool, pick - guarantee):
+                ticket = tuple(sorted(list(base_ticket) + list(extra_nums)))
+                tmask = _ticket_mask(ticket)
+                gain = (tmask & ~covered_mask).bit_count()
+
+                if gain > best_coverage:
+                    best_coverage = gain
+                    best_ticket = ticket
+                    best_targets_covered = tmask
+                    if best_coverage == max_ticket_coverage:
+                        break
+
+                search_count += 1
+                if search_count > max_search_per_iter:
+                    break
+
+        if best_ticket:
+            wheel.append(list(best_ticket))
+            covered_mask |= best_targets_covered
+            covered_count = covered_mask.bit_count()
+            if iteration % 20 == 0 or covered_count == total_targets:
+                logger.info(
+                    f"[WHEEL] Progres {iteration}: Acoperite {covered_count}/{total_targets} ținte. Bilete: {len(wheel)}"
+                )
+        else:
+            logger.warning(
+                "[WHEEL] Nu am găsit acoperire suplimentară, oprire timpurie."
+            )
+            break
+
+        if iteration > 1000:
+            logger.warning("[WHEEL] TIMEOUT: 1000 iterații.")
+            break
+
+    if max_variants > 0:
+        wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
+        covered_mask = 0
+        g = int(guarantee)
+        for t in wheel:
+            ticket = tuple(sorted(int(x) for x in t))
+            for sub in itertools.combinations(ticket, g):
+                idx = target_index.get(sub)
+                if idx is not None:
+                    covered_mask |= 1 << idx
+        coverage_pct = _coverage_ratio_pct(covered_mask.bit_count(), total_targets)
+    else:
+        coverage_pct = _coverage_ratio_pct(covered_count, total_targets)
+    logger.info(
+        f"[WHEEL] Generare completă în {time.time() - start_time:.2f}s. Total variante: {len(wheel)}. Acoperire: {coverage_pct}%"
+    )
+    return wheel, coverage_pct

@@ -1,0 +1,368 @@
+"""Audit read-only al outputului curent: decizie, randare, bilete, cache WF.
+
+Rulează din rădăcina repo cu Python-ul aplicației. Nu generează joburi, nu
+rescrie istoricul și nu trimite email. --report permite salvarea unei copii
+a raportului randat cu codul curent, într-o cale explicită.
+"""
+
+from __future__ import annotations
+
+import argparse
+from contextlib import contextmanager
+import json
+from pathlib import Path
+import sqlite3
+import sys
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+import pandas as pd
+
+import app_nicegui as app_ui
+from job_queue import DB_PATH
+from loto_enterprise.benchmark import decision
+from loto_enterprise.core.py314_io import pickle_load_path
+from loto_enterprise.core import walk_forward_adapter as wf
+from ui_shared import atomic_write_text, decode_queue_result
+from wheeling_methods import compute_coverage_pct
+
+
+class CaptureUI:
+    """Capturează arborele randat de aceleași funcții care servesc NiceGUI."""
+
+    def __init__(self):
+        self.nodes = []
+        self.stack = []
+
+    def __getattr__(self, kind):
+        def make(*args, **kwargs):
+            node = {"kind": kind, "args": args, "kwargs": kwargs, "children": []}
+            (self.stack[-1]["children"] if self.stack else self.nodes).append(node)
+            owner = self
+
+            class Element:
+                def __enter__(self):
+                    owner.stack.append(node)
+                    return self
+
+                def __exit__(self, *exc):
+                    owner.stack.pop()
+
+                def __getattr__(self, name):
+                    return lambda *a, **kw: self
+
+            return Element()
+
+        return make
+
+    def walk(self):
+        def visit(nodes):
+            for node in nodes:
+                yield node
+                yield from visit(node["children"])
+
+        return visit(self.nodes)
+
+    def text(self):
+        return "\n".join(str(n["args"][0]) for n in self.walk() if n["args"])
+
+    def ranking(self):
+        result = []
+        for node in self.walk():
+            if node["kind"] != "row":
+                continue
+            labels = [
+                n["args"][0]
+                for n in node["children"]
+                if n["kind"] == "label" and n["args"]
+            ]
+            if len(labels) >= 2 and (labels[0] == "🏆" or str(labels[0]).endswith(".")):
+                result.append(str(labels[1]).removeprefix("🎯 "))
+        return result
+
+
+@contextmanager
+def capture_ui():
+    """Redirecționează `ui` către un colector în TOATE modulele UI încărcate.
+
+    Funcțiile de randare (`_render_bench_leaderboard_slice`, `_render_hits_4plus`
+    etc.) trăiesc în `ui_bench.py` / `ui_hits.py` / `ui_results.py` / `ui_runtime.py`
+    și folosesc `ui`-ul propriului modul; `app_nicegui` doar le re-exportă. A
+    patch-ui doar `app_ui.ui` lăsa aceste funcții pe `ui`-ul real NiceGUI, care
+    fără client conectat nu produce nimic capturabil — capturarea ieșea goală.
+    Patch-uim `ui` pe fiecare modul UI care îl expune.
+    """
+    import sys as _sys
+    from contextlib import ExitStack
+
+    collector = CaptureUI()
+    _ui_modules = ("app_nicegui", "ui_bench", "ui_hits", "ui_results", "ui_runtime")
+    with ExitStack() as stack:
+        for _modname in _ui_modules:
+            _mod = _sys.modules.get(_modname)
+            if _mod is not None and hasattr(_mod, "ui"):
+                stack.enter_context(patch.object(_mod, "ui", collector))
+        yield collector
+
+
+def audit_rankings(df):
+    tested = 0
+    for target in (3, 4):
+        with patch.object(decision, "BENCH_HIT_TARGET", target):
+            for game, draw_n in app_ui._BENCH_DRAW_N.items():
+                if game not in set(df["game"]):
+                    continue
+                pools = [1] if draw_n == 1 else range(draw_n, draw_n + 15)
+                for pool in pools:
+                    cfg = decision.decide_optimal_config_for_pool(
+                        df, game, pool, draw_n
+                    )
+                    if "error" in cfg:
+                        continue
+                    app_ui._LB_ROWS_MEMO.clear()
+                    with capture_ui() as ui:
+                        app_ui._render_bench_leaderboard_slice(
+                            df, game, pool, game, top_n=20
+                        )
+                    ranked = ui.ranking()
+                    expected = cfg["ranked_methods"]
+                    # O randare complet esuata (0 randuri) trecea vacuu la
+                    # comparatia de mai jos: ranked[:len(expected)] si
+                    # expected[:len(ranked)] devin ambele [] cand ranked==[],
+                    # indiferent de cate metode calificate exista de fapt —
+                    # exact clasa de bug pe care auditul asta o cauta.
+                    if expected and not ranked:
+                        raise AssertionError(
+                            f"randare esuata: 0 randuri afisate, desi decizia "
+                            f"are {len(expected)} metode calificate "
+                            f"({game}, k{pool}, {target})"
+                        )
+                    assert ranked[: len(expected)] == expected[: len(ranked)], (
+                        game,
+                        pool,
+                        target,
+                        ranked,
+                        expected,
+                    )
+                    for excluded in cfg.get("tiebreak_dependent", []):
+                        assert excluded["method"] not in ranked, (game, pool, excluded)
+                    for excluded in cfg.get("rate_data_missing", []):
+                        assert excluded["method"] not in ranked, (game, pool, excluded)
+                    for excluded in cfg.get("incomplete_methods", []):
+                        assert excluded["method"] not in ranked, (game, pool, excluded)
+                    if draw_n == 1:
+                        assert "brut 4+" not in ui.text()
+                    tested += 1
+    return tested
+
+
+def latest_bundle():
+    # mode=ro evită inclusiv scrierile de inițializare ale helperului de queue.
+    with sqlite3.connect(Path(DB_PATH).resolve().as_uri() + "?mode=ro", uri=True) as db:
+        db.row_factory = sqlite3.Row
+        row = db.execute(
+            "SELECT id, completed_at, result_json, config_json FROM jobs WHERE status='COMPLETED' "
+            "ORDER BY completed_at DESC,id DESC LIMIT 1"
+        ).fetchone()
+    if row is None:
+        raise RuntimeError("Nu există job complet de verificat")
+    return row, decode_queue_result(row["result_json"])
+
+
+
+def audit_history(fname, game, data, source=None):
+    """Resolve source and geometry through the result's registered identity."""
+    from loto_enterprise.core.history import chronological_history
+    from loto_enterprise.core.lotteries import require_lottery
+
+    lot = require_lottery(data.get("game_id") or game, data.get("country") or "RO")
+    if source is not None:
+        source_game = source.attrs.get("game_id")
+        if source_game and require_lottery(source_game, source.attrs.get("country") or "RO") != lot:
+            raise ValueError("Snapshot-ul aparține altui joc")
+        return lot, chronological_history(source)
+    if Path(fname).name != Path(lot.csv).name:
+        raise ValueError(f"Istoric diferit de sursa înregistrată: {fname!r}")
+    return lot, chronological_history(pd.read_csv(ROOT / lot.csv))
+
+
+def audit_cached_hits(flat, source, lot, guarantee, condition):
+    """Recalculate ticket hits against every drawn number in the main urn."""
+    per = wf.per_draw_hit_summary(flat)
+    assert all(
+        0 <= r["best_ticket"] <= lot.pick_n
+        and r["best_ticket"] <= r["pool"] <= lot.draw_n
+        for r in per.values()
+    )
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+    from loto_enterprise.core.history import chronological_history
+
+    # draw_index este poziția în istoricul validat al backtesterului. Un rând
+    # invalid anterior țintei nu trebuie comparat în locul extragerii reale.
+    # Sursa originală rămâne intactă pentru cheia WF, calculată înainte de
+    # filtrarea rândurilor.
+    ordered = chronological_history(source)
+    _draws, valid = valid_draw_matrix(
+        ordered,
+        [f"n{i}" for i in range(1, lot.draw_n + 1)],
+        draw_n=lot.draw_n,
+        max_num=lot.max_n,
+    )
+    validated = ordered.loc[valid].reset_index(drop=True)
+    actual = {
+        i: set(int(row[f"n{j}"]) for j in range(1, lot.draw_n + 1))
+        for i, row in validated.iterrows()
+    }
+    unions, complete = {}, {}
+    for prediction in flat:
+        nums = set(prediction.variant[:lot.pick_n])
+        assert len(nums) == lot.pick_n
+        assert prediction.hits == len(nums & actual[prediction.draw_index]), (
+            lot.game_id, prediction.draw_index, prediction.hits,
+        )
+        unions.setdefault(prediction.draw_index, set()).update(nums)
+        complete[prediction.draw_index] = (
+            complete.get(prediction.draw_index, True)
+            and prediction.wheel_coverage == 100.0
+        )
+    for index, nums in unions.items():
+        played_hits = len(nums & actual[index])
+        assert played_hits <= per[index]["pool"]
+        # A conditional lotto design may leave pool numbers off every ticket.
+        # A complete classical cover necessarily plays every pool number.
+        if condition == guarantee and complete[index]:
+            assert played_hits == per[index]["pool"]
+    return per
+
+
+def audit_bundle(bundle, sources=None):
+    summary = []
+    for fname, outs in bundle[0]:
+        for game, raw in outs.items():
+            data = app_ui._primary_pool_data(raw)
+            if sources is not None and fname not in sources:
+                raise ValueError(f"Snapshot original indisponibil: {fname}")
+            original = sources.get(fname) if sources is not None else None
+            lot, source = audit_history(fname, game, data, original)
+            pool = data["hard_core"]
+            variants = data["variants"]
+            audit = data.get("audit") or {}
+            guarantee = int(audit.get("wheel_guarantee_used") or data["guarantee"])
+            condition = int(audit.get("wheel_condition_used") or guarantee)
+            wheel = [list(v[:lot.pick_n]) for v in variants]
+            assert len(pool) == len(set(pool)) == int(data["pool_size"])
+            assert len(variants) == len({tuple(v) for v in variants})
+            assert all(len(v) == len(set(v)) == lot.pick_n and set(v) <= set(pool) for v in wheel)
+            cov = compute_coverage_pct(wheel, pool, guarantee, condition)
+            assert abs(cov - float(data["context"]["coverage_pct"])) < 1e-8
+            rp = audit.get("recent_penalty") or {}
+            # Geometria wheel-ului (garanție/condiție/plafon) trebuie in cheie
+            # EXACT ca in productie (_wf_generation_options din app_nicegui.py),
+            # altfel un job cu lotto design "t daca p" sau plafon de bilete
+            # calculeaza o cheie diferita de cea reala si raporteaza "fara cache"
+            # pe un cache care exista, sau — mai rau — citeste tacit cache-ul
+            # unei geometrii NEPOTRIVITE (default guarantee=guarantee).
+            max_variants = int(
+                data.get(
+                    "max_variants", (data.get("context") or {}).get("max_variants")
+                )
+                or 0
+            )
+            # Opțiunile de compoziție (bază restrânsă, limită de consecutive) din
+            # rezultat, ca la pornirea WF din UI; fără ele cheia ar citi tacit
+            # cache-ul configurației nerestrânse.
+            opts = app_ui._wf_generation_options(data)
+            sig = wf._decision_sig(
+                lot.geometry,
+                len(pool),
+                audit.get("lookback_pct") or 100,
+                rp.get("draws") or 0,
+                rp.get("factor", 0.5),
+                guarantee=guarantee,
+                wheel_condition=condition,
+                max_variants=max_variants,
+                restrict_base_max=opts["restrict_base_max"],
+                restrict_base_min=opts["restrict_base_min"],
+                max_consecutive_run=opts["max_consecutive_run"],
+                game_key=opts.get("game_key"),
+                country=opts.get("country"),
+            )
+            # Adâncimea intră în nume ca `float(...).hex()`, ca în
+            # `run_honest_walk_forward`; cu `30` simplu cheia nu se potrivea niciodată.
+            cache = wf._cache_path(
+                lot.geometry,
+                wf._csv_hash(source, lot.geometry),
+                len(pool),
+                float(app_ui.WF_DEPTH_PERCENT).hex(),
+                sig,
+                game_key=opts.get("game_key"),
+                country=opts.get("country"),
+            )
+            item = {
+                "game": game,
+                "pool": len(pool),
+                "variants": len(variants),
+                "coverage": cov,
+            }
+            if cache.exists():
+                cached = pickle_load_path(cache)
+                flat = cached["flat"]
+                per = audit_cached_hits(flat, source, lot, guarantee, condition)
+                assert len(per) == cached["n_test_draws"]
+                item["wf_draws_checked"] = len(per)
+                item["wf_records_checked"] = len(flat)
+                app_ui.STATE["retro"][f"{fname}_{game}"] = flat
+                app_ui.STATE["retro_meta"][f"{fname}_{game}"] = cached
+                with capture_ui() as ui:
+                    app_ui._render_hits_4plus(flat, game, cached, len(pool))
+                tables = [n for n in ui.walk() if n["kind"] == "table"]
+                assert len(tables[0]["kwargs"]["rows"]) == 2
+                item["wf"] = app_ui._wf_summary(flat, data)
+            else:
+                item["wf"] = "Nu există cache pentru configurația și istoricul curente"
+            with capture_ui() as ui:
+                app_ui._render_pool_body(fname, game, data)
+            assert "cover minim" not in ui.text()
+            summary.append(item)
+    return summary
+
+
+def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--report", type=Path)
+    args = parser.parse_args()
+    import logging
+
+    logging.getLogger().setLevel(logging.WARNING)
+    df = pd.read_csv(ROOT / "bench_results" / "folds.csv")
+    n = audit_rankings(df)
+    row, bundle = latest_bundle()
+    app_ui.STATE["results"] = bundle
+    sources = app_ui._result_sources_from_job(dict(row))
+    app_ui.STATE["result_sources"] = sources
+    summary = audit_bundle(bundle, sources)
+    report = app_ui._build_report()
+    assert "timesfm_predictions" not in report
+    assert "pure_bench_mode" not in report
+    if args.report:
+        atomic_write_text(args.report, report)
+    print(
+        json.dumps(
+            {
+                "rankings_verified": n,
+                "job": row["id"],
+                "completed_at": row["completed_at"],
+                "games": summary,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,184 @@
+"""Nicio metodă din registry nu are voie să fie un filtru structural deghizat.
+
+Un filtru (paritate, sume, decade, poziție) nu prezice un număr: împarte
+universul în câteva clase și dă aceeași valoare tuturor membrilor unei clase.
+Interdicția e o cerință a utilizatorului (AGENTS.md §13 P3), iar o metodă nouă
+scrisă neatent o poate încălca fără ca nimeni să observe — numele și docstring-ul
+spun altceva decât face codul. Testul măsoară comportamentul, nu intenția:
+
+  levels     — un filtru pur dă 2-3 nivele distincte de scor pe tot universul;
+  top_mass   — un filtru lasă un platou mare de numere la scor maxim;
+  class_R²   — cât din varianța scorului se explică prin apartenența la o clasă
+               structurală; ≈ 1 înseamnă că metoda ESTE acea clasă;
+  run        — pool-ul top-12 ieșit bloc consecutiv arată un scorer degenerat pe
+               axa valorilor (1,2,3…), nu semnal.
+
+Pragurile sunt largi cu bună știință: prind un filtru, nu o metodă care doar
+corelează slab cu o clasă (`neighbor_adjacent`, care scorează vecinii ±1/±2 ai
+ultimei extrageri, urcă legitim până pe la R² = 0,5 pe decade la 5/40).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from loto_enterprise.benchmark.methods import METHODS, call_method
+from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+
+HISTORY = 700  # suficient pentru ca fiecare metodă să iasă din ramurile de start
+MAX_NUM = 49
+COLS = [f"n{i}" for i in range(1, 7)]
+
+MIN_LEVELS = 5  # sub asta, scorul e o scară de clase, nu o ordonare
+MAX_TOP_MASS = MAX_NUM // 4  # platou de maxim pe un sfert din univers
+MAX_CLASS_R2 = 0.85  # scorul explicat aproape complet de o clasă structurală
+MAX_RUN = 8  # bloc consecutiv în pool-ul top-12
+
+
+@pytest.fixture(scope="module")
+def draws() -> np.ndarray:
+    df = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(HISTORY)
+    return df[COLS].to_numpy(dtype=np.int64)
+
+
+def _structural_classes(max_num: int) -> dict[str, np.ndarray]:
+    n = np.arange(1, max_num + 1)
+    primes = np.array(
+        [p for p in range(2, max_num + 1) if all(p % d for d in range(2, int(p**0.5) + 1))]
+    )
+    return {
+        "paritate": n % 2,
+        "decada": (n - 1) // 10,
+        "prim": np.isin(n, primes).astype(int),
+        "mod3": n % 3,
+        "mod5": n % 5,
+        "jumatate": (n > max_num // 2).astype(int),
+    }
+
+
+def _class_r2(vec: np.ndarray, labels: np.ndarray) -> float:
+    """R² al scorului explicat prin media clasei (varianță între clase / totală)."""
+    total = float(((vec - vec.mean()) ** 2).sum())
+    if total <= 1e-12:
+        return 1.0  # scor constant: „explicat" perfect de orice clasă
+    resid = sum(
+        float(((vec[labels == lab] - vec[labels == lab].mean()) ** 2).sum())
+        for lab in np.unique(labels)
+    )
+    return 1.0 - resid / total
+
+
+def _longest_run(nums: list[int]) -> int:
+    best = run = 1
+    for a, b in zip(sorted(nums), sorted(nums)[1:]):
+        run = run + 1 if b == a + 1 else 1
+        best = max(best, run)
+    return best
+
+
+@pytest.mark.parametrize("name", sorted(METHODS))
+def test_method_is_not_a_structural_filter(name: str, draws: np.ndarray) -> None:
+    if METHODS[name][1] == "experimental_interval":
+        # An explicitly labelled interval filter is measurable only in bench.
+        assert name in EXCLUDED_FROM_PRODUCTION
+        return
+    scores, _ = call_method(name, draws, MAX_NUM)
+    vec = np.array([scores.get(i + 1, 0.0) for i in range(MAX_NUM)], dtype=np.float64)
+    rounded = np.round(vec, 9)
+
+    levels = len(np.unique(rounded))
+    assert levels >= MIN_LEVELS, (
+        f"{name}: doar {levels} nivele distincte de scor — o scară de clase, nu o "
+        "ordonare a numerelor; pool-ul ar fi decis de tie-break, nu de metodă"
+    )
+
+    top_mass = int((rounded == rounded.max()).sum())
+    assert top_mass <= MAX_TOP_MASS, (
+        f"{name}: {top_mass} numere la scor maxim — platou de filtru, nu vârf de scorer"
+    )
+
+    for cls, labels in _structural_classes(MAX_NUM).items():
+        r2 = _class_r2(vec, labels)
+        assert r2 < MAX_CLASS_R2, (
+            f"{name}: {r2:.3f} din varianța scorului se explică prin clasa "
+            f"„{cls}” — metoda e de fapt acel filtru"
+        )
+
+    top12 = [int(x) + 1 for x in np.argsort(-vec, kind="stable")[:12]]
+    assert _longest_run(top12) < MAX_RUN, (
+        f"{name}: pool-ul top-12 conține un bloc consecutiv de {_longest_run(top12)} "
+        "numere — scorer degenerat pe axa valorilor"
+    )
+
+
+@pytest.fixture(scope="module")
+def urn2_draws() -> np.ndarray:
+    df = pd.read_csv("_ISTORIC/joker.csv").tail(HISTORY)
+    return df[["joker"]].to_numpy(dtype=np.int64)
+
+
+@pytest.mark.parametrize(
+    "name", sorted(set(METHODS) - set(EXCLUDED_FROM_PRODUCTION) - {"random"})
+)
+def test_production_method_follows_the_numbers_not_their_labels(
+    name: str, draws: np.ndarray, urn2_draws: np.ndarray
+) -> None:
+    """Reetichetarea numerelor mută scorul odată cu ele.
+
+    Un scorer care folosește doar istoricul dă numărului π(j) din istoricul
+    reetichetat scorul pe care j îl avea în cel original. Altfel scorul depinde
+    de eticheta numărului, adică de o poziție pe axa 1..N: exact ce nu poate
+    măsura `levels`/`class_R²` când preferința e ascunsă în departajarea
+    internă a metodei (`rank_ensemble_core`, audit 2026-10-07).
+    """
+    rng = np.random.default_rng(2026)
+    for history, max_num in ((draws, MAX_NUM), (urn2_draws, 20)):
+        perm = rng.permutation(max_num) + 1  # π(j) = perm[j - 1]
+        scores, _ = call_method(name, history, max_num)
+        moved, _ = call_method(name, perm[history - 1], max_num)
+        diff = max(abs(moved[int(perm[j - 1])] - scores[j]) for j in range(1, max_num + 1))
+        assert diff < 1e-9, (
+            f"{name}: scorul depinde de eticheta numerelor (Δ={diff:.2e}, "
+            f"max_num={max_num}) — o preferință pe axa 1..N, nu un semnal"
+        )
+
+
+def _urn2_repeat_share(name: str, histories: list[np.ndarray]) -> float:
+    from loto_enterprise.core.ranking import rank_by_score
+
+    hits = 0
+    for history in histories:
+        scores, _ = call_method(name, history, 20)
+        top = rank_by_score(scores, 1)
+        hits += bool(top) and top[0] == int(history[-1, 0])
+    return hits / len(histories)
+
+
+@pytest.fixture(scope="module")
+def uniform_urn2() -> list[np.ndarray]:
+    rng = np.random.default_rng(20261007)
+    return [rng.integers(1, 21, size=(200, 1)) for _ in range(100)]
+
+
+@pytest.mark.parametrize("name", sorted(set(METHODS) - {"random"}))
+def test_single_pick_scorer_is_not_the_previous_ball(name: str, uniform_urn2) -> None:
+    """Pe o urnă cu o bilă, top-1 nu are voie să fie de regulă bila precedentă.
+
+    Pe extrageri uniforme, la întâmplare top-1 repetă bila precedentă în 5% din
+    pași. O metodă care o face în majoritatea pașilor este clasa „ultima bilă"
+    (ca `haar_multiscale`), nu un clasament: e exclusă din producție pe urnele cu
+    o singură bilă (`EXCLUDED_FROM_SINGLE_PICK`).
+    """
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_SINGLE_PICK
+
+    share = _urn2_repeat_share(name, uniform_urn2)
+    excluded = name in EXCLUDED_FROM_PRODUCTION or name in EXCLUDED_FROM_SINGLE_PICK
+    if name in EXCLUDED_FROM_SINGLE_PICK:
+        assert share >= 0.5, f"{name}: {share:.0%} — excluderea nu mai e justificată"
+    if not excluded:
+        assert share < 0.5, (
+            f"{name}: top-1 repetă bila precedentă în {share:.0%} din pași pe "
+            "extrageri uniforme — clasa „ultima bilă”, nu un clasament"
+        )

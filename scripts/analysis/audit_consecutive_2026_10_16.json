@@ -1,0 +1,679 @@
+{
+  "history_sha256": "bf32020bcdb614b1252bbb321193ad6eabd33f71d51e4f747725938efe5d42d6",
+  "decision_sha256": "ee5eeaec4762da33f3f88d63aa2d26525cf052b6eb3fa1229b008c3fd74d011a",
+  "rows": 2593,
+  "last_date": "15-10-2026",
+  "uniform": {
+    "6": {
+      "total": 13983816,
+      "p_run_ge2": 0.4951984494075151,
+      "p_run_ge3": 0.04769613673406459,
+      "p_run_ge4": 0.003115029545583292,
+      "p_run_ge5": 0.00013844575758148459,
+      "expected_adjacent_pairs": 0.6122448979591837
+    },
+    "12": {
+      "total": 92263734836,
+      "p_run_ge2": 0.9706550449880165,
+      "p_run_ge3": 0.4082068356537476,
+      "p_run_ge4": 0.08800681058958992,
+      "p_run_ge5": 0.015777170343119762,
+      "expected_adjacent_pairs": 2.693877551020408
+    },
+    "16": {
+      "total": 3348108992991,
+      "p_run_ge2": 0.9993417294853263,
+      "p_run_ge3": 0.744580495927631,
+      "p_run_ge4": 0.27616584248740006,
+      "p_run_ge5": 0.07733541619554318,
+      "expected_adjacent_pairs": 4.8979591836734695
+    }
+  },
+  "current": {
+    "6": {
+      "method": [
+        [
+          "dmd_forecast",
+          1.0
+        ]
+      ],
+      "pool": [
+        6,
+        16,
+        25,
+        33,
+        35,
+        39
+      ],
+      "max_run": 1,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        6,
+        16,
+        25,
+        33,
+        35,
+        39
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    "7": {
+      "method": [
+        [
+          "dmd_forecast",
+          1.0
+        ]
+      ],
+      "pool": [
+        6,
+        11,
+        16,
+        25,
+        33,
+        35,
+        39
+      ],
+      "max_run": 1,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        6,
+        11,
+        16,
+        25,
+        33,
+        35,
+        39
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    "8": {
+      "method": [
+        [
+          "dmd_forecast",
+          1.0
+        ]
+      ],
+      "pool": [
+        6,
+        11,
+        16,
+        25,
+        33,
+        35,
+        39,
+        42
+      ],
+      "max_run": 1,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        6,
+        11,
+        16,
+        25,
+        33,
+        35,
+        39,
+        42
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    "9": {
+      "method": [
+        [
+          "logit_pooled_feats",
+          1.0
+        ]
+      ],
+      "pool": [
+        7,
+        14,
+        17,
+        23,
+        26,
+        32,
+        35,
+        39,
+        46
+      ],
+      "max_run": 1,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        7,
+        14,
+        17,
+        23,
+        26,
+        32,
+        35,
+        39,
+        46
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    "10": {
+      "method": [
+        [
+          "online_logit_sgd",
+          1.0
+        ]
+      ],
+      "pool": [
+        13,
+        14,
+        20,
+        23,
+        28,
+        30,
+        33,
+        39,
+        48,
+        49
+      ],
+      "max_run": 2,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        13,
+        14,
+        20,
+        23,
+        28,
+        30,
+        33,
+        39,
+        48,
+        49
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    "11": {
+      "method": [
+        [
+          "markov_self_state",
+          1.0
+        ]
+      ],
+      "pool": [
+        2,
+        4,
+        5,
+        6,
+        13,
+        15,
+        16,
+        23,
+        25,
+        33,
+        34
+      ],
+      "max_run": 3,
+      "unique_scores": 45,
+      "boundary_tie": false,
+      "limited_pool": [
+        2,
+        5,
+        6,
+        9,
+        13,
+        15,
+        16,
+        23,
+        25,
+        33,
+        34
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [
+            [
+              4,
+              4
+            ]
+          ],
+          "added": [
+            [
+              9,
+              12
+            ]
+          ]
+        }
+      }
+    },
+    "12": {
+      "method": [
+        [
+          "drift_linear",
+          1.0
+        ]
+      ],
+      "pool": [
+        5,
+        7,
+        12,
+        18,
+        19,
+        21,
+        23,
+        25,
+        32,
+        36,
+        42,
+        43
+      ],
+      "max_run": 2,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        5,
+        7,
+        12,
+        18,
+        19,
+        21,
+        23,
+        25,
+        32,
+        36,
+        42,
+        43
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    "13": {
+      "method": [
+        [
+          "markov_lag2",
+          1.0
+        ]
+      ],
+      "pool": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        12,
+        16,
+        20,
+        25,
+        33,
+        36,
+        48
+      ],
+      "max_run": 5,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        2,
+        3,
+        5,
+        6,
+        8,
+        12,
+        14,
+        16,
+        20,
+        25,
+        33,
+        36,
+        48
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [
+            [
+              4,
+              11
+            ]
+          ],
+          "added": [
+            [
+              14,
+              14
+            ]
+          ]
+        }
+      }
+    },
+    "14": {
+      "method": [
+        [
+          "online_logit_sgd",
+          1.0
+        ]
+      ],
+      "pool": [
+        10,
+        13,
+        14,
+        15,
+        20,
+        23,
+        24,
+        28,
+        30,
+        33,
+        39,
+        40,
+        48,
+        49
+      ],
+      "max_run": 3,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        10,
+        13,
+        14,
+        20,
+        23,
+        24,
+        28,
+        30,
+        32,
+        33,
+        39,
+        40,
+        48,
+        49
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [
+            [
+              15,
+              14
+            ]
+          ],
+          "added": [
+            [
+              32,
+              15
+            ]
+          ]
+        }
+      }
+    },
+    "15": {
+      "method": [
+        [
+          "markov_lag2",
+          1.0
+        ]
+      ],
+      "pool": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        12,
+        14,
+        15,
+        16,
+        20,
+        25,
+        33,
+        36,
+        48
+      ],
+      "max_run": 5,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        2,
+        3,
+        5,
+        6,
+        8,
+        12,
+        14,
+        16,
+        18,
+        20,
+        25,
+        32,
+        33,
+        36,
+        48
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [
+            [
+              4,
+              11
+            ],
+            [
+              15,
+              15
+            ]
+          ],
+          "added": [
+            [
+              18,
+              17
+            ],
+            [
+              32,
+              16
+            ]
+          ]
+        }
+      }
+    },
+    "16": {
+      "method": [
+        [
+          "markov_lag2",
+          1.0
+        ]
+      ],
+      "pool": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        12,
+        14,
+        15,
+        16,
+        20,
+        25,
+        32,
+        33,
+        36,
+        48
+      ],
+      "max_run": 5,
+      "unique_scores": 49,
+      "boundary_tie": false,
+      "limited_pool": [
+        2,
+        3,
+        5,
+        6,
+        8,
+        9,
+        12,
+        14,
+        16,
+        18,
+        20,
+        25,
+        32,
+        33,
+        36,
+        48
+      ],
+      "limit_audit": {
+        "consecutive_limit": {
+          "requested": 2,
+          "applied": 2,
+          "relaxed": false,
+          "removed": [
+            [
+              4,
+              11
+            ],
+            [
+              15,
+              15
+            ]
+          ],
+          "added": [
+            [
+              9,
+              18
+            ],
+            [
+              18,
+              17
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "replay": {
+    "method": "markov_lag2",
+    "n": 800,
+    "first_date": "20-12-2018",
+    "last_date": "15-10-2026",
+    "runs": {
+      "2": 95,
+      "3": 384,
+      "4": 190,
+      "5": 100,
+      "6": 25,
+      "7": 5,
+      "8": 1
+    },
+    "p_run_ge3": 0.88125,
+    "p_run_ge4": 0.40125,
+    "boundary_ties": 0,
+    "hits_raw": {
+      "4": 65,
+      "5": 12,
+      "1": 226,
+      "0": 61,
+      "2": 265,
+      "3": 171
+    },
+    "hits_limited": {
+      "3": 168,
+      "4": 59,
+      "0": 65,
+      "1": 230,
+      "2": 270,
+      "5": 8
+    },
+    "note": "Current scorer selected on all available history and fixed retrospectively; descriptive only, not a holdout. Temporal pools strongly overlap. The relabelling p-value concerns numeric clustering, not predictive advantage.",
+    "relabel_null": {
+      "replicates": 5000,
+      "seed": 20261016,
+      "run3_mean": 0.742281,
+      "run3_95pct": [
+        0.56246875,
+        0.90375
+      ],
+      "run3_upper_p": 0.0595880823835233,
+      "run4_mean": 0.27535575,
+      "run4_95pct": [
+        0.12996875000000002,
+        0.5000312499999996
+      ],
+      "run4_upper_p": 0.10957808438312337
+    }
+  },
+  "draw_runs": {
+    "all": {
+      "2": 1164,
+      "3": 114,
+      "1": 1306,
+      "4": 9
+    },
+    "last800": {
+      "2": 351,
+      "4": 2,
+      "1": 411,
+      "3": 36
+    }
+  },
+  "verification": {
+    "exact_dp_brute_force_cases": 20,
+    "historical_run_checks": 2593,
+    "relabel_cases": 300,
+    "max_score_error": 8.881784197001252e-16,
+    "independent_markov_formula_cases": 40,
+    "input_unchanged": true
+  }
+}

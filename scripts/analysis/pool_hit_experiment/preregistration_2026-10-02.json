@@ -1,0 +1,155 @@
+{
+  "registered": "2026-10-02",
+  "code_base_commit": "b1b9ee4",
+  "warmup": 200,
+  "meta_window": 300,
+  "meta_top": 5,
+  "dev_fraction": 0.7,
+  "alpha": 0.05,
+  "correction": "holm",
+  "test": "exact one-sided binomial vs hypergeometric rate",
+  "candidates": [
+    "C1_meta_best",
+    "C2_borda_all",
+    "C3_dev_best",
+    "C4_meta_top5_borda"
+  ],
+  "cells": [
+    [
+      "ext_645_k6",
+      6,
+      3
+    ],
+    [
+      "ext_645_k12",
+      12,
+      3
+    ],
+    [
+      "ext_649_k6",
+      6,
+      3
+    ],
+    [
+      "ext_649_k12",
+      12,
+      3
+    ],
+    [
+      "ro_649_k6",
+      6,
+      3
+    ],
+    [
+      "ro_649_k12",
+      12,
+      3
+    ],
+    [
+      "ro_joker_k11",
+      11,
+      3
+    ],
+    [
+      "ro_540_k11",
+      11,
+      4
+    ]
+  ],
+  "methods": [
+    "anti_cooc_last",
+    "ar_ls_pooled",
+    "autocorr_lag",
+    "cooc_last3",
+    "croston_interval",
+    "cusum_burst",
+    "dmd_forecast",
+    "drift_linear",
+    "ewma_cold_hl30",
+    "ewma_hl30",
+    "freq_window_200",
+    "freq_window_50",
+    "frequency",
+    "gap_current",
+    "gap_hazard",
+    "gap_ratio",
+    "gbm_stumps_pooled",
+    "hawkes_cross",
+    "holt_forecast",
+    "hot_consistency",
+    "hurst_persistence",
+    "imapa_agg",
+    "knn_draw_similarity",
+    "knn_feature_pooled",
+    "knn_pattern_self",
+    "logit_pooled_feats",
+    "markov_lag2",
+    "markov_pairs",
+    "markov_self_state",
+    "momentum_30_300",
+    "naive_bayes_last",
+    "nb_lags_pooled",
+    "online_logit_sgd",
+    "pagerank_cooc",
+    "pair_lift_last",
+    "pair_transition",
+    "rank_ensemble_core",
+    "rhythm_phase",
+    "ridge_pooled_feats",
+    "runs_persistence",
+    "season_period2",
+    "ses_opt_alpha",
+    "spectral_phase",
+    "ssa_forecast",
+    "theta_drift",
+    "vlmm_self_k3",
+    "weighted_recent_linear"
+  ],
+  "datasets": {
+    "ro_649": {
+      "file": "_ISTORIC/loto_6_49.csv",
+      "rows": 2589,
+      "prefix_sha256": "f55fde7e883ccc8b0100eb2f6525896cf5b1eb2044b4efe29791132a6163b967"
+    },
+    "ro_540": {
+      "file": "_ISTORIC/loto_5_40.csv",
+      "rows": 1740,
+      "prefix_sha256": "8408b5d1e1ada22d125d85b3d4cfcb81dce871c874811dafc536f3ab3b411a47"
+    },
+    "ro_joker": {
+      "file": "_ISTORIC/joker.csv",
+      "rows": 2192,
+      "prefix_sha256": "4f89fab6717545f7fb1cca05ef004d58f222906869ea97bb5700dac79e252bea"
+    },
+    "at_645": {
+      "file": "_ISTORIC/externe/austria_lotto_6aus45.csv",
+      "rows": 3687,
+      "prefix_sha256": "7be3b356c344e56d71dfc28dc9d20374825db9ad4c6429cc6521cbaf21645927"
+    },
+    "be_645": {
+      "file": "_ISTORIC/externe/belgia_lotto_6din45.csv",
+      "rows": 1566,
+      "prefix_sha256": "ac91f8f3fc08f5ec99217acf3389bbbd1a54732553b469d89024a1d12185f154"
+    },
+    "hu_645": {
+      "file": "_ISTORIC/externe/ungaria_hatoslotto_6din45.csv",
+      "rows": 1852,
+      "prefix_sha256": "2786c4044e56390b13029945a94f9dededa9dd626e7f3c8b1d71ff8af30e7f35"
+    },
+    "cz_649": {
+      "file": "_ISTORIC/externe/cehia_sportka_6din49.csv",
+      "rows": 7624,
+      "prefix_sha256": "bf67ef757e2af1d3eb80ee79c1cb4f0c0cbc7d6a4bfaf24f29b59c8f99d3ee7f"
+    },
+    "sk_649": {
+      "file": "_ISTORIC/externe/slovacia_loto_6din49.csv",
+      "rows": 5168,
+      "prefix_sha256": "ee28c3e886059dae87c40b394fc263f8febfa8681ff0cfe6b621aefac0f56df9"
+    },
+    "bg_649": {
+      "file": "_ISTORIC/externe/bulgaria_toto2_6din49.csv",
+      "rows": 703,
+      "prefix_sha256": "26edbe6e1a00f5c0eeaac0d2cf153f71a52e89f9159908c3782c5aa35c91639c"
+    }
+  }
+}

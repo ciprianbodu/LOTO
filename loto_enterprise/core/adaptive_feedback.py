@@ -1,0 +1,315 @@
+"""
+Adaptive Feedback Engine — telemetrie persistentă post-extragere.
+
+Sistemul detectează catastrofe (0 hituri din pool), sub-performanță (1 hit) și
+regime mismatch (sub-performanță susținută în fereastră rolling) — evenimente
+și mod (`active_mode`) afișate în audit/UI ca istoric, fără să ajusteze scorul
+vreunui număr. (Până la eliminarea lui — verificare globală 2026-09-07 — modulul
+calcula și un `error_correction_map`, un multiplicator per număr menit să
+amplifice/penalizeze scorul la predicția următoare; nu era însă niciodată citit
+de pipeline-ul de scoring, deci n-a influențat vreodată vreun pool generat.)
+
+State persistat în `adaptive_state.json` (la rădăcina proiectului), keyed pe
+`{game_type}_{pool_size}` — consistent cu `pool_history.json`.
+
+Evenimente clasificate:
+    * "normal"        — pool a obținut >=2 hituri (peste baseline-ul aleator)
+    * "underperf"     — exact 1 hit (sub baseline)
+    * "catastrophe"   — 0 hituri (pierdere totală — semnal de regim greșit)
+    * "regime_reset"  — fereastră rolling sub baseline aleator pentru >=N
+                        extrageri => regimul curent al modelului e nepotrivit
+                        (raportat ca `active_mode = "reset"`, telemetrie).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime
+from pathlib import Path
+
+from loto_enterprise.core.lotteries import GEOMETRIES
+
+logger = logging.getLogger(__name__)
+
+# Locația fișierului de stare. Rădăcina proiectului = trei niveluri mai sus față
+# de acest modul (loto_enterprise/core/adaptive_feedback.py -> .. -> .. -> root)
+_STATE_FILE = Path(__file__).resolve().parent.parent.parent / "adaptive_state.json"
+
+# Lungimea ferestrei rolling pentru detecția regime mismatch
+_ROLLING_WINDOW = 5
+
+# Pragul de underperformance pentru trigger reset: rolling avg trebuie să fie
+# sub `baseline * (1 - threshold)` pentru a declanșa.
+# 0.25 înseamnă că rolling avg < 75% din baseline (pentru Joker: < 1.0 hits).
+_REGIME_UNDERPERF_THRESHOLD = 0.25
+
+# Numărul minim de catastrofe consecutive pentru auto-trigger reset.
+# Anterior era 2. Mărit la 3 pentru a evita reseturi pe varianță naturală
+# (P(2 catastrofe consecutive Joker) ≈ 3.8%, P(3) ≈ 0.7%).
+_REGIME_STREAK_THRESHOLD = 3
+
+# Numărul maxim de extrageri în care rămânem în mod reset.
+# După acest prag revenim automat la normal — evităm să rămânem blocați în
+# reset când acesta nu produce îmbunătățiri (descoperit empiric: reset
+# performa mai prost decât normal pe ferestre lungi).
+_REGIME_MAX_DURATION = 5
+
+# Lungimea istoricului păstrat per cheie (rolling buffer)
+_HISTORY_MAXLEN = 50
+
+# (draw_n, max_n) per joc — pentru E(hits) al unui pool ales la întâmplare.
+_GAME_GEOMETRY = {
+    "6/49": (6, 49),
+    "5/40": (6, 40),  # 6 numere extrase; hiturile se numără pe toate 6
+    "joker": (5, 45),
+}
+# Geometriile celorlalte țări (6/45, 5/50), din registru.
+for _name, _geo in GEOMETRIES.items():
+    _GAME_GEOMETRY.setdefault(_name, (_geo.draw_n, _geo.max_n))
+
+
+def _baseline_random_hits(game_type: str, pool_size: int) -> float:
+    """Numărul AȘTEPTAT de hituri pe pool ales la întâmplare: E(hits) =
+    draw_n * pool_size / max_n."""
+    draw_n, max_n = _GAME_GEOMETRY.get(game_type, (6, 49))
+    return draw_n * pool_size / max_n
+
+
+def _state_key(game_type: str, pool_size: int, key_prefix: str = "") -> str:
+    """`6/49_12` pentru România; `DE_de_lotto_6/49_12` pentru alt joc (prefixul
+    vine din registru, `Lottery.history_key_prefix`), ca jocurile de aceeași
+    geometrie să nu-și suprascrie starea."""
+    return f"{key_prefix}{game_type}_{pool_size}"
+
+
+def _empty_entry() -> dict:
+    return {
+        "last_pool": [],
+        "last_pool_date": None,  # ISO timestamp al momentului predicției
+        "last_data_rows": 0,  # nr. rânduri din CSV când s-a făcut predicția
+        "history": [],  # listă dict {date, pool_hits, actual, event}
+        "regime_state": {
+            "streak_zero": 0,
+            "rolling_avg": None,
+            "last_reset": None,
+            "active_mode": "normal",  # "normal" | "reset"
+            "reset_duration": 0,  # nr. extrageri în care suntem în reset
+        },
+    }
+
+
+def load_adaptive_state(
+    game_type: str, pool_size: int, *, key_prefix: str = ""
+) -> dict:
+    """Încarcă starea adaptivă pentru combinația (game_type, pool_size)."""
+    if not _STATE_FILE.exists():
+        return _empty_entry()
+    try:
+        raw = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning(f"[ADAPTIVE] Nu pot citi {_STATE_FILE}: {e}. Pornesc gol.")
+        return _empty_entry()
+
+    entry = raw.get(_state_key(game_type, pool_size, key_prefix))
+    if not entry:
+        return _empty_entry()
+
+    base = _empty_entry()
+    base.update(entry)
+    base["regime_state"] = {**base["regime_state"], **entry.get("regime_state", {})}
+    return base
+
+
+def save_adaptive_state(
+    game_type: str, pool_size: int, entry: dict, *, key_prefix: str = ""
+) -> None:
+    """Salvează starea adaptivă pe disc. Read-modify-write atomic + lock advisory
+    cross-proces (worker vs UI) ca să nu se piardă update-uri pe alte chei."""
+    serializable = {
+        "last_pool": [int(n) for n in entry.get("last_pool", [])],
+        "last_pool_date": entry.get("last_pool_date"),
+        "last_data_rows": int(entry.get("last_data_rows", 0)),
+        "history": entry.get("history", [])[-_HISTORY_MAXLEN:],
+        "regime_state": entry.get("regime_state", {}),
+    }
+    try:
+        from ui_shared import atomic_write_json, file_lock
+
+        with file_lock(_STATE_FILE):
+            raw: dict = {}
+            if _STATE_FILE.exists():
+                try:
+                    raw = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+                except Exception as e:
+                    logger.warning(
+                        f"[ADAPTIVE] Eroare citire {_STATE_FILE}: {e}. Voi suprascrie."
+                    )
+                    raw = {}
+            raw[_state_key(game_type, pool_size, key_prefix)] = serializable
+            atomic_write_json(_STATE_FILE, raw)  # atomic: tmp+fsync+os.replace
+    except Exception as e:
+        logger.error(f"[ADAPTIVE] Nu pot scrie {_STATE_FILE}: {e}")
+
+
+def classify_event(pool_hits: int) -> str:
+    """Clasifică un rezultat în normal / underperf / catastrophe."""
+    if pool_hits == 0:
+        return "catastrophe"
+    if pool_hits == 1:
+        return "underperf"
+    return "normal"
+
+
+def detect_regime_mismatch(
+    history: list[dict],
+    game_type: str,
+    pool_size: int,
+    window: int = _ROLLING_WINDOW,
+    threshold: float = _REGIME_UNDERPERF_THRESHOLD,
+) -> tuple[bool, float]:
+    """
+    Detectează regime mismatch — fereastră rolling cu media hiturilor pool
+    SEMNIFICATIV sub baseline-ul aleator.
+
+    Triggerează doar când rolling avg < baseline * (1 - threshold). Asta
+    elimină false positives din varianța naturală (rolling avg poate fluctua
+    sub baseline simplu doar din întâmplare).
+
+    Returnează: (is_mismatch, rolling_avg)
+    """
+    if len(history) < window:
+        return False, _baseline_random_hits(game_type, pool_size)
+
+    recent = history[-window:]
+    avg = sum(int(h.get("pool_hits", 0)) for h in recent) / float(window)
+    baseline = _baseline_random_hits(game_type, pool_size)
+    cutoff = baseline * (1.0 - threshold)
+    return (avg < cutoff), avg
+
+
+def _advance_regime_mode(
+    prev_mode: str, reset_duration: int, should_reset: bool
+) -> tuple[str, int]:
+    """Tranziția stării de regim (normal <-> reset).
+
+    Ieșire forțată la normal dacă am petrecut deja `_REGIME_MAX_DURATION`
+    extrageri consecutive în reset — indiferent dacă `should_reset` mai e
+    adevărat, ca să nu rămânem blocați într-un regim care nu ajută."""
+    if prev_mode == "reset" and reset_duration >= _REGIME_MAX_DURATION:
+        return "normal", 0
+    if should_reset:
+        next_duration = reset_duration + 1 if prev_mode == "reset" else 1
+        return "reset", next_duration
+    return "normal", 0
+
+
+def compute_post_draw_feedback(
+    last_pool: list[int],
+    actual_draw: list[int],
+    history: list[dict] | None = None,
+    game_type: str = "6/49",
+    pool_size: int = 12,
+    streak_zero: int = 0,
+    prev_mode: str = "normal",
+    reset_duration: int = 0,
+) -> tuple[str, dict[str, object]]:
+    """
+    Clasifică rezultatul unei extrageri reale (catastrofă/underperf/normal) și
+    actualizează detecția de regim (streak de catastrofe, fereastră rolling).
+
+    Args:
+        last_pool: pool-ul prezis pentru extragerea CURENTĂ (numerele jucate)
+        actual_draw: numerele care AU IEȘIT efectiv
+        history: istoricul pool_hits din extragerile anterioare (pentru regime)
+        game_type, pool_size: pentru calculul baseline-ului
+        streak_zero: numărul de catastrofe consecutive (din regime_state)
+        prev_mode: modul activ la pasul anterior ("normal" | "reset")
+        reset_duration: nr. extrageri consecutive în care am fost în reset
+
+    Returns:
+        (event_type, regime_info)
+    """
+    pool_set: set[int] = {int(n) for n in last_pool}
+    actual_set: set[int] = {int(n) for n in actual_draw}
+    pool_hits = len(pool_set & actual_set)
+
+    event = classify_event(pool_hits)
+    missed = sorted(actual_set - pool_set)
+    false_positives = sorted(pool_set - actual_set)
+
+    streak_zero = streak_zero + 1 if event == "catastrophe" else 0
+
+    # Regime detection (semnificativ sub baseline, nu doar sub)
+    hist_for_check = [*(history or []), {"pool_hits": pool_hits}]
+    is_mismatch, rolling_avg = detect_regime_mismatch(
+        hist_for_check, game_type, pool_size
+    )
+
+    # Trigger reset: streak >= THRESHOLD SAU mismatch detectat.
+    should_reset = streak_zero >= _REGIME_STREAK_THRESHOLD or is_mismatch
+    active_mode, new_reset_duration = _advance_regime_mode(
+        prev_mode, reset_duration, should_reset
+    )
+    if active_mode == "reset" and event != "catastrophe":
+        event = "regime_reset"
+
+    regime_info = {
+        "pool_hits": pool_hits,
+        "rolling_avg": rolling_avg,
+        "baseline": _baseline_random_hits(game_type, pool_size),
+        "streak_zero": streak_zero,
+        "active_mode": active_mode,
+        "reset_duration": new_reset_duration,
+        "missed": missed,
+        "false_positives": false_positives,
+        "is_mismatch": is_mismatch,
+        "evaluated_pool": sorted(
+            int(x) for x in pool_set
+        ),  # pool-ul pe care s-a calculat feedback (folosit pentru temp_blacklist)
+    }
+
+    return event, regime_info
+
+
+def record_predicted_pool(
+    game_type: str,
+    pool_size: int,
+    pool: list[int],
+    data_rows: int = 0,
+    pool_date: str | None = None,
+    *,
+    key_prefix: str = "",
+) -> None:
+    """Marchează pool-ul curent prezis ca fiind cel asupra căruia se va aplica
+    feedback la următoarea extragere reală.
+
+    data_rows: numărul de rânduri din CSV la momentul predicției (folosit pentru
+    a detecta extrageri noi la rularea următoare).
+    """
+    state = load_adaptive_state(game_type, pool_size, key_prefix=key_prefix)
+    state["last_pool"] = [int(n) for n in pool]
+    state["last_pool_date"] = pool_date or datetime.now().isoformat(timespec="seconds")
+    state["last_data_rows"] = int(data_rows)
+    save_adaptive_state(game_type, pool_size, state, key_prefix=key_prefix)
+
+
+def get_state_summary(game_type: str, pool_size: int, *, key_prefix: str = "") -> dict:
+    """
+    Sumar pentru UI: ultimele evenimente, ajustări active, mod regim.
+    """
+    state = load_adaptive_state(game_type, pool_size, key_prefix=key_prefix)
+    history = state.get("history", [])
+    last = history[-1] if history else None
+    regime_state = state.get("regime_state", {})
+
+    return {
+        "last_event": last.get("event") if last else None,
+        "last_hits": last.get("pool_hits") if last else None,
+        "last_date": last.get("date") if last else None,
+        "active_mode": regime_state.get("active_mode", "normal"),
+        "streak_zero": regime_state.get("streak_zero", 0),
+        "rolling_avg": regime_state.get("rolling_avg"),
+        "baseline": _baseline_random_hits(game_type, pool_size),
+        "history_size": len(history),
+    }

@@ -1,0 +1,316 @@
+"""Cache pe disc pentru fold-urile de benchmark.
+
+Un fold calculat se reutilizează cât timp nu se schimbă nimic din cheia lui:
+versiunea cache-ului, `csv_hash` (extragerile plus cutoff-urile de antrenare),
+jocul, metoda, percentila, `is_random` și sufixele de variantă (`bs`, `seed`).
+Un Re-Bench pe același istoric și același motor e servit din cache; o extragere
+nouă schimbă `csv_hash` și recalculează fold-urile afectate.
+
+Folosire: vezi `runner.run_benchmark` (apelurile `get_cached_fold` /
+`store_cached_fold`). `purge_stale_fold_cache` șterge fold-urile de versiuni
+vechi (apelat din ACTUALIZARI.bat prin `cleanup_residual.py`).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import time
+from dataclasses import MISSING, fields, is_dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path
+from runtime_paths import RUNTIME_ROOT
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_cache_dir() -> Path:
+    """Cache-ul stă ÎN AFARA OneDrive (ca .venv) — altfel zeci de mii de fișiere mici
+    se sincronizează degeaba și pot fi corupte la sync parțial.
+
+    Derivat din `runtime_paths.RUNTIME_ROOT` (LOTO_RUNTIME_DIR / D:\\_BUILD\\_LOTO
+    / rădăcina proiectului ca fallback), NU un resolver propriu: înainte, un
+    apelant care importa `bench_cache` fără să fi importat deja `runtime_paths`
+    (deci fără garanția lui `mkdir`) putea cădea tăcut pe `.bench_cache` RELATIV
+    la CWD — chiar în checkout-ul sincronizat de OneDrive, exact ce funcția asta
+    trebuie să evite. `LOTO_BENCH_CACHE_DIR` rămâne override SPECIFIC cache-ului
+    de benchmark, separat de `LOTO_RUNTIME_DIR` (care mută loguri + cache WF)."""
+    env = os.environ.get("LOTO_BENCH_CACHE_DIR", "").strip()
+    if env:
+        return Path(env).expanduser()
+    return RUNTIME_ROOT / ".bench_cache"
+
+
+CACHE_DIR = _resolve_cache_dir()
+CACHE_VERSION = "v22"
+# v22: `rank_ensemble_core` dă rangul mediu la egalitate; rangul după poziție
+#      favoriza numerele mai mari (audit 2026-10-07). Scorurile metodei se schimbă.
+# v21: Loto 5/40 = 6 numere extrase (n1..n6, hituri pe toate 6), bilet de 5.
+# v20: SES pornește din x_0 pe toată seria (`_ses_series`), nu doar la primul
+#      pas; `theta_drift` scorează prognoza liniară a ratei glisante, nu media
+#      indicatorului. Se schimbă `ses_opt_alpha`, `imapa_agg` și `theta_drift`.
+# v19: `knn_pattern_self` și `knn_feature_pooled` primesc tie-break pe frecvență
+#      (media a k ținte binare are doar k+1 nivele; pe 6/49 jumătate din pool era
+#      decisă de „cel mai mare număr dintre cele egale", nu de metodă). Scorurile
+#      celor două metode se schimbă → fold-urile v18 pentru ele sunt stale.
+#      În aceeași versiune, `alternating_parity` → `season_period2` (redenumire;
+#      alias în METHOD_ALIASES, deci deciziile salvate se rezolvă mai departe).
+# v18: chronological loading and strict earlier-day training boundaries.
+# Changelog (cea mai nouă prima; bump = invalidare TOTALĂ, re-bench complet).
+# v17: FoldResult scrie tiebreak_kN (fracția blocurilor în care tăietura top-K
+#      cade într-un grup de scoruri egale); decizia exclude metodele cu fracție
+#      ≥ decision.TIEBREAK_MAX_FRACTION ca dependente de tie-break, nu de scor.
+#      Fold-urile v16 nu au coloana → poarta nu se aplică pe folds.csv vechi
+#      (decision.tiebreak_gate_applied = False), nu e o eroare.
+# v16: benchmark-ul respinge scorurile plate/ne-numerice/ne-finite la fel ca
+#      selectorul si engine-ul; fold-urile v15 puteau evalua un tie-break fictiv.
+# v15: FoldResult scrie rate_1plus[_k1] şi Urna 2 intră în benchmark cu
+#      metrica top-1. Cache-urile v14 nu au coloana cerută de decizie.
+# ⚠️ De la v13 numele fișierului începe cu versiunea (`v13_<hash>.pkl`) → straturile
+# vechi pot fi curățate selectiv cu `purge_stale_fold_cache()`.
+# v14: toate traseele (engine, WF, bench) validează identic o extragere: exact
+#      draw_n întregi distincți în interval. Un istoric corupt nu mai poate fi
+#      evaluat diferit de producție, deci fold-urile v13 pot fi stale.
+# v13: denominatori UNIFICAȚI în _evaluate_fold — hits_per_pool[_bl]/avg_hits_topk
+#      împart la n_eval (extrageri efectiv evaluate), nu la n_test; + câmp nou
+#      FoldResult.n_eval (folosit de Wilson-ul din decision/UI). Valorile din folds
+#      se schimbă la metode parțial eșuate → cache-ul v12 e stale.
+# v12: parity_balance + 649_parity_recent: tie-break pe frecvență (nu mai degenera
+#      la „cele mai MARI pare/impare" via rank_by_score pe 2 nivele).
+# v11: score_sum_affinity nu mai e gaussiană pe |k − medie/n| (Joker top-11 era
+#      MEREU 18–28 consecutiv). Scorul e masa de extrageri cu sumă tipică care
+#      conțin k — output-ul metodei se schimbă, cache-ul v10 e stale.
+# v10: tie-break unificat + ponderi engine + registry fără duplicatul 649_top_autocorr (alias → autocorr).
+# v9:  prime_bias + frecvență (nu mai degenera la „cele mai mici compuse”).
+# v8:  nefolosită (sărită la bump-ul v7→v9).
+# v7:  top649 649_katz12_gap88 (12% Katz + 88% gap_poisson).
+# v6:  nefolosită (sărită).
+# v5:  nefolosită (sărită).
+# v4:  metodele graf folosesc graf de ASOCIERE (lift centrat) în loc de co-apariție brută.
+# v3:  FoldResult are rate_3plus / rates_3plus_per_pool (target 3+/4+ configurabil).
+# v2:  versiunea inițială.
+INDEX_FILE = CACHE_DIR / "index.json"
+
+
+# ---------------------------------------------------------------------------
+# Hashing
+# ---------------------------------------------------------------------------
+
+
+def compute_csv_hash(draws_2d: np.ndarray) -> str:
+    """Hash al continutului array-ului — stabil intre rulari."""
+    body = draws_2d.tobytes()
+    return hashlib.md5(body).hexdigest()[:16]
+
+
+# Parametrii de rulare care SCHIMBĂ rezultatul unui fold dar nu erau în cheie:
+# block_size (cadența de re-scoring din _evaluate_fold) și seed-ul (doar foldurile
+# is_random). Fără ei, `--block-size 1` sau `--seed X` primeau CACHE HIT pe
+# foldurile rulate cu valorile default — rezultate stale servite TĂCUT.
+# Cheile se schimbă DOAR la valori non-default, ca tot cache-ul istoric
+# (rulat mereu cu default-urile) să rămână valid.
+# Valoarea de bază ISTORICĂ a cheii (bench-urile vechi score-once-per-fold au
+# fost stocate fără sufix). O păstrăm ca sentinel de compatibilitate chiar dacă
+# runner/CLI folosesc acum implicit block_size=1: acesta primește sufixul ``bs1``
+# și nu poate primi accidental cache-ul vechi, nealiniat cu walk-forward-ul UI.
+_DEFAULT_BLOCK_SIZE = 99999
+_DEFAULT_SEED = 1234
+_CACHE_VARIANT = {"block_size": _DEFAULT_BLOCK_SIZE, "seed": _DEFAULT_SEED}
+
+
+def set_cache_variant(block_size: int, random_seed: int) -> None:
+    """Setat de runner la începutul rulării (per proces principal)."""
+    _CACHE_VARIANT["block_size"] = int(block_size)
+    _CACHE_VARIANT["seed"] = int(random_seed)
+
+
+def _fold_key(
+    csv_hash: str, method: str, percentile: int, game_key: str, is_random: bool
+) -> str:
+    raw = (
+        f"{CACHE_VERSION}::{csv_hash}::{game_key}::{method}::{percentile}::{is_random}"
+    )
+    if _CACHE_VARIANT["block_size"] != _DEFAULT_BLOCK_SIZE:
+        raw += f"::bs{_CACHE_VARIANT['block_size']}"
+    if is_random and _CACHE_VARIANT["seed"] != _DEFAULT_SEED:
+        raw += f"::seed{_CACHE_VARIANT['seed']}"
+    # Prefixul de VERSIUNE in NUMELE fisierului (nu doar in hash): altfel
+    # fisierele unei versiuni vechi devin permanent inaccesibile la un bump, dar
+    # raman pe disc la nesfarsit si nimic nu le poate identifica selectiv (numele
+    # era un hash opac). Masurat inainte de schimbare: 47.889 fisiere / 49 MB in
+    # .bench_cache, din care doar 1.032 apartineau versiunii curente.
+    return f"{CACHE_VERSION}_{hashlib.md5(raw.encode()).hexdigest()[:20]}"
+
+
+# ---------------------------------------------------------------------------
+# Disk cache I/O
+# ---------------------------------------------------------------------------
+
+
+def _ensure_cache_dir():
+    CACHE_DIR.mkdir(exist_ok=True, parents=True)
+
+
+def get_cached_fold(
+    csv_hash: str,
+    method: str,
+    percentile: int,
+    game_key: str,
+    is_random: bool = False,
+    expected_pools: "set[str] | None" = None,
+) -> Any | None:
+    """Return cached FoldResult or None.
+
+    `expected_pools` = mulțimea de chei `kN` pe care GameDef-ul CURENT le cere
+    (derivate din draw_n + pool_extra). Cheia de cache NU conține geometria
+    jocului, deci un fold calculat cu alt `pool_extra` se potrivea pe cheie și
+    era servit TRUNCHIAT — de acolo coloanele all-NaN `k5`/`k20` într-un
+    folds.csv asamblat din faze de bench diferite. Validăm la CITIRE (nu prin
+    cheie) tocmai ca să prindem și intrările vechi deja otrăvite, fără să
+    invalidăm tot cache-ul existent."""
+    _ensure_cache_dir()
+    key = _fold_key(csv_hash, method, percentile, game_key, is_random)
+    f = CACHE_DIR / f"{key}.pkl"
+    if not f.exists():
+        return None
+    try:
+        obj = pickle_load_path(f)
+        # Backfill câmpuri noi adăugate în FoldResult DUPĂ ce s-a scris cache-ul
+        # (ex. `family`) — altfel asdict()/acces atribut crapă pe obiecte vechi.
+        if is_dataclass(obj):
+            for fld in fields(obj):
+                if not hasattr(obj, fld.name):
+                    if fld.default is not MISSING:
+                        setattr(obj, fld.name, fld.default)
+                    elif fld.default_factory is not MISSING:  # type: ignore[misc]
+                        setattr(obj, fld.name, fld.default_factory())  # type: ignore[misc]
+                    else:
+                        setattr(obj, fld.name, None)
+        # Validare de GEOMETRIE: dacă fold-ul cache-uit nu acoperă exact pool-urile
+        # cerute de GameDef-ul curent, e dintr-o altă configurație → cache MISS
+        # (recalculăm) în loc să scriem un rând trunchiat în folds.csv.
+        if expected_pools:
+            got = set((getattr(obj, "hits_per_pool", None) or {}).keys())
+            if got and got != set(expected_pools):
+                logger.warning(
+                    "[bench_cache] %s/%s pct=%s: fold cache-uit are pool-urile %s, "
+                    "dar jocul cere %s — îl ignor și recalculez.",
+                    game_key,
+                    method,
+                    percentile,
+                    sorted(got),
+                    sorted(expected_pools),
+                )
+                return None
+        return obj
+    except Exception as exc:
+        # warning, nu debug: fisierul e sters chiar dupa asta, deci logul e
+        # singura urma ca ceva n-a mers (nu doar autovindecare banala).
+        logger.warning(f"[bench_cache] failed to load {f.name}: {exc}")
+        try:
+            f.unlink()  # corrupted; remove
+        except Exception:
+            pass
+        return None
+
+
+def store_cached_fold(
+    csv_hash: str,
+    method: str,
+    percentile: int,
+    game_key: str,
+    is_random: bool,
+    result: Any,
+) -> None:
+    _ensure_cache_dir()
+    key = _fold_key(csv_hash, method, percentile, game_key, is_random)
+    f = CACHE_DIR / f"{key}.pkl"
+    try:
+        pickle_store_path(f, result)
+    except Exception as exc:
+        logger.warning(f"[bench_cache] failed to write {f.name}: {exc}")
+
+
+def cache_stats() -> dict[str, int]:
+    """Return number of cached folds + total disk size."""
+    _ensure_cache_dir()
+    files = list(CACHE_DIR.glob("*.pkl"))
+    total_bytes = sum(f.stat().st_size for f in files)
+    return {
+        "n_folds_cached": len(files),
+        "size_mb": round(total_bytes / 1024 / 1024, 2),
+    }
+
+
+def purge_stale_fold_cache(dry_run: bool = True) -> dict:
+    """Sterge foldurile cache-uite ale ALTOR versiuni decat `CACHE_VERSION`.
+
+    La un bump de versiune, fisierele vechi devin PERMANENT inaccesibile
+    (`_fold_key` include versiunea), dar ramaneau pe disc — un strat nou la
+    fiecare bump. Analogul lui `walk_forward_adapter.purge_stale_wf_cache`.
+    Fisierele versiunii CURENTE nu sunt atinse niciodata; cele fara prefix de
+    versiune sunt de dinaintea acestei scheme, deci si ele inaccesibile.
+
+    dry_run=True (implicit) doar raporteaza. Returneaza
+    {'version', 'kept', 'stale', 'stale_mb', 'deleted'}.
+    """
+    _ensure_cache_dir()
+    prefix = f"{CACHE_VERSION}_"
+    kept = stale = deleted = 0
+    stale_bytes = 0
+    for f in CACHE_DIR.glob("*.pkl"):
+        if f.name.startswith(prefix):
+            kept += 1
+            continue
+        stale += 1
+        try:
+            stale_bytes += f.stat().st_size
+        except OSError:
+            pass
+        if not dry_run:
+            try:
+                f.unlink()
+                deleted += 1
+            except OSError as exc:
+                logger.debug("[bench_cache] nu pot sterge %s: %s", f.name, exc)
+    logger.info(
+        "[bench_cache] purge %s: %d fisiere ale versiunii %s pastrate, "
+        "%d stale (%.1f MB)%s",
+        "(dry-run)" if dry_run else "",
+        kept,
+        CACHE_VERSION,
+        stale,
+        stale_bytes / 1048576,
+        "" if dry_run else f", {deleted} sterse",
+    )
+    return {
+        "version": CACHE_VERSION,
+        "kept": kept,
+        "stale": stale,
+        "stale_mb": round(stale_bytes / 1048576, 1),
+        "deleted": deleted,
+    }
+
+
+def clear_cache(older_than_days: int | None = None) -> int:
+    """Delete cached folds. Returns number deleted.
+
+    Daca older_than_days e setat, doar folds mai vechi sunt sterse.
+    """
+    _ensure_cache_dir()
+    deleted = 0
+    cutoff = time.time() - (older_than_days * 86400) if older_than_days else None
+    for f in CACHE_DIR.glob("*.pkl"):
+        try:
+            if cutoff is not None and f.stat().st_mtime > cutoff:
+                continue
+            f.unlink()
+            deleted += 1
+        except Exception:
+            pass
+    return deleted

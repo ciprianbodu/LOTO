@@ -1,0 +1,8 @@
+# Design lotto 3 daca 5, pool 11, bilet 5, rafinat pentru 5 extrase din 45
+# (pozitii 1..11, 1 = cel mai bine clasat). Derivat din covering_designs/L_11_5_5_3.txt
+# prin recoacere in C (scripts/analysis/lotto_anneal.c); aceeasi garantie, acelasi numar de bilete.
+1 2 5 7 9
+1 2 3 4 11
+5 6 9 10 11
+3 4 5 8 9
+2 6 7 8 10
