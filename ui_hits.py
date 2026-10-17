@@ -13,7 +13,17 @@ from nicegui import ui
 from ui_runtime import *
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
-from ui_results import PRICES, _hypergeo_params, _random_rate_hypergeo, _bench_transform_note
+from ui_results import (
+    PRICES,
+    _bench_transform_note,
+    _five_plus_pct,
+    _guarantee_gap_line,
+    _hypergeo_params,
+    _method_from_bench,
+    _random_rate_hypergeo,
+    _thousands,
+    _ticket_pick,
+)
 from ui_bench import _render_bench_leaderboard, _render_last_csv_draw
 from ui_shared import PROJECT_ROOT, render_html_safe
 
@@ -69,11 +79,9 @@ def _hit_gap_rows(items: list[tuple], today=None) -> list[dict]:
         if g is None:
             gap_txt = "—"
         elif di == newest_di:
-            gap_txt = f"acum {g} zile" if g != 1 else "acum 1 zi"
-            if g == 0:
-                gap_txt = "azi"
+            gap_txt = "azi" if g == 0 else f"acum {count(g, 'zile', 'zi')}"
         else:
-            gap_txt = f"{g} zile" if g != 1 else "1 zi"
+            gap_txt = count(g, "zile", "zi")
         rows_out.append((di, d, gap_txt))
     return rows_out
 
@@ -185,8 +193,8 @@ def _decision_target_text(country=None) -> str | None:
 
 
 def _n_extrageri(n: int) -> str:
-    """„1 extragere" / „2 extrageri" — acordul românesc, nu «1 extrageri»."""
-    return "1 extragere" if int(n) == 1 else f"{int(n)} extrageri"
+    """„1 extragere” / „2 extrageri” / „777 de extrageri” — acordul românesc."""
+    return count(n, "extrageri", "extragere")
 
 
 # Reluarea „Bilet complet” pe pașii WF rulează în fundal (sute de pași). Rezultatul
@@ -253,37 +261,34 @@ def _full_ticket_replay(flat, game: str, tickets: int, guarantee) -> dict | None
     return None
 
 
-def _five_plus_pct(p) -> str:
-    """Șansa 5+ în procente: trei zecimale de la 0,1% în sus, altfel două cifre
-    semnificative. La Joker cu un bilet (2 variante) 5+ e 0,00016%, iar cu trei
-    zecimale apărea „0.000%”, ca și cum n-ar exista."""
-    value = 100.0 * float(p or 0.0)
-    return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
-
-
 def _full_ticket_replay_rows(res: dict, tickets: int) -> tuple[list[dict], int]:
-    """Rândul „Bilet complet” și numărul de extrageri reluate."""
+    """Un rând pe prag (+3/+4/+5) pentru „Bilet complet” și extragerile reluate."""
     best = res.get("best") or {}
     exact = res.get("uniform")
     m = len(best)
-    cells = {}
+    rows = []
     for t in (3, 4, 5):
         k = sum(1 for row in best.values() if int(row.get("hits", 0)) >= t)
-        cells[f"p{t}"] = f"{k} ({k / m * 100:.2f}%)" if m else "—"
-    n_var = max((int(row.get("variants", 0)) for row in best.values()), default=0)
-    rnd = (
-        f"{exact.get(3, 0) * 100:.1f}% / {exact.get(4, 0) * 100:.2f}% / "
-        f"{_five_plus_pct(exact.get(5, 0))}"
-        if exact
-        else "—"
-    )
-    row = {
-        "src": "🎟️ Bilet complet",
-        **cells,
-        "rnd": rnd,
-        "var": count(n_var, "variante", "o variantă"),
-    }
-    return [row], m
+        rows.append(
+            {
+                "prag": f"+{t}",
+                "seen": f"{k} ({k / m * 100:.2f}%)" if m else "—",
+                "rnd": _threshold_pct(t, (exact or {}).get(t)),
+            }
+        )
+    return rows, m
+
+
+def _threshold_pct(t: int, p) -> str:
+    """Șansa la pragul t: o zecimală la 3+, două la 4+, cifre semnificative la 5+."""
+    if p is None:
+        return "—"
+    return _five_plus_pct(p) if t >= 5 else f"{100 * float(p):.{1 if t == 3 else 2}f}%"
+
+
+def _full_ticket_variants(res: dict) -> int:
+    """Variantele pe extragere ale „Biletului complet” reluat (cel mai mare număr)."""
+    return max((int(row.get("variants", 0)) for row in (res.get("best") or {}).values()), default=0)
 
 
 def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
@@ -332,22 +337,25 @@ def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
                         "text-caption text-grey"
                     )
                 return
+            n_var = count(_full_ticket_variants(res), "variante", "o variantă")
             ui.table(
                 columns=[
-                    {"name": "src", "label": "", "field": "src", "align": "left"},
-                    {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
-                    {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
-                    {"name": "p5", "label": "+5 (extrageri)", "field": "p5", "align": "center"},
+                    {"name": "prag", "label": "Extrageri cu", "field": "prag", "align": "left"},
+                    {
+                        "name": "seen",
+                        "label": f"🎟️ Bilet complet ({n_var} pe extragere)",
+                        "field": "seen",
+                        "align": "center",
+                    },
                     {
                         "name": "rnd",
-                        "label": "🎲 exact, extragere uniformă (3+ / 4+ / 5+)",
+                        "label": "🎲 Exact, extragere uniformă",
                         "field": "rnd",
                         "align": "center",
                     },
-                    {"name": "var", "label": "Variante/extragere", "field": "var", "align": "center"},
                 ],
                 rows=rows,
-            ).classes("w-full").props("dense")
+            ).classes("w-full").props("dense wrap-cells")
             note = (
                 f"Extrageri cu cel puțin o variantă la prag, din {_n_extrageri(m)}. "
                 "La fiecare extragere, biletele sunt cele pe care le-ar fi dat butonul "
@@ -355,8 +363,8 @@ def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
                 "walk-forward, garanția rezultatului afișat. 🎲 = șansa exactă ca cel "
                 "puțin o variantă să atingă pragul la o extragere uniformă, calculată pe "
                 "biletele celei mai recente extrageri; nu depinde de numerele alese, ci "
-                "de cum se suprapun variantele. Rândul urmează hiturile pool-ului din "
-                "tabelul de mai sus; metoda a fost aleasă pe același istoric, deci un "
+                "de cum se suprapun variantele. Coloana „Bilet complet” urmează hiturile "
+                "pool-ului din tabelul de mai sus; metoda a fost aleasă pe același istoric, deci un "
                 "rezultat peste 🎲 aici nu e o validare externă. La pragurile rare "
                 "(câteva evenimente), frecvența observată variază mult în jurul valorii 🎲."
             )
@@ -439,13 +447,20 @@ def _wf_pool_size(flat, fallback: int) -> int:
     return max(sizes, key=lambda k: (sizes[k], k))
 
 
-def _wf_per_draw_stats(flat) -> dict:
+def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
     """Dedup walk-forward pe extragere: pool hits_union.
 
     `flat` are o intrare per (extragere × variantă); aici păstrăm o singură
     intrare per extragere, fiindcă `hits_union` (câte numere din POOL au ieșit)
-    e identic pentru toate variantele aceleiași extrageri."""
+    e identic pentru toate variantele aceleiași extrageri.
+
+    Din `ticket_context` al pasului vin și numerele: `pool_numbers` (pool-ul
+    jucat ATUNCI, ales numai din extragerile de dinainte), `drawn` (extragerea)
+    și `best_variant` (primul bilet cu cele mai multe numere prinse; la Joker
+    fără numărul Joker, `game_type` = geometria). Liste goale = pas dintr-un
+    cache scris înainte de context."""
     per: dict = {}
+    from loto_enterprise.core.backtesting import scored_variant_numbers
     from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
 
     hits = per_draw_hit_summary(flat)
@@ -453,11 +468,53 @@ def _wf_per_draw_stats(flat) -> dict:
         di = getattr(p, "draw_index", 0)
         if di not in per:
             dd = getattr(p, "draw_date", getattr(p, "target_draw_date", None))
+            ctx = getattr(p, "ticket_context", None) or {}
             per[di] = {
                 "label": str(dd) if dd and str(dd) != "None" else f"#{di}",
                 **hits[int(di)],
+                "pool_numbers": sorted(int(x) for x in (ctx.get("hard_core") or [])),
+                "drawn": sorted(int(x) for x in (ctx.get("actual") or [])),
+                # Fără extragere în context nu se poate marca nimic: „—”, ca extragerea.
+                "best_variant": None if ctx.get("actual") else [],
             }
+        row = per[di]
+        if row["best_variant"] is None and int(getattr(p, "hits", 0) or 0) == int(
+            row["best_ticket"]
+        ):
+            variant = list(getattr(p, "variant", None) or [])
+            nums = scored_variant_numbers(variant, game_type) if game_type else variant
+            row["best_variant"] = sorted(int(x) for x in nums)
     return per
+
+
+def _wf_level_counts(levels) -> dict[int, int]:
+    """Numărul de extrageri pe fiecare nivel de hituri, crescător."""
+    out: dict[int, int] = {}
+    for k in sorted(int(x) for x in levels):
+        out[k] = out.get(k, 0) + 1
+    return out
+
+
+def _wf_marked_numbers(numbers, marked) -> tuple[str, list[dict]]:
+    """Text simplu și lista pentru celula cu numerele ieșite îngroșate."""
+    nums = [int(x) for x in numbers or []]
+    if not nums:
+        return "—", []
+    hit = {int(x) for x in marked or []}
+    text = " ".join(f"[{n}]" if n in hit else str(n) for n in nums)
+    return text, [{"v": n, "hit": n in hit} for n in nums]
+
+
+# Celulă Quasar care îngroașă numerele ieșite; fără listă, textul simplu.
+_WF_MARKED_CELL = r"""
+<q-td :props="props">
+  <template v-if="props.row[props.col.name + '_marks'] && props.row[props.col.name + '_marks'].length">
+    <span v-for="(m, i) in props.row[props.col.name + '_marks']" :key="i"
+          :class="m.hit ? 'text-weight-bolder text-positive' : ''">{{ m.v }}{{ i + 1 < props.row[props.col.name + '_marks'].length ? ' ' : '' }}</span>
+  </template>
+  <span v-else>{{ props.value }}</span>
+</q-td>
+"""
 
 
 def _render_hits_4plus(
@@ -468,8 +525,12 @@ def _render_hits_4plus(
     restrict_base_text: str = "",
     consecutive_limit_text: str = "",
     full_ticket: dict | None = None,
+    method_from_bench: bool = True,
 ) -> None:
     """Istoric hits pentru pool-ul unic; folosește mărimea efectivă din rezultat.
+
+    `method_from_bench` = False când pool-ul vine din rezerva `frequency` (fără
+    decizie bench): atunci metoda nu a fost aleasă pe aceste extrageri.
 
     `full_ticket` = {"game", "guarantee"} adaugă „Bilet complet” refăcut pe
     aceleași extrageri (`_render_full_ticket_replay`).
@@ -483,7 +544,7 @@ def _render_hits_4plus(
     """
     if not flat:
         return
-    per = _wf_per_draw_stats(flat)
+    per = _wf_per_draw_stats(flat, _game_label_for(game))
     n = len(per)
     if not n:
         ui.label("Niciun istoric walk-forward.").classes("text-caption text-grey")
@@ -498,9 +559,24 @@ def _render_hits_4plus(
     def _cell(k, denom):
         return f"{k} ({k / denom * 100:.2f}%)" if denom else "—"
 
-    ui.label(f"🎯 Istoric hits (din {n} extrageri walk-forward):").classes(
+    ui.label(f"🎯 Istoric hits (din {_n_extrageri(n)} walk-forward):").classes(
         "text-bold text-caption mt-2"
     )
+    # Ce se numără: pool-ul fiecărei extrageri, refăcut atunci; setările sunt ale
+    # rezultatului afișat, nu cele din stânga (care pot fi schimbate între timp).
+    _off = "".join(
+        txt
+        for on, txt in (
+            (not consecutive_limit_text, " Fără limită de consecutive."),
+            (not restrict_base_text, " Fără restrângerea bazei."),
+        )
+        if on
+    )
+    ui.label(
+        "Fiecare extragere e numărată pe pool-ul ales ATUNCI, numai din extragerile "
+        "de dinainte, nu pe pool-ul de azi. Setările sunt ale rezultatului afișat; "
+        f"cele din stânga se aplică la generarea următoare.{_off}"
+    ).classes("text-caption text-grey")
     if restrict_base_text:
         ui.label(
             f"{restrict_base_text[0].upper() + restrict_base_text[1:]} — istoricul "
@@ -525,7 +601,7 @@ def _render_hits_4plus(
         if int(_wc) > int(_wg):
             ui.label(
                 f"Acoperirea de 100% garantează {_wg} pe un bilet numai de la {_wc} "
-                "numere în pool. Pentru rezultate, urmăriți rândul BILET."
+                "numere în pool. Pentru rezultate, urmăriți coloana variantelor."
             ).classes("text-caption text-warning")
     _cn = _wf_coverage_note(flat)
     if _cn:
@@ -568,97 +644,117 @@ def _render_hits_4plus(
     tick_avg = (n_tick / n) if n else 0.0
 
     # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
-    def _bcell(K):
-        b3 = _random_rate_hypergeo(gk, K, 3)
-        b4 = _random_rate_hypergeo(gk, K, 4)
-        b5 = _random_rate_hypergeo(gk, K, 5)
-        if b3 is None or b4 is None or b5 is None:
-            return "—"
-        return f"{b3 * 100:.1f}% / {b4 * 100:.2f}% / {_five_plus_pct(b5)}"
+    def _rnd(t):
+        return _threshold_pct(t, _random_rate_hypergeo(gk, _pn, t) if _pn else None)
 
-    def _tick_cell(n_tick, avg):
-        return f"{n_tick:,} ({avg:.2f}/extr.)"
-
+    # Un rând pe prag: pe telefon încap toate coloanele (înainte, 735 px).
+    pool_k = {3: pool3, 4: pool4, 5: pool5}
+    tick_k = {3: ticket3, 4: ticket4, 5: ticket5}
     rows = [
-        {
-            "src": f"🎯 Pool (din {_pn})" if _pn else "🎯 Pool",
-            "p3": _cell(pool3, n),
-            "p4": _cell(pool4, n),
-            "p5": _cell(pool5, n),
-            "rnd": _bcell(_pn),
-            "tick": _tick_cell(n_tick, tick_avg),
-        },
-        {
-            "src": "🎟️ Cel puțin un bilet WF",
-            "p3": _cell(ticket3, n),
-            "p4": _cell(ticket4, n),
-            "p5": _cell(ticket5, n),
-            "rnd": "—",
-            "tick": "același wheel",
-        },
+        {"prag": f"+{t}", "pool": _cell(pool_k[t], n), "tick": _cell(tick_k[t], n), "rnd": _rnd(t)}
+        for t in (3, 4, 5)
     ]
     ui.table(
         columns=[
-            {"name": "src", "label": "Sursă", "field": "src", "align": "left"},
-            {"name": "p3", "label": "+3 (extrageri)", "field": "p3", "align": "center"},
-            {"name": "p4", "label": "+4 (extrageri)", "field": "p4", "align": "center"},
-            {"name": "p5", "label": "+5 (extrageri)", "field": "p5", "align": "center"},
+            {"name": "prag", "label": "Extrageri cu", "field": "prag", "align": "left"},
             {
-                "name": "rnd",
-                "label": "🎲 random (3+ / 4+ / 5+)",
-                "field": "rnd",
+                "name": "pool",
+                "label": f"🎯 Pool de atunci (din {_pn})" if _pn else "🎯 Pool de atunci",
+                "field": "pool",
                 "align": "center",
             },
             {
                 "name": "tick",
-                "label": "🎟️ Variante WF",
+                "label": "🎟️ Cel puțin o variantă",
                 "field": "tick",
                 "align": "center",
             },
+            {"name": "rnd", "label": "🎲 Pool aleator", "field": "rnd", "align": "center"},
         ],
         rows=rows,
-    ).classes("w-full").props("dense")
+    ).classes("w-full").props("dense wrap-cells")
     _cap = (
-        "🎟️ = variantele efectiv evaluate (o intrare walk-forward = o variantă la o extragere). "
-        "🎲 = baseline PUR aleator (hipergeometric, calculat din parametrii jocului și "
-        "mărimea pool-ului). +3 / +4 / +5 = extrageri cu ≥3 / ≥4 / ≥5 numere nimerite. "
-        "Premiile și ROI-ul nu sunt estimate: CSV-ul nu conține categoria de premiu, "
-        "iar Joker cere și validarea Urnei 2 pe același bilet. "
+        "+3 / +4 / +5 = extrageri cu ≥3 / ≥4 / ≥5 numere nimerite. 🎟️ = extrageri cu "
+        "cel puțin o variantă jucată care atinge pragul. 🎲 = rata unui pool PUR "
+        "aleator de aceeași mărime (hipergeometric, din parametrii jocului); nu e un "
+        "reper separat pentru variante. Premiile și ROI-ul nu sunt estimate: CSV-ul "
+        "nu conține categoria de premiu, iar Joker cere și validarea Urnei 2 pe "
+        "aceeași variantă."
     )
-    _cap += f" Bilete evaluate = {n_tick:,} (extragere × variantă, {tick_avg:.2f}/extragere)."
-    _cap += " Rândul de bilete numără extrageri cu cel puțin un bilet care atinge pragul; baseline-ul de pool nu este un baseline separat pentru bilete."
+    _cap += (
+        f" Variante evaluate = {_thousands(n_tick)} (extragere × variantă, "
+        f"{tick_avg:.2f}/extragere)."
+    )
     _price = PRICES.get(gk, 8.0)
     if _foreign is not None:
         if n_tick and _foreign.price is not None:
             _cap += (
-                f" Cost estimat pe fereastra WF: {n_tick:,} × {_fmt_price(_foreign)} "
-                f"≈ {n_tick * _foreign.price:,.2f} {_foreign.currency} "
+                f" Cost estimat pe fereastra WF: {_thousands(n_tick)} × {_fmt_price(_foreign)} "
+                f"≈ {_thousands(n_tick * _foreign.price, 2)} {_foreign.currency} "
                 "(fără taxe pe bilet, fără câștig)."
             )
         elif n_tick:
             _cap += " Cost: tarif necunoscut."
     elif n_tick:
         _cap += (
-            f" Cost estimat pe fereastra WF: {n_tick:,} × {_price:g} lei/variantă "
-            f"≈ {n_tick * _price:,.0f} lei (tarif standard, fără taxă fizică, fără câștig)."
+            f" Cost estimat pe fereastra WF: {_thousands(n_tick)} × {_price:g} lei/variantă "
+            f"≈ {_thousands(n_tick * _price)} lei (tarif standard, fără taxă fizică, fără câștig)."
         )
     ui.label(_cap).classes("text-caption text-grey")
-    ui.label(
-        "Garanția 4 nu asigură 5 pe un bilet; compară separat hiturile pool-ului "
-        "și ale biletelor."
-    ).classes("text-caption text-grey")
+    # Joker: numărul din Urna 2 (top-1) e pe toate biletele pasului.
+    _jk = [bool(d["joker"]) for d in per.values() if d.get("joker") is not None]
+    if _jk:
+        ui.label(
+            f"🃏 Numărul Joker (Urna 2, un singur număr pe bilet): nimerit la "
+            f"{sum(_jk)} din {_n_extrageri(len(_jk))} ({sum(_jk) / len(_jk) * 100:.2f}%; "
+            "la întâmplare 5%)."
+        ).classes("text-caption")
+    _hp = _hypergeo_params(gk)
+    _gap = (
+        _guarantee_gap_line(
+            _wg, _ticket_pick(gk), _hp[0], "compară separat hiturile pool-ului și ale variantelor"
+        )
+        if _hp
+        else ""
+    )
+    if _gap:
+        ui.label(_gap).classes("text-caption text-grey")
     if full_ticket:
         _render_full_ticket_replay(flat, full_ticket["game"], full_ticket.get("guarantee"))
     # Onestitate: rata WF observată la ținta bench vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
-    _losers = []
+    _losers, _winners = [], []
     for _lbl3, _cnt, _den, _K in _tt_checks:
         _b = _random_rate_hypergeo(gk, _K, _TT) if _K else None
-        if _b is not None and _den and (_cnt / _den) <= _b:
+        if _b is None or not _den:
+            continue
+        if (_cnt / _den) <= _b:
             _losers.append(
-                f"{_lbl3}: {_cnt / _den * 100:.1f}% ≤ random {_b * 100:.1f}%"
+                f"{_lbl3}: {_cnt / _den * 100:.2f}% ≤ random {_b * 100:.2f}%"
             )
+        else:
+            from scipy.stats import binom
+
+            _p = float(binom.sf(_cnt - 1, _den, _b))
+            _winners.append(
+                f"{_lbl3}: {_cnt / _den * 100:.2f}% față de random {_b * 100:.2f}% "
+                f"(p = {_p:.2f}, test binomial unilateral)"
+            )
+    if _winners:
+        # Peste hazard nu înseamnă validat: metoda a fost aleasă pe aceste extrageri.
+        ui.label(
+            f"ℹ️ Peste hazard (≥{_TT}): "
+            + " · ".join(_winners)
+            + (
+                ". Metoda e cea din decizia de azi, aleasă de bench pe ferestre care "
+                "cuprind și aceste extrageri, deci nu e o validare externă; un p mic "
+                "aici nu dovedește un avantaj."
+                if method_from_bench
+                else ". Metoda e rezerva frequency, fără decizie bench, deci nu a fost "
+                "aleasă pe aceste extrageri."
+            )
+        ).classes("text-caption text-grey")
     if _losers:
         ui.label(
             f"⚠️ Onestitate (≥{_TT}): "
@@ -672,7 +768,16 @@ def _render_hits_4plus(
         h = int(d["pool"])
         return f"🔥 {h}" if h >= _TT else f"⭐ {h}"
 
-    def _dates_table(title, pred, badge, empty_msg, gap_on=None, gap_label=None):
+    def _dates_table(
+        title,
+        pred,
+        badge,
+        empty_msg,
+        gap_on=None,
+        gap_label=None,
+        details=(),
+        level=None,
+    ):
         items = [(di, d) for di, d in per.items() if pred(d)]
         if not items:
             ui.label(empty_msg).classes("text-caption text-grey mt-2")
@@ -682,45 +787,100 @@ def _render_hits_4plus(
         gap_items = [(di, d) for di, d in items if _gp(d)]
         gap_txt = {di: g for di, _d, g in _hit_gap_rows(gap_items)}
         _gl = gap_label or f"Δ până la următorul ≥{_TT} (sau azi)"
-        rows = []
+        rows, levels = [], []
         for di, d in sorted(items, key=lambda kv: kv[0], reverse=True):
-            rows.append(
-                {
-                    "draw": d["label"],
-                    "hits": badge(d),
-                    "gap": gap_txt.get(di, "—") if _gp(d) else "—",
-                }
-            )
-        ui.label(f"{title} ({len(rows)} extrageri, cele mai recente întâi):").classes(
+            row = {
+                "draw": d["label"],
+                "hits": badge(d),
+                "gap": gap_txt.get(di, "—") if _gp(d) else "—",
+            }
+            for name, _label, numbers, marked in details:
+                row[name], row[f"{name}_marks"] = _wf_marked_numbers(numbers(d), marked(d))
+            rows.append(row)
+            levels.append(int(level(d)) if level else 0)
+        # Câte extrageri pe fiecare nivel: pe pagina întâi încap numai 15 rânduri.
+        counts = _wf_level_counts(levels) if level else {}
+        head = _n_extrageri(len(rows))
+        if len(counts) > 1:
+            head += ": " + ", ".join(f"{c} cu {k}" for k, c in counts.items())
+        ui.label(f"{title} ({head}; cele mai recente întâi):").classes(
             "text-bold text-caption mt-3"
         )
-        ui.table(
+        shown = {}
+        if len(counts) > 1:
+            _low = min(counts)
+
+            def _only_from(e):
+                at = int(e.value if e.value is not None else _low)
+                table = shown["table"]
+                table.rows = [r for r, k in zip(rows, levels) if k >= at]
+                # Filtrul nou începe de la prima pagină, nu din mijlocul listei.
+                pag = table.pagination if isinstance(table.pagination, dict) else {}
+                table.pagination = {**pag, "page": 1}
+                table.update()
+
+            with ui.row().classes("items-center gap-2"):
+                ui.label("Arată:").classes("text-caption")
+                ui.toggle(
+                    {_low: "toate", **{k: f"≥{k}" for k in list(counts)[1:]}},
+                    value=_low,
+                    on_change=_only_from,
+                ).props("dense no-caps")
+        # Data și nimeritele pe un rând; numerele și intervalul se rup pe telefon.
+        _nw = {"classes": "text-no-wrap"}
+        table = ui.table(
             columns=[
-                {"name": "draw", "label": "Data", "field": "draw", "align": "left"},
+                {"name": "draw", "label": "Data", "field": "draw", "align": "left", **_nw},
                 {
                     "name": "hits",
                     "label": "Nimerite",
                     "field": "hits",
                     "align": "center",
+                    **_nw,
                 },
+                *(
+                    {"name": name, "label": label, "field": name, "align": "left"}
+                    for name, label, _numbers, _marked in details
+                ),
                 {"name": "gap", "label": _gl, "field": "gap", "align": "center"},
             ],
             rows=rows,
             pagination=15,
-        ).classes("w-full").props("dense")
+        ).classes("w-full").props("dense wrap-cells")
+        shown["table"] = table
+        for name, _label, _numbers, _marked in details:
+            table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
     # Legendă condiționată de țintă: la _TT==3 orice ≥3 primește 🔥, deci ⭐ nu
     # apare niciodată → mențiunea lui ar fi text mort/contradictoriu.
     _star_leg = (
         ("⭐ = exact 3; " if _TT == 4 else f"⭐ = 3–{_TT - 1}; ") if _TT > 3 else ""
     )
+    _chosen_txt = (
+        "metoda e cea din decizia de azi, aleasă pe ferestre bench care cuprind și "
+        "aceste extrageri"
+        if method_from_bench
+        else "metoda e rezerva frequency, fără decizie bench"
+    )
     ui.label(
         f"🗓️ Istoric: extrageri cu ≥3 în pool-ul walk-forward de LA DATA extragerii "
-        f"(antrenat doar pe trecut, fără lookahead). 🔥 = target bench (≥{_TT}); "
+        f"(scorerul vede numai extragerile de dinainte; {_chosen_txt}). "
+        f"🔥 = target bench (≥{_TT}); "
         f"{_star_leg}Δ pe cel mai recent rând care atinge ținta = „acum X zile”; "
         f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent. "
         f"Nucleul de producție de lângă ultima extragere CSV e ALT set — nu compara 🔥 cu el."
     ).classes("text-caption text-grey mt-2")
+    _pool_n_txt = f"cele {_pn} numere" if _pn else "numerele"
+    ui.label(
+        f"„Pool-ul de atunci” = {_pool_n_txt} alese de metodă la data extragerii, "
+        "numai din extragerile de dinainte, cu setările rezultatului afișat (nu "
+        "pool-ul de azi). Numerele care au ieșit sunt îngroșate."
+    ).classes("text-caption text-grey")
+    if any(not d["pool_numbers"] for d in per.values() if d["pool"] >= 3):
+        ui.label(
+            "Unele extrageri vin dintr-o validare salvată înainte ca pool-ul pasului "
+            "să fie păstrat („—”); se completează la următoarea validare walk-forward."
+        ).classes("text-caption text-grey")
     _dates_table(
         "🗓️ POOL",
         lambda d: d["pool"] >= 3,
@@ -728,21 +888,43 @@ def _render_hits_4plus(
         "Pool-ul n-a prins ≥3 în istoricul walk-forward.",
         gap_on=lambda d: d["pool"] >= _TT,
         gap_label=f"Δ → următorul ≥{_TT} / azi",
+        level=lambda d: d["pool"],
+        details=(
+            ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["pool_numbers"]),
+            (
+                "pool_nums",
+                "Pool-ul de atunci",
+                lambda d: d["pool_numbers"],
+                lambda d: d["drawn"],
+            ),
+        ),
     )
-    with ui.expansion("🎟️ Bilete WF cu 4+ și 5+ — date și intervale", value=False).classes(
+    with ui.expansion("🎟️ Variante WF cu 4+ și 5+ — date și intervale", value=False).classes(
         "w-full"
     ):
         ui.label(
-            "Fiecare rând este o extragere cu cel puțin un bilet la pragul indicat. "
-            "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții."
+            "Fiecare rând este o extragere cu cel puțin o variantă la pragul indicat. "
+            "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții. "
+            "„Varianta” = cea jucată atunci cu cele mai multe numere prinse; "
+            "numerele ieșite sunt îngroșate."
         ).classes("text-caption text-grey")
         for threshold in (4, 5):
             _dates_table(
-                f"🎟️ BILET {threshold}+",
+                f"🎟️ VARIANTĂ {threshold}+",
                 lambda d, t=threshold: d["best_ticket"] >= t,
                 lambda d: f"{int(d['best_ticket'])} numere",
-                f"Niciun bilet nu a prins ≥{threshold} în istoricul walk-forward.",
-                gap_label=f"Δ → următorul ≥{threshold} pe bilet / azi",
+                f"Nicio variantă nu a prins ≥{threshold} în istoricul walk-forward.",
+                gap_label=f"Δ → următorul ≥{threshold} pe variantă / azi",
+                level=lambda d: d["best_ticket"],
+                details=(
+                    (
+                        "ticket",
+                        "Varianta",
+                        lambda d: d["best_variant"],
+                        lambda d: d["drawn"],
+                    ),
+                    ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["best_variant"]),
+                ),
             )
 
 
@@ -816,7 +998,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                     # Deschis implicit (apare după ce termină walk-forward), dar pliabil
                     # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
                     with ui.expansion(
-                        "📜 Istoric hits (walk-forward) — click pentru ascunde",
+                        "📜 Istoric hits (walk-forward)",
                         value=True,
                     ).classes("w-full"):
                         _render_hits_4plus(
@@ -836,6 +1018,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                             consecutive_limit_text=_consecutive_limit_text(
                                 data.get("audit"), details=False
                             ),
+                            method_from_bench=_method_from_bench(data),
                             # Același joc și aceeași garanție ca „🎟️ Bilet complet”.
                             full_ticket={
                                 "game": _game_label_for(str(game))

@@ -10,6 +10,7 @@ from nicegui import ui
 
 from ui_runtime import *
 from loto_enterprise.core import lotteries as _LOT
+from loto_enterprise.core.ro_text import count
 from ui_shared import PROJECT_ROOT, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
@@ -259,6 +260,15 @@ def _decision_low_confidence(entry: dict) -> bool | None:
     return None
 
 
+def _candidates_text(n) -> str:
+    """„cei 42 de candidați”, „cei 8 candidați”, „un candidat”."""
+    try:
+        k = int(n)
+    except (TypeError, ValueError):
+        return f"cei {n} candidați"
+    return "un candidat" if k == 1 else f"cei {count(k, 'candidați')}"
+
+
 def _multiplicity_note(entry: dict) -> str | None:
     """Avertismentul pentru un avantaj care nu trece corecția pentru candidați.
 
@@ -274,8 +284,8 @@ def _multiplicity_note(entry: dict) -> str | None:
     except (TypeError, ValueError):
         return None
     return (
-        f"⚠️ Avantaj nedemonstrat: după corecția Holm pentru cei "
-        f"{mu.get('candidates')} candidați testați pe acest pool, p = {holm_p:.2f} "
+        f"⚠️ Avantaj nedemonstrat: după corecția Holm pentru "
+        f"{_candidates_text(mu.get('candidates'))} testați pe acest pool, p = {holm_p:.2f} "
         f"(prag {mu.get('alpha', 0.05)}). Metoda aleasă poate fi doar cea mai "
         "norocoasă dintre ei."
     )
@@ -971,7 +981,8 @@ def _render_bench_leaderboard_slice(
             )
             _pref = (
                 "experimentală, exclusă din selecția automată · " if is_experimental
-                else "baseline (referință, NU e candidat) · " if is_base else ""
+                else "baseline aleator (referință, NU e candidat) · " if is_base and m == "random"
+                else "martor exclus din producție (NU e candidat) · " if is_base else ""
             )
             avg_txt = "—" if pd.isna(avg) else f"{avg:.2f}"
             ui.label(
@@ -988,7 +999,7 @@ def _render_bench_leaderboard_slice(
         ).classes("text-caption text-grey")
         if has_target_rate:
             ui.label(
-                "Wilson și brut sunt aceleași procente, cu două zecimale. Wilson folosește "
+                "Wilson și brut apar în același format (procente, două zecimale). Wilson folosește "
                 "z=1 ca scor de clasare și este mai mic decât rata observată; nu este un "
                 "interval de încredere de 95%. Brut este rata observată pe aceleași "
                 "extrageri. Calificarea este euristică. Un avantaj predictiv necesită "
@@ -1084,6 +1095,12 @@ def _render_bench_leaderboard_slice(
                 "ℹ️ Decizia a sărit ca redundanți (semnătură de performanță): "
                 + "; ".join(_dparts)
             ).classes("text-caption text-grey")
+        # Metoda pe care o joacă producția acum (decizia salvată, curățată ca în
+        # motor); 🎯 poate fi al unei generări de dinaintea ei. Decizia recalculată
+        # din folds.csv poate diferi de cea salvată (bench oprit, folds parțial).
+        _saved_method = _decision_entry_method(_saved_entry, folds_game_key)
+        _gen_before_dec = bool(_gen_usable and _saved_method and chosen_name != _saved_method)
+        _note_scorer = (_current_dec or _dec or {}).get("scorer")
         if chosen_name != winner[0]:
             # De ce diferă ALEASĂ de #1 — enumerăm doar cauzele care chiar există.
             if _conf_ok and _lift_ok:
@@ -1103,6 +1120,12 @@ def _render_bench_leaderboard_slice(
                     f"selecția folosită provine dintr-o decizie anterioară, iar bench-ul curent "
                     f"o exclude structural: {_structural_fail[chosen_name]}"
                 )
+            elif _gen_before_dec:
+                _why = (
+                    "rezultatul afișat a fost generat înaintea deciziei de acum (Re-Bench "
+                    "terminat sau țintă 3+/4+ schimbată), care alege "
+                    f"{_saved_method}; generează din nou pentru decizia de acum"
+                )
             elif not _gen_usable and not _saved_entry:
                 _why = (
                     "nu există decizie salvată (best_methods.json lipsește sau fără acest "
@@ -1116,10 +1139,7 @@ def _render_bench_leaderboard_slice(
                     "superioritate, diferențele sunt zgomot"
                 )
             elif _gate_applied:
-                _why = (
-                    "decizia e dintr-un bench mai vechi decât folds.csv, sau "
-                    "ensemble-ul de scoring a rămas pe alt cap de listă"
-                )
+                _why = "decizia e dintr-un bench mai vechi decât folds.csv"
             elif _dec_low is False:
                 _why = (
                     f"decizia aplică ÎN PLUS filtrul de consistență (să bată random în ≥"
@@ -1147,6 +1167,9 @@ def _render_bench_leaderboard_slice(
             ).classes("text-caption text-warning")
         _mult = _multiplicity_note(_current_dec or _dec)
         if _mult and _dec_low is not True:
+            if _note_scorer and _note_scorer != chosen_name:
+                # Nota e a metodei pe care o alege clasamentul, nu a celei marcate 🎯.
+                _mult = _mult.replace("⚠️ ", f"⚠️ {_note_scorer} (clasamentul de acum): ", 1)
             ui.label(_mult).classes("text-caption text-warning")
         if not has_family:
             ui.label(
@@ -1227,10 +1250,16 @@ def _render_bench_leaderboard_slice(
                 if _below_theory is not None
                 else ""
             )
+            # Numai `random` e o realizare a hazardului; ceilalți sunt filtre
+            # deterministe excluse din producție, păstrați ca martori de bench.
+            _what = (
+                f"🎲 baseline «{_brec[0]}» (realizare empirică a hazardului, NU candidat)"
+                if _brec[0] == "random"
+                else f"🚫 martor «{_brec[0]}» (filtru exclus din producție, NU candidat)"
+            )
             ui.label(
-                f"🎲 baseline «{_brec[0]}» (realizare empirică, NU candidat) — locul "
-                f"{_better + 1} din {len(measured_methods) + 1} după Wilson."
-                f"{_theory_txt}"
+                f"{_what} — locul {_better + 1} din {len(measured_methods) + 1} după "
+                f"Wilson.{_theory_txt}"
             ).classes("text-caption text-grey")
         # SIMETRIC cu baseline-ul: dacă metoda EFECTIV folosită la generare nu apare în
         # slice, spune unde cade. Altfel 🎯 lipsește complet din listă, fără niciun
@@ -1543,8 +1572,8 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
                 "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului."
             ).classes("text-caption text-grey")
         ui.label(
-            "ℹ️ Walk-forward: istoricul listează +3 și +4; targetul bench/alerte rămâne "
-            f"≥{_bench_target()}."
+            "ℹ️ Walk-forward: istoricul listează +3, +4 și +5; ținta bench/alerte: "
+            f"≥{_bench_target()} (Loto 5/40 minimum 4+, Joker Urna 2 top-1)."
         ).classes("text-caption text-grey")
         _sections = (
             [

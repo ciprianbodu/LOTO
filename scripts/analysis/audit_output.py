@@ -53,6 +53,10 @@ class CaptureUI:
                 def __getattr__(self, name):
                     return lambda *a, **kw: self
 
+                def __setattr__(self, name, value):
+                    # `table.rows = ...` după randare (filtre): se vede în nod.
+                    node.setdefault("attrs", {})[name] = value
+
             return Element()
 
         return make
