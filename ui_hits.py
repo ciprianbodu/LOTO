@@ -354,7 +354,7 @@ def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
                     },
                 ],
                 rows=rows,
-            ).classes("w-full").props("dense")
+            ).classes("w-full").props("dense wrap-cells")
             note = (
                 f"Extrageri cu cel puțin o variantă la prag, din {_n_extrageri(m)}. "
                 "La fiecare extragere, biletele sunt cele pe care le-ar fi dat butonul "
@@ -666,7 +666,7 @@ def _render_hits_4plus(
             {"name": "rnd", "label": "🎲 Pool aleator", "field": "rnd", "align": "center"},
         ],
         rows=rows,
-    ).classes("w-full").props("dense")
+    ).classes("w-full").props("dense wrap-cells")
     _cap = (
         "+3 / +4 / +5 = extrageri cu ≥3 / ≥4 / ≥5 numere nimerite. 🎟️ = extrageri cu "
         "cel puțin o variantă jucată care atinge pragul. 🎲 = rata unui pool PUR "
@@ -808,11 +808,13 @@ def _render_hits_4plus(
                 table.pagination = {**pag, "page": 1}
                 table.update()
 
-            ui.toggle(
-                {_low: "toate", **{k: f"≥{k}" for k in list(counts)[1:]}},
-                value=_low,
-                on_change=_only_from,
-            ).props("dense no-caps size=sm")
+            with ui.row().classes("items-center gap-2"):
+                ui.label("Arată:").classes("text-caption")
+                ui.toggle(
+                    {_low: "toate", **{k: f"≥{k}" for k in list(counts)[1:]}},
+                    value=_low,
+                    on_change=_only_from,
+                ).props("dense no-caps")
         # Data și nimeritele pe un rând; numerele și intervalul se rup pe telefon.
         _nw = {"classes": "text-no-wrap"}
         table = ui.table(

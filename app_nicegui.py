@@ -2748,6 +2748,10 @@ def main_page() -> None:
             .loto-main, .loto-main .nicegui-card, .loto-main .nicegui-expansion-content {
                 padding: 4px !important;
             }
+            .loto-main .q-table--dense th, .loto-main .q-table--dense td {
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
         }
     """)
 
