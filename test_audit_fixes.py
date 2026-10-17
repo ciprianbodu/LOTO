@@ -581,7 +581,7 @@ def test_method_desc_uses_registry_not_graveyard():
 def test_wf_hits_caption_does_not_label_ticket_volume_as_pool():
     source = open("ui_hits.py", encoding="utf-8").read()
     assert "Pool = {n_tick" not in source
-    assert "Bilete evaluate" in source
+    assert "Variante evaluate" in source
 
 
 def test_freshness_flags_stale_decision_when_engine_changed(tmp_path, monkeypatch):

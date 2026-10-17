@@ -85,7 +85,9 @@ def _at_least_five(max_num, draw_n, selected_n):
 ])
 def test_five_plus_odds_are_exact_and_keep_pool_separate_from_ticket(game, draw_n, max_num, pick):
     ticket = list(range(1, pick + 1)) + ([7] if game == "joker" else [])
-    lines = ui_results._wheel_probability_lines(game, {"hard_core": list(range(1, 9)), "variants": [ticket]})
+    lines = ui_results._wheel_probability_lines(
+        game, {"hard_core": list(range(1, 9)), "variants": [ticket], "guarantee": 4}
+    )
     expected_pool = 100 * _at_least_five(max_num, draw_n, 8)
     expected_ticket = 100 * _at_least_five(max_num, draw_n, pick)
     assert expected_pool > expected_ticket
@@ -93,7 +95,7 @@ def test_five_plus_odds_are_exact_and_keep_pool_separate_from_ticket(game, draw_
         f"5+ numere: în pool {expected_pool:.3f}%; pe cel puțin o variantă {expected_ticket:.3f}%" in line
         for line in lines
     )
-    assert "Garanția 4 nu asigură 5 pe un bilet; compară probabilitățile separate." in lines
+    assert "Garanția 4 nu asigură 5 pe o variantă; compară probabilitățile separate." in lines
 
 
 def _wf_entries():
@@ -101,9 +103,12 @@ def _wf_entries():
     # Mai multe variante pe extragere: trei pool-uri cu 5+, dar un singur bilet cu 5+.
     for index, day, pool, best in ((1, 1, 5, 4), (2, 5, 5, 5), (3, 8, 5, 4), (4, 15, 4, 4), (5, 25, 3, 3)):
         for hits in (best - 1, best):
+            # Ca un cache scris înainte de `ticket_context`: varianta există,
+            # extragerea și pool-ul pasului nu.
             flat.append(SimpleNamespace(
                 draw_index=index, draw_date=f"{day:02d}-09-2026", hits_union=pool,
-                hits=hits, wheel_coverage=100.0,
+                hits=hits, wheel_coverage=100.0, variant=[2, 10, 20, 30, 40, 49],
+                ticket_context=None,
             ))
     return flat
 
@@ -121,20 +126,24 @@ def test_wf_table_and_ticket_gaps_use_each_threshold_separately(monkeypatch):
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(_wf_entries(), "6/49", {"pool_size": 16})
     summary = next(node for node in ui.walk() if node["kind"] == "table")
-    pool, ticket = summary["kwargs"]["rows"]
-    assert pool["p5"] == "3 (60.00%)"
-    assert ticket["p5"] == "1 (20.00%)"
-    assert ticket["rnd"] == "—"
+    five_row = summary["kwargs"]["rows"][2]
+    assert five_row["prag"] == "+5"
+    assert five_row["pool"] == "3 (60.00%)"
+    assert five_row["tick"] == "1 (20.00%)"
     # Random pool 16, 6/49, 5+ rămâne probabilitatea exactă hipergeometrică.
-    assert pool["rnd"].endswith(f"{100 * _at_least_five(49, 6, 16):.3f}%")
-    details = next(node for node in ui.walk() if node["kind"] == "expansion" and "Bilete WF" in node["args"][0])
+    assert five_row["rnd"] == f"{100 * _at_least_five(49, 6, 16):.3f}%"
+    details = next(node for node in ui.walk() if node["kind"] == "expansion" and "Variante WF" in node["args"][0])
     assert details["kwargs"]["value"] is False
     tables = [node for node in details["children"] if node["kind"] == "table"]
     four = tables[0]["kwargs"]["rows"]
     five = tables[1]["kwargs"]["rows"]
     assert [row["draw"] for row in four] == ["15-09-2026", "08-09-2026", "05-09-2026", "01-09-2026"]
     assert [row["gap"] for row in four] == ["acum 16 zile", "7 zile", "3 zile", "4 zile"]
-    assert five == [{"draw": "05-09-2026", "hits": "5 numere", "gap": "acum 26 zile"}]
+    assert [{k: r[k] for k in ("draw", "hits", "gap")} for r in five] == [
+        {"draw": "05-09-2026", "hits": "5 numere", "gap": "acum 26 de zile"}
+    ]
+    # Fixture fără `ticket_context`: biletul și extragerea lipsesc, nu se inventează.
+    assert five[0]["ticket"] == five[0]["drawn"] == "—"
 
 
 def test_five_plus_probabilities_and_counts_are_shared_with_saved_report(monkeypatch):

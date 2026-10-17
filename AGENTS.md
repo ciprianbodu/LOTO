@@ -61,7 +61,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v18` (garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v19` (`hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -79,6 +79,60 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Istoric hits cu pool-ul de atunci si audit pe module — 2026-10-17
+
+- Cerinta: la „📜 Istoric hits”, langa „5 hits”, cu ce pool s-au prins. Tabelul
+  „🗓️ POOL” arata acum extragerea si pool-ul jucat la acel pas (din
+  `ticket_context`, ales numai din extragerile de dinainte), cu numerele iesite
+  ingrosate; tabelele de variante 4+/5+ arata varianta cu cele mai multe numere
+  prinse. Titlul spune cate extrageri are fiecare nivel, iar selectorul „toate /
+  ≥4 / ≥5” le filtreaza de la pagina 1 (§6). Pe 6/49, „un singur 5” era prima
+  pagina din 16: WF are 8 extrageri cu 5 in pool, fata de 8,45 la intamplare.
+- Auditul WF pe toate jocurile (6/49 777, 5/40 523, Joker 658 de pasi): niciun
+  defect de logica sau de numaratoare. Fara date viitoare, pool-urile refacute
+  independent din CSV-ul taiat coincid, cache-ul (partial, reluat, fara context,
+  `cache_only`) da acelasi rezultat ca o rulare noua, paralel = serial.
+  Distributia hiturilor de pool urmeaza legea hipergeometrica (6/49 chi-patrat
+  p 0,87; 5/40 5+ 26 fata de 15,4, exces, nu lipsa, Holm 0,07; Joker 0,07-0,11).
+- Auditul pe module (texte, asezare, generare, verificarea rezultatelor,
+  semantica istoricului, clasament), fiecare constatare verificata adversarial;
+  cele confirmate sunt reparate, fiecare cu test care pica pe codul vechi
+  (`test_audit_2026_10_17.py`):
+  - garantia efectiva in „Garantia g nu asigura g+1” (inainte mereu „4 nu
+    asigura 5”); sansele Joker si fara numarul Urnei 2;
+  - fiecare urna cu nota ei Holm in panou, raport si notificarea Auto-Pilot;
+    rezerva Urnei 2 se spune si pe randul top-1;
+  - Istoric hits si raportul spun ca metoda e aleasa pe aceleasi extrageri
+    (nu e validare externa), si peste hazard, cu p-ul binomial; antetul spune
+    ca se numara pool-ul de atunci, cu setarile rezultatului afisat;
+  - mailul „CEL MAI BUN REZULTAT” are numarul asteptat pentru un pool oarecare;
+    sub RATING, mailul spune ca ratingul e al top-K brut cand pool-ul jucat
+    are limita de consecutive, penalizare sau restrangere (ca nota de bench);
+  - sub 1024 px, butonul plutitor „☰” deschide sertarul cu comenzile (antetul
+    neschimbat); pe telefon, tabelele din Istoric hits incap (un rand pe prag);
+  - clasamentul: numai `random` e realizarea hazardului, filtrele excluse sunt
+    martori; o generare de dinaintea deciziei de acum e numita ca atare;
+  - la pornire, cu decizia mutata, „Walk-forward sarit” in loc de sectiune lipsa;
+  - ETA-ul Re-Bench imparte la procesele paralele (`runner.bench_worker_count`);
+    tabelul de intervale pe tinta jocului (5/40: 4+); `hit_forecast` recomanda
+    pool-ul minim (worker `v19`); sume in lei cu spatiu ingust la mii; fara
+    `g_range`; acordul numeralelor („777 de extrageri”, „1 extragere noua”).
+- Ramase de decis, nereparate: `pair_lift_last` (5/40 pool 16) pune numerele
+  ultimei extrageri la coada (0 din 6 in top-16 la 97% din pasi); la fel, in
+  sens invers sau acelasi, metodele de gap (`gap_current`, `croston_interval`)
+  si de recenta (`ewma_hl30`, `imapa_agg`). Decizia din 2026-10-07 (§4.2) nu pune
+  poarta pe extragerea precedenta la jocurile cu pool; o schimbare cere
+  Re-Bench. La plafon 64 -> 65 de bilete (Joker g4), 3+ pe variante scade
+  22,49% -> 22,16%: certificarea e fata de wheel-ul aceluiasi buget, nu fata de
+  bugetul anterior.
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 116 fisiere `test_*.py`,
+  2743 teste trecute, 11 sarite, zero esecuri (14 min 40 s). `audit_application.py`:
+  13 istorice, 848 verificari de paritate, 151 designuri, 26 de pipeline-uri,
+  13 profile de cover complet, worker separat pe 13 jocuri si UI HTTP 200,
+  fisierele de productie neatinse. Aplicatia reala (Playwright, 390/1000/1440 px):
+  butonul „☰” deschide sertarul, fara derulare orizontala a paginii, tabelele
+  din Istoric hits incap in 326 px; „≥5” pe 6/49 arata cele 8 extrageri.
 
 ### Audit si mai multe hituri pe bilete, runda a treia — 2026-10-16
 
@@ -1401,6 +1455,10 @@ limita de validitate din §5).
   ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
 
 - Pool-ul UI este limitat la 6..16.
+- Sub 1024 px, Quasar scoate sertarul din ecran; butonul plutitor „☰”
+  (`ui.page_sticky`, clasa `lt-md`) il deschide. Antetul paginii nu se modifica.
+  Sub 600 px, marginile cardurilor si ale expansion-urilor din zona principala
+  (`loto-main`) scad la 4 px, ca tabelele din „📜 Istoric hits” sa incapa.
 - Butoanele „🚀 Genereaza (metoda din decizia bench)” si „⚡ Auto-Pilot (arata
   metoda pe joc + genereaza)” dau acelasi pool si aceleasi bilete: motorul
   citeste scorerul din `best_methods.json` la orice job. Auto-Pilot doar
@@ -1480,6 +1538,25 @@ limita de validitate din §5).
   `full_ticket_spread_val` din `.ui_state.json` nu se mai citeste si dispare
   la urmatoarea salvare. Dialogul afiseaza, pentru pragurile cu premiu, sansa
   EXACTA ca cel putin o varianta sa castige (`ticket_hit_probabilities`).
+- „📜 Istoric hits”, tabelul „🗓️ POOL” (extragerile cu cel putin 3 in pool):
+  langa data si hiturile fiecarei extrageri, „Extragerea” si „Pool-ul de
+  atunci”, din `ticket_context` al pasului (§8): pool-ul jucat la acel pas,
+  ales numai din extragerile de dinainte, cu setarile rezultatului afisat, nu
+  pool-ul de azi. Numerele iesite sunt ingrosate. Tabelele „🎟️ VARIANTĂ 4+/5+”
+  (expansion-ul „🎟️ Variante WF cu 4+ și 5+”) arata „Varianta” (prima varianta
+  cu cele mai multe numere prinse, la Joker fara numarul Urnei 2,
+  `scored_variant_numbers`) si extragerea (`ui_hits._wf_per_draw_stats`,
+  `_wf_marked_numbers`, 2026-10-17). Un pas dintr-un cache fara context arata
+  „—” la extragere, pool si varianta; nota spune ca se completeaza la
+  urmatoarea validare (un pas cu context `{}` ramane „—”). Titlul spune cate
+  extrageri are fiecare nivel (6/49 pool 16: 161 cu 3, 57 cu 4, 8 cu 5), iar
+  selectorul „toate”, apoi „≥k” pentru fiecare nivel prezent (la 5/40 si ≥6),
+  filtreaza randurile de la pagina 1 (`_wf_level_counts`): cu 15 randuri pe
+  pagina, cele 8 extrageri cu 5 erau pe paginile 1, 2, 9, 10 si 14-16. Cand
+  pool-ul vine din rezerva `frequency`, textele nu mai spun ca metoda a fost
+  aleasa pe aceste extrageri (`ui_results._method_from_bench`). La Joker,
+  panoul arata si numarul din Urna 2 (nimerit la N din M extrageri, fata de
+  5%), care aparea pana atunci numai in raport.
 - „📜 Istoric hits” are sub tabelul principal „Bilet complet” pe ACELEASI
   extrageri WF (`ticket_replay.replay_full_tickets`,
   `ui_hits._render_full_ticket_replay`): la fiecare pas, biletele pe care le-ar
@@ -1930,7 +2007,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v18` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v19` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

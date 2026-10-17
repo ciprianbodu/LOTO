@@ -284,6 +284,19 @@ def apply_autopilot_and_generate() -> None:
                     else ""
                 )
                 recs.append(f"{gk}: {cfg.get('scorer')}{low}{sub}")
+            # Numărul Joker are decizia lui (Urna 2, top-1), cu nota ei.
+            if _spec.is_romanian and _spec.geometry == "joker":
+                gk2 = _spec.bench_key_urna2 or f"{gk}_urna2"
+                cfg2 = recommend_optimal_config(gk2, 1)
+                if cfg2 and not cfg2.get("fallback"):
+                    low2 = (
+                        " · low_confidence"
+                        if cfg2.get("low_confidence")
+                        else " · avantaj nedemonstrat (Holm)"
+                        if (cfg2.get("multiplicity") or {}).get("proven") is False
+                        else ""
+                    )
+                    recs.append(f"{gk2}: {cfg2.get('scorer')}{low2}")
         if recs:
             ui.notify(
                 "Auto-Pilot (scorer per joc, din Re-Bench): " + " | ".join(recs),
@@ -675,10 +688,26 @@ def _avg_fold_runtime(fp, game_key: str | None = None) -> float | None:
     return float(real["runtime_sec"].mean())
 
 
+def _bench_workers() -> int:
+    """Procesele în care rulează bench-ul pe această stație (același calcul ca runner-ul)."""
+    try:
+        from loto_enterprise.benchmark.runner import bench_worker_count
+
+        return bench_worker_count()
+    except Exception:  # noqa: BLE001
+        return 1
+
+
+def _workers_text(n: int) -> str:
+    """„pe 4 procese în paralel”, „pe 21 de procese în paralel”, „într-un singur proces”."""
+    return "într-un singur proces" if int(n) <= 1 else f"pe {count(n, 'procese')} în paralel"
+
+
 def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
     """ETA bench pe baza ULTIMEI rulări (bench_results/folds.csv): avg runtime_sec
-    al folds-urilor reale × nr. folds × overhead. Fallback la estimarea implicită
-    dacă nu există bench anterior."""
+    al folds-urilor reale × nr. folds × overhead, împărțit la procesele în care
+    rulează în paralel (`runtime_sec` e timpul unui fold într-un proces).
+    Fallback la estimarea implicită dacă nu există bench anterior."""
     default = "~50 min" if target_folds >= 1000 else "~5 min"
     fp = PROJECT_ROOT / "bench_results" / "folds.csv"
     if not fp.exists():
@@ -687,7 +716,7 @@ def _estimate_bench_eta(target_folds: int, overhead: float = 1.25) -> str:
         avg = _avg_fold_runtime(fp)
         if avg is None:
             return default
-        return _fmt_eta_seconds(avg * target_folds * overhead)
+        return _fmt_eta_seconds(avg * target_folds * overhead / _bench_workers())
     except Exception:  # noqa: BLE001
         return default
 
@@ -698,6 +727,11 @@ def _csv_rows(path) -> int:
             return max(0, sum(1 for _ in fh) - 1)
     except OSError:
         return 0
+
+
+def _new_draws_text(n: int) -> str:
+    """„1 extragere nouă”, „5 extrageri noi”, „20 de extrageri noi”."""
+    return "1 extragere nouă" if int(n) == 1 else f"{count(n, 'extrageri')} noi"
 
 
 def _bench_target_rule_text(country: str) -> str:
@@ -775,9 +809,11 @@ def _country_bench_texts(country: str) -> dict:
     try:
         avg = _avg_fold_runtime(fp)
         if avg is not None:
+            workers = _bench_workers()
             eta = (
-                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25)} pentru "
-                f"{target} folduri — calculat din durata ultimei rulări {name}."
+                f"⏱ ETA estimat: {_fmt_eta_seconds(avg * target * 1.25 / workers)} "
+                f"pentru {count(target, 'folduri', 'un fold')} {_workers_text(workers)} "
+                f"— din durata medie a unui fold la ultima rulare {name}."
             )
     except Exception:  # noqa: BLE001
         eta = None
@@ -790,9 +826,11 @@ def _country_bench_texts(country: str) -> dict:
             n_here = max(_csv_rows(PROJECT_ROOT / g.csv) for g in games)
             if ref and n_ref:
                 scaled = ref * (n_here / n_ref) ** 2
+                workers = _bench_workers()
                 eta = (
-                    f"⏱ ETA estimat: {_fmt_eta_seconds(scaled * target * 1.25)} pentru "
-                    f"{target} folduri — estimare fără o rulare anterioară {name}, "
+                    f"⏱ ETA estimat: {_fmt_eta_seconds(scaled * target * 1.25 / workers)} "
+                    f"pentru {count(target, 'folduri', 'un fold')} {_workers_text(workers)} "
+                    f"— estimare fără o rulare anterioară {name}, "
                     f"scalată cu lungimea istoricului ({n_here} extrageri față de "
                     f"{n_ref} la România · Loto 6/49)."
                 )
@@ -824,7 +862,7 @@ def _country_bench_texts(country: str) -> dict:
             )
             if rec in ("quick_rebench", "full_rebench") and delta > 0:
                 out["freshness"] = (
-                    f"🆕 {name}: +{delta} extrageri noi de la ultimul bench → "
+                    f"🆕 {name}: +{_new_draws_text(delta)} de la ultimul bench → "
                     "Re-Bench recalculează complet."
                 )
             elif rec in ("quick_rebench", "full_rebench"):
@@ -1299,6 +1337,12 @@ def _load_cached_walk_forward() -> int:
                     "cache ar fi a altei metode; nu o afișez.",
                     g_label,
                 )
+                if _decision_moved_since_generation(g_label, data):
+                    # Același aviz ca la calea live, nu o secțiune care lipsește.
+                    with STATE_LOCK:
+                        STATE.setdefault("retro_meta", {})[f"{fname}_{g_label}"] = {
+                            "decision_moved": True
+                        }
                 continue
             flat, meta = run_honest_walk_forward(
                 df_source=df_source,
@@ -1955,14 +1999,25 @@ def _mail_best_draw_line(spec, df, pool) -> str:
     idx = hits[hits == best].index
     last = idx[-1]
     when = str(df.at[last, "date"]) if "date" in df.columns else f"rândul {last + 1}"
+    # Cât ar avea un pool oarecare de aceeași mărime: pool-ul de azi e ales pe
+    # aceleași extrageri, deci numărătoarea singură ar părea un palmares.
+    from math import comb
+
+    k, n, m = len(pool), int(spec.draw_n), int(spec.max_n)
+    chance = len(df) * comb(k, best) * comb(m - k, n - best) / comb(m, n)
+    # Sub 1, cifre semnificative: „~0.0” s-ar citi „imposibil la întâmplare”.
+    chance_txt = f"{chance:.1f}" if chance >= 0.95 else f"{chance:.2g}"
+    times = "o dată" if len(idx) == 1 else f"de {count(len(idx), 'ori')}"
     return (
-        f"CEL MAI BUN REZULTAT pe istoric ({len(df)} extrageri, pool-ul de azi): "
-        f"{best} numere din pool, ultima oară la {when}; de {len(idx)} ori în total"
+        f"CEL MAI BUN REZULTAT pe istoric ({count(len(df), 'extrageri', 'extragere')}, "
+        f"pool-ul de azi): {best} numere din pool, ultima oară la {when}; {times} în "
+        f"total, față de ~{chance_txt} pentru un pool oarecare de {k} numere. Privire "
+        "înapoi, nu validare: pool-ul e ales pe aceleași extrageri."
     )
 
 
 def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
-    """Metoda folosită la generare și ratingul ei din bench, pe pool-ul generat.
+    """Metoda folosită la generare și ratingul ei din bench (top-K brut al metodei).
 
     Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
     țării pentru pool-ul cu care s-a ales metoda (`pool_hint`; `rationale` scris
@@ -2033,6 +2088,17 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
     note = _multiplicity_note(entry)
     if note and _decision_low_confidence(entry) is not True:
         lines.append(note)
+    # Ca nota de sub clasament: ratingul e al top-K brut, iar pool-ul de mai sus
+    # poate fi schimbat de limita de consecutive, penalizare sau restrângere.
+    if urna2:
+        _rp = (data.get("audit") or {}).get("recent_penalty") or {}
+        if int(_rp.get("draws") or 0) > 0 and _rp.get("penalized_urna2"):
+            lines.append(
+                "Numărul Joker include penalizarea recentă; ratingul măsoară "
+                "scorerul fără ea."
+            )
+    elif _transform := _bench_transform_note(data):
+        lines.append(_transform)
     return lines
 
 
@@ -2048,7 +2114,8 @@ def _send_test_email() -> None:
     body = (
         "Test e-mail Loto Enterprise — configurarea funcționează ✅\n"
         f"Următoarea extragere: {_next_draw_date()}\n"
-        "La finalul bench-ului vei primi: data + pool-ul fiecărui joc."
+        "După fiecare generare vei primi data extragerii, pool-ul fiecărui joc, "
+        "metoda și ratingul ei."
     )
     try:
         send_email(cfg, "🎰 Loto — mail de test", body)
@@ -2326,7 +2393,7 @@ def _bench_freshness_panel(country: str) -> None:
         parts = ", ".join(f"{labels.get(gk, gk)} +{d}" for gk, d in fresh["per"].items())
         color = "text-negative" if fresh["rec"] == "full_rebench" else "text-warning"
         total = fresh["total"]
-        ui.label(f"🆕 +{total} extrageri noi de la ultimul bench ({parts}).").classes(
+        ui.label(f"🆕 +{_new_draws_text(total)} de la ultimul bench ({parts}).").classes(
             "text-caption " + color
         )
         ui.label(
@@ -2513,17 +2580,28 @@ def _base_table_games(country=None) -> tuple:
     )
 
 
-_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool) → (rânduri, n_extrageri)
-# 3 jocuri × pool 6..16 = 33 combinații. Sub atât, memo-ul se golea înainte să
-# apuce să fie folosit: o plimbare înainte și înapoi peste dimensiunile de pool
-# recalcula tot de fiecare dată.
-_BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11
+_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool, țintă) → (rânduri, n)
+# 3 jocuri × pool 6..16 × ținta 3/4 = 66 de combinații. Sub atât, memo-ul se
+# golea înainte să apuce să fie folosit: o plimbare înainte și înapoi peste
+# dimensiunile de pool recalcula tot de fiecare dată.
+_BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11 * 2
 # Tabelul se calculează abia când submeniul e deschis: ~0.7 s pentru trei jocuri
 # ar fi fost plătiți la fiecare încărcare de pagină, chiar fără să fie deschis.
 _BASE_TABLE_OPENED = {"value": False}
 
 
-def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int):
+def _weaker_text(n: int) -> str:
+    """„niciunul n-a ieșit mai slab”, „unul a ieșit mai slab”, „5 au ieșit mai slabe”."""
+    if int(n) == 0:
+        return "niciunul n-a ieșit mai slab"
+    if int(n) == 1:
+        return "unul a ieșit mai slab"
+    return f"{int(n)} au ieșit mai slabe"
+
+
+def _base_interval_rows(
+    csv_name: str, draw_n: int, max_num: int, pool_size: int, target: int = 3
+):
     """Tabelul de intervale al unui joc, memoizat pe fișier + geometrie + pool.
 
     Calculul e exact (hipergeometric per extragere), nu simulare, și durează sub
@@ -2544,7 +2622,7 @@ def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int
         stat = path.stat()
     except OSError:
         return None
-    key = (str(path), stat.st_mtime_ns, stat.st_size, draw_n, max_num, pool_size)
+    key = (str(path), stat.st_mtime_ns, stat.st_size, draw_n, max_num, pool_size, target)
     if key in _BASE_TABLE_MEMO:
         return _BASE_TABLE_MEMO[key]
     try:
@@ -2554,7 +2632,10 @@ def _base_interval_rows(csv_name: str, draw_n: int, max_num: int, pool_size: int
             draw_n=draw_n,
             max_num=max_num,
         )
-        result = (interval_table(draws, max_num, pool_size, draw_n), len(draws))
+        result = (
+            interval_table(draws, max_num, pool_size, draw_n, target=target),
+            len(draws),
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("tabel intervale %s: %s", csv_name, exc)
         return None
@@ -2585,10 +2666,13 @@ def _render_base_interval_tables() -> None:
     # `ui.number` își aplică min/max abia la blur, deci în timpul tastării pot
     # ajunge aici valori ca 0 sau 1. Fără plafonare, geometria era invalidă și
     # tabelul raporta „istoric indisponibil" pentru un istoric perfect valid.
+    from loto_enterprise.benchmark.hit_target import game_hit_target
+
     pool = max(6, min(16, _int_setting("pool_size_val")))
     ui.label(
-        f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată de 3+ "
-        f"la un pool de {pool} numere. Calcul exact (hipergeometric per extragere), "
+        f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată la ținta "
+        f"jocului (ca bench-ul: Loto 5/40 minimum 4+), la un pool de {pool} numere. "
+        "Calcul exact (hipergeometric per extragere), "
         "nu simulare. Coloana «Toată extragerea» e altceva: de câte ori au încăput "
         "TOATE numerele extrase în interval — plafonul unui sistem care ar juca "
         "întregul interval, nu rata unui pool de dimensiune fixă. Ultimul rând este "
@@ -2597,14 +2681,17 @@ def _render_base_interval_tables() -> None:
     for label, csv_name, draw_n, max_num in _base_table_games():
         if pool > max_num:
             continue
-        data = _base_interval_rows(csv_name, draw_n, max_num, pool)
+        _t = game_hit_target(_game_spec_for(csv_name).bench_key, _clamped_bench_target())
+        data = _base_interval_rows(csv_name, draw_n, max_num, pool, _t)
         if data is None:
             ui.label(f"· {label}: istoric indisponibil.").classes(
                 "text-caption text-grey"
             )
             continue
         rows, n_draws = data
-        with ui.expansion(f"{label} — {n_draws} extrageri", value=False).classes(
+        with ui.expansion(
+            f"{label} — {count(n_draws, 'extrageri')}, ținta {_t}+", value=False
+        ).classes(
             "w-full"
         ):
             ui.table(
@@ -2617,14 +2704,16 @@ def _render_base_interval_tables() -> None:
                         "align": "center",
                     },
                     {"name": "whole", "label": "Tot", "field": "whole", "align": "center"},
-                    {"name": "h1", "label": "Jum. 1", "field": "h1", "align": "center"},
-                    {"name": "h2", "label": "Jum. 2", "field": "h2", "align": "center"},
+                    # Controlul uniform lângă „Tot”: în sertarul de 360 px încap
+                    # primele patru coloane, iar comparația lor e rostul tabelului.
                     {
                         "name": "ctrl",
                         "label": "🎲 Uniform",
                         "field": "ctrl",
                         "align": "center",
                     },
+                    {"name": "h1", "label": "Jum. 1", "field": "h1", "align": "center"},
+                    {"name": "h2", "label": "Jum. 2", "field": "h2", "align": "center"},
                     {
                         "name": "full",
                         "label": "Toată extragerea",
@@ -2654,9 +2743,9 @@ def _render_base_interval_tables() -> None:
             )
             ui.label(
                 f"Referință teoretică, identică pentru ORICE pool de {pool} numere: "
-                f"{theoretical_rate(max_num, pool, draw_n):.2f}%. "
-                f"Din {len(rows) - 1} intervale alese pe tot istoricul, {_moved} au "
-                "ieșit mai slabe pe a doua jumătate decât pe prima."
+                f"{theoretical_rate(max_num, pool, draw_n, _t):.2f}%. "
+                f"Din {count(len(rows) - 1, 'intervale', 'un interval')} alese pe tot "
+                f"istoricul, {_weaker_text(_moved)} pe a doua jumătate decât pe prima."
             ).classes("text-caption text-grey")
     ui.label(
         "Cum se citește: un pool de dimensiune fixă are aceeași probabilitate "
@@ -2679,9 +2768,20 @@ def main_page() -> None:
     # Chevron-ul expansion-urilor: vârful în JOS când e DESCHIS (arată spre conținut),
     # în sus când e închis — invers față de implicitul Quasar. Inversăm rotația global
     # pentru toate expansion-urile (q-expansion-item) printr-o singură regulă.
+    # Pe telefon, fiecare card și expansion imbricat lua câte 32 px din lățime:
+    # tabelele din „Istoric hits” rămâneau cu 230 px din 390.
     ui.add_css("""
         .q-expansion-item__toggle-icon { transform: rotate(180deg) !important; }
         .q-expansion-item__toggle-icon--rotated { transform: rotate(0deg) !important; }
+        @media (max-width: 599.98px) {
+            .loto-main, .loto-main .nicegui-card, .loto-main .nicegui-expansion-content {
+                padding: 4px !important;
+            }
+            .loto-main .q-table--dense th, .loto-main .q-table--dense td {
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
+        }
     """)
 
     with ui.header().classes("items-center justify-between"):
@@ -2689,7 +2789,7 @@ def main_page() -> None:
         ui.label("NiceGUI — stare persistentă, fără reload").classes("text-caption")
 
     # ---- Sidebar (drawer stânga) ----
-    with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3"):
+    with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3") as drawer:
         ui.label("1. Încărcare Date CSV").classes("text-bold")
         _cc = _selected_country()
         _cc_name = _country_label(_cc)
@@ -2910,7 +3010,7 @@ def main_page() -> None:
             "Scorul unui număr extras de k ori în ultimele N extrageri se înmulțește cu factor^k. "
             "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
             "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
-            "Walk-forward aplică aceeași setare."
+            "La Joker se aplică și numărului din Urna 2. Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.checkbox("🔗 Fără 3 numere consecutive în pool (activ implicit)").classes(
@@ -2923,7 +3023,7 @@ def main_page() -> None:
             "la repornire. Setarea se aplică la următoarea generare. "
             "Pool-ul se ia tot după clasamentul metodei. Numărul care ar forma al "
             "treilea consecutiv este sărit, iar locul lui îl ia următorul număr din "
-            "clasament care nu formează o secvență. Fereastra rezultatului arată ce "
+            "clasament care nu formează trei numere consecutive. Fereastra rezultatului arată ce "
             "număr a fost scos din pool și ce număr i-a luat locul. Preferință de "
             "compoziție, fără avantaj statistic demonstrat; walk-forward aplică "
             "aceeași regulă."
@@ -3047,6 +3147,8 @@ def main_page() -> None:
             target = _clamped_bench_target(e.value)
             SETTINGS["bench_hit_target"] = target
             _save_settings()
+            # Tabelul de intervale se ordonează pe ținta jocului.
+            _render_base_interval_tables.refresh()
             try:
                 import loto_enterprise.benchmark.decision as decision
 
@@ -3089,7 +3191,8 @@ def main_page() -> None:
             ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete"
         )
         _bind_save(
-            ui.checkbox("📧 Trimite rezultatele pe mail la final"), "mail_on_complete"
+            ui.checkbox("📧 Trimite rezultatele pe mail după fiecare generare"),
+            "mail_on_complete",
         )
         ui.button("📧 Trimite mail de test", on_click=_send_test_email).props(
             "outline no-caps size=sm"
@@ -3154,8 +3257,9 @@ def main_page() -> None:
             if _eta_folds:
                 ui.label(
                     f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
-                    f"{_eta_folds} folduri — calculat din durata ultimei rulări; "
-                    "prima estimare după o schimbare de matrice e optimistă."
+                    f"{count(_eta_folds, 'folduri', 'un fold')} "
+                    f"{_workers_text(_bench_workers())} — din durata medie a unui fold "
+                    "la ultima rulare; după o schimbare de matrice estimarea e aproximativă."
                 ).classes("text-caption text-grey")
             # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
             # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
@@ -3211,8 +3315,15 @@ def main_page() -> None:
             "🗑️ Șterge Log", on_click=lambda: (clear_logs(), logs_panel.refresh())
         ).props("outline no-caps").classes("w-full").style(_BTN_STYLE)
 
+    # Sub 1024 px sertarul iese din ecran și toate comenzile odată cu el; butonul
+    # plutitor îl aduce înapoi (antetul rămâne neschimbat).
+    with ui.page_sticky(position="top-left", x_offset=8, y_offset=8).classes("lt-md"):
+        ui.button(icon="menu", on_click=drawer.toggle).props(
+            "round color=primary aria-label=Setări"
+        ).tooltip("Setări și comenzi")
+
     # ---- Zona principală ----
-    with ui.column().classes("w-full p-4 gap-2"):
+    with ui.column().classes("w-full p-4 gap-2 loto-main"):
         status_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
