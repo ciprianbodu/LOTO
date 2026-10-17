@@ -1,0 +1,11 @@
+{
+  "name": "Loto Enterprise",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "loto-ui",
+      "command": "export PATH=\"$HOME/.local/bin:$PATH\"; export LOTO_RUNTIME_DIR=\"$HOME/.loto-runtime\"; export LOTO_WF_CACHE_DIR=\"$HOME/.loto-runtime/.wf_cache\"; export LOTO_UI_PORT=8000; mkdir -p \"$LOTO_RUNTIME_DIR\"; exec .venv/bin/python app_nicegui.py"
+    }
+  ],
+  "ports": [8000]
+}
