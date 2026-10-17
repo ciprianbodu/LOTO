@@ -1,0 +1,45 @@
+# Loteria Romana, Joker, schema redusa predefinita Cod 14
+# numere: 12
+# variante: 38
+# Sursa: https://www.loto.ro/images/upload/pages/extras_brosura_joker.pdf (sha256 d7a07dff71026e8ee4513a0b55e24171eaa0a362b6c816861c9e07535f5e6f08)
+# Pozitia 1 = cel mai mic numar jucat, ultima = cel mai mare (brosura 6/49,
+# exemplul 3: numerele teoretice 1..n fata de numerele jucate, crescator).
+# Verificat exact pe indexul de castiguri tiparit (scripts/analysis/import_lr_schemes.py).
+1 2 3 4 10
+1 2 7 9 10
+1 3 6 8 9
+1 4 5 9 10
+1 5 6 10 11
+2 3 5 9 10
+2 3 7 8 12
+2 4 6 9 12
+2 7 8 9 10
+3 4 5 6 8
+3 6 7 10 12
+4 6 7 8 11
+5 7 9 10 12
+1 2 4 8 11
+1 3 4 10 12
+1 3 6 8 11
+1 4 6 7 8
+1 5 7 9 11
+2 3 5 9 11
+2 4 5 7 10
+2 5 6 8 9
+2 7 8 11 12
+3 4 5 11 12
+3 7 8 10 11
+4 6 9 10 11
+5 8 9 11 12
+1 2 5 6 12
+1 3 5 7 8
+1 3 9 11 12
+1 4 7 11 12
+1 8 9 10 12
+2 3 6 7 11
+2 4 6 9 11
+2 5 6 8 10
+2 8 10 11 12
+3 4 7 8 9
+4 5 8 10 12
+5 6 7 9 12

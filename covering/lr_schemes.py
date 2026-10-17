@@ -1,0 +1,175 @@
+"""Schemele reduse predefinite ale Loteriei Române (2026-10-17).
+
+La agenție o schemă redusă se joacă după cod: se marchează n numere, iar
+terminalul le desfășoară în variantele schemei. Desfășurările vin din broșurile
+loto.ro, importate offline prin `scripts/analysis/import_lr_schemes.py`, care
+scrie o schemă numai dacă indexul de câștiguri recalculat din variante
+coincide exact cu cel tipărit. Fișierele sunt
+``covering_designs/lr/LR_<joc>_cod<NN>.txt``: o variantă pe linie, poziții
+1..n.
+
+Poziția 1 este cel mai mic număr jucat (broșura 6/49, exemplul 3: numerele
+„teoretice” 1..13 corespund numerelor jucate în ordine crescătoare). Schema se
+pune deci pe pool-ul sortat crescător, nu pe clasamentul metodei. Pe extrageri
+uniforme șansele nu depind de această așezare.
+
+Numai geometrie: o schemă nu schimbă rata pool-ului (hipergeometrică), ci felul
+în care numerele prinse în pool ajung pe aceeași variantă.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass
+from functools import lru_cache
+from math import comb
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_MODULE_DIR = Path(__file__).resolve().parents[1]
+LR_DIR = _MODULE_DIR / "covering_designs" / "lr"
+# Eticheta jocului în aplicație -> cheia din numele fișierului; bilet, extrase, univers.
+_GAMES = {
+    "6/49": ("649", 6, 6, 49),
+    "5/40": ("540", 5, 6, 40),
+    "joker": ("joker", 5, 5, 45),
+}
+_FILE = re.compile(r"^LR_(649|540|joker)_cod(\d+)\.txt$")
+
+
+@dataclass(frozen=True)
+class LRScheme:
+    """O schemă oficială: `variants` pe pozițiile 1..n, în ordinea broșurii."""
+
+    game: str
+    code: int
+    n: int
+    variants: tuple[tuple[int, ...], ...]
+
+    @property
+    def label(self) -> str:
+        return f"Cod {self.code}"
+
+    @property
+    def size(self) -> int:
+        return len(self.variants)
+
+
+def _parse(path: Path, game: str, code: int) -> LRScheme:
+    pick = _GAMES[game][1]
+    header: dict[str, int] = {}
+    rows: list[tuple[int, ...]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            m = re.match(r"#\s*(numere|variante):\s*(\d+)\s*$", line)
+            if m:
+                header[m.group(1)] = int(m.group(2))
+            continue
+        rows.append(tuple(int(x) for x in line.split()))
+    n = header.get("numere")
+    if n is None or header.get("variante") != len(rows):
+        raise ValueError("antet fără numere sau cu alt număr de variante")
+    if any(
+        len(r) != pick or len(set(r)) != pick or not all(1 <= p <= n for p in r)
+        for r in rows
+    ):
+        raise ValueError(f"variantă care nu are {pick} poziții distincte din 1..{n}")
+    if len(set(rows)) != len(rows):
+        raise ValueError("variante repetate")
+    if {p for r in rows for p in r} != set(range(1, n + 1)):
+        raise ValueError("poziție nejucată")
+    return LRScheme(game, code, n, tuple(tuple(sorted(r)) for r in rows))
+
+
+@lru_cache(maxsize=4)
+def _load(directory: str) -> tuple[LRScheme, ...]:
+    out = []
+    base = Path(directory)
+    if not base.is_dir():
+        return ()
+    labels = {key: label for label, (key, *_rest) in _GAMES.items()}
+    for path in sorted(base.iterdir()):
+        m = _FILE.match(path.name)
+        if not m:
+            continue
+        try:
+            out.append(_parse(path, labels[m.group(1)], int(m.group(2))))
+        except (OSError, ValueError) as exc:
+            # Un fișier stricat e sărit singur; celelalte scheme rămân.
+            logger.warning("Schema LR %s ignorată: %s", path.name, exc)
+    return tuple(sorted(out, key=lambda s: (s.game, s.n, s.size, s.code)))
+
+
+def lr_schemes(game: str | None = None, n: int | None = None) -> list[LRScheme]:
+    """Schemele valide, filtrate pe joc („6/49”, „5/40”, „joker”) și pe numere."""
+    return [
+        s
+        for s in _load(str(LR_DIR))
+        if (game is None or s.game == game) and (n is None or s.n == int(n))
+    ]
+
+
+def scheme_tickets(scheme: LRScheme, pool) -> list[list[int]]:
+    """Variantele schemei pe numerele jucate, cum le desfășoară terminalul."""
+    nums = sorted({int(x) for x in pool})
+    if len(nums) != scheme.n:
+        raise ValueError(f"{scheme.label} cere {scheme.n} numere, nu {len(nums)}")
+    return [[nums[p - 1] for p in v] for v in scheme.variants]
+
+
+@lru_cache(maxsize=64)
+def scheme_odds(scheme: LRScheme) -> dict[int, float]:
+    """P(cel puțin t pe o variantă) la o extragere uniformă, t = 3..min(bilet, extrase).
+
+    Profilul exact e limitat la 16 numere, cât are cel mai mare pool al
+    aplicației; schemele 5/40 de 17-19 numere ridică ValueError.
+    """
+    from covering.probability import wheel_hit_probabilities
+
+    _, pick, draw_n, max_num = _GAMES[scheme.game]
+    odds = wheel_hit_probabilities(
+        list(range(1, scheme.n + 1)),
+        [list(v) for v in scheme.variants],
+        draw_n,
+        max_num,
+    )
+    return {t: float(odds["ticket"][t]) for t in range(3, min(pick, draw_n) + 1)}
+
+
+@lru_cache(maxsize=64)
+def scheme_guarantees(scheme: LRScheme) -> dict[int, dict[int, float]]:
+    """{k ieșite din cele n: {t: fracția cazurilor cu cel puțin t pe o variantă}}.
+
+    k merge de la 3 la min(n, extrase); t de la 3 la min(k, bilet). 1.0 = sigur.
+    """
+    from covering.probability import wheel_hit_profile
+
+    _, pick, draw_n, _ = _GAMES[scheme.game]
+    counts = wheel_hit_profile(
+        list(range(1, scheme.n + 1)), [list(v) for v in scheme.variants]
+    )
+    out: dict[int, dict[int, float]] = {}
+    for k in range(3, min(scheme.n, draw_n) + 1):
+        total = comb(scheme.n, k)
+        out[k] = {t: counts[k][t] / total for t in range(3, min(k, pick) + 1)}
+    return out
+
+
+@lru_cache(maxsize=64)
+def _position_masks(scheme: LRScheme) -> tuple[int, ...]:
+    return tuple(sum(1 << (p - 1) for p in v) for v in scheme.variants)
+
+
+def best_hits(scheme: LRScheme, pool, drawn) -> int:
+    """Cele mai multe numere extrase pe o singură variantă a schemei puse pe `pool`."""
+    nums = sorted({int(x) for x in pool})
+    if len(nums) != scheme.n:
+        raise ValueError(f"{scheme.label} cere {scheme.n} numere, nu {len(nums)}")
+    hit = {int(x) for x in drawn}
+    mask = sum(1 << i for i, x in enumerate(nums) if x in hit)
+    return max((m & mask).bit_count() for m in _position_masks(scheme))

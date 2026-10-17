@@ -1,5 +1,12 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Schemele reduse ale Loteriei Române, 17.10.2026:** [desfășurări oficiale verificate și comparate cu aplicația](lr_schemes_2026-10-17.md).
+Cele 33 de scheme cu variante întregi (6/49, 5/40, Joker) sunt importate din
+broșurile loto.ro numai dacă indexul de câștiguri recalculat coincide cu cel
+tipărit. Cod 59 (6/49, 16 numere, 112 variante) are aceleași șanse ca cel mai
+bun wheel al aplicației cu 112 variante: 4+ 7,43%, 5+ 0,207%. Reproducere:
+`import_lr_schemes.py`, `analyze_lr_schemes.py`.
+
 **Audit și mai multe hituri pe bilete, 16.10.2026:** [pârghii certificate și frontiera pool-ului 16](audit_hits_2026-10-16.md).
 Configurația 6/49 pool 16, garanția 4, fără plafon e la frontieră (3+ și 4+ la
 maximul pool-ului, nicio rearanjare certificată a coverului de 152 pentru 5+).

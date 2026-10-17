@@ -1954,6 +1954,16 @@ def _build_mail_body() -> str:
             + _nums(primary.get("hard_core") or [])
             + (f"  | joker: {_nums(joker)}" if joker else "")
         )
+        _lr = _lr_schemes_for(g, primary)
+        if _lr:
+            _price = PRICES.get(_game_label_for(g), 8.0)
+            lines.append(
+                "SCHEMĂ LR: "
+                + " sau ".join(
+                    f"{s.label} ({s.size} var. ≈ {_thousands(s.size * _price)} lei)"
+                    for s in _lr
+                )
+            )
         lines.extend(_mail_method_lines(_sp, primary))
         if joker:
             lines.extend(_mail_method_lines(_sp, primary, urna2=True))
