@@ -301,6 +301,10 @@ def update_job_progress(
     picioare (`requeue_running_jobs`) nu mai poate scrie progres peste rularea
     NOUĂ care l-a revendicat între timp, chiar dacă statusul e din nou RUNNING.
     """
+    # Engine callbacks may regress (frequency 30%, then scoring 15%). Across
+    # multiple tasks they can round down to 0/1, which fetch_running_job treats
+    # as unstarted and reclaimable. Keep progress monotone in the same atomic
+    # UPDATE; a legitimate requeue resets it when fetch_pending_job claims it.
     init_job_queue(db_path)
     pct_i = max(0, min(100, int(pct)))
     line = str(log_msg or "").strip()
@@ -322,7 +326,7 @@ def update_job_progress(
         cur = conn.execute(
             f"""
             UPDATE jobs
-            SET progress_pct = ?, log_tail = {_LOG_TAIL_APPEND_SQL}
+            SET progress_pct = MAX(progress_pct, ?), log_tail = {_LOG_TAIL_APPEND_SQL}
             WHERE {where}
             """,
             (pct_i, *_append_log_tail_params(stamped)) + params,
@@ -511,16 +515,18 @@ def fetch_running_job(
 ) -> dict[str, Any] | None:
     """Preluăm job-uri RUNNING care nu au fost procesate încă (fallback la restart worker).
 
-    Pragul e <= 1 (doar claim-uit, niciodată atins de worker): orice job cu pct >= 2
-    a fost deja preluat („Job preluat de worker.") și e PROPRIETATEA acelui worker —
-    un al doilea worker nu are voie să-l fure cât primul încarcă pandas/engine
-    (pct 2-5). Orfanii cu pct >= 2 se recuperează la următorul start de worker
-    (requeue_running_jobs), nu aici. `worker_token`, dacă e dat, marchează noul
-    proprietar (vezi `fetch_pending_job`)."""
+    Pragul e <= 1, înainte de „Job preluat de worker.”. Un token deja scris
+    la claim protejează jobul chiar și în fereastra dinaintea primului progres:
+    numai același worker îl poate continua. Rândurile legacy fără token pot fi
+    preluate de orice worker. Orfanii cu token străin sau pct >= 2 se recuperează
+    la următorul start de worker (requeue_running_jobs), nu aici."""
     return _claim_job(
         db_path,
-        where_sql="status = ? AND progress_pct <= 1",
-        where_params=(JOB_RUNNING,),
+        where_sql=(
+            "status = ? AND progress_pct <= 1 "
+            "AND (worker_token IS NULL OR worker_token = ?)"
+        ),
+        where_params=(JOB_RUNNING, worker_token),
         update_sql="UPDATE jobs SET progress_pct = 2, worker_token = ? WHERE id = ?",
         update_extra_params=(worker_token,),
     )

@@ -1,0 +1,1538 @@
+{
+  "date": "2026-10-18",
+  "python": "3.14.8",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "scores": "synthetic descending ranks, not calibrated probabilities",
+  "repeats": 3,
+  "comparisons": [
+    {
+      "game": "6/49",
+      "pool": 16,
+      "pick": 6,
+      "draw_n": 6,
+      "max_num": 49,
+      "guarantee": 4,
+      "budget": 10,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 10,
+        "coverage_pct": 8.24,
+        "uniform_ticket_probability": {
+          "1": 0.9207964406854323,
+          "2": 0.6316839409214194,
+          "3": 0.14808032371135318,
+          "4": 0.009773440954886706,
+          "5": 0.00018521410750827957,
+          "6": 7.151123842018516e-07
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 150,
+          "pct_1plus": 8.24,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 10010.208,
+        "warm_median_ms": 21.371
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 10,
+          "coverage_pct": 8.02,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.5343062294297922,
+            "3": 0.1206282319504204,
+            "4": 0.008806752033922643,
+            "5": 0.00018378388273987588,
+            "6": 7.151123842018516e-07
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 146,
+            "pct_1plus": 8.02,
+            "covered_2plus": 3,
+            "pct_2plus": 0.16,
+            "covered_3plus": 1,
+            "pct_3plus": 0.05,
+            "min_covers": 0,
+            "max_covers": 3
+          },
+          "cold_ms": 24.114,
+          "warm_median_ms": 22.163,
+          "delta_probability_points": {
+            "3": -2.7452091760932786,
+            "4": -0.09666889209640622,
+            "5": -0.00014302247684036963,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 10,
+          "coverage_pct": 8.08,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.5351321842335454,
+            "3": 0.11826457098691802,
+            "4": 0.008748470374610193,
+            "5": 0.00018435597264723736,
+            "6": 7.151123842018516e-07
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 147,
+            "pct_1plus": 8.08,
+            "covered_2plus": 3,
+            "pct_2plus": 0.16,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 10.213,
+          "warm_median_ms": 7.813,
+          "delta_probability_points": {
+            "3": -2.9815752724435165,
+            "4": -0.10249705802765127,
+            "5": -8.581348610422123e-05,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "6/49",
+      "pool": 16,
+      "pick": 6,
+      "draw_n": 6,
+      "max_num": 49,
+      "guarantee": 4,
+      "budget": 30,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 30,
+        "coverage_pct": 24.73,
+        "uniform_ticket_probability": {
+          "1": 0.9207964406854323,
+          "2": 0.6492413801783433,
+          "3": 0.2700006922287879,
+          "4": 0.025901084510837384,
+          "5": 0.0005556423225248387,
+          "6": 2.145337152605555e-06
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 450,
+          "pct_1plus": 24.73,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 10818.309,
+        "warm_median_ms": 33.925
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 30,
+          "coverage_pct": 23.68,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.6316839409214194,
+            "3": 0.21266684287035814,
+            "4": 0.02309877361086559,
+            "5": 0.0005497068897359634,
+            "6": 2.145337152605555e-06
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 431,
+            "pct_1plus": 23.68,
+            "covered_2plus": 17,
+            "pct_2plus": 0.93,
+            "covered_3plus": 2,
+            "pct_3plus": 0.11,
+            "min_covers": 0,
+            "max_covers": 3
+          },
+          "cold_ms": 43.561,
+          "warm_median_ms": 45.065,
+          "delta_probability_points": {
+            "3": -5.733384935842977,
+            "4": -0.2802310899971794,
+            "5": -0.0005935432788875365,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 30,
+          "coverage_pct": 22.8,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.6492413801783433,
+            "3": 0.220636126791142,
+            "4": 0.022462466611402783,
+            "5": 0.0005456307491460128,
+            "6": 2.145337152605555e-06
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 415,
+            "pct_1plus": 22.8,
+            "covered_2plus": 35,
+            "pct_2plus": 1.92,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 20.316,
+          "warm_median_ms": 21.165,
+          "delta_probability_points": {
+            "3": -4.936456543764592,
+            "4": -0.3438617899434601,
+            "5": -0.0010011573378825955,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "6/49",
+      "pool": 16,
+      "pick": 6,
+      "draw_n": 6,
+      "max_num": 49,
+      "guarantee": 4,
+      "budget": 65,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 65,
+        "coverage_pct": 53.57,
+        "uniform_ticket_probability": {
+          "1": 0.9207964406854323,
+          "2": 0.6492413801783433,
+          "3": 0.29809259503986607,
+          "4": 0.04707406047104739,
+          "5": 0.0012038916988038172,
+          "6": 4.648230497312036e-06
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 975,
+          "pct_1plus": 53.57,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 11965.822,
+        "warm_median_ms": 54.764
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 65,
+          "coverage_pct": 47.2,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.6492413801783433,
+            "3": 0.27718728564506284,
+            "4": 0.042033519319762215,
+            "5": 0.001167492478447943,
+            "6": 4.648230497312036e-06
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 859,
+            "pct_1plus": 47.2,
+            "covered_2plus": 103,
+            "pct_2plus": 5.66,
+            "covered_3plus": 12,
+            "pct_3plus": 0.66,
+            "min_covers": 0,
+            "max_covers": 4
+          },
+          "cold_ms": 127.506,
+          "warm_median_ms": 83.872,
+          "delta_probability_points": {
+            "3": -2.090530939480323,
+            "4": -0.5040541151285174,
+            "5": -0.0036399220355874283,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 65,
+          "coverage_pct": 43.35,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.6492413801783433,
+            "3": 0.29809259503986607,
+            "4": 0.03951460745764961,
+            "5": 0.0011484704890281738,
+            "6": 4.648230497312036e-06
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 789,
+            "pct_1plus": 43.35,
+            "covered_2plus": 168,
+            "pct_2plus": 9.23,
+            "covered_3plus": 14,
+            "pct_3plus": 0.77,
+            "min_covers": 0,
+            "max_covers": 4
+          },
+          "cold_ms": 41.59,
+          "warm_median_ms": 39.03,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": -0.7559453013397777,
+            "5": -0.005542120977564341,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "6/49",
+      "pool": 16,
+      "pick": 6,
+      "draw_n": 6,
+      "max_num": 49,
+      "guarantee": 4,
+      "budget": 0,
+      "automatic_method": "lajolla",
+      "automatic": {
+        "tickets": 152,
+        "coverage_pct": 100.0,
+        "uniform_ticket_probability": {
+          "1": 0.9207964406854323,
+          "2": 0.6492413801783433,
+          "3": 0.29809259503986607,
+          "4": 0.07960001762036914,
+          "5": 0.00251433514285371,
+          "6": 1.0869708239868145e-05
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 1820,
+          "pct_1plus": 100.0,
+          "covered_2plus": 380,
+          "pct_2plus": 20.88,
+          "covered_3plus": 12,
+          "pct_3plus": 0.66,
+          "min_covers": 1,
+          "max_covers": 10
+        },
+        "cold_ms": 653.781,
+        "warm_median_ms": 127.98
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 152,
+          "coverage_pct": 100.0,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.6492413801783433,
+            "3": 0.29809259503986607,
+            "4": 0.07960001762036914,
+            "5": 0.00251433514285371,
+            "6": 1.0869708239868145e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 1820,
+            "pct_1plus": 100.0,
+            "covered_2plus": 380,
+            "pct_2plus": 20.88,
+            "covered_3plus": 12,
+            "pct_3plus": 0.66,
+            "min_covers": 1,
+            "max_covers": 10
+          },
+          "cold_ms": 15.721,
+          "warm_median_ms": 12.437,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.0,
+            "6": 0.0
+          },
+          "equal_cost_certificate": "no strict gain"
+        },
+        "multihit": {
+          "tickets": 335,
+          "coverage_pct": 100.0,
+          "uniform_ticket_probability": {
+            "1": 0.9207964406854323,
+            "2": 0.6492413801783433,
+            "3": 0.29809259503986607,
+            "4": 0.07960001762036914,
+            "5": 0.004991269908013664,
+            "6": 2.395626487076203e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 1820,
+            "pct_1plus": 100.0,
+            "covered_2plus": 1820,
+            "pct_2plus": 100.0,
+            "covered_3plus": 954,
+            "pct_3plus": 52.42,
+            "min_covers": 2,
+            "max_covers": 7
+          },
+          "cold_ms": 224.263,
+          "warm_median_ms": 172.203,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.24769347651599538,
+            "6": 0.0013086556630893885
+          },
+          "equal_cost_certificate": "different ticket count; no equal-cost claim"
+        }
+      }
+    },
+    {
+      "game": "5/40",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 6,
+      "max_num": 40,
+      "guarantee": 4,
+      "budget": 10,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 10,
+        "coverage_pct": 2.75,
+        "uniform_ticket_probability": {
+          "1": 0.964934164934165,
+          "2": 0.7048405837879522,
+          "3": 0.15680755943913838,
+          "4": 0.007820747294431505,
+          "5": 9.11843017106175e-05,
+          "6": 0.0
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 50,
+          "pct_1plus": 2.75,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 9358.059,
+        "warm_median_ms": 14.703
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 10,
+          "coverage_pct": 2.75,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.5706412601149443,
+            "3": 0.11768454400033347,
+            "4": 0.007204341414867731,
+            "5": 9.11843017106175e-05,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 50,
+            "pct_1plus": 2.75,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          },
+          "cold_ms": 11.644,
+          "warm_median_ms": 10.293,
+          "delta_probability_points": {
+            "3": -3.9123015438804907,
+            "4": -0.06164058795637738,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 10,
+          "coverage_pct": 2.69,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.5204138204138204,
+            "3": 0.10514696304169989,
+            "4": 0.006687717214033003,
+            "5": 9.092377513430145e-05,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 49,
+            "pct_1plus": 2.69,
+            "covered_2plus": 1,
+            "pct_2plus": 0.05,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 3.09,
+          "warm_median_ms": 2.76,
+          "delta_probability_points": {
+            "3": -5.166059639743849,
+            "4": -0.11330300803985013,
+            "5": -2.6052657631604e-05
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "5/40",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 6,
+      "max_num": 40,
+      "guarantee": 4,
+      "budget": 30,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 30,
+        "coverage_pct": 8.24,
+        "uniform_ticket_probability": {
+          "1": 0.964934164934165,
+          "2": 0.7877594193383667,
+          "3": 0.31435866172708277,
+          "4": 0.022972972972972974,
+          "5": 0.0002735529051318525,
+          "6": 0.0
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 150,
+          "pct_1plus": 8.24,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 8663.944,
+        "warm_median_ms": 13.016
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 30,
+          "coverage_pct": 8.24,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.676629723998145,
+            "3": 0.20559272401377665,
+            "4": 0.019376143060353585,
+            "5": 0.0002735529051318525,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 150,
+            "pct_1plus": 8.24,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          },
+          "cold_ms": 11.192,
+          "warm_median_ms": 11.435,
+          "delta_probability_points": {
+            "3": -10.876593771330612,
+            "4": -0.3596829912619389,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 30,
+          "coverage_pct": 7.91,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.7673263199578989,
+            "3": 0.21900254794991636,
+            "4": 0.017637909743172902,
+            "5": 0.0002719897456739562,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 144,
+            "pct_1plus": 7.91,
+            "covered_2plus": 6,
+            "pct_2plus": 0.33,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 5.727,
+          "warm_median_ms": 5.119,
+          "delta_probability_points": {
+            "3": -9.535611377716641,
+            "4": -0.5335063229800072,
+            "5": -0.0001563159457896267
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "5/40",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 6,
+      "max_num": 40,
+      "guarantee": 4,
+      "budget": 65,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 65,
+        "coverage_pct": 17.86,
+        "uniform_ticket_probability": {
+          "1": 0.964934164934165,
+          "2": 0.7877594193383667,
+          "3": 0.437101068680016,
+          "4": 0.04514039777197672,
+          "5": 0.0005926979611190138,
+          "6": 0.0
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 325,
+          "pct_1plus": 17.86,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 11251.952,
+        "warm_median_ms": 13.546
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 65,
+          "coverage_pct": 17.8,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.7678536257483626,
+            "3": 0.2994888468572679,
+            "4": 0.03781074307390097,
+            "5": 0.0005924374345426977,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 324,
+            "pct_1plus": 17.8,
+            "covered_2plus": 1,
+            "pct_2plus": 0.05,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 11.936,
+          "warm_median_ms": 12.419,
+          "delta_probability_points": {
+            "3": -13.761222182274812,
+            "4": -0.7329654698075748,
+            "5": -2.6052657631605355e-05
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 65,
+          "coverage_pct": 16.43,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.7877594193383667,
+            "3": 0.3221293879188616,
+            "4": 0.034374137005715955,
+            "5": 0.0005859242701347964,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 299,
+            "pct_1plus": 16.43,
+            "covered_2plus": 26,
+            "pct_2plus": 1.43,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 9.051,
+          "warm_median_ms": 9.068,
+          "delta_probability_points": {
+            "3": -11.497168076115443,
+            "4": -1.0766260766260762,
+            "5": -0.0006773690984217392
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "5/40",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 6,
+      "max_num": 40,
+      "guarantee": 4,
+      "budget": 0,
+      "automatic_method": "lajolla",
+      "automatic": {
+        "tickets": 404,
+        "coverage_pct": 100.0,
+        "uniform_ticket_probability": {
+          "1": 0.964934164934165,
+          "2": 0.7877594193383667,
+          "3": 0.455556771346245,
+          "4": 0.1602655286865813,
+          "5": 0.003631219420693105,
+          "6": 0.0
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 1820,
+          "pct_1plus": 100.0,
+          "covered_2plus": 195,
+          "pct_2plus": 10.71,
+          "covered_3plus": 5,
+          "pct_3plus": 0.27,
+          "min_covers": 1,
+          "max_covers": 3
+        },
+        "cold_ms": 4101.965,
+        "warm_median_ms": 439.515
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 404,
+          "coverage_pct": 100.0,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.7877594193383667,
+            "3": 0.455556771346245,
+            "4": 0.1602655286865813,
+            "5": 0.003631219420693105,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 1820,
+            "pct_1plus": 100.0,
+            "covered_2plus": 195,
+            "pct_2plus": 10.71,
+            "covered_3plus": 5,
+            "pct_3plus": 0.27,
+            "min_covers": 1,
+            "max_covers": 3
+          },
+          "cold_ms": 48.808,
+          "warm_median_ms": 60.072,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "no strict gain"
+        },
+        "multihit": {
+          "tickets": 844,
+          "coverage_pct": 100.0,
+          "uniform_ticket_probability": {
+            "1": 0.964934164934165,
+            "2": 0.7877594193383667,
+            "3": 0.455556771346245,
+            "4": 0.1602655286865813,
+            "5": 0.006977683293472767,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 1820,
+            "pct_1plus": 100.0,
+            "covered_2plus": 1820,
+            "pct_2plus": 100.0,
+            "covered_3plus": 486,
+            "pct_3plus": 26.7,
+            "min_covers": 2,
+            "max_covers": 6
+          },
+          "cold_ms": 124.822,
+          "warm_median_ms": 331.307,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.3346463872779662
+          },
+          "equal_cost_certificate": "different ticket count; no equal-cost claim"
+        }
+      }
+    },
+    {
+      "game": "Joker Urna 1",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 5,
+      "max_num": 45,
+      "guarantee": 4,
+      "budget": 10,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 10,
+        "coverage_pct": 2.75,
+        "uniform_ticket_probability": {
+          "1": 0.9027999793740009,
+          "2": 0.4970522009659843,
+          "3": 0.06146956969418682,
+          "4": 0.001645168973586444,
+          "5": 8.184920266599222e-06
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 50,
+          "pct_1plus": 2.75,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 7378.7,
+        "warm_median_ms": 42.346
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 10,
+          "coverage_pct": 2.75,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.37143986661853934,
+            "3": 0.046911870508013445,
+            "4": 0.0015862375476669295,
+            "5": 8.184920266599222e-06
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 50,
+            "pct_1plus": 2.75,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          },
+          "cold_ms": 12.155,
+          "warm_median_ms": 12.17,
+          "delta_probability_points": {
+            "3": -1.4557699186173376,
+            "4": -0.0058931425919514415,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 10,
+          "coverage_pct": 2.69,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.35105695967862727,
+            "3": 0.044115901744943155,
+            "4": 0.0015158472333741762,
+            "5": 8.184920266599222e-06
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 49,
+            "pct_1plus": 2.69,
+            "covered_2plus": 1,
+            "pct_2plus": 0.05,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 3.468,
+          "warm_median_ms": 3.418,
+          "delta_probability_points": {
+            "3": -1.7353667949243665,
+            "4": -0.012932174021226773,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "Joker Urna 1",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 5,
+      "max_num": 45,
+      "guarantee": 4,
+      "budget": 30,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 30,
+        "coverage_pct": 8.24,
+        "uniform_ticket_probability": {
+          "1": 0.9027999793740009,
+          "2": 0.5917599133708039,
+          "3": 0.14518575267299033,
+          "4": 0.004935506920759332,
+          "5": 2.455476079979767e-05
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 150,
+          "pct_1plus": 8.24,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 7064.594,
+        "warm_median_ms": 30.559
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 30,
+          "coverage_pct": 8.24,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.47312604204266145,
+            "3": 0.08944808264150295,
+            "4": 0.004541812255935909,
+            "5": 2.455476079979767e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 150,
+            "pct_1plus": 8.24,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          },
+          "cold_ms": 15.657,
+          "warm_median_ms": 17.873,
+          "delta_probability_points": {
+            "3": -5.573767003148738,
+            "4": -0.03936946648234228,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 30,
+          "coverage_pct": 7.91,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.5701599087872485,
+            "3": 0.10053292015855828,
+            "4": 0.004244699650258357,
+            "5": 2.455476079979767e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 144,
+            "pct_1plus": 7.91,
+            "covered_2plus": 6,
+            "pct_2plus": 0.33,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 6.075,
+          "warm_median_ms": 6.108,
+          "delta_probability_points": {
+            "3": -4.465283251443205,
+            "4": -0.06908072705009748,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "Joker Urna 1",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 5,
+      "max_num": 45,
+      "guarantee": 4,
+      "budget": 65,
+      "automatic_method": "hitcover",
+      "automatic": {
+        "tickets": 65,
+        "coverage_pct": 17.86,
+        "uniform_ticket_probability": {
+          "1": 0.9027999793740009,
+          "2": 0.5917599133708039,
+          "3": 0.2215690655849476,
+          "4": 0.010290900251195202,
+          "5": 5.320198173289495e-05
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 325,
+          "pct_1plus": 17.86,
+          "covered_2plus": 0,
+          "pct_2plus": 0.0,
+          "covered_3plus": 0,
+          "pct_3plus": 0.0,
+          "min_covers": 0,
+          "max_covers": 1
+        },
+        "cold_ms": 11418.171,
+        "warm_median_ms": 40.139
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 65,
+          "coverage_pct": 17.8,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.5704922165500724,
+            "3": 0.1412651758652893,
+            "4": 0.009393014497949269,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 324,
+            "pct_1plus": 17.8,
+            "covered_2plus": 1,
+            "pct_2plus": 0.05,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 25.081,
+          "warm_median_ms": 21.582,
+          "delta_probability_points": {
+            "3": -8.030388971965829,
+            "4": -0.08978857532459336,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        },
+        "multihit": {
+          "tickets": 65,
+          "coverage_pct": 16.43,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.5917599133708039,
+            "3": 0.15393625093001156,
+            "4": 0.008590892311822544,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 299,
+            "pct_1plus": 16.43,
+            "covered_2plus": 26,
+            "pct_2plus": 1.43,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          },
+          "cold_ms": 14.325,
+          "warm_median_ms": 10.529,
+          "delta_probability_points": {
+            "3": -6.763281465493604,
+            "4": -0.17000079393726578,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "chance falls at a threshold"
+        }
+      }
+    },
+    {
+      "game": "Joker Urna 1",
+      "pool": 16,
+      "pick": 5,
+      "draw_n": 5,
+      "max_num": 45,
+      "guarantee": 4,
+      "budget": 0,
+      "automatic_method": "lajolla",
+      "automatic": {
+        "tickets": 404,
+        "coverage_pct": 100.0,
+        "uniform_ticket_probability": {
+          "1": 0.9027999793740009,
+          "2": 0.5917599133708039,
+          "3": 0.23286752952096118,
+          "4": 0.04677518233956124,
+          "5": 0.00033067077877060863
+        },
+        "target_multiplicity": {
+          "total_targets": 1820,
+          "covered_1plus": 1820,
+          "pct_1plus": 100.0,
+          "covered_2plus": 195,
+          "pct_2plus": 10.71,
+          "covered_3plus": 5,
+          "pct_3plus": 0.27,
+          "min_covers": 1,
+          "max_covers": 3
+        },
+        "cold_ms": 3172.238,
+        "warm_median_ms": 101.446
+      },
+      "candidates": {
+        "weighted": {
+          "tickets": 404,
+          "coverage_pct": 100.0,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.5917599133708039,
+            "3": 0.23286752952096118,
+            "4": 0.04677518233956124,
+            "5": 0.00033067077877060863
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 1820,
+            "pct_1plus": 100.0,
+            "covered_2plus": 195,
+            "pct_2plus": 10.71,
+            "covered_3plus": 5,
+            "pct_3plus": 0.27,
+            "min_covers": 1,
+            "max_covers": 3
+          },
+          "cold_ms": 16.945,
+          "warm_median_ms": 17.875,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.0
+          },
+          "equal_cost_certificate": "no strict gain"
+        },
+        "multihit": {
+          "tickets": 844,
+          "coverage_pct": 100.0,
+          "uniform_ticket_probability": {
+            "1": 0.9027999793740009,
+            "2": 0.5917599133708039,
+            "3": 0.23286752952096118,
+            "4": 0.04677518233956124,
+            "5": 0.0006908072705009744
+          },
+          "target_multiplicity": {
+            "total_targets": 1820,
+            "covered_1plus": 1820,
+            "pct_1plus": 100.0,
+            "covered_2plus": 1820,
+            "pct_2plus": 100.0,
+            "covered_3plus": 486,
+            "pct_3plus": 26.7,
+            "min_covers": 2,
+            "max_covers": 6
+          },
+          "cold_ms": 114.538,
+          "warm_median_ms": 133.198,
+          "delta_probability_points": {
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.03601364917303657
+          },
+          "equal_cost_certificate": "different ticket count; no equal-cost claim"
+        }
+      }
+    }
+  ],
+  "budget_design": {
+    "path": "covering_designs\\budget\\H_11_5_4.txt",
+    "sha256": "f2590af7ae7d268abffbd9fb2db1405ef43c80f28a0994290e1997d9a3699a5b",
+    "tickets": 65,
+    "covered_4_subsets": 325,
+    "total_4_subsets": 330,
+    "all_four_subsets_unique": true,
+    "threshold_3_globally_optimal": true,
+    "threshold_5_globally_optimal": true,
+    "primary_target_coverage_globally_optimal": true,
+    "threshold_4_global_optimality_not_proved": true,
+    "proof": "3+ attains pool bound; primary 4-subset coverage attains the 325-subset counting bound; 4+ covers 461/462 five-subsets and every six-subset; 5+ attains union bound because ticket pairs share at most 3 numbers.",
+    "comparisons": [
+      {
+        "game": "5/40",
+        "scores": "ranked",
+        "certificate": "strict exact dominance certified",
+        "gain": {
+          "3": 0.0,
+          "4": 0.004223396328659486,
+          "5": 1.0421063052642033e-05
+        },
+        "before": {
+          "tickets": 65,
+          "coverage_pct": 86.36,
+          "uniform_ticket_probability": {
+            "1": 0.8762446657183499,
+            "2": 0.5359174964438123,
+            "3": 0.19559032716927455,
+            "4": 0.033756428493270596,
+            "5": 0.0005822768980663718,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 285,
+            "pct_1plus": 86.36,
+            "covered_2plus": 39,
+            "pct_2plus": 11.82,
+            "covered_3plus": 1,
+            "pct_3plus": 0.3,
+            "min_covers": 0,
+            "max_covers": 3
+          }
+        },
+        "after": {
+          "tickets": 65,
+          "coverage_pct": 98.48,
+          "uniform_ticket_probability": {
+            "1": 0.8762446657183499,
+            "2": 0.5359174964438123,
+            "3": 0.19559032716927455,
+            "4": 0.03797982482193008,
+            "5": 0.0005926979611190138,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 325,
+            "pct_1plus": 98.48,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          }
+        }
+      },
+      {
+        "game": "5/40",
+        "scores": "flat",
+        "certificate": "strict exact dominance certified",
+        "gain": {
+          "3": 0.0,
+          "4": 0.004011848748690851,
+          "5": 1.0681589628958087e-05
+        },
+        "before": {
+          "tickets": 65,
+          "coverage_pct": 86.97,
+          "uniform_ticket_probability": {
+            "1": 0.8762446657183499,
+            "2": 0.5359174964438123,
+            "3": 0.19559032716927455,
+            "4": 0.03396797607323923,
+            "5": 0.0005820163714900557,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 287,
+            "pct_1plus": 86.97,
+            "covered_2plus": 34,
+            "pct_2plus": 10.3,
+            "covered_3plus": 4,
+            "pct_3plus": 1.21,
+            "min_covers": 0,
+            "max_covers": 3
+          }
+        },
+        "after": {
+          "tickets": 65,
+          "coverage_pct": 98.48,
+          "uniform_ticket_probability": {
+            "1": 0.8762446657183499,
+            "2": 0.5359174964438123,
+            "3": 0.19559032716927455,
+            "4": 0.03797982482193008,
+            "5": 0.0005926979611190138,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 325,
+            "pct_1plus": 98.48,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          }
+        }
+      },
+      {
+        "game": "5/40",
+        "scores": "mixed",
+        "certificate": "strict exact dominance certified",
+        "gain": {
+          "3": 0.0,
+          "4": 0.004223396328659486,
+          "5": 1.4328961697382837e-05
+        },
+        "before": {
+          "tickets": 65,
+          "coverage_pct": 86.36,
+          "uniform_ticket_probability": {
+            "1": 0.8762446657183499,
+            "2": 0.5359174964438123,
+            "3": 0.19559032716927455,
+            "4": 0.033756428493270596,
+            "5": 0.000578368999421631,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 285,
+            "pct_1plus": 86.36,
+            "covered_2plus": 35,
+            "pct_2plus": 10.61,
+            "covered_3plus": 1,
+            "pct_3plus": 0.3,
+            "min_covers": 0,
+            "max_covers": 7
+          }
+        },
+        "after": {
+          "tickets": 65,
+          "coverage_pct": 98.48,
+          "uniform_ticket_probability": {
+            "1": 0.8762446657183499,
+            "2": 0.5359174964438123,
+            "3": 0.19559032716927455,
+            "4": 0.03797982482193008,
+            "5": 0.0005926979611190138,
+            "6": 0.0
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 325,
+            "pct_1plus": 98.48,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          }
+        }
+      },
+      {
+        "game": "Joker Urna 1",
+        "scores": "ranked",
+        "certificate": "strict exact dominance certified",
+        "gain": {
+          "3": 0.0,
+          "4": 0.00041661244156989893,
+          "5": 0.0
+        },
+        "before": {
+          "tickets": 65,
+          "coverage_pct": 93.94,
+          "uniform_ticket_probability": {
+            "1": 0.7722496826297167,
+            "2": 0.35470743411753053,
+            "3": 0.08532533830321692,
+            "4": 0.009005049277312466,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 310,
+            "pct_1plus": 93.94,
+            "covered_2plus": 15,
+            "pct_2plus": 4.55,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          }
+        },
+        "after": {
+          "tickets": 65,
+          "coverage_pct": 98.48,
+          "uniform_ticket_probability": {
+            "1": 0.7722496826297167,
+            "2": 0.35470743411753053,
+            "3": 0.08532533830321692,
+            "4": 0.009421661718882365,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 325,
+            "pct_1plus": 98.48,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          }
+        }
+      },
+      {
+        "game": "Joker Urna 1",
+        "scores": "flat",
+        "certificate": "strict exact dominance certified",
+        "gain": {
+          "3": 0.0,
+          "4": 0.00041661244156989893,
+          "5": 0.0
+        },
+        "before": {
+          "tickets": 65,
+          "coverage_pct": 93.94,
+          "uniform_ticket_probability": {
+            "1": 0.7722496826297167,
+            "2": 0.35470743411753053,
+            "3": 0.08532533830321692,
+            "4": 0.009005049277312466,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 310,
+            "pct_1plus": 93.94,
+            "covered_2plus": 15,
+            "pct_2plus": 4.55,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          }
+        },
+        "after": {
+          "tickets": 65,
+          "coverage_pct": 98.48,
+          "uniform_ticket_probability": {
+            "1": 0.7722496826297167,
+            "2": 0.35470743411753053,
+            "3": 0.08532533830321692,
+            "4": 0.009421661718882365,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 325,
+            "pct_1plus": 98.48,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          }
+        }
+      },
+      {
+        "game": "Joker Urna 1",
+        "scores": "mixed",
+        "certificate": "strict exact dominance certified",
+        "gain": {
+          "3": 0.0,
+          "4": 0.00041661244156989893,
+          "5": 0.0
+        },
+        "before": {
+          "tickets": 65,
+          "coverage_pct": 93.94,
+          "uniform_ticket_probability": {
+            "1": 0.7722496826297167,
+            "2": 0.35470743411753053,
+            "3": 0.08532533830321692,
+            "4": 0.009005049277312466,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 310,
+            "pct_1plus": 93.94,
+            "covered_2plus": 15,
+            "pct_2plus": 4.55,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 2
+          }
+        },
+        "after": {
+          "tickets": 65,
+          "coverage_pct": 98.48,
+          "uniform_ticket_probability": {
+            "1": 0.7722496826297167,
+            "2": 0.35470743411753053,
+            "3": 0.08532533830321692,
+            "4": 0.009421661718882365,
+            "5": 5.320198173289495e-05
+          },
+          "target_multiplicity": {
+            "total_targets": 330,
+            "covered_1plus": 325,
+            "pct_1plus": 98.48,
+            "covered_2plus": 0,
+            "pct_2plus": 0.0,
+            "covered_3plus": 0,
+            "pct_3plus": 0.0,
+            "min_covers": 0,
+            "max_covers": 1
+          }
+        }
+      }
+    ]
+  }
+}

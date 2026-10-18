@@ -47,7 +47,11 @@ import pandas as pd
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.history import canonical_history_columns, simulation_indices
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
-from loto_enterprise.core.wf_sig import ensemble_sig as _ensemble_sig, lookback_pct
+from loto_enterprise.core.wf_sig import (
+    ensemble_sig as _ensemble_sig,
+    lookback_pct,
+    scorer_semantics as _scorer_semantics,
+)
 from runtime_paths import PROJECT_ROOT, WF_CACHE_DIR
 
 logger = logging.getLogger(__name__)
@@ -406,6 +410,19 @@ def _wheel_sig(
                 )
                 extra += f"|lc1:{_sources_digest(classic)}"
             return f"lotto|{geometry}|cd{design_sig}|rt1|hp1{extra}"
+        if method == "weighted":
+            # Uncapped weighted designs read the same local C file, then relabel
+            # its positions. A changed file must invalidate only this geometry.
+            design_sig = (
+                covering_design_source_signature(
+                    int(pool_size), int(_WF_PICK.get(game_type) or 6), g
+                )
+                if cap == 0
+                else "none"
+            )
+            return f"weighted|{geometry}|cd{design_sig}|wt1|rt1"
+        if method == "multihit":
+            return f"multihit|{geometry}|mh1|lambda2|rt1"
         if method in {"lajolla", "union34"}:
             design_guarantee = 4 if method == "union34" and g <= 4 else g
             design_sig = covering_design_source_signature(
@@ -633,7 +650,7 @@ def _decision_sig(
             c2 = recommend_optimal_config(u2_key, 1, **_cp)
             urna2_sig = (
                 f"|u2:{c2.get('scorer', '?')}:{c2.get('hit_target', 1)}:"
-                f"{_ensemble_sig(c2.get('ensemble') or [])}"
+                f"{_ensemble_sig(c2.get('ensemble') or [])}{_scorer_semantics(c2)}"
             )
         lb = lookback_pct(lookback_percent)
         # `use_blacklist` e INERT în producție (engine: blacklist=set()) — nu
@@ -646,7 +663,7 @@ def _decision_sig(
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
-            f"{foreign_sfx}"
+            f"{foreign_sfx}{_scorer_semantics(c)}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:

@@ -39,3 +39,21 @@ def lookback_pct(lookback_percent) -> int | str:
         return int(value) if value.is_integer() else value.hex()
     except (TypeError, ValueError):
         return 100
+
+
+def scorer_semantics(config: dict) -> str:
+    """Invalidate only decisions using a scorer whose output semantics changed.
+
+    Include nominal ensemble members as well as the fallback scorer. The
+    second Joker urn calls this helper separately in the adapter.
+    """
+    names = {config.get("scorer")}
+    ensemble = config.get("ensemble") or []
+    if isinstance(ensemble, dict):
+        names.update(ensemble)
+    elif isinstance(ensemble, list):
+        for item in ensemble:
+            name = item.get("method") if isinstance(item, dict) else item
+            if isinstance(name, str):
+                names.add(name)
+    return "|dmd-svd-ties1" if "dmd_forecast" in names else ""

@@ -80,6 +80,59 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Continuarea workflow-ului Claude si audit pe module — 2026-10-18
+
+- Registry renumarat: 53 de intrari active (include experimentul exclus
+  `interval_extrema_k16`); per_game 52/51/51/48. Foldurile locale au 824 de
+  randuri, 28 failed (sapte metode de co-aparitie pe Urna 2, patru ferestre).
+  Snapshotul se opreste la 15 octombrie, istoricele includ 18 octombrie.
+- Markov calculeaza numai randurile sursa folosite, pastrand scorurile si
+  clasamentele exact: 2.728 prefixe si cazuri speciale; lag2 pe cele trei jocuri
+  cu pool, ~2,1..2,46x mai rapid numai scorerul, nu aplicatia intreaga.
+- Validarea coloanelor deja numerice evita conversia redundanta: matrice si
+  masca identice pe 13 istorice si 4.000 de randuri sintetice / opt dtype;
+  ~1,54x la 6/49, 2,19x la 5/40, 1,82x la Joker numai validarea.
+- DMD include intreg blocul singular egal la limita de rang si nu transforma
+  roundoff-ul unei prognoze nule in clasament. Defect reprodus independent
+  din HEAD pe Urna 2; rangul poate creste peste sase. Copiile inghetate ale
+  testelor prospective raman intacte. Bench v23, worker v20; WF ramane v31,
+  cu `|dmd-svd-ties1` numai pentru deciziile cu DMD (si ensemble/Urna 2).
+  Re-Bench complet necesar pentru un clasament actualizat; decizia si
+  output-urile locale ale utilizatorului nu sunt rescrise de audit.
+- Coada: progres monoton atomic; un worker nu poate fura jobul revendicat
+  de alt token nici inaintea primului callback. Requeue si recuperarea
+  randurilor legacy fara token raman functionale.
+- Workflow-ul Claude: exportul ILP restaurat; `weighted` si `multihit`
+  integrate numai ca override-uri experimentale explicite. Metodele automate
+  raman La Jolla fara plafon / hitcover cu buget. La pool16 g4, 3 jocuri x
+  3 bugete (10/30/65) x 2 metode, toate cele 18 comparatii pierd la 4+ fata
+  de automat. Ponderarea scorurilor nu este o probabilitate predictiva.
+  Refinarile generice nu ating aceste metode (ar putea rupe multiplicitatea).
+  Cheile WF: `weighted` semneaza fisierul C fara plafon; `multihit|mh1|lambda2`.
+- Designul Claude H(11,5,4), 65 de variante, este certificat strict in sase
+  comparatii: scoruri descrescatoare, plate si mixte pe 5/40 si Joker. La
+  scor descrescator, P4+ pe cel putin o varianta creste 3,375643% -> 3,797982%
+  la 5/40 (+12,51% relativ), 0,900505% -> 0,942166% la Joker (+4,63%), fara
+  pierderi la alte praguri 3..5. Acoperirea de 4 ramane partiala, 98,48%.
+  Fisierul H si sectiunea lui intra deja in amprenta cache-ului afectat.
+- Toate cele 46 de celule ale deciziei tinta4 coincid cu snapshotul
+  recalculat (16 campuri, zero nepotriviri); avantaj Holm demonstrat 0/46,
+  p ajustat minim 0,102454. Sunt 20 de scoreri distincti selectati. DMD era
+  ales numai la 6/49 k6/k7/k8, care cer reevaluare dupa fix. Nu se
+  promoveaza scoreri noi.
+  Toate cele 52 de covere C locale coincid ca marime cu cele mai bune din
+  arhiva oficiala La Jolla, Zenodo 19735294, versiunea1.2 din 24 aprilie2026
+  (baza inghetata in martie). Nu este o dovada a minimalitatii globale.
+- Auditul aplicatiei: 13 istorice, 848 verificari de paritate, 151 designuri,
+  26 pipeline-uri, 13 profile complete; worker separat pe 13 jocuri si
+  UI HTTP200; fisierele de productie protejate au aceleasi amprente.
+- Verificare finala Windows / Python 3.14.8: 2.853 teste trecute, 20 omise,
+  zero esecuri (24 min 31 s); sintaxa si git diff --check trec.
+- Dovezi: `scripts/analysis/scoring_audit_2026-10-18.md`,
+  `claude_wheeling_2026-10-18.md`, `audit_application_2026-10-18.json`,
+  `cover_source_check_2026-10-18.json`; comparatia de geometrie se reface
+  prin `audit_claude_wheeling_2026_10_18.py`.
+
 ### Istoric hits cu pool-ul de atunci si audit pe module — 2026-10-17
 
 - Cerinta: la „📜 Istoric hits”, langa „5 hits”, cu ce pool s-au prins. Tabelul
@@ -1688,7 +1741,8 @@ limita de validitate din §5).
 - `annealing`;
 - `genetic`;
 - `lajolla`;
-- `union34`.
+- `union34`;
+- `weighted` si `multihit` (numai experimente opt-in, fara avantaj demonstrat).
 
 Metoda opt-in `maxcover` adauga greedy pe castig marginal exhaustiv si doua
 treceri de schimburi locale, pe geometrie pozitionala memoizata. Este limitata
@@ -2005,9 +2059,9 @@ taie.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| benchmark fold | `v23` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v19` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v20` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
