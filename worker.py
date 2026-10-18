@@ -26,7 +26,8 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v19"
+PIPELINE_CACHE_VERSION = "v20"
+# v20: DMD keeps complete tied singular subspaces; scores/pools can change.
 # v19: `audit.hit_forecast.recommendations` dă pool-ul minim, nu pool-ul curent.
 # v18: garanția egală cu biletul ia biletele certificate ale unei garanții mai
 #      mici; designurile cu buget cad pe garanția mai mică; ramura lotto „g dacă

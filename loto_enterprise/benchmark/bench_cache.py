@@ -47,7 +47,9 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v22"
+CACHE_VERSION = "v23"
+# v23: DMD includes complete repeated-singular-value blocks at its rank cutoff;
+#      an arbitrary partial SVD eigenspace depended on the number labels.
 # v22: `rank_ensemble_core` dă rangul mediu la egalitate; rangul după poziție
 #      favoriza numerele mai mari (audit 2026-10-07). Scorurile metodei se schimbă.
 # v21: Loto 5/40 = 6 numere extrase (n1..n6, hituri pe toate 6), bilet de 5.

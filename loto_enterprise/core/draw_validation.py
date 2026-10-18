@@ -36,9 +36,13 @@ def valid_draw_matrix(
     if missing:
         raise ValueError(f"lipsesc coloanele de numere: {missing}")
 
-    raw = (
-        df.loc[:, cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
-    )
+    numeric = df.loc[:, cols]
+    # CSV histories already have numeric columns. Per-column coercion copies
+    # them again on every WF prefix; reserve it for strings/objects, preserving
+    # the same float64 representation and missing-value validation below.
+    if not all(dtype.kind in "biuf" for dtype in numeric.dtypes):
+        numeric = numeric.apply(pd.to_numeric, errors="coerce")
+    raw = numeric.to_numpy(dtype=np.float64)
     finite = np.isfinite(raw)
     whole = finite & (raw == np.floor(raw))
     # Reject huge floats before int64 conversion (no overflow or cast warning).

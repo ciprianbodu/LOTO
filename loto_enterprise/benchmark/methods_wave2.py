@@ -252,8 +252,25 @@ def score_ssa_forecast(draws_2d, max_num, window: int = 128, L: int = 24, rank: 
     return vector_to_scores(out, max_num)
 
 
+def _svd_rank_including_ties(s: np.ndarray, requested_rank: int) -> int:
+    """Retain the whole boundary singular subspace, including numerical ties.
+
+    Cutting a repeated singular value selects an arbitrary part of its
+    eigenspace: relabelling the balls can then change the forecast. The rank
+    may exceed the requested cap to keep that subspace intact. Values below
+    the existing 1e-8 invertibility threshold remain excluded.
+    """
+    usable = int((s > 1e-8).sum())
+    r = min(max(int(requested_rank), 0), usable)
+    if 0 < r < usable:
+        boundary = float(s[r - 1])
+        while r < usable and np.isclose(s[r], boundary, rtol=1e-10, atol=1e-12):
+            r += 1
+    return r
+
+
 def score_dmd_forecast(draws_2d, max_num, window: int = 200, rank: int = 6):
-    """DMD: A ≈ Y X⁺ pe matricea-indicator (numere × timp); scor = A · x_ultim."""
+    """DMD: A ≈ Y X⁺; the rank cap expands across tied singular values."""
     ind = indicator(draws_2d, max_num)
     x = ind[-window:].T  # (m, n)
     m, n = x.shape
@@ -262,13 +279,18 @@ def score_dmd_forecast(draws_2d, max_num, window: int = 200, rank: int = 6):
     x = x - x.mean(axis=1, keepdims=True)
     X, Y = x[:, :-1], x[:, 1:]
     U, s, Vt = np.linalg.svd(X, full_matrices=False)
-    r = min(rank, int((s > 1e-8).sum()))
+    r = _svd_rank_including_ties(s, rank)
     if r == 0:
         return vector_to_scores(np.zeros(m), max_num)
     Ur, sr, Vtr = U[:, :r], s[:r], Vt[:r]
     A_tilde = Ur.T @ Y @ Vtr.T / sr
     A = Ur @ A_tilde @ Ur.T
-    return vector_to_scores(A @ x[:, -1], max_num)
+    forecast = A @ x[:, -1]
+    # A null projection can leave roundoff near 1e-14. Min-max normalization
+    # would amplify it into a label-dependent ranking without any signal.
+    if np.ptp(forecast) <= 1e-12:
+        forecast = np.zeros(m)
+    return vector_to_scores(forecast, max_num)
 
 
 def score_runs_persistence(draws_2d, max_num, window: int = 300):

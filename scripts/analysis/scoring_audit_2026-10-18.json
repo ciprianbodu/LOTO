@@ -1,0 +1,4696 @@
+{
+  "date": "2026-10-18",
+  "kind": "read-only method/decision audit plus exact Markov CPU optimization",
+  "source_sha256": {
+    "bench_results/folds.csv": "94af8d694309c9e6fc8d3bbbf65db66797683fd5e16fb1b051efd5f7e6a5941a",
+    "bench_results/report.json": "bca7bbf1c20666bec77de2e84ca49dc531b44473837769eb7f71bfbf53b4bd53",
+    "best_methods.json": "fa48bd2f6c3a06b1c6ca3ae23b11b803a2e360e01a8e699d02859a1943788d60",
+    "curated_methods.json": "3b46f4bcec7869bb321efe54998487545ca83774ad83602de10992979c0b5092",
+    "_ISTORIC/loto_6_49.csv": "db454d56b213fc248e81f9ab261c252188d22224f696a8d8857139f9d626bf02",
+    "_ISTORIC/loto_5_40.csv": "ad7d19b4f9010eda19acbdd9e953bde231a6b7b1b8be5da84bf6afe6a05a4aa9",
+    "_ISTORIC/joker.csv": "f77225305bcd6de3fea5b4d4b20de742b989230550562bcde6e18b2ff34ab665",
+    "loto_enterprise/benchmark/methods_relational.py": "6cbe8e49d7189132420a86ffd9da9dcfdc2d262b39559193c975df46b7b0f51f"
+  },
+  "registry_count": 53,
+  "active_count": 53,
+  "per_game_counts": {
+    "loto_6_49": 52,
+    "loto_5_40": 51,
+    "joker_urna1": 51,
+    "joker_urna2": 48
+  },
+  "fold_rows": 824,
+  "failed_fold_rows": 28,
+  "percentiles": [
+    10,
+    30,
+    60,
+    100
+  ],
+  "production_target": 4,
+  "block_size": 1,
+  "games": {
+    "loto_6_49": {
+      "history_rows": 2594,
+      "pool": 16,
+      "draw_n": 6,
+      "max_num": 49,
+      "methods_in_real_folds": 53,
+      "failed_methods": [],
+      "scorer": "markov_lag2",
+      "saved_scorer": "markov_lag2",
+      "matches_saved": true,
+      "hit_target": 4,
+      "low_confidence": false,
+      "multiplicity": {
+        "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+        "candidates": 40,
+        "p_value": 0.011397,
+        "holm_p": 0.455879,
+        "alpha": 0.05,
+        "proven": false
+      },
+      "rationale": "markov_lag2: rată 4+ @ k16 = 0.091 (Wilson_lb=0.085), beat random (hipergeometric 0.0796) in 3/4 windows on the same 4+ target (lift +0.0113); din 12 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 40 candidați: p=0.456 ≥ 0.05 — avantaj nedemonstrat]",
+      "baseline": 0.07960001762036914,
+      "pooled_rate": 0.0908556882710005,
+      "full_window_n_eval": 2513,
+      "full_window_rate": 0.0923199363310783,
+      "benchmark_snapshot_rows": 2593,
+      "benchmark_snapshot_last_date": "15-10-2026",
+      "current_history_last_date": "18-10-2026",
+      "new_draws_since_snapshot": 1
+    },
+    "loto_5_40": {
+      "history_rows": 1745,
+      "pool": 16,
+      "draw_n": 6,
+      "max_num": 40,
+      "methods_in_real_folds": 52,
+      "failed_methods": [],
+      "scorer": "pair_lift_last",
+      "saved_scorer": "pair_lift_last",
+      "matches_saved": true,
+      "hit_target": 4,
+      "low_confidence": false,
+      "multiplicity": {
+        "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+        "candidates": 42,
+        "p_value": 0.214006,
+        "holm_p": 1.0,
+        "alpha": 0.05,
+        "proven": false
+      },
+      "rationale": "pair_lift_last: rată 4+ @ k16 = 0.176 (Wilson_lb=0.166), beat random (hipergeometric 0.1603) in 4/4 windows on the same 4+ target (lift +0.0158); din 14 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 42 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+      "baseline": 0.1602655286865813,
+      "pooled_rate": 0.17624633431085038,
+      "full_window_n_eval": 1664,
+      "full_window_rate": 0.1676682692307692,
+      "benchmark_snapshot_rows": 1744,
+      "benchmark_snapshot_last_date": "15-10-2026",
+      "current_history_last_date": "18-10-2026",
+      "new_draws_since_snapshot": 1
+    },
+    "joker_urna1": {
+      "history_rows": 2197,
+      "pool": 16,
+      "draw_n": 5,
+      "max_num": 45,
+      "methods_in_real_folds": 52,
+      "failed_methods": [],
+      "scorer": "frequency",
+      "saved_scorer": "frequency",
+      "matches_saved": true,
+      "hit_target": 4,
+      "low_confidence": false,
+      "multiplicity": {
+        "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+        "candidates": 42,
+        "p_value": 0.003106,
+        "holm_p": 0.130468,
+        "alpha": 0.05,
+        "proven": false
+      },
+      "rationale": "frequency: rată 4+ @ k16 = 0.061 (Wilson_lb=0.056), beat random (hipergeometric 0.0468) in 4/4 windows on the same 4+ target (lift +0.0146); din 18 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 42 candidați: p=0.130 ≥ 0.05 — avantaj nedemonstrat]",
+      "baseline": 0.04677518233956124,
+      "pooled_rate": 0.06144215163459305,
+      "full_window_n_eval": 2116,
+      "full_window_rate": 0.0600189035916824,
+      "benchmark_snapshot_rows": 2196,
+      "benchmark_snapshot_last_date": "15-10-2026",
+      "current_history_last_date": "18-10-2026",
+      "new_draws_since_snapshot": 1
+    },
+    "joker_urna2": {
+      "history_rows": 2197,
+      "pool": 1,
+      "draw_n": 1,
+      "max_num": 20,
+      "methods_in_real_folds": 49,
+      "failed_methods": [
+        "anti_cooc_last",
+        "cooc_last3",
+        "hawkes_cross",
+        "pagerank_cooc",
+        "pair_lift_last",
+        "pair_transition",
+        "rwr_last_draw"
+      ],
+      "scorer": "ridge_pooled_feats",
+      "saved_scorer": "ridge_pooled_feats",
+      "matches_saved": true,
+      "hit_target": 1,
+      "low_confidence": false,
+      "multiplicity": {
+        "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+        "candidates": 38,
+        "p_value": 0.021682,
+        "holm_p": 0.823902,
+        "alpha": 0.05,
+        "proven": false
+      },
+      "rationale": "ridge_pooled_feats: rată top-1 (1/1) @ k1 = 0.063 (Wilson_lb=0.057), beat random (hipergeometric 0.0500) in 4/4 windows on the same top-1 (1/1) target (lift +0.0130); din 16 metode calificate [prioritate: top-1 (1/1), robust] [după corecția Holm pentru 38 candidați: p=0.824 ≥ 0.05 — avantaj nedemonstrat]",
+      "baseline": 0.05,
+      "pooled_rate": 0.06306515186645024,
+      "full_window_n_eval": 2116,
+      "full_window_rate": 0.0600189035916824,
+      "benchmark_snapshot_rows": 2196,
+      "benchmark_snapshot_last_date": "15-10-2026",
+      "current_history_last_date": "18-10-2026",
+      "new_draws_since_snapshot": 1
+    }
+  },
+  "freshness": {
+    "loto_6_49": {
+      "game_key": "loto_6_49",
+      "csv_path": "_ISTORIC\\loto_6_49.csv",
+      "cached_rows": 2593,
+      "current_rows": 2594,
+      "cached_hash": "e3b70920f6096666",
+      "current_hash": "bf38a55d6e6ddb6f",
+      "row_delta_pct": 0.03856536829926726,
+      "status": "moderate_drift",
+      "recommendation": "quick_rebench"
+    },
+    "loto_5_40": {
+      "game_key": "loto_5_40",
+      "csv_path": "_ISTORIC\\loto_5_40.csv",
+      "cached_rows": 1744,
+      "current_rows": 1745,
+      "cached_hash": "222cddbf19334688",
+      "current_hash": "4956d63610834add",
+      "row_delta_pct": 0.05733944954128441,
+      "status": "moderate_drift",
+      "recommendation": "quick_rebench"
+    },
+    "joker_urna1": {
+      "game_key": "joker_urna1",
+      "csv_path": "_ISTORIC\\joker.csv",
+      "cached_rows": 2196,
+      "current_rows": 2197,
+      "cached_hash": "dab27a53fe957664",
+      "current_hash": "7c33647b6a9a9a9f",
+      "row_delta_pct": 0.04553734061930783,
+      "status": "moderate_drift",
+      "recommendation": "quick_rebench"
+    },
+    "joker_urna2": {
+      "game_key": "joker_urna2",
+      "csv_path": "_ISTORIC\\joker.csv",
+      "cached_rows": 2196,
+      "current_rows": 2197,
+      "cached_hash": "c6cdc1291d3bc968",
+      "current_hash": "fad6e52e25a4a3d5",
+      "row_delta_pct": 0.04553734061930783,
+      "status": "moderate_drift",
+      "recommendation": "quick_rebench"
+    }
+  },
+  "markov_optimization": {
+    "changed": "Only nonzero source-draw rows of the transition matrix are computed. The final matrix shape and dot product remain unchanged. Integer transition counts and normalized scores are identical.",
+    "cache_change": "none: scorer output, pools and folds are unchanged",
+    "real_history_timings_ms_median_7x60_calls": {
+      "loto_6_49_lag1": [
+        0.843475,
+        0.473305
+      ],
+      "loto_6_49_lag2": [
+        0.794077,
+        0.325338
+      ],
+      "loto_5_40_lag1": [
+        0.576707,
+        0.261425
+      ],
+      "loto_5_40_lag2": [
+        0.502352,
+        0.204293
+      ],
+      "joker_urna1_lag1": [
+        0.744277,
+        0.3379
+      ],
+      "joker_urna1_lag2": [
+        0.736052,
+        0.345768
+      ],
+      "joker_urna2_lag1": [
+        0.187633,
+        0.192737
+      ],
+      "joker_urna2_lag2": [
+        0.408895,
+        0.176822
+      ]
+    },
+    "timing_limit": "CPU microbenchmark on this station under concurrent load; not an end-to-end speedup claim."
+  },
+  "conclusions": [
+    "The registry has 53 entries: 2 baselines, 50 existing methods and 1 benchmark-only experimental interval method. Earlier 52-entry documentation is historical.",
+    "Current local folds contain 824 rows and all 4 games. The 28 failed rows are the seven single-pick co-occurrence methods, which correctly have no usable signal.",
+    "At pool16 target4 and Urna2 top1, no selected method demonstrates excess performance after Holm correction within its cell. Historical rankings do not establish future superiority.",
+    "The existing 1002-method screen (2026-10-10), 491-scorer screen (2026-10-05) and external confirmations promoted no new predictor. This audit does not switch production scorers. The corrected DMD requires a complete Re-Bench before any new ranking is current.",
+    "No production histories, benchmark outputs or saved decisions are written."
+  ],
+  "snapshot_caveat": "The saved v22 decision/folds describe histories through 15-10-2026. The current histories additionally contain the 18-10-2026 draws. The table audits those saved results, not newly evaluated current draws. The DMD correction also changes scorer semantics, so a complete v23 Re-Bench is required before selecting under the corrected engine. Production outputs were intentionally preserved.",
+  "dmd_correction": {
+    "problem": "At the rank-six boundary, repeated singular values were cut through an arbitrary SVD basis. Re-labelling Urna 2 balls changed normalized scores by 0.0975998656 on the current 700-row fixture; the defect was independently reproduced from HEAD.",
+    "fix": "Retain the whole numerical-tie singular block (rtol 1e-10, atol 1e-12), still excluding singular values <=1e-8. Flatten null forecasts with raw variation <=1e-12 rather than amplifying roundoff.",
+    "tests": "Exact and near degeneracy, twelve relabellings for each, unchanged distinct-spectrum results, short/constant input, null-projection roundoff; existing current-history equivariance regression.",
+    "invalidation": "Benchmark v23; DMD-specific WF scorer semantic tag; worker v20. Frozen forward-test copies are unchanged."
+  },
+  "source_sha256_after_changes": {
+    "loto_enterprise/benchmark/methods_relational.py": "6cbe8e49d7189132420a86ffd9da9dcfdc2d262b39559193c975df46b7b0f51f",
+    "loto_enterprise/benchmark/methods_wave2.py": "02c79cd47129070f30eb02b88fe493ed35db9e7c89c29996720776cba899f6cf",
+    "test_markov_sparse_sources.py": "141e746931aa562423e7c255d40baf617bb3ec951656ffac876a94e11088eea0",
+    "test_dmd_svd_ties.py": "489de3dfedb3746c9444e3e0c0943402a3fa724dace4012eff585e0ebfb56a86"
+  },
+  "all_decision_cells": {
+    "summary": {
+      "target": 4,
+      "cells": 46,
+      "scorer_mismatch_cells": 0,
+      "any_compared_field_mismatch_cells": 0,
+      "compared_fields": [
+        "scorer",
+        "ensemble",
+        "sim_depth_pct",
+        "use_blacklist",
+        "hit_target",
+        "rate_col_used",
+        "rate_col_mismatch",
+        "low_confidence",
+        "multiplicity",
+        "expected_windows",
+        "incomplete_methods",
+        "rate_data_missing",
+        "tiebreak_gate_applied",
+        "tiebreak_dependent",
+        "ranked_methods",
+        "qualifying_methods"
+      ],
+      "proven_holm_cells": 0,
+      "low_confidence_cells": 0,
+      "metric_mismatch_cells": 0,
+      "cells_with_incomplete_methods": 0,
+      "cells_with_missing_rate_data": 0,
+      "tiebreak_gate_applied_cells": 46,
+      "cells_with_tiebreak_exclusions": 45,
+      "total_tiebreak_method_cell_exclusions": 211,
+      "selected_methods": {
+        "croston_interval": 1,
+        "cusum_burst": 1,
+        "dmd_forecast": 3,
+        "drift_linear": 3,
+        "frequency": 7,
+        "gbm_stumps_pooled": 1,
+        "hot_consistency": 5,
+        "knn_pattern_self": 2,
+        "logit_pooled_feats": 1,
+        "markov_lag2": 3,
+        "markov_pairs": 1,
+        "markov_self_state": 2,
+        "online_logit_sgd": 3,
+        "pagerank_cooc": 2,
+        "pair_lift_last": 4,
+        "pair_transition": 2,
+        "rank_ensemble_core": 2,
+        "ridge_pooled_feats": 1,
+        "runs_persistence": 1,
+        "theta_drift": 1
+      },
+      "dmd_selected_cells": [
+        "loto_6_49.k6",
+        "loto_6_49.k7",
+        "loto_6_49.k8"
+      ],
+      "minimum_selected_holm_p": 0.102454,
+      "read_only_source_sha256": {
+        "best_methods.json": "fa48bd2f6c3a06b1c6ca3ae23b11b803a2e360e01a8e699d02859a1943788d60",
+        "bench_results/folds.csv": "94af8d694309c9e6fc8d3bbbf65db66797683fd5e16fb1b051efd5f7e6a5941a",
+        "bench_results/report.json": "bca7bbf1c20666bec77de2e84ca49dc531b44473837769eb7f71bfbf53b4bd53",
+        "_ISTORIC/loto_6_49.csv": "db454d56b213fc248e81f9ab261c252188d22224f696a8d8857139f9d626bf02",
+        "_ISTORIC/loto_5_40.csv": "ad7d19b4f9010eda19acbdd9e953bde231a6b7b1b8be5da84bf6afe6a05a4aa9",
+        "_ISTORIC/joker.csv": "f77225305bcd6de3fea5b4d4b20de742b989230550562bcde6e18b2ff34ab665"
+      },
+      "runtime_seconds": 12.283,
+      "limits": "Complete audit of the saved v22 folds/decision through 15-10-2026, without evaluating new draws. The DMD correction requires complete v23 Re-Bench before any ranking describes the corrected engine. Holm is corrected within each cell, not across 46 cells or through external validation.",
+      "per_game": {
+        "loto_6_49": {
+          "cells": 15,
+          "selected_methods": {
+            "dmd_forecast": 3,
+            "drift_linear": 3,
+            "frequency": 1,
+            "logit_pooled_feats": 1,
+            "markov_lag2": 3,
+            "markov_self_state": 1,
+            "online_logit_sgd": 2,
+            "theta_drift": 1
+          },
+          "scorer_mismatches": 0,
+          "proven_holm_cells": 0,
+          "low_confidence_cells": 0,
+          "tiebreak_exclusions": 82
+        },
+        "loto_5_40": {
+          "cells": 15,
+          "selected_methods": {
+            "croston_interval": 1,
+            "cusum_burst": 1,
+            "hot_consistency": 5,
+            "knn_pattern_self": 2,
+            "online_logit_sgd": 1,
+            "pair_lift_last": 4,
+            "pair_transition": 1
+          },
+          "scorer_mismatches": 0,
+          "proven_holm_cells": 0,
+          "low_confidence_cells": 0,
+          "tiebreak_exclusions": 69
+        },
+        "joker_urna1": {
+          "cells": 15,
+          "selected_methods": {
+            "frequency": 6,
+            "gbm_stumps_pooled": 1,
+            "markov_pairs": 1,
+            "markov_self_state": 1,
+            "pagerank_cooc": 2,
+            "pair_transition": 1,
+            "rank_ensemble_core": 2,
+            "runs_persistence": 1
+          },
+          "scorer_mismatches": 0,
+          "proven_holm_cells": 0,
+          "low_confidence_cells": 0,
+          "tiebreak_exclusions": 60
+        },
+        "joker_urna2": {
+          "cells": 1,
+          "selected_methods": {
+            "ridge_pooled_feats": 1
+          },
+          "scorer_mismatches": 0,
+          "proven_holm_cells": 0,
+          "low_confidence_cells": 0,
+          "tiebreak_exclusions": 0
+        }
+      }
+    },
+    "records": [
+      {
+        "game": "loto_6_49",
+        "pool": 6,
+        "scorer": "dmd_forecast",
+        "saved_scorer": "dmd_forecast",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k6",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 17,
+        "ranked_methods": [
+          "dmd_forecast",
+          "knn_feature_pooled",
+          "rhythm_phase",
+          "rank_ensemble_core",
+          "ewma_cold_hl30",
+          "gap_hazard",
+          "ar_ls_pooled",
+          "logit_pooled_feats",
+          "nb_lags_pooled",
+          "ridge_pooled_feats",
+          "autocorr_lag",
+          "gbm_stumps_pooled",
+          "markov_self_state",
+          "cooc_last3",
+          "pagerank_cooc",
+          "anti_cooc_last",
+          "theta_drift"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.040662,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.749
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.552
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.576
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "dmd_forecast",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 7,
+        "scorer": "dmd_forecast",
+        "saved_scorer": "dmd_forecast",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k7",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 11,
+        "ranked_methods": [
+          "dmd_forecast",
+          "knn_feature_pooled",
+          "runs_persistence",
+          "naive_bayes_last",
+          "logit_pooled_feats",
+          "ewma_cold_hl30",
+          "rank_ensemble_core",
+          "gap_hazard",
+          "spectral_phase",
+          "theta_drift",
+          "rhythm_phase"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.111903,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.749
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.622
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.622
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "dmd_forecast",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 8,
+        "scorer": "dmd_forecast",
+        "saved_scorer": "dmd_forecast",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k8",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "dmd_forecast",
+          "naive_bayes_last",
+          "logit_pooled_feats",
+          "runs_persistence",
+          "rank_ensemble_core",
+          "drift_linear",
+          "markov_self_state",
+          "online_logit_sgd",
+          "rhythm_phase",
+          "cusum_burst",
+          "ses_opt_alpha",
+          "vlmm_self_k3",
+          "ridge_pooled_feats",
+          "knn_feature_pooled",
+          "gap_hazard",
+          "theta_drift"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.194169,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.769
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.63
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.521
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.648
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "dmd_forecast",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 9,
+        "scorer": "logit_pooled_feats",
+        "saved_scorer": "logit_pooled_feats",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k9",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 17,
+        "ranked_methods": [
+          "logit_pooled_feats",
+          "runs_persistence",
+          "ridge_pooled_feats",
+          "markov_self_state",
+          "naive_bayes_last",
+          "rhythm_phase",
+          "ses_opt_alpha",
+          "pair_transition",
+          "rank_ensemble_core",
+          "dmd_forecast",
+          "online_logit_sgd",
+          "markov_lag2",
+          "theta_drift",
+          "gap_hazard",
+          "vlmm_self_k3",
+          "hurst_persistence",
+          "nb_lags_pooled"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.178779,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.841
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.65
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.531
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.676
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "logit_pooled_feats",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 10,
+        "scorer": "online_logit_sgd",
+        "saved_scorer": "online_logit_sgd",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k10",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 13,
+        "ranked_methods": [
+          "online_logit_sgd",
+          "markov_self_state",
+          "naive_bayes_last",
+          "ses_opt_alpha",
+          "logit_pooled_feats",
+          "drift_linear",
+          "ridge_pooled_feats",
+          "runs_persistence",
+          "gap_hazard",
+          "ar_ls_pooled",
+          "nb_lags_pooled",
+          "dmd_forecast",
+          "markov_lag2"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.109742,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.864
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.636
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.556
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.687
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "online_logit_sgd",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 11,
+        "scorer": "markov_self_state",
+        "saved_scorer": "markov_self_state",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k11",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 15,
+        "ranked_methods": [
+          "markov_self_state",
+          "drift_linear",
+          "gap_hazard",
+          "online_logit_sgd",
+          "runs_persistence",
+          "ses_opt_alpha",
+          "rhythm_phase",
+          "naive_bayes_last",
+          "markov_lag2",
+          "ar_ls_pooled",
+          "ssa_forecast",
+          "imapa_agg",
+          "gbm_stumps_pooled",
+          "nb_lags_pooled",
+          "knn_feature_pooled"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.078076,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.851
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.677
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.563
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.714
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "markov_self_state",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 12,
+        "scorer": "drift_linear",
+        "saved_scorer": "drift_linear",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k12",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 15,
+        "ranked_methods": [
+          "drift_linear",
+          "markov_self_state",
+          "dmd_forecast",
+          "rhythm_phase",
+          "online_logit_sgd",
+          "ses_opt_alpha",
+          "hawkes_cross",
+          "vlmm_self_k3",
+          "markov_lag2",
+          "ssa_forecast",
+          "naive_bayes_last",
+          "runs_persistence",
+          "croston_interval",
+          "gap_hazard",
+          "knn_pattern_self"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.056291,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.808
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.673
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.6
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.732
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "drift_linear",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 13,
+        "scorer": "markov_lag2",
+        "saved_scorer": "markov_lag2",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k13",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 11,
+        "ranked_methods": [
+          "markov_lag2",
+          "vlmm_self_k3",
+          "rhythm_phase",
+          "ses_opt_alpha",
+          "drift_linear",
+          "markov_self_state",
+          "runs_persistence",
+          "ssa_forecast",
+          "knn_pattern_self",
+          "hawkes_cross",
+          "gbm_stumps_pooled"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.046182,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.788
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.669
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.503
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.501
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.627
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.723
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.514
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "markov_lag2",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 14,
+        "scorer": "online_logit_sgd",
+        "saved_scorer": "online_logit_sgd",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k14",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 11,
+        "ranked_methods": [
+          "online_logit_sgd",
+          "markov_lag2",
+          "drift_linear",
+          "frequency",
+          "rhythm_phase",
+          "vlmm_self_k3",
+          "runs_persistence",
+          "knn_pattern_self",
+          "theta_drift",
+          "ssa_forecast",
+          "knn_feature_pooled"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.305264,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.825
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.703
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.522
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.541
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.675
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.742
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.555
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "online_logit_sgd",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 15,
+        "scorer": "markov_lag2",
+        "saved_scorer": "markov_lag2",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k15",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 11,
+        "ranked_methods": [
+          "markov_lag2",
+          "drift_linear",
+          "rhythm_phase",
+          "frequency",
+          "knn_feature_pooled",
+          "online_logit_sgd",
+          "knn_pattern_self",
+          "runs_persistence",
+          "gap_ratio",
+          "ses_opt_alpha",
+          "theta_drift"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.022927,
+          "holm_p": 0.917082,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.882
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.702
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.525
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.564
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.684
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.758
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.588
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "markov_lag2",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 60,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 16,
+        "scorer": "markov_lag2",
+        "saved_scorer": "markov_lag2",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k16",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 12,
+        "ranked_methods": [
+          "markov_lag2",
+          "drift_linear",
+          "online_logit_sgd",
+          "theta_drift",
+          "dmd_forecast",
+          "markov_self_state",
+          "hawkes_cross",
+          "knn_feature_pooled",
+          "gap_ratio",
+          "knn_pattern_self",
+          "vlmm_self_k3",
+          "holt_forecast"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.011397,
+          "holm_p": 0.455879,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.921
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.706
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.591
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.579
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.65
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.748
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.602
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "markov_lag2",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 17,
+        "scorer": "theta_drift",
+        "saved_scorer": "theta_drift",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k17",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 17,
+        "ranked_methods": [
+          "theta_drift",
+          "drift_linear",
+          "markov_lag2",
+          "markov_self_state",
+          "frequency",
+          "online_logit_sgd",
+          "gap_ratio",
+          "rhythm_phase",
+          "vlmm_self_k3",
+          "momentum_30_300",
+          "ridge_pooled_feats",
+          "dmd_forecast",
+          "ewma_cold_hl30",
+          "knn_pattern_self",
+          "ewma_hl30",
+          "pair_lift_last",
+          "weighted_recent_linear"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.034661,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.934
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.718
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.563
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.63
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.616
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.738
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.629
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "theta_drift",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 18,
+        "scorer": "drift_linear",
+        "saved_scorer": "drift_linear",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k18",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "drift_linear",
+          "theta_drift",
+          "online_logit_sgd",
+          "gap_ratio",
+          "markov_lag2",
+          "hawkes_cross",
+          "ewma_hl30",
+          "markov_self_state",
+          "ridge_pooled_feats",
+          "pair_lift_last",
+          "momentum_30_300",
+          "frequency",
+          "rhythm_phase",
+          "dmd_forecast",
+          "ewma_cold_hl30",
+          "vlmm_self_k3"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.059743,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.902
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.729
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.61
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.652
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.607
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.763
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.666
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "drift_linear",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 19,
+        "scorer": "drift_linear",
+        "saved_scorer": "drift_linear",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k19",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 19,
+        "ranked_methods": [
+          "drift_linear",
+          "gap_ratio",
+          "theta_drift",
+          "frequency",
+          "pair_lift_last",
+          "markov_lag2",
+          "momentum_30_300",
+          "online_logit_sgd",
+          "logit_pooled_feats",
+          "ridge_pooled_feats",
+          "rhythm_phase",
+          "vlmm_self_k3",
+          "markov_self_state",
+          "gap_hazard",
+          "ewma_hl30",
+          "dmd_forecast",
+          "hawkes_cross",
+          "weighted_recent_linear",
+          "ewma_cold_hl30"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.081228,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.849
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.716
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.624
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.681
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.662
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.753
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.691
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "drift_linear",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_6_49",
+        "pool": 20,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k20",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "frequency",
+          "theta_drift",
+          "markov_lag2",
+          "gap_ratio",
+          "drift_linear",
+          "logit_pooled_feats",
+          "pair_lift_last",
+          "ewma_cold_hl30",
+          "online_logit_sgd",
+          "ridge_pooled_feats",
+          "weighted_recent_linear",
+          "dmd_forecast",
+          "autocorr_lag",
+          "gap_hazard"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.041676,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.802
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.745
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.626
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.689
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.664
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.775
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.695
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 5,
+        "scorer": "croston_interval",
+        "saved_scorer": "croston_interval",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k5",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "croston_interval",
+          "freq_window_200",
+          "naive_bayes_last",
+          "knn_draw_similarity",
+          "theta_drift",
+          "holt_forecast",
+          "hot_consistency",
+          "imapa_agg",
+          "ridge_pooled_feats",
+          "autocorr_lag",
+          "rank_ensemble_core",
+          "gbm_stumps_pooled",
+          "pagerank_cooc",
+          "vlmm_self_k3"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 46,
+          "p_value": 0.043518,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.685
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "croston_interval",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 6,
+        "scorer": "hot_consistency",
+        "saved_scorer": "hot_consistency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k6",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 18,
+        "ranked_methods": [
+          "hot_consistency",
+          "rank_ensemble_core",
+          "ses_opt_alpha",
+          "holt_forecast",
+          "naive_bayes_last",
+          "knn_draw_similarity",
+          "croston_interval",
+          "ridge_pooled_feats",
+          "imapa_agg",
+          "vlmm_self_k3",
+          "knn_feature_pooled",
+          "pagerank_cooc",
+          "theta_drift",
+          "pair_transition",
+          "ewma_hl30",
+          "dmd_forecast",
+          "gap_current",
+          "markov_lag2"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.175013,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.695
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.553
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.545
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "hot_consistency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 7,
+        "scorer": "pair_lift_last",
+        "saved_scorer": "pair_lift_last",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k7",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 18,
+        "ranked_methods": [
+          "pair_lift_last",
+          "ssa_forecast",
+          "ridge_pooled_feats",
+          "croston_interval",
+          "hot_consistency",
+          "imapa_agg",
+          "pagerank_cooc",
+          "rank_ensemble_core",
+          "online_logit_sgd",
+          "ewma_hl30",
+          "knn_feature_pooled",
+          "ses_opt_alpha",
+          "markov_pairs",
+          "knn_draw_similarity",
+          "pair_transition",
+          "holt_forecast",
+          "gap_hazard",
+          "autocorr_lag"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.002329,
+          "holm_p": 0.102454,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.727
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.573
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.588
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pair_lift_last",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 60,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 8,
+        "scorer": "hot_consistency",
+        "saved_scorer": "hot_consistency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k8",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 21,
+        "ranked_methods": [
+          "hot_consistency",
+          "pair_lift_last",
+          "ssa_forecast",
+          "rank_ensemble_core",
+          "markov_lag2",
+          "pagerank_cooc",
+          "drift_linear",
+          "online_logit_sgd",
+          "knn_draw_similarity",
+          "ridge_pooled_feats",
+          "nb_lags_pooled",
+          "frequency",
+          "knn_pattern_self",
+          "holt_forecast",
+          "ewma_hl30",
+          "hurst_persistence",
+          "gap_ratio",
+          "pair_transition",
+          "imapa_agg",
+          "markov_pairs",
+          "logit_pooled_feats"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.006356,
+          "holm_p": 0.279643,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.758
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.569
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.588
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "hot_consistency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 60,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 9,
+        "scorer": "hot_consistency",
+        "saved_scorer": "hot_consistency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k9",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 19,
+        "ranked_methods": [
+          "hot_consistency",
+          "pair_lift_last",
+          "markov_lag2",
+          "pagerank_cooc",
+          "cusum_burst",
+          "momentum_30_300",
+          "ssa_forecast",
+          "rank_ensemble_core",
+          "knn_draw_similarity",
+          "ridge_pooled_feats",
+          "logit_pooled_feats",
+          "hurst_persistence",
+          "runs_persistence",
+          "drift_linear",
+          "gap_ratio",
+          "markov_self_state",
+          "markov_pairs",
+          "vlmm_self_k3",
+          "knn_feature_pooled"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.002733,
+          "holm_p": 0.120273,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.763
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.626
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.566
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "hot_consistency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 10,
+        "scorer": "cusum_burst",
+        "saved_scorer": "cusum_burst",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k10",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 20,
+        "ranked_methods": [
+          "cusum_burst",
+          "pair_lift_last",
+          "hot_consistency",
+          "drift_linear",
+          "holt_forecast",
+          "cooc_last3",
+          "momentum_30_300",
+          "markov_lag2",
+          "pair_transition",
+          "imapa_agg",
+          "logit_pooled_feats",
+          "hawkes_cross",
+          "ssa_forecast",
+          "rank_ensemble_core",
+          "gap_ratio",
+          "pagerank_cooc",
+          "online_logit_sgd",
+          "ridge_pooled_feats",
+          "croston_interval",
+          "vlmm_self_k3"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.021708,
+          "holm_p": 0.933456,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.81
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.568
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.52
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.602
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "cusum_burst",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 11,
+        "scorer": "hot_consistency",
+        "saved_scorer": "hot_consistency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k11",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 19,
+        "ranked_methods": [
+          "hot_consistency",
+          "pair_lift_last",
+          "hawkes_cross",
+          "ssa_forecast",
+          "holt_forecast",
+          "drift_linear",
+          "online_logit_sgd",
+          "pair_transition",
+          "markov_lag2",
+          "imapa_agg",
+          "logit_pooled_feats",
+          "momentum_30_300",
+          "croston_interval",
+          "knn_feature_pooled",
+          "vlmm_self_k3",
+          "cooc_last3",
+          "gbm_stumps_pooled",
+          "runs_persistence",
+          "frequency"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.011686,
+          "holm_p": 0.490799,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.823
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.65
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.505
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.543
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.617
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "hot_consistency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 12,
+        "scorer": "hot_consistency",
+        "saved_scorer": "hot_consistency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k12",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 15,
+        "ranked_methods": [
+          "hot_consistency",
+          "pair_transition",
+          "imapa_agg",
+          "pair_lift_last",
+          "knn_feature_pooled",
+          "online_logit_sgd",
+          "croston_interval",
+          "drift_linear",
+          "gap_ratio",
+          "hawkes_cross",
+          "gbm_stumps_pooled",
+          "holt_forecast",
+          "vlmm_self_k3",
+          "frequency",
+          "markov_lag2"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.026375,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.784
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.635
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.526
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.565
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.631
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "hot_consistency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 13,
+        "scorer": "online_logit_sgd",
+        "saved_scorer": "online_logit_sgd",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k13",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 17,
+        "ranked_methods": [
+          "online_logit_sgd",
+          "hot_consistency",
+          "pair_transition",
+          "imapa_agg",
+          "pair_lift_last",
+          "vlmm_self_k3",
+          "croston_interval",
+          "gap_ratio",
+          "knn_feature_pooled",
+          "drift_linear",
+          "gbm_stumps_pooled",
+          "markov_lag2",
+          "hawkes_cross",
+          "gap_hazard",
+          "anti_cooc_last",
+          "frequency",
+          "autocorr_lag"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.04999,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.752
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.618
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.548
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.606
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.626
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "online_logit_sgd",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 14,
+        "scorer": "pair_lift_last",
+        "saved_scorer": "pair_lift_last",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k14",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "pair_lift_last",
+          "online_logit_sgd",
+          "gap_hazard",
+          "pair_transition",
+          "croston_interval",
+          "cusum_burst",
+          "vlmm_self_k3",
+          "drift_linear",
+          "imapa_agg",
+          "hot_consistency",
+          "anti_cooc_last",
+          "hurst_persistence",
+          "knn_feature_pooled",
+          "markov_lag2",
+          "autocorr_lag",
+          "hawkes_cross"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.033685,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.795
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.684
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.582
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.578
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.64
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pair_lift_last",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 15,
+        "scorer": "pair_lift_last",
+        "saved_scorer": "pair_lift_last",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k15",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 13,
+        "ranked_methods": [
+          "pair_lift_last",
+          "cusum_burst",
+          "imapa_agg",
+          "hot_consistency",
+          "gap_hazard",
+          "online_logit_sgd",
+          "croston_interval",
+          "pair_transition",
+          "vlmm_self_k3",
+          "drift_linear",
+          "markov_lag2",
+          "knn_feature_pooled",
+          "holt_forecast"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.038863,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.863
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.638
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.633
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.575
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.679
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pair_lift_last",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 16,
+        "scorer": "pair_lift_last",
+        "saved_scorer": "pair_lift_last",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k16",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "pair_lift_last",
+          "pair_transition",
+          "knn_pattern_self",
+          "online_logit_sgd",
+          "ridge_pooled_feats",
+          "hot_consistency",
+          "vlmm_self_k3",
+          "knn_feature_pooled",
+          "rank_ensemble_core",
+          "gap_hazard",
+          "imapa_agg",
+          "markov_lag2",
+          "croston_interval",
+          "cooc_last3"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.214006,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.882
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.693
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.595
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.553
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.698
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pair_lift_last",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 17,
+        "scorer": "pair_transition",
+        "saved_scorer": "pair_transition",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k17",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 13,
+        "ranked_methods": [
+          "pair_transition",
+          "knn_pattern_self",
+          "ridge_pooled_feats",
+          "vlmm_self_k3",
+          "pair_lift_last",
+          "rank_ensemble_core",
+          "hot_consistency",
+          "markov_pairs",
+          "gap_ratio",
+          "cusum_burst",
+          "theta_drift",
+          "dmd_forecast",
+          "drift_linear"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 39,
+          "p_value": 0.128838,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.861
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.635
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.638
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.506
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.623
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.723
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.514
+          },
+          {
+            "method": "gbm_stumps_pooled",
+            "tiebreak_fraction": 0.518
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pair_transition",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 18,
+        "scorer": "knn_pattern_self",
+        "saved_scorer": "knn_pattern_self",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k18",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 12,
+        "ranked_methods": [
+          "knn_pattern_self",
+          "hot_consistency",
+          "pair_transition",
+          "gap_hazard",
+          "theta_drift",
+          "vlmm_self_k3",
+          "rank_ensemble_core",
+          "drift_linear",
+          "cusum_burst",
+          "online_logit_sgd",
+          "markov_pairs",
+          "croston_interval"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.00926,
+          "holm_p": 0.370419,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.816
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.635
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.673
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.533
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.633
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.701
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.553
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "knn_pattern_self",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "loto_5_40",
+        "pool": 19,
+        "scorer": "knn_pattern_self",
+        "saved_scorer": "knn_pattern_self",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k19",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 15,
+        "ranked_methods": [
+          "knn_pattern_self",
+          "hot_consistency",
+          "gap_hazard",
+          "pair_transition",
+          "naive_bayes_last",
+          "vlmm_self_k3",
+          "theta_drift",
+          "rank_ensemble_core",
+          "momentum_30_300",
+          "drift_linear",
+          "dmd_forecast",
+          "online_logit_sgd",
+          "hawkes_cross",
+          "markov_pairs",
+          "ridge_pooled_feats"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 40,
+          "p_value": 0.046355,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.784
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.653
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.672
+          },
+          {
+            "method": "ar_ls_pooled",
+            "tiebreak_fraction": 0.564
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.632
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.664
+          },
+          {
+            "method": "nb_lags_pooled",
+            "tiebreak_fraction": 0.576
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "knn_pattern_self",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 5,
+        "scorer": "runs_persistence",
+        "saved_scorer": "runs_persistence",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k5",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 2,
+        "ranked_methods": [
+          "runs_persistence",
+          "cooc_last3"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 45,
+          "p_value": 0.294004,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.718
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.514
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "runs_persistence",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 6,
+        "scorer": "gbm_stumps_pooled",
+        "saved_scorer": "gbm_stumps_pooled",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k6",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 6,
+        "ranked_methods": [
+          "gbm_stumps_pooled",
+          "pair_transition",
+          "knn_pattern_self",
+          "runs_persistence",
+          "drift_linear",
+          "logit_pooled_feats"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.020437,
+          "holm_p": 0.89922,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.731
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.546
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.545
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "gbm_stumps_pooled",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 7,
+        "scorer": "pair_transition",
+        "saved_scorer": "pair_transition",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k7",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "pair_transition",
+          "gbm_stumps_pooled",
+          "markov_pairs",
+          "knn_feature_pooled",
+          "frequency",
+          "online_logit_sgd",
+          "knn_draw_similarity",
+          "knn_pattern_self",
+          "hawkes_cross",
+          "vlmm_self_k3",
+          "spectral_phase",
+          "theta_drift",
+          "naive_bayes_last",
+          "runs_persistence"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 44,
+          "p_value": 0.088365,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.755
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.578
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.579
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pair_transition",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 8,
+        "scorer": "rank_ensemble_core",
+        "saved_scorer": "rank_ensemble_core",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k8",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "rank_ensemble_core",
+          "knn_pattern_self",
+          "pair_transition",
+          "markov_pairs",
+          "runs_persistence",
+          "frequency",
+          "knn_feature_pooled",
+          "ridge_pooled_feats",
+          "gbm_stumps_pooled",
+          "pagerank_cooc",
+          "vlmm_self_k3",
+          "online_logit_sgd",
+          "naive_bayes_last",
+          "hot_consistency"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.044029,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.805
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.61
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.513
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.605
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "rank_ensemble_core",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 9,
+        "scorer": "rank_ensemble_core",
+        "saved_scorer": "rank_ensemble_core",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k9",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 12,
+        "ranked_methods": [
+          "rank_ensemble_core",
+          "markov_pairs",
+          "pagerank_cooc",
+          "frequency",
+          "markov_self_state",
+          "pair_transition",
+          "ridge_pooled_feats",
+          "knn_pattern_self",
+          "runs_persistence",
+          "ewma_cold_hl30",
+          "theta_drift",
+          "hawkes_cross"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.03614,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.78
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.644
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.561
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.64
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "rank_ensemble_core",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 60,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 10,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k10",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "frequency",
+          "markov_pairs",
+          "pagerank_cooc",
+          "pair_transition",
+          "hawkes_cross",
+          "runs_persistence",
+          "ewma_cold_hl30",
+          "logit_pooled_feats",
+          "hot_consistency",
+          "markov_self_state",
+          "knn_pattern_self",
+          "ridge_pooled_feats",
+          "naive_bayes_last",
+          "vlmm_self_k3"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.076003,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.799
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.654
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.565
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.672
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 11,
+        "scorer": "markov_pairs",
+        "saved_scorer": "markov_pairs",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k11",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 11,
+        "ranked_methods": [
+          "markov_pairs",
+          "markov_lag2",
+          "markov_self_state",
+          "pagerank_cooc",
+          "frequency",
+          "hawkes_cross",
+          "hot_consistency",
+          "gbm_stumps_pooled",
+          "knn_pattern_self",
+          "pair_transition",
+          "runs_persistence"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.121767,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.862
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.703
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.584
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.657
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "markov_pairs",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 12,
+        "scorer": "pagerank_cooc",
+        "saved_scorer": "pagerank_cooc",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k12",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 14,
+        "ranked_methods": [
+          "pagerank_cooc",
+          "markov_lag2",
+          "knn_feature_pooled",
+          "frequency",
+          "hawkes_cross",
+          "knn_pattern_self",
+          "markov_pairs",
+          "hot_consistency",
+          "markov_self_state",
+          "ewma_cold_hl30",
+          "imapa_agg",
+          "pair_transition",
+          "runs_persistence",
+          "naive_bayes_last"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.183725,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.876
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.686
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.555
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.679
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pagerank_cooc",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 13,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k13",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "frequency",
+          "knn_pattern_self",
+          "knn_feature_pooled",
+          "pagerank_cooc",
+          "markov_lag2",
+          "hawkes_cross",
+          "markov_self_state",
+          "cooc_last3",
+          "gbm_stumps_pooled",
+          "imapa_agg",
+          "vlmm_self_k3",
+          "ewma_cold_hl30",
+          "hot_consistency",
+          "holt_forecast",
+          "markov_pairs",
+          "hurst_persistence"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.038558,
+          "holm_p": 1.0,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.852
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.677
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.582
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.673
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 14,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k14",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "frequency",
+          "pagerank_cooc",
+          "knn_feature_pooled",
+          "knn_pattern_self",
+          "ewma_cold_hl30",
+          "hawkes_cross",
+          "cusum_burst",
+          "cooc_last3",
+          "markov_lag2",
+          "holt_forecast",
+          "gbm_stumps_pooled",
+          "imapa_agg",
+          "hot_consistency",
+          "vlmm_self_k3",
+          "markov_self_state",
+          "ses_opt_alpha"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.023324,
+          "holm_p": 0.979623,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.796
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.719
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.614
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.715
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 15,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k15",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "frequency",
+          "pagerank_cooc",
+          "knn_feature_pooled",
+          "markov_lag2",
+          "hawkes_cross",
+          "knn_pattern_self",
+          "markov_self_state",
+          "gbm_stumps_pooled",
+          "markov_pairs",
+          "cooc_last3",
+          "ewma_cold_hl30",
+          "vlmm_self_k3",
+          "holt_forecast",
+          "imapa_agg",
+          "ridge_pooled_feats",
+          "spectral_phase"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 43,
+          "p_value": 0.003135,
+          "holm_p": 0.134812,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.778
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.702
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.648
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.709
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 16,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k16",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 18,
+        "ranked_methods": [
+          "frequency",
+          "pagerank_cooc",
+          "markov_lag2",
+          "markov_self_state",
+          "knn_feature_pooled",
+          "knn_pattern_self",
+          "markov_pairs",
+          "cooc_last3",
+          "hawkes_cross",
+          "vlmm_self_k3",
+          "ewma_cold_hl30",
+          "ridge_pooled_feats",
+          "spectral_phase",
+          "gbm_stumps_pooled",
+          "rhythm_phase",
+          "imapa_agg",
+          "ewma_hl30",
+          "drift_linear"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.003106,
+          "holm_p": 0.130468,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.814
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.712
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.512
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.668
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.736
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 17,
+        "scorer": "pagerank_cooc",
+        "saved_scorer": "pagerank_cooc",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k17",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 22,
+        "ranked_methods": [
+          "pagerank_cooc",
+          "frequency",
+          "knn_pattern_self",
+          "markov_self_state",
+          "markov_lag2",
+          "hawkes_cross",
+          "cooc_last3",
+          "hot_consistency",
+          "ridge_pooled_feats",
+          "knn_feature_pooled",
+          "vlmm_self_k3",
+          "ewma_cold_hl30",
+          "markov_pairs",
+          "hurst_persistence",
+          "holt_forecast",
+          "imapa_agg",
+          "rank_ensemble_core",
+          "momentum_30_300",
+          "nb_lags_pooled",
+          "spectral_phase",
+          "anti_cooc_last",
+          "croston_interval"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.004397,
+          "holm_p": 0.184663,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.895
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.728
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.522
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.666
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.728
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "pagerank_cooc",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": true
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 18,
+        "scorer": "frequency",
+        "saved_scorer": "frequency",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k18",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 19,
+        "ranked_methods": [
+          "frequency",
+          "knn_pattern_self",
+          "markov_self_state",
+          "rank_ensemble_core",
+          "pagerank_cooc",
+          "cooc_last3",
+          "markov_lag2",
+          "hawkes_cross",
+          "hot_consistency",
+          "ridge_pooled_feats",
+          "vlmm_self_k3",
+          "weighted_recent_linear",
+          "ewma_hl30",
+          "markov_pairs",
+          "ar_ls_pooled",
+          "momentum_30_300",
+          "hurst_persistence",
+          "holt_forecast",
+          "online_logit_sgd"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.002694,
+          "holm_p": 0.113136,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.939
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.702
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.547
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.694
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.725
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "frequency",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "joker_urna1",
+        "pool": 19,
+        "scorer": "markov_self_state",
+        "saved_scorer": "markov_self_state",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 4,
+        "rate_col_used": "rate_4plus_k19",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 21,
+        "ranked_methods": [
+          "markov_self_state",
+          "frequency",
+          "rank_ensemble_core",
+          "knn_pattern_self",
+          "pagerank_cooc",
+          "hawkes_cross",
+          "markov_pairs",
+          "markov_lag2",
+          "hot_consistency",
+          "vlmm_self_k3",
+          "cooc_last3",
+          "ar_ls_pooled",
+          "ridge_pooled_feats",
+          "drift_linear",
+          "theta_drift",
+          "nb_lags_pooled",
+          "spectral_phase",
+          "ewma_hl30",
+          "cusum_burst",
+          "momentum_30_300",
+          "croston_interval"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 42,
+          "p_value": 0.013734,
+          "holm_p": 0.549352,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [
+          {
+            "method": "freq_window_50",
+            "tiebreak_fraction": 0.913
+          },
+          {
+            "method": "freq_window_200",
+            "tiebreak_fraction": 0.714
+          },
+          {
+            "method": "gap_current",
+            "tiebreak_fraction": 0.568
+          },
+          {
+            "method": "knn_draw_similarity",
+            "tiebreak_fraction": 0.664
+          },
+          {
+            "method": "season_period2",
+            "tiebreak_fraction": 0.747
+          }
+        ],
+        "ensemble": [
+          {
+            "method": "markov_self_state",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 10,
+        "use_blacklist": false
+      },
+      {
+        "game": "joker_urna2",
+        "pool": 1,
+        "scorer": "ridge_pooled_feats",
+        "saved_scorer": "ridge_pooled_feats",
+        "scorer_matches_saved": true,
+        "compared_fields": [
+          "scorer",
+          "ensemble",
+          "sim_depth_pct",
+          "use_blacklist",
+          "hit_target",
+          "rate_col_used",
+          "rate_col_mismatch",
+          "low_confidence",
+          "multiplicity",
+          "expected_windows",
+          "incomplete_methods",
+          "rate_data_missing",
+          "tiebreak_gate_applied",
+          "tiebreak_dependent",
+          "ranked_methods",
+          "qualifying_methods"
+        ],
+        "mismatches": {},
+        "hit_target": 1,
+        "rate_col_used": "rate_1plus_k1",
+        "rate_col_mismatch": false,
+        "low_confidence": false,
+        "qualifying_methods": 16,
+        "ranked_methods": [
+          "ridge_pooled_feats",
+          "logit_pooled_feats",
+          "dmd_forecast",
+          "imapa_agg",
+          "online_logit_sgd",
+          "knn_draw_similarity",
+          "holt_forecast",
+          "markov_lag2",
+          "cusum_burst",
+          "drift_linear",
+          "gbm_stumps_pooled",
+          "ses_opt_alpha",
+          "ewma_cold_hl30",
+          "ssa_forecast",
+          "rhythm_phase",
+          "rank_ensemble_core"
+        ],
+        "multiplicity": {
+          "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+          "candidates": 38,
+          "p_value": 0.021682,
+          "holm_p": 0.823902,
+          "alpha": 0.05,
+          "proven": false
+        },
+        "expected_windows": [
+          10,
+          30,
+          60,
+          100
+        ],
+        "incomplete_methods": [],
+        "rate_data_missing": [],
+        "tiebreak_gate_applied": true,
+        "tiebreak_dependent": [],
+        "ensemble": [
+          {
+            "method": "ridge_pooled_feats",
+            "weight": 1.0
+          }
+        ],
+        "sim_depth_pct": 30,
+        "use_blacklist": false
+      }
+    ]
+  }
+}
