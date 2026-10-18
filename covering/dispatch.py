@@ -16,6 +16,7 @@ from covering.common import (
     _coverage_pct,
     _greedy_fallback,
     _order_by_scores,
+    _pool_rank_key,
     _sorted_pool,
     lotto_coverage_pct,
     ensure_pool_numbers_on_tickets,
@@ -28,11 +29,16 @@ from covering.designs import (
 )
 from covering.higher_hits import improve_higher_hits
 from covering.ilp import wheel_ilp
+from covering.multihit import wheel_multihit
+from covering.weighted import wheel_weighted
 from covering.profile_swap import improve_hit_profile
 from covering.refined_covers import improve_with_refined_cover
 from covering.search import wheel_annealing, wheel_genetic
 
 WHEEL_METHODS = {
+    # Experimental, explicit overrides only; automatic selection stays unchanged.
+    "weighted": wheel_weighted,
+    "multihit": wheel_multihit,
     "hitcover": wheel_hitcover,
     "maxcover": wheel_maxcover,
     "ilp": wheel_ilp,
@@ -203,7 +209,10 @@ def generate_wheel(
         method, pool, pick, guarantee, max_variants, scores, condition, draw_n, max_num
     )
     if max_num and scores and wheel:
-        wheel = _order_by_scores(wheel, scores)
+        order_scores = scores
+        if (method or "").strip().lower() in {"weighted", "multihit"}:
+            order_scores = {n: _pool_rank_key(n, scores)[0] for n in pool}
+        wheel = _order_by_scores(wheel, order_scores)
     return wheel, cov
 
 
@@ -275,6 +284,10 @@ def _generate_wheel(
         wheel, cov = _greedy_fallback(pool, pick, guarantee, max_variants, scores)
     else:
         wheel, cov = fn(pool, pick, guarantee, max_variants, scores)
+    if fn in (wheel_weighted, wheel_multihit):
+        # Generic hit-profile swaps preserve one-cover probabilities, but can
+        # destroy multiplicity or the score-weighted objective of these APIs.
+        return wheel, cov
     if int(max_variants or 0) > 0:
         wheel = ensure_pool_numbers_on_tickets(wheel, pool, pick)
         cov = _coverage_pct(wheel, pool, guarantee)

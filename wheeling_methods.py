@@ -34,10 +34,13 @@ from covering.dispatch import (
     resolve_wheel_method,
 )
 from covering.ilp import _ILP_COVER_CACHE, _ilp_cover_positions, wheel_ilp
+from covering.multihit import multi_hit_stats, wheel_multihit
 from covering.search import wheel_annealing, wheel_genetic
+from covering.weighted import align_positions_by_degree, wheel_weighted
 
 __all__ = [
     "WHEEL_METHODS",
+    "align_positions_by_degree",
     "budget_buys_complete_design",
     "budget_design_signature",
     "compute_coverage_pct",
@@ -49,10 +52,13 @@ __all__ = [
     "resolve_wheel_method",
     "lotto_coverage_pct",
     "lotto_design_path",
+    "multi_hit_stats",
     "wheel_annealing",
     "wheel_genetic",
     "wheel_ilp",
     "wheel_lajolla",
     "wheel_lotto",
+    "wheel_multihit",
     "wheel_union34",
+    "wheel_weighted",
 ]
