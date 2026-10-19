@@ -14,3 +14,7 @@ _ISTORIC/*.csv text eol=lf
 scripts/analysis/pool_selection_649_2026-10-19*.json -text diff whitespace=cr-at-eol
 scripts/analysis/pool_selection_649_2026-10-19*.csv -text diff whitespace=cr-at-eol
 scripts/analysis/pool_selection_649_2026-10-19*.md -text diff whitespace=cr-at-eol
+# Noua runda scrie explicit LF, inclusiv manifestul semnat.
+scripts/analysis/pool_combinations_649_2026-10-19*.json text eol=lf
+scripts/analysis/pool_combinations_649_2026-10-19*.csv text eol=lf
+scripts/analysis/pool_combinations_649_2026-10-19*.md text eol=lf

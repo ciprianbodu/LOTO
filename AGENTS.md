@@ -80,6 +80,46 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Alte combinatii pentru pool 9..16, Romania si Bulgaria — 2026-10-19
+
+- La cererea explicita a utilizatorului, aceasta continuare compara Romania
+  si, in plus, NUMAI Bulgaria. Alte state se adauga numai daca le cere.
+  Protocolul si runnerul initial sunt arhivate; amendamentul de scop este
+  inregistrat inainte de prima evaluare bulgareasca. Germania terminase si
+  Cehia era la scoruri cand au fost oprite celelalte tari; rezultatele lor
+  nu intra in raportul acestei continuari.
+- 208 combinatii din 47 de scoreri de productie: 138 de perechi ponderate
+  Markov+expert, 8 agregari robuste, 12 RRF, 4 medii geometrice si 46 de
+  corectii reziduale de rang. Scoruri numai din trecut, rang mediu la
+  egalitate, fallback frequency explicit; nicio schimbare in productie.
+- Selector fixat anterior: origini 70/80/90% din zilele CSV, fereastra
+  anterioara de 20%, alegere fixa in blocul urmator, tinta media ratelor
+  4+ peste poolurile 9..16 cu limita de consecutive 2. Perioada 70..80%
+  este diagnostic; 80..100% este evaluare retrospectiva prequentiala,
+  nu holdout virgin. Top-N brut foloseste aceleasi alegeri.
+- Romania, 529 de extrageri: selector 4.584121%, Markov 3.827977%,
+  p unilateral 0.125440, CI95 al diferentei -0.470944..+2.011724 pp.
+  Bulgaria, 142 de extrageri: 2.992958% fata de 2.200704%, p 0.316360,
+  CI95 -2.024648..+3.697183 pp. Diferente numerice pozitive, fara
+  superioritate demonstrata; 0/208 statice trec Holm in fiecare tara.
+- Cea mai mare rata statica romaneasca, observata DUPA rezultate:
+  `combo_rank_m025__dmd_forecast`, 5.482042%, p brut 0.040570, Holm 1.
+  Nu inlocuieste selectorul si nu este o metoda confirmata. Nici toate
+  obiectivele nu cresc: zero hituri in Romania 17.060491% fata de
+  16.824197% la Markov. Statisticile sunt conditionate pe traseele
+  observate; nu calibreaza toate rundele adaptive sub un nul IID.
+- Validare independenta: 57099 controale, zero discrepante, numai doua
+  tari; refacerea integrala a selectorului/statisticilor si noua prefixe
+  directe pe tara. Toate cele 3328 de randuri CSV statice si 6344 de
+  randuri din traseu coincid cu NPZ; fisierele operative protejate au
+  aceleasi amprente. Cele 62 de teste specifice trec si dupa amendament.
+- Suita completa, Windows / Python 3.14.8, copie locala izolata: 2949 passed, 20 skipped, 272 warnings in 1402.42s (0:23:22).
+  NumPy 2.5.2, SciPy 1.18.1; sursele stiintifice ale copiei coincid cu
+  manifestul. Sintaxa si git diff --check trec.
+- Raport si dovezi: `scripts/analysis/pool_combinations_649_2026-10-19.md`,
+  JSON, CSV-uri, protocoale si validare cu acelasi prefix. Cache-ul ramane
+  local; jurnalele de durata sunt locale, dupa intreruperea I/O pe G:.
+
 ### Cautare pool 9..16 la 6/49 fata de Markov — 2026-10-19
 
 - 47 de metode existente + patru agregari online noi, scoruri strict anterioare zilei tinta, limita de consecutive 2; top-N brut separat. Protocol si amprente fixate inainte de numararea hiturilor; amendament numai pentru verificarea CRLF/LF, fara retuning.
