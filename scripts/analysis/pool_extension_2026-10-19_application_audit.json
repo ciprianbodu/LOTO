@@ -1,0 +1,56 @@
+{
+  "scope": "Regression audit of existing application and 4+ history UI, separate from the 5/40 and Joker pool research",
+  "python": "3.14.8 (tags/v3.14.8:8e6e75d, Sep 30 2026, 18:19:33) [MSC v.1944 64 bit (AMD64)]",
+  "methods": 53,
+  "per_game": {
+    "loto_6_49": 52,
+    "loto_5_40": 51,
+    "joker_urna1": 51,
+    "joker_urna2": 48
+  },
+  "checks": {
+    "histories": 13,
+    "scorers": 848,
+    "pipelines": 26,
+    "budgets": 24,
+    "complete_wheels": 13,
+    "designs": 151
+  },
+  "all_designs_100_percent_coverage": true,
+  "worker_e2e": {
+    "status": "COMPLETED",
+    "games": 13,
+    "payload_decoded": true
+  },
+  "ui_http": {
+    "status": 200,
+    "bytes": 73038,
+    "isolated_queue_and_settings": true
+  },
+  "production_unchanged": true,
+  "protected_sha256": {
+    "best_methods.json": null,
+    "pool_history.json": null,
+    "adaptive_state.json": null,
+    ".ui_state.json": null,
+    "bench_results\\folds.csv": "87514003b7d1e81f55f6cc3c105f56c735192920d31f33a1973935c4c18a50e2",
+    "bench_results\\report.json": "682fba888fffb9abd04b413f263ab921dafc8e44673ce42ea7448f4bbfc45123",
+    "_ISTORIC\\joker.csv": "f77225305bcd6de3fea5b4d4b20de742b989230550562bcde6e18b2ff34ab665",
+    "_ISTORIC\\loto_5_40.csv": "ad7d19b4f9010eda19acbdd9e953bde231a6b7b1b8be5da84bf6afe6a05a4aa9",
+    "_ISTORIC\\loto_6_49.csv": "db454d56b213fc248e81f9ab261c252188d22224f696a8d8857139f9d626bf02",
+    "_ISTORIC\\externe\\austria_lotto_6aus45.csv": "eef1ebb49a6ab6262ff45b07b7124390f3ff39fdda47b9def57b6c0ca0657564",
+    "_ISTORIC\\externe\\belgia_lotto_6din45.csv": "7440db2d12825b95e936dbefd93b2312e7f6716e2864995b4a1d5ca1b56103e2",
+    "_ISTORIC\\externe\\bulgaria_toto2_6din49.csv": "247c5a4358eb6247f4f25e410852398dab15ff3ab6aefe9ada5f2311ba929ee9",
+    "_ISTORIC\\externe\\cehia_sportka_6din49.csv": "32d626f6fd75e0ea072f450a581c3c55709af413718206a97ebf3341f9cad680",
+    "_ISTORIC\\externe\\euromillions_5din50_stele.csv": "7cc3da675a7484c84314afface9208dee0dd2b1d58aaffbb0e8d16c4a866916a",
+    "_ISTORIC\\externe\\germania_lotto_6aus49.csv": "888d194df208a3580caba083c1c5e3141194735b72ae275cb2fcdd1ff98cf259",
+    "_ISTORIC\\externe\\polonia_lotto_6din49.csv": "b8c2f27d45599671c1b5e1dba315488723846585a6938e3e06b1e7eff45a4acc",
+    "_ISTORIC\\externe\\slovacia_loto_6din49.csv": "02f058cca52169b665db34892255d87717250a1ef3061086a5ca96cb4e90eaad",
+    "_ISTORIC\\externe\\spania_la_primitiva_6din49.csv": "cee4d42a400d6d0cbde0d992aeabb9d5619abaf77748f831c699eff6cf582146",
+    "_ISTORIC\\externe\\ungaria_hatoslotto_6din45.csv": "cc939f404cb14a48770d0a5b95be57d279d5e28697248e91e841acf6a57745b1"
+  },
+  "seconds": 85.96754700000747,
+  "detail_report_local": "C:\\Users\\Cipix\\AppData\\Local\\Temp\\loto-pool-extension-20261019\\application-audit-gc4mk964\\audit_application_report.json",
+  "detail_report_sha256": "3bbd2fbfcecf0f5f675254fd274aed6f71b23d281a09b43419927149bdb2e5a0",
+  "reproduce": "python scripts/analysis/audit_application.py --output <local temporary report path>; use an isolated checkout and no mail configuration"
+}

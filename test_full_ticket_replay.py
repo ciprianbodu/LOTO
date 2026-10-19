@@ -230,9 +230,9 @@ def test_history_rows_count_draws_with_a_winning_variant(monkeypatch):
         ui_hits._render_full_ticket_replay([], "6/49", 3)
     table = next(n for n in ui.walk() if n["kind"] == "table")
     rows = table["kwargs"]["rows"]
-    assert [r["seen"] for r in rows] == ["2 (50.00%)", "1 (25.00%)", "1 (25.00%)"]
+    assert [r["seen"] for r in rows] == ["1 (25.00%)", "1 (25.00%)"]
     assert "3 variante pe extragere" in table["kwargs"]["columns"][1]["label"]
-    assert [r["rnd"] for r in rows] == ["5.5%", "0.29%", "0.005%"]
+    assert [r["rnd"] for r in rows] == ["0.29%", "0.005%"]
     text = ui.text()
     assert "dispers" not in text
     assert "un bilet pe extragere" in text
@@ -311,6 +311,6 @@ def test_joker_five_plus_chance_is_not_shown_as_zero(monkeypatch):
     with capture_ui() as ui:
         ui_hits._render_full_ticket_replay([], "joker", 3)
     rows = next(n for n in ui.walk() if n["kind"] == "table")["kwargs"]["rows"]
-    assert rows[2]["rnd"] == "0.00016%"
+    assert rows[1]["rnd"] == "0.00016%"
     assert ui_hits._five_plus_pct(0.01088) == "1.088%"
     assert ui_hits._five_plus_pct(0.00005) == "0.005%"

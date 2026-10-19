@@ -126,7 +126,7 @@ def test_wf_table_and_ticket_gaps_use_each_threshold_separately(monkeypatch):
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(_wf_entries(), "6/49", {"pool_size": 16})
     summary = next(node for node in ui.walk() if node["kind"] == "table")
-    five_row = summary["kwargs"]["rows"][2]
+    five_row = next(row for row in summary["kwargs"]["rows"] if row["prag"] == "+5")
     assert five_row["prag"] == "+5"
     assert five_row["pool"] == "3 (60.00%)"
     assert five_row["tick"] == "1 (20.00%)"
