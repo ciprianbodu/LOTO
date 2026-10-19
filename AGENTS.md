@@ -80,6 +80,65 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Extindere 5/40 si Joker; Istoric hits numai 4+ — 2026-10-19
+
+- Extinderea ceruta: Loto 5/40, pool 9..15 (toate cele sase numere
+  extrase din 40, bilet de 5), si Joker Urna 1, pool 9..19 (cinci din 45).
+  Aceleasi 16 ipoteze adaptive, adaptate geometriei, plus 16 combinatii
+  de rang 50% cu Markov pentru fiecare joc; Markov si frequency separat.
+  Nu s-au adaugat alte state sau o cautare de pool pe Urna 2.
+- Protocolul, parametrii si sursele au fost semnate inaintea evaluarii.
+  Scoruri strict din zile anterioare; selectie pe ferestre anterioare de
+  20% la originile 70/80/90%, criteriu media ratelor 4+ peste poolurile
+  jocului, consecutive 2. Ultimele 20% sunt evaluare retrospectiva
+  prequentiala pe istorice reutilizate, nu holdout virgin. Top-N brut este
+  diagnostic si foloseste aceleasi alegeri. Fiecare K foloseste selectorul
+  canonic real, fara a presupune pooluri incluse unele in altele.
+- 5/40, 361 de extrageri: selector 6.133755%, Markov 5.856747%, diferenta
+  +0.277008 pp, p unilateral 0.424950, Holm pe cele doua jocuri 0.849900,
+  CI95 al diferentei -2.240954..+2.817112 pp. Joker, 446 de extrageri:
+  3.872809% fata de 4.810436%, diferenta -0.937627 pp, p 0.888300,
+  Holm 0.888300, CI95 -2.472142..+0.573365 pp. Niciun selector nu trece
+  poarta; 0/32 definitii fixe trec Holm in fiecare joc, 0/64 impreuna.
+  Nu s-a promovat nicio metoda si nu s-a rescris decizia de productie.
+- Metodele din configuratia curenta, inregistrate per pool in protocol,
+  au 7.162643% la 5/40 si 4.790053% la Joker. Sunt DOAR diagnostic pe
+  istoricul reutilizat, cu selectie standardizata: nu reprezinta o reluare
+  a deciziilor si setarilor istorice de productie sau o validare externa.
+  Zero hituri creste numeric fata de Markov: 12.623664% / 10.961615% la
+  5/40 si 14.859356% / 13.575214% la Joker. Nu se afirma avantaj fata de
+  hazard sau cresterea tuturor indicatorilor. Inferenta paired pe zile
+  este conditionata pe traseele observate, fara calibrarea intregii
+  cautari adaptive sub un nul IID.
+- Validator separat: 37419 controale, zero discrepante; toate cele 576
+  de randuri ale candidatilor si 11118 din traseu coincid cu JSON/NPZ.
+  Per joc: noua tinte canonice, trei prefixe pentru toate cele 32 de
+  definitii, 21 de prefixe directe de experti, perturbarea tintei.
+  Cache-ul si jurnalele raman locale in TEMP; fisierele operative
+  protejate au aceleasi amprente inainte/dupa.
+- In Clasament, Istoric hits afiseaza numai pragurile 4+ si 5+ si
+  extragerile cu minimum patru numere, pentru toate jocurile, indiferent
+  de tinta bench. La fel sumarul reluarii Bilet complet. Procentele
+  pastreaza toate extragerile evaluate la numitor; filtrul ≥4/≥5 revine
+  la pagina 1. Nu se modifica scorerii, setarile sau cache-ul. Schimbarea
+  intra la repornirea normala (reload=False); aplicatia reala nu a fost
+  repornita si nu s-a trimis mail de test.
+- Audit in copie izolata: 13 istorice, 848 verificari de paritate,
+  151 designuri, 26 de pipeline-uri, 13 profile complete; worker separat
+  pe 13 jocuri si UI HTTP 200, fara modificarea fisierelor protejate.
+- Suita completa, Windows / Python 3.14.8, copie locala izolata:
+  3182 passed, 20 skipped, 272 warnings in 1310.41s (0:21:50).
+  Cele 47 de surse stiintifice coincid cu manifestul si copia testata;
+  UI-ul si testele au aceleasi surse, sintaxa celor 19 fisiere Python si
+  git diff --check trec. Ulterior cercetarii, raportul local are alta
+  amprenta, cu data dinaintea suitei finale; este pastrat, fara a atribui
+  cauza. Decizia, setarile, istoricul poolurilor si Re-Bench-ul statiei
+  coincid in continuare cu amprentele inregistrate.
+- Dovezi: `scripts/analysis/pool_extension_2026-10-19.*`, protocolul,
+  CSV-urile, validarea si auditul aplicatiei cu acelasi prefix.
+  Reproducere: `python -m scripts.analysis.validate_pool_extension_2026_10_19
+  --verify scripts/analysis/pool_extension_2026-10-19.json` din radacina.
+
 ### Metode adaptive noi si clarificarea mailului — 2026-10-19
 
 - Cautare noua numai Romania si Bulgaria: 16 definitii in trei familii
