@@ -77,6 +77,18 @@ def test_mail_rating_says_when_holm_does_not_confirm_the_advantage(monkeypatch):
     assert "Avantaj nedemonstrat" in lines[2] and "p = 0.43" in lines[2]
     assert lines[2] == app._multiplicity_note(entry)
 
+    # O rată numeric peste referință în ferestre suprapuse nu dovedește avantaj.
+    entry = _entry("markov_lag2", proven=False, holm_p=1.0)
+    lines = app._mail_method_lines(spec, _result("markov_lag2"))
+    assert (
+        "rata observată peste media aleatoare în 3/4 ferestre suprapuse "
+        "(comparație descriptivă)"
+    ) in lines[1]
+    assert "a bătut hazardul" not in lines[1]
+    assert "Avantaj nedemonstrat" in lines[2] and "p = 1.00" in lines[2]
+    assert lines[2] == app._multiplicity_note(entry)
+    assert lines[2] in _panel_text(monkeypatch, _result("markov_lag2"), entry)
+
     # Avantaj confirmat: fără avertisment.
     entry = _entry("markov_lag2", proven=True, holm_p=0.01)
     assert len(app._mail_method_lines(spec, _result("markov_lag2"))) == 2
@@ -408,7 +420,8 @@ def test_mail_names_the_joker_number_method_with_its_rate_and_wilson(monkeypatch
     )
     assert lines[1] == (
         "RATING JOKER: rată top-1 7.1% față de 5.00% la întâmplare; "
-        "scor Wilson (z=1) 6.2%; a bătut hazardul în 3/4 ferestre"
+        "scor Wilson (z=1) 6.2%; rata observată peste media aleatoare în "
+        "3/4 ferestre suprapuse (comparație descriptivă)"
     )
     assert "Avantaj nedemonstrat" in lines[2] and "48" in lines[2]
 

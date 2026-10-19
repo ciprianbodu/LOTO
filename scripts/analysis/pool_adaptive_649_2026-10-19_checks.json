@@ -1,0 +1,28 @@
+{
+  "completed_at_utc": "2026-10-19T18:44:33.149392+00:00",
+  "protocol_sha256": "5822ba19abd32bcb7cdc0394c62231f6a6c0abcca75e3303d4901573c1273f21",
+  "full_suite": {
+    "return_code": 0,
+    "summary": "3015 passed, 20 skipped, 272 warnings in 1464.59s (0:24:24)",
+    "log_sha256": "1708d47c6902395a33aeb4cab0a6d397642a4605f4d809bc3b9acdb5956d513c",
+    "isolated_copy": "C:\\Users\\Cipix\\AppData\\Local\\Temp\\loto-pool-adaptive-20261019\\full-suite-r_hpu8iw"
+  },
+  "scientific_source_copy": {
+    "files": 50,
+    "all_equal_frozen_manifest_and_workspace": true
+  },
+  "application_source_sha256_lf": "79dda689c86d7cd4a3733588c796924dd9a74d130fd4bd4491a4b0754a768619",
+  "application_source_copy_equal": true,
+  "focused_new_tests_passed": 66,
+  "syntax_checked_python_files": 11,
+  "csv_parity": {
+    "candidate_rows": 512,
+    "trace_rows": 8048,
+    "all_rows_equal_json_or_npz": true
+  },
+  "independent_validator_checks": 12861,
+  "independent_validator_failures": 0,
+  "runtime_protected_unchanged": true,
+  "application_audit_summary": "pool_adaptive_649_2026-10-19_application_audit.json",
+  "limits": "Full regression suite and application smoke audit do not prove lottery advantage; statistical research is retrospective."
+}

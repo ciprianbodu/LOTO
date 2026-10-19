@@ -1,0 +1,34 @@
+{
+  "report": "G:\\My Drive\\_CODING\\_LOTO\\scripts\\analysis\\pool_adaptive_649_2026-10-19.json",
+  "protocol_sha256": "5822ba19abd32bcb7cdc0394c62231f6a6c0abcca75e3303d4901573c1273f21",
+  "checks": 12861,
+  "failures": [],
+  "passed": true,
+  "country_banks": 2,
+  "algorithm_candidates": 32,
+  "holm_families": {
+    "romania": 32,
+    "external": 32
+  },
+  "prediction_audit": {
+    "romania": {
+      "canonical_target_rows": 9,
+      "canonical_pool_checks": 4896,
+      "truncated_target_prefixes": 3,
+      "algorithm_prefix_checks": 96,
+      "direct_expert_prefix_checks": 9,
+      "target_label_perturbations": 1
+    },
+    "bulgaria": {
+      "canonical_target_rows": 9,
+      "canonical_pool_checks": 4896,
+      "truncated_target_prefixes": 3,
+      "algorithm_prefix_checks": 96,
+      "direct_expert_prefix_checks": 9,
+      "target_label_perturbations": 1
+    }
+  },
+  "retrospective_reuse": true,
+  "iid_search_calibrated": false,
+  "limits": "Full array/statistic recount and independent integer selector replay; sampled canonical pools and truncated algorithm/expert prefixes. Prefix replay checks causal behavior, not an independent derivation of every model formula. No virgin or prospective evidence, and no calibration of the entire historical search."
+}

@@ -2108,7 +2108,10 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
         line = f"RATING{tag}: rată {label} {100 * rate:.1f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
-        line += f"; scor Wilson (z=1) {100 * wil:.1f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
+        line += (
+            f"; scor Wilson (z=1) {100 * wil:.1f}%; rata observată peste media "
+            f"aleatoare în {w_ok}/{w_all} ferestre suprapuse (comparație descriptivă)"
+        )
         lines[1] = line
     elif m := re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat):
         line = f"RATING{tag}: rată {label} {100 * float(m[1]):.1f}%"
