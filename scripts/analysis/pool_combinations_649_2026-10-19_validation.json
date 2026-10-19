@@ -1,0 +1,56 @@
+{
+  "report": "G:\\My Drive\\_CODING\\_LOTO\\scripts\\analysis\\pool_combinations_649_2026-10-19.json",
+  "protocol_sha256": "bc83b03d279d9ee4ab4461ded587c5c97517dca8ea0c1f23ce1b53d5ebe1e8bb",
+  "checks": 57099,
+  "failures": [],
+  "passed": true,
+  "country_banks": 2,
+  "static_candidates": 208,
+  "static_holm_families": {
+    "romania": 208,
+    "external": 208
+  },
+  "direct_prefix_audit": {
+    "romania": {
+      "target_prefixes": 9,
+      "candidate_prefix_checks": 72,
+      "candidate_ids": [
+        "combo_rank_m050__markov_self_state",
+        "combo_rank_m050__nb_lags_pooled",
+        "combo_rank_m075__cooc_last3",
+        "combo_rank_m075__pair_transition",
+        "combo_residual_a050__knn_draw_similarity",
+        "combo_residual_a050__season_period2",
+        "frequency",
+        "markov_lag2"
+      ],
+      "random_static_ids": [
+        "combo_rank_m075__cooc_last3",
+        "combo_rank_m050__nb_lags_pooled",
+        "combo_rank_m075__pair_transition"
+      ]
+    },
+    "bulgaria": {
+      "target_prefixes": 9,
+      "candidate_prefix_checks": 72,
+      "candidate_ids": [
+        "combo_rank_m025__ewma_cold_hl30",
+        "combo_rank_m025__knn_feature_pooled",
+        "combo_rank_m050__nb_lags_pooled",
+        "combo_rank_m075__cooc_last3",
+        "combo_rank_m075__pair_transition",
+        "combo_residual_a050__naive_bayes_last",
+        "frequency",
+        "markov_lag2"
+      ],
+      "random_static_ids": [
+        "combo_rank_m075__cooc_last3",
+        "combo_rank_m050__nb_lags_pooled",
+        "combo_rank_m075__pair_transition"
+      ]
+    }
+  },
+  "retrospective_reuse": true,
+  "iid_search_calibrated": false,
+  "limits": "Array/statistic recount, independent selector implementation and sampled parent/formula prefixes; no virgin or prospective evidence."
+}
