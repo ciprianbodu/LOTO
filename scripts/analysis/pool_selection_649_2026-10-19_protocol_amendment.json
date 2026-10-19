@@ -1,0 +1,9 @@
+{
+  "at_utc": "2026-10-19T04:22:22.692748+00:00",
+  "reason": "Normalize CRLF to LF in independent source-hash validator. Scorer generation stopped before any hit evaluation or outcome inspection. No data, candidate, parameter, split, selection or inference change.",
+  "changed_sources": [
+    "scripts/analysis/validate_pool_screen_2026_10_19.py"
+  ],
+  "initial_protocol_sha256": "27cab776a4cbd37e4a84a0714ae396f6de28eb9afc4968b665b32b887cbbfc52",
+  "final_protocol_sha256": "883234ed583e928a043dc5c6c05dc9b0bdee036f1b9dfa05810d0119a3c585d7"
+}

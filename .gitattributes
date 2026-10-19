@@ -10,3 +10,7 @@ scripts/analysis/forward_test/* text eol=lf
 _ISTORIC/externe/*.csv text eol=lf
 # Istoricele romanesti: update_csv.py scrie LF.
 _ISTORIC/*.csv text eol=lf
+# Studiul semneaza manifestul pe octeti; pastreaza CRLF/LF exact ca la rulare.
+scripts/analysis/pool_selection_649_2026-10-19*.json -text diff whitespace=cr-at-eol
+scripts/analysis/pool_selection_649_2026-10-19*.csv -text diff whitespace=cr-at-eol
+scripts/analysis/pool_selection_649_2026-10-19*.md -text diff whitespace=cr-at-eol
