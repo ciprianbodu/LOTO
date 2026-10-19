@@ -21,3 +21,6 @@ scripts/analysis/pool_combinations_649_2026-10-19*.md text eol=lf
 scripts/analysis/pool_adaptive_649_2026-10-19*.json text eol=lf
 scripts/analysis/pool_adaptive_649_2026-10-19*.csv text eol=lf
 scripts/analysis/pool_adaptive_649_2026-10-19*.md text eol=lf
+scripts/analysis/pool_extension_2026-10-19*.json text eol=lf
+scripts/analysis/pool_extension_2026-10-19*.csv text eol=lf
+scripts/analysis/pool_extension_2026-10-19*.md text eol=lf
