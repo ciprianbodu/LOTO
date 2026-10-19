@@ -1,0 +1,17 @@
+{
+  "report": "G:\\My Drive\\_CODING\\_LOTO\\scripts\\analysis\\pool_selection_649_2026-10-19.json",
+  "protocol_sha256": "883234ed583e928a043dc5c6c05dc9b0bdee036f1b9dfa05810d0119a3c585d7",
+  "checks": 32216,
+  "failures": [],
+  "passed": true,
+  "candidate_methods_recounted": 51,
+  "paired_confirmation_methods_recounted": 45,
+  "external_archives_recounted": 6,
+  "direct_prefix_samples": {
+    "markov_lag2": 9,
+    "cusum_burst": 9
+  },
+  "online_finalist_direct_prefix_not_recomputed": false,
+  "retrospective_reuse": true,
+  "limits": "Independent array/statistics recount and sampled registry prefix checks; this does not create virgin or prospective evidence."
+}

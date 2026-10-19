@@ -80,6 +80,14 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Cautare pool 9..16 la 6/49 fata de Markov — 2026-10-19
+
+- 47 de metode existente + patru agregari online noi, scoruri strict anterioare zilei tinta, limita de consecutive 2; top-N brut separat. Protocol si amprente fixate inainte de numararea hiturilor; amendament numai pentru verificarea CRLF/LF, fara retuning.
+- Split pe zile 60/20/20: 532 de extrageri pe dezvoltare, 529 pe confirmare. Finalistul unic `cusum_burst` are pe confirmare media ratelor 4+ 2.599244% fata de 3.827977% pentru Markov; Holm 1.000000. Avantaj confirmat dupa Holm: 0/45 candidati eligibili.
+- Extern, sase tari / 30176 de extrageri: 3.543793% fata de 3.700374%; p 0.908140. Istorice reutilizate retrospectiv; nu sunt dovezi prospective. Nicio metoda noua promovata, decizia si output-urile de productie ramase intacte.
+- Validator independent: 32216 controale, zero discrepante; noua prefixe pentru fiecare finalist/baseline. Suita completa: 2887 passed, 20 skipped, 272 warnings in 1591.20s (0:26:31).
+- Raport, protocol, JSON, CSV per extragere si validare: `scripts/analysis/pool_selection_649_2026-10-19.*`. Cache NPZ separat si local.
+
 ### Continuarea workflow-ului Claude si audit pe module — 2026-10-18
 
 - Registry renumarat: 53 de intrari active (include experimentul exclus
