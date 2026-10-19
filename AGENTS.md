@@ -80,6 +80,55 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Metode adaptive noi si clarificarea mailului — 2026-10-19
+
+- Cautare noua numai Romania si Bulgaria: 16 definitii in trei familii
+  (BOCPD zilnic, interactiuni cu doua antecedente lag2, calibrare bilineara
+  online a rangurilor), plus 16 combinatii 50% cu Markov. Parametrii,
+  amprentele si regulile sunt fixate inainte de calcularea hiturilor.
+  Markov si frequency sunt controale separate; scoruri strict din trecut.
+- Acelasi obiectiv primar: media ratelor 4+ peste poolurile 9..16, limita
+  de consecutive 2, selector pe ferestre anterioare la originile 70/80/90%.
+  Ultimele 20% sunt o evaluare retrospectiva prequentiala pe istorice deja
+  explorate. Scorurile parintilor sunt reutilizate numai dupa verificarea
+  semnaturilor si alinierii; noul cache si jurnalele raman in TEMP.
+- Romania, 529 de extrageri: selector 3.355388%, Markov 3.827977%,
+  p unilateral 0.763640, CI95 al diferentei -1.813054..+0.858902 pp.
+  Bulgaria, 142 de extrageri: 4.665493% fata de 2.200704%, p 0.066370,
+  CI95 -0.528169..+5.545775 pp. Selectorul nu trece poarta fixata;
+  0/32 definitii trec Holm in fiecare tara (minim Holm 1.00).
+  Nicio metoda promovata si nicio decizie de productie rescrisa.
+- Zero hituri este numeric mai frecvent pentru selector in ambele tari:
+  Romania 17.107750% fata de 16.824197%, Bulgaria 20.070423% fata de
+  16.109155%. Nu se afirma imbunatatirea tuturor obiectivelor sau un
+  avantaj fata de hazard. Testele paired sunt conditionate pe traseele
+  observate, fara calibrarea tuturor rundelor adaptive sub un nul IID.
+- Validator independent: 12861 controale, zero discrepante, doua tari;
+  4896 de verificari canonice de pool pe tara, trei prefixe pentru toate
+  cele 32 de definitii, noua prefixe directe ale expertilor si perturbarea
+  tintei. Cele 66 de teste specifice noi trec; rezerva frequency invalida
+  nu contamineaza o metoda care nu a consumat-o.
+- Mailul numea „a batut hazardul” simpla rata numeric peste referinta in
+  ferestre suprapuse. Acum spune explicit „rata observata peste media
+  aleatoare ... (comparatie descriptiva)”, pastrand cifrele si aceeasi nota
+  Holm ca panoul. Decizia locala 6/49 k9: logit_pooled_feats, 43 de candidati,
+  Holm p=1.00, deci avantaj nedemonstrat. low_confidence=False nu inlocuieste
+  testul Holm. Textul nou intra la repornirea normala (reload=False);
+  aplicatia reala nu a fost repornita si nu s-a trimis mail de test.
+- Audit intr-o copie izolata: 13 istorice, 848 verificari de paritate,
+  151 designuri, 26 de pipeline-uri; worker separat pentru toate cele 13
+  jocuri si UI HTTP 200. Fisierele protejate au ramas intacte.
+- Suita completa, Windows / Python 3.14.8, copie locala izolata:
+  3015 passed, 20 skipped, 272 warnings in 1464.59s (0:24:24).
+  Cele 50 de surse stiintifice ale copiei coincid cu manifestul; aceeasi
+  sursa a aplicatiei cu mailul corectat. Sintaxa celor 11 fisiere Python
+  modificate si git diff --check trec. Toate cele 512 randuri ale
+  candidatilor si 8048 de randuri din traseu coincid cu JSON/NPZ.
+- Raport, protocol, JSON, CSV-uri si validare:
+  `scripts/analysis/pool_adaptive_649_2026-10-19.*`.
+  Validatorul se lanseaza ca modul din radacina proiectului:
+  `python -m scripts.analysis.validate_pool_adaptive_2026_10_19 --verify ...`.
+
 ### Alte combinatii pentru pool 9..16, Romania si Bulgaria — 2026-10-19
 
 - La cererea explicita a utilizatorului, aceasta continuare compara Romania
