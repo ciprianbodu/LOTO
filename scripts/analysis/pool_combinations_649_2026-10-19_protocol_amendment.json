@@ -1,0 +1,71 @@
+{
+  "kind": "user_requested_scope_restriction",
+  "recorded_at_utc": "2026-10-19T17:13:00.951974+00:00",
+  "user_request": "Fa in plus doar Bulgaria îți zic eu daca vreau alt stat",
+  "initial_protocol_sha256": "8343bac36e2b987b90bafc9eb9f3a5dab3c6d1c412dfe98fbe55a45b70af5062",
+  "updated_protocol_sha256": "bc83b03d279d9ee4ab4461ded587c5c97517dca8ea0c1f23ce1b53d5ebe1e8bb",
+  "external_before": [
+    "germania",
+    "cehia",
+    "slovacia",
+    "polonia",
+    "spania",
+    "bulgaria"
+  ],
+  "external_after": [
+    "bulgaria"
+  ],
+  "status": "Romania and Germany pool banks computed; Czech scorer calculation interrupted; Bulgaria not yet evaluated. Other-country outputs are excluded from the amended study.",
+  "unchanged": [
+    "208 combination descriptors",
+    "47 parent scorers",
+    "selection windows and gates",
+    "seed and permutation/bootstrap counts",
+    "pool sizes and primary outcome",
+    "no automatic promotion"
+  ],
+  "changed_source_files": [
+    "scripts/analysis/pool_combinations_649_2026_10_19.py"
+  ],
+  "runner_diff": [
+    "--- initial",
+    "+++ Bulgaria_only",
+    "@@ -56,20 +56,10 @@",
+    " CACHE = ROOT / \"bench_results/pool649_combinations_20261019\"",
+    " MANIFEST = HERE / f\"{STEM}_protocol.json\"",
+    " REPORT = HERE / f\"{STEM}.json\"",
+    "-DATASETS = {\"romania\": \"_ISTORIC/loto_6_49.csv\"}",
+    "-DATASETS.update(",
+    "-    {",
+    "-        country: f\"_ISTORIC/externe/{filename}.csv\"",
+    "-        for country, filename in (",
+    "-            (\"germania\", \"germania_lotto_6aus49\"),",
+    "-            (\"cehia\", \"cehia_sportka_6din49\"),",
+    "-            (\"slovacia\", \"slovacia_loto_6din49\"),",
+    "-            (\"polonia\", \"polonia_lotto_6din49\"),",
+    "-            (\"spania\", \"spania_la_primitiva_6din49\"),",
+    "-            (\"bulgaria\", \"bulgaria_toto2_6din49\"),",
+    "-        )",
+    "-    }",
+    "-)",
+    "+DATASETS = {",
+    "+    \"romania\": \"_ISTORIC/loto_6_49.csv\",",
+    "+    \"bulgaria\": \"_ISTORIC/externe/bulgaria_toto2_6din49.csv\",",
+    "+}",
+    " PROTECTED = (",
+    "     \"best_methods.json\",",
+    "     \".ui_state.json\",",
+    "@@ -160,9 +150,9 @@",
+    "             \"permutations\": 99999,",
+    "             \"bootstrap_samples\": 2000,",
+    "             \"unit\": \"whole day; same swap for all8 pools and same-day draws\",",
+    "-            \"external\": \"same selector from local past on six archives; last20% per country; pooled country:date\",",
+    "+            \"external\": \"same selector from local past on Bulgaria ONLY; last20% of Bulgarian days; country:date clusters\",",
+    "             \"static_holm_families\": \"all208 statics in RO and all208 in pooled external, separately; controls excluded\",",
+    "-            \"country_holm\": \"six country selector tests\",",
+    "+            \"country_holm\": \"one Bulgarian selector test; no other country without user request\",",
+    "             \"superiority_gate\": \"positive selector difference and one-sided p<.05 in BOTH RO and pooled external\",",
+    "             \"assumption\": \"paired date-level label exchangeability; day bootstrap does not prove robustness to serial dependence\",",
+    "         },"
+  ]
+}

@@ -1,0 +1,1496 @@
+{
+  "version": 1,
+  "baseline": "markov_lag2",
+  "seed": 2026101904,
+  "games": {
+    "loto_5_40": {
+      "label": "Loto 5/40",
+      "path": "_ISTORIC/loto_5_40.csv",
+      "max_num": 40,
+      "draw_n": 6,
+      "play_n": 5,
+      "ks": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    "joker_urna1": {
+      "label": "Joker Urna 1",
+      "path": "_ISTORIC/joker.csv",
+      "max_num": 45,
+      "draw_n": 5,
+      "play_n": 5,
+      "ks": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ]
+    }
+  },
+  "candidate_specs": {
+    "loto_5_40": [
+      {
+        "name": "markov_lag2",
+        "family": "reference",
+        "complexity": 1
+      },
+      {
+        "name": "frequency",
+        "family": "control",
+        "complexity": 1
+      },
+      {
+        "name": "bocpd_daily_h128_k20",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.0078125,
+          "prior_strength": 20,
+          "prior_mean": 0.15,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "bocpd_daily_h128_k100",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.0078125,
+          "prior_strength": 100,
+          "prior_mean": 0.15,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "bocpd_daily_h512_k20",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.001953125,
+          "prior_strength": 20,
+          "prior_mean": 0.15,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "bocpd_daily_h512_k100",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.001953125,
+          "prior_strength": 100,
+          "prior_mean": 0.15,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k20_a25",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 20,
+          "amplitude": 0.25,
+          "source_lag_rows": 2,
+          "active_pairs": 15,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 15",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/39; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k20_a50",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 20,
+          "amplitude": 0.5,
+          "source_lag_rows": 2,
+          "active_pairs": 15,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 15",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/39; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k100_a25",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 100,
+          "amplitude": 0.25,
+          "source_lag_rows": 2,
+          "active_pairs": 15,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 15",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/39; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k100_a50",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 100,
+          "amplitude": 0.5,
+          "source_lag_rows": 2,
+          "active_pairs": 15,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 15",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/39; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g3_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g3_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g5_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g5_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g3_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g3_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g5_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g5_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.15,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 40,
+          "draw_n": 6
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h128_k20",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h128_k20"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h128_k100",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h128_k100"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h512_k20",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h512_k20"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h512_k100",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h512_k100"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k20_a25",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k20_a25"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k20_a50",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k20_a50"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k100_a25",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k100_a25"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k100_a50",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k100_a50"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g3_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g3_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g3_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g3_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g5_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g5_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g5_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g5_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g3_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g3_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g3_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g3_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g5_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g5_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g5_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g5_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      }
+    ],
+    "joker_urna1": [
+      {
+        "name": "markov_lag2",
+        "family": "reference",
+        "complexity": 1
+      },
+      {
+        "name": "frequency",
+        "family": "control",
+        "complexity": 1
+      },
+      {
+        "name": "bocpd_daily_h128_k20",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.0078125,
+          "prior_strength": 20,
+          "prior_mean": 0.1111111111111111,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "bocpd_daily_h128_k100",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.0078125,
+          "prior_strength": 100,
+          "prior_mean": 0.1111111111111111,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "bocpd_daily_h512_k20",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.001953125,
+          "prior_strength": 20,
+          "prior_mean": 0.1111111111111111,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "bocpd_daily_h512_k100",
+        "family": "bocpd_beta_binomial_daily",
+        "complexity": 1,
+        "parent_names": [],
+        "expert_names": [
+          "frequency"
+        ],
+        "params": {
+          "hazard_per_day": 0.001953125,
+          "prior_strength": 100,
+          "prior_mean": 0.1111111111111111,
+          "runlength_cap": null,
+          "per_ball_posterior": true,
+          "likelihood": "beta_binomial_per_day_block",
+          "prediction": "hazard_before_day; all rows before update",
+          "training": "full raw history from row zero"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k20_a25",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 20,
+          "amplitude": 0.25,
+          "source_lag_rows": 2,
+          "active_pairs": 10,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 10",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/44; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k20_a50",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 20,
+          "amplitude": 0.5,
+          "source_lag_rows": 2,
+          "active_pairs": 10,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 10",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/44; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k100_a25",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 100,
+          "amplitude": 0.25,
+          "source_lag_rows": 2,
+          "active_pairs": 10,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 10",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/44; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "lag2_pair_contrast_k100_a50",
+        "family": "lag2_pair_interaction_contrast",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "shrink": 100,
+          "amplitude": 0.5,
+          "source_lag_rows": 2,
+          "active_pairs": 10,
+          "marginal": "response marginal over all past lag2 transitions",
+          "q": "(C_state,j + shrink*p_j)/(n_state + shrink)",
+          "contrast": "fsum((q11+q00)-(q10+q01)) / 10",
+          "formula": "R(markov_lag2) + amplitude*(R(contrast)-0.5)",
+          "R": "(exact mean rank - 1)/44; no label jitter",
+          "flat_contrast": "span<=1e-12: neutral term zero",
+          "training": "all transitions with target date strictly past"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g3_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g3_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g5_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_frequency_g5_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "frequency"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g3_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g3_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 3,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g5_all",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": null,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "rank_bilinear_markov_ewma_hl30_g5_h256",
+        "family": "online_bilinear_rank_calibration",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "expert_names": [
+          "frequency",
+          "markov_lag2",
+          "ewma_hl30"
+        ],
+        "params": {
+          "nodes_per_axis": 5,
+          "memory_half_life": 256,
+          "memory_unit": "target draws, batched by date",
+          "prior_exposure_per_node": 100.0,
+          "prior_mean": 0.1111111111111111,
+          "formula": "sum(phi_node*(hits_node+100*p0)/(exposure_node+100))",
+          "basis": "bilinear hats on exact mean ranks in [0,1]",
+          "training": "provided target stream only; pre-day prediction"
+        },
+        "geometry": {
+          "max_num": 45,
+          "draw_n": 5
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h128_k20",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h128_k20"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h128_k100",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h128_k100"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h512_k20",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h512_k20"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__bocpd_daily_h512_k100",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 2,
+        "parent_names": [
+          "markov_lag2",
+          "bocpd_daily_h512_k100"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k20_a25",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k20_a25"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k20_a50",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k20_a50"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k100_a25",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k100_a25"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__lag2_pair_contrast_k100_a50",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "lag2_pair_contrast_k100_a50"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g3_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g3_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g3_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g3_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g5_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g5_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_frequency_g5_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_frequency_g5_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g3_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g3_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g3_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g3_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g5_all",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g5_all"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      },
+      {
+        "name": "mix_markov50__rank_bilinear_markov_ewma_hl30_g5_h256",
+        "family": "markov_new_method_rank_blend",
+        "complexity": 3,
+        "parent_names": [
+          "markov_lag2",
+          "rank_bilinear_markov_ewma_hl30_g5_h256"
+        ],
+        "params": {
+          "markov_weight": 0.5,
+          "ties": "mean rank",
+          "flat_fallback": "frequency"
+        }
+      }
+    ]
+  },
+  "candidate_count_per_game": 32,
+  "current_baselines": {
+    "loto_5_40": {
+      "k9": "hot_consistency",
+      "k10": "cusum_burst",
+      "k11": "hot_consistency",
+      "k12": "hot_consistency",
+      "k13": "online_logit_sgd",
+      "k14": "pair_lift_last",
+      "k15": "pair_lift_last"
+    },
+    "joker_urna1": {
+      "k9": "rank_ensemble_core",
+      "k10": "frequency",
+      "k11": "markov_pairs",
+      "k12": "markov_lag2",
+      "k13": "frequency",
+      "k14": "frequency",
+      "k15": "frequency",
+      "k16": "frequency",
+      "k17": "pagerank_cooc",
+      "k18": "frequency",
+      "k19": "markov_self_state"
+    }
+  },
+  "current_baseline_scope": "DIAGNOSTIC ONLY: current per-pool method IDs selected on full reused history, evaluated with the same raw/consecutive2 pool construction and without recent penalties or base restriction; not a replay of historical application settings or production selection, not independent validation; no role in new selector",
+  "selection": {
+    "origins": [
+      0.7,
+      0.8,
+      0.9
+    ],
+    "lookback": 0.2,
+    "score_start": "max(256, rows before floor(50% of all unique dates))",
+    "boundaries": "exact fractions of unique dates in full CSV",
+    "criterion": "mean4+ over requested pools; choose on past20%, hold fixed next10%",
+    "gates": "no own fallback or consumed-parent invalidity in past window; raw boundary tie fraction<.5 at every k; explicit Markov reserve",
+    "tie_break": "Markov first, then complexity, then ID"
+  },
+  "primary": "selector on80..100% vs Markov, consecutive limit2; two game hypotheses, Holm2",
+  "diagnostic": "70..80%; current methods selected on reused full history",
+  "secondary": "all32 fixed algorithm definitions per game on final20%, Holm32 within game and Holm64 across both games; raw uses SAME selector choices;3+,5+,mean hits,zero",
+  "pool_selection": "rank_by_score canonical; apply_consecutive_limit(ranked,k,2) independently for EACH k; no prefix/nesting assumption",
+  "geometry": "5/40 counts ALL SIX drawn numbers n1..n6, physical ticket has5; Joker Urna1 counts only n1..n5 from45, Urna2 not part of pool study",
+  "inference": {
+    "threshold": 4,
+    "permutations": 99999,
+    "bootstrap_samples": 2000,
+    "unit": "whole day, common sign across all overlapping pools and all draws of that day",
+    "assumption": "paired method-label exchangeability conditional on observed trajectories; does not calibrate whole adaptive search or serial dependence",
+    "promotion": "none automatic, including a nominal/corrected retrospective signal"
+  },
+  "retrospective_reuse": true,
+  "iid_search_calibrated": false,
+  "limitations": "Previously explored histories, no virgin holdout or prospective evidence. Existing6/49 studies remain frozen. Only these two Romanian games are evaluated; no additional countries or Joker Urna2 study.",
+  "data_sha256": {
+    "loto_5_40": "ad7d19b4f9010eda19acbdd9e953bde231a6b7b1b8be5da84bf6afe6a05a4aa9",
+    "joker_urna1": "f77225305bcd6de3fea5b4d4b20de742b989230550562bcde6e18b2ff34ab665"
+  },
+  "source_sha256": {
+    "loto_enterprise/__init__.py": "59627cfff9ce13e1090abf8070399c9caf8c417380959703e53fa37e9cfa8774",
+    "loto_enterprise/benchmark/__init__.py": "68ac4e7c2f85fc5458c02a097b4a6095c4cf7aeceede35de9dae830b2df1528e",
+    "loto_enterprise/benchmark/bench_cache.py": "c95d0c8c8996f04c98d3054f9304d30e2c9b3fd074c17c8ab555e15ba6763185",
+    "loto_enterprise/benchmark/curated.py": "2f9660af08155cc3098e60e105048d629de8e23ec2013a2bb26c7c3f2f83cb97",
+    "loto_enterprise/benchmark/decision.py": "cc3f5c59f0412db1ef21fd4b9f19181e3aa4eabf5498c2f14f55bc04a0593c2c",
+    "loto_enterprise/benchmark/freshness.py": "073f3b013118a45ab19a628fb710b5f8f2e30fe7cd810dfd73dbbfe4f5fe7d68",
+    "loto_enterprise/benchmark/hardware.py": "f0bd47b16926ea878a51e8cca17c33b8d0b272862d1af9935a419519758ceebe",
+    "loto_enterprise/benchmark/hit_target.py": "2ce48cd5e5998604e45cdda563c38798f283d42462749251307a2caafcd6899a",
+    "loto_enterprise/benchmark/hw_sampler.py": "091ebc45e12a330a0e0f2977b0a862a7ad2f3541eb77d1c473920431a2cea8e7",
+    "loto_enterprise/benchmark/matrix_reader.py": "1fd22101a47e143465eafdec69594634d8fb6b600e9aba6b7dd5e349beb688b1",
+    "loto_enterprise/benchmark/methods.py": "ccf0e35b980b99f2d53e8c6652012a940ffc108903d276828c96e877c2fae681",
+    "loto_enterprise/benchmark/methods_common.py": "f2dcd53a5878765694cf95eee82422454101af6256f7300e648bfc67458fb876",
+    "loto_enterprise/benchmark/methods_experimental.py": "16b83d1533cd362ef23547055dbeb834de3225317fba34ddf7a3354638e94558",
+    "loto_enterprise/benchmark/methods_learning.py": "77b81d44369b6da8bf2738066d829a821f41e9485a2fd75e2a964e6ac10757d9",
+    "loto_enterprise/benchmark/methods_recency.py": "ae6982efd67aab652bf58ccc5215d34f4699e0938f939b9f9ca7a9f61b73be67",
+    "loto_enterprise/benchmark/methods_relational.py": "6cbe8e49d7189132420a86ffd9da9dcfdc2d262b39559193c975df46b7b0f51f",
+    "loto_enterprise/benchmark/methods_wave2.py": "02c79cd47129070f30eb02b88fe493ed35db9e7c89c29996720776cba899f6cf",
+    "loto_enterprise/benchmark/reporting.py": "fb67117049f6b5dd47d40e1bc91e6ae9d7b7e983663d9cc3132abf88107cd500",
+    "loto_enterprise/benchmark/runner.py": "1438146b8e79c6098e4586a2ab73b08be7127b633aba3bece3ea1788496a247f",
+    "loto_enterprise/core/__init__.py": "ca19610c16ba2341fd70b43631340a6a2e23471eb309b06c1bc72f7dc9e816f7",
+    "loto_enterprise/core/adaptive_feedback.py": "c12a55346c78686a40aa6dccab6080b2993561310780bdd7e000247fba6f5329",
+    "loto_enterprise/core/backtesting.py": "17404bd226b4ff7e67c1302b92e8b5594c0eb9322e295ffc7655bab31d6ed223",
+    "loto_enterprise/core/base_threshold.py": "5a840d4deb8781002511663455aefbb9e78d77a96bb09dd74c549da0399a7282",
+    "loto_enterprise/core/draw_validation.py": "479dff63ec38885a1a7117dadd003c2779488d1aa276af78279af98804dbd89b",
+    "loto_enterprise/core/full_ticket.py": "ee9d809b338846ebe1a063a04ac6f5644b7979dc96c19b25b6c45d34028f4be6",
+    "loto_enterprise/core/history.py": "cab1093aeb71cf691700f3e090ce066c89fdd5d102f35842ca83889853dd69b2",
+    "loto_enterprise/core/lotteries.py": "72cfb1c94e4456c02420c857f21e3e5495623d1931e282122f0e3f9c0ef58ab2",
+    "loto_enterprise/core/method_selector.py": "b3c7a7fefb5e7a89de0a8b9b9ab3624285d0bbbdc61a79c8c9c8b1dca2f3b6cf",
+    "loto_enterprise/core/pool_selection.py": "ea40d652bdda7033a2026cd6d9290e2a0f8c7cca85b5ffe3e9b534de8a2b7146",
+    "loto_enterprise/core/py314_io.py": "805c60252e08e513302e3754a0dcf9998ed1884ac6a925aa1046cabb37cb7f72",
+    "loto_enterprise/core/ranking.py": "7e03961e6f77080588f9b8cb94d7193b6caddc35548e300fb50e6536e2d1d408",
+    "loto_enterprise/core/ro_text.py": "3d22e1922f66103d8438eebd1e4966105075ada6a391622a800ff02834e581e9",
+    "loto_enterprise/core/score_validation.py": "8f1eb4b9bd41b087d115193c0dfc8331df2af601a26560fa2f0dbb979b49a5bc",
+    "loto_enterprise/core/ticket_replay.py": "475f8d615b9fad43539f04b7e879eb4b99aef26067beb98dd423519c1868563a",
+    "loto_enterprise/core/walk_forward_adapter.py": "4761a9ec609940d63f2e24b5ba3648c33787f5430880f2dc50f6591d4aeb27fd",
+    "loto_enterprise/core/wf_sig.py": "589b55fa19286599e51ff1fd31b30f04f67de73985e526ef9e3976f9b85b11df",
+    "loto_enterprise/engine/__init__.py": "4fa9e3fc2d8a0e8f0e681f94b4e593ce564df18e39427c804cb5d02889c62504",
+    "loto_enterprise/engine/pipeline.py": "27ac04ee987758bc7b4d32d4f2632f1f1b70a7802c743b1035ec479ae8cef76a",
+    "loto_enterprise/engine/scoring.py": "7f17478914b2c35870d5fec7690378662851bedbc68575a785760fab3749259f",
+    "scripts/analysis/pool_extension_2026_10_19.py": "911c7fcae0a0ddcb7f85190774fa7a1e13aa3e862f3303edd95663f9148be6b9",
+    "scripts/analysis/pool_extension_cache_2026_10_19.py": "a4bfef8fcd72ea3933db23ff7daae2195d806bbb6d072f8977557dba1b019de0",
+    "scripts/analysis/pool_extension_candidates_2026_10_19.py": "ef5aae54d418f8571bff300d8751870ec5ea467f0b1d834a66665717dd55a4e6",
+    "scripts/analysis/pool_extension_eval_2026_10_19.py": "d103682f40ec916a382b9c4dd5e00dfb44ba0f56cbcbf9104de67c130e1c91b8",
+    "scripts/analysis/pool_extension_statistics_2026_10_19.py": "b2d4a7213a36f6e40cbb610c1f2a5e30d0814ae8dd2817cb572bb356db16961e",
+    "scripts/analysis/validate_pool_combinations_2026_10_19.py": "49c1f6fc2929f208d481fd75dd8390105acba2a8d62eaf8edbbdf0cc231cafcd",
+    "scripts/analysis/validate_pool_extension_2026_10_19.py": "0c8a7f77eaf5e129b09bd98a122c4579bc36ee52c26e25cb73104770d5a5dcb7",
+    "scripts/analysis/validate_pool_screen_2026_10_19.py": "3196e94babfaa07ca51a7452786341bc35eebc3569224dbdd6a3b1253979036b"
+  },
+  "environment": {
+    "python": [
+      3,
+      14,
+      8
+    ],
+    "numpy": "2.5.2",
+    "scipy": "1.18.1"
+  },
+  "sources": [
+    "https://arxiv.org/abs/0710.3742",
+    "https://ojs.aaai.org/index.php/AAAI/article/download/9602/9461"
+  ],
+  "source_scope": "BOCPD inspiration and calibration context; custom bilinear/interaction hypotheses, not a lottery-prediction guarantee or exact BBQ implementation",
+  "registered_at_utc": "2026-10-19T19:17:49.827589+00:00"
+}

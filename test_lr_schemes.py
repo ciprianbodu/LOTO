@@ -365,7 +365,8 @@ def test_history_replays_cod59_on_the_pool_of_each_draw():
     wf_best = [
         max(len(set(t) & set(d)) for t in (POOL16[:6], POOL16[6:12])) for _, d in draws
     ]
-    for t in (3, 4, 5):
+    assert "+3" not in rows  # istoricul arată numai 4+
+    for t in (4, 5):
         k = sum(1 for h in expected if h >= t)
         assert rows[f"+{t}"]["lr"] == f"{k} ({k / 3 * 100:.2f}%)"
         k = sum(1 for h in wf_best if h >= t)
@@ -406,7 +407,7 @@ def test_history_540_counts_all_six_drawn_numbers():
         best = [max(len(set(t) & set(d)) for t in tickets) for _, d in draws]
         if s.code == 37:
             assert best[0] == 5
-        for t, label in ((3, "+3"), (4, "+4"), (5, "5")):
+        for t, label in ((4, "+4"), (5, "5")):
             k = sum(1 for h in best if h >= t)
             assert rows[label]["lr"] == f"{k} ({k / 3 * 100:.2f}%)"
 

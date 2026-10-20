@@ -81,6 +81,215 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Extindere 5/40 si Joker; Istoric hits numai 4+ — 2026-10-19
+
+- Extinderea ceruta: Loto 5/40, pool 9..15 (toate cele sase numere
+  extrase din 40, bilet de 5), si Joker Urna 1, pool 9..19 (cinci din 45).
+  Aceleasi 16 ipoteze adaptive, adaptate geometriei, plus 16 combinatii
+  de rang 50% cu Markov pentru fiecare joc; Markov si frequency separat.
+  Nu s-au adaugat alte state sau o cautare de pool pe Urna 2.
+- Protocolul, parametrii si sursele au fost semnate inaintea evaluarii.
+  Scoruri strict din zile anterioare; selectie pe ferestre anterioare de
+  20% la originile 70/80/90%, criteriu media ratelor 4+ peste poolurile
+  jocului, consecutive 2. Ultimele 20% sunt evaluare retrospectiva
+  prequentiala pe istorice reutilizate, nu holdout virgin. Top-N brut este
+  diagnostic si foloseste aceleasi alegeri. Fiecare K foloseste selectorul
+  canonic real, fara a presupune pooluri incluse unele in altele.
+- 5/40, 361 de extrageri: selector 6.133755%, Markov 5.856747%, diferenta
+  +0.277008 pp, p unilateral 0.424950, Holm pe cele doua jocuri 0.849900,
+  CI95 al diferentei -2.240954..+2.817112 pp. Joker, 446 de extrageri:
+  3.872809% fata de 4.810436%, diferenta -0.937627 pp, p 0.888300,
+  Holm 0.888300, CI95 -2.472142..+0.573365 pp. Niciun selector nu trece
+  poarta; 0/32 definitii fixe trec Holm in fiecare joc, 0/64 impreuna.
+  Nu s-a promovat nicio metoda si nu s-a rescris decizia de productie.
+- Metodele din configuratia curenta, inregistrate per pool in protocol,
+  au 7.162643% la 5/40 si 4.790053% la Joker. Sunt DOAR diagnostic pe
+  istoricul reutilizat, cu selectie standardizata: nu reprezinta o reluare
+  a deciziilor si setarilor istorice de productie sau o validare externa.
+  Zero hituri creste numeric fata de Markov: 12.623664% / 10.961615% la
+  5/40 si 14.859356% / 13.575214% la Joker. Nu se afirma avantaj fata de
+  hazard sau cresterea tuturor indicatorilor. Inferenta paired pe zile
+  este conditionata pe traseele observate, fara calibrarea intregii
+  cautari adaptive sub un nul IID.
+- Validator separat: 37419 controale, zero discrepante; toate cele 576
+  de randuri ale candidatilor si 11118 din traseu coincid cu JSON/NPZ.
+  Per joc: noua tinte canonice, trei prefixe pentru toate cele 32 de
+  definitii, 21 de prefixe directe de experti, perturbarea tintei.
+  Cache-ul si jurnalele raman locale in TEMP; fisierele operative
+  protejate au aceleasi amprente inainte/dupa.
+- In Clasament, Istoric hits afiseaza numai pragurile 4+ si 5+ si
+  extragerile cu minimum patru numere, pentru toate jocurile, indiferent
+  de tinta bench. La fel sumarul reluarii Bilet complet. Procentele
+  pastreaza toate extragerile evaluate la numitor; filtrul ≥4/≥5 revine
+  la pagina 1. Nu se modifica scorerii, setarile sau cache-ul. Schimbarea
+  intra la repornirea normala (reload=False); aplicatia reala nu a fost
+  repornita si nu s-a trimis mail de test.
+- Audit in copie izolata: 13 istorice, 848 verificari de paritate,
+  151 designuri, 26 de pipeline-uri, 13 profile complete; worker separat
+  pe 13 jocuri si UI HTTP 200, fara modificarea fisierelor protejate.
+- Suita completa, Windows / Python 3.14.8, copie locala izolata:
+  3182 passed, 20 skipped, 272 warnings in 1310.41s (0:21:50).
+  Cele 47 de surse stiintifice coincid cu manifestul si copia testata;
+  UI-ul si testele au aceleasi surse, sintaxa celor 19 fisiere Python si
+  git diff --check trec. Ulterior cercetarii, raportul local are alta
+  amprenta, cu data dinaintea suitei finale; este pastrat, fara a atribui
+  cauza. Decizia, setarile, istoricul poolurilor si Re-Bench-ul statiei
+  coincid in continuare cu amprentele inregistrate.
+- Dovezi: `scripts/analysis/pool_extension_2026-10-19.*`, protocolul,
+  CSV-urile, validarea si auditul aplicatiei cu acelasi prefix.
+  Reproducere: `python -m scripts.analysis.validate_pool_extension_2026_10_19
+  --verify scripts/analysis/pool_extension_2026-10-19.json` din radacina.
+
+### Metode adaptive noi si clarificarea mailului — 2026-10-19
+
+- Cautare noua numai Romania si Bulgaria: 16 definitii in trei familii
+  (BOCPD zilnic, interactiuni cu doua antecedente lag2, calibrare bilineara
+  online a rangurilor), plus 16 combinatii 50% cu Markov. Parametrii,
+  amprentele si regulile sunt fixate inainte de calcularea hiturilor.
+  Markov si frequency sunt controale separate; scoruri strict din trecut.
+- Acelasi obiectiv primar: media ratelor 4+ peste poolurile 9..16, limita
+  de consecutive 2, selector pe ferestre anterioare la originile 70/80/90%.
+  Ultimele 20% sunt o evaluare retrospectiva prequentiala pe istorice deja
+  explorate. Scorurile parintilor sunt reutilizate numai dupa verificarea
+  semnaturilor si alinierii; noul cache si jurnalele raman in TEMP.
+- Romania, 529 de extrageri: selector 3.355388%, Markov 3.827977%,
+  p unilateral 0.763640, CI95 al diferentei -1.813054..+0.858902 pp.
+  Bulgaria, 142 de extrageri: 4.665493% fata de 2.200704%, p 0.066370,
+  CI95 -0.528169..+5.545775 pp. Selectorul nu trece poarta fixata;
+  0/32 definitii trec Holm in fiecare tara (minim Holm 1.00).
+  Nicio metoda promovata si nicio decizie de productie rescrisa.
+- Zero hituri este numeric mai frecvent pentru selector in ambele tari:
+  Romania 17.107750% fata de 16.824197%, Bulgaria 20.070423% fata de
+  16.109155%. Nu se afirma imbunatatirea tuturor obiectivelor sau un
+  avantaj fata de hazard. Testele paired sunt conditionate pe traseele
+  observate, fara calibrarea tuturor rundelor adaptive sub un nul IID.
+- Validator independent: 12861 controale, zero discrepante, doua tari;
+  4896 de verificari canonice de pool pe tara, trei prefixe pentru toate
+  cele 32 de definitii, noua prefixe directe ale expertilor si perturbarea
+  tintei. Cele 66 de teste specifice noi trec; rezerva frequency invalida
+  nu contamineaza o metoda care nu a consumat-o.
+- Mailul numea „a batut hazardul” simpla rata numeric peste referinta in
+  ferestre suprapuse. Acum spune explicit „rata observata peste media
+  aleatoare ... (comparatie descriptiva)”, pastrand cifrele si aceeasi nota
+  Holm ca panoul. Decizia locala 6/49 k9: logit_pooled_feats, 43 de candidati,
+  Holm p=1.00, deci avantaj nedemonstrat. low_confidence=False nu inlocuieste
+  testul Holm. Textul nou intra la repornirea normala (reload=False);
+  aplicatia reala nu a fost repornita si nu s-a trimis mail de test.
+- Audit intr-o copie izolata: 13 istorice, 848 verificari de paritate,
+  151 designuri, 26 de pipeline-uri; worker separat pentru toate cele 13
+  jocuri si UI HTTP 200. Fisierele protejate au ramas intacte.
+- Suita completa, Windows / Python 3.14.8, copie locala izolata:
+  3015 passed, 20 skipped, 272 warnings in 1464.59s (0:24:24).
+  Cele 50 de surse stiintifice ale copiei coincid cu manifestul; aceeasi
+  sursa a aplicatiei cu mailul corectat. Sintaxa celor 11 fisiere Python
+  modificate si git diff --check trec. Toate cele 512 randuri ale
+  candidatilor si 8048 de randuri din traseu coincid cu JSON/NPZ.
+- Raport, protocol, JSON, CSV-uri si validare:
+  `scripts/analysis/pool_adaptive_649_2026-10-19.*`.
+  Validatorul se lanseaza ca modul din radacina proiectului:
+  `python -m scripts.analysis.validate_pool_adaptive_2026_10_19 --verify ...`.
+
+### Alte combinatii pentru pool 9..16, Romania si Bulgaria — 2026-10-19
+
+- La cererea explicita a utilizatorului, aceasta continuare compara Romania
+  si, in plus, NUMAI Bulgaria. Alte state se adauga numai daca le cere.
+  Protocolul si runnerul initial sunt arhivate; amendamentul de scop este
+  inregistrat inainte de prima evaluare bulgareasca. Germania terminase si
+  Cehia era la scoruri cand au fost oprite celelalte tari; rezultatele lor
+  nu intra in raportul acestei continuari.
+- 208 combinatii din 47 de scoreri de productie: 138 de perechi ponderate
+  Markov+expert, 8 agregari robuste, 12 RRF, 4 medii geometrice si 46 de
+  corectii reziduale de rang. Scoruri numai din trecut, rang mediu la
+  egalitate, fallback frequency explicit; nicio schimbare in productie.
+- Selector fixat anterior: origini 70/80/90% din zilele CSV, fereastra
+  anterioara de 20%, alegere fixa in blocul urmator, tinta media ratelor
+  4+ peste poolurile 9..16 cu limita de consecutive 2. Perioada 70..80%
+  este diagnostic; 80..100% este evaluare retrospectiva prequentiala,
+  nu holdout virgin. Top-N brut foloseste aceleasi alegeri.
+- Romania, 529 de extrageri: selector 4.584121%, Markov 3.827977%,
+  p unilateral 0.125440, CI95 al diferentei -0.470944..+2.011724 pp.
+  Bulgaria, 142 de extrageri: 2.992958% fata de 2.200704%, p 0.316360,
+  CI95 -2.024648..+3.697183 pp. Diferente numerice pozitive, fara
+  superioritate demonstrata; 0/208 statice trec Holm in fiecare tara.
+- Cea mai mare rata statica romaneasca, observata DUPA rezultate:
+  `combo_rank_m025__dmd_forecast`, 5.482042%, p brut 0.040570, Holm 1.
+  Nu inlocuieste selectorul si nu este o metoda confirmata. Nici toate
+  obiectivele nu cresc: zero hituri in Romania 17.060491% fata de
+  16.824197% la Markov. Statisticile sunt conditionate pe traseele
+  observate; nu calibreaza toate rundele adaptive sub un nul IID.
+- Validare independenta: 57099 controale, zero discrepante, numai doua
+  tari; refacerea integrala a selectorului/statisticilor si noua prefixe
+  directe pe tara. Toate cele 3328 de randuri CSV statice si 6344 de
+  randuri din traseu coincid cu NPZ; fisierele operative protejate au
+  aceleasi amprente. Cele 62 de teste specifice trec si dupa amendament.
+- Suita completa, Windows / Python 3.14.8, copie locala izolata: 2949 passed, 20 skipped, 272 warnings in 1402.42s (0:23:22).
+  NumPy 2.5.2, SciPy 1.18.1; sursele stiintifice ale copiei coincid cu
+  manifestul. Sintaxa si git diff --check trec.
+- Raport si dovezi: `scripts/analysis/pool_combinations_649_2026-10-19.md`,
+  JSON, CSV-uri, protocoale si validare cu acelasi prefix. Cache-ul ramane
+  local; jurnalele de durata sunt locale, dupa intreruperea I/O pe G:.
+
+### Cautare pool 9..16 la 6/49 fata de Markov — 2026-10-19
+
+- 47 de metode existente + patru agregari online noi, scoruri strict anterioare zilei tinta, limita de consecutive 2; top-N brut separat. Protocol si amprente fixate inainte de numararea hiturilor; amendament numai pentru verificarea CRLF/LF, fara retuning.
+- Split pe zile 60/20/20: 532 de extrageri pe dezvoltare, 529 pe confirmare. Finalistul unic `cusum_burst` are pe confirmare media ratelor 4+ 2.599244% fata de 3.827977% pentru Markov; Holm 1.000000. Avantaj confirmat dupa Holm: 0/45 candidati eligibili.
+- Extern, sase tari / 30176 de extrageri: 3.543793% fata de 3.700374%; p 0.908140. Istorice reutilizate retrospectiv; nu sunt dovezi prospective. Nicio metoda noua promovata, decizia si output-urile de productie ramase intacte.
+- Validator independent: 32216 controale, zero discrepante; noua prefixe pentru fiecare finalist/baseline. Suita completa: 2887 passed, 20 skipped, 272 warnings in 1591.20s (0:26:31).
+- Raport, protocol, JSON, CSV per extragere si validare: `scripts/analysis/pool_selection_649_2026-10-19.*`. Cache NPZ separat si local.
+
+### Continuarea workflow-ului Claude si audit pe module — 2026-10-18
+
+- Registry renumarat: 53 de intrari active (include experimentul exclus
+  `interval_extrema_k16`); per_game 52/51/51/48. Foldurile locale au 824 de
+  randuri, 28 failed (sapte metode de co-aparitie pe Urna 2, patru ferestre).
+  Snapshotul se opreste la 15 octombrie, istoricele includ 18 octombrie.
+- Markov calculeaza numai randurile sursa folosite, pastrand scorurile si
+  clasamentele exact: 2.728 prefixe si cazuri speciale; lag2 pe cele trei jocuri
+  cu pool, ~2,1..2,46x mai rapid numai scorerul, nu aplicatia intreaga.
+- Validarea coloanelor deja numerice evita conversia redundanta: matrice si
+  masca identice pe 13 istorice si 4.000 de randuri sintetice / opt dtype;
+  ~1,54x la 6/49, 2,19x la 5/40, 1,82x la Joker numai validarea.
+- DMD include intreg blocul singular egal la limita de rang si nu transforma
+  roundoff-ul unei prognoze nule in clasament. Defect reprodus independent
+  din HEAD pe Urna 2; rangul poate creste peste sase. Copiile inghetate ale
+  testelor prospective raman intacte. Bench v23, worker v20; WF ramane v31,
+  cu `|dmd-svd-ties1` numai pentru deciziile cu DMD (si ensemble/Urna 2).
+  Re-Bench complet necesar pentru un clasament actualizat; decizia si
+  output-urile locale ale utilizatorului nu sunt rescrise de audit.
+- Coada: progres monoton atomic; un worker nu poate fura jobul revendicat
+  de alt token nici inaintea primului callback. Requeue si recuperarea
+  randurilor legacy fara token raman functionale.
+- Workflow-ul Claude: exportul ILP restaurat; `weighted` si `multihit`
+  integrate numai ca override-uri experimentale explicite. Metodele automate
+  raman La Jolla fara plafon / hitcover cu buget. La pool16 g4, 3 jocuri x
+  3 bugete (10/30/65) x 2 metode, toate cele 18 comparatii pierd la 4+ fata
+  de automat. Ponderarea scorurilor nu este o probabilitate predictiva.
+  Refinarile generice nu ating aceste metode (ar putea rupe multiplicitatea).
+  Cheile WF: `weighted` semneaza fisierul C fara plafon; `multihit|mh1|lambda2`.
+- Designul Claude H(11,5,4), 65 de variante, este certificat strict in sase
+  comparatii: scoruri descrescatoare, plate si mixte pe 5/40 si Joker. La
+  scor descrescator, P4+ pe cel putin o varianta creste 3,375643% -> 3,797982%
+  la 5/40 (+12,51% relativ), 0,900505% -> 0,942166% la Joker (+4,63%), fara
+  pierderi la alte praguri 3..5. Acoperirea de 4 ramane partiala, 98,48%.
+  Fisierul H si sectiunea lui intra deja in amprenta cache-ului afectat.
+- Toate cele 46 de celule ale deciziei tinta4 coincid cu snapshotul
+  recalculat (16 campuri, zero nepotriviri); avantaj Holm demonstrat 0/46,
+  p ajustat minim 0,102454. Sunt 20 de scoreri distincti selectati. DMD era
+  ales numai la 6/49 k6/k7/k8, care cer reevaluare dupa fix. Nu se
+  promoveaza scoreri noi.
+  Toate cele 52 de covere C locale coincid ca marime cu cele mai bune din
+  arhiva oficiala La Jolla, Zenodo 19735294, versiunea1.2 din 24 aprilie2026
+  (baza inghetata in martie). Nu este o dovada a minimalitatii globale.
+- Auditul aplicatiei: 13 istorice, 848 verificari de paritate, 151 designuri,
+  26 pipeline-uri, 13 profile complete; worker separat pe 13 jocuri si
+  UI HTTP200; fisierele de productie protejate au aceleasi amprente.
+- Verificare finala Windows / Python 3.14.8: 2.853 teste trecute, 20 omise,
+  zero esecuri (24 min 31 s); sintaxa si git diff --check trec.
+- Dovezi: `scripts/analysis/scoring_audit_2026-10-18.md`,
+  `claude_wheeling_2026-10-18.md`, `audit_application_2026-10-18.json`,
+  `cover_source_check_2026-10-18.json`; comparatia de geometrie se reface
+  prin `audit_claude_wheeling_2026_10_18.py`.
+
 ### Schemele reduse ale Loteriei Romane — 2026-10-17
 
 - Cerinta: utilizatorul joaca la 6/49 schemele reduse LR, deci analiza trebuie
@@ -1759,7 +1968,8 @@ limita de validitate din §5).
 - `annealing`;
 - `genetic`;
 - `lajolla`;
-- `union34`.
+- `union34`;
+- `weighted` si `multihit` (numai experimente opt-in, fara avantaj demonstrat).
 
 Metoda opt-in `maxcover` adauga greedy pe castig marginal exhaustiv si doua
 treceri de schimburi locale, pe geometrie pozitionala memoizata. Este limitata
@@ -2076,9 +2286,9 @@ taie.
 
 | Strat | Versiune | Bump obligatoriu cand |
 |---|---:|---|
-| benchmark fold | `v22` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
+| benchmark fold | `v23` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v19` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v20` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

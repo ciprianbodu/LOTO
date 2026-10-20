@@ -1,0 +1,3178 @@
+{
+  "version": 1,
+  "baseline": "markov_lag2",
+  "pool_sizes": [
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "seed": 2026101902,
+  "minimum_warmup_rows": 256,
+  "experts": [
+    "anti_cooc_last",
+    "ar_ls_pooled",
+    "autocorr_lag",
+    "cooc_last3",
+    "croston_interval",
+    "cusum_burst",
+    "dmd_forecast",
+    "drift_linear",
+    "ewma_cold_hl30",
+    "ewma_hl30",
+    "freq_window_200",
+    "freq_window_50",
+    "frequency",
+    "gap_current",
+    "gap_hazard",
+    "gap_ratio",
+    "gbm_stumps_pooled",
+    "hawkes_cross",
+    "holt_forecast",
+    "hot_consistency",
+    "hurst_persistence",
+    "imapa_agg",
+    "knn_draw_similarity",
+    "knn_feature_pooled",
+    "knn_pattern_self",
+    "logit_pooled_feats",
+    "markov_lag2",
+    "markov_pairs",
+    "markov_self_state",
+    "momentum_30_300",
+    "naive_bayes_last",
+    "nb_lags_pooled",
+    "online_logit_sgd",
+    "pagerank_cooc",
+    "pair_lift_last",
+    "pair_transition",
+    "rank_ensemble_core",
+    "rhythm_phase",
+    "ridge_pooled_feats",
+    "runs_persistence",
+    "season_period2",
+    "ses_opt_alpha",
+    "spectral_phase",
+    "ssa_forecast",
+    "theta_drift",
+    "vlmm_self_k3",
+    "weighted_recent_linear"
+  ],
+  "candidate_specs": [
+    {
+      "name": "markov_lag2",
+      "family": "reference",
+      "parent_names": [
+        "markov_lag2"
+      ],
+      "complexity": 1
+    },
+    {
+      "name": "frequency",
+      "family": "control",
+      "parent_names": [
+        "frequency"
+      ],
+      "complexity": 1
+    },
+    {
+      "name": "combo_rank_m025__anti_cooc_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "anti_cooc_last"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__anti_cooc_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "anti_cooc_last"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__anti_cooc_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "anti_cooc_last"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__ar_ls_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ar_ls_pooled"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__ar_ls_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ar_ls_pooled"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__ar_ls_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ar_ls_pooled"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__autocorr_lag",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "autocorr_lag"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__autocorr_lag",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "autocorr_lag"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__autocorr_lag",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "autocorr_lag"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__cooc_last3",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "cooc_last3"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__cooc_last3",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "cooc_last3"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__cooc_last3",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "cooc_last3"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__croston_interval",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "croston_interval"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__croston_interval",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "croston_interval"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__croston_interval",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "croston_interval"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__cusum_burst",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "cusum_burst"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__cusum_burst",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "cusum_burst"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__cusum_burst",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "cusum_burst"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__dmd_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "dmd_forecast"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__dmd_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "dmd_forecast"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__dmd_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "dmd_forecast"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__drift_linear",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "drift_linear"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__drift_linear",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "drift_linear"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__drift_linear",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "drift_linear"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__ewma_cold_hl30",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_cold_hl30"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__ewma_cold_hl30",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_cold_hl30"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__ewma_cold_hl30",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_cold_hl30"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__ewma_hl30",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_hl30"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__ewma_hl30",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_hl30"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__ewma_hl30",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_hl30"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__freq_window_200",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_200"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__freq_window_200",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_200"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__freq_window_200",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_200"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__freq_window_50",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_50"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__freq_window_50",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_50"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__freq_window_50",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_50"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__frequency",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__frequency",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__frequency",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__gap_current",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_current"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__gap_current",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_current"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__gap_current",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_current"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__gap_hazard",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_hazard"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__gap_hazard",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_hazard"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__gap_hazard",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_hazard"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__gap_ratio",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_ratio"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__gap_ratio",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_ratio"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__gap_ratio",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gap_ratio"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__gbm_stumps_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gbm_stumps_pooled"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__gbm_stumps_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gbm_stumps_pooled"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__gbm_stumps_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "gbm_stumps_pooled"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__hawkes_cross",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hawkes_cross"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__hawkes_cross",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hawkes_cross"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__hawkes_cross",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hawkes_cross"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__holt_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "holt_forecast"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__holt_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "holt_forecast"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__holt_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "holt_forecast"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__hot_consistency",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hot_consistency"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__hot_consistency",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hot_consistency"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__hot_consistency",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hot_consistency"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__hurst_persistence",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hurst_persistence"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__hurst_persistence",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hurst_persistence"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__hurst_persistence",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "hurst_persistence"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__imapa_agg",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "imapa_agg"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__imapa_agg",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "imapa_agg"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__imapa_agg",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "imapa_agg"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__knn_draw_similarity",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_draw_similarity"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__knn_draw_similarity",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_draw_similarity"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__knn_draw_similarity",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_draw_similarity"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__knn_feature_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_feature_pooled"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__knn_feature_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_feature_pooled"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__knn_feature_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_feature_pooled"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__knn_pattern_self",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_pattern_self"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__knn_pattern_self",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_pattern_self"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__knn_pattern_self",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "knn_pattern_self"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__logit_pooled_feats",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "logit_pooled_feats"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__logit_pooled_feats",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "logit_pooled_feats"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__logit_pooled_feats",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "logit_pooled_feats"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__markov_pairs",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__markov_pairs",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__markov_pairs",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__markov_self_state",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_self_state"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__markov_self_state",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_self_state"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__markov_self_state",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_self_state"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__momentum_30_300",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "momentum_30_300"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__momentum_30_300",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "momentum_30_300"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__momentum_30_300",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "momentum_30_300"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__naive_bayes_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "naive_bayes_last"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__naive_bayes_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "naive_bayes_last"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__naive_bayes_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "naive_bayes_last"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__nb_lags_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "nb_lags_pooled"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__nb_lags_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "nb_lags_pooled"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__nb_lags_pooled",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "nb_lags_pooled"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__online_logit_sgd",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "online_logit_sgd"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__online_logit_sgd",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "online_logit_sgd"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__online_logit_sgd",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "online_logit_sgd"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__pagerank_cooc",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pagerank_cooc"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__pagerank_cooc",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pagerank_cooc"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__pagerank_cooc",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pagerank_cooc"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__pair_lift_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pair_lift_last"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__pair_lift_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pair_lift_last"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__pair_lift_last",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pair_lift_last"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__pair_transition",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pair_transition"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__pair_transition",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pair_transition"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__pair_transition",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "pair_transition"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__rank_ensemble_core",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "rank_ensemble_core"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__rank_ensemble_core",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "rank_ensemble_core"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__rank_ensemble_core",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "rank_ensemble_core"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__rhythm_phase",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "rhythm_phase"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__rhythm_phase",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "rhythm_phase"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__rhythm_phase",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "rhythm_phase"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__ridge_pooled_feats",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ridge_pooled_feats"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__ridge_pooled_feats",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ridge_pooled_feats"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__ridge_pooled_feats",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ridge_pooled_feats"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__runs_persistence",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "runs_persistence"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__runs_persistence",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "runs_persistence"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__runs_persistence",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "runs_persistence"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__season_period2",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "season_period2"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__season_period2",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "season_period2"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__season_period2",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "season_period2"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__ses_opt_alpha",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ses_opt_alpha"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__ses_opt_alpha",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ses_opt_alpha"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__ses_opt_alpha",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ses_opt_alpha"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__spectral_phase",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "spectral_phase"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__spectral_phase",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "spectral_phase"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__spectral_phase",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "spectral_phase"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__ssa_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ssa_forecast"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__ssa_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ssa_forecast"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__ssa_forecast",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "ssa_forecast"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__theta_drift",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "theta_drift"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__theta_drift",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "theta_drift"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__theta_drift",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "theta_drift"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__vlmm_self_k3",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "vlmm_self_k3"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__vlmm_self_k3",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "vlmm_self_k3"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__vlmm_self_k3",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "vlmm_self_k3"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m025__weighted_recent_linear",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "weighted_recent_linear"
+      ],
+      "markov_weight": 0.25,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m050__weighted_recent_linear",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "weighted_recent_linear"
+      ],
+      "markov_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rank_m075__weighted_recent_linear",
+      "family": "pair_mean_rank",
+      "rule": "weighted_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "weighted_recent_linear"
+      ],
+      "markov_weight": 0.75,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_median__recency",
+      "family": "robust_rank",
+      "rule": "median_mean_rank",
+      "parent_names": [
+        "frequency",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_trim20__recency",
+      "family": "robust_rank",
+      "rule": "trimmed_mean_rank",
+      "parent_names": [
+        "frequency",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "trim_fraction": 0.2,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_median__balanced",
+      "family": "robust_rank",
+      "rule": "median_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs",
+        "frequency",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_trim20__balanced",
+      "family": "robust_rank",
+      "rule": "trimmed_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs",
+        "frequency",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "trim_fraction": 0.2,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_median__learned",
+      "family": "robust_rank",
+      "rule": "median_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats"
+      ],
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_trim20__learned",
+      "family": "robust_rank",
+      "rule": "trimmed_mean_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats"
+      ],
+      "trim_fraction": 0.2,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_median__all10",
+      "family": "robust_rank",
+      "rule": "median_mean_rank",
+      "parent_names": [
+        "frequency",
+        "markov_pairs",
+        "markov_lag2",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats",
+        "hot_consistency"
+      ],
+      "complexity": 10,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_trim20__all10",
+      "family": "robust_rank",
+      "rule": "trimmed_mean_rank",
+      "parent_names": [
+        "frequency",
+        "markov_pairs",
+        "markov_lag2",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats",
+        "hot_consistency"
+      ],
+      "trim_fraction": 0.2,
+      "complexity": 10,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c00__recency",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "frequency",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "offset": 0,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c10__recency",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "frequency",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "offset": 10,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c60__recency",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "frequency",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "offset": 60,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c00__balanced",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs",
+        "frequency",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "offset": 0,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c10__balanced",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs",
+        "frequency",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "offset": 10,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c60__balanced",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs",
+        "frequency",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "offset": 60,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c00__learned",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats"
+      ],
+      "offset": 0,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c10__learned",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats"
+      ],
+      "offset": 10,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c60__learned",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "markov_lag2",
+        "frequency",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats"
+      ],
+      "offset": 60,
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c00__all10",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "frequency",
+        "markov_pairs",
+        "markov_lag2",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats",
+        "hot_consistency"
+      ],
+      "offset": 0,
+      "complexity": 10,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c10__all10",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "frequency",
+        "markov_pairs",
+        "markov_lag2",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats",
+        "hot_consistency"
+      ],
+      "offset": 10,
+      "complexity": 10,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_rrf_c60__all10",
+      "family": "rrf_rank",
+      "rule": "sum_reciprocal_rank",
+      "parent_names": [
+        "frequency",
+        "markov_pairs",
+        "markov_lag2",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats",
+        "hot_consistency"
+      ],
+      "offset": 60,
+      "complexity": 10,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_geomean__recency",
+      "family": "geometric_rank",
+      "rule": "negative_geometric_mean_position",
+      "parent_names": [
+        "frequency",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_geomean__balanced",
+      "family": "geometric_rank",
+      "rule": "negative_geometric_mean_position",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs",
+        "frequency",
+        "freq_window_200",
+        "hot_consistency"
+      ],
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_geomean__learned",
+      "family": "geometric_rank",
+      "rule": "negative_geometric_mean_position",
+      "parent_names": [
+        "markov_lag2",
+        "frequency",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats"
+      ],
+      "complexity": 5,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_geomean__all10",
+      "family": "geometric_rank",
+      "rule": "negative_geometric_mean_position",
+      "parent_names": [
+        "frequency",
+        "markov_pairs",
+        "markov_lag2",
+        "ewma_hl30",
+        "freq_window_50",
+        "freq_window_200",
+        "rank_ensemble_core",
+        "logit_pooled_feats",
+        "ridge_pooled_feats",
+        "hot_consistency"
+      ],
+      "complexity": 10,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__anti_cooc_last",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "anti_cooc_last"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__ar_ls_pooled",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "ar_ls_pooled"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__autocorr_lag",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "autocorr_lag"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__cooc_last3",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "cooc_last3"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__croston_interval",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "croston_interval"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__cusum_burst",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "cusum_burst"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__dmd_forecast",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "dmd_forecast"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__drift_linear",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "drift_linear"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__ewma_cold_hl30",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_cold_hl30"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__ewma_hl30",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "ewma_hl30"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__freq_window_200",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_200"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__freq_window_50",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "freq_window_50"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__frequency",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "frequency"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__gap_current",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "gap_current"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__gap_hazard",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "gap_hazard"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__gap_ratio",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "gap_ratio"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__gbm_stumps_pooled",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "gbm_stumps_pooled"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__hawkes_cross",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "hawkes_cross"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__holt_forecast",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "holt_forecast"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__hot_consistency",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "hot_consistency"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__hurst_persistence",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "hurst_persistence"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__imapa_agg",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "imapa_agg"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__knn_draw_similarity",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "knn_draw_similarity"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__knn_feature_pooled",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "knn_feature_pooled"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__knn_pattern_self",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "knn_pattern_self"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__logit_pooled_feats",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "logit_pooled_feats"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__markov_pairs",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "markov_pairs"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__markov_self_state",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "markov_self_state"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__momentum_30_300",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "momentum_30_300"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__naive_bayes_last",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "naive_bayes_last"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__nb_lags_pooled",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "nb_lags_pooled"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__online_logit_sgd",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "online_logit_sgd"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__pagerank_cooc",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "pagerank_cooc"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__pair_lift_last",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "pair_lift_last"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__pair_transition",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "pair_transition"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__rank_ensemble_core",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "rank_ensemble_core"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__rhythm_phase",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "rhythm_phase"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__ridge_pooled_feats",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "ridge_pooled_feats"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__runs_persistence",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "runs_persistence"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__season_period2",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "season_period2"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__ses_opt_alpha",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "ses_opt_alpha"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__spectral_phase",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "spectral_phase"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__ssa_forecast",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "ssa_forecast"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__theta_drift",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "theta_drift"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__vlmm_self_k3",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "vlmm_self_k3"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    },
+    {
+      "name": "combo_residual_a050__weighted_recent_linear",
+      "family": "residual_rank",
+      "rule": "markov_plus_orthogonal_rank_residual",
+      "parent_names": [
+        "markov_lag2",
+        "weighted_recent_linear"
+      ],
+      "residual_weight": 0.5,
+      "complexity": 2,
+      "mean_rank_ties": "average",
+      "flat_fallback": "frequency",
+      "flat_epsilon": 1e-12
+    }
+  ],
+  "candidate_count": 208,
+  "score_start": "max(256, number of rows strictly before floor(50% of full unique dates))",
+  "selection": {
+    "origins": [
+      0.7,
+      0.8,
+      0.9
+    ],
+    "lookback": 0.2,
+    "boundaries": "exact fractions of unique dates in the FULL CSV",
+    "criterion": "sum 4+ indicators across k9..16 in past window only",
+    "tie_break": "baseline first, then formula-parent count, then candidate ID",
+    "gates": "no invalid source/flat-combination fallback in past window; every raw boundary tie fraction<.5; baseline reserve explicit",
+    "future": "choice fixed until next origin; future invalidity reported without reselection"
+  },
+  "primary": "rolling selector vs Markov on80..100% of original days; constrained2",
+  "diagnostic": "rolling selector70..80%; no parameter retuning after results",
+  "secondary": "raw topN uses SAME choices as constrained2;3+,mean hits,zero;208 static candidates on final20%",
+  "inference": {
+    "permutations": 99999,
+    "bootstrap_samples": 2000,
+    "unit": "whole day; same swap for all8 pools and same-day draws",
+    "external": "same selector from local past on Bulgaria ONLY; last20% of Bulgarian days; country:date clusters",
+    "static_holm_families": "all208 statics in RO and all208 in pooled external, separately; controls excluded",
+    "country_holm": "one Bulgarian selector test; no other country without user request",
+    "superiority_gate": "positive selector difference and one-sided p<.05 in BOTH RO and pooled external",
+    "assumption": "paired date-level label exchangeability; day bootstrap does not prove robustness to serial dependence"
+  },
+  "iid_search_calibrated": false,
+  "retrospective_reuse": true,
+  "limitations": "All histories were explored previously. No virgin holdout, no IID full-search replay, no proof of future advantage. No automatic production promotion from reused retrospective data.",
+  "source_sha256": {
+    "loto_enterprise/__init__.py": "59627cfff9ce13e1090abf8070399c9caf8c417380959703e53fa37e9cfa8774",
+    "loto_enterprise/benchmark/__init__.py": "68ac4e7c2f85fc5458c02a097b4a6095c4cf7aeceede35de9dae830b2df1528e",
+    "loto_enterprise/benchmark/bench_cache.py": "c95d0c8c8996f04c98d3054f9304d30e2c9b3fd074c17c8ab555e15ba6763185",
+    "loto_enterprise/benchmark/curated.py": "2f9660af08155cc3098e60e105048d629de8e23ec2013a2bb26c7c3f2f83cb97",
+    "loto_enterprise/benchmark/decision.py": "cc3f5c59f0412db1ef21fd4b9f19181e3aa4eabf5498c2f14f55bc04a0593c2c",
+    "loto_enterprise/benchmark/freshness.py": "073f3b013118a45ab19a628fb710b5f8f2e30fe7cd810dfd73dbbfe4f5fe7d68",
+    "loto_enterprise/benchmark/hardware.py": "f0bd47b16926ea878a51e8cca17c33b8d0b272862d1af9935a419519758ceebe",
+    "loto_enterprise/benchmark/hit_target.py": "2ce48cd5e5998604e45cdda563c38798f283d42462749251307a2caafcd6899a",
+    "loto_enterprise/benchmark/hw_sampler.py": "091ebc45e12a330a0e0f2977b0a862a7ad2f3541eb77d1c473920431a2cea8e7",
+    "loto_enterprise/benchmark/matrix_reader.py": "1fd22101a47e143465eafdec69594634d8fb6b600e9aba6b7dd5e349beb688b1",
+    "loto_enterprise/benchmark/methods.py": "ccf0e35b980b99f2d53e8c6652012a940ffc108903d276828c96e877c2fae681",
+    "loto_enterprise/benchmark/methods_common.py": "f2dcd53a5878765694cf95eee82422454101af6256f7300e648bfc67458fb876",
+    "loto_enterprise/benchmark/methods_experimental.py": "16b83d1533cd362ef23547055dbeb834de3225317fba34ddf7a3354638e94558",
+    "loto_enterprise/benchmark/methods_learning.py": "77b81d44369b6da8bf2738066d829a821f41e9485a2fd75e2a964e6ac10757d9",
+    "loto_enterprise/benchmark/methods_recency.py": "ae6982efd67aab652bf58ccc5215d34f4699e0938f939b9f9ca7a9f61b73be67",
+    "loto_enterprise/benchmark/methods_relational.py": "6cbe8e49d7189132420a86ffd9da9dcfdc2d262b39559193c975df46b7b0f51f",
+    "loto_enterprise/benchmark/methods_wave2.py": "02c79cd47129070f30eb02b88fe493ed35db9e7c89c29996720776cba899f6cf",
+    "loto_enterprise/benchmark/reporting.py": "fb67117049f6b5dd47d40e1bc91e6ae9d7b7e983663d9cc3132abf88107cd500",
+    "loto_enterprise/benchmark/runner.py": "1438146b8e79c6098e4586a2ab73b08be7127b633aba3bece3ea1788496a247f",
+    "loto_enterprise/core/__init__.py": "ca19610c16ba2341fd70b43631340a6a2e23471eb309b06c1bc72f7dc9e816f7",
+    "loto_enterprise/core/adaptive_feedback.py": "c12a55346c78686a40aa6dccab6080b2993561310780bdd7e000247fba6f5329",
+    "loto_enterprise/core/backtesting.py": "17404bd226b4ff7e67c1302b92e8b5594c0eb9322e295ffc7655bab31d6ed223",
+    "loto_enterprise/core/base_threshold.py": "5a840d4deb8781002511663455aefbb9e78d77a96bb09dd74c549da0399a7282",
+    "loto_enterprise/core/draw_validation.py": "479dff63ec38885a1a7117dadd003c2779488d1aa276af78279af98804dbd89b",
+    "loto_enterprise/core/full_ticket.py": "ee9d809b338846ebe1a063a04ac6f5644b7979dc96c19b25b6c45d34028f4be6",
+    "loto_enterprise/core/history.py": "cab1093aeb71cf691700f3e090ce066c89fdd5d102f35842ca83889853dd69b2",
+    "loto_enterprise/core/lotteries.py": "72cfb1c94e4456c02420c857f21e3e5495623d1931e282122f0e3f9c0ef58ab2",
+    "loto_enterprise/core/method_selector.py": "b3c7a7fefb5e7a89de0a8b9b9ab3624285d0bbbdc61a79c8c9c8b1dca2f3b6cf",
+    "loto_enterprise/core/pool_selection.py": "ea40d652bdda7033a2026cd6d9290e2a0f8c7cca85b5ffe3e9b534de8a2b7146",
+    "loto_enterprise/core/py314_io.py": "805c60252e08e513302e3754a0dcf9998ed1884ac6a925aa1046cabb37cb7f72",
+    "loto_enterprise/core/ranking.py": "7e03961e6f77080588f9b8cb94d7193b6caddc35548e300fb50e6536e2d1d408",
+    "loto_enterprise/core/ro_text.py": "3d22e1922f66103d8438eebd1e4966105075ada6a391622a800ff02834e581e9",
+    "loto_enterprise/core/score_validation.py": "8f1eb4b9bd41b087d115193c0dfc8331df2af601a26560fa2f0dbb979b49a5bc",
+    "loto_enterprise/core/ticket_replay.py": "475f8d615b9fad43539f04b7e879eb4b99aef26067beb98dd423519c1868563a",
+    "loto_enterprise/core/walk_forward_adapter.py": "4761a9ec609940d63f2e24b5ba3648c33787f5430880f2dc50f6591d4aeb27fd",
+    "loto_enterprise/core/wf_sig.py": "589b55fa19286599e51ff1fd31b30f04f67de73985e526ef9e3976f9b85b11df",
+    "loto_enterprise/engine/__init__.py": "4fa9e3fc2d8a0e8f0e681f94b4e593ce564df18e39427c804cb5d02889c62504",
+    "loto_enterprise/engine/pipeline.py": "27ac04ee987758bc7b4d32d4f2632f1f1b70a7802c743b1035ec479ae8cef76a",
+    "loto_enterprise/engine/scoring.py": "7f17478914b2c35870d5fec7690378662851bedbc68575a785760fab3749259f",
+    "scripts/analysis/pool_combination_cache_2026_10_19.py": "883f1aea87d827f8506038384ad9a97dfed7f3d34d2f9fdde771502d4563debf",
+    "scripts/analysis/pool_combination_eval_2026_10_19.py": "96dad8fc3c10f947f3d78555993e23b00dabb0ab2d525eef9161e3a4864a0eab",
+    "scripts/analysis/pool_combinations_2026_10_19.py": "11dcb6cdc0e59a0447681312147da6814b8ee0693f7b3309e2509f8869b74d9e",
+    "scripts/analysis/pool_combinations_649_2026_10_19.py": "3d39959253337d616034e0386b35fe91b93eddfd7e4603938e0e46ce71c550b5",
+    "scripts/analysis/pool_score_cache_2026_10_19.py": "6e75ca6a50c719bfa884ef3246ec68a80143c45b7823d2703f536e3c34fbab0b",
+    "scripts/analysis/validate_pool_combinations_2026_10_19.py": "49c1f6fc2929f208d481fd75dd8390105acba2a8d62eaf8edbbdf0cc231cafcd",
+    "scripts/analysis/validate_pool_screen_2026_10_19.py": "3196e94babfaa07ca51a7452786341bc35eebc3569224dbdd6a3b1253979036b"
+  },
+  "data_sha256": {
+    "romania": "db454d56b213fc248e81f9ab261c252188d22224f696a8d8857139f9d626bf02",
+    "bulgaria": "247c5a4358eb6247f4f25e410852398dab15ff3ab6aefe9ada5f2311ba929ee9"
+  },
+  "sources": [
+    "https://cormack.uwaterloo.ca/cormack/cormacksigir09-rrf.pdf",
+    "https://journal.r-project.org/articles/RJ-2018-052/",
+    "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.permutation_test.html"
+  ],
+  "registered_at_utc": "2026-10-19T17:13:00.357383+00:00"
+}

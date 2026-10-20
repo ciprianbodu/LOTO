@@ -71,6 +71,40 @@ from ui_hits import *  # noqa: F403
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
 
+
+def _get_build_timestamp() -> str:
+    """Returnează data și ora ultimei compilări / modificări de cod."""
+    ts = 0.0
+    try:
+        ts = max(ts, os.path.getmtime(__file__))
+    except Exception:
+        pass
+    try:
+        res = subprocess.run(
+            ["git", "log", "-1", "--format=%ct"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            ts = max(ts, float(res.stdout.strip()))
+    except Exception:
+        pass
+    if ts > 0:
+        return _dt.fromtimestamp(ts).strftime("%d.%m.%Y %H:%M:%S")
+    return ""
+
+
+BUILD_TIMESTAMP = _get_build_timestamp()
+APP_TITLE = (
+    f"Loto Enterprise Wheeling - {BUILD_TIMESTAMP}"
+    if BUILD_TIMESTAMP
+    else "Loto Enterprise Wheeling"
+)
+
+
 def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     sim_depth_per_game = sim_depth_per_game or {}
     h = hashlib.sha256()
@@ -2084,7 +2118,10 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
         line = f"RATING{tag}: rată {label} {100 * rate:.1f}%"
         if base:
             line += f" față de {100 * float(base):.2f}% la întâmplare"
-        line += f"; scor Wilson (z=1) {100 * wil:.1f}%; a bătut hazardul în {w_ok}/{w_all} ferestre"
+        line += (
+            f"; scor Wilson (z=1) {100 * wil:.1f}%; rata observată peste media "
+            f"aleatoare în {w_ok}/{w_all} ferestre suprapuse (comparație descriptivă)"
+        )
         lines[1] = line
     elif m := re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat):
         line = f"RATING{tag}: rată {label} {100 * float(m[1]):.1f}%"
@@ -2771,7 +2808,7 @@ def _render_base_interval_tables() -> None:
 # --------------------------------------------------------------------------- #
 # Pagina principală
 # --------------------------------------------------------------------------- #
-@ui.page("/")
+@ui.page("/", title=APP_TITLE)
 def main_page() -> None:
     ui.dark_mode().enable()
 
@@ -2795,7 +2832,7 @@ def main_page() -> None:
     """)
 
     with ui.header().classes("items-center justify-between"):
-        ui.label("🎰 Loto Enterprise Wheeling").classes("text-h5")
+        ui.label(f"🎰 {APP_TITLE}").classes("text-h5")
         ui.label("NiceGUI — stare persistentă, fără reload").classes("text-caption")
 
     # ---- Sidebar (drawer stânga) ----
@@ -3660,7 +3697,7 @@ if __name__ == "__main__":
     # reconnect_timeout mărit: cât rulează bench/walk-forward, event-loop-ul poate fi
     # ocupat (citiri loguri OneDrive) → fără timeout generos, WebSocket pica 'connection lost'.
     ui.run(
-        title="Loto Enterprise Wheeling",
+        title=APP_TITLE,
         port=_port,
         reload=False,
         show=False,

@@ -1,0 +1,697 @@
+{
+  "date": "2026-10-18",
+  "source": "https://zenodo.org/records/19735294",
+  "metadata_url": "https://zenodo.org/records/19735294/files/coverdata.json?download=1",
+  "metadata_bytes": 8319503,
+  "metadata_md5": "b2c626b07f216aac830d344eff5ad523",
+  "metadata_sha256": "9e7da3710921066b10234fdc95379a18df3a7d3ae0f8a08ae188ea6bbca92f87",
+  "metadata_version": "1.2, published 2026-04-24; database frozen March 2026 per README",
+  "license": "CC BY 4.0",
+  "creator": "Daniel Gordon and credited design contributors",
+  "count": 52,
+  "summary": {
+    "equal": 52,
+    "local_smaller": 0,
+    "archive_smaller": 0,
+    "not_listed": 0
+  },
+  "records": [
+    {
+      "file": "covering_designs/C_10_5_3.txt",
+      "geometry": [
+        10,
+        5,
+        3
+      ],
+      "local_blocks": 17,
+      "local_sha256": "904cb898965aa989870e2f9553c634f0c76810dcd54d93d44a7cc093b198c26f",
+      "archived_best_blocks": 17,
+      "archived_lower_bound": 17,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_10_5_4.txt",
+      "geometry": [
+        10,
+        5,
+        4
+      ],
+      "local_blocks": 51,
+      "local_sha256": "aa9c47d9f7f0f7171e954c8969590f89b4c8540f73e58251d655aeb0e496e73e",
+      "archived_best_blocks": 51,
+      "archived_lower_bound": 51,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_10_6_3.txt",
+      "geometry": [
+        10,
+        6,
+        3
+      ],
+      "local_blocks": 10,
+      "local_sha256": "9ff6a2b1b07683c1211d9bfcd43a578ccb960f7ca56f308202a8a8903aae00c6",
+      "archived_best_blocks": 10,
+      "archived_lower_bound": 10,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_10_6_4.txt",
+      "geometry": [
+        10,
+        6,
+        4
+      ],
+      "local_blocks": 20,
+      "local_sha256": "ef9b3c88ad659ad447a254c72484d974325487d3c47d99d42e538b252f954ef2",
+      "archived_best_blocks": 20,
+      "archived_lower_bound": 20,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_10_6_5.txt",
+      "geometry": [
+        10,
+        6,
+        5
+      ],
+      "local_blocks": 50,
+      "local_sha256": "c7396c6f9420cdce44f3e4c2d79cd4eaf26ba60437c5faeee9770aaca8f28ca3",
+      "archived_best_blocks": 50,
+      "archived_lower_bound": 50,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_11_5_3.txt",
+      "geometry": [
+        11,
+        5,
+        3
+      ],
+      "local_blocks": 20,
+      "local_sha256": "cd42b1d394616c2dc345bf7c9e6f8488604ea0cf13e2d0d9e2cce346ad1a083e",
+      "archived_best_blocks": 20,
+      "archived_lower_bound": 20,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_11_5_4.txt",
+      "geometry": [
+        11,
+        5,
+        4
+      ],
+      "local_blocks": 66,
+      "local_sha256": "dc499cccbb987537258cfe09be1ce5066b7050f1c79878d2c78db0a88071c3db",
+      "archived_best_blocks": 66,
+      "archived_lower_bound": 66,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_11_6_3.txt",
+      "geometry": [
+        11,
+        6,
+        3
+      ],
+      "local_blocks": 11,
+      "local_sha256": "7220b53e09c6958004605133ef4337e80299cc650dd3b7d6b0837323dd7ee53a",
+      "archived_best_blocks": 11,
+      "archived_lower_bound": 11,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_11_6_4.txt",
+      "geometry": [
+        11,
+        6,
+        4
+      ],
+      "local_blocks": 32,
+      "local_sha256": "dfea645e5cd6e102034b5f1e9dfa0f29e1225ae8bd88edf9e2a3e4ac3e853a6f",
+      "archived_best_blocks": 32,
+      "archived_lower_bound": 32,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_11_6_5.txt",
+      "geometry": [
+        11,
+        6,
+        5
+      ],
+      "local_blocks": 100,
+      "local_sha256": "8c729912117e49557d79fbac64e692f8a56d6c9a07b0168d023528b15d9d7c84",
+      "archived_best_blocks": 100,
+      "archived_lower_bound": 96,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_12_5_3.txt",
+      "geometry": [
+        12,
+        5,
+        3
+      ],
+      "local_blocks": 29,
+      "local_sha256": "35971d8bbd40c774f6eecc330d9b2eae9cb2756d68d37e729e8e86aac56bfd2c",
+      "archived_best_blocks": 29,
+      "archived_lower_bound": 29,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_12_5_4.txt",
+      "geometry": [
+        12,
+        5,
+        4
+      ],
+      "local_blocks": 113,
+      "local_sha256": "b8b1b1eea45b9b070aff4c0cb8e4b5d2ef767425f71a6b69014e4c96b788c209",
+      "archived_best_blocks": 113,
+      "archived_lower_bound": 113,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_12_6_3.txt",
+      "geometry": [
+        12,
+        6,
+        3
+      ],
+      "local_blocks": 15,
+      "local_sha256": "6be34e8267f2cf2044f15be0a149f019e75bbcdfa0e74179c719f330a673e6a6",
+      "archived_best_blocks": 15,
+      "archived_lower_bound": 15,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_12_6_4.txt",
+      "geometry": [
+        12,
+        6,
+        4
+      ],
+      "local_blocks": 41,
+      "local_sha256": "0f3082631628e6336b516f5a6533fedc2f074e60b8c6c26959717384be6e40d5",
+      "archived_best_blocks": 41,
+      "archived_lower_bound": 40,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_12_6_5.txt",
+      "geometry": [
+        12,
+        6,
+        5
+      ],
+      "local_blocks": 132,
+      "local_sha256": "59448776b1b771130229685b2fee5818e4096dc531b9c81c14ce9344ff7db631",
+      "archived_best_blocks": 132,
+      "archived_lower_bound": 132,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_13_5_3.txt",
+      "geometry": [
+        13,
+        5,
+        3
+      ],
+      "local_blocks": 34,
+      "local_sha256": "c80cbedbeca16a741f48749fb8b856fd155695a67f9a6019895d41047dd19cba",
+      "archived_best_blocks": 34,
+      "archived_lower_bound": 34,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_13_5_4.txt",
+      "geometry": [
+        13,
+        5,
+        4
+      ],
+      "local_blocks": 157,
+      "local_sha256": "979a83d856c80f40d49b7a16a4c4e0fb5f2bc562a91104cffe35da554d86d2d2",
+      "archived_best_blocks": 157,
+      "archived_lower_bound": 149,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_13_6_3.txt",
+      "geometry": [
+        13,
+        6,
+        3
+      ],
+      "local_blocks": 21,
+      "local_sha256": "87238fd9f411665a7ee6e32d0134dfcb1a3f589aaa938b29decf711775512b2a",
+      "archived_best_blocks": 21,
+      "archived_lower_bound": 20,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_13_6_4.txt",
+      "geometry": [
+        13,
+        6,
+        4
+      ],
+      "local_blocks": 66,
+      "local_sha256": "9d3634be8922d448f49f2854c3645452687347f932a6cb3debeb516f94fb9ef5",
+      "archived_best_blocks": 66,
+      "archived_lower_bound": 63,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_13_6_5.txt",
+      "geometry": [
+        13,
+        6,
+        5
+      ],
+      "local_blocks": 245,
+      "local_sha256": "d6309fc14b826dd9eff38a422c9dc66d06d63b423d152953fc881c0e021c0797",
+      "archived_best_blocks": 245,
+      "archived_lower_bound": 245,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_14_5_3.txt",
+      "geometry": [
+        14,
+        5,
+        3
+      ],
+      "local_blocks": 43,
+      "local_sha256": "2e1ac5b822c1133d71d4127c99043d17a683c0f6e2013b83683ef6ecceffc849",
+      "archived_best_blocks": 43,
+      "archived_lower_bound": 37,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_14_5_4.txt",
+      "geometry": [
+        14,
+        5,
+        4
+      ],
+      "local_blocks": 229,
+      "local_sha256": "63c3126ab98c98d29e3df99407fe8ed18d161b64fbd6315ca7a9e77cec4c0656",
+      "archived_best_blocks": 229,
+      "archived_lower_bound": 219,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_14_6_3.txt",
+      "geometry": [
+        14,
+        6,
+        3
+      ],
+      "local_blocks": 25,
+      "local_sha256": "c7ff272875fd25573c17884d133e1088ca25aa90bd022dd14fa615c0bb85203b",
+      "archived_best_blocks": 25,
+      "archived_lower_bound": 24,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_14_6_4.txt",
+      "geometry": [
+        14,
+        6,
+        4
+      ],
+      "local_blocks": 80,
+      "local_sha256": "7037a4b323e545c776103d58d145f285d2a53de0a9d523d3f7b80e7de7532ca7",
+      "archived_best_blocks": 80,
+      "archived_lower_bound": 80,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_14_6_5.txt",
+      "geometry": [
+        14,
+        6,
+        5
+      ],
+      "local_blocks": 371,
+      "local_sha256": "7fc2c3cb1ddcc2c58b0043174f29c2aad2a32af1638ccaf41804cb28cfef11d0",
+      "archived_best_blocks": 371,
+      "archived_lower_bound": 348,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_15_5_3.txt",
+      "geometry": [
+        15,
+        5,
+        3
+      ],
+      "local_blocks": 55,
+      "local_sha256": "3f42f60dd0a362061dd108cf598d3807ec008e898555cbcd1d6075e105263b70",
+      "archived_best_blocks": 55,
+      "archived_lower_bound": 54,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_15_5_4.txt",
+      "geometry": [
+        15,
+        5,
+        4
+      ],
+      "local_blocks": 294,
+      "local_sha256": "c30c5eb02aad71d15bd41bfd8037d07ac803736c17e345c73931434f9dd15462",
+      "archived_best_blocks": 294,
+      "archived_lower_bound": 274,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_15_6_3.txt",
+      "geometry": [
+        15,
+        6,
+        3
+      ],
+      "local_blocks": 31,
+      "local_sha256": "b53f3da423c865e70da451407afa7cf1c47b60cb43e0c3b586c3352e442ff5fa",
+      "archived_best_blocks": 31,
+      "archived_lower_bound": 30,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_15_6_4.txt",
+      "geometry": [
+        15,
+        6,
+        4
+      ],
+      "local_blocks": 117,
+      "local_sha256": "07f244f6b9823ee2eb96aec9b6730ef292e80fc2e9c39601605db611b83daed9",
+      "archived_best_blocks": 117,
+      "archived_lower_bound": 93,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_15_6_5.txt",
+      "geometry": [
+        15,
+        6,
+        5
+      ],
+      "local_blocks": 578,
+      "local_sha256": "454c3d1d79a6972d00388c4bfbd86b8b8baf9d858617346274387d3f4a49ebea",
+      "archived_best_blocks": 578,
+      "archived_lower_bound": 548,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_16_5_3.txt",
+      "geometry": [
+        16,
+        5,
+        3
+      ],
+      "local_blocks": 65,
+      "local_sha256": "f1adc29680f3ee8fcdbd42d20a65c169732284af81f140ded7862461e31756d0",
+      "archived_best_blocks": 65,
+      "archived_lower_bound": 61,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_16_5_4.txt",
+      "geometry": [
+        16,
+        5,
+        4
+      ],
+      "local_blocks": 404,
+      "local_sha256": "d6f49df9bf8674b375fd0c096a18ad0ed22cb4379eda330adb565ddd08d011bf",
+      "archived_best_blocks": 404,
+      "archived_lower_bound": 397,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_16_6_3.txt",
+      "geometry": [
+        16,
+        6,
+        3
+      ],
+      "local_blocks": 38,
+      "local_sha256": "7588d2177d1ca1409b71de4ac36365c7f3c781c823855086b38da57c1db6678d",
+      "archived_best_blocks": 38,
+      "archived_lower_bound": 35,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_16_6_4.txt",
+      "geometry": [
+        16,
+        6,
+        4
+      ],
+      "local_blocks": 152,
+      "local_sha256": "cf3daeebf57d2328ee1ad6cb356817782517da1e9ebd8eafcf4bebcef6d78689",
+      "archived_best_blocks": 152,
+      "archived_lower_bound": 144,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_16_6_5.txt",
+      "geometry": [
+        16,
+        6,
+        5
+      ],
+      "local_blocks": 808,
+      "local_sha256": "e494d71012f829f58eac1606de394940a2c80d92d1bc805414a88b3881609eed",
+      "archived_best_blocks": 808,
+      "archived_lower_bound": 731,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_6_5_3.txt",
+      "geometry": [
+        6,
+        5,
+        3
+      ],
+      "local_blocks": 4,
+      "local_sha256": "7b2d6ebee94987f573a217367308c56d77313cb8d795dee504c371df953694fe",
+      "archived_best_blocks": 4,
+      "archived_lower_bound": 4,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_6_5_4.txt",
+      "geometry": [
+        6,
+        5,
+        4
+      ],
+      "local_blocks": 5,
+      "local_sha256": "41b55863f45a5966e9946400abac88b0fd77bb99b8fea324844864bfe3e771b2",
+      "archived_best_blocks": 5,
+      "archived_lower_bound": 5,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_7_5_3.txt",
+      "geometry": [
+        7,
+        5,
+        3
+      ],
+      "local_blocks": 5,
+      "local_sha256": "872fb46dfced8747fcdf7ce8d54081a08e5dc74eeb6093f7fe949c43bbcd3676",
+      "archived_best_blocks": 5,
+      "archived_lower_bound": 5,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_7_5_4.txt",
+      "geometry": [
+        7,
+        5,
+        4
+      ],
+      "local_blocks": 9,
+      "local_sha256": "cd59b4b84ea07ad3ea97d5c27d1b1a699637042db006d3197c0fdde4103a004c",
+      "archived_best_blocks": 9,
+      "archived_lower_bound": 9,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_7_6_3.txt",
+      "geometry": [
+        7,
+        6,
+        3
+      ],
+      "local_blocks": 4,
+      "local_sha256": "67c9aa22eb0c325aad7ab5546e223c8563cd6feda3bdec7ea5729befac49caf8",
+      "archived_best_blocks": 4,
+      "archived_lower_bound": 4,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_7_6_4.txt",
+      "geometry": [
+        7,
+        6,
+        4
+      ],
+      "local_blocks": 5,
+      "local_sha256": "ea8408b78da81ecb5ec32a11ad9f04312f75dd143c6d085a10c7bb8ab164c0d5",
+      "archived_best_blocks": 5,
+      "archived_lower_bound": 5,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_7_6_5.txt",
+      "geometry": [
+        7,
+        6,
+        5
+      ],
+      "local_blocks": 6,
+      "local_sha256": "9f9f58cfb7b56feeafd62390bc11e39ab9bee7402e1078f302747fb27c6cbb6e",
+      "archived_best_blocks": 6,
+      "archived_lower_bound": 6,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_8_5_3.txt",
+      "geometry": [
+        8,
+        5,
+        3
+      ],
+      "local_blocks": 8,
+      "local_sha256": "c7b43a46b810c641530888d9e4102161e03f1970c93b9d5adf9886becb384667",
+      "archived_best_blocks": 8,
+      "archived_lower_bound": 8,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_8_5_4.txt",
+      "geometry": [
+        8,
+        5,
+        4
+      ],
+      "local_blocks": 20,
+      "local_sha256": "185876de9ffcf184558aae623b728fed63ee3263d00644fdd0daa8f898a1314f",
+      "archived_best_blocks": 20,
+      "archived_lower_bound": 20,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_8_6_3.txt",
+      "geometry": [
+        8,
+        6,
+        3
+      ],
+      "local_blocks": 4,
+      "local_sha256": "601b698eed9bdaca076c79186a318e85cfe74eaffc0f905448265fcf854a66ee",
+      "archived_best_blocks": 4,
+      "archived_lower_bound": 4,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_8_6_4.txt",
+      "geometry": [
+        8,
+        6,
+        4
+      ],
+      "local_blocks": 7,
+      "local_sha256": "c2563b7c9139cabe8ebabfc4bcc0385ef901c96aac0cf3c183e79fbf4e1f6906",
+      "archived_best_blocks": 7,
+      "archived_lower_bound": 7,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_8_6_5.txt",
+      "geometry": [
+        8,
+        6,
+        5
+      ],
+      "local_blocks": 12,
+      "local_sha256": "6a05593424133727143d64fe458147d8c54249c970e37528adbb30576b70efa2",
+      "archived_best_blocks": 12,
+      "archived_lower_bound": 12,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_9_5_3.txt",
+      "geometry": [
+        9,
+        5,
+        3
+      ],
+      "local_blocks": 12,
+      "local_sha256": "73eaf439f71d5f0298d5212aaa00fc9f09a190a33967d8e4590189a511069011",
+      "archived_best_blocks": 12,
+      "archived_lower_bound": 12,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_9_5_4.txt",
+      "geometry": [
+        9,
+        5,
+        4
+      ],
+      "local_blocks": 30,
+      "local_sha256": "5a1003ad9a2a1cafe752aca6993cd84d9e072108db51310b5c27f0f2025b9dfe",
+      "archived_best_blocks": 30,
+      "archived_lower_bound": 30,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_9_6_3.txt",
+      "geometry": [
+        9,
+        6,
+        3
+      ],
+      "local_blocks": 7,
+      "local_sha256": "1d8555401331f4244754e088d44bbc52055624901d1457713214748b60906c37",
+      "archived_best_blocks": 7,
+      "archived_lower_bound": 7,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_9_6_4.txt",
+      "geometry": [
+        9,
+        6,
+        4
+      ],
+      "local_blocks": 12,
+      "local_sha256": "e339c2e9ebc732927e5986ac9fcfc6fa206c837ca7b711e890be85d0f03cf51f",
+      "archived_best_blocks": 12,
+      "archived_lower_bound": 12,
+      "relation": "equal"
+    },
+    {
+      "file": "covering_designs/C_9_6_5.txt",
+      "geometry": [
+        9,
+        6,
+        5
+      ],
+      "local_blocks": 30,
+      "local_sha256": "58a115ea018f7701100cf2c8936759100a8eba80e845020e351b33631309a7bb",
+      "archived_best_blocks": 30,
+      "archived_lower_bound": 30,
+      "relation": "equal"
+    }
+  ],
+  "limits": "This is an independent comparison with the published frozen archive, not a proof of global minimality or a live online repository claim. Local coverage is validated separately by application tests."
+}

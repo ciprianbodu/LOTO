@@ -1,0 +1,48 @@
+{
+  "completed_at_utc": "2026-10-19T19:54:47.567040+00:00",
+  "protocol_sha256": "480ca2605ceed0e4bcfcf661618a2d3ad682676af66fa4a58cdf17156efc6700",
+  "full_suite": {
+    "return_code": 0,
+    "summary": "3182 passed, 20 skipped, 272 warnings in 1310.41s (0:21:50)",
+    "log_sha256": "a24d21276a9b93c6c909f3719ca3e51faba6e4ac5dce9615265cad0047ba094b",
+    "isolated_copy": "C:\\Users\\Cipix\\AppData\\Local\\Temp\\loto-pool-extension-20261019\\full-suite-final-d0u3ppas",
+    "elapsed_seconds": 1312.9499825999956
+  },
+  "scientific_source_copy": {
+    "files": 47,
+    "all_equal_frozen_manifest_and_workspace": true
+  },
+  "ui_source_sha256_lf": "e14ea9a9d02b0b5f0b72235bd3aaaf39e58666a9a062e84ab25fd4a314722395",
+  "ui_source_copy_equal": true,
+  "test_sources_copy_equal": true,
+  "presentation_only_renderer_updated_after_test_copy": true,
+  "syntax_checked_python_files": 19,
+  "focused_checks": {
+    "initial_ui_tests_passed": 122,
+    "replay_and_new_ui_tests_passed": 40,
+    "new_research_tests_passed": 155
+  },
+  "csv_parity": {
+    "candidate_rows": 576,
+    "trace_rows": 11118,
+    "all_rows_equal_json_or_npz": true
+  },
+  "independent_validator_checks": 37419,
+  "independent_validator_failures": 0,
+  "runtime_protected_unchanged_during_research": true,
+  "station_post_research_changes_preserved": {
+    "raport_complet.txt": {
+      "research_after_sha256": "d35ac954fd2360354fe0dcccda5a10db3d1c81cb2d83e692ff9d73daa6c0647a",
+      "current_sha256": "c77e3873d8a766d238e9074fb4421e62a72be4297a45be7e8af6b0f02b7106b3",
+      "modified_at_utc": "2026-10-19T19:22:07.404000+00:00"
+    }
+  },
+  "station_change_scope": "Only raport_complet.txt differs after research; its mtime precedes the final full-suite start. Preserved without rewriting; attribution is not inferred. Decision, settings, pool history and workstation bench still match.",
+  "application_audit_summary": "pool_extension_2026-10-19_application_audit.json",
+  "read_only_reviews": {
+    "history_4plus_denominators": "no defect found",
+    "report_vs_json": "104 initial rows match; 12 added secondary 3+ values verified separately",
+    "statistics_selector_and_holm": "no defect found"
+  },
+  "limits": "Full regression suite and application smoke audit do not prove lottery advantage; research is retrospective."
+}

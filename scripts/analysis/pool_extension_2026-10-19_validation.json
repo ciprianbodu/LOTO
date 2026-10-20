@@ -1,0 +1,35 @@
+{
+  "report": "G:\\My Drive\\_CODING\\_LOTO\\scripts\\analysis\\pool_extension_2026-10-19.json",
+  "protocol_sha256": "480ca2605ceed0e4bcfcf661618a2d3ad682676af66fa4a58cdf17156efc6700",
+  "checks": 37419,
+  "failures": [],
+  "passed": true,
+  "game_banks": 2,
+  "candidate_game_tests": 64,
+  "prediction_audit": {
+    "loto_5_40": {
+      "canonical_target_rows": 9,
+      "canonical_pool_checks": 4284,
+      "truncated_target_prefixes": 3,
+      "algorithm_prefix_checks": 96,
+      "direct_expert_prefix_checks": 21,
+      "target_label_perturbations": 1
+    },
+    "joker_urna1": {
+      "canonical_target_rows": 9,
+      "canonical_pool_checks": 6732,
+      "truncated_target_prefixes": 3,
+      "algorithm_prefix_checks": 96,
+      "direct_expert_prefix_checks": 21,
+      "target_label_perturbations": 1
+    }
+  },
+  "full_prediction_audit": true,
+  "csv_rows": {
+    "candidates": 576,
+    "trace": 11118
+  },
+  "retrospective_reuse": true,
+  "iid_search_calibrated": false,
+  "limits": "Full metric/selector/statistic recount, CSV parity, sampled canonical pools and strict-prefix scores. Implementation audit is not prospective evidence or entire-search IID calibration."
+}
