@@ -1,0 +1,4 @@
+[
+{"game": "6/49", "code": 49, "t": 4, "method": "ilp", "seconds": 156.4, "scheme": 154533, "status": "optimal", "maximum": 154533},
+{"game": "joker", "code": 45, "t": 4, "method": "exhaustive", "seconds": 0.0, "scheme": 895, "status": "optimal", "maximum": 895}
+]

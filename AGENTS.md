@@ -62,7 +62,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v19` (`hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v21` (schemele LR adoptate certificat la plafonul egal cu marimea lor si coverul garantiei mai mici completat pana la plafon, 2026-10-20; v20 DMD cu subspatiile singulare la egalitate; v19 `hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -80,6 +80,56 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Schemele LR in motor si optimalitatea lor — 2026-10-20
+
+- Cerinta: cod care sa dea mai multe hituri. Utilizatorul joaca la 6/49 Cod 59
+  (16 numere, 112 variante). Rata pool-ului ramane hipergeometrica; parghia e
+  asezarea pe variante, la acelasi cost.
+- Cod 59 e o impachetare perfecta (fiecare grupa de 4 pe cel mult o varianta,
+  1.680 din 1.820; fiecare pozitie pe 42 de variante) si atinge marginea
+  superioara (`lr_schemes._upper_bound`) la 3+, 4+, 5+ si 6: nicio asezare de
+  112 variante pe 16 numere nu prinde mai des la vreun prag. Completarea lui
+  pana la 4 sigur cere cel putin 47 de variante (orice varianta noua acopera cel
+  mult 3 din cele 140 de grupe ramase), deci peste cele 152 ale coverului complet.
+- Marginea nu e mereu atinsa: o schema sub ea nu e neaparat sub maxim (Joker
+  Cod 45 la 4+). Pragurile sub margine trec prin `prove_lr_optimality.py`
+  (exhaustiv sau ILP HiGHS, `covering_designs/lr/optimal_offline.json`). Optime
+  la fiecare prag: 6/49 Cod 48, 50, 56-59; 5/40 Cod 15, 16, 17, 25; Joker Cod 15,
+  23, 25, 45. 6/49 Cod 49 e optim la 3+ si 4+ (ILP), la 5+ aplicatia da mai mult.
+- Motorul (§7): la plafonul egal cu marimea unei scheme LR cu tot atatea numere
+  si acelasi bilet, de la oricare joc, schema e candidat certificat; pool peste
+  16 nu trece prin etapa. Adopta in 8 configuratii (tabelul din raport), de
+  exemplu 6/49 pool 10 g5 plafon 30, Cod 50: 5+ +3,3%; 5/40 pool 16 g4 plafon
+  348, Cod 37: 4+ 14,58% -> 14,91%; 5/40 pool 11 g4 plafon 22, Joker Cod 15: 4+
+  +5,9%; Joker pool 16 g4 plafon 348, 5/40 Cod 37: 4+ +3,3%. Niciun prag nu scade.
+- Garantia egala cu biletul, cu plafonul peste coverul complet al garantiei mai
+  mici: coverul se completeaza pana la plafon (`guarantee_portfolio._padded`) si
+  intra certificat. Inainte, certificarea il respingea pentru ca avea mai putine
+  bilete: 5/40 pool 16 g5 dadea 4+ 16,03% la 404 variante si 8,30% la 405; acum
+  16,03% de la 404 in sus (plafonul 500: 5 0,352% -> 0,429%); Joker plafonul
+  450: 4+ 2,45% -> 4,68%. La 6/49 g6 ramane wheel-ul (5+ ar scadea). Cheia WF
+  `lg2` (§8); worker `v21`.
+- Panoul (§6): pragurile dovedit optime, cele unde se stie o asezare mai buna
+  (cu sursa), cele nedovedite (cu marginea, „nu e mereu atinsa”), si ce da
+  aplicatia la acelasi cost (`covering_designs/lr/app_same_size.json`, garantii
+  2..bilet, cu profilul garantiei). Recomanda variantele simple numai de la 1%
+  castig relativ si spune garantia pierduta (Joker: codul da 4 sigur cand ies 5
+  din cele jucate; aplicatia, in 97,67-99,33% din cazuri). La Joker aplicatia
+  bate codurile 35, 34, 14, 13, 12; la 5/40, 16 numere, coverul de 404 da 3+ si
+  4+ cat Cod 38, cu 195 lei mai putin.
+- Revizia adversariala (4 zone, fiecare constatare verificata separat): „sub
+  maximul posibil” la o margine neatinsa; doua valori afisate la fel (Cod 18:
+  0,0452% si 0,0453%); eroarea la pool 17-19 (schemele 5/40 mari); lista
+  incompleta a adoptarilor; recomandarea pentru castiguri sub 1%; garantia
+  pierduta nespusa; comanda de reproducere. Toate reparate, cu teste.
+- Raport: `scripts/analysis/lr_optimality_2026-10-20.md`; date
+  `lr_schemes_2026-10-20.json`.
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 143 fisiere `test_*.py`,
+  3313 teste trecute, 11 sarite, zero esecuri (20 min 14 s). Aplicatia reala, pe
+  o copie izolata (Playwright, 390 si 1440 px): panoul 6/49 spune Cod 59 optima,
+  5/40 arata pragurile nedovedite ale Cod 37 si 38 si coverul de 404; fara
+  derulare orizontala.
 
 ### Extindere 5/40 si Joker; Istoric hits numai 4+ — 2026-10-19
 
@@ -1853,13 +1903,22 @@ limita de validitate din §5).
   marimea pool-ului, panoul spune marimile care au scheme cu variante intregi;
   un fisier necitibil e numit (`unloaded_schemes`), nu raportat ca lipsa.
   „📜 Istoric hits” (`ui_hits._render_lr_replay`) pune schema pe pool-ul
-  fiecarui pas WF (`ticket_context`) si numara extragerile cu 3+/4+/5+/6 pe o
-  varianta. Le compara cu variantele WF pe aceiasi pasi si cu sansa exacta;
+  fiecarui pas WF (`ticket_context`) si numara extragerile cu 4+ pe o varianta
+  (4+/5+/6 la 6/49, 4+/5 la 5/40 si Joker, ca restul istoricului din
+  2026-10-19); un fisier necitibil e numit si aici. Le compara cu variantele WF pe aceiasi pasi si cu sansa exacta;
   fara pool-ul pasilor in context, spune ca reluarea apare la urmatoarea
   validare. Mailul are linia
   `SCHEMĂ LR`. Profilul exact merge pana la 16 numere; schemele 5/40 de 17-19
-  numere raman numai ca date. Schemele nu intra in `generate_wheel` si nici in
-  cheile de cache.
+  numere raman numai ca date. Din 2026-10-20 panoul spune la ce praguri schema
+  e dovedit optima (`optimal_thresholds`: marginea atinsa sau dovada offline din
+  `optimal_offline.json`), unde se stie o asezare mai buna (wheel-ul aplicatiei
+  sau martorul offline) si unde nu se stie (cu marginea, care nu e mereu atinsa);
+  apoi ce da aplicatia la acelasi cost (`app_same_size`, garantii 2..bilet: cel
+  putin la fel la fiecare prag si mai des la unul, sau la fel cu mai putine
+  variante). Variantele simple se recomanda numai de la 1% castig relativ, iar
+  garantia sigura pierduta se spune (`_lr_lost_guarantee`). Doua valori care ar
+  iesi la fel primesc cifre in plus (`_lr_pct_pair`). Motorul adopta schema
+  certificat la plafonul egal cu marimea ei (§7); cheia WF o semneaza (`lr`, §8).
 - Selectia este top-N pura dupa scorul validat, cu o singura exceptie, limita
   de consecutive de mai jos.
 - Limita de consecutive este o OPTIUNE de utilizator (`max_consecutive_run` in
@@ -2109,6 +2168,20 @@ cu `anneal_hits._certify`:
   (`generate_wheel` in jurul lui `_generate_wheel`): etapele care inlocuiesc
   wheel-ul isi intorc candidatul in ordinea proprie, iar UI-ul arata primele N.
   Fara `max_num` (biletul fizic) ordinea ramane, cu baza garantiei in fata.
+Schemele reduse LR ca variante ale motorului (2026-10-20,
+`covering.lr_schemes.improve_with_lr_scheme`, ultima etapa hitcover cu `max_num`,
+pool de cel mult 16 numere): la plafonul egal cu marimea unei scheme cu tot
+atatea numere si acelasi bilet, de la oricare joc (o schema 5/40 poate intra la
+Joker si invers), schema se pune pe pozitiile clasamentului si intra numai
+certificata (`anneal_hits._certify`). Pe toate garantiile 3..bilet o adopta in 8
+configuratii (tabelul din raport); Cod 59 e egal cu wheel-ul motorului (amandoua
+optime la fiecare prag). „Bilet complet” (fara `max_num`) nu trece prin etapa.
+Garantia egala cu biletul (`covering/guarantee_portfolio.py`): candidatul unei
+garantii mai mici care e coverul ei complet, cu mai putine bilete decat
+plafonul, se completeaza pana la plafon cu biletele distincte ale wheel-ului
+livrat, in ordinea lor, apoi se certifica (`_padded`); si pe „Bilet complet”.
+Raport: `scripts/analysis/lr_optimality_2026-10-20.md`.
+
 Granita bugetului complet, 6/49 pool 16 g4: plafonul 151 ia sectiunea H
 (98,74%, 4+ 7,873159%, 5+ 0,266029%), 152 sau fara plafon coverul complet
 (100%, 4+ 7,960002%, 5+ 0,251434%). Garantia 100% are prioritate; 5+ scade cu
@@ -2269,8 +2342,13 @@ designului cand bugetul ia coverul complet si `bc1` peste 64 de bilete
 precalculat pentru acel buget (amprenta sectiunii din
 `covering_designs/budget/H_v_pick_g.txt`, §7; fara design cheia se opreste la
 `bc1`), si `sa1` la 1..64 de bilete (recoacerea pe sansa exacta, §7).
+Din 2026-10-20, `lr<amprenta>` dupa `bc1`/`sa1`, numai cand plafonul e egal cu
+marimea unei scheme LR pe acest pool de cel mult 16 numere
+(`lr_scheme_signature`, §7); unde schema nu se certifica (Cod 59 la 112, Cod 49
+la 15), cheia se schimba o data fara schimbare de bilete. `lg1` a devenit `lg2`:
+coverul complet al garantiei mai mici e completat pana la plafon.
 Din 2026-10-16: `rc<amprenta>` pe `lajolla` si `bf1` cand geometria are cover
-rafinat; `lg1:<amprenta>` la garantia egala cu biletul cu plafon (dupa
+rafinat; `lg1:<amprenta>` (din 2026-10-20 `lg2:`) la garantia egala cu biletul cu plafon (dupa
 `bc1`/`sa1`), cu semnaturile wheel-urilor garantiilor 3..g-1 pe care le poate
 livra; pe ramura lotto, `rl<amprenta>` cand exista designul rafinat (la orice
 plafon) si `lc1:<amprenta>` cu semnatura wheel-ului clasic la acelasi numar de
@@ -2288,7 +2366,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v23` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v20` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v21` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
