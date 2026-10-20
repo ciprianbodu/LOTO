@@ -52,7 +52,8 @@ Snapshot verificat la 2026-09-15:
   cade determinist pe `frequency` (`_sanitize_production_name`);
 - covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
   designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
-  la ultimul audit;
+  la ultimul audit; separat, cele 33 de scheme reduse oficiale LR
+  (`covering_designs/lr/`, §6), care nu intra in generarea biletelor;
 - cache benchmark: `v22` (`rank_ensemble_core` cu rang mediu la egalitate; v21 Loto 5/40 citeste toate cele 6 numere extrase);
 - cache walk-forward: `v31` (sufixele `rc`, `rl`, `lc1`, `lg1` din 2026-10-16 si `bf1`, `bc1`, `tg1` din 2026-10-08, fara bump, §8; rang mediu in `rank_ensemble_core`, ordinea scorului la factorul 0 al penalizarii, semnatura designurilor fara cale absoluta; v30 swap-uri cu dominanta exacta a profilului de hituri, sufix `|hp1`; v29 optimizarea 5+ a coverelor complete de 4; v28 candidati hitcover si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
 - Loto 5/40 = 6 numere extrase din 40, bilet de 5. Istoricul scorerilor,
@@ -288,6 +289,57 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   `claude_wheeling_2026-10-18.md`, `audit_application_2026-10-18.json`,
   `cover_source_check_2026-10-18.json`; comparatia de geometrie se reface
   prin `audit_claude_wheeling_2026_10_18.py`.
+
+### Schemele reduse ale Loteriei Romane — 2026-10-17
+
+- Cerinta: utilizatorul joaca la 6/49 schemele reduse LR, deci analiza trebuie
+  facuta pe ele. Panoul stia numai codul si numarul de variante si avertiza ca
+  garantia nu e documentata.
+- Desfasurarile vin din brosurile loto.ro (`extras_brosura-649.pdf`,
+  `extras_brosura_Loto540.pdf`, `extras_brosura_joker.pdf`).
+  `scripts/analysis/import_lr_schemes.py` citeste grila (`pdftotext -bbox`) si
+  scrie o schema numai daca indexul de castiguri recalculat coincide exact cu
+  cel tiparit. Au trecut toate cele 33 de scheme cu variante intregi:
+  - 6/49: 7 scheme;
+  - 5/40: 16 scheme;
+  - Joker: 10 scheme.
+  Cele 18 scheme 6/49 cu variante de 2-4 numere (combinate compuse) sunt sarite
+  si listate. Fisierele sunt `covering_designs/lr/LR_<joc>_cod<NN>.txt` (pozitii
+  1..n, 1 = cel mai mic numar jucat; brosura 6/49, exemplul 3, o arata, iar la
+  5/40 si Joker e presupusa si spusa in panou). `index_oficial.json` tine
+  indexurile tiparite si amprenta variantelor verificate (`rows_sha256`): indexul
+  nu fixeaza singur desfasurarea (o reetichetare il pastreaza, tabelul Joker pe
+  intervale accepta si cateva variante schimbate). `test_lr_schemes.py`
+  recalculeaza indexul si compara amprenta.
+- Analiza (`scripts/analysis/lr_schemes_2026-10-17.md`):
+  - Cod 59 (6/49, 16 numere, 112 variante, 896 lei) are exact sansele celui
+    mai bun wheel al aplicatiei cu 112 variante: 4+ 7,43%, 5+ 0,207%;
+  - 4 numere iesite din 16 dau 4 pe o varianta in 92,31% din cazuri;
+  - coverul complet g4 (152 de variante, 1.216 lei) da 4+ 7,96% si 5+ 0,251%,
+    dar costa mai mult pe extragerea cu 4+;
+  - pe 777 de extrageri WF, Cod 59 pe pool-ul de atunci: 4+ in 60, 5 in 0;
+    coverul de 152: 65 si 1.
+  - La 5/40 pool 16, Cod 37 bate wheel-ul de 348 de variante la 4+, iar Cod 38
+    ajunge la 4+ cat coverul complet de 404, cu 39 de variante in plus si 5 mai
+    mare.
+  - La Joker nu exista cod pentru 16 numere.
+- Aplicatia (§6), fara schimbare de pool, scorer, variante sau cache:
+  - panoul arata codul, garantia, sansele exacte, comparatia cu wheel-ul si
+    desfasurarea pe pool;
+  - „📜 Istoric hits” rejoaca schema pe pool-ul fiecarui pas;
+  - raportul si mailul numesc codul.
+- Revizia adversariala a diff-ului (5 zone, fiecare constatare verificata
+  separat): 17 confirmate, minore sau marunte, toate reparate, cu teste care pica
+  pe commit-ul anterior. Amprenta variantelor; geometria 5/40 si Joker testata;
+  incarcarea accepta BOM, respinge schemele goale si codurile dublate, iar un
+  fisier necitibil e numit ca atare, nu drept „fara schema”; sansele mici fara
+  exponent (`_five_plus_pct`: 0,000086%, nu „8.6e-05%”); „cel putin o varianta”
+  si urna 1 la Joker; „fara schema cu variante intregi” (la 6/49 exista si scheme
+  cu variante de 2-4 numere); pool gol si baza restransa cu aceeasi marime in tot
+  panoul; Istoric hits nu mai neaga codul cand pasii n-au pool-ul in context;
+  raportul: derivarea celor 60 de extrageri cu 4+ (57 cu exact 4 in pool, 52
+  prinse; 8 cu 5, toate), datele pe praguri in JSON, nota Joker 5 -> 4 (sigur la
+  LR, 92,86-99,33% la wheel-ul aplicatiei).
 
 ### Istoric hits cu pool-ul de atunci si audit pe module — 2026-10-17
 
@@ -1789,6 +1841,25 @@ limita de validitate din §5).
   ordinea data, 2026-10-16): pe pool 16, ~0,11 s pe pas dupa primul (2-5 s),
   la 1 sau 10 bilete; pe pool 8..14 cu garantia completa inainte de umplere,
   ~1 s pe pas (cautarea pasului ramane, §7). Masurat pe CPU, un proces.
+- Schemele reduse LR (`covering/lr_schemes.py`, 2026-10-17): pentru pool-ul
+  rezultatului, `_lr_schemes_for` alege codurile cu tot atatea numere (numai
+  Romania). Panoul de cost (`_render_cost`) si raportul (`_lr_scheme_lines`) dau:
+  - ce prinde schema dupa cate numere ies din cele jucate (`scheme_guarantees`,
+    profil exact);
+  - sansa exacta pe o extragere uniforma (`scheme_odds`);
+  - diferenta fata de variantele generate, la fiecare prag si in lei.
+  `_render_lr_layouts` arata variantele schemei pe pool, sortat crescator, ca la
+  terminal; la Joker, numarul din campul 2 intra pe toate. Fara cod pentru
+  marimea pool-ului, panoul spune marimile care au scheme cu variante intregi;
+  un fisier necitibil e numit (`unloaded_schemes`), nu raportat ca lipsa.
+  „📜 Istoric hits” (`ui_hits._render_lr_replay`) pune schema pe pool-ul
+  fiecarui pas WF (`ticket_context`) si numara extragerile cu 3+/4+/5+/6 pe o
+  varianta. Le compara cu variantele WF pe aceiasi pasi si cu sansa exacta;
+  fara pool-ul pasilor in context, spune ca reluarea apare la urmatoarea
+  validare. Mailul are linia
+  `SCHEMĂ LR`. Profilul exact merge pana la 16 numere; schemele 5/40 de 17-19
+  numere raman numai ca date. Schemele nu intra in `generate_wheel` si nici in
+  cheile de cache.
 - Selectia este top-N pura dupa scorul validat, cu o singura exceptie, limita
   de consecutive de mai jos.
 - Limita de consecutive este o OPTIUNE de utilizator (`max_consecutive_run` in
