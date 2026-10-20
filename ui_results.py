@@ -6,6 +6,7 @@ import logging
 import math
 import time
 from datetime import datetime as _dt, timezone as _tz
+from decimal import Decimal
 
 import pandas as pd
 from nicegui import ui
@@ -48,30 +49,18 @@ def _badges(numbers, stats: dict | None = None):
 # lista de variante generată de aplicație.
 PRICES = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
 
-# Scheme reduse oficiale Loteria Română: (cod, n_variante) per (joc, pool_size)
-LR_SCHEMES = {
-    "6/49": {
-        9: [("Cod 48", 12)],
-        10: [("Cod 49", 15), ("Cod 50", 30)],
-        11: [("Cod 56", 66)],
-        12: [("Cod 57", 22), ("Cod 58", 132)],
-        16: [("Cod 59", 112)],
-    },
-    "5/40": {
-        7: [("Cod 15", 9)],
-        8: [("Cod 16", 21)],
-        9: [("Cod 17", 30)],
-        10: [("Cod 18", 51)],
-    },
-    "joker": {
-        7: [("Cod 45", 5)],
-        8: [("Cod 35", 6)],
-        9: [("Cod 34", 9)],
-        10: [("Cod 24", 14)],
-        11: [("Cod 15", 22)],
-        12: [("Cod 14", 38)],
-    },
-}
+def _lr_table() -> dict:
+    """(cod, n_variante) per (joc, numere jucate), din desfășurările verificate."""
+    from covering.lr_schemes import lr_schemes
+
+    out: dict = {}
+    for s in lr_schemes():
+        out.setdefault(s.game, {}).setdefault(s.n, []).append((s.label, s.size))
+    return out
+
+
+# Scheme reduse oficiale Loteria Română (`covering/lr_schemes.py`).
+LR_SCHEMES = _lr_table()
 STAGE_META = [
     (
         "1_nqi_raw",
@@ -210,7 +199,10 @@ def _render_cost(game: str, data: dict) -> None:
     price = PRICES.get(gk, 8.0)
     # Numere pe BILET (5/40 extrage 6, dar varianta are 5).
     draw_n = _ticket_pick(gk)
-    pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    # Mărimea pool-ului = numerele lui distincte (o bază restrânsă poate da mai
+    # puține decât pool_size); pool_size numai fără numere.
+    _nums = {int(x) for x in (data.get("hard_core") or [])}
+    pool_used = len(_nums) or int(data.get("pool_size") or 0)
 
     full_vars = math.comb(pool_used, draw_n) if pool_used >= draw_n else 0
     full_cost = full_vars * price
@@ -231,31 +223,46 @@ def _render_cost(game: str, data: dict) -> None:
         f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} "
         f"≈ {_thousands(full_cost)} Lei în variante"
     )
-    if gk in LR_SCHEMES and pool_used in LR_SCHEMES[gk]:
-        parts = []
-        for code, base in LR_SCHEMES[gk][pool_used]:
-            parts.append(
-                f"**{code}** ({base} var.{_jk_txt} ≈ {_thousands(base * price)} Lei în variante)"
-            )
+    schemes = _lr_schemes_for(game, data)
+    if schemes:
+        parts = [
+            f"**{s.label}** ({s.size} var.{_jk_txt} ≈ {_thousands(s.size * price)} Lei în variante)"
+            for s in schemes
+        ]
         ui.markdown(
-            f"💡 **Scheme reduse oficiale la agenție** ({pool_used} nr.): "
+            f"💡 **Scheme reduse oficiale la agenție** ({schemes[0].n} nr.): "
             + " sau ".join(parts)
             + f"\n\n*({_full_lbl} — toate combinațiile, exhaustiv)*"
         ).classes("text-info")
-        # Garanția schemelor „Cod NN" NU e documentată nicăieri în proiect (doar codul
-        # și numărul de variante) → nu o putem afirma. Fără avertisment, utilizatorul
-        # poate crede că cele 15 variante de la „Cod 49" au aceeași garanție ca cele
-        # 21 ale wheel-ului nostru (care ESTE verificată — vezi „Acoperire garanție").
-        ui.markdown(
-            "⚠️ **Garanția schemelor oficiale nu e documentată în app** (avem doar "
-            "codul + numărul de variante). NU presupune că e aceeași cu garanția "
-            "configurată aici — verific-o la agenție înainte să compari numărul de "
-            "variante cu wheel-ul nostru de mai jos."
-        ).classes("text-caption text-orange")
+        for line in _lr_scheme_lines(game, data):
+            ui.label(line).classes("text-caption")
+        _render_lr_layouts(game, data, schemes)
     else:
+        from covering.lr_schemes import unloaded_schemes
+
+        _sizes = sorted(LR_SCHEMES.get(gk, {}))
+        _bad = unloaded_schemes(gk, pool_used) if _nums else []
+        if not _nums:
+            _none = f"pool gol la {_game_title(game)}."
+        elif _bad:
+            _none = (
+                f"schema redusă LR {', '.join(_bad)} pentru {pool_used} nr. nu s-a putut "
+                "citi din covering_designs/lr (vezi jurnalul)."
+            )
+        else:
+            _none = (
+                f"fără schemă redusă oficială cu variante întregi pentru {pool_used} nr. "
+                f"la {_game_title(game)}."
+            )
+        _have = (
+            f" Loteria Română are scheme reduse cu variante întregi pentru "
+            f"{', '.join(map(str, _sizes))} numere."
+            if _sizes and _nums and not _bad
+            else ""
+        )
         ui.markdown(
-            f"💡 **Cost la agenție:** fără schemă redusă oficială pentru {pool_used} nr. la "
-            f"{_game_title(game)}. **{_full_lbl}** (toate combinațiile, exhaustiv)."
+            f"💡 **Cost la agenție:** {_none} **{_full_lbl}** (toate combinațiile, "
+            f"exhaustiv).{_have}"
         ).classes("text-info")
 
     variants = data.get("variants") or []
@@ -335,6 +342,138 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
             f"Estimare la tariful {_fmt_price(spec)} ({spec.price_source}); "
             "taxele pe bilet nu sunt incluse."
         ).classes("text-caption text-grey")
+
+
+def _lr_schemes_for(game: str, data: dict) -> list:
+    """Schemele reduse LR pentru numerele pool-ului rezultatului; [] la alte țări."""
+    pool = {int(x) for x in (data.get("hard_core") or [])}
+    if not pool or not _game_spec_for(game, data).is_romanian:
+        return []
+    from covering.lr_schemes import lr_schemes
+
+    return lr_schemes(_game_label_for(game), len(pool))
+
+
+def _lr_pct(p: float) -> str:
+    """Procent cu două zecimale; sub 0,1% două cifre semnificative."""
+    value = 100.0 * float(p)
+    return f"{value:.2f}%" if value >= 0.1 or value == 0 else f"{value:.2g}%"
+
+
+def _lr_guarantee_text(scheme) -> str:
+    """Ce prinde schema după câte numere ies dintre cele jucate, din profilul exact."""
+    from covering.lr_schemes import scheme_guarantees
+
+    parts = []
+    for k, row in scheme_guarantees(scheme).items():
+        top = max(row)
+        sure = max((t for t, v in row.items() if v >= 1.0 - 1e-12), default=None)
+        bits = [f"{sure} sigur"] if sure is not None else []
+        bits += [
+            f"{t}{'' if t == top else '+'} în {_lr_pct(v)}"
+            for t, v in row.items()
+            if (sure is None or t > sure) and v > 0
+        ]
+        parts.append(f"{k} {'ieșite ' if not parts else ''}→ " + (", ".join(bits) or "sub 3"))
+    return "; ".join(parts)
+
+
+def _lr_scheme_lines(game: str, data: dict) -> list[str]:
+    """Garanția, șansele exacte și comparația cu wheel-ul nostru, în panou și raport."""
+    schemes = _lr_schemes_for(game, data)
+    if not schemes:
+        return []
+    from covering.lr_schemes import scheme_odds
+    from covering.probability import wheel_hit_probabilities
+
+    gk = _game_label_for(game)
+    price = PRICES.get(gk, 8.0)
+    pick = _ticket_pick(gk)
+    draw_n, max_num = _hypergeo_params(gk)
+    ours = None
+    variants = data.get("variants") or []
+    try:
+        if variants:
+            ours = wheel_hit_probabilities(
+                data.get("hard_core") or [], [v[:pick] for v in variants], draw_n, max_num
+            )["ticket"]
+    except (ValueError, TypeError):
+        ours = None
+    lines = []
+    for s in schemes:
+        odds = scheme_odds(s)
+        lines.append(
+            f"{s.label}, cele mai multe numere pe o variantă, după câte ies din cele "
+            f"{s.n}: {_lr_guarantee_text(s)} (procentul = partea cazurilor)."
+        )
+        lines.append(
+            f"{s.label}, șansa ca cel puțin o variantă să prindă"
+            f"{' (urna 1, fără numărul Joker)' if gk == 'joker' else ''}, "
+            "la o extragere uniformă: "
+            + " · ".join(
+                f"{t}{'+' if t < max(odds) else ''} {_five_plus_pct(p)}"
+                for t, p in odds.items()
+            )
+            + "."
+        )
+        if ours is not None:
+            diff = [
+                f"{t}{'+' if t < max(odds) else ''} {_five_plus_pct(p)} față de "
+                f"{_five_plus_pct(ours[t])}"
+                for t, p in odds.items()
+                if abs(p - ours[t]) > 1e-12
+            ]
+            delta = len(variants) - s.size
+            cost = (
+                f"cu {count(abs(delta), 'variante', 'variantă')} "
+                f"{('mai puțin' if abs(delta) == 1 else 'mai puține') if delta > 0 else 'în plus'} "
+                f"({_thousands(abs(delta) * price)} Lei)"
+                if delta
+                else "tot atâtea variante"
+            )
+            lines.append(
+                f"{s.label} față de wheel-ul nostru ({len(variants)} var.): {cost}; "
+                + ("; ".join(diff) if diff else "aceleași șanse la fiecare prag")
+                + "."
+            )
+    _order = (
+        "(broșura 6/49 loto.ro, exemplul 3)"
+        if gk == "6/49"
+        else "(așa arată broșura 6/49, exemplul 3; broșura acestui joc nu spune "
+        "ordinea, deci desfășurarea de mai jos presupune aceeași regulă)"
+    )
+    lines.append(
+        "La agenție schema se joacă după cod: terminalul pune numerele jucate în ordine "
+        f"crescătoare pe pozițiile 1..n ale schemei {_order}. Desfășurările sunt "
+        "verificate pe indexul de câștiguri tipărit; pe extrageri uniforme șansele nu "
+        "depind de numerele din pool."
+    )
+    return lines
+
+
+def _render_lr_layouts(game: str, data: dict, schemes) -> None:
+    """Variantele fiecărei scheme pe pool-ul de azi, cum le desfășoară terminalul."""
+    from covering.lr_schemes import scheme_tickets
+
+    joker = [int(x) for x in (data.get("hard_core_joker") or [])][:1]
+    for s in schemes:
+        try:
+            tickets = scheme_tickets(s, data.get("hard_core") or [])
+        except ValueError:
+            continue
+        tail = f"  +{joker[0]}" if joker else ""
+        text = "\n".join(
+            f"V{i:>3}: " + ", ".join(map(str, t)) + tail for i, t in enumerate(tickets, 1)
+        )
+        with ui.expansion(
+            f"📋 {s.label} pe pool-ul de azi ({count(s.size, 'variante', 'variantă')})",
+            value=False,
+        ).classes("w-full"):
+            if joker:
+                ui.label("Numărul Joker (câmpul 2) intră pe toate variantele schemei.").classes(
+                    "text-caption text-grey"
+                )
+            ui.label(text).classes("font-mono text-sm").style("white-space: pre")
 
 
 def _wheel_probability_lines(game: str, data: dict) -> list[str]:
@@ -612,7 +751,9 @@ def _five_plus_pct(p) -> str:
     semnificative. La Joker cu un bilet (2 variante) 5+ e 0,00016%, iar cu trei
     zecimale apărea „0.000%”, ca și cum n-ar exista."""
     value = 100.0 * float(p or 0.0)
-    return f"{value:.3f}%" if value >= 0.1 else f"{value:.2g}%"
+    # Decimal: două cifre semnificative fără exponent (6 la 6/49, 0,000086%,
+    # ieșea „8.6e-05%”).
+    return f"{value:.3f}%" if value >= 0.1 else f"{Decimal(f'{value:.2g}'):f}%"
 
 
 def _thousands(x, decimals: int = 0) -> str:
@@ -767,6 +908,7 @@ def _build_report() -> str:
             + (f"{float(cov):.2f}%" if cov is not None else "necunoscută")
         )
         out.extend(f"{indent}{line}" for line in _wheel_probability_lines(game, d))
+        out.extend(f"{indent}Schemă LR: {line}" for line in _lr_scheme_lines(game, d))
         # Metoda și nota ei de încredere, ca în panou (Urna 2 cu nota ei).
         _bw = (d.get("audit") or {}).get("bench_winner") or {}
         for _key, _info in _bw.items():
