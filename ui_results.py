@@ -260,10 +260,15 @@ def _render_cost(game: str, data: dict) -> None:
             if _sizes and _nums and not _bad
             else ""
         )
-        ui.markdown(
-            f"💡 **Cost la agenție:** {_none} **{_full_lbl}** (toate combinațiile, "
-            f"exhaustiv).{_have}"
-        ).classes("text-info")
+        if _nums:
+            ui.markdown(
+                f"💡 **Cost la agenție:** {_none} **{_full_lbl}** (toate combinațiile, "
+                f"exhaustiv).{_have}"
+            ).classes("text-info")
+        else:
+            # Fără numere nu există sistem complet de prețuit (pool_size e numai
+            # mărimea cerută).
+            ui.markdown(f"💡 **Cost la agenție:** {_none}").classes("text-info")
 
     variants = data.get("variants") or []
     if variants:
@@ -441,7 +446,7 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
         "(broșura 6/49 loto.ro, exemplul 3)"
         if gk == "6/49"
         else "(așa arată broșura 6/49, exemplul 3; broșura acestui joc nu spune "
-        "ordinea, deci desfășurarea de mai jos presupune aceeași regulă)"
+        "ordinea, deci desfășurarea pe pool presupune aceeași regulă)"
     )
     lines.append(
         "La agenție schema se joacă după cod: terminalul pune numerele jucate în ordine "
@@ -456,55 +461,144 @@ def _lr_threshold(t: int, odds: dict) -> str:
     return f"{t}{'+' if t < max(odds) else ''}"
 
 
-def _lr_quality_lines(s, odds: dict, price: float) -> list[str]:
-    """Cât de aproape e schema de maximul posibil și ce dă aplicația la același cost.
+def _lr_pct_pair(a: float, b: float) -> tuple[str, str]:
+    """Două șanse scrise ca `_five_plus_pct`, cu mai multe cifre când două valori
+    diferite ar ieși la fel (5/40 Cod 18 la 5: 0,0452% și 0,0453%, ambele „0.045%”)."""
+    x, y = _five_plus_pct(a), _five_plus_pct(b)
+    digits = 3
+    while x == y and abs(float(a) - float(b)) > 1e-15 and digits <= 10:
+        x, y = (f"{Decimal(f'{100.0 * float(v):.{digits}g}'):f}%" for v in (a, b))
+        digits += 1
+    return x, y
 
-    Maximul vine din `optimal_thresholds` (margine exactă pentru orice așezare
-    cu tot atâtea variante); comparația, din wheel-urile motorului precalculate
-    în `covering_designs/lr/app_same_size.json`."""
-    from covering.lr_schemes import _GAMES, _upper_bound, app_same_size, optimal_thresholds
+
+def _lr_join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " și " + items[-1]
+
+
+def _lr_lost_guarantee(scheme: dict, app: dict, n: int) -> str:
+    """Garanția sigură a schemei pe care wheel-ul aplicației n-o mai dă: cel mai
+    mare prag t, apoi cele mai puține numere ieșite k (Joker Cod 34: 5 ieșite ->
+    4 sigur pe o variantă; aplicația, în 92,86% din cazuri)."""
+    lost = [
+        (t, k, app[k][t])
+        for k, row in scheme.items()
+        for t, f in row.items()
+        if f >= 1.0 - 1e-12 and k in app and t in app[k] and app[k][t] < 1.0 - 1e-12
+    ]
+    if not lost:
+        return ""
+    t, k, f = max(lost, key=lambda x: (x[0], -x[1]))
+    return (
+        f"Codul dă însă sigur {t} pe o variantă când ies {k} dintre cele {n} numere "
+        f"jucate; wheel-ul aplicației, în {100.0 * f:.2f}% din cazuri."
+    )
+
+
+def _lr_quality_lines(s, odds: dict, price: float) -> list[str]:
+    """Ce se știe despre schemă față de orice altă așezare cu tot atâtea variante.
+
+    Un prag e optim când șansa schemei atinge marginea superioară sau maximul
+    găsit offline (`optimal_thresholds`). O margine neatinsă nu dovedește că se
+    poate mai bine: panoul spune „se poate mai bine” numai cu o așezare concretă
+    (wheel-ul aplicației din `covering_designs/lr/app_same_size.json` sau cea din
+    `optimal_offline.json`), altfel că nu se știe."""
+    from covering.lr_schemes import (
+        _GAMES,
+        _upper_bound,
+        app_same_size,
+        app_same_size_guarantees,
+        improvable_thresholds,
+        optimal_thresholds,
+        scheme_guarantees,
+    )
 
     _, pick, draws, universe = _GAMES[s.game]
-    best = set(optimal_thresholds(s))
-    if best >= set(odds):
-        lines = [
-            f"Schema {s.label} e optimă: nicio altă așezare de "
-            f"{count(s.size, 'variante', 'variantă')} pe {s.n} numere nu prinde mai "
-            "des, la niciun prag."
-        ]
-    else:
-        below = [
-            f"{_lr_threshold(t, odds)} {_five_plus_pct(p)} față de cel mult "
-            f"{_five_plus_pct(_upper_bound(s.n, s.size, pick, t, draws, universe))}"
-            for t, p in odds.items()
-            if t not in best
-        ]
-        lines = [
-            f"Schema {s.label} e sub maximul posibil pentru "
-            f"{count(s.size, 'variante', 'variantă')} pe {s.n} numere: "
-            + "; ".join(below)
-            + "."
-        ]
+    variants = count(s.size, "variante", "variantă")
+    proven = [t for t in odds if t in set(optimal_thresholds(s))]
+    # Când biletul are cât extragerea (6/49 la 6, Joker la 5), orice așezare cu
+    # tot atâtea variante distincte are aceeași șansă la pragul maxim: acolo
+    # „optimă” n-ar spune nimic despre schemă.
+    named = [t for t in proven if not (t == pick == draws)]
+    lines = []
+    if len(proven) == len(odds):
+        lines.append(
+            f"Schema {s.label} e optimă: nicio altă așezare de {variants} pe {s.n} "
+            "numere nu prinde mai des, la niciun prag."
+        )
+    elif named:
+        lines.append(
+            f"Schema {s.label} e optimă la {_lr_join([_lr_threshold(t, odds) for t in named])}: "
+            f"nicio altă așezare de {variants} pe {s.n} numere nu prinde mai des la "
+            f"{'acest prag' if len(named) == 1 else 'aceste praguri'}."
+        )
     designs = app_same_size(s)
+    same = [(g, p) for g, v, p in designs if v == s.size]
     better = [
-        (g, v, p)
-        for g, v, p in designs
-        if v == s.size
-        and all(p[t] >= odds[t] - 1e-15 for t in odds)
+        (g, p)
+        for g, p in same
+        if all(p[t] >= odds[t] - 1e-15 for t in odds)
         and any(p[t] > odds[t] + 1e-15 for t in odds)
     ]
+    shown: set[int] = set()
     if better:
-        g, v, p = max(better, key=lambda d: tuple(d[2][t] for t in sorted(odds, reverse=True)))
-        diff = "; ".join(
-            f"{_lr_threshold(t, odds)} {_five_plus_pct(p[t])} față de {_five_plus_pct(odds[t])}"
-            for t in odds
-            if p[t] > odds[t] + 1e-15
+        g, p = max(better, key=lambda d: tuple(d[1][t] for t in sorted(odds, reverse=True)))
+        diff = []
+        gain = 0.0
+        for t, q in odds.items():
+            if p[t] > q + 1e-15:
+                ours, theirs = _lr_pct_pair(p[t], q)
+                diff.append(f"{_lr_threshold(t, odds)} {ours} față de {theirs}")
+                shown.add(t)
+                gain = max(gain, p[t] / q - 1.0 if q > 0 else 1.0)
+        if gain >= 0.01:
+            lines.append(
+                f"La același cost, aplicația prinde mai des decât {s.label}: cu plafonul "
+                f"{s.size} și garanția {g}, {'; '.join(diff)}. Variantele aplicației se "
+                "joacă la agenție ca variante simple."
+            )
+        else:
+            lines.append(
+                f"Cu plafonul {s.size} și garanția {g}, aplicația prinde abia mai des decât "
+                f"{s.label}: {'; '.join(diff)}. Sub 1% în plus nu merită {variants} "
+                "simple în locul codului."
+            )
+        lost = _lr_lost_guarantee(
+            scheme_guarantees(s), app_same_size_guarantees(s).get(g) or {}, s.n
         )
+        if lost:
+            lines.append(lost)
+    offline = improvable_thresholds(s)
+    known = {}
+    for t, q in odds.items():
+        if t in proven or t in shown:
+            continue
+        found = [(p[t], f"wheel-ul aplicației cu garanția {g}") for g, p in same if p[t] > q + 1e-15]
+        if t in offline:
+            found.append((offline[t], "o așezare găsită prin căutare offline"))
+        if found:
+            known[t] = max(found)
+    if known:
+        parts = []
+        for t, (q, source) in known.items():
+            ours, theirs = _lr_pct_pair(q, odds[t])
+            parts.append(f"{_lr_threshold(t, odds)} {ours} față de {theirs} ({source})")
+        lines.append(f"Cu tot atâtea variante se poate prinde mai des: {'; '.join(parts)}.")
+    unknown = [t for t in odds if t not in proven and t not in shown and t not in known]
+    if unknown:
+        pairs = [
+            _lr_pct_pair(odds[t], _upper_bound(s.n, s.size, pick, t, draws, universe))
+            for t in unknown
+        ]
         lines.append(
-            f"La același cost, aplicația prinde mai des decât {s.label}: cu plafonul "
-            f"{v} și garanția {g}, {diff}. Variantele ei se joacă la agenție ca "
-            "variante simple."
+            f"La {_lr_join([_lr_threshold(t, odds) for t in unknown])} nu se știe dacă "
+            f"se poate mai bine: schema dă {_lr_join([a for a, _b in pairs])}, iar "
+            f"marginea superioară pentru orice așezare de {variants} pe {s.n} numere e "
+            f"{_lr_join([b for _a, b in pairs])}"
+            f"{'' if len(unknown) == 1 else ', în aceeași ordine'}; marginea nu e mereu "
+            "atinsă."
         )
+    if better:
         return lines
     top = max(odds)
     cheaper = [
@@ -514,12 +608,12 @@ def _lr_quality_lines(s, odds: dict, price: float) -> list[str]:
     ]
     if cheaper:
         g, v, p = min(cheaper, key=lambda d: d[1])
-        same = ", ".join(_lr_threshold(t, odds) for t in odds if t < top)
+        same_thr = ", ".join(_lr_threshold(t, odds) for t in odds if t < top)
+        ours, theirs = _lr_pct_pair(p[top], odds[top])
         lines.append(
-            f"Aplicația dă la fel ({same}) cu {count(v, 'variante', 'variantă')}, "
+            f"Aplicația dă la fel ({same_thr}) cu {count(v, 'variante', 'variantă')}, "
             f"{_thousands((s.size - v) * price)} Lei mai puțin (garanția {g}, fără "
-            f"plafon); la {_lr_threshold(top, odds)}: {_five_plus_pct(p[top])} față de "
-            f"{_five_plus_pct(odds[top])}."
+            f"plafon); la {_lr_threshold(top, odds)}: {ours} față de {theirs}."
         )
     return lines
 

@@ -442,16 +442,18 @@ def _wheel_sig(
                 design_sig = covering_design_source_signature(int(pool_size), pick, g)
                 refined = _refined_cover_suffix("lajolla", int(pool_size), game_type, g)
                 return f"lajolla|{geometry}|cd{design_sig}|rt1|hp1|tg1|bf1{refined}"
-            # `lg1:<amprenta>`: garanția egală cu biletul primește biletele
+            # `lg2:<amprenta>`: garanția egală cu biletul primește biletele
             # certificate ale unei garanții mai mici (`covering.guarantee_portfolio`);
             # amprenta poartă semnăturile acelor candidați (fișierele C, R, H).
+            # `lg2` (2026-10-20): coverul complet al garanției mai mici e
+            # completat până la plafon, nu respins pentru că are mai puține bilete.
             lower = ""
             if g >= pick:
                 candidates = [
                     _wheel_sig(pool_size, game_type, t, None, cap, method_override="hitcover")
                     for t in range(pick - 1, 2, -1)
                 ]
-                lower = f"|lg1:{_sources_digest(*candidates)}"
+                lower = f"|lg2:{_sources_digest(*candidates)}"
             # `lr<amprenta>`: schema redusă LR cu exact `cap` variante pe acest
             # pool (`covering_designs/lr/`), adoptată numai certificată.
             from covering.lr_schemes import lr_scheme_signature

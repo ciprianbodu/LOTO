@@ -129,6 +129,13 @@ def test_an_unreadable_file_is_not_reported_as_a_missing_code(monkeypatch, tmp_p
     assert "schema redusă LR Cod 59 pentru 16 nr. nu s-a putut citi" in text
     assert "fără schemă" not in text
     assert lr.unloaded_schemes("6/49", 14) == []
+    # Revizia 2026-10-20: Istoric hits spunea „nu are schemă” pentru același fișier.
+    flat = _wf(POOL16, [("06-08-2026", [2, 5, 9, 13, 17, 1])])
+    with capture_ui() as ui:
+        ui_hits._render_hits_4plus(flat, "6/49", {"pool_size": 16}, pool_n=16)
+    text = ui.text()
+    assert "Schemă redusă LR Cod 59 pentru 16 numere: fișierul nu s-a putut citi" in text
+    assert "nu are schemă" not in text
 
 
 # --------------------------------------------------------------------------- #
@@ -270,6 +277,8 @@ def test_empty_or_restricted_pool_sizes_agree():
         ui_results._render_cost("6/49", {**_data([]), "pool_size": 16})
     text = ui.text()
     assert "pool gol" in text and "are scheme reduse" not in text
+    # Fără numere nu se prețuiește un sistem complet de 16 (revizia 2026-10-20).
+    assert "Sistem complet" not in text
     # Bază restrânsă: 12 numere jucate, pool_size cerut 16.
     pool = POOL16[:12]
     with capture_ui() as ui:
@@ -453,3 +462,10 @@ def test_replay_matches_brute_force_over_many_draws():
     best = [max(len(set(t) & set(d)) for t in tickets) for d in draws]
     assert res["observed"] == {t: sum(1 for h in best if h >= t) for t in (3, 4, 5, 6)}
     assert Path(lr.LR_DIR).is_dir()
+
+
+def test_the_report_does_not_point_to_a_layout_it_does_not_have():
+    """Raportul folosește aceleași linii ca panoul, dar nu are desfășurarea."""
+    for game, pool in (("joker", list(range(1, 46, 3))[:15]), ("5/40", POOL16[:16])):
+        lines = ui_results._lr_scheme_lines(game, _data(pool))
+        assert lines and not any("de mai jos" in line for line in lines), game

@@ -7,7 +7,7 @@ Pentru fiecare schemă din ``covering_designs/lr`` cu cel mult 16 numere:
 - ce garantează schema: din k numere ieșite dintre cele n, în ce parte a
   cazurilor ajung cel puțin t pe aceeași variantă;
 - wheel-ul aplicației pe aceleași n numere, cu bugetul egal cu numărul de
-  variante al schemei, pentru fiecare garanție 2..bilet-1
+  variante al schemei, pentru fiecare garanție 2..bilet
   (`generate_wheel("hitcover", ...)`, calea motorului); o garanție acoperită
   complet cu mai puține variante le are numai pe acelea. Verdictul de dominanță,
   pe pragurile 3..min(bilet, extrase), se dă numai la tot atâtea variante.
@@ -15,9 +15,16 @@ Pentru fiecare schemă din ``covering_designs/lr`` cu cel mult 16 numere:
 Cu ``--wf FIȘIER.pkl`` (cache walk-forward v31) refă și istoricul: la fiecare
 pas, schema pusă pe pool-ul de atunci (sortat crescător), față de variantele
 validate în WF: extrageri pe praguri, defalcate după câte numere au fost în
-pool, și datele extragerilor cu cel puțin bilet-1 pe o variantă. Rezultatul: ``scripts/analysis/lr_schemes_2026-10-17.json``.
+pool, și datele extragerilor cu cel puțin bilet-1 pe o variantă. Rezultatul:
+``scripts/analysis/lr_schemes_2026-10-20.json`` (cel din 2026-10-17 a fost scris
+de prima versiune, fără margine și fără garanția egală cu biletul).
 
-    python scripts/analysis/analyze_lr_schemes.py [--wf CACHE.pkl ...] [--out FIȘIER]
+``--app-out`` scrie wheel-urile aplicației, cu șansele și profilul garanției, în
+``covering_designs/lr/app_same_size.json``, citit de panou. Reproducerea:
+
+    python scripts/analysis/analyze_lr_schemes.py --wf <cele trei cache-uri WF v31> \
+        --out scripts/analysis/lr_schemes_2026-10-20.json \
+        --app-out covering_designs/lr/app_same_size.json
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ import argparse
 import json
 import logging
 import sys
+from math import comb
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,13 +67,13 @@ def verdict(lr: dict, app: dict) -> str:
 
 def app_designs(game: str, n: int, budget: int) -> list[dict]:
     from covering.dispatch import generate_wheel
-    from covering.probability import wheel_hit_probabilities
+    from covering.probability import wheel_hit_probabilities, wheel_hit_profile
 
     pick, draw_n, max_num, _ = GAMES[game]
     pool = list(range(1, n + 1))
     scores = {p: float(n + 1 - p) for p in pool}
     out = []
-    for g in range(2, pick):
+    for g in range(2, pick + 1):
         try:
             wheel, _ = generate_wheel(
                 "hitcover",
@@ -82,11 +90,18 @@ def app_designs(game: str, n: int, budget: int) -> list[dict]:
             continue
         tickets = [sorted(int(x) for x in t[:pick]) for t in wheel]
         odds = wheel_hit_probabilities(pool, tickets, draw_n, max_num)
+        counts = wheel_hit_profile(pool, tickets)
         out.append(
             {
                 "g": g,
                 "variants": len(tickets),
                 "P": {t: odds["ticket"][t] for t in range(3, min(pick, draw_n) + 1)},
+                # Ca `scheme_guarantees`: din k numere ieșite, partea cazurilor
+                # cu cel puțin t pe o variantă.
+                "sure": {
+                    k: {t: counts[k][t] / comb(n, k) for t in range(3, min(k, pick) + 1)}
+                    for k in range(3, min(n, draw_n) + 1)
+                },
             }
         )
     return out
@@ -182,7 +197,7 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--out",
         type=Path,
-        default=ROOT / "scripts" / "analysis" / "lr_schemes_2026-10-17.json",
+        default=ROOT / "scripts" / "analysis" / "lr_schemes_2026-10-20.json",
     )
     ap.add_argument(
         "--app-out",
@@ -255,7 +270,7 @@ def main(argv=None) -> int:
                 "n": r["n"],
                 "size": r["variants"],
                 "designs": [
-                    {"g": a["g"], "variants": a["variants"], "P": a["P"]}
+                    {"g": a["g"], "variants": a["variants"], "P": a["P"], "sure": a["sure"]}
                     for a in r["app"]
                     if "P" in a
                 ],

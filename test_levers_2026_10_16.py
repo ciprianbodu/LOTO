@@ -120,28 +120,28 @@ def test_physical_ticket_at_guarantee_equal_to_pick_uses_the_lower_guarantee():
 
 
 def test_guarantee_portfolio_walk_forward_key():
-    assert "|sa1|lg1:" in wf._wheel_sig(16, "6/49", 6, None, 30)
-    assert "|sa1|lg1:" in wf._wheel_sig(16, "5/40", 6, None, 30)  # garanția tăiată la 5
-    assert "|lg1:" in wf._wheel_sig(16, "6/49", 6, None, 100)
-    assert "lg1" not in wf._wheel_sig(16, "6/49", 4, None, 30)
-    assert "lg1" not in wf._wheel_sig(16, "6/49", 5, None, 30)
+    assert "|sa1|lg2:" in wf._wheel_sig(16, "6/49", 6, None, 30)
+    assert "|sa1|lg2:" in wf._wheel_sig(16, "5/40", 6, None, 30)  # garanția tăiată la 5
+    assert "|lg2:" in wf._wheel_sig(16, "6/49", 6, None, 100)
+    assert "lg2" not in wf._wheel_sig(16, "6/49", 4, None, 30)
+    assert "lg2" not in wf._wheel_sig(16, "6/49", 5, None, 30)
 
 
 def test_guarantee_portfolio_key_signs_the_lower_guarantee_designs(monkeypatch):
     """Revizie 2026-10-16: `lg1` era constant, deși biletele vin din fișierele C,
     R și H ale garanțiilor mai mici (5/40 pool 12, g5, 113 bilete = C(12,5,4))."""
     before = wf._wheel_sig(12, "5/40", 5, None, 113)
-    assert "|lg1:" in before
+    assert "|lg2:" in before
     monkeypatch.setattr(rc, "refined_cover_signature", lambda *a, **k: "altul")
     assert wf._wheel_sig(12, "5/40", 5, None, 113) != before
     monkeypatch.undo()
-    with_h = wf._wheel_sig(16, "6/49", 6, None, 100).split("|lg1:")[1]
+    with_h = wf._wheel_sig(16, "6/49", 6, None, 100).split("|lg2:")[1]
     real = bd.budget_design_signature
-    # Numai garanțiile mai mici: segmentul `lg1:` trebuie să urmărească H-ul lor.
+    # Numai garanțiile mai mici: segmentul `lg2:` trebuie să urmărească H-ul lor.
     monkeypatch.setattr(
         bd, "budget_design_signature", lambda v, pick, g, n: None if g < 6 else real(v, pick, g, n)
     )
-    assert wf._wheel_sig(16, "6/49", 6, None, 100).split("|lg1:")[1] != with_h
+    assert wf._wheel_sig(16, "6/49", 6, None, 100).split("|lg2:")[1] != with_h
 
 
 def test_capped_lotto_key_signs_the_classic_wheel_it_can_adopt(monkeypatch):

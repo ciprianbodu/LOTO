@@ -18,6 +18,10 @@ nu scade, câștig strict, acoperirea garanției nu scade (la garanția egală c
 biletul ea e chiar numărul de bilete). Dintre candidații certificați rămâne cel
 mai bun pe ordinea garanție, apoi pragurile mai mici. Numai geometrie,
 extrageri uniforme: rata pool-ului nu se schimbă.
+
+Cu plafonul peste coverul complet al garanției mai mici, candidatul e acel cover,
+cu mai puține bilete; din 2026-10-20 se completează până la plafon cu biletele
+wheel-ului livrat (`_padded`), apoi se certifică.
 """
 
 from __future__ import annotations
@@ -51,6 +55,27 @@ def applies(v: int, pick: int, guarantee: int, budget: int) -> bool:
     return int(guarantee) >= int(pick) >= 4 and 1 <= int(budget) and int(pick) < int(v) <= MAX_POOL
 
 
+def _padded(candidate: list[list[int]], tickets: list[list[int]]) -> list[list[int]]:
+    """Candidatul completat până la numărul de bilete al wheel-ului livrat.
+
+    Cu plafonul cel puțin cât coverul complet al garanției mai mici, motorul dă
+    acel cover, cu mai puține bilete decât plafonul, iar certificarea (același
+    număr de bilete distincte) îl respingea: 5/40 pool 16, garanția 5, plafonul
+    404 dădea 4+ 16,03%, plafonul 405 numai 8,30%. Biletele lipsă vin din
+    wheel-ul livrat, în ordinea lui, fără dubluri. Un bilet în plus nu scade
+    șansa de a prinde t pe o variantă la niciun prag, deci candidatul completat
+    are cel puțin șansele coverului; certificarea decide față de wheel."""
+    have = {tuple(t) for t in candidate}
+    out = [list(t) for t in candidate]
+    for t in tickets:
+        if len(out) >= len(tickets):
+            break
+        if tuple(t) not in have:
+            have.add(tuple(t))
+            out.append(list(t))
+    return out
+
+
 def improve_with_lower_guarantees(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
     """``(wheel, audit)``: cel mai bun candidat certificat de la o garanție mai mică."""
     audit = {"applied": False, "reason": "", "source_guarantee": None, "gain": {}}
@@ -80,7 +105,7 @@ def improve_with_lower_guarantees(ordered_pool, wheel, guarantee: int, draw_n: i
         positions = _canonical_candidate(
             v, pick, lower, len(tickets), int(draw_n), int(max_num), sources
         )
-        candidate = [sorted(pool[p - 1] for p in block) for block in positions]
+        candidate = _padded([sorted(pool[p - 1] for p in block) for block in positions], tickets)
         why, _gain, _cov = _certify(pool, tickets, candidate, int(guarantee), int(draw_n), int(max_num))
         if why:
             continue

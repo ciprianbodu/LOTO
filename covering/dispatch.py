@@ -394,12 +394,12 @@ def _generate_wheel(
         fn is wheel_hitcover
         and max_num
         and int(max_variants or 0) > 0
-        and len(set(pool)) == len(pool)
+        and len(set(pool)) == len(pool) <= 16
     ):
-        # Schema redusă LR cu tot atâtea variante pe tot atâtea numere
-        # (`covering_designs/lr/`), certificată față de wheel-ul de mai sus
-        # (2026-10-20): 6/49 Cod 50 la garanția 5, 5/40 Cod 37 și Joker Cod 15
-        # la garanția 4 prind mai des decât construcția proprie.
+        # Schema redusă LR cu tot atâtea variante pe tot atâtea numere și bilet
+        # de aceeași mărime (`covering_designs/lr/`, de la orice joc), certificată
+        # față de wheel-ul de mai sus (2026-10-20); lista adoptărilor e în
+        # `scripts/analysis/lr_optimality_2026-10-20.md`.
         draws = int(pick) if draw_n is None else int(draw_n)
         improved, audit = improve_with_lr_scheme(
             _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)

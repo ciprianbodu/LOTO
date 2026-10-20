@@ -562,13 +562,20 @@ def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: floa
     """Tabelul „schemă LR pe pool-ul de atunci”; o notă când pool-ul n-are cod.
 
     `wf_variants` = variante WF pe extragere, ca schema să se compare la cost."""
-    from covering.lr_schemes import lr_schemes
+    from covering.lr_schemes import lr_schemes, unloaded_schemes
 
     res = _lr_replay(per, game_label)
     if not res:
         sizes = sorted({s.n for s in lr_schemes(game_label)})
         here = lr_schemes(game_label, pool_n) if pool_n else []
-        if here:
+        bad = unloaded_schemes(game_label, pool_n) if pool_n else []
+        if bad and not here:
+            # Ca panoul de cost: codul există, dar fișierul nu s-a putut citi.
+            ui.label(
+                f"📋 Schemă redusă LR {', '.join(bad)} pentru {pool_n} numere: fișierul "
+                "nu s-a putut citi din covering_designs/lr (vezi jurnalul)."
+            ).classes("text-caption text-grey")
+        elif here:
             # Codul există, dar pașii n-au pool-ul în context (validare veche).
             ui.label(
                 f"📋 {', '.join(s.label for s in here)}: reluarea cere pool-ul fiecărei "
