@@ -125,6 +125,11 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   pierduta nespusa; comanda de reproducere. Toate reparate, cu teste.
 - Raport: `scripts/analysis/lr_optimality_2026-10-20.md`; date
   `lr_schemes_2026-10-20.json`.
+- Verificat pe Python 3.14.7 / Linux cu pwsh 7.6.2: 143 fisiere `test_*.py`,
+  3313 teste trecute, 11 sarite, zero esecuri (20 min 14 s). Aplicatia reala, pe
+  o copie izolata (Playwright, 390 si 1440 px): panoul 6/49 spune Cod 59 optima,
+  5/40 arata pragurile nedovedite ale Cod 37 si 38 si coverul de 404; fara
+  derulare orizontala.
 
 ### Extindere 5/40 si Joker; Istoric hits numai 4+ — 2026-10-19
 
