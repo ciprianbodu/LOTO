@@ -32,8 +32,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from covering.lr_schemes import (
+    _upper_bound,
     best_hits,
     lr_schemes,
+    optimal_thresholds,
     scheme_guarantees,
     scheme_odds,
 )
@@ -182,6 +184,12 @@ def main(argv=None) -> int:
         type=Path,
         default=ROOT / "scripts" / "analysis" / "lr_schemes_2026-10-17.json",
     )
+    ap.add_argument(
+        "--app-out",
+        type=Path,
+        help="covering_designs/lr/app_same_size.json: variantele aplicației la "
+        "mărimea fiecărei scheme, citite de panou",
+    )
     args = ap.parse_args(argv)
     logging.disable(logging.WARNING)
     rows = []
@@ -203,6 +211,18 @@ def main(argv=None) -> int:
                 "cost_lei": scheme.size * price,
                 "P": lr,
                 "guarantees": scheme_guarantees(scheme),
+                "optimal": list(optimal_thresholds(scheme)),
+                "upper_bound": {
+                    t: _upper_bound(
+                        scheme.n,
+                        scheme.size,
+                        GAMES[scheme.game][0],
+                        t,
+                        GAMES[scheme.game][1],
+                        GAMES[scheme.game][2],
+                    )
+                    for t in lr
+                },
                 "app": apps,
             }
         )
@@ -225,6 +245,29 @@ def main(argv=None) -> int:
         + "\n",
         encoding="utf-8",
     )
+    if args.app_out:
+        # O schemă pe linie: wheel-urile aplicației cu bugetul egal cu schema, pe
+        # fiecare garanție (variantele pot fi mai puține: designul complet).
+        compact = [
+            {
+                "game": r["game"],
+                "code": r["code"],
+                "n": r["n"],
+                "size": r["variants"],
+                "designs": [
+                    {"g": a["g"], "variants": a["variants"], "P": a["P"]}
+                    for a in r["app"]
+                    if "P" in a
+                ],
+            }
+            for r in rows
+        ]
+        args.app_out.write_text(
+            "[\n"
+            + ",\n".join(json.dumps(e, ensure_ascii=False) for e in compact)
+            + "\n]\n",
+            encoding="utf-8",
+        )
     return 0
 
 

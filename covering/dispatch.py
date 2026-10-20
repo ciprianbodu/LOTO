@@ -32,6 +32,7 @@ from covering.ilp import wheel_ilp
 from covering.multihit import wheel_multihit
 from covering.weighted import wheel_weighted
 from covering.profile_swap import improve_hit_profile
+from covering.lr_schemes import improve_with_lr_scheme
 from covering.refined_covers import improve_with_refined_cover
 from covering.search import wheel_annealing, wheel_genetic
 
@@ -384,6 +385,23 @@ def _generate_wheel(
         # mică, certificate pe garanția cerută (`covering.guarantee_portfolio`).
         draws = int(pick) if draw_n is None else int(draw_n)
         improved, audit = improve_with_lower_guarantees(
+            _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
+        )
+        if audit["applied"]:
+            wheel = improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    if (
+        fn is wheel_hitcover
+        and max_num
+        and int(max_variants or 0) > 0
+        and len(set(pool)) == len(pool)
+    ):
+        # Schema redusă LR cu tot atâtea variante pe tot atâtea numere
+        # (`covering_designs/lr/`), certificată față de wheel-ul de mai sus
+        # (2026-10-20): 6/49 Cod 50 la garanția 5, 5/40 Cod 37 și Joker Cod 15
+        # la garanția 4 prind mai des decât construcția proprie.
+        draws = int(pick) if draw_n is None else int(draw_n)
+        improved, audit = improve_with_lr_scheme(
             _sorted_pool(pool, scores), wheel, int(guarantee), draws, int(max_num)
         )
         if audit["applied"]:

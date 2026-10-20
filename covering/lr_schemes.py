@@ -211,3 +211,145 @@ def best_hits(scheme: LRScheme, pool, drawn) -> int:
     hit = {int(x) for x in drawn}
     mask = sum(1 << i for i, x in enumerate(nums) if x in hit)
     return max((m & mask).bit_count() for m in _position_masks(scheme))
+
+
+# --------------------------------------------------------------------------- #
+# Optimalitatea pe praguri
+# --------------------------------------------------------------------------- #
+def _upper_bound(
+    n: int, size: int, pick: int, t: int, draw_n: int, max_num: int
+) -> float:
+    """Cea mai mare P(cel puțin t pe o variantă) posibilă cu `size` variante pe n numere.
+
+    Numără, pentru fiecare k numere ieșite din pool, câte k-submulțimi pot
+    conține o t-submulțime de pe o variantă: cel mult C(n, k) și cel mult
+    D·C(n-t, k-t), unde D = min(C(n, t), size·C(pick, t)) e numărul maxim de
+    t-submulțimi acoperite. La k = bilet și t = bilet - 1, fiecare variantă își
+    conține toate cele `pick` t-submulțimi, deci e numărată de `pick` ori:
+    marginea scade cu (pick - 1)·size. La t = bilet, D = size exact.
+    """
+    total = comb(max_num, draw_n)
+    d_max = size if t == pick else min(comb(n, t), size * comb(pick, t))
+    prob = 0.0
+    for k in range(t, min(n, draw_n) + 1):
+        rest = draw_n - k
+        if rest > max_num - n:
+            continue
+        cap = min(comb(n, k), d_max * comb(n - t, k - t))
+        if k == pick and t == pick - 1:
+            cap = min(cap, (n - t) * d_max - (pick - 1) * size)
+        prob += cap * comb(max_num - n, rest) / total
+    return prob
+
+
+@lru_cache(maxsize=64)
+def optimal_thresholds(scheme: LRScheme) -> tuple[int, ...]:
+    """Pragurile la care nicio așezare cu tot atâtea variante pe aceleași numere
+    nu prinde mai des: șansa exactă a schemei atinge marginea superioară
+    (`_upper_bound`). Cod 59 (6/49, 16 numere, 112 variante) e o împachetare
+    perfectă: o atinge la 3+, 4+, 5+ și 6."""
+    _, pick, draw_n, max_num = _GAMES[scheme.game]
+    odds = scheme_odds(scheme)
+    return tuple(
+        t
+        for t, p in odds.items()
+        if p
+        >= _upper_bound(scheme.n, scheme.size, pick, t, draw_n, max_num) * (1 - 1e-12)
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Schema ca variante ale aplicației, la același număr de bilete
+# --------------------------------------------------------------------------- #
+def lr_candidates(v: int, pick: int, size: int) -> list[LRScheme]:
+    """Schemele cu `v` numere, variante de `pick` și exact `size` variante.
+
+    Geometria jocului nu contează aici: o schemă e o așezare pe poziții, iar
+    certificarea (`improve_with_lr_scheme`) o judecă pe extragerile jocului."""
+    return [
+        s
+        for s in lr_schemes()
+        if s.n == int(v) and s.size == int(size) and _GAMES[s.game][1] == int(pick)
+    ]
+
+
+def lr_scheme_signature(v: int, pick: int, size: int) -> str | None:
+    """Amprenta schemelor pe care le poate adopta motorul la acest plafon (cheia WF)."""
+    found = lr_candidates(v, pick, size)
+    if not found:
+        return None
+    import hashlib
+
+    text = "|".join(
+        f"{s.game}:{s.code}:" + ";".join(" ".join(map(str, r)) for r in s.variants)
+        for s in found
+    )
+    return hashlib.sha256(text.encode("ascii")).hexdigest()[:12]
+
+
+def improve_with_lr_scheme(
+    ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int
+):
+    """``(wheel, audit)``: o schemă LR de aceeași mărime, pe pozițiile pool-ului.
+
+    Intră numai certificată față de wheel-ul dat (`anneal_hits._certify`):
+    același număr de bilete distincte, numerele jucate rămân, niciun prag de la
+    3 la numărul extras nu scade, câștig strict, acoperirea garanției nu scade.
+    Pe extrageri uniforme, șansele nu depind de numerele puse pe poziții."""
+    from covering.anneal_hits import _certify
+
+    audit = {"applied": False, "reason": "", "gain": {}, "code": None}
+    pool = [int(n) for n in ordered_pool]
+    tickets = [sorted(int(n) for n in t) for t in wheel]
+    if not tickets or len(set(pool)) != len(pool):
+        audit["reason"] = "outside limits"
+        return wheel, audit
+    pick = len(tickets[0])
+    found = lr_candidates(len(pool), pick, len(tickets))
+    if not found or any(len(t) != pick for t in tickets):
+        audit["reason"] = "no scheme of this size"
+        return wheel, audit
+    best = tickets
+    for scheme in found:
+        candidate = [sorted(pool[p - 1] for p in v) for v in scheme.variants]
+        why, gain, _cov = _certify(
+            pool, best, candidate, int(guarantee), int(draw_n), int(max_num)
+        )
+        if not why:
+            best = candidate
+            audit.update(applied=True, gain=gain, code=scheme.code, reason="")
+        elif not audit["applied"]:
+            audit["reason"] = why
+    return (best if audit["applied"] else wheel), audit
+
+
+@lru_cache(maxsize=4)
+def _app_same_size(directory: str) -> dict:
+    """{(joc, cod): [(garanție, variante, {t: P})]} din `app_same_size.json`.
+
+    Fișierul e scris offline de `scripts/analysis/analyze_lr_schemes.py`:
+    wheel-urile motorului cu bugetul egal cu fiecare schemă, pe fiecare garanție.
+    Lipsă sau stricat: {} (panoul nu mai compară la același cost)."""
+    labels = {key: label for label, (key, *_rest) in _GAMES.items()}
+    try:
+        entries = json.loads(
+            (Path(directory) / "app_same_size.json").read_text("utf-8")
+        )
+        return {
+            (e["game"] if e["game"] in _GAMES else labels[e["game"]], int(e["code"])): [
+                (
+                    int(d["g"]),
+                    int(d["variants"]),
+                    {int(t): float(p) for t, p in d["P"].items()},
+                )
+                for d in e["designs"]
+            ]
+            for e in entries
+        }
+    except OSError, ValueError, KeyError, TypeError:
+        return {}
+
+
+def app_same_size(scheme: LRScheme) -> list[tuple[int, int, dict[int, float]]]:
+    """Wheel-urile aplicației cu bugetul schemei: (garanție, variante, șanse)."""
+    return _app_same_size(str(LR_DIR)).get((scheme.game, scheme.code), [])

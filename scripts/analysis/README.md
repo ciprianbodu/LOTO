@@ -1,5 +1,12 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Schemele LR: optimalitate și motor, 20.10.2026:** [unde se mai pot obține hituri](lr_optimality_2026-10-20.md).
+Cod 59 (6/49, 16 numere, 112 variante) atinge marginea superioară exactă la
+fiecare prag: nicio așezare de 112 variante nu prinde mai des. Motorul adoptă
+certificat schemele care îi bat construcția la același plafon (6/49 Cod 50,
+5/40 Cod 37, Joker Cod 15); la Joker, variantele aplicației domină codurile 35,
+34, 14, 13 și 12. Reproducere: `analyze_lr_schemes.py --app-out`.
+
 **Schemele reduse ale Loteriei Române, 17.10.2026:** [desfășurări oficiale verificate și comparate cu aplicația](lr_schemes_2026-10-17.md).
 Cele 33 de scheme cu variante întregi (6/49, 5/40, Joker) sunt importate din
 broșurile loto.ro numai dacă indexul de câștiguri recalculat coincide cu cel

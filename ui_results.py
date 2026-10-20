@@ -416,6 +416,7 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
             )
             + "."
         )
+        lines.extend(_lr_quality_lines(s, odds, price))
         if ours is not None:
             diff = [
                 f"{t}{'+' if t < max(odds) else ''} {_five_plus_pct(p)} față de "
@@ -448,6 +449,78 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
         "verificate pe indexul de câștiguri tipărit; pe extrageri uniforme șansele nu "
         "depind de numerele din pool."
     )
+    return lines
+
+
+def _lr_threshold(t: int, odds: dict) -> str:
+    return f"{t}{'+' if t < max(odds) else ''}"
+
+
+def _lr_quality_lines(s, odds: dict, price: float) -> list[str]:
+    """Cât de aproape e schema de maximul posibil și ce dă aplicația la același cost.
+
+    Maximul vine din `optimal_thresholds` (margine exactă pentru orice așezare
+    cu tot atâtea variante); comparația, din wheel-urile motorului precalculate
+    în `covering_designs/lr/app_same_size.json`."""
+    from covering.lr_schemes import _GAMES, _upper_bound, app_same_size, optimal_thresholds
+
+    _, pick, draws, universe = _GAMES[s.game]
+    best = set(optimal_thresholds(s))
+    if best >= set(odds):
+        lines = [
+            f"Schema {s.label} e optimă: nicio altă așezare de "
+            f"{count(s.size, 'variante', 'variantă')} pe {s.n} numere nu prinde mai "
+            "des, la niciun prag."
+        ]
+    else:
+        below = [
+            f"{_lr_threshold(t, odds)} {_five_plus_pct(p)} față de cel mult "
+            f"{_five_plus_pct(_upper_bound(s.n, s.size, pick, t, draws, universe))}"
+            for t, p in odds.items()
+            if t not in best
+        ]
+        lines = [
+            f"Schema {s.label} e sub maximul posibil pentru "
+            f"{count(s.size, 'variante', 'variantă')} pe {s.n} numere: "
+            + "; ".join(below)
+            + "."
+        ]
+    designs = app_same_size(s)
+    better = [
+        (g, v, p)
+        for g, v, p in designs
+        if v == s.size
+        and all(p[t] >= odds[t] - 1e-15 for t in odds)
+        and any(p[t] > odds[t] + 1e-15 for t in odds)
+    ]
+    if better:
+        g, v, p = max(better, key=lambda d: tuple(d[2][t] for t in sorted(odds, reverse=True)))
+        diff = "; ".join(
+            f"{_lr_threshold(t, odds)} {_five_plus_pct(p[t])} față de {_five_plus_pct(odds[t])}"
+            for t in odds
+            if p[t] > odds[t] + 1e-15
+        )
+        lines.append(
+            f"La același cost, aplicația prinde mai des decât {s.label}: cu plafonul "
+            f"{v} și garanția {g}, {diff}. Variantele ei se joacă la agenție ca "
+            "variante simple."
+        )
+        return lines
+    top = max(odds)
+    cheaper = [
+        (g, v, p)
+        for g, v, p in designs
+        if v < s.size and all(p[t] >= odds[t] - 1e-15 for t in odds if t < top)
+    ]
+    if cheaper:
+        g, v, p = min(cheaper, key=lambda d: d[1])
+        same = ", ".join(_lr_threshold(t, odds) for t in odds if t < top)
+        lines.append(
+            f"Aplicația dă la fel ({same}) cu {count(v, 'variante', 'variantă')}, "
+            f"{_thousands((s.size - v) * price)} Lei mai puțin (garanția {g}, fără "
+            f"plafon); la {_lr_threshold(top, odds)}: {_five_plus_pct(p[top])} față de "
+            f"{_five_plus_pct(odds[top])}."
+        )
     return lines
 
 

@@ -452,6 +452,12 @@ def _wheel_sig(
                     for t in range(pick - 1, 2, -1)
                 ]
                 lower = f"|lg1:{_sources_digest(*candidates)}"
+            # `lr<amprenta>`: schema redusă LR cu exact `cap` variante pe acest
+            # pool (`covering_designs/lr/`), adoptată numai certificată.
+            from covering.lr_schemes import lr_scheme_signature
+
+            scheme = lr_scheme_signature(int(pool_size), pick, cap) if cap > 0 else None
+            lower += f"|lr{scheme}" if scheme else ""
             if cap >= 65:
                 # `bd<amprenta>`: designul cu buget precalculat
                 # (`covering_designs/budget/`) când există pentru acest buget.
