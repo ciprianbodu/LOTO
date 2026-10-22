@@ -1572,7 +1572,7 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
                 "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului."
             ).classes("text-caption text-grey")
         ui.label(
-            "ℹ️ Walk-forward: istoricul listează +3, +4 și +5; ținta bench/alerte: "
+            "ℹ️ Walk-forward: istoricul listează +4 și +5; ținta bench/alerte: "
             f"≥{_bench_target()} (Loto 5/40 minimum 4+, Joker Urna 2 top-1)."
         ).classes("text-caption text-grey")
         _sections = (

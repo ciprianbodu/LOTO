@@ -491,7 +491,13 @@ def _penalty_sig(
         return ""
     # Factorul UI poate avea mai mult de 3 zecimale: 0.5001 și 0.5002 nu sunt
     # aceeași penalizare și nu trebuie să citească același rezultat cached.
-    return f"|rp{n}:{float(recent_penalty_factor).hex()}"
+    sig = f"|rp{n}:{float(recent_penalty_factor).hex()}"
+    if float(recent_penalty_factor) <= 0:
+        # Factorul 0 pune penalizatele sub TOATE nepenalizatele, și sub cele cu
+        # scor 0 (`loto_engine._below_unpenalized`, audit 2026-10-22): numai
+        # cheile cu factor 0 se invalidează, fără bump global.
+        sig += "|rpz1"
+    return sig
 
 
 _MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45, "6/45": 45, "5/50": 50}

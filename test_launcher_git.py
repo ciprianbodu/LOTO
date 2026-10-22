@@ -30,6 +30,38 @@ def git_for_helper(monkeypatch):
     if not WINDOWS:
         monkeypatch.setenv('LOTO_GIT_EXE', shutil.which('git'))
 
+
+@pytest.fixture(autouse=True)
+def explorer_lookup(monkeypatch):
+    """Lansatorul pornit din Explorer gaseste .bat-ul in folderul curent.
+
+    Unele terminale de agent (Claude Code) seteaza
+    NoDefaultCurrentDirectoryInExePath=1; atunci `cmd /c START_8000.bat` nu mai
+    cauta in folderul curent si testul pica fara nicio legatura cu lansatorul.
+    Explorer nu seteaza variabila, iar lansatoarele folosesc in interior numai
+    cai complete."""
+    monkeypatch.delenv('NoDefaultCurrentDirectoryInExePath', raising=False)
+
+
+def installed_git():
+    """Git-ul instalat, cum il vede Explorer: wrapper-ul `Git/cmd/git.exe`.
+
+    Din Git Bash, PATH incepe cu `Git/ucrt64/bin` (sau `mingw64/bin`), iar
+    `shutil.which` intoarce binarul MSYS. Acela are nevoie de PATH-ul shell-ului
+    pentru `sh` si DLL-uri; cu PATH-ul minim al Explorer-ului vechi nu poate
+    face fetch dintr-un remote local. Wrapper-ul isi pune singur PATH-ul."""
+    found = shutil.which('git')
+    if not found or not WINDOWS:
+        return found
+    path = Path(found)
+    if path.parent.name.lower() == 'bin' and path.parent.parent.name.lower() in {
+        'mingw64', 'ucrt64', 'clang64', 'clangarm64', 'mingw32', 'usr',
+    }:
+        wrapper = path.parents[2] / 'cmd' / 'git.exe'
+        if wrapper.is_file():
+            return str(wrapper)
+    return found
+
 # Istoric real din registru: verifica_istoric.py il valideaza ca pe cel versionat.
 DRAWS = '_ISTORIC/loto_6_49.csv'
 README = '_ISTORIC/externe/README.md'
@@ -89,7 +121,7 @@ def gitless_env():
     """Model Explorer's stale PATH while supplying an installed Git explicitly."""
     if not WINDOWS:
         pytest.skip('Windows PATH model')
-    git_exe = shutil.which('git')
+    git_exe = installed_git()
     if not git_exe:
         pytest.skip('Git is required to prepare the isolated repositories')
     env = os.environ.copy()

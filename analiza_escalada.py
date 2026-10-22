@@ -20,6 +20,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+# Ieșirea redirecționată (`> raport.txt`) e cp1252 pe Windows: fără asta
+# scriptul cădea cu UnicodeEncodeError la primul „Ă”/„→” (audit 2026-10-22).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 DATADIR = sys.argv[1] if len(sys.argv) > 1 else "_ISTORIC"
 
 GAMES = [

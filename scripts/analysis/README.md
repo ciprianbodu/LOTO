@@ -1,5 +1,16 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Audit pe module și mai multe hituri 4+, 22.10.2026:** [14 defecte reparate și pârghiile 4+ măsurate exact](audit_hits_2026-10-22.md).
+Zece zone auditate, fiecare constatare reprodusă și verificată adversarial; 14
+reparate, cu teste care pică pe codul vechi. Configurația pool 16 / garanția 4
+fără plafon e la plafonul oricărei așezări pe 16 numere (7,96% / 16,03% / 4,68%
+la 4+). Livrat: designuri cu buget pentru biletul de 5 (5/40 și Joker, plafon
+în principal 321..403, 92 de bugete de la 270), +1,0..4,0% la 4+, certificate
+pe ambele jocuri. Un pool de 17-20
+numere pe același număr de variante ar da mai mult (6/49, 152 de variante: până
+la 10,01%), dar cu garanția parțială: cere decizia utilizatorului.
+Reproducere: `python scripts/analysis/gen_budget_designs_pick5.py`.
+
 **Schemele LR: optimalitate și motor, 20.10.2026:** [unde se mai pot obține hituri](lr_optimality_2026-10-20.md).
 Cod 59 (6/49, 16 numere, 112 variante) atinge marginea superioară exactă la
 fiecare prag: nicio așezare de 112 variante nu prinde mai des. Pragurile sub
@@ -33,7 +44,7 @@ Reproducere: `gen_refined_covers.py`, `gen_refined_lotto.py` (gcc).
 6/49, garanția 4, pool 13-16, toate cele 194 de bugete sub designul complet:
 P(4+ pe un bilet) crește cu mediana +7,25% la pool 16 (maxim +15,56%), niciun
 prag nu scade; certificate la fiecare apel față de căutarea din proces. Biletul
-de 5 măsurat și nelivrat (cel mult +2,6%).
+de 5 măsurat și nelivrat atunci (cel mult +2,6%); livrat la 22.10.2026, mai sus.
 Reproducere: `python scripts/analysis/gen_budget_designs.py` (gcc, ~1 h pe 3 procese).
 
 **„Bilet complet” cu garanția completă, 12.10.2026:** [rearanjarea tuturor variantelor](full_cover_anneal_2026-10-12.md).

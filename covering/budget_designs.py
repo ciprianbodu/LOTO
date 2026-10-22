@@ -73,6 +73,13 @@ def _parse(text: str, v: int, pick: int) -> dict[int, tuple[tuple[tuple[int, ...
         blocks = []
         ok = True
         for line in lines:
+            # `split()` și `int()` acceptă și spațiul neseparabil sau cifrele
+            # Unicode; amprenta ASCII de mai jos ar ridica atunci pentru tot
+            # fișierul. O linie ne-ASCII strică numai secțiunea ei (audit
+            # 2026-10-22), iar amprenta secțiunilor valide rămâne aceeași.
+            if not line.isascii():
+                ok = False
+                break
             try:
                 nums = [int(x) for x in line.replace(",", " ").split() if x.strip()]
             except ValueError:

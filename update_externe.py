@@ -520,6 +520,19 @@ def plan_update(lottery, have: list[Draw], src: list[Draw], today: dt.date) -> t
     if checked == 0:
         # Fără suprapunere nu putem dovedi că sursa e aceeași cu istoricul.
         raise SourceError(f"nicio extragere comuna cu CSV-ul (ultima din CSV: {last:%d-%m-%Y})")
+    # AGENTS.md §4.1, ca update_csv (regula 4) și verifica_istoric: aceleași
+    # numere principale ca rândul anterior (ultimul stocat sau rândul nou
+    # dinainte) sunt o copie, nu o extragere. Fără verificare, copia se scria,
+    # iar PushHistory refuza apoi tot fișierul la fiecare pornire (audit
+    # 2026-10-22).
+    prev = have[-1]
+    for d in new:
+        if _key(lottery, d.nums)[0] == _key(lottery, prev.nums)[0]:
+            raise SourceError(
+                f"extragerea din {d.date:%d-%m-%Y} repeta numerele randului anterior "
+                f"({prev.date:%d-%m-%Y}): copie, nu extragere"
+            )
+        prev = d
     return new, checked
 
 

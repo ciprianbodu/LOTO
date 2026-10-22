@@ -62,7 +62,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v21` (schemele LR adoptate certificat la plafonul egal cu marimea lor si coverul garantiei mai mici completat pana la plafon, 2026-10-20; v20 DMD cu subspatiile singulare la egalitate; v19 `hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v22` (factorul 0 al penalizarii recente pune numerele penalizate sub toate cele nepenalizate, si sub cele cu scor 0, 2026-10-22; v21 schemele LR adoptate certificat la plafonul egal cu marimea lor si coverul garantiei mai mici completat pana la plafon, 2026-10-20; v20 DMD cu subspatiile singulare la egalitate; v19 `hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -80,6 +80,65 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Audit pe module si mai multe hituri 4+ — 2026-10-22
+
+- Cerinta: verificare globala pe module si optimizare pentru mai multe hituri
+  4+. Zece zone auditate in paralel; fiecare constatare reprodusa de auditor,
+  apoi verificata separat (reproducere pe HEAD) si de un arbitru pe
+  contractele de aici. 14 reparate, fiecare cu test care pica pe codul vechi
+  (`test_audit_2026_10_22.py`); 15 respinse (intrare imposibila din productie,
+  comportament documentat). Raport: `scripts/analysis/audit_hits_2026-10-22.md`.
+- Reparatii:
+  - bench: scrierea finala a `folds.csv` refuzata (fisier tinut deschis fara
+    partajare la stergere) se loga la DEBUG, iar decizia se construia din
+    `folds.csv` vechi, stampilata proaspata; acum 10 incercari, apoi bench-ul
+    se opreste (`runner._flush_folds(final=True)`); flush-urile periodice
+    raman best-effort, cu WARNING;
+  - bench: consola 5/40 scria „hits@k6” pentru media pe k5; tabelul regresiv
+    primeste `base_k`; `_ISTORIC` si `_istoric` (acelasi folder pe Windows)
+    nu mai dau trei avertismente false la fiecare bench;
+  - motor: factorul 0 al penalizarii (§6), cheia WF `|rpz1`, worker `v22`;
+  - covering: scorul lipsa merge la coada pozitiilor (`_pool_rank_key`); o
+    linie ne-ASCII strica numai sectiunea H a ei, cu amprentele celorlalte
+    neschimbate;
+  - date: `update_csv` respinge randul cu o celula in plus (la Joker al
+    saselea numar devenea Joker-ul); pe paginile reale loto49.ro, 3.155 de
+    randuri citite la fel, zero respinse. `update_externe.plan_update`
+    refuza copia randului anterior (§4.1). `analiza_4plus` si
+    `analiza_escalada` scriu UTF-8 si cu iesirea redirectionata;
+  - UI: legenda clasamentului live spune „+4 si +5”; linia „Cod X fata de
+    wheel-ul nostru” foloseste `_lr_pct_pair`;
+  - worker: o eroare SQLite trecatoare la `complete_job` se reincearca, apoi
+    rezultatul se salveaza pe disc (`_complete_with_retry`); la progres,
+    eroarea doar se logheaza. Curatarea de la START_8000 nu mai lasa un PID
+    reciclat sa adopte procese mai vechi (`create_time`, ca psutil) si
+    potriveste calea proiectului ca segment de cale.
+- Revizia adversariala a diff-ului (4 zone, fiecare constatare verificata
+  separat): 5 confirmate, toate reparate, cu teste. Un bench fara niciun fold
+  (istoricele cazute la incarcare) nu mai reconstruieste decizia din
+  `folds.csv` vechi si iese cu 1; la factorul 0, penalizatele urmeaza
+  aparitiile, apoi scorul, si cand un scor e 0; Ctrl+C in pauza dintre
+  incercari nu mai lasa copia tmp; testul UTF-8 al scripturilor de analiza;
+  cifrele intervalului H_16_5_4 in documentatie.
+- Testele lansatorului modeleaza mediul Explorer-ului: scot
+  `NoDefaultCurrentDirectoryInExePath` (setata de terminalele de agent) si
+  folosesc `Git\cmd\git.exe` in locul binarului MSYS din PATH-ul Git Bash.
+  Inainte, 8 cazuri picau rulate din Claude Code, fara defect in lansator.
+- Hituri 4+ (exact, extrageri uniforme; cifrele cheie recalculate independent):
+  - contabilizarea WF e corecta (zero diferente pe 180 de pasi, trei jocuri);
+    configuratia pool 16 / g4 fara plafon e la plafonul oricarei asezari pe
+    16 numere (6/49 7,960002%, 5/40 16,026553%, Joker 4,677518%);
+  - „Bilet complet” cu 2 bilete: 4+ dovedit optim la toate trei jocurile;
+  - livrat: `H_16_5_4.txt` (§7), +1,0..4,0% la 4+ cu plafon in principal
+    321..403 (92 de bugete, de la 270);
+  - nelivrat, cere decizia utilizatorului: un pool de 17-20 numere pe acelasi
+    numar de variante bate orice asezare pe 16 la 4+ (6/49, 152 de variante:
+    8,50% / 9,32% / 10,01% la 17 / 18 / 20 numere; 5/40 si Joker, 404:
+    17,55% si 5,17% la 18), fara prag in scadere, dar garantia „4 sigur” devine
+    partiala (72% din grupe la 18 numere). Portofoliile de coduri LR pe
+    pool-uri disjuncte (6/49 Cod 49+57+59: 10,32% la 149 de variante) ies din
+    pool, ca variantele dispersate scoase la 2026-10-10.
 
 ### Schemele LR in motor si optimalitatea lor — 2026-10-20
 
@@ -1954,9 +2013,12 @@ limita de validitate din §5).
   (`recent_penalty_draws_val = 0` in UI) — nu schimba pool-ul fara nicio actiune
   a utilizatorului. Odata setat un numar de extrageri > 0 (factor implicit 0.5),
   scorul unui numar extras de k ori in ultimele N extrageri se inmulteste cu
-  factor^k, inainte de top-N. Se aplica identic in productie si in walk-forward
-  (intra in cheia de cache WF cand e activa) si este raportata in
-  `audit.recent_penalty`. Este o preferinta de compozitie a pool-ului, neutra ca
+  factor^k, inainte de top-N. Factorul 0 pune numerele penalizate sub TOATE
+  cele nepenalizate, inclusiv sub cele cu scor 0 sau negativ, cu ordinea dintre
+  ele pastrata (aparitiile intai, apoi scorul; `loto_engine._below_unpenalized`,
+  2026-10-22). Se aplica identic in productie si in walk-forward
+  (intra in cheia de cache WF cand e activa; factorul 0 primeste in plus
+  `|rpz1`) si este raportata in `audit.recent_penalty`. Este o preferinta de compozitie a pool-ului, neutra ca
   valoare asteptata: analizele din `scripts/analysis/` nu au demonstrat
   predictibilitate pentru paritate, decade, sume sau tipare recente, iar
   penalizarea nu trebuie prezentata drept avantaj statistic.
@@ -2118,10 +2180,17 @@ bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, pe care il da numai motorul
   (`anneal_hits._certify`): acelasi numar de bilete distincte, numerele
   jucate pastrate, niciun prag 3..extrase in scadere, castig strict,
   acoperirea garantiei nu scade; altfel ramane wheel-ul din proces (~2 ms).
-  O sectiune invalida e sarita de loader. Biletul de 5 (5/40, Joker) e
-  masurat si nelivrat: productia e deja impachetare perfecta la bugetele mici
-  si medii, cel mult +2,6% langa designul complet. Raport:
-  `scripts/analysis/budget_designs_2026-10-12.md`.
+  O sectiune invalida (inclusiv o linie ne-ASCII) e sarita de loader, singura.
+  Raport: `scripts/analysis/budget_designs_2026-10-12.md`.
+  Biletul de 5 (5/40, Joker), pool 16 g4, din 2026-10-22: `H_16_5_4.txt`, 92
+  de bugete (in principal 321..403, fara 348), din taierea greedy a coverului
+  complet de 404 (`scripts/analysis/gen_budget_designs_pick5.py`). O sectiune
+  intra numai certificata pe AMBELE jocuri fata de motor, cu cel putin +1% la
+  4+ pe fiecare, si niciodata la marimea unei scheme LR de 16 numere (Cod 37 =
+  348 ramane schema). Castig la 4+ 1,0..3,2% (5/40) si 1,0..4,0% (Joker); la
+  403 de variante motorul pierdea 3,5% fata de 404. Bugetele mici si medii
+  raman pe `budget_climb` (impachetare perfecta). Fara plafon fisierul nu se
+  citeste. Cifrele pe fiecare buget: `budget_designs_pick5_2026-10-22.json`.
 
 Recoacerea pe sansa exacta (2026-10-11, `covering/anneal_hits.py`): dupa
 hitcover si schimburile de profil, la 1..64 de bilete pe calea motorului
@@ -2366,7 +2435,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v23` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v21` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v22` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.

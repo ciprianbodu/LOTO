@@ -423,11 +423,13 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
         )
         lines.extend(_lr_quality_lines(s, odds, price))
         if ours is not None:
+            # Două șanse diferite primesc cifre în plus când ar ieși la fel
+            # (`_lr_pct_pair`, ca pe rândul de calitate; audit 2026-10-22).
             diff = [
-                f"{t}{'+' if t < max(odds) else ''} {_five_plus_pct(p)} față de "
-                f"{_five_plus_pct(ours[t])}"
+                f"{t}{'+' if t < max(odds) else ''} {a} față de {b}"
                 for t, p in odds.items()
                 if abs(p - ours[t]) > 1e-12
+                for a, b in [_lr_pct_pair(p, ours[t])]
             ]
             delta = len(variants) - s.size
             cost = (

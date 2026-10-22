@@ -42,6 +42,11 @@ from loto_enterprise.core.score_validation import has_usable_score_variance
 
 logger = logging.getLogger(__name__)
 
+# Scrierea finală a folds.csv: încercări la un `os.replace` refuzat pe Windows
+# (fișier ținut deschis de alt proces), cu pauză crescătoare (~9 s în total).
+_FINAL_FLUSH_ATTEMPTS = 10
+_FINAL_FLUSH_BACKOFF_SEC = 0.2
+
 # Co-apariția din aceeași extragere e zero când fiecare rând are o singură bilă.
 # Lista doar evită bucla; fold-ul e failed doar dacă sonda chiar e plată.
 _SINGLE_PICK_FLAT_METHODS = frozenset(
@@ -93,7 +98,24 @@ def _list_istoric_dirs() -> list[Path]:
         Path("_LOTO/istoric"),
         Path("_LOTO/ISTORIC"),
     ]
-    return [p for p in candidates if p.exists()]
+    # Pe un disc fără majuscule (Windows), `_ISTORIC` și `_istoric` sunt același
+    # folder: a doua trecere ignora fiecare CSV românesc cu un avertisment fals
+    # „nume nerecunoscut sau joc deja luat” (audit 2026-10-22).
+    found: list[Path] = []
+    for p in candidates:
+        if not p.exists():
+            continue
+        if any(_same_dir(p, q) for q in found):
+            continue
+        found.append(p)
+    return found
+
+
+def _same_dir(a: Path, b: Path) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
 
 
 # Numele exacte ale istoricelor românești. `discover_games` le ia ÎNAINTEA
@@ -759,10 +781,19 @@ def run_benchmark(
         logger.debug(f"[bench_cache] import failed: {_cache_exc}")
         _cache_ok = False
 
-    def _flush_folds():
+    def _flush_folds(final: bool = False):
         """Scrie folds.csv ATOMIC din fold_rows-urile de PÂNĂ ACUM. Apelat periodic ca
         rezultatele să supraviețuiască unei anulări/crash (înainte se scria DOAR la final
-        → 2h de bench anulat = folds.csv gol). Întoarce DataFrame-ul (pt agregare)."""
+        → 2h de bench anulat = folds.csv gol). Întoarce DataFrame-ul (pt agregare).
+
+        Scrierea finală (`final=True`) e strictă: decizia de producție
+        (`write_bench_decision`) recitește folds.csv de pe disc, deci un
+        `os.replace` refuzat (alt proces ține fișierul deschis fără partajare la
+        ștergere: Excel, un cititor pandas, sincronizarea Drive) se reîncearcă,
+        apoi ridică. Înainte eșecul se loga la DEBUG, iar decizia se construia
+        din flush-ul periodic anterior sau din bench-ul precedent, ștampilată
+        „proaspătă” (audit 2026-10-22). Flush-urile periodice rămân best-effort,
+        cu WARNING."""
         if not fold_rows:
             return pd.DataFrame()
         rows = []
@@ -802,13 +833,32 @@ def run_benchmark(
                 _df.to_csv(_fh, index=False)
                 _fh.flush()
                 os.fsync(_fh.fileno())
-            os.replace(_tmp, _target)  # atomic (OneDrive-safe)
-        except Exception as exc:  # noqa: BLE001
+            attempts = _FINAL_FLUSH_ATTEMPTS if final else 1
+            for attempt in range(1, attempts + 1):
+                try:
+                    os.replace(_tmp, _target)  # atomic (OneDrive-safe)
+                    break
+                except PermissionError:
+                    if attempt == attempts:
+                        raise
+                    time.sleep(_FINAL_FLUSH_BACKOFF_SEC * attempt)
+        except BaseException as exc:  # noqa: BLE001
+            # Și la Ctrl+C în pauza dintre încercări: copia tmp nu rămâne în
+            # bench_results (audit 2026-10-22, revizia diff-ului).
             try:
                 _tmp.unlink(missing_ok=True)
             except OSError:
                 pass
-            logger.debug("[bench] flush folds.csv esuat: %s", exc)
+            if not isinstance(exc, Exception):
+                raise
+            if final:
+                logger.error(
+                    "[bench] folds.csv final NU s-a putut scrie (%s): decizia nu se "
+                    "construieste din fisierul vechi.",
+                    exc,
+                )
+                raise
+            logger.warning("[bench] flush periodic folds.csv esuat: %s", exc)
         return _df
 
     def _handle_result(game, method, pct, is_random, fr, from_cache, kind):
@@ -1142,7 +1192,7 @@ def run_benchmark(
             _run_seq_one(a)
 
     # ----- Save per-fold CSV (scriere finală; pe parcurs s-a flush-uit periodic) -----
-    df = _flush_folds()
+    df = _flush_folds(final=True)
     pool_keys_per_game = {}
     for g in games:
         if g.is_single_pick:
