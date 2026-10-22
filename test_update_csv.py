@@ -253,7 +253,9 @@ def test_update_all_refuses_when_the_site_changed_a_stored_draw(
     assert added == 0, out
     assert _unchanged(istoric, before)
     assert f"EROARE verificare: extragerile din {day} diferă" in out
-    assert f"NEACTUALIZATE: {uc.GAME_CONFIGS[key]['display_name']}" in out
+    # Celelalte jocuri (doar antet, sărite) sunt și ele în listă.
+    listed = out.split("NEACTUALIZATE: ", 1)[1].split(" (vezi motivul")[0]
+    assert uc.GAME_CONFIGS[key]["display_name"] in listed.split(", ")
 
 
 def test_update_all_ignores_site_differences_older_than_the_window(

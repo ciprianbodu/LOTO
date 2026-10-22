@@ -899,12 +899,16 @@ def run_benchmark(
     # ── PRE-PASS: încarcă TOATE jocurile, construiește task-urile, rezolvă cache-ul.
     # Adunăm TOATE task-urile (din toate jocurile) într-un singur pool global de procese.
     all_cpu_compute = []  # (method, train, test, game, block_size, pct, is_random, csv_hash)
+    # Jocurile al căror istoric nu s-a încărcat: decizia nu se rescrie dintr-un
+    # bench fără ele (bench_all_methods, `games_load_failed` din report.json).
+    load_failed: list[str] = []
 
     for game in games:
         try:
             draws = load_draws(game)
         except Exception as exc:
             logger.error("[%s] CSV load failed: %s", game.key, exc)
+            load_failed.append(game.key)
             continue
         n = len(draws)
         logger.info("[%s] %d draws loaded from %s", game.key, n, game.csv_path)
@@ -1209,6 +1213,9 @@ def run_benchmark(
     report["methods_per_game"] = {
         g.key: _methods_for_game(methods, methods_per_game, g.key) for g in games
     }
+    if load_failed:
+        # Numai când există: report.json rămâne byte-identic pe calea normală.
+        report["games_load_failed"] = load_failed
     # Scriere atomică (tmp per-PID + fsync + rename) — OneDrive-safe, ca folds.csv.
     import uuid as _uuid
 

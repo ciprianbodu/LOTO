@@ -112,6 +112,14 @@ def check_history(
             f"randul {lines[copy]} repeta numerele randului {lines[copy - 1]} "
             "(copie, nu extragere)"
         )
+    # Actualizatoarele citesc numerele cu int(): "1.0" sau "1e0" trec de
+    # valid_draw_matrix, dar ar opri update_externe/update_csv pe toate statiile.
+    for row, line in zip(rows, lines):
+        try:
+            for cell in row[1:]:
+                int(cell)
+        except ValueError:
+            return f"randul {line}: numere invalide pentru {geo.name}: {_shown(row)}"
     return None
 
 

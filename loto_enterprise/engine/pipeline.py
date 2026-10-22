@@ -676,7 +676,13 @@ class PipelineMixin:
                     nums = [row[c] for c in n_cols if pd.notna(row.get(c))]
                     d["numbers"] = [int(x) for x in nums][:draw_n]
                     if "joker" in df_subset.columns and pd.notna(row.get("joker")):
-                        d["joker"] = int(row["joker"])
+                        try:
+                            d["joker"] = int(row["joker"])
+                        except (TypeError, ValueError, OverflowError):
+                            # Urna 2 necitibilă („?”, „1o”, inf): afișată ca
+                            # lipsă, ca în `_valid_joker_values`; înainte
+                            # pica tot jobul după wheel (audit 2026-10-22b).
+                            d["joker"] = None
                     draws.append(d)
                 return draws
 

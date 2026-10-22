@@ -828,7 +828,10 @@ def _country_bench_texts(country: str) -> dict:
 
         avail = [m for m in list_methods() if method_meta(m).get("available", True)]
         kept, _info = apply_curation(avail)
-        n_methods = len(kept)
+        # `random` e deja în lista curată (REQUIRED_METHODS), iar runner-ul îl
+        # rulează o singură dată: textul îl numește separat și ținta îl adaugă
+        # o singură dată (+1 mai jos), nu încă o dată peste listă.
+        n_methods = len([m for m in kept if m != "random"])
     except Exception:  # noqa: BLE001
         n_methods = 0
     n_main = len(games)
@@ -1303,6 +1306,15 @@ def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
     schimbare a țintei 3+/4+, cache-ul găsit sub decizia de acum validează altă
     metodă decât cea care a produs pool-ul afișat. Se compară cu auditul
     rezultatului (`bench_winner`), pe aceeași cale ca motorul; la Joker și Urna 2."""
+    for _key, now, info in _decision_methods_now(g_label, data):
+        if info.get("method") != now:
+            return False
+    return True
+
+
+def _decision_methods_now(g_label: str, data: dict):
+    """(cheie, metoda deciziei de acum, auditul rezultatului) pentru fiecare cheie
+    de bench a jocului (Joker: și Urna 2), pe aceeași cale ca motorul."""
     from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
     from loto_enterprise.core.method_selector import (
         decision_path_for,
@@ -1324,9 +1336,44 @@ def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
             )
             if ens:
                 now = ens[0][0]
-        if (used.get(key) or {}).get("method") != now:
-            return False
-    return True
+        yield key, now, used.get(key) or {}
+
+
+def _generation_used_engine_reserve(g_label: str, data: dict) -> str:
+    """Scorerul deciziei care a eșuat la generare, când pool-ul afișat vine din
+    rezerva `frequency` a motorului și decizia de acum îl numește tot pe el.
+
+    Decizia nu s-a mutat, dar WF-ul rămâne sărit: pașii ar fi scorați de metoda
+    deciziei, nu de `frequency`, care a produs pool-ul (AGENTS.md §8). `attempted`
+    absent = rezultat fără numele încercat. Gol dacă vreo cheie nepotrivită nu e
+    rezerva motorului (decizie mutată cu adevărat)."""
+    names: list[str] = []
+    for _key, now, info in _decision_methods_now(g_label, data):
+        if info.get("method") == now:
+            continue
+        if not (
+            info.get("fallback")
+            and not info.get("no_decision")
+            and info.get("method") == "frequency"
+            and info.get("attempted") in (None, now)
+        ):
+            return ""
+        if now not in names:
+            names.append(now)
+    return ", ".join(names)
+
+
+def _wf_skip_mark(g_label: str, data: dict) -> dict:
+    """Marcajul (`retro_meta`) unui joc al cărui WF e sărit pentru că alt scorer
+    decât cel care a produs pool-ul afișat i-ar scora pașii: motivul adevărat."""
+    try:
+        scorer = _generation_used_engine_reserve(g_label, data)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WF] %s: nu pot citi rezerva de la generare: %s", g_label, exc)
+        scorer = ""
+    if scorer:
+        return {"scorer_fallback": True, "scorer": scorer}
+    return {"decision_moved": True}
 
 
 def _decision_moved_since_generation(g_label: str, data: dict) -> bool:
@@ -1369,16 +1416,16 @@ def _load_cached_walk_forward() -> int:
         try:
             if not _result_scorers_match_decision(g_label, data):
                 logger.info(
-                    "[WF] %s: decizia s-a schimbat de la generare — validarea din "
-                    "cache ar fi a altei metode; nu o afișez.",
+                    "[WF] %s: decizia de acum nu alege metoda care a produs "
+                    "rezultatul — validarea din cache ar fi a altei metode; nu o afișez.",
                     g_label,
                 )
                 if _decision_moved_since_generation(g_label, data):
                     # Același aviz ca la calea live, nu o secțiune care lipsește.
                     with STATE_LOCK:
-                        STATE.setdefault("retro_meta", {})[f"{fname}_{g_label}"] = {
-                            "decision_moved": True
-                        }
+                        STATE.setdefault("retro_meta", {})[f"{fname}_{g_label}"] = (
+                            _wf_skip_mark(g_label, data)
+                        )
                 continue
             flat, meta = run_honest_walk_forward(
                 df_source=df_source,
@@ -1483,14 +1530,18 @@ def _start_walk_forward() -> None:
                 if _decision_moved_since_generation(g_label, data):
                     # Pașii ar fi scorați de altă metodă decât cea care a produs
                     # pool-ul afișat; nu se rulează și nu se afișează drept ai lui.
+                    _skip = _wf_skip_mark(g_label, data)
                     logger.warning(
-                        "[WF] %s: decizia de bench s-a schimbat după generare — "
-                        "walk-forward sărit.",
+                        "[WF] %s: %s — walk-forward sărit.",
                         g_label,
+                        f"pool din rezerva frequency (scorerul deciziei {_skip['scorer']} "
+                        "a eșuat la generare)"
+                        if _skip.get("scorer_fallback")
+                        else "decizia de bench s-a schimbat după generare",
                     )
                     with STATE_LOCK:
                         STATE["retro"].pop(rk, None)
-                        STATE.setdefault("retro_meta", {})[rk] = {"decision_moved": True}
+                        STATE.setdefault("retro_meta", {})[rk] = _skip
                     continue
                 base = (done - 1) / max(1, total)
                 STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."

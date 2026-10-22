@@ -418,6 +418,46 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
     return cache_key
 
 
+def _progress_stops_job(job_id: int, pct: int, msg: str) -> bool:
+    """`update_job_progress` al workerului; True = jobul nu mai e RUNNING/al lui.
+
+    O eroare SQLite trecătoare („database is locked” după busy_timeout, disk
+    I/O) la un simplu progres nu oprește jobul: se loghează și rularea
+    continuă, ca în `progress_cb`. Înainte scrierile de 2%, 3% și 99% nu erau
+    păzite: jobul ieșea FAILED, iar la 99% rezultatul calculat se pierdea
+    (audit 2026-10-22b). O anulare ratată aici se vede la progresul următor
+    sau la `complete_job`, care scrie numai pe jobul RUNNING al acestui worker."""
+    try:
+        return update_job_progress(job_id, pct, msg, worker_token=WORKER_TOKEN)
+    except sqlite3.Error as exc:
+        logging.warning(
+            "[worker] Job %s: progresul n-a putut fi scris (%s); continui.",
+            job_id,
+            exc,
+        )
+        return False
+
+
+def _job_cancelled(job_id: int) -> bool:
+    """`is_job_cancelled` care nu pierde rularea la o eroare SQLite trecătoare.
+
+    Eroarea se loghează și jobul continuă: `update_job_progress` și
+    `complete_job` scriu numai pe un job RUNNING al acestui worker, deci o
+    anulare ratată oprește rularea la progresul următor sau trimite rezultatul
+    pe disc (`_dump_orphan_result`), niciodată peste jobul anulat. Înainte
+    eroarea de după rulare marca jobul FAILED și rezultatul se pierdea fără
+    copie (audit 2026-10-22b)."""
+    try:
+        return is_job_cancelled(job_id)
+    except sqlite3.Error as exc:
+        logging.warning(
+            "[worker] Job %s: verificarea anulării a eșuat (%s); continui.",
+            job_id,
+            exc,
+        )
+        return False
+
+
 def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     from loto_enterprise.core.lotteries import UnknownLotteryError
 
@@ -447,9 +487,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         return None
     cache_key = _pipeline_cache_key(input_hash, cfg) if use_cache else ""
 
-    if update_job_progress(
-        job_id, 3, "Încarc motorul de generare...", worker_token=WORKER_TOKEN
-    ):
+    if _progress_stops_job(job_id, 3, "Încarc motorul de generare..."):
         logging.info(
             "[worker] Job %s nu mai este RUNNING; opresc înainte de engine.", job_id
         )
@@ -466,11 +504,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     if use_cache and cache_key:
         cached = get_pipeline_cache(cache_key)
         if cached:
-            if update_job_progress(
-                job_id,
-                100,
-                "Cache hit: rezultat reutilizat (hash CSV identic).",
-                worker_token=WORKER_TOKEN,
+            if _progress_stops_job(
+                job_id, 100, "Cache hit: rezultat reutilizat (hash CSV identic)."
             ):
                 logging.info(
                     "[worker] Job %s a pierdut starea RUNNING la cache hit.", job_id
@@ -562,7 +597,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     raise Exception("STOP_REQUESTED")
 
             try:
-                if is_job_cancelled(job_id):
+                if _job_cancelled(job_id):
                     logging.info(
                         f"[worker] Job {job_id} anulat în timpul execuției "
                         f"(task {game_label}). Oprire."
@@ -655,9 +690,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         _remove_temp_csv(temp_csv_path)
         results_bundle.append((fname, outputs))
 
-    if update_job_progress(
-        job_id, 99, "Pregătesc rezultatul final pentru UI...", worker_token=WORKER_TOKEN
-    ):
+    if _progress_stops_job(job_id, 99, "Pregătesc rezultatul final pentru UI..."):
         logging.info(
             "[worker] Job %s nu mai este RUNNING înainte de serializare.", job_id
         )
@@ -754,15 +787,13 @@ def _complete_with_retry(job_id: int, result_json: str) -> bool:
 def _process_one_job(job: dict) -> None:
     task_type = str(job.get("task_type") or "")
     job_id = int(job["id"])
-    if update_job_progress(
-        job_id, 2, "Job preluat de worker.", worker_token=WORKER_TOKEN
-    ):
+    if _progress_stops_job(job_id, 2, "Job preluat de worker."):
         logging.info(
             "[worker] Job %s nu mai este RUNNING imediat după claim; sarim.", job_id
         )
         return
 
-    if is_job_cancelled(job_id):
+    if _job_cancelled(job_id):
         logging.info(f"[worker] Job {job_id} a fost anulat (CANCELLED), sarim.")
         return
 
@@ -776,7 +807,7 @@ def _process_one_job(job: dict) -> None:
     if result_json is None:
         return
 
-    if is_job_cancelled(job_id):
+    if _job_cancelled(job_id):
         logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
         return
 

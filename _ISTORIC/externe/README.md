@@ -146,5 +146,7 @@ jocul acela) și adaugă numai extragerile mai noi, atomic, cu LF. Manual:
 
 ### `slovacia_loto_6din49.csv`: Slovacia, Loto
 
+- Extrageri miercurea, vinerea (din 07-03-2025) și duminica, câte două pe zi.
+
 - 5.164 de rânduri, 02.10.2002 – 25.09.2026 (la import), din arhiva oficială TIPOS.
 - Verificare: 450 de extrageri comparate cu o sursă independentă, zero diferențe.

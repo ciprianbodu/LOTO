@@ -48,9 +48,35 @@ fi
 
 GIT_TERMINAL_PROMPT=0
 export GIT_TERMINAL_PROMPT
-if git push --quiet origin main </dev/null; then
+# Output captured only to tell a rejection apart; printed unchanged.
+if out=$(git push --quiet origin main </dev/null 2>&1); then
+    [ -z "$out" ] || printf '%s\n' "$out" >&2
     echo "[git] auto-push origin/main ok" >&2
 else
-    echo "[git] auto-push failed; commit is local. Retry: git push origin main" >&2
+    [ -z "$out" ] || printf '%s\n' "$out" >&2
+    # Rejected: origin/main has commits HEAD lacks, a bare retry fails again.
+    case "$out" in
+        *'[rejected]'*)
+            # Same tests as Sync (scripts/launcher_git.ps1), in its order: an
+            # unpushed merge commit, or a former main tip in HEAD..origin/main
+            # (a pushed commit rewritten by amend/reset), stays manual there.
+            why=
+            merges=$(git rev-list --merges --count origin/main..HEAD 2>/dev/null || echo 0)
+            if [ "$merges" != "0" ]; then
+                why="are un commit de merge netrimis"
+            else
+                up=$(git rev-list HEAD..origin/main 2>/dev/null)
+                if [ -n "$up" ] && git reflog show --format=%H -n 200 refs/heads/main 2>/dev/null | grep -qxF "$up"; then
+                    why="rescrie un commit deja trimis (amend sau reset)"
+                fi
+            fi
+            if [ -n "$why" ]; then
+                echo "[git] auto-push respins: main local $why; commit-ul ramane local, iar integrarea cu origin/main ramane manuala." >&2
+            else
+                echo "[git] auto-push respins: origin/main are commit-uri noi; commit-ul ramane local. Integrati intai: porniti START_8000.bat sau ACTUALIZARI.bat (Sync integreaza si trimite) sau rulati git pull --rebase origin main, apoi git push origin main" >&2
+            fi ;;
+        *)
+            echo "[git] auto-push failed; commit is local. Retry: git push origin main" >&2 ;;
+    esac
 fi
 exit 0

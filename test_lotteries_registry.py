@@ -307,7 +307,7 @@ def test_verified_facts_for_germany_poland_spain():
         ("be_lotto", "BE", "Lotto", "6/45", 1.5, "EUR", 14, (2, 5)),
         ("hu_hatos", "HU", "Hatoslottó", "6/45", 500.0, "HUF", 20, (3, 6)),
         ("cz_sportka", "CZ", "Sportka", "6/49", 30.0, "CZK", 8, (2, 4, 6)),
-        ("sk_loto", "SK", "Loto", "6/49", 1.2, "EUR", 10, (2, 6)),
+        ("sk_loto", "SK", "Loto", "6/49", 1.2, "EUR", 10, (2, 4, 6)),
         ("eu_euromillions", "EU", "EuroMillions", "5/50", None, "EUR", None, (1, 4)),
     ],
 )

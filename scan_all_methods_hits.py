@@ -30,7 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 try:
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 except Exception:
     pass
 
@@ -114,7 +114,11 @@ def _available_methods() -> list[str]:
 def scan_game(
     game, pools: tuple[int, ...], methods: list[str], workers: int
 ) -> list[dict]:
-    draws = _load_draws(Path(game.csv_path), game.draw_n)
+    from loto_enterprise.benchmark.runner import load_draws
+
+    # Ca bench-ul: aceeasi ordonare/validare si game.history_cutoffs completat,
+    # deci istoricul unei tinte exclude extragerile din ziua ei.
+    draws = load_draws(game)
     n = len(draws)
     n_test = max(1, int(math.ceil(n * PCT / 100.0)))
     n_train = n - n_test

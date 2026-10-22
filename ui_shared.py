@@ -479,6 +479,12 @@ class file_lock:
 # --------------------------------------------------------------------------- #
 # Worker
 # --------------------------------------------------------------------------- #
+# Opțiunea Python -m/-c, și lipită de flaguri fără valoare (`-midlelib`, `-Bm`,
+# `-Ic`): tot ce urmează e argv-ul modulului sau al comenzii, nu scriptul rulat.
+# Nu prinde -X…/-W… (valoarea lor poate conține „c”/„m”) și nici --opțiuni lungi.
+_PY_MODULE_OR_CMD = re.compile(r"-[bBdEhiIOPqRsSuvVx]*[cm]")
+
+
 def is_worker_running() -> bool:
     """Compară fiecare argument din cmdline cu `WORKER_PATH`, NU substring pe
     linia de comandă întreagă. Vechiul `root in cmd` (root = PROJECT_ROOT ca
@@ -496,9 +502,20 @@ def is_worker_running() -> bool:
     target_norm = os.path.normcase(str(WORKER_PATH))
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
+            # Numai un interpretor Python poate fi workerul: un editor sau un
+            # shell deschis pe worker.py are aceeași cale în argv și bloca
+            # repornirea workerului mort (audit 2026-10-22b). Prefix, nu listă
+            # fixă: pe Linux numele e și „python3.14”. Fără nume: regula veche.
+            name = str(proc.info.get("name") or "").lower()
+            if name and not name.startswith("python"):
+                continue
             cmdline = proc.info.get("cmdline") or []
-            for arg in cmdline:
+            for i, arg in enumerate(cmdline):
                 arg_s = str(arg)
+                if i and _PY_MODULE_OR_CMD.match(arg_s):
+                    # IDLE („Edit with IDLE”) rulează ca Python:
+                    # `pythonw.exe -m idlelib worker.py` nu e workerul.
+                    break
                 norm_arg = os.path.normcase(arg_s)
                 if "worker.py" not in norm_arg:
                     continue

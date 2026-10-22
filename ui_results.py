@@ -943,6 +943,18 @@ def _method_from_bench(data: dict | None) -> bool:
     )
 
 
+def _scorer_fallback_reason(meta: dict | None) -> str:
+    """Motivul WF-ului sărit când pool-ul vine din rezerva `frequency` a motorului
+    (`retro_meta` cu `scorer_fallback`): decizia nu s-a mutat, dar pașii ar fi
+    scorați de metoda ei, nu de cea care a produs pool-ul."""
+    name = (meta or {}).get("scorer")
+    return (
+        f"la generare scorerul deciziei{f' ({name})' if name else ''} a eșuat, iar "
+        "pool-ul vine din rezerva frequency; pașii WF ar fi scorați de metoda "
+        "deciziei, nu de cea care a produs pool-ul afișat"
+    )
+
+
 def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str | None:
     if not flat:
         return None
@@ -1217,6 +1229,9 @@ def _build_report() -> str:
             flat = STATE["retro"].get(f"{fn}_{g}")
             _dump_pool(d, None, game=g)
             wf = _wf_summary(flat, d, g)
+            _skip = (STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}
+            if _skip.get("scorer_fallback"):
+                out.append(f"  Walk-forward: sărit — {_scorer_fallback_reason(_skip)}.")
             if ((STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}).get("decision_moved"):
                 out.append(
                     "  Walk-forward: sărit — decizia de bench s-a schimbat după generare."

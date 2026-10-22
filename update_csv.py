@@ -479,8 +479,12 @@ def update_all() -> int:
             # origin/main la urmatoarea pornire, fara niciun avertisment.
             print(
                 f"  {cfg['display_name']:<12}: CSV EXISTA dar fara nicio data valida — "
-                "pare trunchiat/corupt. SAR peste (nu tratez ca prima rulare)."
+                "pare trunchiat/corupt. EROARE verificare: CSV-ul stocat nu are nicio "
+                "data lizibila. NU scriu nimic. SAR peste (nu tratez ca prima rulare)."
             )
+            # Nici verificat, nici actualizat: fara NEACTUALIZATE, rezumatul
+            # spunea "la zi", iar START_8000 nu avertiza in consola.
+            not_updated.append(cfg["display_name"])
             continue
 
         # Fetch MEREU site-ul ca să raportăm ultima extragere reală (best-effort).

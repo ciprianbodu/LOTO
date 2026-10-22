@@ -119,6 +119,12 @@ class ScoringMixin:
             _ens_audit: dict = {}
             scores = combine_ensemble_scores(contributions, audit=_ens_audit)
             if not scores:
+                # Scorerul deciziei a rulat fără rezultat (a eșuat, gol sau
+                # ne-finit): rezerva îl numește în audit (`attempted`), ca la
+                # scorurile inutilizabile. `frequency` (rezerva unui scorer
+                # respins sau indisponibil) nu se numește pe sine.
+                if ensemble[0][0] != "frequency":
+                    self._bench_winner_empty_attempt = ensemble[0][0]
                 return {}
             _active = _ens_audit.get("ensemble_active") or []
             # Cap de listă = primul membru ACTIV (după filtrare), nu ensemble[0]
@@ -274,6 +280,8 @@ class ScoringMixin:
             self._bench_winner_unusable_attempt = None
             _missing = getattr(self, "_bench_winner_missing_reason", None)
             self._bench_winner_missing_reason = None
+            _empty_attempt = getattr(self, "_bench_winner_empty_attempt", None)
+            self._bench_winner_empty_attempt = None
             _fb_info = {
                 "method": "frequency",
                 "fallback": True,
@@ -292,6 +300,8 @@ class ScoringMixin:
                 _fb_info["no_decision"] = True
             if _attempted:
                 _fb_info["attempted"] = _attempted
+            elif _empty_attempt:
+                _fb_info["attempted"] = _empty_attempt
             fallback = self._frequency_fallback_scores(is_joker_drum=is_joker_drum)
             if fallback:
                 self.audit.setdefault("bench_winner", {})[_gk] = _fb_info

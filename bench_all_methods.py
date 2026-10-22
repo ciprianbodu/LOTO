@@ -45,8 +45,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 except Exception:
     pass
 
@@ -654,11 +654,22 @@ def main() -> int:
             "[bench] niciun fold produs (istoricele nu s-au incarcat?): "
             "best_methods.json ramane neatins, nu se reconstruieste din folds.csv vechi."
         )
+    # Numai unele istorice au căzut la încărcare: decizia ar înlocui jocurile
+    # lor cu celule {"error"}, ștampilate la zi. Ca la cazul fără niciun fold,
+    # decizia anterioară rămâne neatinsă și bench-ul iese cu 1.
+    _load_failed = [] if _no_folds else list(report.get("games_load_failed") or [])
+    if _load_failed and not _skip_decision:
+        _decision_failed = True
+        logging.error(
+            "[bench] istoricul nu s-a incarcat pentru %s: best_methods.json "
+            "ramane neatins.",
+            ", ".join(_load_failed),
+        )
     if _skip_decision:
         # Bench paralel pe faze: scriem DOAR folds.csv in --out (deja scris de runner);
         # decizia (best_methods.json) se ia separat dupa combinarea folds-urilor.
         logging.info("[bench] sar scrierea best_methods.json (no-decision/set redus).")
-    elif not _no_folds:
+    elif not _no_folds and not _load_failed:
         # Folds-ul rularii CURENTE, din --out (nu default-ul
         # "bench_results/folds.csv"). Fara asta, `--out alt_folder` producea un
         # best_methods.json HIBRID: winners din rularea noua, dar
@@ -736,6 +747,8 @@ def main() -> int:
         _why = (
             "niciun fold produs (istoricele nu s-au încărcat)"
             if _no_folds
+            else "istoricul nu s-a încărcat pentru " + ", ".join(_load_failed)
+            if _load_failed
             else "matricea de decizie nu s-a putut construi (vezi logul)"
         )
         console.print(

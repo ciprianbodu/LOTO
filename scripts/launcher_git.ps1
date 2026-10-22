@@ -228,12 +228,15 @@ $script:HistoryRefused = $false
 
 function Request-OfflinePin {
     # attrib +P cere furnizorului cloud sa pastreze fisierele pe disc
-    # (Disponibil offline). O data reusit, marcajul din .git evita repetarea.
-    $marker = Join-Path (Get-Location).Path '.git\loto-offline-pin'
+    # (Disponibil offline). O data ceruta, marcajul din .git evita repetarea.
+    # Marcajul e al calculatorului: .git e sincronizat intre statii, iar fiecare
+    # cere fixarea pentru discul ei.
+    $marker = Join-Path (Get-Location).Path ('.git\loto-offline-pin-' + [Environment]::MachineName)
     if (Test-Path -LiteralPath $marker -PathType Leaf) { return }
     Write-Host '[GIT] Folder sincronizat in cloud - cer fixarea fisierelor pe disc (Disponibil offline)...'
     $info = New-Object System.Diagnostics.ProcessStartInfo
-    $info.FileName = "$env:SystemRoot\System32\attrib.exe"
+    # LOTO_ATTRIB_EXE numai in teste (attrib simulat, ca LOTO_WINGET_EXE).
+    $info.FileName = if ($env:LOTO_ATTRIB_EXE) { $env:LOTO_ATTRIB_EXE } else { "$env:SystemRoot\System32\attrib.exe" }
     $info.Arguments = '+P /S /D "' + (Join-Path (Get-Location).Path '*') + '"'
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
@@ -251,9 +254,21 @@ function Request-OfflinePin {
     $text = ($stdout.Result + $stderr.Result).Trim()
     $code = $process.ExitCode
     $process.Dispose()
-    if ($code -eq 0 -and -not $text) {
+    if ($code -eq 0) {
+        # Google Drive (G:, volum FAT32 virtual) primeste attrib +P cu cod 0 si nu
+        # fixeaza nimic: conteaza numai bitul PINNED (0x80000) ramas pe fisiere,
+        # nu tacerea lui attrib (pe un .git ascuns de Git for Windows scrie "Not
+        # resetting hidden file" si fixeaza restul). Proba e pe elementele vizibile
+        # din proiect, pe care attrib nu le sare. Marcajul se scrie oricum: un
+        # attrib fara efect nu se reia la fiecare pornire.
+        $pinned = @(Get-ChildItem -LiteralPath (Get-Location).Path | Select-Object -First 20 |
+            Where-Object { ([int]$_.Attributes -band 0x80000) -ne 0 }).Count -gt 0
         Set-Content -LiteralPath $marker -Value (Get-Date -Format 's') -Encoding ASCII
-        Write-Host '[GIT] Fixare offline ceruta. Drive descarca fisierele in fundal.'
+        if ($pinned) {
+            Write-Host '[GIT] Fixare offline ceruta. Drive descarca fisierele in fundal.'
+        } else {
+            Write-Host '[GIT] Google Drive nu a acceptat fixarea automata. Manual: click dreapta pe folderul proiectului > Acces offline > Disponibil offline.'
+        }
     } else {
         Write-Host '[GIT] Google Drive nu a acceptat fixarea automata. Manual: click dreapta pe folderul proiectului > Acces offline > Disponibil offline.'
     }
@@ -289,7 +304,12 @@ function Invoke-LotoProcess {
     if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
         # Only this invocation and its children; never an application worker.
         if ($env:SystemRoot) {
-            & "$env:SystemRoot\System32\taskkill.exe" /F /T /PID $process.Id 2>&1 | Out-Null
+            # PowerShell 5.1 cu ErrorActionPreference=Stop transforma stderr-ul
+            # taskkill (un copil deja iesit) in exceptie, iar mesajul despre limita
+            # de timp s-ar pierde. Asteptarea: anularea de dupa nu scrie peste un
+            # git inca in viata.
+            try { & "$env:SystemRoot\System32\taskkill.exe" /F /T /PID $process.Id 2>&1 | Out-Null } catch { }
+            [void]$process.WaitForExit(10000)
         } else {
             $process.Kill($true)  # PowerShell 7 in afara Windows (teste)
             [void]$process.WaitForExit(10000)
@@ -494,13 +514,13 @@ function Get-LocalChanges {
 function Invoke-LotoGitPaths {
     # Comanda git pe o lista de cai literale, din fisier: linia de comanda
     # Windows (32 KB) nu limiteaza numarul fisierelor.
-    param([string[]]$GitArgs, [string[]]$Paths)
+    param([string[]]$GitArgs, [string[]]$Paths, [int]$TimeoutSeconds = 0)
     $gitDir = (Invoke-LotoGit -GitArgs @('rev-parse', '--absolute-git-dir')).Text
     $specFile = Join-Path $gitDir ('loto-sync-paths-' + $PID + '-' + [guid]::NewGuid().ToString('N'))
     $spec = ($Paths | ForEach-Object { ':(literal)' + $_ }) -join [char]0
     [IO.File]::WriteAllText($specFile, $spec, (New-Object Text.UTF8Encoding $false))
     try {
-        return Invoke-LotoGit -GitArgs ($GitArgs + @(('--pathspec-from-file=' + $specFile), '--pathspec-file-nul'))
+        return Invoke-LotoGit -GitArgs ($GitArgs + @(('--pathspec-from-file=' + $specFile), '--pathspec-file-nul')) -TimeoutSeconds $TimeoutSeconds
     } finally {
         Remove-Item -LiteralPath $specFile -Force -ErrorAction SilentlyContinue
     }
@@ -965,10 +985,21 @@ function Write-AsideReport {
     }
 }
 
+function Write-PushAuthHint {
+    # Lansatoarele opresc orice cerere de autentificare (GIT_TERMINAL_PROMPT=0,
+    # GCM_INTERACTIVE=Never), ca START sa nu astepte: fara autentificare salvata,
+    # push-ul ar esua la fiecare pornire. Un push manual, o data, o cere si o salveaza.
+    param([string]$Text)
+    if ($Text -match 'could not read Username|terminal prompts disabled|Authentication failed|user interactivity has been disabled') {
+        Write-Host '[GIT] Autentificarea GitHub nu este salvata pe acest calculator. Rulati o data, intr-un terminal obisnuit deschis in folderul proiectului: git push origin main - se deschide autentificarea GitHub, iar Git o tine minte.'
+    }
+}
+
 function Push-LotoMain {
     $push = Invoke-LotoGitRetry -GitArgs @('push', 'origin', 'main')
     if ($push.Text) { Write-Host $push.Text }
     if ($push.Code -ne 0) {
+        Write-PushAuthHint -Text $push.Text
         Write-Host '[GIT] Push esuat - commit-urile raman locale; se reincearca la urmatoarea pornire.'
         return
     }
@@ -983,6 +1014,11 @@ try {
         exit 0
     }
     $root = Invoke-LotoGit -GitArgs @('rev-parse', '--show-toplevel')
+    if ($root.Code -ne 0 -and (Test-Path -LiteralPath (Join-Path (Get-Location).Path '.git'))) {
+        # .git exista, dar git refuza repository-ul (alt proprietar, config corupt):
+        # mesajul git numeste cauza si remedierea.
+        throw ('Git refuza repository-ul: ' + $root.Text)
+    }
     if ($root.Code -ne 0 -or
         [IO.Path]::GetFullPath($root.Text) -ne (Get-Location).Path.TrimEnd('\')) {
         throw 'Directorul lansatorului nu este radacina repository-ului.'
@@ -1137,6 +1173,13 @@ try {
         $updated = $false
         $failure = $null
         $crashed = $false
+        # ff/drop oprit la limita de timp: git ucis lasa arborele scris pe jumatate
+        # si lock-urile lui; se anuleaza ca un ff/drop refuzat la jumatate.
+        $integrating = $false
+        $stopped = $false
+        $lockNames = @('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'refs\heads\main.lock')
+        $locksBefore = @()
+        $locksRemoved = @()
         $outcome = $null
         $report = $null
         try {
@@ -1168,12 +1211,16 @@ try {
                 $saved = Invoke-LotoGit -GitArgs @('update-ref', $keep, 'HEAD')
                 if ($saved.Code -ne 0) { throw $saved.Text }
                 Write-Host ('[GIT] main local trece pe origin/main: cele ' + $nAhead + ' commit-uri locale ' + $dropWhy + '; vechiul main ramane in ' + $keep + '.')
+                $locksBefore = @($lockNames | Where-Object { Test-Path -LiteralPath (Join-Path $gitDir $_) -PathType Leaf })
+                $integrating = $true
                 $integrate = Invoke-LotoGit -GitArgs @('reset', '-q', '--keep', 'origin/main')
                 if ($integrate.Code -ne 0) {
                     $failure = 'Trecerea pe origin/main nu a reusit'
                     if ($integrate.Text) { Write-Host $integrate.Text }
                 }
             } else {
+                $locksBefore = @($lockNames | Where-Object { Test-Path -LiteralPath (Join-Path $gitDir $_) -PathType Leaf })
+                $integrating = $true
                 $integrate = Invoke-LotoGit -GitArgs @('merge', '--ff-only', 'origin/main')
                 if ($integrate.Code -ne 0) {
                     $failure = 'Actualizarea nu a reusit'
@@ -1184,7 +1231,19 @@ try {
         } catch {
             $failure = $_.Exception.Message
             $crashed = $true
+            $stopped = $integrating
         } finally {
+            if ($stopped) {
+                # Numai lock-urile aparute in timpul integrarii: cu ele ramase,
+                # anularea de mai jos si sincronizarile urmatoare ar esua.
+                foreach ($name in $lockNames) {
+                    $lock = Join-Path $gitDir $name
+                    if ($locksBefore -notcontains $name -and (Test-Path -LiteralPath $lock -PathType Leaf)) {
+                        Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
+                        if (-not (Test-Path -LiteralPath $lock)) { $locksRemoved += $name }
+                    }
+                }
+            }
             # Starea reala, nu ce credem: un rebase oprit se anuleaza intai; apoi
             # HEAD trebuie sa fie pe main, la commit-ul de start (nimic aplicat)
             # sau la cel nou (aplicat). Altfel nimic nu se scrie peste arbore.
@@ -1208,9 +1267,11 @@ try {
             }
         }
         $partial = @()
-        if ($outcome -eq 'unchanged' -and -not $crashed -and $plan -ne 'rebase') {
+        $undoFailed = $null
+        if ($outcome -eq 'unchanged' -and (-not $crashed -or $stopped) -and $plan -ne 'rebase') {
             # Un ff/drop refuzat la jumatate (ex. fisier tinut deschis in Excel)
-            # poate lasa fisiere scrise cu versiunea noua, iar HEAD neschimbat.
+            # sau oprit la limita de timp poate lasa fisiere scrise cu versiunea
+            # noua, iar HEAD neschimbat.
             # Fisierele fara modificari locale inainte revin la HEAD; cele noi,
             # identice cu origin/main, se sterg (inainte nu existau).
             # Numai ce putea scrie git: continutul exact de pe origin/main (sau
@@ -1227,6 +1288,9 @@ try {
                 } elseif (Test-Path -LiteralPath $full -PathType Leaf) {
                     $disk = Invoke-LotoGit -GitArgs @('hash-object', ('--path=' + $path), '--', $full)
                     if ($disk.Code -eq 0 -and $disk.Text -eq $theirs.Text) { $partial += $path }
+                } elseif ($stopped) {
+                    # Git ucis intre stergerea fisierului urmarit si rescrierea lui.
+                    $partial += $path
                 }
             }
             if ($partial.Count -gt 0) {
@@ -1235,15 +1299,40 @@ try {
                 $headTree = New-PathSet @((Invoke-LotoGit -GitArgs @('ls-tree', '-r', '--name-only', '-z', 'HEAD')).Out.Split([char]0))
                 $back = @($partial | Where-Object { $headTree.Contains($_) })
                 $brought = @($partial | Where-Object { -not $headTree.Contains($_) })
-                if ($back.Count -gt 0) { [void](Invoke-LotoGitPaths -GitArgs @('checkout', 'HEAD') -Paths $back) }
-                if ($brought.Count -gt 0) {
-                    [void](Invoke-LotoGitPaths -GitArgs @('rm', '-q', '--cached', '--ignore-unmatch') -Paths $brought)
-                    foreach ($path in $brought) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force -ErrorAction SilentlyContinue }
+                # Dupa oprirea la limita de timp, anularea rescrie aceleasi fisiere pe
+                # acelasi disc lent: are limita lunga, ca Clear-InterruptedRebase.
+                # Mesajul spune ca fisierele au revenit numai daca git a reusit.
+                $undoLimit = if ($stopped) { 600 } else { 0 }
+                try {
+                    if ($back.Count -gt 0) {
+                        $undo = Invoke-LotoGitPaths -GitArgs @('checkout', 'HEAD') -Paths $back -TimeoutSeconds $undoLimit
+                        if ($undo.Code -ne 0) { $undoFailed = if ($undo.Text) { $undo.Text } else { 'cod ' + $undo.Code } }
+                    }
+                    if ($brought.Count -gt 0) {
+                        $undo = Invoke-LotoGitPaths -GitArgs @('rm', '-q', '--cached', '--ignore-unmatch') -Paths $brought -TimeoutSeconds $undoLimit
+                        if ($undo.Code -ne 0) { $undoFailed = if ($undo.Text) { $undo.Text } else { 'cod ' + $undo.Code } }
+                        foreach ($path in $brought) { Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force -ErrorAction SilentlyContinue }
+                    }
+                } catch {
+                    $undoFailed = $_.Exception.Message
+                    # Anularea oprita si ea: lock-urile ei, ca mai sus.
+                    foreach ($name in $lockNames) {
+                        $lock = Join-Path $gitDir $name
+                        if ($locksBefore -notcontains $name -and (Test-Path -LiteralPath $lock -PathType Leaf)) {
+                            Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
+                            if (-not (Test-Path -LiteralPath $lock) -and $locksRemoved -notcontains $name) { $locksRemoved += $name }
+                        }
+                    }
                 }
             }
             foreach ($path in (Get-UntrackedCollisions).Same) {
                 Remove-Item -LiteralPath (Join-Path (Get-Location).Path $path) -Force -ErrorAction SilentlyContinue
                 $partial += $path
+            }
+            if ($undoFailed) {
+                # Motivul pe o singura linie (git scrie uneori mai multe).
+                $reason = @($undoFailed -split "`r?`n" | Where-Object { $_.Trim() }) -join ' '
+                $undoWarning = '[GIT] [ATENTIE] Git se oprise la jumatate, iar readucerea la versiunea de dinainte nu s-a terminat (' + $reason + '): ' + (Format-PathList $partial) + ' pot avea versiunea de pe origin/main sau pot lipsi. Verificati cu git status, apoi reporniti: pornirea urmatoare le ia drept modificari locale si reia actualizarea.'
             }
         }
         if ($outcome -eq 'unchanged' -and $removedSame.Count -gt 0) {
@@ -1267,6 +1356,20 @@ try {
             }
         } elseif ($crashed) {
             Write-Host ('[GIT] Sincronizarea s-a oprit: ' + $failure)
+            if ($undoFailed) {
+                Write-Host $undoWarning
+            } elseif ($partial.Count -gt 0) {
+                Write-Host ('[GIT] Git se oprise la jumatate; am readus la versiunea de dinainte: ' + (Format-PathList $partial) + '.')
+            }
+            if ($locksRemoved.Count -gt 0) {
+                Write-Host ('[GIT] Lock-uri lasate de git-ul oprit, eliminate: ' + ($locksRemoved -join ', ') + '.')
+            }
+        } elseif ($undoFailed) {
+            Write-Host ('[GIT] ' + $failure + '.')
+            Write-Host $undoWarning
+            if ($locksRemoved.Count -gt 0) {
+                Write-Host ('[GIT] Lock-uri lasate de git-ul oprit, eliminate: ' + ($locksRemoved -join ', ') + '.')
+            }
         } else {
             Write-Host ('[GIT] ' + $failure + '. Codul local ramane neschimbat.')
             if ($partial.Count -gt 0) {
@@ -1290,8 +1393,23 @@ try {
         # Inaintea commit-ului automat: peste commit-uri retrase de pe origin/main,
         # extragerile noi ar ramane blocate impreuna cu ele (Sync le lasa manuale).
         $early = Invoke-LotoGitRetry -GitArgs @('fetch', 'origin')
-        if ($early.Code -eq 0 -and @(Get-WithdrawnCommits).Count -gt 0) {
-            Write-Host '[GIT] main local contine commit-uri retrase de pe origin/main; nu comit extragerile noi peste ele. Sync trece intai pe origin/main.'
+        $earlyWithdrawn = @()
+        if ($early.Code -eq 0) { $earlyWithdrawn = @(Get-WithdrawnCommits) }
+        if ($earlyWithdrawn.Count -gt 0) {
+            # Sync trece pe origin/main numai cand toate commit-urile locale sunt
+            # retrase si niciunul nu e de merge (planul drop); altfel ramane manual.
+            $earlyAhead = Invoke-LotoGit -GitArgs @('rev-list', '--count', 'origin/main..HEAD')
+            $earlyMerges = Invoke-LotoGit -GitArgs @('rev-list', '--merges', '--count', 'origin/main..HEAD')
+            # Motivul, in ordinea din Sync: intai commit-ul de merge, apoi amestecul.
+            $next = 'Sync trece intai pe origin/main.'
+            if ($earlyAhead.Code -ne 0 -or $earlyMerges.Code -ne 0) {
+                $next = 'Integrarea ramane manuala, iar extragerile noi raman necomise pana atunci.'
+            } elseif ([int]$earlyMerges.Text -gt 0) {
+                $next = 'Commit-urile locale contin un commit de merge: integrarea ramane manuala, iar extragerile noi raman necomise pana atunci.'
+            } elseif ([int]$earlyAhead.Text -ne $earlyWithdrawn.Count) {
+                $next = 'Sunt amestecate cu commit-uri proprii: integrarea ramane manuala, iar extragerile noi raman necomise pana atunci.'
+            }
+            Write-Host ('[GIT] main local contine commit-uri retrase de pe origin/main; nu comit extragerile noi peste ele. ' + $next)
             exit 0
         }
         $changes = Invoke-LotoGit -GitArgs @('status', '--porcelain', '-z', '--', '_ISTORIC')
@@ -1315,7 +1433,22 @@ try {
                 # explicit paths keep refused files out (it reads the working tree).
                 $commit = Invoke-LotoGit -GitArgs (@('commit', '--only', '-m', 'auto: update istoric extrageri', '--') + $accepted)
                 if ($commit.Text) { Write-Host $commit.Text }
-                if ($commit.Code -ne 0) { throw 'Commit istoric esuat.' }
+                if ($commit.Code -ne 0) {
+                    # Extragerile acceptate ies din index (raman pe disc si se reiau la
+                    # pornirea urmatoare), ca un commit manual sa nu le preia pe tacute.
+                    try { [void](Invoke-LotoGit -GitArgs (@('reset', '-q', '--') + $accepted)) } catch { }
+                    # git var nu depinde de limba mesajelor git: esueaza fara nume/email.
+                    try {
+                        $author = Invoke-LotoGit -GitArgs @('var', 'GIT_AUTHOR_IDENT')
+                        $committer = Invoke-LotoGit -GitArgs @('var', 'GIT_COMMITTER_IDENT')
+                        if ($author.Code -ne 0 -or $committer.Code -ne 0) {
+                            Write-Host '[GIT] Git nu are nume si email pe acest calculator; extragerile noi raman necomise. Rulati o data (in cmd sau PowerShell), apoi reporniti:'
+                            Write-Host '[GIT]   git config --global user.name "Numele Dvs"'
+                            Write-Host '[GIT]   git config --global user.email "adresa@exemplu.ro"'
+                        }
+                    } catch { }
+                    throw 'Commit istoric esuat.'
+                }
             }
         }
         # Fetch inainte de numarare: Sync putut fi sarit, iar origin/main local e vechi.
@@ -1363,7 +1496,10 @@ try {
         }
         $push = Invoke-LotoGitRetry -GitArgs @('push', 'origin', 'main')
         if ($push.Text) { Write-Host $push.Text }
-        if ($push.Code -ne 0) { throw 'Push esuat - commit-urile raman locale pentru reincercare.' }
+        if ($push.Code -ne 0) {
+            Write-PushAuthHint -Text $push.Text
+            throw 'Push esuat - commit-urile raman locale pentru reincercare.'
+        }
         Write-Host '[GIT] Push origin/main reusit.'
     }
     exit 0

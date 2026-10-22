@@ -690,6 +690,9 @@ def test_local_commits_on_top_of_withdrawn_ones_stay_for_manual_integration(repo
     append(local, NEW_ROW)
     out = run_helper(local, 'PushHistory')
     assert 'nu comit extragerile noi peste ele' in out
+    # Sync nu trece pe origin/main in acest caz: mesajul nu promite asta.
+    assert 'Sync trece intai' not in out
+    assert 'integrarea ramane manuala' in out
     assert git(local, 'rev-parse', 'HEAD') == head
     assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
 
@@ -1359,3 +1362,501 @@ def test_detect_without_git_in_path_reports_version_without_repo_writes(
     assert config_path.read_bytes() == config_before
     assert git(local, 'rev-parse', 'HEAD') == head_before
     assert git(local, 'status', '--porcelain') == status_before
+
+
+# --- Audit global 2026-10-22: lansatoarele (C11-C15, plus R1/R2) -------------
+
+
+def run_helper_rc(local, mode='Sync', env=None, project_dir=None):
+    """Ca run_helper, dar intoarce si codul de iesire (refuzurile ies cu 1)."""
+    args = [str(POWERSHELL), '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', str(HELPER), '-Mode', mode, '-ProjectDir', str(project_dir or local)]
+    if mode == 'PushHistory':
+        args += ['-PythonExe', sys.executable]
+    p = subprocess.run(
+        args, capture_output=True, text=True, errors='replace', timeout=60, env=env,
+    )
+    return p.returncode, p.stdout
+
+
+SLOW_MODULES = 10
+
+
+def slow_modules(seed, local,
+                 smudge=r'c=$(cat); case "$c" in v2*) sleep 1;; esac; printf "%s\n" "$c"',
+                 required=False):
+    """Module v1 pe ambele clone. In clona statiei, git scrie lent fiecare
+    modul v2 (ca Drive, unde git citeste si scrie lent fiecare fisier).
+    smudge: alt filtru de scriere; required: un filtru esuat opreste git."""
+    for i in range(SLOW_MODULES):
+        (seed / f'mod{i:02}.py').write_text('v1\n')
+    commit(seed, 'modules')
+    git(seed, 'push', 'origin', 'main')
+    git(local, 'pull', '-q', '--ff-only')
+    (local / '.git' / 'info').mkdir(exist_ok=True)
+    (local / '.git' / 'info' / 'attributes').write_text('*.py filter=slow\n')
+    git(local, 'config', 'filter.slow.smudge', smudge)
+    if required:
+        git(local, 'config', 'filter.slow.clean', 'cat')
+        git(local, 'config', 'filter.slow.required', 'true')
+
+
+@pytest.mark.parametrize('plan', ['ff', 'drop'])
+def test_an_update_stopped_by_the_time_limit_is_undone(repos, plan):
+    """C11: git oprit la limita de timp in mijlocul ff/drop scrisese o parte din
+    arbore (si stersese un modul inainte sa-l rescrie): totul revine la HEAD,
+    fisierul adus dispare, lock-urile lui nu raman, iar mesajul o spune."""
+    local, seed, _ = repos
+    slow_modules(seed, local)
+    if plan == 'drop':
+        # Commit-ul local a fost retras de pe origin/main (force-push).
+        advance(seed)
+        git(local, 'pull', '-q', '--ff-only')
+        git(seed, 'reset', '-q', '--hard', 'HEAD~1')
+    for i in range(SLOW_MODULES):
+        (seed / f'mod{i:02}.py').write_text('v2\n')
+    (seed / 'added.txt').write_text('remote\n')
+    commit(seed, 'v2')
+    git(seed, 'push', '-q', '--force', 'origin', 'main')
+    head = git(local, 'rev-parse', 'HEAD')
+    code_before = (local / 'code.txt').read_text()
+
+    out = run_helper(local, env=dict(os.environ, LOTO_GIT_TIMEOUT_SECONDS='4'))
+
+    assert 'Sincronizarea s-a oprit: Git a depasit 4 s' in out
+    if plan == 'drop':
+        assert 'au fost retrase de pe origin/main' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    modules = [(local / f'mod{i:02}.py').read_text() for i in range(SLOW_MODULES)]
+    assert modules == ['v1\n'] * SLOW_MODULES
+    assert (local / 'code.txt').read_text() == code_before
+    assert not (local / 'added.txt').exists()
+    for lock in ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'refs/heads/main.lock'):
+        assert not (local / '.git' / lock).exists(), lock
+    assert 'Git se oprise la jumatate; am readus la versiunea de dinainte' in out
+    assert git(local, 'status', '--porcelain', '--untracked-files=no') == ''
+    # Pornirea urmatoare, fara limita mica, aduce actualizarea intreaga.
+    run_helper(local)
+    assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+    assert (local / 'mod00.py').read_text() == 'v2\n'
+
+
+def push_v2_modules(seed, local):
+    """origin/main aduce modulele v2 si un fisier nou; intoarce HEAD-ul statiei."""
+    for i in range(SLOW_MODULES):
+        (seed / f'mod{i:02}.py').write_text('v2\n')
+    (seed / 'added.txt').write_text('remote\n')
+    commit(seed, 'v2')
+    git(seed, 'push', '-q', 'origin', 'main')
+    return git(local, 'rev-parse', 'HEAD')
+
+
+def test_an_undo_as_slow_as_the_update_has_its_own_time_limit(repos):
+    """R5 (C11): pe Drive versiunea veche se scrie la fel de lent ca cea noua
+    (aici chiar mai lent), deci anularea ar depasi limita care a oprit
+    actualizarea. Are limita lunga, ca anularea unui rebase: fisierele revin,
+    lock-urile nu raman, iar mesajele opririi nu se pierd."""
+    local, seed, _ = repos
+    slow_modules(seed, local,
+                 smudge=r'c=$(cat); case "$c" in v1*) sleep 2;; *) sleep 1;; esac; printf "%s\n" "$c"')
+    head = push_v2_modules(seed, local)
+
+    code, out = run_helper_rc(local, env=dict(os.environ, LOTO_GIT_TIMEOUT_SECONDS='4'))
+
+    assert code == 0, out
+    assert 'Sincronizarea s-a oprit: Git a depasit 4 s la "git merge --ff-only origin/main"' in out
+    assert 'Git se oprise la jumatate; am readus la versiunea de dinainte' in out
+    assert '[ATENTIE]' not in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    modules = [(local / f'mod{i:02}.py').read_text() for i in range(SLOW_MODULES)]
+    assert modules == ['v1\n'] * SLOW_MODULES
+    assert not (local / 'added.txt').exists()
+    for lock in ('index.lock', 'HEAD.lock', 'ORIG_HEAD.lock', 'refs/heads/main.lock'):
+        assert not (local / '.git' / lock).exists(), lock
+    assert git(local, 'status', '--porcelain', '--untracked-files=no') == ''
+
+
+@pytest.mark.parametrize('cause', ['stopped', 'refused'])
+def test_an_undo_that_fails_is_reported_not_claimed(repos, cause):
+    """R5 (C11): ff-ul oprit la limita de timp sau refuzat la jumatate, iar
+    anularea esueaza si ea (aici filtrul care scrie versiunea veche). Nu se
+    spune ca fisierele au revenit: [ATENTIE] spune ce a ramas si ce e de facut."""
+    local, seed, _ = repos
+    fail_old = 'c=$(cat); case "$c" in v1*) exit 1;; esac; '
+    env = None
+    if cause == 'stopped':
+        slow_modules(seed, local, smudge=fail_old + r'sleep 1; printf "%s\n" "$c"', required=True)
+        env = dict(os.environ, LOTO_GIT_TIMEOUT_SECONDS='4')
+    else:
+        slow_modules(seed, local, smudge=fail_old + r'printf "%s\n" "$c"', required=True)
+        once_on_ref(local, 'refs/heads/main', 'prepared', 'exit 1')
+    head = push_v2_modules(seed, local)
+
+    code, out = run_helper_rc(local, env=env)
+
+    assert code == 0, out
+    if cause == 'stopped':
+        assert 'Sincronizarea s-a oprit: Git a depasit 4 s' in out
+    else:
+        assert '[GIT] Actualizarea nu a reusit.' in out
+    assert 'am readus la versiunea de dinainte' not in out
+    assert 'Codul local ramane neschimbat' not in out
+    assert ('[GIT] [ATENTIE] Git se oprise la jumatate, iar readucerea la versiunea '
+            'de dinainte nu s-a terminat (') in out
+    assert 'smudge filter slow failed' in out
+    assert 'mod00.py' in out
+    assert 'Verificati cu git status, apoi reporniti' in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    if cause == 'stopped':
+        # Cauza inlaturata: pornirea urmatoare reia actualizarea, cum spune mesajul.
+        (local / '.git' / 'info' / 'attributes').unlink()
+        run_helper(local)
+        assert git(local, 'rev-parse', 'HEAD') == git(seed, 'rev-parse', 'HEAD')
+        modules = [(local / f'mod{i:02}.py').read_text() for i in range(SLOW_MODULES)]
+        assert modules == ['v2\n'] * SLOW_MODULES
+
+
+def machine_marker():
+    """Marcajul fixarii offline al acestui calculator ([Environment]::MachineName)."""
+    import socket
+    name = os.environ.get('COMPUTERNAME') if WINDOWS else None
+    return 'loto-offline-pin-' + (name or socket.gethostname().split('.')[0])
+
+
+@pytest.fixture
+def fake_attrib(tmp_path):
+    """attrib simulat ca pe Google Drive (G:): cod 0, fara mesaj, nimic fixat."""
+    if WINDOWS:
+        exe = tmp_path / 'attrib.cmd'
+        exe.write_text('@exit /b 0\r\n', encoding='ascii')
+    else:
+        exe = tmp_path / 'attrib'
+        exe.write_text('#!/bin/sh\nexit 0\n', encoding='ascii')
+        exe.chmod(0o755)
+    return exe
+
+
+@pytest.mark.parametrize('other_station_marker', [False, True])
+def test_an_offline_pin_that_drive_ignores_gives_the_manual_step(
+    repos, fake_attrib, other_station_marker,
+):
+    """C12: attrib +P iese cu 0 pe G:, dar bitul PINNED nu ramane. Nu se spune
+    ca Drive descarca fisierele, ci pasul manual; marcajul celeilalte statii
+    (in .git-ul sincronizat) nu opreste cererea pe acest calculator."""
+    local, _, _ = repos
+    if other_station_marker:
+        (local / '.git' / 'loto-offline-pin').write_text('2026-09-26T19:19:29\n')
+    env = dict(os.environ, LOTO_ATTRIB_EXE=str(fake_attrib))
+
+    out = run_helper(local, env=env)
+
+    assert 'cer fixarea fisierelor pe disc' in out
+    assert 'Google Drive nu a acceptat fixarea automata' in out
+    assert 'Drive descarca fisierele in fundal' not in out
+    markers = [p.name.lower() for p in (local / '.git').glob('loto-offline-pin-*')]
+    assert markers == [machine_marker().lower()]
+    # O data pe calculator: attrib fara efect nu se reia la fiecare pornire.
+    assert 'cer fixarea' not in run_helper(local, env=env)
+
+
+@windows_only
+def test_a_real_offline_pin_is_requested_once_per_computer(repos):
+    """C12: pe NTFS attrib +P ramane pe fisiere, desi scrie „Not resetting hidden
+    file” pentru .git (ascuns de Git for Windows): fixarea e raportata reusita,
+    o data, iar marcajul este al calculatorului, nu cel comun din .git."""
+    local, _, _ = repos
+    out = run_helper(local)
+    assert 'Fixare offline ceruta. Drive descarca fisierele in fundal.' in out
+    assert (local / '.git' / machine_marker()).is_file()
+    assert not (local / '.git' / 'loto-offline-pin').exists()
+    assert 'cer fixarea' not in run_helper(local)
+
+
+def test_history_waits_for_sync_when_every_local_commit_was_withdrawn(repos):
+    """C13, cazul neschimbat: toate commit-urile locale retrase -> Sync le lasa
+    deoparte (drop), iar PushHistory spune ca Sync trece intai pe origin/main."""
+    local, seed, _ = repos
+    advance(seed)
+    git(local, 'pull', '-q', '--ff-only')
+    git(seed, 'reset', '-q', '--hard', 'HEAD~1')
+    git(seed, 'push', '-q', '--force', 'origin', 'main')
+    append(local, NEW_ROW)
+    out = run_helper(local, 'PushHistory')
+    assert ('[GIT] main local contine commit-uri retrase de pe origin/main; nu comit '
+            'extragerile noi peste ele. Sync trece intai pe origin/main.') in out
+
+
+def test_history_with_a_withdrawn_merge_commit_names_the_merge(repos):
+    """R6 (C13): toate commit-urile locale sunt retrase, dar unul e de merge (un
+    PR adus, apoi origin/main readus inapoi cu force-push). Sync lasa integrarea
+    manuala pentru commit-ul de merge; PushHistory spune acelasi motiv, nu ca
+    ar fi amestecate cu commit-uri proprii."""
+    local, seed, _ = repos
+    base = git(seed, 'rev-parse', 'HEAD')
+    git(seed, 'checkout', '-q', '-b', 'feature')
+    (seed / 'feat.txt').write_text('feature\n')
+    commit(seed, 'feature work')
+    git(seed, 'checkout', '-q', 'main')
+    (seed / 'code.txt').write_text('main side\n')
+    commit(seed, 'main side')
+    git(seed, 'merge', '--no-ff', '-q', '-m', 'Merge branch feature', 'feature')
+    git(seed, 'push', '-q', 'origin', 'main')
+    git(local, 'pull', '-q', '--ff-only')
+    git(seed, 'reset', '-q', '--hard', base)
+    git(seed, 'push', '-q', '--force', 'origin', 'main')
+    append(local, NEW_ROW)
+    head = git(local, 'rev-parse', 'HEAD')
+
+    out = run_helper(local, 'PushHistory')
+
+    assert ('[GIT] main local contine commit-uri retrase de pe origin/main; nu comit '
+            'extragerile noi peste ele. Commit-urile locale contin un commit de merge: '
+            'integrarea ramane manuala, iar extragerile noi raman necomise pana atunci.') in out
+    assert 'amestecate cu commit-uri proprii' not in out
+    assert 'Sync trece intai' not in out
+    assert git(local, 'rev-parse', 'HEAD') == head
+    sync = run_helper(local)
+    assert 'commit-uri care contin un commit de merge' in sync
+    assert 'Integrarea ramane manuala' in sync
+
+
+@pytest.mark.parametrize('mode', ['Sync', 'PushHistory'])
+@pytest.mark.parametrize('case, expected', [
+    ('owner', 'safe.directory'),
+    ('config', 'bad config line'),
+])
+def test_a_repository_git_refuses_shows_gits_reason(repos, tmp_path, mode, case, expected):
+    """C14: .git exista, dar git refuza checkout-ul (alt proprietar, config
+    corupt): mesajul git, cu cauza si remedierea, nu „nu este radacina”."""
+    local, _, _ = repos
+    empty = tmp_path / 'empty.gitconfig'
+    empty.write_text('')
+    # Fara safe.directory=* din configurarea globala a statiei.
+    env = dict(os.environ, GIT_CONFIG_GLOBAL=str(empty), GIT_CONFIG_NOSYSTEM='1')
+    if case == 'owner':
+        env['GIT_TEST_ASSUME_DIFFERENT_OWNER'] = '1'
+    else:
+        with open(local / '.git' / 'config', 'a', encoding='utf-8') as config:
+            config.write('garbage [\n')
+    code, out = run_helper_rc(local, mode, env=env)
+    assert code == 1, out
+    assert '[GIT] Git refuza repository-ul: ' in out
+    assert expected in out
+    assert 'nu este radacina repository-ului' not in out
+
+
+@pytest.mark.parametrize('where', ['subfolder', 'not_a_repo'])
+def test_a_folder_that_is_not_the_repository_root_keeps_the_old_message(repos, tmp_path, where):
+    """C14, cazurile neschimbate: subfolder al repository-ului si folder fara .git."""
+    local, _, _ = repos
+    folder = local / 'sub' if where == 'subfolder' else tmp_path / 'not a repo'
+    folder.mkdir()
+    code, out = run_helper_rc(local, 'Sync', project_dir=folder)
+    assert code == 1, out
+    assert '[GIT] Directorul lansatorului nu este radacina repository-ului.' in out
+    assert 'Git refuza repository-ul' not in out
+
+
+def install_post_commit(local):
+    hooks = local / 'scripts' / 'git-hooks'
+    hooks.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / 'scripts' / 'git-hooks' / 'post-commit', hooks / 'post-commit')
+    (hooks / 'post-commit').chmod(0o755)
+
+
+def commit_with_hook(local, text='new work\n'):
+    (local / 'mine.txt').write_text(text)
+    git(local, 'add', 'mine.txt')
+    p = subprocess.run(['git', '-c', 'core.hooksPath=scripts/git-hooks', 'commit', '-q', '-m', 'new'],
+                       cwd=local, capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    return p.stderr
+
+
+@pytest.mark.parametrize('fetched', [False, True])
+def test_the_auto_push_hook_says_to_integrate_first_when_origin_moved(repos, fetched):
+    """C15: cealalta statie a trimis extrageri, iar clona aceasta nu le are:
+    push-ul e respins si un simplu „Retry” ar fi respins din nou. Si cu
+    origin/main deja adus (non-fast-forward): commit-urile noi nu sunt o rescriere."""
+    local, seed, origin = repos
+    advance(seed)
+    if fetched:
+        git(local, 'fetch', '-q', 'origin')
+    install_post_commit(local)
+    err = commit_with_hook(local)
+    assert '[rejected]' in err
+    assert 'Retry: git push origin main' not in err
+    assert '[git] auto-push respins: origin/main are commit-uri noi' in err
+    assert 'START_8000.bat' in err and 'git pull --rebase origin main' in err
+    assert git(origin, 'rev-parse', 'main') == git(seed, 'rev-parse', 'HEAD')
+
+
+@pytest.mark.parametrize('case', ['ok', 'unreachable'])
+def test_the_auto_push_hook_other_outcomes_are_unchanged(repos, tmp_path, case):
+    """C15, cazurile neschimbate: push reusit si push esuat din alt motiv."""
+    local, _, origin = repos
+    install_post_commit(local)
+    if case == 'unreachable':
+        git(local, 'remote', 'set-url', 'origin', str(tmp_path / 'missing.git'))
+    err = commit_with_hook(local)
+    if case == 'ok':
+        assert err.strip().splitlines()[-1] == '[git] auto-push origin/main ok'
+        assert git(origin, 'rev-parse', 'main') == git(local, 'rev-parse', 'HEAD')
+    else:
+        assert err.strip().splitlines()[-1] == (
+            '[git] auto-push failed; commit is local. Retry: git push origin main')
+        assert 'auto-push respins' not in err
+
+
+@pytest.mark.parametrize('case', ['rewrite', 'merge'])
+def test_the_auto_push_hook_does_not_promise_what_sync_leaves_manual(repos, case):
+    """R7 (C15): push respins, dar nu pentru ca origin/main ar avea doar
+    commit-uri noi de integrat: un commit trimis, desfacut (reset) si refacut,
+    sau un commit de merge netrimis (git merge nu ruleaza post-commit). Sync
+    lasa integrarea manuala in ambele cazuri, deci hook-ul nu o promite si nu
+    propune git pull --rebase (ar repune corectura peste commit-ul inlocuit)."""
+    local, seed, origin = repos
+    install_post_commit(local)
+    if case == 'rewrite':
+        assert commit_with_hook(local).strip().splitlines()[-1] == '[git] auto-push origin/main ok'
+        pushed = git(local, 'rev-parse', 'HEAD')
+        git(local, 'reset', '-q', '--soft', 'HEAD~1')
+        err = commit_with_hook(local, 'corrected work\n')
+        why = 'main local rescrie un commit deja trimis (amend sau reset)'
+        sync_why = 'commit-uri care rescriu un commit deja trimis (amend sau reset)'
+    else:
+        git(local, 'checkout', '-q', '-b', 'side')
+        (local / 'side.txt').write_text('side\n')
+        commit(local, 'side work')
+        git(local, 'checkout', '-q', 'main')
+        git(local, 'merge', '-q', '--no-ff', '-m', 'local merge', 'side')
+        advance(seed)
+        pushed = git(seed, 'rev-parse', 'HEAD')
+        err = commit_with_hook(local)
+        why = 'main local are un commit de merge netrimis'
+        sync_why = 'commit-uri care contin un commit de merge'
+    assert '[rejected]' in err
+    assert err.strip().splitlines()[-1] == (
+        '[git] auto-push respins: ' + why + '; commit-ul ramane local, iar '
+        'integrarea cu origin/main ramane manuala.')
+    assert 'Sync integreaza' not in err and 'git pull --rebase' not in err
+    assert git(origin, 'rev-parse', 'main') == pushed
+    sync = run_helper(local)
+    assert sync_why in sync and 'Integrarea ramane manuala' in sync
+
+
+def test_a_failed_history_commit_leaves_nothing_staged(repos):
+    """R1: commit-ul automat esueaza (aici un hook pre-commit): extragerile ies
+    din index, raman pe disc, iar un commit manual ulterior nu le ia."""
+    local, _, origin = repos
+    hook(local, 'pre-commit', 'echo "commit oprit de test" >&2; exit 1')
+    append(local, NEW_ROW)
+    head = git(local, 'rev-parse', 'HEAD')
+
+    code, out = run_helper_rc(local, 'PushHistory')
+
+    assert code == 1, out
+    assert '[GIT] Commit istoric esuat.' in out
+    assert 'Git nu are nume si email' not in out
+    assert git(local, 'rev-parse', 'HEAD') == head == git(origin, 'rev-parse', 'main')
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+    assert git(local, 'diff', '--name-only') == DRAWS
+    (local / 'code.txt').write_text('mine\n')
+    git(local, 'add', 'code.txt')
+    git(local, 'commit', '-q', '-m', 'code only')
+    assert git(local, 'show', '--name-only', '--format=', 'HEAD') == 'code.txt'
+
+
+def test_a_history_commit_without_identity_says_how_to_set_it(repos, tmp_path):
+    """R2: pe un calculator fara user.name/user.email commit-ul automat esueaza;
+    mesajul spune comanda, iar extragerile nu raman in index."""
+    local, _, _ = repos
+    for key in ('user.name', 'user.email'):
+        git(local, 'config', '--unset', key)
+    empty = tmp_path / 'empty.gitconfig'
+    empty.write_text('')
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(('GIT_AUTHOR_', 'GIT_COMMITTER_')) and key != 'EMAIL'}
+    env['GIT_CONFIG_GLOBAL'] = str(empty)
+    probe = subprocess.run(['git', 'var', 'GIT_COMMITTER_IDENT'], cwd=local, env=env,
+                           capture_output=True, text=True, timeout=30)
+    if probe.returncode == 0:
+        pytest.skip('git deduce singur numele si emailul pe acest calculator')
+    append(local, NEW_ROW)
+
+    code, out = run_helper_rc(local, 'PushHistory', env=env)
+
+    assert code == 1, out
+    assert '[GIT] Git nu are nume si email pe acest calculator' in out
+    assert '[GIT]   git config --global user.name "' in out
+    assert '[GIT]   git config --global user.email "' in out
+    assert out.rstrip().endswith('[GIT] Commit istoric esuat.')
+    assert git(local, 'diff', '--cached', '--name-only') == ''
+
+
+@pytest.fixture
+def auth_required_url():
+    """Remote HTTP care cere autentificare (401), ca GitHub fara credentiale salvate."""
+    import http.server
+    import threading
+
+    class Deny(http.server.BaseHTTPRequestHandler):
+        def _deny(self):
+            self.send_response(401)
+            self.send_header('WWW-Authenticate', 'Basic realm="test"')
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
+        do_GET = do_POST = _deny
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Deny)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f'http://127.0.0.1:{server.server_address[1]}/repo.git'
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize('mode', ['Sync', 'PushHistory'])
+@pytest.mark.parametrize('cause', ['auth', 'unreachable'])
+def test_a_push_without_saved_github_login_says_how_to_save_it(
+    repos, tmp_path, auth_required_url, mode, cause,
+):
+    """R2: push-ul cere autentificare, iar lansatorul nu poate intreba: mesajul
+    spune pasul manual, o data. Un push esuat din alt motiv nu primeste sfatul."""
+    local, _, origin = repos
+    # fetch ramane pe origin; numai push-ul merge la remote-ul de test.
+    push_url = auth_required_url if cause == 'auth' else str(tmp_path / 'missing.git')
+    git(local, 'config', 'remote.origin.pushurl', push_url)
+    # Fara GCM (credential.helper din configurarea sistemului) si fara askpass.
+    git(local, 'config', 'credential.helper', '')
+    env = {key: value for key, value in os.environ.items()
+           if key.upper() not in {'GIT_ASKPASS', 'SSH_ASKPASS', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'}}
+    env['NO_PROXY'] = '127.0.0.1'
+    if mode == 'Sync':
+        (local / 'mine.txt').write_text('own work\n')
+        commit(local, 'own work')
+    else:
+        append(local, NEW_ROW)
+    head_before = git(origin, 'rev-parse', 'main')
+
+    code, out = run_helper_rc(local, mode, env=env)
+
+    hint = '[GIT] Autentificarea GitHub nu este salvata pe acest calculator.'
+    if cause == 'auth':
+        assert 'could not read Username' in out
+        assert hint in out and 'git push origin main' in out
+    else:
+        assert hint not in out
+    if mode == 'Sync':
+        assert code == 0, out
+        assert '[GIT] Push esuat - commit-urile raman locale; se reincearca la urmatoarea pornire.' in out
+    else:
+        assert code == 1, out
+        assert out.rstrip().endswith('[GIT] Push esuat - commit-urile raman locale pentru reincercare.')
+    assert git(origin, 'rev-parse', 'main') == head_before

@@ -83,6 +83,73 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Audit global pe module, runda a doua — 2026-10-22
+
+- Cerinta: inca o verificare globala completa, dupa pool-ul pe joc si 5/40 pe
+  17-19 numere. Zece zone (date, metode, bench si decizie, motor, wheeling, WF,
+  worker si coada, UI, „Bilet complet” si scheme LR, lansatoare si git), fiecare
+  constatare reprodusa de auditor si verificata separat pe HEAD. 15 confirmate,
+  toate reparate, fiecare cu test care pica pe codul vechi; plus doua probleme
+  intalnite azi pe al doilea calculator (identitate si autentificare git).
+  Reparatiile s-au facut intr-o clona locala, apoi s-au copiat o data in
+  proiect: aplicatia rula din acelasi folder Google Drive pe celalalt calculator.
+- Date: Slovacia (`sk_loto`) are extragere si vinerea din 07-03-2025: zilele
+  din registru sunt (2, 4, 6), deci data extragerii din mail e corecta (Austria
+  ramane (2, 6): extragerile ei de vineri sunt la doua saptamani). Un CSV
+  romanesc fara nicio data lizibila (trunchiat, gol, codare stricata) apare
+  acum in NEACTUALIZATE, deci START_8000 avertizeaza, in loc de „toate la zi”.
+  `verifica_istoric` refuza celulele pe care actualizatoarele nu le pot citi cu
+  `int()` („1.0”, „1e0”), inainte ca PushHistory sa le publice pe toate statiile.
+  `scan_all_methods_hits.py` exclude, ca bench-ul, extragerile din ziua tintei.
+- Bench: un Re-Bench in care numai unele istorice nu se incarca nu mai rescrie
+  decizia (celulele jocului cazut deveneau erori, stampilate proaspete, iar
+  productia juca `frequency` fara marcaj de rezerva). `report.json` numeste
+  jocurile (`games_load_failed`, numai cand exista), `best_methods.json` ramane
+  neatins, iar bench-ul iese cu 1. Panoul bench al altor tari numara `random`
+  o singura data.
+- Motor si worker: o celula Urna 2 ilizibila in primele sau ultimele 3
+  extrageri Joker nu mai opreste jobul (devine None in contextul afisat). O eroare
+  SQLite trecatoare la oricare scriere de progres sau verificare de anulare a
+  worker-ului se logheaza si nu mai pierde rezultatul terminat (inainte, la 99%
+  sau dupa rulare, jobul devenea FAILED, cu rezultatul aruncat). Un editor sau un
+  shell care are `worker.py` in linia de comanda nu mai trece drept worker, nici
+  un Python pornit cu `-m`/`-c` (IDLE: `pythonw -m idlelib worker.py`).
+  Rezerva `frequency` a motorului (scorerul deciziei a crapat sau a dat scoruri
+  goale la generare) nu mai e raportata drept decizie schimbata: WF ramane sarit,
+  fiindca pasii ar fi scorati de alta metoda decat cea care a dat pool-ul, dar
+  panoul si raportul spun motivul adevarat; auditul numeste scorerul incercat
+  (`attempted`).
+- Teste: `bench_all_methods.py` si `scan_all_methods_hits.py` reconfigurau
+  consola cu handler „strict” la import; importate la colectare, faceau strict
+  fisierul de captura al pytest, iar un WF paralel care scria octeti ne-UTF-8
+  dobora restul sesiunii. Acum `errors="replace"`, ca celelalte scripturi.
+- Lansatoare (§4.5): o actualizare ff/drop oprita la limita de timp se
+  anuleaza (lacatele lasate de git sterse, fisierele sterse de git puse la loc)
+  si o spune; fixarea offline se decide pe bitul PINNED (Google Drive accepta
+  `attrib +P` fara efect), cu marcaj pe calculator; PushHistory spune corect cand
+  integrarea ramane manuala; un repository refuzat de git arata motivul lui git;
+  hook-ul post-commit, la push respins, spune sa integrezi intai. Commit-ul
+  automat esuat al istoricului scoate fisierele din index; fara nume si email,
+  sau fara autentificare GitHub salvata, mesajul spune comenzile exacte.
+- Revizia adversariala a reparatiilor (4 zone, fiecare constatare verificata
+  separat): 7 confirmate, toate reparate, cu teste. Prima forma a reparatiei
+  pentru rezerva `frequency` lasa WF sa ruleze cu metoda deciziei pe un pool
+  facut de rezerva (acum ramane sarit, cu motivul adevarat); anularea unei
+  actualizari oprite rula sub aceeasi limita de timp, fara verificarea
+  rezultatului; IDLE (`pythonw -m idlelib worker.py`) trecea inca drept worker;
+  linia pentru CSV-ul ilizibil nu continea „EROARE”, deci ACTUALIZARI nu
+  avertiza; mesajele PushHistory si ale hook-ului post-commit promiteau
+  integrarea automata si cand ea ramane manuala (commit de merge, commit trimis
+  rescris).
+- Verificat pe Windows / Python 3.14.8, runtime izolat, in proiect dupa copierea
+  din clona: 149 fisiere `test_*.py`, 3521 de teste trecute, 20 sarite, zero
+  esecuri (31 min 13 s); 92 teste noi in `test_audit_2026_10_22b_*.py`, plus
+  cele noi din `test_launcher_git.py` (fisierul complet: 111 trecute, 2 sarite).
+  `audit_application.py`: 13 istorice, 848 verificari de paritate, 154 de
+  designuri, 26 de pipeline-uri, 13 profile de cover complet, worker separat pe
+  13 jocuri si UI HTTP 200, fisierele de productie neatinse. Aplicatia reala nu
+  a fost repornita; schimbarile intra la repornirea normala.
+
 ### Pool pe joc si Loto 5/40 pana la 19 numere — 2026-10-22
 
 - Cerinta: utilizatorul joaca numai scheme reduse LR. Optiunea „Pool extins
@@ -1395,7 +1462,9 @@ UI-ul face polling la o secunda, fara reload complet.
   poate avea in plus a doua extragere a zilei, dar un rand stocat schimbat pe
   site nu mai intra drept a doua extragere); un rand nou repeta numerele
   principale ale randului anterior (ultimul stocat sau randul nou dinainte);
-  pagina nu contine nicio extragere (nu mai e raportata „la zi”). Diferentele
+  pagina nu contine nicio extragere (nu mai e raportata „la zi”); CSV-ul
+  stocat nu are nicio data lizibila (trunchiat, gol, codare stricata; din
+  2026-10-22, inainte jocul era sarit fara avertisment). Diferentele
   mai vechi de 60 de zile nu blocheaza (pagina 5/40 merge pana in 1995 si are
   inca 24-10-2024 gresit). O corectura locala din ultimele 60 de zile,
   nepreluata de loto49.ro, opreste update-ul jocului pana la corectura
@@ -1447,7 +1516,8 @@ UI-ul face polling la o secunda, fara reload complet.
   castigatori dupa `avg_hits` (`winners_per_pool_best`, `overall_winner`), care
   n-au trecut poarta fata de random; acestia raman rezerva numai fara
   `auto_pilot_per_pool`. Auditul (`bench_winner`) marcheaza rezerva: `fallback`,
-  `no_decision` (si la Romania fara decizie) sau `attempted` (numele respins).
+  `no_decision` (si la Romania fara decizie) sau `attempted` (numele respins,
+  sau scorerul deciziei care a crapat ori a dat scoruri goale la generare).
 - `random` este baseline structural pentru benchmark si este interzis in productie.
 - `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` si `haar_multiscale`
   raman in registry pentru bench si sunt interzise in productie
@@ -1525,7 +1595,8 @@ UI-ul face polling la o secunda, fara reload complet.
   `auto_pilot_per_pool` (productia juca `winners_per_pool_best`, fara poarta
   fata de random), cu semnaturile deja stampilate. Daca matricea esueaza,
   decizia anterioara ramane neatinsa, fara semnaturi noi, iar bench-ul iese cu
-  1. Regulile de rulare redusa (§4.3) raman neschimbate.
+  1. La fel cand numai unele istorice nu se incarca (`report.json`:
+  `games_load_failed`). Regulile de rulare redusa (§4.3) raman neschimbate.
 - Nu schimba schema `config_json` sau payload-ul queue fara migrare si teste E2E.
 - Nu folosi fisiere temporare cu nume fix pentru scrieri concurente.
 - Pasii walk-forward paraleli primesc setarile pe NUME (`_wf_worker_step` ia un
@@ -1555,7 +1626,9 @@ UI-ul face polling la o secunda, fara reload complet.
   PR, apoi merge imediat.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
   pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste; nu retrimite
-  commit-uri retrase de pe `origin/main`). `START_8000.bat` si
+  commit-uri retrase de pe `origin/main`). La un push respins (origin/main s-a
+  mutat) spune sa integrezi intai (START_8000, ACTUALIZARI sau `git pull
+  --rebase`), nu sa reincerci. `START_8000.bat` si
   `ACTUALIZARI.bat` setea `core.hooksPath` la `scripts/git-hooks`.
 - Lansatoarele transfera executia FARA CALL intr-o copie temporara imuabila.
   `scripts/launcher_git.ps1 -Mode Sync`, copiat impreuna cu lansatorul, face un
@@ -1625,9 +1698,13 @@ UI-ul face polling la o secunda, fara reload complet.
   in teste. Alta ramura decat `main` nu se atinge. Nu se sterg fisierele .bat
   personale si nu exista reset fortat sau `git stash`.
 - Pe un folder sincronizat in cloud (Google Drive, OneDrive, Dropbox),
-  `launcher_git.ps1` cere o data fixarea offline (`attrib +P /S /D`, marcaj in
-  `.git\loto-offline-pin`) si ridica limita pe comanda git de la 45 la 180 s.
-  Fixarea esuata se raporteaza cu pasul manual si nu opreste sincronizarea.
+  `launcher_git.ps1` cere o data pe calculator fixarea offline (`attrib +P /S
+  /D`, marcaj `.git\loto-offline-pin-<COMPUTERNAME>`; folderul `.git` poate fi
+  impartit de doua calculatoare) si ridica limita pe comanda git de la 45 la
+  180 s. Reusita se judeca pe bitul PINNED al elementelor vizibile din proiect:
+  Google Drive accepta `attrib +P` cu cod 0 fara efect. Fixarea esuata se
+  raporteaza cu pasul manual si nu opreste sincronizarea. In teste,
+  `LOTO_ATTRIB_EXE` inlocuieste `attrib`.
   Recomandarea ramane repository-ul pe disc local.
 - `ACTUALIZARI.bat` verifica Git for Windows inainte de sincronizare
   (`launcher_git.ps1 -Mode EnsureGit`): lipsa -> `winget install --id Git.Git`,
@@ -1673,7 +1750,12 @@ UI-ul face polling la o secunda, fara reload complet.
   repus peste `origin/main`; la conflict, `rebase --abort`. Modificarile
   necomise, inclusiv o schimbare refuzata a unui fisier urmarit, opresc numai
   acest rebase al PushHistory; Sync le pune deoparte si integreaza oricum. Un
-  `packed-refs.lock` fara proces `git` este sters. Hook-ul de auto-push este
+  `packed-refs.lock` fara proces `git` este sters. Un commit automat esuat scoate
+  fisierele acceptate din index (raman pe disc si se reiau la pornirea
+  urmatoare); fara nume si email in git, mesajul da cele doua comenzi `git config
+  --global`, iar un push fara autentificare GitHub salvata (Sync sau
+  PushHistory) spune sa rulezi o data `git push origin main` intr-un terminal
+  obisnuit, care deschide login-ul si il salveaza. Hook-ul de auto-push este
   oprit pentru acest commit: push-ul este executat o data. Testele
   (`test_launcher_git.py`) ruleaza validarea cu Python-ul suitei, pe un
   `loto_6_49.csv` din registru. Pe Linux/macOS helper-ul ruleaza sub PowerShell

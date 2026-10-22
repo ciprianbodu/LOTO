@@ -22,6 +22,7 @@ from ui_results import (
     _hypergeo_params,
     _method_from_bench,
     _random_rate_hypergeo,
+    _scorer_fallback_reason,
     _thousands,
     _ticket_pick,
 )
@@ -1168,6 +1169,12 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                         "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea "
                         "acestui joc. Mărește „⏱ Buget walk-forward”; la generarea "
                         "următoare pașii deja validați se iau din cache."
+                    ).classes("text-warning text-caption text-bold")
+                _skip = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+                if _skip.get("scorer_fallback"):
+                    ui.label(
+                        f"⚠️ Walk-forward sărit: {_scorer_fallback_reason(_skip)}. "
+                        "Generează din nou."
                     ).classes("text-warning text-caption text-bold")
                 if (
                     STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
