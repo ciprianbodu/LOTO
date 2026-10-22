@@ -378,6 +378,14 @@ def _render_full_ticket_replay(flat, game: str, guarantee) -> None:
                 "rezultat peste 🎲 aici nu e o validare externă. La pragurile rare "
                 "(câteva evenimente), frecvența observată variază mult în jurul valorii 🎲."
             )
+            if any(
+                len((getattr(r, "ticket_context", None) or {}).get("hard_core") or ()) > 16
+                for r in flat
+            ):
+                note += (
+                    " La pașii pe pool extins, biletul folosește cele 16 numere ale "
+                    "bazei, ca pool-ul implicit."
+                )
             if game == "joker":
                 note += " Joker: numai Urna 1."
             if m < n_all:
@@ -412,6 +420,24 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
     except Exception:  # noqa: BLE001
         return None
     _sfx = f" ({label})" if label else ""
+    if cov.get("extended"):
+        # Pool extins: garanția 4 parțială e alegerea utilizatorului, nu un wheel
+        # incomplet; remediul „Variante maxime = 0” nu se aplică aici.
+        _min = cov.get("extended_min")
+        return (
+            "text-caption text-info",
+            f"🎯 Pool extins{_sfx} pe {_n_extrageri(cov['extended'])}: garanția 4 e "
+            "parțială prin alegere"
+            + (f" (minim {_min:.2f}% din grupele de 4)" if _min is not None else "")
+            + "; 3 numere din pool ajung mereu pe o variantă. Cifrele 4+/5+ de POOL "
+            "sunt un plafon; numărați hiturile de BILET."
+            + (
+                f" ⚠️ Pe alte {cov['below_100']} extrageri wheel-ul e sub 100% "
+                f"(minim {cov['min']:.2f}%)."
+                if cov["below_100"]
+                else ""
+            ),
+        )
     if cov["below_100"]:
         return (
             "text-warning text-caption text-bold",
@@ -434,6 +460,42 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
             f"{cov['unknown']} (cache WF mai vechi).",
         )
     return None
+
+
+def _wf_step_pool_sizes(flat) -> list[int]:
+    """Mărimea pool-ului jucat la fiecare extragere WF (o valoare pe pas)."""
+    sizes: list[int] = []
+    seen: set = set()
+    for row in flat or ():
+        di = getattr(row, "draw_index", None)
+        if di in seen:
+            continue
+        seen.add(di)
+        hard_core = (getattr(row, "ticket_context", None) or {}).get("hard_core")
+        if hard_core:
+            sizes.append(len(hard_core))
+    return sizes
+
+
+def _mixed_null(gk: str, threshold: int, sizes: list[int], count: int):
+    """(rata aleatoare medie, P(cel puțin `count` extrageri)) pe pași de mărimi diferite.
+
+    Fiecare pas e o încercare cu rata hipergeometrică a pool-ului lui; suma e o
+    convoluție de binomiale, una pe mărime (pool extins amestecat cu 16)."""
+    import numpy as np
+    from scipy.stats import binom
+
+    groups: dict[int, int] = {}
+    for k in sizes:
+        groups[int(k)] = groups.get(int(k), 0) + 1
+    rates = {k: _random_rate_hypergeo(gk, k, threshold) for k in groups}
+    if not sizes or any(r is None for r in rates.values()):
+        return None, None
+    mean = sum(rates[k] * c for k, c in groups.items()) / len(sizes)
+    pmf = np.array([1.0])
+    for k, c in sorted(groups.items()):
+        pmf = np.convolve(pmf, binom.pmf(np.arange(c + 1), c, rates[k]))
+    return mean, float(min(1.0, pmf[max(0, int(count)):].sum()))
 
 
 def _wf_pool_size(flat, fallback: int) -> int:
@@ -534,7 +596,7 @@ def _lr_replay(per: dict, game_label: str) -> list[dict]:
     numai pașii cu pool și extragere în context și cu atâtea numere câte cere
     schema. `observed`/`tickets` numără extragerile cu cel puțin t pe o variantă
     (schema, respectiv variantele validate în WF, pe aceiași pași)."""
-    from covering.lr_schemes import best_hits, lr_schemes, scheme_odds
+    from covering.lr_schemes import MAX_POOL, best_hits, lr_schemes, scheme_odds
 
     by_n: dict[int, list[dict]] = {}
     for d in per.values():
@@ -542,6 +604,8 @@ def _lr_replay(per: dict, game_label: str) -> list[dict]:
             by_n.setdefault(len(d["pool_numbers"]), []).append(d)
     out = []
     for n, rows in sorted(by_n.items()):
+        if n > MAX_POOL:
+            continue  # ca panoul și motorul: schemele de peste 16 numere rămân date
         for scheme in lr_schemes(game_label, n):
             best = [(d, best_hits(scheme, d["pool_numbers"], d["drawn"])) for d in rows]
             odds = scheme_odds(scheme)
@@ -562,10 +626,24 @@ def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: floa
     """Tabelul „schemă LR pe pool-ul de atunci”; o notă când pool-ul n-are cod.
 
     `wf_variants` = variante WF pe extragere, ca schema să se compare la cost."""
-    from covering.lr_schemes import lr_schemes, unloaded_schemes
+    from covering.lr_schemes import MAX_POOL, lr_schemes, unloaded_schemes
 
     res = _lr_replay(per, game_label)
     if not res:
+        if pool_n and pool_n > MAX_POOL:
+            # Limita e a aplicației: LR are la 5/40 și scheme de 17-19 numere.
+            _lr_here = lr_schemes(game_label, pool_n)
+            _extra = (
+                f" (Loteria Română are {', '.join(s.label for s in _lr_here)} pentru "
+                f"{pool_n} numere, neincluse în aplicație)"
+                if _lr_here
+                else ""
+            )
+            ui.label(
+                f"📋 Aplicația reia schemele reduse LR numai pe pool-uri de cel mult "
+                f"{MAX_POOL} numere; pool-ul extins de {pool_n} nu are reluare LR{_extra}."
+            ).classes("text-caption text-grey")
+            return
         sizes = sorted({s.n for s in lr_schemes(game_label)})
         here = lr_schemes(game_label, pool_n) if pool_n else []
         bad = unloaded_schemes(game_label, pool_n) if pool_n else []
@@ -714,7 +792,29 @@ def _render_hits_4plus(
             "pool-ul generat."
         ).classes("text-caption text-grey")
     _wg = (meta or {}).get("wheel_guarantee")
-    if _wg is not None:
+    _xp_v = int((meta or {}).get("extended_pool") or 0)
+    _xps = ((meta or {}).get("extended_steps") or {}) if _xp_v else {}
+    _xp_ap = int(_xps.get("applied") or 0)
+    _xp_fb = int(_xps.get("fallback") or 0)
+    _xp_why = "; ".join(f"{r} ({c})" for r, c in (_xps.get("reasons") or {}).items())
+    _xp_fbs = sorted(int(k) for k in (_xps.get("fallback_pool_sizes") or {}) if int(k))
+    _xp_fb_pool = "/".join(map(str, _xp_fbs)) if _xp_fbs else "16"
+    if _xp_v and _xp_ap:
+        # Garanția 4 e parțială numai la pașii care au adoptat designul.
+        ui.label(
+            f"Wheel evaluat în WF: pool extins {_xp_v}, tot atâtea variante cât coverul "
+            "complet pe 16 numere; designul se certifică la fiecare pas față de acel "
+            f"cover. Garanția 4 e parțială la cele {_n_extrageri(_xp_ap)} pe pool extins."
+            + (
+                f" La {_n_extrageri(_xp_fb)} certificarea n-a trecut și s-a jucat pool-ul "
+                f"de {_xp_fb_pool} cu garanția 4 completă"
+                + (f": {_xp_why}" if _xp_why else "")
+                + "."
+                if _xp_fb
+                else ""
+            )
+        ).classes("text-caption text-grey")
+    elif _wg is not None:
         _wc = (meta or {}).get("wheel_condition") or _wg
         _cap = int((meta or {}).get("max_variants") or 0)
         _cap_note = f"plafon {_cap} variante" if _cap else "fără plafon de variante"
@@ -727,6 +827,13 @@ def _render_hits_4plus(
                 f"Acoperirea de 100% garantează {_wg} pe un bilet numai de la {_wc} "
                 "numere în pool. Pentru rezultate, urmăriți coloana variantelor."
             ).classes("text-caption text-warning")
+        if _xp_v:
+            # Cerut, dar niciun pas nu l-a adoptat: s-a jucat pool-ul de mai sus.
+            ui.label(
+                f"Pool extins {_xp_v} cerut, neaplicat la niciun pas"
+                + (f" ({_xp_why})" if _xp_why else "")
+                + f": pașii au jucat pool-ul de {_xp_fb_pool} cu garanția de mai sus."
+            ).classes("text-caption text-grey")
     _cn = _wf_coverage_note(flat)
     if _cn:
         ui.label(_cn[1]).classes(_cn[0])
@@ -762,9 +869,18 @@ def _render_hits_4plus(
     _pn = _wf_pool_size(flat, int((meta or {}).get("pool_size") or pool_n or 0))
     n_tick = len(flat)
     tick_avg = (n_tick / n) if n else 0.0
+    # Pool extins: pașii pot amesteca mărimi (17-18 și 16 unde certificarea n-a
+    # trecut); referința aleatoare e atunci media pe extrageri.
+    _sizes = _wf_step_pool_sizes(flat)
+    _mixed = len(set(_sizes)) > 1
+    _pn_label = f"{min(_sizes)}–{max(_sizes)}" if _mixed else _pn
 
     # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
     def _rnd(t):
+        if _mixed:
+            rates = [_random_rate_hypergeo(gk, k, t) for k in _sizes]
+            rate = None if None in rates else sum(rates) / len(rates)
+            return _threshold_pct(t, rate)
         return _threshold_pct(t, _random_rate_hypergeo(gk, _pn, t) if _pn else None)
 
     # Un rând pe prag: pe telefon încap toate coloanele (înainte, 735 px).
@@ -784,7 +900,7 @@ def _render_hits_4plus(
             {"name": "prag", "label": "Extrageri cu", "field": "prag", "align": "left"},
             {
                 "name": "pool",
-                "label": f"🎯 Pool de atunci (din {_pn})"
+                "label": f"🎯 Pool de atunci (din {_pn_label})"
                 if _pn
                 else "🎯 Pool de atunci",
                 "field": "pool",
@@ -865,12 +981,25 @@ def _render_hits_4plus(
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
     _losers, _winners = [], []
     for _lbl3, _cnt, _den, _K in _tt_checks:
-        _b = _random_rate_hypergeo(gk, _K, _TT) if _K else None
+        _p_mixed = None
+        if _mixed:
+            # Pași pe pool extins amestecați cu pași pe 16: aceeași referință ca
+            # coloana 🎲 (media pe pași) și p-ul sumei de binomiale pe mărimi.
+            _b, _p_mixed = _mixed_null(gk, _TT, _sizes, _cnt)
+        else:
+            _b = _random_rate_hypergeo(gk, _K, _TT) if _K else None
         if _b is None or not _den:
             continue
         if (_cnt / _den) <= _b:
             _losers.append(
                 f"{_lbl3}: {_cnt / _den * 100:.2f}% ≤ random {_b * 100:.2f}%"
+                + (f" (media pe pașii de {_pn_label} numere)" if _mixed else "")
+            )
+        elif _mixed:
+            _winners.append(
+                f"{_lbl3}: {_cnt / _den * 100:.2f}% față de random {_b * 100:.2f}% "
+                f"(media pe pașii de {_pn_label} numere; p = {_p_mixed:.2f}, test "
+                "unilateral pe mărimea fiecărui pas)"
             )
         else:
             from scipy.stats import binom
@@ -1116,10 +1245,21 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 # a schimbat între timp setarea pentru următoarea generare.
                 _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
                 _spec = _game_spec_for(game, data)
+                # Pool extins: metoda e decizia pentru pool 16, deci clasamentul
+                # arătat e al pool-ului 16; istoricul rămâne pe pool-ul jucat.
+                _xp_on = bool(
+                    ((data.get("audit") or {}).get("extended_pool") or {}).get("applied")
+                )
+                _board_pool = int(data.get("pool_size_requested") or 16) if _xp_on else _pn
+                if _xp_on:
+                    ui.label(
+                        f"Clasamentul pool-ului {_board_pool}: decizia folosită și de "
+                        f"pool-ul extins {_pn}; numerele în plus continuă clasamentul metodei."
+                    ).classes("text-caption text-grey")
                 if _spec.is_romanian:
-                    _render_bench_leaderboard(game, pool_size=_pn or None)
+                    _render_bench_leaderboard(game, pool_size=_board_pool or None)
                 else:
-                    _render_bench_leaderboard(game, pool_size=_pn or None, spec=_spec)
+                    _render_bench_leaderboard(game, pool_size=_board_pool or None, spec=_spec)
                 _penalty_note = _bench_transform_note(data)
                 if _penalty_note:
                     ui.label(_penalty_note).classes("text-caption text-warning")

@@ -154,6 +154,10 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         h.update(
             f"max_consecutive_run={_mcr}|{_CONSECUTIVE_SEMANTICS}".encode("utf-8")
         )
+    # Pool-ul extins, cu aceeași regulă: în hash numai pornit.
+    _ext = _active_extended_pool()
+    if _ext:
+        h.update(f"extended_pool={_ext}|xp1".encode("utf-8"))
     h.update(
         str(sorted(sim_depth_per_game.items())).encode("utf-8")
     )  # adâncime per joc → cache key
@@ -197,6 +201,13 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
         }
+        _ext_game = _extended_for_game(_spec) if _ext else 0
+        if _ext_game:
+            # Numai pornit și numai la jocurile cu design livrat (6/49, 5/40,
+            # Joker și geometriile lor): un job fără opțiune are exact
+            # config_json-ul de dinainte, iar 6/45 sau 5/50 își păstrează pool-ul.
+            # 17/18 = pool extins pentru 4+; worker-ul fixează baza pe 16 / g4.
+            task["extended_pool"] = _ext_game
         if not _spec.is_romanian:
             task["country"] = _spec.country
             h.update(f"country={_spec.country}|game_id={_spec.game_id}".encode("utf-8"))
@@ -276,10 +287,15 @@ def apply_autopilot_and_generate() -> None:
             _spec = _game_spec_for(fname)
             if _spec.game_id not in _selected:
                 continue
+            # Pool-ul extins se scorează cu decizia pentru pool 16 (worker-ul
+            # fixează baza pe 16), deci notificarea numește aceeași metodă.
+            _scorer_pool = (
+                16 if _extended_for_game(_spec) else _int_setting("pool_size_val")
+            )
             if _spec.is_romanian:
                 label = _game_label_for(fname)
                 gk = _LABEL_TO_KEY.get(label, "loto_6_49")
-                cfg = recommend_optimal_config(gk, _int_setting("pool_size_val"))
+                cfg = recommend_optimal_config(gk, _scorer_pool)
             else:
                 # Decizia țării ei; fără bench → frequency (fallback), spus explicit.
                 label = _spec.game_id
@@ -288,7 +304,7 @@ def apply_autopilot_and_generate() -> None:
 
                 cfg = recommend_optimal_config(
                     gk,
-                    _int_setting("pool_size_val"),
+                    _scorer_pool,
                     config_path=str(decision_path_for(_spec.country)),
                 )
                 if not cfg or cfg.get("fallback"):
@@ -1267,7 +1283,12 @@ def _wf_run_kwargs(g_label: str, data: dict) -> dict:
     return {
         # GEOMETRIA (străin: din ecoul rezultatului); România: eticheta.
         "game_type": _game_spec_for(g_label, data).geometry,
-        "pool_size": int(data.get("pool_size_requested") or data.get("pool_size") or 10),
+        # Pool extins: baza e mereu 16 (decizia și coverul certificării).
+        "pool_size": (
+            16
+            if _wf_generation_options(data).get("extended_pool")
+            else int(data.get("pool_size_requested") or data.get("pool_size") or 10)
+        ),
         "backtest_depth_percent": WF_DEPTH_PERCENT,
         "lookback_percent": _effective_lookback_pct(data),
         **_wf_generation_options(data),
@@ -1291,6 +1312,8 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "wheel_condition": meta.get("wheel_condition"),
             "max_variants": meta.get("max_variants"),
             "max_consecutive_run": meta.get("max_consecutive_run"),
+            "extended_pool": meta.get("extended_pool"),
+            "extended_steps": meta.get("extended_steps"),
         }
 
 
@@ -1988,6 +2011,7 @@ def _build_mail_body() -> str:
             + _nums(primary.get("hard_core") or [])
             + (f"  | joker: {_nums(joker)}" if joker else "")
         )
+        lines.extend(_extended_pool_lines(primary))
         _lr = _lr_schemes_for(g, primary)
         if _lr:
             _price = PRICES.get(_game_label_for(g), 8.0)
@@ -3004,6 +3028,30 @@ def main_page() -> None:
             ),
             "pool_size_val",
         )
+        _bind_save(
+            ui.select(
+                {
+                    0: "Oprit: pool-ul de mai sus, garanția completă",
+                    **{
+                        v: f"{v} numere, tot atâtea variante"
+                        for v in _extended_sizes()
+                    },
+                },
+                label="🎯 Pool extins pentru 4+",
+            ).classes("w-full"),
+            "extended_pool_val",
+        )
+        ui.label(
+            "Pornit, ignoră pool-ul, garanția, condiția garanției și limita de variante de aici: joci tot "
+            "atâtea variante cât coverul complet de 16 (6/49: 152; 5/40 și Joker: "
+            "404), dar pe primele 17 sau 18 numere din clasamentul metodei. Șansa "
+            "de 4+ pe o variantă crește (6/49: 7,96% → 8,50% / 9,32%; 5/40: 16,03% "
+            "→ 17,22% / 17,55%; Joker: 4,68% → 5,09% / 5,17%), iar niciun alt prag "
+            "nu scade. În schimb, „4 sigur dacă ies 4 din pool” devine parțial. "
+            "Variantele sunt verificate la fiecare generare față de coverul complet "
+            "de 16; dacă verificarea nu trece, se joacă pool-ul de 16. Fără avantaj "
+            "predictiv: câștigurile se împart pe mai multe extrageri."
+        ).classes("text-caption text-grey")
         _bind_save(
             ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1).classes(
                 "w-full"

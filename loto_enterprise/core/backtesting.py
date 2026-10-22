@@ -139,6 +139,7 @@ def _retroactive_step_stateless(
     adaptive_mode: str = "normal",
     adaptive_event: str | None = None,
     max_consecutive_run: int = 0,
+    extended_pool: int = 0,
     *,
     game_key: str | None = None,
     country: str | None = None,
@@ -188,6 +189,7 @@ def _retroactive_step_stateless(
             restrict_base_min=restrict_base_min,
             wheel_condition=wheel_condition,
             max_consecutive_run=max_consecutive_run,
+            extended_pool=int(extended_pool or 0),
         )
         return eng, out_lines, (_ctx or {}), audit
 
@@ -226,7 +228,12 @@ def _retroactive_step_stateless(
 
 
 # Cheile de audit pe care le citește `full_ticket.build_full_ticket`.
-_TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base")
+_TICKET_AUDIT_KEYS = (
+    "timesfm_predictions",
+    "consecutive_limit",
+    "restrict_base",
+    "extended_pool",
+)
 
 
 def _ticket_context(engine, audit, actual) -> dict:
@@ -877,6 +884,7 @@ class LotoBacktester:
         restrict_base_min: int = 0,
         wheel_condition: int | None = None,
         max_consecutive_run: int = 0,
+        extended_pool: int = 0,
     ) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
@@ -886,6 +894,7 @@ class LotoBacktester:
             și să se oprească la același buget în același loc.
         max_consecutive_run: limita de consecutive a utilizatorului, aceeași ca
             în producție (0 = oprit); ajunge la fiecare pas pe ambele căi.
+        extended_pool: pool-ul extins pentru 4+ (0 = oprit, 17/18), la fel.
 
         Args:
             pool_size: Dimensiunea pool-ului pentru wheeling
@@ -986,6 +995,7 @@ class LotoBacktester:
                     "restrict_base_min": int(restrict_base_min or 0),
                     "wheel_condition": wheel_condition,
                     "max_consecutive_run": int(max_consecutive_run or 0),
+                    "extended_pool": int(extended_pool or 0),
                 }
                 for sim_idx in sim_indices
             ]
@@ -1278,6 +1288,7 @@ class LotoBacktester:
                     restrict_base_min=restrict_base_min,
                     wheel_condition=wheel_condition,
                     max_consecutive_run=int(max_consecutive_run or 0),
+                    extended_pool=int(extended_pool or 0),
                     adaptive_mode=active_mode,
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None

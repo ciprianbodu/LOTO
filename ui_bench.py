@@ -1437,6 +1437,12 @@ def _render_urna2_benchmark_note() -> None:
         ).classes("text-caption text-grey")
 
 
+def _leaderboard_pool() -> int:
+    """Pool-ul clasamentului implicit: cel din setări, sau 16 cu pool-ul extins
+    pornit (generarea folosește atunci decizia pentru pool 16)."""
+    return 16 if _active_extended_pool() else _int_setting("pool_size_val")
+
+
 def _render_bench_leaderboard(
     game_label: str, top_n: int = 20, pool_size: int | None = None, *, spec=None
 ) -> None:
@@ -1459,7 +1465,7 @@ def _render_bench_leaderboard(
         if df.empty or "method" not in df.columns or "game" not in df.columns:
             return
         pool = (
-            int(pool_size) if pool_size is not None else _int_setting("pool_size_val")
+            int(pool_size) if pool_size is not None else _leaderboard_pool()
         )
         _render_bench_leaderboard_slice(
             df, spec.bench_key, pool, spec.display, top_n=top_n
@@ -1476,7 +1482,7 @@ def _render_bench_leaderboard(
         return
     if df.empty or "method" not in df.columns or "game" not in df.columns:
         return
-    pool = int(pool_size) if pool_size is not None else _int_setting("pool_size_val")
+    pool = int(pool_size) if pool_size is not None else _leaderboard_pool()
     if game_label == "joker":
         _render_bench_leaderboard_slice(
             df, "joker_urna1", pool, "Joker Urna 1 (5/45)", top_n=top_n
@@ -1552,7 +1558,7 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
         return  # mid-flush / gol → reîncearcă la următorul tick
     if df.empty or "method" not in df.columns or "game" not in df.columns:
         return
-    pool = _int_setting("pool_size_val")
+    pool = _leaderboard_pool()
     _done = progress is not None and float(progress) >= 1.0
     _title = (
         "🏆 Clasament COMPLET (teste 100% — se scrie decizia/raportul...)"
