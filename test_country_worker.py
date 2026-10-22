@@ -207,7 +207,8 @@ def _app_config(monkeypatch, rows=300) -> dict:
     monkeypatch.setattr(
         app, "STATE", {**app.STATE, "datasets": [("loto_6_49.csv", df)]}
     )
-    monkeypatch.setitem(app.SETTINGS, "pool_size_val", 12)
+    # România: pool-ul pe joc (2026-10-22); câmpul comun e al altor țări.
+    monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["6/49"], 12)
     return json.loads(app._build_config_json())
 
 

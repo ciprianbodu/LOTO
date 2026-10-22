@@ -278,33 +278,27 @@ def audit_bundle(bundle, sources=None):
             # rezultat, ca la pornirea WF din UI; fără ele cheia ar citi tacit
             # cache-ul configurației nerestrânse.
             opts = app_ui._wf_generation_options(data)
-            # Pool-ul extins: WF rulează pe baza de 16 cu garanția 4 completă
-            # (`run_honest_walk_forward`), cu `|xp1` în cheie; pool-ul jucat
-            # (17/18) nu intră în nume.
-            extended = int(opts.get("extended_pool") or 0)
-            wf_pool = 16 if extended else len(pool)
             sig = wf._decision_sig(
                 lot.geometry,
-                wf_pool,
+                len(pool),
                 audit.get("lookback_pct") or 100,
                 rp.get("draws") or 0,
                 rp.get("factor", 0.5),
-                guarantee=4 if extended else guarantee,
-                wheel_condition=4 if extended else condition,
-                max_variants=0 if extended else max_variants,
+                guarantee=guarantee,
+                wheel_condition=condition,
+                max_variants=max_variants,
                 restrict_base_max=opts["restrict_base_max"],
                 restrict_base_min=opts["restrict_base_min"],
                 max_consecutive_run=opts["max_consecutive_run"],
                 game_key=opts.get("game_key"),
                 country=opts.get("country"),
-                extended_pool=extended,
             )
             # Adâncimea intră în nume ca `float(...).hex()`, ca în
             # `run_honest_walk_forward`; cu `30` simplu cheia nu se potrivea niciodată.
             cache = wf._cache_path(
                 lot.geometry,
                 wf._csv_hash(source, lot.geometry),
-                wf_pool,
+                len(pool),
                 float(app_ui.WF_DEPTH_PERCENT).hex(),
                 sig,
                 game_key=opts.get("game_key"),

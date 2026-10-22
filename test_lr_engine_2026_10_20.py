@@ -219,10 +219,10 @@ def test_a_missed_bound_is_not_called_below_the_maximum():
     import app_nicegui  # noqa: F401
     import ui_results
 
+    # Toate schemele, și cele 5/40 de 17-19 numere (șansa exactă merge până la 20).
     for s in lr.lr_schemes():
-        if s.n <= 16:
-            for line in ui_results._lr_quality_lines(s, lr.scheme_odds(s), 5.0):
-                assert "sub maximul" not in line, (s.game, s.code, line)
+        for line in ui_results._lr_quality_lines(s, lr.scheme_odds(s), 5.0):
+            assert "sub maximul" not in line, (s.game, s.code, line)
     assert (
         "Schema Cod 45 e optimă: nicio altă așezare de 5 variante pe 7 numere nu "
         "prinde mai des, la niciun prag."
@@ -316,15 +316,23 @@ def test_same_size_data_matches_the_engine():
 # --------------------------------------------------------------------------- #
 # Revizia adversarială 2026-10-20
 # --------------------------------------------------------------------------- #
-def test_pools_over_16_skip_the_stage_and_the_key():
-    """Schemele 5/40 de 17-19 numere nu se pot certifica (șansa exactă merge până
-    la 16 numere): înainte, `generate_wheel` ridica ValueError la pool 17, plafon 488."""
+def test_cod45_is_adopted_at_17_numbers_and_signed_in_the_key():
+    """2026-10-22: Loto 5/40 se joacă până la 19 numere, iar șansa exactă merge
+    până la 20. La 17 numere cu plafonul 488, Cod 45 bate greedy-ul (acoperire 4
+    94,96% față de ~91%) și intră certificat; cheia WF îl semnează. Înainte, pool
+    peste 16 sărea etapa și cheia."""
     pool = list(range(1, 18))
     scores = {p: float(18 - p) for p in pool}
     wheel, _ = generate_wheel("hitcover", pool, 5, 4, 488, scores, None, 6, 40)
+    cod45 = _scheme("5/40", 45)
     assert len(wheel) == 488
-    assert lr.lr_scheme_signature(17, 5, 488) is None
-    assert "|lr" not in wfa._wheel_sig(17, "5/40", 4, None, 488)
+    assert wheel_hit_profile(pool, wheel) == wheel_hit_profile(
+        pool, [list(v) for v in cod45.variants]
+    )
+    sig = lr.lr_scheme_signature(17, 5, 488)
+    assert sig and f"|lr{sig}" in wfa._wheel_sig(17, "5/40", 4, None, 488)
+    # Peste cel mai mare cod nu există candidați.
+    assert lr.lr_candidates(20, 5, 930) == []
 
 
 def test_adoption_at_guarantee_equal_to_ticket():

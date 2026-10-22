@@ -110,6 +110,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     h = hashlib.sha256()
     for k in (
         "pool_size_val",
+        *_POOL_KEYS.values(),
         "guarantee_val",
         "max_variants_val",
         "lookback_val",
@@ -154,10 +155,6 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         h.update(
             f"max_consecutive_run={_mcr}|{_CONSECUTIVE_SEMANTICS}".encode("utf-8")
         )
-    # Pool-ul extins, cu aceeași regulă: în hash numai pornit.
-    _ext = _active_extended_pool()
-    if _ext:
-        h.update(f"extended_pool={_ext}|xp1".encode("utf-8"))
     h.update(
         str(sorted(sim_depth_per_game.items())).encode("utf-8")
     )  # adâncime per joc → cache key
@@ -184,7 +181,8 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             _rb_min, _rb_max = _rb_foreign.get(g_label, (0, 0))
         task = {
             "game_label": g_label,
-            "pool_size": _int_setting("pool_size_val"),
+            # Pool-ul jocului: câmpul lui (România) sau cel comun (alte țări).
+            "pool_size": _pool_size_for(_spec.game_id),
             "guarantee": _int_setting("guarantee_val"),
             "max_variants": _int_setting("max_variants_val"),
             "wheel_condition": _int_setting("wheel_condition_val"),
@@ -201,13 +199,6 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
         }
-        _ext_game = _extended_for_game(_spec) if _ext else 0
-        if _ext_game:
-            # Numai pornit și numai la jocurile cu design livrat (6/49, 5/40,
-            # Joker și geometriile lor): un job fără opțiune are exact
-            # config_json-ul de dinainte, iar 6/45 sau 5/50 își păstrează pool-ul.
-            # 17/18 = pool extins pentru 4+; worker-ul fixează baza pe 16 / g4.
-            task["extended_pool"] = _ext_game
         if not _spec.is_romanian:
             task["country"] = _spec.country
             h.update(f"country={_spec.country}|game_id={_spec.game_id}".encode("utf-8"))
@@ -287,15 +278,10 @@ def apply_autopilot_and_generate() -> None:
             _spec = _game_spec_for(fname)
             if _spec.game_id not in _selected:
                 continue
-            # Pool-ul extins se scorează cu decizia pentru pool 16 (worker-ul
-            # fixează baza pe 16), deci notificarea numește aceeași metodă.
-            _scorer_pool = (
-                16 if _extended_for_game(_spec) else _int_setting("pool_size_val")
-            )
             if _spec.is_romanian:
                 label = _game_label_for(fname)
                 gk = _LABEL_TO_KEY.get(label, "loto_6_49")
-                cfg = recommend_optimal_config(gk, _scorer_pool)
+                cfg = recommend_optimal_config(gk, _pool_size_for(_spec.game_id))
             else:
                 # Decizia țării ei; fără bench → frequency (fallback), spus explicit.
                 label = _spec.game_id
@@ -304,7 +290,7 @@ def apply_autopilot_and_generate() -> None:
 
                 cfg = recommend_optimal_config(
                     gk,
-                    _scorer_pool,
+                    _pool_size_for(_spec.game_id),
                     config_path=str(decision_path_for(_spec.country)),
                 )
                 if not cfg or cfg.get("fallback"):
@@ -494,7 +480,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> None:
                             continue
                         _c = recommend_optimal_config(
                             _gk,
-                            _int_setting("pool_size_val"),
+                            _pool_size_for(_g.game_id),
                             config_path=str(_dp),
                         )
                         if _c.get("rate_col_mismatch"):
@@ -526,7 +512,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> None:
                 )
 
                 for _gk in ("loto_6_49", "loto_5_40", "joker_urna1"):
-                    _c = recommend_optimal_config(_gk, _int_setting("pool_size_val"))
+                    _c = recommend_optimal_config(_gk, _pool_size_for(_gk))
                     if _c.get("rate_col_mismatch"):
                         _mismatch = True
                         break
@@ -1283,12 +1269,7 @@ def _wf_run_kwargs(g_label: str, data: dict) -> dict:
     return {
         # GEOMETRIA (străin: din ecoul rezultatului); România: eticheta.
         "game_type": _game_spec_for(g_label, data).geometry,
-        # Pool extins: baza e mereu 16 (decizia și coverul certificării).
-        "pool_size": (
-            16
-            if _wf_generation_options(data).get("extended_pool")
-            else int(data.get("pool_size_requested") or data.get("pool_size") or 10)
-        ),
+        "pool_size": int(data.get("pool_size_requested") or data.get("pool_size") or 10),
         "backtest_depth_percent": WF_DEPTH_PERCENT,
         "lookback_percent": _effective_lookback_pct(data),
         **_wf_generation_options(data),
@@ -1312,8 +1293,6 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "wheel_condition": meta.get("wheel_condition"),
             "max_variants": meta.get("max_variants"),
             "max_consecutive_run": meta.get("max_consecutive_run"),
-            "extended_pool": meta.get("extended_pool"),
-            "extended_steps": meta.get("extended_steps"),
         }
 
 
@@ -2011,7 +1990,6 @@ def _build_mail_body() -> str:
             + _nums(primary.get("hard_core") or [])
             + (f"  | joker: {_nums(joker)}" if joker else "")
         )
-        lines.extend(_extended_pool_lines(primary))
         _lr = _lr_schemes_for(g, primary)
         if _lr:
             _price = PRICES.get(_game_label_for(g), 8.0)
@@ -2492,9 +2470,11 @@ def _bench_freshness_panel(country: str) -> None:
 
 # Panoul de istoric adaptiv folosea două nume NEDEFINITE (NameError la orice
 # apel). Fișierul canonic e cel scris de core.adaptive_feedback (rădăcina repo);
-# pool-urile acceptate de UI sunt 6..16 (clamp-ul din worker/încărcare).
+# pool-urile acceptate de UI sunt 6..16, la Loto 5/40 6..19 (clamp-ul din
+# worker/încărcare, `Lottery.max_pool`).
 ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
 SUPPORTED_POOLS = range(6, 17)
+SUPPORTED_POOLS_540 = range(6, 20)
 
 
 def _clean_stale_adaptive(stale_keys) -> None:
@@ -2531,7 +2511,10 @@ def adaptive_history_panel() -> None:
     stale = []
     for k in raw:
         try:
-            if int(str(k).split("_")[-1]) not in SUPPORTED_POOLS:
+            _allowed = (
+                SUPPORTED_POOLS_540 if str(k).startswith("5/40_") else SUPPORTED_POOLS
+            )
+            if int(str(k).split("_")[-1]) not in _allowed:
                 stale.append(k)
         except (ValueError, IndexError):
             pass
@@ -2543,7 +2526,8 @@ def adaptive_history_panel() -> None:
     if stale:
         with ui.row().classes("items-center gap-3"):
             ui.label(
-                f"⚠️ {len(stale)} configurări STALE (pool inaccesibil 6-16): {', '.join(stale)}"
+                f"⚠️ {len(stale)} configurări STALE (pool inaccesibil: 6-16, la 5/40 6-19): "
+                f"{', '.join(stale)}"
             ).classes("text-warning text-caption")
             ui.button(
                 "🗑️ Curăță stale", on_click=lambda s=stale: _clean_stale_adaptive(s)
@@ -2652,10 +2636,11 @@ def _base_table_games(country=None) -> tuple:
 
 
 _BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool, țintă) → (rânduri, n)
-# 3 jocuri × pool 6..16 × ținta 3/4 = 66 de combinații. Sub atât, memo-ul se
-# golea înainte să apuce să fie folosit: o plimbare înainte și înapoi peste
-# dimensiunile de pool recalcula tot de fiecare dată.
-_BASE_TABLE_MEMO_MAX = len(_BASE_TABLE_GAMES) * 11 * 2
+# Pool 6..16 la 6/49 și Joker, 6..19 la 5/40, × ținta 3/4 = (11 + 14 + 11) × 2 =
+# 72 de combinații. Sub atât, memo-ul se golea înainte să apuce să fie folosit:
+# o plimbare înainte și înapoi peste dimensiunile de pool recalcula tot de
+# fiecare dată.
+_BASE_TABLE_MEMO_MAX = (11 + 14 + 11) * 2
 # Tabelul se calculează abia când submeniul e deschis: ~0.7 s pentru trei jocuri
 # ar fi fost plătiți la fiecare încărcare de pagină, chiar fără să fie deschis.
 _BASE_TABLE_OPENED = {"value": False}
@@ -2739,20 +2724,28 @@ def _render_base_interval_tables() -> None:
     # tabelul raporta „istoric indisponibil" pentru un istoric perfect valid.
     from loto_enterprise.benchmark.hit_target import game_hit_target
 
-    pool = max(6, min(16, _int_setting("pool_size_val")))
     ui.label(
-        f"Pentru fiecare lățime de interval, intervalul cu cea mai bună rată la ținta "
-        f"jocului (ca bench-ul: Loto 5/40 minimum 4+), la un pool de {pool} numere. "
+        "Pentru fiecare lățime de interval, intervalul cu cea mai bună rată la ținta "
+        "jocului (ca bench-ul: Loto 5/40 minimum 4+), la pool-ul fiecărui joc. "
         "Calcul exact (hipergeometric per extragere), "
         "nu simulare. Coloana «Toată extragerea» e altceva: de câte ori au încăput "
         "TOATE numerele extrase în interval — plafonul unui sistem care ar juca "
         "întregul interval, nu rata unui pool de dimensiune fixă. Ultimul rând este "
         "jocul nerestrâns și cade pe referința teoretică."
     ).classes("text-caption text-grey")
+    # Fișierul unui joc străin e „externe/…csv”: jocul se ia din registru, nu
+    # din ghicitul după nume (care ar da Loto 6/49 și câmpul lui).
+    _by_csv = {
+        Path(g.csv).relative_to("_ISTORIC").as_posix(): g.game_id
+        for g in _LOT.games_for_country(_selected_country())
+    }
     for label, csv_name, draw_n, max_num in _base_table_games():
+        _gkey = _by_csv.get(csv_name, csv_name)
+        # Pool-ul jocului (câmpul lui), plafonat la 6..maximul jocului.
+        pool = _pool_size_for(_gkey)
         if pool > max_num:
             continue
-        _t = game_hit_target(_game_spec_for(csv_name).bench_key, _clamped_bench_target())
+        _t = game_hit_target(_game_spec_for(_gkey).bench_key, _clamped_bench_target())
         data = _base_interval_rows(csv_name, draw_n, max_num, pool, _t)
         if data is None:
             ui.label(f"· {label}: istoric indisponibil.").classes(
@@ -2761,7 +2754,8 @@ def _render_base_interval_tables() -> None:
             continue
         rows, n_draws = data
         with ui.expansion(
-            f"{label} — {count(n_draws, 'extrageri')}, ținta {_t}+", value=False
+            f"{label} — {count(n_draws, 'extrageri')}, pool {pool}, ținta {_t}+",
+            value=False,
         ).classes(
             "w-full"
         ):
@@ -3022,36 +3016,41 @@ def main_page() -> None:
             widget.on_value_change(lambda: _save_settings())
             return widget
 
-        _pool_input = _bind_save(
-            ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=16, step=1).classes(
-                "w-full"
-            ),
-            "pool_size_val",
-        )
-        _bind_save(
-            ui.select(
-                {
-                    0: "Oprit: pool-ul de mai sus, garanția completă",
-                    **{
-                        v: f"{v} numere, tot atâtea variante"
-                        for v in _extended_sizes()
-                    },
-                },
-                label="🎯 Pool extins pentru 4+",
-            ).classes("w-full"),
-            "extended_pool_val",
-        )
-        ui.label(
-            "Pornit, ignoră pool-ul, garanția, condiția garanției și limita de variante de aici: joci tot "
-            "atâtea variante cât coverul complet de 16 (6/49: 152; 5/40 și Joker: "
-            "404), dar pe primele 17 sau 18 numere din clasamentul metodei. Șansa "
-            "de 4+ pe o variantă crește (6/49: 7,96% → 8,50% / 9,32%; 5/40: 16,03% "
-            "→ 17,22% / 17,55%; Joker: 4,68% → 5,09% / 5,17%), iar niciun alt prag "
-            "nu scade. În schimb, „4 sigur dacă ies 4 din pool” devine parțial. "
-            "Variantele sunt verificate la fiecare generare față de coverul complet "
-            "de 16; dacă verificarea nu trece, se joacă pool-ul de 16. Fără avantaj "
-            "predictiv: câștigurile se împart pe mai multe extrageri."
-        ).classes("text-caption text-grey")
+        # Pool-ul pe joc (2026-10-22): România are un câmp pentru fiecare joc,
+        # cu maximul jocului și implicit cel mai mare cod LR; alte țări, câmpul
+        # comun de dinainte.
+        _pool_inputs = []
+        if _cc == _LOT.RO:
+            for _plabel, _ptitle in (
+                ("6/49", "Pool Loto 6/49"),
+                ("5/40", "Pool Loto 5/40"),
+                ("joker", "Pool Joker (Urna 1)"),
+            ):
+                _pmax = _LOT.GAMES_BY_ID[_plabel].max_pool
+                _pool_inputs.append(
+                    _bind_save(
+                        ui.number(
+                            f"{_ptitle} (6–{_pmax})", min=6, max=_pmax, step=1
+                        ).classes("w-full"),
+                        _POOL_KEYS[_plabel],
+                    )
+                )
+            ui.label(
+                "Implicit, cel mai mare cod LR al fiecărui joc: 16 la 6/49 (Cod 59), "
+                "19 la 5/40 (Cod 48), 15 la Joker. Numai Loto 5/40 are coduri peste "
+                "16 numere (Cod 45 și 46 pe 17, Cod 47 pe 18, Cod 48 pe 19); "
+                "„Istoric hits” se validează pe pool-ul fiecărui joc, cu metoda aleasă "
+                "de bench pentru acea mărime."
+            ).classes("text-caption text-grey")
+        else:
+            _pool_inputs.append(
+                _bind_save(
+                    ui.number("Dimensiune Pool (Nucleu Dur)", min=6, max=16, step=1).classes(
+                        "w-full"
+                    ),
+                    "pool_size_val",
+                )
+            )
         _bind_save(
             ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1).classes(
                 "w-full"
@@ -3209,7 +3208,8 @@ def main_page() -> None:
         # Procentele depind de dimensiunea pool-ului, deci tabelul se recalculează
         # când aceasta se schimbă. Intervalul ales de utilizator nu intră în calcul —
         # tabelul arată toate lățimile, nu îl evidențiază pe cel setat.
-        _pool_input.on_value_change(lambda: _render_base_interval_tables.refresh())
+        for _pool_input in _pool_inputs:
+            _pool_input.on_value_change(lambda: _render_base_interval_tables.refresh())
         _bind_save(
             ui.number(
                 "Analizează doar ultimele X% extrageri", min=0, max=100, step=5

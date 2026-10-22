@@ -223,12 +223,24 @@ def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
     render = app._render_base_interval_tables.func
     app._BASE_TABLE_OPENED["value"] = True
     for pool in (6, 16):
-        monkeypatch.setitem(app.SETTINGS, "pool_size_val", pool)
+        for key in app._POOL_KEYS.values():
+            monkeypatch.setitem(app.SETTINGS, key, pool)
         app._BASE_TABLE_MEMO.clear()
         with capture_ui() as ui:
             render()
         for table in (n for n in ui.walk() if n["kind"] == "table"):
             assert min(r["w"] for r in table["kwargs"]["rows"]) == pool
+    # Pool-ul pe joc (2026-10-22): 19 se aplică numai la Loto 5/40, celelalte
+    # jocuri se opresc la 16. Ordinea tabelelor: 6/49, 5/40, Joker.
+    for key in app._POOL_KEYS.values():
+        monkeypatch.setitem(app.SETTINGS, key, 19)
+    with capture_ui() as ui:
+        render()
+    mins = [
+        min(r["w"] for r in t["kwargs"]["rows"]) for t in ui.walk() if t["kind"] == "table"
+    ]
+    assert mins == [16, 19, 16]
+    assert "pool 19, ținta 4+" in ui.text()
 
 
 def test_submenu_is_lazy_and_survives_a_pool_value_below_the_allowed_minimum():
@@ -252,13 +264,15 @@ def test_submenu_is_lazy_and_survives_a_pool_value_below_the_allowed_minimum():
     assert not app._BASE_TABLE_MEMO, "inchis nu are voie sa calculeze nimic"
 
     app._BASE_TABLE_OPENED["value"] = True
+    saved = {key: app.SETTINGS.get(key) for key in app._POOL_KEYS.values()}
     for bad_pool in (0, 1, 99):
-        app.SETTINGS["pool_size_val"] = bad_pool
+        for key in app._POOL_KEYS.values():
+            app.SETTINGS[key] = bad_pool
         with capture_ui() as ui:
             render()
         assert "istoric indisponibil" not in ui.text()
         assert len([n for n in ui.walk() if n["kind"] == "table"]) == 3
-    app.SETTINGS["pool_size_val"] = 10
+    app.SETTINGS.update(saved)
 
 
 def test_memo_survives_a_walk_over_every_pool_size():
@@ -271,11 +285,12 @@ def test_memo_survives_a_walk_over_every_pool_size():
 
     app._BASE_TABLE_MEMO.clear()
     app._BASE_TABLE_OPENED["value"] = True
+    # Pool 6..16 la 6/49 și Joker, 6..19 la Loto 5/40 (`Lottery.max_pool`).
     walk = [
         (csv_name, draw_n, max_num, pool, target)
         for target in (3, 4)  # ținta jocului: 3+ sau 4+
-        for pool in range(6, 17)
         for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES
+        for pool in range(6, app._game_spec_for(csv_name).max_pool + 1)
     ]
     for args in walk:
         assert app._base_interval_rows(*args) is not None

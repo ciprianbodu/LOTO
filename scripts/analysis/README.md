@@ -1,14 +1,5 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
-**Pool extins pentru 4+, 22.10.2026:** [designurile 17-18 și verificarea lor](extended_pool/README.md).
-Opțiune separată, implicit oprită: la același număr de variante cât coverul
-complet pe 16 numere (6/49: 152; 5/40 și Joker: 404), 17 sau 18 numere din
-clasament prind mai des 4+ (6/49: 7,96% -> 8,50% / 9,32%; 5/40: 16,03% ->
-17,22% / 17,55%; Joker: 4,68% -> 5,09% / 5,17%), fără prag în scădere. Garanția
-4 devine parțială (6/49, 18 numere: 71,6% din grupele de 4); garanția 3 rămâne
-completă. Fiecare design se certifică la fiecare generare față de coverul
-complet pe 16. Reproducere: `python scripts/analysis/extended_pool/verify_extended_designs.py`.
-
 **Audit pe module și mai multe hituri 4+, 22.10.2026:** [14 defecte reparate și pârghiile 4+ măsurate exact](audit_hits_2026-10-22.md).
 Zece zone auditate, fiecare constatare reprodusă și verificată adversarial; 14
 reparate, cu teste care pică pe codul vechi. Configurația pool 16 / garanția 4
@@ -17,7 +8,8 @@ la 4+). Livrat: designuri cu buget pentru biletul de 5 (5/40 și Joker, plafon
 în principal 321..403, 92 de bugete de la 270), +1,0..4,0% la 4+, certificate
 pe ambele jocuri. Un pool de 17-20
 numere pe același număr de variante ar da mai mult (6/49, 152 de variante: până
-la 10,01%), dar cu garanția parțială; livrat ca opțiune la 17-18 numere (intrarea de mai sus).
+la 10,01%), dar cu garanția parțială. Livrat ca opțiune și scos în aceeași zi:
+utilizatorul joacă numai scheme reduse LR; cercetarea rămâne în [extended_pool/](extended_pool/README.md).
 Reproducere: `python scripts/analysis/gen_budget_designs_pick5.py`.
 
 **Schemele LR: optimalitate și motor, 20.10.2026:** [unde se mai pot obține hituri](lr_optimality_2026-10-20.md).

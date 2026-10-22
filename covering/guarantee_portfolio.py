@@ -31,7 +31,9 @@ from functools import lru_cache
 from covering.anneal_hits import MIN_THRESHOLD, _certify
 from covering.probability import wheel_hit_probabilities
 
-MAX_POOL = 16
+# 19: Loto 5/40 se joacă până la 19 numere (scheme LR Cod 45-48, 2026-10-22);
+# șansa exactă merge până la 20. 6/49 și Joker rămân la cel mult 16.
+MAX_POOL = 19
 
 
 @lru_cache(maxsize=64)

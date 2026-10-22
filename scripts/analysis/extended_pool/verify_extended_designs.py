@@ -3,7 +3,7 @@
 Pentru fiecare fișier `covering_designs/extended/X_<v>_<bilet>_<extrase>_<univers>_<variante>.txt`:
 pune designul pe un clasament canonic (1..v, scoruri descrescătoare), construiește
 coverul complet al motorului pe primele 16 numere (La Jolla, fără plafon) și
-rulează exact certificarea din producție (`covering.extended_pool.apply`).
+rulează exact certificarea modulului de studiu (`covering.extended_pool.apply`).
 Scrie șansele exacte pe fiecare prag și grupele de 4 acoperite; iese cu 1 dacă
 vreun design nu se certifică.
 

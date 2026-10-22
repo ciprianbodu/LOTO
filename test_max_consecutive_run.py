@@ -659,7 +659,7 @@ def test_submit_worker_result_and_wf_options_carry_the_limit(tmp_path, monkeypat
     """AGENTS.md §4.4: o cheie nouă în config_json cere un test E2E."""
     app = _app_with_dataset(monkeypatch, rows=400)
     monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", True)
-    monkeypatch.setitem(app.SETTINGS, "pool_size_val", 12)
+    monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["6/49"], 12)
     db = str(tmp_path / "jobs.db")
     jid = jq.submit_job("pipeline", app._build_config_json(), db_path=db)
     job = jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)

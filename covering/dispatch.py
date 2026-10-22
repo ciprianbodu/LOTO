@@ -32,6 +32,7 @@ from covering.ilp import wheel_ilp
 from covering.multihit import wheel_multihit
 from covering.weighted import wheel_weighted
 from covering.profile_swap import improve_hit_profile
+from covering.lr_schemes import MAX_POOL as _LR_MAX_POOL
 from covering.lr_schemes import improve_with_lr_scheme
 from covering.refined_covers import improve_with_refined_cover
 from covering.search import wheel_annealing, wheel_genetic
@@ -394,7 +395,7 @@ def _generate_wheel(
         fn is wheel_hitcover
         and max_num
         and int(max_variants or 0) > 0
-        and len(set(pool)) == len(pool) <= 16
+        and len(set(pool)) == len(pool) <= _LR_MAX_POOL
     ):
         # Schema redusă LR cu tot atâtea variante pe tot atâtea numere și bilet
         # de aceeași mărime (`covering_designs/lr/`, de la orice joc), certificată

@@ -38,11 +38,11 @@ _GAMES = {
     "joker": ("joker", 5, 5, 45),
 }
 _FILE = re.compile(r"^LR_(649|540|joker)_cod(\d+)\.txt$")
-# Schemele intră în motor, panou, raport și reluarea WF numai până la 16 numere,
-# cel mai mare pool clasic al aplicației. Șansa exactă (`covering.probability`)
-# merge până la 20 de numere din 2026-10-22, pentru pool-ul extins; schemele
-# 5/40 de 17-19 numere rămân date, fără etapă în motor.
-MAX_POOL = 16
+# Cel mai mare pool pe care schemele intră în motor, panou, raport și reluarea
+# WF: 19, cât are cel mai mare cod LR (5/40 Cod 48). Șansa exactă
+# (`covering.probability`) merge până la 20 de numere; numai 5/40 are scheme peste
+# 16, iar 6/49 și Joker se joacă cu cel mult 16 numere (2026-10-22).
+MAX_POOL = 19
 
 
 @dataclass(frozen=True)
@@ -168,9 +168,8 @@ def scheme_tickets(scheme: LRScheme, pool) -> list[list[int]]:
 def scheme_odds(scheme: LRScheme) -> dict[int, float]:
     """P(cel puțin t pe o variantă) la o extragere uniformă, t = 3..min(bilet, extrase).
 
-    Profilul exact merge până la 20 de numere (`covering.probability`), deci
-    și pe schemele 5/40 de 17-19 numere; aplicația le folosește numai până la
-    `MAX_POOL`.
+    Profilul exact merge până la 20 de numere (`covering.probability`), deci și
+    pe schemele 5/40 de 17-19 numere.
     """
     from covering.probability import wheel_hit_probabilities
 
@@ -362,9 +361,9 @@ def lr_candidates(v: int, pick: int, size: int) -> list[LRScheme]:
 
     Geometria jocului nu contează aici: o schemă e o așezare pe poziții, iar
     certificarea (`improve_with_lr_scheme`) o judecă pe extragerile jocului, deci
-    o schemă 5/40 poate intra la Joker și invers. Peste `MAX_POOL` numere nu
-    există candidați: schemele 5/40 de 17-19 numere rămân în afara motorului, iar
-    pool-ul extins (`covering.extended_pool`) are designurile lui."""
+    o schemă 5/40 poate intra la Joker și invers. Până la `MAX_POOL` (19): la 5/40
+    Cod 45 intră pe 17 numere cu plafonul 488; Cod 46-48 sunt și covere complete
+    locale (`covering_designs/C_17..19_5_4.txt`), luate înaintea acestei etape."""
     if int(v) > MAX_POOL:
         return []
     return [

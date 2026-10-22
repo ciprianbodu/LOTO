@@ -3,7 +3,7 @@
 `_map_game_label` / `_normalize_task` — parte din rescrierea completă cerută
 explicit pentru toate modulele rămase.
 
-Valorile de clamp (pool 6..16, guarantee 3..draw_n, recent_penalty_draws
+Valorile de clamp (pool 6..16, la Loto 5/40 6..19 din 2026-10-22; guarantee 3..draw_n, recent_penalty_draws
 0..50, recent_penalty_factor 0..0.99, lookback 0..100) sunt cele deja
 existente în worker.py dinaintea rescrierii — pinned aici ca sursă de adevăr,
 nu redefinite din memorie."""
@@ -47,6 +47,20 @@ def test_pool_size_clamped_to_6_16():
     assert worker._normalize_task({"pool_size": 99}, draw_n=6)["pool_size"] == 16
     assert worker._normalize_task({"pool_size": 10}, draw_n=6)["pool_size"] == 10
     assert worker._normalize_task({}, draw_n=6)["pool_size"] == 12  # default
+
+
+def test_pool_cap_follows_the_game():
+    """Loto 5/40 se joacă până la 19 numere (scheme LR Cod 45-48); 6/49 și Joker
+    rămân la 16, la fel jocurile altor țări (`Lottery.max_pool`)."""
+    from loto_enterprise.core import lotteries as L
+
+    ro_540, ro_649, joker = (L.GAMES_BY_ID[g] for g in ("5/40", "6/49", "joker"))
+    for raw, want in ((17, 17), (19, 19), (25, 19), (3, 6)):
+        assert worker._task_norm({"pool_size": raw}, ro_540)["pool_size"] == want
+    for lot in (ro_649, joker, *(g for g in L.GAMES if not g.is_romanian)):
+        assert worker._task_norm({"pool_size": 19}, lot)["pool_size"] == 16
+    norm = worker._task_norm({"pool_size": 19, "max_consecutive_run": 99}, ro_540)
+    assert norm["max_consecutive_run"] == 19 and norm["raw_pool_size"] == 19
 
 
 def test_guarantee_clamped_to_3_and_draw_n():

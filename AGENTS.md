@@ -50,11 +50,13 @@ Snapshot verificat la 2026-09-15:
   vechile filtre de clasa (parity_balance, prime_bias, 649_decade_hot etc.) nu
   mai exista ca metode. Un nume necunoscut sau exclus din `best_methods.json`
   cade determinist pe `frequency` (`_sanitize_production_name`);
-- covering designs locale: 52 covere clasice `C_v_pick_t.txt` plus 99 lotto
-  designs `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100%
-  la ultimul audit; separat, cele 33 de scheme reduse oficiale LR
-  (`covering_designs/lr/`, §6), care nu intra in generarea biletelor;
-- cache benchmark: `v22` (`rank_ensemble_core` cu rang mediu la egalitate; v21 Loto 5/40 citeste toate cele 6 numere extrase);
+- covering designs locale: 55 covere clasice `C_v_pick_t.txt` (pool 6..16,
+  plus `C_17..19_5_4` = LR Cod 46-48 pentru Loto 5/40) si 99 lotto designs
+  `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100% la
+  ultimul audit; separat, cele 33 de scheme reduse oficiale LR
+  (`covering_designs/lr/`, §6), candidate certificate in motor la plafonul egal
+  cu marimea lor (§7);
+- cache benchmark: `v23` (DMD cu subspatiile singulare la egalitate, 2026-10-18; v22 `rank_ensemble_core` cu rang mediu la egalitate; v21 Loto 5/40 citeste toate cele 6 numere extrase);
 - cache walk-forward: `v31` (sufixele `rc`, `rl`, `lc1`, `lg1` din 2026-10-16 si `bf1`, `bc1`, `tg1` din 2026-10-08, fara bump, §8; rang mediu in `rank_ensemble_core`, ordinea scorului la factorul 0 al penalizarii, semnatura designurilor fara cale absoluta; v30 swap-uri cu dominanta exacta a profilului de hituri, sufix `|hp1`; v29 optimizarea 5+ a coverelor complete de 4; v28 candidati hitcover si validare stricta Joker; v27 corecteaza cele 6 numere extrase la 5/40);
 - Loto 5/40 = 6 numere extrase din 40, bilet de 5. Istoricul scorerilor,
   hiturile de bench/WF/UI si baseline-ul random folosesc n1..n6 (`draw_n = 6`);
@@ -81,96 +83,76 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
-### Pool extins pentru 4+ — 2026-10-22
+### Pool pe joc si Loto 5/40 pana la 19 numere — 2026-10-22
 
-- Cerinta: pool 17-20 ca optiune separata, la plafon fix (152 de variante la
-  6/49, 404 la 5/40 si Joker), incepand cu 17-18 numere, certificat la fiecare
-  apel; implicit ramane pool 16 cu garantia completa.
-- UI: selectul „🎯 Pool extins pentru 4+” (`extended_pool_val`: 0, 17 sau 18;
-  implicit 0, salvat). Pornit, ignora pool-ul, garantia, conditia si plafonul
-  din sidebar: worker-ul (`_normalize_task`) si WF fixeaza pool 16, garantia 4,
-  conditia 4, fara plafon. Taskul primeste `extended_pool` numai la jocurile cu
-  design livrat pentru geometria lor (6/49, 5/40, Joker si jocurile straine de
-  aceeasi geometrie, `ui_runtime._extended_for_game`); 6/45 si 5/50 isi pastreaza
-  setarile. Oprit, `config_json`, hash-ul, `_wf_generation_options` si cheile WF
-  si ale worker-ului sunt cele de dinainte; ecoul worker-ului poarta
-  `extended_pool: 0`, aditiv.
-- Motorul (`pipeline._apply_extended_pool`, dupa wheel): baza e coverul complet
-  pe pool-ul de 16, adica ce s-ar juca fara optiune. Pool-ul de v trece prin
-  aceeasi selectie (scor, departajare, limita de consecutive, restrangere,
-  penalizare); designul `covering_designs/extended/X_<v>_<bilet>_<extrase>_<univers>_<variante>.txt`
-  (pozitii 1..v) se pune pe clasament si intra numai certificat
-  (`covering/extended_pool.certify`): acelasi numar de variante distincte, cele
-  16 numere ale bazei raman jucate, P(cel putin t pe o varianta) nu scade la
-  t = 3..min(bilet, extrase) si creste strict la unul, numarul absolut de grupe
-  de 4 acoperite nu scade. Altfel raman biletele de 16, iar `audit.extended_pool`
-  spune motivul (baza restransa prea ingusta, alta metoda de wheeling, design
-  lipsa la alt joc). Joker: numarul Urnei 2 pe fiecare varianta, ca inainte.
-- Scorerul e decizia bench pentru pool 16 (k16), desi `best_methods.json` are
-  si celule k17/k18, cu alti scoreri: cele 16 numere ale bazei trebuie sa ramana
-  in pool-ul de v sub acelasi clasament, altfel certificarea fata de coverul de
-  16 nu masoara aceeasi alegere. Clasamentul din bench si Auto-Pilot arata k16
-  cat optiunea e pornita (`ui_bench._leaderboard_pool`).
-- Exact, extrageri uniforme (`scripts/analysis/extended_pool/verify_extended_designs.py`,
-  cu certificarea din productie):
-
-  | Joc, variante | Prag | Pool 16 | Pool 17 | Pool 18 |
-  |---|---|---:|---:|---:|
-  | 6/49, 152 | 3+ | 29,809260% | 34,065608% | 38,437233% |
-  | | 4+ | 7,960002% | 8,499139% | 9,320038% |
-  | | 5+ | 0,251434% | 0,269962% | 0,278972% |
-  | 5/40, 404 | 3+ | 45,555677% | 51,092388% | 56,548857% |
-  | | 4+ | 16,026553% | 17,219582% | 17,551154% |
-  | | 5 | 0,363122% | 0,367890% | 0,368385% |
-  | Joker, 404 | 3+ | 23,286753% | 26,999433% | 30,906586% |
-  | | 4+ | 4,677518% | 5,094622% | 5,165258% |
-
-  6 la 6/49 si 5 la Joker nu depind de asezare (acelasi numar de variante
-  distincte). Pretul: garantia 4 devine partiala; grupele de 4 ale pool-ului
-  aflate pe o varianta sunt 82,86% / 71,63% la 6/49, 84,08% / 66,01% la 5/40,
-  84,12% / 66,01% la Joker (17 / 18 numere). Garantia 3 ramane completa pe
-  toate cele sase designuri, masurata la fiecare apel (`guarantee3_complete`).
-  Numarul asteptat de variante castigatoare nu se schimba; castigurile se impart
-  pe mai multe extrageri. Fara avantaj predictiv.
-- Sansa exacta merge pana la 20 de numere (`covering.probability.MAX_EXACT_POOL`):
-  pana la 16, bucla de dinainte, bit cu bit; la 17..20, aceeasi numaratoare
-  intreaga in numpy (2^20 masti). Schemele LR raman pana la 16 numere
-  (`lr_schemes.MAX_POOL`): pe pool extins nu au etapa in motor, panou sau
-  reluare WF.
-- Afisare: panoul („Pool efectiv: 18 (pool extins, baza 16)”, „Garantie: 4
-  partiala”), linia de acoperire, costul, raportul si mailul spun castigul pe
-  praguri, partea acoperita a garantiei 4, ca garantia 3 ramane completa si ca
-  nu e avantaj predictiv (`ui_results._extended_pool_lines`); neaplicat, spun
-  motivul si pool-ul de 16 jucat. „Bilet complet” foloseste cele 16 numere ale
-  bazei (`audit.extended_pool.base_pool`). „📜 Istoric hits” numara pasii
-  extinsi si pe cei cazuti pe 16; referinta aleatoare se mediaza pe marimea
-  fiecarui pas.
-- Chei: WF `|xp1:<v>:<amprenta designului>` (`_extended_sig`), acelasi sufix in
-  cheia worker-ului, numai cu optiunea pornita; fara bump. Fiecare pas WF se
-  certifica singur (`meta.extended_steps`: aplicati, cazuti pe 16, motive).
-- Nelivrat: 19-20 de numere (6/49, 152 de variante, 20 de numere: 4+ 10,01%).
-  Sansa exacta le suporta deja; lipsesc designurile si `EXTENDED_SIZES`.
-  Cercetarea offline: `scripts/analysis/extended_pool/` (README).
-- Revizia adversariala a diff-ului (4 zone, fiecare constatare verificata
-  separat): 10 confirmate, toate reparate, cu teste. Auditul pool-ului adoptat
-  pastra avertismentul de bloc consecutiv al selectiei de 16; eticheta WF spunea
-  „garantia 4 partiala” si cand niciun pas nu adoptase designul, cu pool-ul de
-  16 scris fix (acum marimea jucata la pasii cazuti); panoul de cost si nota de
-  reluare LR spuneau ca la 5/40 nu exista scheme LR de 17-18 numere (exista Cod
-  45-47; limita de 16 e a aplicatiei); verdictul „peste hazard” folosea marimea
-  cea mai frecventa cand pasii amesteca 16 si 18 (acum media pe pasi, ca
-  coloana 🎲, si p-ul sumei de binomiale pe marimi, `ui_hits._mixed_null`);
-  „aceleasi variante” in loc de „tot atatea variante”; diagnosticul de
-  consecutive pe selectia de 16 (acum `extended_pool.raw_top`); un test care
-  trecea si fara garda LR. In plus, jocurile fara design nu mai primesc
-  optiunea (mai sus).
-- Verificat pe Windows / Python 3.14.8, runtime izolat: 145 fisiere `test_*.py`,
-  3387 teste trecute, 20 sarite, zero esecuri (24 min 9 s); 50 de teste noi in
-  `test_extended_pool_2026_10_22.py`. `audit_application.py`: 13 istorice, 848
-  verificari de paritate, 151 designuri, 26 de pipeline-uri, 13 profile de cover
-  complet, worker separat pe 13 jocuri si UI HTTP 200, fisierele de productie
-  neatinse. Aplicatia reala nu a fost repornita; optiunea apare la repornirea
-  normala.
+- Cerinta: utilizatorul joaca numai scheme reduse LR. Optiunea „Pool extins
+  pentru 4+” (17-18 numere pe variantele coverului complet de 16), livrata mai
+  devreme in aceeasi zi, a fost scoasa la cererea lui: variantele ei ar fi fost
+  bilete simple, nu un cod LR. Raman, ca studiu, sansa exacta pana la 20 de
+  numere, `covering/extended_pool.py`, `covering_designs/extended/` si
+  `scripts/analysis/extended_pool/`; aplicatia nu le foloseste.
+- In loc: un camp de pool pentru fiecare joc romanesc (`pool_size_649_val`,
+  `pool_size_540_val`, `pool_size_joker_val`), cu maximul jocului
+  (`Lottery.max_pool`: 19 la Loto 5/40, 16 in rest) si implicit cel mai mare cod
+  LR al jocului: 16 la 6/49 (Cod 59), 19 la 5/40 (Cod 48), 15 la Joker. Numai
+  5/40 are coduri peste 16 numere: Cod 45 (17, 488 de variante, garantia 4 in
+  94,96% din cazuri), Cod 46 (17, 562), Cod 47 (18, 732), Cod 48 (19, 930), ultimele
+  trei covere complete de 4. Jocurile altor tari folosesc campul comun
+  `pool_size_val` (6..16). Taskul, Auto-Pilot, clasamentul din bench, tabelul de
+  intervale si nota deciziei citesc pool-ul jocului (`ui_runtime._pool_size_for`).
+  Worker-ul plafoneaza pe joc (`_normalize_task(..., pool_max=lot.max_pool)`).
+- Motorul la 17-19 numere (numai 5/40):
+  - Cod 46/47/48 sunt designuri locale `C_17_5_4.txt`, `C_18_5_4.txt`,
+    `C_19_5_4.txt` (blocurile coincid cu codurile; provenienta in
+    `covering_designs/README.md`). Fara ele, ILP-ul consuma 15 s pe proces si
+    pierdea oricum in fata greedy-ului;
+  - ILP-ul nu se mai incearca peste 16 numere (`covering.ilp._ILP_MAX_POOL`):
+    garantia 3 pe 17-19 ia direct greedy-ul;
+  - etapa LR merge pana la 19 (`lr_schemes.MAX_POOL`): Cod 45 intra la plafonul
+    488 pe 17 numere (4+ 18,37% -> 18,93%);
+  - garantiile mai mici la garantia egala cu biletul merg pana la 19
+    (`guarantee_portfolio.MAX_POOL`): plafonul 50 pe 19 numere, 3+ 18,02% ->
+    42,09% (oricare ar fi scorurile);
+  - hitcover, recoacerea, `budget_climb`, schimburile de profil si `higher_hits`
+    raman pana la 16; la 17-19 nu rearanjeaza variantele unui cod.
+  - Greedy-ul cu scoruri inlocuieste designul cand acopera tot cu mai putine
+    variante: la 17 numere motorul da uneori 553-561 de variante in loc de 562.
+    Pozitiile se pun pe clasament, nu crescator ca terminalul: aceleasi sanse,
+    alte variante. Codul insusi, ca la terminal, apare in panou si in „Istoric hits”.
+- Exact, extrageri uniforme, 5/40: 4+ 19,72% / 23,81% / 28,27% la 17 / 18 / 19
+  numere (cat rata pool-ului), 5 0,497% / 0,648% / 0,820%. Cod 45: 4+ 18,93%.
+  Mai multe numere inseamna mai multe variante, deci cost mai mare, nu avantaj.
+- „Istoric hits” valideaza fiecare joc pe pool-ul rezultatului, cu decizia de
+  bench pentru acea marime (5/40 are celulele k17-k19 in `best_methods.json`,
+  local, refacute la fiecare Re-Bench) si reia codul LR al marimii pe fiecare
+  pas. Un pas la 19 numere: ~0,2 s. Cu „g daca c” (conditia peste garantie) nu
+  exista fisiere L peste 16: designul se construieste o data pe proces, acum in
+  2-10 s (`designs._lotto_block_masks` enumera direct tintele fiecarui bloc,
+  aceleasi masti bit cu bit; inainte 37-185 s la 17-19). Prima validare dupa
+  schimbare are cheie noua (pool-ul e in nume) si se calculeaza de la zero.
+- „Bilet complet” pe 17-19 numere se face pe cele mai bine clasate 16
+  (`full_ticket.TICKET_POOL_MAX`), cu restul numit in nota: etapele exacte ale
+  biletului merg pana la 16 (pe 17-19, 2 bilete: 4+ 0,569% fata de 0,626% pe 16).
+- Memoria: reluarea „Bilet complet” din „Istoric hits” tine, pe langa listele WF
+  afisate, cel mult 1,5 milioane de randuri ale listelor vechi
+  (`ui_hits._REPLAY_MAX_ROWS`); un WF 5/40 pe 19 numere are ~490 de mii. O lista
+  afisata nu iese niciodata: temporizatorul panoului ar cere-o din nou.
+- Fara bump de cache: cheile de 17-19 numere n-au existat (UI-ul si worker-ul
+  plafonau la 16), iar pool-urile de cel mult 16 dau aceleasi bilete si chei.
+- Revizia adversariala (4 zone, fiecare constatare verificata separat): 10
+  confirmate, toate reparate, cu teste. Designurile „g daca c” pe 17-19 numere
+  se construiau in 37-185 s pe proces (acum 2-10 s, aceleasi masti); tabelul de
+  intervale al altor tari citea campul 6/49 ascuns in locul celui comun; plafonul
+  de randuri al reluarii scotea liste inca afisate si panourile le recalculau la
+  nesfarsit; un test care trecea si fara reluarea Cod 48; cifrele portofoliului
+  (18,02% -> 42,09%), numarul adoptarilor LR, textele studiului.
+- Verificat pe Windows / Python 3.14.8, runtime izolat: 146 fisiere `test_*.py`,
+  3401 teste trecute, 20 sarite, zero esecuri (24 min 33 s); teste noi in
+  `test_pool_540_up_to_19.py`. `audit_application.py`: 13 istorice, 848
+  verificari de paritate, 154 de designuri, 26 de pipeline-uri, 13 profile de
+  cover complet, worker separat pe 13 jocuri si UI HTTP 200, fisierele de
+  productie neatinse; pagina randata are cele trei campuri de pool. Aplicatia
+  reala nu a fost repornita: campurile apar la repornirea normala.
 
 ### Audit pe module si mai multe hituri 4+ — 2026-10-22
 
@@ -223,8 +205,9 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   - „Bilet complet” cu 2 bilete: 4+ dovedit optim la toate trei jocurile;
   - livrat: `H_16_5_4.txt` (§7), +1,0..4,0% la 4+ cu plafon in principal
     321..403 (92 de bugete, de la 270);
-  - livrat ulterior ca optiune la 17-18 numere (sectiunea de mai sus): un pool
-    de 17-20 numere pe acelasi numar de variante bate orice asezare pe 16 la 4+ (6/49, 152 de variante:
+  - livrat ca optiune si scos in aceeasi zi, la cererea utilizatorului (joaca
+    numai scheme LR; sectiunea „Pool pe joc”): un pool de 17-20 numere pe acelasi
+    numar de variante bate orice asezare pe 16 la 4+ (6/49, 152 de variante:
     8,50% / 9,32% / 10,01% la 17 / 18 / 20 numere; 5/40 si Joker, 404:
     17,55% si 5,17% la 18), fara prag in scadere, dar garantia „4 sigur” devine
     partiala (72% din grupe la 18 numere). Portofoliile de coduri LR pe
@@ -1562,6 +1545,11 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.5 Git
 
 - Lucrul de productie se integreaza pe `main`.
+- In checkout-ul statiei (`G:\My Drive\_CODING\_LOTO`) se lucreaza direct pe
+  `main`, fara alta ramura: lansatoarele ruleaza din acelasi folder si refuza
+  sincronizarea in afara lui `main` („Ramura curenta nu este main - nu modific
+  repository-ul”). Cerut explicit de utilizator la 2026-10-22. Intre pasi
+  indexul ramane curat (Sync se opreste pe o versiune din index diferita de disc).
 - Utilizatorul a cerut (2026-09-28) ca orice schimbare terminata si verificata
   (suita completa verde) sa fie integrata pe `main` fara sa astepte confirmare:
   PR, apoi merge imediat.
@@ -1902,8 +1890,8 @@ limita de validitate din §5).
   paginii, `_autoload_histories` incarca singur CSV-urile tarii selectate care
   lipsesc sau s-au schimbat pe disc (mtime in `STATE['dataset_mtime']`);
   butonul ramane pentru reincarcare manuala. Se trimit
-  numai seturile tarii selectate; cu România selectata, config_json si hash-ul
-  sunt identice cu cele de dinainte. Rezultatele se identifica din ecoul
+  numai seturile tarii selectate; cu România selectata, config_json e cel de
+  dinainte (hash-ul include din 2026-10-22 si pool-ul pe joc). Rezultatele se identifica din ecoul
   worker-ului (`_game_spec_for`): titlu „Tara · Joc”, tarif in moneda tarii sau
   „tarif necunoscut”, scheme reduse LR numai la România, bilet fizic din
   registru sau „bilet nemodelat”, iar jocurile care nu se joaca online din
@@ -1915,10 +1903,11 @@ limita de validitate din §5).
   actualizeaza abia la reincarcare; cateva texte romanesti (nota de garantie,
   ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
 
-- Pool-ul UI este limitat la 6..16. Separat, optiunea „🎯 Pool extins pentru
-  4+” (17 sau 18, implicit oprita) joaca 17-18 numere pe variantele coverului
-  complet de 16, certificat la fiecare generare (sectiunea „Pool extins pentru
-  4+ — 2026-10-22”, §7).
+- Pool-ul se alege pe joc (2026-10-22): un camp pentru Loto 6/49 (6..16,
+  implicit 16 = Cod 59), unul pentru Loto 5/40 (6..19, implicit 19 = Cod 48) si
+  unul pentru Joker (6..16, implicit 15, cel mai mare cod Joker); `ui_runtime.
+  _pool_size_for` e sursa unica. Jocurile altor tari folosesc campul comun
+  `pool_size_val` (6..16). Maximul vine din `Lottery.max_pool`, comun cu worker-ul.
 - Sub 1024 px, Quasar scoate sertarul din ecran; butonul plutitor „☰”
   (`ui.page_sticky`, clasa `lt-md`) il deschide. Antetul paginii nu se modifica.
   Sub 600 px, marginile cardurilor si ale expansion-urilor din zona principala
@@ -2061,8 +2050,10 @@ limita de validitate din §5).
   2026-10-19); un fisier necitibil e numit si aici. Le compara cu variantele WF pe aceiasi pasi si cu sansa exacta;
   fara pool-ul pasilor in context, spune ca reluarea apare la urmatoarea
   validare. Mailul are linia
-  `SCHEMĂ LR`. Profilul exact merge pana la 16 numere; schemele 5/40 de 17-19
-  numere raman numai ca date. Din 2026-10-20 panoul spune la ce praguri schema
+  `SCHEMĂ LR`. Profilul exact merge pana la 20 de numere; din 2026-10-22, la
+  5/40 pe 17-19 numere, panoul, raportul, mailul si „Istoric hits” arata Cod
+  45-48 (fara comparatia „la acelasi cost”: `app_same_size.json` merge pana la
+  16 numere). Din 2026-10-20 panoul spune la ce praguri schema
   e dovedit optima (`optimal_thresholds`: marginea atinsa sau dovada offline din
   `optimal_offline.json`), unde se stie o asezare mai buna (wheel-ul aplicatiei
   sau martorul offline) si unde nu se stie (cu marginea, care nu e mereu atinsa);
@@ -2159,7 +2150,8 @@ limita de validitate din §5).
   deschidere (inchis costa ~1 ms, deschis ~0.6 s pentru trei jocuri) si e
   memoizat pe fisier + geometrie + pool, cu plafon peste toate combinatiile
   joc × pool, ca o plimbare peste dimensiunile de pool sa nu recalculeze tot.
-  Pool-ul este plafonat la 6..16 inainte de calcul: `ui.number` isi aplica
+  Pool-ul fiecarui joc (6..16, la 5/40 6..19) e plafonat inainte de calcul,
+  iar titlul tabelului il numeste: `ui.number` isi aplica
   min/max abia la blur, iar o valoare tastata intermediar producea o geometrie
   invalida raportata drept „istoric indisponibil".
   Nu adauga niciodata o varianta "bench calculeaza intervalul optim" — ar prezenta
@@ -2333,11 +2325,14 @@ cu `anneal_hits._certify`:
   Fara `max_num` (biletul fizic) ordinea ramane, cu baza garantiei in fata.
 Schemele reduse LR ca variante ale motorului (2026-10-20,
 `covering.lr_schemes.improve_with_lr_scheme`, ultima etapa hitcover cu `max_num`,
-pool de cel mult 16 numere): la plafonul egal cu marimea unei scheme cu tot
+pool de cel mult 19 numere din 2026-10-22, `lr_schemes.MAX_POOL`; la 5/40 pe 17
+numere adopta Cod 45 la plafonul 488, iar Cod 46-48 vin ca designuri complete
+`C_17..19_5_4`): la plafonul egal cu marimea unei scheme cu tot
 atatea numere si acelasi bilet, de la oricare joc (o schema 5/40 poate intra la
 Joker si invers), schema se pune pe pozitiile clasamentului si intra numai
-certificata (`anneal_hits._certify`). Pe toate garantiile 3..bilet o adopta in 8
-configuratii (tabelul din raport); Cod 59 e egal cu wheel-ul motorului (amandoua
+certificata (`anneal_hits._certify`). Pe toate garantiile 3..bilet o adopta, pe
+pool-uri de cel mult 16, in 8 configuratii (tabelul din raport), iar din
+2026-10-22 si la 5/40 pe 17 numere: Cod 45 la plafonul 488; Cod 59 e egal cu wheel-ul motorului (amandoua
 optime la fiecare prag). „Bilet complet” (fara `max_num`) nu trece prin etapa.
 Garantia egala cu biletul (`covering/guarantee_portfolio.py`): candidatul unei
 garantii mai mici care e coverul ei complet, cu mai putine bilete decat
@@ -2345,14 +2340,13 @@ plafonul, se completeaza pana la plafon cu biletele distincte ale wheel-ului
 livrat, in ordinea lor, apoi se certifica (`_padded`); si pe „Bilet complet”.
 Raport: `scripts/analysis/lr_optimality_2026-10-20.md`.
 
-Pool-ul extins (2026-10-22, `covering/extended_pool.py`, optiune, implicit
-oprita): dupa wheel, pe baza pool 16 / garantia 4 / fara plafon, designul
-`covering_designs/extended/X_*` pe primele 17-18 numere din clasament, cu tot
-atatea variante cat coverul complet (152 / 404). Intra numai certificat fata
-de coverul de 16: acelasi numar de variante distincte, baza jucata, niciun
-prag 3..extrase in scadere, castig strict, grupele de 4 acoperite in numar
-absolut nedescrescator. Garantia 4 devine partiala prin alegerea
-utilizatorului; acoperirea raportata e a garantiei 4 pe tot pool-ul.
+Loto 5/40 pe 17-19 numere (2026-10-22): fara plafon, garantia 4 ia designurile
+`C_17..19_5_4` (LR Cod 46-48, covere complete) sau greedy-ul cu scoruri cand
+acopera tot cu mai putine variante; ILP-ul nu se mai incearca peste 16 numere
+(`covering.ilp._ILP_MAX_POOL`; la 17 dadea 909 variante in 15 s fata de 563 ale
+greedy-ului). La garantia egala cu biletul, candidatii garantiilor mai mici merg
+pana la 19 (`guarantee_portfolio.MAX_POOL`). Celelalte etape exacte raman pana
+la 16.
 
 Granita bugetului complet, 6/49 pool 16 g4: plafonul 151 ia sectiunea H
 (98,74%, 4+ 7,873159%, 5+ 0,266029%), 152 sau fara plafon coverul complet
@@ -2499,12 +2493,6 @@ castigul depinde de geometrie, scoruri si hardware.
   rezultatului (`_result_scorers_match_decision`): cheia WF citeste decizia
   curenta, iar dupa un Re-Bench sau o schimbare a tintei ar valida alta
   metoda. Altfel, „📜 Istoric hits” ramane gol pana la generarea urmatoare.
-- Pool-ul extins (optiune, 17/18): WF ruleaza cu pool 16 / garantia 4 /
-  conditia 4 / fara plafon si `extended_pool`; cheia primeste
-  `|xp1:<v>:<amprenta designului>` numai pornit. `ticket_context.audit`
-  poarta `extended_pool`; `meta.extended_steps` rezuma pasii (aplicati, cazuti
-  pe 16, motive); `wheel_coverage_summary` scoate pasii extinsi din
-  `below_100` si ii numara separat (`extended`, `extended_min`).
 - Ordinea jocurilor este Joker, 5/40, 6/49.
 - Paralelizarea foloseste aproximativ 75% din nuclee, cu BLAS single-thread per
   proces.
@@ -2521,8 +2509,8 @@ precalculat pentru acel buget (amprenta sectiunii din
 `covering_designs/budget/H_v_pick_g.txt`, §7; fara design cheia se opreste la
 `bc1`), si `sa1` la 1..64 de bilete (recoacerea pe sansa exacta, §7).
 Din 2026-10-20, `lr<amprenta>` dupa `bc1`/`sa1`, numai cand plafonul e egal cu
-marimea unei scheme LR pe acest pool de cel mult 16 numere
-(`lr_scheme_signature`, §7); unde schema nu se certifica (Cod 59 la 112, Cod 49
+marimea unei scheme LR pe acest pool de cel mult 19 numere
+(`lr_scheme_signature`, §7; 17-19 numai la 5/40, din 2026-10-22); unde schema nu se certifica (Cod 59 la 112, Cod 49
 la 15), cheia se schimba o data fara schimbare de bilete. `lg1` a devenit `lg2`:
 coverul complet al garantiei mai mici e completat pana la plafon.
 Din 2026-10-16: `rc<amprenta>` pe `lajolla` si `bf1` cand geometria are cover

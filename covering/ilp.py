@@ -18,6 +18,8 @@ from covering.common import (
 
 logger = logging.getLogger(__name__)
 
+# Cel mai mare pool pe care se încearcă ILP-ul (peste el, direct greedy).
+_ILP_MAX_POOL = 16
 _ILP_MAX_BLOCKS = 12000  # guard: peste asta, ILP devine prea greu → fallback
 _ILP_MAX_TARGETS = 6000
 
@@ -47,6 +49,15 @@ def _ilp_cover_positions(
     key = (int(v), int(pick), int(guarantee))
     if key in _ILP_COVER_CACHE:
         return _ILP_COVER_CACHE[key]
+    if int(v) > _ILP_MAX_POOL:
+        # Peste 16 numere (Loto 5/40, pool 17-19) HiGHS își consumă limita de
+        # 15 s și dă un cover mult mai mare decât greedy (măsurat la 17, g4: 909
+        # față de 563; g3: 676 față de 93), care câștigă oricum. Sub sarcină,
+        # fără soluție în timp, plătea 15 s la fiecare pas WF. Pool-urile de 16
+        # și mai mici rămân neatinse (2026-10-22).
+        logger.info("[WHEEL-ILP] pool de %d numere peste %d → greedy", v, _ILP_MAX_POOL)
+        _ILP_COVER_CACHE[key] = None
+        return None
     nb, nt = _comb(v, pick), _comb(v, guarantee)
     if nb > _ILP_MAX_BLOCKS or nt > _ILP_MAX_TARGETS:
         logger.info("[WHEEL-ILP] prea mare (blocuri=%d ținte=%d) → greedy", nb, nt)

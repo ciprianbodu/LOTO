@@ -158,6 +158,14 @@ class Lottery:
         return self.country == RO
 
     @property
+    def max_pool(self) -> int:
+        """Cel mai mare pool jucabil: 19 la Loto 5/40, 16 în rest.
+
+        Loteria Română are la 5/40 scheme reduse pe 17, 18 și 19 numere (Cod
+        45-48); la 6/49 cel mai mare cod are 16, la Joker 15 (2026-10-22)."""
+        return 19 if self.is_romanian and self.geometry == "5/40" else 16
+
+    @property
     def training_only(self) -> bool:
         return self.playable_from_ro is not True and not self.play_note
 

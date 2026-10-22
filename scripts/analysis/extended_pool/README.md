@@ -2,8 +2,10 @@
 
 Designurile din `covering_designs/extended/` (17 și 18 numere; 6/49 pe 152 de
 variante, 5/40 și Joker pe 404) au fost găsite offline cu scripturile de aici.
-Producția nu le rulează: le citește din fișiere și le certifică la fiecare
-generare (`covering/extended_pool.py`).
+Au intrat în aplicație ca opțiune și au fost scoase în aceeași zi, la cererea
+utilizatorului, care joacă numai scheme reduse LR (variantele de aici ar fi
+bilete simple). Rămân ca studiu, cu modulul `covering/extended_pool.py`, pe care
+aplicația nu-l mai apelează.
 
 ## Verificare (deterministă)
 
@@ -12,7 +14,7 @@ python scripts/analysis/extended_pool/verify_extended_designs.py
 ```
 
 Pune fiecare design pe un clasament canonic, construiește coverul complet al
-motorului pe primele 16 numere și rulează certificarea din producție. Rezultatul
+motorului pe primele 16 numere și rulează certificarea modulului de studiu (`covering.extended_pool.apply`, neapelat de aplicație). Rezultatul
 așteptat, exact, pe extrageri uniforme:
 
 | Design | 4+ pe 16 numere | 4+ extins | Grupe de 4 acoperite |
@@ -42,5 +44,5 @@ superioară la 3+, 4+ și 5, deci e optim pentru 18 numere și 404 variante.
 - `results_table.txt`: tabelul complet al cercetării (17-20 de numere, bugetele
   100, 112, 152, 200, 348, 404).
 
-O rerulare poate da alte designuri (recoacerea e stocastică); certificarea din
-producție decide oricum la fiecare apel.
+O rerulare poate da alte designuri (recoacerea e stocastică); `verify_extended_designs.py`
+le certifică înainte să fie păstrate.

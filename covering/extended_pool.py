@@ -1,6 +1,9 @@
 """Pool extins pentru 4+ (2026-10-22): 17-18 numere pe același număr de variante.
 
-Opțiune a utilizatorului, implicit oprită. Cu 16 numere și coverul complet
+Studiu, fără legătură cu aplicația: opțiunea a fost scoasă în aceeași zi, la
+cererea utilizatorului, care joacă numai scheme reduse LR (variantele de aici
+ar fi bilete simple). Rămân modulul, designurile și cercetarea din
+`scripts/analysis/extended_pool/`. Cu 16 numere și coverul complet
 C(16, bilet, 4) (6/49: 152 de variante; 5/40 și Joker: 404) șansa 4+ pe o
 variantă e deja rata pool-ului, plafonul oricărei așezări pe 16 numere. La
 același număr de variante, un pool de 17-18 numere cu un cover PARȚIAL de 4

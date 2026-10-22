@@ -279,6 +279,30 @@ _LOTTO_ILP_MAX_TARGETS = 4000
 _LOTTO_COVER_CACHE: dict[tuple[int, int, int, int], list[tuple[int, ...]]] = {}
 
 
+def _lotto_block_masks(v: int, blocks, guarantee: int, condition: int) -> list[int]:
+    """Bitmask-ul țintelor fiecărui bloc: ținta t (c poziții, în ordinea
+    lexicografică a `combinations`) e acoperită dacă |b ∩ t| >= g.
+
+    Enumeră direct țintele care ating blocul (k din bloc, restul din afara lui),
+    în loc să compare fiecare bloc cu fiecare țintă: aceleași măști, bit cu bit
+    (`test_pool_540_up_to_19.py`), dar la Loto 5/40 pe 19 numere „4 dacă 5”
+    construcția scade de la ~3 minute la câteva secunde (2026-10-22).
+    """
+    g, c = int(guarantee), int(condition)
+    index = {t: i for i, t in enumerate(itertools.combinations(range(int(v)), c))}
+    masks: list[int] = []
+    for b in blocks:
+        inside = tuple(b)
+        outside = tuple(x for x in range(int(v)) if x not in set(inside))
+        m = 0
+        for k in range(max(g, c - len(outside)), min(len(inside), c) + 1):
+            for a in itertools.combinations(inside, k):
+                for r in itertools.combinations(outside, c - k):
+                    m |= 1 << index[tuple(sorted(a + r))]
+        masks.append(m)
+    return masks
+
+
 def _lotto_cover_positions(
     v: int, pick: int, guarantee: int, condition: int, time_limit: float = 10.0
 ) -> list[tuple[int, ...]]:
@@ -307,17 +331,7 @@ def _lotto_cover_positions(
     if nt > _LOTTO_MAX_BLOCKS:
         raise ValueError(f"lotto design prea mare: C({v},{c})={nt} tinte")
     blocks = list(itertools.combinations(idxs, int(pick)))
-    targets = list(itertools.combinations(idxs, c))
-    # Bitmask-uri: ținta t acoperită de blocul b dacă |b ∩ t| >= g.
-    block_masks: list[int] = []
-    target_sets = [frozenset(t) for t in targets]
-    for b in blocks:
-        bs = set(b)
-        m = 0
-        for ti, ts in enumerate(target_sets):
-            if len(bs & ts) >= g:
-                m |= 1 << ti
-        block_masks.append(m)
+    block_masks = _lotto_block_masks(int(v), blocks, g, c)
     full = (1 << nt) - 1
 
     # Greedy determinist.
@@ -326,7 +340,7 @@ def _lotto_cover_positions(
     while covered != full:
         best_j, best_gain = -1, 0
         for j, m in enumerate(block_masks):
-            gain = bin(m & ~covered).count("1")
+            gain = (m & ~covered).bit_count()
             if gain > best_gain:
                 best_j, best_gain = j, gain
         if best_j < 0:

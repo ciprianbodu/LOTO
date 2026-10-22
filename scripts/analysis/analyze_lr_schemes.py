@@ -210,7 +210,7 @@ def main(argv=None) -> int:
     rows = []
     for scheme in lr_schemes():
         if scheme.n > 16:
-            continue  # schemele intră numai pe pool-ul clasic, de cel mult 16 numere
+            continue  # peste 16 numere (numai 5/40, Cod 45-48): fără comparație la același cost
         price = GAMES[scheme.game][3]
         lr = scheme_odds(scheme)
         apps = app_designs(scheme.game, scheme.n, scheme.size)

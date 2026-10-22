@@ -46,13 +46,11 @@ from loto_enterprise.core.ranking import limit_consecutive_run, longest_consecut
 from loto_enterprise.core.ro_text import count
 
 TICKET_VARIANTS = {"6/49": 3, "5/40": 4, "joker": 2}  # variante pe un bilet fizic
-# Pool-ul extins pentru 4+ (17-18 numere, 2026-10-22) privește variantele
-# simple ale motorului. Biletul fizic rămâne pe primele 16 din clasament:
-# etapele lui exacte merg până la 16 numere, iar la 1-2 bilete 4+ e dovedit
-# optim acolo (audit 2026-10-22).
-TICKET_POOL_MAX = 16
 PICK = {"6/49": 6, "5/40": 5, "joker": 5}
 MAX_TICKETS = 10
+# Cel mai mare pool pe care se așază variantele biletului (etapele exacte merg
+# până la 16 numere; Loto 5/40 se joacă până la 19, 2026-10-22).
+TICKET_POOL_MAX = 16
 
 
 def clamp_tickets(value) -> int:
@@ -194,11 +192,30 @@ def _ticket_pool(
                 f"{len(pool)}; clasamentul metodei lipsește, deci unele numere "
                 f"pot rămâne în afara {slip}."
             )
-        kept = _ranked(scores, set(pool))[:capacity]
+        kept = _ranked(scores, set(pool))[: min(capacity, TICKET_POOL_MAX)]
         dropped = sorted(set(pool) - set(kept))
+        if len(kept) < capacity:
+            return sorted(kept), (
+                f"Pe {count(n_var, 'variante')} încap {count(capacity, 'numere')}, dar "
+                f"variantele se așază exact numai pe cel mult {TICKET_POOL_MAX}; am păstrat "
+                f"cele mai bine clasate {len(kept)}. În afara {slip}: {_fmt(dropped)}."
+            )
         return sorted(kept), (
             f"Pe {count(n_var, 'variante')} încap {count(capacity, 'numere')}; am păstrat "
             f"cele mai bine clasate {capacity}. În afara {slip}: {_fmt(dropped)}."
+        )
+    if len(pool) > TICKET_POOL_MAX and scores and all(n in scores for n in pool):
+        # Loto 5/40 pe 17-19 numere: încap pe bilete, dar etapele care așază
+        # variantele pe șansa exactă (hitcover, recoacerea, garanțiile mai mici,
+        # schimburile de profil) merg până la 16 numere. Pe 17-19 ar rămâne
+        # greedy-ul simplu, mai slab de la 2 bilete în sus (măsurat la 4+: 2
+        # bilete 0,569% față de 0,626% pe 16), deci biletele se fac pe primele 16.
+        kept = _ranked(scores, set(pool))[:TICKET_POOL_MAX]
+        dropped = sorted(set(pool) - set(kept))
+        return sorted(kept), (
+            f"Variantele se așază exact numai pe cel mult {TICKET_POOL_MAX} numere; "
+            f"am păstrat cele mai bine clasate {TICKET_POOL_MAX} din {len(pool)}. "
+            f"În afara {slip}: {_fmt(dropped)}. Codul LR al pool-ului rămâne în panou."
         )
     return pool, None
 
@@ -458,38 +475,12 @@ def build_full_ticket(
         return {"error": "pool-ul afișat e mai mic decât un bilet"}
     scores = _pool_scores(data)
     max_run = _max_run(data)
-    capped_note = None
-    _xp = (data.get("audit") or {}).get("extended_pool") or {}
-    _xp_applied = isinstance(_xp, dict) and bool(_xp.get("applied"))
-    # Numai rezultatele cu pool extins adoptat: alt pool peste 16 (date vechi,
-    # apelanți direcți) păstrează regula de dinainte, tăiat la locurile de pe bilete.
-    if len(shown_pool) > TICKET_POOL_MAX and _xp_applied:
-        # Cele 16 numere ale bazei pool-ului extins (coverul complet față de care
-        # s-a certificat), nu primele 16 din clasament: sub limita de
-        # consecutive cele două pot diferi.
-        base = _xp.get("base_pool") or []
-        base = sorted({int(n) for n in base} & set(shown_pool))
-        if len(base) == TICKET_POOL_MAX:
-            top = base
-        elif not scores or any(n not in scores for n in shown_pool):
-            return {"error": "pool-ul are peste 16 numere, iar clasamentul lipsește"}
-        else:
-            top = _ranked(scores, set(shown_pool))[:TICKET_POOL_MAX]
-        left = sorted(set(shown_pool) - set(top))
-        shown_pool = sorted(top)
-        capped_note = (
-            f"Pool extins: biletul folosește cele {TICKET_POOL_MAX} numere ale bazei "
-            f"(în afara lui: {_fmt(left)}); variantele simple ale rezultatului "
-            "rămân pe tot pool-ul."
-        )
     guarantee = max(1, min(int(data.get("guarantee") or 3), pick))
     draw_n = lot.draw_n if lot is not None else pick
     max_num = lot.max_n if lot is not None else max(shown_pool)
     min_target = lot.min_hit_target if lot is not None else 3
 
     pool, note = _ticket_pool(shown_pool, scores, n_var, pick, max_run, tickets)
-    if capped_note:
-        note = f"{capped_note} {note}" if note else capped_note
     fill_audit: dict = {}
     plain, n_base = _fill_variants(
         pool, pick, guarantee, n_var, scores, draw_n=draw_n, max_num=max_num, audit=fill_audit

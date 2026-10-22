@@ -227,7 +227,7 @@ def _resolve_task_lottery(task: dict):
 
 
 def _normalize_task(
-    task: dict, draw_n: int, *, max_n: int = _RO_RESTRICT_BASE_CAP
+    task: dict, draw_n: int, *, max_n: int = _RO_RESTRICT_BASE_CAP, pool_max: int = 16
 ) -> dict:
     """Normalizează + clampează parametrii unui task de pipeline la intervalele
     valide. UI-ul le trimite deja clampate, dar workerul poate primi joburi
@@ -242,29 +242,22 @@ def _normalize_task(
     veche) rulează fără limită, iar `filter_consecutives` rămâne ignorat.
 
     `max_n` = plafonul restrângerii bazei: 49 pentru jocurile românești (valoarea
-    de dinainte), universul jocului pentru celelalte (EuroMillions: 50)."""
-    raw_pool = int(task.get("pool_size", 12))
-    pool_size = max(6, min(16, raw_pool))  # aliniat cu UI (pool_size_val max 16)
-    # Pool extins pentru 4+ (opțiune, 0 = oprit): 17 sau 18 numere pe tot atâtea
-    # variante cât coverul complet de 16. Baza certificării e coverul complet pe
-    # 16 numere, deci pool-ul, garanția, plafonul și condiția se fixează pe ea
-    # (covering/extended_pool.py, 2026-10-22).
-    from covering.extended_pool import normalize_size as _extended_size
+    de dinainte), universul jocului pentru celelalte (EuroMillions: 50).
 
-    extended_pool = _extended_size(task.get("extended_pool"))
-    if extended_pool:
-        pool_size = 16
+    `pool_max` = cel mai mare pool al jocului (`Lottery.max_pool`): 19 la Loto
+    5/40 (scheme LR Cod 45-48), 16 în rest, ca în câmpurile din sidebar."""
+    raw_pool = int(task.get("pool_size", 12))
+    pool_cap = max(6, int(pool_max))
+    pool_size = max(6, min(pool_cap, raw_pool))
 
     raw_guarantee = int(task.get("guarantee", 4))
     # UI-ul permite 3..6; workerul poate primi însă joburi vechi sau externe.
     # O garanție 0 generează semantic un cover al mulțimii vide, iar una peste
     # draw_n nu e realizabilă pentru jocul respectiv.
     guarantee = max(3, min(draw_n, raw_guarantee))
-    if extended_pool:
-        guarantee = 4
 
     raw_max_variants = int(task.get("max_variants", 0))
-    max_variants = 0 if extended_pool else max(0, raw_max_variants)
+    max_variants = max(0, raw_max_variants)
 
     # Lotto design „guarantee dacă condition": lipsă/0 = cover clasic.
     try:
@@ -274,8 +267,6 @@ def _normalize_task(
     wheel_condition = (
         guarantee if raw_condition <= 0 else max(guarantee, min(draw_n, raw_condition))
     )
-    if extended_pool:
-        wheel_condition = guarantee
 
     # Penalizare după ultimele extrageri (0 = oprit); factor în [0, 1).
     try:
@@ -308,14 +299,18 @@ def _normalize_task(
         restrict_base_min = 0
 
     # Limita de consecutive (preferință OPȚIONALĂ, 0 = oprit; UI-ul trimite 0
-    # sau 2). Plafon 16 = pool-ul maxim: o limită cât pool-ul nu mai schimbă nimic.
+    # sau 2). Plafon = pool-ul maxim al jocului: o limită cât pool-ul nu mai
+    # schimbă nimic.
     try:
-        max_consecutive_run = max(0, min(16, int(task.get("max_consecutive_run") or 0)))
+        max_consecutive_run = max(
+            0, min(pool_cap, int(task.get("max_consecutive_run") or 0))
+        )
     except TypeError, ValueError:
         max_consecutive_run = 0
 
     return {
         "pool_size": pool_size,
+        "raw_pool_size": raw_pool,
         "guarantee": guarantee,
         "raw_guarantee": raw_guarantee,
         "max_variants": max_variants,
@@ -328,7 +323,6 @@ def _normalize_task(
         "restrict_base_max": restrict_base_max,
         "restrict_base_min": restrict_base_min,
         "max_consecutive_run": max_consecutive_run,
-        "extended_pool": extended_pool,
         "sim_depth_pct": int(task.get("sim_depth_pct", 10)),
         "pure_bench_mode": bool(task.get("pure_bench_mode", False)),
     }
@@ -367,7 +361,7 @@ def _set_bench_hit_target(task: dict) -> None:
 def _task_norm(task: dict, lot) -> dict:
     """`_normalize_task` cu geometria și plafonul jocului din registru."""
     cap = _RO_RESTRICT_BASE_CAP if lot.is_romanian else int(lot.max_n)
-    return _normalize_task(task, int(lot.pick_n), max_n=cap)
+    return _normalize_task(task, int(lot.pick_n), max_n=cap, pool_max=int(lot.max_pool))
 
 
 def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
@@ -386,11 +380,7 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
             path = PROJECT_ROOT / filename
             digest.update(filename.encode())
             digest.update(path.read_bytes() if path.exists() else b"missing")
-        from loto_enterprise.core.walk_forward_adapter import (
-            _effective_pool_size,
-            _extended_sig,
-            _wheel_sig,
-        )
+        from loto_enterprise.core.walk_forward_adapter import _effective_pool_size, _wheel_sig
 
         foreign_countries: set[str] = set()
         for dataset in config.get("datasets", []):
@@ -416,8 +406,6 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                         norm["max_variants"],
                     ).encode()
                 )
-                # Pool-ul extins: amprenta designului; gol oprit (cheile de dinainte).
-                digest.update(_extended_sig(norm["extended_pool"], lot.geometry).encode())
         # Decizia fiecărei țări străine din job (România: best_methods.json, mai sus).
         if foreign_countries:
             from loto_enterprise.core.method_selector import decision_path_for
@@ -514,15 +502,23 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             # România, cu aceeași geometrie ca `_map_game_label` de dinainte.
             game_mapped = lot.geometry
             norm = _task_norm(task, lot)
-            if (norm["guarantee"], norm["max_variants"], norm["lookback"]) != (
+            if (
+                norm["pool_size"],
+                norm["guarantee"],
+                norm["max_variants"],
+                norm["lookback"],
+            ) != (
+                norm["raw_pool_size"],
                 norm["raw_guarantee"],
                 norm["raw_max_variants"],
                 norm["raw_lookback"],
             ):
                 logging.warning(
-                    "[worker] Task normalizat %s: guarantee %s→%s, max_variants %s→%s, "
-                    "lookback %s→%s",
+                    "[worker] Task normalizat %s: pool %s→%s, guarantee %s→%s, "
+                    "max_variants %s→%s, lookback %s→%s",
                     game_label,
+                    norm["raw_pool_size"],
+                    norm["pool_size"],
                     norm["raw_guarantee"],
                     norm["guarantee"],
                     norm["raw_max_variants"],
@@ -602,7 +598,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         restrict_base_max=norm["restrict_base_max"],
                         restrict_base_min=norm["restrict_base_min"],
                         max_consecutive_run=norm["max_consecutive_run"],
-                        extended_pool=norm["extended_pool"],
                         lookback=norm["lookback"],
                         sim_depth_pct=norm["sim_depth_pct"],
                         enable_adaptive_persistence=False,
@@ -630,8 +625,6 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "restrict_base_max": norm["restrict_base_max"],
                     "restrict_base_min": norm["restrict_base_min"],
                     "max_consecutive_run": norm["max_consecutive_run"],
-                    # Ecoul opțiunii (0 = oprită); auditul spune dacă s-a aplicat.
-                    "extended_pool": norm["extended_pool"],
                     "lookback": norm["lookback"],
                     "audit": audit,
                     "resource_stats": monitor.get_stats(),

@@ -345,7 +345,8 @@ def test_interval_table_ranks_by_the_games_target(monkeypatch):
 
     monkeypatch.setattr(app_nicegui, "_base_interval_rows", _spy)
     monkeypatch.setitem(app_nicegui._BASE_TABLE_OPENED, "value", True)
-    monkeypatch.setitem(app_nicegui.SETTINGS, "pool_size_val", 12)
+    for _key in app_nicegui._POOL_KEYS.values():
+        monkeypatch.setitem(app_nicegui.SETTINGS, _key, 12)
     monkeypatch.setitem(app_nicegui.SETTINGS, "bench_hit_target", 3)
     with capture_ui() as ui:
         app_nicegui._render_base_interval_tables.func()

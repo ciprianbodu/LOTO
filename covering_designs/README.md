@@ -37,3 +37,20 @@ poate reproduce importul: solicită numai 60.848 de octeți din arhiva de
 Rezultatele și compromisul dintre cost și pragurile de hit de deasupra
 garanției sunt în
 [raportul măsurătorii](../scripts/analysis/complete_covers_2026-10-15.md).
+
+## Coverele de 17-19 numere pentru Loto 5/40, 22 octombrie 2026
+
+`C_17_5_4.txt`, `C_18_5_4.txt` și `C_19_5_4.txt` sunt schemele reduse ale
+Loteriei Române Cod 46 (562 de variante), Cod 47 (732) și Cod 48 (930), copiate
+din `lr/LR_540_cod46.txt` .. `lr/LR_540_cod48.txt` fără antet. Sursa, amprenta
+broșurii și `rows_sha256` ale variantelor sunt în `lr/index_oficial.json`;
+`test_pool_540_up_to_19.py` verifică faptul că blocurile coincid cu codurile.
+Toate trei sunt covere complete de 4 (fiecare grupă de 4 numere jucate e pe o
+variantă), verificate exhaustiv la încărcare, ca orice design local.
+
+Motorul pune pozițiile pe clasamentul metodei, nu în ordine crescătoare ca
+terminalul de la agenție: șansele sunt aceleași, variantele diferă. Cum
+`wheel_lajolla` păstrează greedy-ul cu scoruri când acoperă tot cu mai puține
+variante, la 17 numere motorul dă uneori un cover mai mic decât Cod 46.
+Codul însuși, pus pe pool ca la terminal, apare în panou și în „Istoric hits”.
+Nu afirmăm că sunt minime.
