@@ -497,7 +497,7 @@ def main() -> int:
             task_id,
             advance=1,
             description=f"[{game.label}] {fr.method} pct={fr.percentile}% "
-            f"{'RND' if fr.is_random else 'REAL'}  hits@k{game.draw_n}={fr.avg_hits_topk:.3f}",
+            f"{'RND' if fr.is_random else 'REAL'}  hits@k{game.base_k}={fr.avg_hits_topk:.3f}",
         )
         # Linie de progres parsabila de UI (app.py cauta regex r"\[(\d+)/(\d+)\]").
         # Scriem direct la stdout (flush imediat) ca sa apara in bench_full.log
@@ -507,7 +507,7 @@ def main() -> int:
             sys.stdout.write(
                 f"[{_folds_done['n']}/{total}] {game.label} | {fr.method} "
                 f"| pct={fr.percentile}% | {'RND' if fr.is_random else 'REAL'} "
-                f"| hits@k{game.draw_n}={fr.avg_hits_topk:.3f}\n"
+                f"| hits@k{game.base_k}={fr.avg_hits_topk:.3f}\n"
             )
             sys.stdout.flush()
         except Exception:
@@ -551,15 +551,22 @@ def main() -> int:
     # Render regressive table from folds.csv
     import pandas as pd
 
-    folds_df = pd.read_csv(Path(args.out) / "folds.csv")
+    # Fără niciun fold nou (toate CSV-urile au căzut la încărcare), folds.csv de
+    # pe disc e al bench-ului ANTERIOR: nici tabelele, nici decizia nu-l citesc
+    # (audit 2026-10-22, revizia diff-ului).
+    _no_folds = not int(report.get("n_folds_total") or 0)
+    _folds_path = Path(args.out) / "folds.csv"
+    folds_df = (
+        pd.DataFrame() if _no_folds or not _folds_path.exists() else pd.read_csv(_folds_path)
+    )
 
     render_per_game(console, report)
     console.print()
     console.rule(
         "[bold green]REGRESIV — hits @ K=draw_n pe FIECARE fereastră istorică[/bold green]"
     )
-    for game in games:
-        render_regressive_table(console, folds_df, game.key, game.label, game.draw_n)
+    for game in games if not folds_df.empty else ():
+        render_regressive_table(console, folds_df, game.key, game.label, game.base_k)
 
     # ─── best_methods.json ─────────────────────────────────────────────────
     # Schema v3: per pool we record BOTH "no blacklist" and "with blacklist"
@@ -641,11 +648,17 @@ def main() -> int:
             "[bold yellow]⚠ Set redus de metode — best_methods.json rămâne "
             "NEATINS (adaugă --force-decision ca să-l rescrii).[/bold yellow]"
         )
+    if _no_folds and not _skip_decision:
+        _decision_failed = True
+        logging.error(
+            "[bench] niciun fold produs (istoricele nu s-au incarcat?): "
+            "best_methods.json ramane neatins, nu se reconstruieste din folds.csv vechi."
+        )
     if _skip_decision:
         # Bench paralel pe faze: scriem DOAR folds.csv in --out (deja scris de runner);
         # decizia (best_methods.json) se ia separat dupa combinarea folds-urilor.
         logging.info("[bench] sar scrierea best_methods.json (no-decision/set redus).")
-    else:
+    elif not _no_folds:
         # Folds-ul rularii CURENTE, din --out (nu default-ul
         # "bench_results/folds.csv"). Fara asta, `--out alt_folder` producea un
         # best_methods.json HIBRID: winners din rularea noua, dar
@@ -720,9 +733,14 @@ def main() -> int:
             "(set redus de metode / --no-decision; forțează cu --force-decision)"
         )
     elif _decision_failed:
+        _why = (
+            "niciun fold produs (istoricele nu s-au încărcat)"
+            if _no_folds
+            else "matricea de decizie nu s-a putut construi (vezi logul)"
+        )
         console.print(
-            "  • [bold red]best_methods.json NU a fost rescris[/bold red]: matricea "
-            "de decizie nu s-a putut construi (vezi logul); rămâne decizia anterioară"
+            "  • [bold red]best_methods.json NU a fost rescris[/bold red]: "
+            f"{_why}; rămâne decizia anterioară"
         )
     else:
         console.print(

@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import signal
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -26,7 +27,9 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v21"
+PIPELINE_CACHE_VERSION = "v22"
+# v22: factorul 0 al penalizării recente pune numerele penalizate sub toate
+#      cele nepenalizate, și sub cele cu scor 0 (audit 2026-10-22).
 # v21: la plafonul egal cu o schemă redusă LR a pool-ului, motorul o adoptă
 # certificată (8 configurații, `scripts/analysis/lr_optimality_2026-10-20.md`);
 # la garanția egală cu biletul, coverul complet al garanției mai mici e
@@ -520,12 +523,25 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             def progress_cb(msg, pct):
                 overall_pct = int(((step_idx + (pct / 100.0)) / total_steps) * 95)
                 # Dacă update_job_progress returnează True, jobul a fost anulat sau șters.
-                if update_job_progress(
-                    job_id,
-                    overall_pct,
-                    f"[{fname}][{game_label}] {msg}",
-                    worker_token=WORKER_TOKEN,
-                ):
+                try:
+                    stop = update_job_progress(
+                        job_id,
+                        overall_pct,
+                        f"[{fname}][{game_label}] {msg}",
+                        worker_token=WORKER_TOKEN,
+                    )
+                except sqlite3.Error as exc:
+                    # O eroare trecătoare a bazei („database is locked” după
+                    # busy_timeout, disk I/O) la un simplu progres nu oprește
+                    # rularea: înainte jobul ieșea FAILED (audit 2026-10-22).
+                    # Anularea se vede la următorul progres sau la final.
+                    logging.warning(
+                        "[worker] Job %s: progresul n-a putut fi scris (%s); continui.",
+                        job_id,
+                        exc,
+                    )
+                    return
+                if stop:
                     # Aruncăm o eroare pentru a opri engine-ul imediat.
                     raise Exception("STOP_REQUESTED")
 
@@ -651,12 +667,19 @@ def _requeue_on_terminate(*_args) -> None:
         pass
 
 
-def _dump_orphan_result(job_id: int, result_json: str) -> None:
-    """Jobul nu mai era RUNNING/al acestui worker când rezultatul a fost gata
-    (al doilea worker l-a revendicat între timp) — `complete_job` a refuzat
+_ORPHAN_REASON = "jobul nu mai era RUNNING/al acestui worker"
+# Scrierea rezultatului: încercări la o eroare SQLite (după busy_timeout-ul de
+# 30 s al conexiunii), cu pauză crescătoare.
+_COMPLETE_ATTEMPTS = 4
+_COMPLETE_BACKOFF_SEC = 2.0
+
+
+def _dump_orphan_result(job_id: int, result_json: str, reason: str = _ORPHAN_REASON) -> str:
+    """`complete_job` n-a scris rezultatul: jobul nu mai era RUNNING/al acestui
+    worker (al doilea worker l-a revendicat între timp) sau baza a refuzat
     scrierea. Salvăm rezultatul pe disc în loc să-l pierdem definitiv; numele
     include tokenul + un uuid scurt (nu doar job_id) — altfel două rulări
-    STALE succesive ale aceluiași job s-ar suprascrie reciproc."""
+    STALE succesive ale aceluiași job s-ar suprascrie reciproc. Întoarce calea."""
     dump_path = os.path.join(
         tempfile.gettempdir(),
         f"loto_orphan_result_{job_id}_{WORKER_TOKEN[:8]}_{uuid.uuid4().hex[:8]}.txt",
@@ -666,18 +689,50 @@ def _dump_orphan_result(job_id: int, result_json: str) -> None:
             fh.write(result_json)
         logging.error(
             "[worker] Job %s: rezultatul NU a putut fi scris în coadă "
-            "(jobul nu mai era RUNNING/al acestui worker). L-am salvat în %s",
+            "(%s). L-am salvat în %s",
             job_id,
+            reason,
             dump_path,
         )
     except OSError as exc:
         logging.error(
-            "[worker] Job %s: rezultat PIERDUT (nu mai era RUNNING/al acestui "
-            "worker) și nici salvarea în %s n-a mers: %s",
+            "[worker] Job %s: rezultat PIERDUT (%s) și nici salvarea în %s "
+            "n-a mers: %s",
             job_id,
+            reason,
             dump_path,
             exc,
         )
+    return dump_path
+
+
+def _complete_with_retry(job_id: int, result_json: str) -> bool:
+    """`complete_job` cu reîncercări la o eroare SQLite trecătoare.
+
+    Înainte o excepție din `complete_job` („database is locked”, „disk I/O
+    error”) ajungea în handler-ul general din `main`, care marca jobul FAILED
+    și suprascria `result_json` cu traceback-ul: rezultatul unei rulări de ore
+    se pierdea fără copie (audit 2026-10-22). Acum se reîncearcă; dacă baza tot
+    refuză, rezultatul se salvează pe disc, apoi eroarea urcă (jobul devine
+    FAILED, cu calea copiei în jurnal)."""
+    for attempt in range(1, _COMPLETE_ATTEMPTS + 1):
+        try:
+            return complete_job(job_id, result_json, worker_token=WORKER_TOKEN)
+        except sqlite3.Error as exc:
+            if attempt == _COMPLETE_ATTEMPTS:
+                _dump_orphan_result(
+                    job_id, result_json, f"baza a refuzat scrierea: {exc}"
+                )
+                raise
+            logging.warning(
+                "[worker] Job %s: scrierea rezultatului a eșuat (%s), încercarea %d/%d.",
+                job_id,
+                exc,
+                attempt,
+                _COMPLETE_ATTEMPTS,
+            )
+            time.sleep(_COMPLETE_BACKOFF_SEC * attempt)
+    return False
 
 
 def _process_one_job(job: dict) -> None:
@@ -709,7 +764,7 @@ def _process_one_job(job: dict) -> None:
         logging.info(f"[worker] Job {job_id} anulat în timpul execuției, nu completăm.")
         return
 
-    if complete_job(job_id, result_json, worker_token=WORKER_TOKEN):
+    if _complete_with_retry(job_id, result_json):
         logging.info(f"[worker] Job {job_id} completat cu succes, continuă loop...")
     else:
         # UPDATE-ul cere status = RUNNING ȘI worker_token = acest proces. Dacă

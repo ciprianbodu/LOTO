@@ -204,7 +204,10 @@ def render_regressive_table(
     game_label: str,
     draw_n: int,
 ) -> None:
-    """Per-percentile breakdown for the base pool K=draw_n (real data only)."""
+    """Per-percentile breakdown for the base pool K (real data only).
+
+    The caller passes the base pool (`game.base_k`): for 5/40 that is k5, the
+    ticket size, not the six drawn numbers."""
     base_col = f"k{draw_n}"
     sub = folds_df[
         (folds_df["game"] == game_key)

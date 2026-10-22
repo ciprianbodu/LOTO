@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,9 @@ class ProcView:
     cmdline: tuple[str, ...] = ()
     cwd: str | None = None
     parent_pid: int | None = None
+    # Momentul pornirii (psutil.create_time): un PID reciclat nu adoptă copiii
+    # mai vechi decât el (vezi `expand_descendants`). None = necunoscut.
+    create_time: float | None = None
 
 
 def is_stale_proc(
@@ -116,14 +120,27 @@ def is_stale_proc(
         return False
 
     cmd = _norm(" ".join(proc.cmdline))
-    if _norm(project_root) and _norm(project_root) in cmd:
+    root = _norm(project_root)
+    # Calea proiectului ca segment întreg de cale, nu ca prefix de text: un
+    # director frate `_LOTO_old` nu e proiectul (audit 2026-10-22; aceeași
+    # regulă ca `ui_shared.is_worker_running`).
+    if root and re.search(re.escape(root) + r"(?=$|/|\s|[\"'])", cmd):
         return True
     return bool(proc.cwd) and path_is_under(proc.cwd, project_root)
 
 
 def expand_descendants(stale_pids: set[int], procs: list[ProcView]) -> set[int]:
-    """Adaugă tot arborele de copii. Windows nu omoară descendenții odată cu părintele."""
+    """Adaugă tot arborele de copii. Windows nu omoară descendenții odată cu părintele.
+
+    Windows păstrează în ppid PID-ul unui părinte mort, iar PID-urile se
+    reciclează: un proces vechi (editor, browser) pornit de un lansator mort
+    al cărui PID l-a primit apoi un python stale al proiectului părea copilul
+    lui și era omorât cu tot arborele (audit 2026-10-22). Ca
+    `psutil.Process.children()`, un copil e acceptat numai dacă a pornit după
+    părintele viu din snapshot; la un părinte mort (fără timp) orfanii rămân
+    urmăriți, ca înainte."""
     by_parent: dict[int, list[int]] = {}
+    created = {p.pid: p.create_time for p in procs}
     for p in procs:
         if p.parent_pid is None:
             continue
@@ -132,10 +149,15 @@ def expand_descendants(stale_pids: set[int], procs: list[ProcView]) -> set[int]:
     stack = list(stale_pids)
     while stack:
         pid = stack.pop()
+        parent_t = created.get(pid)
         for child in by_parent.get(pid, ()):
-            if child not in out and child not in _SYSTEM_PIDS:
-                out.add(child)
-                stack.append(child)
+            if child in out or child in _SYSTEM_PIDS:
+                continue
+            child_t = created.get(child)
+            if parent_t is not None and child_t is not None and child_t < parent_t:
+                continue
+            out.add(child)
+            stack.append(child)
     return out
 
 
@@ -181,7 +203,9 @@ def _snapshot() -> list[ProcView]:
     import psutil
 
     views: list[ProcView] = []
-    for proc in psutil.process_iter(["pid", "name", "exe", "cmdline", "ppid"]):
+    for proc in psutil.process_iter(
+        ["pid", "name", "exe", "cmdline", "ppid", "create_time"]
+    ):
         info = proc.info
         cwd: str | None = None
         try:
@@ -197,6 +221,7 @@ def _snapshot() -> list[ProcView]:
                 cmdline=tuple(str(x) for x in cmdline),
                 cwd=cwd,
                 parent_pid=info.get("ppid"),
+                create_time=info.get("create_time"),
             )
         )
     return views

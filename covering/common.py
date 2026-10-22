@@ -26,8 +26,10 @@ def _pool_rank_key(number: int, scores) -> tuple[float, int]:
 
     Aceeași ordine ca `rank_by_score` când nu există frecvență de departajare.
     Un scor lipsă sau ne-finit cade la coadă, nu între două scoruri reale.
+    Lipsa cheii valora 0.0 (audit 2026-10-22): lângă un scor real negativ,
+    numărul fără scor primea o poziție mai bună în design.
     """
-    raw = scores.get(number, 0.0)
+    raw = scores.get(number)
     try:
         value = float(raw)
     except (TypeError, ValueError):

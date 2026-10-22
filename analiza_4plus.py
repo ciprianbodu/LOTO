@@ -12,9 +12,16 @@ Rulare:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pandas as pd
+
+# Ieșirea redirecționată (`> raport.txt`) e cp1252 pe Windows: fără asta
+# scriptul cădea cu UnicodeEncodeError la primul „Ă”/„→” (audit 2026-10-22).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 FOLDS = Path(__file__).resolve().parent / "bench_results" / "folds.csv"
 

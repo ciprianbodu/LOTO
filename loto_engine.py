@@ -88,6 +88,34 @@ _LEGACY_PARAM_EXTRAS = {
 _ZERO_PENALTY_FACTOR = 1e-9
 
 
+def _below_unpenalized(scores: dict, out: dict, counts: dict, floor: float) -> dict:
+    """Factorul 0 cu un scor <= 0: penalizatele strict sub `floor`, în ordinea
+    (apariții crescător, apoi scorul original descrescător).
+
+    Factorul efectiv de mai sus coboară penalizatele numai sub scorurile
+    nepenalizate POZITIVE. Un scorer normalizat min-max are mereu un număr la
+    exact 0.0; un număr penalizat cu scor s > 0 ajungea la s * 1e-9 > 0, deci
+    peste el, deși factorul 0 le pune sub toate celelalte (audit 2026-10-22).
+    Tot de acolo, un penalizat cu scor 0 (0 * f = 0) ajungea sub unul cu două
+    apariții și scor pozitiv. Aici ordinea e explicită; egalitățile rămân
+    egalități, iar pasul e mic față de scara scorurilor.
+    """
+    keys = sorted(
+        {(counts[int(num)], -float(scores[num])) for num in out if counts.get(int(num))}
+    )
+    if not keys:
+        return out
+    scale = max(1.0, max(abs(float(v)) for v in out.values()))
+    step = scale * 1e-6
+    rank = {key: index for index, key in enumerate(keys)}
+    moved = dict(out)
+    for num in out:
+        k = counts.get(int(num))
+        if k:
+            moved[num] = floor - step * (rank[(k, -float(scores[num]))] + 1)
+    return moved
+
+
 def game_params_for(geometry: str) -> dict | None:
     """Parametrii motorului pentru o geometrie din registru (None = necunoscută).
 
@@ -554,13 +582,15 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 vi = int(v)
                 if 1 <= vi <= int(max_num):
                     counts[vi] = counts.get(vi, 0) + 1
-        if f == 0.0:
+        zero_factor = f == 0.0
+        free_all: list[float] = []
+        if zero_factor:
             # Factorul 0: sub orice scor nepenalizat pozitiv, ordinea păstrată.
             # Cu k >= 1: scor * f**k <= max(penalizate) * f < min(nepenalizate).
             f = _ZERO_PENALTY_FACTOR
-            free = [float(v) for num, v in scores.items() if not counts.get(int(num))]
+            free_all = [float(v) for num, v in scores.items() if not counts.get(int(num))]
             hit = [float(v) for num, v in scores.items() if counts.get(int(num))]
-            free = [v for v in free if v > 0]
+            free = [v for v in free_all if v > 0]
             hit = [v for v in hit if v > 0]
             if free and hit:
                 f = min(f, 0.5 * min(free) / max(hit))
@@ -573,6 +603,12 @@ class LotoEngine(PipelineMixin, ScoringMixin):
                 # pastreaza exact inmultirea veche, bit cu bit (pool si cache WF).
                 v = v * (f**k) if v >= 0 else v * (2.0 - f**k)
             out[num] = v
+        if zero_factor:
+            hit_all = [float(v) for num, v in scores.items() if counts.get(int(num))]
+            if (free_all and min(free_all) <= 0) or (hit_all and min(hit_all) <= 0):
+                # Cu toate scorurile pozitive rămâne înmulțirea veche, bit cu bit.
+                floor = min(free_all) if free_all else 0.0
+                out = _below_unpenalized(scores, out, counts, floor)
         return out, {k_: v_ for k_, v_ in sorted(counts.items())}
 
     def _get_initial_hard_core(

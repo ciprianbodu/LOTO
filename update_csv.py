@@ -169,17 +169,22 @@ def _extract_draws(
     istoricul folosit de engine/benchmark, fara nicio urma aici)."""
     # Fiecare număr se termină înaintea unei cifre sau a unei cratime: o celulă
     # lipsă nu mai împrumută „20” din anul datei următoare, iar „490” nu mai
-    # trece drept „49” urmat de „0”.
+    # trece drept „49” urmat de „0”. După ultimul număr nu mai poate urma o
+    # celulă de 1-2 cifre (audit 2026-10-22): pe pagină urmează data
+    # următoare sau text. Fără ancoră, un rând cu o celulă în plus trecea: la
+    # Joker al șaselea număr devenea Joker-ul, iar cel real se pierdea; la
+    # 6/49 și 5/40 celula în plus dispărea. Rândul cade acum la „necitibil”.
+    row_end = r"(?!\s*\+?\s*\d{1,2}(?![\d-]))"
     if has_joker:
         pattern = re.compile(
             r"\b(\d{4}-\d{1,2}-\d{1,2})\b"
             r"((?:\s+\d{1,2}(?![\d-])){" + str(num_main) + r"})"
-            r"\s*\+?\s*(\d{1,2})(?![\d-])"
+            r"\s*\+?\s*(\d{1,2})(?![\d-])" + row_end
         )
     else:
         pattern = re.compile(
             r"\b(\d{4}-\d{1,2}-\d{1,2})\b"
-            r"((?:\s+\d{1,2}(?![\d-])){" + str(num_main) + r"})"
+            r"((?:\s+\d{1,2}(?![\d-])){" + str(num_main) + r"})" + row_end
         )
 
     today = date.today()
