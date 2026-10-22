@@ -1,0 +1,326 @@
+[
+ {
+  "name": "649_112_v17_g_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 17,
+  "seconds": 60,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v17_lr64959_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 17,
+  "seconds": 60,
+  "seed_kind": "lr:6/49:59",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v18_g_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 18,
+  "seconds": 60,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v18_lr64959_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 18,
+  "seconds": 60,
+  "seed_kind": "lr:6/49:59",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v19_g_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 19,
+  "seconds": 60,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v19_lr64959_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 19,
+  "seconds": 60,
+  "seed_kind": "lr:6/49:59",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v20_g_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 20,
+  "seconds": 60,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_112_v20_lr64959_s1",
+  "game": "6/49",
+  "budget": 112,
+  "v": 20,
+  "seconds": 60,
+  "seed_kind": "lr:6/49:59",
+  "seed": 1
+ },
+ {
+  "name": "649_152_v17_g_s1",
+  "game": "6/49",
+  "budget": 152,
+  "v": 17,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_152_v18_g_s1",
+  "game": "6/49",
+  "budget": 152,
+  "v": 18,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_152_v19_g_s1",
+  "game": "6/49",
+  "budget": 152,
+  "v": 19,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_152_v20_g_s1",
+  "game": "6/49",
+  "budget": 152,
+  "v": 20,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_404_v17_g_s1",
+  "game": "5/40",
+  "budget": 404,
+  "v": 17,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_404_v18_g_s1",
+  "game": "5/40",
+  "budget": 404,
+  "v": 18,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_404_v19_g_s1",
+  "game": "5/40",
+  "budget": 404,
+  "v": 19,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_404_v20_g_s1",
+  "game": "5/40",
+  "budget": 404,
+  "v": 20,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "joker_404_v17_g_s1",
+  "game": "joker",
+  "budget": 404,
+  "v": 17,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "joker_404_v18_g_s1",
+  "game": "joker",
+  "budget": 404,
+  "v": 18,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "joker_404_v19_g_s1",
+  "game": "joker",
+  "budget": 404,
+  "v": 19,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "joker_404_v20_g_s1",
+  "game": "joker",
+  "budget": 404,
+  "v": 20,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_348_v17_g_s1",
+  "game": "5/40",
+  "budget": 348,
+  "v": 17,
+  "seconds": 100,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_348_v18_g_s1",
+  "game": "5/40",
+  "budget": 348,
+  "v": 18,
+  "seconds": 100,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_348_v19_g_s1",
+  "game": "5/40",
+  "budget": 348,
+  "v": 19,
+  "seconds": 100,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_348_v20_g_s1",
+  "game": "5/40",
+  "budget": 348,
+  "v": 20,
+  "seconds": 100,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "540_348_v16_lr54037_s1",
+  "game": "5/40",
+  "budget": 348,
+  "v": 16,
+  "seconds": 60,
+  "seed_kind": "lr:5/40:37",
+  "seed": 1
+ },
+ {
+  "name": "540_348_v17_lr54037_s1",
+  "game": "5/40",
+  "budget": 348,
+  "v": 17,
+  "seconds": 60,
+  "seed_kind": "lr:5/40:37",
+  "seed": 1
+ },
+ {
+  "name": "649_100_v17_g_s1",
+  "game": "6/49",
+  "budget": 100,
+  "v": 17,
+  "seconds": 90,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_100_v18_g_s1",
+  "game": "6/49",
+  "budget": 100,
+  "v": 18,
+  "seconds": 90,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_100_v19_g_s1",
+  "game": "6/49",
+  "budget": 100,
+  "v": 19,
+  "seconds": 90,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_100_v20_g_s1",
+  "game": "6/49",
+  "budget": 100,
+  "v": 20,
+  "seconds": 90,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_100_v16_lr64959_s1",
+  "game": "6/49",
+  "budget": 100,
+  "v": 16,
+  "seconds": 60,
+  "seed_kind": "lr:6/49:59",
+  "seed": 1
+ },
+ {
+  "name": "649_100_v17_lr64959_s1",
+  "game": "6/49",
+  "budget": 100,
+  "v": 17,
+  "seconds": 60,
+  "seed_kind": "lr:6/49:59",
+  "seed": 1
+ },
+ {
+  "name": "649_200_v17_g_s1",
+  "game": "6/49",
+  "budget": 200,
+  "v": 17,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_200_v18_g_s1",
+  "game": "6/49",
+  "budget": 200,
+  "v": 18,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_200_v19_g_s1",
+  "game": "6/49",
+  "budget": 200,
+  "v": 19,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ },
+ {
+  "name": "649_200_v20_g_s1",
+  "game": "6/49",
+  "budget": 200,
+  "v": 20,
+  "seconds": 120,
+  "seed_kind": "greedy",
+  "seed": 1
+ }
+]

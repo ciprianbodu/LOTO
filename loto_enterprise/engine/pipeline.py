@@ -49,6 +49,7 @@ class PipelineMixin:
         restrict_base_max=0,
         restrict_base_min=0,
         max_consecutive_run=0,
+        extended_pool=0,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -594,6 +595,22 @@ class PipelineMixin:
             scores=wheeling_scores,
             condition=wheel_condition,
         )
+        # Pool extins pentru 4+ (opțiune, 2026-10-22): biletele de mai sus sunt
+        # baza certificării; designul pe 17-18 numere le înlocuiește numai
+        # certificat (`covering/extended_pool.py`).
+        if extended_pool:
+            lines, coverage_pct = self._apply_extended_pool(
+                int(extended_pool),
+                lines,
+                coverage_pct,
+                tfm_scores,
+                wheeling_scores,
+                blacklist,
+                _mcr,
+                guarantee=int(guarantee),
+                max_variants=int(max_variants),
+                wheel_condition=int(wheel_condition),
+            )
 
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar
         # putea sparge garanția de acoperire. Dacă vreodată se reintroduce unul,
@@ -742,7 +759,14 @@ class PipelineMixin:
 
                 # România: `6/49_12` (neschimbat). Altă țară: prefixată cu țara și
                 # jocul, ca un Lotto german să nu scrie peste Loto 6/49 românesc.
-                hist_key = f"{self._history_key_prefix()}{self.game_type}_{pool_size}"
+                # Pool-ul extins adoptat are cheia mărimii jucate (17/18), ca
+                # variația să nu-l compare cu pool-ul de 16.
+                _hist_size = (
+                    len(self.hard_core)
+                    if (self.audit.get("extended_pool") or {}).get("applied")
+                    else pool_size
+                )
+                hist_key = f"{self._history_key_prefix()}{self.game_type}_{_hist_size}"
                 legacy_key = f"{hist_key}_p1"
                 last_pool = (history.get(hist_key, {}) or {}).get("pool", [])
                 if not last_pool:
@@ -781,7 +805,11 @@ class PipelineMixin:
             try:
                 record_predicted_pool(
                     game_type=self.game_type,
-                    pool_size=pool_size,
+                    pool_size=(
+                        len(self.hard_core)
+                        if (self.audit.get("extended_pool") or {}).get("applied")
+                        else pool_size
+                    ),
                     pool=self.hard_core,
                     data_rows=full_rows,
                     key_prefix=self._history_key_prefix(),
@@ -824,3 +852,120 @@ class PipelineMixin:
 
         logging.info("[PIPELINE] Pipeline completat cu succes.")
         return lines, p10, p90, g_range, context, self.audit
+
+    # Cheile de audit scrise de selecția pool-ului (`select_pool_from_scores`):
+    # la pool-ul extins adoptat descriu pool-ul de v numere, altfel pe cel de 16.
+    _POOL_AUDIT_KEYS = (
+        "consecutive_limit",
+        "timesfm_predictions",
+        "pool_selection",
+        "pool_selection_note",
+        "pool_score_unique_levels",
+        "pool_selection_warning",
+        "pool_longest_consecutive_run",
+        "pool_is_consecutive_block",
+        "pool_consecutive_warning",
+    )
+
+    def _apply_extended_pool(
+        self,
+        size,
+        lines,
+        coverage_pct,
+        tfm_scores,
+        wheeling_scores,
+        blacklist,
+        max_consecutive_run,
+        *,
+        guarantee,
+        max_variants,
+        wheel_condition,
+    ):
+        """Pool extins pentru 4+: (variante, acoperirea garanției 4).
+
+        Baza e coverul complet pe pool-ul de 16 de mai sus (ce s-ar juca fără
+        opțiune). Metoda e cea a deciziei pentru pool 16 (worker-ul trimite
+        pool_size 16): cele 16 numere ale bazei trebuie să rămână în pool-ul
+        extins, deci același clasament, deși bench-ul are și celule k17/k18. Pool-ul de v numere trece prin aceeași selecție (scor,
+        departajare canonică, limita de consecutive, restrângerea bazei,
+        penalizarea); designul se pune pe clasamentul lui și intră numai
+        certificat. Altfel rămân biletele de 16, iar `audit["extended_pool"]`
+        spune motivul.
+        """
+        from covering.common import _order_by_scores, compute_coverage_pct
+        from covering.extended_pool import apply as apply_extended
+        from covering.extended_pool import normalize_size
+
+        pick = int(self.params["play_n"])
+        draw_n = int(self.params["draw_n"])
+        max_num = int(self.params["max_n"])
+        v = normalize_size(size)
+        audit = {"requested": int(size or 0), "applied": False, "reason": ""}
+        if not v:
+            audit["reason"] = "mărime nelivrată"
+        elif (
+            len(self.hard_core) != 16
+            or guarantee != 4
+            or max_variants != 0
+            or wheel_condition != guarantee
+        ):
+            audit["reason"] = (
+                "baza nu e coverul complet pe 16 numere (pool 16, garanția 4, fără plafon)"
+            )
+        if audit["reason"]:
+            self.audit["extended_pool"] = audit
+            return lines, coverage_pct
+
+        base_audit = self.audit
+        # Selecția pool-ului de v pornește fără cheile selecției de 16: unele se
+        # scriu numai când se aplică (avertismentul de bloc consecutiv), iar una
+        # moștenită ar descrie la adopție alt pool decât cel jucat.
+        self.audit = {k: val for k, val in base_audit.items() if k not in self._POOL_AUDIT_KEYS}
+        try:
+            pool_v = self._get_timesfm_pool(
+                tfm_scores,
+                pool_size=v,
+                blacklist=blacklist,
+                max_consecutive_run=max_consecutive_run,
+            )
+            selection = {k: self.audit.get(k) for k in self._POOL_AUDIT_KEYS if k in self.audit}
+        finally:
+            self.audit = base_audit
+        incumbent = [list(line)[:pick] for line in lines]
+        candidate, audit = apply_extended(
+            pool_v, wheeling_scores, incumbent, v, pick, draw_n, max_num
+        )
+        self.audit["extended_pool"] = audit
+        if candidate is None:
+            logging.info(
+                "[PIPELINE] Pool extins %d neaplicat: %s; raman cele %d variante pe 16 numere.",
+                v,
+                audit.get("reason"),
+                len(lines),
+            )
+            return lines, coverage_pct
+        for key in self._POOL_AUDIT_KEYS:
+            self.audit.pop(key, None)
+        self.audit.update(selection)
+        # Selecția inițială după scor a pool-ului de v (ca etapa 1 pentru 16):
+        # diagnosticul de consecutive o compară cu pool-ul jucat.
+        _cl = selection.get("consecutive_limit") or {}
+        audit["raw_top"] = sorted(
+            ({int(n) for n in pool_v} - {int(n) for n, _r in _cl.get("added") or []})
+            | {int(n) for n, _r in _cl.get("removed") or []}
+        )
+        self.hard_core = sorted(int(n) for n in pool_v)
+        self.audit["pipeline_stages"]["5_extended_pool"] = list(self.hard_core)
+        variants = _order_by_scores(candidate, wheeling_scores)
+        coverage = compute_coverage_pct(variants, self.hard_core, 4)
+        self._attach_joker(variants)
+        logging.info(
+            "[PIPELINE] Pool extins %d adoptat (%s): 4+ %.4f%% -> %.4f%%, garantia 4 "
+            "acoperita %.2f%% din grupele pool-ului.",
+            v,
+            audit.get("design"),
+            100 * audit["chances"]["4"]["base"],
+            100 * audit["chances"]["4"]["extended"],
+            coverage,
+        )
+        return variants, coverage

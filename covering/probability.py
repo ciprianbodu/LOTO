@@ -3,6 +3,12 @@
 from functools import lru_cache
 from math import comb, isfinite
 
+# Pool-ul extins (2026-10-22): 17-20 de numere pe același număr de variante. Până la 16
+# numărătoarea rămâne bucla de mai jos, bit cu bit; peste 16, același tabel
+# întreg din programarea dinamică pe submulțimi în numpy (2^20 = 1M de măști).
+MAX_EXACT_POOL = 20
+_PYTHON_POOL_LIMIT = 16
+
 
 def _integer(value):
     try:
@@ -16,8 +22,8 @@ def _integer(value):
 
 def _wheel_masks(pool, tickets):
     pool = tuple(_integer(n) for n in pool)
-    if not 0 < len(pool) <= 16 or len(set(pool)) != len(pool):
-        raise ValueError("Pool must contain 1..16 distinct numbers")
+    if not 0 < len(pool) <= MAX_EXACT_POOL or len(set(pool)) != len(pool):
+        raise ValueError(f"Pool must contain 1..{MAX_EXACT_POOL} distinct numbers")
     # Pozițiile urmează ordinea dată: numărătorile nu depind de etichete (orice
     # permutare a pool-ului dă același profil), iar un apelant care dă
     # clasamentul primește aceleași măști la fiecare pas WF, deci memoria
@@ -44,6 +50,8 @@ def _hit_counts(v: int, masks: tuple[int, ...]):
     componentwise proves non-decreasing unconditional odds for every uniform
     draw geometry: all outside-pool completion weights are non-negative.
     """
+    if v > _PYTHON_POOL_LIMIT:
+        return _hit_counts_numpy(v, masks)
     best = bytearray(1 << v)
     for ticket in masks:
         sub = ticket
@@ -67,11 +75,39 @@ def _hit_counts(v: int, masks: tuple[int, ...]):
     return tuple(tuple(row) for row in counts)
 
 
+def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
+    """Același tabel ca `_hit_counts`, pentru pool-uri de 17..20 de numere.
+
+    Familia submulțimilor biletelor (închidere în jos), apoi maximul pe
+    submulțimi (propagare în sus, câte o dimensiune), apoi histograma
+    (mărimea submulțimii, cele mai multe numere pe un bilet). Numai întregi.
+    """
+    import numpy as np
+
+    size = 1 << v
+    family = np.zeros(size, dtype=bool)
+    family[np.fromiter(masks, dtype=np.int64, count=len(masks))] = True
+    for i in range(v):  # orice submulțime a unui bilet e în familie
+        view = family.reshape(-1, 2, 1 << i)
+        view[:, 0, :] |= view[:, 1, :]
+    popcount = np.bitwise_count(np.arange(size, dtype=np.uint32)).astype(np.int8)
+    best = np.where(family, popcount, 0).astype(np.int8)
+    for i in range(v):  # best[m] = cel mai mare popcount al unei submulțimi din familie
+        view = best.reshape(-1, 2, 1 << i)
+        np.maximum(view[:, 1, :], view[:, 0, :], out=view[:, 1, :])
+    hist = np.bincount(
+        popcount.astype(np.int64) * (v + 1) + best.astype(np.int64),
+        minlength=(v + 1) * (v + 1),
+    ).reshape(v + 1, v + 1)
+    cumulative = hist[:, ::-1].cumsum(axis=1)[:, ::-1]
+    return tuple(tuple(int(x) for x in row) for row in cumulative)
+
+
 def wheel_hit_profile(pool, tickets):
     """Exact counts indexed by pool-intersection size and hit threshold.
 
     Pure ticket geometry; labels and scorer values do not imply probabilities.
-    Repeated tickets are counted once. Bounded to 16 distinct pool numbers.
+    Repeated tickets are counted once. Bounded to 20 distinct pool numbers.
     """
     pool, masks = _wheel_masks(pool, tickets)
     return _hit_counts(len(pool), masks)

@@ -211,17 +211,76 @@ def wheel_coverage_summary(flat) -> dict:
     înregistrări dintr-un cache mai vechi decât câmpul — necunoscut, nu 100%.
     """
     per: dict = {}
+    extended: set = set()
     for p in flat or ():
         di = int(getattr(p, "draw_index", 0) or 0)
         if di not in per:
             per[di] = getattr(p, "wheel_coverage", None)
-    known = [float(v) for v in per.values() if v is not None]
-    return {
+            if _step_extended(p).get("applied"):
+                extended.add(di)
+    # Pașii pe pool extins au garanția 4 parțială prin construcție: nu intră în
+    # `below_100` (al cărui remediu e „fără plafon de variante”), ci separat.
+    known = [float(v) for di, v in per.items() if v is not None and di not in extended]
+    out = {
         "n_draws": len(per),
         "known": len(known),
-        "unknown": len(per) - len(known),
+        "unknown": sum(1 for v in per.values() if v is None),
         "min": min(known) if known else None,
         "below_100": sum(1 for v in known if v < 100.0),
+    }
+    if extended:
+        ext = [float(per[di]) for di in extended if per[di] is not None]
+        out["extended"] = len(extended)
+        out["extended_min"] = min(ext) if ext else None
+    return out
+
+
+def _step_extended(p) -> dict:
+    """Auditul pool-ului extins al unui pas WF ({} = opțiune oprită / cache vechi)."""
+    ctx = getattr(p, "ticket_context", None) or {}
+    xp = (ctx.get("audit") or {}).get("extended_pool") if isinstance(ctx, dict) else None
+    return xp if isinstance(xp, dict) else {}
+
+
+def extended_steps_summary(flat) -> dict:
+    """Pool-ul extins pe pașii WF, per extragere ({} fără opțiune).
+
+    Fiecare pas se certifică singur, deci o validare poate amesteca pași pe pool
+    extins cu pași pe pool-ul de 16 (`fallback`, cu motivele lor)."""
+    per: dict = {}
+    for p in flat or ():
+        di = int(getattr(p, "draw_index", 0) or 0)
+        if di not in per:
+            per[di] = (_step_extended(p), getattr(p, "ticket_context", None) or {})
+    steps = [(xp, ctx) for xp, ctx in per.values() if xp.get("requested")]
+    if not steps:
+        return {}
+    applied = [(xp, ctx) for xp, ctx in steps if xp.get("applied")]
+    reasons: dict = {}
+    for xp, _ctx in steps:
+        if not xp.get("applied"):
+            r = str(xp.get("reason") or "necunoscut")
+            reasons[r] = reasons.get(r, 0) + 1
+    sizes: dict = {}
+    fallback_sizes: dict = {}
+    for xp, ctx in steps:
+        n = len(ctx.get("hard_core") or []) if isinstance(ctx, dict) else 0
+        sizes[n] = sizes.get(n, 0) + 1
+        if not xp.get("applied"):
+            fallback_sizes[n] = fallback_sizes.get(n, 0) + 1
+    last = applied[-1][0] if applied else {}
+    return {
+        "requested": int(steps[0][0].get("requested") or 0),
+        "steps": len(steps),
+        "applied": len(applied),
+        "fallback": len(steps) - len(applied),
+        "reasons": reasons,
+        "pool_sizes": sizes,
+        "fallback_pool_sizes": fallback_sizes,
+        "chances": last.get("chances") or {},
+        "groups4": last.get("groups4") or {},
+        "guarantee3_complete": bool(last.get("guarantee3_complete")),
+        "design": last.get("design"),
     }
 
 
@@ -573,6 +632,29 @@ def _consecutive_sig(max_consecutive_run: int = 0) -> str:
     return f"|mc{_CONSECUTIVE_SEMANTICS}:{n}"
 
 
+
+
+def _extended_sig(extended_pool: int = 0, game_type: str = "") -> str:
+    """Sufix de cheie pentru pool-ul extins (2026-10-22); gol când e oprit,
+    deci cheile de dinainte rămân valide. Poartă amprenta designului pe care
+    pasul îl poate adopta: un fișier schimbat invalidează exact cheile lui."""
+    from covering.extended_pool import design_signature, normalize_size
+
+    v = normalize_size(extended_pool)
+    if not v:
+        return ""
+    # Aceiași parametri ca motorul (bilet, extrase, univers), din registru.
+    from loto_engine import game_params_for
+
+    params = game_params_for(game_type) or {}
+    sig = (
+        design_signature(v, params["play_n"], params["draw_n"], params["max_n"])
+        if params
+        else None
+    )
+    return f"|xp1:{v}:{sig or 'none'}"
+
+
 def _wf_lottery(game_type: str, game_key: str | None, country: str | None):
     """Jocul STRĂIN al unui WF, sau None pentru România (cu sau fără identitate).
 
@@ -617,6 +699,7 @@ def _decision_sig(
     *,
     game_key: str | None = None,
     country: str | None = None,
+    extended_pool: int = 0,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
@@ -677,6 +760,7 @@ def _decision_sig(
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
+            f"{_extended_sig(extended_pool, game_type)}"
             f"{foreign_sfx}{_scorer_semantics(c)}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
@@ -697,6 +781,7 @@ def _decision_sig(
                         restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type)
                     )
                     + _consecutive_sig(max_consecutive_run)
+                    + _extended_sig(extended_pool, game_type)
                     + foreign_sfx
                 ).encode()
             ).hexdigest()[:6]
@@ -1010,6 +1095,7 @@ def run_honest_walk_forward(
     game_key: str | None = None,
     country: str | None = None,
     cache_only: bool = False,
+    extended_pool: int = 0,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -1023,6 +1109,8 @@ def run_honest_walk_forward(
     max_consecutive_run: aceeași limită de consecutive ca în producție (cerută,
     nu cea relaxată: relaxarea se decide la fiecare pas); în cheie doar când e
     activă (0 = oprit).
+    extended_pool: pool-ul extins pentru 4+ (0 = oprit, 17/18), ca în producție:
+    `pool_size`/garanția/plafonul sunt baza de 16; în cheie doar pornit.
     game_key/country: identitatea jocului (keyword-only). Lipsă sau România =
     exact WF-ul de dinainte (aceeași cheie, aceeași decizie). Alt joc: decizia
     țării ajunge pe NUME la fiecare pas (în proces, secvențial și în procesele
@@ -1048,6 +1136,15 @@ def run_honest_walk_forward(
         meta_dict include: from_cache (bool), n_predictions, n_test_draws, csv_hash
     """
     _log_stale_wf_cache_once()
+    from covering.extended_pool import normalize_size as _extended_size
+
+    extended_pool = _extended_size(extended_pool)
+    if extended_pool:
+        # Ca worker-ul: baza certificării e coverul complet pe 16 numere, deci
+        # pool-ul, garanția, condiția și plafonul se fixează pe ea. Altfel motorul
+        # ar refuza la fiecare pas, iar WF ar valida pool-ul de 16 sub cheia
+        # extinsă.
+        pool_size, guarantee, wheel_condition, max_variants = 16, 4, 4, 0
     lot = _wf_lottery(game_type, game_key, country)
     wf_key = lot.bench_key if lot is not None else None
     wf_country = lot.country if lot is not None else None
@@ -1069,6 +1166,7 @@ def run_honest_walk_forward(
         max_consecutive_run=int(max_consecutive_run or 0),
         game_key=wf_key,
         country=wf_country,
+        extended_pool=int(extended_pool or 0),
     )
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
@@ -1098,6 +1196,8 @@ def run_honest_walk_forward(
         # Rândurile istoricului validat: o extragere nouă găsește direct prefixul.
         "history_rows": int(len(df_source)),
     }
+    if extended_pool:
+        meta["extended_pool"] = int(extended_pool)
     if lot is not None:
         # Numai în afara României: meta-ul românesc rămâne cel de dinainte.
         meta["game_key"] = wf_key
@@ -1120,6 +1220,8 @@ def run_honest_walk_forward(
                 meta["n_expected"] = cached.get("n_expected", cached["n_test_draws"])
                 meta["partial"] = False
                 meta["wheel_coverage"] = wheel_coverage_summary(cached["flat"])
+                if extended_pool:
+                    meta["extended_steps"] = extended_steps_summary(cached["flat"])
                 logger.info(
                     f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
                     f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
@@ -1169,6 +1271,8 @@ def run_honest_walk_forward(
         meta["partial"] = bool(cached.get("partial", False))
         meta["newest_missing"] = bool(cached.get("newest_missing", False))
         meta["wheel_coverage"] = wheel_coverage_summary(flat_c)
+        if extended_pool:
+            meta["extended_steps"] = extended_steps_summary(flat_c)
         return flat_c, meta
 
     # Cache miss → rulează walk-forward genuin
@@ -1227,6 +1331,7 @@ def run_honest_walk_forward(
         restrict_base_max=int(restrict_base_max or 0),
         restrict_base_min=int(restrict_base_min or 0),
         max_consecutive_run=int(max_consecutive_run or 0),
+        extended_pool=int(extended_pool or 0),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
@@ -1262,6 +1367,8 @@ def run_honest_walk_forward(
     # acopere şi paşii veniţi din cache. Sub 100% (sau necunoscută), `hits_union`
     # (hit de POOL) nu mai e egal cu „hit pe un bilet" — UI-ul avertizează.
     meta["wheel_coverage"] = wheel_coverage_summary(flat)
+    if extended_pool:
+        meta["extended_steps"] = extended_steps_summary(flat)
     _cov_sum = meta["wheel_coverage"]
     if _cov_sum["below_100"]:
         logger.warning(

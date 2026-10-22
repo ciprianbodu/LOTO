@@ -1,0 +1,38 @@
+[
+ {
+  "name": "649_152_v18_softpack_s5",
+  "game": "6/49",
+  "budget": 152,
+  "v": 18,
+  "seconds": 120,
+  "seed": 5,
+  "seed_kind": "runs/649_112_v18_hardpack_s4.json",
+  "lam3": 0.01,
+  "lam5": 100.0,
+  "w4mult": 3.0
+ },
+ {
+  "name": "649_152_v19_softpack_s5",
+  "game": "6/49",
+  "budget": 152,
+  "v": 19,
+  "seconds": 120,
+  "seed": 5,
+  "seed_kind": "runs/649_112_v19_hardpack_s4.json",
+  "lam3": 0.01,
+  "lam5": 100.0,
+  "w4mult": 3.0
+ },
+ {
+  "name": "649_152_v20_softpack_s5",
+  "game": "6/49",
+  "budget": 152,
+  "v": 20,
+  "seconds": 120,
+  "seed": 5,
+  "seed_kind": "runs/649_112_v20_g_s1.json",
+  "lam3": 0.01,
+  "lam5": 100.0,
+  "w4mult": 3.0
+ }
+]

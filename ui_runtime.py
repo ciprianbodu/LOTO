@@ -151,6 +151,19 @@ def _wf_generation_options(data: dict) -> dict:
         "restrict_base_min": int(data.get("restrict_base_min") or 0),
         "max_consecutive_run": int(max_run or 0),
     }
+    # Pool-ul extins: ecoul worker-ului, apoi mărimea cerută din audit; numai
+    # pornit, ca rezultatele fără opțiune să păstreze exact dict-ul de dinainte.
+    # Se trimite și când certificarea a căzut: WF încearcă la fiecare pas, ca
+    # producția (baza `pool_size` e 16).
+    extended = data.get("extended_pool")
+    if extended is None:
+        extended = (audit.get("extended_pool") or {}).get("requested")
+    from covering.extended_pool import normalize_size
+
+    if normalize_size(extended):
+        opts["extended_pool"] = normalize_size(extended)
+        # Baza certificării, ca worker-ul (WF le fixează oricum).
+        opts.update(guarantee=4, wheel_condition=4, max_variants=0)
     # Identitatea jocului STRĂIN vine din ecoul rezultatului (worker v6), ca WF
     # să citească decizia țării lui. România (sau un rezultat fără ecou): dict-ul
     # de dinainte, fără chei noi.
@@ -207,6 +220,40 @@ def _active_max_consecutive_run() -> int:
     return _MAX_CONSECUTIVE_RUN_ON if SETTINGS.get("max_consecutive_run_enabled_val") else 0
 
 
+def _active_extended_pool() -> int:
+    """Pool extins pentru 4+ la următoarea generare: 0 (oprit), 17 sau 18.
+
+    Opțiune separată, implicit oprită: pool-ul de 16 cu garanția completă
+    rămâne regula. Pornită, înlocuiește mărimea pool-ului, garanția, plafonul și
+    condiția (covering/extended_pool.py, 2026-10-22).
+    """
+    from covering.extended_pool import normalize_size
+
+    return normalize_size(SETTINGS.get("extended_pool_val"))
+
+
+def _extended_for_game(spec) -> int:
+    """Pool-ul extins de trimis jocului `spec`: 0 fără design livrat pentru
+    geometria lui (6/45, 5/50), ca jocul să-și păstreze pool-ul și garanția."""
+    v = _active_extended_pool()
+    if not v or spec is None:
+        return 0
+    from covering.extended_pool import load_design
+
+    try:
+        found = load_design(v, int(spec.pick_n), int(spec.draw_n), int(spec.max_n))
+    except (AttributeError, TypeError, ValueError):
+        return 0
+    return v if found is not None else 0
+
+
+def _extended_sizes() -> tuple[int, ...]:
+    """Mărimile livrate ale pool-ului extins (opțiunile din sidebar)."""
+    from covering.extended_pool import EXTENDED_SIZES
+
+    return tuple(EXTENDED_SIZES)
+
+
 def _clamped_bench_target(value=None) -> int:
     raw = SETTINGS.get("bench_hit_target", 3) if value is None else value
     try:
@@ -235,6 +282,8 @@ UI_PERSIST_KEYS = [
     # Fără ea în listă, bifa debifată revine pornită la fiecare repornire:
     # `_load_settings` citește numai cheile de aici, iar implicitul e True.
     "max_consecutive_run_enabled_val",
+    # Pool extins pentru 4+ (0 = oprit, 17 sau 18), opțiune din 2026-10-22.
+    "extended_pool_val",
     # Țara și jocurile ei (pasul 1). Praguri de restrângere proprii jocurilor străine.
     "country_val",
     "games_val",
@@ -294,6 +343,9 @@ DEFAULTS = {
     # oprite fiindcă ar schimba pool-ul fără nicio acțiune. Tot compoziție, FĂRĂ
     # avantaj statistic demonstrat (hipergeometric, ca mai sus); bifa o oprește.
     "max_consecutive_run_enabled_val": True,
+    # Pool extins pentru 4+: OPRIT implicit (0). 17 sau 18 numere pe tot atâtea
+    # variante cât coverul complet de 16, cu garanția 4 parțială.
+    "extended_pool_val": 0,
     # Bilete fizice cerute de „🎟️ Bilet complet”, 1-10 (full_ticket.clamp_tickets).
     "full_ticket_count_val": 1,
     # Câte variante simple arată lista din rezultate (implicit 10, ca înainte).
@@ -401,6 +453,8 @@ def _load_settings() -> None:
             SETTINGS["pool_size_val"] = 16
     except (TypeError, ValueError):
         SETTINGS["pool_size_val"] = 10
+    # Pool-ul extins: numai 0, 17 sau 18; orice altă valoare salvată îl oprește.
+    SETTINGS["extended_pool_val"] = _active_extended_pool()
 
     _sanitize_country_settings()
 

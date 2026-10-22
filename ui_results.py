@@ -89,6 +89,14 @@ STAGE_META = [
         "#10b981",
         "Validare retrospectivă ELIMINATĂ — fără rescrieri post-scoring.",
     ),
+    (
+        "5_extended_pool",
+        "5. Pool extins pentru 4+ (opțiunea ta)",
+        "#3b82f6",
+        "Următoarele numere din clasamentul metodei, cu aceeași selecție (limita de "
+        "consecutive, baza restrânsă, penalizarea). Variantele vin din designul "
+        "certificat la generare față de coverul complet pe 16; garanția 4 devine parțială.",
+    ),
 ]
 
 
@@ -238,16 +246,31 @@ def _render_cost(game: str, data: dict) -> None:
             ui.label(line).classes("text-caption")
         _render_lr_layouts(game, data, schemes)
     else:
+        from covering.lr_schemes import MAX_POOL as _LR_MAX
+        from covering.lr_schemes import lr_schemes as _lr_all
         from covering.lr_schemes import unloaded_schemes
 
         _sizes = sorted(LR_SCHEMES.get(gk, {}))
         _bad = unloaded_schemes(gk, pool_used) if _nums else []
+        # Pool extins (17-18): LR are scheme de 17-19 numere la 5/40, dar
+        # aplicația le folosește numai până la 16; nu spunem că lipsesc.
+        try:
+            _hidden = _lr_all(gk, pool_used) if _nums and pool_used > _LR_MAX else []
+        except (KeyError, TypeError, ValueError):
+            _hidden = []
         if not _nums:
             _none = f"pool gol la {_game_title(game)}."
         elif _bad:
             _none = (
                 f"schema redusă LR {', '.join(_bad)} pentru {pool_used} nr. nu s-a putut "
                 "citi din covering_designs/lr (vezi jurnalul)."
+            )
+        elif _hidden:
+            _none = (
+                "Loteria Română are "
+                + ", ".join(f"{s.label} ({s.size} var.)" for s in _hidden)
+                + f" pentru {pool_used} nr., dar aplicația folosește schemele reduse "
+                f"numai pe pool-uri de cel mult {_LR_MAX} numere."
             )
         else:
             _none = (
@@ -257,7 +280,7 @@ def _render_cost(game: str, data: dict) -> None:
         _have = (
             f" Loteria Română are scheme reduse cu variante întregi pentru "
             f"{', '.join(map(str, _sizes))} numere."
-            if _sizes and _nums and not _bad
+            if _sizes and _nums and not _bad and not _hidden
             else ""
         )
         if _nums:
@@ -296,15 +319,39 @@ def _render_cost(game: str, data: dict) -> None:
             if _g_used is not None
             else "garanția configurată"
         )
+        _xp = _extended_pool_info(data)
+        _wheel_txt = "**Wheel-ul nostru**"
+        if _xp.get("applied"):
+            _g4 = _xp.get("groups4") or {}
+            _share = (
+                100 * int(_g4.get("extended") or 0) / int(_g4["pool_total"])
+                if _g4.get("pool_total")
+                else None
+            )
+            _wheel_txt = f"**Pool extins {int(_xp.get('requested') or 0)}**"
+            _g_txt = "garanția 4 parțială" + (
+                f": {_share:.1f}% din grupele de 4" if _share is not None else ""
+            )
         ui.markdown(
             f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
             f"{_thousands(n_simple * price)} Lei în variante "
-            f"| **Wheel-ul nostru** ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
-            f"{_thousands(len(variants) * price)} Lei în variante."
+            f"| {_wheel_txt} ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
+            f"{_thousands(len(variants) * price)} Lei în variante"
+            + (
+                ", tot atâtea cât pool-ul de 16 cu garanția 4 completă."
+                if _xp.get("applied")
+                else "."
+            )
         ).classes("text-caption")
         if n_simple < len(variants):
             ui.label(
-                f"Primele {n_simple} variante sunt doar un subset; garanția afișată se referă la întregul wheel."
+                f"Primele {n_simple} variante sunt doar un subset; "
+                + (
+                    "garanția parțială și șansele privesc toate cele "
+                    f"{len(variants)} variante."
+                    if _xp.get("applied")
+                    else "garanția afișată se referă la întregul wheel."
+                )
             ).classes("text-caption text-grey")
         for line in _wheel_probability_lines(game, data):
             ui.label(line).classes("text-caption")
@@ -354,8 +401,12 @@ def _lr_schemes_for(game: str, data: dict) -> list:
     pool = {int(x) for x in (data.get("hard_core") or [])}
     if not pool or not _game_spec_for(game, data).is_romanian:
         return []
-    from covering.lr_schemes import lr_schemes
+    from covering.lr_schemes import MAX_POOL, lr_schemes
 
+    # Ca motorul (`lr_candidates`): schemele de peste 16 numere (5/40 Cod 45-48)
+    # rămân numai date, și pe un pool extins de 17-18 numere.
+    if len(pool) > MAX_POOL:
+        return []
     return lr_schemes(_game_label_for(game), len(pool))
 
 
@@ -645,6 +696,70 @@ def _render_lr_layouts(game: str, data: dict, schemes) -> None:
             ui.label(text).classes("font-mono text-sm").style("white-space: pre")
 
 
+def _extended_pool_info(data: dict | None) -> dict:
+    """Auditul pool-ului extins al rezultatului ({} = opțiunea n-a fost cerută)."""
+    xp = ((data or {}).get("audit") or {}).get("extended_pool") or {}
+    return xp if isinstance(xp, dict) and xp.get("requested") else {}
+
+
+def _extended_pool_lines(data: dict | None) -> list[str]:
+    """Pool extins pentru 4+: câștigul, garanția parțială și limita, în cuvinte.
+
+    Aceleași rânduri în panou, raport și mail. Neaplicat: motivul, cu pool-ul
+    de 16 jucat în loc."""
+    xp = _extended_pool_info(data)
+    if not xp:
+        return []
+    v = int(xp.get("requested") or 0)
+    if not xp.get("applied"):
+        n_base = len(xp.get("base_pool") or []) or len((data or {}).get("hard_core") or [])
+        return [
+            f"Pool extins {v} cerut, neaplicat ({xp.get('reason') or 'motiv necunoscut'}): "
+            f"s-a jucat pool-ul de {n_base or 16} cu variantele lui obișnuite."
+        ]
+    chances = xp.get("chances") or {}
+    groups = xp.get("groups4") or {}
+    n_var = int(xp.get("variants") or len((data or {}).get("variants") or []))
+    lines = [
+        f"Pool extins pentru 4+ (alegerea ta): {v} numere pe {n_var} variante, "
+        "cât coverul complet pe 16 numere, la același cost."
+    ]
+    parts = []
+    for t in sorted(chances, key=int):
+        base, ext = chances[t].get("base"), chances[t].get("extended")
+        if base is None or ext is None or abs(float(base) - float(ext)) <= 1e-15:
+            continue  # pragul cel mai mare: același număr de variante distincte, aceeași șansă
+        a, b = _lr_pct_pair(float(ext), float(base))
+        sign = "+" if int(t) < max(int(k) for k in chances) else ""
+        parts.append(f"{t}{sign} {a} față de {b}")
+    if parts:
+        lines.append(
+            "Șansa pe cel puțin o variantă, la o extragere uniformă, față de pool-ul "
+            "de 16: " + " · ".join(parts) + "."
+        )
+    total = int(groups.get("pool_total") or 0)
+    covered = int(groups.get("extended") or 0)
+    if total:
+        sure3 = (
+            " Garanția 3 rămâne completă: 3 numere ieșite din pool stau mereu pe o variantă."
+            if xp.get("guarantee3_complete")
+            else ""
+        )
+        lines.append(
+            f"Garanția 4 e parțială: {100 * covered / total:.1f}% din grupele de 4 ale "
+            f"celor {v} numere sunt pe o variantă ({covered} grupe; pe 16 numere, "
+            f"{int(groups.get('base') or 0)}, adică toate). Când ies 4 din pool, "
+            f"varianta cu 4 e sigură numai în {100 * covered / total:.1f}% din cazuri."
+            + sure3
+        )
+    lines.append(
+        "Fără avantaj predictiv: numărul așteptat de variante câștigătoare e același; "
+        "câștigurile se împart pe mai multe extrageri. Verificat la generare față de "
+        "coverul complet pe 16 numere."
+    )
+    return lines
+
+
 def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     """Same exact, unconditional ticket odds in the UI and the saved report."""
     from covering.probability import wheel_hit_probabilities
@@ -682,11 +797,13 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
         )
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
-    lines.append("Acoperirea 100% este o garanție condiționată de numerele prinse în pool, nu șansa de câștig.")
+    if not _extended_pool_info(data).get("applied"):
+        lines.append("Acoperirea 100% este o garanție condiționată de numerele prinse în pool, nu șansa de câștig.")
     _g = (data.get("audit") or {}).get("wheel_guarantee_used")
     gap = _guarantee_gap_line(data.get("guarantee") if _g is None else _g, pick, draw_n)
     if gap:
         lines.append(gap)
+    lines.extend(_extended_pool_lines(data))
     return lines
 
 
@@ -880,6 +997,12 @@ def _bench_transform_note(data: dict) -> str:
         changes.append(
             f"limita de consecutive ({_consecutive_limit_text(audit, details=False)})"
         )
+    _xp = audit.get("extended_pool") or {}
+    if _xp.get("applied"):
+        changes.append(
+            f"pool-ul extins la {int(_xp.get('requested') or 0)} numere (metoda e "
+            "decizia pentru pool 16; numerele în plus continuă clasamentul ei)"
+        )
     if not changes:
         return ""
     return (
@@ -960,7 +1083,22 @@ def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str 
         cov = wheel_coverage_summary(flat)
     except Exception:  # noqa: BLE001
         cov = None
-    if not cov or not cov["known"]:
+    _ext_n = int((cov or {}).get("extended") or 0)
+    if _ext_n:
+        # Pool extins: garanția 4 e parțială prin alegere, nu un wheel incomplet.
+        _ext_min = (cov or {}).get("extended_min")
+        cov_txt = (
+            f" | pool extins pe {_ext_n}/{cov['n_draws']} extrageri: garanția 4 parțială "
+            "prin alegere"
+            + (f" (min {_ext_min:.2f}% din grupele de 4)" if _ext_min is not None else "")
+            + ", 3 din pool ajung mereu pe o variantă"
+            + (
+                f"; ⚠️ wheel INCOMPLET la {cov['below_100']} din celelalte extrageri"
+                if cov["below_100"]
+                else ""
+            )
+        )
+    elif not cov or not cov["known"]:
         cov_txt = " | acoperire wheel: necunoscută (cache WF vechi)"
     elif cov["below_100"]:
         cov_txt = (
@@ -995,11 +1133,34 @@ def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str 
     k_pool = max(set(sizes) - {0}, key=sizes.count, default=0) or int(
         (data or {}).get("pool_size") or len((data or {}).get("hard_core") or ())
     )
-    if game and k_pool:
+    # Pool extins: pașii pot amesteca 17-18 cu 16 (fiecare se certifică
+    # singur), deci referința e media pe extrageri a mărimii jucate la fiecare.
+    _per_step = {}
+    for p in flat:
+        _ctx = getattr(p, "ticket_context", None) or {}
+        _n = len(_ctx.get("hard_core") or ())
+        if _n:
+            _per_step.setdefault(int(getattr(p, "draw_index", 0) or 0), _n)
+    _k_set = sorted(set(_per_step.values()))
+    if game and len(_k_set) > 1:
+        _rows = [
+            [_random_rate_hypergeo(game, k, t) for t in (3, 4, 5)] for k in _per_step.values()
+        ]
+        rates = (
+            None
+            if any(None in r for r in _rows)
+            else [sum(r[i] for r in _rows) / len(_rows) for i in range(3)]
+        )
+        k_label = f"{_k_set[0]}–{_k_set[-1]}"
+    elif game and k_pool:
         rates = [_random_rate_hypergeo(game, k_pool, t) for t in (3, 4, 5)]
+        k_label = str(k_pool)
+    else:
+        rates = None
+    if rates:
         if None not in rates:
             rnd_txt = (
-                f" | la întâmplare (pool {k_pool}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
+                f" | la întâmplare (pool {k_label}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
                 f"{rates[1] * 100:.2f}%/{_five_plus_pct(rates[2])} pe extragere"
                 + (
                     " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"
@@ -1064,10 +1225,15 @@ def _build_report() -> str:
             )
         except (TypeError, ValueError):
             _g_diff_txt = ""
+        _xp_on = bool(_extended_pool_info(d).get("applied"))
         out.append(
             f"{indent}Pool efectiv: {eff}"
-            + (f" (cerut {req})" if req and req != eff else "")
-            + f" | Garanție: {_g_used}{_wc_txt}{_g_diff_txt}"
+            + (
+                " (pool extins, baza 16)"
+                if _xp_on
+                else (f" (cerut {req})" if req and req != eff else "")
+            )
+            + f" | Garanție: {_g_used}{' parțială' if _xp_on else ''}{_wc_txt}{_g_diff_txt}"
             + f" | Variante simple: {len(d.get('variants') or [])}"
             + f" | Extrageri: {d.get('total_draws')}"
         )
@@ -1075,6 +1241,7 @@ def _build_report() -> str:
         out.append(
             f"{indent}Acoperire garanție (wheel generat): "
             + (f"{float(cov):.2f}%" if cov is not None else "necunoscută")
+            + (" (pool extins: garanția 4 parțială, alegerea ta)" if _xp_on else "")
         )
         out.extend(f"{indent}{line}" for line in _wheel_probability_lines(game, d))
         out.extend(f"{indent}Schemă LR: {line}" for line in _lr_scheme_lines(game, d))
@@ -1537,6 +1704,10 @@ def _consecutive_pool_diagnostic(data: dict) -> str:
     parts = [f"Secvența consecutivă maximă în pool-ul jucat: {played_run} {unit}."]
     audit = data.get("audit") or {}
     raw = (audit.get("pipeline_stages") or {}).get("1_nqi_raw")
+    # Pool extins adoptat: selecția inițială a pool-ului de v, nu a bazei de 16.
+    _xp = audit.get("extended_pool") or {}
+    if isinstance(_xp, dict) and _xp.get("applied") and _xp.get("raw_top"):
+        raw = _xp["raw_top"]
     if isinstance(raw, (list, tuple)) and raw:
         try:
             raw_run = longest_consecutive_run(raw)
@@ -1648,9 +1819,15 @@ def _render_pool_body(
     req = data.get("pool_size_requested")
     variants = data.get("variants") or []
 
+    _xp_on = bool(_extended_pool_info(data).get("applied"))
     with ui.row().classes("gap-6 items-center"):
         ui.label(
-            f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else "")
+            f"Pool efectiv: {eff}"
+            + (
+                " (pool extins, baza 16)"
+                if _xp_on
+                else (f" (cerut {req})" if req and req != eff else "")
+            )
         )
         # Garanția EFECTIV folosită la wheel (audit.wheel_guarantee_used) vs cea CERUTĂ
         # din setări — pot diferi; rezultate vechi n-au cheia → fallback pe setare.
@@ -1674,7 +1851,7 @@ def _render_pool_body(
         except (TypeError, ValueError):
             _wc_txt = ""
         ui.label(
-            f"Garanție: {_g_used}{_wc_txt}"
+            f"Garanție: {_g_used}{' parțială' if _xp_on else ''}{_wc_txt}"
             + (f" (cerută: {_g_req})" if _g_diff else "")
         )
         ui.label(f"Variante simple: {len(variants)}")
@@ -1721,7 +1898,15 @@ def _render_pool_body(
                 f"Lotto design „{_g_used}{_wc_txt}”: garanția se aplică doar când cad "
                 f"{int(_wc)} numere din pool; cu {int(_g_used)} numere prinse, hitul pe bilet nu e garantat."
             ).classes("text-caption text-warning")
-        if _cov is not None:
+        if _cov is not None and _xp_on:
+            ui.html(
+                render_html_safe(
+                    t"<b style='color:#3b82f6'>🎯 Garanția 4 parțială (pool extins): "
+                    t"{float(_cov):.2f}% din grupele de 4 ale pool-ului</b> "
+                    t"<span style='opacity:.7'>(alegerea ta; detaliile sub șanse)</span>"
+                )
+            )
+        elif _cov is not None:
             if float(_cov) >= 100.0:
                 ui.html(
                     render_html_safe(
