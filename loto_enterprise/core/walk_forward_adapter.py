@@ -185,10 +185,20 @@ def _backfill_new_fields(records) -> None:
     ar arunca acoperirea WF acumulată). Acelaşi tipar ca în
     `benchmark/bench_cache.get_cached_fold`.
     """
+    # Un cache mare are sute de mii de bilete, de regula toate din aceeasi
+    # dataclass. fields() reconstruieste tuplul la fiecare apel; schema clasei
+    # este aceeasi pentru toate biletele, deci o citim o data pe incarcare.
+    # Cache local: nu retine clase si nu ascunde campuri adaugate intre apeluri.
+    fields_by_type = {}
     for obj in records or ():
         if not is_dataclass(obj):
             continue
-        for fld in fields(obj):
+        record_type = obj if isinstance(obj, type) else type(obj)
+        record_fields = fields_by_type.get(record_type)
+        if record_fields is None:
+            record_fields = fields(obj)
+            fields_by_type[record_type] = record_fields
+        for fld in record_fields:
             if hasattr(obj, fld.name):
                 continue
             if fld.default is not MISSING:

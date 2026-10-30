@@ -83,6 +83,30 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Optimizari pentru Python 3.14 — 2026-10-30
+
+- Runtime verificat: CPython 3.14.10 x64, venv-ul existent din
+  `D:\_BUILD\_LOTO\.venv`, folosit explicit de UI si worker. Lucrul si
+  verificarea s-au facut intr-un snapshot local, separat de aplicatia activa.
+- `methods_common.last_seen_index` evita matricea temporara de indici int64;
+  `vector_to_scores` foloseste conversia in C prin `tolist()`. Scorurile,
+  ordinea si tratarea numerelor nevazute/non-finite sunt identice.
+- `covering.probability` foloseste algoritmul NumPy intreg existent de la
+  pool 9 (inainte 17); pool-urile de cel mult 8 pastreaza bucla Python.
+  Numaratorile exacte, biletele, garantiile si cheile cache nu se schimba.
+- `_backfill_new_fields` citeste schema dataclass o data pe clasa si pe apel,
+  pastrand fabricile de valori per obiect si compatibilitatea cache-urilor.
+- Raport si limite: `scripts/analysis/python314_optimization_2026-10-30.md`.
+  Benchmarkuri reproductibile cu referintele vechi incluse; castigurile sunt
+  locale functiilor masurate, nu o promisiune pentru intregul flux.
+- Validare cumulata pe Python 3.14.10: 3695 teste distincte trecute, 20 sarite.
+  Prima rulare a avut 12 esecuri ale lansatorului Git din cauza caii temporare
+  prea lungi; intregul modul reluat pe o cale scurta: 111 trecute, 2 sarite.
+  Auditul aplicatiei: 13 istorice, 848 comparatii de scoruri, 154 de designuri,
+  26 de fluxuri, 13 profile complete, worker pe 13 jocuri, UI HTTP 200;
+  fisierele protejate ale copiei testate au ramas intacte. Aplicatia activa
+  nu a fost repornita; schimbarile intra la repornirea normala.
+
 ### Audit global pe module, runda a doua — 2026-10-22
 
 - Cerinta: inca o verificare globala completa, dupa pool-ul pe joc si 5/40 pe

@@ -55,7 +55,9 @@ def vector_to_scores(vec: np.ndarray, max_num: int) -> dict[int, float]:
     vmax = float(v[finite].max())
     rng = max(vmax - vmin, 1e-12)
     out = np.where(finite, (v - vmin) / rng, 0.0)
-    return {i + 1: float(out[i]) for i in range(int(max_num))}
+    # tolist converts float64 values in C; avoid one NumPy scalar lookup and
+    # Python float conversion per number on every scorer call.
+    return dict(enumerate(out.tolist(), start=1))
 
 
 def normalize(scores: dict[int, float], max_num: int) -> dict[int, float]:
@@ -102,8 +104,13 @@ def last_seen_index(ind: np.ndarray) -> np.ndarray:
     n = ind.shape[0]
     if n == 0:
         return np.full(ind.shape[1], -1, dtype=np.int64)
-    idx = np.where(ind > 0, np.arange(n, dtype=np.int64)[:, None], -1)
-    return idx.max(axis=0)
+    # Only the first positive value in reverse chronological order is needed.
+    # A boolean mask avoids allocating an n x max_num array of int64 indices.
+    last = n - 1 - np.argmax(ind[::-1] > 0, axis=0)
+    # argmax returns 0 for an all-false column: check the selected cell so
+    # numbers never seen still receive -1 (including NaN/nonpositive cells).
+    last[~(ind[last, np.arange(ind.shape[1])] > 0)] = -1
+    return last
 
 
 def make_registry(entries: list[tuple[str, Callable, str, str]]) -> dict[str, MethodTuple]:

@@ -3,11 +3,11 @@
 from functools import lru_cache
 from math import comb, isfinite
 
-# Pool-ul extins (2026-10-22): 17-20 de numere pe același număr de variante. Până la 16
-# numărătoarea rămâne bucla de mai jos, bit cu bit; peste 16, același tabel
-# întreg din programarea dinamică pe submulțimi în numpy (2^20 = 1M de măști).
+# Același tabel întreg prin programare dinamică pe submulțimi, până la 20
+# de numere (2^20 = 1M de măști). Pe pool-urile de peste 8 numere, numpy evită
+# bucla Python peste fiecare bit; pe pool-urile mici păstrăm calea fără array-uri.
 MAX_EXACT_POOL = 20
-_PYTHON_POOL_LIMIT = 16
+_PYTHON_POOL_LIMIT = 8
 
 
 def _integer(value):
@@ -76,7 +76,7 @@ def _hit_counts(v: int, masks: tuple[int, ...]):
 
 
 def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
-    """Același tabel ca `_hit_counts`, pentru pool-uri de 17..20 de numere.
+    """Același tabel întreg ca bucla Python, pentru pool-uri de 9..20 de numere.
 
     Familia submulțimilor biletelor (închidere în jos), apoi maximul pe
     submulțimi (propagare în sus, câte o dimensiune), apoi histograma
