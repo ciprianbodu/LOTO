@@ -1,0 +1,42 @@
+[
+  {
+    "fixture": "649_2026_09.html",
+    "source_url": "https://www.loto.ro/loto-new/newLotoSiteNexioFinalVersion/web/app2.php/jocuri/649_si_noroc/rezultate_extragere.html",
+    "post": {
+      "select-year": 2026,
+      "select-month": 9
+    },
+    "retrieved": "2026-10-30",
+    "scope": "Only archive selectors and one numerical draw/prize table; no editorial content."
+  },
+  {
+    "fixture": "540_2026_10.html",
+    "source_url": "https://www.loto.ro/loto-new/newLotoSiteNexioFinalVersion/web/app2.php/jocuri/540_si_super_noroc/rezultate_extrageri.html",
+    "post": {
+      "select-year": 2026,
+      "select-month": 10
+    },
+    "retrieved": "2026-10-30",
+    "scope": "Only archive selectors and one numerical draw/prize table; no editorial content."
+  },
+  {
+    "fixture": "joker_2026_10.html",
+    "source_url": "https://www.loto.ro/loto-new/newLotoSiteNexioFinalVersion/web/app2.php/jocuri/joker_si_noroc_plus/rezultate_extrageri.html",
+    "post": {
+      "select-year": 2026,
+      "select-month": 10
+    },
+    "retrieved": "2026-10-30",
+    "scope": "Only archive selectors and one numerical draw/prize table; no editorial content."
+  },
+  {
+    "fixture": "649_2004_01.html",
+    "source_url": "https://www.loto.ro/loto-new/newLotoSiteNexioFinalVersion/web/app2.php/jocuri/649_si_noroc/rezultate_extragere.html",
+    "post": {
+      "select-year": 2004,
+      "select-month": 1
+    },
+    "retrieved": "2026-10-30",
+    "scope": "Only archive selectors and one numerical draw/prize table; no editorial content."
+  }
+]

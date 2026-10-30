@@ -83,6 +83,34 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Premii oficiale in Istoric hits — 2026-10-30
+
+- `VARIANTA 4+` / `VARIANTA 5+` arata categoria si valoarea unitara publicata
+  de Loteria Romana in paranteza la Nimerite, pentru varianta afisata. Pool-ul
+  nu primeste premiu; nu se calculeaza un castig total sau ROI.
+- Surse: arhiva oficiala lunara 6/49, 5/40 si Joker, filtrata prin POST.
+  `official_prizes.py` pastreaza datele in `RUNTIME_ROOT/official_prizes.db`,
+  local statiei, cu identitate data + numere + Joker, sume intregi, provenienta,
+  lease si intervale de reincercare. Datele verificate nu se sterg la erori.
+- `prize_categories.py` verifica varianta reala: 6/49 6=I,5=II,4=III;
+  la 5/40 I cere primele cinci extrase; la Joker se verifica ambele urne.
+  REPORT nu este premiu platit. Fara context sau fara corespondenta exacta in
+  arhiva se afiseaza indisponibil, inclusiv la trageri suplimentare omise.
+- `ui_prizes.py` face I/O numai in fundal, la deschiderea sectiunii si pe
+  pagina vizibila. Filtrele/paginarea se pastreaza la actualizare. Exista
+  reincercare manuala pentru lipsuri. Linkul duce la arhiva, cu luna exacta
+  indicata in tooltip. Valorile istorice ambigue nu sunt convertite presupus.
+- Import optional: `python -m scripts.sync_official_prizes --year 2026 --month 10`.
+  Detalii si probe: `scripts/analysis/official_prizes_2026-10-30.md`.
+- Verificat pe Windows / Python 3.14.10: suita completa 3801 trecute, 20
+  sarite, zero esecuri; dupa corectura de actualizare NiceGUI, 94 de teste
+  UI/regresii trecute, inclusiv un test cu tabel real care cade fara fix.
+  Audit: 13 istorice, 848 comparatii de scoruri, 154 designuri, 26 fluxuri,
+  13 profile complete, worker pe 13 jocuri, UI HTTP 200; fisierele protejate
+  intacte. Probe oficiale live si cache redeschis fara retea, 51 de extrageri
+  pregatite local. Browser: cele trei jocuri si 390 px. Aplicatia activa nu a
+  fost repornita; noua afisare intra la repornirea normala.
+
 ### Optimizari pentru Python 3.14 — 2026-10-30
 
 - Runtime verificat: CPython 3.14.10 x64, venv-ul existent din

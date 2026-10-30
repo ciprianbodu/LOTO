@@ -1,6 +1,13 @@
 @AGENTS.md
 
-Lucrare curenta (30.10.2026): optimizari masurate pe CPython 3.14.10 pentru
+Lucrare curenta: premii oficiale in Istoric hits (30.10.2026), finalizata.
+Suita completa: 3801 trecute, 20 sarite; dupa fixul de actualizare a tabelelor,
+94 de teste UI/regresii trecute. Auditul aplicatiei si browserul sunt verificate.
+Sursele, schema cache si limitele sunt in scripts/analysis/official_prizes_2026-10-30.md.
+Baza oficial_prizes.db este locala statiei, in RUNTIME_ROOT, si nu se comite.
+Interfata se activeaza la repornirea normala; datele/scorerii nu se modifica.
+
+Lucrare incheiata (30.10.2026): optimizari masurate pe CPython 3.14.10 pentru
 scoring, profilul exact al biletelor si incarcarea cache-ului walk-forward.
 Sursele si contractele sunt descrise in AGENTS.md; masuratorile si comenzile de
 reproducere sunt in scripts/analysis/python314_optimization_2026-10-30.md.

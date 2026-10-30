@@ -521,6 +521,8 @@ def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
                 "drawn": sorted(int(x) for x in (ctx.get("actual") or [])),
                 # Fără extragere în context nu se poate marca nimic: „—”, ca extragerea.
                 "best_variant": None if ctx.get("actual") else [],
+                "best_variant_raw": [],
+                "best_variant_joker_hit": None,
             }
         row = per[di]
         if row["best_variant"] is None and int(getattr(p, "hits", 0) or 0) == int(
@@ -529,6 +531,8 @@ def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
             variant = list(getattr(p, "variant", None) or [])
             nums = scored_variant_numbers(variant, game_type) if game_type else variant
             row["best_variant"] = sorted(int(x) for x in nums)
+            row["best_variant_raw"] = [int(x) for x in variant]
+            row["best_variant_joker_hit"] = getattr(p, "joker_hit", None)
     return per
 
 
@@ -558,6 +562,18 @@ _WF_MARKED_CELL = r"""
           :class="m.hit ? 'text-weight-bolder text-positive' : ''">{{ m.v }}{{ i + 1 < props.row[props.col.name + '_marks'].length ? ' ' : '' }}</span>
   </template>
   <span v-else>{{ props.value }}</span>
+</q-td>
+"""
+
+
+_WF_PRIZE_CELL = r"""
+<q-td :props="props">
+  <a v-if="props.row.prize_source" :href="props.row.prize_source" target="_blank"
+     rel="noopener noreferrer" class="text-primary" style="white-space:normal">
+    {{ props.value }}
+    <q-tooltip>{{ props.row.prize_detail }}</q-tooltip>
+  </a>
+  <span v-else style="white-space:normal">{{ props.value }}</span>
 </q-td>
 """
 
@@ -844,10 +860,15 @@ def _render_hits_4plus(
         "+4 / +5 = extrageri cu ≥4 / ≥5 numere nimerite. 🎟️ = extrageri cu "
         "cel puțin o variantă jucată care atinge pragul. 🎲 = rata unui pool PUR "
         "aleator de aceeași mărime (hipergeometric, din parametrii jocului); nu e un "
-        "reper separat pentru variante. Premiile și ROI-ul nu sunt estimate: CSV-ul "
-        "nu conține categoria de premiu, iar Joker cere și validarea Urnei 2 pe "
-        "aceeași variantă."
+        "reper separat pentru variante. ROI-ul și câștigul total nu sunt estimate."
     )
+    if _foreign is None:
+        _cap += (
+            " În tabelele variantelor, paranteza arată categoria și valoarea unitară "
+            "publicată în arhiva Loteriei Române pentru extragerea respectivă; "
+            "la Joker se verifică și Urna 2 a aceleiași variante. Reportul nu este "
+            "un premiu plătit."
+        )
     _cap += (
         f" Variante evaluate = {_thousands(n_tick)} (extragere × variantă, "
         f"{tick_avg:.2f}/extragere)."
@@ -938,6 +959,75 @@ def _render_hits_4plus(
 
     # (2) DATELE prinderii — numai 4+ la toate jocurile.
     # Δ pe cel mai recent = „acum X zile” (până azi); pe rest = interval până la hit-ul următor.
+    from ui_prizes import PrizeHistoryLookup, hit_prize_text
+
+    prize_lookup = PrizeHistoryLookup(gk) if _foreign is None else None
+    prize_tables: list[dict] = []
+    prize_panel = {"open": False, "version": -1, "element": None}
+
+    def _visible_prize_records(binding):
+        pagination = binding.get("pagination") or {}
+        try:
+            page = max(1, int(pagination.get("page") or 1))
+            size = max(0, int(pagination.get("rowsPerPage", 15)))
+        except (TypeError, ValueError):
+            page, size = 1, 15
+        rows = binding["active_rows"]
+        visible = rows[(page - 1) * size : page * size] if size else rows
+        return [per[row["_draw_index"]] for row in visible]
+
+    def _request_visible_prizes():
+        if prize_lookup is not None and prize_panel["open"]:
+            for binding in prize_tables:
+                prize_lookup.request(_visible_prize_records(binding))
+
+    def _refresh_prizes():
+        if prize_lookup is None or not prize_panel["open"]:
+            return
+        element = prize_panel["element"]
+        if element is not None and getattr(element, "is_deleted", False) is True:
+            prize_lookup.close()
+            return
+        if prize_lookup.retry_due:
+            _request_visible_prizes()
+        version = prize_lookup.version
+        if version == prize_panel["version"]:
+            return
+        prize_panel["version"] = version
+        for binding in prize_tables:
+            changed = False
+            for row in binding["rows"]:
+                d = per[row["_draw_index"]]
+                shown_prize = hit_prize_text(gk, d, prize_lookup.view(d))
+                fields = {
+                    "hits": shown_prize.text,
+                    "prize_source": shown_prize.source_url,
+                    "prize_detail": shown_prize.detail,
+                }
+                if any(row.get(key) != value for key, value in fields.items()):
+                    row.update(fields)
+                    changed = True
+            if changed:
+                # NiceGUI owns observable copies of row dictionaries. Rebind
+                # the active rows so completed background lookups reach the
+                # browser, while retaining the current filter and pagination.
+                binding["table"].rows = binding["active_rows"]
+                binding["table"].update()
+
+    def _open_prizes(event):
+        prize_panel["open"] = bool(event.value)
+        if prize_panel["open"]:
+            _request_visible_prizes()
+            _refresh_prizes()
+
+    def _retry_prizes():
+        if prize_lookup is not None and prize_panel["open"]:
+            for binding in prize_tables:
+                prize_lookup.request(
+                    _visible_prize_records(binding), retry_missing=True
+                )
+            _refresh_prizes()
+
     def _pool_badge(d):
         return f"🔥 {int(d['pool'])}"
 
@@ -950,6 +1040,7 @@ def _render_hits_4plus(
         gap_label=None,
         details=(),
         level=None,
+        prizes=False,
     ):
         items = [(di, d) for di, d in per.items() if pred(d)]
         if not items:
@@ -967,6 +1058,14 @@ def _render_hits_4plus(
                 "hits": badge(d),
                 "gap": gap_txt.get(di, "—") if _gp(d) else "—",
             }
+            if prizes and prize_lookup is not None:
+                shown_prize = hit_prize_text(gk, d, prize_lookup.view(d))
+                row.update(
+                    _draw_index=di,
+                    hits=shown_prize.text,
+                    prize_source=shown_prize.source_url,
+                    prize_detail=shown_prize.detail,
+                )
             for name, _label, numbers, marked in details:
                 row[name], row[f"{name}_marks"] = _wf_marked_numbers(
                     numbers(d), marked(d)
@@ -988,11 +1087,19 @@ def _render_hits_4plus(
             def _only_from(e):
                 at = int(e.value if e.value is not None else _low)
                 table = shown["table"]
-                table.rows = [r for r, k in zip(rows, levels) if k >= at]
+                filtered_rows = [r for r, k in zip(rows, levels) if k >= at]
+                table.rows = filtered_rows
                 # Filtrul nou începe de la prima pagină, nu din mijlocul listei.
                 pag = table.pagination if isinstance(table.pagination, dict) else {}
                 table.pagination = {**pag, "page": 1}
                 table.update()
+                if prizes and prize_lookup is not None:
+                    binding = shown["prize_binding"]
+                    binding["active_rows"] = filtered_rows
+                    binding["pagination"] = {
+                        **binding["pagination"], "page": 1
+                    }
+                    _request_visible_prizes()
 
             with ui.row().classes("items-center gap-2"):
                 ui.label("Arată:").classes("text-caption")
@@ -1003,6 +1110,12 @@ def _render_hits_4plus(
                 ).props("dense no-caps")
         # Data și nimeritele pe un rând; numerele și intervalul se rup pe telefon.
         _nw = {"classes": "text-no-wrap"}
+
+        def _prize_page(event):
+            if prizes and prize_lookup is not None:
+                shown["prize_binding"]["pagination"] = dict(event.value or {})
+                _request_visible_prizes()
+
         table = (
             ui.table(
                 columns=[
@@ -1018,7 +1131,7 @@ def _render_hits_4plus(
                         "label": "Nimerite",
                         "field": "hits",
                         "align": "center",
-                        **_nw,
+                        **({} if prizes and prize_lookup is not None else _nw),
                     },
                     *(
                         {"name": name, "label": label, "field": name, "align": "left"}
@@ -1028,11 +1141,23 @@ def _render_hits_4plus(
                 ],
                 rows=rows,
                 pagination=15,
+                **(
+                    {"row_key": "_draw_index", "on_pagination_change": _prize_page}
+                    if prizes and prize_lookup is not None else {}
+                ),
             )
             .classes("w-full")
             .props("dense wrap-cells")
         )
         shown["table"] = table
+        if prizes and prize_lookup is not None:
+            binding = {
+                "table": table, "rows": rows, "active_rows": rows,
+                "pagination": {"page": 1, "rowsPerPage": 15},
+            }
+            shown["prize_binding"] = binding
+            prize_tables.append(binding)
+            table.add_slot("body-cell-hits", _WF_PRIZE_CELL)
         for name, _label, _numbers, _marked in details:
             table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
@@ -1080,14 +1205,26 @@ def _render_hits_4plus(
         ),
     )
     with ui.expansion(
-        "🎟️ Variante WF cu 4+ și 5+ — date și intervale", value=False
-    ).classes("w-full"):
+        "🎟️ Variante WF cu 4+ și 5+ — date și intervale",
+        value=False,
+        on_value_change=_open_prizes,
+    ).classes("w-full") as prize_expansion:
+        prize_panel["element"] = prize_expansion
         ui.label(
             "Fiecare rând este o extragere cu cel puțin o variantă la pragul indicat. "
             "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții. "
             "„Varianta” = cea jucată atunci cu cele mai multe numere prinse; "
             "numerele ieșite sunt îngroșate."
         ).classes("text-caption text-grey")
+        if prize_lookup is not None:
+            ui.label(
+                "Premiile oficiale se încarcă pentru pagina afișată, apoi se păstrează "
+                "local. Apăsați valoarea pentru sursa Loteriei Române. Paranteza "
+                "se referă la varianta afișată, nu la toate numerele din pool."
+            ).classes("text-caption text-grey")
+            ui.button(
+                "Reîncearcă premiile indisponibile", on_click=_retry_prizes
+            ).props("flat dense no-caps").classes("text-caption")
         for threshold in (4, 5):
             _dates_table(
                 f"🎟️ VARIANTĂ {threshold}+",
@@ -1096,6 +1233,7 @@ def _render_hits_4plus(
                 f"Nicio variantă nu a prins ≥{threshold} în istoricul walk-forward.",
                 gap_label=f"Δ → următorul ≥{threshold} pe variantă / azi",
                 level=lambda d: d["best_ticket"],
+                prizes=True,
                 details=(
                     (
                         "ticket",
@@ -1111,6 +1249,8 @@ def _render_hits_4plus(
                     ),
                 ),
             )
+        if prize_lookup is not None and prize_tables:
+            ui.timer(0.5, _refresh_prizes)
 
 
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
