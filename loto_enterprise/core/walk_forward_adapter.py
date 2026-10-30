@@ -378,6 +378,10 @@ def _wheel_sig(
         pool_size, game_type, guarantee, wheel_condition, max_variants
     )
     geometry = f"g{g}|c{condition}|cap{cap}"
+    if int(pool_size) > 19:
+        # New large-pool route is independent of La Jolla/hitcover overrides.
+        # Separate it from caches created by direct API calls before UI support.
+        return f"constructive_cover|{geometry}|rt1|lp1"
     try:
         from wheeling_methods import (
             budget_buys_complete_design,
@@ -511,6 +515,11 @@ def _penalty_sig(
 
 
 _MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45, "6/45": 45, "5/50": 50}
+
+# Existing pools retain their cache keys and replay behaviour. Newly supported
+# large pools need an explicit ticket budget before a flat result can be built.
+_LEGACY_WF_POOL_MAX = {"5/40": 19}
+_LARGE_POOL_MAX_ROWS = 1_500_000
 
 # Versiunea SEMANTICII de restrângere, nu a formatului cheii. Se incrementează
 # când se schimbă ce pool produce un interval dat — altfel un pickle scris sub
@@ -1061,6 +1070,52 @@ def run_honest_walk_forward(
     lot = _wf_lottery(game_type, game_key, country)
     wf_key = lot.bench_key if lot is not None else None
     wf_country = lot.country if lot is not None else None
+    universe = lot.max_n if lot is not None else _MAX_NUM.get(game_type)
+    if universe is not None and int(pool_size) > universe:
+        pool_size = universe
+    preflight_bt = None
+    legacy_pool_max = _LEGACY_WF_POOL_MAX.get(game_type, 16)
+    if int(pool_size) > legacy_pool_max:
+        effective_pool = _effective_pool_size(
+            pool_size, game_type, restrict_base_max, restrict_base_min
+        )
+        if effective_pool > legacy_pool_max:
+            from loto_enterprise.core.backtesting import LotoBacktester
+
+            preflight_bt = LotoBacktester(
+                df_source, game_type=game_type, game_key=wf_key, country=wf_country
+            )
+            expected = len(simulation_indices(
+                preflight_bt.df.attrs["training_cutoffs"], backtest_depth_percent
+            ))
+            early_g, early_condition, early_cap = _wf_geometry(
+                pool_size, game_type, guarantee, wheel_condition, max_variants
+            )
+            estimated_rows = expected * early_cap if early_cap > 0 else None
+            if expected and (
+                early_cap <= 0 or estimated_rows > _LARGE_POOL_MAX_ROWS
+            ):
+                # No synthetic zero-hit rows or success percentages: the replay
+                # did not run, and no cache file is read or written on this path.
+                return [], {
+                    "game_type": game_type,
+                    "pool_size": pool_size,
+                    "effective_pool_size": effective_pool,
+                    "backtest_depth_percent": backtest_depth_percent,
+                    "wheel_guarantee": early_g,
+                    "wheel_condition": early_condition,
+                    "max_variants": early_cap,
+                    "from_cache": False,
+                    "n_predictions": 0,
+                    "n_test_draws": 0,
+                    "n_expected": expected,
+                    "partial": True,
+                    "selection_validation": "fixed_current_decision",
+                    "large_pool_wf_skipped": True,
+                    "skip_reason": "variant_cap_required" if early_cap <= 0 else "row_limit",
+                    "estimated_rows": estimated_rows,
+                    "row_limit": _LARGE_POOL_MAX_ROWS,
+                }
     csv_hash = _csv_hash(df_source, game_type)
     # Amprenta deciziei ÎNAINTE de semnătură: o rescriere oricând după acest punct
     # (inclusiv în timpul căutării pașilor refolosibili) se vede la final.
@@ -1188,7 +1243,7 @@ def run_honest_walk_forward(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
     )
-    bt = LotoBacktester(
+    bt = preflight_bt or LotoBacktester(
         df_source, game_type=game_type, game_key=wf_key, country=wf_country
     )
     if cached is None and use_cache and not force_refresh:

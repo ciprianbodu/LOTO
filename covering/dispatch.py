@@ -36,6 +36,7 @@ from covering.lr_schemes import MAX_POOL as _LR_MAX_POOL
 from covering.lr_schemes import improve_with_lr_scheme
 from covering.refined_covers import improve_with_refined_cover
 from covering.search import wheel_annealing, wheel_genetic
+from covering.large_pool import LEGACY_MAX_POOL, generate_large_pool_wheel
 
 WHEEL_METHODS = {
     # Experimental, explicit overrides only; automatic selection stays unchanged.
@@ -249,6 +250,12 @@ def _generate_wheel(
     jocului (`covering.refined_covers`), numai certificat: aceeași garanție
     100%, aceleași bilete ca număr, niciun prag în scădere, câștig strict.
     """
+    if len(pool) > LEGACY_MAX_POOL:
+        # The catalogue/ILP/exact-profile optimizers have bounded geometries.
+        # Route large pools before any of them can enumerate their universe.
+        return generate_large_pool_wheel(
+            pool, pick, guarantee, max_variants, scores, condition
+        )
     if int(guarantee) > int(pick):
         # Pipeline-ul clampeaza deja; API-ul direct arunca altfel
         # `ValueError: r must be non-negative` din itertools, fara context.

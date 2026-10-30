@@ -93,7 +93,7 @@ def test_lottery_caps_and_defaults_follow_the_largest_lr_code():
     import ui_runtime
 
     caps = {g.game_id: g.max_pool for g in L.GAMES}
-    assert caps["5/40"] == 19 and caps["6/49"] == 16 and caps["joker"] == 16
+    assert caps["5/40"] == 40 and caps["6/49"] == 49 and caps["joker"] == 45
     assert all(v == 16 for k, v in caps.items() if not L.GAMES_BY_ID[k].is_romanian)
     for game, key in ui_runtime._POOL_KEYS.items():
         largest = max(s.n for s in lr.lr_schemes(game))
@@ -117,8 +117,8 @@ def test_pool_setting_per_game_is_clamped_and_survives_a_restart(tmp_path, monke
     for key in keys.values():
         monkeypatch.setitem(ui_runtime.SETTINGS, key, None)
     ui_runtime._load_settings()
-    assert ui_runtime.SETTINGS[keys["5/40"]] == 19
-    assert ui_runtime.SETTINGS[keys["6/49"]] == 16
+    assert ui_runtime.SETTINGS[keys["5/40"]] == 25
+    assert ui_runtime.SETTINGS[keys["6/49"]] == 18
     assert ui_runtime.SETTINGS[keys["joker"]] == 15
     state.write_text(json.dumps({keys["5/40"]: 18}), "utf-8")
     ui_runtime._load_settings()
@@ -137,7 +137,7 @@ def test_pool_size_for_reads_the_games_field(monkeypatch):
     for key, want in (
         ("5/40", 18), ("loto_5_40", 18), ("loto_5_40.csv", 18),
         ("6/49", 12), ("loto_6_49", 12),
-        ("joker", 16), ("joker_urna1", 16),
+        ("joker", 45), ("joker_urna1", 45),
         ("at_lotto", 11), ("de_lotto", 11),
     ):
         assert app._pool_size_for(key) == want, key

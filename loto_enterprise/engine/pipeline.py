@@ -588,6 +588,24 @@ class PipelineMixin:
         # lotto design „guarantee dacă condition" (mai puține bilete, garanție
         # declanșată doar când cad `condition` numere din pool).
         self.audit["wheel_condition_used"] = int(wheel_condition)
+        # Peste catalogul local, motorul construiește un cover pe întregul
+        # pool. Auditul distinge această rută de schemele LR și nu atribuie
+        # construcției o optimalitate pe care nu a demonstrat-o.
+        self.audit.pop("large_pool", None)
+        if len(self.hard_core) > 19:
+            from covering.large_pool import validate_large_pool_request
+
+            validate_large_pool_request(
+                len(self.hard_core), int(self.params["play_n"]),
+                guarantee, max_variants, wheel_condition,
+            )
+            self.audit["large_pool"] = {
+                "route": "constructive_cover",
+                "pool_size": len(self.hard_core),
+                "max_variants": int(max_variants),
+                "guarantee": int(guarantee),
+                "condition": int(wheel_condition),
+            }
         lines, coverage_pct = self.generate_predictions(
             guarantee=guarantee,
             max_variants=max_variants,

@@ -73,6 +73,10 @@ def _coverage_ratio_pct(covered: int, total: int) -> float:
 
 
 def _coverage_pct(wheel: list[list[int]], pool: list[int], guarantee: int) -> float:
+    if len(pool) > 19:
+        from covering.large_pool import large_pool_coverage_pct
+
+        return large_pool_coverage_pct(wheel, pool, guarantee)
     if not wheel:
         return 0.0
     targets = set(itertools.combinations(sorted(set(pool)), guarantee))
@@ -93,6 +97,10 @@ def lotto_coverage_pct(
     `condition == guarantee` coincide exact cu `_coverage_pct`.
     """
     g, c = int(guarantee), int(condition)
+    if len(pool) > 19:
+        from covering.large_pool import large_pool_coverage_pct
+
+        return large_pool_coverage_pct(wheel, pool, g, c)
     if not wheel:
         return 0.0
     if c == g:

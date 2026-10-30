@@ -26,6 +26,10 @@ def generate_combinatorial_wheel(
     Sistem de Wheeling (Set Cover Optimizat Memorie & Viteză)
     Optimizat pentru hit-uri de 4 și 5 numere prin prioritizarea scorurilor NQI/Frecvență.
     """
+    if len(pool) > 19:
+        from covering.large_pool import generate_large_pool_wheel
+
+        return generate_large_pool_wheel(pool, pick, guarantee, max_variants, scores)
     if int(guarantee) > int(pick):
         raise ValueError(
             f"guarantee={guarantee} > pick={pick}: garanția nu poate depăși numerele extrase"

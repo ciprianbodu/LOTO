@@ -185,6 +185,27 @@ def _ticket_pool(
                 f"{count(comb(target, pick), 'variante')} distincte."
             )
         return sorted(chosen), note
+    if len(pool) > 19:
+        # New full-urn pools can exceed the audit's stored ranking prefix.
+        # The known top positions suffice for the small physical ticket;
+        # never pass an unranked 40..49-number pool to its exact optimiser.
+        target = min(capacity, TICKET_POOL_MAX)
+        ranked = _ranked(scores, set(pool)) if scores else []
+        if len(ranked) >= target:
+            kept = ranked[:target]
+            selection = f"am păstrat cele mai bine clasate {target} din {len(pool)}"
+        else:
+            kept = sorted(pool, reverse=True)[:target]
+            selection = (
+                f"clasamentul nu este disponibil pentru {target} poziții; am ales "
+                f"determinist {target} numere în ordine descrescătoare"
+            )
+        dropped = sorted(set(pool) - set(kept))
+        return sorted(kept), (
+            f"Biletul complet folosește cel mult {TICKET_POOL_MAX} numere; "
+            f"{selection}. În afara {slip}: {_fmt(dropped)}. "
+            "Pool-ul mare rămâne afișat separat."
+        )
     if len(pool) > capacity:
         if not scores or any(n not in scores for n in pool):
             return pool, (
@@ -215,7 +236,7 @@ def _ticket_pool(
         return sorted(kept), (
             f"Variantele se așază exact numai pe cel mult {TICKET_POOL_MAX} numere; "
             f"am păstrat cele mai bine clasate {TICKET_POOL_MAX} din {len(pool)}. "
-            f"În afara {slip}: {_fmt(dropped)}. Codul LR al pool-ului rămâne în panou."
+            f"În afara {slip}: {_fmt(dropped)}. Pool-ul întreg rămâne afișat separat."
         )
     return pool, None
 

@@ -83,6 +83,40 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Pool pana la universul jocului — 2026-10-30
+
+- In „2. Setari algoritm”, cele trei jocuri romanesti accepta pool pana la
+  49 / 40 / 45 de numere. Implicitele raman 16 / 19 / 15, separate de maxim;
+  valorile salvate se pastreaza. Celelalte tari raman la maxim 16.
+- Peste 19 numere, motorul foloseste `covering.large_pool`: cover constructiv
+  determinist pe pozitii, fara enumerarea tuturor biletelor sau vectori 2^v.
+  Un plafon pozitiv limiteaza variantele; fara plafon, constructia termina
+  acoperirea clasica daca numarul de grupe este acceptabil. Nu este un cod
+  LR si nu se afirma ca numarul de variante este minim.
+- Garanteaza exact acoperirea raportata, numarata pe grupele distincte.
+  Conditia „g daca c” se verifica exact in loturi cu memorie limitata.
+  Cererile prea mari sunt refuzate cu explicatie si cer un plafon explicit;
+  nu se reduce pool-ul si nu se aplica un plafon ascuns.
+- Istoric hits cere plafon pozitiv peste vechile maxime (16 / 19 / 16) si cel mult 1,5 milioane
+  de randuri estimate (numar pasi x plafon). Daca nu poate rula, explica
+  motivul fara hituri sau procente inventate. „Bilet complet” pastreaza
+  limita explicita de 16 numere. Sansele exacte comune ale variantelor
+  raman limitate la pool 20; pentru pool mai mare se afiseaza separat
+  baseline-ul matematic al pool-ului si limita calculului pe bilete.
+- Daca bench-ul nu a evaluat marimea ceruta, metoda provine de la cel mai
+  apropiat pool decis, cu nota explicita. Cifrele acelui bench nu sunt
+  prezentate ca rezultate ale pool-ului mai mare. Workerul separa prin `lp1`
+  noile marimi (peste 16 / 19 / 16); semnatura wheel-ului WF adauga `lp1`
+  numai peste 19, unde se schimba algoritmul. Cheile vechi valide se pastreaza.
+- Limita de consecutive se relaxeaza cand nu incape pool-ul cerut, ca
+  inainte, cu limita efectiva in audit; alegerea intregii urne o impune.
+- Detalii si verificari: `scripts/analysis/full_pool_2026-10-30.md`.
+  Validare cumulata: 3896 teste distincte trecute, 20 sarite. Asertiunea veche
+  de plafonare din tabelul de intervale, gasita de suita completa, a fost
+  actualizata si reluata cu succes. Auditul general, proba worker pe toate
+  cele trei pool-uri maxime si browserul au trecut in runtime-uri izolate.
+  Aplicatia activa nu a fost repornita; noile limite intra la repornirea normala.
+
 ### Premii oficiale in Istoric hits — 2026-10-30
 
 - `VARIANTA 4+` / `VARIANTA 5+` arata categoria si valoarea unitara publicata

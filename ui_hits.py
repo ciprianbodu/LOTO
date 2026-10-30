@@ -694,6 +694,23 @@ def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: floa
         ).classes("text-caption text-grey")
 
 
+def _large_pool_wf_note(meta: dict | None) -> str | None:
+    if not (meta or {}).get("large_pool_wf_skipped"):
+        return None
+    if meta.get("skip_reason") == "variant_cap_required":
+        return (
+            "Walk-forward necalculat pentru pool-ul mare: numărul de variante "
+            "este fără plafon. Stabilește un plafon de variante pentru validare; "
+            "nu s-au calculat hituri sau procente istorice pentru această cerere."
+        )
+    return (
+        "Walk-forward necalculat: plafonul de variante înmulțit cu extragerile "
+        f"de evaluat ar putea produce până la {int(meta.get('estimated_rows') or 0):,} rânduri "
+        f"(limita: {int(meta.get('row_limit') or 0):,}). Redu plafonul sau "
+        "adâncimea validării; nu s-au calculat hituri sau procente istorice."
+    )
+
+
 def _render_hits_4plus(
     flat,
     game: str,
@@ -720,6 +737,8 @@ def _render_hits_4plus(
     câte ori limita a fost cerută, chiar dacă pool-ul de azi n-a avut nevoie de ea.
     """
     if not flat:
+        if note := _large_pool_wf_note(meta):
+            ui.label(note).classes("text-caption text-warning")
         return
     per = _wf_per_draw_stats(flat, _game_label_for(game))
     n = len(per)
@@ -1258,6 +1277,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
     has_folds = (PROJECT_ROOT / "bench_results" / "folds.csv").exists()
     has_wf = any(
         STATE["retro"].get(f"{res_prefix}{fn}_{g}")
+        or (STATE.get("retro_meta", {}).get(f"{res_prefix}{fn}_{g}") or {}).get("large_pool_wf_skipped")
         for fn, outs in results_bundle
         for g, _ in outs.items()
     )
@@ -1311,6 +1331,8 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                         "următoare pașii deja validați se iau din cache."
                     ).classes("text-warning text-caption text-bold")
                 _skip = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+                if note := _large_pool_wf_note(_skip):
+                    ui.label(note).classes("text-warning text-caption text-bold")
                 if _skip.get("scorer_fallback"):
                     ui.label(
                         f"⚠️ Walk-forward sărit: {_scorer_fallback_reason(_skip)}. "

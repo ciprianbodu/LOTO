@@ -175,11 +175,13 @@ _RESTRICT_BASE_GAMES = (
 _RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_BASE_GAMES}
 
 # Pool-ul pe joc (2026-10-22): un câmp pentru fiecare joc românesc, cu maximul
-# jocului (`Lottery.max_pool`: 19 la Loto 5/40, 16 în rest) și implicit cel mai
-# mare cod LR al lui (6/49 Cod 59: 16; 5/40 Cod 48: 19; Joker: 15). Jocurile
+# jocului (`Lottery.max_pool`: 49 / 40 / 45) și implicit cel mai mare cod LR
+# al lui (6/49 Cod 59: 16; 5/40 Cod 48: 19; Joker: 15). Jocurile
 # altor țări folosesc câmpul comun `pool_size_val`.
 _POOL_KEYS = {label: f"pool_size_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
-_POOL_DEFAULTS = {"6/49": 16, "5/40": 19, "joker": 15}
+_POOL_DEFAULTS = {
+    label: _LOT.GAMES_BY_ID[label].default_pool for label in _POOL_KEYS
+}
 
 
 def _pool_size_for(game) -> int:
@@ -191,6 +193,72 @@ def _pool_size_for(game) -> int:
     key = _POOL_KEYS.get(lot.game_id) if lot.is_romanian else None
     raw = _int_setting(key) if key else _int_setting("pool_size_val")
     return max(6, min(int(lot.max_pool), int(raw)))
+
+
+def _large_pool_notes() -> list[str]:
+    """Costul unei alegeri mari și eventuala relaxare a limitei de consecutive."""
+    if _selected_country() != _LOT.RO:
+        return []
+    from math import comb
+    from covering.large_pool import validate_large_pool_request
+
+    notes = []
+    limit = _active_max_consecutive_run()
+    budget = max(0, _int_setting("max_variants_val"))
+    guarantee = _int_setting("guarantee_val")
+    for lot in _selected_games():
+        pool = _pool_size_for(lot.game_id)
+        if pool <= lot.default_pool:
+            continue
+        text = (
+            f"{lot.name}: pool de {pool} numere. Variantele sunt generate în afara "
+            "catalogului LR; acoperirea efectivă și garanția se verifică pentru "
+            "plafonul ales. "
+        )
+        guard_message = ""
+        if pool > 19:
+            normalized_guarantee = max(3, min(lot.pick_n, guarantee))
+            condition = _int_setting("wheel_condition_val")
+            condition = (
+                normalized_guarantee if condition <= 0
+                else max(normalized_guarantee, min(lot.pick_n, condition))
+            )
+            try:
+                validate_large_pool_request(
+                    pool, lot.pick_n, normalized_guarantee, budget, condition
+                )
+            except ValueError as exc:
+                guard_message = str(exc).replace(",", ".")
+        if guard_message:
+            text += guard_message
+        elif budget:
+            text += f"Plafonul ales este de {budget:,} variante".replace(",", ".")
+            if lot.price is not None:
+                cost = (
+                    f"{budget * lot.price:,.2f}".replace(",", "_")
+                    .replace(".", ",").replace("_", ".")
+                )
+                text += f" (cel mult {cost} lei, fără taxe pe bilet)"
+            text += "."
+        elif guarantee >= lot.pick_n:
+            variants = comb(pool, lot.pick_n)
+            formatted = f"{variants:,}".replace(",", ".")
+            text += (
+                f"Garanția cerută înseamnă sistem complet: {formatted} variante, "
+                "fără plafon."
+            )
+        else:
+            text += (
+                "Nu este ales un plafon de variante. Un pool mai mare poate cere "
+                "mai multe variante și un cost mai mare."
+            )
+        if limit and pool > lot.max_n - lot.max_n // (limit + 1):
+            text += (
+                f" Regula fără {limit + 1} consecutive nu încape în acest pool; "
+                "va fi relaxată, iar limita aplicată apare în rezultat."
+            )
+        notes.append(text)
+    return notes
 
 
 def _active_restrict_base(game_label: str) -> tuple[int, int]:
@@ -358,7 +426,7 @@ def _int_setting(key: str, default: int | None = None) -> int:
         if v is None:
             raise TypeError(key)
         return int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return int(default if default is not None else DEFAULTS[key])
 
 
@@ -415,19 +483,20 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
-    # Pool max 16 — clamp pentru valori salvate de versiuni vechi.
+    # Câmpul comun rămâne 6..16 pentru jocurile altor țări.
     try:
-        if int(SETTINGS.get("pool_size_val", 10)) > 16:
-            SETTINGS["pool_size_val"] = 16
-    except (TypeError, ValueError):
+        SETTINGS["pool_size_val"] = max(
+            6, min(16, int(SETTINGS.get("pool_size_val", 10)))
+        )
+    except (TypeError, ValueError, OverflowError):
         SETTINGS["pool_size_val"] = 10
-    # Pool-ul pe joc: 6..maximul jocului (19 la 5/40); o valoare stricată revine
-    # la implicitul jocului (cel mai mare cod LR).
+    # Pool-ul pe joc: 6..universul jocului; o valoare stricată revine la
+    # implicitul păstrat al jocului, nu la noul maxim.
     for _label, _key in _POOL_KEYS.items():
-        _cap = 19 if _label == "5/40" else 16
+        _cap = _LOT.GAMES_BY_ID[_label].max_pool
         try:
             SETTINGS[_key] = max(6, min(_cap, int(SETTINGS.get(_key))))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             SETTINGS[_key] = _POOL_DEFAULTS[_label]
 
     _sanitize_country_settings()

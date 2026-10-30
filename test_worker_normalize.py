@@ -55,12 +55,15 @@ def test_pool_cap_follows_the_game():
     from loto_enterprise.core import lotteries as L
 
     ro_540, ro_649, joker = (L.GAMES_BY_ID[g] for g in ("5/40", "6/49", "joker"))
-    for raw, want in ((17, 17), (19, 19), (25, 19), (3, 6)):
+    for raw, want in ((17, 17), (19, 19), (25, 25), (99, 40), (3, 6)):
         assert worker._task_norm({"pool_size": raw}, ro_540)["pool_size"] == want
-    for lot in (ro_649, joker, *(g for g in L.GAMES if not g.is_romanian)):
+    for lot in (ro_649, joker):
+        assert worker._task_norm({"pool_size": 19}, lot)["pool_size"] == 19
+        assert worker._task_norm({"pool_size": 99}, lot)["pool_size"] == lot.max_n
+    for lot in (g for g in L.GAMES if not g.is_romanian):
         assert worker._task_norm({"pool_size": 19}, lot)["pool_size"] == 16
     norm = worker._task_norm({"pool_size": 19, "max_consecutive_run": 99}, ro_540)
-    assert norm["max_consecutive_run"] == 19 and norm["raw_pool_size"] == 19
+    assert norm["max_consecutive_run"] == 40 and norm["raw_pool_size"] == 19
 
 
 def test_guarantee_clamped_to_3_and_draw_n():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -191,6 +192,12 @@ def _decision_path_for_key(folds_game_key: str) -> str | None:
     return str(_LOT.decision_path_for(lot.country))
 
 
+def _extended_bench_pool(folds_game_key: str, pool: int) -> bool:
+    """New pool sizes beyond the game's previously evaluated production range."""
+    legacy_max = 19 if folds_game_key == "loto_5_40" else 16
+    return int(pool) > legacy_max
+
+
 def _country_folds_path(country=None) -> Path:
     """folds.csv al țării: România `bench_results/folds.csv` (neschimbat)."""
     cc = country or _selected_country()
@@ -236,6 +243,14 @@ def _decision_entry(folds_game_key: str, pool: int) -> dict:
             _load_config(_decision_path_for_key(folds_game_key)).get("games") or {}
         ).get(folds_game_key) or {}
         e = _auto_pilot_entry(g, int(pool))
+        if _extended_bench_pool(folds_game_key, pool) and e:
+            from loto_enterprise.core.method_selector import recommend_optimal_config
+
+            chosen = recommend_optimal_config(
+                folds_game_key, int(pool), _decision_path_for_key(folds_game_key)
+            )
+            if chosen.get("pool_substituted"):
+                e = {**e, "pool_substituted": chosen["pool_substituted"]}
         return e if isinstance(e, dict) else {}
     except Exception:  # noqa: BLE001
         return {}
@@ -458,6 +473,19 @@ def _render_bench_leaderboard_slice(
         sub = sub[sub["failed"] != True]  # noqa: E712
     if sub.empty:
         return
+    if _extended_bench_pool(folds_game_key, pool):
+        measured = sorted({
+            int(str(column)[1:]) for column in sub.columns
+            if re.fullmatch(r"k\d+", str(column)) and sub[column].notna().any()
+        })
+        if int(pool) not in measured:
+            latest = f" (ultimul pool evaluat: {max(measured)})" if measured else ""
+            ui.label(
+                f"Clasament pentru pool {pool}: bench-ul nu a evaluat această "
+                f"mărime{latest}. Metoda se preia de la cel mai apropiat pool "
+                "decis; ratele și rangurile acelui pool nu descriu pool-ul cerut."
+            ).classes("text-caption text-warning")
+            return
     try:
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET as _T
     except Exception:  # noqa: BLE001
@@ -496,7 +524,7 @@ def _render_bench_leaderboard_slice(
                 break
     has_target_rate = metric is not None
     if metric is None:
-        metric = "avg_hits_topk"
+        metric = f"k{pool}" if _extended_bench_pool(folds_game_key, pool) else "avg_hits_topk"
     if metric not in sub.columns:
         return
     has_family = "family" in sub.columns

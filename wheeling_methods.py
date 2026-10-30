@@ -34,6 +34,7 @@ from covering.dispatch import (
     resolve_wheel_method,
 )
 from covering.ilp import _ILP_COVER_CACHE, _ilp_cover_positions, wheel_ilp
+from covering.large_pool import validate_large_pool_request
 from covering.multihit import multi_hit_stats, wheel_multihit
 from covering.search import wheel_annealing, wheel_genetic
 from covering.weighted import align_positions_by_degree, wheel_weighted
@@ -61,4 +62,5 @@ __all__ = [
     "wheel_multihit",
     "wheel_union34",
     "wheel_weighted",
+    "validate_large_pool_request",
 ]

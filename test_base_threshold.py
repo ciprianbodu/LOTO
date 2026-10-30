@@ -230,8 +230,8 @@ def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
             render()
         for table in (n for n in ui.walk() if n["kind"] == "table"):
             assert min(r["w"] for r in table["kwargs"]["rows"]) == pool
-    # Pool-ul pe joc (2026-10-22): 19 se aplică numai la Loto 5/40, celelalte
-    # jocuri se opresc la 16. Ordinea tabelelor: 6/49, 5/40, Joker.
+    # Pool 19 este acum accesibil la toate cele trei jocuri; tabelul trebuie
+    # să citească alegerea fiecăruia. Ordinea: 6/49, 5/40, Joker.
     for key in app._POOL_KEYS.values():
         monkeypatch.setitem(app.SETTINGS, key, 19)
     with capture_ui() as ui:
@@ -239,7 +239,7 @@ def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
     mins = [
         min(r["w"] for r in t["kwargs"]["rows"]) for t in ui.walk() if t["kind"] == "table"
     ]
-    assert mins == [16, 19, 16]
+    assert mins == [19, 19, 19]
     assert "pool 19, ținta 4+" in ui.text()
 
 

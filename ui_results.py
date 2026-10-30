@@ -647,7 +647,7 @@ def _render_lr_layouts(game: str, data: dict, schemes) -> None:
 
 def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     """Same exact, unconditional ticket odds in the UI and the saved report."""
-    from covering.probability import wheel_hit_probabilities
+    from covering.probability import MAX_EXACT_POOL, wheel_hit_probabilities
 
     params = _hypergeo_params(game)
     pool, variants = data.get("hard_core") or [], data.get("variants") or []
@@ -656,6 +656,41 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     draw_n, max_num = params
     pick = _ticket_pick(game)
     is_joker = "joker" in str(game).lower()
+    if len(pool) > MAX_EXACT_POOL:
+        try:
+            pool_set = {int(n) for n in pool}
+            valid = (
+                len(pool_set) == len(pool)
+                and all(not isinstance(n, bool) and int(n) == n for n in pool)
+                and all(1 <= n <= max_num for n in pool_set)
+                and all(len(v) in {pick, pick + int(is_joker)} for v in variants)
+                and all(
+                    len(set(v[:pick])) == pick
+                    and all(not isinstance(n, bool) and int(n) == n and int(n) in pool_set for n in v[:pick])
+                    for v in variants
+                )
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid = False
+        if not valid:
+            return ["Șanse teoretice indisponibile: pool sau variante invalide."]
+        total = math.comb(max_num, draw_n)
+        rates = []
+        for target in (3, 4, 5):
+            if target <= draw_n:
+                favorable = sum(
+                    math.comb(len(pool_set), hits)
+                    * math.comb(max_num - len(pool_set), draw_n - hits)
+                    for hits in range(target, min(draw_n, len(pool_set)) + 1)
+                    if 0 <= draw_n - hits <= max_num - len(pool_set)
+                )
+                rates.append(f"{target}+ numere în pool: {100 * favorable / total:.3f}%")
+        return [
+            "Șanse teoretice ale pool-ului la o extragere uniformă: " + " · ".join(rates),
+            f"Șansa comună pe variante nu este calculată exact pentru pool-uri "
+            f"de peste {MAX_EXACT_POOL} numere; procentele de mai sus privesc numai "
+            "pool-ul, nu garantează un premiu pe biletele generate.",
+        ]
     try:
         # Joker fără numărul Urnei 2 (coloana lipsă sau invalidă): 5 numere.
         if any(len(v) not in {pick, pick + int(is_joker)} for v in variants):
@@ -1089,6 +1124,8 @@ def _build_report() -> str:
             + (f"{float(cov):.2f}%" if cov is not None else "necunoscută")
         )
         out.extend(f"{indent}{line}" for line in _wheel_probability_lines(game, d))
+        if route_note := _large_pool_route_note(game, d):
+            out.append(f"{indent}{route_note}")
         out.extend(f"{indent}Schemă LR: {line}" for line in _lr_scheme_lines(game, d))
         # Metoda și nota ei de încredere, ca în panou (Urna 2 cu nota ei).
         _bw = (d.get("audit") or {}).get("bench_winner") or {}
@@ -1155,7 +1192,9 @@ def _build_report() -> str:
         _cd = _consecutive_pool_diagnostic(d)
         if _cd:
             out.append(f"{indent}{_cd}")
-        _cw = _consecutive_pool_warning(pool, d.get("audit"))
+        _cw = _consecutive_pool_warning(
+            pool, d.get("audit"), universe_size=(_hypergeo_params(game) or (None, None))[1]
+        )
         if _cw:
             out.append(f"{indent}⚠️ {_cw}")
         _unplayed = (d.get("audit") or {}).get("pool_numbers_not_on_tickets") or []
@@ -1192,7 +1231,8 @@ def _build_report() -> str:
             forecast = dict(au["hit_forecast"])
             forecast["note"] = (
                 "Baseline matematic pentru orizontul n_draws. Mărimile teoretice "
-                "de pool pot depăși pool-ul maxim al jocului (16; la Loto 5/40, 19); "
+                "de pool nu pot depăși universul jocului (49 la 6/49, 40 la 5/40, "
+                "45 la Joker); "
                 "3 evenimente în medie nu sunt o garanție."
             )
             au["hit_forecast"] = forecast
@@ -1577,7 +1617,9 @@ def _consecutive_pool_diagnostic(data: dict) -> str:
     return " ".join(parts)
 
 
-def _consecutive_pool_warning(pool, audit: dict | None = None) -> str | None:
+def _consecutive_pool_warning(
+    pool, audit: dict | None = None, *, universe_size: int | None = None
+) -> str | None:
     """Avertisment dacă tot pool-ul e un interval fără găuri (ex. Joker 18–28).
 
     Calculat din numere, nu din audit — ca să apară și pe rezultate vechi,
@@ -1588,6 +1630,8 @@ def _consecutive_pool_warning(pool, audit: dict | None = None) -> str | None:
     from loto_enterprise.core.ranking import is_consecutive_block
 
     nums = [int(x) for x in (pool or [])]
+    if universe_size and len(nums) == universe_size and set(nums) == set(range(1, universe_size + 1)):
+        return None  # Selecting the entire urn leaves the scorer no choice.
     if not is_consecutive_block(nums, min_size=6):
         return None
     lo, hi = min(nums), max(nums)
@@ -1619,9 +1663,17 @@ def _decision_notes(bw: dict, game_key: str, pool_fallback) -> list[str]:
         if info.get("fallback"):
             continue
         hint = info.get("pool_hint") or (1 if info.get("single_pick") else pool_fallback)
-        entry = _decision_entry(key, int(hint or _pool_size_for(key)))
-        now = _decision_entry_method(entry, key) if entry and method else method
         prefix = ("Urna 2: " if key.endswith("_urna2") else "Urna 1: ") if len(keys) > 1 else ""
+        entry = _decision_entry(key, int(hint or _pool_size_for(key)))
+        substituted = entry.get("pool_substituted") or {}
+        measured_pool = substituted.get("used")
+        if measured_pool is not None:
+            notes.append(
+                f"ℹ️ {prefix}Pool {hint} nu a fost "
+                f"evaluat de bench; metoda provine de la pool {measured_pool}, "
+                "iar cifrele deciziei privesc acel pool de referință."
+            )
+        now = _decision_entry_method(entry, key) if entry and method else method
         if now != method:
             # Nota de încredere ar fi a altei metode decât cea care a dat pool-ul.
             notes.append(
@@ -1634,11 +1686,30 @@ def _decision_notes(bw: dict, game_key: str, pool_fallback) -> list[str]:
         elif _decision_low_confidence(entry) is True:
             notes.append(
                 f"⚠️ {prefix}Decizie low_confidence: nicio metodă n-a bătut random "
-                "consistent pe acest pool. Scorer-ul e conservator — diferențele sunt zgomot."
+                + (
+                    f"consistent la pool-ul de referință {measured_pool}. "
+                    if measured_pool is not None else "consistent pe acest pool. "
+                )
+                + "Scorer-ul e conservator — diferențele sunt zgomot."
             )
         elif mult := _multiplicity_note(entry):
             notes.append(mult.replace("⚠️ ", f"⚠️ {prefix}", 1))
     return notes
+
+
+def _large_pool_route_note(game: str, data: dict) -> str | None:
+    if _game_label_for(game) not in {"6/49", "5/40", "joker"}:
+        return None
+    pool_n = len(data.get("hard_core") or [])
+    route = (data.get("audit") or {}).get("large_pool") or {}
+    if pool_n <= 19 and not route:
+        return None
+    return (
+        f"Pool de {pool_n} numere: variantele formează un cover constructiv "
+        "generat de aplicație, fără cod LR pentru această mărime. Numărul "
+        "variantelor nu este demonstrat minim; garanția și acoperirea sunt "
+        "cele raportate pentru variantele efectiv generate."
+    )
 
 
 def _render_pool_body(
@@ -1663,6 +1734,8 @@ def _render_pool_body(
     eff = data.get("pool_size")
     req = data.get("pool_size_requested")
     variants = data.get("variants") or []
+    if route_note := _large_pool_route_note(game, data):
+        ui.label(route_note).classes("text-caption text-warning")
 
     with ui.row().classes("gap-6 items-center"):
         ui.label(
@@ -1887,7 +1960,9 @@ def _render_pool_body(
     _cd = _consecutive_pool_diagnostic(data)
     if _cd:
         ui.label(_cd).classes("text-caption text-grey mt-1")
-    _cw = _consecutive_pool_warning(pool, data.get("audit"))
+    _cw = _consecutive_pool_warning(
+        pool, data.get("audit"), universe_size=(_hypergeo_params(game) or (None, None))[1]
+    )
     if _cw:
         ui.label(f"⚠️ {_cw}").classes("text-bold text-negative mt-1")
     _cl_text = _consecutive_limit_text(data.get("audit"))

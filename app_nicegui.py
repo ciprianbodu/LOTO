@@ -1297,6 +1297,11 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "max_variants": meta.get("max_variants"),
             "max_consecutive_run": meta.get("max_consecutive_run"),
         }
+        for key in (
+            "large_pool_wf_skipped", "skip_reason", "estimated_rows", "row_limit"
+        ):
+            if key in meta:
+                STATE["retro_meta"][rk][key] = meta[key]
 
 
 def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
@@ -1436,9 +1441,10 @@ def _load_cached_walk_forward() -> int:
         except Exception as exc:  # noqa: BLE001 — reafișarea nu blochează pornirea
             logger.warning("[WF] validare din cache indisponibilă pentru %s: %s", g_label, exc)
             continue
-        if flat:
+        if flat or meta.get("large_pool_wf_skipped"):
             _store_wf_result(f"{fname}_{g_label}", flat, meta)
-            loaded += 1
+            if flat:
+                loaded += 1
     if loaded:
         logger.info("[WF] validare reîncărcată din cache pentru %d joc(uri).", loaded)
     return loaded
@@ -2521,11 +2527,26 @@ def _bench_freshness_panel(country: str) -> None:
 
 # Panoul de istoric adaptiv folosea două nume NEDEFINITE (NameError la orice
 # apel). Fișierul canonic e cel scris de core.adaptive_feedback (rădăcina repo);
-# pool-urile acceptate de UI sunt 6..16, la Loto 5/40 6..19 (clamp-ul din
-# worker/încărcare, `Lottery.max_pool`).
+# pool-urile acceptate de UI urmează registrul: tot universul jocurilor
+# românești, 6..16 pentru jocurile altor țări.
 ADAPTIVE_STATE_FILE = PROJECT_ROOT / "adaptive_state.json"
-SUPPORTED_POOLS = range(6, 17)
-SUPPORTED_POOLS_540 = range(6, 20)
+SUPPORTED_POOLS = range(6, _LOT.GAMES_BY_ID["6/49"].max_pool + 1)
+SUPPORTED_POOLS_540 = range(6, _LOT.GAMES_BY_ID["5/40"].max_pool + 1)
+SUPPORTED_POOLS_JOKER = range(6, _LOT.GAMES_BY_ID["joker"].max_pool + 1)
+
+
+def _adaptive_pool_range(state_key):
+    stem = str(state_key).rsplit("_", 1)[0]
+    lot = _LOT.lottery_by_id(stem)
+    if lot is None:
+        lot = next(
+            (
+                g for g in _LOT.GAMES
+                if g.history_key_prefix and stem.startswith(g.history_key_prefix)
+            ),
+            None,
+        )
+    return range(6, (lot.max_pool if lot is not None else 16) + 1)
 
 
 def _clean_stale_adaptive(stale_keys) -> None:
@@ -2562,9 +2583,7 @@ def adaptive_history_panel() -> None:
     stale = []
     for k in raw:
         try:
-            _allowed = (
-                SUPPORTED_POOLS_540 if str(k).startswith("5/40_") else SUPPORTED_POOLS
-            )
+            _allowed = _adaptive_pool_range(k)
             if int(str(k).split("_")[-1]) not in _allowed:
                 stale.append(k)
         except (ValueError, IndexError):
@@ -2577,7 +2596,8 @@ def adaptive_history_panel() -> None:
     if stale:
         with ui.row().classes("items-center gap-3"):
             ui.label(
-                f"⚠️ {len(stale)} configurări STALE (pool inaccesibil: 6-16, la 5/40 6-19): "
+                f"⚠️ {len(stale)} configurări STALE (maxim 49 la 6/49, 40 la 5/40, "
+                f"45 la Joker, 16 la celelalte jocuri): "
                 f"{', '.join(stale)}"
             ).classes("text-warning text-caption")
             ui.button(
@@ -2687,11 +2707,13 @@ def _base_table_games(country=None) -> tuple:
 
 
 _BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool, țintă) → (rânduri, n)
-# Pool 6..16 la 6/49 și Joker, 6..19 la 5/40, × ținta 3/4 = (11 + 14 + 11) × 2 =
-# 72 de combinații. Sub atât, memo-ul se golea înainte să apuce să fie folosit:
+# Toate dimensiunile de pool românești, pentru cele două ținte 3/4.
+# Sub atât, memo-ul se golea înainte să apuce să fie folosit:
 # o plimbare înainte și înapoi peste dimensiunile de pool recalcula tot de
 # fiecare dată.
-_BASE_TABLE_MEMO_MAX = (11 + 14 + 11) * 2
+_BASE_TABLE_MEMO_MAX = 2 * sum(
+    _LOT.GAMES_BY_ID[game].max_pool - 5 for game in ("6/49", "5/40", "joker")
+)
 # Tabelul se calculează abia când submeniul e deschis: ~0.7 s pentru trei jocuri
 # ar fi fost plătiți la fiecare încărcare de pagină, chiar fără să fie deschis.
 _BASE_TABLE_OPENED = {"value": False}
@@ -2937,6 +2959,7 @@ def main_page() -> None:
             SETTINGS["games_val"] = [str(v) for v in (e.value or [])]
             _save_settings()
             datasets_label.refresh()
+            _render_large_pool_warning()
 
         ui.select(
             {
@@ -3088,10 +3111,11 @@ def main_page() -> None:
                 )
             ui.label(
                 "Implicit, cel mai mare cod LR al fiecărui joc: 16 la 6/49 (Cod 59), "
-                "19 la 5/40 (Cod 48), 15 la Joker. Numai Loto 5/40 are coduri peste "
+                "19 la 5/40 (Cod 48), 15 la Joker. Maximul poate fi ales separat: "
+                "49 la 6/49, 40 la 5/40, 45 la Joker. Numai Loto 5/40 are coduri peste "
                 "16 numere (Cod 45 și 46 pe 17, Cod 47 pe 18, Cod 48 pe 19); "
-                "„Istoric hits” se validează pe pool-ul fiecărui joc, cu metoda aleasă "
-                "de bench pentru acea mărime."
+                "„Istoric hits” se validează pe pool-ul fiecărui joc, cu metoda decisă "
+                "pentru acea mărime sau pentru cel mai apropiat pool evaluat."
             ).classes("text-caption text-grey")
         else:
             _pool_inputs.append(
@@ -3102,7 +3126,7 @@ def main_page() -> None:
                     "pool_size_val",
                 )
             )
-        _bind_save(
+        _guarantee_input = _bind_save(
             ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1).classes(
                 "w-full"
             ),
@@ -3113,7 +3137,7 @@ def main_page() -> None:
             "la 5 numere pe bilet, din cele 6 extrase. Joker are 5 numere extrase "
             "în Urna 1, deci garanția maximă este 5."
         ).classes("text-caption text-grey")
-        _bind_save(
+        _condition_input = _bind_save(
             ui.number(
                 "Garanția se aplică dacă în pool cad (0 = câte cere garanția)",
                 min=0,
@@ -3126,7 +3150,7 @@ def main_page() -> None:
             "Lotto design „t dacă p”: de exemplu garanție 3 cu 4 = un bilet cu 3 numere garantat "
             "doar când cad 4 numere din pool. Economia de bilete depinde de dimensiunea pool-ului."
         ).classes("text-caption text-grey")
-        _bind_save(
+        _variant_limit_input = _bind_save(
             ui.number(
                 "Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10
             ).classes("w-full"),
@@ -3134,8 +3158,18 @@ def main_page() -> None:
         )
         ui.label(
             "La buget limitat, aplicația caută automat o acoperire mai bună "
-            "fără să mărească numărul de variante. 0 folosește designurile complete."
+            "fără să mărească numărul de variante. 0 cere acoperire completă, "
+            "în limitele de calcul afișate."
         ).classes("text-caption text-grey")
+        _large_pool_warning = ui.column().classes("w-full gap-1")
+
+        def _render_large_pool_warning():
+            _large_pool_warning.clear()
+            with _large_pool_warning:
+                for note in _large_pool_notes():
+                    ui.label(note).classes("text-caption text-warning")
+
+        _render_large_pool_warning()
         _bind_save(
             ui.number(
                 "Penalizare numere extrase în ultimele N extrageri (0 = oprit)",
@@ -3157,7 +3191,7 @@ def main_page() -> None:
             "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
             "La Joker se aplică și numărului din Urna 2. Walk-forward aplică aceeași setare."
         ).classes("text-caption text-grey")
-        _bind_save(
+        _consecutive_input = _bind_save(
             ui.checkbox("🔗 Fără 3 numere consecutive în pool (activ implicit)").classes(
                 "w-full"
             ),
@@ -3171,7 +3205,8 @@ def main_page() -> None:
             "clasament care nu formează trei numere consecutive. Fereastra rezultatului arată ce "
             "număr a fost scos din pool și ce număr i-a luat locul. Preferință de "
             "compoziție, fără avantaj statistic demonstrat; walk-forward aplică "
-            "aceeași regulă."
+            "aceeași regulă. Dacă un pool mare nu încape cu această regulă, limita "
+            "de consecutive este relaxată și se arată în rezultat."
         ).classes("text-caption text-grey")
         ui.label(
             "Restrânge candidații jucați la un interval de numere, SEPARAT pentru "
@@ -3261,6 +3296,11 @@ def main_page() -> None:
         # tabelul arată toate lățimile, nu îl evidențiază pe cel setat.
         for _pool_input in _pool_inputs:
             _pool_input.on_value_change(lambda: _render_base_interval_tables.refresh())
+        for _budget_input in (
+            *_pool_inputs, _guarantee_input, _condition_input,
+            _variant_limit_input, _consecutive_input,
+        ):
+            _budget_input.on_value_change(lambda: _render_large_pool_warning())
         _bind_save(
             ui.number(
                 "Analizează doar ultimele X% extrageri", min=0, max=100, step=5

@@ -244,8 +244,10 @@ def _normalize_task(
     `max_n` = plafonul restrângerii bazei: 49 pentru jocurile românești (valoarea
     de dinainte), universul jocului pentru celelalte (EuroMillions: 50).
 
-    `pool_max` = cel mai mare pool al jocului (`Lottery.max_pool`): 19 la Loto
-    5/40 (scheme LR Cod 45-48), 16 în rest, ca în câmpurile din sidebar."""
+    `pool_max` = cel mai mare pool al jocului (`Lottery.max_pool`): universul
+    principal în România (49 / 40 / 45), 16 în celelalte țări. Calea de
+    producție `_task_norm` îl transmite explicit din registru; implicitul 16
+    al helperului rămâne pentru apelurile vechi fără identitate de joc."""
     raw_pool = int(task.get("pool_size", 12))
     pool_cap = max(6, int(pool_max))
     pool_size = max(6, min(pool_cap, raw_pool))
@@ -383,12 +385,17 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
         from loto_enterprise.core.walk_forward_adapter import _effective_pool_size, _wheel_sig
 
         foreign_countries: set[str] = set()
+        large_pool = False
         for dataset in config.get("datasets", []):
             for task in dataset.get("tasks", []):
                 lot = _resolve_task_lottery(task)
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
                 norm = _task_norm(task, lot)
+                previous_cap = 19 if lot.geometry == "5/40" else 16
+                large_pool = large_pool or (
+                    lot.is_romanian and norm["pool_size"] > previous_cap
+                )
                 # Designul pool-ului jucat: o bază restrânsă mai îngustă decât
                 # pool-ul îl taie (ca la cheia WF), iar designul semnat e al lui.
                 played = _effective_pool_size(
@@ -415,6 +422,10 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                 digest.update(f"decision:{cc}".encode())
                 digest.update(path.read_bytes() if path.exists() else b"missing")
         cache_key += ":" + digest.hexdigest()
+        if large_pool:
+            # Old workers silently clamped these requested pools to 16/19.
+            # Keep every existing small-pool key while separating new results.
+            cache_key += ":lp1"
     return cache_key
 
 

@@ -159,11 +159,19 @@ class Lottery:
 
     @property
     def max_pool(self) -> int:
-        """Cel mai mare pool jucabil: 19 la Loto 5/40, 16 în rest.
+        """Pool-ul acceptat: universul principal în România, 16 în alte țări.
 
-        Loteria Română are la 5/40 scheme reduse pe 17, 18 și 19 numere (Cod
-        45-48); la 6/49 cel mai mare cod are 16, la Joker 15 (2026-10-22)."""
-        return 19 if self.is_romanian and self.geometry == "5/40" else 16
+        Dimensiunea unui cod LR nu limitează alegerea numerelor din pool.
+        Joker folosește universul Urnei 1, separat de numărul din Urna 2.
+        """
+        return self.max_n if self.is_romanian else 16
+
+    @property
+    def default_pool(self) -> int:
+        """Implicitul păstrat, independent de extinderea maximului acceptat."""
+        if self.is_romanian:
+            return {"6/49": 16, "5/40": 19, "joker": 15}.get(self.geometry, 10)
+        return 10
 
     @property
     def training_only(self) -> bool:

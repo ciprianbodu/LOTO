@@ -160,6 +160,10 @@ def complete_design_size(v: int, pick: int, guarantee: int) -> int | None:
 
 
 def wheel_lajolla(pool, pick, guarantee, max_variants=0, scores=None):
+    if len(pool) > 19:
+        from covering.large_pool import generate_large_pool_wheel
+
+        return generate_large_pool_wheel(pool, pick, guarantee, max_variants, scores)
     pool = _sorted_pool(pool, scores)
     v = len(pool)
     if v < pick:
@@ -477,6 +481,10 @@ def wheel_lotto(pool, pick, guarantee, condition, max_variants=0, scores=None):
     biletele se trunchiază după scor, numerele din pool se readuc pe bilete
     (`ensure_pool_numbers_on_tickets`) și acoperirea se recalculează.
     """
+    if len(pool) > 19:
+        from covering.large_pool import generate_large_pool_wheel
+
+        return generate_large_pool_wheel(pool, pick, guarantee, max_variants, scores, condition)
     g, c, pk = int(guarantee), int(condition), int(pick)
     if c < g:
         raise ValueError(f"condition={c} < guarantee={g}")
