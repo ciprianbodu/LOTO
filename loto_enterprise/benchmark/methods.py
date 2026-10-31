@@ -12,7 +12,8 @@ de producție) și cele 50 de metode din modulele:
     methods_wave2.py       20 metode (al doilea val, 14.09.2026): idei reluate din
                            vechea listă disabled + descompuneri, context propriu,
                            relații de ordinul 2, învățare ieftină
-    methods_experimental.py 1 metode: interval adaptiv, numai benchmark
+    methods_experimental.py 1 metode: interval adaptiv, experimental; din
+                           2026-10-31 eligibila si in productie (numai 6/49)
 
 Metodele marcate `_uses_history_cutoffs` primesc opțional începutul zilei
 fiecărui rând prin `call_method`. Fără date, fiecare rând este un pas temporal.

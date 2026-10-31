@@ -183,11 +183,16 @@ EXCLUDED_FROM_PRODUCTION = frozenset(
         "repeat_last_draw",
         "rwr_last_draw",
         "haar_multiscale",
-        # Interval membership is an explicit experimental pool filter.
-        # Its retrospective signal is not externally confirmed.
-        "interval_extrema_k16",
     }
 )
+# `interval_extrema_k16` NU mai e aici din 2026-10-31: reactivată în producție
+# la cererea explicită a utilizatorului. Rămâne family="experimental_interval"
+# (vizibilă ca atare în UI), poate fi aleasă de decizie și de producție — dar
+# numai Loto 6/49 are folduri pentru ea. Avantajul statistic rămâne
+# nedemonstrat (audit retrospectiv: Holm51=0,07935); vezi AGENTS.md §"Interval
+# adaptiv experimental". Producția o apelează fără history_cutoffs, deci
+# contractul explicit „un rând = un pas temporal" (la 6/49 o extragere/zi,
+# deci identic cu bench-ul).
 
 # Pe o urnă cu o singură bilă (Joker Urna 2 și echivalentele străine), aceste
 # metode aleg bila precedentă în majoritatea pașilor chiar pe extrageri uniforme:

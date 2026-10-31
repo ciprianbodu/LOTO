@@ -45,11 +45,13 @@ Snapshot verificat la 2026-09-15:
   pe fiecare joc, fara preselectie pe istoric; Re-Bench ruleaza matricea completa
   (52 pe fiecare joc, cu `random` adaugat de runner);
 - `EXCLUDED_FROM_PRODUCTION` = `{random, neighbor_adjacent, repeat_last_draw,
-  rwr_last_draw, haar_multiscale, interval_extrema_k16}`; pe Urna 2 si
+  rwr_last_draw, haar_multiscale}`; pe Urna 2 si
   `EXCLUDED_FROM_SINGLE_PICK` = `{markov_self_state, vlmm_self_k3}` (§4.2);
   vechile filtre de clasa (parity_balance, prime_bias, 649_decade_hot etc.) nu
   mai exista ca metode. Un nume necunoscut sau exclus din `best_methods.json`
   cade determinist pe `frequency` (`_sanitize_production_name`);
+  `interval_extrema_k16` a fost REACTIVATA in productie la cererea explicita a
+  utilizatorului (2026-10-31) — vezi „Interval adaptiv experimental" mai jos;
 - covering designs locale: 55 covere clasice `C_v_pick_t.txt` (pool 6..16,
   plus `C_17..19_5_4` = LR Cod 46-48 pentru Loto 5/40) si 99 lotto designs
   `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100% la
@@ -1313,6 +1315,30 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   Integrare verificata pe Python3.14.7/Windows:2038 teste trecute,17 omise,
   zero esecuri. Benchmark real in procese separate:32/32 pasi evaluati.
 - Detalii: `scripts/analysis/interval_extrema_method.md`.
+
+#### Reactivare în producție — 2026-10-31 (cerere explicită a utilizatorului)
+
+- `interval_extrema_k16` a fost scoasă din `EXCLUDED_FROM_PRODUCTION`
+  (decision.py): `_sanitize_production_name` o acceptă acum, engine-ul o poate
+  rula (apel fără `history_cutoffs` → contractul „un rând = un pas”; la 6/49 o
+  extragere pe zi, deci identic cu bench-ul), iar UI-ul o afișează ca
+  candidată eligibilă (caption „Eligibilă în producție din 2026-10-31", rang
+  numeric când e eligibilă, nu doar 🧪). Rămâne family=`experimental_interval`.
+- Numai Loto 6/49 are folduri pentru ea (per_game). Decizia automată tot nu o
+  alege singură: poarta de completețe (`_complete_windows`, n_eval<n_test la
+  fereastra 100% din cauza warmup-ului de 200) o raportează în
+  `incomplete_methods` cu reason `unevaluated_draws`. Forțarea ei ca scorer se
+  face acum legal prin `best_methods.json` (scorer=interval_extrema_k16 la
+  k16/k20), anterior blocată de excludere.
+- Avertisment păstrat: avantajul predictiv rămâne NEDEMONSTRAT statistic
+  (audit retrospectiv Holm51=0,07935; filtru de interval dependent de axa
+  valorilor prin construcție — testul de echivarianță la reetichetare îl sare
+  explicit). Decizia refăcută din folds.csv curent nu schimbă niciun câștigător
+  per pool (metoda nu câștigă niciun pool automat).
+- Teste: `test_interval_extrema_integration.py` (contract nou: permisă în
+  producție), `test_methods_registry.py::test_interval_extrema_reenabled_in_production_2026_10_31`,
+  `test_no_structural_filters.py` (sari peste filtrele de clasă/echivarianță
+  pentru family experimental_interval, cu motiv).
 
 ### Audit global 2026-10-03
 

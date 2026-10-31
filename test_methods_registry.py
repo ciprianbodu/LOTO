@@ -55,12 +55,23 @@ def test_spatial_filters_stay_in_registry_but_excluded_from_production():
         "repeat_last_draw",
         "rwr_last_draw",
         "haar_multiscale",
-        "interval_extrema_k16",
     ):
         assert name in methods.METHODS
         assert name in EXCLUDED_FROM_PRODUCTION
     assert "random" in EXCLUDED_FROM_PRODUCTION
     assert "frequency" not in EXCLUDED_FROM_PRODUCTION
+
+
+def test_interval_extrema_reenabled_in_production_2026_10_31():
+    """La cererea explicită a utilizatorului, filtrul experimental de interval
+    este din nou eligibil în producție (numai 6/49 are folduri pentru el)."""
+    name = "interval_extrema_k16"
+    assert name in methods.METHODS
+    assert name not in EXCLUDED_FROM_PRODUCTION
+    from loto_enterprise.core import method_selector
+
+    assert method_selector._sanitize_production_name(name, context="test") == name
+    assert name not in method_selector._production_forbidden("loto_6_49")
 
 
 def test_folds_decision_never_picks_excluded_last_draw_filters():

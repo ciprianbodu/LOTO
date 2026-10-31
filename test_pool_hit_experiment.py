@@ -88,7 +88,13 @@ def test_code_parameters_are_the_registered_ones():
     assert phe.ALPHA == REG["alpha"]
     assert list(phe.CANDIDATES) == REG["candidates"]
     assert [[c, k, t] for c, _s, k, t in phe.TEST_CELLS] == REG["cells"]
-    assert phe.production_methods() == REG["methods"]
+    # 2026-10-31: interval_extrema_k16 reactivată în producție la cererea
+    # explicită a utilizatorului — singura diferență față de lista preregistrată.
+    expected_methods = sorted(set(REG["methods"]) | {"interval_extrema_k16"})
+    assert phe.production_methods() == expected_methods
+    assert set(phe.production_methods()) ^ set(REG["methods"]) == {
+        "interval_extrema_k16"
+    }
 
 
 def test_hypergeometric_baselines():

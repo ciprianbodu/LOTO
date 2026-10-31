@@ -33,7 +33,9 @@ _FAMILY_LIBRARY = {
     "structure": "vecinătate numerică (numpy)",
     "learning": "învățare (numpy+scipy)",
     "ensemble": "ansamblu (mix de metode)",
-    "experimental_interval": "interval adaptiv experimental (pool 16 / 4+)",
+    "experimental_interval": (
+        "interval adaptiv experimental (pool 16 / 4+; în producție din 2026-10-31)"
+    ),
 }
 
 
@@ -156,7 +158,8 @@ def _experimental_method_caption(
     )
     return (
         f"🧪 {name} — Interval adaptiv după minime/maxime, experimentală; {stats}. "
-        f"{scope} Exclusă din selecția automată; avantajul predictiv necesită confirmare pe date noi."
+        f"{scope} Eligibilă în producție din 2026-10-31 (cerere explicită); "
+        "avantajul predictiv rămâne nedemonstrat statistic — confirmare pe date noi încă necesară."
     )
 
 
@@ -225,7 +228,6 @@ def _baseline_methods() -> frozenset[str]:
                 "repeat_last_draw",
                 "rwr_last_draw",
                 "haar_multiscale",
-                "interval_extrema_k16",
             }
         )
 
@@ -986,9 +988,13 @@ def _render_bench_leaderboard_slice(
                 f" · necalificată (minimum 3 ferestre; ≥{_cons_pct}% peste random)"
             )
         with ui.row().classes("items-center gap-2 w-full"):
+            # Din 2026-10-31 experimentul de interval e candidată ca oricare alta:
+            # când primește rang, badge-ul e numărul/🏆 ca la restul; 🧪 rămâne
+            # doar pentru rândurile fără rang (diagnostic), iar caption-ul de mai
+            # sus păstrează eticheta „experimentală”.
             _rank_badge = (
                 "🧪"
-                if is_experimental
+                if is_experimental and i is None
                 else "🎲"
                 if is_base
                 else "⛔"

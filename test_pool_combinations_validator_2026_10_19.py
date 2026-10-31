@@ -243,7 +243,9 @@ def test_independent_formula_oracle_matches_every_fixed_bank_formula():
             np.testing.assert_array_equal(generated[row], expected)
             assert bool(audit[name][row]) == flat
             checked += 1
-    assert checked == 208 * 3
+    # 2026-10-31: interval_extrema_k16 e din nou eligibilă în producție, deci
+    # intră în `names` — bancul de formule a crescut de la 208 la 212 spec-uri.
+    assert checked == 212 * 3
 
 
 @pytest.fixture

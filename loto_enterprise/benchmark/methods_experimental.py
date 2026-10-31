@@ -1,4 +1,11 @@
-"""Explicit interval filters for research benchmarks, excluded from production.
+"""Explicit interval filters for research benchmarks.
+
+Din 2026-10-31, la cererea explicită a utilizatorului, ``interval_extrema_k16``
+NU mai este exclusă din producție (a fost scoasă din
+``decision.EXCLUDED_FROM_PRODUCTION``): poate fi aleasă de decizie și poate
+scoate pool-ul, numai pentru Loto 6/49 (singurul joc cu folduri). Rămâne o
+etichetă experimentală (family="experimental_interval") — avantajul ei
+predictiv este nedemonstrat statistic (audit retrospectiv Holm51=0,07935).
 
 ``interval_extrema_k16`` reproduces the frozen conditional-extrema experiment:
 a pool of 16, frequency over 50 prior draws, a 200-draw warmup, and interval
@@ -180,7 +187,8 @@ EXPERIMENTAL_METHODS = make_registry([
         score_interval_extrema_k16,
         "experimental_interval",
         "Filtru experimental de interval, pool 16, țintă 4+, condiționat de "
-        "extremele ultimei zile; benchmark exclusiv, interzis în producție.",
+        "extremele ultimei zile; reactivat în producție la cererea "
+        "utilizatorului (2026-10-31), numai 6/49; avantaj nedemonstrat statistic.",
     ),
 ])
 

@@ -1,4 +1,7 @@
-"""Integration contracts for the benchmark-only interval policy."""
+"""Integration contracts for the experimental interval method.
+
+Din 2026-10-31 metoda este eligibilă și în producție (cerere explicită a
+utilizatorului); rămâne etichetată experimentală în UI."""
 
 from __future__ import annotations
 
@@ -184,14 +187,18 @@ def test_experimental_registration_is_curated_only_for_649():
     )
 
 
-def test_experimental_method_cannot_become_a_production_scorer(monkeypatch):
-    assert METHOD in EXCLUDED_FROM_PRODUCTION
-    assert method_selector._sanitize_production_name(METHOD, context="test") is None
+def test_experimental_method_is_allowed_as_production_scorer_since_2026_10_31(
+    monkeypatch,
+):
+    # Reactivată în producție la cererea explicită a utilizatorului
+    # (2026-10-31): nu mai e în EXCLUDED_FROM_PRODUCTION, deci un best_methods.json
+    # care o numește (inclusiv editat manual) este onorat, nu forțat pe frequency.
+    assert METHOD not in EXCLUDED_FROM_PRODUCTION
+    assert method_selector._sanitize_production_name(METHOD, context="test") == METHOD
     monkeypatch.setattr(method_selector, "_CACHE", {})
-    # Even a stale or hand-edited saved winner must be sanitized at consumption.
     monkeypatch.setattr(method_selector, "get_winner_name", lambda *args: METHOD)
     scorer = method_selector.get_scorer_for_game("loto_6_49", 16)
-    assert scorer is methods.METHODS["frequency"][0]
+    assert scorer is methods.METHODS[METHOD][0]
 
 
 @pytest.mark.parametrize("rate", [None, float("nan"), 0.1234])
@@ -201,7 +208,7 @@ def test_ui_caption_separates_experiment_scope_from_measured_pool(rate):
     caption = ui_bench._experimental_method_caption(METHOD, 16, rate)
     assert "experimentală" in caption
     assert "pool 16 / 4+" in caption
-    assert "Exclusă din selecția automată" in caption
+    assert "Eligibilă în producție din 2026-10-31" in caption
     assert "date noi" in caption
     if rate is None or np.isnan(rate):
         assert "indisponibilă" in caption
@@ -238,7 +245,7 @@ def test_ui_caption_separates_experiment_scope_from_measured_pool(rate):
 
 
 @pytest.mark.parametrize("with_candidate", [False, True])
-def test_ui_shows_experiment_without_a_winner_rank(
+def test_ui_shows_experiment_as_eligible_candidate(
     monkeypatch, tmp_path, with_candidate
 ):
     import pandas as pd
@@ -284,11 +291,14 @@ def test_ui_shows_experiment_without_a_winner_rank(
         )
     assert METHOD in captured.text()
     assert "experimentală" in captured.text()
-    assert "Exclusă din selecția automată" in captured.text()
-    assert METHOD not in captured.ranking()
-    assert f"🎯 {METHOD}" not in captured.text()
+    # Din 2026-10-31 metoda NU mai e baseline exclus: e candidată și primește rang.
+    assert "Eligibilă în producție din 2026-10-31" in captured.text()
+    assert METHOD in captured.ranking()
+    assert f"🎯 {METHOD}" not in captured.text()  # fără decizie salvată, nimeni nu e 🎯
     assert not state_file.exists()
     if with_candidate:
-        assert captured.ranking()[0] == "frequency"
+        # METHOD (0.99) rămâne peste frequency (0.12) în clasament.
+        assert captured.ranking()[0] == METHOD
+        assert captured.ranking()[1] == "frequency"
     else:
-        assert captured.ranking() == []
+        assert captured.ranking() == [METHOD]
