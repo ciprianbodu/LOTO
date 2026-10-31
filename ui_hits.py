@@ -929,12 +929,6 @@ def _render_hits_4plus(
     )
     if _gap:
         ui.label(_gap).classes("text-caption text-grey")
-    if full_ticket:
-        _render_full_ticket_replay(
-            flat, full_ticket["game"], full_ticket.get("guarantee")
-        )
-    if _foreign is None:
-        _render_lr_replay(per, gk, _pn, tick_avg)
     # Rata WF observată la pragul afișat vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
     _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
@@ -1180,96 +1174,206 @@ def _render_hits_4plus(
         for name, _label, _numbers, _marked in details:
             table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
-    _chosen_txt = (
-        "metoda e cea din decizia de azi, aleasă pe ferestre bench care cuprind și "
-        "aceste extrageri"
-        if method_from_bench
-        else "metoda e rezerva frequency, fără decizie bench"
-    )
-    ui.label(
-        f"🗓️ Istoric: extrageri cu ≥4 în pool-ul walk-forward de LA DATA extragerii "
-        f"(scorerul vede numai extragerile de dinainte; {_chosen_txt}). "
-        f"🔥 = pragul afișat (≥{_TT}); "
-        f"Δ pe cel mai recent rând care atinge pragul = „acum X zile”; "
-        f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent. "
-        f"Nucleul de producție de lângă ultima extragere CSV e ALT set — nu compara 🔥 cu el."
-    ).classes("text-caption text-grey mt-2")
-    _pool_n_txt = f"cele {_pn} numere" if _pn else "numerele"
-    ui.label(
-        f"„Pool-ul de atunci” = {_pool_n_txt} alese de metodă la data extragerii, "
-        "numai din extragerile de dinainte, cu setările rezultatului afișat (nu "
-        "pool-ul de azi). Numerele care au ieșit sunt îngroșate."
-    ).classes("text-caption text-grey")
-    if any(not d["pool_numbers"] for d in per.values() if d["pool"] >= 4):
-        ui.label(
-            "Unele extrageri vin dintr-o validare salvată înainte ca pool-ul pasului "
-            "să fie păstrat („—”); se completează la următoarea validare walk-forward."
-        ).classes("text-caption text-grey")
-    _dates_table(
-        "🗓️ POOL",
-        lambda d: d["pool"] >= 4,
-        _pool_badge,
-        "Pool-ul n-a prins ≥4 în istoricul walk-forward.",
-        gap_on=lambda d: d["pool"] >= _TT,
-        gap_label=f"Δ → următorul ≥{_TT} / azi",
-        level=lambda d: d["pool"],
-        details=(
-            ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["pool_numbers"]),
-            (
-                "pool_nums",
-                "Pool-ul de atunci",
-                lambda d: d["pool_numbers"],
-                lambda d: d["drawn"],
-            ),
-        ),
-    )
-    with ui.expansion(
-        "🎟️ Variante WF cu 4+ și 5+ — date și intervale",
-        value=False,
-        on_value_change=_open_prizes,
-    ).classes("w-full") as prize_expansion:
-        prize_panel["element"] = prize_expansion
-        ui.label(
-            "Fiecare rând este o extragere cu cel puțin o variantă la pragul indicat. "
-            "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții. "
-            "„Varianta” = cea jucată atunci cu cele mai multe numere prinse; "
-            "numerele ieșite sunt îngroșate."
-        ).classes("text-caption text-grey")
-        if prize_lookup is not None:
+    # Tabelele detaliate pe file (tab-uri): sumarul de mai sus rămâne nepliat.
+    _sections = [("pool", "🗓️ Pool"), ("var", "🎟️ Variante 4+ și 5+")]
+    if full_ticket:
+        _sections.append(("bilet", "🎟️ Bilet complet"))
+    if _foreign is None:
+        _sections.append(("lr", "📋 Schemă LR"))
+    with ui.tabs().classes("w-full") as _hit_tabs:
+        for _sn, _sl in _sections:
+            ui.tab(_sn, _sl)
+    with ui.tab_panels(tabs=_hit_tabs, value="pool").classes("w-full"):
+        with ui.tab_panel("pool"):
+            _chosen_txt = (
+                "metoda e cea din decizia de azi, aleasă pe ferestre bench care cuprind și "
+                "aceste extrageri"
+                if method_from_bench
+                else "metoda e rezerva frequency, fără decizie bench"
+            )
             ui.label(
-                "Premiile oficiale se încarcă pentru pagina afișată, apoi se păstrează "
-                "local. Apăsați valoarea pentru sursa Loteriei Române. Paranteza "
-                "se referă la varianta afișată, nu la toate numerele din pool."
+                f"🗓️ Istoric: extrageri cu ≥4 în pool-ul walk-forward de LA DATA extragerii "
+                f"(scorerul vede numai extragerile de dinainte; {_chosen_txt}). "
+                f"🔥 = pragul afișat (≥{_TT}); "
+                f"Δ pe cel mai recent rând care atinge pragul = „acum X zile”; "
+                f"pe celelalte rânduri care ating ținta = zile până la hit-ul următor mai recent. "
+                f"Nucleul de producție de lângă ultima extragere CSV e ALT set — nu compara 🔥 cu el."
+            ).classes("text-caption text-grey mt-2")
+            _pool_n_txt = f"cele {_pn} numere" if _pn else "numerele"
+            ui.label(
+                f"„Pool-ul de atunci” = {_pool_n_txt} alese de metodă la data extragerii, "
+                "numai din extragerile de dinainte, cu setările rezultatului afișat (nu "
+                "pool-ul de azi). Numerele care au ieșit sunt îngroșate."
             ).classes("text-caption text-grey")
-            ui.button(
-                "Reîncearcă premiile indisponibile", on_click=_retry_prizes
-            ).props("flat dense no-caps").classes("text-caption")
-        for threshold in (4, 5):
+            if any(not d["pool_numbers"] for d in per.values() if d["pool"] >= 4):
+                ui.label(
+                    "Unele extrageri vin dintr-o validare salvată înainte ca pool-ul pasului "
+                    "să fie păstrat („—”); se completează la următoarea validare walk-forward."
+                ).classes("text-caption text-grey")
             _dates_table(
-                f"🎟️ VARIANTĂ {threshold}+",
-                lambda d, t=threshold: d["best_ticket"] >= t,
-                lambda d: f"{int(d['best_ticket'])} numere",
-                f"Nicio variantă nu a prins ≥{threshold} în istoricul walk-forward.",
-                gap_label=f"Δ → următorul ≥{threshold} pe variantă / azi",
-                level=lambda d: d["best_ticket"],
-                prizes=True,
+                "🗓️ POOL",
+                lambda d: d["pool"] >= 4,
+                _pool_badge,
+                "Pool-ul n-a prins ≥4 în istoricul walk-forward.",
+                gap_on=lambda d: d["pool"] >= _TT,
+                gap_label=f"Δ → următorul ≥{_TT} / azi",
+                level=lambda d: d["pool"],
                 details=(
+                    ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["pool_numbers"]),
                     (
-                        "ticket",
-                        "Varianta",
-                        lambda d: d["best_variant"],
+                        "pool_nums",
+                        "Pool-ul de atunci",
+                        lambda d: d["pool_numbers"],
                         lambda d: d["drawn"],
-                    ),
-                    (
-                        "drawn",
-                        "Extragerea",
-                        lambda d: d["drawn"],
-                        lambda d: d["best_variant"],
                     ),
                 ),
             )
-        if prize_lookup is not None and prize_tables:
-            ui.timer(0.5, _refresh_prizes)
+        with ui.tab_panel("var"):
+            with ui.expansion(
+                "🎟️ Variante WF cu 4+ și 5+ — date și intervale",
+                value=False,
+                on_value_change=_open_prizes,
+            ).classes("w-full") as prize_expansion:
+                prize_panel["element"] = prize_expansion
+                ui.label(
+                    "Fiecare rând este o extragere cu cel puțin o variantă la pragul indicat. "
+                    "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții. "
+                    "„Varianta” = cea jucată atunci cu cele mai multe numere prinse; "
+                    "numerele ieșite sunt îngroșate."
+                ).classes("text-caption text-grey")
+                if prize_lookup is not None:
+                    ui.label(
+                        "Premiile oficiale se încarcă pentru pagina afișată, apoi se păstrează "
+                        "local. Apăsați valoarea pentru sursa Loteriei Române. Paranteza "
+                        "se referă la varianta afișată, nu la toate numerele din pool."
+                    ).classes("text-caption text-grey")
+                    ui.button(
+                        "Reîncearcă premiile indisponibile", on_click=_retry_prizes
+                    ).props("flat dense no-caps").classes("text-caption")
+                for threshold in (4, 5):
+                    _dates_table(
+                        f"🎟️ VARIANTĂ {threshold}+",
+                        lambda d, t=threshold: d["best_ticket"] >= t,
+                        lambda d: f"{int(d['best_ticket'])} numere",
+                        f"Nicio variantă nu a prins ≥{threshold} în istoricul walk-forward.",
+                        gap_label=f"Δ → următorul ≥{threshold} pe variantă / azi",
+                        level=lambda d: d["best_ticket"],
+                        prizes=True,
+                        details=(
+                            (
+                                "ticket",
+                                "Varianta",
+                                lambda d: d["best_variant"],
+                                lambda d: d["drawn"],
+                            ),
+                            (
+                                "drawn",
+                                "Extragerea",
+                                lambda d: d["drawn"],
+                                lambda d: d["best_variant"],
+                            ),
+                        ),
+                    )
+                if prize_lookup is not None and prize_tables:
+                    ui.timer(0.5, _refresh_prizes)
+
+
+        if full_ticket:
+            with ui.tab_panel("bilet"):
+                _render_full_ticket_replay(
+                    flat, full_ticket["game"], full_ticket.get("guarantee")
+                )
+        if _foreign is None:
+            with ui.tab_panel("lr"):
+                _render_lr_replay(per, gk, _pn, tick_avg)
+
+
+def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
+    """Clasamentul bench + „📜 Istoric hits” pentru UN SINGUR joc (o filă în meniu)."""
+    data = _primary_pool_data(raw_data)
+    ui.separator().classes("my-3")
+    ui.label(f"🎯 {_game_title(game, data)}").classes("text-bold text-lg")
+
+    # Reper: ultima extragere reală din CSV (deasupra clasamentului).
+    _render_last_csv_draw(
+        fname,
+        pool=data.get("hard_core"),
+        joker_pick=data.get("hard_core_joker"),
+    )
+
+    # Pool-ul din rezultatul afișat rămâne reperul și dacă utilizatorul
+    # a schimbat între timp setarea pentru următoarea generare.
+    _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    _spec = _game_spec_for(game, data)
+    if _spec.is_romanian:
+        _render_bench_leaderboard(game, pool_size=_pn or None)
+    else:
+        _render_bench_leaderboard(game, pool_size=_pn or None, spec=_spec)
+    _penalty_note = _bench_transform_note(data)
+    if _penalty_note:
+        ui.label(_penalty_note).classes("text-caption text-warning")
+
+    # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
+    # Pool-ul EFECTIV din REZULTAT, nu din setarea care se poate schimba ulterior.
+    flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
+    if (
+        STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+    ).get("budget_skipped"):
+        ui.label(
+            "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea "
+            "acestui joc. Mărește „⏱ Buget walk-forward”; la generarea "
+            "următoare pașii deja validați se iau din cache."
+        ).classes("text-warning text-caption text-bold")
+    _skip = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+    if note := _large_pool_wf_note(_skip):
+        ui.label(note).classes("text-warning text-caption text-bold")
+    if _skip.get("scorer_fallback"):
+        ui.label(
+            f"⚠️ Walk-forward sărit: {_scorer_fallback_reason(_skip)}. "
+            "Generează din nou."
+        ).classes("text-warning text-caption text-bold")
+    if (
+        STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+    ).get("decision_moved"):
+        ui.label(
+            "⚠️ Walk-forward sărit: decizia de bench s-a schimbat după generare "
+            "(Re-Bench terminat sau țintă 3+/4+ schimbată). Validarea ar fi "
+            "măsurat altă metodă decât cea care a produs pool-ul afișat; "
+            "generează din nou."
+        ).classes("text-warning text-caption text-bold")
+    if flat:
+        # Deschis implicit (apare după ce termină walk-forward), dar pliabil
+        # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
+        with ui.expansion(
+            "📜 Istoric hits 4+ (walk-forward)",
+            value=True,
+        ).classes("w-full"):
+            _render_hits_4plus(
+                flat,
+                game,
+                meta=STATE.get("retro_meta", {}).get(
+                    f"{res_prefix}{fname}_{game}"
+                ),
+                pool_n=_pn,
+                # `_wf_generation_options(data)` (folosit la pornirea WF de
+                # mai sus) citește exact acest audit — istoricul de mai jos
+                # a rulat cu ACEEAȘI restrângere ca pool-ul afișat, nu una
+                # nerestrânsă. Fără linia asta, întrebarea „e cu pragul
+                # bifat sau fără?" nu avea răspuns lângă tabel, doar sus,
+                # lângă clasamentul bench.
+                restrict_base_text=_restrict_base_text(data.get("audit")),
+                consecutive_limit_text=_consecutive_limit_text(
+                    data.get("audit"), details=False
+                ),
+                method_from_bench=_method_from_bench(data),
+                # Același joc și aceeași garanție ca „🎟️ Bilet complet”.
+                full_ticket={
+                    "game": _game_label_for(str(game))
+                    if _spec.is_romanian
+                    else _spec.game_id,
+                    "guarantee": data.get("guarantee"),
+                },
+            )
 
 
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
@@ -1295,88 +1399,15 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             flat_games.sort(
                 key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99)
             )
-            for fname, game, raw_data in flat_games:
-                data = _primary_pool_data(raw_data)
-                ui.separator().classes("my-3")
-                ui.label(f"🎯 {_game_title(game, data)}").classes("text-bold text-lg")
-
-                # Reper: ultima extragere reală din CSV (deasupra clasamentului).
-                _render_last_csv_draw(
-                    fname,
-                    pool=data.get("hard_core"),
-                    joker_pick=data.get("hard_core_joker"),
-                )
-
-                # Pool-ul din rezultatul afișat rămâne reperul și dacă utilizatorul
-                # a schimbat între timp setarea pentru următoarea generare.
-                _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
-                _spec = _game_spec_for(game, data)
-                if _spec.is_romanian:
-                    _render_bench_leaderboard(game, pool_size=_pn or None)
-                else:
-                    _render_bench_leaderboard(game, pool_size=_pn or None, spec=_spec)
-                _penalty_note = _bench_transform_note(data)
-                if _penalty_note:
-                    ui.label(_penalty_note).classes("text-caption text-warning")
-
-                # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
-                # Pool-ul EFECTIV din REZULTAT, nu din setarea care se poate schimba ulterior.
-                flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-                if (
-                    STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-                ).get("budget_skipped"):
-                    ui.label(
-                        "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea "
-                        "acestui joc. Mărește „⏱ Buget walk-forward”; la generarea "
-                        "următoare pașii deja validați se iau din cache."
-                    ).classes("text-warning text-caption text-bold")
-                _skip = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-                if note := _large_pool_wf_note(_skip):
-                    ui.label(note).classes("text-warning text-caption text-bold")
-                if _skip.get("scorer_fallback"):
-                    ui.label(
-                        f"⚠️ Walk-forward sărit: {_scorer_fallback_reason(_skip)}. "
-                        "Generează din nou."
-                    ).classes("text-warning text-caption text-bold")
-                if (
-                    STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-                ).get("decision_moved"):
-                    ui.label(
-                        "⚠️ Walk-forward sărit: decizia de bench s-a schimbat după generare "
-                        "(Re-Bench terminat sau țintă 3+/4+ schimbată). Validarea ar fi "
-                        "măsurat altă metodă decât cea care a produs pool-ul afișat; "
-                        "generează din nou."
-                    ).classes("text-warning text-caption text-bold")
-                if flat:
-                    # Deschis implicit (apare după ce termină walk-forward), dar pliabil
-                    # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
-                    with ui.expansion(
-                        "📜 Istoric hits 4+ (walk-forward)",
-                        value=True,
-                    ).classes("w-full"):
-                        _render_hits_4plus(
-                            flat,
-                            game,
-                            meta=STATE.get("retro_meta", {}).get(
-                                f"{res_prefix}{fname}_{game}"
-                            ),
-                            pool_n=_pn,
-                            # `_wf_generation_options(data)` (folosit la pornirea WF de
-                            # mai sus) citește exact acest audit — istoricul de mai jos
-                            # a rulat cu ACEEAȘI restrângere ca pool-ul afișat, nu una
-                            # nerestrânsă. Fără linia asta, întrebarea „e cu pragul
-                            # bifat sau fără?" nu avea răspuns lângă tabel, doar sus,
-                            # lângă clasamentul bench.
-                            restrict_base_text=_restrict_base_text(data.get("audit")),
-                            consecutive_limit_text=_consecutive_limit_text(
-                                data.get("audit"), details=False
-                            ),
-                            method_from_bench=_method_from_bench(data),
-                            # Același joc și aceeași garanție ca „🎟️ Bilet complet”.
-                            full_ticket={
-                                "game": _game_label_for(str(game))
-                                if _spec.is_romanian
-                                else _spec.game_id,
-                                "guarantee": data.get("guarantee"),
-                            },
-                        )
+            # Jocurile pe file (tab-uri): clasamentul și istoricul nu mai sunt amestecate.
+            if len(flat_games) > 1:
+                with ui.tabs().classes("w-full") as _game_tabs:
+                    for _i, (_fn, _g, _rd) in enumerate(flat_games):
+                        ui.tab(f"g{_i}", f"🎯 {_game_title(_g, _primary_pool_data(_rd))}")
+                with ui.tab_panels(tabs=_game_tabs, value="g0").classes("w-full"):
+                    for _i, (_fn, _g, _rd) in enumerate(flat_games):
+                        with ui.tab_panel(f"g{_i}"):
+                            _render_game_analysis(_fn, _g, _rd, res_prefix)
+            else:
+                for fname, game, raw_data in flat_games:
+                    _render_game_analysis(fname, game, raw_data, res_prefix)

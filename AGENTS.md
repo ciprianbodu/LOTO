@@ -105,9 +105,19 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   baseline-ul matematic al pool-ului si limita calculului pe bilete.
 - Daca bench-ul nu a evaluat marimea ceruta, metoda provine de la cel mai
   apropiat pool decis, cu nota explicita. Cifrele acelui bench nu sunt
-  prezentate ca rezultate ale pool-ului mai mare. Workerul separa prin `lp1`
-  noile marimi (peste 16 / 19 / 16); semnatura wheel-ului WF adauga `lp1`
+  prezentate ca rezultate ale pool-ului mai mare. Workerul separa prin `lp2`
+  noile marimi (peste 16 / 19 / 16); semnatura wheel-ului WF adauga `lp2`
   numai peste 19, unde se schimba algoritmul. Cheile vechi valide se pastreaza.
+- Rafinarea coverului cu plafon peste 19 (2026-10-31): dupa constructia greedy
+  din `covering.large_pool`, cand coverul e partial (oprit de plafon, plafon
+  <= 4096, garantie < bilet), `_refine_capped_cover` schimba cate un bilet pentru
+  mai multe grupe de g si g+1 acoperite la acelasi numar de bilete (lexicografic,
+  deci acoperirea raportata nu scade), pastrand biletele distincte si pozitiile
+  jucate; determinist, fara scoruri/date, cache-uit per proces. `lp1` -> `lp2`
+  peste 19 in WF si worker. Castig masurat (exact, extragere uniforma): 6/49
+  pool 20 plafon 152 -> 4+ 9,2742% -> 9,5691% (+3,2%), 5+ +0,8%; 5/40 pool 20
+  plafon 404 -> 4+ +2,6%; Joker pool 20 plafon 404 -> 4+ +3,3%. Detalii:
+  `scripts/analysis/large_pool_refine_2026-10-31.md`.
 - Limita de consecutive se relaxeaza cand nu incape pool-ul cerut, ca
   inainte, cu limita efectiva in audit; alegerea intregii urne o impune.
 - Detalii si verificari: `scripts/analysis/full_pool_2026-10-30.md`.
@@ -2159,6 +2169,12 @@ limita de validitate din §5).
   `full_ticket_spread_val` din `.ui_state.json` nu se mai citeste si dispare
   la urmatoarea salvare. Dialogul afiseaza, pentru pragurile cu premiu, sansa
   EXACTA ca cel putin o varianta sa castige (`ticket_hit_probabilities`).
+- Organizare pe file (tab-uri), 2026-10-31, la cererea utilizatorului: in
+  „📊 Analiză & Clasament” fiecare joc are propria fila (`ui_hits._render_game_analysis`
+  intr-un `ui.tab_panel`; un singur joc ramane fara bara de file), iar in „📜 Istoric hits"
+  sumarul +4/+5 ramane sus, nepliat, iar tabelele detaliate sunt pe cate o fila:
+  „🗓️ Pool", „🎟️ Variante 4+ și 5+" (expansion-ul cu premii, nemodificat),
+  „🎟️ Bilet complet" (cand e cerut) si „📋 Schemă LR" (numai Romania).
 - „📜 Istoric hits”, tabelul „🗓️ POOL” (extragerile cu cel putin 3 in pool):
   langa data si hiturile fiecarei extrageri, „Extragerea” si „Pool-ul de
   atunci”, din `ticket_context` al pasului (§8): pool-ul jucat la acel pas,
