@@ -381,7 +381,7 @@ def _wheel_sig(
     if int(pool_size) > 19:
         # New large-pool route is independent of La Jolla/hitcover overrides.
         # Separate it from caches created by direct API calls before UI support.
-        return f"constructive_cover|{geometry}|rt1|lp1"
+        return f"constructive_cover|{geometry}|rt1|lp2"
     try:
         from wheeling_methods import (
             budget_buys_complete_design,

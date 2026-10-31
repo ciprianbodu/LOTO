@@ -107,9 +107,9 @@ def test_wf_pool_is_capped_at_its_actual_universe():
 
 
 def test_large_wheel_key_has_its_own_namespace_only_above_19():
-    assert wf._wheel_sig(49, "6/49", 4, None, 20) == "constructive_cover|g4|c4|cap20|rt1|lp1"
-    assert "|lp1" not in wf._wheel_sig(19, "5/40", 4, None, 20)
-    assert "|lp1" not in wf._wheel_sig(16, "6/49", 4, None, 20)
+    assert wf._wheel_sig(49, "6/49", 4, None, 20) == "constructive_cover|g4|c4|cap20|rt1|lp2"
+    assert "|lp2" not in wf._wheel_sig(19, "5/40", 4, None, 20)
+    assert "|lp2" not in wf._wheel_sig(16, "6/49", 4, None, 20)
 
 
 @pytest.mark.parametrize("game,pool", [

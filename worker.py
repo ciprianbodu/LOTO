@@ -425,7 +425,7 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
         if large_pool:
             # Old workers silently clamped these requested pools to 16/19.
             # Keep every existing small-pool key while separating new results.
-            cache_key += ":lp1"
+            cache_key += ":lp2"
     return cache_key
 
 

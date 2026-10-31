@@ -237,7 +237,7 @@ def test_large_pool_result_cache_has_its_own_namespace(tmp_path, monkeypatch):
     }]}]}
     key = worker._pipeline_cache_key("fixed-history", config)
     old = "v22:fixed-history:wheel=auto:e80ea7ae3d3a93d1b94aecc63156d7cdc03cffecf27c1901b98e98884e81c6de"
-    assert key == old + ":lp1"
+    assert key == old + ":lp2"
 
 
 @pytest.mark.parametrize("game,old_max,new_size", [
@@ -251,6 +251,6 @@ def test_worker_cache_namespace_starts_above_each_previous_game_limit(
     monkeypatch.setattr(worker, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(wf, "_wheel_sig", lambda *args: "fixed-design-signature")
     config = {"datasets": [{"tasks": [{"game_label": game, "pool_size": old_max}]}]}
-    assert not worker._pipeline_cache_key("same-history", config).endswith(":lp1")
+    assert not worker._pipeline_cache_key("same-history", config).endswith(":lp2")
     config["datasets"][0]["tasks"][0]["pool_size"] = new_size
-    assert worker._pipeline_cache_key("same-history", config).endswith(":lp1")
+    assert worker._pipeline_cache_key("same-history", config).endswith(":lp2")

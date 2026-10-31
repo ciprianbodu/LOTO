@@ -83,6 +83,16 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Rafinarea locala a coverului cu plafon la pool > 19 — 2026-10-31
+
+- Un cover large-pool oprit de plafon (`len(tickets) == cap`, `guarantee < pick`,
+  `cap <= 4096`, design clasic fara conditie peste garantie) trece prin
+  `covering.large_pool._refine_capped_cover`: schimbari de cate un bilet care cresc
+  lexicografic (grupe de g noi acoperite, grupe de g+1 noi acoperite), pastrand
+  numarul de bilete, distinctia si pozitiile jucate. Determinista (RNG local, seed
+  din geometrie), buget de evaluari; fara scoruri/date. Designul lotto „g daca c”
+  peste 19 nu se rafineaza. Cheile WF/worker peste 19 trec la `lp2`.
+
 ### Pool pana la universul jocului — 2026-10-30
 
 - In „2. Setari algoritm”, cele trei jocuri romanesti accepta pool pana la
