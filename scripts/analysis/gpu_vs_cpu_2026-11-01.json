@@ -1,0 +1,29 @@
+{
+ "gpu_available": true,
+ "benchmarks": {
+  "A_small_ops_cpu_us": 46.851999999489635,
+  "B_mi_window_cpu_s": 0.08248339999408927,
+  "C_hit_counts_v16_cpu_ms": 1.0443000006489456,
+  "C_hit_counts_v20_cpu_ms": 18.688899996050168,
+  "E_big_matmul_cpu_ms": 363.9614999992773,
+  "A_small_ops_gpu_resident_us": 218.68659999745432,
+  "A_small_ops_gpu_transfer_us": 281.21529999771155,
+  "B_mi_window_gpu_s": 0.1533497000054922,
+  "C_hit_counts_v16_gpu_ms": 32.04808000009507,
+  "C_hit_counts_v20_gpu_ms": 2.843800000846386,
+  "E_big_matmul_gpu_ms": 403.8327666639816,
+  "D_enumerate_gpu_s": 6.836601700008032,
+  "D_enumerate_draws": 13983816,
+  "D_enumerate_hit_hist": [
+   0,
+   0,
+   765735,
+   11271171,
+   1907582,
+   39176,
+   152
+  ],
+  "D_enumerate_cpu_s": 20.03193349999492
+ },
+ "gpu_name": "?"
+}
