@@ -1,5 +1,11 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Ecran 2 4+/5+, 01.11.2026:** [29 de ansambluri dinamice + semnale cross-game](hit5plus_screen2_2026-11-01.md).
+5 familii (FTL la 5+, cross-game, voturi, stacking, Kalman), 12 celule, nul pe
+100 de istorii, Holm + replicare externă. Nimic promovat: rata pool-ului la
+4+/5+ rămâne hipergeometrică. Reproducere:
+`HIT5_NULL=100 HIT5_WORKERS=16 python scripts/analysis/hit5plus_screen2_2026-11-01.py`.
+
 **Ecran 4+/5+, 01.11.2026:** [42 de metode noi orientate pe hituri 4+ și 5+](hit5plus_screen_2026-11-01.md).
 6 familii netestate (triple/quadruple, NMF, cluster k-means, pair-lift cu
 dezintegrare), 12 celule, nul pe 100 de istorii, Holm + replicare externă.

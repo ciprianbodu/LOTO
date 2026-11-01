@@ -1,0 +1,1965 @@
+{
+ "protocol": "Ecran 2 de metode pentru hituri 4+/5+, 2026-11-01: ansambluri dinamice si semnale intre jocuri. Protocol fixat inainte de rulare.\n\nContinuare dupa hit5plus_screen_2026-11-01.py (42 de scoreri statici, nimic\npromovat). Aici se testeaza ce a ramas: META-scoreri peste o banca de scoreri\nde baza si semnale INTRE jocurile romanesti, masurati la pragurile 4+ si 5+.\n\nDate, celule, nul, selectie, confirmare: identic cu hit5plus_screen_2026-11-01.py\n(Romania 6/49, 5/40, Joker Urna 1; pool (11,16) x tinta (4+,5+); 200 zile\nwarmup; 70% dezvoltare / 30% confirmare; nul pe N_NULL istorii sintetice;\nlider = decizia din folds.csv la tinta 4; McNemar + binomial + Holm +\nreplicare externa; promovare doar cu Holm < 0.05 pe ambele si p extern < 0.05).\n\nCandidati noi (banca de baza: freq50/freq200/freqall, ewma 0.05/0.2, markov\nlag1, co-ocurrenta, pair-lift dezintegrat h=30, triple-lift L=500 \u2014 toti\nS[d] vad numai zilele < d):\n  E1 FTL la 5+ \u2014 \u201eurmareste liderul\" la evenimentul 5+ (B2 din 09.10 l-a\n     rulat la 4+): alegem zilnic scorerul de baza cu cele mai multe evenimente\n     5+ in ultimele L zile (discount exponential), K in (11,16), L in\n     (100,200), discount in (1.0, 0.99); si varianta anti-FTL (cel mai slab).\n  E3 voturi \u2014 media rangurilor peste toata banca; numarul de scoreri de baza\n     care pun n in top-K (K = 11, 16).\n  E4 stacking \u2014 regresie logistica online (ps.logistic_online) pe rangurile\n     primelor 6 scoreri de baza, lambda 1 / 100.\n  E5 Kalman \u2014 nivel local per numar (Q in 1e-4/1e-3, R = 0.1), si anti.\n  E2 cross-game \u2014 pentru fiecare joc romanesc, suma frecventelor pe ultimele\n     W zile (W = 50, 200) ale CELORLALTE doua jocuri romanesti, aliniate pe\n     indexul de zi, n -> n; si anti. B1 din 09.10 a testat cross-game la 4+;\n     aici e la 4+ si 5+. In nul, cele 3 jocuri sintetice se genereaza din\n     acelasi stream de seed, deci si E2 are nulul lui. E2 nu are replicare\n     externa (nu exista istorice paralele pentru straine).\n\nCheck-uri: leak si echivarian\u021ba se verifica pe toate familiile; pentru E2\nse permuta aceeasi permutare pe TOATE cele 3 jocuri (cross copiaza n -> n din\nalt joc, deci echivarian\u021ba tine doar cu permutare comuna) si leak-ul se\nverifica modificand aceeasi zi in toate jocurile.\n",
+ "data_sha256": {
+  "_ISTORIC\\externe\\austria_lotto_6aus45.csv": "bc59eb314a96319aaff6a95a3c76472706c26a993724454ecce7fa308d407a51",
+  "_ISTORIC\\externe\\belgia_lotto_6din45.csv": "4dcab56299c1deff0f5b9920d2587f9ed27d4c366f92bf0c54d362f51eaead83",
+  "_ISTORIC\\externe\\bulgaria_toto2_6din49.csv": "87d7e62ea7a7231351df0ca2caa0041a3ebe26ef7ff463b02c80acbcdc42242a",
+  "_ISTORIC\\externe\\cehia_sportka_6din49.csv": "5df3f6c9019ddf5f724dedfd98fc32bf6ec0649afbc4bad29892d1f151d9c932",
+  "_ISTORIC\\externe\\euromillions_5din50_stele.csv": "20514062b3d7a682aff30bb3ff2d17d0f9cc406b6a02860d4a8d8b5a4c4ed7cd",
+  "_ISTORIC\\externe\\germania_lotto_6aus49.csv": "ed6e14ee56ce6bb04597abadcd3a90ccaaee5900d0f4f06ebca746e879684d0f",
+  "_ISTORIC\\externe\\polonia_lotto_6din49.csv": "64fc322e1f43526656b270d84a714b7cc0c56b57e06a7756bb46f0f6ed77abeb",
+  "_ISTORIC\\externe\\slovacia_loto_6din49.csv": "d798a81e54c5509628b8e8fdd8fb95fc931bc1e140f42a050af02ec32a9e2233",
+  "_ISTORIC\\externe\\spania_la_primitiva_6din49.csv": "48a3f41f692e802e14dcbd0ec3b0f483603648682516d736a500aa22b0fc2325",
+  "_ISTORIC\\externe\\ungaria_hatoslotto_6din45.csv": "197add40deeee5424498c860725a836cb4c6e0cad1a7d36925f007e578a0fea7",
+  "_ISTORIC\\joker.csv": "ea38f5f6fa5e2e570024bb1eb3b3df994df9740069281b06e4aa88121ef9f6f4",
+  "_ISTORIC\\loto_5_40.csv": "5e4b89aa27c25b61f40eaaa139621cb7d63352f1e253da210cea7144e67db583",
+  "_ISTORIC\\loto_6_49.csv": "1ecc189b5af2ff6982c4f26abe3f8e3de9cc303147bb56f3a5dfe1b0ebd5a518",
+  "bench_results\\folds.csv": "ac0d85f9c973031551cd21b01053311383c1768d18722b7508217c8700b2bad9"
+ },
+ "n_null": 100,
+ "games": {
+  "ro_649": {
+   "rows": 2597,
+   "days": 2528,
+   "scorers": 29,
+   "tests": 116,
+   "gated": 0,
+   "families": {
+    "E1_ftl5": 16,
+    "E2_cross": 4,
+    "E3_vote": 3,
+    "E4_stack": 2,
+    "E5_kalman": 4
+   },
+   "search": {
+    "11_4": {
+     "max_dev_z_event": 1.3413340285245599,
+     "p_search_event": 0.6435643564356436,
+     "max_dev_z_hits": 2.703843449972042,
+     "p_search_hits": 0.0594059405940594
+    },
+    "11_5": {
+     "max_dev_z_event": 1.2683232605936254,
+     "p_search_event": 0.6237623762376238,
+     "max_dev_z_hits": 2.703843449972042,
+     "p_search_hits": 0.0594059405940594
+    },
+    "16_4": {
+     "max_dev_z_event": 0.6833930342378781,
+     "p_search_event": 0.900990099009901,
+     "max_dev_z_hits": 1.7118278328125582,
+     "p_search_hits": 0.594059405940594
+    },
+    "16_5": {
+     "max_dev_z_event": 1.865561754135319,
+     "p_search_event": 0.39603960396039606,
+     "max_dev_z_hits": 1.7118278328125582,
+     "p_search_hits": 0.594059405940594
+    }
+   },
+   "leaders": {
+    "11": "markov_self_state",
+    "16": "markov_lag2"
+   },
+   "leader_fallback_days": {
+    "markov_lag2": 0,
+    "markov_self_state": 0
+   },
+   "leader_rates": {
+    "11_4": {
+     "dev": 0.018629807692307692,
+     "conf": 0.027285129604365622,
+     "p0": 0.017878381694953652
+    },
+    "11_5": {
+     "dev": 0.001201923076923077,
+     "conf": 0.004092769440654843,
+     "p0": 0.0012884894938548963
+    },
+    "16_4": {
+     "dev": 0.0889423076923077,
+     "conf": 0.0941336971350614,
+     "p0": 0.07960001762036914
+    },
+    "16_5": {
+     "dev": 0.013822115384615384,
+     "conf": 0.010914051841746248,
+     "p0": 0.010880577948108013
+    }
+   }
+  },
+  "ro_540": {
+   "rows": 1748,
+   "days": 1729,
+   "scorers": 29,
+   "tests": 116,
+   "gated": 0,
+   "families": {
+    "E1_ftl5": 16,
+    "E2_cross": 4,
+    "E3_vote": 3,
+    "E4_stack": 2,
+    "E5_kalman": 4
+   },
+   "search": {
+    "11_4": {
+     "max_dev_z_event": 1.8725828083125038,
+     "p_search_event": 0.43564356435643564,
+     "max_dev_z_hits": 2.5295699283605018,
+     "p_search_hits": 0.16831683168316833
+    },
+    "11_5": {
+     "max_dev_z_event": 1.5984864599369715,
+     "p_search_event": 0.5148514851485149,
+     "max_dev_z_hits": 2.5295699283605018,
+     "p_search_hits": 0.16831683168316833
+    },
+    "16_4": {
+     "max_dev_z_event": 1.2929853160055609,
+     "p_search_event": 0.7227722772277227,
+     "max_dev_z_hits": 2.1009244498724446,
+     "p_search_hits": 0.297029702970297
+    },
+    "16_5": {
+     "max_dev_z_event": 1.1843917351128113,
+     "p_search_event": 0.7029702970297029,
+     "max_dev_z_hits": 2.1009244498724446,
+     "p_search_hits": 0.297029702970297
+    }
+   },
+   "leaders": {
+    "11": "hot_consistency",
+    "16": "neighbor_adjacent"
+   },
+   "leader_fallback_days": {
+    "hot_consistency": 0,
+    "neighbor_adjacent": 0
+   },
+   "leader_rates": {
+    "11_4": {
+     "dev": 0.05327102803738318,
+     "conf": 0.043933054393305436,
+     "p0": 0.03851624904256483
+    },
+    "11_5": {
+     "dev": 0.004672897196261682,
+     "conf": 0.0020920502092050207,
+     "p0": 0.003610898347740453
+    },
+    "16_4": {
+     "dev": 0.18691588785046728,
+     "conf": 0.19246861924686193,
+     "p0": 0.1602655286865813
+    },
+    "16_5": {
+     "dev": 0.02336448598130841,
+     "conf": 0.029288702928870293,
+     "p0": 0.02939781887150308
+    }
+   }
+  },
+  "ro_joker1": {
+   "rows": 2200,
+   "days": 2137,
+   "scorers": 29,
+   "tests": 116,
+   "gated": 0,
+   "families": {
+    "E1_ftl5": 16,
+    "E2_cross": 4,
+    "E3_vote": 3,
+    "E4_stack": 2,
+    "E5_kalman": 4
+   },
+   "search": {
+    "11_4": {
+     "max_dev_z_event": 3.2159715029334177,
+     "p_search_event": 0.06930693069306931,
+     "max_dev_z_hits": 1.6798114164989477,
+     "p_search_hits": 0.5247524752475248
+    },
+    "11_5": {
+     "max_dev_z_event": 0.6521772397722542,
+     "p_search_event": 0.8415841584158416,
+     "max_dev_z_hits": 1.6798114164989477,
+     "p_search_hits": 0.5247524752475248
+    },
+    "16_4": {
+     "max_dev_z_event": 2.3908369967762,
+     "p_search_event": 0.13861386138613863,
+     "max_dev_z_hits": 2.5611871379133047,
+     "p_search_hits": 0.10891089108910891
+    },
+    "16_5": {
+     "max_dev_z_event": 1.804497658842946,
+     "p_search_event": 0.26732673267326734,
+     "max_dev_z_hits": 2.5611871379133047,
+     "p_search_hits": 0.10891089108910891
+    }
+   },
+   "leaders": {
+    "11": "rwr_last_draw",
+    "16": "frequency"
+   },
+   "leader_fallback_days": {
+    "frequency": 0,
+    "rwr_last_draw": 0
+   },
+   "leader_rates": {
+    "11_4": {
+     "dev": 0.012203876525484566,
+     "conf": 0.023064250411861616,
+     "p0": 0.009561623855441213
+    },
+    "11_5": {
+     "dev": 0.0,
+     "conf": 0.0,
+     "p0": 0.0003781433163168841
+    },
+    "16_4": {
+     "dev": 0.05599425699928212,
+     "conf": 0.07084019769357495,
+     "p0": 0.04677518233956124
+    },
+    "16_5": {
+     "dev": 0.002871500358937545,
+     "conf": 0.0032948929159802307,
+     "p0": 0.0035751731724505405
+    }
+   }
+  }
+ },
+ "frozen": [
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 4,
+   "name": "cross_W50",
+   "family": "E2_cross",
+   "by": "dev_z_event",
+   "dev_z_event": 1.3413340285245599,
+   "dev_z_hits": 0.5244256423626018,
+   "dev_rate": 0.022235576923076924,
+   "dev_p0": 0.017878381694953652,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.018629807692307692,
+   "conf_n": 733,
+   "conf_events": 14,
+   "conf_rate": 0.019099590723055934,
+   "conf_leader_events": 20,
+   "conf_leader_rate": 0.027285129604365622,
+   "conf_p0": 0.017878381694953652,
+   "mcnemar_b": 11,
+   "mcnemar_c": 17,
+   "p_vs_leader": 0.9075333289802074,
+   "p_vs_random": 0.43858287410778724,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 4,
+   "name": "ftl5_K16_L200_d0.99",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.4163236500934199,
+   "dev_z_hits": 2.703843449972042,
+   "dev_rate": 0.019230769230769232,
+   "dev_p0": 0.017878381694953652,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.018629807692307692,
+   "conf_n": 733,
+   "conf_events": 17,
+   "conf_rate": 0.023192360163710776,
+   "conf_leader_events": 20,
+   "conf_leader_rate": 0.027285129604365622,
+   "conf_p0": 0.017878381694953652,
+   "mcnemar_b": 17,
+   "mcnemar_c": 20,
+   "p_vs_leader": 0.7443121092073852,
+   "p_vs_random": 0.1702065879424814,
+   "external": {
+    "events": 550,
+    "expected": 539.211991919802,
+    "z": 0.4687905587366957,
+    "p": 0.3196096745437906,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 115,
+      "rate": 0.018042045811107625,
+      "p0": 0.017878381694953652
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 131,
+      "rate": 0.01806896551724138,
+      "p0": 0.017878381694953652
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 80,
+      "rate": 0.016687526074259492,
+      "p0": 0.017878381694953652
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 128,
+      "rate": 0.017716262975778548,
+      "p0": 0.017878381694953652
+     },
+     "spania": {
+      "n": 4009,
+      "events": 87,
+      "rate": 0.021701172362185085,
+      "p0": 0.017878381694953652
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 9,
+      "rate": 0.017716535433070866,
+      "p0": 0.017878381694953652
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 4,
+   "name": "ftl5_K16_L100_d1.0",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.693688804023948,
+   "dev_z_hits": 1.1579773306211598,
+   "dev_rate": 0.015625,
+   "dev_p0": 0.017878381694953652,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.018629807692307692,
+   "conf_n": 733,
+   "conf_events": 17,
+   "conf_rate": 0.023192360163710776,
+   "conf_leader_events": 20,
+   "conf_leader_rate": 0.027285129604365622,
+   "conf_p0": 0.017878381694953652,
+   "mcnemar_b": 16,
+   "mcnemar_c": 19,
+   "p_vs_leader": 0.7502200833987445,
+   "p_vs_random": 0.1702065879424814,
+   "external": {
+    "events": 552,
+    "expected": 539.211991919802,
+    "z": 0.5557001263328097,
+    "p": 0.28920793510432835,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 111,
+      "rate": 0.017414496391590838,
+      "p0": 0.017878381694953652
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 127,
+      "rate": 0.017517241379310346,
+      "p0": 0.017878381694953652
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 85,
+      "rate": 0.01773049645390071,
+      "p0": 0.017878381694953652
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 137,
+      "rate": 0.018961937716262974,
+      "p0": 0.017878381694953652
+     },
+     "spania": {
+      "n": 4009,
+      "events": 81,
+      "rate": 0.020204539785482666,
+      "p0": 0.017878381694953652
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 11,
+      "rate": 0.021653543307086614,
+      "p0": 0.017878381694953652
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 5,
+   "name": "ftl5_K16_L200_d0.99",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 1.2683232605936254,
+   "dev_z_hits": 2.703843449972042,
+   "dev_rate": 0.002403846153846154,
+   "dev_p0": 0.0012884894938548963,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.001201923076923077,
+   "conf_n": 733,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 3,
+   "conf_leader_rate": 0.004092769440654843,
+   "conf_p0": 0.0012884894938548963,
+   "mcnemar_b": 0,
+   "mcnemar_c": 3,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 37,
+    "expected": 38.860843134663675,
+    "z": -0.29869890285283796,
+    "p": 0.6174151028726681,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 5,
+      "rate": 0.0007844367743959837,
+      "p0": 0.0012884894938548963
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 12,
+      "rate": 0.0016551724137931034,
+      "p0": 0.0012884894938548963
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 8,
+      "rate": 0.001668752607425949,
+      "p0": 0.0012884894938548963
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 5,
+      "rate": 0.0006920415224913495,
+      "p0": 0.0012884894938548963
+     },
+     "spania": {
+      "n": 4009,
+      "events": 7,
+      "rate": 0.001746071339486156,
+      "p0": 0.0012884894938548963
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0012884894938548963
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 5,
+   "name": "ftl5_K16_L100_d1.0",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.584942306954209,
+   "dev_z_hits": 1.1579773306211598,
+   "dev_rate": 0.0018028846153846155,
+   "dev_p0": 0.0012884894938548963,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.001201923076923077,
+   "conf_n": 733,
+   "conf_events": 2,
+   "conf_rate": 0.002728512960436562,
+   "conf_leader_events": 3,
+   "conf_leader_rate": 0.004092769440654843,
+   "conf_p0": 0.0012884894938548963,
+   "mcnemar_b": 2,
+   "mcnemar_c": 3,
+   "p_vs_leader": 0.8125,
+   "p_vs_random": 0.24380771443255767,
+   "external": {
+    "events": 37,
+    "expected": 38.860843134663675,
+    "z": -0.29869890285283796,
+    "p": 0.6174151028726681,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 4,
+      "rate": 0.0006275494195167869,
+      "p0": 0.0012884894938548963
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 11,
+      "rate": 0.0015172413793103448,
+      "p0": 0.0012884894938548963
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 6,
+      "rate": 0.0012515644555694619,
+      "p0": 0.0012884894938548963
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 8,
+      "rate": 0.0011072664359861593,
+      "p0": 0.0012884894938548963
+     },
+     "spania": {
+      "n": 4009,
+      "events": 8,
+      "rate": 0.001995510102269893,
+      "p0": 0.0012884894938548963
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0012884894938548963
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 5,
+   "name": "ftl5_K11_L100_d0.99_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.09843864668520748,
+   "dev_z_hits": 0.853872520257052,
+   "dev_rate": 0.001201923076923077,
+   "dev_p0": 0.0012884894938548963,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.001201923076923077,
+   "conf_n": 733,
+   "conf_events": 1,
+   "conf_rate": 0.001364256480218281,
+   "conf_leader_events": 3,
+   "conf_leader_rate": 0.004092769440654843,
+   "conf_p0": 0.0012884894938548963,
+   "mcnemar_b": 1,
+   "mcnemar_c": 3,
+   "p_vs_leader": 0.9375,
+   "p_vs_random": 0.6113483303791789,
+   "external": {
+    "events": 43,
+    "expected": 38.860843134663675,
+    "z": 0.6644093698070954,
+    "p": 0.2532141687564195,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 11,
+      "rate": 0.0017257609036711642,
+      "p0": 0.0012884894938548963
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 12,
+      "rate": 0.0016551724137931034,
+      "p0": 0.0012884894938548963
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 6,
+      "rate": 0.0012515644555694619,
+      "p0": 0.0012884894938548963
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 7,
+      "rate": 0.0009688581314878892,
+      "p0": 0.0012884894938548963
+     },
+     "spania": {
+      "n": 4009,
+      "events": 7,
+      "rate": 0.001746071339486156,
+      "p0": 0.0012884894938548963
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0012884894938548963
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 4,
+   "name": "ftl5_K16_L200_d0.99",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.6833930342378781,
+   "dev_z_hits": 1.7118278328125582,
+   "dev_rate": 0.08413461538461539,
+   "dev_p0": 0.07960001762036914,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.0889423076923077,
+   "conf_n": 733,
+   "conf_events": 68,
+   "conf_rate": 0.0927694406548431,
+   "conf_leader_events": 69,
+   "conf_leader_rate": 0.0941336971350614,
+   "conf_p0": 0.07960001762036914,
+   "mcnemar_b": 59,
+   "mcnemar_c": 60,
+   "p_vs_leader": 0.5726849789101169,
+   "p_vs_random": 0.10755365567390775,
+   "external": {
+    "events": 2442,
+    "expected": 2400.736531430334,
+    "z": 0.8778194112713642,
+    "p": 0.19002086429220316,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 499,
+      "rate": 0.07828679008471917,
+      "p0": 0.07960001762036914
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 571,
+      "rate": 0.07875862068965517,
+      "p0": 0.07960001762036914
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 377,
+      "rate": 0.07863996662494785,
+      "p0": 0.07960001762036914
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 606,
+      "rate": 0.08387543252595156,
+      "p0": 0.07960001762036914
+     },
+     "spania": {
+      "n": 4009,
+      "events": 349,
+      "rate": 0.08705412821152407,
+      "p0": 0.07960001762036914
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 40,
+      "rate": 0.07874015748031496,
+      "p0": 0.07960001762036914
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 4,
+   "name": "ftl5_K16_L100_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.04941166387826768,
+   "dev_z_hits": 1.1932176264739152,
+   "dev_rate": 0.07992788461538461,
+   "dev_p0": 0.07960001762036914,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.0889423076923077,
+   "conf_n": 733,
+   "conf_events": 60,
+   "conf_rate": 0.08185538881309687,
+   "conf_leader_events": 69,
+   "conf_leader_rate": 0.0941336971350614,
+   "conf_p0": 0.07960001762036914,
+   "mcnemar_b": 51,
+   "mcnemar_c": 60,
+   "p_vs_leader": 0.8287097087140506,
+   "p_vs_random": 0.4301541928581362,
+   "external": {
+    "events": 2407,
+    "expected": 2400.736531430334,
+    "z": 0.13324605232975828,
+    "p": 0.4469993955194567,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 495,
+      "rate": 0.07765924066520238,
+      "p0": 0.07960001762036914
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 585,
+      "rate": 0.08068965517241379,
+      "p0": 0.07960001762036914
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 391,
+      "rate": 0.08156028368794327,
+      "p0": 0.07960001762036914
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 576,
+      "rate": 0.07972318339100345,
+      "p0": 0.07960001762036914
+     },
+     "spania": {
+      "n": 4009,
+      "events": 312,
+      "rate": 0.07782489398852582,
+      "p0": 0.07960001762036914
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 48,
+      "rate": 0.09448818897637795,
+      "p0": 0.07960001762036914
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 4,
+   "name": "vote_top16",
+   "family": "E3_vote",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.7657072408698028,
+   "dev_z_hits": 1.4412485947228313,
+   "dev_rate": 0.07451923076923077,
+   "dev_p0": 0.07960001762036914,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.0889423076923077,
+   "conf_n": 733,
+   "conf_events": 64,
+   "conf_rate": 0.08731241473396999,
+   "conf_leader_events": 69,
+   "conf_leader_rate": 0.0941336971350614,
+   "conf_p0": 0.07960001762036914,
+   "mcnemar_b": 45,
+   "mcnemar_c": 50,
+   "p_vs_leader": 0.7308029868539161,
+   "p_vs_random": 0.2379477304267357,
+   "external": {
+    "events": 2370,
+    "expected": 2400.736531430334,
+    "z": -0.6538743556942251,
+    "p": 0.7434036215858576,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 522,
+      "rate": 0.08189519924694069,
+      "p0": 0.07960001762036914
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 581,
+      "rate": 0.08013793103448276,
+      "p0": 0.07960001762036914
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 390,
+      "rate": 0.08135168961201501,
+      "p0": 0.07960001762036914
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 548,
+      "rate": 0.0758477508650519,
+      "p0": 0.07960001762036914
+     },
+     "spania": {
+      "n": 4009,
+      "events": 286,
+      "rate": 0.07133948615614867,
+      "p0": 0.07960001762036914
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 43,
+      "rate": 0.08464566929133858,
+      "p0": 0.07960001762036914
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 5,
+   "name": "vote_top16",
+   "family": "E3_vote",
+   "by": "dev_z_event",
+   "dev_z_event": 1.865561754135319,
+   "dev_z_hits": 1.4412485947228313,
+   "dev_rate": 0.015625,
+   "dev_p0": 0.010880577948108013,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.013822115384615384,
+   "conf_n": 733,
+   "conf_events": 9,
+   "conf_rate": 0.01227830832196453,
+   "conf_leader_events": 8,
+   "conf_leader_rate": 0.010914051841746248,
+   "conf_p0": 0.010880577948108013,
+   "mcnemar_b": 8,
+   "mcnemar_c": 7,
+   "p_vs_leader": 0.4999999999999999,
+   "p_vs_random": 0.404007573648909,
+   "external": {
+    "events": 329,
+    "expected": 328.15823091493763,
+    "z": 0.046722595032583865,
+    "p": 0.4813671608886558,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 75,
+      "rate": 0.011766551615939756,
+      "p0": 0.010880577948108013
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 75,
+      "rate": 0.010344827586206896,
+      "p0": 0.010880577948108013
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 58,
+      "rate": 0.012098456403838132,
+      "p0": 0.010880577948108013
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 69,
+      "rate": 0.009550173010380622,
+      "p0": 0.010880577948108013
+     },
+     "spania": {
+      "n": 4009,
+      "events": 46,
+      "rate": 0.011474183088051882,
+      "p0": 0.010880577948108013
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 6,
+      "rate": 0.011811023622047244,
+      "p0": 0.010880577948108013
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 5,
+   "name": "ftl5_K16_L200_d0.99",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.9203415780229669,
+   "dev_z_hits": 1.7118278328125582,
+   "dev_rate": 0.013221153846153846,
+   "dev_p0": 0.010880577948108013,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.013822115384615384,
+   "conf_n": 733,
+   "conf_events": 6,
+   "conf_rate": 0.008185538881309686,
+   "conf_leader_events": 8,
+   "conf_leader_rate": 0.010914051841746248,
+   "conf_p0": 0.010880577948108013,
+   "mcnemar_b": 6,
+   "mcnemar_c": 8,
+   "p_vs_leader": 0.78802490234375,
+   "p_vs_random": 0.8080091054004898,
+   "external": {
+    "events": 328,
+    "expected": 328.15823091493763,
+    "z": -0.00878264489805835,
+    "p": 0.503503723340333,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 60,
+      "rate": 0.009413241292751805,
+      "p0": 0.010880577948108013
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 81,
+      "rate": 0.011172413793103448,
+      "p0": 0.010880577948108013
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 51,
+      "rate": 0.010638297872340425,
+      "p0": 0.010880577948108013
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 79,
+      "rate": 0.010934256055363321,
+      "p0": 0.010880577948108013
+     },
+     "spania": {
+      "n": 4009,
+      "events": 53,
+      "rate": 0.013220254427538039,
+      "p0": 0.010880577948108013
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 4,
+      "rate": 0.007874015748031496,
+      "p0": 0.010880577948108013
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 5,
+   "name": "ftl5_K16_L100_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.024878598089385237,
+   "dev_z_hits": 1.1932176264739152,
+   "dev_rate": 0.010817307692307692,
+   "dev_p0": 0.010880577948108013,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.013822115384615384,
+   "conf_n": 733,
+   "conf_events": 5,
+   "conf_rate": 0.0068212824010914054,
+   "conf_leader_events": 8,
+   "conf_leader_rate": 0.010914051841746248,
+   "conf_p0": 0.010880577948108013,
+   "mcnemar_b": 4,
+   "mcnemar_c": 7,
+   "p_vs_leader": 0.88671875,
+   "p_vs_random": 0.9002103032106631,
+   "external": {
+    "events": 354,
+    "expected": 328.15823091493763,
+    "z": 1.4343535932986393,
+    "p": 0.07573569178837823,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 83,
+      "rate": 0.013021650454973329,
+      "p0": 0.010880577948108013
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 85,
+      "rate": 0.011724137931034483,
+      "p0": 0.010880577948108013
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 54,
+      "rate": 0.011264080100125156,
+      "p0": 0.010880577948108013
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 79,
+      "rate": 0.010934256055363321,
+      "p0": 0.010880577948108013
+     },
+     "spania": {
+      "n": 4009,
+      "events": 48,
+      "rate": 0.011973060613619356,
+      "p0": 0.010880577948108013
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 5,
+      "rate": 0.00984251968503937,
+      "p0": 0.010880577948108013
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 4,
+   "name": "ftl5_K11_L200_d1.0",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 1.8725828083125038,
+   "dev_z_hits": 2.2302125403888446,
+   "dev_rate": 0.04953271028037383,
+   "dev_p0": 0.03851624904256483,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.05327102803738318,
+   "conf_n": 478,
+   "conf_events": 21,
+   "conf_rate": 0.043933054393305436,
+   "conf_leader_events": 21,
+   "conf_leader_rate": 0.043933054393305436,
+   "conf_p0": 0.03851624904256483,
+   "mcnemar_b": 15,
+   "mcnemar_c": 15,
+   "p_vs_leader": 0.572232224047184,
+   "p_vs_random": 0.3001340438196159,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 4,
+   "name": "vote_meanrank",
+   "family": "E3_vote",
+   "by": "dev_z_event",
+   "dev_z_event": 1.2371419518821578,
+   "dev_z_hits": 1.900919413620022,
+   "dev_rate": 0.04579439252336449,
+   "dev_p0": 0.03851624904256483,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.05327102803738318,
+   "conf_n": 478,
+   "conf_events": 15,
+   "conf_rate": 0.03138075313807531,
+   "conf_leader_events": 21,
+   "conf_leader_rate": 0.043933054393305436,
+   "conf_p0": 0.03851624904256483,
+   "mcnemar_b": 13,
+   "mcnemar_c": 19,
+   "p_vs_leader": 0.8923364251386374,
+   "p_vs_random": 0.8227436146659866,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 4,
+   "name": "ftl5_K16_L200_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.9194215236669847,
+   "dev_z_hits": 2.5295699283605018,
+   "dev_rate": 0.04392523364485981,
+   "dev_p0": 0.03851624904256483,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.05327102803738318,
+   "conf_n": 478,
+   "conf_events": 16,
+   "conf_rate": 0.03347280334728033,
+   "conf_leader_events": 21,
+   "conf_leader_rate": 0.043933054393305436,
+   "conf_p0": 0.03851624904256483,
+   "mcnemar_b": 14,
+   "mcnemar_c": 19,
+   "p_vs_leader": 0.8518968157004565,
+   "p_vs_random": 0.7494067880892721,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 5,
+   "name": "kalman_Q0.001",
+   "family": "E5_kalman",
+   "by": "dev_z_event",
+   "dev_z_event": 1.5984864599369715,
+   "dev_z_hits": 1.7213049808370278,
+   "dev_rate": 0.0065420560747663555,
+   "dev_p0": 0.003610898347740453,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.004672897196261682,
+   "conf_n": 478,
+   "conf_events": 2,
+   "conf_rate": 0.0041841004184100415,
+   "conf_leader_events": 1,
+   "conf_leader_rate": 0.0020920502092050207,
+   "conf_p0": 0.003610898347740453,
+   "mcnemar_b": 2,
+   "mcnemar_c": 1,
+   "p_vs_leader": 0.5,
+   "p_vs_random": 0.5151920391537148,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 5,
+   "name": "vote_meanrank",
+   "family": "E3_vote",
+   "by": "dev_z_event",
+   "dev_z_event": 1.5984864599369715,
+   "dev_z_hits": 1.900919413620022,
+   "dev_rate": 0.0065420560747663555,
+   "dev_p0": 0.003610898347740453,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.004672897196261682,
+   "conf_n": 478,
+   "conf_events": 2,
+   "conf_rate": 0.0041841004184100415,
+   "conf_leader_events": 1,
+   "conf_leader_rate": 0.0020920502092050207,
+   "conf_p0": 0.003610898347740453,
+   "mcnemar_b": 2,
+   "mcnemar_c": 1,
+   "p_vs_leader": 0.5,
+   "p_vs_random": 0.5151920391537148,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 5,
+   "name": "ftl5_K16_L200_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.06948728776057855,
+   "dev_z_hits": 2.5295699283605018,
+   "dev_rate": 0.003738317757009346,
+   "dev_p0": 0.003610898347740453,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.004672897196261682,
+   "conf_n": 478,
+   "conf_events": 4,
+   "conf_rate": 0.008368200836820083,
+   "conf_leader_events": 1,
+   "conf_leader_rate": 0.0020920502092050207,
+   "conf_p0": 0.003610898347740453,
+   "mcnemar_b": 4,
+   "mcnemar_c": 1,
+   "p_vs_leader": 0.1875,
+   "p_vs_random": 0.09676672338461023,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 4,
+   "name": "vote_top11",
+   "family": "E3_vote",
+   "by": "dev_z_event",
+   "dev_z_event": 1.2929853160055609,
+   "dev_z_hits": 2.1009244498724446,
+   "dev_rate": 0.17476635514018693,
+   "dev_p0": 0.1602655286865813,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.18691588785046728,
+   "conf_n": 478,
+   "conf_events": 67,
+   "conf_rate": 0.1401673640167364,
+   "conf_leader_events": 92,
+   "conf_leader_rate": 0.19246861924686193,
+   "conf_p0": 0.1602655286865813,
+   "mcnemar_b": 52,
+   "mcnemar_c": 77,
+   "p_vs_leader": 0.9891485232185818,
+   "p_vs_random": 0.8978421443422746,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 4,
+   "name": "ftl5_K16_L100_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.7096542577226986,
+   "dev_z_hits": 1.9372160511810854,
+   "dev_rate": 0.16822429906542055,
+   "dev_p0": 0.1602655286865813,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.18691588785046728,
+   "conf_n": 478,
+   "conf_events": 71,
+   "conf_rate": 0.14853556485355648,
+   "conf_leader_events": 92,
+   "conf_leader_rate": 0.19246861924686193,
+   "conf_p0": 0.1602655286865813,
+   "mcnemar_b": 56,
+   "mcnemar_c": 77,
+   "p_vs_leader": 0.9719860590805497,
+   "p_vs_random": 0.7750142949865719,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 4,
+   "name": "ftl5_K16_L200_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.12367582553853304,
+   "dev_z_hits": 1.964500784296312,
+   "dev_rate": 0.1588785046728972,
+   "dev_p0": 0.1602655286865813,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.18691588785046728,
+   "conf_n": 478,
+   "conf_events": 74,
+   "conf_rate": 0.15481171548117154,
+   "conf_leader_events": 92,
+   "conf_leader_rate": 0.19246861924686193,
+   "conf_p0": 0.1602655286865813,
+   "mcnemar_b": 58,
+   "mcnemar_c": 76,
+   "p_vs_leader": 0.9498171492512693,
+   "p_vs_random": 0.6462571599619498,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 5,
+   "name": "ftl5_K16_L100_d1.0_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 1.1843917351128113,
+   "dev_z_hits": 1.9372160511810854,
+   "dev_rate": 0.03551401869158879,
+   "dev_p0": 0.02939781887150308,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.02336448598130841,
+   "conf_n": 478,
+   "conf_events": 12,
+   "conf_rate": 0.02510460251046025,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.029288702928870293,
+   "conf_p0": 0.02939781887150308,
+   "mcnemar_b": 12,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.7214014530181885,
+   "p_vs_random": 0.7481363128885016,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 5,
+   "name": "ftl5_K16_L100_d0.99_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.8224322844023463,
+   "dev_z_hits": 1.418806121991781,
+   "dev_rate": 0.03364485981308411,
+   "dev_p0": 0.02939781887150308,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.02336448598130841,
+   "conf_n": 478,
+   "conf_events": 13,
+   "conf_rate": 0.027196652719665274,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.029288702928870293,
+   "conf_p0": 0.02939781887150308,
+   "mcnemar_b": 13,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.6494459807872772,
+   "p_vs_random": 0.6496546131618585,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 5,
+   "name": "vote_top11",
+   "family": "E3_vote",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.2794931083366489,
+   "dev_z_hits": 2.1009244498724446,
+   "dev_rate": 0.0308411214953271,
+   "dev_p0": 0.02939781887150308,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.02336448598130841,
+   "conf_n": 478,
+   "conf_events": 13,
+   "conf_rate": 0.027196652719665274,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.029288702928870293,
+   "conf_p0": 0.02939781887150308,
+   "mcnemar_b": 13,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.6494459807872772,
+   "p_vs_random": 0.6496546131618585,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 4,
+   "name": "cross_W50",
+   "family": "E2_cross",
+   "by": "dev_z_event",
+   "dev_z_event": 3.2159715029334177,
+   "dev_z_hits": 1.6798114164989477,
+   "dev_rate": 0.017946877243359655,
+   "dev_p0": 0.009561623855441213,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.012203876525484566,
+   "conf_n": 607,
+   "conf_events": 7,
+   "conf_rate": 0.011532125205930808,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.023064250411861616,
+   "conf_p0": 0.009561623855441213,
+   "mcnemar_b": 6,
+   "mcnemar_c": 13,
+   "p_vs_leader": 0.9682159423828125,
+   "p_vs_random": 0.36208165267264936,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 4,
+   "name": "ftl5_K11_L100_d0.99_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.46272634211585056,
+   "dev_z_hits": 1.3581454005736169,
+   "dev_rate": 0.010768126346015794,
+   "dev_p0": 0.009561623855441213,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.012203876525484566,
+   "conf_n": 607,
+   "conf_events": 5,
+   "conf_rate": 0.008237232289950576,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.023064250411861616,
+   "conf_p0": 0.009561623855441213,
+   "mcnemar_b": 5,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.9903945922851562,
+   "p_vs_random": 0.6890746739473156,
+   "external": {
+    "events": 160,
+    "expected": 172.74745121470946,
+    "z": -0.9814852020540769,
+    "p": 0.836823235864323,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 73,
+      "rate": 0.02086906803887936,
+      "p0": 0.024714366744996354
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 33,
+      "rate": 0.024,
+      "p0": 0.024714366744996354
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 43,
+      "rate": 0.025903614457831327,
+      "p0": 0.024714366744996354
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 11,
+      "rate": 0.006131549609810479,
+      "p0": 0.006292359682078197
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 4,
+   "name": "ftl5_K16_L200_d1.0",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.6385717222111763,
+   "dev_z_hits": 1.5628419561624638,
+   "dev_rate": 0.007896625987078248,
+   "dev_p0": 0.009561623855441213,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.012203876525484566,
+   "conf_n": 607,
+   "conf_events": 6,
+   "conf_rate": 0.009884678747940691,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.023064250411861616,
+   "conf_p0": 0.009561623855441213,
+   "mcnemar_b": 6,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.9793052673339844,
+   "p_vs_random": 0.5229712606302239,
+   "external": {
+    "events": 158,
+    "expected": 172.74745121470946,
+    "z": -1.135474448299872,
+    "p": 0.871911709031578,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 83,
+      "rate": 0.023727844482561464,
+      "p0": 0.024714366744996354
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 30,
+      "rate": 0.02181818181818182,
+      "p0": 0.024714366744996354
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 31,
+      "rate": 0.018674698795180723,
+      "p0": 0.024714366744996354
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 14,
+      "rate": 0.007803790412486065,
+      "p0": 0.006292359682078197
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 5,
+   "name": "ftl5_K16_L200_d0.99",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 0.6521772397722542,
+   "dev_z_hits": 0.7148133687229548,
+   "dev_rate": 0.0007178750897343862,
+   "dev_p0": 0.0003781433163168841,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.0,
+   "conf_n": 607,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 0,
+   "conf_leader_rate": 0.0,
+   "conf_p0": 0.0003781433163168841,
+   "mcnemar_b": 0,
+   "mcnemar_c": 0,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 11,
+    "expected": 13.360839409199917,
+    "z": -0.6465019471871614,
+    "p": 0.7410228317535119,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 6,
+      "rate": 0.0017152658662092624,
+      "p0": 0.0019852524106636414
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 2,
+      "rate": 0.0014545454545454545,
+      "p0": 0.0019852524106636414
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 3,
+      "rate": 0.0018072289156626507,
+      "p0": 0.0019852524106636414
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0002180520681908286
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 5,
+   "name": "cross_W50",
+   "family": "E2_cross",
+   "by": "dev_z_event",
+   "dev_z_event": -0.7259152177409111,
+   "dev_z_hits": 1.6798114164989477,
+   "dev_rate": 0.0,
+   "dev_p0": 0.0003781433163168841,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.0,
+   "conf_n": 607,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 0,
+   "conf_leader_rate": 0.0,
+   "conf_p0": 0.0003781433163168841,
+   "mcnemar_b": 0,
+   "mcnemar_c": 0,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 5,
+   "name": "ftl5_K16_L200_d1.0",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.7259152177409111,
+   "dev_z_hits": 1.5628419561624638,
+   "dev_rate": 0.0,
+   "dev_p0": 0.0003781433163168841,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.0,
+   "conf_n": 607,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 0,
+   "conf_leader_rate": 0.0,
+   "conf_p0": 0.0003781433163168841,
+   "mcnemar_b": 0,
+   "mcnemar_c": 0,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 9,
+    "expected": 13.360839409199917,
+    "z": -1.1941901505167214,
+    "p": 0.8837982024771909,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 6,
+      "rate": 0.0017152658662092624,
+      "p0": 0.0019852524106636414
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 2,
+      "rate": 0.0014545454545454545,
+      "p0": 0.0019852524106636414
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 1,
+      "rate": 0.0006024096385542169,
+      "p0": 0.0019852524106636414
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0002180520681908286
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 4,
+   "name": "cross_W50",
+   "family": "E2_cross",
+   "by": "dev_z_event",
+   "dev_z_event": 2.3908369967762,
+   "dev_z_hits": 1.6685638301667551,
+   "dev_rate": 0.06030150753768844,
+   "dev_p0": 0.04677518233956124,
+   "leader": "frequency",
+   "leader_dev_rate": 0.05599425699928212,
+   "conf_n": 607,
+   "conf_events": 23,
+   "conf_rate": 0.03789126853377265,
+   "conf_leader_events": 43,
+   "conf_leader_rate": 0.07084019769357495,
+   "conf_p0": 0.04677518233956124,
+   "mcnemar_b": 23,
+   "mcnemar_c": 43,
+   "p_vs_leader": 0.9953947551527227,
+   "p_vs_random": 0.8735198781682824,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 4,
+   "name": "ftl5_K11_L100_d0.99_anti",
+   "family": "E1_ftl5",
+   "by": "dev_z_event",
+   "dev_z_event": 1.248849007714119,
+   "dev_z_hits": 1.2222521762934804,
+   "dev_rate": 0.05384063173007897,
+   "dev_p0": 0.04677518233956124,
+   "leader": "frequency",
+   "leader_dev_rate": 0.05599425699928212,
+   "conf_n": 607,
+   "conf_events": 34,
+   "conf_rate": 0.05601317957166392,
+   "conf_leader_events": 43,
+   "conf_leader_rate": 0.07084019769357495,
+   "conf_p0": 0.04677518233956124,
+   "mcnemar_b": 25,
+   "mcnemar_c": 34,
+   "p_vs_leader": 0.9037367711192686,
+   "p_vs_random": 0.1625698181614965,
+   "external": {
+    "events": 770,
+    "expected": 756.791807089858,
+    "z": 0.5065541399975363,
+    "p": 0.30623384653473357,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 381,
+      "rate": 0.10891938250428816,
+      "p0": 0.10725519517351621
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 156,
+      "rate": 0.11345454545454546,
+      "p0": 0.10725519517351621
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 174,
+      "rate": 0.10481927710843374,
+      "p0": 0.10725519517351621
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 59,
+      "rate": 0.03288740245261984,
+      "p0": 0.03126734505087882
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 4,
+   "name": "kalman_Q0.0001",
+   "family": "E5_kalman",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.020026535688193355,
+   "dev_z_hits": 2.5611871379133047,
+   "dev_rate": 0.046661880832735106,
+   "dev_p0": 0.04677518233956124,
+   "leader": "frequency",
+   "leader_dev_rate": 0.05599425699928212,
+   "conf_n": 607,
+   "conf_events": 30,
+   "conf_rate": 0.04942339373970346,
+   "conf_leader_events": 43,
+   "conf_leader_rate": 0.07084019769357495,
+   "conf_p0": 0.04677518233956124,
+   "mcnemar_b": 24,
+   "mcnemar_c": 37,
+   "p_vs_leader": 0.9639112807495387,
+   "p_vs_random": 0.4049571769814766,
+   "external": {
+    "events": 780,
+    "expected": 756.791807089858,
+    "z": 0.890069238121653,
+    "p": 0.18671435473891007,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 387,
+      "rate": 0.11063464837049743,
+      "p0": 0.10725519517351621
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 152,
+      "rate": 0.11054545454545454,
+      "p0": 0.10725519517351621
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 194,
+      "rate": 0.11686746987951807,
+      "p0": 0.10725519517351621
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 47,
+      "rate": 0.026198439241917504,
+      "p0": 0.03126734505087882
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 5,
+   "name": "cross_W50",
+   "family": "E2_cross",
+   "by": "dev_z_event",
+   "dev_z_event": 1.804497658842946,
+   "dev_z_hits": 1.6685638301667551,
+   "dev_rate": 0.006460875807609476,
+   "dev_p0": 0.0035751731724505405,
+   "leader": "frequency",
+   "leader_dev_rate": 0.002871500358937545,
+   "conf_n": 607,
+   "conf_events": 6,
+   "conf_rate": 0.009884678747940691,
+   "conf_leader_events": 2,
+   "conf_leader_rate": 0.0032948929159802307,
+   "conf_p0": 0.0035751731724505405,
+   "mcnemar_b": 6,
+   "mcnemar_c": 2,
+   "p_vs_leader": 0.14453125,
+   "p_vs_random": 0.02328354420434079,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 0.8382075913562684,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 5,
+   "name": "kalman_Q0.0001",
+   "family": "E5_kalman",
+   "by": "dev_z_event",
+   "dev_z_event": 1.804497658842946,
+   "dev_z_hits": 2.5611871379133047,
+   "dev_rate": 0.006460875807609476,
+   "dev_p0": 0.0035751731724505405,
+   "leader": "frequency",
+   "leader_dev_rate": 0.002871500358937545,
+   "conf_n": 607,
+   "conf_events": 1,
+   "conf_rate": 0.0016474464579901153,
+   "conf_leader_events": 2,
+   "conf_leader_rate": 0.0032948929159802307,
+   "conf_p0": 0.0035751731724505405,
+   "mcnemar_b": 1,
+   "mcnemar_c": 2,
+   "p_vs_leader": 0.875,
+   "p_vs_random": 0.886280305898294,
+   "external": {
+    "events": 114,
+    "expected": 111.72278454540074,
+    "z": 0.21719412068612703,
+    "p": 0.41402853317205796,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 61,
+      "rate": 0.017438536306460833,
+      "p0": 0.01653517592258375
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 30,
+      "rate": 0.02181818181818182,
+      "p0": 0.01653517592258375
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 21,
+      "rate": 0.012650602409638554,
+      "p0": 0.01653517592258375
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 2,
+      "rate": 0.0011148272017837235,
+      "p0": 0.002061583190167834
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 5,
+   "name": "ftl5_K16_L200_d1.0",
+   "family": "E1_ftl5",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.44002314344689736,
+   "dev_z_hits": 1.7998319636588946,
+   "dev_rate": 0.002871500358937545,
+   "dev_p0": 0.0035751731724505405,
+   "leader": "frequency",
+   "leader_dev_rate": 0.002871500358937545,
+   "conf_n": 607,
+   "conf_events": 2,
+   "conf_rate": 0.0032948929159802307,
+   "conf_leader_events": 2,
+   "conf_leader_rate": 0.0032948929159802307,
+   "conf_p0": 0.0035751731724505405,
+   "mcnemar_b": 2,
+   "mcnemar_c": 2,
+   "p_vs_leader": 0.6875,
+   "p_vs_random": 0.6386083026810698,
+   "external": {
+    "events": 110,
+    "expected": 111.72278454540074,
+    "z": -0.1643141292205093,
+    "p": 0.5652580703208018,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 68,
+      "rate": 0.019439679817038306,
+      "p0": 0.01653517592258375
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 17,
+      "rate": 0.012363636363636363,
+      "p0": 0.01653517592258375
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 21,
+      "rate": 0.012650602409638554,
+      "p0": 0.01653517592258375
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 4,
+      "rate": 0.002229654403567447,
+      "p0": 0.002061583190167834
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  }
+ ],
+ "promoted": [],
+ "runtime_s": 165.61652946472168
+}
