@@ -2968,12 +2968,18 @@ scor inutilizabil nu intra in decizie, iar productia consuma exact decizia afisa
 
 - [x] Adauga `per_game.joker_urna2` dupa test extern si pre-screening oficial pe
   toate cele 111 metode; pastreaza numai semnale peste baseline si distincte.
-- [ ] Automatizeaza testul care ruleaza fiecare metoda activa pe toate geometriile
-  si compara acceptarea benchmarkului cu acceptarea engine-ului.
+- [x] Automatizeaza testul care ruleaza fiecare metoda activa pe toate geometriile
+  si compara acceptarea benchmarkului cu acceptarea engine-ului
+  (`test_bench_production_parity.py`, 2026-11-01: 53 metode active × 4 jocuri × 3 prefixe
+  × toate pool-urile bench — aceleași scoruri, aceeași acceptare
+  `has_usable_score_variance`, aceeași mulțime top-K ca `select_pool_from_scores` cu
+  blacklist gol și max_consecutive_run=0; zero diferențe).
 - [x] Raporteaza separat metodele incomplete (fereastra lipsa) si dependente de
   tie-break in decizie; raman de raportat unavailable, plate si corelate.
-- [ ] Adauga un test de regresie pentru fallback-ul top-1 fara coloana
-  `rate_1plus_k1`.
+- [x] Adauga un test de regresie pentru fallback-ul top-1 fara coloana
+  `rate_1plus_k1` (`test_bench_production_parity.py::test_urna2_top1_without_rate_1plus_k1_column_falls_back_to_frequency`,
+  2026-11-01: fără coloana, Urna 2 k1 cade pe `frequency` cu low_confidence și
+  rate_col_mismatch semnalizat).
 
 Criteriu de iesire: zero diferente de acceptare bench/productie si curation
 Urna 2 explicabila, reversibila si reproductibila. Comparatia top-K
