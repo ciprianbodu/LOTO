@@ -142,6 +142,8 @@ def _retroactive_step_stateless(
     *,
     game_key: str | None = None,
     country: str | None = None,
+    compact_variants: bool = False,
+    virtual_full_system: bool = False,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward — un singur loc pentru "un pas", folosit atât de
     calea paralelă/stateless (parametrii de stare rămân la implicit) cât și
@@ -188,25 +190,76 @@ def _retroactive_step_stateless(
             restrict_base_min=restrict_base_min,
             wheel_condition=wheel_condition,
             max_consecutive_run=max_consecutive_run,
+            **({"_pool_analysis_only": True} if virtual_full_system else {}),
         )
         return eng, out_lines, (_ctx or {}), audit
 
+    if virtual_full_system:
+        pick = 6 if game_type in ("6/49", "6/45") else 5
+        if int(guarantee) != pick or int(max_variants or 0) != 0 or int(wheel_condition or pick) != pick:
+            raise ValueError("Analiza virtuală cere sistem complet nelimitat")
     engine, lines, ctx, audit = _run_pipeline()
 
     actual_draw = draws[sim_idx]
     actual_set = set(actual_draw)
+    if virtual_full_system:
+        from math import comb
+
+        pool = set(map(int, engine.hard_core))
+        picked = sorted(map(int, pool & actual_set))[:pick]
+        picked += sorted(pool - set(picked))[:pick - len(picked)]
+        picked.sort()
+        # One possible maximal-hit combination; not the first sorted ticket.
+        if game_type == "joker" and getattr(engine, "hard_core_joker", None):
+            picked.append(int(engine.hard_core_joker[0]))
+        hits = min(len(pool & actual_set), pick)
+        return RetroactivePrediction(
+            simulation_date=str(sim_date), target_draw_date=str(target_date),
+            variants=[picked], predicted_numbers=pool, actual_numbers=actual_draw,
+            hits=hits, hits_union=len(pool & actual_set), pool_size=pool_size,
+            guarantee=guarantee, game_type=game_type, draw_index=sim_idx,
+            wheel_coverage=100.0, hard_core=list(engine.hard_core),
+            joker_hit=_joker_hit(df, sim_idx, [picked]) if game_type == "joker" else None,
+            variant_count=comb(len(pool), pick), virtual_full_system=True,
+            game_key=engine.game_key, country=engine.country,
+            bench_method=_step_bench_method(engine),
+            ticket_context=_ticket_context(engine, audit, actual_draw),
+        )
     max_hits = 0
+    best_variant = None
+    # Fiecare grup reține o variantă generată și numărul de variante cu aceeași
+    # mulțime a numerelor extrase și aceeași bilă Joker. Astfel clasificarea
+    # ulterioară 5/40 poate folosi ordinea oficială, fără a reține tot wheel-ul.
+    prize_groups = (
+        {} if compact_variants and game_type in {"6/49", "5/40", "joker"}
+        and getattr(engine, "country", None) in (None, "RO") else None
+    )
     for v in lines:
-        h = len(set(scored_variant_numbers(v, game_type)) & actual_set)
-        if h > max_hits:
+        matched = set(scored_variant_numbers(v, game_type)) & actual_set
+        h = len(matched)
+        if best_variant is None or h > max_hits:
             max_hits = h
+            best_variant = v
+        if prize_groups is not None:
+            joker_part = tuple(v[5:]) if game_type == "joker" else ()
+            key = (tuple(sorted(matched)), joker_part)
+            if key not in prize_groups:
+                prize_groups[key] = {"variant": list(v), "count": 0}
+            prize_groups[key]["count"] += 1
+    variant_count = len(lines)
+    variant_prize_groups = (
+        {"version": 1, "total_variants": variant_count, "groups": list(prize_groups.values())}
+        if prize_groups is not None and variant_count else None
+    )
+    joker_hit = _joker_hit(df, sim_idx, lines) if game_type == "joker" else None
+    saved_variants = [best_variant] if compact_variants and best_variant is not None else lines
 
     hits_union = pool_draw_hits(engine.hard_core, actual_set)
 
     return RetroactivePrediction(
         simulation_date=str(sim_date),
         target_draw_date=str(target_date),
-        variants=lines,
+        variants=saved_variants,
         predicted_numbers=set(engine.hard_core),
         actual_numbers=actual_draw,
         hits=max_hits,
@@ -217,7 +270,9 @@ def _retroactive_step_stateless(
         draw_index=sim_idx,
         wheel_coverage=coverage_from_context(ctx),
         hard_core=list(engine.hard_core),
-        joker_hit=_joker_hit(df, sim_idx, lines) if game_type == "joker" else None,
+        joker_hit=joker_hit,
+        variant_count=variant_count if compact_variants else None,
+        variant_prize_groups=variant_prize_groups,
         game_key=engine.game_key,
         country=engine.country,
         bench_method=_step_bench_method(engine),
@@ -405,6 +460,11 @@ class RetroactivePrediction:
     bench_method: str | None = None
     # Contextul „Bilet complet” al pasului (`_ticket_context`); None = necunoscut.
     ticket_context: dict | None = None
+    # Compact WF keeps only the first best variant, with its real wheel size.
+    variant_count: int | None = None
+    virtual_full_system: bool = False
+    # Distribuția variantelor efectiv generate; absentă din cache-uri vechi/virtuale.
+    variant_prize_groups: dict | None = None
 
 
 def _joker_hit(df, sim_idx: int, lines) -> bool | None:
@@ -877,6 +937,8 @@ class LotoBacktester:
         restrict_base_min: int = 0,
         wheel_condition: int | None = None,
         max_consecutive_run: int = 0,
+        compact_variants: bool = False,
+        virtual_full_system: bool = False,
     ) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
@@ -986,6 +1048,8 @@ class LotoBacktester:
                     "restrict_base_min": int(restrict_base_min or 0),
                     "wheel_condition": wheel_condition,
                     "max_consecutive_run": int(max_consecutive_run or 0),
+                    **({"compact_variants": True} if compact_variants else {}),
+                    **({"virtual_full_system": True} if virtual_full_system else {}),
                 }
                 for sim_idx in sim_indices
             ]
@@ -1278,6 +1342,8 @@ class LotoBacktester:
                     restrict_base_min=restrict_base_min,
                     wheel_condition=wheel_condition,
                     max_consecutive_run=int(max_consecutive_run or 0),
+                    **({"compact_variants": True} if compact_variants else {}),
+                    **({"virtual_full_system": True} if virtual_full_system else {}),
                     adaptive_mode=active_mode,
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None

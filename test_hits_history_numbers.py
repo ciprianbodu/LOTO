@@ -74,7 +74,7 @@ def test_pool_table_shows_the_pool_and_the_draw_of_each_hit():
         ui_hits._render_hits_4plus(_entries(), "6/49", {"pool_size": 16}, pool_n=16)
     table = _table_after(ui, "🗓️ POOL")
     names = [c["name"] for c in table["kwargs"]["columns"]]
-    assert names == ["draw", "hits", "drawn", "pool_nums", "gap"]
+    assert names == ["draw", "hits", "drawn", "pool_nums", "pool_prize", "pool_cost", "gap"]
     five = next(r for r in table["kwargs"]["rows"] if r["draw"] == "06-08-2026")
     assert "5" in five["hits"]
     # Pool-ul de atunci, crescător, cu cele 5 numere ieșite marcate.

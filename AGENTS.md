@@ -73,7 +73,7 @@ Snapshot verificat la 2026-09-15:
   `pick_n`/`play_n = 5`. Categoria I (5 din primele 5 extrase) nu este modelata
   separat. `folds.csv` scris inainte de v21 are randuri 5/40 pe n1..n5 si este
   marcat `stale` de `check_freshness` pana la Re-Bench;
-- cache rezultat worker: `v22` (factorul 0 al penalizarii recente pune numerele penalizate sub toate cele nepenalizate, si sub cele cu scor 0, 2026-10-22; v21 schemele LR adoptate certificat la plafonul egal cu marimea lor si coverul garantiei mai mici completat pana la plafon, 2026-10-20; v20 DMD cu subspatiile singulare la egalitate; v19 `hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
+- cache rezultat worker: `v23` (limitele zilelor pentru interval_extrema_k16; v22 factorul 0 al penalizarii recente pune numerele penalizate sub toate cele nepenalizate, si sub cele cu scor 0, 2026-10-22; v21 schemele LR adoptate certificat la plafonul egal cu marimea lor si coverul garantiei mai mici completat pana la plafon, 2026-10-20; v20 DMD cu subspatiile singulare la egalitate; v19 `hit_forecast` cu pool-ul minim, 2026-10-17; v18 garantia egala cu biletul cu plafon, designurile cu buget pe garantia mai mica, ramura lotto cu universul jocului, 2026-10-16; v17 coverele complete rafinate; v16 covere complete La Jolla mai mici si rafinarea designurilor cu buget, 2026-10-15; v15 designurile cu buget precalculate peste 64 de bilete, §7; v14 recoacerea pe sansa exacta la 1..64 de bilete; v13 bugetul care cuprinde designul complet, cautarea exacta peste 64 de bilete, greedy-ul care domina designul la egalitate; v12 aceleasi schimbari de pool si auditul rezervei `frequency`; v11 swap-uri cu dominanta exacta a profilului; v10 optimizarea 5+ a coverelor complete de 4; v9 candidati hitcover; v8 activeaza hitcover implicit la buget pozitiv, v7 corecteaza auditul Joker al numerelor nejucate, v6 aduce identitatea jocului);
 - teste: 89 fisiere `test_*.py`, 1977 de teste (renumarat la 2026-10-02). Pe
   Python 3.14.7, Linux cu `pwsh` (`LOTO_PWSH`): 1952 trec, 25 sarite (integrarea
   reala a lansatorului, numai pe Windows), 0 esecuri. Pe Windows, cele 15 teste
@@ -91,6 +91,79 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Premii pe variantele generate in istoricul WF — 2026-11-01
+
+- La cererea utilizatorului, tabelul POOL si istoricul simulat arata premiul
+  brut estimat numai pentru variantele generate la fiecare pas, la sumele
+  unitare loto.ro; costul foloseste numarul de variante si tariful actual, fara
+  taxa pe bilet. Nu sunt bilete dovedite ca jucate; valorile unitare efective
+  ar fi putut fi diferite daca se modifica numarul castigatorilor.
+- WF compact pastreaza `variant_prize_groups`: numar si reprezentanti reali
+  grupati dupa numerele extrase si bila Joker, suficienti pentru toate categoriile
+  si primele cinci la 5/40. `pg1` separa cache-ul compact romanesc vechi, care
+  nu poate justifica suma; se recalculeaza in bugetul WF. Cheile jocurilor
+  straine raman identice. Sistemul complet exclusiv virtual nu a generat
+  variante, deci nu afiseaza suma aferenta unei scheme concrete.
+- `loto_enterprise.core.generated_prize` verifica fiecare varianta sau rezumat,
+  identitatea extragerii, categoriile, reportul, Joker complet si ordinea 5/40.
+  `ui_prizes` incarca in fundal premiile oficiale pentru pagina vizibila.
+  Datele incomplete si premiile reportate apar ca indisponibile. Calculul
+  combinatoric mai vechi `pool_prize` nu mai este folosit in tabel.
+- Reconstituire izolata 22.10.2026 din sursele originale ale jobului #28,
+  metoda corespunzatoare deciziei actuale, pool identic: g4, 3750 variante,
+  7 cu 4 si 157 cu 3, nicio varianta cu 5; la 238,46 si 50 lei inseamna
+  9519,22 lei brut estimat, cost 30000 lei la tariful actual fara taxa pe bilet.
+  Este reconstituire cu motorul actual, nu dovada variantelor jucate atunci.
+- Verificat pe Python 3.14.10: suita completa impartita in 3 loturi izolate,
+  4131 teste trecute, 22 sarite, zero esecuri. Testul vechi al coloanelor POOL
+  a fost actualizat. Comparatie independenta: lista completa de 3750 variante
+  si 31 de grupe, cache oficial si interfata; runtime si LOTO_JOBS_DB izolate.
+  Aplicatia activa nu a fost repornita. Raport: `scripts/analysis/audit_2026_11_01_pool30.md`.
+
+### Istoric automat dupa Re-Bench — 2026-11-01
+
+- La Re-Bench confirmat reusit, istoricul porneste automat si deschide Analiza &
+  Clasament. Sistemele complete fara plafon sunt virtuale; pentru cele cu plafon
+  sau garantie redusa se simuleaza variantele, daca Auto-Pilot nu genereaza un
+  rezultat fizic. Selectia este per joc si procentele se raporteaza la extrageri.
+- Pool 30 cu g6/5/5 si plafon 0 depaseste limita generarii fizice; analiza
+  virtuala ruleaza fara bilete sau premii. Un sistem fizic imposibil este aratat
+  cu motivul refuzului si nu este trimis ca job sortit esecului.
+- Un rezultat vechi recuperat reia automat istoricul lipsa/partial pe sursele
+  originale, fara mail sau shutdown. Anularea opreste si reluarile amanate.
+- `bench_outcome.py`: marker unic cu PID, UUID si rezultat, revendicat o singura
+  data; dupa restart asteapta sursele si setarile identice, cu termen de 10 minute.
+  Bench esuat/anulat sau decizie pe tinta nerefacuta nu porneste automatizarea.
+  Doua UI-uri care lanseaza bench simultan nu au lacat comun.
+- WF de generare nu programeaza oprirea PC cand un bench/istoric este in curs
+  sau asteptare; o oprire suprimata astfel nu este reprogramata automat.
+- Verificat izolat pe Python 3.14.10: 324 teste trecute, 1806 avertismente de
+  depreciere in testele existente; runtime si LOTO_JOBS_DB separate. Aplicatia
+  activa nu a fost repornita. Raport: `scripts/analysis/audit_2026_11_01_pool30.md`.
+
+### Audit si istoric pool mare — 2026-11-01
+
+- `interval_extrema_k16` foloseste aceleasi limite de zi in bench, motor si WF;
+  cheia WF se schimba selectiv, cache worker v23. Nicio metoda nu a fost exclusa.
+- Istoric hits pentru pooluri mari: variantele sunt calculate efectiv, dar se
+  retine compact primul bilet maxim si numarul real de variante. Rezultatul
+  recuperat isi calculeaza automat istoricul original; actiunea manuala ramane disponibila.
+- Analiza separata a sistemului complet virtual, in Analiza & Clasament: poolul
+  fiecarui pas, best=min(hiturile poolului, marimea biletului), numar exact de
+  combinatii, exemplu construit dupa extragere; 30% sau 100%, cache separat,
+  fara bilete generate, premii, mail sau shutdown. Pool 30/g6 (6/49) respectiv
+  g5 (Joker, 5/40) ramane peste limita generatorului fizic de 100.000 variante.
+- Setarea comuna salvata a fost schimbata la 6 la cererea utilizatorului;
+  workerul aplica 6/5/5. Aplicatia deja pornita nu a fost repornita.
+- Auditul mai corecteaza validarea istoricului descarcat, mesaje WF si protectia
+  identitatii proceselor. Limitele concurentei la shutdown si ale markerelor
+  pentru mai multi supravietuitori sunt documentate in raport.
+- Teste finale: 494 trecute, UI izolat cu calcul 779/660/524 pasi; suita generala
+  a fost intrerupta la 43% si nu este raportata drept reusita. Primele probe au
+  deschis coada reala din cauza lipsei LOTO_JOBS_DB; nicio anulare nu apare in
+  jurnal, iar jobul #28 era deja complet. Probe ulterioare cu coada izolata.
+- Raport: `scripts/analysis/audit_2026_11_01_pool30.md`.
 
 ### Rafinarea locala a coverului cu plafon la pool > 19 — 2026-10-31
 
@@ -1330,8 +1403,9 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 
 - `interval_extrema_k16` a fost scoasă din `EXCLUDED_FROM_PRODUCTION`
   (decision.py): `_sanitize_production_name` o acceptă acum, engine-ul o poate
-  rula (apel fără `history_cutoffs` → contractul „un rând = un pas”; la 6/49 o
-  extragere pe zi, deci identic cu bench-ul), iar UI-ul o afișează ca
+  rula. Motorul transmite limitele zilelor calculate pe istoricul valid și
+  restrâns la lookback, ca în bench: istoricul 6/49 conține extrageri cu aceeași
+  dată, astfel că ipoteza anterioară „o extragere pe zi” era greșită. UI-ul o afișează ca
   candidată eligibilă (caption „Eligibilă în producție din 2026-10-31", rang
   numeric când e eligibilă, nu doar 🧪). Rămâne family=`experimental_interval`.
 - Numai Loto 6/49 are folduri pentru ea (per_game). Decizia automată tot nu o
@@ -2816,7 +2890,7 @@ taie.
 |---|---:|---|
 | benchmark fold | `v23` | se schimba output-ul scorerului, `FoldResult`, validarea sau denominatoarele |
 | walk-forward | `v31` | se schimba pool-ul, wheel-ul, structura flat sau semantica hiturilor |
-| worker pipeline | `v22` | se schimba rezultatul serializat al pipeline-ului |
+| worker pipeline | `v23` | se schimba rezultatul serializat al pipeline-ului |
 
 ⚠️ Worker pipeline e INERT azi: UI-ul trimite `use_cache: False` la fiecare job
 (`app_nicegui._build_config_json`), deci stratul nu se atinge in productie.
@@ -2988,14 +3062,31 @@ difera de top-K prin constructie (§6).
 
 ### P1 - acoperire si cost
 
-- [ ] Pastreaza manifest pentru cele 151 de designuri (52 clasice + 99 lotto):
-  geometrie, hash, bilete si acoperire.
-- [ ] Compara La Jolla, ILP si greedy pe aceeasi geometrie prin
-  `(coverage, ticket_count, runtime)`.
-- [ ] Cauta designuri cu mai putine bilete numai offline; promoveaza un fisier
-  doar dupa validare exhaustiva la 100%.
-- [ ] Adauga teste explicite pentru bugete imposibile si raportarea acoperirii
-  partiale.
+- [x] Pastreaza manifest pentru designuri (2026-11-01: `covering_designs/MANIFEST.json`,
+  277 fișiere — 55 C + 99 L + 6 H + 12 R + 66 RL + 6 X + 33 LR — cu geometrie, sha256,
+  bilete și acoperire; 232 covere complete toate la 1.0. Generat de
+  `scripts/analysis/gen_design_manifest.py`; `test_design_manifest.py` verifică
+  că fiecare fișier e listat și hash-urile sunt proaspete, deci manifestul nu
+  poate rămâne în urmă. Auditul exhaustiv 2026-11-01 a re-verificat toate cele
+  670 de intrări (inclusiv RL, după repararea regexului) cu abatere 0 față de
+  numărătoarea combinatorială).
+- [x] Compara La Jolla, ILP si greedy pe aceeasi geometrie prin
+  `(coverage, ticket_count, runtime)` (2026-11-01:
+  `scripts/analysis/wheel_methods_comparison_2026-11-01.{json,md}` — 19 geometrii
+  × cap 0/64: fără plafon La Jolla câștigă peste tot la 100% cu cele mai puține
+  bilete (ex. pool 16 g4 pick 6: 152 vs 198 ILP/greedy; ILP ~15 s vs 0,04 s);
+  cu plafon 64 greedy acoperă mai mult — de aceea producția cu buget folosește
+  hitcover/buget, nu trunchierea designului).
+- [x] Cauta designuri cu mai putine bilete numai offline; promoveaza un fisier
+  doar dupa validare exhaustiva la 100% (regulă în vigoare: test_covering_designs.py
+  + test_lotto_design_and_penalty.py validează C/L la 100% în fiecare rulare;
+  auditul exhaustiv 2026-11-01 a enumerat toate extragerile pentru toate cele
+  670 de intrări, abatere maximă 0; manifestul păstrează hash-urile).
+- [x] Adauga teste explicite pentru bugete imposibile si raportarea acoperirii
+  partiale (`test_budget_edge_cases.py`, 2026-11-01: 10 teste — clamp 99.99,
+  wheel gol → 0.0, guarantee>pick ValueError, condition<guarantee ValueError,
+  buget 1/10 pe pool 16 raportează acoperire parțială reală, cap negativ = fără
+  plafon, pool==pick sistem complet).
 
 Criteriu de iesire: nicio regresie de acoperire, costul scade numai cu dovada
 reproductibila, iar UI nu confunda pool-hit cu ticket-hit.

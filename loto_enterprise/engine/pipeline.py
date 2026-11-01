@@ -49,6 +49,7 @@ class PipelineMixin:
         restrict_base_max=0,
         restrict_base_min=0,
         max_consecutive_run=0,
+        _pool_analysis_only=False,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -573,6 +574,11 @@ class PipelineMixin:
                     logging.info(
                         f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}"
                     )
+        if _pool_analysis_only:
+            # Internal historical analysis only: no wheel is generated. The
+            # backtester supplies and labels its mathematical full-system model.
+            return [], None, None, None, {}, self.audit
+
         if progress_cb:
             progress_cb("Generare predicții finale (Wheeling)...", 70)
 

@@ -392,9 +392,9 @@ def test_the_report_names_the_missing_newest_draws(monkeypatch):
     monkeypatch.setitem(app.STATE, "retro", {"loto_6_49.csv_6/49": ["pas"]})
     meta = {"partial": True, "n_test_draws": 11, "n_expected": 12}
     monkeypatch.setitem(app.STATE, "retro_meta", {"loto_6_49.csv_6/49": meta})
-    assert "11 din 12 extrageri (cele mai recente)" in app._build_report()
+    assert "11 din 12 extrageri (pot exista goluri între extragerile validate)" in app._build_report()
     meta["newest_missing"] = True
-    assert "11 din 12 extrageri (lipsesc cele mai noi)" in app._build_report()
+    assert "11 din 12 extrageri (cea mai recentă extragere lipsește; pot exista și alte goluri)" in app._build_report()
 
 
 def test_a_job_taken_in_an_earlier_session_comes_back_without_finalizing(

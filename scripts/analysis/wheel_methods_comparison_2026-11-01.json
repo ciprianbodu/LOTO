@@ -1,0 +1,2350 @@
+{
+ "date": "2026-11-01",
+ "methods": [
+  "lajolla",
+  "ilp",
+  "greedy"
+ ],
+ "caps": [
+  0,
+  64
+ ],
+ "rows": [
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 17,
+   "coverage_pct": 100.0,
+   "seconds": 0.002,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 17,
+   "coverage_pct": 100.0,
+   "seconds": 15.357,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 18,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 17,
+   "coverage_pct": 100.0,
+   "seconds": 0.005,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 17,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 18,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.005,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 15.016,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.005,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 10,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 10,
+   "coverage_pct": 100.0,
+   "seconds": 15.021,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 11,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 10,
+   "coverage_pct": 100.0,
+   "seconds": 0.009,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 10,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 11,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 20,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 21,
+   "coverage_pct": 100.0,
+   "seconds": 15.017,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 23,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 20,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 21,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 23,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 29,
+   "coverage_pct": 100.0,
+   "seconds": 0.01,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 32,
+   "coverage_pct": 100.0,
+   "seconds": 15.034,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 33,
+   "coverage_pct": 100.0,
+   "seconds": 0.002,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 29,
+   "coverage_pct": 100.0,
+   "seconds": 0.01,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 32,
+   "coverage_pct": 100.0,
+   "seconds": 0.003,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 33,
+   "coverage_pct": 100.0,
+   "seconds": 0.003,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 113,
+   "coverage_pct": 100.0,
+   "seconds": 0.012,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 123,
+   "coverage_pct": 100.0,
+   "seconds": 15.022,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 131,
+   "coverage_pct": 100.0,
+   "seconds": 0.002,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 61.01,
+   "seconds": 0.007,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 56.97,
+   "seconds": 0.003,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 57.78,
+   "seconds": 0.002,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 15,
+   "coverage_pct": 100.0,
+   "seconds": 0.008,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 19,
+   "coverage_pct": 100.0,
+   "seconds": 15.068,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 20,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 15,
+   "coverage_pct": 100.0,
+   "seconds": 0.009,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 19,
+   "coverage_pct": 100.0,
+   "seconds": 0.005,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 20,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 41,
+   "coverage_pct": 100.0,
+   "seconds": 0.009,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 56,
+   "coverage_pct": 100.0,
+   "seconds": 15.055,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 56,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 41,
+   "coverage_pct": 100.0,
+   "seconds": 0.014,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 56,
+   "coverage_pct": 100.0,
+   "seconds": 0.005,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 56,
+   "coverage_pct": 100.0,
+   "seconds": 0.005,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 43,
+   "coverage_pct": 100.0,
+   "seconds": 0.013,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 15.077,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.006,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 43,
+   "coverage_pct": 100.0,
+   "seconds": 0.012,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.007,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 51,
+   "coverage_pct": 100.0,
+   "seconds": 0.006,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 229,
+   "coverage_pct": 100.0,
+   "seconds": 0.013,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 259,
+   "coverage_pct": 100.0,
+   "seconds": 15.096,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 259,
+   "coverage_pct": 100.0,
+   "seconds": 0.006,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 29.67,
+   "seconds": 0.012,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 29.47,
+   "seconds": 0.008,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 30.27,
+   "seconds": 0.002,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 25,
+   "coverage_pct": 100.0,
+   "seconds": 0.018,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 29,
+   "coverage_pct": 100.0,
+   "seconds": 15.291,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 29,
+   "coverage_pct": 100.0,
+   "seconds": 0.013,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 25,
+   "coverage_pct": 100.0,
+   "seconds": 0.021,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 29,
+   "coverage_pct": 100.0,
+   "seconds": 0.015,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 29,
+   "coverage_pct": 100.0,
+   "seconds": 0.013,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 80,
+   "coverage_pct": 100.0,
+   "seconds": 0.023,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 110,
+   "coverage_pct": 100.0,
+   "seconds": 16.457,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 110,
+   "coverage_pct": 100.0,
+   "seconds": 0.025,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 82.42,
+   "seconds": 0.042,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 72.63,
+   "seconds": 0.03,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 74.43,
+   "seconds": 0.014,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 65,
+   "coverage_pct": 100.0,
+   "seconds": 0.09,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 76,
+   "coverage_pct": 100.0,
+   "seconds": 15.466,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 76,
+   "coverage_pct": 100.0,
+   "seconds": 0.011,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 98.57,
+   "seconds": 0.017,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 91.79,
+   "seconds": 0.013,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 92.68,
+   "seconds": 0.009,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 404,
+   "coverage_pct": 100.0,
+   "seconds": 0.033,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 452,
+   "coverage_pct": 100.0,
+   "seconds": 15.102,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 452,
+   "coverage_pct": 100.0,
+   "seconds": 0.012,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 16.87,
+   "seconds": 0.019,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 16.48,
+   "seconds": 0.015,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 17.58,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 38,
+   "coverage_pct": 100.0,
+   "seconds": 0.08,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 45,
+   "coverage_pct": 100.0,
+   "seconds": 15.8,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "tickets": 45,
+   "coverage_pct": 100.0,
+   "seconds": 0.033,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 38,
+   "coverage_pct": 100.0,
+   "seconds": 0.046,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 45,
+   "coverage_pct": 100.0,
+   "seconds": 0.033,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "tickets": 45,
+   "coverage_pct": 100.0,
+   "seconds": 0.033,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 152,
+   "coverage_pct": 100.0,
+   "seconds": 0.043,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 198,
+   "coverage_pct": 100.0,
+   "seconds": 15.428,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "tickets": 198,
+   "coverage_pct": 100.0,
+   "seconds": 0.042,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 46.15,
+   "seconds": 0.059,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 45.82,
+   "seconds": 0.046,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 46.87,
+   "seconds": 0.015,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 0,
+   "tickets": 808,
+   "coverage_pct": 100.0,
+   "seconds": 0.049,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 0,
+   "tickets": 974,
+   "coverage_pct": 100.0,
+   "seconds": 15.242,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 0,
+   "tickets": 974,
+   "coverage_pct": 100.0,
+   "seconds": 0.032,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 7.99,
+   "seconds": 0.057,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 8.47,
+   "seconds": 0.041,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 8.79,
+   "seconds": 0.006,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 0,
+   "tickets": 4368,
+   "coverage_pct": 100.0,
+   "seconds": 0.053,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 0,
+   "tickets": 4368,
+   "coverage_pct": 100.0,
+   "seconds": 0.015,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 0,
+   "tickets": 4368,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 1.47,
+   "seconds": 0.014,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 1.47,
+   "seconds": 0.013,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 1.47,
+   "seconds": 0.0,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 0,
+   "tickets": 8008,
+   "coverage_pct": 100.0,
+   "seconds": 0.004,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 0,
+   "tickets": 8008,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 0,
+   "tickets": 8008,
+   "coverage_pct": 100.0,
+   "seconds": 0.001,
+   "error": null
+  },
+  {
+   "method": "lajolla",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 0.8,
+   "seconds": 0.002,
+   "error": null
+  },
+  {
+   "method": "ilp",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 0.8,
+   "seconds": 0.0,
+   "error": null
+  },
+  {
+   "method": "greedy",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 64,
+   "tickets": 64,
+   "coverage_pct": 0.8,
+   "seconds": 0.0,
+   "error": null
+  }
+ ],
+ "summary": [
+  {
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 17,
+   "winners": [
+    "lajolla",
+    "ilp"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 17,
+     "cov": 100.0,
+     "s": 0.002
+    },
+    "ilp": {
+     "tickets": 17,
+     "cov": 100.0,
+     "s": 15.357
+    },
+    "greedy": {
+     "tickets": 18,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 17,
+   "winners": [
+    "lajolla",
+    "ilp"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 17,
+     "cov": 100.0,
+     "s": 0.005
+    },
+    "ilp": {
+     "tickets": 17,
+     "cov": 100.0,
+     "s": 0.001
+    },
+    "greedy": {
+     "tickets": 18,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 51,
+   "winners": [
+    "lajolla",
+    "ilp",
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.005
+    },
+    "ilp": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 15.016
+    },
+    "greedy": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 51,
+   "winners": [
+    "lajolla",
+    "ilp",
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.005
+    },
+    "ilp": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.001
+    },
+    "greedy": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 10,
+   "winners": [
+    "lajolla",
+    "ilp"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 10,
+     "cov": 100.0,
+     "s": 0.004
+    },
+    "ilp": {
+     "tickets": 10,
+     "cov": 100.0,
+     "s": 15.021
+    },
+    "greedy": {
+     "tickets": 11,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 10,
+   "winners": [
+    "lajolla",
+    "ilp"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 10,
+     "cov": 100.0,
+     "s": 0.009
+    },
+    "ilp": {
+     "tickets": 10,
+     "cov": 100.0,
+     "s": 0.001
+    },
+    "greedy": {
+     "tickets": 11,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 20,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 20,
+     "cov": 100.0,
+     "s": 0.004
+    },
+    "ilp": {
+     "tickets": 21,
+     "cov": 100.0,
+     "s": 15.017
+    },
+    "greedy": {
+     "tickets": 23,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 20,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 20,
+     "cov": 100.0,
+     "s": 0.004
+    },
+    "ilp": {
+     "tickets": 21,
+     "cov": 100.0,
+     "s": 0.001
+    },
+    "greedy": {
+     "tickets": 23,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 29,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 29,
+     "cov": 100.0,
+     "s": 0.01
+    },
+    "ilp": {
+     "tickets": 32,
+     "cov": 100.0,
+     "s": 15.034
+    },
+    "greedy": {
+     "tickets": 33,
+     "cov": 100.0,
+     "s": 0.002
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 29,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 29,
+     "cov": 100.0,
+     "s": 0.01
+    },
+    "ilp": {
+     "tickets": 32,
+     "cov": 100.0,
+     "s": 0.003
+    },
+    "greedy": {
+     "tickets": 33,
+     "cov": 100.0,
+     "s": 0.003
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 113,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 113,
+     "cov": 100.0,
+     "s": 0.012
+    },
+    "ilp": {
+     "tickets": 123,
+     "cov": 100.0,
+     "s": 15.022
+    },
+    "greedy": {
+     "tickets": 131,
+     "cov": 100.0,
+     "s": 0.002
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 61.01,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 61.01,
+     "s": 0.007
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 56.97,
+     "s": 0.003
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 57.78,
+     "s": 0.002
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 15,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 15,
+     "cov": 100.0,
+     "s": 0.008
+    },
+    "ilp": {
+     "tickets": 19,
+     "cov": 100.0,
+     "s": 15.068
+    },
+    "greedy": {
+     "tickets": 20,
+     "cov": 100.0,
+     "s": 0.004
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 15,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 15,
+     "cov": 100.0,
+     "s": 0.009
+    },
+    "ilp": {
+     "tickets": 19,
+     "cov": 100.0,
+     "s": 0.005
+    },
+    "greedy": {
+     "tickets": 20,
+     "cov": 100.0,
+     "s": 0.004
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 41,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 41,
+     "cov": 100.0,
+     "s": 0.009
+    },
+    "ilp": {
+     "tickets": 56,
+     "cov": 100.0,
+     "s": 15.055
+    },
+    "greedy": {
+     "tickets": 56,
+     "cov": 100.0,
+     "s": 0.004
+    }
+   }
+  },
+  {
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 41,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 41,
+     "cov": 100.0,
+     "s": 0.014
+    },
+    "ilp": {
+     "tickets": 56,
+     "cov": 100.0,
+     "s": 0.005
+    },
+    "greedy": {
+     "tickets": 56,
+     "cov": 100.0,
+     "s": 0.005
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 43,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 43,
+     "cov": 100.0,
+     "s": 0.013
+    },
+    "ilp": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 15.077
+    },
+    "greedy": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.006
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 43,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 43,
+     "cov": 100.0,
+     "s": 0.012
+    },
+    "ilp": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.007
+    },
+    "greedy": {
+     "tickets": 51,
+     "cov": 100.0,
+     "s": 0.006
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 229,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 229,
+     "cov": 100.0,
+     "s": 0.013
+    },
+    "ilp": {
+     "tickets": 259,
+     "cov": 100.0,
+     "s": 15.096
+    },
+    "greedy": {
+     "tickets": 259,
+     "cov": 100.0,
+     "s": 0.006
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 30.27,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 29.67,
+     "s": 0.012
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 29.47,
+     "s": 0.008
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 30.27,
+     "s": 0.002
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 25,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 25,
+     "cov": 100.0,
+     "s": 0.018
+    },
+    "ilp": {
+     "tickets": 29,
+     "cov": 100.0,
+     "s": 15.291
+    },
+    "greedy": {
+     "tickets": 29,
+     "cov": 100.0,
+     "s": 0.013
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 25,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 25,
+     "cov": 100.0,
+     "s": 0.021
+    },
+    "ilp": {
+     "tickets": 29,
+     "cov": 100.0,
+     "s": 0.015
+    },
+    "greedy": {
+     "tickets": 29,
+     "cov": 100.0,
+     "s": 0.013
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 80,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 80,
+     "cov": 100.0,
+     "s": 0.023
+    },
+    "ilp": {
+     "tickets": 110,
+     "cov": 100.0,
+     "s": 16.457
+    },
+    "greedy": {
+     "tickets": 110,
+     "cov": 100.0,
+     "s": 0.025
+    }
+   }
+  },
+  {
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 82.42,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 82.42,
+     "s": 0.042
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 72.63,
+     "s": 0.03
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 74.43,
+     "s": 0.014
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 65,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 65,
+     "cov": 100.0,
+     "s": 0.09
+    },
+    "ilp": {
+     "tickets": 76,
+     "cov": 100.0,
+     "s": 15.466
+    },
+    "greedy": {
+     "tickets": 76,
+     "cov": 100.0,
+     "s": 0.011
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 98.57,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 98.57,
+     "s": 0.017
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 91.79,
+     "s": 0.013
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 92.68,
+     "s": 0.009
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 404,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 404,
+     "cov": 100.0,
+     "s": 0.033
+    },
+    "ilp": {
+     "tickets": 452,
+     "cov": 100.0,
+     "s": 15.102
+    },
+    "greedy": {
+     "tickets": 452,
+     "cov": 100.0,
+     "s": 0.012
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 17.58,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 16.87,
+     "s": 0.019
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 16.48,
+     "s": 0.015
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 17.58,
+     "s": 0.004
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 38,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 38,
+     "cov": 100.0,
+     "s": 0.08
+    },
+    "ilp": {
+     "tickets": 45,
+     "cov": 100.0,
+     "s": 15.8
+    },
+    "greedy": {
+     "tickets": 45,
+     "cov": 100.0,
+     "s": 0.033
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "cap": 64,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 38,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 38,
+     "cov": 100.0,
+     "s": 0.046
+    },
+    "ilp": {
+     "tickets": 45,
+     "cov": 100.0,
+     "s": 0.033
+    },
+    "greedy": {
+     "tickets": 45,
+     "cov": 100.0,
+     "s": 0.033
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 152,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 152,
+     "cov": 100.0,
+     "s": 0.043
+    },
+    "ilp": {
+     "tickets": 198,
+     "cov": 100.0,
+     "s": 15.428
+    },
+    "greedy": {
+     "tickets": 198,
+     "cov": 100.0,
+     "s": 0.042
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "cap": 64,
+   "best_coverage_pct": 46.87,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 46.15,
+     "s": 0.059
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 45.82,
+     "s": 0.046
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 46.87,
+     "s": 0.015
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 808,
+   "winners": [
+    "lajolla"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 808,
+     "cov": 100.0,
+     "s": 0.049
+    },
+    "ilp": {
+     "tickets": 974,
+     "cov": 100.0,
+     "s": 15.242
+    },
+    "greedy": {
+     "tickets": 974,
+     "cov": 100.0,
+     "s": 0.032
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "cap": 64,
+   "best_coverage_pct": 8.79,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 7.99,
+     "s": 0.057
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 8.47,
+     "s": 0.041
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 8.79,
+     "s": 0.006
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 4368,
+   "winners": [
+    "lajolla",
+    "ilp",
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 4368,
+     "cov": 100.0,
+     "s": 0.053
+    },
+    "ilp": {
+     "tickets": 4368,
+     "cov": 100.0,
+     "s": 0.015
+    },
+    "greedy": {
+     "tickets": 4368,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 5,
+   "guarantee": 5,
+   "cap": 64,
+   "best_coverage_pct": 1.47,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "lajolla",
+    "ilp",
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 1.47,
+     "s": 0.014
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 1.47,
+     "s": 0.013
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 1.47,
+     "s": 0.0
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 0,
+   "best_coverage_pct": 100.0,
+   "min_tickets_at_best": 8008,
+   "winners": [
+    "lajolla",
+    "ilp",
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 8008,
+     "cov": 100.0,
+     "s": 0.004
+    },
+    "ilp": {
+     "tickets": 8008,
+     "cov": 100.0,
+     "s": 0.001
+    },
+    "greedy": {
+     "tickets": 8008,
+     "cov": 100.0,
+     "s": 0.001
+    }
+   }
+  },
+  {
+   "v": 16,
+   "pick": 6,
+   "guarantee": 6,
+   "cap": 64,
+   "best_coverage_pct": 0.8,
+   "min_tickets_at_best": 64,
+   "winners": [
+    "lajolla",
+    "ilp",
+    "greedy"
+   ],
+   "per_method": {
+    "lajolla": {
+     "tickets": 64,
+     "cov": 0.8,
+     "s": 0.002
+    },
+    "ilp": {
+     "tickets": 64,
+     "cov": 0.8,
+     "s": 0.0
+    },
+    "greedy": {
+     "tickets": 64,
+     "cov": 0.8,
+     "s": 0.0
+    }
+   }
+  }
+ ]
+}

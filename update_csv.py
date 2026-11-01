@@ -342,6 +342,19 @@ def _site_refusal(
     # servită cu 200) nu înseamnă „la zi”.
     if not all_draws:
         return "pagina nu conține nicio extragere (structura site-ului s-a schimbat?)"
+    # PushHistory cere ordine cronologică, iar controlul copiei de mai jos
+    # compară cu ultimul rând fizic. Nu adăuga peste un istoric neordonat.
+    days = [_csv_date_to_date(row[0]) for row in stored if row]
+    days = [day for day in days if day is not None]
+    if any(later < earlier for earlier, later in zip(days, days[1:])):
+        return "CSV-ul nu este ordonat cronologic; verifică și corectează istoricul"
+    # O pagina ramasa in urma CSV-ului nu poate confirma ca nu exista extrageri
+    # noi, chiar daca datele mai vechi care se suprapun coincid.
+    if last is not None and all_draws[-1]["date"] < last:
+        return (
+            f"pagina se oprește la {all_draws[-1]['date']:%d-%m-%Y}, înainte de "
+            f"ultima extragere din CSV ({last:%d-%m-%Y}); nu pot verifica actualitatea"
+        )
     # 3. Zilele comune site–CSV din ultimele CHECK_DAYS zile trebuie să coincidă.
     # În ziua ultimei extrageri stocate, site-ul poate avea în plus a doua
     # extragere a zilei; un rând stocat care nu mai e pe site (corectat pe site

@@ -310,7 +310,7 @@ def test_only_factor_zero_walk_forward_keys_change():
     assert _penalty_sig(5, 0.5) == f"|rp5:{0.5.hex()}"
     assert _penalty_sig(5, 0.0) == f"|rp5:{0.0.hex()}|rpz1"
     source = (ROOT / "worker.py").read_text(encoding="utf-8")
-    assert 'PIPELINE_CACHE_VERSION = "v22"' in source
+    assert 'PIPELINE_CACHE_VERSION = "v23"' in source
 
 
 # --------------------------------------------------------------------------- #

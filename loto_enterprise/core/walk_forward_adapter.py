@@ -146,7 +146,7 @@ CACHE_VERSION = "v31"
 
 @dataclass
 class WalkForwardResult:
-    """Per (draw, variant) entry — drop-in pentru UI care aşteaptă lista flat."""
+    """Per variant, or first best variant per draw when ``variant_count`` is set."""
 
     draw_index: int
     draw_date: str | None
@@ -164,6 +164,10 @@ class WalkForwardResult:
     # Contextul „Bilet complet” al pasului (backtesting._ticket_context), acelasi
     # obiect pe toate intrarile extragerii. None = intrare scrisa inainte de camp.
     ticket_context: dict | None = None
+    # None = legacy complete flat; integer = number of wheel variants evaluated.
+    variant_count: int | None = None
+    virtual_full_system: bool = False
+    variant_prize_groups: dict | None = None
 
     def __post_init__(self):
         if self.target_draw_date is None:
@@ -516,10 +520,9 @@ def _penalty_sig(
 
 _MAX_NUM = {"6/49": 49, "5/40": 40, "joker": 45, "6/45": 45, "5/50": 50}
 
-# Existing pools retain their cache keys and replay behaviour. Newly supported
-# large pools need an explicit ticket budget before a flat result can be built.
+# Existing small pools retain their cache keys and full-flat replay behaviour.
+# Larger pools keep the first best real variant plus the true number evaluated.
 _LEGACY_WF_POOL_MAX = {"5/40": 19}
-_LARGE_POOL_MAX_ROWS = 1_500_000
 
 # Versiunea SEMANTICII de restrângere, nu a formatului cheii. Se incrementează
 # când se schimbă ce pool produce un interval dat — altfel un pickle scris sub
@@ -652,6 +655,7 @@ def _decision_sig(
     )
     lot = _wf_lottery(game_type, game_key, country)
     foreign_sfx = _foreign_decision_suffix(lot) if lot is not None else ""
+    compact_sfx = "|compact-wf1" if _wheel_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16) else ""
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
         from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
@@ -696,7 +700,7 @@ def _decision_sig(
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
-            f"{foreign_sfx}{_scorer_semantics(c)}"
+            f"{foreign_sfx}{_scorer_semantics(c)}{compact_sfx}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -717,6 +721,7 @@ def _decision_sig(
                     )
                     + _consecutive_sig(max_consecutive_run)
                     + foreign_sfx
+                    + compact_sfx
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -794,11 +799,7 @@ def _cache_path(
 def expand_predictions_to_flat(
     preds: list[Any], game_type: str
 ) -> list[WalkForwardResult]:
-    """RetroactivePrediction[N draws] → WalkForwardResult[N draws × M variants].
-
-    Fiecare RetroactivePrediction conține lista de variante prezise pentru o
-    extragere. UI consumă lista flat (variantă × extragere). Expand explicit.
-    """
+    """Flatten full predictions, or keep one counted best variant per draw."""
     flat: list[WalkForwardResult] = []
     for p in preds:
         actual = set(p.actual_numbers)
@@ -816,6 +817,9 @@ def expand_predictions_to_flat(
                     wheel_coverage=getattr(p, "wheel_coverage", None),
                     joker_hit=getattr(p, "joker_hit", None),
                     ticket_context=getattr(p, "ticket_context", None),
+                    variant_count=getattr(p, "variant_count", None),
+                    virtual_full_system=bool(getattr(p, "virtual_full_system", False)),
+                    variant_prize_groups=getattr(p, "variant_prize_groups", None),
                 )
             )
     return flat
@@ -1029,6 +1033,8 @@ def run_honest_walk_forward(
     game_key: str | None = None,
     country: str | None = None,
     cache_only: bool = False,
+    virtual_full_system: bool = False,
+    compact_results: bool = False,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -1073,49 +1079,39 @@ def run_honest_walk_forward(
     universe = lot.max_n if lot is not None else _MAX_NUM.get(game_type)
     if universe is not None and int(pool_size) > universe:
         pool_size = universe
-    preflight_bt = None
-    legacy_pool_max = _LEGACY_WF_POOL_MAX.get(game_type, 16)
-    if int(pool_size) > legacy_pool_max:
-        effective_pool = _effective_pool_size(
-            pool_size, game_type, restrict_base_max, restrict_base_min
+    effective_pool = _effective_pool_size(
+        pool_size, game_type, restrict_base_max, restrict_base_min
+    )
+    compact_variants = compact_results or virtual_full_system or effective_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16)
+    if virtual_full_system:
+        pick = _WF_PICK.get(game_type)
+        g0, condition0, cap0 = _wf_geometry(
+            pool_size, game_type, guarantee, wheel_condition, max_variants
         )
-        if effective_pool > legacy_pool_max:
-            from loto_enterprise.core.backtesting import LotoBacktester
-
-            preflight_bt = LotoBacktester(
-                df_source, game_type=game_type, game_key=wf_key, country=wf_country
+        if pick is None or g0 != pick or condition0 != pick or cap0 != 0:
+            raise ValueError("Analiza virtuală cere sistem complet nelimitat")
+    if compact_variants and effective_pool > 19 and not virtual_full_system:
+        # Use exactly the generator's own resource guard, never a hidden cap.
+        from covering.large_pool import validate_large_pool_request
+        g0, condition0, cap0 = _wf_geometry(
+            pool_size, game_type, guarantee, wheel_condition, max_variants
+        )
+        try:
+            validate_large_pool_request(
+                effective_pool, _WF_PICK.get(game_type, 6), g0, cap0, condition0
             )
-            expected = len(simulation_indices(
-                preflight_bt.df.attrs["training_cutoffs"], backtest_depth_percent
-            ))
-            early_g, early_condition, early_cap = _wf_geometry(
-                pool_size, game_type, guarantee, wheel_condition, max_variants
-            )
-            estimated_rows = expected * early_cap if early_cap > 0 else None
-            if expected and (
-                early_cap <= 0 or estimated_rows > _LARGE_POOL_MAX_ROWS
-            ):
-                # No synthetic zero-hit rows or success percentages: the replay
-                # did not run, and no cache file is read or written on this path.
-                return [], {
-                    "game_type": game_type,
-                    "pool_size": pool_size,
-                    "effective_pool_size": effective_pool,
-                    "backtest_depth_percent": backtest_depth_percent,
-                    "wheel_guarantee": early_g,
-                    "wheel_condition": early_condition,
-                    "max_variants": early_cap,
-                    "from_cache": False,
-                    "n_predictions": 0,
-                    "n_test_draws": 0,
-                    "n_expected": expected,
-                    "partial": True,
-                    "selection_validation": "fixed_current_decision",
-                    "large_pool_wf_skipped": True,
-                    "skip_reason": "variant_cap_required" if early_cap <= 0 else "row_limit",
-                    "estimated_rows": estimated_rows,
-                    "row_limit": _LARGE_POOL_MAX_ROWS,
-                }
+        except ValueError as exc:
+            return [], {
+                "game_type": game_type, "pool_size": pool_size,
+                "effective_pool_size": effective_pool,
+                "backtest_depth_percent": backtest_depth_percent,
+                "wheel_guarantee": g0, "wheel_condition": condition0,
+                "max_variants": cap0, "from_cache": False,
+                "n_predictions": 0, "n_test_draws": 0, "partial": True,
+                "selection_validation": "fixed_current_decision",
+                "large_pool_wf_skipped": True, "skip_reason": "resource_limit",
+                "skip_detail": str(exc),
+            }
     csv_hash = _csv_hash(df_source, game_type)
     # Amprenta deciziei ÎNAINTE de semnătură: o rescriere oricând după acest punct
     # (inclusiv în timpul căutării pașilor refolosibili) se vede la final.
@@ -1135,6 +1131,17 @@ def run_honest_walk_forward(
         game_key=wf_key,
         country=wf_country,
     )
+    if virtual_full_system:
+        # The representative ticket is a mathematical witness, not the first
+        # ticket of the physical wheel; never share its cache with real wheels.
+        dec_sig += "vfs1"
+    elif compact_results:
+        dec_sig += "csim1"
+        if lot is None and game_type in {"6/49", "5/40", "joker"}:
+            # Cache separat: rezumatul pe premii nu există în cache-ul vechi.
+            dec_sig += "pg1"
+    elif compact_variants and lot is None and game_type in {"6/49", "5/40", "joker"}:
+        dec_sig += "pg1"
     g, condition, cap = _wf_geometry(
         pool_size, game_type, guarantee, wheel_condition, max_variants
     )
@@ -1160,6 +1167,7 @@ def run_honest_walk_forward(
         "max_variants": cap,
         "max_consecutive_run": int(max_consecutive_run or 0),
         "selection_validation": "fixed_current_decision",
+        **({"virtual_full_system": True} if virtual_full_system else {}),
         # Rândurile istoricului validat: o extragere nouă găsește direct prefixul.
         "history_rows": int(len(df_source)),
     }
@@ -1243,7 +1251,7 @@ def run_honest_walk_forward(
         f"[WALK-FWD] Cache miss — rulez walk-forward genuin pentru {game_type} "
         f"pool={pool_size} depth={backtest_depth_percent}%"
     )
-    bt = preflight_bt or LotoBacktester(
+    bt = LotoBacktester(
         df_source, game_type=game_type, game_key=wf_key, country=wf_country
     )
     if cached is None and use_cache and not force_refresh:
@@ -1292,6 +1300,8 @@ def run_honest_walk_forward(
         restrict_base_max=int(restrict_base_max or 0),
         restrict_base_min=int(restrict_base_min or 0),
         max_consecutive_run=int(max_consecutive_run or 0),
+        **({"compact_variants": True} if compact_variants else {}),
+        **({"virtual_full_system": True} if virtual_full_system else {}),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).

@@ -112,15 +112,19 @@ def collect() -> list[dict]:
                 entries[-1]["budget"] = n
 
     for p in sorted((DESIGNS / "refined").glob("*.txt")):
-        m = re.match(r"R(?:L)?_(\d+)_(\d+)_(\d+)(?:_(\d+)_(\d+))?_(\d+)_(\d+)\.txt", p.name)
+        # RL_<v>_<pick>_<g>_<c>_<draw>_<max> (6 câmpuri) și R_<v>_<pick>_<g>_<draw>_<max> (5)
+        m = re.match(r"RL_(\d+)_(\d+)_(\d+)_(\d+)_(\d+)_(\d+)\.txt", p.name)
+        if m:
+            v, pick, g, cond, draw_n, max_num = map(int, m.groups())
+            rows = _rows(p.read_text(encoding="utf-8-sig"))
+            add(p, "RL", v, pick, g, cond, draw_n, max_num, rows)
+            continue
+        m = re.match(r"R_(\d+)_(\d+)_(\d+)_(\d+)_(\d+)\.txt", p.name)
         if not m:
             continue
-        v, pick, g = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        cond = int(m.group(4)) if m.group(4) else None
-        t = int(m.group(5)) if m.group(5) else None
-        draw_n, max_num = int(m.group(6)), int(m.group(7))
+        v, pick, g, draw_n, max_num = map(int, m.groups())
         rows = _rows(p.read_text(encoding="utf-8-sig"))
-        add(p, "R" if cond is None else "RL", v, pick, t if cond else g, cond, draw_n, max_num, rows)
+        add(p, "R", v, pick, g, None, draw_n, max_num, rows)
 
     for p in sorted((DESIGNS / "extended").glob("X_*.txt")):
         m = re.match(r"X_(\d+)_(\d+)_(\d+)_(\d+)_(\d+)\.txt", p.name)
