@@ -174,21 +174,16 @@ def has_decision(game_key: str, config_path: str | None = None) -> bool:
 def _production_forbidden(game_key: str | None = None) -> frozenset[str]:
     """Metode care NU au voie să scocheze pool-ul de producție.
 
-    = EXCLUDED_FROM_PRODUCTION (`random` + filtrele de apartenență
-    last-draw: `neighbor_adjacent` / `repeat_last_draw` / `rwr_last_draw` /
-    `haar_multiscale`). best_methods.json vechi/manual putea totuși să numească
-    `random` — fără gardă aici, pool-ul devenea nedeterminist. Mecanismul de
-    tombstone (disabled_methods.json) a fost eliminat la 14.09.2026: un nume
-    necunoscut e respins oricum de gărzile din `_sanitize_production_name`
-    (nu e în METHODS), nu mai e nevoie de o listă separată de blacklist.
+    = EXCLUDED_FROM_PRODUCTION ∪ EXCLUDED_FROM_SINGLE_PICK (pe urnele cu o
+    singură bilă) din decision.py. Din 2026-10-31, la cererea explicită a
+    utilizatorului, AMBELE liste sunt GOALE — nicio metodă nu mai e interzisă în
+    producție (inclusiv `random`, cu riscul de pool nedeterminist notat în
+    AGENTS.md). Mecanismul de tombstone (disabled_methods.json) a fost eliminat
+    la 14.09.2026: un nume necunoscut e respins oricum de gărzile din
+    `_sanitize_production_name` (nu e în METHODS), nu mai e nevoie de o listă
+    separată de blacklist.
     """
-    forbidden: set[str] = {
-        "random",
-        "neighbor_adjacent",
-        "repeat_last_draw",
-        "rwr_last_draw",
-        "haar_multiscale",
-    }
+    forbidden: set[str] = set()
     try:
         from loto_enterprise.benchmark.decision import (
             EXCLUDED_FROM_PRODUCTION,
@@ -200,7 +195,6 @@ def _production_forbidden(game_key: str | None = None) -> frozenset[str]:
         if game_key is not None and _is_urna2_key(game_key):
             forbidden |= {str(m) for m in EXCLUDED_FROM_SINGLE_PICK}
     except Exception as exc:  # noqa: BLE001
-        # "random" (hardcodat mai sus) tot blochează chiar dacă importul e spart.
         logger.error("[method_selector] EXCLUDED_FROM_PRODUCTION indisponibil: %s", exc)
     return frozenset(forbidden)
 
@@ -233,9 +227,9 @@ def _sanitize_production_name(
 ) -> str | None:
     """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
 
-    Respinge: random, filtrele last-draw/spațiale, orice nume care nu e în
-    registry. Altfel UI/audit pretindea un scorer inexistent când rulează de
-    fapt frequency.
+    Respinge: orice nume din `_production_forbidden` (listele sunt GOALE din
+    2026-10-31 — nimic nu mai e interzis) și orice nume care nu e în registry.
+    Altfel UI/audit pretindea un scorer inexistent când rulează de fapt frequency.
     """
     if not name:
         return None
@@ -353,9 +347,9 @@ def rejected_decision_scorer(
 ) -> str | None:
     """Numele scris în decizie pe care producția nu-l poate rula, altfel None.
 
-    Interzis (EXCLUDED_FROM_PRODUCTION) sau necunoscut registry-ului. Auditul
-    îl raportează ca `attempted`, ca rezultatul să nu prezinte rezerva drept
-    câștigătoarea bench-ului.
+    Interzis (EXCLUDED_FROM_PRODUCTION — gol din 2026-10-31) sau necunoscut
+    registry-ului. Auditul îl raportează ca `attempted`, ca rezultatul să nu
+    prezinte rezerva drept câștigătoarea bench-ului.
     """
     if pool_size is None:
         return None

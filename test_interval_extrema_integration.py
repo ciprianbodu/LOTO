@@ -301,4 +301,8 @@ def test_ui_shows_experiment_as_eligible_candidate(
         assert captured.ranking()[0] == METHOD
         assert captured.ranking()[1] == "frequency"
     else:
-        assert captured.ranking() == [METHOD]
+        # Din 2026-10-31 `random` e candidată vizibilă și în clasament (după
+        # METHOD, fiindcă rata ei 0.08 < 0.99).
+        assert captured.ranking() == [METHOD, "random"]
+    # `random` apare mereu ca ultimă candidată (rată 0.08, cea mai mică).
+    assert captured.ranking()[-1] == "random"

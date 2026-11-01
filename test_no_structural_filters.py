@@ -135,12 +135,12 @@ def test_production_method_follows_the_numbers_not_their_labels(
     măsura `levels`/`class_R²` când preferința e ascunsă în departajarea
     internă a metodei (`rank_ensemble_core`, audit 2026-10-07).
     """
-    if METHODS[name][1] == "experimental_interval":
-        # Filtrul de interval alege un interval contiguu pe axa valorilor —
-        # prin definiție dependent de etichetă (nu de istoric). Reactivat în
-        # producție la cererea explicită a utilizatorului (2026-10-31), cu
-        # acest cost cunoscut; celelalte metode rămân verificate mai jos.
-        pytest.skip("filtru de interval: dependent de axa valorilor prin construcție")
+    if METHODS[name][1] == "experimental_interval" or name == "neighbor_adjacent":
+        # Filtre pe axa valorilor (interval contiguu, respectiv vecinătate ±1/±2)
+        # — prin definiție dependente de etichetă, nu de istoric. Reactivate în
+        # producție la cererea explicită a utilizatorului (2026-10-31), cu acest
+        # cost cunoscut; celelalte metode rămân verificate mai jos.
+        pytest.skip("filtru pe axa valorilor: dependent de etichetă prin construcție")
     rng = np.random.default_rng(2026)
     for history, max_num in ((draws, MAX_NUM), (urn2_draws, 20)):
         perm = rng.permutation(max_num) + 1  # π(j) = perm[j - 1]
@@ -170,23 +170,42 @@ def uniform_urn2() -> list[np.ndarray]:
     return [rng.integers(1, 21, size=(200, 1)) for _ in range(100)]
 
 
-@pytest.mark.parametrize("name", sorted(set(METHODS) - {"random"}))
-def test_single_pick_scorer_is_not_the_previous_ball(name: str, uniform_urn2) -> None:
-    """Pe o urnă cu o bilă, top-1 nu are voie să fie de regulă bila precedentă.
+def test_single_pick_previous_ball_class_is_characterized_not_excluded(uniform_urn2) -> None:
+    """Pe o urnă cu o bilă, măsurăm clasa „ultima bilă” (top-1 = bila precedentă).
 
     Pe extrageri uniforme, la întâmplare top-1 repetă bila precedentă în 5% din
-    pași. O metodă care o face în majoritatea pașilor este clasa „ultima bilă"
-    (ca `haar_multiscale`), nu un clasament: e exclusă din producție pe urnele cu
-    o singură bilă (`EXCLUDED_FROM_SINGLE_PICK`).
+    pași. Până în 2026-10-31 metodele din această clasă erau excluse din
+    producție pe urnele single-pick (`EXCLUDED_FROM_SINGLE_PICK`); din
+    2026-10-31, la cererea explicită a utilizatorului, listele de excludere sunt
+    GOALE — testul păstrează doar caracterizarea măsurată (ce metode sunt de fapt
+    clasa „ultima bilă”), fără să mai interzică nimic.
     """
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_SINGLE_PICK
+    from loto_enterprise.benchmark.decision import (
+        EXCLUDED_FROM_PRODUCTION,
+        EXCLUDED_FROM_SINGLE_PICK,
+    )
 
-    share = _urn2_repeat_share(name, uniform_urn2)
-    excluded = name in EXCLUDED_FROM_PRODUCTION or name in EXCLUDED_FROM_SINGLE_PICK
-    if name in EXCLUDED_FROM_SINGLE_PICK:
-        assert share >= 0.5, f"{name}: {share:.0%} — excluderea nu mai e justificată"
-    if not excluded:
-        assert share < 0.5, (
-            f"{name}: top-1 repetă bila precedentă în {share:.0%} din pași pe "
-            "extrageri uniforme — clasa „ultima bilă”, nu un clasament"
-        )
+    assert EXCLUDED_FROM_PRODUCTION == frozenset()
+    assert EXCLUDED_FROM_SINGLE_PICK == frozenset()
+
+    shares = {
+        name: _urn2_repeat_share(name, uniform_urn2)
+        for name in sorted(set(METHODS) - {"random"})
+    }
+    previous_ball_class = {name for name, share in shares.items() if share >= 0.5}
+    # Măsurat 2026-10-31 pe 100 de istorii uniforme (seed 20261007): exact aceste
+    # patru metode repetă bila precedentă în majoritatea pașilor (0,71–1,00).
+    assert previous_ball_class == {
+        "haar_multiscale",
+        "markov_self_state",
+        "repeat_last_draw",
+        "vlmm_self_k3",
+    }
+    for name in previous_ball_class:
+        assert shares[name] >= 0.5, f"{name}: {shares[name]:.0%}"
+    for name, share in shares.items():
+        if name not in previous_ball_class:
+            assert share < 0.5, (
+                f"{name}: top-1 repetă bila precedentă în {share:.0%} din pași pe "
+                "extrageri uniforme — clasa „ultima bilă”, nu un clasament"
+            )

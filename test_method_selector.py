@@ -201,8 +201,10 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
     assert weights["markov_pairs"] == pytest.approx(0.4)
 
 
-def test_ensemble_skips_random_even_if_listed(temp_config):
-    """random e EXCLUDED_FROM_PRODUCTION — nu intră în blend chiar dacă e în JSON."""
+def test_ensemble_includes_random_since_2026_10_31(temp_config):
+    """Din 2026-10-31 listele de excludere sunt GOALE (cerere explicită a
+    utilizatorului): `random` intră în blend dacă e listat în JSON — cu prețul
+    unui pool nedeterminist, documentat în AGENTS.md."""
     cfg_path = temp_config(
         {
             "loto_6_49": {
@@ -218,10 +220,17 @@ def test_ensemble_skips_random_even_if_listed(temp_config):
             }
         }
     )
-    result = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
-    assert len(result) == 1
-    assert result[0][0] == "frequency"
-    assert result[0][2] == pytest.approx(1.0)
+    result = ms.get_ensemble_for_game(
+        "loto_6_49", pool_size=10, config_path=cfg_path, max_methods=3
+    )
+    names = {name for name, _fn, _w in result}
+    assert names == {"frequency", "random"}
+    assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
+    # Cu plafonul implicit (ENSEMBLE_MAX_METHODS = 1) câștigă primul membru valid.
+    result1 = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
+    assert len(result1) == 1
+    assert result1[0][0] == "frequency"
+    assert result1[0][2] == pytest.approx(1.0)
 
 
 def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
@@ -254,8 +263,9 @@ def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
     assert all(e["method"] == "frequency" for e in rec["ensemble"])
 
 
-def test_get_winner_rejects_random_scorer(temp_config):
-    """random e EXCLUDED_FROM_PRODUCTION — scorer → frequency."""
+def test_get_winner_accepts_random_scorer_since_2026_10_31(temp_config):
+    """Din 2026-10-31 `random` nu mai e exclus: un best_methods.json care îl
+    numește scorer este onorat (pool nedeterminist — vezi AGENTS.md)."""
     cfg_path = temp_config(
         {
             "loto_6_49": {
@@ -270,17 +280,18 @@ def test_get_winner_rejects_random_scorer(temp_config):
     )
     assert (
         ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path)
-        == "frequency"
+        == "random"
     )
 
 
-def test_spatial_last_draw_filters_never_reach_production(temp_config):
-    """Filtrele last-draw rămân în METHODS (bench) dar sunt
-    EXCLUDED_FROM_PRODUCTION — un best_methods.json care le numește cade pe
-    frequency, ca random."""
+def test_spatial_last_draw_filters_reach_production_since_2026_10_31(temp_config):
+    """Din 2026-10-31 filtrele last-draw NU mai sunt excluse: un best_methods.json
+    care le numește este onorat (top-K-ul lor e clasă geometrică, nu ranking —
+    consecință asumată de utilizator, vezi AGENTS.md)."""
     from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
     from loto_enterprise.benchmark.methods import METHODS
 
+    assert EXCLUDED_FROM_PRODUCTION == frozenset()
     for scorer in (
         "neighbor_adjacent",
         "repeat_last_draw",
@@ -288,7 +299,7 @@ def test_spatial_last_draw_filters_never_reach_production(temp_config):
         "haar_multiscale",
     ):
         assert scorer in METHODS
-        assert scorer in EXCLUDED_FROM_PRODUCTION
+        assert scorer not in EXCLUDED_FROM_PRODUCTION
         cfg_path = temp_config(
             {
                 "loto_5_40": {
@@ -303,13 +314,12 @@ def test_spatial_last_draw_filters_never_reach_production(temp_config):
         )
         assert (
             ms.get_winner_name("loto_5_40", pool_size=11, config_path=cfg_path)
-            == "frequency"
+            == scorer
         )
         rec = ms.recommend_optimal_config("loto_5_40", 11, config_path=cfg_path)
-        assert rec["scorer"] == "frequency"
-        assert rec["scorer"] != scorer
+        assert rec["scorer"] == scorer
         ens = ms.get_ensemble_for_game("loto_5_40", pool_size=11, config_path=cfg_path)
-        assert all(name != scorer for name, _fn, _w in ens)
+        assert any(name == scorer for name, _fn, _w in ens)
 
 
 def test_old_class_filters_are_gone_and_never_reach_production(temp_config):
@@ -474,7 +484,8 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
 
 
 def test_ensemble_cap_applies_after_sanitization(temp_config):
-    """`random`/ponderi invalide în primele poziții nu consumă locuri din plafon."""
+    """Ponderile invalide nu consumă locuri din plafon; din 2026-10-31 `random`
+    e valid (listele de excludere goale), deci intră primul dacă e listat."""
     cfg_path = temp_config(
         {
             "loto_6_49": {
@@ -497,8 +508,7 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
         "loto_6_49", pool_size=10, config_path=cfg_path, max_methods=3
     )
     names = [name for name, _fn, _w in result]
-    assert "random" not in names
-    assert names == ["frequency", "ewma_hl30", "markov_pairs"]
+    assert names == ["random", "frequency", "ewma_hl30"]
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
 
 

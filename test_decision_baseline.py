@@ -87,9 +87,25 @@ def test_gate_uses_hypergeometric_reference_not_noisy_random_row(monkeypatch):
     )
     assert cfg["baseline_source"] == "hypergeometric"
     assert cfg["baseline_rate"] == pytest.approx(base)
-    assert cfg["scorer"] == "m_signal"
+    # Din 2026-10-31 `random` e candidată eligibilă și are rata cea mai mare
+    # (base+0.05), deci ea câștigă; referința porții rămâne hipergeometrică,
+    # nu rândul zgomotos `random` (altfel niciuna n-ar fi trecut poarta și
+    # low_confidence ar fi True).
+    assert cfg["scorer"] == "random"
     assert cfg["low_confidence"] is False
     assert cfg["random_empirical_rate"] == pytest.approx(base + 0.05, abs=1e-4)
+
+    # Când m_signal bate și rândul zgomotos random, m_signal câștigă — poarta
+    # tot nu folosește rândul random ca referință.
+    rows_signal = []
+    for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
+        rows_signal.append(_row("loto_6_49", "random", pct, n, base + 0.05))
+        rows_signal.append(_row("loto_6_49", "m_signal", pct, n, base + 0.06))
+    cfg_signal = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows_signal), "loto_6_49", 10, 6
+    )
+    assert cfg_signal["scorer"] == "m_signal"
+    assert cfg_signal["baseline_source"] == "hypergeometric"
 
     # Joc necunoscut, fără geometrie: rămâne referința empirică din folds.csv.
     rows2 = [dict(r, game="synthetic_game") for r in rows]

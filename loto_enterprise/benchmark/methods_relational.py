@@ -11,11 +11,13 @@ Ipoteze despre legăturile dintre numere și despre forma extragerii:
     knn_draw_similarity             ce a urmat după extragerile cele mai asemănătoare cu ultima
     neighbor_adjacent               vecinii numerici (±1, ±2) ai ultimei extrageri
                                     (filtru spațial: top-K = clasa de vecinătate;
-                                    rămâne în bench, EXCLUDED_FROM_PRODUCTION)
+                                    în producție din 2026-10-31, listele de
+                                    excludere fiind goale)
 
 `neighbor_adjacent` e filtru de poziție pe axa 1…N, nu predictor. Paritate /
 sume / decade au fost scoase înainte de bench (14.09.2026); acesta a rămas
-și a fost exclus din producție la auditul din 15.09.2026.
+și a fost exclus din producție la auditul din 15.09.2026, apoi reactivat la
+cererea utilizatorului în 2026-10-31.
 
 `neighbor_adjacent` e singura intrare din registry cu familia declarată
 `structure`, dar eticheta descrie doar sursa semnalului (poziția numerică față

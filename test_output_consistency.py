@@ -72,13 +72,19 @@ def test_rendered_ranking_obeys_structural_gate_without_disqualifying_baseline(
     assert ui.ranking()[0] == "frequency"
     assert "markov_pairs" not in ui.ranking()
     assert "70.0%" in ui.text()
-    assert "1 excluse structural" in ui.text()  # random rămâne doar reper
+    # Din 2026-10-31 `random` nu mai e exclusă: apare în clasament ca orice
+    # candidată (aici necalificată, nu ⛔ — per_game nu o include în decizie).
+    assert "1 excluse structural" in ui.text()
+    assert "random" in ui.ranking()
 
 
 def test_no_eligible_method_still_renders_exclusion_reasons(monkeypatch):
     monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
     monkeypatch.setattr(app_ui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
-    df = _folds().query("method != 'frequency'")
+    # Din 2026-10-31 `random` e și ea candidată în listă, deci ramura „Nicio
+    # metodă eligibilă" se testează fără rândul random (altfel rămâne un
+    # competitor vizibil, marcat necalificată).
+    df = _folds().query("method not in ('frequency', 'random')")
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
     assert "Nicio metodă eligibilă" in ui.text()

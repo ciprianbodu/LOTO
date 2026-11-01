@@ -24,11 +24,12 @@ registrele lor, la commit-ul dinaintea înlocuirii) au fost eliminate la
 la cererea utilizatorului.
 
 `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` și `haar_multiscale`
-rămân în registry, pentru ca bench-ul să le măsoare ca martori, dar sunt în
-`EXCLUDED_FROM_PRODUCTION`: top-K-ul lor e determinat de ultima extragere, nu
-de un clasament — vecinii ei, ea însăși, prefixul unui random walk pornit din
-ea, respectiv (pe Urna 2 top-1) echivalentul repetării ei
-(audit 2026-09-15 / 2026-09-16).
+rămân în registry, pentru ca bench-ul să le măsoare ca martori. Până în
+2026-10-31 erau în `EXCLUDED_FROM_PRODUCTION` (top-K-ul lor e determinat de
+ultima extragere, nu de un clasament — vecinii ei, ea însăși, prefixul unui
+random walk pornit din ea, respectiv pe Urna 2 top-1 echivalentul repetării ei;
+audit 2026-09-15 / 2026-09-16); din 2026-10-31, la cererea explicită a
+utilizatorului, listele de excludere sunt GOALE și pot fi și scorer de producție.
 """
 
 from __future__ import annotations

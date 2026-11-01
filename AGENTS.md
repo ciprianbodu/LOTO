@@ -38,20 +38,27 @@ Snapshot verificat la 2026-09-15:
   `METHOD_ALIASES` pastreaza redenumirea `alternating_parity` -> `season_period2`. `neighbor_adjacent` (vecinii numerici ±1/±2 ai
   ultimei extrageri), `repeat_last_draw` (naive last), `rwr_last_draw` (RWR
   semanat din ultima extragere, prefix last-draw) si `haar_multiscale` (pe
-  Urna 2 top-1 ≡ repeat) raman in METHODS ca martori de bench, dar sunt in
-  `EXCLUDED_FROM_PRODUCTION` — top-K e o clasa geometrica, nu un ranking
-  (audit 2026-09-15 / 2026-09-16);
+  Urna 2 top-1 ≡ repeat) raman in METHODS ca martori de bench — top-K e o
+  clasa geometrica, nu un ranking (audit 2026-09-15 / 2026-09-16); din
+  2026-10-31 NU mai sunt excluse din productie (liste goale, vezi mai jos);
 - curare reversibila: toate cele 50 + `frequency` in `active` si in `per_game`
   pe fiecare joc, fara preselectie pe istoric; Re-Bench ruleaza matricea completa
   (52 pe fiecare joc, cu `random` adaugat de runner);
-- `EXCLUDED_FROM_PRODUCTION` = `{random, neighbor_adjacent, repeat_last_draw,
-  rwr_last_draw, haar_multiscale}`; pe Urna 2 si
-  `EXCLUDED_FROM_SINGLE_PICK` = `{markov_self_state, vlmm_self_k3}` (§4.2);
-  vechile filtre de clasa (parity_balance, prime_bias, 649_decade_hot etc.) nu
-  mai exista ca metode. Un nume necunoscut sau exclus din `best_methods.json`
-  cade determinist pe `frequency` (`_sanitize_production_name`);
-  `interval_extrema_k16` a fost REACTIVATA in productie la cererea explicita a
-  utilizatorului (2026-10-31) — vezi „Interval adaptiv experimental" mai jos;
+- `EXCLUDED_FROM_PRODUCTION` si `EXCLUDED_FROM_SINGLE_PICK` sunt **GOALE din
+  2026-10-31**, la cererea explicita a utilizatorului („nu mai excluzi nimic”):
+  nicio metoda din registry nu mai e interzisa in productie, pe niciun joc —
+  inclusiv `random` si filtrele last-draw. Istoric, aici erau `random`,
+  `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`,
+  `interval_extrema_k16`, iar pe Urna 2 `markov_self_state` + `vlmm_self_k3`.
+  Avertismente pastrate: `random` ca scorer = pool NEDETERMINIST (seed-ul se
+  schimba cu fiecare extragere noua); filtrele last-draw au top-K clasa
+  geometrica; pe Urna 2 cele patru metode „bila precedenta” au share 0,71–1,00
+  pe extrageri uniforme (masurat 2026-10-31). `random` ramane REFERINTA de
+  sanity in bench (ferestre comune + poarta de consistenta). Vezi addendumul
+  „Golirea listelor de excludere — 2026-10-31” la „Interval adaptiv
+  experimental”. Vechile filtre de clasa (parity_balance, prime_bias,
+  649_decade_hot etc.) nu mai exista ca metode. Un nume NECUNOSCUT din
+  `best_methods.json` cade determinist pe `frequency` (`_sanitize_production_name`);
 - covering designs locale: 55 covere clasice `C_v_pick_t.txt` (pool 6..16,
   plus `C_17..19_5_4` = LR Cod 46-48 pentru Loto 5/40) si 99 lotto designs
   `L_v_pick_p_t.txt` (pool 6..16, pick 5 si 6), toate validate la 100% la
@@ -1146,7 +1153,10 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   `per_game.joker_urna2` are 48 de metode, fara cele doua si fara
   `naive_bayes_last` (duplicat al `markov_pairs`). Pe jocurile cu pool nu s-a
   introdus poarta pe extragerea precedenta: ocupa cel mult 6 din K locuri, iar
-  restul pool-ului ramane clasamentul metodei.
+  restul pool-ului ramane clasamentul metodei. **Din 2026-10-31 lista de
+  excludere e goală** (vezi §2 și addendumul „Golirea listelor de excludere —
+  2026-10-31”); cele două metode rămân în afara candidaturii automate pe Urna 2
+  doar prin curarea `per_game` (48 de metode), nu prin excludere.
 - Jobul preluat de UI se marcheaza in baza statiei, nu in checkout-ul
   sincronizat (§4.4).
 - Swap-urile de profil dau acelasi rezultat de ~7 ori mai repede la garantia
@@ -1339,6 +1349,42 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   producție), `test_methods_registry.py::test_interval_extrema_reenabled_in_production_2026_10_31`,
   `test_no_structural_filters.py` (sari peste filtrele de clasă/echivarianță
   pentru family experimental_interval, cu motiv).
+
+#### Golirea listelor de excludere — 2026-10-31 (cerere explicită: „nu mai excluzi nimic”)
+
+- `EXCLUDED_FROM_PRODUCTION` și `EXCLUDED_FROM_SINGLE_PICK` din
+  `loto_enterprise/benchmark/decision.py` sunt acum **frozenset() goale**;
+  la fel setul hardcodat `_production_forbidden` din
+  `loto_enterprise/core/method_selector.py` și literalul de fallback din
+  `ui_bench._baseline_methods()`. Nicio metodă din registry nu mai e
+  interzisă în producție, pe niciun joc: `random`, `neighbor_adjacent`,
+  `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`, `interval_extrema_k16`,
+  iar pe Urna 2 `markov_self_state` și `vlmm_self_k3`. Toate porțile care le
+  verifica (sanitize, `get_scorer_for_game`, `rejected_decision_scorer`,
+  candidația deciziei, baseline UI) citesc acum liste goale. Un nume
+  NECUNOSCUT tot cade pe `frequency`.
+- Decizia refăcută din folds.csv curent (`update_best_methods_with_auto_pilot`)
+  alege acum și foste filtre last-draw: `neighbor_adjacent` pe 5/40
+  k12/k15/k16/k17, `rwr_last_draw` pe Joker Urna 1 k6/k8/k10. `random` nu a
+  câștigat niciun pool, dar e acum legal ca scorer. Urna 2 k1 rămâne
+  `ridge_pooled_feats`.
+- Consecințe măsurate/atinse (păstrate ca avertismente):
+  - `random` ca scorer de producție = pool **nedeterminist** (seed-ul se
+    schimbă când intră o extragere nouă în istoric);
+  - filtrele last-draw au top-K cu formă geometrică (clasa de vecini/ultima
+    extragere domină primele poziții);
+  - pe Urna 2, pe 100 de istorice uniforme (seed 20261007), clasa „bila
+    precedenta” are share `{haar_multiscale 1,00, repeat_last_draw 1,00,
+    markov_self_state 0,71, vlmm_self_k3 0,71}`; doar `neighbor_adjacent`
+    pică testul de echivarianță la reetichetare (Δ=1,0), celelalte trei îl trec;
+  - urna2 single-pick: cele două metode „bila precedenta” rămân în afara
+    candidaturii automate doar prin curarea `per_game` (48), nu prin excludere.
+- Teste: `test_methods_registry.py::test_no_method_is_excluded_from_production_since_2026_10_31`,
+  `test_no_structural_filters.py::test_single_pick_previous_ball_class_is_characterized_not_excluded`,
+  cele 4 teste rescrise din `test_method_selector.py`, plus ajustările din
+  `test_benchmark_production_mode.py`, `test_pool_hit_experiment.py`,
+  `test_pool_combinations_validator_2026_10_19.py` (232×3 combinații, 53 nume) și
+  `test_audit_2026_10_07.py`.
 
 ### Audit global 2026-10-03
 
@@ -1650,18 +1696,30 @@ UI-ul face polling la o secunda, fara reload complet.
   `auto_pilot_per_pool`. Auditul (`bench_winner`) marcheaza rezerva: `fallback`,
   `no_decision` (si la Romania fara decizie) sau `attempted` (numele respins,
   sau scorerul deciziei care a crapat ori a dat scoruri goale la generare).
-- `random` este baseline structural pentru benchmark si este interzis in productie.
+- `random` este baseline structural pentru benchmark. **Din 2026-10-31 nu mai
+  este interzis in productie** (`EXCLUDED_FROM_PRODUCTION` goală, §2): poate fi
+  scorer Auto-Pilot dacă apare în `best_methods.json`, cu avertismentul că
+  pool-ul devine nedeterminist (seed-ul depinde de istoric). În practică
+  decizia refăcută din folds.csv curent nu a ales `random` pe niciun pool.
 - `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` si `haar_multiscale`
-  raman in registry pentru bench si sunt interzise in productie
-  (`EXCLUDED_FROM_PRODUCTION`).
+  raman in registry pentru bench; **din 2026-10-31 sunt eligibile si in
+  productie** (listele de excludere goale). Decizia refăcută le alege acum
+  automat: `neighbor_adjacent` pe 5/40 k12/k15/k16/k17, `rwr_last_draw` pe
+  Joker Urna 1 k6/k8/k10.
 - Pe o urna cu o singura bila (Joker Urna 2 si echivalentele straine),
   `markov_self_state` si `vlmm_self_k3` aleg bila precedenta in 66%, respectiv
-  63% din pasi chiar pe extrageri uniforme (5% la intamplare). Decizia le sare
-  la `draw_n == 1`, iar productia le respinge pe Urna 2
-  (`EXCLUDED_FROM_SINGLE_PICK`). Pe jocurile cu pool raman metode de recenta,
-  judecate de bench. `test_no_structural_filters` masoara rata pe extrageri
-  uniforme si opreste orice alta metoda care ar repeta bila in majoritatea
-  pasilor.
+  63% din pasi chiar pe extrageri uniforme (5% la intamplare); masurat
+  2026-10-31 pe 100 de istorice uniforme (seed 20261007): clasa „bila
+  precedenta” = `{haar_multiscale 1,00, markov_self_state 0,71,
+  repeat_last_draw 1,00, vlmm_self_k3 0,71}`. **Din 2026-10-31
+  `EXCLUDED_FROM_SINGLE_PICK` e goală**: productia le poate rula dacă sunt
+  numite în `best_methods.json`, dar decizia automată tot le sare la
+  `draw_n == 1` prin curarea `per_game` (urna2 = 48 de metode, fără ele).
+  Pe jocurile cu pool raman metode de recenta, judecate de bench.
+  `test_no_structural_filters` masoara rata pe extrageri uniforme si opreste
+  orice alta metoda care ar repeta bila in majoritatea pasilor; de la
+  2026-10-31 testul single-pick e de caracterizare (assertă că listele sunt
+  goale și măsoară clasa), nu de excludere.
 
 ### 4.3 Metode active si curate
 
@@ -1671,12 +1729,15 @@ UI-ul face polling la o secunda, fara reload complet.
   o metoda stearsa dispare din cod, iar un nume necunoscut cade pe `frequency`.
 - Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
   decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
-  nu prezic un numar. Daca un astfel de filtru intra in METHODS, intra si in
-  `EXCLUDED_FROM_PRODUCTION` (ramane martor de bench, nu scorer). Azi:
+  nu prezic un numar. Istoric, dacă un astfel de filtru intra în METHODS intra
+  și în `EXCLUDED_FROM_PRODUCTION` (martor de bench, nu scorer):
   `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`.
-  Limita de consecutive (§6) nu e o metoda: e o optiune explicita a
-  utilizatorului pe compozitia pool-ului, aplicata dupa scor, absenta din bench,
-  fara afirmatie predictiva.
+  **Din 2026-10-31 ambele liste sunt goale** — la cererea explicită a
+  utilizatorului nicio metodă nu mai e exclusă din producție; filtrele
+  last-draw rămân în registry și pot fi alese de decizie (au câștigat pool-uri
+  5/40 și Joker Urna 1, vezi §2). Limita de consecutive (§6) nu e o metoda: e o
+  optiune explicita a utilizatorului pe compozitia pool-ului, aplicata dupa
+  scor, absenta din bench, fara afirmatie predictiva.
 - `test_no_structural_filters.py` masoara scorurile pentru clase statice;
   nu constituie dovada unui avantaj predictiv.
 - `curated_methods.json` este reversibil si controleaza costul benchmarkului;
@@ -2091,8 +2152,11 @@ Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar
 Poarta `tiebreak_k1` ramane: o metoda cu doar cateva niveluri de scor pe 1..20,
 care alege mereu acelasi numar prin tie-break, este exclusa ca dependenta de
 tie-break, nu transformata artificial in castigator. `markov_self_state` si
-`vlmm_self_k3` nu intra in decizia si nici in curarea Urnei 2: top-1 e acolo
-bila precedenta (§4.2). Pana la un Re-Bench pe
+`vlmm_self_k3` nu intra în curarea Urnei 2 (per_game = 48 de metode): top-1 e
+acolo bila precedenta (§4.2). **Din 2026-10-31 `EXCLUDED_FROM_SINGLE_PICK` e
+goală**, deci cele două pot fi numite legal în producție pe Urna 2, dar
+decizia automată tot nu le alege (lipsesc din `per_game`, deci nu au folduri).
+Pana la un Re-Bench pe
 extrageri viitoare, un rezultat de clasament NU e dovada de avantaj (vezi
 limita de validitate din §5).
 

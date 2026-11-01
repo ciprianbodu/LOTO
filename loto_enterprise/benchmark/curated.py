@@ -36,8 +36,8 @@ _PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
 #     corect pe acele jocuri. Rândul `random` rămâne totuși necesar: e singura
 #     referință pentru un joc NECUNOSCUT (`baseline_source="empirical_random"`,
 #     fallback pe `real_random`) și alimentează `random_empirical_rate`, verificarea
-#     de sanitate afișată lângă rata hipergeometrică. (Rămâne interzis ca scorer
-#     de producție: decision.EXCLUDED_FROM_PRODUCTION.)
+#     de sanitate afișată lângă rata hipergeometrică. (Din 2026-10-31 listele
+#     de excludere din producție sunt goale — vezi decision.py.)
 #   • `frequency` = decision.SAFE_FALLBACK_SCORER, folosit pe ramura fără metode
 #     calificate. Baseline DETERMINIST, deci permis în producție (regula de aur 7).
 REQUIRED_METHODS = ("random", "frequency")

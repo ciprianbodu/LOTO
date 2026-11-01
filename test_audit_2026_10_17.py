@@ -496,7 +496,12 @@ def test_eta_is_wired_to_the_runner_and_divides_the_foreign_fallback(monkeypatch
     assert "scaled * target * 1.25 / workers" in src
 
 
-def test_leaderboard_labels_render_random_and_witnesses_differently(monkeypatch):
+def test_leaderboard_renders_random_and_former_filters_as_plain_candidates(monkeypatch):
+    # Din 2026-10-31 listele de excludere sunt GOALE (cerere explicită a
+    # utilizatorului): nici `random`, nici filtrele last-draw nu mai primesc
+    # badge-ul de baseline/martor „NU candidat” — apar în clasament ca orice
+    # altă candidată. `random` rămâne vizibilă în listă (și ca referință de
+    # hazard în titlu), chiar dacă per_game nu o conține.
     import ui_bench
     from loto_enterprise.benchmark import decision
     from scripts.analysis.audit_output import capture_ui
@@ -512,11 +517,18 @@ def test_leaderboard_labels_render_random_and_witnesses_differently(monkeypatch)
     monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
     monkeypatch.setattr(app_nicegui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
     with capture_ui() as ui:
-        ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 1)
+        ui_bench._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
     text = ui.text()
-    assert "🎲 baseline «random» (realizare empirică a hazardului" in text
-    assert "🚫 martor «neighbor_adjacent» (filtru exclus din producție" in text
-    assert "baseline «neighbor_adjacent»" not in text
+    assert "NU candidat" not in text
+    assert "🎲 baseline" not in text
+    assert "🚫 martor" not in text
+    # `random` e în listă ca orice candidată (aici necalificată: nu se poate
+    # bate pe ea însăși la poarta de consistență), iar fostul filtru
+    # `neighbor_adjacent` ia 🏆 ca lider al slice-ului.
+    assert "random" in text
+    assert "necalificată" in text
+    assert "neighbor_adjacent" in text
+    assert "🏆" in text
 
 
 def test_leaderboard_reason_uses_the_saved_decision_not_the_recomputed_one(monkeypatch):

@@ -31,9 +31,10 @@ The output is written to best_methods.json under `auto_pilot_per_pool[gk][kN]`
 with full traceability (rationale + supporting numbers).
 
 Invarianți (NU strica):
-    * Baseline-urile NEDETERMINISTE și filtrele de clasă (`EXCLUDED_FROM_PRODUCTION`)
-      sunt doar REFERINȚĂ / registry — nu pot deveni niciodată scorer de
-      producție, nici pe ramura de fallback.
+    * `EXCLUDED_FROM_PRODUCTION` / `EXCLUDED_FROM_SINGLE_PICK` sunt GOALE din
+      2026-10-31 (cerere explicită a utilizatorului) — orice metodă din registry
+      poate fi candidată; `random` rămâne doar REFERINȚĂ de sanity în bench.
+      Vezi avertismentele din AGENTS.md (pool nedeterminist cu `random` etc.).
     * Producția folosește câștigătorul unic evaluat direct. Ratele individuale
       din folds.csv NU permit reconstruirea performanței pool-ului obținut prin
       blend; un ensemble nevalidat poate pierde chiar dacă fiecare membru a
@@ -162,45 +163,26 @@ ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 # niciodată de generator.
 # `frequency` rămâne permisă ca scorer: e baseline DETERMINIST și SAFE_FALLBACK.
 # `recency` a fost blacklistată și ELIMINATĂ din METHODS (2026-08-25).
-# `random` e EXCLUS din producție (fără semnal real, seed instabil în timp).
-# (aceleași date → același scor), reproductibile și explicabile pentru
-# utilizator; un pool "cele mai frecvente numere" e o alegere onestă, un pool
-# "numere date cu zarul" nu.
-EXCLUDED_FROM_PRODUCTION = frozenset(
-    {
-        # `random` e martorul structural (fără semnal, seed instabil în timp).
-        "random",
-        # Filtre de apartenență pe ultima extragere: top-K e o clasă geometrică,
-        # nu un ranking. Rămân în METHODS (bench le măsoară ca martori), dar nu
-        # pot fi scorer de producție — același tratament ca vechile
-        # parity_balance / 649_last_neighbors.
-        # neighbor_adjacent: vecinii numerici ±1/±2 (câștiga 5/40 k10–k14).
-        # repeat_last_draw: naive last; la k=draw_n copiază ultima extragere.
-        # rwr_last_draw: RWR restart 0.3 semănat din ultima extragere — prefix
-        #   last-draw garantat (urna1 k6/k8–k10 câștigător pe 1e8076a).
-        # haar_multiscale: Haar pe fereastra recentă; pe Urna 2 top-1 ≡ repeat.
-        "neighbor_adjacent",
-        "repeat_last_draw",
-        "rwr_last_draw",
-        "haar_multiscale",
-    }
-)
-# `interval_extrema_k16` NU mai e aici din 2026-10-31: reactivată în producție
-# la cererea explicită a utilizatorului. Rămâne family="experimental_interval"
-# (vizibilă ca atare în UI), poate fi aleasă de decizie și de producție — dar
-# numai Loto 6/49 are folduri pentru ea. Avantajul statistic rămâne
-# nedemonstrat (audit retrospectiv: Holm51=0,07935); vezi AGENTS.md §"Interval
-# adaptiv experimental". Producția o apelează fără history_cutoffs, deci
-# contractul explicit „un rând = un pas temporal" (la 6/49 o extragere/zi,
-# deci identic cu bench-ul).
+# 2026-10-31, la cererea explicită a utilizatorului ("nu mai excluzi nimic"),
+# ambele liste sunt GOALE: nicio metodă din registry nu mai e exclusă din
+# producție, pe niciun joc. Istoric, aici erau `random` + filtrele de
+# apartenență pe ultima extragere (`neighbor_adjacent`, `repeat_last_draw`,
+# `rwr_last_draw`, `haar_multiscale`) și, mai devreme, `interval_extrema_k16`.
+# ATENȚIE la consecințe, păstrate în AGENTS.md: `random` ca scorer de producție
+# înseamnă pool-uri NEDETERMINISTE (seed-ul se schimbă cu fiecare extragere
+# nouă, deci același istoric nu mai dă același pool); filtrele last-draw au
+# top-K clasă geometrică, nu ranking; pe Urna 2 `markov_self_state` /
+# `vlmm_self_k3` / `haar_multiscale` / `repeat_last_draw` aleg bila precedentă
+# în majoritatea pașilor pe extrageri uniforme (măsurat 2026-10-31: 0,71–1,0
+# față de 5% la întâmplare). `random` rămâne totuși REFERINȚA de sanity în
+# bench (folosit la ferestrele comune și la poarta de consistență), doar nu mai
+# e exclus ca *candidat*.
+EXCLUDED_FROM_PRODUCTION = frozenset()
 
-# Pe o urnă cu o singură bilă (Joker Urna 2 și echivalentele străine), aceste
-# metode aleg bila precedentă în majoritatea pașilor chiar pe extrageri uniforme:
-# markov_self_state 66%, vlmm_self_k3 63%, față de 5% la întâmplare (audit
-# 2026-10-07; garda din `test_no_structural_filters`). Top-1 e acolo clasa
-# „ultima bilă", ca la haar_multiscale. Pe jocurile cu pool rămân metode de
-# recență obișnuite, judecate de bench.
-EXCLUDED_FROM_SINGLE_PICK = frozenset({"markov_self_state", "vlmm_self_k3"})
+# La fel golită în 2026-10-31 (vezi mai sus): pe urnele cu o singură bilă nu se
+# mai exclude nimic. Măsurătorile care justificau excluderea rămân în
+# `test_no_structural_filters` ca test de caracterizare.
+EXCLUDED_FROM_SINGLE_PICK = frozenset()
 
 # Geometria jocurilor cunoscute (max_num). Folosita cand apelantul nu poate da
 # `max_num` (folds.csv nu contine geometria). Pentru chei necunoscute decizia
@@ -225,7 +207,9 @@ KNOWN_GAME_MAX_NUM.update(foreign_bench_max_num())
 TIEBREAK_MAX_FRACTION = 0.5
 
 # Plasă de siguranță DETERMINISTĂ când nu rămâne nicio metodă reală în
-# folds.csv (niciodată `random` — vezi EXCLUDED_FROM_PRODUCTION).
+# folds.csv. (Din 2026-10-31 listele de excludere sunt goale — vezi mai sus —
+# deci `random` ar putea teoretic fi candidat; fallback-ul de aici rămâne tot
+# `frequency`, determinist.)
 SAFE_FALLBACK_SCORER = "frequency"
 DEFAULT_SIM_DEPTH_PCT = 40  # identic cu default-ul din method_selector
 
@@ -868,9 +852,10 @@ def decide_optimal_config_for_pool(
         return {"error": f"no folds for game {game_key}"}
 
     real_random = sub[(sub["method"] == "random") & (sub["is_random"] == False)]  # noqa: E712
-    # `random` rămâne REFERINȚĂ (real_random, de mai sus), dar e scos din
-    # candidați (vezi EXCLUDED_FROM_PRODUCTION): nu are voie să ajungă scorer de
-    # producție. Plus: sare metodele care nu mai există în METHODS (folds mai
+    # `random` rămâne REFERINȚĂ (real_random, de mai sus). Din 2026-10-31
+    # EXCLUDED_FROM_PRODUCTION e gol (cerere explicită a utilizatorului), deci
+    # `random` poate fi și candidant — cu riscul de pool nedeterminist notat în
+    # AGENTS.md. Plus: sare metodele care nu mai există în METHODS (folds mai
     # vechi decât registry-ul). Mecanismul de tombstone a fost eliminat la
     # 14.09.2026: un nume necunoscut cade oricum, fiindcă nu e în METHODS.
     try:
@@ -1192,9 +1177,9 @@ def decide_optimal_config_for_pool(
     if not qualifying:
         # Fallback: nicio metodă nu a bătut random ≥60% din ferestre.
         # Prioritizăm tot regula T+ (robust, via Wilson), apoi avg_hits (la egalitate).
-        # `random` NU e candidat aici (EXCLUDED_FROM_PRODUCTION): faptul că
-        # nimeni nu-l bate consistent NU îl face scorer legitim — ar însemna să
-        # generăm pool-uri nedeterministe, nereproductibile.
+        # Din 2026-10-31 listele de excludere sunt goale (cerere explicită a
+        # utilizatorului), deci și `random` poate fi candidat aici — vezi
+        # avertismentul despre pool-uri nedeterministe din AGENTS.md.
         low_confidence = True
         ranked = []
         for m in methods:
@@ -1270,8 +1255,8 @@ def decide_optimal_config_for_pool(
                     f"FALLBACK: nicio metodă reală cu rată {target_label} utilizabilă în "
                     f"folds.csv pentru k{pool_size}; "
                     f"selecție conservatoare pe baseline-ul DETERMINIST "
-                    f"{SAFE_FALLBACK_SCORER} (baseline-urile nedeterministe "
-                    f"{sorted(EXCLUDED_FROM_PRODUCTION)} nu pot fi scorer de producție)"
+                    f"{SAFE_FALLBACK_SCORER} (listele de excludere sunt goale din "
+                    f"2026-10-31, dar fallback-ul implicit rămâne determinist)"
                 ),
                 "rate_col_used": None,
                 "rate_col_mismatch": bool(_mismatch_cols_used),

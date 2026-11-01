@@ -213,7 +213,9 @@ def _baseline_methods() -> frozenset[str]:
     Trebuie să rămână SINCRON cu excluderea din decizie (decision.py:
     `methods = [m for m in ... if m not in EXCLUDED_FROM_PRODUCTION]`). Preferăm
     constanta din decision.py dacă există; altfel fallback identic cu ce face
-    decizia azi.
+    decizia azi. Din 2026-10-31 lista e GOALĂ (cerere explicită a utilizatorului:
+    nicio metodă nu mai e exclusă) — `random` apare în clasament ca orice altă
+    candidată.
     NB: `frequency` are family="baseline" în folds.csv, DAR decizia NU o exclude
     (e și fallback-ul de scoring în producție) → rămâne candidat aici."""
     try:
@@ -221,15 +223,7 @@ def _baseline_methods() -> frozenset[str]:
 
         return frozenset(str(m) for m in _EX)
     except Exception:  # noqa: BLE001
-        return frozenset(
-            {
-                "random",
-                "neighbor_adjacent",
-                "repeat_last_draw",
-                "rwr_last_draw",
-                "haar_multiscale",
-            }
-        )
+        return frozenset()
 
 
 def _decision_entry(folds_game_key: str, pool: int) -> dict:
@@ -652,7 +646,15 @@ def _render_bench_leaderboard_slice(
             if _alive_methods is not None and str(m) not in _alive_methods:
                 continue
             # Clasament per joc = lista curated per_game (plus baseline random).
-            if _pg_only and str(m) not in _pg_only and str(m) not in _BASE:
+            # Din 2026-10-31 `_BASE` e goală (nimic exclus din producție), deci
+            # păstrăm `random` explicit în listă — e în continuare referința de
+            # hazard afișată în titlu și acum candidată eligibilă ca oricare alta.
+            if (
+                _pg_only
+                and str(m) not in _pg_only
+                and str(m) not in _BASE
+                and str(m) != "random"
+            ):
                 continue
             score = float(grp[metric].mean())
             # Afișăm media la pool-ul CERUT (k{pool}), nu `avg_hits_topk`, care

@@ -228,6 +228,26 @@ _LEGACY = {
 def test_rejected_decision_scorer_falls_to_frequency_not_to_old_avg_hits_winner(
     monkeypatch, tmp_path
 ):
+    # Din 2026-10-31 nimic nu mai e „interzis” (liste goale), deci singurul motiv
+    # de respingere rămas e numele NECUNOSCUT registry-ului („omnius”).
+    ms = _decision_file(
+        monkeypatch,
+        tmp_path,
+        {
+            "loto_6_49": {
+                "draw_n": 6,
+                "auto_pilot_per_pool": {
+                    "k12": {"scorer": "omnius", "ensemble": [{"method": "omnius", "weight": 1.0}]}
+                },
+                **_LEGACY,
+            }
+        },
+    )
+    assert ms.get_winner_name("loto_6_49", 12) == "frequency"
+    assert [n for n, _fn, _w in ms.get_ensemble_for_game("loto_6_49", 12)] == ["frequency"]
+    cfg = ms.recommend_optimal_config("loto_6_49", 12)
+    assert cfg["scorer"] == "frequency" and cfg["fallback"] is True
+    # Iar `random`, fost interzis, este acum onorat (pool nedeterminist — AGENTS.md).
     ms = _decision_file(
         monkeypatch,
         tmp_path,
@@ -241,20 +261,43 @@ def test_rejected_decision_scorer_falls_to_frequency_not_to_old_avg_hits_winner(
             }
         },
     )
-    assert ms.get_winner_name("loto_6_49", 12) == "frequency"
-    assert [n for n, _fn, _w in ms.get_ensemble_for_game("loto_6_49", 12)] == ["frequency"]
-    cfg = ms.recommend_optimal_config("loto_6_49", 12)
-    assert cfg["scorer"] == "frequency" and cfg["fallback"] is True
+    assert ms.get_winner_name("loto_6_49", 12) == "random"
     # Fără auto_pilot_per_pool, câmpurile vechi rămân rezerva documentată.
     ms = _decision_file(monkeypatch, tmp_path, {"loto_6_49": {"draw_n": 6, **_LEGACY}})
     assert ms.get_winner_name("loto_6_49", 12) == "ewma_hl30"
 
 
-def test_engine_audit_marks_the_reserve_when_the_decision_names_a_forbidden_method(
+def test_engine_audit_marks_the_reserve_when_the_decision_names_an_unknown_method(
     monkeypatch, tmp_path
 ):
     from loto_enterprise.benchmark.methods import score_frequency
 
+    # Din 2026-10-31 listele de excludere sunt goale; singurul nume respins e
+    # cel necunoscut registry-ului („omnius”) — engine-ul cade pe frequency și
+    # auditul numește încercarea în `attempted`.
+    _decision_file(
+        monkeypatch,
+        tmp_path,
+        {
+            "loto_6_49": {
+                "draw_n": 6,
+                "auto_pilot_per_pool": {
+                    "k12": {"scorer": "omnius", "ensemble": [{"method": "omnius", "weight": 1.0}]}
+                },
+            }
+        },
+    )
+    eng = _engine_649()
+    scores = eng._get_timesfm_scores()
+    assert scores == score_frequency(eng._draw_matrix.astype("int64"), 49)
+    info = eng.audit["bench_winner"]["loto_6_49"]
+    assert info["method"] == "frequency"
+    assert info["fallback"] is True and info["attempted"] == "omnius"
+
+
+def test_engine_runs_random_scorer_since_2026_10_31(monkeypatch, tmp_path):
+    # `random` nu mai e interzis: decizia care îl numește este rulată efectiv
+    # (fără fallback), cu toate că pool-ul rezultat e nedeterminist.
     _decision_file(
         monkeypatch,
         tmp_path,
@@ -269,10 +312,10 @@ def test_engine_audit_marks_the_reserve_when_the_decision_names_a_forbidden_meth
     )
     eng = _engine_649()
     scores = eng._get_timesfm_scores()
-    assert scores == score_frequency(eng._draw_matrix.astype("int64"), 49)
+    assert scores  # scoruri nenule, de la metoda random
     info = eng.audit["bench_winner"]["loto_6_49"]
-    assert info["method"] == "frequency"
-    assert info["fallback"] is True and info["attempted"] == "random"
+    assert info["method"] == "random"
+    assert "fallback" not in info
 
 
 def test_romanian_game_without_decision_is_audited_as_no_decision(monkeypatch, tmp_path):
@@ -702,9 +745,12 @@ def test_urn2_decision_skips_methods_that_repeat_the_previous_ball(monkeypatch):
     assert "markov_self_state" not in cfg["ranked_methods"]
 
 
-def test_stale_urn2_decision_with_a_previous_ball_method_falls_to_frequency(
+def test_stale_urn2_decision_with_a_previous_ball_method_is_honored_since_2026_10_31(
     monkeypatch, tmp_path
 ):
+    # Din 2026-10-31 EXCLUDED_FROM_SINGLE_PICK e gol: o decizie veche care numește
+    # o metodă „bila precedentă" pe Urna 2 este onorată (nu mai cade pe frequency).
+    # Doar numele necunoscute mai sunt respinse.
     entry = {"scorer": "markov_self_state", "ensemble": [{"method": "markov_self_state", "weight": 1.0}]}
     ms = _decision_file(
         monkeypatch,
@@ -714,10 +760,18 @@ def test_stale_urn2_decision_with_a_previous_ball_method_falls_to_frequency(
             "loto_6_49": {"draw_n": 6, "auto_pilot_per_pool": {"k12": entry}},
         },
     )
-    assert ms.get_winner_name("joker_urna2", 1) == "frequency"
-    assert ms.rejected_decision_scorer("joker_urna2", 1) == "markov_self_state"
-    # Pe jocurile cu pool rămâne o metodă de recență obișnuită.
+    assert ms.get_winner_name("joker_urna2", 1) == "markov_self_state"
+    assert ms.rejected_decision_scorer("joker_urna2", 1) is None
     assert ms.get_winner_name("loto_6_49", 12) == "markov_self_state"
+    # Nume necunoscut: cade determinist pe frequency și e raportat ca respins.
+    stale = {"scorer": "omnius", "ensemble": [{"method": "omnius", "weight": 1.0}]}
+    ms = _decision_file(
+        monkeypatch,
+        tmp_path,
+        {"joker_urna2": {"draw_n": 1, "auto_pilot_per_pool": {"k1": stale}}},
+    )
+    assert ms.get_winner_name("joker_urna2", 1) == "frequency"
+    assert ms.rejected_decision_scorer("joker_urna2", 1) == "omnius"
 
 
 def test_urn2_curation_drops_excluded_and_duplicate_methods():

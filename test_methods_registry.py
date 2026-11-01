@@ -48,34 +48,39 @@ def test_old_method_names_are_gone():
         assert old not in methods.METHODS
 
 
-def test_spatial_filters_stay_in_registry_but_excluded_from_production():
-    """Filtrele de apartenență rămân măsurabile în bench, nu scorer de producție."""
+def test_no_method_is_excluded_from_production_since_2026_10_31():
+    """La cererea explicită a utilizatorului (2026-10-31, „nu mai excluzi nimic"),
+    ambele liste de excludere sunt GOALE: orice metodă din registry poate fi
+    scorer de producție, pe orice joc — inclusiv `random` și filtrele last-draw
+    (cu riscurile documentate în AGENTS.md: pool nedeterminist, top-K clasă
+    geometrică)."""
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_SINGLE_PICK
+
+    assert EXCLUDED_FROM_PRODUCTION == frozenset()
+    assert EXCLUDED_FROM_SINGLE_PICK == frozenset()
     for name in (
+        "random",
         "neighbor_adjacent",
         "repeat_last_draw",
         "rwr_last_draw",
         "haar_multiscale",
+        "interval_extrema_k16",
+        "markov_self_state",
+        "vlmm_self_k3",
+        "frequency",
     ):
         assert name in methods.METHODS
-        assert name in EXCLUDED_FROM_PRODUCTION
-    assert "random" in EXCLUDED_FROM_PRODUCTION
-    assert "frequency" not in EXCLUDED_FROM_PRODUCTION
-
-
-def test_interval_extrema_reenabled_in_production_2026_10_31():
-    """La cererea explicită a utilizatorului, filtrul experimental de interval
-    este din nou eligibil în producție (numai 6/49 are folduri pentru el)."""
-    name = "interval_extrema_k16"
-    assert name in methods.METHODS
-    assert name not in EXCLUDED_FROM_PRODUCTION
+        assert name not in EXCLUDED_FROM_PRODUCTION
     from loto_enterprise.core import method_selector
 
-    assert method_selector._sanitize_production_name(name, context="test") == name
-    assert name not in method_selector._production_forbidden("loto_6_49")
+    for name in ("random", "neighbor_adjacent", "rwr_last_draw", "interval_extrema_k16"):
+        assert method_selector._sanitize_production_name(name, context="test") == name
+        assert name not in method_selector._production_forbidden("loto_6_49")
+        assert name not in method_selector._production_forbidden("joker_urna2")
 
 
-def test_folds_decision_never_picks_excluded_last_draw_filters():
-    """Pe folds.csv curent, decizia nu poate numi un filtru last-draw."""
+def test_folds_decision_picks_only_alive_methods():
+    """Pe folds.csv curent, decizia numește doar metode prezente în registry."""
     folds = Path("bench_results/folds.csv")
     if not folds.exists():
         pytest.skip("folds.csv absent")
@@ -90,8 +95,7 @@ def test_folds_decision_never_picks_excluded_last_draw_filters():
         cfg = decide_optimal_config_for_pool(
             df, game, k, draw_n, max_num=KNOWN_GAME_MAX_NUM[game]
         )
-        assert cfg.get("scorer") not in EXCLUDED_FROM_PRODUCTION
-        assert cfg.get("scorer") != "rwr_last_draw"
+        assert cfg.get("scorer") in methods.METHODS
 
 
 def test_extension_name_collision_is_logged_not_silent(monkeypatch, caplog):

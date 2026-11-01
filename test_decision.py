@@ -497,8 +497,13 @@ def test_method_without_common_rate_data_cannot_win(monkeypatch):
         draw_n=6,
     )
 
-    assert cfg["scorer"] == decision.SAFE_FALLBACK_SCORER
+    # Din 2026-10-31 `random` nu mai e exclusă din candidați: e singura metodă
+    # cu rată validă, deci câștigă fallback-ul low-confidence (nu bate baseline-ul
+    # empiric 0.10, deci low_confidence rămâne True). Rândul cu rată NaN e în
+    # continuare sărit și raportat — nu poate câștiga cu avg_hits mare.
+    assert cfg["scorer"] == "random"
     assert cfg["low_confidence"] is True
+    assert {"method": "missing_rate_method"} in cfg["rate_data_missing"]
 
 
 # ---------------------------------------------------------------------------

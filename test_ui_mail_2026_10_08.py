@@ -181,7 +181,10 @@ def test_panel_note_uses_the_pool_the_method_was_chosen_for(monkeypatch):
 def test_decision_entry_method_resolves_aliases_like_production():
     renamed = {"scorer": "alternating_parity"}
     assert app._decision_entry_method(renamed, "loto_6_49") == "season_period2"
-    assert app._decision_entry_method({"scorer": "random"}, "loto_6_49") is None
+    # Din 2026-10-31 `random` nu mai e exclusă din producție: rezolvă legal.
+    assert app._decision_entry_method({"scorer": "random"}, "loto_6_49") == "random"
+    # Un nume necunoscut tot cade pe None (apoi pe fallback-ul determinist).
+    assert app._decision_entry_method({"scorer": "omnius"}, "loto_6_49") is None
     assert app._decision_entry_method({}, "loto_6_49") is None
 
 
