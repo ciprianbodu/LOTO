@@ -15,7 +15,7 @@ from loto_enterprise.core import lotteries as L
 
 
 RO_MAX = {"6/49": 49, "5/40": 40, "joker": 45}
-RO_DEFAULT = {"6/49": 16, "5/40": 19, "joker": 15}
+RO_DEFAULT = {"6/49": 16, "5/40": 19, "joker": 12}
 
 
 def _settings(monkeypatch, **values):
@@ -29,7 +29,7 @@ def test_registry_separates_romanian_universes_from_unchanged_defaults():
     for game, maximum in RO_MAX.items():
         lot = L.GAMES_BY_ID[game]
         assert lot.max_pool == maximum == lot.max_n
-        assert lot.default_pool == RO_DEFAULT[game]
+        assert lot.default_pool == {"6/49": 16, "5/40": 19, "joker": 15}[game]
         assert ui_runtime.DEFAULTS[ui_runtime._POOL_KEYS[game]] == RO_DEFAULT[game]
     for lot in L.GAMES:
         if not lot.is_romanian:
@@ -54,26 +54,72 @@ def test_all_accepted_values_reach_the_worker_without_a_hidden_old_limit(
     assert worker._task_norm({"pool_size": 999}, lot)["pool_size"] == RO_MAX[game]
 
 
-def test_settings_roundtrip_keeps_large_choices_and_existing_small_choices(
-    tmp_path, monkeypatch
-):
+def test_settings_reset_at_restart_and_remain_editable_in_session(tmp_path, monkeypatch):
     settings = _settings(monkeypatch)
     saved = {ui_runtime._POOL_KEYS[g]: maximum for g, maximum in RO_MAX.items()}
+    saved.update(pool_size_val=14, guarantee_val=3, max_variants_val=123,
+                 sim_depth_val=55, mail_on_complete=True)
     state = tmp_path / "ui-state.json"
     state.write_text(json.dumps(saved), encoding="utf-8")
     monkeypatch.setattr(ui_runtime, "UI_STATE_FILE", state)
-    ui_runtime._load_settings()
-    assert {g: ui_runtime._pool_size_for(g) for g in RO_MAX} == RO_MAX
+
+    ui_runtime._load_settings()  # process startup
+    assert {g: ui_runtime._pool_size_for(g) for g in RO_MAX} == RO_DEFAULT
+    for key in ("pool_size_val", "guarantee_val", "max_variants_val",
+                "sim_depth_val", "mail_on_complete"):
+        assert settings[key] == saved[key]
+
+    choices = {"6/49": 12, "5/40": 17, "joker": 14}
+    for game, value in choices.items():
+        settings[ui_runtime._POOL_KEYS[game]] = value
     ui_runtime._save_settings()
-    assert all(json.loads(state.read_text())[key] == value for key, value in saved.items())
-    settings[ui_runtime._POOL_KEYS["6/49"]] = 12
-    settings[ui_runtime._POOL_KEYS["5/40"]] = 17
-    settings[ui_runtime._POOL_KEYS["joker"]] = 14
-    ui_runtime._save_settings()
-    ui_runtime._load_settings()
-    assert {g: ui_runtime._pool_size_for(g) for g in RO_MAX} == {
-        "6/49": 12, "5/40": 17, "joker": 14,
+    # A second client sees the shared session settings without a reload.
+    assert {g: ui_runtime._pool_size_for(g) for g in RO_MAX} == choices
+    assert all(json.loads(state.read_text())[ui_runtime._POOL_KEYS[g]] == v
+               for g, v in choices.items())
+    ui_runtime._load_settings()  # next process startup
+    assert {g: ui_runtime._pool_size_for(g) for g in RO_MAX} == RO_DEFAULT
+    assert settings["guarantee_val"] == 3
+    assert settings["max_variants_val"] == 123
+
+
+def test_real_process_restart_restores_only_romanian_pool_defaults(tmp_path):
+    import subprocess
+    import sys
+
+    state = tmp_path / "ui-state.json"
+    state.write_text(json.dumps({
+        "pool_size_649_val": 30, "pool_size_540_val": 25,
+        "pool_size_joker_val": 30, "pool_size_val": 14,
+        "guarantee_val": 3, "max_variants_val": 123,
+    }), encoding="utf-8")
+    script = r"""
+import json, sys
+from pathlib import Path
+import ui_runtime as u
+u.UI_STATE_FILE = Path(sys.argv[1])
+u._load_settings()
+keys = list(u._POOL_KEYS.values()) + ['pool_size_val', 'guarantee_val', 'max_variants_val']
+print(json.dumps({k: u.SETTINGS[k] for k in keys}))
+if sys.argv[2] == 'edit':
+    u.SETTINGS.update(pool_size_649_val=13, pool_size_540_val=20, pool_size_joker_val=14)
+    u._save_settings()
+"""
+    def boot(action):
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(state), action],
+            check=True, text=True, capture_output=True,
+        )
+        return json.loads(result.stdout.splitlines()[-1])
+
+    expected = {
+        "pool_size_649_val": 16, "pool_size_540_val": 19,
+        "pool_size_joker_val": 12, "pool_size_val": 14,
+        "guarantee_val": 3, "max_variants_val": 123,
     }
+    assert boot("edit") == expected
+    assert json.loads(state.read_text(encoding="utf-8"))["pool_size_joker_val"] == 14
+    assert boot("read") == expected
 
 
 @pytest.mark.parametrize("invalid", [None, "invalid", float("inf")])

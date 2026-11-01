@@ -721,6 +721,8 @@ def _on_bench_finished() -> None:
         logger.warning("[BENCH] Decizia nu corespunde țintei selectate; istoricul automat și Auto-Pilot nu pornesc.")
         ui.notify("Decizia nu corespunde țintei selectate; istoricul automat nu a pornit.", type="warning")
         return
+    # Completează jocurile selectate, inclusiv înaintea unei amânări.
+    _load_missing_bench_histories()
     if STATE.get("wf_running") or STATE.get("active_job_id"):
         # Un WF început înainte de bench nu poate fi suprascris. Așteptăm
         # finalizarea lui și verificăm din nou datele și decizia.
@@ -979,6 +981,7 @@ def run_rebench() -> None:
             timeout=8000,
         )
         return
+    _load_missing_bench_histories()
     if not STATE["datasets"]:
         ui.notify(
             "⚠️ Niciun CSV încărcat în UI — bench-ul va rula, dar Auto-Pilot-ul "
@@ -1266,6 +1269,27 @@ def _load_registry_histories(games) -> tuple[list, list]:
     return loaded, errors
 
 
+def _load_missing_bench_histories() -> None:
+    """Completează jocurile selectate, fără să reîncarce sursele existente."""
+    with STATE_LOCK:
+        current = list(STATE.get("datasets") or [])
+        present = {_game_spec_for(name).game_id for name, _ in current}
+        names = {str(name).casefold() for name, _ in current}
+    missing = [game for game in _selected_games() if game.game_id not in present]
+    loadable, errors = [], []
+    for game in missing:
+        name = Path(game.csv).name
+        if name.casefold() in names:
+            errors.append(f"{game.display}: numele {name} este deja folosit de altă sursă")
+        else:
+            loadable.append(game)
+    if loadable:
+        _loaded, load_errors = _load_registry_histories(loadable)
+        errors.extend(load_errors)
+    for error in errors:
+        ui.notify(f"Istoric indisponibil pentru Re-Bench: {error}", type="warning", timeout=8000)
+
+
 def _autoload_histories(games) -> tuple[list, list]:
     """Încarcă automat CSV-urile jocurilor date care lipsesc din STATE sau s-au
     schimbat pe disc de la ultima încărcare (ex. după ACTUALIZARI.bat)."""
@@ -1482,8 +1506,6 @@ def cancel_all() -> None:
         STATE["bench_cancelled"] = True
         STATE.pop("_autopilot_after_virtual", None)
         STATE.pop("_bench_history_pending", None)
-        if STATE.get("results_recovered"):
-            STATE["recovered_wf_auto_attempted"] = STATE["results_recovered"]
     cancel_marker_saved = _mark_bench_cancelled()
     try:
         cancel_pending_running_jobs("Oprit de utilizator")
@@ -2121,37 +2143,6 @@ def _start_recovered_walk_forward() -> None:
     _refresh_status()
     results_panel.refresh()
 
-
-def _start_recovered_history_if_missing() -> bool:
-    """Start missing recovered-job validation without requiring a UI client."""
-    with STATE_LOCK:
-        if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
-            return False
-        if _bench_running() or STATE.get("bench_was_running"):
-            return False
-        results = STATE.get("results")
-        sources = STATE.get("result_sources")
-        recovered = STATE.get("results_recovered")
-        if not recovered or not (isinstance(results, tuple) and len(results) == 2):
-            return False
-        jobs = list(_iter_wf_jobs(results[0]))
-        if not jobs or not isinstance(sources, dict) or any(sources.get(fname) is None for fname, _, _ in jobs):
-            return False
-        retro, meta_by_key = STATE.get("retro", {}), STATE.get("retro_meta", {})
-        def missing(job):
-            fname, g_label, _data = job
-            key = f"{fname}_{g_label}"
-            meta = meta_by_key.get(key, {})
-            if meta.get("large_pool_wf_skipped") or meta.get("decision_moved") or meta.get("scorer_fallback"):
-                return False
-            return bool(meta.get("partial")) or key not in retro
-        if not any(missing(job) for job in jobs):
-            return False
-        if STATE.get("recovered_wf_auto_attempted") == recovered:
-            return False
-        STATE["recovered_wf_auto_attempted"] = recovered
-        _start_walk_forward(post_completion_actions=False)
-        return True
 
 def _romanian_guarantee_text() -> str:
     """Pragul pe joc folosește aceleași limite ca normalizarea workerului."""
@@ -4376,12 +4367,6 @@ def main_page() -> None:
         # Re-Bench terminat → Auto-Pilot automat
         _observe_bench_activity(bench_now)
         _continue_after_automatic_history(bench_now)
-        # Reluăm restaurarea amânată când se termină lucrările în curs.
-        if STATE.get("results_recovered") and STATE.get("recovered_wf_auto_attempted") != STATE.get("results_recovered"):
-            try:
-                _start_recovered_history_if_missing()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("[RECOVERY] reluare automată WF indisponibilă: %s", exc)
         # Refresh UI (rapid, din STATE) — doar când e activ
         if _active:
             logs_panel.refresh()
@@ -4481,88 +4466,56 @@ def _migrate_legacy_finalized_marker() -> None:
 
 
 def _recover_completed_job(*, allow_finalize: bool = True) -> None:
-    """get_active_job() vede DOAR PENDING/RUNNING. Ultimul job terminat se
-    reafișează la fiecare pornire, cu validarea WF din cache; mail-ul și oprirea
-    PC-ului se fac cel mult O DATĂ:
-      • PROASPĂT, nepreluat încă de UI și allow_finalize → flux COMPLET: afișare +
-        walk-forward + mail + shutdown (ca o finalizare normală pe care UI-ul a ratat-o);
-      • VECHI / fără completed_at → DOAR afișare (fără shutdown-surpriză, fără mail vechi).
-      • START_8000 (`allow_finalize=False`) → DOAR afișare chiar dacă e proaspăt:
-        „sesiune nouă, fără job automat” nu are voie să trimită mail sau să oprească PC-ul.
-      • deja preluat (`ui_finalized_at` pe rândul jobului, ori marcajul vechi
-        nemigrat) → DOAR afișare, fără un nou marcaj."""
+    """Reafișează rezultatul și cache-ul, fără calcul nou, mail sau oprire.
+
+    Argumentul istoric rămâne acceptat pentru apelanții existenți; nici un job
+    terminat înainte de pornirea interfeței nu este finalizat automat.
+    """
     last = get_latest_completed_job()
     if not last:
         return
     jid = int(last["id"])
-    # Preluat de UI într-o sesiune anterioară, pe această stație; sau marcajul
-    # vechi pe care baza l-a refuzat la migrare (regula veche, o pornire).
-    taken = bool(last.get("ui_finalized_at")) or (
-        STATE.get("legacy_finalized_job_id") == jid
-    )
-
+    taken = bool(last.get("ui_finalized_at")) or STATE.get("legacy_finalized_job_id") == jid
     payload = decode_queue_result(str(last.get("result_json") or "{}"))
     if not (isinstance(payload, tuple) and len(payload) == 2):
-        # payload gol/invalid (ex. cancel-race) → marcăm văzut, nu reîncercăm la infinit
         if not taken:
             _mark_job_finalized(jid)
         return
-
-    age = _completed_age_seconds(last)
-    if (
-        not taken
-        and allow_finalize
-        and age is not None
-        and age <= RECOVERY_FINALIZE_WINDOW_S
-    ):
-        # Proaspăt → status_panel îl preia exact ca pe o finalizare normală (decode +
-        # STATE["results"] + walk-forward + mail + shutdown) și setează last_finalized.
-        # NU pornim worker-ul (jobul e gata).
-        STATE["active_job_id"] = jid
-        logger.warning(
-            "[RECOVERY] job #%s terminat acum %ss (în fereastră) → "
-            "finalizez complet (mail/shutdown).",
-            jid,
-            int(age),
-        )
-    else:
-        # Vechi, fără completed_at sau deja preluat → doar afișăm, fără mail/shutdown.
-        # Marcăm CLAR că-s dintr-o sesiune anterioară (la loto, a juca numere vechi
-        # crezându-le curente e o eroare reală) — afișat ca avertisment în status_panel.
-        when = _completed_local_text(last) or "sesiune anterioară"
-        with STATE_LOCK:
-            STATE["results"] = payload
-            STATE["result_sources"] = _result_sources_from_job(last)
-            STATE["results_recovered"] = f"job #{jid} · {when}"
-        if not taken:
-            _mark_job_finalized(jid)
+    when = _completed_local_text(last) or "sesiune anterioară"
+    with STATE_LOCK:
+        STATE["results"] = payload
+        STATE["result_sources"] = _result_sources_from_job(last)
+        STATE["results_recovered"] = f"job #{jid} · {when}"
+    if not taken:
+        _mark_job_finalized(jid)
+    try:
+        _load_cached_walk_forward()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[RECOVERY] validare WF din cache: %s", exc)
+    if not taken:
         try:
-            _load_cached_walk_forward()
+            _save_report_file()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("[RECOVERY] validare WF din cache: %s", exc)
-        # Jobul deja preluat are raportul sesiunii care l-a finalizat, cu WF-ul
-        # de atunci; o rescriere fără validarea din cache l-ar pierde.
-        if not taken:
-            try:
-                _save_report_file()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("[RECOVERY] raport: %s", exc)
-        _why = (
-            "deja preluat"
-            if taken
-            else "START_8000 fresh"
-            if not allow_finalize
-            else "necunoscut"
-            if age is None
-            else f"{int(age)}s"
-        )
-        logger.warning(
-            "[RECOVERY] job #%s display-only (%s) → fără mail/shutdown.", jid, _why
-        )
-        try:
-            _start_recovered_history_if_missing()
-        except Exception as exc:  # noqa: BLE001 — recuperarea rămâne disponibilă
-            logger.warning("[RECOVERY] pornire automată WF indisponibilă: %s", exc)
+            logger.warning("[RECOVERY] raport: %s", exc)
+    logger.warning("[RECOVERY] job #%s reafișat, fără recalcul, mail sau oprire.", jid)
+
+
+def _discard_finished_bench_at_startup() -> None:
+    """O rulare încheiată înainte de pornire nu pornește istoricul la pornire.
+
+    O rulare încă activă rămâne urmărită și va declanșa istoricul la final.
+    Un PID cu acces interzis este considerat activ, ca în restul aplicației.
+    """
+    if _bench_running():
+        return
+    identity = STATE.pop("_bench_run_identity", None)
+    if identity is None:
+        return
+    STATE["_bench_seen_run"] = identity[1]
+    STATE["bench_was_running"] = False
+    # Suprimarea este locală: o altă interfață care a lansat Re-Bench poate
+    # avea încă de preluat rezultatul și nu trebuie să-i revendicăm markerul.
+    logger.info("[BENCH] Rularea terminată înainte de pornire nu lansează istoricul automat.")
 
 
 # --------------------------------------------------------------------------- #
@@ -4573,6 +4526,7 @@ def _startup() -> None:
     # NU marcăm joburile RUNNING ca eșuate: worker.py e proces separat care
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
+    _discard_finished_bench_at_startup()
     try:
         # Verificarea e ieftină; recalcularea, dacă trebuie, după pornirea serverului.
         if _decision_target_mismatch():
@@ -4620,7 +4574,7 @@ def _startup() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
     # Job terminat cât UI-ul era COMPLET jos (get_active_job vede doar PENDING/RUNNING)
-    # → altfel rezultatul + mail/shutdown rămân orfane. Doar dacă nu avem deja unul activ.
+    # → reafișăm rezultatul și istoricul deja salvat, fără calcul sau acțiuni post-finalizare.
     try:
         if not STATE.get("active_job_id"):
             _recover_completed_job(allow_finalize=not fresh_start)

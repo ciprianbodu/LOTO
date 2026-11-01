@@ -176,12 +176,13 @@ _RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_
 
 # Pool-ul pe joc (2026-10-22): un câmp pentru fiecare joc românesc, cu maximul
 # jocului (`Lottery.max_pool`: 49 / 40 / 45) și implicit cel mai mare cod LR
-# al lui (6/49 Cod 59: 16; 5/40 Cod 48: 19; Joker: 15). Jocurile
+# al lui (6/49 Cod 59: 16; 5/40 Cod 48: 19); Joker pornește cu 12. Jocurile
 # altor țări folosesc câmpul comun `pool_size_val`.
 _POOL_KEYS = {label: f"pool_size_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
 _POOL_DEFAULTS = {
     label: _LOT.GAMES_BY_ID[label].default_pool for label in _POOL_KEYS
 }
+_POOL_DEFAULTS["joker"] = 12
 
 
 def _pool_size_for(game) -> int:
@@ -490,14 +491,10 @@ def _load_settings() -> None:
         )
     except (TypeError, ValueError, OverflowError):
         SETTINGS["pool_size_val"] = 10
-    # Pool-ul pe joc: 6..universul jocului; o valoare stricată revine la
-    # implicitul păstrat al jocului, nu la noul maxim.
+    # Numai la pornirea procesului, cele trei pooluri revin la valorile cerute.
+    # Câmpurile rămân editabile pentru toată sesiunea și pentru toate paginile.
     for _label, _key in _POOL_KEYS.items():
-        _cap = _LOT.GAMES_BY_ID[_label].max_pool
-        try:
-            SETTINGS[_key] = max(6, min(_cap, int(SETTINGS.get(_key))))
-        except (TypeError, ValueError, OverflowError):
-            SETTINGS[_key] = _POOL_DEFAULTS[_label]
+        SETTINGS[_key] = _POOL_DEFAULTS[_label]
 
     _sanitize_country_settings()
 

@@ -19,6 +19,7 @@ def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
     scope = {
         "_bench_running": lambda: False,
         "_istoric_has_data": lambda: True,
+        "_load_missing_bench_histories": lambda: None,
         "STATE": {"datasets": [object()]},
         "_PCTS": "10,30,60,100",
         "_launch_bench": lambda args, label: calls.append((args, label)),

@@ -1,106 +1,157 @@
-"""Recalcularea sigură a istoricului unui rezultat recuperat."""
+"""Pornirea reafișează cache-ul, fără să pornească o nouă validare."""
+import hashlib
+
 import pytest
+import psutil
 import app_nicegui as app
+import bench_outcome
 from loto_enterprise.core import walk_forward_adapter as wf
 from test_recovered_manual_wf_2026_11_01 import recovered
 
 
-@pytest.fixture
-def background(recovered, monkeypatch):
-    monkeypatch.setitem(app.STATE, "recovered_wf_auto_attempted", None)
-    monkeypatch.setitem(app.STATE, "virtual_wf_running", False)
-    monkeypatch.setitem(app.STATE, "bench_was_running", False)
-    monkeypatch.setattr(app, "_bench_running", lambda: False)
-    monkeypatch.setattr(app.ui, "notify", lambda *a, **k: pytest.fail("notification requires a client"))
-    monkeypatch.setattr(app.results_panel, "refresh", lambda: pytest.fail("refresh requires a client"))
-    monkeypatch.setattr(app, "_finalize_pipeline", lambda: pytest.fail("shutdown"))
-    monkeypatch.setattr(app, "_maybe_send_results_email", lambda: pytest.fail("mail"))
-    return recovered
-
-
-def test_missing_history_uses_original_snapshot_once_without_ui_or_side_effects(background, monkeypatch):
-    frame, data, notices = background
-    calls = []
-    monkeypatch.setattr(wf, "run_honest_walk_forward", lambda **kw: (
-        calls.append(kw) or [{"draw_index": 1}],
-        {"partial": False, "n_test_draws": 1, "n_expected": 1},
-    ))
-    assert app._start_recovered_history_if_missing()
-    assert calls[0]["df_source"] is frame
-    assert calls[0]["pool_size"] == data["pool_size"]
-    assert calls[0]["guarantee"] == data["guarantee"]
-    assert app.STATE["retro"]["history.csv_6/49"] == [{"draw_index": 1}]
-    assert not app._start_recovered_history_if_missing()
-    assert len(calls) == 1
-
-
-@pytest.mark.parametrize("metadata,rows,expected", [
-    ({"partial": False}, ["done"], False),
-    ({"partial": True}, ["partial"], True),
-    ({"large_pool_wf_skipped": True}, [], False),
-    ({"decision_moved": True}, [], False),
-    ({"scorer_fallback": True}, [], False),
-])
-def test_cache_complete_partial_and_explicit_skips(background, monkeypatch, metadata, rows, expected):
-    key = "history.csv_6/49"
-    monkeypatch.setitem(app.STATE, "retro", {key: rows})
-    monkeypatch.setitem(app.STATE, "retro_meta", {key: metadata})
-    starts = []
-    monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: starts.append(kw))
-    assert app._start_recovered_history_if_missing() is expected
-    assert bool(starts) is expected
-    if starts:
-        assert starts == [{"post_completion_actions": False}]
-        assert not app._start_recovered_history_if_missing()
-
-
-@pytest.mark.parametrize("source", [None, {}, {"other.csv": object()}])
-def test_missing_original_snapshot_never_uses_current_datasets(background, monkeypatch, source):
-    monkeypatch.setitem(app.STATE, "result_sources", source)
-    monkeypatch.setitem(app.STATE, "datasets", [("history.csv", object())])
-    monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: pytest.fail("missing source"))
-    assert not app._start_recovered_history_if_missing()
-
-
-@pytest.mark.parametrize("busy", ["wf_running", "virtual_wf_running", "active_job_id", "bench_was_running"])
-def test_no_overlap_with_existing_work(background, monkeypatch, busy):
-    monkeypatch.setitem(app.STATE, busy, True)
-    monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: pytest.fail("overlap"))
-    assert not app._start_recovered_history_if_missing()
-    assert app.STATE["recovered_wf_auto_attempted"] is None
-
-
-def test_recovery_starts_after_cache_load_without_client(background, monkeypatch):
-    frame, data, _ = background
+@pytest.mark.parametrize("taken,allow_finalize", [(False, True), (False, False), (True, True)])
+@pytest.mark.parametrize("cached", ["missing", "partial", "complete"])
+def test_recovery_loads_only_cached_data_even_for_new_job(recovered, monkeypatch, taken, allow_finalize, cached):
+    frame, _data, _ = recovered
     payload = app.STATE["results"]
     monkeypatch.setattr(app, "get_latest_completed_job", lambda: {
-        "id": 28, "result_json": "{}", "ui_finalized_at": "2026-11-01T12:00:00"})
+        "id": 28, "result_json": "{}", "ui_finalized_at": "done" if taken else None})
     monkeypatch.setattr(app, "decode_queue_result", lambda _: payload)
     monkeypatch.setattr(app, "_result_sources_from_job", lambda _: {"history.csv": frame})
-    monkeypatch.setattr(app, "_completed_age_seconds", lambda _: 10000)
-    monkeypatch.setattr(app, "_completed_local_text", lambda _: "earlier")
-    events = []
-    monkeypatch.setattr(app, "_load_cached_walk_forward", lambda: events.append("load"))
-    monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: events.append(("run", kw)))
-    app._recover_completed_job(allow_finalize=False)
-    assert events == ["load", ("run", {"post_completion_actions": False})]
+    monkeypatch.setattr(app, "_completed_local_text", lambda _: "acum")
+    monkeypatch.setattr(app, "_result_scorers_match_decision", lambda *_: True)
+    monkeypatch.setattr(app, "_wf_run_kwargs", lambda *_: {})
+    calls, marks = [], []
+    rows = [] if cached == "missing" else [{"draw_index": 1}]
+    meta = {"partial": cached == "partial"}
+    monkeypatch.setattr(wf, "run_honest_walk_forward", lambda **kw: (calls.append(kw) or rows, meta))
+    monkeypatch.setattr(app, "_mark_job_finalized", marks.append)
+    monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: pytest.fail("new walk-forward on startup"))
+    monkeypatch.setattr(app, "_maybe_send_results_email", lambda: pytest.fail("mail on startup"))
+    monkeypatch.setattr(app, "_finalize_pipeline", lambda: pytest.fail("shutdown on startup"))
+    app._recover_completed_job(allow_finalize=allow_finalize)
+    assert app.STATE["active_job_id"] is None
+    assert app.STATE["results"] == payload
     assert app.STATE["result_sources"]["history.csv"] is frame
-    app._recover_completed_job(allow_finalize=False)
-    assert len([e for e in events if isinstance(e, tuple)]) == 1
+    assert app.STATE["results_recovered"].startswith("job #28")
+    assert len(calls) == 1 and calls[0]["cache_only"] is True and calls[0]["use_cache"] is True
+    assert calls[0]["df_source"] is frame
+    assert marks == ([] if taken else [28])
+    if rows:
+        assert app.STATE["retro"]["history.csv_6/49"] == rows
+        assert app.STATE["retro_meta"]["history.csv_6/49"]["partial"] == (cached == "partial")
 
 
-def test_deferred_recovery_is_not_restarted_after_cancel_all(background, monkeypatch, tmp_path):
-    import psutil
-    monkeypatch.setitem(app.STATE, "bench_was_running", True)
-    assert not app._start_recovered_history_if_missing()
-    monkeypatch.setattr(app, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(app, "BENCH_PID_FILE", tmp_path / "pid")
-    monkeypatch.setattr(app, "_bench_pid_status", lambda: (None, False))
-    monkeypatch.setattr(psutil, "process_iter", lambda *_: [])
-    monkeypatch.setattr(app, "cancel_pending_running_jobs", lambda *_: None)
-    monkeypatch.setattr(app, "_refresh_status", lambda: None)
-    monkeypatch.setattr(app.ui, "notify", lambda *_a, **_kw: None)
-    monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: pytest.fail("cancelled recovery restarted"))
-    app.cancel_all()
-    monkeypatch.setitem(app.STATE, "bench_was_running", False)
-    assert not app._start_recovered_history_if_missing()
+def _marker_fixture(monkeypatch, tmp_path, alive):
+    run_id, pid, timestamp = "a" * 32, 12345, 1000
+    digest = hashlib.sha256(b"same").hexdigest()
+    marker = tmp_path / "bench_pid"
+    marker.write_text(f"{pid}|{timestamp}|{run_id}|{digest}", encoding="utf-8")
+    monkeypatch.setattr(app, "BENCH_PID_FILE", marker)
+    monkeypatch.setattr(bench_outcome, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(app, "_build_config_json", lambda: "same")
+    monkeypatch.setattr(app, "_bench_process_identity", lambda _: True)
+    monkeypatch.setattr(app, "_bench_survivor_identity", lambda *_: False)
+    for key, value in {"_bench_run_identity": None, "_bench_seen_run": None,
+                       "_bench_survivors": [], "bench_was_running": False,
+                       "bench_cancelled": False}.items():
+        monkeypatch.setitem(app.STATE, key, value)
+    class Process:
+        def __init__(self, given):
+            if not alive[0]:
+                raise psutil.NoSuchProcess(given)
+        def status(self): return "running"
+        def create_time(self): return timestamp
+    monkeypatch.setattr(psutil, "Process", Process)
+    return run_id, pid
+
+
+def test_bench_completed_before_start_is_suppressed_locally_and_never_triggers(recovered, monkeypatch, tmp_path):
+    run_id, pid = _marker_fixture(monkeypatch, tmp_path, [False])
+    bench_outcome.record_exit(run_id, pid, 0)
+    monkeypatch.setattr(app, "_on_bench_finished", lambda: pytest.fail("stale bench triggered"))
+    app._discard_finished_bench_at_startup()
+    assert not bench_outcome.is_claimed(run_id)
+    assert app.STATE["bench_was_running"] is False
+    app._observe_bench_activity(app._bench_running())
+    # A further UI restart suppresses the old outcome locally again.
+    app.STATE["_bench_seen_run"] = None
+    app._discard_finished_bench_at_startup()
+    app._observe_bench_activity(app._bench_running())
+
+
+def test_bench_running_at_start_triggers_once_when_it_later_finishes(recovered, monkeypatch, tmp_path):
+    alive = [True]
+    run_id, pid = _marker_fixture(monkeypatch, tmp_path, alive)
+    events = []
+    monkeypatch.setattr(app, "_on_bench_finished", lambda: events.append("bench"))
+    app._discard_finished_bench_at_startup()
+    assert app.STATE["bench_was_running"] is True
+    assert not bench_outcome.is_claimed(run_id)
+    bench_outcome.record_exit(run_id, pid, 0)
+    alive[0] = False
+    app._observe_bench_activity(app._bench_running())
+    app._observe_bench_activity(app._bench_running())
+    assert events == ["bench"]
+    assert bench_outcome.is_claimed(run_id)
+
+
+def test_running_job_reattached_at_start_finishes_with_normal_actions(recovered, monkeypatch):
+    from scripts.analysis.audit_output import capture_ui
+    frame, _data, _ = recovered
+    payload = app.STATE["results"]
+    events = []
+    for name in ("init_job_queue", "_load_settings", "_migrate_legacy_finalized_marker",
+                 "_discard_finished_bench_at_startup"):
+        monkeypatch.setattr(app, name, lambda: None)
+    monkeypatch.setattr(app, "_decision_target_mismatch", lambda: False)
+    monkeypatch.setattr(app, "is_fresh_ui_start", lambda: False)
+    monkeypatch.setattr(app, "get_active_job", lambda: {"id": 28, "status": "RUNNING"})
+    monkeypatch.setattr(app, "is_unstarted_job", lambda _: False)
+    monkeypatch.setattr(app, "ensure_worker_running", lambda: events.append("worker"))
+    monkeypatch.setattr(app, "_recover_completed_job", lambda **_: pytest.fail("recovered while active"))
+    monkeypatch.setattr(app, "_bench_running", lambda: False)
+    monkeypatch.setitem(app.STATE, "active_job_id", None)
+    app._startup()
+    assert app.STATE["active_job_id"] == 28 and events == ["worker"]
+    monkeypatch.setattr(app, "get_job_status", lambda _: {"id": 28, "status": "COMPLETED", "result_json": "{}"})
+    monkeypatch.setattr(app, "decode_queue_result", lambda _: payload)
+    monkeypatch.setattr(app, "_result_sources_from_job", lambda _: {"history.csv": frame})
+    monkeypatch.setattr(app, "_mark_job_finalized", lambda _: events.append("claimed"))
+    monkeypatch.setattr(app, "_maybe_send_results_email", lambda: events.append("mail"))
+    monkeypatch.setattr(app, "_start_walk_forward", lambda **_: events.append("wf"))
+    monkeypatch.setattr(app, "_shutdown_banner", lambda: None)
+    with capture_ui():
+        app.status_panel.func()
+    assert events == ["worker", "claimed", "mail", "wf"]
+    assert app.STATE["results_recovered"] is None
+
+
+def test_second_ui_startup_does_not_consume_first_uis_bench_outcome(recovered, monkeypatch, tmp_path):
+    alive = [False]
+    run_id, pid = _marker_fixture(monkeypatch, tmp_path, alive)
+    bench_outcome.record_exit(run_id, pid, 0)
+    digest = hashlib.sha256(b"same").hexdigest()
+    class FinishedProcess:
+        def poll(self): return 0
+    owner = dict(app.STATE)
+    owner.update({"bench_was_running": True, "_bench_run_identity": (pid, run_id, digest),
+                  "_bench_process": FinishedProcess(), "_bench_seen_run": None})
+    newcomer = dict(app.STATE)
+    newcomer.update({"bench_was_running": False, "_bench_run_identity": None,
+                     "_bench_process": None, "_bench_seen_run": None})
+    events = []
+    monkeypatch.setattr(app, "_on_bench_finished", lambda: events.append("history"))
+
+    # A second UI starts after the benchmark has exited, but before its owner
+    # has observed completion. Its local suppression must not claim the receipt.
+    monkeypatch.setattr(app, "STATE", newcomer)
+    app._discard_finished_bench_at_startup()
+    app._observe_bench_activity(app._bench_running())
+    assert not events and not bench_outcome.is_claimed(run_id)
+
+    # The original UI can still claim and process its own successful run once.
+    monkeypatch.setattr(app, "STATE", owner)
+    app._observe_bench_activity(app._bench_running())
+    app._observe_bench_activity(app._bench_running())
+    assert events == ["history"] and bench_outcome.is_claimed(run_id)

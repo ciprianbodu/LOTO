@@ -89,7 +89,7 @@ def test_guarantee_5_with_a_small_cap_uses_lower_guarantees_at_19():
     assert wheel_hit_probabilities(pool, wheel, 6, 40)["ticket"][3] > 0.40
 
 
-def test_lottery_caps_and_defaults_follow_the_largest_lr_code():
+def test_lottery_caps_and_defaults():
     import ui_runtime
 
     caps = {g.game_id: g.max_pool for g in L.GAMES}
@@ -97,15 +97,15 @@ def test_lottery_caps_and_defaults_follow_the_largest_lr_code():
     assert all(v == 16 for k, v in caps.items() if not L.GAMES_BY_ID[k].is_romanian)
     for game, key in ui_runtime._POOL_KEYS.items():
         largest = max(s.n for s in lr.lr_schemes(game))
-        want = min(largest, L.GAMES_BY_ID[game].max_pool)
+        want = 12 if game == "joker" else min(largest, L.GAMES_BY_ID[game].max_pool)
         assert ui_runtime.DEFAULTS[key] == ui_runtime._POOL_DEFAULTS[game] == want
-    assert ui_runtime._POOL_DEFAULTS == {"6/49": 16, "5/40": 19, "joker": 15}
+    assert ui_runtime._POOL_DEFAULTS == {"6/49": 16, "5/40": 19, "joker": 12}
 
 
 # --------------------------------------------------------------------------- #
 # Setări, config, Auto-Pilot, clasament
 # --------------------------------------------------------------------------- #
-def test_pool_setting_per_game_is_clamped_and_survives_a_restart(tmp_path, monkeypatch):
+def test_pool_setting_per_game_is_reset_at_each_restart(tmp_path, monkeypatch):
     import ui_runtime
 
     state = tmp_path / ".ui_state.json"
@@ -117,12 +117,9 @@ def test_pool_setting_per_game_is_clamped_and_survives_a_restart(tmp_path, monke
     for key in keys.values():
         monkeypatch.setitem(ui_runtime.SETTINGS, key, None)
     ui_runtime._load_settings()
-    assert ui_runtime.SETTINGS[keys["5/40"]] == 25
-    assert ui_runtime.SETTINGS[keys["6/49"]] == 18
-    assert ui_runtime.SETTINGS[keys["joker"]] == 15
-    state.write_text(json.dumps({keys["5/40"]: 18}), "utf-8")
-    ui_runtime._load_settings()
-    assert ui_runtime.SETTINGS[keys["5/40"]] == 18
+    assert {g: ui_runtime.SETTINGS[key] for g, key in keys.items()} == {
+        "6/49": 16, "5/40": 19, "joker": 12,
+    }
     assert set(keys.values()) <= set(ui_runtime.UI_PERSIST_KEYS)
 
 
@@ -160,12 +157,12 @@ def test_config_sends_each_game_its_own_pool(monkeypatch):
     monkeypatch.setitem(app.SETTINGS, "games_val", [])
     cfg = json.loads(app._build_config_json())
     pools = {ds["tasks"][0]["game_label"]: ds["tasks"][0]["pool_size"] for ds in cfg["datasets"]}
-    assert pools == {"6/49": 16, "5/40": 19, "joker": 15}
+    assert pools == {"6/49": 16, "5/40": 19, "joker": 12}
     monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["5/40"], 17)
     again = json.loads(app._build_config_json())
     assert again["input_hash"] != cfg["input_hash"]
     pools = {ds["tasks"][0]["game_label"]: ds["tasks"][0]["pool_size"] for ds in again["datasets"]}
-    assert pools == {"6/49": 16, "5/40": 17, "joker": 15}
+    assert pools == {"6/49": 16, "5/40": 17, "joker": 12}
 
 
 def test_autopilot_asks_each_game_for_its_own_pool(monkeypatch):

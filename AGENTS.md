@@ -123,17 +123,31 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 
 ### Istoric automat dupa Re-Bench — 2026-11-01
 
+- La pornirea procesului, poolurile romanesti revin la 16 pentru 6/49, 19
+  pentru 5/40 si 12 pentru Joker Urna 1, indiferent de valorile salvate;
+  celelalte setari raman salvate, iar campurile pot fi modificate in sesiune.
+- Pornirea nu calculeaza automat istoricul unui rezultat recuperat si nu
+  relanseaza un Re-Bench incheiat inainte de pornire. Cache-ul disponibil se
+  afiseaza, iar calculul manual ramane disponibil. Un Re-Bench inca activ este
+  urmarit si isi porneste istoricul la incheierea reusita.
+- Verificat izolat: suita impartita in patru loturi (4136 trecute, 22 sarite;
+  un test al handlerului executat separat avea nevoie de noul helper in
+  contextul simulat si a trecut dupa corectare), plus 132 de teste tinta si
+  proba HTTP cu setari salvate. Aplicatia activa nu a fost repornita.
 - La Re-Bench confirmat reusit, istoricul porneste automat si deschide Analiza &
   Clasament. Sistemele complete fara plafon sunt virtuale; pentru cele cu plafon
   sau garantie redusa se simuleaza variantele, daca Auto-Pilot nu genereaza un
   rezultat fizic. Selectia este per joc si procentele se raporteaza la extrageri.
+  Jocurile selectate care lipsesc din sesiune sunt incarcate din registru la
+  lansare si la finalizare, fara a inlocui sursele deja incarcate.
 - Pool 30 cu g6/5/5 si plafon 0 depaseste limita generarii fizice; analiza
   virtuala ruleaza fara bilete sau premii. Un sistem fizic imposibil este aratat
   cu motivul refuzului si nu este trimis ca job sortit esecului.
-- Un rezultat vechi recuperat reia automat istoricul lipsa/partial pe sursele
-  originale, fara mail sau shutdown. Anularea opreste si reluarile amanate.
+- Un rezultat recuperat poate avea istoricul lipsa/partial calculat manual pe
+  sursele originale, fara mail sau shutdown. Anularea opreste reluarile amanate.
 - `bench_outcome.py`: marker unic cu PID, UUID si rezultat, revendicat o singura
-  data; dupa restart asteapta sursele si setarile identice, cu termen de 10 minute.
+  data; pentru un bench activ la restart asteapta sursele si setarile identice,
+  cu termen de 10 minute.
   Bench esuat/anulat sau decizie pe tinta nerefacuta nu porneste automatizarea.
   Doua UI-uri care lanseaza bench simultan nu au lacat comun.
 - WF de generare nu programeaza oprirea PC cand un bench/istoric este in curs
@@ -147,8 +161,8 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 - `interval_extrema_k16` foloseste aceleasi limite de zi in bench, motor si WF;
   cheia WF se schimba selectiv, cache worker v23. Nicio metoda nu a fost exclusa.
 - Istoric hits pentru pooluri mari: variantele sunt calculate efectiv, dar se
-  retine compact primul bilet maxim si numarul real de variante. Rezultatul
-  recuperat isi calculeaza automat istoricul original; actiunea manuala ramane disponibila.
+  retine compact primul bilet maxim si numarul real de variante. Istoricul
+  rezultatului recuperat se poate calcula manual.
 - Analiza separata a sistemului complet virtual, in Analiza & Clasament: poolul
   fiecarui pas, best=min(hiturile poolului, marimea biletului), numar exact de
   combinatii, exemplu construit dupa extragere; 30% sau 100%, cache separat,
@@ -2255,10 +2269,10 @@ limita de validitate din §5).
   actualizeaza abia la reincarcare; cateva texte romanesti (nota de garantie,
   ordinea WF) apar si la alte tari; tariful strain nu include taxa pe bilet.
 
-- Pool-ul se alege pe joc (2026-10-22): un camp pentru Loto 6/49 (6..16,
-  implicit 16 = Cod 59), unul pentru Loto 5/40 (6..19, implicit 19 = Cod 48) si
-  unul pentru Joker (6..16, implicit 15, cel mai mare cod Joker); `ui_runtime.
-  _pool_size_for` e sursa unica. Jocurile altor tari folosesc campul comun
+- Pool-ul se alege pe joc: un camp pentru Loto 6/49 (6..49, implicit 16), unul
+  pentru Loto 5/40 (6..40, implicit 19) si unul pentru Joker (6..45, implicit
+  12); `ui_runtime._pool_size_for` e sursa unica. La pornirea procesului,
+  cele trei campuri revin la valorile implicite. Jocurile altor tari folosesc campul comun
   `pool_size_val` (6..16). Maximul vine din `Lottery.max_pool`, comun cu worker-ul.
 - Sub 1024 px, Quasar scoate sertarul din ecran; butonul plutitor „☰”
   (`ui.page_sticky`, clasa `lt-md`) il deschide. Antetul paginii nu se modifica.
