@@ -1,5 +1,11 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Ecran 4+/5+, 01.11.2026:** [42 de metode noi orientate pe hituri 4+ și 5+](hit5plus_screen_2026-11-01.md).
+6 familii netestate (triple/quadruple, NMF, cluster k-means, pair-lift cu
+dezintegrare), 12 celule, nul pe 100 de istorii, Holm + replicare externă.
+Nimic promovat: rata pool-ului la 4+/5+ rămâne hipergeometrică.
+Reproducere: `python scripts/analysis/hit5plus_screen_2026-11-01.py`.
+
 **Audit pe module și mai multe hituri 4+, 22.10.2026:** [14 defecte reparate și pârghiile 4+ măsurate exact](audit_hits_2026-10-22.md).
 Zece zone auditate, fiecare constatare reprodusă și verificată adversarial; 14
 reparate, cu teste care pică pe codul vechi. Configurația pool 16 / garanția 4
