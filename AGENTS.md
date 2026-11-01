@@ -2938,7 +2938,7 @@ submit -> worker -> rezultat. Nu considera simplul import suficient.
 - [x] Ruleaza `pip check` si `verify_imports.py`: toate modulele sunt verzi.
 - [x] Intareste `ACTUALIZARI.bat`: detector fara `py`, semnatura installer,
   erori fatale la pip/import si snapshot extern arhivei versionate.
-- [ ] Porneste UI + worker si executa un job E2E pe fiecare tip de joc.
+- [x] Porneste UI + worker si executa un job E2E pe fiecare tip de joc (verificat 2026-11-01, runtime izolat, Python 3.14.10: UI HTTP 200 pe port liber; 3 joburi pipeline câte unul per joc RO, toate COMPLETED cu payload decodat via `decode_queue_result` — 6/49 pool 16 → 152 variante, 5/40 pool 19 → 930, Joker pool 15 → 294, toate acoperire 100.0%; raport salvat în scratchpad-ul sesiunii, `e2e_p0_2026-11-01.json`).
 
 Criteriu de iesire: Python 3.14 si venv functionale, toate importurile obligatorii
 verzi, pytest verde, UI HTTP 200 si payload worker decodat corect.
