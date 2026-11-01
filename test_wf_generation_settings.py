@@ -76,6 +76,20 @@ def test_cache_fallback_still_separates_lookback(monkeypatch):
     assert wf._decision_sig("6/49", 10, 30.0) != wf._decision_sig("6/49", 10, 100.0)
 
 
+def test_wf_lookback_reads_the_setting_like_the_submitted_job(monkeypatch):
+    # Un câmp golit (None) se citea 0 în WF, iar jobul trimis lua valoarea
+    # implicită: cu o implicită nenulă, WF valida alt istoric decât generarea.
+    import ui_runtime
+
+    monkeypatch.setitem(ui_runtime.DEFAULTS, "lookback_val", 10)
+    monkeypatch.setitem(ui_runtime.SETTINGS, "lookback_val", None)
+    assert app._int_setting("lookback_val") == 10
+    assert app._effective_lookback_pct() == 10.0
+    monkeypatch.setitem(ui_runtime.SETTINGS, "lookback_val", 0)
+    assert app._effective_lookback_pct() == 100.0
+    assert app._effective_lookback_pct({"lookback": 25}) == 25.0
+
+
 @pytest.mark.parametrize("depth", [5.0, 10.0])
 def test_wf_tickets_equal_direct_generation_with_conditional_cap(
     tmp_path, monkeypatch, depth

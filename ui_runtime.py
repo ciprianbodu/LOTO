@@ -33,7 +33,7 @@ def _effective_lookback_pct(from_data: dict | None = None) -> float:
     if isinstance(from_data, dict) and "lookback" in from_data:
         raw = from_data.get("lookback")
     if raw is None:
-        raw = SETTINGS.get("lookback_val") or 0
+        raw = _int_setting("lookback_val")
     try:
         v = int(raw or 0)
     except (TypeError, ValueError):
