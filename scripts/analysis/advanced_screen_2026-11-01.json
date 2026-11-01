@@ -1,0 +1,2168 @@
+{
+ "protocol": "Ecran 3 de metode, 2026-11-01: matematici avansate NETESTATE inca (ecranul 1 a\nrulat 1.002 scoreri clasici/ML, ecranul hit5plus 42 statici, hit5plus_screen2 29\nmeta/cross-game). Protocol fixat inainte de rulare.\n\nIntrebarea: exista metode matematice avansate (valuri, AR online, informatie\nmutuala, motive/matrix-profile, clusterizare spectrala, centralitate, procese\npunctuale cu refractie, transport optimal, benzi conforme, Kalman cu trend,\nGARCH, dependenta de coada, FFT multi-varf, shrinkage ierarhic, autocorelatie,\nhazard Weibull, HMM) care depasesc liderul clasamentului?\n\nDate, celule, nul, selectie, confirmare, promovare: identic cu\nhit5plus_screen_2026-11-01.py (Romania 6/49, 5/40, Joker Urna 1; pool (11,16) x\ntinta (4+,5+); 200 zile warmup; 70% dezvoltare / 30% confirmare; nul pe N_NULL\nistorii sintetice uniforme cu toata banca refacuta; lider = decizia din\nfolds.csv la tinta 4; McNemar + binomial + Holm + replicare externa; promovare\ndoar cu Holm < 0.05 pe ambele si p extern < 0.05). N_NULL = 60 (fixat aici,\ninainte de rulare; ecranele anterioare au folosit 100/200).\n\nCandidati noi (toate cauzale: S[d] vede numai zilele < d; toate echivariante la\npermutarea etichetelor; CPU, deterministe, fara GPU, fara filtre structurale):\n  A1 wavelet_burst   energie Haar pe scalele 2..16 in fereastra W (128/256),\n                     scor = ponderea energiei fine (burst recent); +/- \n  A2 ar2_online      AR(2) per numar pe indicator, LS online cu uitare 0.995,\n                     prognoza clampata in [0,1]; +/-\n  A3 mi_lag          informatie mutuala intarziata I(x_t ; y_{t-lag}) agregata\n                     peste y, fereastra L (200/500), lag (1,2,5); +/-\n  A4 motif           matrix-profile per numar: cea mai asemanatoare fereastra\n                     trecuta (w=10, stride 5) si rata de aparitie a numarului in\n                     cele 10 zile de dupa motiv; +/-\n  A5 heat_kernel     (I + a*M)^p @ indicatorul ultimei zile, M = co-aparitie\n                     decazuta pe L=500, p (4/8) \u2014 difuzie pe graf; +/-\n  A6 eigen_cent      centralitate vector propriu a grafului de co-aparitie\n                     (L=500 / all); +/-\n  A7 refractory      rata de baza * exp(-aparitii_recente/tau), tau (3/10), si\n                     inversa (auto-excitare)\n  A8 chi2_dev        abaterea (semnata/patrata) a frecventei recente fata de\n                     uniforma, W (100/300) \u2014 W1 pe axa numerelor era filtru\n                     structural neechivariant si a fost scos inainte de rulare\n  A9 conformal_z     z rolling al ratei pe fereastra W (200/500); +/-\n  A10 kalman_trend   Kalman local liniar (nivel+panta) per numar, Q (1e-4/1e-3),\n                     R=0.1; prognoza = nivel+panta; +/-\n  A11 garch_vol      GARCH(1,1) pe indicator per numar (omega .05, a .1, b .85);\n                     scor = volatilitatea prognozata; +/-\n  A12 tail_dep       coeficient empiric de dependenta in coada superioara\n                     (P(ambele in decila superioara)) pe L=500, agregat; +/-\n  A13 fft_top3       suma top-3 magnitudini spectrale cu extrapolare de faza,\n                     W (256/512); +/-\n  A14 shrink_beta    (count + s*p_global)/(W + s), s (10/50/200), W (200/500)\n  A15 autocorr_cyc   autocorelatia maxima pe lag 2..30 (W=512) inmultita cu\n                     alinierea de faza curenta; +/-\n  A16 weibull_gap    hazard Weibull pe goluri per numar, forma k (0.5/1/2)\n  A17 hmm2_regime    HMM cu 2 stari pe seria zilei (minimul extragerii), scor =\n                     p_stare_inalta * freq200 + (1-p) * freqall; +/-\n\nCheck-uri: leak si echivarian\u021ba se verifica pe toate familiile (h5.leak_check /\nh5.equivariance_check, cu banca aceasta). Niciun rezultat nu se scrie daca\nistoricul se schimba in timpul rularii.\n",
+ "data_sha256": {
+  "_ISTORIC\\externe\\austria_lotto_6aus45.csv": "bc59eb314a96319aaff6a95a3c76472706c26a993724454ecce7fa308d407a51",
+  "_ISTORIC\\externe\\belgia_lotto_6din45.csv": "4dcab56299c1deff0f5b9920d2587f9ed27d4c366f92bf0c54d362f51eaead83",
+  "_ISTORIC\\externe\\bulgaria_toto2_6din49.csv": "87d7e62ea7a7231351df0ca2caa0041a3ebe26ef7ff463b02c80acbcdc42242a",
+  "_ISTORIC\\externe\\cehia_sportka_6din49.csv": "5df3f6c9019ddf5f724dedfd98fc32bf6ec0649afbc4bad29892d1f151d9c932",
+  "_ISTORIC\\externe\\euromillions_5din50_stele.csv": "20514062b3d7a682aff30bb3ff2d17d0f9cc406b6a02860d4a8d8b5a4c4ed7cd",
+  "_ISTORIC\\externe\\germania_lotto_6aus49.csv": "ed6e14ee56ce6bb04597abadcd3a90ccaaee5900d0f4f06ebca746e879684d0f",
+  "_ISTORIC\\externe\\polonia_lotto_6din49.csv": "64fc322e1f43526656b270d84a714b7cc0c56b57e06a7756bb46f0f6ed77abeb",
+  "_ISTORIC\\externe\\slovacia_loto_6din49.csv": "d798a81e54c5509628b8e8fdd8fb95fc931bc1e140f42a050af02ec32a9e2233",
+  "_ISTORIC\\externe\\spania_la_primitiva_6din49.csv": "48a3f41f692e802e14dcbd0ec3b0f483603648682516d736a500aa22b0fc2325",
+  "_ISTORIC\\externe\\ungaria_hatoslotto_6din45.csv": "197add40deeee5424498c860725a836cb4c6e0cad1a7d36925f007e578a0fea7",
+  "_ISTORIC\\joker.csv": "ea38f5f6fa5e2e570024bb1eb3b3df994df9740069281b06e4aa88121ef9f6f4",
+  "_ISTORIC\\loto_5_40.csv": "5e4b89aa27c25b61f40eaaa139621cb7d63352f1e253da210cea7144e67db583",
+  "_ISTORIC\\loto_6_49.csv": "1ecc189b5af2ff6982c4f26abe3f8e3de9cc303147bb56f3a5dfe1b0ebd5a518",
+  "bench_results\\folds.csv": "0267b6752248f5ace59c8193c658d3fa8cb27c440010c8485c3416d7bea3faad"
+ },
+ "n_null": 60,
+ "games": {
+  "ro_649": {
+   "rows": 2597,
+   "days": 2528,
+   "scorers": 73,
+   "tests": 292,
+   "gated": 0,
+   "families": {
+    "A10_kalman": 4,
+    "A11_garch": 2,
+    "A12_taildep": 2,
+    "A13_fft": 4,
+    "A14_shrink": 6,
+    "A15_autocorr": 2,
+    "A16_weibull": 3,
+    "A17_hmm": 2,
+    "A1_wavelet": 4,
+    "A2_ar2": 2,
+    "A3_mi": 12,
+    "A4_motif": 2,
+    "A5_heatkernel": 4,
+    "A6_eigen": 4,
+    "A7_refractory": 8,
+    "A8_chi2dev": 8,
+    "A9_conformal": 4
+   },
+   "search": {
+    "11_4": {
+     "max_dev_z_event": 1.5263361042107877,
+     "p_search_event": 0.8688524590163934,
+     "max_dev_z_hits": 2.399738639607934,
+     "p_search_hits": 0.4426229508196721
+    },
+    "11_5": {
+     "max_dev_z_event": 1.951704214233042,
+     "p_search_event": 0.7540983606557377,
+     "max_dev_z_hits": 2.399738639607934,
+     "p_search_hits": 0.4426229508196721
+    },
+    "16_4": {
+     "max_dev_z_event": 1.8607870077628688,
+     "p_search_event": 0.7704918032786885,
+     "max_dev_z_hits": 2.523565547081739,
+     "p_search_hits": 0.36065573770491804
+    },
+    "16_5": {
+     "max_dev_z_event": 2.101866798163407,
+     "p_search_event": 0.4918032786885246,
+     "max_dev_z_hits": 2.523565547081739,
+     "p_search_hits": 0.36065573770491804
+    }
+   },
+   "leaders": {
+    "11": "markov_self_state",
+    "16": "markov_lag2"
+   },
+   "leader_fallback_days": {
+    "markov_lag2": 0,
+    "markov_self_state": 0
+   },
+   "leader_rates": {
+    "11_4": {
+     "dev": 0.018629807692307692,
+     "conf": 0.027285129604365622,
+     "p0": 0.017878381694953652
+    },
+    "11_5": {
+     "dev": 0.001201923076923077,
+     "conf": 0.004092769440654843,
+     "p0": 0.0012884894938548963
+    },
+    "16_4": {
+     "dev": 0.0889423076923077,
+     "conf": 0.0941336971350614,
+     "p0": 0.07960001762036914
+    },
+    "16_5": {
+     "dev": 0.013822115384615384,
+     "conf": 0.010914051841746248,
+     "p0": 0.010880577948108013
+    }
+   }
+  },
+  "ro_540": {
+   "rows": 1748,
+   "days": 1729,
+   "scorers": 73,
+   "tests": 292,
+   "gated": 4,
+   "families": {
+    "A10_kalman": 4,
+    "A11_garch": 2,
+    "A12_taildep": 2,
+    "A13_fft": 4,
+    "A14_shrink": 6,
+    "A15_autocorr": 2,
+    "A16_weibull": 3,
+    "A17_hmm": 2,
+    "A1_wavelet": 4,
+    "A2_ar2": 2,
+    "A3_mi": 12,
+    "A4_motif": 2,
+    "A5_heatkernel": 4,
+    "A6_eigen": 4,
+    "A7_refractory": 8,
+    "A8_chi2dev": 8,
+    "A9_conformal": 4
+   },
+   "search": {
+    "11_4": {
+     "max_dev_z_event": 1.5548623800973307,
+     "p_search_event": 0.8688524590163934,
+     "max_dev_z_hits": 2.6493128835491646,
+     "p_search_hits": 0.18032786885245902
+    },
+    "11_5": {
+     "max_dev_z_event": 2.108152850662436,
+     "p_search_event": 0.7704918032786885,
+     "max_dev_z_hits": 2.6493128835491646,
+     "p_search_hits": 0.18032786885245902
+    },
+    "16_4": {
+     "max_dev_z_event": 2.1263153992667925,
+     "p_search_event": 0.5081967213114754,
+     "max_dev_z_hits": 2.1009244498724446,
+     "p_search_hits": 0.5737704918032787
+    },
+    "16_5": {
+     "max_dev_z_event": 1.1843917351128113,
+     "p_search_event": 0.9508196721311475,
+     "max_dev_z_hits": 2.1009244498724446,
+     "p_search_hits": 0.5737704918032787
+    }
+   },
+   "leaders": {
+    "11": "hot_consistency",
+    "16": "neighbor_adjacent"
+   },
+   "leader_fallback_days": {
+    "hot_consistency": 0,
+    "neighbor_adjacent": 0
+   },
+   "leader_rates": {
+    "11_4": {
+     "dev": 0.05327102803738318,
+     "conf": 0.043933054393305436,
+     "p0": 0.03851624904256483
+    },
+    "11_5": {
+     "dev": 0.004672897196261682,
+     "conf": 0.0020920502092050207,
+     "p0": 0.003610898347740453
+    },
+    "16_4": {
+     "dev": 0.18691588785046728,
+     "conf": 0.19246861924686193,
+     "p0": 0.1602655286865813
+    },
+    "16_5": {
+     "dev": 0.02336448598130841,
+     "conf": 0.029288702928870293,
+     "p0": 0.02939781887150308
+    }
+   }
+  },
+  "ro_joker1": {
+   "rows": 2200,
+   "days": 2137,
+   "scorers": 73,
+   "tests": 292,
+   "gated": 6,
+   "families": {
+    "A10_kalman": 4,
+    "A11_garch": 2,
+    "A12_taildep": 2,
+    "A13_fft": 4,
+    "A14_shrink": 6,
+    "A15_autocorr": 2,
+    "A16_weibull": 3,
+    "A17_hmm": 2,
+    "A1_wavelet": 4,
+    "A2_ar2": 2,
+    "A3_mi": 12,
+    "A4_motif": 2,
+    "A5_heatkernel": 4,
+    "A6_eigen": 4,
+    "A7_refractory": 8,
+    "A8_chi2dev": 8,
+    "A9_conformal": 4
+   },
+   "search": {
+    "11_4": {
+     "max_dev_z_event": 1.8393489225246342,
+     "p_search_event": 0.7213114754098361,
+     "max_dev_z_hits": 1.8552656070036737,
+     "p_search_hits": 0.7704918032786885
+    },
+    "11_5": {
+     "max_dev_z_event": 2.0302696972854197,
+     "p_search_event": 0.819672131147541,
+     "max_dev_z_hits": 1.8552656070036737,
+     "p_search_hits": 0.7704918032786885
+    },
+    "16_4": {
+     "max_dev_z_event": 2.0101743337555065,
+     "p_search_event": 0.6721311475409836,
+     "max_dev_z_hits": 2.298650870929025,
+     "p_search_hits": 0.4426229508196721
+    },
+    "16_5": {
+     "max_dev_z_event": 2.7023059797588833,
+     "p_search_event": 0.26229508196721313,
+     "max_dev_z_hits": 2.298650870929025,
+     "p_search_hits": 0.4426229508196721
+    }
+   },
+   "leaders": {
+    "11": "rwr_last_draw",
+    "16": "frequency"
+   },
+   "leader_fallback_days": {
+    "frequency": 0,
+    "rwr_last_draw": 0
+   },
+   "leader_rates": {
+    "11_4": {
+     "dev": 0.012203876525484566,
+     "conf": 0.023064250411861616,
+     "p0": 0.009561623855441213
+    },
+    "11_5": {
+     "dev": 0.0,
+     "conf": 0.0,
+     "p0": 0.0003781433163168841
+    },
+    "16_4": {
+     "dev": 0.05599425699928212,
+     "conf": 0.07084019769357495,
+     "p0": 0.04677518233956124
+    },
+    "16_5": {
+     "dev": 0.002871500358937545,
+     "conf": 0.0032948929159802307,
+     "p0": 0.0035751731724505405
+    }
+   }
+  }
+ },
+ "frozen": [
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 4,
+   "name": "mi_L500_lag1",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 1.5263361042107877,
+   "dev_z_hits": 1.8928972890010873,
+   "dev_rate": 0.02283653846153846,
+   "dev_p0": 0.017878381694953652,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.018629807692307692,
+   "conf_n": 733,
+   "conf_events": 13,
+   "conf_rate": 0.017735334242837655,
+   "conf_leader_events": 20,
+   "conf_leader_rate": 0.027285129604365622,
+   "conf_p0": 0.017878381694953652,
+   "mcnemar_b": 13,
+   "mcnemar_c": 20,
+   "p_vs_leader": 0.918622171273455,
+   "p_vs_random": 0.549463039958782,
+   "external": {
+    "events": 547,
+    "expected": 539.211991919802,
+    "z": 0.33842620734252454,
+    "p": 0.3675210137128164,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 113,
+      "rate": 0.01772827110134923,
+      "p0": 0.017878381694953652
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 134,
+      "rate": 0.018482758620689654,
+      "p0": 0.017878381694953652
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 90,
+      "rate": 0.01877346683354193,
+      "p0": 0.017878381694953652
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 135,
+      "rate": 0.018685121107266434,
+      "p0": 0.017878381694953652
+     },
+     "spania": {
+      "n": 4009,
+      "events": 69,
+      "rate": 0.017211274632077826,
+      "p0": 0.017878381694953652
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 6,
+      "rate": 0.011811023622047244,
+      "p0": 0.017878381694953652
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 4,
+   "name": "motif_w10",
+   "family": "A4_motif",
+   "by": "dev_z_event",
+   "dev_z_event": 1.1563319528383318,
+   "dev_z_hits": 0.3470311696502055,
+   "dev_rate": 0.021634615384615384,
+   "dev_p0": 0.017878381694953652,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.018629807692307692,
+   "conf_n": 733,
+   "conf_events": 8,
+   "conf_rate": 0.010914051841746248,
+   "conf_leader_events": 20,
+   "conf_leader_rate": 0.027285129604365622,
+   "conf_p0": 0.017878381694953652,
+   "mcnemar_b": 8,
+   "mcnemar_c": 20,
+   "p_vs_leader": 0.9937295243144035,
+   "p_vs_random": 0.9503144023652208,
+   "external": {
+    "events": 524,
+    "expected": 539.211991919802,
+    "z": -0.6610338200127872,
+    "p": 0.745704687548824,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 128,
+      "rate": 0.02008158142453718,
+      "p0": 0.017878381694953652
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 115,
+      "rate": 0.015862068965517243,
+      "p0": 0.017878381694953652
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 86,
+      "rate": 0.017939090529828953,
+      "p0": 0.017878381694953652
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 118,
+      "rate": 0.01633217993079585,
+      "p0": 0.017878381694953652
+     },
+     "spania": {
+      "n": 4009,
+      "events": 69,
+      "rate": 0.017211274632077826,
+      "p0": 0.017878381694953652
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 8,
+      "rate": 0.015748031496062992,
+      "p0": 0.017878381694953652
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 4,
+   "name": "fft3_W512",
+   "family": "A13_fft",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.04631949872096392,
+   "dev_z_hits": 2.399738639607934,
+   "dev_rate": 0.018028846153846152,
+   "dev_p0": 0.017878381694953652,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.018629807692307692,
+   "conf_n": 733,
+   "conf_events": 20,
+   "conf_rate": 0.027285129604365622,
+   "conf_leader_events": 20,
+   "conf_leader_rate": 0.027285129604365622,
+   "conf_p0": 0.017878381694953652,
+   "mcnemar_b": 20,
+   "mcnemar_c": 20,
+   "p_vs_leader": 0.5626853438097896,
+   "p_vs_random": 0.044080528232415934,
+   "external": {
+    "events": 547,
+    "expected": 539.211991919802,
+    "z": 0.33842620734252454,
+    "p": 0.3675210137128164,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 125,
+      "rate": 0.019610919359899594,
+      "p0": 0.017878381694953652
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 129,
+      "rate": 0.017793103448275862,
+      "p0": 0.017878381694953652
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 71,
+      "rate": 0.0148101793909053,
+      "p0": 0.017878381694953652
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 136,
+      "rate": 0.018823529411764704,
+      "p0": 0.017878381694953652
+     },
+     "spania": {
+      "n": 4009,
+      "events": 78,
+      "rate": 0.019456223497131456,
+      "p0": 0.017878381694953652
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 8,
+      "rate": 0.015748031496062992,
+      "p0": 0.017878381694953652
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 5,
+   "name": "anti_ar2_online",
+   "family": "A2_ar2",
+   "by": "dev_z_event",
+   "dev_z_event": 1.951704214233042,
+   "dev_z_hits": 1.0819511280301328,
+   "dev_rate": 0.0030048076923076925,
+   "dev_p0": 0.0012884894938548963,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.001201923076923077,
+   "conf_n": 733,
+   "conf_events": 1,
+   "conf_rate": 0.001364256480218281,
+   "conf_leader_events": 3,
+   "conf_leader_rate": 0.004092769440654843,
+   "conf_p0": 0.0012884894938548963,
+   "mcnemar_b": 1,
+   "mcnemar_c": 3,
+   "p_vs_leader": 0.9375,
+   "p_vs_random": 0.6113483303791789,
+   "external": {
+    "events": 30,
+    "expected": 38.860843134663675,
+    "z": -1.4223252209560937,
+    "p": 0.9225340697689048,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 6,
+      "rate": 0.0009413241292751804,
+      "p0": 0.0012884894938548963
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 8,
+      "rate": 0.001103448275862069,
+      "p0": 0.0012884894938548963
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 5,
+      "rate": 0.0010429703796412183,
+      "p0": 0.0012884894938548963
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 7,
+      "rate": 0.0009688581314878892,
+      "p0": 0.0012884894938548963
+     },
+     "spania": {
+      "n": 4009,
+      "events": 3,
+      "rate": 0.0007483162883512097,
+      "p0": 0.0012884894938548963
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 1,
+      "rate": 0.001968503937007874,
+      "p0": 0.0012884894938548963
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 5,
+   "name": "anti_taildep_L500",
+   "family": "A12_taildep",
+   "by": "dev_z_event",
+   "dev_z_event": 1.951704214233042,
+   "dev_z_hits": 0.9805828579087636,
+   "dev_rate": 0.0030048076923076925,
+   "dev_p0": 0.0012884894938548963,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.001201923076923077,
+   "conf_n": 733,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 3,
+   "conf_leader_rate": 0.004092769440654843,
+   "conf_p0": 0.0012884894938548963,
+   "mcnemar_b": 0,
+   "mcnemar_c": 3,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 41,
+    "expected": 38.860843134663675,
+    "z": 0.343373278920451,
+    "p": 0.36565882960706786,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 13,
+      "rate": 0.0020395356134295575,
+      "p0": 0.0012884894938548963
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 7,
+      "rate": 0.0009655172413793104,
+      "p0": 0.0012884894938548963
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 10,
+      "rate": 0.0020859407592824365,
+      "p0": 0.0012884894938548963
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 5,
+      "rate": 0.0006920415224913495,
+      "p0": 0.0012884894938548963
+     },
+     "spania": {
+      "n": 4009,
+      "events": 5,
+      "rate": 0.001247193813918683,
+      "p0": 0.0012884894938548963
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 1,
+      "rate": 0.001968503937007874,
+      "p0": 0.0012884894938548963
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 11,
+   "target": 5,
+   "name": "fft3_W512",
+   "family": "A13_fft",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.584942306954209,
+   "dev_z_hits": 2.399738639607934,
+   "dev_rate": 0.0018028846153846155,
+   "dev_p0": 0.0012884894938548963,
+   "leader": "markov_self_state",
+   "leader_dev_rate": 0.001201923076923077,
+   "conf_n": 733,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 3,
+   "conf_leader_rate": 0.004092769440654843,
+   "conf_p0": 0.0012884894938548963,
+   "mcnemar_b": 0,
+   "mcnemar_c": 3,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 36,
+    "expected": 38.860843134663675,
+    "z": -0.4592169482961602,
+    "p": 0.6769608095044445,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 9,
+      "rate": 0.0014119861939127707,
+      "p0": 0.0012884894938548963
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 8,
+      "rate": 0.001103448275862069,
+      "p0": 0.0012884894938548963
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 3,
+      "rate": 0.0006257822277847309,
+      "p0": 0.0012884894938548963
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 7,
+      "rate": 0.0009688581314878892,
+      "p0": 0.0012884894938548963
+     },
+     "spania": {
+      "n": 4009,
+      "events": 8,
+      "rate": 0.001995510102269893,
+      "p0": 0.0012884894938548963
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 1,
+      "rate": 0.001968503937007874,
+      "p0": 0.0012884894938548963
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 4,
+   "name": "mi_L200_lag1",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 1.8607870077628688,
+   "dev_z_hits": 1.2834107058371573,
+   "dev_rate": 0.09194711538461539,
+   "dev_p0": 0.07960001762036914,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.0889423076923077,
+   "conf_n": 733,
+   "conf_events": 57,
+   "conf_rate": 0.07776261937244201,
+   "conf_leader_events": 69,
+   "conf_leader_rate": 0.0941336971350614,
+   "conf_p0": 0.07960001762036914,
+   "mcnemar_b": 49,
+   "mcnemar_c": 61,
+   "p_vs_leader": 0.8925117311283518,
+   "p_vs_random": 0.5924911527477533,
+   "external": {
+    "events": 2521,
+    "expected": 2400.736531430334,
+    "z": 2.5584278500252746,
+    "p": 0.0052573318375799235,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 535,
+      "rate": 0.08393473486037026,
+      "p0": 0.07960001762036914
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 602,
+      "rate": 0.08303448275862069,
+      "p0": 0.07960001762036914
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 446,
+      "rate": 0.09303295786399667,
+      "p0": 0.07960001762036914
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 550,
+      "rate": 0.07612456747404844,
+      "p0": 0.07960001762036914
+     },
+     "spania": {
+      "n": 4009,
+      "events": 348,
+      "rate": 0.08680468944874034,
+      "p0": 0.07960001762036914
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 40,
+      "rate": 0.07874015748031496,
+      "p0": 0.07960001762036914
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 4,
+   "name": "mi_L500_lag1",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 1.7702182405686389,
+   "dev_z_hits": 2.0726001502655276,
+   "dev_rate": 0.09134615384615384,
+   "dev_p0": 0.07960001762036914,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.0889423076923077,
+   "conf_n": 733,
+   "conf_events": 55,
+   "conf_rate": 0.07503410641200546,
+   "conf_leader_events": 69,
+   "conf_leader_rate": 0.0941336971350614,
+   "conf_p0": 0.07960001762036914,
+   "mcnemar_b": 49,
+   "mcnemar_c": 63,
+   "p_vs_leader": 0.9219668490031162,
+   "p_vs_random": 0.6953000786542287,
+   "external": {
+    "events": 2435,
+    "expected": 2400.736531430334,
+    "z": 0.728904739483043,
+    "p": 0.2330299677244025,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 494,
+      "rate": 0.0775023533103232,
+      "p0": 0.07960001762036914
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 586,
+      "rate": 0.08082758620689655,
+      "p0": 0.07960001762036914
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 422,
+      "rate": 0.08802670004171881,
+      "p0": 0.07960001762036914
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 557,
+      "rate": 0.07709342560553634,
+      "p0": 0.07960001762036914
+     },
+     "spania": {
+      "n": 4009,
+      "events": 341,
+      "rate": 0.08505861810925418,
+      "p0": 0.07960001762036914
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 35,
+      "rate": 0.0688976377952756,
+      "p0": 0.07960001762036914
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 4,
+   "name": "fft3_W512",
+   "family": "A13_fft",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.22229463770442248,
+   "dev_z_hits": 2.523565547081739,
+   "dev_rate": 0.078125,
+   "dev_p0": 0.07960001762036914,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.0889423076923077,
+   "conf_n": 733,
+   "conf_events": 65,
+   "conf_rate": 0.08867667121418826,
+   "conf_leader_events": 69,
+   "conf_leader_rate": 0.0941336971350614,
+   "conf_p0": 0.07960001762036914,
+   "mcnemar_b": 61,
+   "mcnemar_c": 65,
+   "p_vs_leader": 0.6719108891982855,
+   "p_vs_random": 0.1989086027731115,
+   "external": {
+    "events": 2440,
+    "expected": 2400.736531430334,
+    "z": 0.8352723621889867,
+    "p": 0.2017821874491284,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 544,
+      "rate": 0.08534672105428302,
+      "p0": 0.07960001762036914
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 575,
+      "rate": 0.07931034482758621,
+      "p0": 0.07960001762036914
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 370,
+      "rate": 0.07717980809345015,
+      "p0": 0.07960001762036914
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 592,
+      "rate": 0.08193771626297577,
+      "p0": 0.07960001762036914
+     },
+     "spania": {
+      "n": 4009,
+      "events": 323,
+      "rate": 0.08056872037914692,
+      "p0": 0.07960001762036914
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 36,
+      "rate": 0.07086614173228346,
+      "p0": 0.07960001762036914
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 5,
+   "name": "mi_L200_lag1",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 2.101866798163407,
+   "dev_z_hits": 1.2834107058371573,
+   "dev_rate": 0.01622596153846154,
+   "dev_p0": 0.010880577948108013,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.013822115384615384,
+   "conf_n": 733,
+   "conf_events": 5,
+   "conf_rate": 0.0068212824010914054,
+   "conf_leader_events": 8,
+   "conf_leader_rate": 0.010914051841746248,
+   "conf_p0": 0.010880577948108013,
+   "mcnemar_b": 5,
+   "mcnemar_c": 8,
+   "p_vs_leader": 0.8665771484375,
+   "p_vs_random": 0.9002103032106631,
+   "external": {
+    "events": 351,
+    "expected": 328.15823091493763,
+    "z": 1.2678378735067126,
+    "p": 0.1024279269873063,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 84,
+      "rate": 0.013178537809852526,
+      "p0": 0.010880577948108013
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 72,
+      "rate": 0.009931034482758621,
+      "p0": 0.010880577948108013
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 61,
+      "rate": 0.012724238631622862,
+      "p0": 0.010880577948108013
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 83,
+      "rate": 0.011487889273356401,
+      "p0": 0.010880577948108013
+     },
+     "spania": {
+      "n": 4009,
+      "events": 47,
+      "rate": 0.011723621850835619,
+      "p0": 0.010880577948108013
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 4,
+      "rate": 0.007874015748031496,
+      "p0": 0.010880577948108013
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 5,
+   "name": "selfexc_tau10",
+   "family": "A7_refractory",
+   "by": "dev_z_event",
+   "dev_z_event": 1.629256710107231,
+   "dev_z_hits": 0.5844143407720296,
+   "dev_rate": 0.015024038461538462,
+   "dev_p0": 0.010880577948108013,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.013822115384615384,
+   "conf_n": 733,
+   "conf_events": 7,
+   "conf_rate": 0.009549795361527967,
+   "conf_leader_events": 8,
+   "conf_leader_rate": 0.010914051841746248,
+   "conf_p0": 0.010880577948108013,
+   "mcnemar_b": 7,
+   "mcnemar_c": 8,
+   "p_vs_leader": 0.696380615234375,
+   "p_vs_random": 0.6849482507240094,
+   "external": {
+    "events": 337,
+    "expected": 328.15823091493763,
+    "z": 0.49076451447772157,
+    "p": 0.3117965054230537,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 81,
+      "rate": 0.012707875745214935,
+      "p0": 0.010880577948108013
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 92,
+      "rate": 0.012689655172413793,
+      "p0": 0.010880577948108013
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 48,
+      "rate": 0.010012515644555695,
+      "p0": 0.010880577948108013
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 78,
+      "rate": 0.010795847750865051,
+      "p0": 0.010880577948108013
+     },
+     "spania": {
+      "n": 4009,
+      "events": 35,
+      "rate": 0.008730356697430781,
+      "p0": 0.010880577948108013
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 3,
+      "rate": 0.005905511811023622,
+      "p0": 0.010880577948108013
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_649",
+   "K": 16,
+   "target": 5,
+   "name": "fft3_W512",
+   "family": "A13_fft",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.7337937301736494,
+   "dev_z_hits": 2.523565547081739,
+   "dev_rate": 0.009014423076923076,
+   "dev_p0": 0.010880577948108013,
+   "leader": "markov_lag2",
+   "leader_dev_rate": 0.013822115384615384,
+   "conf_n": 733,
+   "conf_events": 9,
+   "conf_rate": 0.01227830832196453,
+   "conf_leader_events": 8,
+   "conf_leader_rate": 0.010914051841746248,
+   "conf_p0": 0.010880577948108013,
+   "mcnemar_b": 8,
+   "mcnemar_c": 7,
+   "p_vs_leader": 0.4999999999999999,
+   "p_vs_random": 0.404007573648909,
+   "external": {
+    "events": 321,
+    "expected": 328.15823091493763,
+    "z": -0.39731932441255385,
+    "p": 0.6544340005502686,
+    "series": {
+     "germania": {
+      "n": 6374,
+      "events": 74,
+      "rate": 0.011609664261060559,
+      "p0": 0.010880577948108013
+     },
+     "cehia": {
+      "n": 7250,
+      "events": 83,
+      "rate": 0.011448275862068966,
+      "p0": 0.010880577948108013
+     },
+     "slovacia": {
+      "n": 4794,
+      "events": 42,
+      "rate": 0.008760951188986232,
+      "p0": 0.010880577948108013
+     },
+     "polonia": {
+      "n": 7225,
+      "events": 70,
+      "rate": 0.009688581314878892,
+      "p0": 0.010880577948108013
+     },
+     "spania": {
+      "n": 4009,
+      "events": 46,
+      "rate": 0.011474183088051882,
+      "p0": 0.010880577948108013
+     },
+     "bulgaria": {
+      "n": 508,
+      "events": 6,
+      "rate": 0.011811023622047244,
+      "p0": 0.010880577948108013
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 4,
+   "name": "anti_mi_L500_lag1",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 1.5548623800973307,
+   "dev_z_hits": 0.793297078124891,
+   "dev_rate": 0.04766355140186916,
+   "dev_p0": 0.03851624904256483,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.05327102803738318,
+   "conf_n": 478,
+   "conf_events": 17,
+   "conf_rate": 0.03556485355648536,
+   "conf_leader_events": 21,
+   "conf_leader_rate": 0.043933054393305436,
+   "conf_p0": 0.03851624904256483,
+   "mcnemar_b": 17,
+   "mcnemar_c": 21,
+   "p_vs_leader": 0.7911539045817335,
+   "p_vs_random": 0.6643938239934015,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 4,
+   "name": "confz_W500",
+   "family": "A9_conformal",
+   "by": "dev_z_event",
+   "dev_z_event": 1.5548623800973307,
+   "dev_z_hits": 1.7512407196341935,
+   "dev_rate": 0.04766355140186916,
+   "dev_p0": 0.03851624904256483,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.05327102803738318,
+   "conf_n": 478,
+   "conf_events": 18,
+   "conf_rate": 0.03765690376569038,
+   "conf_leader_events": 21,
+   "conf_leader_rate": 0.043933054393305436,
+   "conf_p0": 0.03851624904256483,
+   "mcnemar_b": 14,
+   "mcnemar_c": 17,
+   "p_vs_leader": 0.7634351700544357,
+   "p_vs_random": 0.5718430084629262,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 4,
+   "name": "anti_refract_tau10",
+   "family": "A7_refractory",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.2839806672366386,
+   "dev_z_hits": 2.6493128835491646,
+   "dev_rate": 0.04018691588785047,
+   "dev_p0": 0.03851624904256483,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.05327102803738318,
+   "conf_n": 478,
+   "conf_events": 20,
+   "conf_rate": 0.04184100418410042,
+   "conf_leader_events": 21,
+   "conf_leader_rate": 0.043933054393305436,
+   "conf_p0": 0.03851624904256483,
+   "mcnemar_b": 14,
+   "mcnemar_c": 15,
+   "p_vs_leader": 0.644464448094368,
+   "p_vs_random": 0.3847986128653984,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 5,
+   "name": "mi_L500_lag5",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 2.108152850662436,
+   "dev_z_hits": 1.8410479360256906,
+   "dev_rate": 0.007476635514018692,
+   "dev_p0": 0.003610898347740453,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.004672897196261682,
+   "conf_n": 478,
+   "conf_events": 1,
+   "conf_rate": 0.0020920502092050207,
+   "conf_leader_events": 1,
+   "conf_leader_rate": 0.0020920502092050207,
+   "conf_p0": 0.003610898347740453,
+   "mcnemar_b": 1,
+   "mcnemar_c": 1,
+   "p_vs_leader": 0.75,
+   "p_vs_random": 0.8225618451983009,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 5,
+   "name": "chi2_abs_W300",
+   "family": "A8_chi2dev",
+   "by": "dev_z_event",
+   "dev_z_event": 1.0888200692115073,
+   "dev_z_hits": 1.0627187272993823,
+   "dev_rate": 0.005607476635514018,
+   "dev_p0": 0.003610898347740453,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.004672897196261682,
+   "conf_n": 478,
+   "conf_events": 2,
+   "conf_rate": 0.0041841004184100415,
+   "conf_leader_events": 1,
+   "conf_leader_rate": 0.0020920502092050207,
+   "conf_p0": 0.003610898347740453,
+   "mcnemar_b": 2,
+   "mcnemar_c": 1,
+   "p_vs_leader": 0.5,
+   "p_vs_random": 0.5151920391537148,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 11,
+   "target": 5,
+   "name": "anti_refract_tau10",
+   "family": "A7_refractory",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.06948728776057855,
+   "dev_z_hits": 2.6493128835491646,
+   "dev_rate": 0.003738317757009346,
+   "dev_p0": 0.003610898347740453,
+   "leader": "hot_consistency",
+   "leader_dev_rate": 0.004672897196261682,
+   "conf_n": 478,
+   "conf_events": 1,
+   "conf_rate": 0.0020920502092050207,
+   "conf_leader_events": 1,
+   "conf_leader_rate": 0.0020920502092050207,
+   "conf_p0": 0.003610898347740453,
+   "mcnemar_b": 1,
+   "mcnemar_c": 1,
+   "p_vs_leader": 0.75,
+   "p_vs_random": 0.8225618451983009,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 4,
+   "name": "confz_W500",
+   "family": "A9_conformal",
+   "by": "dev_z_event",
+   "dev_z_event": 2.1263153992667925,
+   "dev_z_hits": 2.073639716757218,
+   "dev_rate": 0.18411214953271027,
+   "dev_p0": 0.1602655286865813,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.18691588785046728,
+   "conf_n": 478,
+   "conf_events": 66,
+   "conf_rate": 0.13807531380753138,
+   "conf_leader_events": 92,
+   "conf_leader_rate": 0.19246861924686193,
+   "conf_p0": 0.1602655286865813,
+   "mcnemar_b": 50,
+   "mcnemar_c": 76,
+   "p_vs_leader": 0.9920908979959739,
+   "p_vs_random": 0.9191122234115351,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 4,
+   "name": "anti_refract_tau10",
+   "family": "A7_refractory",
+   "by": "dev_z_event",
+   "dev_z_event": 1.9596493826145462,
+   "dev_z_hits": 1.8007923856049526,
+   "dev_rate": 0.1822429906542056,
+   "dev_p0": 0.1602655286865813,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.18691588785046728,
+   "conf_n": 478,
+   "conf_events": 69,
+   "conf_rate": 0.14435146443514643,
+   "conf_leader_events": 92,
+   "conf_leader_rate": 0.19246861924686193,
+   "conf_p0": 0.1602655286865813,
+   "mcnemar_b": 50,
+   "mcnemar_c": 73,
+   "p_vs_leader": 0.9849765425822276,
+   "p_vs_random": 0.8440843134293009,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 4,
+   "name": "anti_refract_tau3",
+   "family": "A7_refractory",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.6263212493965755,
+   "dev_z_hits": 2.1009244498724446,
+   "dev_rate": 0.16728971962616823,
+   "dev_p0": 0.1602655286865813,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.18691588785046728,
+   "conf_n": 478,
+   "conf_events": 81,
+   "conf_rate": 0.1694560669456067,
+   "conf_leader_events": 92,
+   "conf_leader_rate": 0.19246861924686193,
+   "conf_p0": 0.1602655286865813,
+   "mcnemar_b": 64,
+   "mcnemar_c": 75,
+   "p_vs_leader": 0.8456237154035859,
+   "p_vs_random": 0.3099118749691522,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 5,
+   "name": "mi_L500_lag5",
+   "family": "A3_mi",
+   "by": "dev_z_event",
+   "dev_z_event": 1.1843917351128113,
+   "dev_z_hits": 0.46384046295885145,
+   "dev_rate": 0.03551401869158879,
+   "dev_p0": 0.02939781887150308,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.02336448598130841,
+   "conf_n": 478,
+   "conf_events": 10,
+   "conf_rate": 0.02092050209205021,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.029288702928870293,
+   "conf_p0": 0.02939781887150308,
+   "mcnemar_b": 10,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.8462718725204468,
+   "p_vs_random": 0.8965226578259751,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 5,
+   "name": "confz_W200",
+   "family": "A9_conformal",
+   "by": "dev_z_event",
+   "dev_z_event": 1.0034120097575787,
+   "dev_z_hits": 1.1459587908395152,
+   "dev_rate": 0.03457943925233645,
+   "dev_p0": 0.02939781887150308,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.02336448598130841,
+   "conf_n": 478,
+   "conf_events": 19,
+   "conf_rate": 0.0397489539748954,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.029288702928870293,
+   "conf_p0": 0.02939781887150308,
+   "mcnemar_b": 19,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.24342512083239853,
+   "p_vs_random": 0.11695164799226164,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_540",
+   "K": 16,
+   "target": 5,
+   "name": "anti_refract_tau3",
+   "family": "A7_refractory",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.8224322844023463,
+   "dev_z_hits": 2.1009244498724446,
+   "dev_rate": 0.03364485981308411,
+   "dev_p0": 0.02939781887150308,
+   "leader": "neighbor_adjacent",
+   "leader_dev_rate": 0.02336448598130841,
+   "conf_n": 478,
+   "conf_events": 11,
+   "conf_rate": 0.02301255230125523,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.029288702928870293,
+   "conf_p0": 0.02939781887150308,
+   "mcnemar_b": 11,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.787821888923645,
+   "p_vs_random": 0.831686235941802,
+   "external": null,
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 4,
+   "name": "confz_W200",
+   "family": "A9_conformal",
+   "by": "dev_z_event",
+   "dev_z_event": 1.8393489225246342,
+   "dev_z_hits": 1.1242064799006488,
+   "dev_rate": 0.014357501794687724,
+   "dev_p0": 0.009561623855441213,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.012203876525484566,
+   "conf_n": 607,
+   "conf_events": 6,
+   "conf_rate": 0.009884678747940691,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.023064250411861616,
+   "conf_p0": 0.009561623855441213,
+   "mcnemar_b": 6,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.9793052673339844,
+   "p_vs_random": 0.5229712606302239,
+   "external": {
+    "events": 171,
+    "expected": 172.74745121470946,
+    "z": -0.13454434770220414,
+    "p": 0.5535139272700315,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 89,
+      "rate": 0.025443110348770726,
+      "p0": 0.024714366744996354
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 30,
+      "rate": 0.02181818181818182,
+      "p0": 0.024714366744996354
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 40,
+      "rate": 0.024096385542168676,
+      "p0": 0.024714366744996354
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 12,
+      "rate": 0.006688963210702341,
+      "p0": 0.006292359682078197
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 4,
+   "name": "anti_wavelet_W128",
+   "family": "A1_wavelet",
+   "by": "dev_z_event",
+   "dev_z_event": 1.2886998903611206,
+   "dev_z_hits": 1.0657217497324067,
+   "dev_rate": 0.012921751615218953,
+   "dev_p0": 0.009561623855441213,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.012203876525484566,
+   "conf_n": 607,
+   "conf_events": 9,
+   "conf_rate": 0.014827018121911038,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.023064250411861616,
+   "conf_p0": 0.009561623855441213,
+   "mcnemar_b": 9,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.8949801921844482,
+   "p_vs_random": 0.1321720153458653,
+   "external": {
+    "events": 191,
+    "expected": 172.74745121470946,
+    "z": 1.4053481147557463,
+    "p": 0.07995889368170334,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 98,
+      "rate": 0.02801600914808462,
+      "p0": 0.024714366744996354
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 38,
+      "rate": 0.027636363636363636,
+      "p0": 0.024714366744996354
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 45,
+      "rate": 0.02710843373493976,
+      "p0": 0.024714366744996354
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 10,
+      "rate": 0.005574136008918618,
+      "p0": 0.006292359682078197
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 4,
+   "name": "weibull_k2.0",
+   "family": "A16_weibull",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.1874018260340939,
+   "dev_z_hits": 1.8552656070036737,
+   "dev_rate": 0.010050251256281407,
+   "dev_p0": 0.009561623855441213,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.012203876525484566,
+   "conf_n": 607,
+   "conf_events": 10,
+   "conf_rate": 0.016474464579901153,
+   "conf_leader_events": 14,
+   "conf_leader_rate": 0.023064250411861616,
+   "conf_p0": 0.009561623855441213,
+   "mcnemar_b": 10,
+   "mcnemar_c": 14,
+   "p_vs_leader": 0.8462718725204468,
+   "p_vs_random": 0.07013332968028053,
+   "external": {
+    "events": 198,
+    "expected": 172.74745121470946,
+    "z": 1.9443104766160288,
+    "p": 0.025929011018955162,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 98,
+      "rate": 0.02801600914808462,
+      "p0": 0.024714366744996354
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 46,
+      "rate": 0.03345454545454545,
+      "p0": 0.024714366744996354
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 39,
+      "rate": 0.023493975903614458,
+      "p0": 0.024714366744996354
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 15,
+      "rate": 0.008361204013377926,
+      "p0": 0.006292359682078197
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 5,
+   "name": "anti_selfexc_tau3",
+   "family": "A7_refractory",
+   "by": "dev_z_event",
+   "dev_z_event": 2.0302696972854197,
+   "dev_z_hits": 1.3581454005736169,
+   "dev_rate": 0.0014357501794687725,
+   "dev_p0": 0.0003781433163168841,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.0,
+   "conf_n": 607,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 0,
+   "conf_leader_rate": 0.0,
+   "conf_p0": 0.0003781433163168841,
+   "mcnemar_b": 0,
+   "mcnemar_c": 0,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 19,
+    "expected": 13.360839409199917,
+    "z": 1.5442508661310792,
+    "p": 0.06126378525480697,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 14,
+      "rate": 0.004002287021154946,
+      "p0": 0.0019852524106636414
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 2,
+      "rate": 0.0014545454545454545,
+      "p0": 0.0019852524106636414
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 3,
+      "rate": 0.0018072289156626507,
+      "p0": 0.0019852524106636414
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0002180520681908286
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 5,
+   "name": "anti_wavelet_W128",
+   "family": "A1_wavelet",
+   "by": "dev_z_event",
+   "dev_z_event": 2.0302696972854197,
+   "dev_z_hits": 1.0657217497324067,
+   "dev_rate": 0.0014357501794687725,
+   "dev_p0": 0.0003781433163168841,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.0,
+   "conf_n": 607,
+   "conf_events": 0,
+   "conf_rate": 0.0,
+   "conf_leader_events": 0,
+   "conf_leader_rate": 0.0,
+   "conf_p0": 0.0003781433163168841,
+   "mcnemar_b": 0,
+   "mcnemar_c": 0,
+   "p_vs_leader": 1.0,
+   "p_vs_random": 1.0,
+   "external": {
+    "events": 13,
+    "expected": 13.360839409199917,
+    "z": -0.09881374385760124,
+    "p": 0.5393569220590346,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 7,
+      "rate": 0.002001143510577473,
+      "p0": 0.0019852524106636414
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 4,
+      "rate": 0.002909090909090909,
+      "p0": 0.0019852524106636414
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 1,
+      "rate": 0.0006024096385542169,
+      "p0": 0.0019852524106636414
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 1,
+      "rate": 0.0005574136008918618,
+      "p0": 0.0002180520681908286
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 11,
+   "target": 5,
+   "name": "weibull_k2.0",
+   "family": "A16_weibull",
+   "by": "dev_z_hits",
+   "dev_z_event": -0.7259152177409111,
+   "dev_z_hits": 1.8552656070036737,
+   "dev_rate": 0.0,
+   "dev_p0": 0.0003781433163168841,
+   "leader": "rwr_last_draw",
+   "leader_dev_rate": 0.0,
+   "conf_n": 607,
+   "conf_events": 1,
+   "conf_rate": 0.0016474464579901153,
+   "conf_leader_events": 0,
+   "conf_leader_rate": 0.0,
+   "conf_p0": 0.0003781433163168841,
+   "mcnemar_b": 1,
+   "mcnemar_c": 0,
+   "p_vs_leader": 0.5,
+   "p_vs_random": 0.20512976346252215,
+   "external": {
+    "events": 17,
+    "expected": 13.360839409199917,
+    "z": 0.996562662801519,
+    "p": 0.15948841837775313,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 10,
+      "rate": 0.002858776443682104,
+      "p0": 0.0019852524106636414
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 4,
+      "rate": 0.002909090909090909,
+      "p0": 0.0019852524106636414
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 3,
+      "rate": 0.0018072289156626507,
+      "p0": 0.0019852524106636414
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 0,
+      "rate": 0.0,
+      "p0": 0.0002180520681908286
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 4,
+   "name": "weibull_k2.0",
+   "family": "A16_weibull",
+   "by": "dev_z_event",
+   "dev_z_event": 2.0101743337555065,
+   "dev_z_hits": 1.721071083563611,
+   "dev_rate": 0.05814788226848528,
+   "dev_p0": 0.04677518233956124,
+   "leader": "frequency",
+   "leader_dev_rate": 0.05599425699928212,
+   "conf_n": 607,
+   "conf_events": 26,
+   "conf_rate": 0.042833607907743,
+   "conf_leader_events": 43,
+   "conf_leader_rate": 0.07084019769357495,
+   "conf_p0": 0.04677518233956124,
+   "mcnemar_b": 20,
+   "mcnemar_c": 37,
+   "p_vs_leader": 0.991825948051312,
+   "p_vs_random": 0.703895623540592,
+   "external": {
+    "events": 807,
+    "expected": 756.791807089858,
+    "z": 1.925560003056768,
+    "p": 0.027079668475104093,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 408,
+      "rate": 0.11663807890222985,
+      "p0": 0.10725519517351621
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 164,
+      "rate": 0.11927272727272727,
+      "p0": 0.10725519517351621
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 172,
+      "rate": 0.10361445783132531,
+      "p0": 0.10725519517351621
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 63,
+      "rate": 0.03511705685618729,
+      "p0": 0.03126734505087882
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 4,
+   "name": "anti_fft3_W512",
+   "family": "A13_fft",
+   "by": "dev_z_event",
+   "dev_z_event": 1.5026241163945815,
+   "dev_z_hits": 0.4083897486422148,
+   "dev_rate": 0.05527638190954774,
+   "dev_p0": 0.04677518233956124,
+   "leader": "frequency",
+   "leader_dev_rate": 0.05599425699928212,
+   "conf_n": 607,
+   "conf_events": 29,
+   "conf_rate": 0.047775947281713346,
+   "conf_leader_events": 43,
+   "conf_leader_rate": 0.07084019769357495,
+   "conf_p0": 0.04677518233956124,
+   "mcnemar_b": 28,
+   "mcnemar_c": 42,
+   "p_vs_leader": 0.9638810364041187,
+   "p_vs_random": 0.4801453845342294,
+   "external": {
+    "events": 765,
+    "expected": 756.791807089858,
+    "z": 0.31479659093547785,
+    "p": 0.3764580501413989,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 375,
+      "rate": 0.1072041166380789,
+      "p0": 0.10725519517351621
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 145,
+      "rate": 0.10545454545454545,
+      "p0": 0.10725519517351621
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 190,
+      "rate": 0.1144578313253012,
+      "p0": 0.10725519517351621
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 55,
+      "rate": 0.030657748049052396,
+      "p0": 0.03126734505087882
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 4,
+   "name": "garch_vol",
+   "family": "A11_garch",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.23374857299226912,
+   "dev_z_hits": 2.298650870929025,
+   "dev_rate": 0.04809763101220388,
+   "dev_p0": 0.04677518233956124,
+   "leader": "frequency",
+   "leader_dev_rate": 0.05599425699928212,
+   "conf_n": 607,
+   "conf_events": 38,
+   "conf_rate": 0.06260296540362438,
+   "conf_leader_events": 43,
+   "conf_leader_rate": 0.07084019769357495,
+   "conf_p0": 0.04677518233956124,
+   "mcnemar_b": 29,
+   "mcnemar_c": 34,
+   "p_vs_leader": 0.7750187318548887,
+   "p_vs_random": 0.04461057296072446,
+   "external": {
+    "events": 732,
+    "expected": 756.791807089858,
+    "z": -0.9508032328741074,
+    "p": 0.8291478644160747,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 335,
+      "rate": 0.09576901086335049,
+      "p0": 0.10725519517351621
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 157,
+      "rate": 0.11418181818181818,
+      "p0": 0.10725519517351621
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 187,
+      "rate": 0.11265060240963855,
+      "p0": 0.10725519517351621
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 53,
+      "rate": 0.029542920847268672,
+      "p0": 0.03126734505087882
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 5,
+   "name": "weibull_k0.5",
+   "family": "A16_weibull",
+   "by": "dev_z_event",
+   "dev_z_event": 2.7023059797588833,
+   "dev_z_hits": 1.9836073505478902,
+   "dev_rate": 0.007896625987078248,
+   "dev_p0": 0.0035751731724505405,
+   "leader": "frequency",
+   "leader_dev_rate": 0.002871500358937545,
+   "conf_n": 607,
+   "conf_events": 3,
+   "conf_rate": 0.004942339373970346,
+   "conf_leader_events": 2,
+   "conf_leader_rate": 0.0032948929159802307,
+   "conf_p0": 0.0035751731724505405,
+   "mcnemar_b": 3,
+   "mcnemar_c": 2,
+   "p_vs_leader": 0.5,
+   "p_vs_random": 0.36934814966040685,
+   "external": {
+    "events": 122,
+    "expected": 111.72278454540074,
+    "z": 0.9802106204993997,
+    "p": 0.16349108155441783,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 60,
+      "rate": 0.017152658662092625,
+      "p0": 0.01653517592258375
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 28,
+      "rate": 0.020363636363636365,
+      "p0": 0.01653517592258375
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 30,
+      "rate": 0.018072289156626505,
+      "p0": 0.01653517592258375
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 4,
+      "rate": 0.002229654403567447,
+      "p0": 0.002061583190167834
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 5,
+   "name": "weibull_k1.0",
+   "family": "A16_weibull",
+   "by": "dev_z_event",
+   "dev_z_event": 2.7023059797588833,
+   "dev_z_hits": 1.9836073505478902,
+   "dev_rate": 0.007896625987078248,
+   "dev_p0": 0.0035751731724505405,
+   "leader": "frequency",
+   "leader_dev_rate": 0.002871500358937545,
+   "conf_n": 607,
+   "conf_events": 3,
+   "conf_rate": 0.004942339373970346,
+   "conf_leader_events": 2,
+   "conf_leader_rate": 0.0032948929159802307,
+   "conf_p0": 0.0035751731724505405,
+   "mcnemar_b": 3,
+   "mcnemar_c": 2,
+   "p_vs_leader": 0.5,
+   "p_vs_random": 0.36934814966040685,
+   "external": {
+    "events": 124,
+    "expected": 111.72278454540074,
+    "z": 1.170964745452718,
+    "p": 0.120806474116119,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 62,
+      "rate": 0.017724413950829045,
+      "p0": 0.01653517592258375
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 29,
+      "rate": 0.02109090909090909,
+      "p0": 0.01653517592258375
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 30,
+      "rate": 0.018072289156626505,
+      "p0": 0.01653517592258375
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 3,
+      "rate": 0.0016722408026755853,
+      "p0": 0.002061583190167834
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  },
+  {
+   "game": "ro_joker1",
+   "K": 16,
+   "target": 5,
+   "name": "garch_vol",
+   "family": "A11_garch",
+   "by": "dev_z_hits",
+   "dev_z_event": 0.9066893379270086,
+   "dev_z_hits": 2.298650870929025,
+   "dev_rate": 0.005025125628140704,
+   "dev_p0": 0.0035751731724505405,
+   "leader": "frequency",
+   "leader_dev_rate": 0.002871500358937545,
+   "conf_n": 607,
+   "conf_events": 4,
+   "conf_rate": 0.006589785831960461,
+   "conf_leader_events": 2,
+   "conf_leader_rate": 0.0032948929159802307,
+   "conf_p0": 0.0035751731724505405,
+   "mcnemar_b": 4,
+   "mcnemar_c": 2,
+   "p_vs_leader": 0.34375,
+   "p_vs_random": 0.17451683942987897,
+   "external": {
+    "events": 116,
+    "expected": 111.72278454540074,
+    "z": 0.4079482456394452,
+    "p": 0.3416558357360966,
+    "series": {
+     "austria": {
+      "n": 3498,
+      "events": 64,
+      "rate": 0.018296169239565466,
+      "p0": 0.01653517592258375
+     },
+     "belgia": {
+      "n": 1375,
+      "events": 18,
+      "rate": 0.01309090909090909,
+      "p0": 0.01653517592258375
+     },
+     "ungaria": {
+      "n": 1660,
+      "events": 30,
+      "rate": 0.018072289156626505,
+      "p0": 0.01653517592258375
+     },
+     "euromillions": {
+      "n": 1794,
+      "events": 4,
+      "rate": 0.002229654403567447,
+      "p0": 0.002061583190167834
+     }
+    }
+   },
+   "holm_vs_leader": 1.0,
+   "holm_vs_random": 1.0,
+   "promoted": false
+  }
+ ],
+ "promoted": [],
+ "runtime_s": 760.0117933750153
+}

@@ -1,0 +1,630 @@
+{
+ "protocol": "Ecran de aranjamente geometrice / cover design, 2026-11-01. Protocol fixat\ninainte de rulare.\n\nIntrebarea utilizatorului: se pot testa si alte metode experimentale de cover\ndesign / aranjare geometrica a biletelor? Rata pool-ului e hipergeometrica si nu\nse poate ridica prin cod; singura parghie e asezarea numerelor pe bilete, la\nacelasi pool si acelasi numar de bilete.\n\nGeometrii (aceleasi ca aplicatia): 6/49 (pick 6, draw 6, max 49), Loto 5/40\n(pick 5, draw 6, max 40), Joker Urna 1 (pick 5, draw 5, max 45). Pool-ul e\ncanonic (pozitiile 1..v), ca la designurile din covering_designs.\n\nConfiguratii:\n  above_complete  v=16, g=4, buget B peste designul complet (6/49: 200/300/404;\n                  5/40 si Joker: 500/600, completul fiind 404): obiectiv P(>=5)\n                  pe un bilet, cu acoperirea g=4 mentinuta 100%. Intrebare: merita\n                  cheltuit mai mult decat designul complet pentru 5+?\n  budget_below    v=16, g=3, B in {64, 100}: obiectiv P(>=4) la buget fix sub\n                  designul complet.\n  complete_refine v in {14, 15, 16}, g=4, fara plafon: obiectiv P(>=5) peste\n                  wheel-ul motorului (care include deja coverele rafinate R_*).\n  cyclic          v=16, pick 6, g=4: design ciclic (blocuri de baza + shifturi\n                  mod 16) vs greedy la acelasi numar de bilete \u2014 diagnostic.\n\nMetoda. Baseline = wheel-ul motorului pe pozitii canonice\n(dispatch.generate_wheel cu metoda auto rezolvata, max_variants=B, draw_n,\nmax_num). Pentru above_complete/budget_below baseline-ul de certificare e\ngreedy la acelasi B (acelasi numar de bilete). Candidati = recoacere simulata\n(mutare = inlocuirea unui numar dintr-un bilet cu alt numar din pool), 2 seed-uri\nx 3000 de mutari, obiectivul exact (covering.probability.wheel_hit_probabilities).\nFiecare candidat se CERTIFICA cu regula de productie (covering.anneal_hits.\n_certify): acelasi numar de bilete distincte, numerele jucate pastrate, niciun\nprag 3..draw_n in scadere, castig strict la cel putin un prag, acoperirea\ngarantiei nedescrescatoare. Ne-certificat = nu se raporteaza ca imbunatatire.\n\nRezultatele sunt EXACTE (numaratori intregi, extragere uniforma), nu Monte\nCarlo. Niciun rezultat nu afirma avantaj predictiv \u2014 doar geometria biletelor.\n",
+ "configs": [
+  {
+   "game": "6/49",
+   "v": 16,
+   "g": 4,
+   "B": 200,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 198,
+   "baseline": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.0032924489281037452,
+    "6": 1.4159225207196663e-05
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0,
+    "5": 4.791252974152126e-06,
+    "6": 0.0
+   },
+   "candidate": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.0032972401810778974,
+    "6": 1.4159225207196663e-05
+   },
+   "candidate_cov_g": 1.0,
+   "complete_tickets": 152,
+   "complete": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.00251433514285371,
+    "6": 1.0869708239868145e-05
+   }
+  },
+  {
+   "game": "6/49",
+   "v": 16,
+   "g": 4,
+   "B": 300,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 198,
+   "baseline": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.0032924489281037452,
+    "6": 1.4159225207196663e-05
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0,
+    "5": 4.791252974152126e-06,
+    "6": 0.0
+   },
+   "candidate": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.0032972401810778974,
+    "6": 1.4159225207196663e-05
+   },
+   "candidate_cov_g": 1.0,
+   "complete_tickets": 152,
+   "complete": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.00251433514285371,
+    "6": 1.0869708239868145e-05
+   }
+  },
+  {
+   "game": "6/49",
+   "v": 16,
+   "g": 4,
+   "B": 404,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 198,
+   "baseline": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.0032924489281037452,
+    "6": 1.4159225207196663e-05
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0,
+    "5": 4.791252974152126e-06,
+    "6": 0.0
+   },
+   "candidate": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.0032972401810778974,
+    "6": 1.4159225207196663e-05
+   },
+   "candidate_cov_g": 1.0,
+   "complete_tickets": 152,
+   "complete": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.00251433514285371,
+    "6": 1.0869708239868145e-05
+   }
+  },
+  {
+   "game": "6/49",
+   "v": 16,
+   "g": 3,
+   "B": 64,
+   "target": 4,
+   "kind": "budget_below",
+   "baseline_tickets": 45,
+   "baseline": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.03477427048525238,
+    "5": 0.0008268844498526011,
+    "6": 3.2180057289083323e-06
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0001250016447584823,
+    "5": 8.581348610422123e-07,
+    "6": 0.0
+   },
+   "candidate": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.034899272130010865,
+    "5": 0.0008277425847136433,
+    "6": 3.2180057289083323e-06
+   },
+   "candidate_cov_g": 1.0
+  },
+  {
+   "game": "6/49",
+   "v": 16,
+   "g": 3,
+   "B": 100,
+   "target": 4,
+   "kind": "budget_below",
+   "baseline_tickets": 45,
+   "baseline": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.03477427048525238,
+    "5": 0.0008268844498526011,
+    "6": 3.2180057289083323e-06
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0001250016447584823,
+    "5": 8.581348610422123e-07,
+    "6": 0.0
+   },
+   "candidate": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.034899272130010865,
+    "5": 0.0008277425847136433,
+    "6": 3.2180057289083323e-06
+   },
+   "candidate_cov_g": 1.0
+  },
+  {
+   "game": "6/49",
+   "v": 14,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 80,
+   "baseline": {
+    "1": 0.8839258182458922,
+    "2": 0.5589181093343906,
+    "3": 0.2181842209594291,
+    "4": 0.04781727677194837,
+    "5": 0.0013916086996568033,
+    "6": 5.720899073614813e-06
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "6/49",
+   "v": 15,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 117,
+   "baseline": {
+    "1": 0.9038242494037393,
+    "2": 0.6053477820360337,
+    "3": 0.2571252367737104,
+    "4": 0.062420157702303865,
+    "5": 0.001975426450119195,
+    "6": 8.366814895161663e-06
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "6/49",
+   "v": 16,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 152,
+   "baseline": {
+    "1": 0.9207964406854323,
+    "2": 0.6492413801783433,
+    "3": 0.29809259503986607,
+    "4": 0.07960001762036914,
+    "5": 0.00251433514285371,
+    "6": 1.0869708239868145e-05
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "5/40",
+   "v": 16,
+   "g": 4,
+   "B": 500,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 467,
+   "baseline": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.004105898842740948,
+    "6": 0.0
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0,
+    "5": 7.815797289480522e-07
+   },
+   "candidate": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.0041066804224698964,
+    "6": 0.0
+   },
+   "candidate_cov_g": 1.0,
+   "complete_tickets": 404,
+   "complete": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.003631219420693105,
+    "6": 0.0
+   }
+  },
+  {
+   "game": "5/40",
+   "v": 16,
+   "g": 4,
+   "B": 600,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 467,
+   "baseline": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.004105898842740948,
+    "6": 0.0
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.0,
+    "5": 7.815797289480522e-07
+   },
+   "candidate": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.0041066804224698964,
+    "6": 0.0
+   },
+   "candidate_cov_g": 1.0,
+   "complete_tickets": 404,
+   "complete": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.003631219420693105,
+    "6": 0.0
+   }
+  },
+  {
+   "game": "5/40",
+   "v": 16,
+   "g": 3,
+   "B": 64,
+   "target": 4,
+   "kind": "budget_below",
+   "baseline_tickets": 64,
+   "baseline": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.42739384844648004,
+    "4": 0.043483188220030326,
+    "5": 0.000583319004371636,
+    "6": 0.0
+   },
+   "baseline_cov_g": 0.9053571428571429,
+   "certified": false
+  },
+  {
+   "game": "5/40",
+   "v": 16,
+   "g": 3,
+   "B": 100,
+   "target": 4,
+   "kind": "budget_below",
+   "baseline_tickets": 77,
+   "baseline": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.05042335568651358,
+    "5": 0.0007010770168664906,
+    "6": 0.0
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 0.00014407119670278162,
+    "5": 5.210531526321071e-07
+   },
+   "candidate": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.05056742688321636,
+    "5": 0.0007015980700191227,
+    "6": 0.0
+   },
+   "candidate_cov_g": 1.0
+  },
+  {
+   "game": "5/40",
+   "v": 14,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 229,
+   "baseline": {
+    "1": 0.9400189663347558,
+    "2": 0.7000948316737791,
+    "3": 0.3456614509246088,
+    "4": 0.0990990990990991,
+    "5": 0.0020448730975046766,
+    "6": 0.0
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "5/40",
+   "v": 15,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 294,
+   "baseline": {
+    "1": 0.9538607433344275,
+    "2": 0.7462340883393515,
+    "3": 0.40018966334755807,
+    "4": 0.12754860123281175,
+    "5": 0.0026388736915052705,
+    "6": 0.0
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "5/40",
+   "v": 16,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 404,
+   "baseline": {
+    "1": 0.964934164934165,
+    "2": 0.7877594193383667,
+    "3": 0.455556771346245,
+    "4": 0.1602655286865813,
+    "5": 0.003631219420693105,
+    "6": 0.0
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "joker1",
+   "v": 16,
+   "g": 4,
+   "B": 500,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 467,
+   "baseline": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.04677518233956124,
+    "5": 0.0003822357764501837
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false,
+   "complete_tickets": 404,
+   "complete": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.04677518233956124,
+    "5": 0.00033067077877060863
+   }
+  },
+  {
+   "game": "joker1",
+   "v": 16,
+   "g": 4,
+   "B": 600,
+   "target": 5,
+   "kind": "above_complete",
+   "baseline_tickets": 467,
+   "baseline": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.04677518233956124,
+    "5": 0.0003822357764501837
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false,
+   "complete_tickets": 404,
+   "complete": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.04677518233956124,
+    "5": 0.00033067077877060863
+   }
+  },
+  {
+   "game": "joker1",
+   "v": 16,
+   "g": 3,
+   "B": 64,
+   "target": 4,
+   "kind": "budget_below",
+   "baseline_tickets": 64,
+   "baseline": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.21518400928497355,
+    "4": 0.009996243121597631,
+    "5": 5.2383489706235025e-05
+   },
+   "baseline_cov_g": 0.9053571428571429,
+   "certified": false
+  },
+  {
+   "game": "joker1",
+   "v": 16,
+   "g": 3,
+   "B": 100,
+   "target": 4,
+   "kind": "budget_below",
+   "baseline_tickets": 77,
+   "baseline": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.011786285183902881,
+    "5": 6.302388605281402e-05
+   },
+   "baseline_cov_g": 1.0,
+   "certified": true,
+   "gain": {
+    "3": 0.0,
+    "4": 5.7294441866194076e-05,
+    "5": 0.0
+   },
+   "candidate": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.011843579625769075,
+    "5": 6.302388605281402e-05
+   },
+   "candidate_cov_g": 1.0
+  },
+  {
+   "game": "joker1",
+   "v": 14,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 229,
+   "baseline": {
+    "1": 0.860929201258186,
+    "2": 0.5003752785942236,
+    "3": 0.16557520754911567,
+    "4": 0.027037247116657212,
+    "5": 0.0001874346741051222
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "joker1",
+   "v": 15,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 294,
+   "baseline": {
+    "1": 0.8833599752488012,
+    "2": 0.5468983653895736,
+    "3": 0.19797521442444868,
+    "4": 0.035975180047783564,
+    "5": 0.00024063665583801716
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  },
+  {
+   "game": "joker1",
+   "v": 16,
+   "g": 4,
+   "B": 0,
+   "target": 5,
+   "kind": "complete_refine",
+   "baseline_tickets": 404,
+   "baseline": {
+    "1": 0.9027999793740009,
+    "2": 0.5917599133708039,
+    "3": 0.23286752952096118,
+    "4": 0.04677518233956124,
+    "5": 0.00033067077877060863
+   },
+   "baseline_cov_g": 1.0,
+   "certified": false
+  }
+ ],
+ "cyclic": {
+  "game": "6/49",
+  "kind": "cyclic",
+  "tickets": 192,
+  "cov_g": 0.5186813186813187,
+  "probs": {
+   "1": 0.9207964406854323,
+   "2": 0.6492413801783433,
+   "3": 0.2918499499707376,
+   "4": 0.045277483628217076,
+   "5": 0.00189247341355178,
+   "6": 1.3730157776675552e-05
+  },
+  "greedy_same_count": {
+   "1": 0.9207964406854323,
+   "2": 0.6492413801783433,
+   "3": 0.29809259503986607,
+   "4": 0.07899589067819542,
+   "5": 0.0032086377566752883,
+   "6": 1.3730157776675552e-05
+  }
+ },
+ "runtime_s": 345.2988579273224
+}
