@@ -373,3 +373,35 @@ def test_a_stored_date_without_leading_zero_is_the_same_draw(tmp_path, monkeypat
     assert added == 1, out
     lines = (istoric / uc.GAME_CONFIGS["loto_6_49"]["csv_name"]).read_text().splitlines()
     assert lines[-2:] == ["4-10-2026,24,10,12,15,32,40", "08-10-2026,7,8,9,10,11,13"]
+
+@pytest.mark.parametrize("page", [
+    "2026-06-01 7 8 9 10 11 12",
+    "2026-08-25 7 8 9 10 11 12",
+])
+def test_older_site_is_not_reported_up_to_date(tmp_path, monkeypatch, capsys, page):
+    """O pagină mai veche decât CSV-ul nu dovedește că acesta este la zi."""
+    rows = ["25-08-2026,7,8,9,10,11,12", "01-09-2026,1,2,3,4,5,6"]
+    added, before, istoric = _run(
+        tmp_path, monkeypatch, {"loto_6_49": rows}, {"loto_6_49": page}
+    )
+    out = capsys.readouterr().out
+    assert added == 0
+    assert _unchanged(istoric, before)
+    assert "NEACTUALIZATE" in out
+    line = next(line for line in out.splitlines() if "Loto 6/49" in line)
+    assert "EROARE verificare" in line
+    assert "la zi" not in line
+
+@pytest.mark.parametrize("new_numbers", ["1 2 3 4 5 6", "13 14 15 16 17 18"])
+def test_unordered_history_is_not_updated(tmp_path, monkeypatch, capsys, new_numbers):
+    rows = ["25-10-2026,1,2,3,4,5,6", "18-10-2026,7,8,9,10,11,12"]
+    page = ("2026-10-18 7 8 9 10 11 12 "
+            "2026-10-25 1 2 3 4 5 6 "
+            f"2026-10-29 {new_numbers}")
+    added, before, istoric = _run(tmp_path, monkeypatch, {"loto_6_49": rows}, {"loto_6_49": page})
+    out = capsys.readouterr().out
+    line = next(line for line in out.splitlines() if "Loto 6/49" in line)
+    assert added == 0
+    assert _unchanged(istoric, before)
+    assert "EROARE verificare" in line
+    assert "ordon" in line

@@ -223,7 +223,7 @@ def test_small_pool_result_cache_keys_match_the_pre_extension_keys(
         "game_label": game, "pool_size": pool, "guarantee": 4, "max_variants": 50,
     }]}]}
     key = worker._pipeline_cache_key("fixed-history", config)
-    assert key == f"v22:fixed-history:wheel=auto:{expected}"
+    assert key == f"v23:fixed-history:wheel=auto:{expected}"
 
 
 def test_large_pool_result_cache_has_its_own_namespace(tmp_path, monkeypatch):
@@ -236,7 +236,7 @@ def test_large_pool_result_cache_has_its_own_namespace(tmp_path, monkeypatch):
         "game_label": "6/49", "pool_size": 49, "guarantee": 4, "max_variants": 50,
     }]}]}
     key = worker._pipeline_cache_key("fixed-history", config)
-    old = "v22:fixed-history:wheel=auto:e80ea7ae3d3a93d1b94aecc63156d7cdc03cffecf27c1901b98e98884e81c6de"
+    old = "v23:fixed-history:wheel=auto:e80ea7ae3d3a93d1b94aecc63156d7cdc03cffecf27c1901b98e98884e81c6de"
     assert key == old + ":lp2"
 
 

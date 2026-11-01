@@ -22,10 +22,12 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 
@@ -63,6 +65,11 @@ logging.basicConfig(
     level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger("app_nicegui")
+
+# Semnalizat imediat, inclusiv când finalizarea ține STATE_LOCK la I/O.
+_WF_CANCEL_REQUESTED = threading.Event()
+_VIRTUAL_WF_CANCEL_REQUESTED = threading.Event()
+_VIRTUAL_WF_DECISION_CHANGED = threading.Event()
 
 from ui_runtime import *  # noqa: F403
 from ui_results import *  # noqa: F403
@@ -219,6 +226,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
 def submit_generation(
     pure: bool = False, sim_depth_per_game: dict | None = None
 ) -> None:
+    if STATE.get("virtual_wf_running"):
+        ui.notify("Analiza virtuală este în curs; așteaptă sau anulează.", type="warning")
+        return
     if not STATE["datasets"]:
         ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
         return
@@ -354,8 +364,58 @@ def apply_autopilot_and_generate() -> None:
 # --------------------------------------------------------------------------- #
 # Bench (subprocess) + status
 # --------------------------------------------------------------------------- #
-def _verified_bench_pid() -> int | None:
-    """PID-ul din `.bench_pid` DOAR dacă e CHIAR bench-ul pe care l-am pornit.
+def _bench_process_identity(proc) -> bool | None:
+    """Acceptă numai un interpret Python care execută scriptul acestui proiect.
+
+    Argumentele de după alt script, `-c` sau `-m` nu identifică programul
+    executat. La date inaccesibile nu se autorizează oprirea procesului.
+    """
+    try:
+        import psutil
+        if proc.status() == getattr(psutil, "STATUS_ZOMBIE", "zombie"):
+            return False
+        name = str(proc.name() or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if not re.fullmatch(r"python(?:w|3(?:\.\d+)?)?(?:\.exe)?", name):
+            return False
+        args = list(proc.cmdline() or [])
+        if len(args) < 2:
+            return False
+        exe = str(args[0]).replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if not re.fullmatch(r"python(?:w|3(?:\.\d+)?)?(?:\.exe)?", exe):
+            return False
+        index = 1
+        # Numai opțiuni fără valori și fără -c/-m. Opțiunile necunoscute
+        # se resping, nu se interpretează prin presupuneri.
+        while index < len(args) and str(args[index]).startswith("-"):
+            arg = str(args[index])
+            if arg == "--":
+                index += 1
+                break
+            if not re.fullmatch(r"-[bBdEhiIOPqRsSuvVx]+", arg):
+                return False
+            index += 1
+        if index >= len(args):
+            return False
+        script = Path(str(args[index]))
+        if not script.is_absolute():
+            script = Path(proc.cwd()) / script
+        return os.path.normcase(str(script.resolve())) == os.path.normcase(
+            str((Path(PROJECT_ROOT) / "bench_all_methods.py").resolve())
+        )
+    except Exception as exc:  # noqa: BLE001 — proces dispărut sau inaccesibil
+        import psutil
+        if isinstance(exc, (psutil.NoSuchProcess, psutil.ZombieProcess)):
+            return False
+        return None
+
+
+def _is_project_bench_process(proc) -> bool:
+    """Oprirea cere identitate pozitivă, nu numai lipsa dovezii contrare."""
+    return _bench_process_identity(proc) is True
+
+
+def _bench_pid_status() -> tuple[int | None, bool]:
+    """PID-ul și dacă identitatea a putut fi confirmată pozitiv.
 
     `psutil.pid_exists()` singur nu ajunge: nimic nu șterge `.bench_pid` la
     terminarea normală a bench-ului, deci fișierul supraviețuiește cu un PID mort,
@@ -368,16 +428,28 @@ def _verified_bench_pid() -> int | None:
 
     Verificăm identitatea, nu doar existența: `create_time` față de timestamp-ul
     scris la lansare (`pid|ts`) și `bench_all_methods.py` în linia de comandă.
-    Fișierul stale e șters ca să nu mai fie reevaluat.
+    Fișierul stale e șters; la AccessDenied rămâne, pentru a bloca un al doilea
+    bench. Oprirea verifică separat identitatea pozitivă.
     """
     if not BENCH_PID_FILE.exists():
-        return None
+        return None, False
+    parts = []
     try:
         import psutil
 
         parts = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
         pid = int(parts[0])
         started = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+        if (len(parts) >= 4 and re.fullmatch(r"[0-9a-f]{32}", parts[2])
+                and re.fullmatch(r"[0-9a-f]{64}", parts[3])
+                and STATE.get("_bench_seen_run") != parts[2]):
+            from bench_outcome import is_claimed
+            if is_claimed(parts[2]):
+                return None, False
+            STATE["_bench_run_identity"] = (pid, parts[2], parts[3])
+            STATE["bench_was_running"] = True
+            if parts[-1] == "cancelled":
+                STATE["bench_cancelled"] = True
         proc = psutil.Process(pid)  # NoSuchProcess → stale
         if proc.status() == getattr(psutil, "STATUS_ZOMBIE", "zombie"):
             raise psutil.NoSuchProcess(pid)
@@ -385,26 +457,84 @@ def _verified_bench_pid() -> int | None:
         # câteva secunde de `int(time.time())` scris de noi).
         if started is not None and abs(proc.create_time() - started) > 60:
             raise psutil.NoSuchProcess(pid)
-        try:
-            if "bench_all_methods.py" not in " ".join(proc.cmdline() or []):
-                raise psutil.NoSuchProcess(pid)
-        except (psutil.AccessDenied, psutil.ZombieProcess):
-            pass  # nu putem citi cmdline (elevat) → ne bazăm pe create_time
-        return pid
+        identity = _bench_process_identity(proc)
+        if identity is False:
+            raise psutil.NoSuchProcess(pid)
+        return pid, identity is True
+    except psutil.AccessDenied:
+        # Stare necunoscută: păstrăm markerul și blocăm un al doilea bench;
+        # cancel_all verifică separat identitatea pozitivă înainte de kill.
+        return pid, False
     except Exception:  # noqa: BLE001
         # PID mort / reciclat / fișier corupt → curățăm ca să nu blocheze UI-ul.
         try:
-            BENCH_PID_FILE.unlink(missing_ok=True)
+            # Păstrăm identitatea unei rulări cunoscute până la claim, inclusiv
+            # dacă UI se repornește din nou înainte să încarce sursele originale.
+            if not (len(parts) >= 4 and re.fullmatch(r"[0-9a-f]{32}", parts[2])):
+                BENCH_PID_FILE.unlink(missing_ok=True)
         except OSError:
             pass
+        return None, False
+
+
+def _verified_bench_pid() -> int | None:
+    # PID necunoscut = ocupat pentru starea UI; nu autorizează oprirea.
+    return _bench_pid_status()[0]
+
+
+def _bench_cancel_marker() -> bool:
+    try:
+        return BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")[-1] == "cancelled"
+    except (OSError, UnicodeError):
+        return False
+
+
+def _mark_bench_cancelled() -> bool:
+    """Păstrează prefixul pid|timestamp și adaugă anularea peste repornire."""
+    try:
+        if not BENCH_PID_FILE.exists():
+            return True
+        raw = BENCH_PID_FILE.read_text(encoding="utf-8").strip()
+        if not raw.split("|")[0].isdigit():
+            return False
+        if raw.split("|")[-1] != "cancelled":
+            atomic_write_text(BENCH_PID_FILE, raw + "|cancelled")
+        return True
+    except (OSError, UnicodeError) as exc:
+        logger.warning("[BENCH] marcajul anulării nu a putut fi salvat: %s", exc)
+        return False
+
+
+def _bench_survivor_identity(pid: int, started: float | None) -> bool | None:
+    """Confirmă același bench; None păstrează garda când accesul e refuzat."""
+    import psutil
+    try:
+        proc = psutil.Process(pid)
+        if started is not None and proc.create_time() != started:
+            return False
+        return _bench_process_identity(proc)
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+        return False
+    except (psutil.Error, OSError):
         return None
 
 
 def _bench_running() -> bool:
-    return _verified_bench_pid() is not None
+    if _verified_bench_pid() is not None:
+        if _bench_cancel_marker():
+            STATE["bench_cancelled"] = True
+        return True
+    pending = STATE.get("_bench_survivors") or []
+    alive = [(pid, started) for pid, started in pending
+             if _bench_survivor_identity(pid, started) is not False]
+    STATE["_bench_survivors"] = alive
+    return bool(alive)
 
 
 def _launch_bench(args: list[str], label: str) -> None:
+    if STATE.get("virtual_wf_running") or STATE.get("wf_running") or STATE.get("active_job_id"):
+        ui.notify("O generare sau validare este în curs; așteaptă sau anulează.", type="warning")
+        return
     if _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
@@ -414,6 +544,13 @@ def _launch_bench(args: list[str], label: str) -> None:
     # Bench exclusiv CPU (GPU eliminat complet din aplicație).
     env = dict(os.environ)
     env["LOTO_BENCH_TARGET"] = str(_clamped_bench_target())
+    run_id = uuid.uuid4().hex
+    env["LOTO_BENCH_RUN_ID"] = run_id
+    try:
+        config_digest = hashlib.sha256(_build_config_json().encode("utf-8")).hexdigest()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[BENCH] Identitatea surselor nu poate fi fixată: %s", exc)
+        config_digest = "0" * 64
     try:
         # bench_all_methods.py își scrie SINGUR bench_full.log (FileHandler) → nu
         # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
@@ -421,7 +558,14 @@ def _launch_bench(args: list[str], label: str) -> None:
         proc = subprocess.Popen(
             cmd, cwd=str(PROJECT_ROOT), creationflags=flags, env=env
         )
-        atomic_write_text(BENCH_PID_FILE, f"{proc.pid}|{int(time.time())}")
+        atomic_write_text(BENCH_PID_FILE, f"{proc.pid}|{int(time.time())}|{run_id}|{config_digest}")
+        STATE["_bench_run_identity"] = (proc.pid, run_id, config_digest)
+        # Numai o pornire nouă cerută de utilizator ridică anularea anterioară.
+        STATE["bench_cancelled"] = False
+        STATE.pop("_bench_waiting_sources", None)
+        _VIRTUAL_WF_CANCEL_REQUESTED.clear()
+        STATE["_bench_process"] = proc
+        STATE["bench_was_running"] = True
         ui.notify(f"{label} pornit (PID {proc.pid}).", type="positive")
     except Exception as exc:  # noqa: BLE001
         ui.notify(f"Nu pot porni bench-ul: {exc}", type="negative")
@@ -441,7 +585,7 @@ def _log_notify(message, type: str = "info", **_kw) -> None:  # noqa: A002
     log("[decizie] %s", message)
 
 
-def _rebuild_decision_for_target(target: int, notify=None) -> None:
+def _rebuild_decision_for_target(target: int, notify=None) -> bool:
     """Recalculează decizia de producție pentru ținta 3+/4+ selectată.
 
     Refuză un folds.csv care nu acoperă Re-Bench-ul deciziei (bench oprit,
@@ -502,7 +646,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> None:
                 )
             _refresh_status()
             results_panel.refresh()
-            return
+            return not _mismatch
         if (PROJECT_ROOT / "bench_results" / "folds.csv").exists():
             decision.update_best_methods_with_auto_pilot(require_complete=True)
             _mismatch = False
@@ -531,6 +675,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> None:
                 )
             _refresh_status()
             results_panel.refresh()
+            return not _mismatch
     except FileNotFoundError:
         # best_methods.json e gitignored: pe un clone proaspăt (sau după
         # ștergere) nu există, iar `update_best_methods_with_auto_pilot`
@@ -558,6 +703,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> None:
             notify(f"Nu am putut recalcula decizia: {exc}", type="negative")
     finally:
         _bench_freshness_panel.refresh()
+    return False
 
 
 def _on_bench_finished() -> None:
@@ -567,15 +713,181 @@ def _on_bench_finished() -> None:
         # ținta de la pornire. Acum folds.csv e complet. Fără marcaj (UI-ul a
         # fost repornit cât rula bench-ul), decizia scrisă pe altă țintă decât
         # cea selectată e singurul semn.
-        _rebuild_decision_for_target(_clamped_bench_target())
+        if not _rebuild_decision_for_target(_clamped_bench_target()):
+            logger.warning("[BENCH] Decizia nu a putut fi refăcută; istoricul automat nu pornește.")
+            return
     _bench_freshness_panel.refresh()
-    if (
-        SETTINGS.get("autopilot_after_bench")
-        and not STATE.get("active_job_id")
-        and STATE["datasets"]
-    ):
+    if _decision_target_mismatch():
+        logger.warning("[BENCH] Decizia nu corespunde țintei selectate; istoricul automat și Auto-Pilot nu pornesc.")
+        ui.notify("Decizia nu corespunde țintei selectate; istoricul automat nu a pornit.", type="warning")
+        return
+    if STATE.get("wf_running") or STATE.get("active_job_id"):
+        # Un WF început înainte de bench nu poate fi suprascris. Așteptăm
+        # finalizarea lui și verificăm din nou datele și decizia.
+        try:
+            cfg_text = _build_config_json()
+            cfg = json.loads(cfg_text)
+            countries = tuple(task.get("country", _LOT.RO) for ds in cfg.get("datasets", []) for task in ds.get("tasks", []))
+            STATE["_bench_history_pending"] = (cfg_text, countries, _virtual_decision_fingerprint(countries))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[BENCH] Istoricul automat nu poate fi planificat: %s", exc)
+        return
+    autopilot = bool(SETTINGS.get("autopilot_after_bench") and STATE.get("datasets"))
+    # Sistemul complet virtual se evaluează chiar și atunci când sistemul fizic
+    # este prea mare pentru generator; o decizie de bench nouă este obligatorie.
+    try:
+        cfg_text = _build_config_json()
+        cfg = json.loads(cfg_text)
+        tasks = [task for ds in cfg.get("datasets", []) for task in ds.get("tasks", [])]
+        full = bool(tasks) and all(
+            min(max(3, int(task["guarantee"])),
+                _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO)).pick_n)
+            == _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO)).pick_n
+            and int(task.get("max_variants") or 0) == 0 for task in tasks
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[BENCH] Nu pot pregăti istoricul automat: %s", exc)
+        return
+    from covering.large_pool import LEGACY_MAX_POOL, validate_large_pool_request
+    from loto_enterprise.core.walk_forward_adapter import _effective_pool_size, _wf_geometry
+    physical_errors = []
+    for task in tasks:
+        spec = _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO))
+        try:
+            pool = _effective_pool_size(int(task["pool_size"]), spec.geometry,
+                                        task.get("restrict_base_max", 0), task.get("restrict_base_min", 0))
+            guarantee, condition, cap = _wf_geometry(pool, spec.geometry, task["guarantee"],
+                                                       task.get("wheel_condition"), task.get("max_variants"))
+            if pool > LEGACY_MAX_POOL:
+                validate_large_pool_request(pool, spec.pick_n, guarantee, cap, condition)
+        except (ValueError, TypeError, OverflowError) as exc:
+            physical_errors.append(f"{spec.name}: {exc}")
+    STATE["_virtual_physical_notice"] = (
+        "Sistemul este prea mare sau invalid pentru generare: " + " | ".join(physical_errors) if physical_errors else ""
+    )
+    if physical_errors and autopilot:
+        ui.notify(STATE["_virtual_physical_notice"], type="warning")
+    if full and not STATE.get("active_job_id"):
+        if _start_virtual_history(auto_generate_config=cfg_text if autopilot and not physical_errors else None, automatic=True):
+            return
+        if physical_errors:
+            return
+    if not full and (not autopilot or physical_errors) and not STATE.get("active_job_id"):
+        _start_virtual_history(automatic=True, simulated=True)
+        return
+    if autopilot and not STATE.get("active_job_id"):
         ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
         apply_autopilot_and_generate()
+
+
+def _clear_bench_pid_if_matches(identity) -> None:
+    """Retire the receipt; do not delete a PID file another UI can replace."""
+    try:
+        from bench_outcome import mark_processed
+        mark_processed(identity[1])
+    except OSError as exc:
+        logger.warning("[BENCH] Nu pot marca rezultatul ca preluat: %s", exc)
+
+
+def _resume_bench_waiting_sources() -> None:
+    identity = STATE.get("_bench_waiting_sources")
+    if not identity or STATE.get("bench_cancelled") or _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
+        return
+    pid, run_id, config_digest = identity
+    try:
+        from bench_outcome import peek_exit, claim_exit
+        code = peek_exit(run_id, pid)
+        if code is None:
+            STATE.pop("_bench_waiting_sources", None)
+            _clear_bench_pid_if_matches(identity)
+            STATE["virtual_wf_status"] = "Re-Bench s-a încheiat prea demult sau rezultatul nu mai poate fi confirmat; rulează din nou."
+            STATE["virtual_wf_dirty"] = True
+            return
+        if config_digest != hashlib.sha256(_build_config_json().encode("utf-8")).hexdigest():
+            return
+        if code == 0 and claim_exit(run_id, pid) == 0:
+            STATE.pop("_bench_waiting_sources", None)
+            _clear_bench_pid_if_matches(identity)
+            _on_bench_finished()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[BENCH] Așteptarea surselor: %s", exc)
+
+
+def _observe_bench_activity(bench_now: bool) -> None:
+    """Detectează terminarea fără a revoca anularea unui proces încă viu."""
+    if STATE.get("bench_was_running") and not bench_now:
+        STATE["bench_was_running"] = False
+        process = STATE.pop("_bench_process", None)
+        identity = STATE.pop("_bench_run_identity", None)
+        rc = None
+        if identity is not None:
+            pid, run_id, config_digest = identity
+            STATE["_bench_seen_run"] = run_id
+            try:
+                from bench_outcome import claim_exit, peek_exit
+                code = peek_exit(run_id, pid)
+                if process is not None and process.poll() != 0:
+                    code = None
+                if process is None and code == 0 and not STATE.get("bench_cancelled"):
+                    current = hashlib.sha256(_build_config_json().encode("utf-8")).hexdigest()
+                    if config_digest != current:
+                        STATE["_bench_waiting_sources"] = identity
+                        STATE["virtual_wf_status"] = "Re-Bench este gata; încarcă istoricele și setările folosite la pornire pentru calculul automat."
+                        STATE["analysis_expanded"] = True
+                        STATE["virtual_wf_dirty"] = True
+                        return
+                if code is not None:
+                    rc = claim_exit(run_id, pid)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[BENCH] Verificarea rezultatului a eșuat: %s", exc)
+            _clear_bench_pid_if_matches(identity)
+        if not STATE.get("bench_cancelled") and rc == 0:
+            _on_bench_finished()
+        elif not STATE.get("bench_cancelled"):
+            logger.warning("[BENCH] Încheierea cu succes nu a putut fi confirmată (cod %s); nu pornesc istoricul sau Auto-Pilot.", rc)
+            ui.notify("Re-Bench nu a confirmat finalizarea cu succes sau datele originale nu corespund; istoricul automat nu a pornit.", type="warning")
+    elif bench_now:
+        STATE["bench_was_running"] = True
+
+
+def _continue_after_automatic_history(bench_now: bool) -> None:
+    if not (bench_now or STATE.get("active_job_id") or STATE.get("wf_running") or STATE.get("virtual_wf_running")):
+        _resume_bench_waiting_sources()
+    # Continuarea după analiza virtuală rulează numai pe event-loop și
+    # numai pe aceleași setări și date care au pornit analiza.
+    with STATE_LOCK:
+        waiting = STATE.get("_bench_history_pending")
+        if waiting and not (bench_now or STATE.get("active_job_id") or STATE.get("wf_running") or STATE.get("virtual_wf_running")):
+            STATE.pop("_bench_history_pending", None)
+        else:
+            waiting = None
+        pending = STATE.pop("_autopilot_after_virtual", None)
+    if waiting is not None:
+        config, countries, decision = waiting
+        try:
+            unchanged = config == _build_config_json() and decision == _virtual_decision_fingerprint(countries)
+        except Exception:  # noqa: BLE001
+            unchanged = False
+        if unchanged and not STATE.get("bench_cancelled") and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
+            _on_bench_finished()
+        else:
+            ui.notify("Istoricul automat nu a pornit: anulare, setări sau decizie schimbate.", type="warning")
+    if pending is not None:
+        config, countries, decision = pending
+        try:
+            unchanged = config == _build_config_json() and decision == _virtual_decision_fingerprint(countries)
+        except Exception:  # noqa: BLE001
+            unchanged = False
+        if unchanged and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set() and not STATE.get("bench_cancelled") and not (bench_now or STATE.get("active_job_id") or STATE.get("wf_running") or STATE.get("virtual_wf_running")):
+            apply_autopilot_and_generate()
+        else:
+            ui.notify("Auto-Pilot nu a pornit: anulare, setări sau decizie schimbate.", type="warning")
+
+
+def _bench_status_text() -> str:
+    if STATE.get("bench_cancelled"):
+        return "Anulare solicitată; oprirea bench-ului nu este confirmată. Auto-Pilot nu va porni la final."
+    return "Testez toate metodele (CPU, pe toate nucleele). Auto-Pilot pornește la final."
 
 
 def _reconcile_decision_target() -> None:
@@ -1162,24 +1474,51 @@ def _hw_telemetry_html() -> str:
 
 
 def cancel_all() -> None:
+    # Publicarea și finalizarea WF se serializează cu anularea, înainte de I/O.
+    _WF_CANCEL_REQUESTED.set()
+    _VIRTUAL_WF_CANCEL_REQUESTED.set()
+    with STATE_LOCK:
+        STATE["wf_user_cancel"] = True
+        STATE["bench_cancelled"] = True
+        STATE.pop("_autopilot_after_virtual", None)
+        STATE.pop("_bench_history_pending", None)
+        if STATE.get("results_recovered"):
+            STATE["recovered_wf_auto_attempted"] = STATE["results_recovered"]
+    cancel_marker_saved = _mark_bench_cancelled()
     try:
         cancel_pending_running_jobs("Oprit de utilizator")
     except Exception as exc:  # noqa: BLE001
         logger.warning("cancel jobs: %s", exc)
     # Kill bench (din .bench_pid) + fallback orice bench_all_methods.py din proiect
     from cleanup_old_processes import kill_pid_tree
+    import psutil
 
+    keep_bench_pid_file = False
+    survivor_candidates = list(STATE.get("_bench_survivors") or [])
     try:
         # PID VERIFICAT (aceeași identitate ca _bench_running: create_time +
         # cmdline), nu doar `pid_exists`: un PID stale reciclat de Windows către
         # un proces străin ar face ca tree-kill-ul să omoare tot arborele lui,
         # nu doar procesul greșit izolat cum era înainte de tree-kill.
-        pid = _verified_bench_pid()
+        pid, verified = _bench_pid_status()
         if pid is not None:
+            # Kill poate eșua fără excepție; markerul rămâne până când starea
+            # procesului a fost verificată din nou după încercare.
+            keep_bench_pid_file = True
             # Tree-kill, nu doar terminate() pe părinte: runner.py paralelizează
             # foldurile pe un ProcessPoolExecutor — uciderea DOAR a procesului
             # principal lasă lucrătorii orfani, arzând CPU după „Anulează TOT".
-            kill_pid_tree(pid)
+            if not verified:
+                keep_bench_pid_file = True
+            else:
+                proc = psutil.Process(pid)
+                identity = _bench_process_identity(proc)
+                if identity is True:
+                    kill_pid_tree(pid, expected_create_time=proc.create_time())
+                elif identity is None:
+                    keep_bench_pid_file = True
+    except psutil.AccessDenied:
+        keep_bench_pid_file = True
     except Exception as exc:  # noqa: BLE001
         logger.warning("kill bench pid: %s", exc)
     try:
@@ -1191,23 +1530,44 @@ def cancel_all() -> None:
         # `.bench_pid` lipsă sau reciclat, „Anulează TOT" raporta „Proces anulat."
         # în timp ce bench-ul mergea mai departe și rescria folds.csv.
         # Acum: potrivim pe numele scriptului și confirmăm prin CWD-ul procesului.
-        root = Path(PROJECT_ROOT).resolve()
-        for p in psutil.process_iter(["cmdline"]):
-            cl = " ".join(p.info.get("cmdline") or [])
-            if "bench_all_methods.py" not in cl:
-                continue
-            try:
-                same_cwd = Path(p.cwd()).resolve() == root
-            except Exception:  # noqa: BLE001 — AccessDenied / procesul a murit
-                same_cwd = root.as_posix() in cl.replace("\\", "/")
-            if same_cwd:
-                kill_pid_tree(p.pid)
+        for p in psutil.process_iter(["pid", "name", "cmdline"]):
+            if _is_project_bench_process(p):
+                started = None
+                try:
+                    started = p.create_time()
+                    kill_pid_tree(p.pid, expected_create_time=started)
+                    if _bench_survivor_identity(p.pid, started) is not False:
+                        survivor_candidates.append((p.pid, started))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[BENCH] oprirea PID %s nu a fost confirmată: %s", p.pid, exc)
+                    survivor_candidates.append((p.pid, started))
     except Exception as exc:  # noqa: BLE001
         logger.warning("kill bench fallback: %s", exc)
-    try:
-        BENCH_PID_FILE.unlink()
-    except OSError:
-        pass
+    if keep_bench_pid_file:
+        keep_bench_pid_file = _bench_pid_status()[0] is not None
+    survivors = []
+    for candidate in dict.fromkeys(survivor_candidates):
+        if _bench_survivor_identity(*candidate) is not False:
+            survivors.append(candidate)
+    STATE["_bench_survivors"] = survivors
+    # Reconstituim markerul numai când identitatea și momentul sunt confirmate;
+    # garda în memorie rămâne și dacă scrierea pe disc nu reușește.
+    if not keep_bench_pid_file:
+        for survivor_pid, survivor_started in survivors:
+            if survivor_started is not None and _bench_survivor_identity(survivor_pid, survivor_started) is True:
+                try:
+                    atomic_write_text(BENCH_PID_FILE, f"{survivor_pid}|{int(survivor_started)}|cancelled")
+                    keep_bench_pid_file = True
+                except OSError as exc:
+                    logger.warning("[BENCH] markerul nu a putut fi refăcut: %s", exc)
+                break
+    if not keep_bench_pid_file:
+        try:
+            BENCH_PID_FILE.unlink()
+        except OSError:
+            pass
+    else:
+        logger.warning("[BENCH] markerul a fost păstrat: oprirea procesului nu a fost confirmată.")
     STATE["active_job_id"] = None
     # IMPORTANT: marcăm că bench-ul NU mai e "în rulare" ca _tick să NU interpreteze
     # disparitia procesului ca "bench terminat → Auto-Pilot". Altfel Anuleaza pornea
@@ -1217,8 +1577,10 @@ def cancel_all() -> None:
     # Oprește și WALK-FORWARD-ul (thread separat) și blochează _finalize_pipeline:
     # altfel „Anulează TOT" lăsa WF să ruleze până la buget (până la 90 min), iar
     # finally-ul lui declanșa mail/shutdown — PC-ul se putea ÎNCHIDE după un cancel.
-    STATE["wf_user_cancel"] = True
-    ui.notify("Proces anulat.", type="warning")
+    if keep_bench_pid_file or survivors or not cancel_marker_saved:
+        ui.notify("Anularea bench-ului nu a fost confirmată; un proces poate rula în continuare.", type="warning")
+    else:
+        ui.notify("Proces anulat.", type="warning")
     _refresh_status()
 
 
@@ -1298,7 +1660,7 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "max_consecutive_run": meta.get("max_consecutive_run"),
         }
         for key in (
-            "large_pool_wf_skipped", "skip_reason", "estimated_rows", "row_limit"
+            "large_pool_wf_skipped", "skip_reason", "skip_detail", "estimated_rows", "row_limit"
         ):
             if key in meta:
                 STATE["retro_meta"][rk][key] = meta[key]
@@ -1450,13 +1812,24 @@ def _load_cached_walk_forward() -> int:
     return loaded
 
 
-def _start_walk_forward() -> None:
+def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
     with STATE_LOCK:
         results = STATE.get("results")
         sources = STATE.get("result_sources")
         ds_by_name = dict(sources) if sources is not None else dict(STATE.get("datasets", []))
+        if isinstance(results, tuple) and len(results) == 2:
+            _WF_CANCEL_REQUESTED.clear()
+            STATE["wf_user_cancel"] = False
+            my_seq = int(STATE.get("wf_seq") or 0) + 1
+            STATE["wf_seq"] = my_seq
+            STATE["wf_progress"] = 0.0
+            wf_t0 = time.time()
+            STATE["wf_start"] = wf_t0
+            STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU)..."
+            STATE["wf_running"] = True
     if not (isinstance(results, tuple) and len(results) == 2):
-        _finalize_pipeline()  # fără rezultate → nu rulează WF; mail deja trimis mai sus, doar shutdown
+        if post_completion_actions:
+            _finalize_pipeline()  # ramura normală a unei generări
         return
     results_bundle, _ = results
     # Walk-forward pentru singurul pool de producție.
@@ -1465,12 +1838,8 @@ def _start_walk_forward() -> None:
     # Secvență de rulare: dacă între timp pornește ALT walk-forward (generare nouă
     # cât rula validarea veche), thread-ul vechi devine stale — se oprește și NU mai
     # scrie retro/status/finalize peste rularea nouă.
-    STATE["wf_user_cancel"] = False
-    my_seq = int(STATE.get("wf_seq") or 0) + 1
-    STATE["wf_seq"] = my_seq
-
     def _worker_wf() -> None:
-        _wf_t0 = float(STATE.get("wf_start") or time.time())
+        _wf_t0 = wf_t0
 
         def _budget_s_live() -> float:
             # Citit LIVE din SETTINGS (nu o dată la pornire) → schimbarea bugetului din
@@ -1488,7 +1857,9 @@ def _start_walk_forward() -> None:
 
         def _global_deadline() -> float:
             dl = _wf_t0 + _budget_s_live()
-            STATE["wf_deadline"] = dl  # ETA-ul afișat urmărește și el schimbarea live
+            with STATE_LOCK:
+                if STATE.get("wf_seq") == my_seq:
+                    STATE["wf_deadline"] = dl  # ETA urmărește bugetul live
             return dl
 
         _global_deadline()  # inițializează STATE["wf_deadline"] pt panou
@@ -1496,7 +1867,11 @@ def _start_walk_forward() -> None:
         def _wf_cancel_all():
             # Anulare explicită din UI sau rulare înlocuită (alt WF pornit) →
             # oprire imediată; altfel buget global depășit → oprire parțială.
-            if STATE.get("wf_user_cancel") or STATE.get("wf_seq") != my_seq:
+            if (
+                STATE.get("wf_user_cancel")
+                or _WF_CANCEL_REQUESTED.is_set()
+                or STATE.get("wf_seq") != my_seq
+            ):
                 return True
             return time.time() > _global_deadline()
 
@@ -1531,6 +1906,8 @@ def _start_walk_forward() -> None:
                 done += 1
                 rk = f"{_pfx}{fname}_{g_label}"
                 with STATE_LOCK:
+                    if STATE.get("wf_seq") != my_seq:
+                        break
                     # Marcajul unui rezultat anterior nu rămâne pe cel nou.
                     STATE.setdefault("retro_meta", {}).pop(rk, None)
                 if _decision_moved_since_generation(g_label, data):
@@ -1546,12 +1923,17 @@ def _start_walk_forward() -> None:
                         else "decizia de bench s-a schimbat după generare",
                     )
                     with STATE_LOCK:
+                        if STATE.get("wf_seq") != my_seq:
+                            break
                         STATE["retro"].pop(rk, None)
                         STATE.setdefault("retro_meta", {})[rk] = _skip
                     continue
                 base = (done - 1) / max(1, total)
-                STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
-                STATE["wf_progress"] = base
+                with STATE_LOCK:
+                    if STATE.get("wf_seq") != my_seq:
+                        break
+                    STATE["wf_status"] = f"📊 Walk-forward {done}/{total}: {g_label}..."
+                    STATE["wf_progress"] = base
 
                 def _wf_cb(
                     frac,
@@ -1564,16 +1946,19 @@ def _start_walk_forward() -> None:
                     _g=g_label,
                 ):
                     frac = max(0.0, min(1.0, float(frac)))
-                    STATE["wf_progress"] = min(1.0, _b + frac / _t)
-                    if n_total > 0:
-                        STATE["wf_status"] = (
-                            f"📊 Walk-forward {_d}/{_tot}: {_g} — "
-                            f"pas {n_done}/{n_total} ({int(frac * 100)}%)"
-                        )
-                    else:
-                        STATE["wf_status"] = (
-                            f"📊 Walk-forward {_d}/{_tot}: {_g} — {int(frac * 100)}%"
-                        )
+                    with STATE_LOCK:
+                        if STATE.get("wf_seq") != my_seq:
+                            return
+                        STATE["wf_progress"] = min(1.0, _b + frac / _t)
+                        if n_total > 0:
+                            STATE["wf_status"] = (
+                                f"📊 Walk-forward {_d}/{_tot}: {_g} — "
+                                f"pas {n_done}/{n_total} ({int(frac * 100)}%)"
+                            )
+                        else:
+                            STATE["wf_status"] = (
+                                f"📊 Walk-forward {_d}/{_tot}: {_g} — {int(frac * 100)}%"
+                            )
 
                 # Buget PER JOC (felie adaptivă din timpul global rămas): un joc
                 # lent nu mai înfometează jocurile următoare (bug văzut: joker a
@@ -1609,7 +1994,7 @@ def _start_walk_forward() -> None:
                     if meta.get("partial"):
                         logger.warning(
                             "[WF] %s validat PARȚIAL: %s/%s extrageri "
-                            "(buget de timp / anulare) — acoperă extragerile RECENTE.",
+                            "(pot exista goluri între extragerile validate).",
                             g_label,
                             meta.get("n_test_draws"),
                             meta.get("n_expected"),
@@ -1619,73 +2004,506 @@ def _start_walk_forward() -> None:
                     ):
                         # Decizia s-a schimbat chiar înaintea pornirii WF-ului acestui joc.
                         meta = {**meta, "decision_changed": True}
-                    _store_wf_result(rk, flat, meta)
+                    with STATE_LOCK:
+                        if STATE.get("wf_seq") != my_seq:
+                            break
+                        _store_wf_result(rk, flat, meta)
                 except Exception as exc:  # noqa: BLE001
                     logger.error("walk-forward %s: %s", g_label, exc)
-                STATE["wf_progress"] = done / max(1, total)
+                    with STATE_LOCK:
+                        if (
+                            STATE.get("wf_seq") == my_seq
+                            and not STATE.get("wf_user_cancel")
+                            and not _WF_CANCEL_REQUESTED.is_set()
+                        ):
+                            STATE["retro"].pop(rk, None)
+                            STATE.setdefault("retro_meta", {})[rk] = {"wf_error": True}
+                with STATE_LOCK:
+                    if STATE.get("wf_seq") != my_seq:
+                        break
+                    STATE["wf_progress"] = done / max(1, total)
                 if _wf_cancel_all():
                     logger.warning(
                         "[WF] oprire walk-forward (anulare/buget) după %d/%d jocuri.",
                         done,
                         total,
                     )
-                    if STATE.get("wf_seq") == my_seq and not STATE.get("wf_user_cancel"):
-                        # Bugetul s-a terminat: jocurile neîncepute primesc un
-                        # marcaj, ca panoul și raportul să spună de ce lipsesc.
-                        for fn_left, g_left, _d_left in jobs[i_job + 1 :]:
-                            if ds_by_name.get(fn_left) is None:
-                                continue
-                            rk_left = f"{_pfx}{fn_left}_{g_left}"
+                    # Secvența și marcajele se verifică/scriu atomic pentru
+                    # fiecare joc, ca să nu atingă rezultatul unei generări noi.
+                    for fn_left, g_left, _d_left in jobs[i_job + 1 :]:
+                        if ds_by_name.get(fn_left) is None:
+                            continue
+                        rk_left = f"{_pfx}{fn_left}_{g_left}"
+                        with STATE_LOCK:
+                            if (
+                                STATE.get("wf_seq") != my_seq
+                                or STATE.get("wf_user_cancel")
+                                or _WF_CANCEL_REQUESTED.is_set()
+                            ):
+                                break
                             budget_skipped += 1
-                            with STATE_LOCK:
-                                STATE["retro"].pop(rk_left, None)
-                                STATE.setdefault("retro_meta", {})[rk_left] = {
-                                    "budget_skipped": True
-                                }
+                            STATE["retro"].pop(rk_left, None)
+                            STATE.setdefault("retro_meta", {})[rk_left] = {
+                                "budget_skipped": True
+                            }
                     break
-            if STATE.get("wf_seq") == my_seq and not STATE.get("wf_user_cancel"):
-                STATE["wf_status"] = (
-                    f"⏱ Walk-forward oprit de bugetul de timp: "
-                    f"{count(budget_skipped, 'jocuri', 'joc')} fără validare. "
-                    "Mărește „⏱ Buget walk-forward”; la generarea următoare pașii "
-                    "deja validați se iau din cache."
-                    if budget_skipped
-                    else ""
-                )
-                STATE["wf_progress"] = 1.0
+            with STATE_LOCK:
+                if (
+                    STATE.get("wf_seq") == my_seq
+                    and not STATE.get("wf_user_cancel")
+                    and not _WF_CANCEL_REQUESTED.is_set()
+                ):
+                    STATE["wf_status"] = (
+                        f"⏱ Walk-forward oprit de bugetul de timp: "
+                        f"{count(budget_skipped, 'jocuri', 'joc')} fără validare. "
+                        "Mărește „⏱ Buget walk-forward”; la generarea următoare pașii "
+                        "deja validați se iau din cache."
+                        if budget_skipped
+                        else ""
+                    )
+                    STATE["wf_progress"] = 1.0
         except Exception as exc:  # noqa: BLE001
-            STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
+            with STATE_LOCK:
+                if STATE.get("wf_seq") == my_seq:
+                    STATE["wf_status"] = f"Walk-forward eșuat: {exc}"
         finally:
-            _stale = STATE.get("wf_seq") != my_seq
-            _user_cancelled = bool(STATE.get("wf_user_cancel"))
-            if not _stale:
-                if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
-                    STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
-                _save_report_file()  # rescriu raportul acum CU statisticile walk-forward
-                # Refresh-ul UI se face DOAR pe event-loop (în _tick), nu din thread:
-                # elementele NiceGUI nu sunt thread-safe.
-                STATE["results_dirty"] = True
-                if _user_cancelled:
-                    # Anulare explicită: FĂRĂ finalizare (mail/shutdown) — utilizatorul
-                    # tocmai a oprit tot; un shutdown aici ar închide PC-ul după cancel.
-                    STATE["wf_status"] = "Walk-forward anulat (fără mail/oprire PC)."
-                    logger.info("[WF] finalizare sărită: anulare explicită din UI.")
-                else:
-                    # Mail-ul a plecat deja imediat după generare (vezi status_panel).
-                    # ABIA ACUM (walk-forward terminat): oprirea PC-ului (dacă e cerută).
-                    _finalize_pipeline()
-                STATE["results_dirty"] = (
-                    True  # banner-ul de oprire apare la următorul tick
-                )
-                # Textul din wf_status („anulat"/„eșuat") rămâne vizibil, dar WF NU
-                # mai rulează: flag-ul separat oprește refresh-ul de 1s și bara de progres.
-                STATE["wf_running"] = False
+            # Serializăm decizia de finalizare cu generarea nouă și anularea:
+            # altfel o rulare veche putea salva raportul sau programa oprirea PC-ului.
+            with STATE_LOCK:
+                if STATE.get("wf_seq") == my_seq:
+                    if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
+                        STATE["wf_elapsed"] = time.time() - STATE["job_start_time"]
+                    _save_report_file()  # raportul include statisticile walk-forward
+                    STATE["results_dirty"] = True  # refresh pe event-loop
+                    # Cancel poate fi cerut cât salvarea ține lacătul. Evenimentul
+                    # se setează înainte ca handlerul să aștepte STATE_LOCK.
+                    if STATE.get("wf_user_cancel") or _WF_CANCEL_REQUESTED.is_set():
+                        STATE["wf_status"] = "Walk-forward anulat (fără mail/oprire PC)."
+                        logger.info("[WF] finalizare sărită: anulare explicită din UI.")
+                    elif post_completion_actions:
+                        # Un bench pornit extern în timpul validării nu trebuie
+                        # întrerupt de oprirea PC-ului din generarea anterioară.
+                        try:
+                            bench_busy = bool(STATE.get("_bench_history_pending") or STATE.get("bench_was_running") or _bench_running())
+                        except Exception:  # noqa: BLE001
+                            bench_busy = True
+                        if bench_busy:
+                            STATE["wf_status"] = "Finalizarea automată a fost oprită: Re-Bench este în curs."
+                            logger.warning("[WF] Finalizare omisă: Re-Bench este în curs sau starea lui nu poate fi verificată.")
+                        else:
+                            _finalize_pipeline()
+                    STATE["results_dirty"] = True
+                    STATE["wf_running"] = False
 
-    STATE["wf_progress"] = 0.0
-    STATE["wf_start"] = time.time()  # pt ETA walk-forward
-    STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU)..."
-    STATE["wf_running"] = True
     threading.Thread(target=_worker_wf, daemon=True).start()
+
+
+def _start_recovered_walk_forward() -> None:
+    """Calculează numai la cerere istoricul rezultatului recuperat, pe sursele lui."""
+    with STATE_LOCK:
+        results = STATE.get("results")
+        sources = STATE.get("result_sources")
+        if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
+            ui.notify("Există deja o generare sau o validare în curs.", type="warning")
+            return
+        if not STATE.get("results_recovered") or not (isinstance(results, tuple) and len(results) == 2):
+            ui.notify("Rezultatul recuperat nu este disponibil.", type="warning")
+            return
+        jobs = list(_iter_wf_jobs(results[0]))
+        if not jobs or not isinstance(sources, dict) or any(sources.get(fname) is None for fname, _, _ in jobs):
+            ui.notify(
+                "Istoricele folosite la generarea recuperată nu sunt disponibile. Generează din nou.",
+                type="warning",
+            )
+            return
+        _start_walk_forward(post_completion_actions=False)
+    ui.notify("Calculez istoricul pentru rezultatul recuperat.", type="positive")
+    _refresh_status()
+    results_panel.refresh()
+
+
+def _start_recovered_history_if_missing() -> bool:
+    """Start missing recovered-job validation without requiring a UI client."""
+    with STATE_LOCK:
+        if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
+            return False
+        if _bench_running() or STATE.get("bench_was_running"):
+            return False
+        results = STATE.get("results")
+        sources = STATE.get("result_sources")
+        recovered = STATE.get("results_recovered")
+        if not recovered or not (isinstance(results, tuple) and len(results) == 2):
+            return False
+        jobs = list(_iter_wf_jobs(results[0]))
+        if not jobs or not isinstance(sources, dict) or any(sources.get(fname) is None for fname, _, _ in jobs):
+            return False
+        retro, meta_by_key = STATE.get("retro", {}), STATE.get("retro_meta", {})
+        def missing(job):
+            fname, g_label, _data = job
+            key = f"{fname}_{g_label}"
+            meta = meta_by_key.get(key, {})
+            if meta.get("large_pool_wf_skipped") or meta.get("decision_moved") or meta.get("scorer_fallback"):
+                return False
+            return bool(meta.get("partial")) or key not in retro
+        if not any(missing(job) for job in jobs):
+            return False
+        if STATE.get("recovered_wf_auto_attempted") == recovered:
+            return False
+        STATE["recovered_wf_auto_attempted"] = recovered
+        _start_walk_forward(post_completion_actions=False)
+        return True
+
+def _romanian_guarantee_text() -> str:
+    """Pragul pe joc folosește aceleași limite ca normalizarea workerului."""
+    requested = max(3, min(6, _int_setting("guarantee_val")))
+    parts = []
+    for game_id, label in (("6/49", "6/49"), ("5/40", "5/40"), ("joker", "Joker")):
+        pick = _LOT.require_lottery(game_id, _LOT.RO).pick_n
+        effective = min(requested, pick)
+        suffix = f" (plafonată la {pick})" if effective < requested else ""
+        parts.append(f"{label}: {effective}{suffix}")
+    return "Garanția cerută pe joc: " + " · ".join(parts) + ". Depinde de acoperirea variantelor."
+
+
+def _virtual_decision_fingerprint(countries) -> tuple:
+    """Ținta curentă și conținutul fiecărei decizii, inclusiv modificări externe."""
+    from loto_enterprise.core.method_selector import decision_path_for
+
+    fingerprints = []
+    for country in sorted(set(countries)):
+        try:
+            content = Path(decision_path_for(country)).read_bytes()
+        except FileNotFoundError:
+            digest = None
+        else:
+            digest = hashlib.sha256(content).hexdigest()
+        fingerprints.append((country, digest))
+    return _clamped_bench_target(), tuple(fingerprints)
+
+
+def _start_virtual_history(*, auto_generate_config: str | None = None, automatic: bool = False, simulated: bool = False) -> bool:
+    """Analizează sistemul complet teoretic pe setările curente."""
+    with STATE_LOCK:
+        if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
+            ui.notify("Există deja o generare sau o validare în curs.", type="warning")
+            return
+        if STATE.get("bench_was_running") and not STATE.get("bench_cancelled"):
+            ui.notify("Se finalizează Re-Bench; așteaptă actualizarea înainte de analiza virtuală.", type="warning")
+            return
+        try:
+            if _bench_running():
+                ui.notify("Re-Bench este în curs; așteaptă încheierea înainte de analiza virtuală.", type="warning")
+                return
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[WF VIRTUAL] nu pot verifica Re-Bench: %s", exc)
+            ui.notify("Nu pot verifica starea Re-Bench; încearcă din nou.", type="warning")
+            return
+        try:
+            config = json.loads(_build_config_json())
+            jobs = []
+            for dataset in config.get("datasets", []):
+                frame = pd.read_json(io.StringIO(dataset["df_json"]), orient="split", convert_dates=False)
+                for task in dataset.get("tasks", []):
+                    spec = _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO))
+                    guarantee = max(3, min(spec.pick_n, int(task["guarantee"])))
+                    if not simulated and (guarantee != spec.pick_n or int(task.get("max_variants") or 0) != 0):
+                        raise ValueError("Analiza virtuală cere sistem complet și plafon 0 pentru fiecare joc selectat.")
+                    jobs.append((dataset["fname"], spec, frame, dict(task), guarantee))
+            if not jobs:
+                raise ValueError("Încarcă istoricul jocurilor selectate.")
+            depth = int(STATE.get("virtual_wf_depth") or 30)
+            if depth not in (30, 100):
+                raise ValueError("Alege adâncimea 30% sau 100%.")
+            budget = max(60.0, float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"]) * 60.0)
+            countries = tuple(spec.country for _, spec, _, _, _ in jobs)
+            initial_decision = _virtual_decision_fingerprint(countries)
+            if any(int(task.get("bench_hit_target", initial_decision[0])) != initial_decision[0]
+                   for _, _, _, task, _ in jobs):
+                raise ValueError("Ținta de bench s-a schimbat; pornește analiza din nou.")
+        except (ValueError, TypeError, KeyError, OverflowError, OSError) as exc:
+            ui.notify(str(exc), type="warning")
+            return
+        _VIRTUAL_WF_CANCEL_REQUESTED.clear()
+        _VIRTUAL_WF_DECISION_CHANGED.clear()
+        STATE["virtual_wf_running"] = True
+        if automatic:
+            STATE["analysis_expanded"] = True
+        STATE["virtual_wf_results"] = []
+        STATE["_virtual_history_simulated"] = simulated
+        if not automatic:
+            STATE["_virtual_physical_notice"] = ""
+        STATE["virtual_wf_status"] = "Pornesc simularea istorică…" if simulated else "Pornesc analiza virtuală…"
+        STATE["virtual_wf_dirty"] = True
+
+    def worker() -> None:
+        deadline = time.monotonic() + budget
+        fatal_error = False
+        decision_changed = False
+
+        def decision_moved():
+            if _VIRTUAL_WF_DECISION_CHANGED.is_set():
+                return True
+            try:
+                return _virtual_decision_fingerprint(countries) != initial_decision
+            except (OSError, ValueError):
+                return True
+
+        try:
+            from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
+
+            for index, (fname, spec, frame, task, guarantee) in enumerate(jobs):
+                # Sistemele complete se pot evalua virtual, fără a materializa
+                # sute de mii de combinații; restul simulează variantele reale.
+                job_simulated = simulated and not (
+                    guarantee == spec.pick_n and int(task.get("max_variants") or 0) == 0
+                )
+                if _VIRTUAL_WF_CANCEL_REQUESTED.is_set() or time.monotonic() >= deadline:
+                    break
+                if decision_moved():
+                    decision_changed = True
+                    break
+                game_deadline = min(deadline, time.monotonic() + max(60.0, (deadline - time.monotonic()) / (len(jobs) - index)))
+                with STATE_LOCK:
+                    STATE["virtual_wf_status"] = f"{'Simulare istorică' if job_simulated else 'Analiză virtuală'} {index + 1}/{len(jobs)}: {spec.name}…"
+                    STATE["virtual_wf_dirty"] = True
+                kw = {
+                    "df_source": frame, "game_type": spec.geometry,
+                    "pool_size": int(task["pool_size"]), "backtest_depth_percent": depth,
+                    "lookback_percent": _effective_lookback_pct({"lookback": task.get("lookback")}),
+                    "use_cache": True, "guarantee": guarantee, "wheel_condition": task.get("wheel_condition"),
+                    "max_variants": int(task.get("max_variants") or 0) if job_simulated else 0, "recent_penalty_draws": task.get("recent_penalty_draws", 0),
+                    "recent_penalty_factor": task.get("recent_penalty_factor", 0.5),
+                    "restrict_base_max": task.get("restrict_base_max", 0),
+                    "restrict_base_min": task.get("restrict_base_min", 0),
+                    "max_consecutive_run": task.get("max_consecutive_run", 0),
+                    **({"compact_results": True} if job_simulated else {"virtual_full_system": True}),
+                    "should_cancel": lambda: _VIRTUAL_WF_CANCEL_REQUESTED.is_set() or time.monotonic() >= game_deadline or decision_moved(),
+                    "should_skip_cache_write": decision_moved,
+                }
+                if not spec.is_romanian:
+                    kw.update(game_key=spec.bench_key, country=spec.country)
+                meta = {}
+                try:
+                    flat, meta = run_honest_walk_forward(**kw)
+                    if not job_simulated and (not meta.get("virtual_full_system") or any(not getattr(row, "virtual_full_system", False) for row in flat)):
+                        raise ValueError("Rezultatul nu este identificat ca sistem virtual.")
+                    if job_simulated and (meta.get("virtual_full_system") or any(getattr(row, "virtual_full_system", False) for row in flat)):
+                        raise ValueError("Sistemul virtual nu poate fi afișat ca simulare de variante.")
+                    record = {"name": spec.name, "game": spec.geometry, "pool": task["pool_size"],
+                              "guarantee": guarantee, "depth": depth, "flat": flat, "meta": meta, "simulated": job_simulated,
+                              "max_variants": int(task.get("max_variants") or 0), "wheel_condition": task.get("wheel_condition")}
+                except Exception as exc:  # noqa: BLE001
+                    fatal_error = True
+                    logger.error("[WF VIRTUAL] %s: %s", spec.name, exc)
+                    record = {"name": spec.name, "pool": task["pool_size"], "guarantee": guarantee,
+                              "depth": depth, "error": str(exc), "simulated": job_simulated}
+                if decision_moved() or (not record.get("error") and meta.get("decision_changed")):
+                    decision_changed = True
+                    break
+                with STATE_LOCK:
+                    STATE["virtual_wf_results"].append(record)
+                    STATE["virtual_wf_dirty"] = True
+        except Exception as exc:  # noqa: BLE001
+            fatal_error = True
+            logger.error("[WF VIRTUAL] analiza a eșuat: %s", exc)
+        finally:
+            with STATE_LOCK:
+                STATE["virtual_wf_running"] = False
+                if automatic and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
+                    STATE["analysis_expanded"] = True
+                STATE["virtual_wf_status"] = (
+                    ("Analiză istorică anulată." if simulated else "Analiză virtuală anulată.") if _VIRTUAL_WF_CANCEL_REQUESTED.is_set()
+                    else "Analiza istorică s-a oprit: decizia de bench sau ținta s-a schimbat. Reia analiza." if decision_changed
+                    else "Analiza istorică a eșuat; vezi jurnalul." if fatal_error
+                    else ("Analiză istorică oprită de buget." if simulated else "Analiză virtuală oprită de buget.") if time.monotonic() >= deadline
+                    else ("Analiză istorică încheiată." if simulated else "Analiză virtuală încheiată.")
+                )
+                STATE["virtual_wf_dirty"] = True
+                if (auto_generate_config is not None and not fatal_error and not decision_changed
+                        and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set()):
+                    STATE["_autopilot_after_virtual"] = (auto_generate_config, countries, initial_decision)
+
+    threading.Thread(target=worker, daemon=True).start()
+    ui.notify("Calculez istoricul sistemelor selectate." if simulated else "Calculez istoricul sistemului complet virtual.", type="positive")
+    results_panel.refresh()
+    return True
+
+
+def _render_virtual_history() -> None:
+    records = list(STATE.get("virtual_wf_results") or [])
+    status = STATE.get("virtual_wf_status")
+    if not records and not status:
+        return
+    modes = {bool(record.get("simulated")) for record in records}
+    mixed = len(modes) > 1
+    simulated = (modes == {True}) if records else bool(STATE.get("_virtual_history_simulated"))
+    heading = ("📊 Istoric hits — sisteme simulate și virtuale" if mixed else
+               "📊 Istoric hits — simularea variantelor" if simulated else
+               "📊 Istoric hits — sistem complet virtual")
+    with ui.card().classes("w-full"):
+        with ui.expansion(heading, value=True).classes("w-full"):
+            ui.label(
+                "Metoda aleasă de bench poate folosi unele dintre extragerile evaluate, "
+                "astfel că rezultatul nu dovedește un avantaj predictiv."
+            ).classes("text-caption text-warning")
+            if status:
+                ui.label(status).classes("text-caption")
+            if STATE.get("_virtual_physical_notice"):
+                ui.label(STATE["_virtual_physical_notice"]).classes("text-caption text-warning")
+            for record in records:
+                simulated = bool(record.get("simulated"))
+                ui.label(f"{record['name']} · pool cerut {record['pool']} · garanție {record['guarantee']} · fereastră cerută {record['depth']}%").classes("text-bold")
+                ui.label(
+                    ("Variante simulate pentru fiecare extragere pe baza datelor anterioare; "
+                     "nu stabilește că au fost jucate și nu atribuie premii. Varianta afișată este "
+                     "una dintre cele simulate, aleasă după verificarea extragerii." if simulated else
+                     "Analiza teoretică nu generează bilete și nu stabilește că au fost jucate; nu se atribuie premii. "
+                     "Exemplul de variantă este construit după extragerea istorică din numerele nimerite; "
+                     "nu este o variantă anticipată.")
+                ).classes("text-caption text-warning")
+                if simulated and not record.get("error"):
+                    cap = int(record.get("max_variants") or 0)
+                    condition = int(record.get("meta", {}).get("wheel_condition") or record.get("wheel_condition") or record["guarantee"])
+                    ui.label(f"Condiție {condition}; " + (f"plafon {cap} variante pe extragere." if cap else "fără plafon de variante.")).classes("text-caption")
+                if record.get("error"):
+                    ui.label(f"Analiză necalculată: {record['error']}").classes("text-negative")
+                    continue
+                meta = record["meta"]
+                if meta.get("large_pool_wf_skipped"):
+                    ui.label(f"Analiză necalculată: {meta.get('skip_detail') or 'limita de resurse a fost depășită'}").classes("text-warning")
+                    continue
+                ui.label(
+                    f"Extrageri validate: {meta.get('n_test_draws', 0)} din {meta.get('n_expected', 0)} evaluabile. "
+                    + ("Validare parțială; pot exista goluri." if meta.get("partial") else "Validare completă pentru fereastra cerută.")
+                ).classes("text-caption")
+                if meta.get("decision_changed"):
+                    ui.label(
+                        "Decizia de bench s-a schimbat în timpul validării; pașii pot folosi metode diferite."
+                    ).classes("text-caption text-warning")
+                dates = sorted(
+                    date for entry in record["flat"]
+                    if (date := _parse_draw_date(entry.draw_date)) is not None
+                )
+                if dates:
+                    ui.label(
+                        f"Prima extragere validată: {dates[0].strftime('%d-%m-%Y')}; "
+                        f"ultima: {dates[-1].strftime('%d-%m-%Y')}."
+                    ).classes("text-caption")
+                # Datele compacte au un rând pe extragere; cache-urile complete
+                # pot avea mai multe variante. Numitorul rămâne numărul extragerilor.
+                per_draw = {}
+                for entry in record["flat"]:
+                    key = int(entry.draw_index)
+                    bucket = per_draw.setdefault(key, [])
+                    bucket.append(entry)
+                flat = [max(group, key=lambda entry: int(entry.hits)) for group in per_draw.values()]
+                if flat:
+                    thresholds = (4, 5, 6) if record["game"] in ("6/49", "5/40") else (4, 5)
+                    def _rate(n):
+                        return f"{n} ({n / len(flat) * 100:.2f}%)"
+                    summary = []
+                    for threshold in thresholds:
+                        summary.append({
+                            "threshold": f"{threshold}+",
+                            "pool": _rate(sum(int(p.hits_union) >= threshold for p in flat)),
+                            "ticket": (
+                                _rate(sum(int(p.hits) >= threshold for p in flat))
+                                if threshold <= (5 if record["game"] in ("joker", "5/40") else 6) else "—"
+                            ),
+                        })
+                    ui.label("Hiturile din extragerile validate; pe variantă este maximul variantelor simulate." if simulated else "Hiturile din extragerile validate; pe variantă este maximul teoretic al sistemului complet.").classes("text-caption")
+                    ui.table(columns=[
+                        {"name": "threshold", "label": "Hiturile", "field": "threshold"},
+                        {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
+                        {"name": "ticket", "label": "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "ticket"},
+                    ], rows=summary, row_key="threshold").classes("w-full").props("dense wrap-cells")
+                rows = []
+                pool_records = {}
+                for entry in sorted(flat, key=lambda x: int(x.draw_index), reverse=True):
+                    context = entry.ticket_context or {}
+                    variant = list(entry.variant or [])
+                    if record["game"] == "joker" and len(variant) == 6:
+                        example = " ".join(map(str, variant[:5])) + f" · Joker {variant[5]}"
+                    else:
+                        example = " ".join(map(str, variant))
+                    pool_records[int(entry.draw_index)] = {
+                        "label": str(entry.draw_date or ""), "drawn": list(context.get("actual") or []),
+                        "pool_numbers": list(context.get("hard_core") or []),
+                        "best_variant_raw": variant, "best_variant_joker_hit": getattr(entry, "joker_hit", None),
+                        "generated_variants": [list(getattr(e, "variant", None) or []) for e in per_draw[int(entry.draw_index)]],
+                        "expected_variant_count": getattr(entry, "variant_count", None),
+                        "variant_prize_groups": getattr(entry, "variant_prize_groups", None),
+                        "virtual_full_system": bool(getattr(entry, "virtual_full_system", False)),
+                    }
+                    rows.append({
+                        "_draw_index": int(entry.draw_index), "pool_prize": "se încarcă premiile oficiale",
+                        "draw_index": int(entry.draw_index),
+                        "date": str(entry.draw_date or f"#{entry.draw_index}"),
+                        "drawn": " ".join(map(str, context.get("actual") or [])) or "—",
+                        "pool": " ".join(map(str, context.get("hard_core") or [])) or "—",
+                        "pool_hits": int(entry.hits_union), "best_hits": int(entry.hits),
+                        "example": example or "—", "variants": f"{int(entry.variant_count or len(per_draw[int(entry.draw_index)])):,}".replace(",", "."),
+                    })
+                if rows:
+                    romanian = str(meta.get("country") or "RO").upper() == "RO" and record["game"] in ("6/49", "5/40", "joker")
+                    holder = {}
+                    def _pool_page(event, holder=holder):
+                        if holder.get("binding") is not None:
+                            holder["binding"].set_pagination(event.value)
+                    ui.label(
+                        "Premiu brut estimat pentru variantele generate la fiecare pas, la valorile unitare publicate; "
+                        "simularea nu dovedește că variantele au fost jucate. Analiza exclusiv virtuală nu a generat variante. "
+                        "Costul variantelor folosește tariful actual și nu include taxa pe bilet."
+                    ).classes("text-caption text-grey") if romanian else None
+                    table = ui.table(columns=[
+                        {"name": "date", "label": "Extragere", "field": "date"},
+                        {"name": "drawn", "label": "Numere extrase", "field": "drawn"},
+                        {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
+                        {"name": "pool_hits", "label": "În pool", "field": "pool_hits"},
+                        {"name": "best_hits", "label": "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "best_hits"},
+                        {"name": "example", "label": "Variantă simulată, aleasă după verificare" if simulated else "Exemplu construit după extragere", "field": "example"},
+                        {"name": "variants", "label": "Variante simulate" if simulated else "Combinații posibile calculate matematic", "field": "variants"},
+                        *([{"name": "pool_prize", "label": "Premiu brut estimat · variante generate", "field": "pool_prize"},
+                           {"name": "pool_cost", "label": "Cost variante · tarif actual", "field": "pool_cost"}] if romanian else []),
+                    ], rows=rows, row_key="draw_index", pagination=15,
+                        **({"on_pagination_change": _pool_page} if romanian else {})).classes("w-full").props("dense wrap-cells")
+                    if romanian:
+                        from ui_prizes import PoolPrizeBinding
+                        from ui_hits import _WF_PRIZE_CELL
+                        price = PRICES.get(record["game"])
+                        for row in rows:
+                            data = pool_records[row["_draw_index"]]
+                            n = data["expected_variant_count"]
+                            if n is None:
+                                n = len(data["generated_variants"])
+                            if data["virtual_full_system"]:
+                                n = None
+                            row["pool_cost"] = f"{_thousands(n)} × {price:g} = {_thousands(n * price)} lei" if n is not None and n > 0 and price else "—"
+                        table.rows = rows
+                        table.add_slot("body-cell-pool_prize", _WF_PRIZE_CELL)
+                        binding = PoolPrizeBinding(record["game"], table, rows, pool_records)
+                        holder["binding"] = binding
+                        binding.request()
+                        ui.button("Reîncearcă premiile indisponibile", on_click=lambda b=binding: b.request(retry_missing=True)).props("flat dense no-caps").classes("text-caption")
+                        ui.timer(0.5, binding.refresh)
+                else:
+                    ui.label("Nu există extrageri validate pentru această cerere.").classes("text-caption")
+
+
+def _render_virtual_controls() -> None:
+    STATE.setdefault("virtual_wf_depth", 30)
+    ui.select(
+        {30: "Ultimele 30%", 100: "Întreg istoricul evaluabil (100%)"},
+        value=STATE["virtual_wf_depth"], label="Adâncime istoric virtual",
+    ).bind_value(STATE, "virtual_wf_depth").classes("w-full")
+    ui.button(
+        "📊 Calculează istoric virtual (sistem complet)", on_click=_start_virtual_history,
+    ).props("outline no-caps").classes("w-full")
+    ui.label(
+        "Analiză teoretică pentru setările și istoricele curente. Nu generează bilete; "
+        "nu trimite mail și nu oprește calculatorul. Bugetul walk-forward poate opri "
+        "calculul înainte de toate extragerile."
+    ).classes("text-caption text-grey")
 
 
 # --------------------------------------------------------------------------- #
@@ -1895,9 +2713,7 @@ def status_panel() -> None:
                 ui.linear_progress(value=rc[0], show_value=False).props(
                     "instant-feedback"
                 ).classes("w-full")
-            ui.label(
-                "Testez toate metodele (CPU, pe toate nucleele). Auto-Pilot pornește la final."
-            ).classes("text-caption")
+            ui.label(_bench_status_text()).classes("text-caption")
             ui.html(_hw_telemetry_html())  # consum live CPU/RAM
         # Clasament PARȚIAL live: metodele apar pe măsură ce termină.
         _render_bench_live_leaderboard(_start, progress=(rc[0] if rc else None))
@@ -3104,7 +3920,7 @@ def main_page() -> None:
                 _pool_inputs.append(
                     _bind_save(
                         ui.number(
-                            f"{_ptitle} (6–{_pmax})", min=6, max=_pmax, step=1
+                            f"{_ptitle} (6–{_pmax} numere)", min=6, max=_pmax, step=1
                         ).classes("w-full"),
                         _POOL_KEYS[_plabel],
                     )
@@ -3132,6 +3948,10 @@ def main_page() -> None:
             ),
             "guarantee_val",
         )
+        if _cc == _LOT.RO:
+            ui.label(_romanian_guarantee_text()).bind_text_from(
+                SETTINGS, "guarantee_val", lambda _: _romanian_guarantee_text()
+            ).classes("text-caption text-grey")
         ui.label(
             "6 este sistem complet pentru 6/49. La 5/40 garanția este plafonată "
             "la 5 numere pe bilet, din cele 6 extrase. Joker are 5 numere extrase "
@@ -3331,6 +4151,8 @@ def main_page() -> None:
 
         def _on_target_change(e):
             target = _clamped_bench_target(e.value)
+            if STATE.get("virtual_wf_running") and target != _clamped_bench_target():
+                _VIRTUAL_WF_DECISION_CHANGED.set()
             SETTINGS["bench_hit_target"] = target
             _save_settings()
             # Tabelul de intervale se ordonează pe ținta jocului.
@@ -3541,9 +4363,10 @@ def main_page() -> None:
             bench_now = False
 
         _active = bool(
-            STATE.get("active_job_id") or bench_now or STATE.get("wf_running")
+            STATE.get("active_job_id") or bench_now or STATE.get("wf_running") or STATE.get("virtual_wf_running")
         )
-        if STATE.pop("results_dirty", False):
+        virtual_dirty = STATE.pop("virtual_wf_dirty", False)
+        if STATE.pop("results_dirty", False) or virtual_dirty:
             # Cerut din thread-ul WF: refresh-ul se execută AICI, pe event-loop.
             try:
                 results_panel.refresh()
@@ -3551,13 +4374,14 @@ def main_page() -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("[tick] refresh după walk-forward eșuat: %s", exc)
         # Re-Bench terminat → Auto-Pilot automat
-        if STATE.get("bench_was_running") and not bench_now:
-            STATE["bench_was_running"] = False
-            if not STATE.get("bench_cancelled"):
-                _on_bench_finished()
-        elif bench_now:
-            STATE["bench_was_running"] = True
-            STATE["bench_cancelled"] = False
+        _observe_bench_activity(bench_now)
+        _continue_after_automatic_history(bench_now)
+        # Reluăm restaurarea amânată când se termină lucrările în curs.
+        if STATE.get("results_recovered") and STATE.get("recovered_wf_auto_attempted") != STATE.get("results_recovered"):
+            try:
+                _start_recovered_history_if_missing()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[RECOVERY] reluare automată WF indisponibilă: %s", exc)
         # Refresh UI (rapid, din STATE) — doar când e activ
         if _active:
             logs_panel.refresh()
@@ -3735,6 +4559,10 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
         logger.warning(
             "[RECOVERY] job #%s display-only (%s) → fără mail/shutdown.", jid, _why
         )
+        try:
+            _start_recovered_history_if_missing()
+        except Exception as exc:  # noqa: BLE001 — recuperarea rămâne disponibilă
+            logger.warning("[RECOVERY] pornire automată WF indisponibilă: %s", exc)
 
 
 # --------------------------------------------------------------------------- #

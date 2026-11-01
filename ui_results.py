@@ -18,6 +18,29 @@ from ui_shared import PROJECT_ROOT, atomic_write_text, render_html_safe
 
 logger = logging.getLogger("app_nicegui")
 
+def _large_pool_wf_note(meta: dict | None) -> str | None:
+    if not (meta or {}).get("large_pool_wf_skipped"):
+        return None
+    if meta.get("skip_reason") == "resource_limit":
+        return f"Walk-forward necalculat: {meta.get('skip_detail') or 'limita de generare a fost depășită'}"
+    if meta.get("skip_reason") == "variant_cap_required":
+        return (
+            "Walk-forward necalculat pentru pool-ul mare: numărul de variante "
+            "este fără plafon. Stabilește un plafon de variante pentru validare; "
+            "nu s-au calculat hituri sau procente istorice pentru această cerere."
+        )
+    return (
+        "Walk-forward necalculat: plafonul de variante înmulțit cu extragerile "
+        f"de evaluat ar putea produce până la {int(meta.get('estimated_rows') or 0):,} rânduri "
+        f"(limita: {int(meta.get('row_limit') or 0):,}). Redu plafonul sau "
+        "adâncimea validării; nu s-au calculat hituri sau procente istorice."
+    )
+
+def _partial_wf_note(meta: dict) -> str:
+    if meta.get("newest_missing"):
+        return "cea mai recentă extragere lipsește; pot exista și alte goluri"
+    return "pot exista goluri între extragerile validate"
+
 def _badges(numbers, stats: dict | None = None):
     stats = stats or {}
     with ui.row().classes("flex-wrap gap-1"):
@@ -1270,6 +1293,10 @@ def _build_report() -> str:
             _dump_pool(d, None, game=g)
             wf = _wf_summary(flat, d, g)
             _skip = (STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}
+            if _skip.get("wf_error"):
+                out.append("  Walk-forward: eșuat — vezi jurnalul pentru detalii; generează din nou.")
+            if _large_note := _large_pool_wf_note(_skip):
+                out.append(f"  {_large_note}")
             if _skip.get("scorer_fallback"):
                 out.append(f"  Walk-forward: sărit — {_scorer_fallback_reason(_skip)}.")
             if ((STATE.get("retro_meta") or {}).get(f"{fn}_{g}") or {}).get("decision_moved"):
@@ -1289,11 +1316,7 @@ def _build_report() -> str:
                     wf += (
                         f" | PARȚIAL: {_wm.get('n_test_draws')} din "
                         f"{_wm.get('n_expected')} extrageri "
-                        + (
-                            "(lipsesc cele mai noi)"
-                            if _wm.get("newest_missing")
-                            else "(cele mai recente)"
-                        )
+                        + f"({_partial_wf_note(_wm)})"
                     )
                 if _wm.get("decision_changed"):
                     wf += " | decizia s-a schimbat în timpul validării"
@@ -2079,6 +2102,7 @@ def results_panel() -> None:
 
     results = STATE.get("results")
     if not (isinstance(results, tuple) and len(results) == 2):
+        _render_analysis_menu([])
         return
 
     elapsed = ""

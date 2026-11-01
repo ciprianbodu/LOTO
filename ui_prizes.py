@@ -211,8 +211,11 @@ class PrizeHistoryLookup:
         with self._lock:
             return self._version
 
+    def _key(self, row):
+        return _request(row)
+
     def view(self, row: dict) -> PrizeView:
-        key = _request(row)
+        key = self._key(row)
         if key is None:
             return PrizeView("missing_context")
         with self._lock:
@@ -231,7 +234,7 @@ class PrizeHistoryLookup:
             if self._closed:
                 return
             for row in rows:
-                key = _request(row)
+                key = self._key(row)
                 busy_due = (
                     key in self._retry_at and self._retry_at[key] <= time.monotonic()
                 )
@@ -364,3 +367,143 @@ class PrizeHistoryLookup:
                 self._version += 1
                 self._running = False
 
+
+
+def _pool_request(row: dict):
+    """Identifică extragerea, fără să ceară sau să inventeze o variantă."""
+    when = _date(row.get("label"))
+    try:
+        values = tuple(row.get("drawn") or ())
+        if any(isinstance(n, bool) or not math.isfinite(float(n)) or not float(n).is_integer() for n in values):
+            return None
+        numbers = tuple(sorted(int(n) for n in values))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if when is None or len(numbers) not in {5, 6} or len(set(numbers)) != len(numbers):
+        return None
+    # Bila extrasă poate fi dedusă sigur numai când bila aleasă este cunoscută
+    # și indicatorul confirmă că a coincis. În rest cerem potrivire unică.
+    raw = row.get("best_variant_raw") or ()
+    try:
+        chosen = int(raw[-1]) if len(raw) == 6 and row.get("best_variant_joker_hit") is True else None
+        if chosen is not None and not 1 <= chosen <= 20:
+            return None
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return when.isoformat(), numbers, chosen
+
+
+class PoolPrizeHistoryLookup(PrizeHistoryLookup):
+    """Premiile extragerii, independente de o variantă jucată."""
+    def _key(self, row):
+        return _pool_request(row)
+
+
+def _generated_variants_issue(row: dict) -> str | None:
+    if row.get("virtual_full_system"):
+        return "istoricul virtual nu conține variante generate"
+    if row.get("variant_prize_groups") is None:
+        variants = row.get("generated_variants") or []
+        expected = row.get("expected_variant_count")
+        if not variants or (expected is not None and expected != len(variants)):
+            return "istoricul nu păstrează toate variantele; recalculează istoricul"
+    return None
+
+
+def pool_prize_text(game: str, row: dict, view: PrizeView) -> HitPrizeText:
+    """Estimează premiile variantelor generate în simulare, la valorile publicate."""
+    issue = _generated_variants_issue(row)
+    if issue:
+        return HitPrizeText("indisponibil: " + issue)
+    request = _pool_request(row)
+    if request is None or not row.get("pool_numbers"):
+        return HitPrizeText("indisponibil: context incomplet")
+    if view.state in {"pending", "busy"}:
+        return HitPrizeText("se încarcă premiile oficiale")
+    if view.draw is None:
+        return HitPrizeText("premii oficiale indisponibile")
+    from loto_enterprise.core.generated_prize import estimate_generated_prize
+    variants = row.get("generated_variants") or []
+    result = estimate_generated_prize(game, variants, view.draw,
+        target_numbers=row.get("drawn"), target_date=row.get("label"),
+        expected_count=row.get("expected_variant_count"),
+        variant_prize_groups=row.get("variant_prize_groups"),
+        virtual_full_system=bool(row.get("virtual_full_system")),
+        joker_hit=row.get("best_variant_joker_hit"), pool_numbers=row.get("pool_numbers"))
+    source = _official_url(getattr(view.draw, "source_url", ""))
+    when = _date(row.get("label"))
+    published = {str(c.category).strip().upper(): c for c in getattr(view.draw, "categories", ())}
+    breakdown = []
+    for category, count in result.category_counts.items():
+        entry = published.get(category)
+        amount = getattr(entry, "amount_bani", None)
+        value = (_money_number(amount) if isinstance(amount, int) and not isinstance(amount, bool)
+                 and amount >= 0 and getattr(entry, "winners", 0) > 0 else "report/valoare nepublicată")
+        historical_currency = (when < date(2005, 7, 1) and
+                               str(getattr(view.draw, "currency", "lei") or "lei").strip().casefold() == "lei")
+        unit = (" (monedă istorică neconfirmată, fără conversie)" if historical_currency
+                else " lei") if value != "report/valoare nepublicată" else ""
+        count_text = f"{count:,}".replace(",", ".")
+        breakdown.append(f"cat. {category}: {count_text} × {value}{unit}")
+    detail = ("Variante generate în simulare, la premiile unitare publicate. " + "; ".join(breakdown) + ". "
+              "Valoarea reală s-ar putea modifica dacă ar exista și aceste variante câștigătoare. "
+              f"Sursă: Loteria Română; selectați luna {when.strftime('%m/%Y')} în arhivă.")
+    if result.status not in {"ready", "historical_currency"}:
+        categories = ", ".join(result.missing_categories)
+        suffix = f" (categorii {categories}: report sau valoare nepublicată)" if categories else ""
+        return HitPrizeText("indisponibil: " + (result.reason or "premii incomplete") + suffix, source, detail)
+    currency = " lei" if result.status == "ready" else " (monedă istorică neconfirmată, fără conversie)"
+    return HitPrizeText(_money_number(result.total_bani) + currency, source, detail)
+
+
+class PoolPrizeBinding:
+    """Actualizează în fundal numai pagina vizibilă a unui tabel de pool."""
+    def __init__(self, game, table, rows, records, *, lookup=None):
+        self.game, self.table, self.rows, self.records = game, table, rows, records
+        self.active_rows = rows
+        self.pagination = {"page": 1, "rowsPerPage": 15}
+        self.lookup = lookup or PoolPrizeHistoryLookup(game)
+        self.version = -1
+
+    def _visible(self):
+        try:
+            page = max(1, int(self.pagination.get("page") or 1))
+            size = max(0, int(self.pagination.get("rowsPerPage", 15)))
+        except (ValueError, TypeError):
+            page, size = 1, 15
+        return self.active_rows[(page - 1) * size:page * size] if size else self.active_rows
+
+    def request(self, *, retry_missing=False):
+        visible = [self.records[r["_draw_index"]] for r in self._visible()]
+        self.lookup.request([row for row in visible if not _generated_variants_issue(row)], retry_missing=retry_missing)
+
+    def set_rows(self, rows):
+        self.active_rows = rows
+        self.pagination = {**self.pagination, "page": 1}
+        self.request()
+
+    def set_pagination(self, value):
+        self.pagination = dict(value or {})
+        self.request()
+
+    def refresh(self):
+        if getattr(self.table, "is_deleted", False) is True:
+            self.lookup.close()
+            return
+        if self.lookup.retry_due:
+            self.request()
+        version = self.lookup.version
+        if version == self.version:
+            return
+        self.version = version
+        changed = False
+        for row in self.rows:
+            data = self.records[row["_draw_index"]]
+            prize = pool_prize_text(self.game, data, self.lookup.view(data))
+            fields = {"pool_prize": prize.text, "prize_source": prize.source_url, "prize_detail": prize.detail}
+            if any(row.get(k) != v for k, v in fields.items()):
+                row.update(fields)
+                changed = True
+        if changed:
+            self.table.rows = self.active_rows
+            self.table.update()

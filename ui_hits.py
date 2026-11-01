@@ -20,7 +20,9 @@ from ui_results import (
     _five_plus_pct,
     _guarantee_gap_line,
     _hypergeo_params,
+    _large_pool_wf_note,
     _method_from_bench,
+    _partial_wf_note,
     _random_rate_hypergeo,
     _scorer_fallback_reason,
     _thousands,
@@ -523,8 +525,17 @@ def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
                 "best_variant": None if ctx.get("actual") else [],
                 "best_variant_raw": [],
                 "best_variant_joker_hit": None,
+                "generated_variants": [],
+                "expected_variant_count": None,
+                "variant_prize_groups": getattr(p, "variant_prize_groups", None),
+                "virtual_full_system": bool(getattr(p, "virtual_full_system", False)),
             }
         row = per[di]
+        row["generated_variants"].append(getattr(p, "variant", None) or [])
+        row["virtual_full_system"] = row["virtual_full_system"] or bool(getattr(p, "virtual_full_system", False))
+        _n_variants = getattr(p, "variant_count", None)
+        if _n_variants is not None:
+            row["expected_variant_count"] = int(_n_variants)
         if row["best_variant"] is None and int(getattr(p, "hits", 0) or 0) == int(
             row["best_ticket"]
         ):
@@ -694,23 +705,6 @@ def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: floa
         ).classes("text-caption text-grey")
 
 
-def _large_pool_wf_note(meta: dict | None) -> str | None:
-    if not (meta or {}).get("large_pool_wf_skipped"):
-        return None
-    if meta.get("skip_reason") == "variant_cap_required":
-        return (
-            "Walk-forward necalculat pentru pool-ul mare: numărul de variante "
-            "este fără plafon. Stabilește un plafon de variante pentru validare; "
-            "nu s-au calculat hituri sau procente istorice pentru această cerere."
-        )
-    return (
-        "Walk-forward necalculat: plafonul de variante înmulțit cu extragerile "
-        f"de evaluat ar putea produce până la {int(meta.get('estimated_rows') or 0):,} rânduri "
-        f"(limita: {int(meta.get('row_limit') or 0):,}). Redu plafonul sau "
-        "adâncimea validării; nu s-au calculat hituri sau procente istorice."
-    )
-
-
 def _render_hits_4plus(
     flat,
     game: str,
@@ -737,8 +731,8 @@ def _render_hits_4plus(
     câte ori limita a fost cerută, chiar dacă pool-ul de azi n-a avut nevoie de ea.
     """
     if not flat:
-        if note := _large_pool_wf_note(meta):
-            ui.label(note).classes("text-caption text-warning")
+        # Fără date WF nu se randează tabel; apelantul afișează motivul
+        # (pool mare fără plafon, buget, decizie mutată) în secțiunea pliată.
         return
     per = _wf_per_draw_stats(flat, _game_label_for(game))
     n = len(per)
@@ -801,14 +795,9 @@ def _render_hits_4plus(
     if _cn:
         ui.label(_cn[1]).classes(_cn[0])
     if meta and meta.get("partial"):
-        _which = (
-            "lipsesc tocmai extragerile CELE MAI NOI"
-            if meta.get("newest_missing")
-            else "extragerile CELE MAI RECENTE"
-        )
         ui.label(
             f"⚠️ Validare PARȚIALĂ: {meta.get('n_test_draws')} din "
-            f"{meta.get('n_expected')} extrageri — {_which}."
+            f"{meta.get('n_expected')} extrageri — {_partial_wf_note(meta)}."
         ).classes("text-warning text-caption text-bold")
     if meta and meta.get("decision_changed"):
         ui.label(
@@ -830,7 +819,7 @@ def _render_hits_4plus(
     # restrânsă mai îngustă decât pool-ul o micșorează), apoi meta WF, apoi
     # rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
     _pn = _wf_pool_size(flat, int((meta or {}).get("pool_size") or pool_n or 0))
-    n_tick = len(flat)
+    n_tick = sum(int(getattr(row, "variant_count", None) or 1) for row in flat)
     tick_avg = (n_tick / n) if n else 0.0
 
     # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
@@ -879,7 +868,7 @@ def _render_hits_4plus(
         "+4 / +5 = extrageri cu ≥4 / ≥5 numere nimerite. 🎟️ = extrageri cu "
         "cel puțin o variantă jucată care atinge pragul. 🎲 = rata unui pool PUR "
         "aleator de aceeași mărime (hipergeometric, din parametrii jocului); nu e un "
-        "reper separat pentru variante. ROI-ul și câștigul total nu sunt estimate."
+        "reper separat pentru variante. ROI-ul nu este estimat."
     )
     if _foreign is None:
         _cap += (
@@ -976,6 +965,7 @@ def _render_hits_4plus(
 
     prize_lookup = PrizeHistoryLookup(gk) if _foreign is None else None
     prize_tables: list[dict] = []
+    pool_prize_bindings = []
     prize_panel = {"open": False, "version": -1, "element": None}
 
     def _visible_prize_records(binding):
@@ -1054,6 +1044,8 @@ def _render_hits_4plus(
         details=(),
         level=None,
         prizes=False,
+        joker_variant=False,
+        pool_prizes=False,
     ):
         items = [(di, d) for di, d in per.items() if pred(d)]
         if not items:
@@ -1079,6 +1071,24 @@ def _render_hits_4plus(
                     prize_source=shown_prize.source_url,
                     prize_detail=shown_prize.detail,
                 )
+            if pool_prizes:
+                from ui_prizes import pool_prize_text, PrizeView
+                price = PRICES.get(gk)
+                variants = d.get("expected_variant_count")
+                if variants is None:
+                    variants = len(d.get("generated_variants") or [])
+                if d.get("virtual_full_system"):
+                    variants = None
+                row.update(_draw_index=di, pool_prize=pool_prize_text(gk, d, PrizeView()).text,
+                           pool_cost=(f"{_thousands(variants)} × {price:g} = {_thousands(variants * price)} lei" if variants is not None and variants > 0 and price else "—"))
+            if joker_variant:
+                raw = d.get("best_variant_raw") or []
+                if len(raw) == 6:
+                    flag = d.get("best_variant_joker_hit")
+                    suffix = " (nimerit)" if flag is True else " (nenimerit)" if flag is False else ""
+                    row["joker_variant"] = f"{raw[-1]}{suffix}"
+                else:
+                    row["joker_variant"] = "—"
             for name, _label, numbers, marked in details:
                 row[name], row[f"{name}_marks"] = _wf_marked_numbers(
                     numbers(d), marked(d)
@@ -1113,6 +1123,8 @@ def _render_hits_4plus(
                         **binding["pagination"], "page": 1
                     }
                     _request_visible_prizes()
+                if pool_prizes:
+                    shown["pool_prize_binding"].set_rows(filtered_rows)
 
             with ui.row().classes("items-center gap-2"):
                 ui.label("Arată:").classes("text-caption")
@@ -1128,6 +1140,8 @@ def _render_hits_4plus(
             if prizes and prize_lookup is not None:
                 shown["prize_binding"]["pagination"] = dict(event.value or {})
                 _request_visible_prizes()
+            if pool_prizes:
+                shown["pool_prize_binding"].set_pagination(event.value)
 
         table = (
             ui.table(
@@ -1150,13 +1164,16 @@ def _render_hits_4plus(
                         {"name": name, "label": label, "field": name, "align": "left"}
                         for name, label, _numbers, _marked in details
                     ),
+                    *([{"name": "joker_variant", "label": "Joker jucat", "field": "joker_variant", "align": "center"}] if joker_variant else []),
+                    *([{"name": "pool_prize", "label": "Premiu brut estimat · variante generate", "field": "pool_prize", "align": "center"},
+                       {"name": "pool_cost", "label": "Cost variante · tarif actual", "field": "pool_cost", "align": "center"}] if pool_prizes else []),
                     {"name": "gap", "label": _gl, "field": "gap", "align": "center"},
                 ],
                 rows=rows,
                 pagination=15,
                 **(
                     {"row_key": "_draw_index", "on_pagination_change": _prize_page}
-                    if prizes and prize_lookup is not None else {}
+                    if (prizes and prize_lookup is not None) or pool_prizes else {}
                 ),
             )
             .classes("w-full")
@@ -1171,6 +1188,13 @@ def _render_hits_4plus(
             shown["prize_binding"] = binding
             prize_tables.append(binding)
             table.add_slot("body-cell-hits", _WF_PRIZE_CELL)
+        if pool_prizes:
+            from ui_prizes import PoolPrizeBinding
+            binding = PoolPrizeBinding(gk, table, rows, per)
+            shown["pool_prize_binding"] = binding
+            table.add_slot("body-cell-pool_prize", _WF_PRIZE_CELL)
+            binding.request()
+            pool_prize_bindings.append(binding)
         for name, _label, _numbers, _marked in details:
             table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
@@ -1210,6 +1234,17 @@ def _render_hits_4plus(
                     "Unele extrageri vin dintr-o validare salvată înainte ca pool-ul pasului "
                     "să fie păstrat („—”); se completează la următoarea validare walk-forward."
                 ).classes("text-caption text-grey")
+            if _foreign is None:
+                ui.label(
+                    "Premiul brut este calculat pentru variantele generate la fiecare pas al istoricului, "
+                    "la valorile unitare publicate de Loteria Română; simularea nu dovedește că au fost jucate. "
+                    "Premiile efective ar putea diferi dacă se modifică numărul câștigătorilor. "
+                    "Costul folosește tariful actual și nu include taxa pe bilet."
+                ).classes("text-caption text-grey")
+                def _retry_pool_prizes():
+                    for binding in pool_prize_bindings:
+                        binding.request(retry_missing=True)
+                ui.button("Reîncearcă premiile indisponibile", on_click=_retry_pool_prizes).props("flat dense no-caps").classes("text-caption")
             _dates_table(
                 "🗓️ POOL",
                 lambda d: d["pool"] >= 4,
@@ -1218,6 +1253,7 @@ def _render_hits_4plus(
                 gap_on=lambda d: d["pool"] >= _TT,
                 gap_label=f"Δ → următorul ≥{_TT} / azi",
                 level=lambda d: d["pool"],
+                pool_prizes=_foreign is None,
                 details=(
                     ("drawn", "Extragerea", lambda d: d["drawn"], lambda d: d["pool_numbers"]),
                     (
@@ -1259,6 +1295,7 @@ def _render_hits_4plus(
                         gap_label=f"Δ → următorul ≥{threshold} pe variantă / azi",
                         level=lambda d: d["best_ticket"],
                         prizes=True,
+                        joker_variant=gk == "joker",
                         details=(
                             (
                                 "ticket",
@@ -1277,6 +1314,8 @@ def _render_hits_4plus(
                 if prize_lookup is not None and prize_tables:
                     ui.timer(0.5, _refresh_prizes)
 
+        for _binding in pool_prize_bindings:
+            ui.timer(0.5, _binding.refresh)
 
         if full_ticket:
             with ui.tab_panel("bilet"):
@@ -1316,34 +1355,35 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
     # --- Istoric ≥4 hits — PLIABIL (în cadrul clasamentului, îl poți ascunde) ---
     # Pool-ul EFECTIV din REZULTAT, nu din setarea care se poate schimba ulterior.
     flat = STATE["retro"].get(f"{res_prefix}{fname}_{game}")
-    if (
-        STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-    ).get("budget_skipped"):
-        ui.label(
+    _skip = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
+    _wf_notes: list[str] = []
+    if _skip.get("wf_error"):
+        _wf_notes.append("⚠️ Walk-forward eșuat. Vezi jurnalul pentru detalii și generează din nou.")
+    if _skip.get("budget_skipped"):
+        _wf_notes.append(
             "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea "
             "acestui joc. Mărește „⏱ Buget walk-forward”; la generarea "
             "următoare pașii deja validați se iau din cache."
-        ).classes("text-warning text-caption text-bold")
-    _skip = STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-    if note := _large_pool_wf_note(_skip):
-        ui.label(note).classes("text-warning text-caption text-bold")
+        )
+    if _note := _large_pool_wf_note(_skip):
+        _wf_notes.append(_note)
     if _skip.get("scorer_fallback"):
-        ui.label(
+        _wf_notes.append(
             f"⚠️ Walk-forward sărit: {_scorer_fallback_reason(_skip)}. "
             "Generează din nou."
-        ).classes("text-warning text-caption text-bold")
-    if (
-        STATE.get("retro_meta", {}).get(f"{res_prefix}{fname}_{game}") or {}
-    ).get("decision_moved"):
-        ui.label(
+        )
+    if _skip.get("decision_moved"):
+        _wf_notes.append(
             "⚠️ Walk-forward sărit: decizia de bench s-a schimbat după generare "
             "(Re-Bench terminat sau țintă 3+/4+ schimbată). Validarea ar fi "
             "măsurat altă metodă decât cea care a produs pool-ul afișat; "
             "generează din nou."
-        ).classes("text-warning text-caption text-bold")
+        )
     if flat:
         # Deschis implicit (apare după ce termină walk-forward), dar pliabil
         # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
+        for _n in _wf_notes:
+            ui.label(_n).classes("text-warning text-caption text-bold")
         with ui.expansion(
             "📜 Istoric hits 4+ (walk-forward)",
             value=True,
@@ -1351,15 +1391,13 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
             _render_hits_4plus(
                 flat,
                 game,
-                meta=STATE.get("retro_meta", {}).get(
-                    f"{res_prefix}{fname}_{game}"
-                ),
+                meta=_skip,
                 pool_n=_pn,
                 # `_wf_generation_options(data)` (folosit la pornirea WF de
                 # mai sus) citește exact acest audit — istoricul de mai jos
                 # a rulat cu ACEEAȘI restrângere ca pool-ul afișat, nu una
                 # nerestrânsă. Fără linia asta, întrebarea „e cu pragul
-                # bifat sau fără?" nu avea răspuns lângă tabel, doar sus,
+                # bifat sau fără?” nu avea răspuns lângă tabel, doar sus,
                 # lângă clasamentul bench.
                 restrict_base_text=_restrict_base_text(data.get("audit")),
                 consecutive_limit_text=_consecutive_limit_text(
@@ -1374,22 +1412,41 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
                     "guarantee": data.get("guarantee"),
                 },
             )
+    elif _wf_notes:
+        # WF sărit (ex. pool peste 19 fără plafon de variante): secțiunea
+        # „📜 Istoric hits” apare ORICUM, deschisă, cu motivul înăuntru —
+        # nu dispare din „Analiză & Clasament” când nu s-au calculat hituri.
+        with ui.expansion(
+            "📜 Istoric hits 4+ (walk-forward)",
+            value=True,
+        ).classes("w-full"):
+            for _n in _wf_notes:
+                ui.label(_n).classes("text-warning text-caption text-bold")
+            ui.label(
+                "Niciun istoric walk-forward pentru această cerere."
+            ).classes("text-caption text-grey")
 
 
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
     """Meniu global: metoda câștigătoare + istoric ≥4 hits per joc. Închis implicit."""
-    has_folds = (PROJECT_ROOT / "bench_results" / "folds.csv").exists()
-    has_wf = any(
-        STATE["retro"].get(f"{res_prefix}{fn}_{g}")
-        or (STATE.get("retro_meta", {}).get(f"{res_prefix}{fn}_{g}") or {}).get("large_pool_wf_skipped")
-        for fn, outs in results_bundle
-        for g, _ in outs.items()
-    )
-    if not (has_folds or has_wf):
-        return
-
     with ui.card().classes("w-full"):
-        with ui.expansion("📊 Analiză & Clasament", value=False).classes("w-full"):
+        initial_open = STATE.get("analysis_expanded")
+        if initial_open is None:
+            initial_open = bool(STATE.get("virtual_wf_status"))
+        with ui.expansion("📊 Analiză & Clasament", value=initial_open).classes("w-full") as analysis:
+            analysis.on_value_change(lambda event: STATE.__setitem__("analysis_expanded", bool(event.value)))
+            _render_virtual_controls()
+            _render_virtual_history()
+            if STATE.get("results_recovered"):
+                ui.label(
+                    "Calculează istoricul rezultatului recuperat folosind datele și setările "
+                    "lui. Calculul poate dura; nu trimite mail și nu oprește calculatorul."
+                ).classes("text-caption text-grey")
+                _history_button = ui.button(
+                    "Calculează Istoric hits", on_click=_start_recovered_walk_forward
+                ).props("no-caps")
+                if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
+                    _history_button.props("disable")
             # Aplatizăm toate jocurile din toate fișierele și le sortăm GLOBAL: 6/49, Joker, 5/40.
             flat_games = [
                 (fname, game, data)

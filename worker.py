@@ -27,7 +27,7 @@ require_python_version()
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
 # un payload produs de cod vechi doar fiindcă CSV-ul și setările coincid.
-PIPELINE_CACHE_VERSION = "v22"
+PIPELINE_CACHE_VERSION = "v23"
 # v22: factorul 0 al penalizării recente pune numerele penalizate sub toate
 #      cele nepenalizate, și sub cele cu scor 0 (audit 2026-10-22).
 # v21: la plafonul egal cu o schemă redusă LR a pool-ului, motorul o adoptă

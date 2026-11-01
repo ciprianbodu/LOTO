@@ -27,39 +27,28 @@ def history(game="6/49", n=30):
     ("6/49", 49), ("5/40", 40), ("joker", 45),
     ("6/49", 17), ("6/49", 19), ("joker", 17), ("joker", 19),
 ])
-def test_uncapped_large_wf_is_explicitly_skipped_before_cache_or_simulation(monkeypatch, game, pool):
-    def forbidden(*args, **kwargs):
-        raise AssertionError("Skipped replay must not build/read/write its cache or simulate")
-
-    monkeypatch.setattr(wf, "_decision_sig", forbidden)
-    monkeypatch.setattr(LotoBacktester, "run_retroactive_backtest", forbidden)
+def test_uncapped_large_wf_runs_compact_without_hidden_cap(monkeypatch, tmp_path, game, pool):
+    calls = []
+    def simulate(self, **kwargs):
+        calls.append(kwargs)
+        return []
+    monkeypatch.setattr(LotoBacktester, "run_retroactive_backtest", simulate)
+    monkeypatch.setattr(wf, "CACHE_DIR", tmp_path)
     flat, meta = wf.run_honest_walk_forward(
         history(game), game, pool, 100, use_cache=False, guarantee=4,
     )
-    assert flat == []
-    assert meta["large_pool_wf_skipped"]
-    assert meta["skip_reason"] == "variant_cap_required"
-    assert meta["n_test_draws"] == meta["n_predictions"] == 0
-    assert meta["n_expected"] == 25
-    assert meta["pool_size"] == pool
-    assert "cache_file" not in meta
-    with capture_ui() as captured:
-        ui_hits._render_hits_4plus([], game, meta)
-    assert "Stabilește un plafon" in captured.text()
-    assert "procente istorice" in captured.text()
-    assert "%" not in captured.text()
+    assert flat == [] and meta["n_expected"] == 25
+    assert not meta.get("large_pool_wf_skipped")
+    assert calls[0]["pool_size"] == pool and calls[0]["max_variants"] == 0
+    assert calls[0]["compact_variants"] is True
 
 
-def test_capped_large_wf_rows_are_bounded_without_fabricating_samples(monkeypatch):
-    monkeypatch.setattr(wf, "_LARGE_POOL_MAX_ROWS", 49)
+def test_capped_large_wf_rejects_only_generator_resource_limit():
     flat, meta = wf.run_honest_walk_forward(
-        history(), "6/49", 49, 100, use_cache=False, guarantee=4, max_variants=2,
+        history(), "6/49", 49, 100, use_cache=False, guarantee=4, max_variants=100_001,
     )
-    assert flat == []
-    assert meta["skip_reason"] == "row_limit"
-    assert meta["estimated_rows"] == 50
-    assert meta["row_limit"] == 49
-    assert "Redu plafonul" in ui_hits._large_pool_wf_note(meta)
+    assert flat == [] and meta["skip_reason"] == "resource_limit"
+    assert "100,000" in ui_hits._large_pool_wf_note(meta)
 
 
 def test_allowed_capped_wf_receives_full_pool_and_only_one_backtester(monkeypatch, tmp_path):

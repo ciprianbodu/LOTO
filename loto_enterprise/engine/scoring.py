@@ -104,7 +104,23 @@ class ScoringMixin:
             contributions = []
             for name, fn, weight in ensemble:
                 try:
-                    raw = fn(draws_2d, max_num)
+                    if getattr(fn, "_uses_history_cutoffs", False):
+                        # Recompute after invalid-row filtering and lookback: attrs
+                        # carried by a sliced DataFrame have the old offsets.
+                        from loto_enterprise.core.history import training_cutoffs
+
+                        history = getattr(self, "data", None)
+                        if is_joker_drum and history is not None:
+                            from loto_enterprise.core.draw_validation import valid_draw_matrix
+
+                            _, valid = valid_draw_matrix(history, ["joker"], draw_n=1, max_num=max_num)
+                            history = history.loc[valid]
+                        cutoffs = training_cutoffs(history) if history is not None else None
+                        if cutoffs is not None and len(cutoffs) != len(draws_2d):
+                            raise ValueError("history dates do not align with scoring draws")
+                        raw = fn(draws_2d, max_num, history_cutoffs=cutoffs)
+                    else:
+                        raw = fn(draws_2d, max_num)
                 except Exception as exc_m:
                     logging.warning(
                         "[ENGINE] ensemble member %s a eșuat: %s — sar peste",

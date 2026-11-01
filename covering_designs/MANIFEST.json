@@ -1,0 +1,3950 @@
+{
+ "generated": "2026-11-01",
+ "generator": "scripts/analysis/gen_design_manifest.py",
+ "note": "sha256 peste bytes-ul fișierului; coverage = fracția de submulțimi ale garanției acoperite (1.0 = complet). H/X/LR au coverage null (fără garanție completă prin construcție). test_design_manifest.py verifică prospețimea hash-urilor.",
+ "counts": {
+  "C": 55,
+  "H": 6,
+  "L": 99,
+  "LR": 33,
+  "R": 12,
+  "RL": 66,
+  "X": 6
+ },
+ "total_files": 277,
+ "entries": [
+  {
+   "file": "budget/H_11_5_4.txt",
+   "sha256": "f2590af7ae7d268abffbd9fb2db1405ef43c80f28a0994290e1997d9a3699a5b",
+   "kind": "H",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 4,
+   "sections": [
+    {
+     "budget": 65,
+     "tickets": 65
+    }
+   ],
+   "tickets": 65,
+   "coverage": null
+  },
+  {
+   "file": "budget/H_13_6_4.txt",
+   "sha256": "cc5c92cc9b9440de06cdcaa6b06bf35cf02ce784b0d8f05e9a97b04cc4ccace7",
+   "kind": "H",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 4,
+   "sections": [
+    {
+     "budget": 65,
+     "tickets": 65
+    }
+   ],
+   "tickets": 65,
+   "coverage": null
+  },
+  {
+   "file": "budget/H_14_6_4.txt",
+   "sha256": "21cacade1148b6c82f49b799dcdaa21e0af5f6be00f9a35a8384b616f706bfdb",
+   "kind": "H",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "sections": [
+    {
+     "budget": 65,
+     "tickets": 65
+    },
+    {
+     "budget": 66,
+     "tickets": 66
+    },
+    {
+     "budget": 67,
+     "tickets": 67
+    },
+    {
+     "budget": 68,
+     "tickets": 68
+    },
+    {
+     "budget": 69,
+     "tickets": 69
+    },
+    {
+     "budget": 70,
+     "tickets": 70
+    },
+    {
+     "budget": 71,
+     "tickets": 71
+    },
+    {
+     "budget": 72,
+     "tickets": 72
+    },
+    {
+     "budget": 73,
+     "tickets": 73
+    },
+    {
+     "budget": 74,
+     "tickets": 74
+    },
+    {
+     "budget": 75,
+     "tickets": 75
+    },
+    {
+     "budget": 76,
+     "tickets": 76
+    },
+    {
+     "budget": 77,
+     "tickets": 77
+    },
+    {
+     "budget": 78,
+     "tickets": 78
+    },
+    {
+     "budget": 79,
+     "tickets": 79
+    }
+   ],
+   "tickets": 1080,
+   "coverage": null
+  },
+  {
+   "file": "budget/H_15_6_4.txt",
+   "sha256": "574fb08854773ab009586577123d77bba51fa39db3526d66b01f37a08f1537d9",
+   "kind": "H",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 4,
+   "sections": [
+    {
+     "budget": 65,
+     "tickets": 65
+    },
+    {
+     "budget": 66,
+     "tickets": 66
+    },
+    {
+     "budget": 67,
+     "tickets": 67
+    },
+    {
+     "budget": 68,
+     "tickets": 68
+    },
+    {
+     "budget": 69,
+     "tickets": 69
+    },
+    {
+     "budget": 70,
+     "tickets": 70
+    },
+    {
+     "budget": 71,
+     "tickets": 71
+    },
+    {
+     "budget": 72,
+     "tickets": 72
+    },
+    {
+     "budget": 73,
+     "tickets": 73
+    },
+    {
+     "budget": 74,
+     "tickets": 74
+    },
+    {
+     "budget": 75,
+     "tickets": 75
+    },
+    {
+     "budget": 76,
+     "tickets": 76
+    },
+    {
+     "budget": 77,
+     "tickets": 77
+    },
+    {
+     "budget": 78,
+     "tickets": 78
+    },
+    {
+     "budget": 79,
+     "tickets": 79
+    },
+    {
+     "budget": 80,
+     "tickets": 80
+    },
+    {
+     "budget": 81,
+     "tickets": 81
+    },
+    {
+     "budget": 82,
+     "tickets": 82
+    },
+    {
+     "budget": 83,
+     "tickets": 83
+    },
+    {
+     "budget": 84,
+     "tickets": 84
+    },
+    {
+     "budget": 85,
+     "tickets": 85
+    },
+    {
+     "budget": 86,
+     "tickets": 86
+    },
+    {
+     "budget": 87,
+     "tickets": 87
+    },
+    {
+     "budget": 88,
+     "tickets": 88
+    },
+    {
+     "budget": 89,
+     "tickets": 89
+    },
+    {
+     "budget": 90,
+     "tickets": 90
+    },
+    {
+     "budget": 91,
+     "tickets": 91
+    },
+    {
+     "budget": 92,
+     "tickets": 92
+    },
+    {
+     "budget": 93,
+     "tickets": 93
+    },
+    {
+     "budget": 94,
+     "tickets": 94
+    },
+    {
+     "budget": 95,
+     "tickets": 95
+    },
+    {
+     "budget": 96,
+     "tickets": 96
+    },
+    {
+     "budget": 97,
+     "tickets": 97
+    },
+    {
+     "budget": 98,
+     "tickets": 98
+    },
+    {
+     "budget": 99,
+     "tickets": 99
+    },
+    {
+     "budget": 100,
+     "tickets": 100
+    },
+    {
+     "budget": 101,
+     "tickets": 101
+    },
+    {
+     "budget": 102,
+     "tickets": 102
+    },
+    {
+     "budget": 103,
+     "tickets": 103
+    },
+    {
+     "budget": 104,
+     "tickets": 104
+    },
+    {
+     "budget": 105,
+     "tickets": 105
+    },
+    {
+     "budget": 106,
+     "tickets": 106
+    },
+    {
+     "budget": 107,
+     "tickets": 107
+    },
+    {
+     "budget": 108,
+     "tickets": 108
+    },
+    {
+     "budget": 109,
+     "tickets": 109
+    },
+    {
+     "budget": 110,
+     "tickets": 110
+    },
+    {
+     "budget": 111,
+     "tickets": 111
+    },
+    {
+     "budget": 112,
+     "tickets": 112
+    },
+    {
+     "budget": 113,
+     "tickets": 113
+    },
+    {
+     "budget": 114,
+     "tickets": 114
+    },
+    {
+     "budget": 115,
+     "tickets": 115
+    },
+    {
+     "budget": 116,
+     "tickets": 116
+    }
+   ],
+   "tickets": 4706,
+   "coverage": null
+  },
+  {
+   "file": "budget/H_16_5_4.txt",
+   "sha256": "a08910da4fdae120393f81afe8e49b73c07de1b6e9a172b1d16b23d065bb40e1",
+   "kind": "H",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "sections": [
+    {
+     "budget": 270,
+     "tickets": 270
+    },
+    {
+     "budget": 289,
+     "tickets": 289
+    },
+    {
+     "budget": 292,
+     "tickets": 292
+    },
+    {
+     "budget": 303,
+     "tickets": 303
+    },
+    {
+     "budget": 306,
+     "tickets": 306
+    },
+    {
+     "budget": 315,
+     "tickets": 315
+    },
+    {
+     "budget": 316,
+     "tickets": 316
+    },
+    {
+     "budget": 317,
+     "tickets": 317
+    },
+    {
+     "budget": 318,
+     "tickets": 318
+    },
+    {
+     "budget": 319,
+     "tickets": 319
+    },
+    {
+     "budget": 321,
+     "tickets": 321
+    },
+    {
+     "budget": 322,
+     "tickets": 322
+    },
+    {
+     "budget": 323,
+     "tickets": 323
+    },
+    {
+     "budget": 324,
+     "tickets": 324
+    },
+    {
+     "budget": 325,
+     "tickets": 325
+    },
+    {
+     "budget": 326,
+     "tickets": 326
+    },
+    {
+     "budget": 327,
+     "tickets": 327
+    },
+    {
+     "budget": 328,
+     "tickets": 328
+    },
+    {
+     "budget": 329,
+     "tickets": 329
+    },
+    {
+     "budget": 330,
+     "tickets": 330
+    },
+    {
+     "budget": 331,
+     "tickets": 331
+    },
+    {
+     "budget": 332,
+     "tickets": 332
+    },
+    {
+     "budget": 333,
+     "tickets": 333
+    },
+    {
+     "budget": 334,
+     "tickets": 334
+    },
+    {
+     "budget": 335,
+     "tickets": 335
+    },
+    {
+     "budget": 336,
+     "tickets": 336
+    },
+    {
+     "budget": 337,
+     "tickets": 337
+    },
+    {
+     "budget": 338,
+     "tickets": 338
+    },
+    {
+     "budget": 339,
+     "tickets": 339
+    },
+    {
+     "budget": 340,
+     "tickets": 340
+    },
+    {
+     "budget": 341,
+     "tickets": 341
+    },
+    {
+     "budget": 342,
+     "tickets": 342
+    },
+    {
+     "budget": 343,
+     "tickets": 343
+    },
+    {
+     "budget": 344,
+     "tickets": 344
+    },
+    {
+     "budget": 345,
+     "tickets": 345
+    },
+    {
+     "budget": 346,
+     "tickets": 346
+    },
+    {
+     "budget": 347,
+     "tickets": 347
+    },
+    {
+     "budget": 349,
+     "tickets": 349
+    },
+    {
+     "budget": 350,
+     "tickets": 350
+    },
+    {
+     "budget": 351,
+     "tickets": 351
+    },
+    {
+     "budget": 352,
+     "tickets": 352
+    },
+    {
+     "budget": 353,
+     "tickets": 353
+    },
+    {
+     "budget": 354,
+     "tickets": 354
+    },
+    {
+     "budget": 355,
+     "tickets": 355
+    },
+    {
+     "budget": 356,
+     "tickets": 356
+    },
+    {
+     "budget": 357,
+     "tickets": 357
+    },
+    {
+     "budget": 358,
+     "tickets": 358
+    },
+    {
+     "budget": 359,
+     "tickets": 359
+    },
+    {
+     "budget": 360,
+     "tickets": 360
+    },
+    {
+     "budget": 361,
+     "tickets": 361
+    },
+    {
+     "budget": 362,
+     "tickets": 362
+    },
+    {
+     "budget": 363,
+     "tickets": 363
+    },
+    {
+     "budget": 364,
+     "tickets": 364
+    },
+    {
+     "budget": 365,
+     "tickets": 365
+    },
+    {
+     "budget": 366,
+     "tickets": 366
+    },
+    {
+     "budget": 367,
+     "tickets": 367
+    },
+    {
+     "budget": 368,
+     "tickets": 368
+    },
+    {
+     "budget": 369,
+     "tickets": 369
+    },
+    {
+     "budget": 370,
+     "tickets": 370
+    },
+    {
+     "budget": 371,
+     "tickets": 371
+    },
+    {
+     "budget": 372,
+     "tickets": 372
+    },
+    {
+     "budget": 373,
+     "tickets": 373
+    },
+    {
+     "budget": 374,
+     "tickets": 374
+    },
+    {
+     "budget": 375,
+     "tickets": 375
+    },
+    {
+     "budget": 376,
+     "tickets": 376
+    },
+    {
+     "budget": 377,
+     "tickets": 377
+    },
+    {
+     "budget": 378,
+     "tickets": 378
+    },
+    {
+     "budget": 379,
+     "tickets": 379
+    },
+    {
+     "budget": 380,
+     "tickets": 380
+    },
+    {
+     "budget": 381,
+     "tickets": 381
+    },
+    {
+     "budget": 382,
+     "tickets": 382
+    },
+    {
+     "budget": 383,
+     "tickets": 383
+    },
+    {
+     "budget": 384,
+     "tickets": 384
+    },
+    {
+     "budget": 385,
+     "tickets": 385
+    },
+    {
+     "budget": 386,
+     "tickets": 386
+    },
+    {
+     "budget": 387,
+     "tickets": 387
+    },
+    {
+     "budget": 388,
+     "tickets": 388
+    },
+    {
+     "budget": 389,
+     "tickets": 389
+    },
+    {
+     "budget": 390,
+     "tickets": 390
+    },
+    {
+     "budget": 391,
+     "tickets": 391
+    },
+    {
+     "budget": 392,
+     "tickets": 392
+    },
+    {
+     "budget": 393,
+     "tickets": 393
+    },
+    {
+     "budget": 394,
+     "tickets": 394
+    },
+    {
+     "budget": 395,
+     "tickets": 395
+    },
+    {
+     "budget": 396,
+     "tickets": 396
+    },
+    {
+     "budget": 397,
+     "tickets": 397
+    },
+    {
+     "budget": 398,
+     "tickets": 398
+    },
+    {
+     "budget": 399,
+     "tickets": 399
+    },
+    {
+     "budget": 400,
+     "tickets": 400
+    },
+    {
+     "budget": 401,
+     "tickets": 401
+    },
+    {
+     "budget": 402,
+     "tickets": 402
+    },
+    {
+     "budget": 403,
+     "tickets": 403
+    }
+   ],
+   "tickets": 32743,
+   "coverage": null
+  },
+  {
+   "file": "budget/H_16_6_4.txt",
+   "sha256": "59499070c23a8a6fdf36b273a5c2be78cbf0fdb0e0ca41b0cf5694110014f707",
+   "kind": "H",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "sections": [
+    {
+     "budget": 65,
+     "tickets": 65
+    },
+    {
+     "budget": 66,
+     "tickets": 66
+    },
+    {
+     "budget": 67,
+     "tickets": 67
+    },
+    {
+     "budget": 68,
+     "tickets": 68
+    },
+    {
+     "budget": 69,
+     "tickets": 69
+    },
+    {
+     "budget": 70,
+     "tickets": 70
+    },
+    {
+     "budget": 71,
+     "tickets": 71
+    },
+    {
+     "budget": 72,
+     "tickets": 72
+    },
+    {
+     "budget": 73,
+     "tickets": 73
+    },
+    {
+     "budget": 74,
+     "tickets": 74
+    },
+    {
+     "budget": 75,
+     "tickets": 75
+    },
+    {
+     "budget": 76,
+     "tickets": 76
+    },
+    {
+     "budget": 77,
+     "tickets": 77
+    },
+    {
+     "budget": 78,
+     "tickets": 78
+    },
+    {
+     "budget": 79,
+     "tickets": 79
+    },
+    {
+     "budget": 80,
+     "tickets": 80
+    },
+    {
+     "budget": 81,
+     "tickets": 81
+    },
+    {
+     "budget": 82,
+     "tickets": 82
+    },
+    {
+     "budget": 83,
+     "tickets": 83
+    },
+    {
+     "budget": 84,
+     "tickets": 84
+    },
+    {
+     "budget": 85,
+     "tickets": 85
+    },
+    {
+     "budget": 86,
+     "tickets": 86
+    },
+    {
+     "budget": 87,
+     "tickets": 87
+    },
+    {
+     "budget": 88,
+     "tickets": 88
+    },
+    {
+     "budget": 89,
+     "tickets": 89
+    },
+    {
+     "budget": 90,
+     "tickets": 90
+    },
+    {
+     "budget": 91,
+     "tickets": 91
+    },
+    {
+     "budget": 92,
+     "tickets": 92
+    },
+    {
+     "budget": 93,
+     "tickets": 93
+    },
+    {
+     "budget": 94,
+     "tickets": 94
+    },
+    {
+     "budget": 95,
+     "tickets": 95
+    },
+    {
+     "budget": 96,
+     "tickets": 96
+    },
+    {
+     "budget": 97,
+     "tickets": 97
+    },
+    {
+     "budget": 98,
+     "tickets": 98
+    },
+    {
+     "budget": 99,
+     "tickets": 99
+    },
+    {
+     "budget": 100,
+     "tickets": 100
+    },
+    {
+     "budget": 101,
+     "tickets": 101
+    },
+    {
+     "budget": 102,
+     "tickets": 102
+    },
+    {
+     "budget": 103,
+     "tickets": 103
+    },
+    {
+     "budget": 104,
+     "tickets": 104
+    },
+    {
+     "budget": 105,
+     "tickets": 105
+    },
+    {
+     "budget": 106,
+     "tickets": 106
+    },
+    {
+     "budget": 107,
+     "tickets": 107
+    },
+    {
+     "budget": 108,
+     "tickets": 108
+    },
+    {
+     "budget": 109,
+     "tickets": 109
+    },
+    {
+     "budget": 110,
+     "tickets": 110
+    },
+    {
+     "budget": 111,
+     "tickets": 111
+    },
+    {
+     "budget": 112,
+     "tickets": 112
+    },
+    {
+     "budget": 113,
+     "tickets": 113
+    },
+    {
+     "budget": 114,
+     "tickets": 114
+    },
+    {
+     "budget": 115,
+     "tickets": 115
+    },
+    {
+     "budget": 116,
+     "tickets": 116
+    },
+    {
+     "budget": 117,
+     "tickets": 117
+    },
+    {
+     "budget": 118,
+     "tickets": 118
+    },
+    {
+     "budget": 119,
+     "tickets": 119
+    },
+    {
+     "budget": 120,
+     "tickets": 120
+    },
+    {
+     "budget": 121,
+     "tickets": 121
+    },
+    {
+     "budget": 122,
+     "tickets": 122
+    },
+    {
+     "budget": 123,
+     "tickets": 123
+    },
+    {
+     "budget": 124,
+     "tickets": 124
+    },
+    {
+     "budget": 125,
+     "tickets": 125
+    },
+    {
+     "budget": 126,
+     "tickets": 126
+    },
+    {
+     "budget": 127,
+     "tickets": 127
+    },
+    {
+     "budget": 128,
+     "tickets": 128
+    },
+    {
+     "budget": 129,
+     "tickets": 129
+    },
+    {
+     "budget": 130,
+     "tickets": 130
+    },
+    {
+     "budget": 131,
+     "tickets": 131
+    },
+    {
+     "budget": 132,
+     "tickets": 132
+    },
+    {
+     "budget": 133,
+     "tickets": 133
+    },
+    {
+     "budget": 134,
+     "tickets": 134
+    },
+    {
+     "budget": 135,
+     "tickets": 135
+    },
+    {
+     "budget": 136,
+     "tickets": 136
+    },
+    {
+     "budget": 137,
+     "tickets": 137
+    },
+    {
+     "budget": 138,
+     "tickets": 138
+    },
+    {
+     "budget": 139,
+     "tickets": 139
+    },
+    {
+     "budget": 140,
+     "tickets": 140
+    },
+    {
+     "budget": 141,
+     "tickets": 141
+    },
+    {
+     "budget": 142,
+     "tickets": 142
+    },
+    {
+     "budget": 143,
+     "tickets": 143
+    },
+    {
+     "budget": 144,
+     "tickets": 144
+    },
+    {
+     "budget": 145,
+     "tickets": 145
+    },
+    {
+     "budget": 146,
+     "tickets": 146
+    },
+    {
+     "budget": 147,
+     "tickets": 147
+    },
+    {
+     "budget": 148,
+     "tickets": 148
+    },
+    {
+     "budget": 149,
+     "tickets": 149
+    },
+    {
+     "budget": 150,
+     "tickets": 150
+    },
+    {
+     "budget": 151,
+     "tickets": 151
+    }
+   ],
+   "tickets": 9396,
+   "coverage": null
+  },
+  {
+   "file": "C_10_5_3.txt",
+   "sha256": "904cb898965aa989870e2f9553c634f0c76810dcd54d93d44a7cc093b198c26f",
+   "kind": "C",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 17,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_10_5_4.txt",
+   "sha256": "aa9c47d9f7f0f7171e954c8969590f89b4c8540f73e58251d655aeb0e496e73e",
+   "kind": "C",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 51,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_10_6_3.txt",
+   "sha256": "9ff6a2b1b07683c1211d9bfcd43a578ccb960f7ca56f308202a8a8903aae00c6",
+   "kind": "C",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_10_6_4.txt",
+   "sha256": "ef9b3c88ad659ad447a254c72484d974325487d3c47d99d42e538b252f954ef2",
+   "kind": "C",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 20,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_10_6_5.txt",
+   "sha256": "c7396c6f9420cdce44f3e4c2d79cd4eaf26ba60437c5faeee9770aaca8f28ca3",
+   "kind": "C",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 50,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_11_5_3.txt",
+   "sha256": "cd42b1d394616c2dc345bf7c9e6f8488604ea0cf13e2d0d9e2cce346ad1a083e",
+   "kind": "C",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 20,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_11_5_4.txt",
+   "sha256": "dc499cccbb987537258cfe09be1ce5066b7050f1c79878d2c78db0a88071c3db",
+   "kind": "C",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 66,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_11_6_3.txt",
+   "sha256": "7220b53e09c6958004605133ef4337e80299cc650dd3b7d6b0837323dd7ee53a",
+   "kind": "C",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 11,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_11_6_4.txt",
+   "sha256": "dfea645e5cd6e102034b5f1e9dfa0f29e1225ae8bd88edf9e2a3e4ac3e853a6f",
+   "kind": "C",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 32,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_11_6_5.txt",
+   "sha256": "8c729912117e49557d79fbac64e692f8a56d6c9a07b0168d023528b15d9d7c84",
+   "kind": "C",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 100,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_12_5_3.txt",
+   "sha256": "35971d8bbd40c774f6eecc330d9b2eae9cb2756d68d37e729e8e86aac56bfd2c",
+   "kind": "C",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 29,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_12_5_4.txt",
+   "sha256": "b8b1b1eea45b9b070aff4c0cb8e4b5d2ef767425f71a6b69014e4c96b788c209",
+   "kind": "C",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 113,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_12_6_3.txt",
+   "sha256": "6be34e8267f2cf2044f15be0a149f019e75bbcdfa0e74179c719f330a673e6a6",
+   "kind": "C",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 15,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_12_6_4.txt",
+   "sha256": "0f3082631628e6336b516f5a6533fedc2f074e60b8c6c26959717384be6e40d5",
+   "kind": "C",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 41,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_12_6_5.txt",
+   "sha256": "59448776b1b771130229685b2fee5818e4096dc531b9c81c14ce9344ff7db631",
+   "kind": "C",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 132,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_13_5_3.txt",
+   "sha256": "c80cbedbeca16a741f48749fb8b856fd155695a67f9a6019895d41047dd19cba",
+   "kind": "C",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 34,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_13_5_4.txt",
+   "sha256": "979a83d856c80f40d49b7a16a4c4e0fb5f2bc562a91104cffe35da554d86d2d2",
+   "kind": "C",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 157,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_13_6_3.txt",
+   "sha256": "87238fd9f411665a7ee6e32d0134dfcb1a3f589aaa938b29decf711775512b2a",
+   "kind": "C",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 21,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_13_6_4.txt",
+   "sha256": "9d3634be8922d448f49f2854c3645452687347f932a6cb3debeb516f94fb9ef5",
+   "kind": "C",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 66,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_13_6_5.txt",
+   "sha256": "d6309fc14b826dd9eff38a422c9dc66d06d63b423d152953fc881c0e021c0797",
+   "kind": "C",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 245,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_14_5_3.txt",
+   "sha256": "2e1ac5b822c1133d71d4127c99043d17a683c0f6e2013b83683ef6ecceffc849",
+   "kind": "C",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 43,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_14_5_4.txt",
+   "sha256": "63c3126ab98c98d29e3df99407fe8ed18d161b64fbd6315ca7a9e77cec4c0656",
+   "kind": "C",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 229,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_14_6_3.txt",
+   "sha256": "c7ff272875fd25573c17884d133e1088ca25aa90bd022dd14fa615c0bb85203b",
+   "kind": "C",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_14_6_4.txt",
+   "sha256": "7037a4b323e545c776103d58d145f285d2a53de0a9d523d3f7b80e7de7532ca7",
+   "kind": "C",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 80,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_14_6_5.txt",
+   "sha256": "7fc2c3cb1ddcc2c58b0043174f29c2aad2a32af1638ccaf41804cb28cfef11d0",
+   "kind": "C",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 371,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_15_5_3.txt",
+   "sha256": "3f42f60dd0a362061dd108cf598d3807ec008e898555cbcd1d6075e105263b70",
+   "kind": "C",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 55,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_15_5_4.txt",
+   "sha256": "c30c5eb02aad71d15bd41bfd8037d07ac803736c17e345c73931434f9dd15462",
+   "kind": "C",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 294,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_15_6_3.txt",
+   "sha256": "b53f3da423c865e70da451407afa7cf1c47b60cb43e0c3b586c3352e442ff5fa",
+   "kind": "C",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 31,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_15_6_4.txt",
+   "sha256": "07f244f6b9823ee2eb96aec9b6730ef292e80fc2e9c39601605db611b83daed9",
+   "kind": "C",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 117,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_15_6_5.txt",
+   "sha256": "454c3d1d79a6972d00388c4bfbd86b8b8baf9d858617346274387d3f4a49ebea",
+   "kind": "C",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 578,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_16_5_3.txt",
+   "sha256": "f1adc29680f3ee8fcdbd42d20a65c169732284af81f140ded7862461e31756d0",
+   "kind": "C",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 65,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_16_5_4.txt",
+   "sha256": "d6f49df9bf8674b375fd0c096a18ad0ed22cb4379eda330adb565ddd08d011bf",
+   "kind": "C",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 404,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_16_6_3.txt",
+   "sha256": "7588d2177d1ca1409b71de4ac36365c7f3c781c823855086b38da57c1db6678d",
+   "kind": "C",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 38,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_16_6_4.txt",
+   "sha256": "cf3daeebf57d2328ee1ad6cb356817782517da1e9ebd8eafcf4bebcef6d78689",
+   "kind": "C",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 152,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_16_6_5.txt",
+   "sha256": "e494d71012f829f58eac1606de394940a2c80d92d1bc805414a88b3881609eed",
+   "kind": "C",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 808,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_17_5_4.txt",
+   "sha256": "00334b13b2638814f409e8adec66f8665c2fc6a765c6122b26867f0f93910324",
+   "kind": "C",
+   "v": 17,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 562,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_18_5_4.txt",
+   "sha256": "95e74d08322c4597e0121109a9fdd70aa55bafd064927ecd7e89713bd174045f",
+   "kind": "C",
+   "v": 18,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 732,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_19_5_4.txt",
+   "sha256": "84a27e72a5a27fca1d453c3a7c7d6659c224b2e3e8d40f962dcda003d77f0161",
+   "kind": "C",
+   "v": 19,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 930,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_6_5_3.txt",
+   "sha256": "7b2d6ebee94987f573a217367308c56d77313cb8d795dee504c371df953694fe",
+   "kind": "C",
+   "v": 6,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_6_5_4.txt",
+   "sha256": "41b55863f45a5966e9946400abac88b0fd77bb99b8fea324844864bfe3e771b2",
+   "kind": "C",
+   "v": 6,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_7_5_3.txt",
+   "sha256": "872fb46dfced8747fcdf7ce8d54081a08e5dc74eeb6093f7fe949c43bbcd3676",
+   "kind": "C",
+   "v": 7,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_7_5_4.txt",
+   "sha256": "cd59b4b84ea07ad3ea97d5c27d1b1a699637042db006d3197c0fdde4103a004c",
+   "kind": "C",
+   "v": 7,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 9,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_7_6_3.txt",
+   "sha256": "67c9aa22eb0c325aad7ab5546e223c8563cd6feda3bdec7ea5729befac49caf8",
+   "kind": "C",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_7_6_4.txt",
+   "sha256": "ea8408b78da81ecb5ec32a11ad9f04312f75dd143c6d085a10c7bb8ab164c0d5",
+   "kind": "C",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_7_6_5.txt",
+   "sha256": "9f9f58cfb7b56feeafd62390bc11e39ab9bee7402e1078f302747fb27c6cbb6e",
+   "kind": "C",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 6,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_8_5_3.txt",
+   "sha256": "c7b43a46b810c641530888d9e4102161e03f1970c93b9d5adf9886becb384667",
+   "kind": "C",
+   "v": 8,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 8,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_8_5_4.txt",
+   "sha256": "185876de9ffcf184558aae623b728fed63ee3263d00644fdd0daa8f898a1314f",
+   "kind": "C",
+   "v": 8,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 20,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_8_6_3.txt",
+   "sha256": "601b698eed9bdaca076c79186a318e85cfe74eaffc0f905448265fcf854a66ee",
+   "kind": "C",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_8_6_4.txt",
+   "sha256": "c2563b7c9139cabe8ebabfc4bcc0385ef901c96aac0cf3c183e79fbf4e1f6906",
+   "kind": "C",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_8_6_5.txt",
+   "sha256": "6a05593424133727143d64fe458147d8c54249c970e37528adbb30576b70efa2",
+   "kind": "C",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_9_5_3.txt",
+   "sha256": "73eaf439f71d5f0298d5212aaa00fc9f09a190a33967d8e4590189a511069011",
+   "kind": "C",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_9_5_4.txt",
+   "sha256": "5a1003ad9a2a1cafe752aca6993cd84d9e072108db51310b5c27f0f2025b9dfe",
+   "kind": "C",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 30,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_9_6_3.txt",
+   "sha256": "1d8555401331f4244754e088d44bbc52055624901d1457713214748b60906c37",
+   "kind": "C",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_9_6_4.txt",
+   "sha256": "e339c2e9ebc732927e5986ac9fcfc6fa206c837ca7b711e890be85d0f03cf51f",
+   "kind": "C",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 4,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "C_9_6_5.txt",
+   "sha256": "58a115ea018f7701100cf2c8936759100a8eba80e845020e351b33631309a7bb",
+   "kind": "C",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 5,
+   "tickets": 30,
+   "coverage": 1.0
+  },
+  {
+   "file": "extended/X_17_5_5_45_404.txt",
+   "sha256": "55d9f8845b60963429cb953789f573ba8b58b64143e6a8f5a7d44166a620943b",
+   "kind": "X",
+   "v": 17,
+   "pick": 5,
+   "tickets": 404,
+   "coverage": null
+  },
+  {
+   "file": "extended/X_17_5_6_40_404.txt",
+   "sha256": "a82b79db12a50e61fd5c32b3e0601a80f9444f3a68ecfabb3992592ecde4f86f",
+   "kind": "X",
+   "v": 17,
+   "pick": 5,
+   "tickets": 404,
+   "coverage": null
+  },
+  {
+   "file": "extended/X_17_6_6_49_152.txt",
+   "sha256": "2445bada7c0cba7dce438c98d1083d70f22a1eb73024515208caaa9b4310b8f5",
+   "kind": "X",
+   "v": 17,
+   "pick": 6,
+   "tickets": 152,
+   "coverage": null
+  },
+  {
+   "file": "extended/X_18_5_5_45_404.txt",
+   "sha256": "071ce31ec9f06106bc12526c40fa2f0d5ba214a3916efbead556c6233b044dbb",
+   "kind": "X",
+   "v": 18,
+   "pick": 5,
+   "tickets": 404,
+   "coverage": null
+  },
+  {
+   "file": "extended/X_18_5_6_40_404.txt",
+   "sha256": "15841ff5ae11b2d65bde787cd5b09f97c9b2255f28fe0f91683c1366693b1625",
+   "kind": "X",
+   "v": 18,
+   "pick": 5,
+   "tickets": 404,
+   "coverage": null
+  },
+  {
+   "file": "extended/X_18_6_6_49_152.txt",
+   "sha256": "507a8c2194f5a5cc50bd83ac462c0014b1860057e4bc0b9aa44fed8f71124947",
+   "kind": "X",
+   "v": 18,
+   "pick": 6,
+   "tickets": 152,
+   "coverage": null
+  },
+  {
+   "file": "L_10_5_4_3.txt",
+   "sha256": "dfa33918f09e46405995799e2721946a7b1e8489cac3fc648def71bb764f511b",
+   "kind": "L",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_5_5_3.txt",
+   "sha256": "0422083a1aabe5e4cdf20d39a238a4ac9d8e3a48f4cddab5fc0e115572818c4a",
+   "kind": "L",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_5_5_4.txt",
+   "sha256": "e72be1a665ef7aa96ebe07a2a13c95dac22bec16b0e68ba0bcae6d817f62586f",
+   "kind": "L",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_6_4_3.txt",
+   "sha256": "23bcc208ec118e734718cde5a77147f8f8bdbaa4763fed7903f8a2338d35a340",
+   "kind": "L",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_6_5_3.txt",
+   "sha256": "7079eef94614f239bc887dc21d54990d1e0b8433448afdf6137f665f5c33e9ee",
+   "kind": "L",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_6_5_4.txt",
+   "sha256": "149074bdcbc65f36c0dd78a55576c910925ce08f6be883b190989bcb15a6c53a",
+   "kind": "L",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_6_6_3.txt",
+   "sha256": "bad5aa80065cdc2c591ef5f2bdf240bcd2f30800a490772fa7764e8ffadab840",
+   "kind": "L",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_6_6_4.txt",
+   "sha256": "d986b2b962def3fbf4168026fde199ec448e8a12e1fabd8b64964a19a6fac6e3",
+   "kind": "L",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_10_6_6_5.txt",
+   "sha256": "1b527f74956874423ade31c97e093a670743093d5868396db0e4fc1351ab3d08",
+   "kind": "L",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_5_4_3.txt",
+   "sha256": "b712620bdbcc30efc9ebf069eddbe819bac80623db513879a8bfaf9142bdbd1d",
+   "kind": "L",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 9,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_5_5_3.txt",
+   "sha256": "f9e7bfb2b8b1e1ca0e41f40c08da1890bbf19408c1ec2e64914675e83e136963",
+   "kind": "L",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_5_5_4.txt",
+   "sha256": "18a05735cfb82b457f59c3710a1ee9312445d93d315428e4d4c48eaa27bc1705",
+   "kind": "L",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_6_4_3.txt",
+   "sha256": "eec37b3590568a9cfcb9f1ac0d627c69a2ae988a57f0a27325f095555687a838",
+   "kind": "L",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_6_5_3.txt",
+   "sha256": "99374887ff27bc5624fc2498ae27a02f1000710c649cfef3d96ab55c68d3af88",
+   "kind": "L",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_6_5_4.txt",
+   "sha256": "5342fadb23faf76611101fe6f1f7ba70ca6023ebf156628e6e0a8a4b96a59f13",
+   "kind": "L",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_6_6_3.txt",
+   "sha256": "7079eef94614f239bc887dc21d54990d1e0b8433448afdf6137f665f5c33e9ee",
+   "kind": "L",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_6_6_4.txt",
+   "sha256": "3205adf7cd0b839502366f2089595b8922b79567ae679fade82bc2cc58b95c08",
+   "kind": "L",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_11_6_6_5.txt",
+   "sha256": "3e01b49170cb83219cb3e3aa956bfede1de6748e811ebb185499f6ae46f47475",
+   "kind": "L",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_5_4_3.txt",
+   "sha256": "b403d206f5ef85430826b73606dda3343c5076ed21ff520480c48f41ce1ea6bc",
+   "kind": "L",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_5_5_3.txt",
+   "sha256": "407b281a5b66f749c82c389ac557318cb5205e30a5d61074a5427665feee3a3f",
+   "kind": "L",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 6,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_5_5_4.txt",
+   "sha256": "20f314c9d1ce38bbc1df270989b2ff945f11a1ca7a623cb49b6eeda4f3b086a1",
+   "kind": "L",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 41,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_6_4_3.txt",
+   "sha256": "e8a475ab71047f3964fd6e53d6c926e8480151bd4ba9e6d87f1b44090df554e8",
+   "kind": "L",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 8,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_6_5_3.txt",
+   "sha256": "004bec9f35efce17a92bb53a4b4c74c7f66ff4ed84a19f60ca4dce7b348e6eb4",
+   "kind": "L",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_6_5_4.txt",
+   "sha256": "6a8effe5914a484c21105f7f4554d72b70b179e47cb46fa59a97a8adf4176190",
+   "kind": "L",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 15,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_6_6_3.txt",
+   "sha256": "99374887ff27bc5624fc2498ae27a02f1000710c649cfef3d96ab55c68d3af88",
+   "kind": "L",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_6_6_4.txt",
+   "sha256": "996c1ea630410d0a7817f76c40b1b2d72b2c7374314c272c2fe5d89c4a40586d",
+   "kind": "L",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 6,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_12_6_6_5.txt",
+   "sha256": "462852f8dd0f06760ba9bad736dd36f4c34db55eda78ee04e25c3e90a66300af",
+   "kind": "L",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 46,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_5_4_3.txt",
+   "sha256": "b6ba7697199228d1f07e3e98803ce67561889672ca5e16f139ec9b34580399d2",
+   "kind": "L",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 19,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_5_5_3.txt",
+   "sha256": "9346becc294a29d0cdcaaa57a706c5f4b0c941f2085909f5232acaf1be302484",
+   "kind": "L",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 9,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_5_5_4.txt",
+   "sha256": "6512ee7a1d30d0f06f5da85fc5af86232cba5d09b3f493acb988ac2d87435045",
+   "kind": "L",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 62,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_6_4_3.txt",
+   "sha256": "1c03d54230befca08b3fa1cccbe45eb674d31d2adaaf31514760bdef169f7fe5",
+   "kind": "L",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_6_5_3.txt",
+   "sha256": "fcafb9334b6c6652197df13e8ec76cbc2de38a3cffc18a4c9416c4662f267e95",
+   "kind": "L",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_6_5_4.txt",
+   "sha256": "30bfda8b4afcb58f4f7d14476195848c6510cf1558b62ecf83bd6095594dc446",
+   "kind": "L",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 26,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_6_6_3.txt",
+   "sha256": "004bec9f35efce17a92bb53a4b4c74c7f66ff4ed84a19f60ca4dce7b348e6eb4",
+   "kind": "L",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_6_6_4.txt",
+   "sha256": "f37a4e9ac106782ba976460c56fa88e371498cf0272f19f65eb0ce6d512831a5",
+   "kind": "L",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_13_6_6_5.txt",
+   "sha256": "ca9be88d4a4b584c2d1129f63c68a3f68866709a56e77fb49c70d7b5d5e7376e",
+   "kind": "L",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 79,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_5_4_3.txt",
+   "sha256": "dd05c3741f9c666020fbd4efd6a9bdf0a60361f9c255393eb995b671e916d785",
+   "kind": "L",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 23,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_5_5_3.txt",
+   "sha256": "b67f939febe106c337ca167d573f68d85d83f9ef9022be657c3be44a5a731789",
+   "kind": "L",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_5_5_4.txt",
+   "sha256": "2dad3a26c4921e66bcc5faf0c55fd9e979742a1c791729deebc08bb2278b4016",
+   "kind": "L",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 87,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_6_4_3.txt",
+   "sha256": "5d1402241541da24b6c2bd40dfb04c21e532b92e09dcf594eb22d5b1260ce068",
+   "kind": "L",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_6_5_3.txt",
+   "sha256": "a2266908cf5305e467d654f56e87c9cbc658d8fee982332e50dbf18ca5ad9f76",
+   "kind": "L",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_6_5_4.txt",
+   "sha256": "4e955ee0cac614d2c48e3ca60743a4c2cddfa559a48c32ad3830ac1ddefebd67",
+   "kind": "L",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 37,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_6_6_3.txt",
+   "sha256": "acf1b6c39b1561843f91762a30fbee3936fcb66da09d7442c56af8b005adda68",
+   "kind": "L",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_6_6_4.txt",
+   "sha256": "393783b715a83dc4588ba551aafd7ee10b5e4c571d79bbcbbabab3eba6429b72",
+   "kind": "L",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 18,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_14_6_6_5.txt",
+   "sha256": "47c62ca16fb88c7fdf6e7c2ed5ea495baffb3904efb12cc6ca5bebef6934ee70",
+   "kind": "L",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 125,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_5_4_3.txt",
+   "sha256": "dee39686af5867295936de9a00c9f4a45dc72370844d6380e362a80c2430c4ae",
+   "kind": "L",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 28,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_5_5_3.txt",
+   "sha256": "cd26a9dc4f3781d7bd4a8867ed5f5d30042b6b63e6fa1bc67fb6eb85e9b6f0c9",
+   "kind": "L",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 16,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_5_5_4.txt",
+   "sha256": "9add82f75b4b6bffc86f90ad0c1fc184e70dba0129852b943e337e39b6d1e60e",
+   "kind": "L",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 129,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_6_4_3.txt",
+   "sha256": "4368d6e361ff140f91f34d2c91f609731b2d504f58f52232205747ee66ab916b",
+   "kind": "L",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 17,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_6_5_3.txt",
+   "sha256": "3f1dae92629eae1d2a34ee1d4efebbc397adba017d4473fd5fcecbac88eddb0b",
+   "kind": "L",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 8,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_6_5_4.txt",
+   "sha256": "79870b7f35d2d0e3ae63e03b820572692a0c032b3867397610ca399c96310ff4",
+   "kind": "L",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 50,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_6_6_3.txt",
+   "sha256": "05fe68b3265bc58ac3f38ceee9da4960ec95481a1e3b3a32948d5854a2cc7c49",
+   "kind": "L",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_6_6_4.txt",
+   "sha256": "31e543b9422b186e143542b295b8e4b66c3c05a560deda5d1e6a6afbb9fca6bd",
+   "kind": "L",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 23,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_15_6_6_5.txt",
+   "sha256": "bad7a465ed077427e818427bbe6a64317dd76121a31bf5f20ce95a0673ac3f90",
+   "kind": "L",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 190,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_5_4_3.txt",
+   "sha256": "15b35136d9e9e9c496127b0147839cad5fff3315992c84789a4859d5d4ef0658",
+   "kind": "L",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 37,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_5_5_3.txt",
+   "sha256": "ae0bcac35d3b68beb063a3392403b0c085f2a4b2836c48f4482ab99ee04a5940",
+   "kind": "L",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 20,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_5_5_4.txt",
+   "sha256": "e9c6a78cd3cb90721c993524678021996b7b606e28065620e9b8d19368b7cc91",
+   "kind": "L",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 170,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_6_4_3.txt",
+   "sha256": "709beb73dfd26fcc7a7cf23bf14936c97551df941a5768e86a58acad76ef8e7e",
+   "kind": "L",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 21,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_6_5_3.txt",
+   "sha256": "bd1ec8b893debac94bc5d48467c4976d354c05e8ba862636e9f1025cf6ee8f02",
+   "kind": "L",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_6_5_4.txt",
+   "sha256": "c24cf453c6ca119ca13cf0a3752386346d2607a072df05382a229a186e05ca4a",
+   "kind": "L",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 65,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_6_6_3.txt",
+   "sha256": "b78f44eef2189f23a656be2407decebc9234d52d158c7400e9d9996b1d717b74",
+   "kind": "L",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_6_6_4.txt",
+   "sha256": "29cd688fc4caad9ff9b016a8f11e20977a5787723584a5066dd3b2b7abbb1618",
+   "kind": "L",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 31,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_16_6_6_5.txt",
+   "sha256": "1ac125f720298bd6015f25c514c6ae62ddafbac331858de67da140f85bd0ae31",
+   "kind": "L",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 281,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_5_4_3.txt",
+   "sha256": "3d8a8be2dbe5cb3153c168b1f1048079a1296a538db8ef960559647bde5f126d",
+   "kind": "L",
+   "v": 6,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_5_5_3.txt",
+   "sha256": "3d8a8be2dbe5cb3153c168b1f1048079a1296a538db8ef960559647bde5f126d",
+   "kind": "L",
+   "v": 6,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_5_5_4.txt",
+   "sha256": "3d8a8be2dbe5cb3153c168b1f1048079a1296a538db8ef960559647bde5f126d",
+   "kind": "L",
+   "v": 6,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_6_4_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 6,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_6_5_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 6,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_6_5_4.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 6,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_6_6_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 6,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_6_6_4.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 6,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_6_6_6_5.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 6,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_5_4_3.txt",
+   "sha256": "1288bd8ded66577ebbd3ad5a46c24a7b400e7ad369b843aa78999bffe56d9f21",
+   "kind": "L",
+   "v": 7,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_5_5_3.txt",
+   "sha256": "3d8a8be2dbe5cb3153c168b1f1048079a1296a538db8ef960559647bde5f126d",
+   "kind": "L",
+   "v": 7,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_5_5_4.txt",
+   "sha256": "153639bed419bf7643c49e7b8bf4f30a7f84c16ad2e9290a0e1c8ba5b55be22b",
+   "kind": "L",
+   "v": 7,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_6_4_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_6_5_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_6_5_4.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_6_6_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_6_6_4.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_7_6_6_5.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 7,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_5_4_3.txt",
+   "sha256": "c795c34b0a582a762338b892ff1d1e0844f91c53a12e4888887c012ac0369389",
+   "kind": "L",
+   "v": 8,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_5_5_3.txt",
+   "sha256": "8568a571235a2f2b0896fe32a06734a09631f3cc7cc15c3809e0a22ddc85bf38",
+   "kind": "L",
+   "v": 8,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_5_5_4.txt",
+   "sha256": "113e9d16d25d82ce407b7eb7e9673e379c7815c1afd6406decc58d1a58bd2927",
+   "kind": "L",
+   "v": 8,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_6_4_3.txt",
+   "sha256": "b94e894f0bda1f80b24055f7da195a62888b2c6d4dbb5c4d81a58b088bfef727",
+   "kind": "L",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_6_5_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_6_5_4.txt",
+   "sha256": "d49a03fc6ff14987730dc146931fd2e89ae8794907dac818a26b6a4e3342bf2e",
+   "kind": "L",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_6_6_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_6_6_4.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_8_6_6_5.txt",
+   "sha256": "ce90e9a84efac97661763cb47410733916a3b7d9ab30ad8ad51437323e055344",
+   "kind": "L",
+   "v": 8,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_5_4_3.txt",
+   "sha256": "923c47d1efd04e77b2bdc70fad3e88a3ea2d899d46547a08356ddde7b514ac0a",
+   "kind": "L",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_5_5_3.txt",
+   "sha256": "06b4b092d529dab86dae60fce52de9b9f0e32bf73f9a9daae8e6ffd223093cac",
+   "kind": "L",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_5_5_4.txt",
+   "sha256": "0b8e068993ff44902e553ec7653bfd97248126a05f37e296513a7d2ca8a11649",
+   "kind": "L",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 9,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_6_4_3.txt",
+   "sha256": "02f7faa6294defd3a52223252ddab0717503ff477caf569eedbd6cb34f5d9d81",
+   "kind": "L",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_6_5_3.txt",
+   "sha256": "bad5aa80065cdc2c591ef5f2bdf240bcd2f30800a490772fa7764e8ffadab840",
+   "kind": "L",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 2,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_6_5_4.txt",
+   "sha256": "5e7de08228559ee1e75cda4263c6fb4d75431497c74e7cb9b97f0b69791cad36",
+   "kind": "L",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_6_6_3.txt",
+   "sha256": "6ef172245fb782d5c3697cc1d8af5e6c5613fd8f78b0d760bb724d837ac6dcba",
+   "kind": "L",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 1,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_6_6_4.txt",
+   "sha256": "6ec3d81aa8e2056c57c7985c5d0e5093a45ffb38d633adfa3c4c98183f5b590e",
+   "kind": "L",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "L_9_6_6_5.txt",
+   "sha256": "972df9e74300e38fc043ef1014442f468154ed98f6e8da2b75b9eee01b1a4963",
+   "kind": "L",
+   "v": 9,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "lr/LR_540_cod15.txt",
+   "sha256": "658eb5656ceac78b2090444eaabd63acc85cbfdd5c124d38511918da0f99c81f",
+   "kind": "LR",
+   "game": "540",
+   "code": 15,
+   "v": 7,
+   "tickets": 9,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod16.txt",
+   "sha256": "0c643971af6aece297e4f647843a0ee9bd8c07ed2edb5a4ebaf1fdb04d04ce84",
+   "kind": "LR",
+   "game": "540",
+   "code": 16,
+   "v": 8,
+   "tickets": 21,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod17.txt",
+   "sha256": "4228050e9146321fb2177e14959367f92c468b62a9d2b6b391993fed251b7f12",
+   "kind": "LR",
+   "game": "540",
+   "code": 17,
+   "v": 9,
+   "tickets": 30,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod18.txt",
+   "sha256": "77c58e7efc2a97945adb99f045361a43070cfbac58f5a83ddd29e04595199520",
+   "kind": "LR",
+   "game": "540",
+   "code": 18,
+   "v": 10,
+   "tickets": 51,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod25.txt",
+   "sha256": "8b209014c3b4754f9d06997b95e1d62ff00f9f9bafc65ca14648b1585300505a",
+   "kind": "LR",
+   "game": "540",
+   "code": 25,
+   "v": 11,
+   "tickets": 66,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod26.txt",
+   "sha256": "83ee66f8ba1888078012f3ace0f8b4938c44b78e72e91da08c8e6e7af3b9843f",
+   "kind": "LR",
+   "game": "540",
+   "code": 26,
+   "v": 12,
+   "tickets": 113,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod27.txt",
+   "sha256": "ad591dfcc2b7c6fbb1625c41756278b0c27a9c7819c20a617ed27d09a26fcb94",
+   "kind": "LR",
+   "game": "540",
+   "code": 27,
+   "v": 13,
+   "tickets": 173,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod28.txt",
+   "sha256": "885ddce977a79b5b537e52828c3fa375c1c03fb6e86212728438200d266b11f7",
+   "kind": "LR",
+   "game": "540",
+   "code": 28,
+   "v": 14,
+   "tickets": 255,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod35.txt",
+   "sha256": "d7c0bc4b3439c2649ceab3c2e5854a595a517bbf478959e0e87826b22381c49d",
+   "kind": "LR",
+   "game": "540",
+   "code": 35,
+   "v": 15,
+   "tickets": 243,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod36.txt",
+   "sha256": "b7a2b9609b3c2f9785f5789e852c76ef9cbbc4faeed3b41cedf23f511e2bd8d3",
+   "kind": "LR",
+   "game": "540",
+   "code": 36,
+   "v": 15,
+   "tickets": 327,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod37.txt",
+   "sha256": "df4c74780d2a6de7adcbd95b834fdbcf8ee9620cf5a4c776a393ee73b4bedc6d",
+   "kind": "LR",
+   "game": "540",
+   "code": 37,
+   "v": 16,
+   "tickets": 348,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod38.txt",
+   "sha256": "999136685352acebe5f1b88cdbddb07fa29ec6d8137dfd0d4c4898299006b1bd",
+   "kind": "LR",
+   "game": "540",
+   "code": 38,
+   "v": 16,
+   "tickets": 443,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod45.txt",
+   "sha256": "f5db0feadc583d464cc707644a687c66195a39f4a8a5dec7ff2539c2e4efc49a",
+   "kind": "LR",
+   "game": "540",
+   "code": 45,
+   "v": 17,
+   "tickets": 488,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod46.txt",
+   "sha256": "db4795d2879725a8a0ca0558e6c87c6a5100f88a304f2617f9d8b12e4ef74f33",
+   "kind": "LR",
+   "game": "540",
+   "code": 46,
+   "v": 17,
+   "tickets": 562,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod47.txt",
+   "sha256": "fd565b2f0b8ed42ac21ca8a18f40e8eb4651d39b6a55b35f160e733434e5175d",
+   "kind": "LR",
+   "game": "540",
+   "code": 47,
+   "v": 18,
+   "tickets": 732,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_540_cod48.txt",
+   "sha256": "2df63bfc22b9d52d7d1ae5250e7585f3c6ed98f81a743b745ed035413731855a",
+   "kind": "LR",
+   "game": "540",
+   "code": 48,
+   "v": 19,
+   "tickets": 930,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod48.txt",
+   "sha256": "585534538a8448d55d1718b97828d156d4d5c2676784559274e8b2d92eee99b6",
+   "kind": "LR",
+   "game": "649",
+   "code": 48,
+   "v": 9,
+   "tickets": 12,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod49.txt",
+   "sha256": "dcd9bde112bbdf62f3ca20d371e0097d8c1b3308649421c30a4b1b849de1fac7",
+   "kind": "LR",
+   "game": "649",
+   "code": 49,
+   "v": 10,
+   "tickets": 15,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod50.txt",
+   "sha256": "0fe6a97566bcccbfa4f41ece07a0da3e0ebb597da68543af2fdedb8500b3f735",
+   "kind": "LR",
+   "game": "649",
+   "code": 50,
+   "v": 10,
+   "tickets": 30,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod56.txt",
+   "sha256": "9c215d3a4fcbfe9af19ae725cbdb518e79d1c562e29b76dbad510b0b80f3b05c",
+   "kind": "LR",
+   "game": "649",
+   "code": 56,
+   "v": 11,
+   "tickets": 66,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod57.txt",
+   "sha256": "62cc43d11e52972ac2cee29cd6f129bcb4b19569f5e6d9def74ba4975954485b",
+   "kind": "LR",
+   "game": "649",
+   "code": 57,
+   "v": 12,
+   "tickets": 22,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod58.txt",
+   "sha256": "75ac98e5b9907c59bbb37d32919ef771a75eedfa8418a872e4ecba111867a741",
+   "kind": "LR",
+   "game": "649",
+   "code": 58,
+   "v": 12,
+   "tickets": 132,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_649_cod59.txt",
+   "sha256": "af63a340ac7ae9575d729157899841a55d135ad737d0053c539509feaeff9c96",
+   "kind": "LR",
+   "game": "649",
+   "code": 59,
+   "v": 16,
+   "tickets": 112,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod12.txt",
+   "sha256": "2caa9b3abc768053f39b13dc62df31ae74b0e6be3c54a1800ca43ad4a5f1d0b5",
+   "kind": "LR",
+   "game": "joker",
+   "code": 12,
+   "v": 15,
+   "tickets": 118,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod13.txt",
+   "sha256": "2e0ecb22af2e818bb7a80b865dc16318fcca5f0c19b17b858611d276fc856117",
+   "kind": "LR",
+   "game": "joker",
+   "code": 13,
+   "v": 13,
+   "tickets": 54,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod14.txt",
+   "sha256": "b807b9c934a9b903f8656e082e7845a805e0f58d331de4620758b893d4346f39",
+   "kind": "LR",
+   "game": "joker",
+   "code": 14,
+   "v": 12,
+   "tickets": 38,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod15.txt",
+   "sha256": "2871c5aedbeff38fba3222affc2f640c21064da98c836b1c0fd3e6d2db4bf37a",
+   "kind": "LR",
+   "game": "joker",
+   "code": 15,
+   "v": 11,
+   "tickets": 22,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod23.txt",
+   "sha256": "1dec01d63e49d27f2850770e5347d48b7cb3e6da9c847256dfab6457ee5c0920",
+   "kind": "LR",
+   "game": "joker",
+   "code": 23,
+   "v": 10,
+   "tickets": 51,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod24.txt",
+   "sha256": "08ac75dccb3c747d6f60deaf3cbf04bf790af3f6610702590f466c51ddbafe1f",
+   "kind": "LR",
+   "game": "joker",
+   "code": 24,
+   "v": 10,
+   "tickets": 14,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod25.txt",
+   "sha256": "da42cd050e09176bc28e136c9d18293663487861c2a865c1d9d94523d7d8392c",
+   "kind": "LR",
+   "game": "joker",
+   "code": 25,
+   "v": 9,
+   "tickets": 30,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod34.txt",
+   "sha256": "263acd6c5ce5c0f1b1d8e8eb361d0055e56642a270735344a52e7470749ca322",
+   "kind": "LR",
+   "game": "joker",
+   "code": 34,
+   "v": 9,
+   "tickets": 9,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod35.txt",
+   "sha256": "84820b04a85f76b75e9c82513b8964decdeeac039b14d4dd8c173e8b541307c7",
+   "kind": "LR",
+   "game": "joker",
+   "code": 35,
+   "v": 8,
+   "tickets": 6,
+   "coverage": null
+  },
+  {
+   "file": "lr/LR_joker_cod45.txt",
+   "sha256": "b77733dd0f52cb96c31893b6f76f6bcf88cdc007904d0baac087bb240e1f5132",
+   "kind": "LR",
+   "game": "joker",
+   "code": 45,
+   "v": 7,
+   "tickets": 5,
+   "coverage": null
+  },
+  {
+   "file": "refined/R_10_5_3_5_45.txt",
+   "sha256": "54b66688af6e893fa765cce1728cedbf826eef9fdacee53541a6db37770aeabd",
+   "kind": "R",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 17,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_10_5_3_6_40.txt",
+   "sha256": "f0164148a8ce9fb34e42843f7247a0010b6324e4c9de399efc745e9f25651e4a",
+   "kind": "R",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 17,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_10_6_3_6_49.txt",
+   "sha256": "0878efd2e3e17cfb072d21e89efdfe002275ca55401bf529664055cfee15ec42",
+   "kind": "R",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_12_5_3_5_45.txt",
+   "sha256": "b39ef515bd5e42cd3b34570bef4546d89966e5bf80bbd0a4f66a7b308402026c",
+   "kind": "R",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 29,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_12_5_3_6_40.txt",
+   "sha256": "cefd7bc9a990b43d85a5e0ce1ad4eeca5519749fad851ca15a8ac19e3da3785c",
+   "kind": "R",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 29,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_12_5_4_6_40.txt",
+   "sha256": "34ff45a8b01b0199bd0f0af0e2ec8f1fc3bb2988950ca8d0e3c0f133eab6f982",
+   "kind": "R",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 113,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_12_6_3_6_49.txt",
+   "sha256": "6b001a149abef376506acda7fa616b06f474818e952d78a8f6099967992e09d9",
+   "kind": "R",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 15,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_13_6_3_6_49.txt",
+   "sha256": "685b9dc27417ab3890719ad1b456b2d51aed730abec37720688b3b932f781ccc",
+   "kind": "R",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 21,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_14_6_3_6_49.txt",
+   "sha256": "e14d9862b441a1489ace29858d61704f8c86d085f7a3af78d04ff2592e775aed",
+   "kind": "R",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_9_5_3_5_45.txt",
+   "sha256": "cb93cf614d931f4016cea7f7a6aa6f51ef2efae968c67f96c768cf720fa61af9",
+   "kind": "R",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_9_5_3_6_40.txt",
+   "sha256": "6e43f53f6e58e84edbea034c174dcd5f8727bac83ba3d991ac5b292361babeeb",
+   "kind": "R",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 3,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/R_9_5_4_6_40.txt",
+   "sha256": "2be44ca681fc9ad5f8bd430be3d4a18515d156e4c2ab8dfb7450c9896ae1307b",
+   "kind": "R",
+   "v": 9,
+   "pick": 5,
+   "guarantee": 4,
+   "tickets": 30,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_10_5_3_4_5_45.txt",
+   "sha256": "e744f7eb6c958af7944afed317b72c7bf3c11639b3f50ab3323f23e5520a774b",
+   "kind": "RL",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_10_5_3_4_6_40.txt",
+   "sha256": "fc105b7db140f365f96380ddb5fe9081e3e1c023a4f889b79cd6aa126304d153",
+   "kind": "RL",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_10_5_4_5_5_45.txt",
+   "sha256": "7f5b1fec92b241c8701df029cf093858fb57079255c208eced363db010caf80c",
+   "kind": "RL",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_10_5_4_5_6_40.txt",
+   "sha256": "d5c632d149795a459df955cf4f1fc6e0f9f377a723be8c17a5bc9186fe4d9674",
+   "kind": "RL",
+   "v": 10,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_10_6_4_5_6_49.txt",
+   "sha256": "039916092d7e26ef275b1032bf6c3aafddd61b9c885073a6871cfb2046fbde73",
+   "kind": "RL",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 7,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_10_6_4_6_6_49.txt",
+   "sha256": "e3b941d4e5246feae0ac0a2b4dcd7a36c18fe4bf522bb736d5d91b1ab27456a5",
+   "kind": "RL",
+   "v": 10,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 3,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_11_5_3_5_5_45.txt",
+   "sha256": "e2973a0d9fa1cecccf8ff85ae0e96b56dc9590b2437aae9b119988d53fc7ea6b",
+   "kind": "RL",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_11_5_3_5_6_40.txt",
+   "sha256": "d799f275d44e93d31b4e6da3a812a0e82ebf597eaed022a8392fd06ae5242a2f",
+   "kind": "RL",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_11_5_4_5_5_45.txt",
+   "sha256": "2d2fbd55c2406dc32db66abc33b8a874bc2c4558b553d4532b289187dd44c66d",
+   "kind": "RL",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_11_5_4_5_6_40.txt",
+   "sha256": "f4fa36b6f548cca6e3537f22778314ff95a30b46c744137572cb50e779132466",
+   "kind": "RL",
+   "v": 11,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_11_6_4_6_6_49.txt",
+   "sha256": "10750ab7765cac66c73f538eadbd0a75b3f1efd31b73324cd672965c834b4623",
+   "kind": "RL",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_11_6_5_6_6_49.txt",
+   "sha256": "60f440c8a88b5f1705022eb2561e865a62b9793f3c2817b11b88601a28c9416e",
+   "kind": "RL",
+   "v": 11,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 25,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_5_3_4_5_45.txt",
+   "sha256": "401483447da9637a1ce177f0331f11a1d92461278df2aeeb1e52edf79a421a66",
+   "kind": "RL",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_5_3_4_6_40.txt",
+   "sha256": "cadfba62fa0b96fed8f42ff21771f4849c6232c7567645ec627bcd2b84a9be8c",
+   "kind": "RL",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_5_3_5_6_40.txt",
+   "sha256": "10280ffac41be1911bb4f751062b016837a439b5a6690849cfb25423f4d00010",
+   "kind": "RL",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 6,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_5_4_5_5_45.txt",
+   "sha256": "bc9f62cde9f93f4c3d227e7c21f8502ff2182d2257b95a73f1f34cf0d4c07bd7",
+   "kind": "RL",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 41,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_5_4_5_6_40.txt",
+   "sha256": "f57639e8acebfe5023f61087620b5815eb5b1092fab453c92c9cc33c9a8b931f",
+   "kind": "RL",
+   "v": 12,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 41,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_6_3_4_6_49.txt",
+   "sha256": "45ba7402195c378bb39501426e527eafcae5adcbb86b446ca222a9354f2b7897",
+   "kind": "RL",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 8,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_6_4_5_6_49.txt",
+   "sha256": "538eaa1eef6a99918816f01a58009cee21b2e760b09d41eb9f2d1bea58b2180d",
+   "kind": "RL",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 15,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_6_4_6_6_49.txt",
+   "sha256": "0fef5ac6d71053ef879840a161a85af5dc053ebc63491cfcb119723412e928f7",
+   "kind": "RL",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 6,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_12_6_5_6_6_49.txt",
+   "sha256": "b2c52fa83cca1772f467e8bf67001785ce730252e861f285bd22fd1cda0c0091",
+   "kind": "RL",
+   "v": 12,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 46,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_5_3_4_5_45.txt",
+   "sha256": "7c1a5eaa282c17e2a697e926a6c81e5bd78b3de02e610edd528a273fbbcb1137",
+   "kind": "RL",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 19,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_5_3_4_6_40.txt",
+   "sha256": "273284fe33ccf3c5fafb72ae3078140342671a79377240bcbfbd4dc2f18dda31",
+   "kind": "RL",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 19,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_5_3_5_5_45.txt",
+   "sha256": "49935cf3fab797bf910439b4fa9093ef4a2889b53ed58e30161164a539b057d5",
+   "kind": "RL",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 9,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_5_3_5_6_40.txt",
+   "sha256": "730c1116e541b9b6019100fbedd293ec430826485e5281827f81286e52c3097d",
+   "kind": "RL",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 9,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_5_4_5_5_45.txt",
+   "sha256": "6482d040f0db106e8b31c23276b3bcdea484fa4dbf043f9a7cc992fcda0ada2a",
+   "kind": "RL",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 62,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_5_4_5_6_40.txt",
+   "sha256": "cfb15bd004fcb68ad233d26e852dc4eb3b658c32b559c6e85ddabb271ea537d8",
+   "kind": "RL",
+   "v": 13,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 62,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_6_3_4_6_49.txt",
+   "sha256": "740135304eb9b52c7c768ae711733768281357640ff12169603ccca698fa2f7a",
+   "kind": "RL",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_6_3_5_6_49.txt",
+   "sha256": "e4507b8c9bb58c222cc1705e2061aa3540835fa57d9fd42d92d59b21c170d02e",
+   "kind": "RL",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_6_4_5_6_49.txt",
+   "sha256": "b878a1f56a29653f211b5f6d181fe6cb568cfbd8ad0abeaef123c68171735a48",
+   "kind": "RL",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 26,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_6_4_6_6_49.txt",
+   "sha256": "bb577556c3e2aff54947f7a08960b56f3d1e282a509d3b5e3cef5c1e52825828",
+   "kind": "RL",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 12,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_13_6_5_6_6_49.txt",
+   "sha256": "230bb39b8235872ad3e0df51d60bc3799894de405831f807e6860ed58f40ba59",
+   "kind": "RL",
+   "v": 13,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 79,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_5_3_4_5_45.txt",
+   "sha256": "d4b63e62161f3c85277e10e4739b39bf02cb858e07d3626a3b8f05437fba6a38",
+   "kind": "RL",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 23,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_5_3_4_6_40.txt",
+   "sha256": "bfc4fd0b50a5464ac9dc1d3734c8da116011bb3a6e2b9ecdcc1e04d3a10f1b5a",
+   "kind": "RL",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 23,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_5_3_5_5_45.txt",
+   "sha256": "f0bbe6dfb3963da6c1d2e6afbf145dfa67977a2be9e0920d7ed44e1e059f9a85",
+   "kind": "RL",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_5_3_5_6_40.txt",
+   "sha256": "64e39b99b53f4f62510ecab7a87115a8872e38e331d28cc8355a2964ca473389",
+   "kind": "RL",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_5_4_5_5_45.txt",
+   "sha256": "1bbc318d3a3aae2a2406a790a9c7d94439a55efbc5a0a4736f98444baf65a7c7",
+   "kind": "RL",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 87,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_5_4_5_6_40.txt",
+   "sha256": "0a75b1eb1df30d1606409d7b82f7e76605e930213926e463058146f3383c6d71",
+   "kind": "RL",
+   "v": 14,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 87,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_6_3_4_6_49.txt",
+   "sha256": "cb25b1cf43d67a08f4cabaa7e18b2b9fa82ca13d8f2077ae9648311fa026b690",
+   "kind": "RL",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 14,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_6_3_5_6_49.txt",
+   "sha256": "28b1d663194c508f8c2008b0636cc1b0ab8a965976ee15b607005548b2e3e955",
+   "kind": "RL",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 5,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_6_3_6_6_49.txt",
+   "sha256": "1197859953649ad02e1082c8a36f3c3208abdca5d261b3c8b10e2b0a0e3b57c4",
+   "kind": "RL",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 6,
+   "tickets": 4,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_6_4_5_6_49.txt",
+   "sha256": "1072c984c48b559587f6df0021a9af2bad90d95346ff84c5d476f58bf346c9c6",
+   "kind": "RL",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 37,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_6_4_6_6_49.txt",
+   "sha256": "ffe914c6cfbc13c86075fc280bbe1bd3600ada72ab590936025cd706a89d15b8",
+   "kind": "RL",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 18,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_14_6_5_6_6_49.txt",
+   "sha256": "4827f3838bd1e340f19c1f441c6cf67f2f084b55014285a489982caf4c3e5362",
+   "kind": "RL",
+   "v": 14,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 125,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_5_3_4_5_45.txt",
+   "sha256": "388993ef4475b862eb29d179894d3f616406b02175acdb659ab3b60aeb474f62",
+   "kind": "RL",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 28,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_5_3_4_6_40.txt",
+   "sha256": "c138a4fb4890c188ba894b4b3592103fec86abc83250f3489feebd0dc5ccd752",
+   "kind": "RL",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 28,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_5_3_5_5_45.txt",
+   "sha256": "465006377a54b4a55acfaa1376696f2160759700fb3f12b30eb7da841bee2cc1",
+   "kind": "RL",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 16,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_5_3_5_6_40.txt",
+   "sha256": "e5e7e354864f322ae5a85ad2e4f0e18771c2cab24b3feb666e469b2cf1cd3df2",
+   "kind": "RL",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 16,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_5_4_5_5_45.txt",
+   "sha256": "c1563a6b589e2103b03cea698a4eec587617ecb9a7dd77f27d27cb851f233c21",
+   "kind": "RL",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 129,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_5_4_5_6_40.txt",
+   "sha256": "d5a7c5d6af22a55a94fa4a14ee696f7acd6ac06ac17f2c8cc33299bde4c61399",
+   "kind": "RL",
+   "v": 15,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 129,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_6_3_4_6_49.txt",
+   "sha256": "73ec3a92f71570fa7fe1ee7c4761dfca872fdc23f2895f5498285a91d2ad0e10",
+   "kind": "RL",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 17,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_6_3_5_6_49.txt",
+   "sha256": "2cd6173770119d7f72d48b7d457ce03b309d6486f05edf228c3218889fb189dc",
+   "kind": "RL",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 8,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_6_4_5_6_49.txt",
+   "sha256": "290940b27837c1ce2e4a2cdcb8180ab6c258c42d8823bc4629b624fdccef4858",
+   "kind": "RL",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 50,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_6_4_6_6_49.txt",
+   "sha256": "f65a5eca1ef78eabde265a4480b2543af983a3f2e6c723c84c993dc6c127d0f8",
+   "kind": "RL",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 23,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_15_6_5_6_6_49.txt",
+   "sha256": "4fdfb60497d072530510721fe691cd210492de71b0e3bd41fae75519372538ad",
+   "kind": "RL",
+   "v": 15,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 190,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_5_3_4_5_45.txt",
+   "sha256": "b1369c8b052d198972e8b54bf574c18b9a6b08240899824f9e132fd2d150c497",
+   "kind": "RL",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 37,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_5_3_4_6_40.txt",
+   "sha256": "1fd43367e9d7f59c0a6923364f05d40bfc7c2eb684e33646d2f3ab35740d6c51",
+   "kind": "RL",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 37,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_5_3_5_5_45.txt",
+   "sha256": "5aa14256874110753271fb5491f7cfbc387204b4d8ed2edf2642e205c4812e56",
+   "kind": "RL",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 20,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_5_3_5_6_40.txt",
+   "sha256": "7dff71ff8e707280408170c3020a896e0fb5923e83c8c51c6cca7f0b0cc06d48",
+   "kind": "RL",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 20,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_5_4_5_5_45.txt",
+   "sha256": "f9778092614689316259688def2d76e409f225f456f48c726a34e15968869bfe",
+   "kind": "RL",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 170,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_5_4_5_6_40.txt",
+   "sha256": "c5388820d27e0d08bf822d902259c30cf3b85b90dd21d8c9b9741598ce2df1a0",
+   "kind": "RL",
+   "v": 16,
+   "pick": 5,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 170,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_6_3_4_6_49.txt",
+   "sha256": "f6d7508a92d490b7016c2ffaaedcbe6edd71c26d3a12357c4e261e3df9eec9c4",
+   "kind": "RL",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 4,
+   "tickets": 21,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_6_3_5_6_49.txt",
+   "sha256": "7cc33dbbcebd807a50f66c611cd2a4f1a3dcade05b6d3edf9ba0cf752eddf423",
+   "kind": "RL",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 3,
+   "condition": 5,
+   "tickets": 10,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_6_4_5_6_49.txt",
+   "sha256": "c6170815b8de822f3bb9f0743611a0bddb9219368c324bb622ea58f3ba3fab13",
+   "kind": "RL",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 5,
+   "tickets": 65,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_6_4_6_6_49.txt",
+   "sha256": "c54959ecf8b522a301334b761c77ddd2cc047e9c748c4a76e36e4a10979dccd4",
+   "kind": "RL",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 4,
+   "condition": 6,
+   "tickets": 31,
+   "coverage": 1.0
+  },
+  {
+   "file": "refined/RL_16_6_5_6_6_49.txt",
+   "sha256": "6841d7ace314113d4767e78f1eaff0ec015859cbdbb6e48c376b1f1d89e985e7",
+   "kind": "RL",
+   "v": 16,
+   "pick": 6,
+   "guarantee": 5,
+   "condition": 6,
+   "tickets": 281,
+   "coverage": 1.0
+  }
+ ]
+}

@@ -56,4 +56,7 @@ def scorer_semantics(config: dict) -> str:
             name = item.get("method") if isinstance(item, dict) else item
             if isinstance(name, str):
                 names.add(name)
-    return "|dmd-svd-ties1" if "dmd_forecast" in names else ""
+    suffix = "|dmd-svd-ties1" if "dmd_forecast" in names else ""
+    if "interval_extrema_k16" in names:
+        suffix += "|interval-days1"
+    return suffix

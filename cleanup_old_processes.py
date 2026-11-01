@@ -250,11 +250,15 @@ def _listen_pids(port: int) -> set[int]:
     return pids
 
 
-def _kill_pid(pid: int) -> bool:
+def _kill_pid(pid: int, *, expected_create_time: float | None = None) -> bool:
     import psutil
 
     try:
-        psutil.Process(pid).kill()
+        proc = psutil.Process(pid)
+        if expected_create_time is not None and proc.create_time() != expected_create_time:
+            return False
+        # Același obiect verifică reutilizarea PID și la kill().
+        proc.kill()
         return True
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
         return False
@@ -282,7 +286,9 @@ def _order_deepest_first(pids: set[int], procs: list[ProcView]) -> list[int]:
     return sorted(pids, key=depth, reverse=True)
 
 
-def kill_pid_tree(pid: int, *, dry_run: bool = False) -> list[int]:
+def kill_pid_tree(
+    pid: int, *, dry_run: bool = False, expected_create_time: float | None = None
+) -> list[int]:
     """Omoară un PID și TOT arborele lui de descendenți.
 
     Folosit acolo unde un singur `Process(pid).terminate()`/`kill()` lasă
@@ -300,14 +306,27 @@ def kill_pid_tree(pid: int, *, dry_run: bool = False) -> list[int]:
     omorî, în `dry_run`), copiii întâi.
     """
     procs = _snapshot()
+    if expected_create_time is not None:
+        root = next((p for p in procs if p.pid == pid), None)
+        if root is None or root.create_time != expected_create_time:
+            return []
+        # Fără momentul pornirii nu putem confirma niciun descendent și nici
+        # relația lui de filiație față de părintele din snapshot.
+        procs = [p for p in procs if p.create_time is not None]
     targets = expand_descendants({pid}, procs) - _keep_pids()
     ordered = _order_deepest_first(targets, procs)
+    created = {p.pid: p.create_time for p in procs}
     acted: list[int] = []
     for p in ordered:
         if dry_run:
             acted.append(p)
             continue
-        if _kill_pid(p):
+        ok = (
+            _kill_pid(p, expected_create_time=created[p])
+            if expected_create_time is not None
+            else _kill_pid(p)
+        )
+        if ok:
             acted.append(p)
     return acted
 
@@ -321,7 +340,7 @@ def kill_stale_project_processes(
 ) -> list[int]:
     root = Path(project_root) if project_root else Path(__file__).resolve().parent
     keep = _keep_pids()
-    procs = _snapshot()
+    procs = [p for p in _snapshot() if p.create_time is not None]
     listening = _listen_pids(port)
     stale = select_stale_pids(
         procs,
@@ -331,13 +350,16 @@ def kill_stale_project_processes(
         listen_pids=listening,
     )
     ordered = _order_deepest_first(stale, procs)
+    created = {p.pid: p.create_time for p in procs}
     acted: list[int] = []
     for pid in ordered:
+        if pid not in created:
+            continue  # fără identitate verificabilă nu putem opri procesul
         if dry_run:
             print(f"[CLEANUP] dry-run PID {pid}")
             acted.append(pid)
             continue
-        if _kill_pid(pid):
+        if _kill_pid(pid, expected_create_time=created[pid]):
             print(f"[CLEANUP] Oprit PID {pid}")
             acted.append(pid)
         else:
