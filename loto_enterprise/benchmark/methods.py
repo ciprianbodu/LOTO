@@ -4,7 +4,8 @@ Contract (AGENTS.md §4.2): ``fn(draws_2d, max_num) -> dict[int, float]``,
 scoruri în [0, 1], determinism, fără efecte secundare.
 
 Registry-ul conține cele două baseline-uri structurale (`random` — martorul
-benchmark-ului, interzis în producție; `frequency` — fallback-ul determinist
+benchmark-ului; din 2026-10-31 eligibil și în producție, cu pool
+nedeterminist; `frequency` — fallback-ul determinist
 de producție) și cele 50 de metode din modulele:
     methods_recency.py     16 metode: recență, goluri, serii de timp
     methods_relational.py  10 metode: tranziții, co-apariție, graf, vecinătate

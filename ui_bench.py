@@ -1016,8 +1016,8 @@ def _render_bench_leaderboard_slice(
                 else "text-bold"
             )
             _pref = (
-                "experimentală, exclusă din selecția automată · " if is_experimental
-                else "baseline aleator (referință, NU e candidat) · " if is_base and m == "random"
+                "experimentală, candidată la fel ca restul din 2026-10-31 · " if is_experimental
+                else "baseline aleator (referință de hazard) · " if is_base and m == "random"
                 else "martor exclus din producție (NU e candidat) · " if is_base else ""
             )
             avg_txt = "—" if pd.isna(avg) else f"{avg:.2f}"

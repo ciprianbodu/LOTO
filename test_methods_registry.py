@@ -22,7 +22,7 @@ def _dummy_fn(draws_2d, max_num):
 
 
 def test_registry_has_two_baselines_fifty_methods_and_one_experiment():
-    """Baseline-uri + metodele existente + un experiment exclus din productie."""
+    """Baseline-uri + metodele existente + un experiment eligibil în producție din 2026-10-31."""
     assert len(methods.METHODS) == 53
     assert "random" in methods.METHODS and "frequency" in methods.METHODS
     assert len(methods.list_methods()) == 53

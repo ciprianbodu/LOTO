@@ -263,7 +263,7 @@ RELATIONAL_METHODS = make_registry(
         ("pair_lift_last", score_pair_lift_last, "cooccurrence", "lift-ul perechilor spre ultima extragere (plat pe 1 bilă)"),
         ("pagerank_cooc", score_pagerank_cooc, "graph", "PageRank pe graful de co-apariție; o extragere e o clică, deci urmează frecvența ponderată recent (înjumătățire 200)"),
         ("knn_draw_similarity", score_knn_draw_similarity, "similarity", "ce a urmat după cele 40 de extrageri cele mai asemănătoare"),
-        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "filtru spațial: vecinii ±1/±2 ai ultimei extrageri (exclus din producție)"),
+        ("neighbor_adjacent", score_neighbor_adjacent, "structure", "filtru spațial: vecinii ±1/±2 ai ultimei extrageri (în producție din 2026-10-31; top-K cu formă geometrică)"),
     ]
 )
 
