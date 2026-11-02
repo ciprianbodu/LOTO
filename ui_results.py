@@ -294,6 +294,11 @@ def _render_cost(game: str, data: dict) -> None:
             ui.markdown(f"💡 **Cost la agenție:** {_none}").classes("text-info")
 
     variants = data.get("variants") or []
+    journal = data.get("prospective_ledger") or {}
+    if journal.get("status") == "recording_failed":
+        ui.label(f"Registrul prospectiv nu a fost scris: {journal.get('error', 'eroare necunoscută')}").classes("text-caption text-negative")
+    elif journal.get("record_id"):
+        ui.label(f"Variante păstrate în registru: {journal['record_id']}. Fixează extragerea viitoare în Analiză & Clasament pentru evaluare prospectivă.").classes("text-caption")
     if variants:
         n_simple = min(_simple_variants_count(), len(variants))
         # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de

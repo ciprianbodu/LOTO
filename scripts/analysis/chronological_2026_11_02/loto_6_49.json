@@ -1,0 +1,6092 @@
+{
+  "schema": "chronological_selection_v1",
+  "protocol": {
+    "game": "loto_6_49",
+    "budget": 64,
+    "parameters": [
+      {
+        "pool_size": 16,
+        "lookback": 0,
+        "guarantee": 6,
+        "wheel_condition": null,
+        "max_consecutive_run": 0,
+        "recent_penalty_draws": 0,
+        "recent_penalty_factor": 0.5,
+        "restrict_base_min": 0,
+        "restrict_base_max": 0,
+        "wheel_method": "hitcover"
+      },
+      {
+        "pool_size": 16,
+        "lookback": 100,
+        "guarantee": 6,
+        "wheel_condition": null,
+        "max_consecutive_run": 0,
+        "recent_penalty_draws": 0,
+        "recent_penalty_factor": 0.5,
+        "restrict_base_min": 0,
+        "restrict_base_max": 0,
+        "wheel_method": "hitcover"
+      }
+    ],
+    "objective": "4plus",
+    "hit_target": 4,
+    "inner_draws": 30,
+    "minimum_training": 30,
+    "variant_price_bani": 800,
+    "ticket_fees_bani": 0,
+    "probability_samples": 10000,
+    "design_samples": 4000,
+    "universe_proposals": 128,
+    "seed": 104729
+  },
+  "protocol_sha256": "f80e770ff58b16ef0e0add24a5dfdfe9b081065a9feeec0391d075001c4b1f17",
+  "registry": [
+    "anti_cooc_last",
+    "ar_ls_pooled",
+    "autocorr_lag",
+    "cooc_last3",
+    "croston_interval",
+    "cusum_burst",
+    "dmd_forecast",
+    "drift_linear",
+    "ewma_cold_hl30",
+    "ewma_hl30",
+    "freq_window_200",
+    "freq_window_50",
+    "frequency",
+    "gap_current",
+    "gap_hazard",
+    "gap_ratio",
+    "gbm_stumps_pooled",
+    "haar_multiscale",
+    "hawkes_cross",
+    "holt_forecast",
+    "hot_consistency",
+    "hurst_persistence",
+    "imapa_agg",
+    "interval_extrema_k16",
+    "knn_draw_similarity",
+    "knn_feature_pooled",
+    "knn_pattern_self",
+    "logit_pooled_feats",
+    "markov_lag2",
+    "markov_pairs",
+    "markov_self_state",
+    "momentum_30_300",
+    "naive_bayes_last",
+    "nb_lags_pooled",
+    "neighbor_adjacent",
+    "online_logit_sgd",
+    "pagerank_cooc",
+    "pair_lift_last",
+    "pair_transition",
+    "random",
+    "rank_ensemble_core",
+    "repeat_last_draw",
+    "rhythm_phase",
+    "ridge_pooled_feats",
+    "runs_persistence",
+    "rwr_last_draw",
+    "season_period2",
+    "ses_opt_alpha",
+    "spectral_phase",
+    "ssa_forecast",
+    "theta_drift",
+    "vlmm_self_k3",
+    "weighted_recent_linear"
+  ],
+  "registry_sha256": "8bccdadcf0bf6bc8d3f6aacb989e43a8fdb255b6da6f0e05b00ddd4d088c137e",
+  "universe_search": {
+    "objective": "4plus",
+    "algorithm": "sample_coordinate_search_v1",
+    "seed": 104729,
+    "design_samples": 4000,
+    "proposals": 128,
+    "accepted": 44,
+    "design_covered_before": 254,
+    "design_covered_after": 345,
+    "global_optimum": false
+  },
+  "selection_validation": "nested_chronological_procedure",
+  "inference": "retrospective_replay_no_demonstrated_predictive_advantage",
+  "interval_scope": "MC intervals measure sampling error; historical frequency intervals are descriptive, not independent predictive tests",
+  "financial_note": "Missing prize amounts/fees are unknown, never zero. Published prizes are gross estimates before tax and may change with additional winners.",
+  "method_failures": {
+    "('interval_extrema_k16', 2565, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2566, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2567, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2568, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2569, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2570, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2571, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2572, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2573, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2574, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2575, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2576, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2577, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2578, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2579, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2580, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2581, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2582, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2584, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2585, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2586, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2587, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2588, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2589, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2590, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2591, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2592, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2593, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2594, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2595, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2596, 100, False)": "ValueError: empty, flat or non-finite scores"
+  },
+  "summary": {
+    "pool": {
+      "any_prize_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "4plus_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "cost_recovery_frequency_known_only": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "financially_resolved_draws": 3,
+      "financially_missing_draws": 0,
+      "variant_cost_bani": 153600,
+      "full_cost_bani": 153600,
+      "gross_bani": 0,
+      "net_bani": -153600
+    },
+    "universe": {
+      "any_prize_frequency": {
+        "successes": 3,
+        "samples": 3,
+        "probability": 1.0,
+        "ci95": [
+          0.4385029682449546,
+          1.0
+        ]
+      },
+      "4plus_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "cost_recovery_frequency_known_only": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "financially_resolved_draws": 3,
+      "financially_missing_draws": 0,
+      "variant_cost_bani": 153600,
+      "full_cost_bani": 153600,
+      "gross_bani": 20000,
+      "net_bani": -133600
+    },
+    "random_reference": {
+      "any_prize_frequency": {
+        "successes": 2,
+        "samples": 3,
+        "probability": 0.6666666666666666,
+        "ci95": [
+          0.2076596008020477,
+          0.9385080552796037
+        ]
+      },
+      "4plus_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "cost_recovery_frequency_known_only": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "financially_resolved_draws": 3,
+      "financially_missing_draws": 0,
+      "variant_cost_bani": 153600,
+      "full_cost_bani": 153600,
+      "gross_bani": 10000,
+      "net_bani": -143600
+    }
+  },
+  "rows": [
+    {
+      "target_index": 2595,
+      "target_date": "2026-10-25",
+      "numbers": [
+        39,
+        10,
+        33,
+        27,
+        29,
+        28
+      ],
+      "joker": null,
+      "selection": {
+        "pool": [
+          6,
+          9,
+          11,
+          16,
+          21,
+          25,
+          26,
+          27,
+          35,
+          37,
+          41,
+          43,
+          44,
+          45,
+          46,
+          47
+        ],
+        "method": "gap_ratio",
+        "joker_method": null,
+        "parameters": {
+          "pool_size": 16,
+          "lookback": 100,
+          "guarantee": 6,
+          "wheel_condition": null,
+          "max_consecutive_run": 0,
+          "recent_penalty_draws": 0,
+          "recent_penalty_factor": 0.5,
+          "restrict_base_min": 0,
+          "restrict_base_max": 0,
+          "wheel_method": "hitcover"
+        },
+        "wheel": {
+          "wheel_variants": 64,
+          "top_up": 0,
+          "coverage_before_top_up_pct": 0.8,
+          "method": "hitcover"
+        },
+        "filters": {
+          "timesfm_predictions": {
+            "26": 1.0,
+            "35": 0.639755,
+            "45": 0.46051,
+            "47": 0.423421,
+            "25": 0.419054,
+            "11": 0.38209,
+            "21": 0.365545,
+            "27": 0.330622,
+            "44": 0.326758,
+            "16": 0.305394,
+            "41": 0.291897,
+            "46": 0.25592,
+            "9": 0.251,
+            "6": 0.230026,
+            "37": 0.216788,
+            "43": 0.208869,
+            "18": 0.203566,
+            "2": 0.172196,
+            "32": 0.167053,
+            "15": 0.147507,
+            "20": 0.125564,
+            "28": 0.116292,
+            "48": 0.1124,
+            "30": 0.105495,
+            "10": 0.104631
+          },
+          "pool_selection": "top_score_pure",
+          "pool_selection_note": "top-N după scorul final, cu departajarea canonică",
+          "pool_score_unique_levels": 49,
+          "pool_longest_consecutive_run": 5,
+          "pool_is_consecutive_block": false
+        },
+        "training_end_exclusive": 2595,
+        "training_last_date": "2026-10-22",
+        "inner_indices": [
+          2565,
+          2566,
+          2567,
+          2568,
+          2569,
+          2570,
+          2571,
+          2572,
+          2573,
+          2574,
+          2575,
+          2576,
+          2577,
+          2578,
+          2579,
+          2580,
+          2581,
+          2582,
+          2583,
+          2584,
+          2585,
+          2586,
+          2587,
+          2588,
+          2589,
+          2590,
+          2591,
+          2592,
+          2593,
+          2594
+        ],
+        "selection_last_date": "2026-10-22",
+        "decision": {
+          "scorer": "gap_ratio",
+          "ensemble": [
+            {
+              "method": "gap_ratio",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 2.2666666666666666,
+          "avg_hits_with_blacklist": null,
+          "rationale": "gap_ratio: rată 4+ @ k16 = 0.183 (Wilson_lb=0.118), beat random (hipergeometric 0.0796) in 3/4 windows on the same 4+ target (lift +0.1037); din 14 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 39 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_4plus_k16",
+          "rate_col_mismatch": false,
+          "hit_target": 4,
+          "target_label": "4+",
+          "qualifying_methods": 14,
+          "ranked_methods": [
+            "gap_ratio",
+            "croston_interval",
+            "gap_hazard",
+            "logit_pooled_feats",
+            "rwr_last_draw",
+            "vlmm_self_k3",
+            "dmd_forecast",
+            "markov_self_state",
+            "markov_lag2",
+            "ridge_pooled_feats",
+            "spectral_phase",
+            "weighted_recent_linear",
+            "ewma_cold_hl30",
+            "frequency"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 39,
+            "p_value": 0.085916,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.07960001762036914,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.06667,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "ar_ls_pooled",
+              "tiebreak_fraction": 0.983
+            },
+            {
+              "method": "cooc_last3",
+              "tiebreak_fraction": 0.781
+            },
+            {
+              "method": "freq_window_200",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "gap_current",
+              "tiebreak_fraction": 0.611
+            },
+            {
+              "method": "gbm_stumps_pooled",
+              "tiebreak_fraction": 0.578
+            },
+            {
+              "method": "haar_multiscale",
+              "tiebreak_fraction": 0.792
+            },
+            {
+              "method": "hot_consistency",
+              "tiebreak_fraction": 0.808
+            },
+            {
+              "method": "knn_draw_similarity",
+              "tiebreak_fraction": 0.717
+            },
+            {
+              "method": "knn_feature_pooled",
+              "tiebreak_fraction": 0.544
+            },
+            {
+              "method": "nb_lags_pooled",
+              "tiebreak_fraction": 0.694
+            },
+            {
+              "method": "repeat_last_draw",
+              "tiebreak_fraction": 0.864
+            },
+            {
+              "method": "season_period2",
+              "tiebreak_fraction": 1.0
+            }
+          ]
+        },
+        "joker_decision": null,
+        "inner_objective_successes": 3,
+        "rejected_parameters": [],
+        "candidate_parameter_scores": [
+          {
+            "parameters": {
+              "pool_size": 16,
+              "lookback": 0,
+              "guarantee": 6,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          },
+          {
+            "parameters": {
+              "pool_size": 16,
+              "lookback": 100,
+              "guarantee": 6,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 3
+          }
+        ],
+        "tickets_sha256": "9e5d76fca85ee8b2382b15c951e48c0fe4852dc2efdeaf12b7d2b97c8ad4e65c"
+      },
+      "tickets": {
+        "pool": [
+          [
+            11,
+            25,
+            26,
+            35,
+            45,
+            47
+          ],
+          [
+            21,
+            26,
+            27,
+            35,
+            44,
+            45
+          ],
+          [
+            9,
+            16,
+            21,
+            26,
+            35,
+            47
+          ],
+          [
+            16,
+            26,
+            35,
+            41,
+            45,
+            46
+          ],
+          [
+            21,
+            25,
+            26,
+            35,
+            37,
+            41
+          ],
+          [
+            6,
+            26,
+            27,
+            35,
+            41,
+            47
+          ],
+          [
+            16,
+            25,
+            26,
+            27,
+            35,
+            43
+          ],
+          [
+            9,
+            11,
+            26,
+            35,
+            41,
+            44
+          ],
+          [
+            6,
+            11,
+            21,
+            26,
+            35,
+            46
+          ],
+          [
+            26,
+            35,
+            37,
+            44,
+            46,
+            47
+          ],
+          [
+            6,
+            9,
+            26,
+            35,
+            37,
+            45
+          ],
+          [
+            21,
+            25,
+            26,
+            27,
+            46,
+            47
+          ],
+          [
+            6,
+            16,
+            21,
+            25,
+            26,
+            45
+          ],
+          [
+            16,
+            25,
+            26,
+            41,
+            44,
+            47
+          ],
+          [
+            9,
+            25,
+            26,
+            27,
+            41,
+            45
+          ],
+          [
+            21,
+            26,
+            41,
+            43,
+            45,
+            47
+          ],
+          [
+            16,
+            26,
+            27,
+            37,
+            45,
+            47
+          ],
+          [
+            11,
+            16,
+            21,
+            26,
+            27,
+            41
+          ],
+          [
+            11,
+            25,
+            26,
+            27,
+            37,
+            44
+          ],
+          [
+            25,
+            26,
+            43,
+            44,
+            45,
+            46
+          ],
+          [
+            6,
+            11,
+            26,
+            27,
+            43,
+            45
+          ],
+          [
+            11,
+            16,
+            26,
+            43,
+            46,
+            47
+          ],
+          [
+            9,
+            26,
+            27,
+            43,
+            44,
+            47
+          ],
+          [
+            6,
+            9,
+            25,
+            26,
+            43,
+            47
+          ],
+          [
+            9,
+            16,
+            25,
+            26,
+            37,
+            46
+          ],
+          [
+            9,
+            11,
+            21,
+            26,
+            37,
+            43
+          ],
+          [
+            6,
+            9,
+            21,
+            26,
+            41,
+            46
+          ],
+          [
+            6,
+            16,
+            35,
+            44,
+            45,
+            47
+          ],
+          [
+            11,
+            16,
+            21,
+            35,
+            37,
+            45
+          ],
+          [
+            9,
+            27,
+            35,
+            45,
+            46,
+            47
+          ],
+          [
+            11,
+            21,
+            27,
+            35,
+            43,
+            47
+          ],
+          [
+            9,
+            21,
+            25,
+            35,
+            43,
+            45
+          ],
+          [
+            11,
+            16,
+            25,
+            35,
+            44,
+            46
+          ],
+          [
+            25,
+            27,
+            35,
+            37,
+            45,
+            46
+          ],
+          [
+            26,
+            27,
+            37,
+            41,
+            43,
+            46
+          ],
+          [
+            6,
+            16,
+            26,
+            37,
+            43,
+            44
+          ],
+          [
+            6,
+            21,
+            35,
+            41,
+            44,
+            47
+          ],
+          [
+            6,
+            9,
+            11,
+            25,
+            27,
+            35
+          ],
+          [
+            25,
+            35,
+            41,
+            43,
+            46,
+            47
+          ],
+          [
+            11,
+            27,
+            41,
+            44,
+            45,
+            47
+          ],
+          [
+            21,
+            25,
+            37,
+            44,
+            45,
+            47
+          ],
+          [
+            11,
+            21,
+            25,
+            41,
+            45,
+            46
+          ],
+          [
+            35,
+            37,
+            41,
+            43,
+            44,
+            45
+          ],
+          [
+            6,
+            9,
+            11,
+            21,
+            45,
+            47
+          ],
+          [
+            9,
+            16,
+            27,
+            35,
+            37,
+            44
+          ],
+          [
+            6,
+            11,
+            16,
+            35,
+            41,
+            43
+          ],
+          [
+            6,
+            27,
+            35,
+            37,
+            43,
+            47
+          ],
+          [
+            9,
+            11,
+            35,
+            37,
+            41,
+            46
+          ],
+          [
+            6,
+            11,
+            16,
+            25,
+            37,
+            47
+          ],
+          [
+            21,
+            25,
+            27,
+            41,
+            43,
+            44
+          ],
+          [
+            9,
+            11,
+            16,
+            43,
+            44,
+            45
+          ],
+          [
+            6,
+            11,
+            21,
+            25,
+            43,
+            44
+          ],
+          [
+            16,
+            21,
+            27,
+            43,
+            45,
+            46
+          ],
+          [
+            6,
+            9,
+            35,
+            43,
+            44,
+            46
+          ],
+          [
+            9,
+            11,
+            21,
+            27,
+            44,
+            46
+          ],
+          [
+            16,
+            25,
+            37,
+            41,
+            43,
+            45
+          ],
+          [
+            9,
+            21,
+            27,
+            37,
+            41,
+            47
+          ],
+          [
+            6,
+            37,
+            41,
+            45,
+            46,
+            47
+          ],
+          [
+            6,
+            11,
+            37,
+            44,
+            45,
+            46
+          ],
+          [
+            6,
+            9,
+            16,
+            27,
+            41,
+            45
+          ],
+          [
+            6,
+            16,
+            25,
+            27,
+            44,
+            46
+          ],
+          [
+            16,
+            21,
+            37,
+            41,
+            44,
+            46
+          ],
+          [
+            6,
+            9,
+            25,
+            37,
+            41,
+            44
+          ],
+          [
+            6,
+            21,
+            25,
+            37,
+            43,
+            46
+          ]
+        ],
+        "universe": [
+          [
+            3,
+            12,
+            16,
+            24,
+            27,
+            44
+          ],
+          [
+            4,
+            10,
+            14,
+            31,
+            42,
+            46
+          ],
+          [
+            2,
+            5,
+            10,
+            14,
+            29,
+            34
+          ],
+          [
+            1,
+            8,
+            29,
+            31,
+            42,
+            47
+          ],
+          [
+            5,
+            17,
+            20,
+            36,
+            37,
+            41
+          ],
+          [
+            1,
+            12,
+            32,
+            33,
+            35,
+            41
+          ],
+          [
+            1,
+            3,
+            14,
+            26,
+            38,
+            44
+          ],
+          [
+            9,
+            20,
+            21,
+            28,
+            32,
+            35
+          ],
+          [
+            2,
+            4,
+            16,
+            18,
+            27,
+            36
+          ],
+          [
+            5,
+            17,
+            31,
+            33,
+            34,
+            44
+          ],
+          [
+            2,
+            8,
+            11,
+            14,
+            20,
+            24
+          ],
+          [
+            5,
+            16,
+            20,
+            24,
+            26,
+            28
+          ],
+          [
+            2,
+            10,
+            17,
+            29,
+            31,
+            35
+          ],
+          [
+            2,
+            10,
+            20,
+            24,
+            31,
+            46
+          ],
+          [
+            3,
+            5,
+            14,
+            16,
+            24,
+            35
+          ],
+          [
+            3,
+            5,
+            19,
+            30,
+            41,
+            45
+          ],
+          [
+            20,
+            23,
+            30,
+            40,
+            44,
+            46
+          ],
+          [
+            10,
+            17,
+            23,
+            25,
+            34,
+            47
+          ],
+          [
+            3,
+            9,
+            13,
+            31,
+            37,
+            38
+          ],
+          [
+            3,
+            13,
+            16,
+            19,
+            29,
+            33
+          ],
+          [
+            8,
+            14,
+            19,
+            23,
+            35,
+            47
+          ],
+          [
+            3,
+            24,
+            37,
+            43,
+            45,
+            49
+          ],
+          [
+            4,
+            5,
+            14,
+            27,
+            41,
+            46
+          ],
+          [
+            4,
+            7,
+            9,
+            11,
+            15,
+            34
+          ],
+          [
+            11,
+            12,
+            20,
+            22,
+            36,
+            42
+          ],
+          [
+            4,
+            13,
+            22,
+            30,
+            38,
+            45
+          ],
+          [
+            24,
+            28,
+            30,
+            34,
+            39,
+            45
+          ],
+          [
+            4,
+            22,
+            26,
+            41,
+            42,
+            49
+          ],
+          [
+            4,
+            9,
+            25,
+            30,
+            35,
+            45
+          ],
+          [
+            5,
+            10,
+            15,
+            25,
+            26,
+            41
+          ],
+          [
+            5,
+            13,
+            20,
+            21,
+            32,
+            44
+          ],
+          [
+            2,
+            6,
+            8,
+            23,
+            41,
+            42
+          ],
+          [
+            9,
+            10,
+            14,
+            16,
+            37,
+            49
+          ],
+          [
+            6,
+            10,
+            13,
+            16,
+            24,
+            49
+          ],
+          [
+            6,
+            11,
+            15,
+            30,
+            37,
+            43
+          ],
+          [
+            3,
+            5,
+            12,
+            20,
+            22,
+            29
+          ],
+          [
+            2,
+            7,
+            16,
+            30,
+            34,
+            38
+          ],
+          [
+            6,
+            14,
+            26,
+            27,
+            41,
+            48
+          ],
+          [
+            9,
+            11,
+            13,
+            15,
+            28,
+            42
+          ],
+          [
+            8,
+            22,
+            24,
+            35,
+            38,
+            39
+          ],
+          [
+            7,
+            14,
+            15,
+            22,
+            29,
+            38
+          ],
+          [
+            17,
+            31,
+            36,
+            39,
+            42,
+            44
+          ],
+          [
+            1,
+            3,
+            4,
+            28,
+            34,
+            44
+          ],
+          [
+            2,
+            27,
+            34,
+            35,
+            39,
+            45
+          ],
+          [
+            8,
+            17,
+            24,
+            25,
+            26,
+            44
+          ],
+          [
+            9,
+            12,
+            17,
+            26,
+            30,
+            39
+          ],
+          [
+            9,
+            12,
+            21,
+            26,
+            28,
+            49
+          ],
+          [
+            1,
+            10,
+            30,
+            33,
+            37,
+            45
+          ],
+          [
+            3,
+            4,
+            24,
+            47,
+            48,
+            49
+          ],
+          [
+            8,
+            12,
+            17,
+            32,
+            37,
+            49
+          ],
+          [
+            11,
+            12,
+            18,
+            21,
+            42,
+            47
+          ],
+          [
+            12,
+            14,
+            18,
+            26,
+            29,
+            47
+          ],
+          [
+            3,
+            5,
+            16,
+            18,
+            43,
+            44
+          ],
+          [
+            9,
+            13,
+            23,
+            32,
+            47,
+            48
+          ],
+          [
+            15,
+            16,
+            20,
+            27,
+            31,
+            33
+          ],
+          [
+            15,
+            16,
+            21,
+            22,
+            41,
+            47
+          ],
+          [
+            7,
+            9,
+            10,
+            14,
+            29,
+            37
+          ],
+          [
+            16,
+            19,
+            32,
+            33,
+            42,
+            47
+          ],
+          [
+            1,
+            13,
+            25,
+            30,
+            38,
+            48
+          ],
+          [
+            11,
+            13,
+            20,
+            30,
+            33,
+            45
+          ],
+          [
+            20,
+            25,
+            29,
+            34,
+            46,
+            49
+          ],
+          [
+            21,
+            23,
+            25,
+            27,
+            36,
+            46
+          ],
+          [
+            24,
+            30,
+            38,
+            40,
+            44,
+            47
+          ],
+          [
+            17,
+            26,
+            27,
+            28,
+            33,
+            36
+          ]
+        ],
+        "random_reference": [
+          [
+            1,
+            3,
+            6,
+            24,
+            41,
+            42
+          ],
+          [
+            1,
+            3,
+            12,
+            23,
+            36,
+            46
+          ],
+          [
+            1,
+            3,
+            17,
+            19,
+            24,
+            41
+          ],
+          [
+            1,
+            4,
+            6,
+            12,
+            17,
+            47
+          ],
+          [
+            1,
+            5,
+            7,
+            23,
+            29,
+            39
+          ],
+          [
+            1,
+            5,
+            11,
+            16,
+            21,
+            29
+          ],
+          [
+            1,
+            6,
+            21,
+            33,
+            34,
+            43
+          ],
+          [
+            1,
+            14,
+            24,
+            27,
+            30,
+            43
+          ],
+          [
+            1,
+            21,
+            24,
+            33,
+            34,
+            35
+          ],
+          [
+            2,
+            9,
+            20,
+            21,
+            24,
+            28
+          ],
+          [
+            2,
+            11,
+            14,
+            36,
+            41,
+            46
+          ],
+          [
+            2,
+            12,
+            13,
+            30,
+            38,
+            44
+          ],
+          [
+            2,
+            21,
+            22,
+            26,
+            33,
+            43
+          ],
+          [
+            3,
+            9,
+            31,
+            33,
+            37,
+            49
+          ],
+          [
+            3,
+            20,
+            24,
+            28,
+            30,
+            43
+          ],
+          [
+            3,
+            27,
+            28,
+            30,
+            32,
+            46
+          ],
+          [
+            4,
+            5,
+            7,
+            20,
+            24,
+            36
+          ],
+          [
+            4,
+            6,
+            24,
+            26,
+            33,
+            40
+          ],
+          [
+            4,
+            8,
+            20,
+            29,
+            35,
+            38
+          ],
+          [
+            4,
+            15,
+            27,
+            35,
+            37,
+            49
+          ],
+          [
+            4,
+            20,
+            25,
+            42,
+            46,
+            49
+          ],
+          [
+            5,
+            7,
+            16,
+            31,
+            39,
+            47
+          ],
+          [
+            5,
+            8,
+            12,
+            13,
+            15,
+            28
+          ],
+          [
+            5,
+            8,
+            16,
+            22,
+            30,
+            38
+          ],
+          [
+            5,
+            10,
+            14,
+            24,
+            38,
+            41
+          ],
+          [
+            5,
+            13,
+            15,
+            26,
+            28,
+            43
+          ],
+          [
+            5,
+            15,
+            30,
+            34,
+            36,
+            47
+          ],
+          [
+            5,
+            34,
+            38,
+            40,
+            44,
+            49
+          ],
+          [
+            6,
+            8,
+            21,
+            33,
+            34,
+            37
+          ],
+          [
+            6,
+            12,
+            21,
+            32,
+            44,
+            48
+          ],
+          [
+            7,
+            10,
+            11,
+            13,
+            16,
+            17
+          ],
+          [
+            7,
+            11,
+            16,
+            34,
+            48,
+            49
+          ],
+          [
+            7,
+            12,
+            27,
+            29,
+            40,
+            43
+          ],
+          [
+            7,
+            14,
+            23,
+            30,
+            41,
+            45
+          ],
+          [
+            8,
+            9,
+            11,
+            34,
+            38,
+            48
+          ],
+          [
+            8,
+            10,
+            23,
+            30,
+            42,
+            43
+          ],
+          [
+            8,
+            11,
+            22,
+            24,
+            25,
+            29
+          ],
+          [
+            8,
+            11,
+            32,
+            40,
+            46,
+            47
+          ],
+          [
+            8,
+            12,
+            13,
+            23,
+            25,
+            39
+          ],
+          [
+            8,
+            13,
+            16,
+            27,
+            30,
+            46
+          ],
+          [
+            8,
+            18,
+            23,
+            42,
+            48,
+            49
+          ],
+          [
+            9,
+            39,
+            42,
+            44,
+            46,
+            48
+          ],
+          [
+            10,
+            11,
+            15,
+            28,
+            37,
+            42
+          ],
+          [
+            10,
+            13,
+            18,
+            28,
+            36,
+            45
+          ],
+          [
+            10,
+            15,
+            20,
+            30,
+            35,
+            47
+          ],
+          [
+            10,
+            15,
+            25,
+            30,
+            32,
+            34
+          ],
+          [
+            12,
+            15,
+            25,
+            32,
+            34,
+            41
+          ],
+          [
+            12,
+            23,
+            24,
+            27,
+            33,
+            35
+          ],
+          [
+            12,
+            27,
+            32,
+            34,
+            38,
+            45
+          ],
+          [
+            12,
+            30,
+            32,
+            34,
+            39,
+            46
+          ],
+          [
+            13,
+            17,
+            21,
+            26,
+            29,
+            42
+          ],
+          [
+            13,
+            17,
+            24,
+            38,
+            39,
+            41
+          ],
+          [
+            13,
+            18,
+            22,
+            27,
+            45,
+            49
+          ],
+          [
+            14,
+            16,
+            23,
+            24,
+            31,
+            37
+          ],
+          [
+            14,
+            20,
+            31,
+            32,
+            39,
+            42
+          ],
+          [
+            15,
+            17,
+            25,
+            38,
+            42,
+            43
+          ],
+          [
+            15,
+            26,
+            27,
+            38,
+            40,
+            49
+          ],
+          [
+            16,
+            22,
+            34,
+            39,
+            45,
+            49
+          ],
+          [
+            19,
+            22,
+            26,
+            40,
+            42,
+            43
+          ],
+          [
+            19,
+            22,
+            28,
+            29,
+            36,
+            49
+          ],
+          [
+            20,
+            21,
+            41,
+            43,
+            45,
+            48
+          ],
+          [
+            21,
+            30,
+            31,
+            34,
+            43,
+            48
+          ],
+          [
+            23,
+            27,
+            34,
+            35,
+            48,
+            49
+          ],
+          [
+            29,
+            33,
+            34,
+            45,
+            46,
+            49
+          ]
+        ]
+      },
+      "probabilities": {
+        "pool": {
+          "any_prize": {
+            "successes": 3042,
+            "samples": 10000,
+            "probability": 0.3042,
+            "ci95": [
+              0.2952594420731085,
+              0.3132909316888485
+            ]
+          },
+          "4plus": {
+            "successes": 474,
+            "samples": 10000,
+            "probability": 0.0474,
+            "ci95": [
+              0.04340618728991059,
+              0.051741408035225846
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "universe": {
+          "any_prize": {
+            "successes": 7008,
+            "samples": 10000,
+            "probability": 0.7008,
+            "ci95": [
+              0.6917494613380281,
+              0.7096963249163081
+            ]
+          },
+          "4plus": {
+            "successes": 576,
+            "samples": 10000,
+            "probability": 0.0576,
+            "ci95": [
+              0.05320116648345306,
+              0.06233859527492157
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "random_reference": {
+          "any_prize": {
+            "successes": 6973,
+            "samples": 10000,
+            "probability": 0.6973,
+            "ci95": [
+              0.6882210534207929,
+              0.7062274208221382
+            ]
+          },
+          "4plus": {
+            "successes": 592,
+            "samples": 10000,
+            "probability": 0.0592,
+            "ci95": [
+              0.05474156957770626,
+              0.06399696338588222
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        }
+      },
+      "outcomes": {
+        "pool": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 1,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 0,
+          "net_bani": -51200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "universe": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 5000,
+          "net_bani": -46200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "IV": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "random_reference": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 2,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 0,
+          "net_bani": -51200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        }
+      }
+    },
+    {
+      "target_index": 2596,
+      "target_date": "2026-10-29",
+      "numbers": [
+        42,
+        45,
+        34,
+        30,
+        40,
+        7
+      ],
+      "joker": null,
+      "selection": {
+        "pool": [
+          6,
+          9,
+          11,
+          16,
+          18,
+          21,
+          25,
+          26,
+          35,
+          37,
+          41,
+          43,
+          44,
+          45,
+          46,
+          47
+        ],
+        "method": "gap_ratio",
+        "joker_method": null,
+        "parameters": {
+          "pool_size": 16,
+          "lookback": 100,
+          "guarantee": 6,
+          "wheel_condition": null,
+          "max_consecutive_run": 0,
+          "recent_penalty_draws": 0,
+          "recent_penalty_factor": 0.5,
+          "restrict_base_min": 0,
+          "restrict_base_max": 0,
+          "wheel_method": "hitcover"
+        },
+        "wheel": {
+          "wheel_variants": 64,
+          "top_up": 0,
+          "coverage_before_top_up_pct": 0.8,
+          "method": "hitcover"
+        },
+        "filters": {
+          "timesfm_predictions": {
+            "26": 1.0,
+            "35": 0.643317,
+            "45": 0.466421,
+            "25": 0.431438,
+            "47": 0.421541,
+            "11": 0.39879,
+            "21": 0.389963,
+            "16": 0.325616,
+            "44": 0.323503,
+            "41": 0.308479,
+            "46": 0.27269,
+            "6": 0.250904,
+            "9": 0.233603,
+            "43": 0.233388,
+            "37": 0.227098,
+            "18": 0.221955,
+            "2": 0.190856,
+            "32": 0.189315,
+            "15": 0.167137,
+            "20": 0.146742,
+            "48": 0.131379,
+            "30": 0.123321,
+            "12": 0.120083,
+            "40": 0.118897,
+            "14": 0.115473
+          },
+          "pool_selection": "top_score_pure",
+          "pool_selection_note": "top-N după scorul final, cu departajarea canonică",
+          "pool_score_unique_levels": 49,
+          "pool_longest_consecutive_run": 5,
+          "pool_is_consecutive_block": false
+        },
+        "training_end_exclusive": 2596,
+        "training_last_date": "2026-10-25",
+        "inner_indices": [
+          2566,
+          2567,
+          2568,
+          2569,
+          2570,
+          2571,
+          2572,
+          2573,
+          2574,
+          2575,
+          2576,
+          2577,
+          2578,
+          2579,
+          2580,
+          2581,
+          2582,
+          2583,
+          2584,
+          2585,
+          2586,
+          2587,
+          2588,
+          2589,
+          2590,
+          2591,
+          2592,
+          2593,
+          2594,
+          2595
+        ],
+        "selection_last_date": "2026-10-25",
+        "decision": {
+          "scorer": "gap_ratio",
+          "ensemble": [
+            {
+              "method": "gap_ratio",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 2.2666666666666666,
+          "avg_hits_with_blacklist": null,
+          "rationale": "gap_ratio: rată 4+ @ k16 = 0.183 (Wilson_lb=0.118), beat random (hipergeometric 0.0796) in 3/4 windows on the same 4+ target (lift +0.1037); din 14 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 39 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_4plus_k16",
+          "rate_col_mismatch": false,
+          "hit_target": 4,
+          "target_label": "4+",
+          "qualifying_methods": 14,
+          "ranked_methods": [
+            "gap_ratio",
+            "ewma_cold_hl30",
+            "croston_interval",
+            "gap_hazard",
+            "logit_pooled_feats",
+            "dmd_forecast",
+            "markov_lag2",
+            "ridge_pooled_feats",
+            "rwr_last_draw",
+            "spectral_phase",
+            "vlmm_self_k3",
+            "weighted_recent_linear",
+            "frequency",
+            "markov_self_state"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 39,
+            "p_value": 0.085916,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.07960001762036914,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.06667,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "ar_ls_pooled",
+              "tiebreak_fraction": 0.992
+            },
+            {
+              "method": "cooc_last3",
+              "tiebreak_fraction": 0.781
+            },
+            {
+              "method": "freq_window_200",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "gap_current",
+              "tiebreak_fraction": 0.653
+            },
+            {
+              "method": "gbm_stumps_pooled",
+              "tiebreak_fraction": 0.586
+            },
+            {
+              "method": "haar_multiscale",
+              "tiebreak_fraction": 0.792
+            },
+            {
+              "method": "hot_consistency",
+              "tiebreak_fraction": 0.817
+            },
+            {
+              "method": "knn_draw_similarity",
+              "tiebreak_fraction": 0.667
+            },
+            {
+              "method": "knn_feature_pooled",
+              "tiebreak_fraction": 0.508
+            },
+            {
+              "method": "nb_lags_pooled",
+              "tiebreak_fraction": 0.703
+            },
+            {
+              "method": "repeat_last_draw",
+              "tiebreak_fraction": 0.878
+            },
+            {
+              "method": "season_period2",
+              "tiebreak_fraction": 1.0
+            }
+          ]
+        },
+        "joker_decision": null,
+        "inner_objective_successes": 3,
+        "rejected_parameters": [],
+        "candidate_parameter_scores": [
+          {
+            "parameters": {
+              "pool_size": 16,
+              "lookback": 0,
+              "guarantee": 6,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          },
+          {
+            "parameters": {
+              "pool_size": 16,
+              "lookback": 100,
+              "guarantee": 6,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 3
+          }
+        ],
+        "tickets_sha256": "0adb00793d5c58981bd9c296f88fd30a6ddfba6a60cabdd3af3a378eab8e4ad8"
+      },
+      "tickets": {
+        "pool": [
+          [
+            11,
+            25,
+            26,
+            35,
+            45,
+            47
+          ],
+          [
+            16,
+            21,
+            26,
+            35,
+            44,
+            45
+          ],
+          [
+            9,
+            21,
+            25,
+            26,
+            35,
+            41
+          ],
+          [
+            21,
+            26,
+            35,
+            37,
+            46,
+            47
+          ],
+          [
+            6,
+            26,
+            35,
+            41,
+            45,
+            46
+          ],
+          [
+            16,
+            18,
+            26,
+            35,
+            41,
+            47
+          ],
+          [
+            6,
+            11,
+            21,
+            26,
+            35,
+            43
+          ],
+          [
+            16,
+            25,
+            26,
+            35,
+            43,
+            46
+          ],
+          [
+            6,
+            25,
+            26,
+            35,
+            37,
+            44
+          ],
+          [
+            9,
+            11,
+            26,
+            35,
+            44,
+            46
+          ],
+          [
+            21,
+            26,
+            41,
+            43,
+            45,
+            47
+          ],
+          [
+            6,
+            16,
+            21,
+            25,
+            26,
+            47
+          ],
+          [
+            9,
+            26,
+            35,
+            37,
+            43,
+            45
+          ],
+          [
+            18,
+            21,
+            25,
+            26,
+            45,
+            46
+          ],
+          [
+            16,
+            25,
+            26,
+            37,
+            41,
+            45
+          ],
+          [
+            25,
+            26,
+            41,
+            44,
+            46,
+            47
+          ],
+          [
+            9,
+            16,
+            26,
+            45,
+            46,
+            47
+          ],
+          [
+            11,
+            16,
+            26,
+            37,
+            44,
+            47
+          ],
+          [
+            11,
+            16,
+            21,
+            26,
+            41,
+            46
+          ],
+          [
+            6,
+            18,
+            26,
+            44,
+            45,
+            47
+          ],
+          [
+            11,
+            16,
+            18,
+            26,
+            43,
+            45
+          ],
+          [
+            6,
+            11,
+            18,
+            25,
+            26,
+            41
+          ],
+          [
+            9,
+            18,
+            25,
+            26,
+            43,
+            47
+          ],
+          [
+            9,
+            16,
+            18,
+            25,
+            26,
+            44
+          ],
+          [
+            9,
+            11,
+            18,
+            21,
+            26,
+            37
+          ],
+          [
+            6,
+            9,
+            26,
+            37,
+            41,
+            47
+          ],
+          [
+            11,
+            21,
+            35,
+            37,
+            41,
+            45
+          ],
+          [
+            11,
+            16,
+            18,
+            21,
+            25,
+            35
+          ],
+          [
+            25,
+            35,
+            41,
+            43,
+            44,
+            45
+          ],
+          [
+            6,
+            9,
+            21,
+            26,
+            43,
+            46
+          ],
+          [
+            9,
+            18,
+            21,
+            35,
+            45,
+            47
+          ],
+          [
+            6,
+            9,
+            16,
+            25,
+            35,
+            45
+          ],
+          [
+            6,
+            11,
+            35,
+            41,
+            44,
+            47
+          ],
+          [
+            6,
+            16,
+            35,
+            37,
+            45,
+            47
+          ],
+          [
+            18,
+            26,
+            37,
+            41,
+            43,
+            44
+          ],
+          [
+            6,
+            16,
+            18,
+            26,
+            37,
+            46
+          ],
+          [
+            21,
+            25,
+            35,
+            43,
+            44,
+            46
+          ],
+          [
+            21,
+            25,
+            37,
+            44,
+            45,
+            47
+          ],
+          [
+            9,
+            11,
+            16,
+            35,
+            43,
+            47
+          ],
+          [
+            6,
+            18,
+            25,
+            35,
+            46,
+            47
+          ],
+          [
+            11,
+            16,
+            25,
+            44,
+            45,
+            46
+          ],
+          [
+            6,
+            11,
+            21,
+            45,
+            46,
+            47
+          ],
+          [
+            18,
+            35,
+            37,
+            44,
+            45,
+            46
+          ],
+          [
+            9,
+            11,
+            21,
+            25,
+            43,
+            45
+          ],
+          [
+            16,
+            18,
+            25,
+            35,
+            37,
+            43
+          ],
+          [
+            11,
+            18,
+            35,
+            41,
+            43,
+            46
+          ],
+          [
+            9,
+            16,
+            35,
+            37,
+            41,
+            44
+          ],
+          [
+            6,
+            9,
+            11,
+            35,
+            37,
+            46
+          ],
+          [
+            11,
+            25,
+            37,
+            41,
+            43,
+            47
+          ],
+          [
+            11,
+            18,
+            21,
+            43,
+            44,
+            47
+          ],
+          [
+            6,
+            16,
+            18,
+            21,
+            41,
+            45
+          ],
+          [
+            16,
+            18,
+            21,
+            44,
+            46,
+            47
+          ],
+          [
+            9,
+            11,
+            18,
+            41,
+            44,
+            45
+          ],
+          [
+            6,
+            9,
+            11,
+            16,
+            21,
+            44
+          ],
+          [
+            18,
+            37,
+            41,
+            45,
+            46,
+            47
+          ],
+          [
+            6,
+            9,
+            18,
+            35,
+            43,
+            44
+          ],
+          [
+            6,
+            11,
+            37,
+            43,
+            44,
+            45
+          ],
+          [
+            6,
+            25,
+            37,
+            43,
+            45,
+            46
+          ],
+          [
+            9,
+            16,
+            21,
+            25,
+            37,
+            46
+          ],
+          [
+            6,
+            16,
+            41,
+            43,
+            44,
+            47
+          ],
+          [
+            9,
+            16,
+            41,
+            43,
+            45,
+            46
+          ],
+          [
+            6,
+            21,
+            37,
+            41,
+            44,
+            46
+          ],
+          [
+            6,
+            18,
+            21,
+            37,
+            43,
+            47
+          ],
+          [
+            9,
+            37,
+            43,
+            44,
+            46,
+            47
+          ]
+        ],
+        "universe": [
+          [
+            3,
+            12,
+            16,
+            24,
+            27,
+            44
+          ],
+          [
+            4,
+            10,
+            14,
+            31,
+            42,
+            46
+          ],
+          [
+            2,
+            5,
+            10,
+            14,
+            29,
+            34
+          ],
+          [
+            1,
+            8,
+            29,
+            31,
+            42,
+            47
+          ],
+          [
+            5,
+            17,
+            20,
+            36,
+            37,
+            41
+          ],
+          [
+            1,
+            12,
+            32,
+            33,
+            35,
+            41
+          ],
+          [
+            1,
+            3,
+            14,
+            26,
+            38,
+            44
+          ],
+          [
+            9,
+            20,
+            21,
+            28,
+            32,
+            35
+          ],
+          [
+            2,
+            4,
+            16,
+            18,
+            27,
+            36
+          ],
+          [
+            5,
+            17,
+            31,
+            33,
+            34,
+            44
+          ],
+          [
+            2,
+            8,
+            11,
+            14,
+            20,
+            24
+          ],
+          [
+            5,
+            16,
+            20,
+            24,
+            26,
+            28
+          ],
+          [
+            2,
+            10,
+            17,
+            29,
+            31,
+            35
+          ],
+          [
+            2,
+            10,
+            20,
+            24,
+            31,
+            46
+          ],
+          [
+            3,
+            5,
+            14,
+            16,
+            24,
+            35
+          ],
+          [
+            3,
+            5,
+            19,
+            30,
+            41,
+            45
+          ],
+          [
+            20,
+            23,
+            30,
+            40,
+            44,
+            46
+          ],
+          [
+            10,
+            17,
+            23,
+            25,
+            34,
+            47
+          ],
+          [
+            3,
+            9,
+            13,
+            31,
+            37,
+            38
+          ],
+          [
+            3,
+            13,
+            16,
+            19,
+            29,
+            33
+          ],
+          [
+            8,
+            14,
+            19,
+            23,
+            35,
+            47
+          ],
+          [
+            3,
+            24,
+            37,
+            43,
+            45,
+            49
+          ],
+          [
+            4,
+            5,
+            14,
+            27,
+            41,
+            46
+          ],
+          [
+            4,
+            7,
+            9,
+            11,
+            15,
+            34
+          ],
+          [
+            11,
+            12,
+            20,
+            22,
+            36,
+            42
+          ],
+          [
+            4,
+            13,
+            22,
+            30,
+            38,
+            45
+          ],
+          [
+            24,
+            28,
+            30,
+            34,
+            39,
+            45
+          ],
+          [
+            4,
+            22,
+            26,
+            41,
+            42,
+            49
+          ],
+          [
+            4,
+            9,
+            25,
+            30,
+            35,
+            45
+          ],
+          [
+            5,
+            10,
+            15,
+            25,
+            26,
+            41
+          ],
+          [
+            5,
+            13,
+            20,
+            21,
+            32,
+            44
+          ],
+          [
+            2,
+            6,
+            8,
+            23,
+            41,
+            42
+          ],
+          [
+            9,
+            10,
+            14,
+            16,
+            37,
+            49
+          ],
+          [
+            6,
+            10,
+            13,
+            16,
+            24,
+            49
+          ],
+          [
+            6,
+            11,
+            15,
+            30,
+            37,
+            43
+          ],
+          [
+            3,
+            5,
+            12,
+            20,
+            22,
+            29
+          ],
+          [
+            2,
+            7,
+            16,
+            30,
+            34,
+            38
+          ],
+          [
+            6,
+            14,
+            26,
+            27,
+            41,
+            48
+          ],
+          [
+            9,
+            11,
+            13,
+            15,
+            28,
+            42
+          ],
+          [
+            8,
+            22,
+            24,
+            35,
+            38,
+            39
+          ],
+          [
+            7,
+            14,
+            15,
+            22,
+            29,
+            38
+          ],
+          [
+            17,
+            31,
+            36,
+            39,
+            42,
+            44
+          ],
+          [
+            1,
+            3,
+            4,
+            28,
+            34,
+            44
+          ],
+          [
+            2,
+            27,
+            34,
+            35,
+            39,
+            45
+          ],
+          [
+            8,
+            17,
+            24,
+            25,
+            26,
+            44
+          ],
+          [
+            9,
+            12,
+            17,
+            26,
+            30,
+            39
+          ],
+          [
+            9,
+            12,
+            21,
+            26,
+            28,
+            49
+          ],
+          [
+            1,
+            10,
+            30,
+            33,
+            37,
+            45
+          ],
+          [
+            3,
+            4,
+            24,
+            47,
+            48,
+            49
+          ],
+          [
+            8,
+            12,
+            17,
+            32,
+            37,
+            49
+          ],
+          [
+            11,
+            12,
+            18,
+            21,
+            42,
+            47
+          ],
+          [
+            12,
+            14,
+            18,
+            26,
+            29,
+            47
+          ],
+          [
+            3,
+            5,
+            16,
+            18,
+            43,
+            44
+          ],
+          [
+            9,
+            13,
+            23,
+            32,
+            47,
+            48
+          ],
+          [
+            15,
+            16,
+            20,
+            27,
+            31,
+            33
+          ],
+          [
+            15,
+            16,
+            21,
+            22,
+            41,
+            47
+          ],
+          [
+            7,
+            9,
+            10,
+            14,
+            29,
+            37
+          ],
+          [
+            16,
+            19,
+            32,
+            33,
+            42,
+            47
+          ],
+          [
+            1,
+            13,
+            25,
+            30,
+            38,
+            48
+          ],
+          [
+            11,
+            13,
+            20,
+            30,
+            33,
+            45
+          ],
+          [
+            20,
+            25,
+            29,
+            34,
+            46,
+            49
+          ],
+          [
+            21,
+            23,
+            25,
+            27,
+            36,
+            46
+          ],
+          [
+            24,
+            30,
+            38,
+            40,
+            44,
+            47
+          ],
+          [
+            17,
+            26,
+            27,
+            28,
+            33,
+            36
+          ]
+        ],
+        "random_reference": [
+          [
+            1,
+            3,
+            6,
+            24,
+            41,
+            42
+          ],
+          [
+            1,
+            3,
+            12,
+            23,
+            36,
+            46
+          ],
+          [
+            1,
+            3,
+            17,
+            19,
+            24,
+            41
+          ],
+          [
+            1,
+            4,
+            6,
+            12,
+            17,
+            47
+          ],
+          [
+            1,
+            5,
+            7,
+            23,
+            29,
+            39
+          ],
+          [
+            1,
+            5,
+            11,
+            16,
+            21,
+            29
+          ],
+          [
+            1,
+            6,
+            21,
+            33,
+            34,
+            43
+          ],
+          [
+            1,
+            14,
+            24,
+            27,
+            30,
+            43
+          ],
+          [
+            1,
+            21,
+            24,
+            33,
+            34,
+            35
+          ],
+          [
+            2,
+            9,
+            20,
+            21,
+            24,
+            28
+          ],
+          [
+            2,
+            11,
+            14,
+            36,
+            41,
+            46
+          ],
+          [
+            2,
+            12,
+            13,
+            30,
+            38,
+            44
+          ],
+          [
+            2,
+            21,
+            22,
+            26,
+            33,
+            43
+          ],
+          [
+            3,
+            9,
+            31,
+            33,
+            37,
+            49
+          ],
+          [
+            3,
+            20,
+            24,
+            28,
+            30,
+            43
+          ],
+          [
+            3,
+            27,
+            28,
+            30,
+            32,
+            46
+          ],
+          [
+            4,
+            5,
+            7,
+            20,
+            24,
+            36
+          ],
+          [
+            4,
+            6,
+            24,
+            26,
+            33,
+            40
+          ],
+          [
+            4,
+            8,
+            20,
+            29,
+            35,
+            38
+          ],
+          [
+            4,
+            15,
+            27,
+            35,
+            37,
+            49
+          ],
+          [
+            4,
+            20,
+            25,
+            42,
+            46,
+            49
+          ],
+          [
+            5,
+            7,
+            16,
+            31,
+            39,
+            47
+          ],
+          [
+            5,
+            8,
+            12,
+            13,
+            15,
+            28
+          ],
+          [
+            5,
+            8,
+            16,
+            22,
+            30,
+            38
+          ],
+          [
+            5,
+            10,
+            14,
+            24,
+            38,
+            41
+          ],
+          [
+            5,
+            13,
+            15,
+            26,
+            28,
+            43
+          ],
+          [
+            5,
+            15,
+            30,
+            34,
+            36,
+            47
+          ],
+          [
+            5,
+            34,
+            38,
+            40,
+            44,
+            49
+          ],
+          [
+            6,
+            8,
+            21,
+            33,
+            34,
+            37
+          ],
+          [
+            6,
+            12,
+            21,
+            32,
+            44,
+            48
+          ],
+          [
+            7,
+            10,
+            11,
+            13,
+            16,
+            17
+          ],
+          [
+            7,
+            11,
+            16,
+            34,
+            48,
+            49
+          ],
+          [
+            7,
+            12,
+            27,
+            29,
+            40,
+            43
+          ],
+          [
+            7,
+            14,
+            23,
+            30,
+            41,
+            45
+          ],
+          [
+            8,
+            9,
+            11,
+            34,
+            38,
+            48
+          ],
+          [
+            8,
+            10,
+            23,
+            30,
+            42,
+            43
+          ],
+          [
+            8,
+            11,
+            22,
+            24,
+            25,
+            29
+          ],
+          [
+            8,
+            11,
+            32,
+            40,
+            46,
+            47
+          ],
+          [
+            8,
+            12,
+            13,
+            23,
+            25,
+            39
+          ],
+          [
+            8,
+            13,
+            16,
+            27,
+            30,
+            46
+          ],
+          [
+            8,
+            18,
+            23,
+            42,
+            48,
+            49
+          ],
+          [
+            9,
+            39,
+            42,
+            44,
+            46,
+            48
+          ],
+          [
+            10,
+            11,
+            15,
+            28,
+            37,
+            42
+          ],
+          [
+            10,
+            13,
+            18,
+            28,
+            36,
+            45
+          ],
+          [
+            10,
+            15,
+            20,
+            30,
+            35,
+            47
+          ],
+          [
+            10,
+            15,
+            25,
+            30,
+            32,
+            34
+          ],
+          [
+            12,
+            15,
+            25,
+            32,
+            34,
+            41
+          ],
+          [
+            12,
+            23,
+            24,
+            27,
+            33,
+            35
+          ],
+          [
+            12,
+            27,
+            32,
+            34,
+            38,
+            45
+          ],
+          [
+            12,
+            30,
+            32,
+            34,
+            39,
+            46
+          ],
+          [
+            13,
+            17,
+            21,
+            26,
+            29,
+            42
+          ],
+          [
+            13,
+            17,
+            24,
+            38,
+            39,
+            41
+          ],
+          [
+            13,
+            18,
+            22,
+            27,
+            45,
+            49
+          ],
+          [
+            14,
+            16,
+            23,
+            24,
+            31,
+            37
+          ],
+          [
+            14,
+            20,
+            31,
+            32,
+            39,
+            42
+          ],
+          [
+            15,
+            17,
+            25,
+            38,
+            42,
+            43
+          ],
+          [
+            15,
+            26,
+            27,
+            38,
+            40,
+            49
+          ],
+          [
+            16,
+            22,
+            34,
+            39,
+            45,
+            49
+          ],
+          [
+            19,
+            22,
+            26,
+            40,
+            42,
+            43
+          ],
+          [
+            19,
+            22,
+            28,
+            29,
+            36,
+            49
+          ],
+          [
+            20,
+            21,
+            41,
+            43,
+            45,
+            48
+          ],
+          [
+            21,
+            30,
+            31,
+            34,
+            43,
+            48
+          ],
+          [
+            23,
+            27,
+            34,
+            35,
+            48,
+            49
+          ],
+          [
+            29,
+            33,
+            34,
+            45,
+            46,
+            49
+          ]
+        ]
+      },
+      "probabilities": {
+        "pool": {
+          "any_prize": {
+            "successes": 3025,
+            "samples": 10000,
+            "probability": 0.3025,
+            "ci95": [
+              0.2935743393654976,
+              0.3115773399909195
+            ]
+          },
+          "4plus": {
+            "successes": 464,
+            "samples": 10000,
+            "probability": 0.0464,
+            "ci95": [
+              0.04244851437936254,
+              0.050699848942515245
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "universe": {
+          "any_prize": {
+            "successes": 7008,
+            "samples": 10000,
+            "probability": 0.7008,
+            "ci95": [
+              0.6917494613380281,
+              0.7096963249163081
+            ]
+          },
+          "4plus": {
+            "successes": 576,
+            "samples": 10000,
+            "probability": 0.0576,
+            "ci95": [
+              0.05320116648345306,
+              0.06233859527492157
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "random_reference": {
+          "any_prize": {
+            "successes": 6973,
+            "samples": 10000,
+            "probability": 0.6973,
+            "ci95": [
+              0.6882210534207929,
+              0.7062274208221382
+            ]
+          },
+          "4plus": {
+            "successes": 592,
+            "samples": 10000,
+            "probability": 0.0592,
+            "ci95": [
+              0.05474156957770626,
+              0.06399696338588222
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        }
+      },
+      "outcomes": {
+        "pool": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 1,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 0,
+          "net_bani": -51200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "universe": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 10000,
+          "net_bani": -41200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "IV": 2
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "random_reference": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 5000,
+          "net_bani": -46200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "IV": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        }
+      }
+    },
+    {
+      "target_index": 2597,
+      "target_date": "2026-11-01",
+      "numbers": [
+        43,
+        28,
+        12,
+        41,
+        10,
+        25
+      ],
+      "joker": null,
+      "selection": {
+        "pool": [
+          1,
+          9,
+          11,
+          23,
+          24,
+          25,
+          26,
+          27,
+          29,
+          35,
+          37,
+          38,
+          45,
+          46,
+          47,
+          48
+        ],
+        "method": "ewma_cold_hl30",
+        "joker_method": null,
+        "parameters": {
+          "pool_size": 16,
+          "lookback": 100,
+          "guarantee": 6,
+          "wheel_condition": null,
+          "max_consecutive_run": 0,
+          "recent_penalty_draws": 0,
+          "recent_penalty_factor": 0.5,
+          "restrict_base_min": 0,
+          "restrict_base_max": 0,
+          "wheel_method": "hitcover"
+        },
+        "wheel": {
+          "wheel_variants": 64,
+          "top_up": 0,
+          "coverage_before_top_up_pct": 0.8,
+          "method": "hitcover"
+        },
+        "filters": {
+          "timesfm_predictions": {
+            "47": 1.0,
+            "35": 0.80854,
+            "38": 0.76123,
+            "26": 0.744533,
+            "1": 0.662088,
+            "24": 0.661288,
+            "45": 0.6574,
+            "9": 0.645727,
+            "37": 0.599376,
+            "29": 0.583394,
+            "46": 0.549748,
+            "11": 0.54471,
+            "25": 0.50808,
+            "23": 0.505864,
+            "27": 0.499392,
+            "48": 0.484629,
+            "41": 0.482896,
+            "31": 0.470458,
+            "14": 0.466789,
+            "43": 0.444389,
+            "44": 0.434762,
+            "13": 0.434113,
+            "8": 0.432372,
+            "4": 0.431725,
+            "10": 0.423665
+          },
+          "pool_selection": "top_score_pure",
+          "pool_selection_note": "top-N după scorul final, cu departajarea canonică",
+          "pool_score_unique_levels": 49,
+          "pool_longest_consecutive_run": 5,
+          "pool_is_consecutive_block": false
+        },
+        "training_end_exclusive": 2597,
+        "training_last_date": "2026-10-29",
+        "inner_indices": [
+          2567,
+          2568,
+          2569,
+          2570,
+          2571,
+          2572,
+          2573,
+          2574,
+          2575,
+          2576,
+          2577,
+          2578,
+          2579,
+          2580,
+          2581,
+          2582,
+          2583,
+          2584,
+          2585,
+          2586,
+          2587,
+          2588,
+          2589,
+          2590,
+          2591,
+          2592,
+          2593,
+          2594,
+          2595,
+          2596
+        ],
+        "selection_last_date": "2026-10-29",
+        "decision": {
+          "scorer": "ewma_cold_hl30",
+          "ensemble": [
+            {
+              "method": "ewma_cold_hl30",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 2.1666666666666665,
+          "avg_hits_with_blacklist": null,
+          "rationale": "ewma_cold_hl30: rată 4+ @ k16 = 0.167 (Wilson_lb=0.104), beat random (hipergeometric 0.0796) in 4/4 windows on the same 4+ target (lift +0.0871); din 10 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 39 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_4plus_k16",
+          "rate_col_mismatch": false,
+          "hit_target": 4,
+          "target_label": "4+",
+          "qualifying_methods": 10,
+          "ranked_methods": [
+            "ewma_cold_hl30",
+            "gap_ratio",
+            "croston_interval",
+            "logit_pooled_feats",
+            "dmd_forecast",
+            "gap_hazard",
+            "rwr_last_draw",
+            "spectral_phase",
+            "markov_self_state",
+            "vlmm_self_k3"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 39,
+            "p_value": 0.21323,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.07960001762036914,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.05,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "ar_ls_pooled",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "cooc_last3",
+              "tiebreak_fraction": 0.647
+            },
+            {
+              "method": "freq_window_200",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 1.0
+            },
+            {
+              "method": "gap_current",
+              "tiebreak_fraction": 0.561
+            },
+            {
+              "method": "gbm_stumps_pooled",
+              "tiebreak_fraction": 0.55
+            },
+            {
+              "method": "haar_multiscale",
+              "tiebreak_fraction": 0.792
+            },
+            {
+              "method": "hot_consistency",
+              "tiebreak_fraction": 0.831
+            },
+            {
+              "method": "knn_draw_similarity",
+              "tiebreak_fraction": 0.681
+            },
+            {
+              "method": "momentum_30_300",
+              "tiebreak_fraction": 0.536
+            },
+            {
+              "method": "nb_lags_pooled",
+              "tiebreak_fraction": 0.689
+            },
+            {
+              "method": "repeat_last_draw",
+              "tiebreak_fraction": 0.878
+            },
+            {
+              "method": "season_period2",
+              "tiebreak_fraction": 1.0
+            }
+          ]
+        },
+        "joker_decision": null,
+        "inner_objective_successes": 3,
+        "rejected_parameters": [],
+        "candidate_parameter_scores": [
+          {
+            "parameters": {
+              "pool_size": 16,
+              "lookback": 0,
+              "guarantee": 6,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          },
+          {
+            "parameters": {
+              "pool_size": 16,
+              "lookback": 100,
+              "guarantee": 6,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 3
+          }
+        ],
+        "tickets_sha256": "8e9ae38df3273a473cb6aba51da33d6350872574153323e6959f3e1e252d718b"
+      },
+      "tickets": {
+        "pool": [
+          [
+            1,
+            24,
+            26,
+            35,
+            38,
+            47
+          ],
+          [
+            9,
+            35,
+            37,
+            38,
+            45,
+            47
+          ],
+          [
+            25,
+            26,
+            29,
+            35,
+            45,
+            47
+          ],
+          [
+            1,
+            9,
+            11,
+            26,
+            45,
+            47
+          ],
+          [
+            9,
+            23,
+            26,
+            35,
+            46,
+            47
+          ],
+          [
+            11,
+            29,
+            35,
+            38,
+            46,
+            47
+          ],
+          [
+            9,
+            26,
+            27,
+            29,
+            38,
+            47
+          ],
+          [
+            26,
+            38,
+            45,
+            46,
+            47,
+            48
+          ],
+          [
+            11,
+            26,
+            27,
+            35,
+            37,
+            47
+          ],
+          [
+            1,
+            9,
+            29,
+            35,
+            47,
+            48
+          ],
+          [
+            11,
+            23,
+            24,
+            35,
+            45,
+            47
+          ],
+          [
+            1,
+            27,
+            35,
+            45,
+            46,
+            47
+          ],
+          [
+            1,
+            23,
+            29,
+            38,
+            45,
+            47
+          ],
+          [
+            1,
+            26,
+            29,
+            37,
+            46,
+            47
+          ],
+          [
+            24,
+            25,
+            35,
+            37,
+            46,
+            47
+          ],
+          [
+            1,
+            9,
+            25,
+            38,
+            46,
+            47
+          ],
+          [
+            9,
+            24,
+            29,
+            45,
+            46,
+            47
+          ],
+          [
+            23,
+            25,
+            27,
+            35,
+            38,
+            47
+          ],
+          [
+            1,
+            9,
+            24,
+            27,
+            37,
+            47
+          ],
+          [
+            9,
+            23,
+            24,
+            38,
+            47,
+            48
+          ],
+          [
+            1,
+            11,
+            37,
+            38,
+            47,
+            48
+          ],
+          [
+            11,
+            24,
+            26,
+            29,
+            47,
+            48
+          ],
+          [
+            9,
+            11,
+            25,
+            26,
+            35,
+            38
+          ],
+          [
+            23,
+            26,
+            29,
+            35,
+            37,
+            38
+          ],
+          [
+            9,
+            24,
+            26,
+            35,
+            45,
+            48
+          ],
+          [
+            9,
+            25,
+            26,
+            37,
+            47,
+            48
+          ],
+          [
+            24,
+            27,
+            29,
+            35,
+            38,
+            45
+          ],
+          [
+            9,
+            24,
+            26,
+            37,
+            38,
+            46
+          ],
+          [
+            1,
+            26,
+            27,
+            37,
+            38,
+            45
+          ],
+          [
+            1,
+            9,
+            11,
+            27,
+            35,
+            38
+          ],
+          [
+            1,
+            23,
+            25,
+            26,
+            47,
+            48
+          ],
+          [
+            1,
+            25,
+            35,
+            38,
+            45,
+            48
+          ],
+          [
+            23,
+            26,
+            35,
+            37,
+            45,
+            46
+          ],
+          [
+            1,
+            11,
+            24,
+            29,
+            35,
+            37
+          ],
+          [
+            23,
+            24,
+            25,
+            26,
+            38,
+            45
+          ],
+          [
+            1,
+            11,
+            24,
+            38,
+            45,
+            46
+          ],
+          [
+            24,
+            25,
+            27,
+            45,
+            47,
+            48
+          ],
+          [
+            1,
+            11,
+            25,
+            27,
+            29,
+            47
+          ],
+          [
+            1,
+            11,
+            26,
+            35,
+            46,
+            48
+          ],
+          [
+            1,
+            9,
+            23,
+            24,
+            25,
+            35
+          ],
+          [
+            11,
+            23,
+            25,
+            45,
+            46,
+            47
+          ],
+          [
+            9,
+            11,
+            27,
+            46,
+            47,
+            48
+          ],
+          [
+            27,
+            35,
+            37,
+            38,
+            46,
+            48
+          ],
+          [
+            9,
+            23,
+            26,
+            27,
+            35,
+            48
+          ],
+          [
+            9,
+            11,
+            29,
+            38,
+            45,
+            48
+          ],
+          [
+            23,
+            27,
+            29,
+            37,
+            47,
+            48
+          ],
+          [
+            1,
+            23,
+            24,
+            26,
+            27,
+            29
+          ],
+          [
+            9,
+            25,
+            27,
+            29,
+            35,
+            37
+          ],
+          [
+            9,
+            11,
+            24,
+            25,
+            37,
+            45
+          ],
+          [
+            11,
+            23,
+            26,
+            27,
+            38,
+            46
+          ],
+          [
+            9,
+            25,
+            26,
+            27,
+            45,
+            46
+          ],
+          [
+            1,
+            9,
+            37,
+            45,
+            46,
+            48
+          ],
+          [
+            24,
+            25,
+            29,
+            37,
+            38,
+            48
+          ],
+          [
+            23,
+            24,
+            29,
+            35,
+            46,
+            48
+          ],
+          [
+            11,
+            23,
+            24,
+            27,
+            37,
+            38
+          ],
+          [
+            11,
+            24,
+            25,
+            27,
+            35,
+            46
+          ],
+          [
+            1,
+            23,
+            24,
+            37,
+            45,
+            48
+          ],
+          [
+            9,
+            23,
+            25,
+            29,
+            38,
+            46
+          ],
+          [
+            1,
+            9,
+            11,
+            23,
+            29,
+            37
+          ],
+          [
+            1,
+            27,
+            29,
+            38,
+            46,
+            48
+          ],
+          [
+            11,
+            23,
+            25,
+            35,
+            37,
+            48
+          ],
+          [
+            11,
+            27,
+            29,
+            37,
+            45,
+            46
+          ],
+          [
+            1,
+            11,
+            23,
+            27,
+            45,
+            48
+          ],
+          [
+            1,
+            23,
+            25,
+            27,
+            37,
+            46
+          ]
+        ],
+        "universe": [
+          [
+            3,
+            12,
+            16,
+            24,
+            27,
+            44
+          ],
+          [
+            4,
+            10,
+            14,
+            31,
+            42,
+            46
+          ],
+          [
+            2,
+            5,
+            10,
+            14,
+            29,
+            34
+          ],
+          [
+            1,
+            8,
+            29,
+            31,
+            42,
+            47
+          ],
+          [
+            5,
+            17,
+            20,
+            36,
+            37,
+            41
+          ],
+          [
+            1,
+            12,
+            32,
+            33,
+            35,
+            41
+          ],
+          [
+            1,
+            3,
+            14,
+            26,
+            38,
+            44
+          ],
+          [
+            9,
+            20,
+            21,
+            28,
+            32,
+            35
+          ],
+          [
+            2,
+            4,
+            16,
+            18,
+            27,
+            36
+          ],
+          [
+            5,
+            17,
+            31,
+            33,
+            34,
+            44
+          ],
+          [
+            2,
+            8,
+            11,
+            14,
+            20,
+            24
+          ],
+          [
+            5,
+            16,
+            20,
+            24,
+            26,
+            28
+          ],
+          [
+            2,
+            10,
+            17,
+            29,
+            31,
+            35
+          ],
+          [
+            2,
+            10,
+            20,
+            24,
+            31,
+            46
+          ],
+          [
+            3,
+            5,
+            14,
+            16,
+            24,
+            35
+          ],
+          [
+            3,
+            5,
+            19,
+            30,
+            41,
+            45
+          ],
+          [
+            20,
+            23,
+            30,
+            40,
+            44,
+            46
+          ],
+          [
+            10,
+            17,
+            23,
+            25,
+            34,
+            47
+          ],
+          [
+            3,
+            9,
+            13,
+            31,
+            37,
+            38
+          ],
+          [
+            3,
+            13,
+            16,
+            19,
+            29,
+            33
+          ],
+          [
+            8,
+            14,
+            19,
+            23,
+            35,
+            47
+          ],
+          [
+            3,
+            24,
+            37,
+            43,
+            45,
+            49
+          ],
+          [
+            4,
+            5,
+            14,
+            27,
+            41,
+            46
+          ],
+          [
+            4,
+            7,
+            9,
+            11,
+            15,
+            34
+          ],
+          [
+            11,
+            12,
+            20,
+            22,
+            36,
+            42
+          ],
+          [
+            4,
+            13,
+            22,
+            30,
+            38,
+            45
+          ],
+          [
+            24,
+            28,
+            30,
+            34,
+            39,
+            45
+          ],
+          [
+            4,
+            22,
+            26,
+            41,
+            42,
+            49
+          ],
+          [
+            4,
+            9,
+            25,
+            30,
+            35,
+            45
+          ],
+          [
+            5,
+            10,
+            15,
+            25,
+            26,
+            41
+          ],
+          [
+            5,
+            13,
+            20,
+            21,
+            32,
+            44
+          ],
+          [
+            2,
+            6,
+            8,
+            23,
+            41,
+            42
+          ],
+          [
+            9,
+            10,
+            14,
+            16,
+            37,
+            49
+          ],
+          [
+            6,
+            10,
+            13,
+            16,
+            24,
+            49
+          ],
+          [
+            6,
+            11,
+            15,
+            30,
+            37,
+            43
+          ],
+          [
+            3,
+            5,
+            12,
+            20,
+            22,
+            29
+          ],
+          [
+            2,
+            7,
+            16,
+            30,
+            34,
+            38
+          ],
+          [
+            6,
+            14,
+            26,
+            27,
+            41,
+            48
+          ],
+          [
+            9,
+            11,
+            13,
+            15,
+            28,
+            42
+          ],
+          [
+            8,
+            22,
+            24,
+            35,
+            38,
+            39
+          ],
+          [
+            7,
+            14,
+            15,
+            22,
+            29,
+            38
+          ],
+          [
+            17,
+            31,
+            36,
+            39,
+            42,
+            44
+          ],
+          [
+            1,
+            3,
+            4,
+            28,
+            34,
+            44
+          ],
+          [
+            2,
+            27,
+            34,
+            35,
+            39,
+            45
+          ],
+          [
+            8,
+            17,
+            24,
+            25,
+            26,
+            44
+          ],
+          [
+            9,
+            12,
+            17,
+            26,
+            30,
+            39
+          ],
+          [
+            9,
+            12,
+            21,
+            26,
+            28,
+            49
+          ],
+          [
+            1,
+            10,
+            30,
+            33,
+            37,
+            45
+          ],
+          [
+            3,
+            4,
+            24,
+            47,
+            48,
+            49
+          ],
+          [
+            8,
+            12,
+            17,
+            32,
+            37,
+            49
+          ],
+          [
+            11,
+            12,
+            18,
+            21,
+            42,
+            47
+          ],
+          [
+            12,
+            14,
+            18,
+            26,
+            29,
+            47
+          ],
+          [
+            3,
+            5,
+            16,
+            18,
+            43,
+            44
+          ],
+          [
+            9,
+            13,
+            23,
+            32,
+            47,
+            48
+          ],
+          [
+            15,
+            16,
+            20,
+            27,
+            31,
+            33
+          ],
+          [
+            15,
+            16,
+            21,
+            22,
+            41,
+            47
+          ],
+          [
+            7,
+            9,
+            10,
+            14,
+            29,
+            37
+          ],
+          [
+            16,
+            19,
+            32,
+            33,
+            42,
+            47
+          ],
+          [
+            1,
+            13,
+            25,
+            30,
+            38,
+            48
+          ],
+          [
+            11,
+            13,
+            20,
+            30,
+            33,
+            45
+          ],
+          [
+            20,
+            25,
+            29,
+            34,
+            46,
+            49
+          ],
+          [
+            21,
+            23,
+            25,
+            27,
+            36,
+            46
+          ],
+          [
+            24,
+            30,
+            38,
+            40,
+            44,
+            47
+          ],
+          [
+            17,
+            26,
+            27,
+            28,
+            33,
+            36
+          ]
+        ],
+        "random_reference": [
+          [
+            1,
+            3,
+            6,
+            24,
+            41,
+            42
+          ],
+          [
+            1,
+            3,
+            12,
+            23,
+            36,
+            46
+          ],
+          [
+            1,
+            3,
+            17,
+            19,
+            24,
+            41
+          ],
+          [
+            1,
+            4,
+            6,
+            12,
+            17,
+            47
+          ],
+          [
+            1,
+            5,
+            7,
+            23,
+            29,
+            39
+          ],
+          [
+            1,
+            5,
+            11,
+            16,
+            21,
+            29
+          ],
+          [
+            1,
+            6,
+            21,
+            33,
+            34,
+            43
+          ],
+          [
+            1,
+            14,
+            24,
+            27,
+            30,
+            43
+          ],
+          [
+            1,
+            21,
+            24,
+            33,
+            34,
+            35
+          ],
+          [
+            2,
+            9,
+            20,
+            21,
+            24,
+            28
+          ],
+          [
+            2,
+            11,
+            14,
+            36,
+            41,
+            46
+          ],
+          [
+            2,
+            12,
+            13,
+            30,
+            38,
+            44
+          ],
+          [
+            2,
+            21,
+            22,
+            26,
+            33,
+            43
+          ],
+          [
+            3,
+            9,
+            31,
+            33,
+            37,
+            49
+          ],
+          [
+            3,
+            20,
+            24,
+            28,
+            30,
+            43
+          ],
+          [
+            3,
+            27,
+            28,
+            30,
+            32,
+            46
+          ],
+          [
+            4,
+            5,
+            7,
+            20,
+            24,
+            36
+          ],
+          [
+            4,
+            6,
+            24,
+            26,
+            33,
+            40
+          ],
+          [
+            4,
+            8,
+            20,
+            29,
+            35,
+            38
+          ],
+          [
+            4,
+            15,
+            27,
+            35,
+            37,
+            49
+          ],
+          [
+            4,
+            20,
+            25,
+            42,
+            46,
+            49
+          ],
+          [
+            5,
+            7,
+            16,
+            31,
+            39,
+            47
+          ],
+          [
+            5,
+            8,
+            12,
+            13,
+            15,
+            28
+          ],
+          [
+            5,
+            8,
+            16,
+            22,
+            30,
+            38
+          ],
+          [
+            5,
+            10,
+            14,
+            24,
+            38,
+            41
+          ],
+          [
+            5,
+            13,
+            15,
+            26,
+            28,
+            43
+          ],
+          [
+            5,
+            15,
+            30,
+            34,
+            36,
+            47
+          ],
+          [
+            5,
+            34,
+            38,
+            40,
+            44,
+            49
+          ],
+          [
+            6,
+            8,
+            21,
+            33,
+            34,
+            37
+          ],
+          [
+            6,
+            12,
+            21,
+            32,
+            44,
+            48
+          ],
+          [
+            7,
+            10,
+            11,
+            13,
+            16,
+            17
+          ],
+          [
+            7,
+            11,
+            16,
+            34,
+            48,
+            49
+          ],
+          [
+            7,
+            12,
+            27,
+            29,
+            40,
+            43
+          ],
+          [
+            7,
+            14,
+            23,
+            30,
+            41,
+            45
+          ],
+          [
+            8,
+            9,
+            11,
+            34,
+            38,
+            48
+          ],
+          [
+            8,
+            10,
+            23,
+            30,
+            42,
+            43
+          ],
+          [
+            8,
+            11,
+            22,
+            24,
+            25,
+            29
+          ],
+          [
+            8,
+            11,
+            32,
+            40,
+            46,
+            47
+          ],
+          [
+            8,
+            12,
+            13,
+            23,
+            25,
+            39
+          ],
+          [
+            8,
+            13,
+            16,
+            27,
+            30,
+            46
+          ],
+          [
+            8,
+            18,
+            23,
+            42,
+            48,
+            49
+          ],
+          [
+            9,
+            39,
+            42,
+            44,
+            46,
+            48
+          ],
+          [
+            10,
+            11,
+            15,
+            28,
+            37,
+            42
+          ],
+          [
+            10,
+            13,
+            18,
+            28,
+            36,
+            45
+          ],
+          [
+            10,
+            15,
+            20,
+            30,
+            35,
+            47
+          ],
+          [
+            10,
+            15,
+            25,
+            30,
+            32,
+            34
+          ],
+          [
+            12,
+            15,
+            25,
+            32,
+            34,
+            41
+          ],
+          [
+            12,
+            23,
+            24,
+            27,
+            33,
+            35
+          ],
+          [
+            12,
+            27,
+            32,
+            34,
+            38,
+            45
+          ],
+          [
+            12,
+            30,
+            32,
+            34,
+            39,
+            46
+          ],
+          [
+            13,
+            17,
+            21,
+            26,
+            29,
+            42
+          ],
+          [
+            13,
+            17,
+            24,
+            38,
+            39,
+            41
+          ],
+          [
+            13,
+            18,
+            22,
+            27,
+            45,
+            49
+          ],
+          [
+            14,
+            16,
+            23,
+            24,
+            31,
+            37
+          ],
+          [
+            14,
+            20,
+            31,
+            32,
+            39,
+            42
+          ],
+          [
+            15,
+            17,
+            25,
+            38,
+            42,
+            43
+          ],
+          [
+            15,
+            26,
+            27,
+            38,
+            40,
+            49
+          ],
+          [
+            16,
+            22,
+            34,
+            39,
+            45,
+            49
+          ],
+          [
+            19,
+            22,
+            26,
+            40,
+            42,
+            43
+          ],
+          [
+            19,
+            22,
+            28,
+            29,
+            36,
+            49
+          ],
+          [
+            20,
+            21,
+            41,
+            43,
+            45,
+            48
+          ],
+          [
+            21,
+            30,
+            31,
+            34,
+            43,
+            48
+          ],
+          [
+            23,
+            27,
+            34,
+            35,
+            48,
+            49
+          ],
+          [
+            29,
+            33,
+            34,
+            45,
+            46,
+            49
+          ]
+        ]
+      },
+      "probabilities": {
+        "pool": {
+          "any_prize": {
+            "successes": 2913,
+            "samples": 10000,
+            "probability": 0.2913,
+            "ci95": [
+              0.28247616937011627,
+              0.3002841115498041
+            ]
+          },
+          "4plus": {
+            "successes": 449,
+            "samples": 10000,
+            "probability": 0.0449,
+            "ci95": [
+              0.04101299418343707,
+              0.04913652113355277
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "universe": {
+          "any_prize": {
+            "successes": 7008,
+            "samples": 10000,
+            "probability": 0.7008,
+            "ci95": [
+              0.6917494613380281,
+              0.7096963249163081
+            ]
+          },
+          "4plus": {
+            "successes": 576,
+            "samples": 10000,
+            "probability": 0.0576,
+            "ci95": [
+              0.05320116648345306,
+              0.06233859527492157
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "random_reference": {
+          "any_prize": {
+            "successes": 6973,
+            "samples": 10000,
+            "probability": 0.6973,
+            "ci95": [
+              0.6882210534207929,
+              0.7062274208221382
+            ]
+          },
+          "4plus": {
+            "successes": 592,
+            "samples": 10000,
+            "probability": 0.0592,
+            "ci95": [
+              0.05474156957770626,
+              0.06399696338588222
+            ]
+          },
+          "jackpot_probability_exact": 4.57671925889185e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        }
+      },
+      "outcomes": {
+        "pool": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 1,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 0,
+          "net_bani": -51200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "universe": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 5000,
+          "net_bani": -46200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "IV": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "random_reference": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 51200,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 51200,
+          "gross_bani": 5000,
+          "net_bani": -46200,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "IV": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        }
+      }
+    }
+  ],
+  "source_sha256": "402254270e7151ef619af28465b4150ac10dec8686e9e72a04dc6ec1fceed233",
+  "code": {
+    "git_commit": "70e63b86240ca442477ebd86976fcf63423daa99",
+    "python_sources_sha256": "77608a7e3cdf9dcfd58cf6ec39328ad2b3c159c4ad2a82b9db8932135afe1c55",
+    "source_files": 387
+  }
+}

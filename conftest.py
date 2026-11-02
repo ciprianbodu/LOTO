@@ -9,6 +9,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def isolated_pool_history(tmp_path, monkeypatch):
     monkeypatch.setenv("LOTO_POOL_HISTORY_FILE", str(tmp_path / "pool_history.json"))
+    monkeypatch.setenv("LOTO_PROSPECTIVE_DB", str(tmp_path / "prospective_ledger.db"))
 
 
 @pytest.fixture(autouse=True)

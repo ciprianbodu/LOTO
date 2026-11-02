@@ -801,6 +801,9 @@ def decide_optimal_config_for_pool(
     draw_n: int,
     max_num: int | None = None,
     pick_n: int | None = None,
+    *,
+    hit_target: int | None = None,
+    use_curated: bool = True,
 ) -> dict:
     """Run the decision algorithm for one (game, pool_size) pair.
 
@@ -815,6 +818,10 @@ def decide_optimal_config_for_pool(
     pentru un joc necunoscut cade pe randul `random` din folds.csv.
 
     Returns a dict with the chosen scorer, sim_depth, use_blacklist + rationale.
+
+    `hit_target` and `use_curated=False` let a chronological experiment run the
+    same decision on its own strictly prior folds, with the complete registry,
+    without mutating global settings or reading a retrospectively curated list.
     """
     base_col = f"k{pool_size}"
     base_col_bl = f"k{pool_size}_bl"
@@ -828,7 +835,8 @@ def decide_optimal_config_for_pool(
         base_pool = int(pick_n or draw_n)
     # Ținta per joc: 5/40 rămâne pe 4+ (3 numere nu aduc premiu), oricare ar fi
     # ținta globală; celelalte jocuri de pool urmează ținta globală 3/4.
-    target = 1 if int(draw_n) == 1 else game_hit_target(game_key, BENCH_HIT_TARGET)
+    requested_target = BENCH_HIT_TARGET if hit_target is None else int(hit_target)
+    target = 1 if int(draw_n) == 1 else game_hit_target(game_key, requested_target)
     target_label = "top-1 (1/1)" if target == 1 else f"{target}+"
     rate_target_col = f"rate_{target}plus_k{pool_size}"
     tiebreak_col = f"tiebreak_k{pool_size}"
@@ -875,7 +883,7 @@ def decide_optimal_config_for_pool(
     try:
         from loto_enterprise.benchmark.curated import load_per_game as _load_pg
 
-        _pg = [m for m in (_load_pg().get(game_key) or []) if m in methods]
+        _pg = [m for m in (_load_pg().get(game_key) or []) if m in methods] if use_curated else []
         if _pg:
             methods = _pg
             logger.info(

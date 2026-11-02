@@ -92,6 +92,37 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Evaluare cronologica si registru prospectiv — 2026-11-02
+
+- `core/chronological_evaluation.py` evalueaza intreaga selectie in timp:
+  toate metodele, folduri interne strict anterioare zilei tinta, decizia
+  existenta cu Holm si grila explicita de pool/lookback/filtre/design.
+  Nu citeste decizia curenta sau foldurile de productie si nu le rescrie.
+- `core/ticket_experiment.py` compara pool, cautare limitata pe univers si
+  martor aleator la acelasi B de variante distincte si cost declarat. Raporteaza
+  separat premiu, 4+, jackpot exact, cost, brut estimat/net inainte de impozit.
+  Eroarea Monte Carlo nu este dovada predictiva; premiile/taxele necunoscute
+  raman necunoscute. Bugetul nu creste dupa pierderi.
+- `core/prospective_ledger.py`: workerul salveaza variantele complete si
+  provenienta; utilizatorul fixeaza ulterior o zi VIITOARE si taxele, inainte
+  de 00:00 Europe/Bucharest a zilei tinta. Rezultatul oficial se adauga dupa
+  incheierea zilei. Generarile fara tinta fixata nu sunt dovezi prospective.
+  SQLite append-only + lant SHA-256, fara pretentie de atestare externa a orei.
+  Runtime: `prospective_ledger.db`, override `LOTO_PROSPECTIVE_DB`.
+- Controale explicite in Analiza & Clasament, plus CLI
+  `scripts.evaluate_chronological` / `scripts.prospective_registry`.
+  Pornirea si Re-Bench isi pastreaza fluxul. Istoricul cu decizia curenta
+  ramane reconstituire retrospectiva, etichetata; nu valideaza selectia.
+- Pastrate toate metodele si functiile existente. Trei probe exterioare pe
+  fiecare joc, toate cele 53 metode, pooluri 16/12/19, B64: probe functionale,
+  fara avantaj predictiv demonstrat. Codul este pe ramura separata ceruta.
+  Raport: `scripts/analysis/chronological_selection_2026_11_02.md`.
+- Validare finala cumulata: 4235 teste distincte trecute, 22 sarite;
+  suita completa in 4 copii: 4233/22, plus 2 regresii adaugate ulterior,
+  cu modulele relevante reluate. Browser real: generare/worker/registru,
+  fixare viitoare, export si evaluare explicita. Premii renumarate independent
+  pentru toate cele 27 portofolii. Aplicatia activa nu a fost repornita.
+
 ### Premii pe variantele generate in istoricul WF — 2026-11-01
 
 - La cererea utilizatorului, tabelul POOL si istoricul simulat arata premiul

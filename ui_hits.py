@@ -1448,6 +1448,10 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             initial_open = bool(STATE.get("virtual_wf_status"))
         with ui.expansion("📊 Analiză & Clasament", value=initial_open).classes("w-full") as analysis:
             analysis.on_value_change(lambda event: STATE.__setitem__("analysis_expanded", bool(event.value)))
+            from ui_experiments import render_selection_experiments
+
+            render_selection_experiments()
+            ui.label("Istoricul de mai jos reconstituie variantele cu decizia curentă, aleasă ulterior pe istoricul disponibil. Nu validează cronologic selecția metodei și nu demonstrează avantaj predictiv.").classes("text-caption text-grey")
             _render_virtual_controls()
             if status := STATE.get("virtual_wf_status"):
                 ui.label(status).classes("text-caption")

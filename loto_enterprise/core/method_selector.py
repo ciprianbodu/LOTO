@@ -383,6 +383,10 @@ def get_winner_name(
 ) -> str:
     """Resolve the configured winner method for (game, pool_size).
 
+    This resolves today's saved decision, not the decision knowable on a past
+    target date. Historical prefix scoring through this function does not by
+    itself provide chronological validation of method/configuration selection.
+
     Priority order (v4 — Auto-Pilot consistency first):
       1. auto_pilot_per_pool[kN].scorer  (decision algorithm — preferred,
          consistent cu ce afișează butonul Auto-Pilot în UI)

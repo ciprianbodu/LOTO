@@ -223,7 +223,8 @@ def _foreign_dataset(task_template: dict, rows=300, **identity) -> dict:
 
 
 def _comparable(data: dict) -> dict:
-    out = {k: v for k, v in data.items() if k not in ("resource_stats", *ECHO)}
+    # Receipts are additive run provenance, necessarily different per job.
+    out = {k: v for k, v in data.items() if k not in ("resource_stats", "prospective_ledger", *ECHO)}
     out["audit"] = {k: v for k, v in data["audit"].items() if k != "performance"}
     return out
 

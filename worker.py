@@ -334,7 +334,24 @@ def _run_pipeline_job(job: dict) -> str | None:
     monitor = ResourceMonitor()
     monitor.start()
     try:
-        return _run_pipeline_job_inner(job, monitor)
+        packed = _run_pipeline_job_inner(job, monitor)
+        if packed:
+            from ui_shared import decode_queue_result
+            from loto_enterprise.core.prospective_ledger import record_worker_outputs
+
+            decoded = decode_queue_result(packed)
+            if isinstance(decoded, tuple) and len(decoded) == 2:
+                bundle, count = decoded
+                cfg = json.loads(job["config_json"])
+                try:
+                    record_worker_outputs(bundle, cfg.get("datasets", []), job_id=job["id"])
+                except Exception as exc:  # journal failure must remain visible
+                    logging.exception("[worker] Registrul variantelor nu a putut fi scris")
+                    for _, outputs in bundle:
+                        for result in outputs.values():
+                            result["prospective_ledger"] = {"status": "recording_failed", "error": str(exc)}
+                packed = _pack_result_payload((bundle, count))
+        return packed
     finally:
         monitor.stop()
 

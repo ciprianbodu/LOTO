@@ -1,0 +1,13 @@
+{
+  "full_suite": {
+    "passed": 4233,
+    "skipped": 22
+  },
+  "additional_regressions_after_suite": 2,
+  "total_distinct_passed": 4235,
+  "isolation": "4 separate source copies and runtimes; real user checkout not used for tests",
+  "independently_recounted_portfolios": 27,
+  "variants_each": 64,
+  "prospective_browser_probe": "real UI submit, real worker, immutable generation, future commitment, export, explicit chronological run",
+  "no_predictive_advantage_claim": true
+}

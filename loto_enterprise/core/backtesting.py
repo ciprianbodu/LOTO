@@ -6,6 +6,11 @@ pentru a calcula câte numere ar fi fost ghicite în medie.
 
 Backtesting Retroactiv: Generează previziuni pentru fiecare punct istoric
 folosind doar datele disponibile până la acel moment (walk-forward simulation).
+
+Limita selecției: scorerul provine din decizia CURENTĂ din best_methods.json,
+aleasă pe istoricul disponibil ulterior. Acest modul reconstituie biletele;
+nu validează în afara eșantionului alegerea metodei. Evaluarea cu selecție
+refăcută înaintea fiecărei ținte este în chronological_evaluation.py.
 """
 
 from __future__ import annotations

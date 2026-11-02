@@ -1,0 +1,6661 @@
+{
+  "schema": "chronological_selection_v1",
+  "protocol": {
+    "game": "joker",
+    "budget": 64,
+    "parameters": [
+      {
+        "pool_size": 12,
+        "lookback": 0,
+        "guarantee": 5,
+        "wheel_condition": null,
+        "max_consecutive_run": 0,
+        "recent_penalty_draws": 0,
+        "recent_penalty_factor": 0.5,
+        "restrict_base_min": 0,
+        "restrict_base_max": 0,
+        "wheel_method": "hitcover"
+      },
+      {
+        "pool_size": 12,
+        "lookback": 100,
+        "guarantee": 5,
+        "wheel_condition": null,
+        "max_consecutive_run": 0,
+        "recent_penalty_draws": 0,
+        "recent_penalty_factor": 0.5,
+        "restrict_base_min": 0,
+        "restrict_base_max": 0,
+        "wheel_method": "hitcover"
+      }
+    ],
+    "objective": "4plus",
+    "hit_target": 4,
+    "inner_draws": 30,
+    "minimum_training": 30,
+    "variant_price_bani": 700,
+    "ticket_fees_bani": 0,
+    "probability_samples": 10000,
+    "design_samples": 4000,
+    "universe_proposals": 128,
+    "seed": 104729
+  },
+  "protocol_sha256": "4d324d6fd8c73951dd975105d028645bf6b77676ef05ebe92e194b65dac677ad",
+  "registry": [
+    "anti_cooc_last",
+    "ar_ls_pooled",
+    "autocorr_lag",
+    "cooc_last3",
+    "croston_interval",
+    "cusum_burst",
+    "dmd_forecast",
+    "drift_linear",
+    "ewma_cold_hl30",
+    "ewma_hl30",
+    "freq_window_200",
+    "freq_window_50",
+    "frequency",
+    "gap_current",
+    "gap_hazard",
+    "gap_ratio",
+    "gbm_stumps_pooled",
+    "haar_multiscale",
+    "hawkes_cross",
+    "holt_forecast",
+    "hot_consistency",
+    "hurst_persistence",
+    "imapa_agg",
+    "interval_extrema_k16",
+    "knn_draw_similarity",
+    "knn_feature_pooled",
+    "knn_pattern_self",
+    "logit_pooled_feats",
+    "markov_lag2",
+    "markov_pairs",
+    "markov_self_state",
+    "momentum_30_300",
+    "naive_bayes_last",
+    "nb_lags_pooled",
+    "neighbor_adjacent",
+    "online_logit_sgd",
+    "pagerank_cooc",
+    "pair_lift_last",
+    "pair_transition",
+    "random",
+    "rank_ensemble_core",
+    "repeat_last_draw",
+    "rhythm_phase",
+    "ridge_pooled_feats",
+    "runs_persistence",
+    "rwr_last_draw",
+    "season_period2",
+    "ses_opt_alpha",
+    "spectral_phase",
+    "ssa_forecast",
+    "theta_drift",
+    "vlmm_self_k3",
+    "weighted_recent_linear"
+  ],
+  "registry_sha256": "8bccdadcf0bf6bc8d3f6aacb989e43a8fdb255b6da6f0e05b00ddd4d088c137e",
+  "universe_search": {
+    "objective": "4plus",
+    "algorithm": "sample_coordinate_search_v1",
+    "seed": 104729,
+    "design_samples": 4000,
+    "proposals": 128,
+    "accepted": 26,
+    "design_covered_before": 46,
+    "design_covered_after": 76,
+    "global_optimum": false
+  },
+  "selection_validation": "nested_chronological_procedure",
+  "inference": "retrospective_replay_no_demonstrated_predictive_advantage",
+  "interval_scope": "MC intervals measure sampling error; historical frequency intervals are descriptive, not independent predictive tests",
+  "financial_note": "Missing prize amounts/fees are unknown, never zero. Published prizes are gross estimates before tax and may change with additional winners.",
+  "method_failures": {
+    "('anti_cooc_last', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2168, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2169, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2170, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2171, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2172, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2173, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2174, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2175, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2176, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2177, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2178, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2179, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2180, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2181, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2182, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2183, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2184, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2185, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2187, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2188, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2189, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2190, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2191, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2192, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2193, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2194, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2195, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2196, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2197, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2168, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2169, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2170, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2171, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2172, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2173, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2174, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2175, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2176, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2177, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2178, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2179, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2180, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2181, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2182, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2183, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2184, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2185, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2187, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2188, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2189, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2190, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2191, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2192, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2193, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2194, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2195, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2196, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2197, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2168, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2169, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2170, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2171, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2172, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2173, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2174, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2175, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2176, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2177, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2178, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2179, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2180, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2181, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2182, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2183, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2184, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2185, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2187, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2188, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2189, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2190, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2191, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2192, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2193, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2194, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2195, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2196, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2197, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2198, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2198, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2198, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2199, 0, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2199, 100, False)": "ValueError: empty, flat or non-finite scores",
+    "('anti_cooc_last', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('cooc_last3', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('hawkes_cross', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('interval_extrema_k16', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pagerank_cooc', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_lift_last', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('pair_transition', 2199, 100, True)": "ValueError: empty, flat or non-finite scores",
+    "('rwr_last_draw', 2199, 100, True)": "ValueError: empty, flat or non-finite scores"
+  },
+  "summary": {
+    "pool": {
+      "any_prize_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "4plus_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "cost_recovery_frequency_known_only": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "financially_resolved_draws": 3,
+      "financially_missing_draws": 0,
+      "variant_cost_bani": 134400,
+      "full_cost_bani": 134400,
+      "gross_bani": 0,
+      "net_bani": -134400
+    },
+    "universe": {
+      "any_prize_frequency": {
+        "successes": 3,
+        "samples": 3,
+        "probability": 1.0,
+        "ci95": [
+          0.4385029682449546,
+          1.0
+        ]
+      },
+      "4plus_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "cost_recovery_frequency_known_only": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "financially_resolved_draws": 3,
+      "financially_missing_draws": 0,
+      "variant_cost_bani": 134400,
+      "full_cost_bani": 134400,
+      "gross_bani": 30359,
+      "net_bani": -104041
+    },
+    "random_reference": {
+      "any_prize_frequency": {
+        "successes": 3,
+        "samples": 3,
+        "probability": 1.0,
+        "ci95": [
+          0.4385029682449546,
+          1.0
+        ]
+      },
+      "4plus_frequency": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "cost_recovery_frequency_known_only": {
+        "successes": 0,
+        "samples": 3,
+        "probability": 0.0,
+        "ci95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "financially_resolved_draws": 3,
+      "financially_missing_draws": 0,
+      "variant_cost_bani": 134400,
+      "full_cost_bani": 134400,
+      "gross_bani": 10515,
+      "net_bani": -123885
+    }
+  },
+  "rows": [
+    {
+      "target_index": 2198,
+      "target_date": "2026-10-25",
+      "numbers": [
+        10,
+        39,
+        20,
+        16,
+        1
+      ],
+      "joker": 8,
+      "selection": {
+        "pool": [
+          2,
+          7,
+          8,
+          11,
+          16,
+          27,
+          32,
+          33,
+          36,
+          41,
+          42,
+          44
+        ],
+        "method": "ewma_cold_hl30",
+        "joker_method": "knn_draw_similarity",
+        "parameters": {
+          "pool_size": 12,
+          "lookback": 0,
+          "guarantee": 5,
+          "wheel_condition": null,
+          "max_consecutive_run": 0,
+          "recent_penalty_draws": 0,
+          "recent_penalty_factor": 0.5,
+          "restrict_base_min": 0,
+          "restrict_base_max": 0,
+          "wheel_method": "hitcover"
+        },
+        "wheel": {
+          "wheel_variants": 64,
+          "top_up": 0,
+          "coverage_before_top_up_pct": 8.08,
+          "method": "hitcover"
+        },
+        "filters": {
+          "timesfm_predictions": {
+            "41": 1.0,
+            "8": 0.993696,
+            "44": 0.928723,
+            "16": 0.912364,
+            "27": 0.878154,
+            "33": 0.871895,
+            "36": 0.844885,
+            "2": 0.821126,
+            "42": 0.7916,
+            "11": 0.784121,
+            "32": 0.751963,
+            "7": 0.748511,
+            "12": 0.747361,
+            "4": 0.743252,
+            "34": 0.74196,
+            "35": 0.741341,
+            "20": 0.727321,
+            "23": 0.696997,
+            "21": 0.657886,
+            "9": 0.654047,
+            "39": 0.608091,
+            "13": 0.596636,
+            "29": 0.545521,
+            "3": 0.53655,
+            "28": 0.527903
+          },
+          "pool_selection": "top_score_pure",
+          "pool_selection_note": "top-N după scorul final, cu departajarea canonică",
+          "pool_score_unique_levels": 45,
+          "pool_longest_consecutive_run": 2,
+          "pool_is_consecutive_block": false
+        },
+        "training_end_exclusive": 2198,
+        "training_last_date": "2026-10-22",
+        "inner_indices": [
+          2168,
+          2169,
+          2170,
+          2171,
+          2172,
+          2173,
+          2174,
+          2175,
+          2176,
+          2177,
+          2178,
+          2179,
+          2180,
+          2181,
+          2182,
+          2183,
+          2184,
+          2185,
+          2186,
+          2187,
+          2188,
+          2189,
+          2190,
+          2191,
+          2192,
+          2193,
+          2194,
+          2195,
+          2196,
+          2197
+        ],
+        "selection_last_date": "2026-10-22",
+        "decision": {
+          "scorer": "ewma_cold_hl30",
+          "ensemble": [
+            {
+              "method": "ewma_cold_hl30",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 1.4,
+          "avg_hits_with_blacklist": null,
+          "rationale": "ewma_cold_hl30: rată 4+ @ k12 = 0.100 (Wilson_lb=0.054), beat random (hipergeometric 0.0140) in 3/4 windows on the same 4+ target (lift +0.0860); din 9 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 47 candidați: p=0.396 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_4plus_k12",
+          "rate_col_mismatch": false,
+          "hit_target": 4,
+          "target_label": "4+",
+          "qualifying_methods": 9,
+          "ranked_methods": [
+            "ewma_cold_hl30",
+            "imapa_agg",
+            "knn_pattern_self",
+            "anti_cooc_last",
+            "ewma_hl30",
+            "online_logit_sgd",
+            "rank_ensemble_core",
+            "ses_opt_alpha",
+            "theta_drift"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 47,
+            "p_value": 0.00843,
+            "holm_p": 0.396228,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.01401831294060449,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.0,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "freq_window_200",
+              "tiebreak_fraction": 0.572
+            },
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 0.953
+            },
+            {
+              "method": "gap_current",
+              "tiebreak_fraction": 0.672
+            },
+            {
+              "method": "gbm_stumps_pooled",
+              "tiebreak_fraction": 0.628
+            },
+            {
+              "method": "haar_multiscale",
+              "tiebreak_fraction": 0.85
+            },
+            {
+              "method": "season_period2",
+              "tiebreak_fraction": 0.922
+            }
+          ]
+        },
+        "joker_decision": {
+          "scorer": "knn_draw_similarity",
+          "ensemble": [
+            {
+              "method": "knn_draw_similarity",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 0.13333333333333333,
+          "avg_hits_with_blacklist": null,
+          "rationale": "knn_draw_similarity: rată top-1 (1/1) @ k1 = 0.133 (Wilson_lb=0.078), beat random (hipergeometric 0.0500) in 4/4 windows on the same top-1 (1/1) target (lift +0.0833); din 12 metode calificate [prioritate: top-1 (1/1), robust] [după corecția Holm pentru 45 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_1plus_k1",
+          "rate_col_mismatch": false,
+          "hit_target": 1,
+          "target_label": "top-1 (1/1)",
+          "qualifying_methods": 12,
+          "ranked_methods": [
+            "knn_draw_similarity",
+            "rank_ensemble_core",
+            "markov_pairs",
+            "naive_bayes_last",
+            "neighbor_adjacent",
+            "rhythm_phase",
+            "drift_linear",
+            "freq_window_200",
+            "hot_consistency",
+            "knn_pattern_self",
+            "dmd_forecast",
+            "theta_drift"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 45,
+            "p_value": 0.060772,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.05,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.0,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": []
+        },
+        "inner_objective_successes": 2,
+        "rejected_parameters": [],
+        "candidate_parameter_scores": [
+          {
+            "parameters": {
+              "pool_size": 12,
+              "lookback": 0,
+              "guarantee": 5,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          },
+          {
+            "parameters": {
+              "pool_size": 12,
+              "lookback": 100,
+              "guarantee": 5,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          }
+        ],
+        "tickets_sha256": "9c384242f307e84a67500c0491456f6630c6afa5c00244276e0d52f8f53f4740"
+      },
+      "tickets": {
+        "pool": [
+          [
+            8,
+            16,
+            33,
+            36,
+            41,
+            12
+          ],
+          [
+            2,
+            8,
+            27,
+            41,
+            44,
+            12
+          ],
+          [
+            8,
+            16,
+            27,
+            33,
+            44,
+            12
+          ],
+          [
+            8,
+            36,
+            41,
+            42,
+            44,
+            12
+          ],
+          [
+            8,
+            32,
+            33,
+            41,
+            44,
+            12
+          ],
+          [
+            8,
+            16,
+            27,
+            32,
+            41,
+            12
+          ],
+          [
+            2,
+            8,
+            16,
+            41,
+            42,
+            12
+          ],
+          [
+            16,
+            27,
+            41,
+            42,
+            44,
+            12
+          ],
+          [
+            7,
+            8,
+            11,
+            41,
+            44,
+            12
+          ],
+          [
+            2,
+            8,
+            11,
+            16,
+            44,
+            12
+          ],
+          [
+            7,
+            8,
+            27,
+            41,
+            42,
+            12
+          ],
+          [
+            2,
+            11,
+            16,
+            33,
+            41,
+            12
+          ],
+          [
+            11,
+            27,
+            33,
+            36,
+            41,
+            12
+          ],
+          [
+            8,
+            11,
+            33,
+            42,
+            44,
+            12
+          ],
+          [
+            8,
+            11,
+            16,
+            27,
+            42,
+            12
+          ],
+          [
+            2,
+            8,
+            27,
+            33,
+            42,
+            12
+          ],
+          [
+            2,
+            7,
+            8,
+            16,
+            27,
+            12
+          ],
+          [
+            2,
+            8,
+            16,
+            32,
+            33,
+            12
+          ],
+          [
+            16,
+            33,
+            36,
+            42,
+            44,
+            12
+          ],
+          [
+            11,
+            16,
+            27,
+            36,
+            44,
+            12
+          ],
+          [
+            2,
+            7,
+            36,
+            41,
+            44,
+            12
+          ],
+          [
+            7,
+            33,
+            41,
+            42,
+            44,
+            12
+          ],
+          [
+            7,
+            8,
+            32,
+            36,
+            41,
+            12
+          ],
+          [
+            8,
+            11,
+            27,
+            32,
+            44,
+            12
+          ],
+          [
+            7,
+            8,
+            16,
+            32,
+            44,
+            12
+          ],
+          [
+            11,
+            16,
+            36,
+            41,
+            42,
+            12
+          ],
+          [
+            2,
+            16,
+            32,
+            36,
+            41,
+            12
+          ],
+          [
+            2,
+            33,
+            36,
+            41,
+            42,
+            12
+          ],
+          [
+            2,
+            16,
+            27,
+            33,
+            36,
+            12
+          ],
+          [
+            7,
+            11,
+            16,
+            27,
+            41,
+            12
+          ],
+          [
+            2,
+            7,
+            27,
+            33,
+            41,
+            12
+          ],
+          [
+            7,
+            8,
+            16,
+            33,
+            42,
+            12
+          ],
+          [
+            2,
+            8,
+            11,
+            33,
+            36,
+            12
+          ],
+          [
+            11,
+            32,
+            36,
+            41,
+            44,
+            12
+          ],
+          [
+            2,
+            32,
+            41,
+            42,
+            44,
+            12
+          ],
+          [
+            2,
+            16,
+            27,
+            32,
+            44,
+            12
+          ],
+          [
+            2,
+            8,
+            27,
+            32,
+            36,
+            12
+          ],
+          [
+            8,
+            11,
+            16,
+            32,
+            36,
+            12
+          ],
+          [
+            7,
+            16,
+            32,
+            33,
+            41,
+            12
+          ],
+          [
+            2,
+            7,
+            8,
+            42,
+            44,
+            12
+          ],
+          [
+            2,
+            7,
+            16,
+            33,
+            44,
+            12
+          ],
+          [
+            2,
+            11,
+            27,
+            41,
+            42,
+            12
+          ],
+          [
+            7,
+            27,
+            33,
+            36,
+            44,
+            12
+          ],
+          [
+            27,
+            32,
+            36,
+            41,
+            42,
+            12
+          ],
+          [
+            2,
+            27,
+            36,
+            42,
+            44,
+            12
+          ],
+          [
+            8,
+            32,
+            33,
+            36,
+            42,
+            12
+          ],
+          [
+            7,
+            8,
+            11,
+            27,
+            36,
+            12
+          ],
+          [
+            11,
+            16,
+            32,
+            33,
+            44,
+            12
+          ],
+          [
+            2,
+            32,
+            33,
+            36,
+            44,
+            12
+          ],
+          [
+            16,
+            27,
+            32,
+            33,
+            42,
+            12
+          ],
+          [
+            11,
+            32,
+            33,
+            41,
+            42,
+            12
+          ],
+          [
+            7,
+            11,
+            16,
+            42,
+            44,
+            12
+          ],
+          [
+            7,
+            11,
+            16,
+            33,
+            36,
+            12
+          ],
+          [
+            2,
+            7,
+            11,
+            27,
+            44,
+            12
+          ],
+          [
+            7,
+            8,
+            11,
+            32,
+            33,
+            12
+          ],
+          [
+            2,
+            8,
+            11,
+            32,
+            42,
+            12
+          ],
+          [
+            7,
+            16,
+            27,
+            32,
+            36,
+            12
+          ],
+          [
+            2,
+            7,
+            16,
+            36,
+            42,
+            12
+          ],
+          [
+            2,
+            11,
+            27,
+            32,
+            33,
+            12
+          ],
+          [
+            7,
+            27,
+            32,
+            42,
+            44,
+            12
+          ],
+          [
+            7,
+            11,
+            27,
+            33,
+            42,
+            12
+          ],
+          [
+            2,
+            7,
+            11,
+            16,
+            32,
+            12
+          ],
+          [
+            2,
+            7,
+            32,
+            33,
+            42,
+            12
+          ],
+          [
+            7,
+            11,
+            32,
+            36,
+            42,
+            12
+          ]
+        ],
+        "universe": [
+          [
+            1,
+            5,
+            15,
+            32,
+            41,
+            8
+          ],
+          [
+            1,
+            6,
+            26,
+            30,
+            32,
+            19
+          ],
+          [
+            1,
+            9,
+            10,
+            16,
+            21,
+            5
+          ],
+          [
+            1,
+            9,
+            26,
+            27,
+            29,
+            5
+          ],
+          [
+            1,
+            10,
+            18,
+            29,
+            37,
+            12
+          ],
+          [
+            1,
+            14,
+            18,
+            31,
+            32,
+            15
+          ],
+          [
+            8,
+            14,
+            24,
+            31,
+            45,
+            15
+          ],
+          [
+            2,
+            3,
+            8,
+            24,
+            38,
+            4
+          ],
+          [
+            2,
+            4,
+            24,
+            36,
+            44,
+            11
+          ],
+          [
+            5,
+            6,
+            28,
+            32,
+            37,
+            6
+          ],
+          [
+            3,
+            12,
+            13,
+            28,
+            38,
+            18
+          ],
+          [
+            2,
+            8,
+            11,
+            25,
+            40,
+            8
+          ],
+          [
+            2,
+            20,
+            31,
+            35,
+            41,
+            13
+          ],
+          [
+            6,
+            13,
+            15,
+            31,
+            37,
+            9
+          ],
+          [
+            3,
+            4,
+            18,
+            40,
+            43,
+            19
+          ],
+          [
+            3,
+            6,
+            10,
+            29,
+            39,
+            15
+          ],
+          [
+            12,
+            19,
+            24,
+            29,
+            36,
+            2
+          ],
+          [
+            3,
+            9,
+            10,
+            19,
+            23,
+            5
+          ],
+          [
+            8,
+            22,
+            28,
+            39,
+            45,
+            7
+          ],
+          [
+            3,
+            16,
+            18,
+            19,
+            29,
+            9
+          ],
+          [
+            8,
+            16,
+            26,
+            31,
+            44,
+            15
+          ],
+          [
+            3,
+            24,
+            35,
+            37,
+            40,
+            11
+          ],
+          [
+            3,
+            27,
+            33,
+            42,
+            44,
+            17
+          ],
+          [
+            4,
+            10,
+            12,
+            35,
+            40,
+            9
+          ],
+          [
+            4,
+            13,
+            15,
+            33,
+            38,
+            4
+          ],
+          [
+            4,
+            15,
+            17,
+            25,
+            34,
+            8
+          ],
+          [
+            4,
+            17,
+            19,
+            34,
+            37,
+            14
+          ],
+          [
+            1,
+            3,
+            5,
+            22,
+            39,
+            6
+          ],
+          [
+            5,
+            14,
+            24,
+            38,
+            45,
+            5
+          ],
+          [
+            7,
+            11,
+            13,
+            25,
+            41,
+            3
+          ],
+          [
+            9,
+            14,
+            17,
+            25,
+            37,
+            14
+          ],
+          [
+            5,
+            25,
+            27,
+            33,
+            35,
+            17
+          ],
+          [
+            8,
+            9,
+            13,
+            15,
+            35,
+            2
+          ],
+          [
+            6,
+            8,
+            10,
+            15,
+            27,
+            17
+          ],
+          [
+            6,
+            10,
+            13,
+            30,
+            44,
+            5
+          ],
+          [
+            6,
+            18,
+            21,
+            38,
+            42,
+            7
+          ],
+          [
+            6,
+            21,
+            28,
+            33,
+            44,
+            12
+          ],
+          [
+            6,
+            24,
+            30,
+            35,
+            39,
+            7
+          ],
+          [
+            7,
+            11,
+            15,
+            24,
+            36,
+            6
+          ],
+          [
+            21,
+            22,
+            33,
+            35,
+            37,
+            14
+          ],
+          [
+            12,
+            15,
+            20,
+            24,
+            39,
+            9
+          ],
+          [
+            8,
+            9,
+            10,
+            12,
+            45,
+            17
+          ],
+          [
+            8,
+            18,
+            25,
+            36,
+            41,
+            16
+          ],
+          [
+            2,
+            25,
+            32,
+            33,
+            36,
+            7
+          ],
+          [
+            6,
+            12,
+            18,
+            23,
+            26,
+            20
+          ],
+          [
+            10,
+            20,
+            33,
+            37,
+            45,
+            1
+          ],
+          [
+            7,
+            27,
+            28,
+            34,
+            41,
+            15
+          ],
+          [
+            1,
+            28,
+            31,
+            35,
+            42,
+            13
+          ],
+          [
+            12,
+            15,
+            17,
+            21,
+            29,
+            19
+          ],
+          [
+            12,
+            16,
+            19,
+            30,
+            42,
+            10
+          ],
+          [
+            12,
+            20,
+            27,
+            35,
+            41,
+            12
+          ],
+          [
+            11,
+            13,
+            24,
+            39,
+            43,
+            6
+          ],
+          [
+            15,
+            17,
+            21,
+            39,
+            45,
+            2
+          ],
+          [
+            15,
+            20,
+            24,
+            33,
+            36,
+            12
+          ],
+          [
+            15,
+            22,
+            25,
+            33,
+            45,
+            2
+          ],
+          [
+            2,
+            6,
+            9,
+            22,
+            23,
+            7
+          ],
+          [
+            7,
+            9,
+            13,
+            27,
+            34,
+            16
+          ],
+          [
+            9,
+            17,
+            34,
+            35,
+            42,
+            18
+          ],
+          [
+            2,
+            20,
+            27,
+            28,
+            38,
+            10
+          ],
+          [
+            1,
+            7,
+            13,
+            34,
+            40,
+            12
+          ],
+          [
+            20,
+            28,
+            29,
+            42,
+            45,
+            19
+          ],
+          [
+            22,
+            25,
+            33,
+            43,
+            45,
+            3
+          ],
+          [
+            11,
+            13,
+            17,
+            18,
+            23,
+            10
+          ],
+          [
+            24,
+            25,
+            27,
+            35,
+            43,
+            2
+          ]
+        ],
+        "random_reference": [
+          [
+            1,
+            3,
+            19,
+            22,
+            41,
+            11
+          ],
+          [
+            1,
+            4,
+            11,
+            15,
+            27,
+            16
+          ],
+          [
+            1,
+            4,
+            22,
+            30,
+            45,
+            2
+          ],
+          [
+            1,
+            5,
+            10,
+            14,
+            25,
+            13
+          ],
+          [
+            1,
+            6,
+            20,
+            40,
+            44,
+            16
+          ],
+          [
+            1,
+            7,
+            12,
+            15,
+            35,
+            7
+          ],
+          [
+            1,
+            12,
+            15,
+            27,
+            30,
+            1
+          ],
+          [
+            1,
+            13,
+            23,
+            25,
+            28,
+            15
+          ],
+          [
+            1,
+            22,
+            25,
+            33,
+            43,
+            7
+          ],
+          [
+            2,
+            4,
+            22,
+            29,
+            30,
+            9
+          ],
+          [
+            2,
+            9,
+            13,
+            16,
+            40,
+            18
+          ],
+          [
+            2,
+            14,
+            31,
+            32,
+            45,
+            13
+          ],
+          [
+            2,
+            17,
+            20,
+            21,
+            40,
+            18
+          ],
+          [
+            3,
+            4,
+            5,
+            25,
+            45,
+            15
+          ],
+          [
+            3,
+            4,
+            29,
+            35,
+            39,
+            17
+          ],
+          [
+            3,
+            10,
+            15,
+            30,
+            40,
+            15
+          ],
+          [
+            3,
+            12,
+            17,
+            23,
+            45,
+            6
+          ],
+          [
+            3,
+            19,
+            22,
+            28,
+            40,
+            11
+          ],
+          [
+            3,
+            20,
+            23,
+            31,
+            32,
+            5
+          ],
+          [
+            3,
+            24,
+            28,
+            30,
+            42,
+            10
+          ],
+          [
+            4,
+            8,
+            10,
+            11,
+            24,
+            9
+          ],
+          [
+            4,
+            8,
+            19,
+            31,
+            44,
+            14
+          ],
+          [
+            4,
+            14,
+            26,
+            36,
+            41,
+            10
+          ],
+          [
+            4,
+            31,
+            32,
+            34,
+            44,
+            3
+          ],
+          [
+            5,
+            6,
+            23,
+            35,
+            42,
+            13
+          ],
+          [
+            5,
+            7,
+            13,
+            27,
+            30,
+            5
+          ],
+          [
+            5,
+            8,
+            19,
+            30,
+            34,
+            14
+          ],
+          [
+            5,
+            13,
+            22,
+            23,
+            30,
+            5
+          ],
+          [
+            5,
+            20,
+            26,
+            31,
+            37,
+            17
+          ],
+          [
+            6,
+            7,
+            9,
+            32,
+            41,
+            7
+          ],
+          [
+            6,
+            7,
+            11,
+            19,
+            37,
+            19
+          ],
+          [
+            6,
+            9,
+            27,
+            28,
+            43,
+            19
+          ],
+          [
+            6,
+            10,
+            21,
+            30,
+            37,
+            6
+          ],
+          [
+            6,
+            12,
+            17,
+            21,
+            26,
+            8
+          ],
+          [
+            6,
+            12,
+            19,
+            30,
+            41,
+            6
+          ],
+          [
+            7,
+            11,
+            20,
+            22,
+            34,
+            18
+          ],
+          [
+            7,
+            20,
+            23,
+            30,
+            39,
+            13
+          ],
+          [
+            8,
+            18,
+            31,
+            36,
+            40,
+            18
+          ],
+          [
+            8,
+            37,
+            41,
+            43,
+            45,
+            8
+          ],
+          [
+            9,
+            14,
+            29,
+            42,
+            44,
+            4
+          ],
+          [
+            9,
+            17,
+            20,
+            25,
+            44,
+            3
+          ],
+          [
+            10,
+            11,
+            25,
+            29,
+            35,
+            1
+          ],
+          [
+            10,
+            26,
+            34,
+            37,
+            42,
+            9
+          ],
+          [
+            11,
+            12,
+            18,
+            25,
+            45,
+            10
+          ],
+          [
+            11,
+            13,
+            22,
+            25,
+            26,
+            18
+          ],
+          [
+            11,
+            13,
+            23,
+            24,
+            32,
+            10
+          ],
+          [
+            11,
+            22,
+            23,
+            31,
+            33,
+            20
+          ],
+          [
+            11,
+            22,
+            31,
+            34,
+            41,
+            14
+          ],
+          [
+            11,
+            25,
+            30,
+            31,
+            41,
+            8
+          ],
+          [
+            12,
+            17,
+            24,
+            27,
+            44,
+            3
+          ],
+          [
+            12,
+            24,
+            29,
+            33,
+            39,
+            20
+          ],
+          [
+            13,
+            15,
+            27,
+            34,
+            43,
+            19
+          ],
+          [
+            13,
+            16,
+            28,
+            37,
+            44,
+            20
+          ],
+          [
+            13,
+            17,
+            29,
+            32,
+            33,
+            20
+          ],
+          [
+            13,
+            19,
+            30,
+            37,
+            39,
+            1
+          ],
+          [
+            13,
+            23,
+            34,
+            36,
+            42,
+            7
+          ],
+          [
+            15,
+            22,
+            23,
+            26,
+            37,
+            17
+          ],
+          [
+            16,
+            21,
+            29,
+            35,
+            37,
+            8
+          ],
+          [
+            16,
+            22,
+            30,
+            32,
+            38,
+            19
+          ],
+          [
+            17,
+            33,
+            38,
+            39,
+            43,
+            10
+          ],
+          [
+            20,
+            23,
+            31,
+            32,
+            33,
+            10
+          ],
+          [
+            20,
+            23,
+            32,
+            36,
+            39,
+            16
+          ],
+          [
+            20,
+            24,
+            29,
+            31,
+            32,
+            2
+          ],
+          [
+            26,
+            30,
+            41,
+            42,
+            45,
+            2
+          ]
+        ]
+      },
+      "probabilities": {
+        "pool": {
+          "any_prize": {
+            "successes": 1417,
+            "samples": 10000,
+            "probability": 0.1417,
+            "ci95": [
+              0.13500229304849884,
+              0.14867288018392796
+            ]
+          },
+          "4plus": {
+            "successes": 97,
+            "samples": 10000,
+            "probability": 0.0097,
+            "ci95": [
+              0.007958481396960246,
+              0.011818067405325223
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "universe": {
+          "any_prize": {
+            "successes": 8765,
+            "samples": 10000,
+            "probability": 0.8765,
+            "ci95": [
+              0.8699065594674005,
+              0.8828042897594799
+            ]
+          },
+          "4plus": {
+            "successes": 121,
+            "samples": 10000,
+            "probability": 0.0121,
+            "ci95": [
+              0.010136711003799979,
+              0.014437994606306242
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "random_reference": {
+          "any_prize": {
+            "successes": 8565,
+            "samples": 10000,
+            "probability": 0.8565,
+            "ci95": [
+              0.8494917789373329,
+              0.8632344302243748
+            ]
+          },
+          "4plus": {
+            "successes": 112,
+            "samples": 10000,
+            "probability": 0.0112,
+            "ci95": [
+              0.009316987490236137,
+              0.013458409316937302
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        }
+      },
+      "outcomes": {
+        "pool": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 1,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 0,
+          "net_bani": -44800,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "universe": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 9046,
+          "net_bani": -35754,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "VIII": 1,
+            "VI": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "random_reference": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 2,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 2274,
+          "net_bani": -42526,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "VIII": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        }
+      }
+    },
+    {
+      "target_index": 2199,
+      "target_date": "2026-10-29",
+      "numbers": [
+        42,
+        21,
+        43,
+        18,
+        37
+      ],
+      "joker": 1,
+      "selection": {
+        "pool": [
+          6,
+          7,
+          9,
+          14,
+          15,
+          19,
+          25,
+          26,
+          30,
+          31,
+          43,
+          45
+        ],
+        "method": "online_logit_sgd",
+        "joker_method": "knn_draw_similarity",
+        "parameters": {
+          "pool_size": 12,
+          "lookback": 0,
+          "guarantee": 5,
+          "wheel_condition": null,
+          "max_consecutive_run": 0,
+          "recent_penalty_draws": 0,
+          "recent_penalty_factor": 0.5,
+          "restrict_base_min": 0,
+          "restrict_base_max": 0,
+          "wheel_method": "hitcover"
+        },
+        "wheel": {
+          "wheel_variants": 64,
+          "top_up": 0,
+          "coverage_before_top_up_pct": 8.08,
+          "method": "hitcover"
+        },
+        "filters": {
+          "timesfm_predictions": {
+            "7": 1.0,
+            "6": 0.989641,
+            "43": 0.985436,
+            "25": 0.978211,
+            "26": 0.977359,
+            "19": 0.957675,
+            "30": 0.947312,
+            "45": 0.939912,
+            "14": 0.930018,
+            "9": 0.929479,
+            "15": 0.924139,
+            "31": 0.891422,
+            "5": 0.885658,
+            "16": 0.879599,
+            "44": 0.875835,
+            "20": 0.875274,
+            "39": 0.872383,
+            "28": 0.864989,
+            "37": 0.860591,
+            "18": 0.857338,
+            "10": 0.852812,
+            "1": 0.849623,
+            "11": 0.840921,
+            "34": 0.839614,
+            "32": 0.838433
+          },
+          "pool_selection": "top_score_pure",
+          "pool_selection_note": "top-N după scorul final, cu departajarea canonică",
+          "pool_score_unique_levels": 45,
+          "pool_longest_consecutive_run": 2,
+          "pool_is_consecutive_block": false
+        },
+        "training_end_exclusive": 2199,
+        "training_last_date": "2026-10-25",
+        "inner_indices": [
+          2169,
+          2170,
+          2171,
+          2172,
+          2173,
+          2174,
+          2175,
+          2176,
+          2177,
+          2178,
+          2179,
+          2180,
+          2181,
+          2182,
+          2183,
+          2184,
+          2185,
+          2186,
+          2187,
+          2188,
+          2189,
+          2190,
+          2191,
+          2192,
+          2193,
+          2194,
+          2195,
+          2196,
+          2197,
+          2198
+        ],
+        "selection_last_date": "2026-10-25",
+        "decision": {
+          "scorer": "online_logit_sgd",
+          "ensemble": [
+            {
+              "method": "online_logit_sgd",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 1.1666666666666667,
+          "avg_hits_with_blacklist": null,
+          "rationale": "online_logit_sgd: rată 4+ @ k12 = 0.117 (Wilson_lb=0.066), beat random (hipergeometric 0.0140) in 4/4 windows on the same 4+ target (lift +0.1026); din 9 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 46 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_4plus_k12",
+          "rate_col_mismatch": false,
+          "hit_target": 4,
+          "target_label": "4+",
+          "qualifying_methods": 9,
+          "ranked_methods": [
+            "online_logit_sgd",
+            "ewma_cold_hl30",
+            "imapa_agg",
+            "knn_pattern_self",
+            "anti_cooc_last",
+            "ewma_hl30",
+            "rank_ensemble_core",
+            "ses_opt_alpha",
+            "theta_drift"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 46,
+            "p_value": 0.066002,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.01401831294060449,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.0,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "freq_window_200",
+              "tiebreak_fraction": 0.522
+            },
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 0.967
+            },
+            {
+              "method": "gap_current",
+              "tiebreak_fraction": 0.764
+            },
+            {
+              "method": "gbm_stumps_pooled",
+              "tiebreak_fraction": 0.719
+            },
+            {
+              "method": "haar_multiscale",
+              "tiebreak_fraction": 0.933
+            },
+            {
+              "method": "interval_extrema_k16",
+              "tiebreak_fraction": 0.508
+            },
+            {
+              "method": "season_period2",
+              "tiebreak_fraction": 0.803
+            }
+          ]
+        },
+        "joker_decision": {
+          "scorer": "knn_draw_similarity",
+          "ensemble": [
+            {
+              "method": "knn_draw_similarity",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 0.13333333333333333,
+          "avg_hits_with_blacklist": null,
+          "rationale": "knn_draw_similarity: rată top-1 (1/1) @ k1 = 0.133 (Wilson_lb=0.078), beat random (hipergeometric 0.0500) in 4/4 windows on the same top-1 (1/1) target (lift +0.0833); din 11 metode calificate [prioritate: top-1 (1/1), robust] [după corecția Holm pentru 44 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_1plus_k1",
+          "rate_col_mismatch": false,
+          "hit_target": 1,
+          "target_label": "top-1 (1/1)",
+          "qualifying_methods": 11,
+          "ranked_methods": [
+            "knn_draw_similarity",
+            "neighbor_adjacent",
+            "rank_ensemble_core",
+            "markov_pairs",
+            "naive_bayes_last",
+            "drift_linear",
+            "freq_window_200",
+            "hot_consistency",
+            "knn_pattern_self",
+            "rhythm_phase",
+            "spectral_phase"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 44,
+            "p_value": 0.060772,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.05,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.0,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 0.5
+            }
+          ]
+        },
+        "inner_objective_successes": 2,
+        "rejected_parameters": [],
+        "candidate_parameter_scores": [
+          {
+            "parameters": {
+              "pool_size": 12,
+              "lookback": 0,
+              "guarantee": 5,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          },
+          {
+            "parameters": {
+              "pool_size": 12,
+              "lookback": 100,
+              "guarantee": 5,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          }
+        ],
+        "tickets_sha256": "acfe80dc76dbbe58d025a3a3eba1d1f1553e6959c92b88963b62d0bf58368344"
+      },
+      "tickets": {
+        "pool": [
+          [
+            6,
+            7,
+            26,
+            43,
+            45,
+            19
+          ],
+          [
+            6,
+            19,
+            25,
+            26,
+            43,
+            19
+          ],
+          [
+            6,
+            7,
+            19,
+            25,
+            30,
+            19
+          ],
+          [
+            7,
+            14,
+            25,
+            26,
+            43,
+            19
+          ],
+          [
+            6,
+            7,
+            15,
+            25,
+            26,
+            19
+          ],
+          [
+            6,
+            7,
+            15,
+            19,
+            43,
+            19
+          ],
+          [
+            6,
+            7,
+            14,
+            30,
+            43,
+            19
+          ],
+          [
+            6,
+            7,
+            14,
+            25,
+            45,
+            19
+          ],
+          [
+            6,
+            9,
+            25,
+            43,
+            45,
+            19
+          ],
+          [
+            9,
+            25,
+            26,
+            30,
+            43,
+            19
+          ],
+          [
+            7,
+            9,
+            19,
+            26,
+            30,
+            19
+          ],
+          [
+            6,
+            9,
+            15,
+            26,
+            43,
+            19
+          ],
+          [
+            7,
+            9,
+            19,
+            25,
+            45,
+            19
+          ],
+          [
+            15,
+            25,
+            26,
+            43,
+            45,
+            19
+          ],
+          [
+            6,
+            9,
+            14,
+            25,
+            26,
+            19
+          ],
+          [
+            19,
+            25,
+            26,
+            30,
+            45,
+            19
+          ],
+          [
+            14,
+            19,
+            25,
+            30,
+            43,
+            19
+          ],
+          [
+            6,
+            7,
+            9,
+            31,
+            43,
+            19
+          ],
+          [
+            6,
+            14,
+            19,
+            26,
+            45,
+            19
+          ],
+          [
+            6,
+            9,
+            14,
+            19,
+            43,
+            19
+          ],
+          [
+            6,
+            15,
+            19,
+            25,
+            45,
+            19
+          ],
+          [
+            7,
+            15,
+            25,
+            30,
+            45,
+            19
+          ],
+          [
+            6,
+            7,
+            14,
+            26,
+            31,
+            19
+          ],
+          [
+            7,
+            9,
+            15,
+            30,
+            43,
+            19
+          ],
+          [
+            7,
+            9,
+            14,
+            25,
+            30,
+            19
+          ],
+          [
+            14,
+            26,
+            30,
+            43,
+            45,
+            19
+          ],
+          [
+            7,
+            14,
+            15,
+            43,
+            45,
+            19
+          ],
+          [
+            7,
+            14,
+            15,
+            26,
+            30,
+            19
+          ],
+          [
+            6,
+            15,
+            26,
+            30,
+            45,
+            19
+          ],
+          [
+            7,
+            9,
+            14,
+            26,
+            45,
+            19
+          ],
+          [
+            6,
+            25,
+            26,
+            31,
+            45,
+            19
+          ],
+          [
+            7,
+            9,
+            25,
+            26,
+            31,
+            19
+          ],
+          [
+            9,
+            15,
+            19,
+            25,
+            43,
+            19
+          ],
+          [
+            7,
+            14,
+            19,
+            30,
+            45,
+            19
+          ],
+          [
+            6,
+            15,
+            25,
+            31,
+            43,
+            19
+          ],
+          [
+            6,
+            9,
+            15,
+            25,
+            30,
+            19
+          ],
+          [
+            14,
+            15,
+            19,
+            25,
+            26,
+            19
+          ],
+          [
+            7,
+            19,
+            26,
+            31,
+            45,
+            19
+          ],
+          [
+            7,
+            14,
+            19,
+            31,
+            43,
+            19
+          ],
+          [
+            7,
+            30,
+            31,
+            43,
+            45,
+            19
+          ],
+          [
+            6,
+            9,
+            19,
+            30,
+            45,
+            19
+          ],
+          [
+            19,
+            26,
+            30,
+            31,
+            43,
+            19
+          ],
+          [
+            15,
+            19,
+            30,
+            43,
+            45,
+            19
+          ],
+          [
+            19,
+            25,
+            31,
+            43,
+            45,
+            19
+          ],
+          [
+            6,
+            7,
+            15,
+            30,
+            31,
+            19
+          ],
+          [
+            7,
+            15,
+            19,
+            25,
+            31,
+            19
+          ],
+          [
+            6,
+            14,
+            15,
+            19,
+            30,
+            19
+          ],
+          [
+            6,
+            14,
+            19,
+            25,
+            31,
+            19
+          ],
+          [
+            7,
+            9,
+            14,
+            15,
+            19,
+            19
+          ],
+          [
+            6,
+            14,
+            31,
+            43,
+            45,
+            19
+          ],
+          [
+            6,
+            9,
+            26,
+            30,
+            31,
+            19
+          ],
+          [
+            9,
+            15,
+            19,
+            26,
+            45,
+            19
+          ],
+          [
+            9,
+            26,
+            31,
+            43,
+            45,
+            19
+          ],
+          [
+            15,
+            25,
+            26,
+            30,
+            31,
+            19
+          ],
+          [
+            9,
+            14,
+            25,
+            31,
+            43,
+            19
+          ],
+          [
+            6,
+            9,
+            14,
+            15,
+            45,
+            19
+          ],
+          [
+            14,
+            15,
+            26,
+            31,
+            43,
+            19
+          ],
+          [
+            9,
+            19,
+            25,
+            30,
+            31,
+            19
+          ],
+          [
+            6,
+            9,
+            15,
+            19,
+            31,
+            19
+          ],
+          [
+            14,
+            25,
+            30,
+            31,
+            45,
+            19
+          ],
+          [
+            9,
+            14,
+            19,
+            26,
+            31,
+            19
+          ],
+          [
+            9,
+            15,
+            25,
+            31,
+            45,
+            19
+          ],
+          [
+            14,
+            15,
+            19,
+            31,
+            45,
+            19
+          ],
+          [
+            9,
+            14,
+            15,
+            30,
+            31,
+            19
+          ]
+        ],
+        "universe": [
+          [
+            1,
+            5,
+            15,
+            32,
+            41,
+            8
+          ],
+          [
+            1,
+            6,
+            26,
+            30,
+            32,
+            19
+          ],
+          [
+            1,
+            9,
+            10,
+            16,
+            21,
+            5
+          ],
+          [
+            1,
+            9,
+            26,
+            27,
+            29,
+            5
+          ],
+          [
+            1,
+            10,
+            18,
+            29,
+            37,
+            12
+          ],
+          [
+            1,
+            14,
+            18,
+            31,
+            32,
+            15
+          ],
+          [
+            8,
+            14,
+            24,
+            31,
+            45,
+            15
+          ],
+          [
+            2,
+            3,
+            8,
+            24,
+            38,
+            4
+          ],
+          [
+            2,
+            4,
+            24,
+            36,
+            44,
+            11
+          ],
+          [
+            5,
+            6,
+            28,
+            32,
+            37,
+            6
+          ],
+          [
+            3,
+            12,
+            13,
+            28,
+            38,
+            18
+          ],
+          [
+            2,
+            8,
+            11,
+            25,
+            40,
+            8
+          ],
+          [
+            2,
+            20,
+            31,
+            35,
+            41,
+            13
+          ],
+          [
+            6,
+            13,
+            15,
+            31,
+            37,
+            9
+          ],
+          [
+            3,
+            4,
+            18,
+            40,
+            43,
+            19
+          ],
+          [
+            3,
+            6,
+            10,
+            29,
+            39,
+            15
+          ],
+          [
+            12,
+            19,
+            24,
+            29,
+            36,
+            2
+          ],
+          [
+            3,
+            9,
+            10,
+            19,
+            23,
+            5
+          ],
+          [
+            8,
+            22,
+            28,
+            39,
+            45,
+            7
+          ],
+          [
+            3,
+            16,
+            18,
+            19,
+            29,
+            9
+          ],
+          [
+            8,
+            16,
+            26,
+            31,
+            44,
+            15
+          ],
+          [
+            3,
+            24,
+            35,
+            37,
+            40,
+            11
+          ],
+          [
+            3,
+            27,
+            33,
+            42,
+            44,
+            17
+          ],
+          [
+            4,
+            10,
+            12,
+            35,
+            40,
+            9
+          ],
+          [
+            4,
+            13,
+            15,
+            33,
+            38,
+            4
+          ],
+          [
+            4,
+            15,
+            17,
+            25,
+            34,
+            8
+          ],
+          [
+            4,
+            17,
+            19,
+            34,
+            37,
+            14
+          ],
+          [
+            1,
+            3,
+            5,
+            22,
+            39,
+            6
+          ],
+          [
+            5,
+            14,
+            24,
+            38,
+            45,
+            5
+          ],
+          [
+            7,
+            11,
+            13,
+            25,
+            41,
+            3
+          ],
+          [
+            9,
+            14,
+            17,
+            25,
+            37,
+            14
+          ],
+          [
+            5,
+            25,
+            27,
+            33,
+            35,
+            17
+          ],
+          [
+            8,
+            9,
+            13,
+            15,
+            35,
+            2
+          ],
+          [
+            6,
+            8,
+            10,
+            15,
+            27,
+            17
+          ],
+          [
+            6,
+            10,
+            13,
+            30,
+            44,
+            5
+          ],
+          [
+            6,
+            18,
+            21,
+            38,
+            42,
+            7
+          ],
+          [
+            6,
+            21,
+            28,
+            33,
+            44,
+            12
+          ],
+          [
+            6,
+            24,
+            30,
+            35,
+            39,
+            7
+          ],
+          [
+            7,
+            11,
+            15,
+            24,
+            36,
+            6
+          ],
+          [
+            21,
+            22,
+            33,
+            35,
+            37,
+            14
+          ],
+          [
+            12,
+            15,
+            20,
+            24,
+            39,
+            9
+          ],
+          [
+            8,
+            9,
+            10,
+            12,
+            45,
+            17
+          ],
+          [
+            8,
+            18,
+            25,
+            36,
+            41,
+            16
+          ],
+          [
+            2,
+            25,
+            32,
+            33,
+            36,
+            7
+          ],
+          [
+            6,
+            12,
+            18,
+            23,
+            26,
+            20
+          ],
+          [
+            10,
+            20,
+            33,
+            37,
+            45,
+            1
+          ],
+          [
+            7,
+            27,
+            28,
+            34,
+            41,
+            15
+          ],
+          [
+            1,
+            28,
+            31,
+            35,
+            42,
+            13
+          ],
+          [
+            12,
+            15,
+            17,
+            21,
+            29,
+            19
+          ],
+          [
+            12,
+            16,
+            19,
+            30,
+            42,
+            10
+          ],
+          [
+            12,
+            20,
+            27,
+            35,
+            41,
+            12
+          ],
+          [
+            11,
+            13,
+            24,
+            39,
+            43,
+            6
+          ],
+          [
+            15,
+            17,
+            21,
+            39,
+            45,
+            2
+          ],
+          [
+            15,
+            20,
+            24,
+            33,
+            36,
+            12
+          ],
+          [
+            15,
+            22,
+            25,
+            33,
+            45,
+            2
+          ],
+          [
+            2,
+            6,
+            9,
+            22,
+            23,
+            7
+          ],
+          [
+            7,
+            9,
+            13,
+            27,
+            34,
+            16
+          ],
+          [
+            9,
+            17,
+            34,
+            35,
+            42,
+            18
+          ],
+          [
+            2,
+            20,
+            27,
+            28,
+            38,
+            10
+          ],
+          [
+            1,
+            7,
+            13,
+            34,
+            40,
+            12
+          ],
+          [
+            20,
+            28,
+            29,
+            42,
+            45,
+            19
+          ],
+          [
+            22,
+            25,
+            33,
+            43,
+            45,
+            3
+          ],
+          [
+            11,
+            13,
+            17,
+            18,
+            23,
+            10
+          ],
+          [
+            24,
+            25,
+            27,
+            35,
+            43,
+            2
+          ]
+        ],
+        "random_reference": [
+          [
+            1,
+            3,
+            19,
+            22,
+            41,
+            11
+          ],
+          [
+            1,
+            4,
+            11,
+            15,
+            27,
+            16
+          ],
+          [
+            1,
+            4,
+            22,
+            30,
+            45,
+            2
+          ],
+          [
+            1,
+            5,
+            10,
+            14,
+            25,
+            13
+          ],
+          [
+            1,
+            6,
+            20,
+            40,
+            44,
+            16
+          ],
+          [
+            1,
+            7,
+            12,
+            15,
+            35,
+            7
+          ],
+          [
+            1,
+            12,
+            15,
+            27,
+            30,
+            1
+          ],
+          [
+            1,
+            13,
+            23,
+            25,
+            28,
+            15
+          ],
+          [
+            1,
+            22,
+            25,
+            33,
+            43,
+            7
+          ],
+          [
+            2,
+            4,
+            22,
+            29,
+            30,
+            9
+          ],
+          [
+            2,
+            9,
+            13,
+            16,
+            40,
+            18
+          ],
+          [
+            2,
+            14,
+            31,
+            32,
+            45,
+            13
+          ],
+          [
+            2,
+            17,
+            20,
+            21,
+            40,
+            18
+          ],
+          [
+            3,
+            4,
+            5,
+            25,
+            45,
+            15
+          ],
+          [
+            3,
+            4,
+            29,
+            35,
+            39,
+            17
+          ],
+          [
+            3,
+            10,
+            15,
+            30,
+            40,
+            15
+          ],
+          [
+            3,
+            12,
+            17,
+            23,
+            45,
+            6
+          ],
+          [
+            3,
+            19,
+            22,
+            28,
+            40,
+            11
+          ],
+          [
+            3,
+            20,
+            23,
+            31,
+            32,
+            5
+          ],
+          [
+            3,
+            24,
+            28,
+            30,
+            42,
+            10
+          ],
+          [
+            4,
+            8,
+            10,
+            11,
+            24,
+            9
+          ],
+          [
+            4,
+            8,
+            19,
+            31,
+            44,
+            14
+          ],
+          [
+            4,
+            14,
+            26,
+            36,
+            41,
+            10
+          ],
+          [
+            4,
+            31,
+            32,
+            34,
+            44,
+            3
+          ],
+          [
+            5,
+            6,
+            23,
+            35,
+            42,
+            13
+          ],
+          [
+            5,
+            7,
+            13,
+            27,
+            30,
+            5
+          ],
+          [
+            5,
+            8,
+            19,
+            30,
+            34,
+            14
+          ],
+          [
+            5,
+            13,
+            22,
+            23,
+            30,
+            5
+          ],
+          [
+            5,
+            20,
+            26,
+            31,
+            37,
+            17
+          ],
+          [
+            6,
+            7,
+            9,
+            32,
+            41,
+            7
+          ],
+          [
+            6,
+            7,
+            11,
+            19,
+            37,
+            19
+          ],
+          [
+            6,
+            9,
+            27,
+            28,
+            43,
+            19
+          ],
+          [
+            6,
+            10,
+            21,
+            30,
+            37,
+            6
+          ],
+          [
+            6,
+            12,
+            17,
+            21,
+            26,
+            8
+          ],
+          [
+            6,
+            12,
+            19,
+            30,
+            41,
+            6
+          ],
+          [
+            7,
+            11,
+            20,
+            22,
+            34,
+            18
+          ],
+          [
+            7,
+            20,
+            23,
+            30,
+            39,
+            13
+          ],
+          [
+            8,
+            18,
+            31,
+            36,
+            40,
+            18
+          ],
+          [
+            8,
+            37,
+            41,
+            43,
+            45,
+            8
+          ],
+          [
+            9,
+            14,
+            29,
+            42,
+            44,
+            4
+          ],
+          [
+            9,
+            17,
+            20,
+            25,
+            44,
+            3
+          ],
+          [
+            10,
+            11,
+            25,
+            29,
+            35,
+            1
+          ],
+          [
+            10,
+            26,
+            34,
+            37,
+            42,
+            9
+          ],
+          [
+            11,
+            12,
+            18,
+            25,
+            45,
+            10
+          ],
+          [
+            11,
+            13,
+            22,
+            25,
+            26,
+            18
+          ],
+          [
+            11,
+            13,
+            23,
+            24,
+            32,
+            10
+          ],
+          [
+            11,
+            22,
+            23,
+            31,
+            33,
+            20
+          ],
+          [
+            11,
+            22,
+            31,
+            34,
+            41,
+            14
+          ],
+          [
+            11,
+            25,
+            30,
+            31,
+            41,
+            8
+          ],
+          [
+            12,
+            17,
+            24,
+            27,
+            44,
+            3
+          ],
+          [
+            12,
+            24,
+            29,
+            33,
+            39,
+            20
+          ],
+          [
+            13,
+            15,
+            27,
+            34,
+            43,
+            19
+          ],
+          [
+            13,
+            16,
+            28,
+            37,
+            44,
+            20
+          ],
+          [
+            13,
+            17,
+            29,
+            32,
+            33,
+            20
+          ],
+          [
+            13,
+            19,
+            30,
+            37,
+            39,
+            1
+          ],
+          [
+            13,
+            23,
+            34,
+            36,
+            42,
+            7
+          ],
+          [
+            15,
+            22,
+            23,
+            26,
+            37,
+            17
+          ],
+          [
+            16,
+            21,
+            29,
+            35,
+            37,
+            8
+          ],
+          [
+            16,
+            22,
+            30,
+            32,
+            38,
+            19
+          ],
+          [
+            17,
+            33,
+            38,
+            39,
+            43,
+            10
+          ],
+          [
+            20,
+            23,
+            31,
+            32,
+            33,
+            10
+          ],
+          [
+            20,
+            23,
+            32,
+            36,
+            39,
+            16
+          ],
+          [
+            20,
+            24,
+            29,
+            31,
+            32,
+            2
+          ],
+          [
+            26,
+            30,
+            41,
+            42,
+            45,
+            2
+          ]
+        ]
+      },
+      "probabilities": {
+        "pool": {
+          "any_prize": {
+            "successes": 1496,
+            "samples": 10000,
+            "probability": 0.1496,
+            "ci95": [
+              0.1427438223236886,
+              0.15672528373448158
+            ]
+          },
+          "4plus": {
+            "successes": 113,
+            "samples": 10000,
+            "probability": 0.0113,
+            "ci95": [
+              0.009407908789373,
+              0.013567411218126303
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "universe": {
+          "any_prize": {
+            "successes": 8765,
+            "samples": 10000,
+            "probability": 0.8765,
+            "ci95": [
+              0.8699065594674005,
+              0.8828042897594799
+            ]
+          },
+          "4plus": {
+            "successes": 121,
+            "samples": 10000,
+            "probability": 0.0121,
+            "ci95": [
+              0.010136711003799979,
+              0.014437994606306242
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "random_reference": {
+          "any_prize": {
+            "successes": 8565,
+            "samples": 10000,
+            "probability": 0.8565,
+            "ci95": [
+              0.8494917789373329,
+              0.8632344302243748
+            ]
+          },
+          "4plus": {
+            "successes": 112,
+            "samples": 10000,
+            "probability": 0.0112,
+            "ci95": [
+              0.009316987490236137,
+              0.013458409316937302
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        }
+      },
+      "outcomes": {
+        "pool": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 1,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 0,
+          "net_bani": -44800,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "universe": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 10915,
+          "net_bani": -33885,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "VI": 1,
+            "VIII": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "random_reference": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 2,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 3356,
+          "net_bani": -41444,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "VIII": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        }
+      }
+    },
+    {
+      "target_index": 2200,
+      "target_date": "2026-11-01",
+      "numbers": [
+        28,
+        38,
+        40,
+        32,
+        20
+      ],
+      "joker": 5,
+      "selection": {
+        "pool": [
+          1,
+          6,
+          7,
+          10,
+          16,
+          19,
+          20,
+          25,
+          26,
+          30,
+          39,
+          45
+        ],
+        "method": "online_logit_sgd",
+        "joker_method": "knn_draw_similarity",
+        "parameters": {
+          "pool_size": 12,
+          "lookback": 0,
+          "guarantee": 5,
+          "wheel_condition": null,
+          "max_consecutive_run": 0,
+          "recent_penalty_draws": 0,
+          "recent_penalty_factor": 0.5,
+          "restrict_base_min": 0,
+          "restrict_base_max": 0,
+          "wheel_method": "hitcover"
+        },
+        "wheel": {
+          "wheel_variants": 64,
+          "top_up": 0,
+          "coverage_before_top_up_pct": 8.08,
+          "method": "hitcover"
+        },
+        "filters": {
+          "timesfm_predictions": {
+            "16": 1.0,
+            "20": 0.995863,
+            "39": 0.993089,
+            "10": 0.974249,
+            "7": 0.97274,
+            "1": 0.97169,
+            "6": 0.96489,
+            "25": 0.95175,
+            "26": 0.950982,
+            "19": 0.932207,
+            "30": 0.921686,
+            "45": 0.914585,
+            "14": 0.904762,
+            "9": 0.904196,
+            "15": 0.899045,
+            "42": 0.882561,
+            "21": 0.880658,
+            "43": 0.872694,
+            "37": 0.871181,
+            "18": 0.87018,
+            "31": 0.867273,
+            "5": 0.861689,
+            "44": 0.852438,
+            "28": 0.84146,
+            "11": 0.820134
+          },
+          "pool_selection": "top_score_pure",
+          "pool_selection_note": "top-N după scorul final, cu departajarea canonică",
+          "pool_score_unique_levels": 45,
+          "pool_longest_consecutive_run": 2,
+          "pool_is_consecutive_block": false
+        },
+        "training_end_exclusive": 2200,
+        "training_last_date": "2026-10-29",
+        "inner_indices": [
+          2170,
+          2171,
+          2172,
+          2173,
+          2174,
+          2175,
+          2176,
+          2177,
+          2178,
+          2179,
+          2180,
+          2181,
+          2182,
+          2183,
+          2184,
+          2185,
+          2186,
+          2187,
+          2188,
+          2189,
+          2190,
+          2191,
+          2192,
+          2193,
+          2194,
+          2195,
+          2196,
+          2197,
+          2198,
+          2199
+        ],
+        "selection_last_date": "2026-10-29",
+        "decision": {
+          "scorer": "online_logit_sgd",
+          "ensemble": [
+            {
+              "method": "online_logit_sgd",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 1.2,
+          "avg_hits_with_blacklist": null,
+          "rationale": "online_logit_sgd: rată 4+ @ k12 = 0.117 (Wilson_lb=0.066), beat random (hipergeometric 0.0140) in 4/4 windows on the same 4+ target (lift +0.1026); din 4 metode calificate [prioritate: 4+, robust] [după corecția Holm pentru 47 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_4plus_k12",
+          "rate_col_mismatch": false,
+          "hit_target": 4,
+          "target_label": "4+",
+          "qualifying_methods": 4,
+          "ranked_methods": [
+            "online_logit_sgd",
+            "drift_linear",
+            "ewma_cold_hl30",
+            "anti_cooc_last"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 47,
+            "p_value": 0.066002,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.01401831294060449,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.0,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "freq_window_200",
+              "tiebreak_fraction": 0.536
+            },
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 0.967
+            },
+            {
+              "method": "gap_current",
+              "tiebreak_fraction": 0.786
+            },
+            {
+              "method": "gbm_stumps_pooled",
+              "tiebreak_fraction": 0.803
+            },
+            {
+              "method": "haar_multiscale",
+              "tiebreak_fraction": 0.933
+            },
+            {
+              "method": "season_period2",
+              "tiebreak_fraction": 0.811
+            }
+          ]
+        },
+        "joker_decision": {
+          "scorer": "knn_draw_similarity",
+          "ensemble": [
+            {
+              "method": "knn_draw_similarity",
+              "weight": 1.0
+            }
+          ],
+          "sim_depth_pct": 100,
+          "use_blacklist": false,
+          "avg_hits": 0.13333333333333333,
+          "avg_hits_with_blacklist": null,
+          "rationale": "knn_draw_similarity: rată top-1 (1/1) @ k1 = 0.133 (Wilson_lb=0.078), beat random (hipergeometric 0.0500) in 4/4 windows on the same top-1 (1/1) target (lift +0.0833); din 14 metode calificate [prioritate: top-1 (1/1), robust] [după corecția Holm pentru 44 candidați: p=1.000 ≥ 0.05 — avantaj nedemonstrat]",
+          "rate_col_used": "rate_1plus_k1",
+          "rate_col_mismatch": false,
+          "hit_target": 1,
+          "target_label": "top-1 (1/1)",
+          "qualifying_methods": 14,
+          "ranked_methods": [
+            "knn_draw_similarity",
+            "rank_ensemble_core",
+            "markov_pairs",
+            "naive_bayes_last",
+            "drift_linear",
+            "ewma_cold_hl30",
+            "freq_window_200",
+            "gap_current",
+            "gap_ratio",
+            "hot_consistency",
+            "knn_pattern_self",
+            "rhythm_phase",
+            "neighbor_adjacent",
+            "spectral_phase"
+          ],
+          "consistency_threshold": 0.6,
+          "low_confidence": false,
+          "multiplicity": {
+            "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
+            "candidates": 44,
+            "p_value": 0.060772,
+            "holm_p": 1.0,
+            "alpha": 0.05,
+            "proven": false
+          },
+          "ensemble_dropped_redundant": [],
+          "baseline_rate": 0.05,
+          "baseline_source": "hypergeometric",
+          "random_empirical_rate": 0.0,
+          "expected_windows": [
+            10,
+            30,
+            60,
+            100
+          ],
+          "incomplete_methods": [],
+          "rate_data_missing": [],
+          "tiebreak_gate_applied": true,
+          "tiebreak_dependent": [
+            {
+              "method": "freq_window_50",
+              "tiebreak_fraction": 0.55
+            }
+          ]
+        },
+        "inner_objective_successes": 2,
+        "rejected_parameters": [],
+        "candidate_parameter_scores": [
+          {
+            "parameters": {
+              "pool_size": 12,
+              "lookback": 0,
+              "guarantee": 5,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          },
+          {
+            "parameters": {
+              "pool_size": 12,
+              "lookback": 100,
+              "guarantee": 5,
+              "wheel_condition": null,
+              "max_consecutive_run": 0,
+              "recent_penalty_draws": 0,
+              "recent_penalty_factor": 0.5,
+              "restrict_base_min": 0,
+              "restrict_base_max": 0,
+              "wheel_method": "hitcover"
+            },
+            "successes": 2
+          }
+        ],
+        "tickets_sha256": "d014dfa58c97f0d031246a59320937bb16db46152e1d4abb7c0bc460104b8d6c"
+      },
+      "tickets": {
+        "pool": [
+          [
+            7,
+            16,
+            20,
+            25,
+            39,
+            10
+          ],
+          [
+            1,
+            7,
+            10,
+            20,
+            39,
+            10
+          ],
+          [
+            1,
+            6,
+            10,
+            16,
+            20,
+            10
+          ],
+          [
+            6,
+            16,
+            20,
+            26,
+            39,
+            10
+          ],
+          [
+            7,
+            10,
+            16,
+            26,
+            39,
+            10
+          ],
+          [
+            1,
+            16,
+            20,
+            30,
+            39,
+            10
+          ],
+          [
+            10,
+            16,
+            20,
+            25,
+            26,
+            10
+          ],
+          [
+            7,
+            10,
+            16,
+            20,
+            30,
+            10
+          ],
+          [
+            1,
+            6,
+            10,
+            26,
+            39,
+            10
+          ],
+          [
+            10,
+            19,
+            20,
+            25,
+            39,
+            10
+          ],
+          [
+            1,
+            19,
+            20,
+            26,
+            39,
+            10
+          ],
+          [
+            1,
+            7,
+            20,
+            25,
+            26,
+            10
+          ],
+          [
+            1,
+            6,
+            7,
+            16,
+            19,
+            10
+          ],
+          [
+            1,
+            6,
+            16,
+            25,
+            26,
+            10
+          ],
+          [
+            6,
+            7,
+            10,
+            19,
+            39,
+            10
+          ],
+          [
+            16,
+            19,
+            20,
+            39,
+            45,
+            10
+          ],
+          [
+            1,
+            6,
+            7,
+            10,
+            25,
+            10
+          ],
+          [
+            7,
+            16,
+            20,
+            26,
+            45,
+            10
+          ],
+          [
+            6,
+            7,
+            25,
+            26,
+            39,
+            10
+          ],
+          [
+            1,
+            16,
+            26,
+            39,
+            45,
+            10
+          ],
+          [
+            1,
+            10,
+            16,
+            19,
+            25,
+            10
+          ],
+          [
+            7,
+            10,
+            19,
+            20,
+            26,
+            10
+          ],
+          [
+            6,
+            16,
+            25,
+            39,
+            45,
+            10
+          ],
+          [
+            6,
+            10,
+            16,
+            19,
+            26,
+            10
+          ],
+          [
+            16,
+            25,
+            26,
+            30,
+            39,
+            10
+          ],
+          [
+            1,
+            6,
+            7,
+            39,
+            45,
+            10
+          ],
+          [
+            1,
+            6,
+            19,
+            20,
+            25,
+            10
+          ],
+          [
+            7,
+            19,
+            20,
+            30,
+            39,
+            10
+          ],
+          [
+            1,
+            10,
+            20,
+            25,
+            30,
+            10
+          ],
+          [
+            7,
+            10,
+            25,
+            30,
+            39,
+            10
+          ],
+          [
+            6,
+            10,
+            16,
+            25,
+            30,
+            10
+          ],
+          [
+            6,
+            16,
+            19,
+            30,
+            39,
+            10
+          ],
+          [
+            1,
+            7,
+            16,
+            25,
+            45,
+            10
+          ],
+          [
+            6,
+            7,
+            16,
+            26,
+            30,
+            10
+          ],
+          [
+            7,
+            10,
+            20,
+            25,
+            45,
+            10
+          ],
+          [
+            7,
+            16,
+            19,
+            25,
+            26,
+            10
+          ],
+          [
+            1,
+            10,
+            20,
+            26,
+            45,
+            10
+          ],
+          [
+            6,
+            7,
+            20,
+            25,
+            30,
+            10
+          ],
+          [
+            20,
+            25,
+            26,
+            39,
+            45,
+            10
+          ],
+          [
+            1,
+            10,
+            25,
+            39,
+            45,
+            10
+          ],
+          [
+            1,
+            6,
+            20,
+            26,
+            30,
+            10
+          ],
+          [
+            1,
+            6,
+            25,
+            30,
+            39,
+            10
+          ],
+          [
+            10,
+            20,
+            30,
+            39,
+            45,
+            10
+          ],
+          [
+            6,
+            16,
+            20,
+            30,
+            45,
+            10
+          ],
+          [
+            7,
+            10,
+            16,
+            19,
+            45,
+            10
+          ],
+          [
+            1,
+            10,
+            19,
+            30,
+            39,
+            10
+          ],
+          [
+            1,
+            7,
+            10,
+            26,
+            30,
+            10
+          ],
+          [
+            6,
+            10,
+            19,
+            20,
+            30,
+            10
+          ],
+          [
+            1,
+            10,
+            16,
+            30,
+            45,
+            10
+          ],
+          [
+            6,
+            7,
+            19,
+            20,
+            45,
+            10
+          ],
+          [
+            1,
+            16,
+            19,
+            26,
+            30,
+            10
+          ],
+          [
+            10,
+            19,
+            26,
+            39,
+            45,
+            10
+          ],
+          [
+            7,
+            19,
+            25,
+            39,
+            45,
+            10
+          ],
+          [
+            1,
+            6,
+            10,
+            19,
+            45,
+            10
+          ],
+          [
+            6,
+            10,
+            25,
+            26,
+            45,
+            10
+          ],
+          [
+            7,
+            26,
+            30,
+            39,
+            45,
+            10
+          ],
+          [
+            19,
+            20,
+            25,
+            26,
+            30,
+            10
+          ],
+          [
+            1,
+            7,
+            19,
+            25,
+            30,
+            10
+          ],
+          [
+            6,
+            7,
+            10,
+            30,
+            45,
+            10
+          ],
+          [
+            1,
+            7,
+            19,
+            26,
+            45,
+            10
+          ],
+          [
+            1,
+            19,
+            20,
+            30,
+            45,
+            10
+          ],
+          [
+            1,
+            25,
+            26,
+            30,
+            45,
+            10
+          ],
+          [
+            10,
+            19,
+            25,
+            30,
+            45,
+            10
+          ],
+          [
+            6,
+            19,
+            26,
+            30,
+            45,
+            10
+          ]
+        ],
+        "universe": [
+          [
+            1,
+            5,
+            15,
+            32,
+            41,
+            8
+          ],
+          [
+            1,
+            6,
+            26,
+            30,
+            32,
+            19
+          ],
+          [
+            1,
+            9,
+            10,
+            16,
+            21,
+            5
+          ],
+          [
+            1,
+            9,
+            26,
+            27,
+            29,
+            5
+          ],
+          [
+            1,
+            10,
+            18,
+            29,
+            37,
+            12
+          ],
+          [
+            1,
+            14,
+            18,
+            31,
+            32,
+            15
+          ],
+          [
+            8,
+            14,
+            24,
+            31,
+            45,
+            15
+          ],
+          [
+            2,
+            3,
+            8,
+            24,
+            38,
+            4
+          ],
+          [
+            2,
+            4,
+            24,
+            36,
+            44,
+            11
+          ],
+          [
+            5,
+            6,
+            28,
+            32,
+            37,
+            6
+          ],
+          [
+            3,
+            12,
+            13,
+            28,
+            38,
+            18
+          ],
+          [
+            2,
+            8,
+            11,
+            25,
+            40,
+            8
+          ],
+          [
+            2,
+            20,
+            31,
+            35,
+            41,
+            13
+          ],
+          [
+            6,
+            13,
+            15,
+            31,
+            37,
+            9
+          ],
+          [
+            3,
+            4,
+            18,
+            40,
+            43,
+            19
+          ],
+          [
+            3,
+            6,
+            10,
+            29,
+            39,
+            15
+          ],
+          [
+            12,
+            19,
+            24,
+            29,
+            36,
+            2
+          ],
+          [
+            3,
+            9,
+            10,
+            19,
+            23,
+            5
+          ],
+          [
+            8,
+            22,
+            28,
+            39,
+            45,
+            7
+          ],
+          [
+            3,
+            16,
+            18,
+            19,
+            29,
+            9
+          ],
+          [
+            8,
+            16,
+            26,
+            31,
+            44,
+            15
+          ],
+          [
+            3,
+            24,
+            35,
+            37,
+            40,
+            11
+          ],
+          [
+            3,
+            27,
+            33,
+            42,
+            44,
+            17
+          ],
+          [
+            4,
+            10,
+            12,
+            35,
+            40,
+            9
+          ],
+          [
+            4,
+            13,
+            15,
+            33,
+            38,
+            4
+          ],
+          [
+            4,
+            15,
+            17,
+            25,
+            34,
+            8
+          ],
+          [
+            4,
+            17,
+            19,
+            34,
+            37,
+            14
+          ],
+          [
+            1,
+            3,
+            5,
+            22,
+            39,
+            6
+          ],
+          [
+            5,
+            14,
+            24,
+            38,
+            45,
+            5
+          ],
+          [
+            7,
+            11,
+            13,
+            25,
+            41,
+            3
+          ],
+          [
+            9,
+            14,
+            17,
+            25,
+            37,
+            14
+          ],
+          [
+            5,
+            25,
+            27,
+            33,
+            35,
+            17
+          ],
+          [
+            8,
+            9,
+            13,
+            15,
+            35,
+            2
+          ],
+          [
+            6,
+            8,
+            10,
+            15,
+            27,
+            17
+          ],
+          [
+            6,
+            10,
+            13,
+            30,
+            44,
+            5
+          ],
+          [
+            6,
+            18,
+            21,
+            38,
+            42,
+            7
+          ],
+          [
+            6,
+            21,
+            28,
+            33,
+            44,
+            12
+          ],
+          [
+            6,
+            24,
+            30,
+            35,
+            39,
+            7
+          ],
+          [
+            7,
+            11,
+            15,
+            24,
+            36,
+            6
+          ],
+          [
+            21,
+            22,
+            33,
+            35,
+            37,
+            14
+          ],
+          [
+            12,
+            15,
+            20,
+            24,
+            39,
+            9
+          ],
+          [
+            8,
+            9,
+            10,
+            12,
+            45,
+            17
+          ],
+          [
+            8,
+            18,
+            25,
+            36,
+            41,
+            16
+          ],
+          [
+            2,
+            25,
+            32,
+            33,
+            36,
+            7
+          ],
+          [
+            6,
+            12,
+            18,
+            23,
+            26,
+            20
+          ],
+          [
+            10,
+            20,
+            33,
+            37,
+            45,
+            1
+          ],
+          [
+            7,
+            27,
+            28,
+            34,
+            41,
+            15
+          ],
+          [
+            1,
+            28,
+            31,
+            35,
+            42,
+            13
+          ],
+          [
+            12,
+            15,
+            17,
+            21,
+            29,
+            19
+          ],
+          [
+            12,
+            16,
+            19,
+            30,
+            42,
+            10
+          ],
+          [
+            12,
+            20,
+            27,
+            35,
+            41,
+            12
+          ],
+          [
+            11,
+            13,
+            24,
+            39,
+            43,
+            6
+          ],
+          [
+            15,
+            17,
+            21,
+            39,
+            45,
+            2
+          ],
+          [
+            15,
+            20,
+            24,
+            33,
+            36,
+            12
+          ],
+          [
+            15,
+            22,
+            25,
+            33,
+            45,
+            2
+          ],
+          [
+            2,
+            6,
+            9,
+            22,
+            23,
+            7
+          ],
+          [
+            7,
+            9,
+            13,
+            27,
+            34,
+            16
+          ],
+          [
+            9,
+            17,
+            34,
+            35,
+            42,
+            18
+          ],
+          [
+            2,
+            20,
+            27,
+            28,
+            38,
+            10
+          ],
+          [
+            1,
+            7,
+            13,
+            34,
+            40,
+            12
+          ],
+          [
+            20,
+            28,
+            29,
+            42,
+            45,
+            19
+          ],
+          [
+            22,
+            25,
+            33,
+            43,
+            45,
+            3
+          ],
+          [
+            11,
+            13,
+            17,
+            18,
+            23,
+            10
+          ],
+          [
+            24,
+            25,
+            27,
+            35,
+            43,
+            2
+          ]
+        ],
+        "random_reference": [
+          [
+            1,
+            3,
+            19,
+            22,
+            41,
+            11
+          ],
+          [
+            1,
+            4,
+            11,
+            15,
+            27,
+            16
+          ],
+          [
+            1,
+            4,
+            22,
+            30,
+            45,
+            2
+          ],
+          [
+            1,
+            5,
+            10,
+            14,
+            25,
+            13
+          ],
+          [
+            1,
+            6,
+            20,
+            40,
+            44,
+            16
+          ],
+          [
+            1,
+            7,
+            12,
+            15,
+            35,
+            7
+          ],
+          [
+            1,
+            12,
+            15,
+            27,
+            30,
+            1
+          ],
+          [
+            1,
+            13,
+            23,
+            25,
+            28,
+            15
+          ],
+          [
+            1,
+            22,
+            25,
+            33,
+            43,
+            7
+          ],
+          [
+            2,
+            4,
+            22,
+            29,
+            30,
+            9
+          ],
+          [
+            2,
+            9,
+            13,
+            16,
+            40,
+            18
+          ],
+          [
+            2,
+            14,
+            31,
+            32,
+            45,
+            13
+          ],
+          [
+            2,
+            17,
+            20,
+            21,
+            40,
+            18
+          ],
+          [
+            3,
+            4,
+            5,
+            25,
+            45,
+            15
+          ],
+          [
+            3,
+            4,
+            29,
+            35,
+            39,
+            17
+          ],
+          [
+            3,
+            10,
+            15,
+            30,
+            40,
+            15
+          ],
+          [
+            3,
+            12,
+            17,
+            23,
+            45,
+            6
+          ],
+          [
+            3,
+            19,
+            22,
+            28,
+            40,
+            11
+          ],
+          [
+            3,
+            20,
+            23,
+            31,
+            32,
+            5
+          ],
+          [
+            3,
+            24,
+            28,
+            30,
+            42,
+            10
+          ],
+          [
+            4,
+            8,
+            10,
+            11,
+            24,
+            9
+          ],
+          [
+            4,
+            8,
+            19,
+            31,
+            44,
+            14
+          ],
+          [
+            4,
+            14,
+            26,
+            36,
+            41,
+            10
+          ],
+          [
+            4,
+            31,
+            32,
+            34,
+            44,
+            3
+          ],
+          [
+            5,
+            6,
+            23,
+            35,
+            42,
+            13
+          ],
+          [
+            5,
+            7,
+            13,
+            27,
+            30,
+            5
+          ],
+          [
+            5,
+            8,
+            19,
+            30,
+            34,
+            14
+          ],
+          [
+            5,
+            13,
+            22,
+            23,
+            30,
+            5
+          ],
+          [
+            5,
+            20,
+            26,
+            31,
+            37,
+            17
+          ],
+          [
+            6,
+            7,
+            9,
+            32,
+            41,
+            7
+          ],
+          [
+            6,
+            7,
+            11,
+            19,
+            37,
+            19
+          ],
+          [
+            6,
+            9,
+            27,
+            28,
+            43,
+            19
+          ],
+          [
+            6,
+            10,
+            21,
+            30,
+            37,
+            6
+          ],
+          [
+            6,
+            12,
+            17,
+            21,
+            26,
+            8
+          ],
+          [
+            6,
+            12,
+            19,
+            30,
+            41,
+            6
+          ],
+          [
+            7,
+            11,
+            20,
+            22,
+            34,
+            18
+          ],
+          [
+            7,
+            20,
+            23,
+            30,
+            39,
+            13
+          ],
+          [
+            8,
+            18,
+            31,
+            36,
+            40,
+            18
+          ],
+          [
+            8,
+            37,
+            41,
+            43,
+            45,
+            8
+          ],
+          [
+            9,
+            14,
+            29,
+            42,
+            44,
+            4
+          ],
+          [
+            9,
+            17,
+            20,
+            25,
+            44,
+            3
+          ],
+          [
+            10,
+            11,
+            25,
+            29,
+            35,
+            1
+          ],
+          [
+            10,
+            26,
+            34,
+            37,
+            42,
+            9
+          ],
+          [
+            11,
+            12,
+            18,
+            25,
+            45,
+            10
+          ],
+          [
+            11,
+            13,
+            22,
+            25,
+            26,
+            18
+          ],
+          [
+            11,
+            13,
+            23,
+            24,
+            32,
+            10
+          ],
+          [
+            11,
+            22,
+            23,
+            31,
+            33,
+            20
+          ],
+          [
+            11,
+            22,
+            31,
+            34,
+            41,
+            14
+          ],
+          [
+            11,
+            25,
+            30,
+            31,
+            41,
+            8
+          ],
+          [
+            12,
+            17,
+            24,
+            27,
+            44,
+            3
+          ],
+          [
+            12,
+            24,
+            29,
+            33,
+            39,
+            20
+          ],
+          [
+            13,
+            15,
+            27,
+            34,
+            43,
+            19
+          ],
+          [
+            13,
+            16,
+            28,
+            37,
+            44,
+            20
+          ],
+          [
+            13,
+            17,
+            29,
+            32,
+            33,
+            20
+          ],
+          [
+            13,
+            19,
+            30,
+            37,
+            39,
+            1
+          ],
+          [
+            13,
+            23,
+            34,
+            36,
+            42,
+            7
+          ],
+          [
+            15,
+            22,
+            23,
+            26,
+            37,
+            17
+          ],
+          [
+            16,
+            21,
+            29,
+            35,
+            37,
+            8
+          ],
+          [
+            16,
+            22,
+            30,
+            32,
+            38,
+            19
+          ],
+          [
+            17,
+            33,
+            38,
+            39,
+            43,
+            10
+          ],
+          [
+            20,
+            23,
+            31,
+            32,
+            33,
+            10
+          ],
+          [
+            20,
+            23,
+            32,
+            36,
+            39,
+            16
+          ],
+          [
+            20,
+            24,
+            29,
+            31,
+            32,
+            2
+          ],
+          [
+            26,
+            30,
+            41,
+            42,
+            45,
+            2
+          ]
+        ]
+      },
+      "probabilities": {
+        "pool": {
+          "any_prize": {
+            "successes": 1437,
+            "samples": 10000,
+            "probability": 0.1437,
+            "ci95": [
+              0.13696151223459843,
+              0.1507121250043457
+            ]
+          },
+          "4plus": {
+            "successes": 105,
+            "samples": 10000,
+            "probability": 0.0105,
+            "ci95": [
+              0.008681732235914952,
+              0.012694202168977434
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "universe": {
+          "any_prize": {
+            "successes": 8765,
+            "samples": 10000,
+            "probability": 0.8765,
+            "ci95": [
+              0.8699065594674005,
+              0.8828042897594799
+            ]
+          },
+          "4plus": {
+            "successes": 121,
+            "samples": 10000,
+            "probability": 0.0121,
+            "ci95": [
+              0.010136711003799979,
+              0.014437994606306242
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        },
+        "random_reference": {
+          "any_prize": {
+            "successes": 8565,
+            "samples": 10000,
+            "probability": 0.8565,
+            "ci95": [
+              0.8494917789373329,
+              0.8632344302243748
+            ]
+          },
+          "4plus": {
+            "successes": 112,
+            "samples": 10000,
+            "probability": 0.0112,
+            "ci95": [
+              0.009316987490236137,
+              0.013458409316937302
+            ]
+          },
+          "jackpot_probability_exact": 2.6191744853117513e-06,
+          "variants": 64,
+          "model": "uniform_independent_draws_current_prize_rules",
+          "sample_seed": 1104732,
+          "cost_recovery_probability": null,
+          "cost_recovery_reason": "Future category payouts and shared prize funds are unknown"
+        }
+      },
+      "outcomes": {
+        "pool": {
+          "variants": 64,
+          "any_prize": false,
+          "4plus": false,
+          "best_main_hits": 1,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 0,
+          "net_bani": -44800,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {},
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "universe": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 3,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 10398,
+          "net_bani": -34402,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "VIII": 1,
+            "VI": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        },
+        "random_reference": {
+          "variants": 64,
+          "any_prize": true,
+          "4plus": false,
+          "best_main_hits": 2,
+          "variant_cost_bani": 44800,
+          "ticket_fees_bani": 0,
+          "full_cost_bani": 44800,
+          "gross_bani": 4885,
+          "net_bani": -39915,
+          "recovered_cost": false,
+          "prize_status": "ready",
+          "category_counts": {
+            "VII": 1
+          },
+          "financial_basis": "gross_estimate_at_published_unit_prizes_before_tax; not proof of purchase"
+        }
+      }
+    }
+  ],
+  "source_sha256": "b4b61d4bfcebb55471728fdc9dbef4ca61935a0146f7669feabcccce4796eca3",
+  "code": {
+    "git_commit": "70e63b86240ca442477ebd86976fcf63423daa99",
+    "python_sources_sha256": "77608a7e3cdf9dcfd58cf6ec39328ad2b3c159c4ad2a82b9db8932135afe1c55",
+    "source_files": 387
+  }
+}
