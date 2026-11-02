@@ -123,6 +123,28 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 
 ### Istoric automat dupa Re-Bench — 2026-11-01
 
+- Actualizare 2026-11-02: istoricul Re-Bench foloseste dimensiunile poolurilor
+  fixate la lansare, inclusiv pentru jocuri selectate ulterior. Datele initiale
+  sunt pastrate in contextul rulării; un context lipsa sau alterat nu este
+  inlocuit tacit cu setarile curente, inclusiv dupa reatasarea UI.
+- In Analiza & Clasament, istoricul Re-Bench este afisat pe fila jocului,
+  inclusiv fara job generat; rezultatul recuperat este separat si etichetat cu
+  propriul pool. Istoricul anterior ramane marcat ca atare pana la un calcul nou.
+- Istoricul Re-Bench se pastreaza local in `RUNTIME_ROOT/rebench_history.sqlite3`,
+  inclusiv variantele reprezentative si grupele de premii. La pornire se citesc
+  numai datele salvate, fara un nou WF; lipsa sau coruperea bazei este tratata
+  explicit. Publicarea atomica tine cont de identitatea ultimei rulari; o rulare
+  fara pasi nu sterge istoricul precedent. Baza este locala statiei, nu in Git.
+- Sistemele complete fezabile sunt simulate pe variante efectiv generate, cu
+  rezultate compacte si grupe pentru premii. Cele care depasesc limita fizica
+  sunt analizate virtual, fara premiu; modul se stabileste per joc. Bugetul WF
+  poate opri calculul, iar istoricul partial este marcat. Un context nepreluat
+  cand UI a fost inchis pe toata durata benchului poate ramane in runtime pentru
+  a nu impiedica preluarea de catre o alta instanta.
+- Verificat pe Python 3.14 in patru loturi izolate: 4172 teste trecute si 22
+  sarite. Probe independente pe istoricul real si pe toate cele trei pooluri
+  implicite, comparatie cu enumerarea variantelor, doua reporniri in browser cu
+  istoric restaurat fara recalcul; coada si runtime-ul au fost izolate.
 - La pornirea procesului, poolurile romanesti revin la 16 pentru 6/49, 19
   pentru 5/40 si 12 pentru Joker Urna 1, indiferent de valorile salvate;
   celelalte setari raman salvate, iar campurile pot fi modificate in sesiune.

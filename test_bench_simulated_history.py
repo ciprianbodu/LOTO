@@ -64,7 +64,7 @@ def test_bench_without_autopilot_starts_reduced_simulation(virtual_setup, monkey
     calls = []
     monkeypatch.setattr(app, "_start_virtual_history", lambda **kw: calls.append(kw) or True)
     app._on_bench_finished()
-    assert calls == [{"automatic": True, "simulated": True}]
+    assert calls == [{"automatic": True, "simulated": True, "materialize_full": True}]
 
 
 def test_compact_simulation_uses_separate_cache_and_same_draw_maxima(wf_backend, tmp_path):

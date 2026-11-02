@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import time
@@ -16,6 +17,47 @@ def _path(run_id: str) -> Path:
     if not re.fullmatch(r"[0-9a-f]{32}", str(run_id)):
         raise ValueError("invalid benchmark run id")
     return RUNTIME_ROOT / "bench_outcomes" / f"{run_id}.json"
+
+
+def save_context(run_id: str, config: str, pools: dict[str, int]) -> str:
+    """Păstrează local datele și dimensiunile de la lansarea acestui bench."""
+    path = _path(run_id).with_suffix(".context")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    payload = json.dumps({"config": config, "pools": pools}, sort_keys=True, separators=(",", ":"))
+    try:
+        fd = os.open(str(tmp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(payload)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def load_context(run_id: str, digest: str) -> tuple[str, dict[str, int]] | None:
+    """Acceptă numai snapshotul al cărui conținut corespunde markerului PID."""
+    try:
+        payload = _path(run_id).with_suffix(".context").read_text(encoding="utf-8")
+        if hashlib.sha256(payload.encode("utf-8")).hexdigest() != digest:
+            return None
+        data = json.loads(payload)
+        config, pools = data["config"], data["pools"]
+        if not isinstance(config, str):
+            return None
+        if not isinstance(json.loads(config).get("datasets"), list) or not isinstance(pools, dict):
+            return None
+        if any(not isinstance(k, str) or type(v) is not int or v < 1 for k, v in pools.items()):
+            return None
+        return config, pools
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
+def clear_context(run_id: str) -> None:
+    _path(run_id).with_suffix(".context").unlink(missing_ok=True)
 
 
 def record_exit(run_id: str, pid: int, exit_code: int) -> None:

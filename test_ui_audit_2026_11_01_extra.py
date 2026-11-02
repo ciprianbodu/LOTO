@@ -395,7 +395,7 @@ def test_cancelled_bench_finishing_never_dispatches_autopilot_but_new_bench_does
     monkeypatch.setattr(app.ui, "notify", lambda *_a, **_k: None)
     monkeypatch.setattr(app, "_refresh_status", lambda: None)
     finished = []
-    monkeypatch.setattr(app, "_on_bench_finished", lambda: finished.append(True))
+    monkeypatch.setattr(app, "_on_bench_finished", lambda **_kw: finished.append(True))
     app.cancel_all()
     assert app.STATE["bench_cancelled"] is True
     assert "Auto-Pilot nu va porni" in app._bench_status_text()
@@ -411,7 +411,8 @@ def test_cancelled_bench_finishing_never_dispatches_autopilot_but_new_bench_does
     app._launch_bench([], "Re-Bench")
     assert app.STATE["bench_cancelled"] is False
     assert "Auto-Pilot pornește" in app._bench_status_text()
-    assert len((tmp_path / ".bench_pid").read_text(encoding="utf-8").split("|")) == 4
+    parts = (tmp_path / ".bench_pid").read_text(encoding="utf-8").split("|")
+    assert len(parts) == 5 and parts[-1] == "ctx1"
     import bench_outcome
     monkeypatch.setattr(bench_outcome, "peek_exit", lambda *_: 0)
     monkeypatch.setattr(bench_outcome, "claim_exit", lambda *_: 0)

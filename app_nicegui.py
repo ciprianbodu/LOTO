@@ -447,6 +447,8 @@ def _bench_pid_status() -> tuple[int | None, bool]:
             if is_claimed(parts[2]):
                 return None, False
             STATE["_bench_run_identity"] = (pid, parts[2], parts[3])
+            if "ctx1" in parts[4:]:
+                STATE["_bench_context_required"] = parts[2]
             STATE["bench_was_running"] = True
             if parts[-1] == "cancelled":
                 STATE["bench_cancelled"] = True
@@ -547,10 +549,14 @@ def _launch_bench(args: list[str], label: str) -> None:
     run_id = uuid.uuid4().hex
     env["LOTO_BENCH_RUN_ID"] = run_id
     try:
-        config_digest = hashlib.sha256(_build_config_json().encode("utf-8")).hexdigest()
+        from bench_outcome import save_context
+        config = _build_config_json()
+        pools = {g.game_id: _pool_size_for(g.game_id) for g in _LOT.GAMES}
+        config_digest = save_context(run_id, config, pools)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[BENCH] Identitatea surselor nu poate fi fixată: %s", exc)
-        config_digest = "0" * 64
+        ui.notify("Nu pot salva setările Re-Bench; încearcă din nou.", type="negative")
+        return
     try:
         # bench_all_methods.py își scrie SINGUR bench_full.log (FileHandler) → nu
         # mai redirectăm stdout aici (altfel doi writeri pe același fișier). Logul
@@ -558,8 +564,19 @@ def _launch_bench(args: list[str], label: str) -> None:
         proc = subprocess.Popen(
             cmd, cwd=str(PROJECT_ROOT), creationflags=flags, env=env
         )
-        atomic_write_text(BENCH_PID_FILE, f"{proc.pid}|{int(time.time())}|{run_id}|{config_digest}")
+        atomic_write_text(BENCH_PID_FILE, f"{proc.pid}|{int(time.time())}|{run_id}|{config_digest}|ctx1")
         STATE["_bench_run_identity"] = (proc.pid, run_id, config_digest)
+        STATE["_bench_context_required"] = run_id
+        try:
+            from rebench_history_store import mark_launch
+            mark_launch(run_id)
+            STATE["virtual_wf_store_error"] = ""
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[WF] Nu pot marca lansarea în istoricul local: %s", exc)
+            STATE["virtual_wf_store_error"] = "Istoricul nou nu poate fi salvat local; vezi jurnalul."
+        # Un istoric afișat înainte de acest Re-Bench este al rulării precedente.
+        STATE["virtual_wf_previous"] = bool(STATE.get("virtual_wf_results"))
+        STATE["virtual_wf_dirty"] = True
         # Numai o pornire nouă cerută de utilizator ridică anularea anterioară.
         STATE["bench_cancelled"] = False
         STATE.pop("_bench_waiting_sources", None)
@@ -568,6 +585,11 @@ def _launch_bench(args: list[str], label: str) -> None:
         STATE["bench_was_running"] = True
         ui.notify(f"{label} pornit (PID {proc.pid}).", type="positive")
     except Exception as exc:  # noqa: BLE001
+        try:
+            from bench_outcome import clear_context
+            clear_context(run_id)
+        except OSError:
+            pass
         ui.notify(f"Nu pot porni bench-ul: {exc}", type="negative")
     _refresh_status()
 
@@ -706,7 +728,50 @@ def _rebuild_decision_for_target(target: int, notify=None) -> bool:
     return False
 
 
-def _on_bench_finished() -> None:
+def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
+    """Sursele inițiale și poolurile de la lansare, cu jocurile adăugate ulterior."""
+    original, pools = context
+    current_text = _build_config_json()
+    current = json.loads(current_text)
+    initial = json.loads(original)
+    selected = {g.game_id for g in _selected_games()}
+    original_by_game = {}
+    for dataset in initial.get("datasets", []):
+        for task in dataset.get("tasks", []):
+            original_by_game.setdefault(task.get("game_label"), []).append(dataset)
+    merged = []
+    for dataset in current.get("datasets", []):
+        tasks = dataset.get("tasks", [])
+        gid = tasks[0].get("game_label") if tasks else None
+        if gid in original_by_game:
+            continue
+        merged.append(dataset)
+    for gid, datasets in original_by_game.items():
+        if gid in selected:
+            # Păstrăm sursa originală, dar decizia și restul setărilor urmează
+            # configurația curentă, ca înainte; numai poolul este fixat la start.
+            template = next((d["tasks"][0] for d in current.get("datasets", [])
+                             if d.get("tasks") and d["tasks"][0].get("game_label") == gid), None)
+            for dataset in datasets:
+                ds = dict(dataset)
+                ds["tasks"] = [dict(template or task) for task in dataset.get("tasks", [])]
+                for task in ds["tasks"]:
+                    task["bench_hit_target"] = _clamped_bench_target()
+                merged.append(ds)
+    for dataset in merged:
+        for task in dataset.get("tasks", []):
+            gid = task.get("game_label")
+            if gid in pools:
+                task["pool_size"] = pools[gid]
+    if merged == current.get("datasets"):
+        return current_text
+    current["datasets"] = merged
+    # Nu partajăm o cheie de pipeline pentru date sau pooluri diferite.
+    current["input_hash"] = hashlib.sha256(json.dumps(merged, sort_keys=True).encode("utf-8")).hexdigest()
+    return json.dumps(current)
+
+
+def _on_bench_finished(*, context=None, config_json=None) -> None:
     """Actualizează starea bench-ului și pornește Auto-Pilot dacă e bifat."""
     if STATE.pop("bench_target_pending", False) or _decision_target_mismatch():
         # Ținta s-a schimbat cât rula bench-ul, care și-a scris decizia cu
@@ -723,22 +788,30 @@ def _on_bench_finished() -> None:
         return
     # Completează jocurile selectate, inclusiv înaintea unei amânări.
     _load_missing_bench_histories()
+    try:
+        cfg_text = config_json if config_json is not None else (_bench_history_config(context) if context is not None else _build_config_json())
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        logger.warning("[BENCH] Nu pot pregăti istoricul automat: %s", exc)
+        return
     if STATE.get("wf_running") or STATE.get("active_job_id"):
         # Un WF început înainte de bench nu poate fi suprascris. Așteptăm
         # finalizarea lui și verificăm din nou datele și decizia.
         try:
-            cfg_text = _build_config_json()
             cfg = json.loads(cfg_text)
             countries = tuple(task.get("country", _LOT.RO) for ds in cfg.get("datasets", []) for task in ds.get("tasks", []))
             STATE["_bench_history_pending"] = (cfg_text, countries, _virtual_decision_fingerprint(countries))
+            STATE["_bench_history_snapshot"] = context is not None or config_json is not None
         except Exception as exc:  # noqa: BLE001
             logger.warning("[BENCH] Istoricul automat nu poate fi planificat: %s", exc)
         return
     autopilot = bool(SETTINGS.get("autopilot_after_bench") and STATE.get("datasets"))
+    if autopilot and (context is not None or config_json is not None) and cfg_text != _build_config_json():
+        # Nu genera bilete pe alte setări decât cele validate.
+        autopilot = False
+        ui.notify("Setările s-au schimbat; istoricul folosește poolul de la Re-Bench, fără generare automată.", type="warning")
     # Sistemul complet virtual se evaluează chiar și atunci când sistemul fizic
     # este prea mare pentru generator; o decizie de bench nouă este obligatorie.
     try:
-        cfg_text = _build_config_json()
         cfg = json.loads(cfg_text)
         tasks = [task for ds in cfg.get("datasets", []) for task in ds.get("tasks", [])]
         full = bool(tasks) and all(
@@ -770,12 +843,17 @@ def _on_bench_finished() -> None:
     if physical_errors and autopilot:
         ui.notify(STATE["_virtual_physical_notice"], type="warning")
     if full and not STATE.get("active_job_id"):
-        if _start_virtual_history(auto_generate_config=cfg_text if autopilot and not physical_errors else None, automatic=True):
+        # Sistemul complet poate fi evaluat pe variante generate dacă generatorul
+        # îl acceptă; pentru cereri prea mari rămâne analiza matematică virtuală.
+        extra = {"config_json": cfg_text} if context is not None or config_json is not None else {}
+        if _start_virtual_history(auto_generate_config=cfg_text if autopilot and not physical_errors else None,
+                                  automatic=True, simulated=True, materialize_full=True, **extra):
             return
         if physical_errors:
             return
     if not full and (not autopilot or physical_errors) and not STATE.get("active_job_id"):
-        _start_virtual_history(automatic=True, simulated=True)
+        extra = {"config_json": cfg_text} if context is not None or config_json is not None else {}
+        _start_virtual_history(automatic=True, simulated=True, materialize_full=True, **extra)
         return
     if autopilot and not STATE.get("active_job_id"):
         ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
@@ -785,8 +863,9 @@ def _on_bench_finished() -> None:
 def _clear_bench_pid_if_matches(identity) -> None:
     """Retire the receipt; do not delete a PID file another UI can replace."""
     try:
-        from bench_outcome import mark_processed
+        from bench_outcome import mark_processed, clear_context
         mark_processed(identity[1])
+        clear_context(identity[1])
     except OSError as exc:
         logger.warning("[BENCH] Nu pot marca rezultatul ca preluat: %s", exc)
 
@@ -826,11 +905,23 @@ def _observe_bench_activity(bench_now: bool) -> None:
             pid, run_id, config_digest = identity
             STATE["_bench_seen_run"] = run_id
             try:
-                from bench_outcome import claim_exit, peek_exit
+                from bench_outcome import claim_exit, peek_exit, load_context
                 code = peek_exit(run_id, pid)
+                context = load_context(run_id, config_digest)
+                try:
+                    marker = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
+                    requires_context = (len(marker) >= 5 and marker[2] == run_id and "ctx1" in marker[4:])
+                except (OSError, UnicodeError):
+                    requires_context = False
+                requires_context = requires_context or STATE.get("_bench_context_required") == run_id
+                if requires_context and context is None:
+                    logger.warning("[BENCH] Setările de la lansare lipsesc sau sunt modificate; istoricul nu pornește.")
+                    STATE["virtual_wf_status"] = "Setările Re-Bench nu mai sunt disponibile; rulează din nou."
+                    STATE["virtual_wf_dirty"] = True
+                    code = None
                 if process is not None and process.poll() != 0:
                     code = None
-                if process is None and code == 0 and not STATE.get("bench_cancelled"):
+                if process is None and code == 0 and not STATE.get("bench_cancelled") and context is None:
                     current = hashlib.sha256(_build_config_json().encode("utf-8")).hexdigest()
                     if config_digest != current:
                         STATE["_bench_waiting_sources"] = identity
@@ -844,7 +935,10 @@ def _observe_bench_activity(bench_now: bool) -> None:
                 logger.warning("[BENCH] Verificarea rezultatului a eșuat: %s", exc)
             _clear_bench_pid_if_matches(identity)
         if not STATE.get("bench_cancelled") and rc == 0:
-            _on_bench_finished()
+            if context is None:
+                _on_bench_finished()
+            else:
+                _on_bench_finished(context=context)
         elif not STATE.get("bench_cancelled"):
             logger.warning("[BENCH] Încheierea cu succes nu a putut fi confirmată (cod %s); nu pornesc istoricul sau Auto-Pilot.", rc)
             ui.notify("Re-Bench nu a confirmat finalizarea cu succes sau datele originale nu corespund; istoricul automat nu a pornit.", type="warning")
@@ -861,17 +955,22 @@ def _continue_after_automatic_history(bench_now: bool) -> None:
         waiting = STATE.get("_bench_history_pending")
         if waiting and not (bench_now or STATE.get("active_job_id") or STATE.get("wf_running") or STATE.get("virtual_wf_running")):
             STATE.pop("_bench_history_pending", None)
+            is_snapshot = STATE.pop("_bench_history_snapshot", False)
         else:
             waiting = None
+            is_snapshot = False
         pending = STATE.pop("_autopilot_after_virtual", None)
     if waiting is not None:
         config, countries, decision = waiting
         try:
-            unchanged = config == _build_config_json() and decision == _virtual_decision_fingerprint(countries)
+            unchanged = (is_snapshot or config == _build_config_json()) and decision == _virtual_decision_fingerprint(countries)
         except Exception:  # noqa: BLE001
             unchanged = False
         if unchanged and not STATE.get("bench_cancelled") and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
-            _on_bench_finished()
+            if is_snapshot:
+                _on_bench_finished(config_json=config)
+            else:
+                _on_bench_finished()
         else:
             ui.notify("Istoricul automat nu a pornit: anulare, setări sau decizie schimbate.", type="warning")
     if pending is not None:
@@ -1499,6 +1598,13 @@ def _hw_telemetry_html() -> str:
 
 def cancel_all() -> None:
     # Publicarea și finalizarea WF se serializează cu anularea, înainte de I/O.
+    cancelled_identity = STATE.get("_bench_run_identity")
+    try:
+        marker_parts = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
+        owns_marker = bool(cancelled_identity and len(marker_parts) >= 5
+                           and marker_parts[2] == cancelled_identity[1] and "ctx1" in marker_parts[4:])
+    except (OSError, UnicodeError, IndexError):
+        owns_marker = False
     _WF_CANCEL_REQUESTED.set()
     _VIRTUAL_WF_CANCEL_REQUESTED.set()
     with STATE_LOCK:
@@ -1584,6 +1690,8 @@ def cancel_all() -> None:
                     logger.warning("[BENCH] markerul nu a putut fi refăcut: %s", exc)
                 break
     if not keep_bench_pid_file:
+        if owns_marker and not survivors and cancel_marker_saved and _bench_survivor_identity(cancelled_identity[0], None) is False:
+            _clear_bench_pid_if_matches(cancelled_identity)
         try:
             BENCH_PID_FILE.unlink()
         except OSError:
@@ -2172,7 +2280,8 @@ def _virtual_decision_fingerprint(countries) -> tuple:
     return _clamped_bench_target(), tuple(fingerprints)
 
 
-def _start_virtual_history(*, auto_generate_config: str | None = None, automatic: bool = False, simulated: bool = False) -> bool:
+def _start_virtual_history(*, auto_generate_config: str | None = None, automatic: bool = False, simulated: bool = False,
+                           materialize_full: bool = False, config_json: str | None = None) -> bool:
     """Analizează sistemul complet teoretic pe setările curente."""
     with STATE_LOCK:
         if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
@@ -2190,12 +2299,14 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             ui.notify("Nu pot verifica starea Re-Bench; încearcă din nou.", type="warning")
             return
         try:
-            config = json.loads(_build_config_json())
+            config = json.loads(config_json if config_json is not None else _build_config_json())
             jobs = []
+            source_hashes = {}
             for dataset in config.get("datasets", []):
                 frame = pd.read_json(io.StringIO(dataset["df_json"]), orient="split", convert_dates=False)
                 for task in dataset.get("tasks", []):
                     spec = _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO))
+                    source_hashes[(dataset["fname"], spec.game_id)] = hashlib.sha256(dataset["df_json"].encode("utf-8")).hexdigest()
                     guarantee = max(3, min(spec.pick_n, int(task["guarantee"])))
                     if not simulated and (guarantee != spec.pick_n or int(task.get("max_variants") or 0) != 0):
                         raise ValueError("Analiza virtuală cere sistem complet și plafon 0 pentru fiecare joc selectat.")
@@ -2219,17 +2330,41 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
         STATE["virtual_wf_running"] = True
         if automatic:
             STATE["analysis_expanded"] = True
-        STATE["virtual_wf_results"] = []
+        # Păstrăm istoricul anterior până există efectiv pași ai noii rulări.
+        STATE["virtual_wf_previous"] = bool(STATE.get("virtual_wf_results"))
         STATE["_virtual_history_simulated"] = simulated
         if not automatic:
             STATE["_virtual_physical_notice"] = ""
         STATE["virtual_wf_status"] = "Pornesc simularea istorică…" if simulated else "Pornesc analiza virtuală…"
         STATE["virtual_wf_dirty"] = True
+        run_id = STATE.get("_bench_seen_run") if automatic else None
+        provenance = {"decision": initial_decision, "input_hash": config.get("input_hash"),
+                      "sources": source_hashes and {f"{k[0]}|{k[1]}": v for k, v in source_hashes.items()}}
 
     def worker() -> None:
         deadline = time.monotonic() + budget
         fatal_error = False
         decision_changed = False
+        published = False
+        records = []
+        failure_notes = []
+
+        def persist(status, *, complete=False):
+            if not run_id:
+                return
+            try:
+                from rebench_history_store import save
+                saved = save(run_id, records, status, complete=complete, provenance=provenance)
+                if not saved:
+                    with STATE_LOCK:
+                        STATE["virtual_wf_previous"] = True
+                        STATE["virtual_wf_store_error"] = "O rulare Re-Bench mai nouă a fost lansată; istoricul acesta este precedent."
+                        STATE["virtual_wf_dirty"] = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[WF] Istoricul nu a putut fi păstrat local: %s", exc)
+                with STATE_LOCK:
+                    STATE["virtual_wf_store_error"] = f"Istoricul nu a putut fi salvat local: {exc}"
+                    STATE["virtual_wf_dirty"] = True
 
         def decision_moved():
             if _VIRTUAL_WF_DECISION_CHANGED.is_set():
@@ -2245,9 +2380,20 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             for index, (fname, spec, frame, task, guarantee) in enumerate(jobs):
                 # Sistemele complete se pot evalua virtual, fără a materializa
                 # sute de mii de combinații; restul simulează variantele reale.
-                job_simulated = simulated and not (
-                    guarantee == spec.pick_n and int(task.get("max_variants") or 0) == 0
-                )
+                complete = guarantee == spec.pick_n and int(task.get("max_variants") or 0) == 0
+                job_simulated = simulated and (materialize_full or not complete)
+                if complete and materialize_full:
+                    from covering.large_pool import LEGACY_MAX_POOL, validate_large_pool_request
+                    from loto_enterprise.core.walk_forward_adapter import _effective_pool_size, _wf_geometry
+                    try:
+                        pool = _effective_pool_size(int(task["pool_size"]), spec.geometry,
+                                                    task.get("restrict_base_max", 0), task.get("restrict_base_min", 0))
+                        _guarantee, condition, cap = _wf_geometry(pool, spec.geometry, guarantee,
+                                                                 task.get("wheel_condition"), task.get("max_variants"))
+                        if pool > LEGACY_MAX_POOL:
+                            validate_large_pool_request(pool, spec.pick_n, _guarantee, cap, condition)
+                    except (ValueError, TypeError, OverflowError):
+                        job_simulated = False
                 if _VIRTUAL_WF_CANCEL_REQUESTED.is_set() or time.monotonic() >= deadline:
                     break
                 if decision_moved():
@@ -2280,26 +2426,44 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                         raise ValueError("Rezultatul nu este identificat ca sistem virtual.")
                     if job_simulated and (meta.get("virtual_full_system") or any(getattr(row, "virtual_full_system", False) for row in flat)):
                         raise ValueError("Sistemul virtual nu poate fi afișat ca simulare de variante.")
-                    record = {"name": spec.name, "game": spec.geometry, "pool": task["pool_size"],
+                    record = {"name": spec.name, "game": spec.geometry, "game_id": spec.game_id,
+                              "source": fname, "pool": task["pool_size"],
+                              "source_sha256": source_hashes[(fname, spec.game_id)], "task": dict(task),
                               "guarantee": guarantee, "depth": depth, "flat": flat, "meta": meta, "simulated": job_simulated,
                               "max_variants": int(task.get("max_variants") or 0), "wheel_condition": task.get("wheel_condition")}
                 except Exception as exc:  # noqa: BLE001
                     fatal_error = True
                     logger.error("[WF VIRTUAL] %s: %s", spec.name, exc)
-                    record = {"name": spec.name, "pool": task["pool_size"], "guarantee": guarantee,
+                    record = {"name": spec.name, "game": spec.geometry, "game_id": spec.game_id,
+                              "source": fname, "pool": task["pool_size"], "guarantee": guarantee,
                               "depth": depth, "error": str(exc), "simulated": job_simulated}
                 if decision_moved() or (not record.get("error") and meta.get("decision_changed")):
                     decision_changed = True
                     break
-                with STATE_LOCK:
-                    STATE["virtual_wf_results"].append(record)
-                    STATE["virtual_wf_dirty"] = True
+                if record.get("error"):
+                    failure_notes.append(f"{spec.name}: {record['error']}")
+                elif meta.get("large_pool_wf_skipped"):
+                    fatal_error = True
+                    failure_notes.append(f"{spec.name}: {meta.get('skip_detail') or 'limita de resurse a fost depășită'}")
+                records.append(record)
+                if any(r.get("flat") for r in records):
+                    published = True
+                    with STATE_LOCK:
+                        STATE["virtual_wf_results"] = list(records)
+                        STATE["virtual_wf_previous"] = False
+                        STATE["virtual_wf_dirty"] = True
+                    persist("Istoric Re-Bench parțial; calculul era în curs.")
         except Exception as exc:  # noqa: BLE001
             fatal_error = True
             logger.error("[WF VIRTUAL] analiza a eșuat: %s", exc)
         finally:
             with STATE_LOCK:
                 STATE["virtual_wf_running"] = False
+                # Fără un istoric anterior, arătăm eșecurile pe filele jocurilor;
+                # nu înlocuim un istoric salvat când nu există pași noi.
+                if not published and records and not STATE.get("virtual_wf_results"):
+                    STATE["virtual_wf_results"] = list(records)
+                    STATE["virtual_wf_previous"] = False
                 if automatic and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
                     STATE["analysis_expanded"] = True
                 STATE["virtual_wf_status"] = (
@@ -2309,10 +2473,19 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                     else ("Analiză istorică oprită de buget." if simulated else "Analiză virtuală oprită de buget.") if time.monotonic() >= deadline
                     else ("Analiză istorică încheiată." if simulated else "Analiză virtuală încheiată.")
                 )
+                if failure_notes:
+                    STATE["virtual_wf_status"] += " " + " | ".join(failure_notes)
                 STATE["virtual_wf_dirty"] = True
+                final_status = STATE["virtual_wf_status"]
                 if (auto_generate_config is not None and not fatal_error and not decision_changed
                         and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set()):
                     STATE["_autopilot_after_virtual"] = (auto_generate_config, countries, initial_decision)
+            if published:
+                complete = (len(records) == len(jobs) and not fatal_error and not decision_changed
+                            and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set() and time.monotonic() < deadline
+                            and all(r.get("flat") and not r.get("error") and not r.get("meta", {}).get("partial")
+                                    and not r.get("meta", {}).get("large_pool_wf_skipped") for r in records))
+                persist(final_status if complete else final_status + " Istoricul afișat este parțial.", complete=complete)
 
     threading.Thread(target=worker, daemon=True).start()
     ui.notify("Calculez istoricul sistemelor selectate." if simulated else "Calculez istoricul sistemului complet virtual.", type="positive")
@@ -2320,9 +2493,9 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
     return True
 
 
-def _render_virtual_history() -> None:
-    records = list(STATE.get("virtual_wf_results") or [])
-    status = STATE.get("virtual_wf_status")
+def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
+    records = list(STATE.get("virtual_wf_results") or []) if records is None else list(records)
+    status = STATE.get("virtual_wf_status") if show_status else None
     if not records and not status:
         return
     modes = {bool(record.get("simulated")) for record in records}
@@ -2333,12 +2506,16 @@ def _render_virtual_history() -> None:
                "📊 Istoric hits — sistem complet virtual")
     with ui.card().classes("w-full"):
         with ui.expansion(heading, value=True).classes("w-full"):
+            if STATE.get("virtual_wf_previous"):
+                ui.label("Istoric din rularea precedentă; cel mai recent Re-Bench nu are un istoric nou disponibil.").classes("text-caption text-warning")
             ui.label(
                 "Metoda aleasă de bench poate folosi unele dintre extragerile evaluate, "
                 "astfel că rezultatul nu dovedește un avantaj predictiv."
             ).classes("text-caption text-warning")
             if status:
                 ui.label(status).classes("text-caption")
+            if STATE.get("virtual_wf_store_error"):
+                ui.label(STATE["virtual_wf_store_error"]).classes("text-caption text-warning")
             if STATE.get("_virtual_physical_notice"):
                 ui.label(STATE["_virtual_physical_notice"]).classes("text-caption text-warning")
             for record in records:
@@ -2346,7 +2523,8 @@ def _render_virtual_history() -> None:
                 ui.label(f"{record['name']} · pool cerut {record['pool']} · garanție {record['guarantee']} · fereastră cerută {record['depth']}%").classes("text-bold")
                 ui.label(
                     ("Variante simulate pentru fiecare extragere pe baza datelor anterioare; "
-                     "nu stabilește că au fost jucate și nu atribuie premii. Varianta afișată este "
+                     "nu stabilește că au fost jucate. Premiile afișate, când sunt disponibile, "
+                     "sunt estimări brute pe baza valorilor oficiale. Varianta afișată este "
                      "una dintre cele simulate, aleasă după verificarea extragerii." if simulated else
                      "Analiza teoretică nu generează bilete și nu stabilește că au fost jucate; nu se atribuie premii. "
                      "Exemplul de variantă este construit după extragerea istorică din numerele nimerite; "
@@ -4518,6 +4696,30 @@ def _discard_finished_bench_at_startup() -> None:
     logger.info("[BENCH] Rularea terminată înainte de pornire nu lansează istoricul automat.")
 
 
+def _restore_rebench_history() -> bool:
+    """Reîncarcă numai datele deja calculate, printr-o citire locală read-only."""
+    try:
+        from rebench_history_store import load
+        loaded = load()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WF] Istoricul local nu poate fi citit: %s", exc)
+        STATE["virtual_wf_store_error"] = f"Istoricul local este indisponibil: {exc}"
+        STATE["virtual_wf_status"] = "Istoricul Re-Bench salvat local este indisponibil; rulează din nou."
+        return False
+    if loaded is None:
+        return False
+    payload, previous = loaded
+    with STATE_LOCK:
+        STATE["virtual_wf_results"] = payload["records"]
+        STATE["virtual_wf_previous"] = previous
+        STATE["virtual_wf_status"] = payload["status"]
+        STATE["virtual_wf_provenance"] = payload["provenance"]
+        STATE["virtual_wf_store_error"] = ""
+        STATE["analysis_expanded"] = True
+        STATE["virtual_wf_dirty"] = True
+    return True
+
+
 # --------------------------------------------------------------------------- #
 # Bootstrap
 # --------------------------------------------------------------------------- #
@@ -4526,6 +4728,7 @@ def _startup() -> None:
     # NU marcăm joburile RUNNING ca eșuate: worker.py e proces separat care
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
+    _restore_rebench_history()
     _discard_finished_bench_at_startup()
     try:
         # Verificarea e ieftină; recalcularea, dacă trebuie, după pornirea serverului.

@@ -1427,8 +1427,21 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
             ).classes("text-caption text-grey")
 
 
+def _analysis_record_spec(record):
+    """Identitatea jocului pentru rezultate actuale și înregistrări mai vechi."""
+    game_id = record.get("game_id")
+    if game_id and (spec := _LOT.lottery_by_id(str(game_id))):
+        return spec
+    name = record.get("name")
+    country = str((record.get("meta") or {}).get("country") or "RO").upper()
+    for spec in _LOT.GAMES:
+        if spec.name == name and spec.country == country:
+            return spec
+    return _LOT.lottery_by_id(str(record.get("game") or ""))
+
+
 def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
-    """Meniu global: metoda câștigătoare + istoric ≥4 hits per joc. Închis implicit."""
+    """Clasamentul și istoricul pentru fiecare joc, inclusiv fără un job generat."""
     with ui.card().classes("w-full"):
         initial_open = STATE.get("analysis_expanded")
         if initial_open is None:
@@ -1436,7 +1449,8 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
         with ui.expansion("📊 Analiză & Clasament", value=initial_open).classes("w-full") as analysis:
             analysis.on_value_change(lambda event: STATE.__setitem__("analysis_expanded", bool(event.value)))
             _render_virtual_controls()
-            _render_virtual_history()
+            if status := STATE.get("virtual_wf_status"):
+                ui.label(status).classes("text-caption")
             if STATE.get("results_recovered"):
                 ui.label(
                     "Calculează istoricul rezultatului recuperat folosind datele și setările "
@@ -1447,24 +1461,47 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 ).props("no-caps")
                 if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
                     _history_button.props("disable")
-            # Aplatizăm toate jocurile din toate fișierele și le sortăm GLOBAL: 6/49, Joker, 5/40.
-            flat_games = [
-                (fname, game, data)
-                for fname, outs in results_bundle
-                for game, data in outs.items()
-            ]
-            flat_games.sort(
-                key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99)
-            )
-            # Jocurile pe file (tab-uri): clasamentul și istoricul nu mai sunt amestecate.
-            if len(flat_games) > 1:
+            groups = {}
+            for fname, outs in results_bundle:
+                for game, data in outs.items():
+                    spec = _game_spec_for(game, _primary_pool_data(data))
+                    groups.setdefault(spec.game_id, {"spec": spec, "old": [], "current": []})["old"].append((fname, game, data))
+            for record in STATE.get("virtual_wf_results") or []:
+                spec = _analysis_record_spec(record)
+                key = spec.game_id if spec else f"unknown:{record.get('name', '')}"
+                groups.setdefault(key, {"spec": spec, "old": [], "current": []})["current"].append(record)
+            entries = list(groups.items())
+            entries.sort(key=lambda item: _GAME_DISPLAY_ORDER.get(_game_label_for(item[0]), 99))
+
+            def render_group(group):
+                spec, current, old = group["spec"], group["current"], group["old"]
+                if current:
+                    if spec:
+                        if spec.is_romanian:
+                            _render_bench_leaderboard(spec.game_id, pool_size=current[0].get("pool"))
+                        else:
+                            _render_bench_leaderboard(spec.game_id, pool_size=current[0].get("pool"), spec=spec)
+                    _render_virtual_history(current, show_status=False)
+                if old and (current or STATE.get("results_recovered")):
+                    for fname, game, data in old:
+                        pool = _primary_pool_data(data)
+                        size = pool.get("pool_size") or len(pool.get("hard_core") or [])
+                        title = "Rezultatul recuperat" if STATE.get("results_recovered") else "Rezultatul generat anterior"
+                        suffix = f" · pool {size}" if size else ""
+                        with ui.expansion(f"📁 {title}{suffix}", value=False).classes("w-full"):
+                            _render_game_analysis(fname, game, data, res_prefix)
+                else:
+                    for fname, game, data in old:
+                        _render_game_analysis(fname, game, data, res_prefix)
+
+            if len(entries) > 1:
                 with ui.tabs().classes("w-full") as _game_tabs:
-                    for _i, (_fn, _g, _rd) in enumerate(flat_games):
-                        ui.tab(f"g{_i}", f"🎯 {_game_title(_g, _primary_pool_data(_rd))}")
+                    for index, (key, group) in enumerate(entries):
+                        name = group["spec"].display if group["spec"] else key.removeprefix("unknown:")
+                        ui.tab(f"g{index}", f"🎯 {name}")
                 with ui.tab_panels(tabs=_game_tabs, value="g0").classes("w-full"):
-                    for _i, (_fn, _g, _rd) in enumerate(flat_games):
-                        with ui.tab_panel(f"g{_i}"):
-                            _render_game_analysis(_fn, _g, _rd, res_prefix)
-            else:
-                for fname, game, raw_data in flat_games:
-                    _render_game_analysis(fname, game, raw_data, res_prefix)
+                    for index, (_key, group) in enumerate(entries):
+                        with ui.tab_panel(f"g{index}"):
+                            render_group(group)
+            elif entries:
+                render_group(entries[0][1])

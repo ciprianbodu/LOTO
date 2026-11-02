@@ -113,5 +113,5 @@ def test_autopilot_mixed_oversized_starts_history_not_invalid_job(virtual_setup,
     calls=[]
     monkeypatch.setattr(app, "_start_virtual_history", lambda **kw: calls.append(kw) or True)
     app._on_bench_finished()
-    assert calls == [{"automatic": True, "simulated": True}]
+    assert calls == [{"automatic": True, "simulated": True, "materialize_full": True}]
     assert "prea mare" in app.STATE["_virtual_physical_notice"]
