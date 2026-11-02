@@ -769,8 +769,8 @@ if __name__ == "__main__":
     run_id = os.environ.get("LOTO_BENCH_RUN_ID")
     if run_id:
         try:
-            from bench_outcome import record_exit
-            record_exit(run_id, os.getpid(), exit_code)
+            from bench_outcome import record_process_exit
+            record_process_exit(run_id, exit_code)
         except Exception as exc:  # noqa: BLE001
             logging.warning("[bench] nu pot salva marcajul de finalizare: %s", exc)
     sys.exit(exit_code)

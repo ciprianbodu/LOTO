@@ -123,6 +123,17 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 
 ### Istoric automat dupa Re-Bench — 2026-11-01
 
+- Corectie Windows 2026-11-02: lansatorul Python din venv poate avea alt PID
+  decat interpretorul care executa benchmarkul. Confirmarea finala identifica
+  procesul returnat de `Popen` prin lantul parintilor, pastrand separat PID-ul
+  interpretorului. Interfata asteapta terminarea lansatorului inainte de claim;
+  respingerea unei confirmari are mesaj persistent in Analiza & Clasament.
+  Test de regresie cu procese reale, esuat pe codul anterior; suita completa:
+  4178 trecute, 22 sarite. Re-Bench real in copie izolata, cu istoricul si
+  cache-ul de bench ale statiei: 779/660/524 extrageri la poolurile 16/12/19,
+  variante efective 8008/792/11628, premii si costuri afisate in browser.
+  Schimbarea manuala a poolului Joker la 6 a produs un istoric cu 6 numere
+  si 6 variante pe extragere. Nicio coada sau stare activa nu a fost modificata.
 - Actualizare 2026-11-02: istoricul Re-Bench foloseste dimensiunile poolurilor
   fixate la lansare, inclusiv pentru jocuri selectate ulterior. Datele initiale
   sunt pastrate in contextul rulării; un context lipsa sau alterat nu este

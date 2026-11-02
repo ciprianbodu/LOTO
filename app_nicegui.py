@@ -548,6 +548,7 @@ def _launch_bench(args: list[str], label: str) -> None:
     env["LOTO_BENCH_TARGET"] = str(_clamped_bench_target())
     run_id = uuid.uuid4().hex
     env["LOTO_BENCH_RUN_ID"] = run_id
+    env["LOTO_BENCH_UI_PID"] = str(os.getpid())
     try:
         from bench_outcome import save_context
         config = _build_config_json()
@@ -901,8 +902,16 @@ def _observe_bench_activity(bench_now: bool) -> None:
         process = STATE.pop("_bench_process", None)
         identity = STATE.pop("_bench_run_identity", None)
         rc = None
+        failure_reason = None
         if identity is not None:
             pid, run_id, config_digest = identity
+            if process is not None and process.poll() is None:
+                # The receipt can be written just before the Windows launcher
+                # exits. Wait for its exit code without consuming the receipt.
+                STATE["_bench_process"] = process
+                STATE["_bench_run_identity"] = identity
+                STATE["bench_was_running"] = True
+                return
             STATE["_bench_seen_run"] = run_id
             try:
                 from bench_outcome import claim_exit, peek_exit, load_context
@@ -916,7 +925,8 @@ def _observe_bench_activity(bench_now: bool) -> None:
                 requires_context = requires_context or STATE.get("_bench_context_required") == run_id
                 if requires_context and context is None:
                     logger.warning("[BENCH] Setările de la lansare lipsesc sau sunt modificate; istoricul nu pornește.")
-                    STATE["virtual_wf_status"] = "Setările Re-Bench nu mai sunt disponibile; rulează din nou."
+                    failure_reason = "Setările Re-Bench nu mai sunt disponibile; rulează din nou."
+                    STATE["virtual_wf_status"] = failure_reason
                     STATE["virtual_wf_dirty"] = True
                     code = None
                 if process is not None and process.poll() != 0:
@@ -941,7 +951,10 @@ def _observe_bench_activity(bench_now: bool) -> None:
                 _on_bench_finished(context=context)
         elif not STATE.get("bench_cancelled"):
             logger.warning("[BENCH] Încheierea cu succes nu a putut fi confirmată (cod %s); nu pornesc istoricul sau Auto-Pilot.", rc)
-            ui.notify("Re-Bench nu a confirmat finalizarea cu succes sau datele originale nu corespund; istoricul automat nu a pornit.", type="warning")
+            STATE["virtual_wf_status"] = failure_reason or "Re-Bench nu a confirmat finalizarea cu succes sau datele originale nu corespund; istoricul automat nu a pornit. Vezi jurnalul."
+            STATE["analysis_expanded"] = True
+            STATE["virtual_wf_dirty"] = True
+            ui.notify(STATE["virtual_wf_status"], type="warning")
     elif bench_now:
         STATE["bench_was_running"] = True
 
@@ -4095,8 +4108,8 @@ def main_page() -> None:
                     )
                 )
             ui.label(
-                "Implicit, cel mai mare cod LR al fiecărui joc: 16 la 6/49 (Cod 59), "
-                "19 la 5/40 (Cod 48), 15 la Joker. Maximul poate fi ales separat: "
+                "La fiecare pornire: 16 numere la 6/49, 19 la 5/40 și 12 la Joker. "
+                "Dimensiunile pot fi schimbate pentru Re-Bench. Maximul poate fi ales separat: "
                 "49 la 6/49, 40 la 5/40, 45 la Joker. Numai Loto 5/40 are coduri peste "
                 "16 numere (Cod 45 și 46 pe 17, Cod 47 pe 18, Cod 48 pe 19); "
                 "„Istoric hits” se validează pe pool-ul fiecărui joc, cu metoda decisă "

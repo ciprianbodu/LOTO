@@ -11,6 +11,7 @@ from pathlib import Path
 from runtime_paths import RUNTIME_ROOT
 
 RUN_ID_ENV = "LOTO_BENCH_RUN_ID"
+UI_PID_ENV = "LOTO_BENCH_UI_PID"
 
 
 def _path(run_id: str) -> Path:
@@ -60,14 +61,50 @@ def clear_context(run_id: str) -> None:
     _path(run_id).with_suffix(".context").unlink(missing_ok=True)
 
 
-def record_exit(run_id: str, pid: int, exit_code: int) -> None:
+def _launcher_pid(runtime_pid: int) -> int:
+    """Resolve the process returned by Popen, including Windows venv launchers."""
+    raw = os.environ.get(UI_PID_ENV, "")
+    if not raw.isdigit() or int(raw) <= 0:
+        return runtime_pid
+    ui_pid = int(raw)
+    try:
+        import psutil
+
+        current = psutil.Process(runtime_pid)
+        seen = {runtime_pid}
+        for _ in range(16):
+            parent_pid = current.ppid()
+            if parent_pid == ui_pid:
+                return current.pid
+            if parent_pid <= 0 or parent_pid in seen:
+                break
+            parent = psutil.Process(parent_pid)
+            if parent.create_time() > current.create_time():
+                break  # Recycled parent PID cannot establish ownership.
+            seen.add(parent_pid)
+            current = parent
+    except (OSError, psutil.Error):
+        pass
+    return runtime_pid
+
+
+def record_process_exit(run_id: str, exit_code: int) -> None:
+    """Publish completion under the launcher's PID, preserving the runtime PID."""
+    runtime_pid = os.getpid()
+    record_exit(run_id, _launcher_pid(runtime_pid), exit_code, runtime_pid=runtime_pid)
+
+
+def record_exit(run_id: str, pid: int, exit_code: int, *, runtime_pid: int | None = None) -> None:
     """Publish only after main returns; a killed process leaves no marker."""
     marker = _path(run_id)
     marker.parent.mkdir(parents=True, exist_ok=True)
     tmp = marker.with_name(f".{marker.name}.{os.getpid()}.tmp")
     try:
         with tmp.open("x", encoding="utf-8") as out:
-            json.dump({"run_id": run_id, "pid": int(pid), "exit_code": int(exit_code), "finished_at": time.time()}, out)
+            data = {"run_id": run_id, "pid": int(pid), "exit_code": int(exit_code), "finished_at": time.time()}
+            if runtime_pid is not None:
+                data["runtime_pid"] = int(runtime_pid)
+            json.dump(data, out)
             out.flush()
             os.fsync(out.fileno())
         os.replace(tmp, marker)
