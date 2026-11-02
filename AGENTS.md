@@ -154,6 +154,11 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 
 ### Istoric automat dupa Re-Bench — 2026-11-01
 
+- Tabelul de premii afisat automat dupa Re-Bench arata numai extragerile cu
+  minimum 4 numere in pool (4/5/6, dupa joc), inclusiv pentru cache recuperat.
+  Procentele pastreaza toate extragerile validate la numitor; premiul unui rand
+  vizibil continua sa insumeze toate variantele lui efectiv generate.
+
 - Corectie Windows 2026-11-02: lansatorul Python din venv poate avea alt PID
   decat interpretorul care executa benchmarkul. Confirmarea finala identifica
   procesul returnat de `Popen` prin lantul parintilor, pastrand separat PID-ul
