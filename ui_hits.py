@@ -1451,16 +1451,6 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             _render_virtual_controls()
             if status := STATE.get("virtual_wf_status"):
                 ui.label(status).classes("text-caption")
-            if STATE.get("results_recovered"):
-                ui.label(
-                    "Calculează istoricul rezultatului recuperat folosind datele și setările "
-                    "lui. Calculul poate dura; nu trimite mail și nu oprește calculatorul."
-                ).classes("text-caption text-grey")
-                _history_button = ui.button(
-                    "Calculează Istoric hits", on_click=_start_recovered_walk_forward
-                ).props("no-caps")
-                if STATE.get("wf_running") or STATE.get("virtual_wf_running") or STATE.get("active_job_id"):
-                    _history_button.props("disable")
             groups = {}
             for fname, outs in results_bundle:
                 for game, data in outs.items():

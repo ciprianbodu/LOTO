@@ -65,7 +65,7 @@ def test_virtual_action_snapshots_three_games_and_has_no_completion_side_effects
     with capture_ui() as view:
         app._render_virtual_history()
     text = view.text()
-    assert "nu generează bilete și nu stabilește că au fost jucate" in text
+    assert "nu stabilește că au fost jucate" in text
     assert "construit după extragerea istorică" in text
     assert "fereastră cerută 100%" in text
     tables = [n for n in view.walk() if n["kind"] == "table"]
@@ -183,7 +183,7 @@ def test_virtual_ui_offers_explicit_depth_and_does_not_autostart(virtual_setup, 
     assert len(selectors) == 1 and selectors[0]["kwargs"]["value"] == 30
     assert set(selectors[0]["args"][0]) == {30, 100}
     buttons = [n for n in sections[0]["children"] if n["kind"] == "button" and "Calculează istoric virtual" in n["args"][0]]
-    assert len(buttons) == 1
+    assert not buttons
     assert not starts
 
 
@@ -210,7 +210,7 @@ def test_virtual_results_and_action_are_inside_one_analysis_section(virtual_setu
             yield child
             yield from descendants(child)
     inside = list(descendants(sections[0]))
-    assert sum(n["kind"] == "button" and "Calculează istoric virtual" in n["args"][0] for n in inside) == 1
+    assert not any(n["kind"] == "button" and "Calculează istoric virtual" in n["args"][0] for n in inside)
     assert sum(n["kind"] == "expansion" and "Istoric hits — sistem complet virtual" in n["args"][0] for n in inside) == 1
     assert any(n["kind"] == "table" and n["kwargs"].get("row_key") == "draw_index" for n in inside)
 
@@ -225,7 +225,7 @@ def test_real_results_panel_exposes_analysis_without_a_generated_job(sidebar_con
         ui_results.results_panel()
     buttons = [e for e in client.elements.values() if isinstance(e, ui.button)
                and "Calculează istoric virtual" in e.text]
-    assert len(buttons) == 1
+    assert not buttons
 
 
 def test_analysis_expansion_keeps_user_choice_after_refresh(sidebar_context):

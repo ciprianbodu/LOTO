@@ -125,8 +125,13 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 
 - Tabelul de premii afisat automat dupa Re-Bench arata numai extragerile cu
   minimum 4 numere in pool (4/5/6, dupa joc), inclusiv pentru cache recuperat.
-  Procentele pastreaza toate extragerile validate la numitor; premiul unui rand
-  vizibil continua sa insumeze toate variantele lui efectiv generate.
+  Procentele pastreaza toate extragerile validate la numitor. In lipsa unui
+  cod LR, premiul insumeaza toate variantele efectiv generate ale randului.
+- Numerele nimerite din poolul de atunci sunt verzi. Daca exista cod LR,
+  tabelul reconstituie codul cu cele mai putine variante pentru acel pool si
+  recalculeaza impreuna numarul de variante, maximul de hituri, premiul si costul
+  acelui cod. In lipsa codului raman variantele simulate. Butoanele manuale de
+  calcul istoric au fost eliminate; Re-Bench continua calculul automat.
 
 - Corectie Windows 2026-11-02: lansatorul Python din venv poate avea alt PID
   decat interpretorul care executa benchmarkul. Confirmarea finala identifica

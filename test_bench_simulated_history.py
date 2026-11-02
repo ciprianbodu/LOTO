@@ -11,7 +11,7 @@ from test_wf_incremental import wf as wf_backend, history
 def row(index, hits, pool_hits, variant, count=None):
     return SimpleNamespace(draw_index=index, draw_date=f"2026-10-{index:02d}", variant=variant,
         hits=hits, hits_union=pool_hits, variant_count=count, virtual_full_system=False,
-        ticket_context={"actual": [1, 2, 3, 4, 5, 6], "hard_core": list(range(1, 11))})
+        ticket_context={"actual": list(range(1, pool_hits + 1)) + list(range(30, 36 - pool_hits)), "hard_core": list(range(1, 11))})
 
 
 def test_simulated_history_uses_settings_and_aggregates_variants_per_draw(virtual_setup, monkeypatch):
@@ -34,15 +34,20 @@ def test_simulated_history_uses_settings_and_aggregates_variants_per_draw(virtua
     with capture_ui() as view:
         app._render_virtual_history()
     assert "nu stabilește că au fost jucate" in view.text()
-    assert "variantelor simulate" in view.text()
+    assert "schema redusă LR" in view.text()
     tables = [node for node in view.walk() if node["kind"] == "table"]
     detail = next(t for t in tables if any(c["name"] == "example" for c in t["kwargs"]["columns"]))
     summary = next(t for t in tables if any(c["name"] == "threshold" for c in t["kwargs"]["columns"]))
     assert [r["draw_index"] for r in detail["kwargs"]["rows"]] == [10]
     first = next(r for r in detail["kwargs"]["rows"] if r["draw_index"] == 10)
-    assert first["best_hits"] == 5 and first["variants"] == "2"
+    from covering.lr_schemes import best_hits, lr_schemes
+    scheme = lr_schemes("6/49", 10)[0]
+    assert first["best_hits"] == best_hits(scheme, range(1, 11), [1,2,3,4,5,30])
+    assert first["variants"] == str(scheme.size) and scheme.label in first["system"]
     fifth = next(r for r in summary["kwargs"]["rows"] if r["threshold"] == "5+")
-    assert fifth["pool"] == fifth["ticket"] == "1 (50.00%)"
+    assert fifth["pool"] == "1 (50.00%)"
+    found = sum(best_hits(scheme, range(1, 11), numbers) >= 5 for numbers in ([1,2,3,4,5,30], [1,2,3,30,31,32]))
+    assert fifth["ticket"] == f"{found} ({found / 2 * 100:.2f}%)"
 
 
 def test_simulated_resource_skip_displays_detail(virtual_setup, monkeypatch):
