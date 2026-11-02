@@ -399,7 +399,74 @@ class PoolPrizeHistoryLookup(PrizeHistoryLookup):
         return _pool_request(row)
 
 
+def history_played_system(game: str, row: dict) -> dict:
+    """Reconstruct the cheapest available official LR code on the historical pool.
+
+    Select the code by size/code only, before inspecting the draw. Only the
+    displayed representative is chosen afterwards. Full LR tickets are built
+    lazily when official prizes arrive, keeping the history compact.
+    """
+    from covering.lr_schemes import lr_schemes
+
+    result = dict(row)
+    label = {"loto_6_49": "6/49", "loto_5_40": "5/40"}.get(game, game)
+    result["system_label"] = "Sistem complet virtual" if row.get("virtual_full_system") else "Variante simulate"
+    if str(row.get("country") or "RO").upper() != "RO":
+        return result
+    pool = sorted({int(n) for n in row.get("pool_numbers") or []})
+    if len(set(row.get("drawn") or [])) != (5 if label == "joker" else 6):
+        return result
+    schemes = lr_schemes(label, len(pool))
+    if not schemes:
+        return result
+    scheme = min(schemes, key=lambda s: (s.size, s.code))
+    drawn = {int(n) for n in row.get("drawn") or []}
+    hit_positions = {i + 1 for i, number in enumerate(pool) if number in drawn}
+    positions = max(scheme.variants, key=lambda v: len(hit_positions.intersection(v)))
+    example = [pool[i - 1] for i in positions]
+    if label == "joker":
+        raw = row.get("best_variant_raw") or []
+        chosen = row.get("chosen_joker")
+        if chosen is None and len(raw) == 6:
+            chosen = raw[-1]
+        try:
+            if isinstance(chosen, bool) or int(chosen) != float(chosen) or not 1 <= int(chosen) <= 20:
+                raise ValueError("invalid Joker")
+            example.append(int(chosen))
+        except (TypeError, ValueError, OverflowError):
+            result["history_system_issue"] = "bila Joker jucată nu este păstrată în istoric"
+    result.update(
+        lr_scheme_code=scheme.code, lr_scheme_game=label,
+        system_label=f"Schemă redusă LR · {scheme.label}",
+        expected_variant_count=scheme.size, generated_variants=[],
+        variant_prize_groups=None, virtual_full_system=False,
+        best_variant_raw=example, best_ticket=len(hit_positions.intersection(positions)),
+    )
+    return result
+
+
+def _history_lr_variants(row):
+    from covering.lr_schemes import lr_schemes, scheme_tickets
+
+    pool = row.get("pool_numbers") or []
+    scheme = next((s for s in lr_schemes(row["lr_scheme_game"], len(set(pool)))
+                   if s.code == row["lr_scheme_code"]), None)
+    if scheme is None or scheme.size != row.get("expected_variant_count"):
+        raise ValueError("schema redusă nu mai corespunde istoricului afișat")
+    variants = scheme_tickets(scheme, pool)
+    if row["lr_scheme_game"] == "joker":
+        raw = row.get("best_variant_raw") or []
+        if len(raw) != 6:
+            raise ValueError("bila Joker jucată nu este păstrată în istoric")
+        variants = [line + [raw[-1]] for line in variants]
+    return variants
+
+
 def _generated_variants_issue(row: dict) -> str | None:
+    if row.get("history_system_issue"):
+        return row["history_system_issue"]
+    if row.get("lr_scheme_code") is not None:
+        return None
     if row.get("virtual_full_system"):
         return "istoricul virtual nu conține variante generate"
     if row.get("variant_prize_groups") is None:
@@ -423,7 +490,10 @@ def pool_prize_text(game: str, row: dict, view: PrizeView) -> HitPrizeText:
     if view.draw is None:
         return HitPrizeText("premii oficiale indisponibile")
     from loto_enterprise.core.generated_prize import estimate_generated_prize
-    variants = row.get("generated_variants") or []
+    try:
+        variants = _history_lr_variants(row) if row.get("lr_scheme_code") is not None else row.get("generated_variants") or []
+    except (KeyError, TypeError, ValueError) as exc:
+        return HitPrizeText("indisponibil: " + str(exc))
     result = estimate_generated_prize(game, variants, view.draw,
         target_numbers=row.get("drawn"), target_date=row.get("label"),
         expected_count=row.get("expected_variant_count"),
@@ -445,7 +515,9 @@ def pool_prize_text(game: str, row: dict, view: PrizeView) -> HitPrizeText:
                 else " lei") if value != "report/valoare nepublicată" else ""
         count_text = f"{count:,}".replace(",", ".")
         breakdown.append(f"cat. {category}: {count_text} × {value}{unit}")
-    detail = ("Variante generate în simulare, la premiile unitare publicate. " + "; ".join(breakdown) + ". "
+    basis = (f"{row['system_label']}, reconstituită pe pool-ul de atunci. "
+             if row.get("lr_scheme_code") is not None else "Variante generate în simulare, la premiile unitare publicate. ")
+    detail = (basis + "; ".join(breakdown) + ". "
               "Valoarea reală s-ar putea modifica dacă ar exista și aceste variante câștigătoare. "
               f"Sursă: Loteria Română; selectați luna {when.strftime('%m/%Y')} în arhivă.")
     if result.status not in {"ready", "historical_currency"}:

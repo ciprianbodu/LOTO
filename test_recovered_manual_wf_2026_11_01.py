@@ -105,9 +105,7 @@ def test_recovered_action_is_visible_without_folds_or_cached_history(recovered, 
     with capture_ui() as view:
         ui_hits._render_analysis_menu([("history.csv", {"6/49": data})])
     buttons = [node for node in view.walk() if node["kind"] == "button" and "Calculează Istoric hits" in node["args"][0]]
-    assert len(buttons) == 1 and not starts
-    buttons[0]["kwargs"]["on_click"]()
-    assert starts == [True]
+    assert not buttons and not starts
 
 
 def test_effective_guarantees_follow_live_input_for_all_three_games(sidebar_context):

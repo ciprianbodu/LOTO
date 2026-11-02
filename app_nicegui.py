@@ -2533,20 +2533,17 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                 ui.label(STATE["_virtual_physical_notice"]).classes("text-caption text-warning")
             for record in records:
                 simulated = bool(record.get("simulated"))
-                ui.label(f"{record['name']} · pool cerut {record['pool']} · garanție {record['guarantee']} · fereastră cerută {record['depth']}%").classes("text-bold")
+                ui.label(f"{record['name']} · pool cerut {record['pool']} · garanție inițială {record['guarantee']} · fereastră cerută {record['depth']}%").classes("text-bold")
                 ui.label(
-                    ("Variante simulate pentru fiecare extragere pe baza datelor anterioare; "
-                     "nu stabilește că au fost jucate. Premiile afișate, când sunt disponibile, "
-                     "sunt estimări brute pe baza valorilor oficiale. Varianta afișată este "
-                     "una dintre cele simulate, aleasă după verificarea extragerii." if simulated else
-                     "Analiza teoretică nu generează bilete și nu stabilește că au fost jucate; nu se atribuie premii. "
-                     "Exemplul de variantă este construit după extragerea istorică din numerele nimerite; "
-                     "nu este o variantă anticipată.")
+                    "Istoricul nu stabilește că au fost jucate. Schema LR disponibilă este reconstituită "
+                    "pe pool-ul de atunci; în lipsa unui cod se păstrează sistemul simulat sau virtual. "
+                    "Premiul și costul corespund sistemului indicat pe rând. Exemplul de variantă este "
+                    "construit după extragerea istorică, din variantele sistemului evaluat."
                 ).classes("text-caption text-warning")
                 if simulated and not record.get("error"):
                     cap = int(record.get("max_variants") or 0)
                     condition = int(record.get("meta", {}).get("wheel_condition") or record.get("wheel_condition") or record["guarantee"])
-                    ui.label(f"Condiție {condition}; " + (f"plafon {cap} variante pe extragere." if cap else "fără plafon de variante.")).classes("text-caption")
+                    ui.label(f"Simularea inițială: condiție {condition}; " + (f"plafon {cap} variante pe extragere." if cap else "fără plafon de variante.")).classes("text-caption")
                 if record.get("error"):
                     ui.label(f"Analiză necalculată: {record['error']}").classes("text-negative")
                     continue
@@ -2579,6 +2576,35 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                     bucket = per_draw.setdefault(key, [])
                     bucket.append(entry)
                 flat = [max(group, key=lambda entry: int(entry.hits)) for group in per_draw.values()]
+                from ui_prizes import history_played_system
+                from ui_hits import _wf_marked_numbers, _WF_MARKED_CELL
+                played = {}
+                for entry in flat:
+                    context = entry.ticket_context or {}
+                    jokers = context.get("hard_core_joker") or []
+                    played[int(entry.draw_index)] = history_played_system(record["game"], {
+                        "country": meta.get("country", "RO"),
+                        "label": str(entry.draw_date or ""), "drawn": list(context.get("actual") or []),
+                        "pool_numbers": list(context.get("hard_core") or []),
+                        "best_variant_raw": list(entry.variant or []), "best_variant_joker_hit": getattr(entry, "joker_hit", None),
+                        "chosen_joker": jokers[0] if jokers else None,
+                        "best_ticket": int(entry.hits),
+                        "generated_variants": [list(getattr(e, "variant", None) or []) for e in per_draw[int(entry.draw_index)]],
+                        "expected_variant_count": getattr(entry, "variant_count", None),
+                        "variant_prize_groups": getattr(entry, "variant_prize_groups", None),
+                        "virtual_full_system": bool(getattr(entry, "virtual_full_system", False)),
+                    })
+                has_lr = any(d.get("lr_scheme_code") is not None for d in played.values())
+                if not has_lr:
+                    ui.label(
+                        ("Variante simulate pentru fiecare extragere pe baza datelor anterioare; "
+                         "nu stabilește că au fost jucate. Premiile afișate, când sunt disponibile, "
+                         "sunt estimări brute pe baza valorilor oficiale. Varianta afișată este "
+                         "una dintre cele simulate, aleasă după verificarea extragerii." if simulated else
+                         "Analiza teoretică nu generează bilete și nu stabilește că au fost jucate; nu se atribuie premii. "
+                         "Exemplul de variantă este construit după extragerea istorică din numerele nimerite; "
+                         "nu este o variantă anticipată.")
+                    ).classes("text-caption text-warning")
                 if flat:
                     thresholds = (4, 5, 6) if record["game"] in ("6/49", "5/40") else (4, 5)
                     def _rate(n):
@@ -2589,11 +2615,11 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                             "threshold": f"{threshold}+",
                             "pool": _rate(sum(int(p.hits_union) >= threshold for p in flat)),
                             "ticket": (
-                                _rate(sum(int(p.hits) >= threshold for p in flat))
+                                _rate(sum(int(played[int(p.draw_index)]["best_ticket"]) >= threshold for p in flat))
                                 if threshold <= (5 if record["game"] in ("joker", "5/40") else 6) else "—"
                             ),
                         })
-                    ui.label("Hiturile din extragerile validate; pe variantă este maximul variantelor simulate." if simulated else "Hiturile din extragerile validate; pe variantă este maximul teoretic al sistemului complet.").classes("text-caption")
+                    ui.label("Hiturile din extragerile validate; maximul pe variantă folosește schema LR când există, altfel sistemul simulat sau virtual.").classes("text-caption")
                     ui.table(columns=[
                         {"name": "threshold", "label": "Hiturile", "field": "threshold"},
                         {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
@@ -2607,28 +2633,23 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                     if int(entry.hits_union) < 4:
                         continue
                     context = entry.ticket_context or {}
-                    variant = list(entry.variant or [])
+                    data = played[int(entry.draw_index)]
+                    variant = data["best_variant_raw"]
+                    pool_text, pool_marks = _wf_marked_numbers(data["pool_numbers"], data["drawn"])
                     if record["game"] == "joker" and len(variant) == 6:
                         example = " ".join(map(str, variant[:5])) + f" · Joker {variant[5]}"
                     else:
                         example = " ".join(map(str, variant))
-                    pool_records[int(entry.draw_index)] = {
-                        "label": str(entry.draw_date or ""), "drawn": list(context.get("actual") or []),
-                        "pool_numbers": list(context.get("hard_core") or []),
-                        "best_variant_raw": variant, "best_variant_joker_hit": getattr(entry, "joker_hit", None),
-                        "generated_variants": [list(getattr(e, "variant", None) or []) for e in per_draw[int(entry.draw_index)]],
-                        "expected_variant_count": getattr(entry, "variant_count", None),
-                        "variant_prize_groups": getattr(entry, "variant_prize_groups", None),
-                        "virtual_full_system": bool(getattr(entry, "virtual_full_system", False)),
-                    }
+                    pool_records[int(entry.draw_index)] = data
                     rows.append({
                         "_draw_index": int(entry.draw_index), "pool_prize": "se încarcă premiile oficiale",
                         "draw_index": int(entry.draw_index),
                         "date": str(entry.draw_date or f"#{entry.draw_index}"),
                         "drawn": " ".join(map(str, context.get("actual") or [])) or "—",
-                        "pool": " ".join(map(str, context.get("hard_core") or [])) or "—",
-                        "pool_hits": int(entry.hits_union), "best_hits": int(entry.hits),
-                        "example": example or "—", "variants": f"{int(entry.variant_count or len(per_draw[int(entry.draw_index)])):,}".replace(",", "."),
+                        "pool": pool_text, "pool_marks": pool_marks,
+                        "system": data["system_label"],
+                        "pool_hits": int(entry.hits_union), "best_hits": data["best_ticket"],
+                        "example": example or "—", "variants": f"{int(data['expected_variant_count'] or len(per_draw[int(entry.draw_index)])):,}".replace(",", "."),
                     })
                 if rows:
                     ui.label("Afișate numai extragerile cu 4+ în pool (4, 5 sau 6, în funcție de joc).").classes("text-caption")
@@ -2638,22 +2659,26 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         if holder.get("binding") is not None:
                             holder["binding"].set_pagination(event.value)
                     ui.label(
-                        "Premiu brut estimat pentru variantele generate la fiecare pas, la valorile unitare publicate; "
-                        "simularea nu dovedește că variantele au fost jucate. Analiza exclusiv virtuală nu a generat variante. "
-                        "Costul variantelor folosește tariful actual și nu include taxa pe bilet."
+                        "Premiul brut estimat și costul folosesc schema redusă LR disponibilă pentru pool-ul de atunci; "
+                        "la mai multe coduri se alege cel cu cele mai puține variante. În lipsa unei scheme LR, "
+                        "se folosesc variantele simulate. Codul și numărul de variante sunt afișate pe fiecare rând. "
+                        "Sumele sunt estimări la tariful actual și premiile unitare publicate, fără taxa pe bilet; "
+                        "reconstituirea nu dovedește că variantele au fost jucate."
                     ).classes("text-caption text-grey") if romanian else None
                     table = ui.table(columns=[
                         {"name": "date", "label": "Extragere", "field": "date"},
                         {"name": "drawn", "label": "Numere extrase", "field": "drawn"},
                         {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
                         {"name": "pool_hits", "label": "În pool", "field": "pool_hits"},
-                        {"name": "best_hits", "label": "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "best_hits"},
+                        {"name": "system", "label": "Sistem evaluat", "field": "system"},
+                        {"name": "best_hits", "label": "Maxim pe variantele evaluate" if has_lr else "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "best_hits"},
                         {"name": "example", "label": "Variantă simulată, aleasă după verificare" if simulated else "Exemplu construit după extragere", "field": "example"},
-                        {"name": "variants", "label": "Variante simulate" if simulated else "Combinații posibile calculate matematic", "field": "variants"},
-                        *([{"name": "pool_prize", "label": "Premiu brut estimat · variante generate", "field": "pool_prize"},
-                           {"name": "pool_cost", "label": "Cost variante · tarif actual", "field": "pool_cost"}] if romanian else []),
+                        {"name": "variants", "label": "Variante în sistemul evaluat" if has_lr else "Variante simulate" if simulated else "Combinații posibile calculate matematic", "field": "variants"},
+                        *([{"name": "pool_prize", "label": "Premiu brut estimat · sistem evaluat", "field": "pool_prize"},
+                           {"name": "pool_cost", "label": "Cost schemă / variante · tarif actual", "field": "pool_cost"}] if romanian else []),
                     ], rows=rows, row_key="draw_index", pagination=15,
                         **({"on_pagination_change": _pool_page} if romanian else {})).classes("w-full").props("dense wrap-cells")
+                    table.add_slot("body-cell-pool", _WF_MARKED_CELL)
                     if romanian:
                         from ui_prizes import PoolPrizeBinding
                         from ui_hits import _WF_PRIZE_CELL
@@ -2683,13 +2708,9 @@ def _render_virtual_controls() -> None:
         {30: "Ultimele 30%", 100: "Întreg istoricul evaluabil (100%)"},
         value=STATE["virtual_wf_depth"], label="Adâncime istoric virtual",
     ).bind_value(STATE, "virtual_wf_depth").classes("w-full")
-    ui.button(
-        "📊 Calculează istoric virtual (sistem complet)", on_click=_start_virtual_history,
-    ).props("outline no-caps").classes("w-full")
     ui.label(
-        "Analiză teoretică pentru setările și istoricele curente. Nu generează bilete; "
-        "nu trimite mail și nu oprește calculatorul. Bugetul walk-forward poate opri "
-        "calculul înainte de toate extragerile."
+        "Istoricul hits se calculează automat după Re-Bench, pentru setările și istoricele curente. "
+        "Bugetul walk-forward poate opri calculul înainte de toate extragerile."
     ).classes("text-caption text-grey")
 
 

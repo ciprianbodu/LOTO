@@ -79,6 +79,9 @@ def test_rebench_without_four_plus_has_no_prize_rows_or_requests(bindings, game,
 
 def test_visible_pool_hit_keeps_all_generated_variants_for_its_actual_prize(bindings):
     source = record(levels=(2, 4))
+    source["pool"] = 30  # No official LR code: retain the simulated variants.
+    for entry in source["flat"]:
+        entry.ticket_context["hard_core"] = list(range(1, 31))
     first = source["flat"][-1]
     first.hits = 3
     first.variant = [1, 2, 3, 10, 11, 12]
