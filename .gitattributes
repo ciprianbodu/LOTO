@@ -10,6 +10,9 @@ scripts/analysis/forward_test/* text eol=lf
 _ISTORIC/externe/*.csv text eol=lf
 # Istoricele romanesti: update_csv.py scrie LF.
 _ISTORIC/*.csv text eol=lf
+# Aceste sase designuri au amprente LF in MANIFEST.json.
+covering_designs/C_1[789]_5_4.txt text eol=lf
+covering_designs/budget/H_1[456]_6_4.txt text eol=lf
 # Studiul semneaza manifestul pe octeti; pastreaza CRLF/LF exact ca la rulare.
 scripts/analysis/pool_selection_649_2026-10-19*.json -text diff whitespace=cr-at-eol
 scripts/analysis/pool_selection_649_2026-10-19*.csv -text diff whitespace=cr-at-eol

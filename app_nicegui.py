@@ -2602,6 +2602,10 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                 rows = []
                 pool_records = {}
                 for entry in sorted(flat, key=lambda x: int(x.draw_index), reverse=True):
+                    # The prize table displays pool hits 4+, while summaries
+                    # above keep every validated draw in their denominator.
+                    if int(entry.hits_union) < 4:
+                        continue
                     context = entry.ticket_context or {}
                     variant = list(entry.variant or [])
                     if record["game"] == "joker" and len(variant) == 6:
@@ -2627,6 +2631,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         "example": example or "—", "variants": f"{int(entry.variant_count or len(per_draw[int(entry.draw_index)])):,}".replace(",", "."),
                     })
                 if rows:
+                    ui.label("Afișate numai extragerile cu 4+ în pool (4, 5 sau 6, în funcție de joc).").classes("text-caption")
                     romanian = str(meta.get("country") or "RO").upper() == "RO" and record["game"] in ("6/49", "5/40", "joker")
                     holder = {}
                     def _pool_page(event, holder=holder):
@@ -2669,7 +2674,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         ui.button("Reîncearcă premiile indisponibile", on_click=lambda b=binding: b.request(retry_missing=True)).props("flat dense no-caps").classes("text-caption")
                         ui.timer(0.5, binding.refresh)
                 else:
-                    ui.label("Nu există extrageri validate pentru această cerere.").classes("text-caption")
+                    ui.label("Nu există extrageri cu 4+ în pool pentru această cerere." if flat else "Nu există extrageri validate pentru această cerere.").classes("text-caption")
 
 
 def _render_virtual_controls() -> None:

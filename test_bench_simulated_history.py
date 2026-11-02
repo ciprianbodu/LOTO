@@ -38,7 +38,7 @@ def test_simulated_history_uses_settings_and_aggregates_variants_per_draw(virtua
     tables = [node for node in view.walk() if node["kind"] == "table"]
     detail = next(t for t in tables if any(c["name"] == "example" for c in t["kwargs"]["columns"]))
     summary = next(t for t in tables if any(c["name"] == "threshold" for c in t["kwargs"]["columns"]))
-    assert len(detail["kwargs"]["rows"]) == 2
+    assert [r["draw_index"] for r in detail["kwargs"]["rows"]] == [10]
     first = next(r for r in detail["kwargs"]["rows"] if r["draw_index"] == 10)
     assert first["best_hits"] == 5 and first["variants"] == "2"
     fifth = next(r for r in summary["kwargs"]["rows"] if r["threshold"] == "5+")
