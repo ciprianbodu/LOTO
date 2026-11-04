@@ -1,0 +1,108 @@
+{
+  "python": "3.14.10 (tags/v3.14.10:b703b2c, Oct 25 2026, 17:36:52) [MSC v.1944 64 bit (AMD64)]",
+  "seed": 20261104,
+  "baseline_source_sha256": "7f3a50c427a657568a3d276313644a6ae1a7b71c9c3a2d6d2fb61034b0fe078b",
+  "data": "Synthetic repeatable rows; all official block sets and terminal mapping retained.",
+  "cases": [
+    {
+      "game": "6/49",
+      "pool": 16,
+      "code": 59,
+      "variants": 112,
+      "hits_1000_rows": {
+        "old_seconds": 0.034101299999747425,
+        "new_seconds": 0.012600499999280146,
+        "speedup": 2.706344986444633,
+        "repeats": 5,
+        "identical_outputs": true
+      },
+      "prizes_120_rows": {
+        "old_seconds": 0.4912027999998827,
+        "new_seconds": 0.18442080000022543,
+        "speedup": 2.6634891508944887,
+        "repeats": 5,
+        "identical_outputs": true
+      },
+      "groups_min": 15,
+      "groups_max": 57,
+      "odds": {
+        "3": 0.29809259503986607,
+        "4": 0.07431390687634906,
+        "5": 0.0020743980040927312,
+        "6": 8.009258703060738e-06
+      },
+      "numerators": {
+        "3": 4168472,
+        "4": 1039192,
+        "5": 29008,
+        "6": 112
+      }
+    },
+    {
+      "game": "joker",
+      "pool": 15,
+      "code": 12,
+      "variants": 118,
+      "hits_1000_rows": {
+        "old_seconds": 0.037454999999681604,
+        "new_seconds": 0.016428900000391877,
+        "speedup": 2.279823968664256,
+        "repeats": 5,
+        "identical_outputs": true
+      },
+      "prizes_120_rows": {
+        "old_seconds": 0.6997206000005463,
+        "new_seconds": 0.18459590000020398,
+        "speedup": 3.7905533113128356,
+        "repeats": 5,
+        "identical_outputs": true
+      },
+      "groups_min": 15,
+      "groups_max": 29,
+      "odds": {
+        "3": 0.19797521442444868,
+        "4": 0.015791166670349882,
+        "5": 9.658205914587084e-05
+      },
+      "numerators": {
+        "3": 241878,
+        "4": 19293,
+        "5": 118
+      }
+    },
+    {
+      "game": "5/40",
+      "pool": 19,
+      "code": 48,
+      "variants": 930,
+      "hits_1000_rows": {
+        "old_seconds": 0.2224900000001071,
+        "new_seconds": 0.05947109999942768,
+        "speedup": 3.741144858632987,
+        "repeats": 5,
+        "identical_outputs": true
+      },
+      "prizes_120_rows": {
+        "old_seconds": 2.9202810999995563,
+        "new_seconds": 0.19141820000004373,
+        "speedup": 15.25602633395826,
+        "repeats": 5,
+        "identical_outputs": true
+      },
+      "groups_min": 16,
+      "groups_max": 57,
+      "odds": {
+        "3": 0.6185031185031185,
+        "4": 0.28274428274428276,
+        "5": 0.008199552936395042
+      },
+      "numerators": {
+        "3": 2374050,
+        "4": 1085280,
+        "5": 31473
+      }
+    }
+  ],
+  "baseline_commit_expected": "ee3ed90b624603f03cbfa36041d78f158f86c94c",
+  "timing_context": "Five alternating-order repetitions with warm caches; isolated tests/research ran concurrently. Local timings, not whole-application latency."
+}

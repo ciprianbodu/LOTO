@@ -4134,7 +4134,7 @@ def main_page() -> None:
                     )
                 )
             ui.label(
-                "La fiecare pornire: 16 numere la 6/49, 19 la 5/40 și 12 la Joker. "
+                "La fiecare pornire: 16 numere la 6/49, 19 la 5/40 și 15 la Joker. "
                 "Dimensiunile pot fi schimbate pentru Re-Bench. Maximul poate fi ales separat: "
                 "49 la 6/49, 40 la 5/40, 45 la Joker. Numai Loto 5/40 are coduri peste "
                 "16 numere (Cod 45 și 46 pe 17, Cod 47 pe 18, Cod 48 pe 19); "

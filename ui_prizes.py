@@ -403,10 +403,10 @@ def history_played_system(game: str, row: dict) -> dict:
     """Reconstruct the cheapest available official LR code on the historical pool.
 
     Select the code by size/code only, before inspecting the draw. Only the
-    displayed representative is chosen afterwards. Full LR tickets are built
-    lazily when official prizes arrive, keeping the history compact.
+    displayed representative is chosen afterwards. Exact compact LR groups
+    are built lazily when official prizes arrive, keeping the history compact.
     """
-    from covering.lr_schemes import lr_schemes
+    from covering.lr_schemes import best_variant, lr_schemes
 
     result = dict(row)
     label = {"loto_6_49": "6/49", "loto_5_40": "5/40"}.get(game, game)
@@ -421,9 +421,7 @@ def history_played_system(game: str, row: dict) -> dict:
         return result
     scheme = min(schemes, key=lambda s: (s.size, s.code))
     drawn = {int(n) for n in row.get("drawn") or []}
-    hit_positions = {i + 1 for i, number in enumerate(pool) if number in drawn}
-    positions = max(scheme.variants, key=lambda v: len(hit_positions.intersection(v)))
-    example = [pool[i - 1] for i in positions]
+    example, hits = best_variant(scheme, pool, drawn)
     if label == "joker":
         raw = row.get("best_variant_raw") or []
         chosen = row.get("chosen_joker")
@@ -440,26 +438,49 @@ def history_played_system(game: str, row: dict) -> dict:
         system_label=f"Schemă redusă LR · {scheme.label}",
         expected_variant_count=scheme.size, generated_variants=[],
         variant_prize_groups=None, virtual_full_system=False,
-        best_variant_raw=example, best_ticket=len(hit_positions.intersection(positions)),
+        best_variant_raw=example, best_ticket=hits,
     )
     return result
 
 
-def _history_lr_variants(row):
-    from covering.lr_schemes import lr_schemes, scheme_tickets
-
+def _history_lr_scheme(row):
+    from covering.lr_schemes import lr_schemes
     pool = row.get("pool_numbers") or []
     scheme = next((s for s in lr_schemes(row["lr_scheme_game"], len(set(pool)))
                    if s.code == row["lr_scheme_code"]), None)
     if scheme is None or scheme.size != row.get("expected_variant_count"):
         raise ValueError("schema redusă nu mai corespunde istoricului afișat")
+    return scheme, pool
+
+
+def _history_lr_joker(row):
+    if row["lr_scheme_game"] != "joker":
+        return None
+    raw = row.get("best_variant_raw") or []
+    if len(raw) != 6:
+        raise ValueError("bila Joker jucată nu este păstrată în istoric")
+    # Keep the original value; the prize validator must reject an invalid ball.
+    return raw[-1]
+
+
+def _history_lr_variants(row):
+    from covering.lr_schemes import scheme_tickets
+
+    scheme, pool = _history_lr_scheme(row)
     variants = scheme_tickets(scheme, pool)
     if row["lr_scheme_game"] == "joker":
-        raw = row.get("best_variant_raw") or []
-        if len(raw) != 6:
-            raise ValueError("bila Joker jucată nu este păstrată în istoric")
-        variants = [line + [raw[-1]] for line in variants]
+        chosen = _history_lr_joker(row)
+        variants = [line + [chosen] for line in variants]
     return variants
+
+
+def _history_lr_prize_groups(row):
+    from covering.lr_schemes import scheme_prize_groups
+
+    scheme, pool = _history_lr_scheme(row)
+    return scheme_prize_groups(
+        scheme, pool, row.get("drawn") or (), joker=_history_lr_joker(row)
+    )
 
 
 def _generated_variants_issue(row: dict) -> str | None:
@@ -491,13 +512,27 @@ def pool_prize_text(game: str, row: dict, view: PrizeView) -> HitPrizeText:
         return HitPrizeText("premii oficiale indisponibile")
     from loto_enterprise.core.generated_prize import estimate_generated_prize
     try:
-        variants = _history_lr_variants(row) if row.get("lr_scheme_code") is not None else row.get("generated_variants") or []
+        if row.get("lr_scheme_code") is not None:
+            # Group by the exact matched-number subset, not just hit count:
+            # 5/40's first five drawn numbers and Joker categories stay distinct.
+            if (_GAMES.get(str(game).strip().casefold()) == "loto_5_40"
+                    and not getattr(view.draw, "order_known", False)):
+                # Ambiguous first-five order stops at the first 5-hit ticket.
+                # Preserve the old partial diagnostic counts and its row order.
+                variants = _history_lr_variants(row)
+                groups = None
+            else:
+                variants = []
+                groups = _history_lr_prize_groups(row)
+        else:
+            variants = row.get("generated_variants") or []
+            groups = row.get("variant_prize_groups")
     except (KeyError, TypeError, ValueError) as exc:
         return HitPrizeText("indisponibil: " + str(exc))
     result = estimate_generated_prize(game, variants, view.draw,
         target_numbers=row.get("drawn"), target_date=row.get("label"),
         expected_count=row.get("expected_variant_count"),
-        variant_prize_groups=row.get("variant_prize_groups"),
+        variant_prize_groups=groups,
         virtual_full_system=bool(row.get("virtual_full_system")),
         joker_hit=row.get("best_variant_joker_hit"), pool_numbers=row.get("pool_numbers"))
     source = _official_url(getattr(view.draw, "source_url", ""))

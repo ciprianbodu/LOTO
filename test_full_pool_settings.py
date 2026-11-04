@@ -15,7 +15,7 @@ from loto_enterprise.core import lotteries as L
 
 
 RO_MAX = {"6/49": 49, "5/40": 40, "joker": 45}
-RO_DEFAULT = {"6/49": 16, "5/40": 19, "joker": 12}
+RO_DEFAULT = {"6/49": 16, "5/40": 19, "joker": 15}
 
 
 def _settings(monkeypatch, **values):
@@ -114,12 +114,41 @@ if sys.argv[2] == 'edit':
 
     expected = {
         "pool_size_649_val": 16, "pool_size_540_val": 19,
-        "pool_size_joker_val": 12, "pool_size_val": 14,
+        "pool_size_joker_val": 15, "pool_size_val": 14,
         "guarantee_val": 3, "max_variants_val": 123,
     }
     assert boot("edit") == expected
     assert json.loads(state.read_text(encoding="utf-8"))["pool_size_joker_val"] == 14
     assert boot("read") == expected
+
+
+def test_previous_joker_default_resets_to_registry_without_rewriting_saved_settings(
+    tmp_path, monkeypatch
+):
+    settings = _settings(monkeypatch)
+    saved = {
+        "pool_size_649_val": 16,
+        "pool_size_540_val": 19,
+        "pool_size_joker_val": 12,
+        "pool_size_val": 13,
+        "guarantee_val": 4,
+        "max_variants_val": 118,
+        "sim_depth_val": 55,
+        "mail_on_complete": False,
+    }
+    state = tmp_path / "old-defaults.json"
+    state.write_text(json.dumps(saved), encoding="utf-8")
+    before = state.read_bytes()
+    monkeypatch.setattr(ui_runtime, "UI_STATE_FILE", state)
+
+    ui_runtime._load_settings()
+
+    assert ui_runtime._pool_size_for("joker") == L.GAMES_BY_ID["joker"].default_pool == 15
+    assert {g: ui_runtime._pool_size_for(g) for g in RO_MAX} == RO_DEFAULT
+    for key, value in saved.items():
+        if key not in ui_runtime._POOL_KEYS.values():
+            assert settings[key] == value
+    assert state.read_bytes() == before
 
 
 @pytest.mark.parametrize("invalid", [None, "invalid", float("inf")])

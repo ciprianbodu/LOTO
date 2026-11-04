@@ -92,6 +92,41 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Schemele LR pe pool 16 / 15 / 19 — 2026-11-04
+
+- La cererea utilizatorului, optimizarea si studiul separat urmaresc 6/49
+  pool 16, Cod 59 (112 variante); Joker pool 15, Cod 12 (118); 5/40 pool 19,
+  Cod 48 (930). Implicitul Joker la pornire este acum 15, din registrul
+  jocului; anuleaza suprascrierea anterioara cu 12. Celelalte setari salvate
+  se pastreaza, iar istoricele salvate isi pastreaza poolul propriu.
+- `covering.lr_schemes` memoreaza mastile pe instanta, evita hash-ul repetat
+  al tuturor variantelor si opreste cautarea primei variante maxime la limita
+  matematica. `ui_prizes` foloseste grupe de premii cu reprezentanti reali,
+  multiplicitati si numerele exacte nimerite, inclusiv variantele pierzatoare.
+  Ordinea primelor cinci la 5/40, bila Joker si validatorul raman respectate;
+  ordinea 5/40 necunoscuta pastreaza lista completa si diagnosticul vechi.
+- Blocurile oficiale, maparea crescatoare ca la terminal, scorurile si decizia
+  de productie raman identice. Optimizarea reluarii nu schimba generatorul
+  general in generator obligatoriu al unui cod LR. Nu necesita chei cache noi.
+  Benchmark local al premiilor: 2,66x / 3,79x / 15,26x mai rapid; nu reprezinta
+  cresterea hiturilor sau accelerarea intregii aplicatii.
+- Enumerare independenta a 622592 submultimi: Cod 59 atinge limita
+  combinatorica la 3..6, iar Cod 48 la 4+. Diferenta fata de o limita pentru
+  alte praguri nu dovedeste existenta unei scheme mai bune. Studiul celor
+  53 de metode foloseste numai trecutul fiecarei tinte si evalueaza direct
+  variantele LR; arhivele reutilizate raman cercetare exploratorie.
+- Studiu complet: 5798 tinte x 53 metode, doua moduri de consecutive,
+  1650 celule / 3300 teste; zero rezerve frequency, minim p Holm binomial
+  0,38287. Selectia cronologica dupa LR nu confirma un avantaj robust si nu
+  este promovata: la 6/49, 4+ scade 54 -> 42 fata de frequency; la Joker
+  creste 7 -> 9, iar la 5/40 132 -> 133, dar 5+ scade 7 -> 3.
+- Raport si probe reproductibile: `scripts/analysis/lr_optimization_2026-11-04.md`.
+  Verificat pe Python 3.14.10 in patru copii izolate: 6561 teste trecute,
+  22 sarite, zero esecuri; 845 cazuri noi. Audit aplicatie pe 13 jocuri,
+  UI HTTP 200 si eticheta Joker 15; 53557 comparatii exacte ale designurilor.
+  Revizia independenta confirma 188 blocuri / 18392 alegeri din studiul LR.
+  Aplicatia activa nu a fost repornita.
+
 ### Optimizare certificata a hiturilor si a calculelor — 2026-11-04
 
 - `covering.large_pool` calculeaza exact castigul unui schimb de bilet:

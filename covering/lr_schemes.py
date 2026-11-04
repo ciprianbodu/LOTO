@@ -23,7 +23,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from math import comb
 from pathlib import Path
 
@@ -53,6 +53,17 @@ class LRScheme:
     code: int
     n: int
     variants: tuple[tuple[int, ...], ...]
+
+    @cached_property
+    def _position_data(self) -> tuple[tuple[int, ...], int]:
+        """Immutable positional data, cached on this exact scheme instance.
+
+        An lru_cache keyed by the frozen dataclass would hash every variant on
+        every hit, even though the mask tuple itself was already available.
+        This derived property does not change equality or the scheme hash.
+        """
+        masks = tuple(sum(1 << (p - 1) for p in v) for v in self.variants)
+        return masks, max((m.bit_count() for m in masks), default=0)
 
     @property
     def label(self) -> str:
@@ -203,19 +214,81 @@ def scheme_guarantees(scheme: LRScheme) -> dict[int, dict[int, float]]:
     return out
 
 
-@lru_cache(maxsize=64)
 def _position_masks(scheme: LRScheme) -> tuple[int, ...]:
-    return tuple(sum(1 << (p - 1) for p in v) for v in scheme.variants)
+    return scheme._position_data[0]
 
 
-def best_hits(scheme: LRScheme, pool, drawn) -> int:
-    """Cele mai multe numere extrase pe o singură variantă a schemei puse pe `pool`."""
+def _pool_hit_mask(scheme: LRScheme, pool, drawn):
     nums = sorted({int(x) for x in pool})
     if len(nums) != scheme.n:
         raise ValueError(f"{scheme.label} cere {scheme.n} numere, nu {len(nums)}")
     hit = {int(x) for x in drawn}
-    mask = sum(1 << i for i, x in enumerate(nums) if x in hit)
-    return max((m & mask).bit_count() for m in _position_masks(scheme))
+    return nums, sum(1 << i for i, x in enumerate(nums) if x in hit)
+
+
+def _best_position(scheme: LRScheme, hit_mask: int) -> tuple[int, int]:
+    """First maximum in official order; stop at the mathematical hit ceiling."""
+    masks, pick = scheme._position_data
+    if not masks:
+        max(())  # Preserve the previous empty-scheme ValueError.
+    ceiling = min(hit_mask.bit_count(), pick)
+    best_index, best = 0, -1
+    for index, mask in enumerate(masks):
+        hits = (mask & hit_mask).bit_count()
+        if hits > best:
+            best_index, best = index, hits
+        if best == ceiling:
+            break
+    return best_index, best
+
+
+def best_hits(scheme: LRScheme, pool, drawn) -> int:
+    """Cele mai multe numere extrase pe o singură variantă a schemei puse pe `pool`."""
+    _, mask = _pool_hit_mask(scheme, pool, drawn)
+    return _best_position(scheme, mask)[1]
+
+
+def best_variant(scheme: LRScheme, pool, drawn) -> tuple[list[int], int]:
+    """First best main-number ticket, with terminal mapping and its hit count.
+
+    The pool is sorted numerically, exactly as in ``scheme_tickets``. A tie
+    keeps the first row of the official scheme; Joker's second urn is left
+    to the caller, just as with the main-number ticket generator.
+    """
+    nums, mask = _pool_hit_mask(scheme, pool, drawn)
+    index, hits = _best_position(scheme, mask)
+    return [nums[p - 1] for p in scheme.variants[index]], hits
+
+
+def scheme_prize_groups(scheme: LRScheme, pool, drawn, *, joker=None) -> dict:
+    """Exact compact replay of this official scheme, including losing tickets.
+
+    Group by the complete matched-number subset, not only the hit count:
+    5/40 needs to distinguish the official first five numbers. Representatives
+    are real tickets, selected in official row order, and multiplicities sum
+    to the scheme size. The caller must still use the existing prize validator
+    against the official draw. In particular the chosen Joker is appended
+    unchanged, so malformed values are rejected by that same validator.
+
+    A validator that stops early (notably ambiguous 5/40 extraction order)
+    can expose partial category counters. Replay the full list in that error
+    case if those partial counters must retain their original row-order value.
+    """
+    nums, hit_mask = _pool_hit_mask(scheme, pool, drawn)
+    grouped = {}
+    for index, mask in enumerate(_position_masks(scheme)):
+        signature = mask & hit_mask
+        if signature in grouped:
+            grouped[signature][1] += 1
+        else:
+            grouped[signature] = [index, 1]
+    groups = []
+    for index, count in grouped.values():
+        variant = [nums[p - 1] for p in scheme.variants[index]]
+        if scheme.game == "joker":
+            variant.append(joker)
+        groups.append({"variant": variant, "count": count})
+    return {"version": 1, "total_variants": scheme.size, "groups": groups}
 
 
 # --------------------------------------------------------------------------- #

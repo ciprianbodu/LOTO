@@ -1,0 +1,214 @@
+{
+  "status": "passed",
+  "evaluated_draws": 5798,
+  "methods": 53,
+  "fallbacks": 0,
+  "checked_nested_blocks": 188,
+  "checked_nested_predictions": 18392,
+  "summary": {
+    "cells": 1650,
+    "tests": 3300,
+    "both_holm_below_005": 0,
+    "min_binomial_holm": 0.38287077406561465,
+    "min_paired_holm": 1.0
+  },
+  "main_lr_table": [
+    {
+      "game": "loto_6_49",
+      "candidate": "frequency",
+      "threshold": 4,
+      "n": 705,
+      "successes": 54
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "frequency",
+      "threshold": 5,
+      "n": 705,
+      "successes": 2
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "frequency",
+      "threshold": 6,
+      "n": 705,
+      "successes": 0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "random",
+      "threshold": 4,
+      "n": 705,
+      "successes": 54
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "random",
+      "threshold": 5,
+      "n": 705,
+      "successes": 1
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "random",
+      "threshold": 6,
+      "n": 705,
+      "successes": 0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "nested_pool",
+      "threshold": 4,
+      "n": 705,
+      "successes": 40
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "nested_pool",
+      "threshold": 5,
+      "n": 705,
+      "successes": 1
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "nested_pool",
+      "threshold": 6,
+      "n": 705,
+      "successes": 0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "nested_ticket",
+      "threshold": 4,
+      "n": 705,
+      "successes": 42
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "nested_ticket",
+      "threshold": 5,
+      "n": 705,
+      "successes": 0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "nested_ticket",
+      "threshold": 6,
+      "n": 705,
+      "successes": 0
+    },
+    {
+      "game": "joker",
+      "candidate": "frequency",
+      "threshold": 4,
+      "n": 586,
+      "successes": 7
+    },
+    {
+      "game": "joker",
+      "candidate": "frequency",
+      "threshold": 5,
+      "n": 586,
+      "successes": 0
+    },
+    {
+      "game": "joker",
+      "candidate": "random",
+      "threshold": 4,
+      "n": 586,
+      "successes": 8
+    },
+    {
+      "game": "joker",
+      "candidate": "random",
+      "threshold": 5,
+      "n": 586,
+      "successes": 0
+    },
+    {
+      "game": "joker",
+      "candidate": "nested_pool",
+      "threshold": 4,
+      "n": 586,
+      "successes": 8
+    },
+    {
+      "game": "joker",
+      "candidate": "nested_pool",
+      "threshold": 5,
+      "n": 586,
+      "successes": 1
+    },
+    {
+      "game": "joker",
+      "candidate": "nested_ticket",
+      "threshold": 4,
+      "n": 586,
+      "successes": 9
+    },
+    {
+      "game": "joker",
+      "candidate": "nested_ticket",
+      "threshold": 5,
+      "n": 586,
+      "successes": 0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "frequency",
+      "threshold": 4,
+      "n": 450,
+      "successes": 132
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "frequency",
+      "threshold": 5,
+      "n": 450,
+      "successes": 7
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "random",
+      "threshold": 4,
+      "n": 450,
+      "successes": 122
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "random",
+      "threshold": 5,
+      "n": 450,
+      "successes": 6
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "nested_pool",
+      "threshold": 4,
+      "n": 450,
+      "successes": 133
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "nested_pool",
+      "threshold": 5,
+      "n": 450,
+      "successes": 3
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "nested_ticket",
+      "threshold": 4,
+      "n": 450,
+      "successes": 133
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "nested_ticket",
+      "threshold": 5,
+      "n": 450,
+      "successes": 3
+    }
+  ],
+  "conclusion": "No comparison survives the declared Holm family; exploratory reused archive supplies no robust improvement evidence."
+}
