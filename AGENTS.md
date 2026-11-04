@@ -92,6 +92,41 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Optimizare certificata a hiturilor si a calculelor — 2026-11-04
+
+- `covering.large_pool` calculeaza exact castigul unui schimb de bilet:
+  grupele comune biletului vechi si celui nou nu sunt pierderi. Candidatul
+  porneste din rezultatul algoritmului anterior si este adoptat numai daca
+  numaratorile exacte pentru 3+/4+/5+/6 nu scad la nicio intersectie de pana
+  la sase numere, iar acoperirea g si g+1 este pastrata. Aceasta certificare
+  se aplica numai poolului 20, coverelor clasice partiale, cu plafon 2..4096
+  si garantie sub marimea biletului (cel mult 6). Toate jocurile inregistrate
+  au cel mult sase numere principale extrase; exista test pentru aceasta limita.
+- Celelalte pooluri pastreaza variantele anterioare. Calculul subgrupelor
+  refoloseste candidatii si pierderile, accelerand cautarea compatibila.
+  Schemele LR, scorerii si dimensiunile implicite nu se schimba.
+- Semnatura WF adauga `lp3` numai unde noua rafinare se poate aplica;
+  workerul include aceeasi semnatura in hash. Restul cheilor raman identice,
+  fara stergerea cache-urilor. `lp2` exterior al workerului ramane marcajul
+  extinderii poolurilor, distinct de revizia wheel-ului din hash.
+- `covering.probability` foloseste formula combinatorica pentru zero/un bilet
+  si temporare NumPy mai compacte. Profilurile intregi si probabilitatile
+  sunt identice, deci optimizarea aceasta nu cere invalidare de cache.
+- Bateria exploratorie: 31 de ipoteze, 1488 de celule, 2976 de teste pe
+  istorice, cu excluderea intregii zile tinta si corectie Holm. Nicio ipoteza
+  nu trece corectia. Arhivele au fost deja folosite in cercetare; impartirea
+  cronologica nu este un lot nou nevazut. Nicio metoda nu este promovata.
+- La acelasi numar B de variante distincte de sase numere, sansa de 6/6
+  ramane B/C(49,6). Rafinarea poate imbunatati 4+ si 5+, fara promisiune de
+  castig la o extragere viitoare. Detalii si verificari:
+  `scripts/analysis/optimization_2026-11-04.md`.
+- Verificat pe Python 3.14.10 in trei copii izolate: 5716 teste trecute,
+  22 sarite, zero esecuri, inclusiv 1505 cazuri noi. Audit independent:
+  277 fisiere de design, 519 designuri/sectiuni, 53557 numaratori exacte;
+  232 covere complete la 100%, 33 indici LR verificati. Audit aplicatie:
+  13 istorice, 848 comparatii de paritate, 26 fluxuri, worker pe 13 jocuri,
+  UI HTTP 200; fisierele protejate intacte. Aplicatia activa nu a fost repornita.
+
 ### Premii pe variantele generate in istoricul WF — 2026-11-01
 
 - La cererea utilizatorului, tabelul POOL si istoricul simulat arata premiul

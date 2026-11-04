@@ -1,0 +1,1702 @@
+{
+  "description": "Exact all-outcome probabilities; no historical fitting; timing includes full construction and final certification.",
+  "python": "3.14.10 (tags/v3.14.10:b703b2c, Oct 25 2026, 17:36:52) [MSC v.1944 64 bit (AMD64)]",
+  "cases": [
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 10,
+      "tickets": 10,
+      "changed": false,
+      "before_covered_g": 150,
+      "after_covered_g": 150,
+      "old_seconds": 0.041371099999878425,
+      "new_seconds": 0.07241290000001754,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 1981205,
+              "after_favourable_draws": 1981205,
+              "total_draws": 13983816,
+              "before_probability": 0.14167842311426296,
+              "after_probability": 0.14167842311426296,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 132478,
+              "after_favourable_draws": 132478,
+              "total_draws": 13983816,
+              "before_probability": 0.009473665843429289,
+              "after_probability": 0.009473665843429289,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 2590,
+              "after_favourable_draws": 2590,
+              "total_draws": 13983816,
+              "before_probability": 0.00018521410750827957,
+              "after_probability": 0.00018521410750827957,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 10,
+              "after_favourable_draws": 10,
+              "total_draws": 13983816,
+              "before_probability": 7.151123842018516e-07,
+              "after_probability": 7.151123842018516e-07,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 32,
+      "tickets": 32,
+      "changed": false,
+      "before_covered_g": 480,
+      "after_covered_g": 480,
+      "old_seconds": 0.07091600000012477,
+      "new_seconds": 0.054174600000123974,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 4263362,
+              "after_favourable_draws": 4263362,
+              "total_draws": 13983816,
+              "before_probability": 0.30487829645355746,
+              "after_probability": 0.30487829645355746,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 399221,
+              "after_favourable_draws": 399221,
+              "total_draws": 13983816,
+              "before_probability": 0.028548788113344742,
+              "after_probability": 0.028548788113344742,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 8288,
+              "after_favourable_draws": 8288,
+              "total_draws": 13983816,
+              "before_probability": 0.0005926851440264946,
+              "after_probability": 0.0005926851440264946,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 32,
+              "after_favourable_draws": 32,
+              "total_draws": 13983816,
+              "before_probability": 2.288359629445925e-06,
+              "after_probability": 2.288359629445925e-06,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 64,
+      "tickets": 64,
+      "changed": false,
+      "before_covered_g": 960,
+      "after_covered_g": 960,
+      "old_seconds": 0.3462399000000005,
+      "new_seconds": 0.14277769999989687,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 5686800,
+              "after_favourable_draws": 5686800,
+              "total_draws": 13983816,
+              "before_probability": 0.406670110647909,
+              "after_probability": 0.406670110647909,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 725438,
+              "after_favourable_draws": 725438,
+              "total_draws": 13983816,
+              "before_probability": 0.051876969777062285,
+              "after_probability": 0.051876969777062285,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 16576,
+              "after_favourable_draws": 16576,
+              "total_draws": 13983816,
+              "before_probability": 0.0011853702880529893,
+              "after_probability": 0.0011853702880529893,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 64,
+              "after_favourable_draws": 64,
+              "total_draws": 13983816,
+              "before_probability": 4.57671925889185e-06,
+              "after_probability": 4.57671925889185e-06,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 100,
+      "tickets": 100,
+      "changed": false,
+      "before_covered_g": 1479,
+      "after_covered_g": 1479,
+      "old_seconds": 0.6060357000001204,
+      "new_seconds": 0.29100319999997737,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6379842,
+              "after_favourable_draws": 6379842,
+              "total_draws": 13983816,
+              "before_probability": 0.456230402345111,
+              "after_probability": 0.456230402345111,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1019311,
+              "after_favourable_draws": 1019311,
+              "total_draws": 13983816,
+              "before_probability": 0.07289219194531736,
+              "after_probability": 0.07289219194531736,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 25816,
+              "after_favourable_draws": 25816,
+              "total_draws": 13983816,
+              "before_probability": 0.0018461341310555001,
+              "after_probability": 0.0018461341310555001,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 100,
+              "after_favourable_draws": 100,
+              "total_draws": 13983816,
+              "before_probability": 7.151123842018516e-06,
+              "after_probability": 7.151123842018516e-06,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 125,
+      "tickets": 125,
+      "changed": false,
+      "before_covered_g": 1811,
+      "after_covered_g": 1811,
+      "old_seconds": 0.808431599999949,
+      "new_seconds": 0.3079901000000973,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6526002,
+              "after_favourable_draws": 6526002,
+              "total_draws": 13983816,
+              "before_probability": 0.4666824849526052,
+              "after_probability": 0.4666824849526052,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1183258,
+              "after_favourable_draws": 1183258,
+              "total_draws": 13983816,
+              "before_probability": 0.08461624495059146,
+              "after_probability": 0.08461624495059146,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 32111,
+              "after_favourable_draws": 32111,
+              "total_draws": 13983816,
+              "before_probability": 0.002296297376910566,
+              "after_probability": 0.002296297376910566,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 125,
+              "after_favourable_draws": 125,
+              "total_draws": 13983816,
+              "before_probability": 8.938904802523146e-06,
+              "after_probability": 8.938904802523146e-06,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 152,
+      "tickets": 152,
+      "changed": true,
+      "before_covered_g": 2146,
+      "after_covered_g": 2150,
+      "old_seconds": 1.291439999999966,
+      "new_seconds": 0.6156296000001475,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6584466,
+              "after_favourable_draws": 6584466,
+              "total_draws": 13983816,
+              "before_probability": 0.47086331799560294,
+              "after_probability": 0.47086331799560294,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1338132,
+              "after_favourable_draws": 1340075,
+              "total_draws": 13983816,
+              "before_probability": 0.09569147648967921,
+              "after_probability": 0.09583042282592963,
+              "relative_gain_percent": 0.1452024165029986
+            },
+            "5": {
+              "before_favourable_draws": 38785,
+              "after_favourable_draws": 38793,
+              "total_draws": 13983816,
+              "before_probability": 0.0027735633821268815,
+              "after_probability": 0.002774135472034243,
+              "relative_gain_percent": 0.020626530875333948
+            },
+            "6": {
+              "before_favourable_draws": 152,
+              "after_favourable_draws": 152,
+              "total_draws": 13983816,
+              "before_probability": 1.0869708239868145e-05,
+              "after_probability": 1.0869708239868145e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 200,
+      "tickets": 200,
+      "changed": true,
+      "before_covered_g": 2647,
+      "after_covered_g": 2716,
+      "old_seconds": 1.5380979999999909,
+      "new_seconds": 1.2213160999999673,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6617352,
+              "after_favourable_draws": 6617352,
+              "total_draws": 13983816,
+              "before_probability": 0.47321503658228914,
+              "after_probability": 0.47321503658228914,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1555431,
+              "after_favourable_draws": 1585272,
+              "total_draws": 13983816,
+              "before_probability": 0.11123079708714703,
+              "after_probability": 0.11336476395284377,
+              "relative_gain_percent": 1.9185036173253511
+            },
+            "5": {
+              "before_favourable_draws": 50300,
+              "after_favourable_draws": 50536,
+              "total_draws": 13983816,
+              "before_probability": 0.0035970152925353135,
+              "after_probability": 0.0036138919448024773,
+              "relative_gain_percent": 0.4691848906560603
+            },
+            "6": {
+              "before_favourable_draws": 200,
+              "after_favourable_draws": 200,
+              "total_draws": 13983816,
+              "before_probability": 1.4302247684037032e-05,
+              "after_probability": 1.4302247684037032e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 250,
+      "tickets": 250,
+      "changed": true,
+      "before_covered_g": 3118,
+      "after_covered_g": 3218,
+      "old_seconds": 1.6044782999999825,
+      "new_seconds": 2.1457869999999275,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6621006,
+              "after_favourable_draws": 6621006,
+              "total_draws": 13983816,
+              "before_probability": 0.47347633864747646,
+              "after_probability": 0.47347633864747646,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1752283,
+              "after_favourable_draws": 1793608,
+              "total_draws": 13983816,
+              "before_probability": 0.12530792739263732,
+              "after_probability": 0.12826312932035147,
+              "relative_gain_percent": 2.358351932878433
+            },
+            "5": {
+              "before_favourable_draws": 62022,
+              "after_favourable_draws": 62389,
+              "total_draws": 13983816,
+              "before_probability": 0.004435270029296724,
+              "after_probability": 0.004461514653796932,
+              "relative_gain_percent": 0.5917255167521285
+            },
+            "6": {
+              "before_favourable_draws": 250,
+              "after_favourable_draws": 250,
+              "total_draws": 13983816,
+              "before_probability": 1.787780960504629e-05,
+              "after_probability": 1.787780960504629e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 300,
+      "tickets": 300,
+      "changed": true,
+      "before_covered_g": 3588,
+      "after_covered_g": 3633,
+      "old_seconds": 5.098059499999636,
+      "new_seconds": 3.000461200000018,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6621006,
+              "after_favourable_draws": 6621006,
+              "total_draws": 13983816,
+              "before_probability": 0.47347633864747646,
+              "after_probability": 0.47347633864747646,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1944669,
+              "after_favourable_draws": 1963229,
+              "total_draws": 13983816,
+              "before_probability": 0.13906568850734305,
+              "after_probability": 0.1403929370924217,
+              "relative_gain_percent": 0.9544040656790376
+            },
+            "5": {
+              "before_favourable_draws": 73608,
+              "after_favourable_draws": 73802,
+              "total_draws": 13983816,
+              "before_probability": 0.005263799237632989,
+              "after_probability": 0.0052776724178865055,
+              "relative_gain_percent": 0.2635583088794746
+            },
+            "6": {
+              "before_favourable_draws": 300,
+              "after_favourable_draws": 300,
+              "total_draws": 13983816,
+              "before_probability": 2.145337152605555e-05,
+              "after_probability": 2.145337152605555e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 404,
+      "tickets": 404,
+      "changed": true,
+      "before_covered_g": 4158,
+      "after_covered_g": 4279,
+      "old_seconds": 2.05794429999969,
+      "new_seconds": 2.7014767000000575,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6621006,
+              "after_favourable_draws": 6621006,
+              "total_draws": 13983816,
+              "before_probability": 0.47347633864747646,
+              "after_probability": 0.47347633864747646,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 2176524,
+              "after_favourable_draws": 2225650,
+              "total_draws": 13983816,
+              "before_probability": 0.1556459266912551,
+              "after_probability": 0.1591589877898851,
+              "relative_gain_percent": 2.2570851504509104
+            },
+            "5": {
+              "before_favourable_draws": 95931,
+              "after_favourable_draws": 96457,
+              "total_draws": 13983816,
+              "before_probability": 0.0068601446128867824,
+              "after_probability": 0.0068977595242958,
+              "relative_gain_percent": 0.5483107650290364
+            },
+            "6": {
+              "before_favourable_draws": 404,
+              "after_favourable_draws": 404,
+              "total_draws": 13983816,
+              "before_probability": 2.8890540321754806e-05,
+              "after_probability": 2.8890540321754806e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 500,
+      "tickets": 500,
+      "changed": true,
+      "before_covered_g": 4595,
+      "after_covered_g": 4670,
+      "old_seconds": 5.105276400000093,
+      "new_seconds": 3.8264382000002115,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6621006,
+              "after_favourable_draws": 6621006,
+              "total_draws": 13983816,
+              "before_probability": 0.47347633864747646,
+              "after_probability": 0.47347633864747646,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 2353946,
+              "after_favourable_draws": 2384396,
+              "total_draws": 13983816,
+              "before_probability": 0.1683335936342412,
+              "after_probability": 0.1705111108441358,
+              "relative_gain_percent": 1.2935725798297826
+            },
+            "5": {
+              "before_favourable_draws": 115928,
+              "after_favourable_draws": 116349,
+              "total_draws": 13983816,
+              "before_probability": 0.008290154847575226,
+              "after_probability": 0.008320261078950123,
+              "relative_gain_percent": 0.3631564419294797
+            },
+            "6": {
+              "before_favourable_draws": 500,
+              "after_favourable_draws": 500,
+              "total_draws": 13983816,
+              "before_probability": 3.575561921009258e-05,
+              "after_probability": 3.575561921009258e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 6,
+      "guarantee": 4,
+      "cap": 750,
+      "tickets": 658,
+      "changed": false,
+      "before_covered_g": 4845,
+      "after_covered_g": 4845,
+      "old_seconds": 0.1408446999998887,
+      "new_seconds": 0.15932050000037634,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 6621006,
+              "after_favourable_draws": 6621006,
+              "total_draws": 13983816,
+              "before_probability": 0.47347633864747646,
+              "after_probability": 0.47347633864747646,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 2455446,
+              "after_favourable_draws": 2455446,
+              "total_draws": 13983816,
+              "before_probability": 0.17559198433388998,
+              "after_probability": 0.17559198433388998,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 142408,
+              "after_favourable_draws": 142408,
+              "total_draws": 13983816,
+              "before_probability": 0.010183772440941728,
+              "after_probability": 0.010183772440941728,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 658,
+              "after_favourable_draws": 658,
+              "total_draws": 13983816,
+              "before_probability": 4.7054394880481836e-05,
+              "after_probability": 4.7054394880481836e-05,
+              "relative_gain_percent": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 10,
+      "tickets": 10,
+      "changed": false,
+      "before_covered_g": 50,
+      "after_covered_g": 50,
+      "old_seconds": 0.006136200000128156,
+      "new_seconds": 0.011147000000164553,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 503052,
+              "after_favourable_draws": 503052,
+              "total_draws": 3838380,
+              "before_probability": 0.13105841526894157,
+              "after_probability": 0.13105841526894157,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 27443,
+              "after_favourable_draws": 27443,
+              "total_draws": 3838380,
+              "before_probability": 0.00714963083384136,
+              "after_probability": 0.00714963083384136,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 350,
+              "after_favourable_draws": 350,
+              "total_draws": 3838380,
+              "before_probability": 9.11843017106175e-05,
+              "after_probability": 9.11843017106175e-05,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 64890,
+              "after_favourable_draws": 64890,
+              "total_draws": 1221759,
+              "before_probability": 0.05311194760996236,
+              "after_probability": 0.05311194760996236,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 1926,
+              "after_favourable_draws": 1926,
+              "total_draws": 1221759,
+              "before_probability": 0.0015764156433470103,
+              "after_probability": 0.0015764156433470103,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 10,
+              "after_favourable_draws": 10,
+              "total_draws": 1221759,
+              "before_probability": 8.184920266599222e-06,
+              "after_probability": 8.184920266599222e-06,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 32,
+      "tickets": 32,
+      "changed": false,
+      "before_covered_g": 160,
+      "after_covered_g": 160,
+      "old_seconds": 0.02139069999975618,
+      "new_seconds": 0.027667599999858794,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 1202689,
+              "after_favourable_draws": 1202689,
+              "total_draws": 3838380,
+              "before_probability": 0.31333244754297385,
+              "after_probability": 0.31333244754297385,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 87918,
+              "after_favourable_draws": 87918,
+              "total_draws": 3838380,
+              "before_probability": 0.022904975536554482,
+              "after_probability": 0.022904975536554482,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 1120,
+              "after_favourable_draws": 1120,
+              "total_draws": 3838380,
+              "before_probability": 0.000291789765473976,
+              "after_probability": 0.000291789765473976,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 173195,
+              "after_favourable_draws": 173195,
+              "total_draws": 1221759,
+              "before_probability": 0.14175872655736524,
+              "after_probability": 0.14175872655736524,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 6202,
+              "after_favourable_draws": 6202,
+              "total_draws": 1221759,
+              "before_probability": 0.005076287549344838,
+              "after_probability": 0.005076287549344838,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 32,
+              "after_favourable_draws": 32,
+              "total_draws": 1221759,
+              "before_probability": 2.6191744853117513e-05,
+              "after_probability": 2.6191744853117513e-05,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 64,
+      "tickets": 64,
+      "changed": false,
+      "before_covered_g": 320,
+      "after_covered_g": 320,
+      "old_seconds": 0.03023590000020704,
+      "new_seconds": 0.0356738000000405,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 1751898,
+              "after_favourable_draws": 1751898,
+              "total_draws": 3838380,
+              "before_probability": 0.4564159879949354,
+              "after_probability": 0.4564159879949354,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 169634,
+              "after_favourable_draws": 169634,
+              "total_draws": 3838380,
+              "before_probability": 0.04419416524679683,
+              "after_probability": 0.04419416524679683,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 2240,
+              "after_favourable_draws": 2240,
+              "total_draws": 3838380,
+              "before_probability": 0.000583579530947952,
+              "after_probability": 0.000583579530947952,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 277695,
+              "after_favourable_draws": 277695,
+              "total_draws": 1221759,
+              "before_probability": 0.22729114334332712,
+              "after_probability": 0.22729114334332712,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 12271,
+              "after_favourable_draws": 12271,
+              "total_draws": 1221759,
+              "before_probability": 0.010043715659143906,
+              "after_probability": 0.010043715659143906,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 64,
+              "after_favourable_draws": 64,
+              "total_draws": 1221759,
+              "before_probability": 5.2383489706235025e-05,
+              "after_probability": 5.2383489706235025e-05,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 100,
+      "tickets": 100,
+      "changed": false,
+      "before_covered_g": 500,
+      "after_covered_g": 500,
+      "old_seconds": 0.054711499999939406,
+      "new_seconds": 0.05855789999986882,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2059880,
+              "after_favourable_draws": 2059880,
+              "total_draws": 3838380,
+              "before_probability": 0.536653484021905,
+              "after_probability": 0.536653484021905,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 250407,
+              "after_favourable_draws": 250407,
+              "total_draws": 3838380,
+              "before_probability": 0.06523767839557314,
+              "after_probability": 0.06523767839557314,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 3500,
+              "after_favourable_draws": 3500,
+              "total_draws": 3838380,
+              "before_probability": 0.000911843017106175,
+              "after_probability": 0.000911843017106175,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 347749,
+              "after_favourable_draws": 347749,
+              "total_draws": 1221759,
+              "before_probability": 0.2846297837789613,
+              "after_probability": 0.2846297837789613,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 18768,
+              "after_favourable_draws": 18768,
+              "total_draws": 1221759,
+              "before_probability": 0.015361458356353422,
+              "after_probability": 0.015361458356353422,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 100,
+              "after_favourable_draws": 100,
+              "total_draws": 1221759,
+              "before_probability": 8.184920266599223e-05,
+              "after_probability": 8.184920266599223e-05,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 125,
+      "tickets": 125,
+      "changed": false,
+      "before_covered_g": 625,
+      "after_covered_g": 625,
+      "old_seconds": 0.04644090000010692,
+      "new_seconds": 0.057583400000112306,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2199060,
+              "after_favourable_draws": 2199060,
+              "total_draws": 3838380,
+              "before_probability": 0.5729135729135729,
+              "after_probability": 0.5729135729135729,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 301483,
+              "after_favourable_draws": 301483,
+              "total_draws": 3838380,
+              "before_probability": 0.0785443338074917,
+              "after_probability": 0.0785443338074917,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 4375,
+              "after_favourable_draws": 4375,
+              "total_draws": 3838380,
+              "before_probability": 0.0011398037713827188,
+              "after_probability": 0.0011398037713827188,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 382254,
+              "after_favourable_draws": 382254,
+              "total_draws": 1221759,
+              "before_probability": 0.31287185115886196,
+              "after_probability": 0.31287185115886196,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 23112,
+              "after_favourable_draws": 23112,
+              "total_draws": 1221759,
+              "before_probability": 0.018916987720164122,
+              "after_probability": 0.018916987720164122,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 125,
+              "after_favourable_draws": 125,
+              "total_draws": 1221759,
+              "before_probability": 0.00010231150333249029,
+              "after_probability": 0.00010231150333249029,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 152,
+      "tickets": 152,
+      "changed": false,
+      "before_covered_g": 760,
+      "after_covered_g": 760,
+      "old_seconds": 0.10050109999974666,
+      "new_seconds": 0.09871990000010555,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2288930,
+              "after_favourable_draws": 2288930,
+              "total_draws": 3838380,
+              "before_probability": 0.5963270963270964,
+              "after_probability": 0.5963270963270964,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 351321,
+              "after_favourable_draws": 351321,
+              "total_draws": 3838380,
+              "before_probability": 0.09152845731793101,
+              "after_probability": 0.09152845731793101,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 5320,
+              "after_favourable_draws": 5320,
+              "total_draws": 3838380,
+              "before_probability": 0.001386001386001386,
+              "after_probability": 0.001386001386001386,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 405329,
+              "after_favourable_draws": 405329,
+              "total_draws": 1221759,
+              "before_probability": 0.33175855467403964,
+              "after_probability": 0.33175855467403964,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 27601,
+              "after_favourable_draws": 27601,
+              "total_draws": 1221759,
+              "before_probability": 0.022591198427840516,
+              "after_probability": 0.022591198427840516,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 152,
+              "after_favourable_draws": 152,
+              "total_draws": 1221759,
+              "before_probability": 0.00012441078805230818,
+              "after_probability": 0.00012441078805230818,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 200,
+      "tickets": 200,
+      "changed": false,
+      "before_covered_g": 1000,
+      "after_covered_g": 1000,
+      "old_seconds": 0.16020269999989978,
+      "new_seconds": 0.13682710000011866,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2427440,
+              "after_favourable_draws": 2427440,
+              "total_draws": 3838380,
+              "before_probability": 0.6324126324126325,
+              "after_probability": 0.6324126324126325,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 434332,
+              "after_favourable_draws": 434332,
+              "total_draws": 3838380,
+              "before_probability": 0.11315502894450263,
+              "after_probability": 0.11315502894450263,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 7000,
+              "after_favourable_draws": 7000,
+              "total_draws": 3838380,
+              "before_probability": 0.00182368603421235,
+              "after_probability": 0.00182368603421235,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 441404,
+              "after_favourable_draws": 441404,
+              "total_draws": 1221759,
+              "before_probability": 0.36128565453579636,
+              "after_probability": 0.36128565453579636,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 35357,
+              "after_favourable_draws": 35357,
+              "total_draws": 1221759,
+              "before_probability": 0.028939422586614874,
+              "after_probability": 0.028939422586614874,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 200,
+              "after_favourable_draws": 200,
+              "total_draws": 1221759,
+              "before_probability": 0.00016369840533198447,
+              "after_probability": 0.00016369840533198447,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 250,
+      "tickets": 250,
+      "changed": false,
+      "before_covered_g": 1250,
+      "after_covered_g": 1250,
+      "old_seconds": 0.19894320000003063,
+      "new_seconds": 0.1864255000000412,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2486910,
+              "after_favourable_draws": 2486910,
+              "total_draws": 3838380,
+              "before_probability": 0.6479061479061479,
+              "after_probability": 0.6479061479061479,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 510115,
+              "after_favourable_draws": 510115,
+              "total_draws": 3838380,
+              "before_probability": 0.13289851447746184,
+              "after_probability": 0.13289851447746184,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 8750,
+              "after_favourable_draws": 8750,
+              "total_draws": 3838380,
+              "before_probability": 0.0022796075427654375,
+              "after_probability": 0.0022796075427654375,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 457029,
+              "after_favourable_draws": 457029,
+              "total_draws": 1221759,
+              "before_probability": 0.37407459245235763,
+              "after_probability": 0.37407459245235763,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 42978,
+              "after_favourable_draws": 42978,
+              "total_draws": 1221759,
+              "before_probability": 0.03517715032179014,
+              "after_probability": 0.03517715032179014,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 250,
+              "after_favourable_draws": 250,
+              "total_draws": 1221759,
+              "before_probability": 0.00020462300666498057,
+              "after_probability": 0.00020462300666498057,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 300,
+      "tickets": 300,
+      "changed": false,
+      "before_covered_g": 1500,
+      "after_covered_g": 1500,
+      "old_seconds": 0.42361479999999574,
+      "new_seconds": 0.22707990000026257,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2531370,
+              "after_favourable_draws": 2531370,
+              "total_draws": 3838380,
+              "before_probability": 0.6594891594891595,
+              "after_probability": 0.6594891594891595,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 581394,
+              "after_favourable_draws": 581394,
+              "total_draws": 3838380,
+              "before_probability": 0.15146858831069357,
+              "after_probability": 0.15146858831069357,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 10500,
+              "after_favourable_draws": 10500,
+              "total_draws": 3838380,
+              "before_probability": 0.002735529051318525,
+              "after_probability": 0.002735529051318525,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 468729,
+              "after_favourable_draws": 468729,
+              "total_draws": 1221759,
+              "before_probability": 0.3836509491642787,
+              "after_probability": 0.3836509491642787,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 50394,
+              "after_favourable_draws": 50394,
+              "total_draws": 1221759,
+              "before_probability": 0.04124708719150012,
+              "after_probability": 0.04124708719150012,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 300,
+              "after_favourable_draws": 300,
+              "total_draws": 1221759,
+              "before_probability": 0.0002455476079979767,
+              "after_probability": 0.0002455476079979767,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 404,
+      "tickets": 404,
+      "changed": false,
+      "before_covered_g": 2020,
+      "after_covered_g": 2020,
+      "old_seconds": 2.0253265000001193,
+      "new_seconds": 0.9226690999998937,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2563290,
+              "after_favourable_draws": 2563290,
+              "total_draws": 3838380,
+              "before_probability": 0.6678051678051679,
+              "after_probability": 0.6678051678051679,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 710100,
+              "after_favourable_draws": 710100,
+              "total_draws": 3838380,
+              "before_probability": 0.1849999218420271,
+              "after_probability": 0.1849999218420271,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 14140,
+              "after_favourable_draws": 14140,
+              "total_draws": 3838380,
+              "before_probability": 0.003683845789108947,
+              "after_probability": 0.003683845789108947,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 477129,
+              "after_favourable_draws": 477129,
+              "total_draws": 1221759,
+              "before_probability": 0.39052628218822205,
+              "after_probability": 0.39052628218822205,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 64878,
+              "after_favourable_draws": 64878,
+              "total_draws": 1221759,
+              "before_probability": 0.05310212570564244,
+              "after_probability": 0.05310212570564244,
+              "relative_gain_percent": 0.0
+            },
+            "5": {
+              "before_favourable_draws": 404,
+              "after_favourable_draws": 404,
+              "total_draws": 1221759,
+              "before_probability": 0.00033067077877060863,
+              "after_probability": 0.00033067077877060863,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 500,
+      "tickets": 500,
+      "changed": true,
+      "before_covered_g": 2422,
+      "after_covered_g": 2482,
+      "old_seconds": 2.0534810999997717,
+      "new_seconds": 2.7138612000003377,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2567850,
+              "after_favourable_draws": 2568990,
+              "total_draws": 3838380,
+              "before_probability": 0.668993168993169,
+              "after_probability": 0.6692901692901693,
+              "relative_gain_percent": 0.04439511653717698
+            },
+            "4": {
+              "before_favourable_draws": 798818,
+              "after_favourable_draws": 811758,
+              "total_draws": 3838380,
+              "before_probability": 0.20811331863963442,
+              "after_probability": 0.21148453253716412,
+              "relative_gain_percent": 1.6198933924874037
+            },
+            "5": {
+              "before_favourable_draws": 17418,
+              "after_favourable_draws": 17481,
+              "total_draws": 3838380,
+              "before_probability": 0.004537851906272959,
+              "after_probability": 0.00455426508058087,
+              "relative_gain_percent": 0.3616947984843355
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 478329,
+              "after_favourable_draws": 478629,
+              "total_draws": 1221759,
+              "before_probability": 0.391508472620214,
+              "after_probability": 0.39175402022821193,
+              "relative_gain_percent": 0.06271833821491768
+            },
+            "4": {
+              "before_favourable_draws": 75544,
+              "after_favourable_draws": 77121,
+              "total_draws": 1221759,
+              "before_probability": 0.06183216166199717,
+              "after_probability": 0.06312292358803986,
+              "relative_gain_percent": 2.0875251509054227
+            },
+            "5": {
+              "before_favourable_draws": 500,
+              "after_favourable_draws": 500,
+              "total_draws": 1221759,
+              "before_probability": 0.00040924601332996115,
+              "after_probability": 0.00040924601332996115,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "pool": 20,
+      "pick": 5,
+      "guarantee": 4,
+      "cap": 750,
+      "tickets": 750,
+      "changed": true,
+      "before_covered_g": 3395,
+      "after_covered_g": 3454,
+      "old_seconds": 2.318799300000137,
+      "new_seconds": 2.407771199999843,
+      "timing_repeats": 3,
+      "games": [
+        {
+          "game": "5/40",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 2568990,
+              "after_favourable_draws": 2568990,
+              "total_draws": 3838380,
+              "before_probability": 0.6692901692901693,
+              "after_probability": 0.6692901692901693,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 992810,
+              "after_favourable_draws": 1004460,
+              "total_draws": 3838380,
+              "before_probability": 0.2586533902323376,
+              "after_probability": 0.2616885248464196,
+              "relative_gain_percent": 1.1734370121171178
+            },
+            "5": {
+              "before_favourable_draws": 25858,
+              "after_favourable_draws": 25930,
+              "total_draws": 3838380,
+              "before_probability": 0.006736696210380421,
+              "after_probability": 0.006755454123875177,
+              "relative_gain_percent": 0.2784438084925345
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 3838380,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        },
+        {
+          "game": "Joker Urna 1",
+          "hits": {
+            "3": {
+              "before_favourable_draws": 478629,
+              "after_favourable_draws": 478629,
+              "total_draws": 1221759,
+              "before_probability": 0.39175402022821193,
+              "after_probability": 0.39175402022821193,
+              "relative_gain_percent": 0.0
+            },
+            "4": {
+              "before_favourable_draws": 100325,
+              "after_favourable_draws": 101822,
+              "total_draws": 1221759,
+              "before_probability": 0.0821152125746567,
+              "after_probability": 0.0833404951385666,
+              "relative_gain_percent": 1.4921505108397737
+            },
+            "5": {
+              "before_favourable_draws": 750,
+              "after_favourable_draws": 750,
+              "total_draws": 1221759,
+              "before_probability": 0.0006138690199949418,
+              "after_probability": 0.0006138690199949418,
+              "relative_gain_percent": 0.0
+            },
+            "6": {
+              "before_favourable_draws": 0,
+              "after_favourable_draws": 0,
+              "total_draws": 1221759,
+              "before_probability": 0.0,
+              "after_probability": 0.0,
+              "relative_gain_percent": null
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "baseline_commit_expected": "5b5624050e8c66625b032b12c3fb4f6c646d9379",
+  "baseline_source_sha256": "a9e5b9a6f69cfe259d869416c0a097163b2a9c464f1368854b6a437f417445eb",
+  "source_identity_note": "Caller supplies the old source extracted from the expected commit; the byte hash identifies the actual file measured.",
+  "timing_context": "Three alternating-order repetitions per geometry, while isolated full-suite tests ran concurrently. Indicative local timings, not an application-wide speed claim."
+}

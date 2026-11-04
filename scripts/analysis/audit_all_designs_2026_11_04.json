@@ -1,0 +1,7810 @@
+{
+  "python": "3.14.10",
+  "numpy": "2.5.2",
+  "manifest_sha256": "a39e01628c151407abed1bbe74e2b81c91b75148944f882fa9139a76e49e341d",
+  "scope": "all subsets for h=0..min(pool,6), all hit thresholds",
+  "files": 277,
+  "entries": 519,
+  "complete_designs": 232,
+  "lr_indices": 33,
+  "exact_count_comparisons": 53557,
+  "max_count_difference": 0,
+  "rows": [
+    {
+      "file": "budget/H_11_5_4.txt",
+      "budget": 65,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_13_6_4.txt",
+      "budget": 65,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 65,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 66,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 67,
+      "tickets": 67,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 68,
+      "tickets": 68,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 69,
+      "tickets": 69,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 70,
+      "tickets": 70,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 71,
+      "tickets": 71,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 72,
+      "tickets": 72,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 73,
+      "tickets": 73,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 74,
+      "tickets": 74,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 75,
+      "tickets": 75,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 76,
+      "tickets": 76,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 77,
+      "tickets": 77,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 78,
+      "tickets": 78,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_14_6_4.txt",
+      "budget": 79,
+      "tickets": 79,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 65,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 66,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 67,
+      "tickets": 67,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 68,
+      "tickets": 68,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 69,
+      "tickets": 69,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 70,
+      "tickets": 70,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 71,
+      "tickets": 71,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 72,
+      "tickets": 72,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 73,
+      "tickets": 73,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 74,
+      "tickets": 74,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 75,
+      "tickets": 75,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 76,
+      "tickets": 76,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 77,
+      "tickets": 77,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 78,
+      "tickets": 78,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 79,
+      "tickets": 79,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 80,
+      "tickets": 80,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 81,
+      "tickets": 81,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 82,
+      "tickets": 82,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 83,
+      "tickets": 83,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 84,
+      "tickets": 84,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 85,
+      "tickets": 85,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 86,
+      "tickets": 86,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 87,
+      "tickets": 87,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 88,
+      "tickets": 88,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 89,
+      "tickets": 89,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 90,
+      "tickets": 90,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 91,
+      "tickets": 91,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 92,
+      "tickets": 92,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 93,
+      "tickets": 93,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 94,
+      "tickets": 94,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 95,
+      "tickets": 95,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 96,
+      "tickets": 96,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 97,
+      "tickets": 97,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 98,
+      "tickets": 98,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 99,
+      "tickets": 99,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 100,
+      "tickets": 100,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 101,
+      "tickets": 101,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 102,
+      "tickets": 102,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 103,
+      "tickets": 103,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 104,
+      "tickets": 104,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 105,
+      "tickets": 105,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 106,
+      "tickets": 106,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 107,
+      "tickets": 107,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 108,
+      "tickets": 108,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 109,
+      "tickets": 109,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 110,
+      "tickets": 110,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 111,
+      "tickets": 111,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 112,
+      "tickets": 112,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 113,
+      "tickets": 113,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 114,
+      "tickets": 114,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 115,
+      "tickets": 115,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_15_6_4.txt",
+      "budget": 116,
+      "tickets": 116,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 270,
+      "tickets": 270,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 289,
+      "tickets": 289,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 292,
+      "tickets": 292,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 303,
+      "tickets": 303,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 306,
+      "tickets": 306,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 315,
+      "tickets": 315,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 316,
+      "tickets": 316,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 317,
+      "tickets": 317,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 318,
+      "tickets": 318,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 319,
+      "tickets": 319,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 321,
+      "tickets": 321,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 322,
+      "tickets": 322,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 323,
+      "tickets": 323,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 324,
+      "tickets": 324,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 325,
+      "tickets": 325,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 326,
+      "tickets": 326,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 327,
+      "tickets": 327,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 328,
+      "tickets": 328,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 329,
+      "tickets": 329,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 330,
+      "tickets": 330,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 331,
+      "tickets": 331,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 332,
+      "tickets": 332,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 333,
+      "tickets": 333,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 334,
+      "tickets": 334,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 335,
+      "tickets": 335,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 336,
+      "tickets": 336,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 337,
+      "tickets": 337,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 338,
+      "tickets": 338,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 339,
+      "tickets": 339,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 340,
+      "tickets": 340,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 341,
+      "tickets": 341,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 342,
+      "tickets": 342,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 343,
+      "tickets": 343,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 344,
+      "tickets": 344,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 345,
+      "tickets": 345,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 346,
+      "tickets": 346,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 347,
+      "tickets": 347,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 349,
+      "tickets": 349,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 350,
+      "tickets": 350,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 351,
+      "tickets": 351,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 352,
+      "tickets": 352,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 353,
+      "tickets": 353,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 354,
+      "tickets": 354,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 355,
+      "tickets": 355,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 356,
+      "tickets": 356,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 357,
+      "tickets": 357,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 358,
+      "tickets": 358,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 359,
+      "tickets": 359,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 360,
+      "tickets": 360,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 361,
+      "tickets": 361,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 362,
+      "tickets": 362,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 363,
+      "tickets": 363,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 364,
+      "tickets": 364,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 365,
+      "tickets": 365,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 366,
+      "tickets": 366,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 367,
+      "tickets": 367,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 368,
+      "tickets": 368,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 369,
+      "tickets": 369,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 370,
+      "tickets": 370,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 371,
+      "tickets": 371,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 372,
+      "tickets": 372,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 373,
+      "tickets": 373,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 374,
+      "tickets": 374,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 375,
+      "tickets": 375,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 376,
+      "tickets": 376,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 377,
+      "tickets": 377,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 378,
+      "tickets": 378,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 379,
+      "tickets": 379,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 380,
+      "tickets": 380,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 381,
+      "tickets": 381,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 382,
+      "tickets": 382,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 383,
+      "tickets": 383,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 384,
+      "tickets": 384,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 385,
+      "tickets": 385,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 386,
+      "tickets": 386,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 387,
+      "tickets": 387,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 388,
+      "tickets": 388,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 389,
+      "tickets": 389,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 390,
+      "tickets": 390,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 391,
+      "tickets": 391,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 392,
+      "tickets": 392,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 393,
+      "tickets": 393,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 394,
+      "tickets": 394,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 395,
+      "tickets": 395,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 396,
+      "tickets": 396,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 397,
+      "tickets": 397,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 398,
+      "tickets": 398,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 399,
+      "tickets": 399,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 400,
+      "tickets": 400,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 401,
+      "tickets": 401,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 402,
+      "tickets": 402,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_5_4.txt",
+      "budget": 403,
+      "tickets": 403,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 65,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 66,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 67,
+      "tickets": 67,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 68,
+      "tickets": 68,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 69,
+      "tickets": 69,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 70,
+      "tickets": 70,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 71,
+      "tickets": 71,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 72,
+      "tickets": 72,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 73,
+      "tickets": 73,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 74,
+      "tickets": 74,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 75,
+      "tickets": 75,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 76,
+      "tickets": 76,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 77,
+      "tickets": 77,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 78,
+      "tickets": 78,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 79,
+      "tickets": 79,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 80,
+      "tickets": 80,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 81,
+      "tickets": 81,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 82,
+      "tickets": 82,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 83,
+      "tickets": 83,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 84,
+      "tickets": 84,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 85,
+      "tickets": 85,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 86,
+      "tickets": 86,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 87,
+      "tickets": 87,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 88,
+      "tickets": 88,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 89,
+      "tickets": 89,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 90,
+      "tickets": 90,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 91,
+      "tickets": 91,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 92,
+      "tickets": 92,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 93,
+      "tickets": 93,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 94,
+      "tickets": 94,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 95,
+      "tickets": 95,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 96,
+      "tickets": 96,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 97,
+      "tickets": 97,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 98,
+      "tickets": 98,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 99,
+      "tickets": 99,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 100,
+      "tickets": 100,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 101,
+      "tickets": 101,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 102,
+      "tickets": 102,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 103,
+      "tickets": 103,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 104,
+      "tickets": 104,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 105,
+      "tickets": 105,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 106,
+      "tickets": 106,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 107,
+      "tickets": 107,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 108,
+      "tickets": 108,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 109,
+      "tickets": 109,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 110,
+      "tickets": 110,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 111,
+      "tickets": 111,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 112,
+      "tickets": 112,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 113,
+      "tickets": 113,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 114,
+      "tickets": 114,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 115,
+      "tickets": 115,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 116,
+      "tickets": 116,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 117,
+      "tickets": 117,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 118,
+      "tickets": 118,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 119,
+      "tickets": 119,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 120,
+      "tickets": 120,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 121,
+      "tickets": 121,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 122,
+      "tickets": 122,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 123,
+      "tickets": 123,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 124,
+      "tickets": 124,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 125,
+      "tickets": 125,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 126,
+      "tickets": 126,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 127,
+      "tickets": 127,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 128,
+      "tickets": 128,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 129,
+      "tickets": 129,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 130,
+      "tickets": 130,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 131,
+      "tickets": 131,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 132,
+      "tickets": 132,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 133,
+      "tickets": 133,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 134,
+      "tickets": 134,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 135,
+      "tickets": 135,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 136,
+      "tickets": 136,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 137,
+      "tickets": 137,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 138,
+      "tickets": 138,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 139,
+      "tickets": 139,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 140,
+      "tickets": 140,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 141,
+      "tickets": 141,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 142,
+      "tickets": 142,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 143,
+      "tickets": 143,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 144,
+      "tickets": 144,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 145,
+      "tickets": 145,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 146,
+      "tickets": 146,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 147,
+      "tickets": 147,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 148,
+      "tickets": 148,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 149,
+      "tickets": 149,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 150,
+      "tickets": 150,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "budget/H_16_6_4.txt",
+      "budget": 151,
+      "tickets": 151,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_10_5_3.txt",
+      "budget": null,
+      "tickets": 17,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_10_5_4.txt",
+      "budget": null,
+      "tickets": 51,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_10_6_3.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_10_6_4.txt",
+      "budget": null,
+      "tickets": 20,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_10_6_5.txt",
+      "budget": null,
+      "tickets": 50,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_11_5_3.txt",
+      "budget": null,
+      "tickets": 20,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_11_5_4.txt",
+      "budget": null,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_11_6_3.txt",
+      "budget": null,
+      "tickets": 11,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_11_6_4.txt",
+      "budget": null,
+      "tickets": 32,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_11_6_5.txt",
+      "budget": null,
+      "tickets": 100,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_12_5_3.txt",
+      "budget": null,
+      "tickets": 29,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_12_5_4.txt",
+      "budget": null,
+      "tickets": 113,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_12_6_3.txt",
+      "budget": null,
+      "tickets": 15,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_12_6_4.txt",
+      "budget": null,
+      "tickets": 41,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_12_6_5.txt",
+      "budget": null,
+      "tickets": 132,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_13_5_3.txt",
+      "budget": null,
+      "tickets": 34,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_13_5_4.txt",
+      "budget": null,
+      "tickets": 157,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_13_6_3.txt",
+      "budget": null,
+      "tickets": 21,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_13_6_4.txt",
+      "budget": null,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_13_6_5.txt",
+      "budget": null,
+      "tickets": 245,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_14_5_3.txt",
+      "budget": null,
+      "tickets": 43,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_14_5_4.txt",
+      "budget": null,
+      "tickets": 229,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_14_6_3.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_14_6_4.txt",
+      "budget": null,
+      "tickets": 80,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_14_6_5.txt",
+      "budget": null,
+      "tickets": 371,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_15_5_3.txt",
+      "budget": null,
+      "tickets": 55,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_15_5_4.txt",
+      "budget": null,
+      "tickets": 294,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_15_6_3.txt",
+      "budget": null,
+      "tickets": 31,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_15_6_4.txt",
+      "budget": null,
+      "tickets": 117,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_15_6_5.txt",
+      "budget": null,
+      "tickets": 578,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_16_5_3.txt",
+      "budget": null,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_16_5_4.txt",
+      "budget": null,
+      "tickets": 404,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_16_6_3.txt",
+      "budget": null,
+      "tickets": 38,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_16_6_4.txt",
+      "budget": null,
+      "tickets": 152,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_16_6_5.txt",
+      "budget": null,
+      "tickets": 808,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_17_5_4.txt",
+      "budget": null,
+      "tickets": 562,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_18_5_4.txt",
+      "budget": null,
+      "tickets": 732,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_19_5_4.txt",
+      "budget": null,
+      "tickets": 930,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_6_5_3.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_6_5_4.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_7_5_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_7_5_4.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_7_6_3.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_7_6_4.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_7_6_5.txt",
+      "budget": null,
+      "tickets": 6,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_8_5_3.txt",
+      "budget": null,
+      "tickets": 8,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_8_5_4.txt",
+      "budget": null,
+      "tickets": 20,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_8_6_3.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_8_6_4.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_8_6_5.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_9_5_3.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_9_5_4.txt",
+      "budget": null,
+      "tickets": 30,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_9_6_3.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_9_6_4.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "C_9_6_5.txt",
+      "budget": null,
+      "tickets": 30,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "extended/X_17_5_5_45_404.txt",
+      "budget": null,
+      "tickets": 404,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "extended/X_17_5_6_40_404.txt",
+      "budget": null,
+      "tickets": 404,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "extended/X_17_6_6_49_152.txt",
+      "budget": null,
+      "tickets": 152,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "extended/X_18_5_5_45_404.txt",
+      "budget": null,
+      "tickets": 404,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "extended/X_18_5_6_40_404.txt",
+      "budget": null,
+      "tickets": 404,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "extended/X_18_6_6_49_152.txt",
+      "budget": null,
+      "tickets": 152,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_5_4_3.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_5_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_5_5_4.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_6_4_3.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_6_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_6_5_4.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_6_6_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_6_6_4.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_10_6_6_5.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_5_4_3.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_5_5_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_5_5_4.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_6_4_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_6_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_6_5_4.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_6_6_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_6_6_4.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_11_6_6_5.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_5_4_3.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_5_5_3.txt",
+      "budget": null,
+      "tickets": 6,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_5_5_4.txt",
+      "budget": null,
+      "tickets": 41,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_6_4_3.txt",
+      "budget": null,
+      "tickets": 8,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_6_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_6_5_4.txt",
+      "budget": null,
+      "tickets": 15,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_6_6_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_6_6_4.txt",
+      "budget": null,
+      "tickets": 6,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_12_6_6_5.txt",
+      "budget": null,
+      "tickets": 46,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_5_4_3.txt",
+      "budget": null,
+      "tickets": 19,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_5_5_3.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_5_5_4.txt",
+      "budget": null,
+      "tickets": 62,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_6_4_3.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_6_5_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_6_5_4.txt",
+      "budget": null,
+      "tickets": 26,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_6_6_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_6_6_4.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_13_6_6_5.txt",
+      "budget": null,
+      "tickets": 79,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_5_4_3.txt",
+      "budget": null,
+      "tickets": 23,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_5_5_3.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_5_5_4.txt",
+      "budget": null,
+      "tickets": 87,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_6_4_3.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_6_5_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_6_5_4.txt",
+      "budget": null,
+      "tickets": 37,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_6_6_3.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_6_6_4.txt",
+      "budget": null,
+      "tickets": 18,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_14_6_6_5.txt",
+      "budget": null,
+      "tickets": 125,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_5_4_3.txt",
+      "budget": null,
+      "tickets": 28,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_5_5_3.txt",
+      "budget": null,
+      "tickets": 16,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_5_5_4.txt",
+      "budget": null,
+      "tickets": 129,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_6_4_3.txt",
+      "budget": null,
+      "tickets": 17,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_6_5_3.txt",
+      "budget": null,
+      "tickets": 8,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_6_5_4.txt",
+      "budget": null,
+      "tickets": 50,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_6_6_3.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_6_6_4.txt",
+      "budget": null,
+      "tickets": 23,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_15_6_6_5.txt",
+      "budget": null,
+      "tickets": 190,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_5_4_3.txt",
+      "budget": null,
+      "tickets": 37,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_5_5_3.txt",
+      "budget": null,
+      "tickets": 20,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_5_5_4.txt",
+      "budget": null,
+      "tickets": 170,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_6_4_3.txt",
+      "budget": null,
+      "tickets": 21,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_6_5_3.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_6_5_4.txt",
+      "budget": null,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_6_6_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_6_6_4.txt",
+      "budget": null,
+      "tickets": 31,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_16_6_6_5.txt",
+      "budget": null,
+      "tickets": 281,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_5_4_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_5_5_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_5_5_4.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_6_4_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_6_5_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_6_5_4.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_6_6_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_6_6_4.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_6_6_6_5.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_5_4_3.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_5_5_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_5_5_4.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_6_4_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_6_5_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_6_5_4.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_6_6_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_6_6_4.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_7_6_6_5.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_5_4_3.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_5_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_5_5_4.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_6_4_3.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_6_5_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_6_5_4.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_6_6_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_6_6_4.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_8_6_6_5.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_5_4_3.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_5_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_5_5_4.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_6_4_3.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_6_5_3.txt",
+      "budget": null,
+      "tickets": 2,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_6_5_4.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_6_6_3.txt",
+      "budget": null,
+      "tickets": 1,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_6_6_4.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "L_9_6_6_5.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod15.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod16.txt",
+      "budget": null,
+      "tickets": 21,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod17.txt",
+      "budget": null,
+      "tickets": 30,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod18.txt",
+      "budget": null,
+      "tickets": 51,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod25.txt",
+      "budget": null,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod26.txt",
+      "budget": null,
+      "tickets": 113,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod27.txt",
+      "budget": null,
+      "tickets": 173,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod28.txt",
+      "budget": null,
+      "tickets": 255,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod35.txt",
+      "budget": null,
+      "tickets": 243,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod36.txt",
+      "budget": null,
+      "tickets": 327,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod37.txt",
+      "budget": null,
+      "tickets": 348,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod38.txt",
+      "budget": null,
+      "tickets": 443,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod45.txt",
+      "budget": null,
+      "tickets": 488,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod46.txt",
+      "budget": null,
+      "tickets": 562,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod47.txt",
+      "budget": null,
+      "tickets": 732,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_540_cod48.txt",
+      "budget": null,
+      "tickets": 930,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod48.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod49.txt",
+      "budget": null,
+      "tickets": 15,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod50.txt",
+      "budget": null,
+      "tickets": 30,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod56.txt",
+      "budget": null,
+      "tickets": 66,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod57.txt",
+      "budget": null,
+      "tickets": 22,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod58.txt",
+      "budget": null,
+      "tickets": 132,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_649_cod59.txt",
+      "budget": null,
+      "tickets": 112,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod12.txt",
+      "budget": null,
+      "tickets": 118,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod13.txt",
+      "budget": null,
+      "tickets": 54,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod14.txt",
+      "budget": null,
+      "tickets": 38,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod15.txt",
+      "budget": null,
+      "tickets": 22,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod23.txt",
+      "budget": null,
+      "tickets": 51,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod24.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod25.txt",
+      "budget": null,
+      "tickets": 30,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod34.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod35.txt",
+      "budget": null,
+      "tickets": 6,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "lr/LR_joker_cod45.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_10_5_3_5_45.txt",
+      "budget": null,
+      "tickets": 17,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_10_5_3_6_40.txt",
+      "budget": null,
+      "tickets": 17,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_10_6_3_6_49.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_12_5_3_5_45.txt",
+      "budget": null,
+      "tickets": 29,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_12_5_3_6_40.txt",
+      "budget": null,
+      "tickets": 29,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_12_5_4_6_40.txt",
+      "budget": null,
+      "tickets": 113,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_12_6_3_6_49.txt",
+      "budget": null,
+      "tickets": 15,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_13_6_3_6_49.txt",
+      "budget": null,
+      "tickets": 21,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_14_6_3_6_49.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_9_5_3_5_45.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_9_5_3_6_40.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/R_9_5_4_6_40.txt",
+      "budget": null,
+      "tickets": 30,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_10_5_3_4_5_45.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_10_5_3_4_6_40.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_10_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_10_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_10_6_4_5_6_49.txt",
+      "budget": null,
+      "tickets": 7,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_10_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 3,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_11_5_3_5_5_45.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_11_5_3_5_6_40.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_11_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_11_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_11_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_11_6_5_6_6_49.txt",
+      "budget": null,
+      "tickets": 25,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_5_3_4_5_45.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_5_3_4_6_40.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_5_3_5_6_40.txt",
+      "budget": null,
+      "tickets": 6,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 41,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 41,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_6_3_4_6_49.txt",
+      "budget": null,
+      "tickets": 8,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_6_4_5_6_49.txt",
+      "budget": null,
+      "tickets": 15,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 6,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_12_6_5_6_6_49.txt",
+      "budget": null,
+      "tickets": 46,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_5_3_4_5_45.txt",
+      "budget": null,
+      "tickets": 19,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_5_3_4_6_40.txt",
+      "budget": null,
+      "tickets": 19,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_5_3_5_5_45.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_5_3_5_6_40.txt",
+      "budget": null,
+      "tickets": 9,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 62,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 62,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_6_3_4_6_49.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_6_3_5_6_49.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_6_4_5_6_49.txt",
+      "budget": null,
+      "tickets": 26,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 12,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_13_6_5_6_6_49.txt",
+      "budget": null,
+      "tickets": 79,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_5_3_4_5_45.txt",
+      "budget": null,
+      "tickets": 23,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_5_3_4_6_40.txt",
+      "budget": null,
+      "tickets": 23,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_5_3_5_5_45.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_5_3_5_6_40.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 87,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 87,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_6_3_4_6_49.txt",
+      "budget": null,
+      "tickets": 14,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_6_3_5_6_49.txt",
+      "budget": null,
+      "tickets": 5,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_6_3_6_6_49.txt",
+      "budget": null,
+      "tickets": 4,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_6_4_5_6_49.txt",
+      "budget": null,
+      "tickets": 37,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 18,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_14_6_5_6_6_49.txt",
+      "budget": null,
+      "tickets": 125,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_5_3_4_5_45.txt",
+      "budget": null,
+      "tickets": 28,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_5_3_4_6_40.txt",
+      "budget": null,
+      "tickets": 28,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_5_3_5_5_45.txt",
+      "budget": null,
+      "tickets": 16,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_5_3_5_6_40.txt",
+      "budget": null,
+      "tickets": 16,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 129,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 129,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_6_3_4_6_49.txt",
+      "budget": null,
+      "tickets": 17,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_6_3_5_6_49.txt",
+      "budget": null,
+      "tickets": 8,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_6_4_5_6_49.txt",
+      "budget": null,
+      "tickets": 50,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 23,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_15_6_5_6_6_49.txt",
+      "budget": null,
+      "tickets": 190,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_5_3_4_5_45.txt",
+      "budget": null,
+      "tickets": 37,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_5_3_4_6_40.txt",
+      "budget": null,
+      "tickets": 37,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_5_3_5_5_45.txt",
+      "budget": null,
+      "tickets": 20,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_5_3_5_6_40.txt",
+      "budget": null,
+      "tickets": 20,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_5_4_5_5_45.txt",
+      "budget": null,
+      "tickets": 170,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_5_4_5_6_40.txt",
+      "budget": null,
+      "tickets": 170,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_6_3_4_6_49.txt",
+      "budget": null,
+      "tickets": 21,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_6_3_5_6_49.txt",
+      "budget": null,
+      "tickets": 10,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_6_4_5_6_49.txt",
+      "budget": null,
+      "tickets": 65,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_6_4_6_6_49.txt",
+      "budget": null,
+      "tickets": 31,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    },
+    {
+      "file": "refined/RL_16_6_5_6_6_49.txt",
+      "budget": null,
+      "tickets": 281,
+      "validated_intersection_sizes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "exact_profile_match": true
+    }
+  ],
+  "kinds": {
+    "H": 6,
+    "C": 55,
+    "X": 6,
+    "L": 99,
+    "LR": 33,
+    "R": 12,
+    "RL": 66
+  },
+  "seconds": 22.6174888999999,
+  "all_hashes_match": true
+}

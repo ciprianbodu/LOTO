@@ -50,6 +50,8 @@ def _hit_counts(v: int, masks: tuple[int, ...]):
     componentwise proves non-decreasing unconditional odds for every uniform
     draw geometry: all outside-pool completion weights are non-negative.
     """
+    if len(masks) <= 1:
+        return _single_ticket_counts(v, masks[0].bit_count() if masks else 0)
     if v > _PYTHON_POOL_LIMIT:
         return _hit_counts_numpy(v, masks)
     best = bytearray(1 << v)
@@ -75,6 +77,24 @@ def _hit_counts(v: int, masks: tuple[int, ...]):
     return tuple(tuple(row) for row in counts)
 
 
+def _single_ticket_counts(v: int, pick: int):
+    """Exact intersections with one ticket, without enumerating 2**v subsets.
+
+    A size-h subset with j hits chooses j of the ticket's pick positions and
+    h-j of the remaining positions. pick=0 also describes an empty wheel.
+    """
+    outside = v - pick
+    counts = []
+    for size in range(v + 1):
+        row = [0] * (v + 1)
+        for hits in range(max(0, size - outside), min(size, pick) + 1):
+            row[hits] = comb(pick, hits) * comb(outside, size - hits)
+        for threshold in range(v - 1, -1, -1):
+            row[threshold] += row[threshold + 1]
+        counts.append(tuple(row))
+    return tuple(counts)
+
+
 def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
     """Același tabel întreg ca bucla Python, pentru pool-uri de 9..20 de numere.
 
@@ -90,13 +110,15 @@ def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
     for i in range(v):  # orice submulțime a unui bilet e în familie
         view = family.reshape(-1, 2, 1 << i)
         view[:, 0, :] |= view[:, 1, :]
-    popcount = np.bitwise_count(np.arange(size, dtype=np.uint32)).astype(np.int8)
-    best = np.where(family, popcount, 0).astype(np.int8)
+    popcount = np.bitwise_count(np.arange(size, dtype=np.uint32))
+    best = popcount * family
     for i in range(v):  # best[m] = cel mai mare popcount al unei submulțimi din familie
         view = best.reshape(-1, 2, 1 << i)
         np.maximum(view[:, 1, :], view[:, 0, :], out=view[:, 1, :])
     hist = np.bincount(
-        popcount.astype(np.int64) * (v + 1) + best.astype(np.int64),
+        # The largest index is v*(v+1)+v <= 440. int16 avoids the two
+        # full-size int64 operands; bincount performs its own index conversion.
+        popcount.astype(np.int16) * (v + 1) + best,
         minlength=(v + 1) * (v + 1),
     ).reshape(v + 1, v + 1)
     cumulative = hist[:, ::-1].cumsum(axis=1)[:, ::-1]

@@ -1,0 +1,174 @@
+{
+  "python": "3.14.10",
+  "numpy": "2.5.2",
+  "repeats": 21,
+  "result_cache_bypassed": true,
+  "scope": "single exact-profile function; timings depend on CPU load",
+  "results": [
+    {
+      "pool": 9,
+      "kind": "empty",
+      "tickets": 0,
+      "before_ms": 0.08889999980965513,
+      "after_ms": 0.012699999842880061,
+      "speedup": 7.000000071613757,
+      "before_peak_bytes": 14520,
+      "after_peak_bytes": 296,
+      "exact_equality": true
+    },
+    {
+      "pool": 9,
+      "kind": "single",
+      "tickets": 1,
+      "before_ms": 0.08739999998397252,
+      "after_ms": 0.015800000028320937,
+      "speedup": 5.531645558690578,
+      "before_peak_bytes": 14520,
+      "after_peak_bytes": 296,
+      "exact_equality": true
+    },
+    {
+      "pool": 9,
+      "kind": "many",
+      "tickets": 64,
+      "before_ms": 0.08870000010574586,
+      "after_ms": 0.08709999997336126,
+      "speedup": 1.0183696915370142,
+      "before_peak_bytes": 14520,
+      "after_peak_bytes": 8160,
+      "exact_equality": true
+    },
+    {
+      "pool": 12,
+      "kind": "empty",
+      "tickets": 0,
+      "before_ms": 0.18840000007003255,
+      "after_ms": 0.018599999975776882,
+      "speedup": 10.12903227502093,
+      "before_peak_bytes": 111288,
+      "after_peak_bytes": 344,
+      "exact_equality": true
+    },
+    {
+      "pool": 12,
+      "kind": "single",
+      "tickets": 1,
+      "before_ms": 0.28830000019297586,
+      "after_ms": 0.02189999986512703,
+      "speedup": 13.16438365152947,
+      "before_peak_bytes": 111288,
+      "after_peak_bytes": 344,
+      "exact_equality": true
+    },
+    {
+      "pool": 12,
+      "kind": "many",
+      "tickets": 96,
+      "before_ms": 0.3452000000834232,
+      "after_ms": 0.33189999999194697,
+      "speedup": 1.0400723112136154,
+      "before_peak_bytes": 111288,
+      "after_peak_bytes": 55272,
+      "exact_equality": true
+    },
+    {
+      "pool": 16,
+      "kind": "empty",
+      "tickets": 0,
+      "before_ms": 3.8544999999885476,
+      "after_ms": 0.04349999994701648,
+      "speedup": 88.60919550996265,
+      "before_peak_bytes": 1770168,
+      "after_peak_bytes": 408,
+      "exact_equality": true
+    },
+    {
+      "pool": 16,
+      "kind": "single",
+      "tickets": 1,
+      "before_ms": 2.572300000110772,
+      "after_ms": 0.050999999984924216,
+      "speedup": 50.43725491904222,
+      "before_peak_bytes": 1770168,
+      "after_peak_bytes": 408,
+      "exact_equality": true
+    },
+    {
+      "pool": 16,
+      "kind": "many",
+      "tickets": 99,
+      "before_ms": 2.2837999999865133,
+      "after_ms": 2.019499999960317,
+      "speedup": 1.1308739787231443,
+      "before_peak_bytes": 1770168,
+      "after_peak_bytes": 854952,
+      "exact_equality": true
+    },
+    {
+      "pool": 19,
+      "kind": "empty",
+      "tickets": 0,
+      "before_ms": 26.821700000027704,
+      "after_ms": 0.054899999895496876,
+      "speedup": 488.55555648603433,
+      "before_peak_bytes": 14156472,
+      "after_peak_bytes": 520,
+      "exact_equality": true
+    },
+    {
+      "pool": 19,
+      "kind": "single",
+      "tickets": 1,
+      "before_ms": 18.587499999966894,
+      "after_ms": 0.07049999999253487,
+      "speedup": 263.6524822969517,
+      "before_peak_bytes": 14156472,
+      "after_peak_bytes": 520,
+      "exact_equality": true
+    },
+    {
+      "pool": 19,
+      "kind": "many",
+      "tickets": 99,
+      "before_ms": 19.390400000020236,
+      "after_ms": 17.021099999965372,
+      "speedup": 1.1391978191808805,
+      "before_peak_bytes": 14156472,
+      "after_peak_bytes": 6819616,
+      "exact_equality": true
+    },
+    {
+      "pool": 20,
+      "kind": "empty",
+      "tickets": 0,
+      "before_ms": 64.74079999998139,
+      "after_ms": 0.061499999901570845,
+      "speedup": 1052.6959366438596,
+      "before_peak_bytes": 28312248,
+      "after_peak_bytes": 5112,
+      "exact_equality": true
+    },
+    {
+      "pool": 20,
+      "kind": "single",
+      "tickets": 1,
+      "before_ms": 82.01099999996586,
+      "after_ms": 0.08800000000519503,
+      "speedup": 931.9431817627772,
+      "before_peak_bytes": 28312248,
+      "after_peak_bytes": 5112,
+      "exact_equality": true
+    },
+    {
+      "pool": 20,
+      "kind": "many",
+      "tickets": 100,
+      "before_ms": 69.16980000005424,
+      "after_ms": 51.85969999979534,
+      "speedup": 1.3337871217983754,
+      "before_peak_bytes": 28312248,
+      "after_peak_bytes": 13635688,
+      "exact_equality": true
+    }
+  ]
+}
