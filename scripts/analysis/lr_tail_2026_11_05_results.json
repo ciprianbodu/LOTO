@@ -1,0 +1,1453 @@
+{
+  "study_id": "lr_tail_2026_11_05_v1",
+  "protocol": {
+    "study_id": "lr_tail_2026_11_05_v1",
+    "status": "frozen before executing the new study; exploratory reused archives, not a fresh holdout",
+    "scope": "offline research only; no production scorer, decision, default, history, official row or cost changes",
+    "games": [
+      {
+        "key": "loto_6_49",
+        "label": "6/49",
+        "universe": 49,
+        "draw_n": 6,
+        "pick": 6,
+        "pool_n": 16,
+        "code": 59,
+        "variants": 112
+      },
+      {
+        "key": "joker",
+        "label": "joker",
+        "universe": 45,
+        "draw_n": 5,
+        "pick": 5,
+        "pool_n": 15,
+        "code": 12,
+        "variants": 118
+      },
+      {
+        "key": "loto_5_40",
+        "label": "5/40",
+        "universe": 40,
+        "draw_n": 6,
+        "pick": 5,
+        "pool_n": 19,
+        "code": 48,
+        "variants": 930
+      }
+    ],
+    "warmup_rows": 250,
+    "max_consecutive_run": 2,
+    "day_policy": "all rows of one normalized date use the same strictly earlier forecast and pool; counts and evidence update only after that complete day",
+    "weighted_draw_model": "P(D|past)=product(w[n] for n in D)/e_draw_n(w[1..universe]); unordered distinct-number draws",
+    "predictors": {
+      "names": [
+        "uniform",
+        "global_shrunk",
+        "ewma_shrunk"
+      ],
+      "initial_model_prior": [
+        0.9,
+        0.05,
+        0.05
+      ],
+      "pseudo_draws": 250,
+      "per_number_prior": "alpha=250*draw_n/universe",
+      "weight": "(counts+alpha)/(effective_draws*draw_n/universe+alpha)",
+      "ewma_half_life_completed_days": 256,
+      "ewma_update": "once per observed complete day: counts=2^(-1/256)*counts+day_number_counts; effective_draws=2^(-1/256)*effective_draws+day_rows",
+      "evidence": "prequential exact likelihood from the first complete archive day, with forecasts frozen within days; log-space expert likelihood ratios against uniform",
+      "mixture": "posterior model probabilities proportional to initial priors times the prequential expert likelihoods",
+      "ranking": "posterior mixture of weights normalized to mean1; subtract the uniform constant and divide by nonuniform posterior mass for numerical stability, an equivalent ranking",
+      "objective_comparison": "conditional nonuniform posterior mixture of exact official-scheme P5+/P6; the uniform component is pool-invariant so cancels exactly"
+    },
+    "candidates": [
+      "frequency",
+      "model_topk",
+      "lr_tail",
+      "gated_lr_tail"
+    ],
+    "baseline": "registered frequency scorer through call_method and canonical select_pool_from_scores; no replacement or hidden fallback",
+    "model_topk": "canonical selection of mixture scores, fixed pool_n and max_consecutive_run2",
+    "lr_tail": {
+      "start": "model_topk",
+      "passes": 2,
+      "weakest_members": 6,
+      "best_outsiders": 4,
+      "proposal_bound": 48,
+      "proposal_rule": "at each pass replace each of six weakest current members with each of four highest ranked outsiders; keep distinct valid pools satisfying maxrun2; ranking frozen for the day",
+      "terminal_mapping": "official positional rows applied to ascending numeric pool; never remap positions",
+      "acceptance": "neither exact model endpoint decreases beyond relative tolerance1e-12 and at least one increases beyond tolerance; P6 applies only to six-number rows",
+      "choice": "among acceptable proposals choose maximum P5+, then P6, then lexicographically largest ascending pool; stop when no acceptable proposal",
+      "relative_tolerance": 1e-12
+    },
+    "gated_lr_tail": {
+      "gate": "equal-weight mixture of the two nonuniform experts' prequential likelihood ratios versus uniform, based only on completed prior days",
+      "threshold": 60,
+      "open": "lr_tail",
+      "closed": "frequency",
+      "interpretation": "under conditional independent uniform draws this nonnegative e-process gives anytime false opening <=1/60 per game, <=5% union bound across3 games; opening supports nonuniform predictive-distribution evidence, not proof of5+/6+ lift"
+    },
+    "primary_window": "last30% of eligible distinct draw dates, split at floor(0.70*eligible_days); every row of a date stays together",
+    "diagnostic_window": "all rows with strictly earlier training cutoff>=250; counts only, no extra significance tests",
+    "endpoints": "pool5+ for all games; pool6 for6/49 and5/40; official best-ticket5+ for all games; official best-ticket6 only6/49. Joker refers to urn1, no Joker-ball/category inference.5/40 uses all6 extracted numbers, no first5/category inference.",
+    "comparisons": {
+      "primary": "each of model_topk, lr_tail and gated_lr_tail versus frequency using one-sided exact paired discordant-event binomial test; versus exact uniform pool/scheme odds using one-sided binomial test",
+      "multiplicity": "one Holm family containing every primary candidate/game/endpoint/comparator test (54 expected); marginal95% Clopper-Pearson intervals are not selection-adjusted",
+      "tail_vs_topk": "descriptive paired wins/losses only, no additional p-value or selection",
+      "selection": "report all fixed candidates; no posthoc winner, model, parameter or cost selection"
+    },
+    "integrity": "SHA256 fingerprints of frozen protocol, input CSV bytes, actual official rows and runner/objective/scorer/core code; write isolated NPZ and JSON artifacts; SHA256 is integrity fingerprinting, not a digital signature",
+    "failure_policy": "invalid input, scheme, scores, geometry, nonfinite probabilities or violated constraints fail the study; no silent omission or alternate scorer",
+    "promotion": "none; reused historical outcomes are exploratory, any claimed advantage requires prospective or independent external confirmation"
+  },
+  "protocol_sha256": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+  "interpretation": "Exploratory reused archives; model optimization is not evidence of predictive lift. No production promotion.",
+  "statistical_assumptions": {
+    "uniform_comparison": "One-sided binomial test is exact under conditionally independent uniform draws: each predictable pool has the same fixed-size pool/scheme probability.",
+    "paired_comparison": "Discordance-binomial p-values assume exchangeable win/loss signs conditional on their observed count. Adaptive history-dependent forecasts can violate that conditioning assumption; these paired p-values are exploratory diagnostics, not anytime-valid evidence.",
+    "archive_reuse": "Chronological exclusion prevents target leakage; it does not remove prior research reuse or provide a fresh confirmatory holdout."
+  },
+  "runtime": {
+    "python": "3.14.8 (main, Oct 14 2026, 01:04:34) [Clang 23.1.3 ]",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1"
+  },
+  "games": [
+    {
+      "game": {
+        "key": "loto_6_49",
+        "label": "6/49",
+        "universe": 49,
+        "draw_n": 6,
+        "pick": 6,
+        "pool_n": 16,
+        "code": 59,
+        "variants": 112
+      },
+      "candidates": [
+        "frequency",
+        "model_topk",
+        "lr_tail",
+        "gated_lr_tail"
+      ],
+      "history_rows": 2598,
+      "target_rows": 2348,
+      "eligible_days": 2279,
+      "forecast_seconds": 6.797260979004022,
+      "elapsed_seconds": 8.744983098000375,
+      "final_after_last_day_posterior": [
+        0.9999999999844679,
+        3.3239046804476504e-13,
+        1.5199698645702867e-11
+      ],
+      "final_after_last_day_log_alt_bf": -22.690888389294805,
+      "signature": {
+        "protocol_sha256": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+        "history_sha256": "402254270e7151ef619af28465b4150ac10dec8686e9e72a04dc6ec1fceed233",
+        "scheme_sha256": "365529a8177ebe283beadceb6e18885e420ca33c314409a5200819fe6850f504",
+        "code_sha256": {
+          "scripts/analysis/lr_tail_2026_11_05.py": "536ddff1d5e1504084ba40f7d73766fa35187a15bd759964b9ed7828b6212ab7",
+          "scripts/analysis/lr_tail_2026_11_05_protocol.json": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+          "scripts/analysis/lr_tail_objective_2026_11_05.py": "a6ecb085eab4df18ff75acfef8db522edaf2be603a094a5e95d560c9e26eb70e",
+          "scripts/analysis/lr_pool_study_2026_11_04.py": "d5a32dc8ed625086662338f038ce65ca79686e296fed2103aafb41f2047ec790",
+          "scripts/analysis/hit_evidence_2026_11_04.py": "3e66114d61576dbcf3e5c7201510ec6e86cc02d661da5bd146000b9479a06f3f",
+          "covering/lr_schemes.py": "a2f14945c48da80dec896b62cfb203fcd957ba5a114c2b7169bb4cf9b41dd34b",
+          "covering/probability.py": "eabc719974799f45c24037806dacb803e5c8e9744f0e71b64f7ae886be01c468",
+          "loto_enterprise/benchmark/methods.py": "d4a49ebbaf62d62bb323d7f11ec1d94e1463aab99b62821ef330a4f50e8539cd",
+          "loto_enterprise/benchmark/methods_common.py": "377f2bb045505880053d3e3850d164636bac78538db11b800797eb257aa31bad",
+          "loto_enterprise/benchmark/methods_experimental.py": "9eca15ed1f5d187603a57733dc314f5d097bc6a937287ed7e4d983bf8caa4b64",
+          "loto_enterprise/benchmark/methods_learning.py": "77b81d44369b6da8bf2738066d829a821f41e9485a2fd75e2a964e6ac10757d9",
+          "loto_enterprise/benchmark/methods_recency.py": "ae6982efd67aab652bf58ccc5215d34f4699e0938f939b9f9ca7a9f61b73be67",
+          "loto_enterprise/benchmark/methods_relational.py": "8658aef92230e62857d6a3a275f8096104de63ac8783f15672d9028e2258839b",
+          "loto_enterprise/benchmark/methods_wave2.py": "18447182e76861ac02ca157a3d8f8ca4018c91dd4389ce6bee637df1b3f85aa2",
+          "loto_enterprise/core/ranking.py": "7e03961e6f77080588f9b8cb94d7193b6caddc35548e300fb50e6536e2d1d408",
+          "loto_enterprise/core/pool_selection.py": "0debb708ceffe9f2d7c22e167a0ef233ede960e33b28c286645f86953553be38",
+          "loto_enterprise/core/history.py": "cab1093aeb71cf691700f3e090ce066c89fdd5d102f35842ca83889853dd69b2",
+          "loto_enterprise/core/draw_validation.py": "479dff63ec38885a1a7117dadd003c2779488d1aa276af78279af98804dbd89b"
+        }
+      },
+      "uniform_ticket_odds": {
+        "3": 0.29809259503986607,
+        "4": 0.07431390687634906,
+        "5": 0.0020743980040927312,
+        "6": 8.009258703060738e-06
+      },
+      "diagnostics": {
+        "primary_rows": 717,
+        "primary_start": "2019-10-27",
+        "primary_end": "2026-11-01",
+        "gate_open_rows": 0,
+        "primary_gate_open_rows": 0,
+        "maximum_prior_log_alt_bf": -3.2007317077071016,
+        "minimum_prior_uniform_posterior": 0.9954945697851857,
+        "rows_with_accepted_swap": 59,
+        "maximum_proposals_per_day": 36,
+        "mean_relative_model_p5_gain": 1.683697270462838e-06,
+        "first_forecast_posterior": [
+          0.9963965608395206,
+          0.0009994103305196668,
+          0.0026040288299598053
+        ],
+        "last_forecast_posterior": [
+          0.9999999999860661,
+          2.9084089726509317e-13,
+          1.3642987740008544e-11
+        ],
+        "primary_start_posterior": [
+          0.9999999998551364,
+          4.607310399695648e-12,
+          1.4025625887985037e-10
+        ],
+        "tail_vs_topk_pool5+": {
+          "tail_only": 1,
+          "topk_only": 0
+        },
+        "tail_vs_topk_ticket5+": {
+          "tail_only": 0,
+          "topk_only": 0
+        },
+        "tail_vs_topk_pool6+": {
+          "tail_only": 0,
+          "topk_only": 0
+        },
+        "tail_vs_topk_ticket6+": {
+          "tail_only": 0,
+          "topk_only": 0
+        }
+      },
+      "outcomes": [
+        {
+          "candidate": "frequency",
+          "endpoint": "pool5+",
+          "primary_hits": 10,
+          "primary_rows": 717,
+          "primary_rate": 0.01394700139470014,
+          "marginal_rate_ci95": [
+            0.006707849889674328,
+            0.025499061465443784
+          ],
+          "uniform_probability": 0.010880577948108013,
+          "uniform_expected_hits": 7.8013743887934455,
+          "full_history_hits": 21,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "pool5+",
+          "primary_hits": 9,
+          "primary_rows": 717,
+          "primary_rate": 0.012552301255230125,
+          "marginal_rate_ci95": [
+            0.005755339411530338,
+            0.023693953010309226
+          ],
+          "uniform_probability": 0.010880577948108013,
+          "uniform_expected_hits": 7.8013743887934455,
+          "full_history_hits": 21,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "pool5+",
+          "primary_hits": 10,
+          "primary_rows": 717,
+          "primary_rate": 0.01394700139470014,
+          "marginal_rate_ci95": [
+            0.006707849889674328,
+            0.025499061465443784
+          ],
+          "uniform_probability": 0.010880577948108013,
+          "uniform_expected_hits": 7.8013743887934455,
+          "full_history_hits": 22,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "pool5+",
+          "primary_hits": 10,
+          "primary_rows": 717,
+          "primary_rate": 0.01394700139470014,
+          "marginal_rate_ci95": [
+            0.006707849889674328,
+            0.025499061465443784
+          ],
+          "uniform_probability": 0.010880577948108013,
+          "uniform_expected_hits": 7.8013743887934455,
+          "full_history_hits": 21,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "frequency",
+          "endpoint": "ticket5+",
+          "primary_hits": 2,
+          "primary_rows": 717,
+          "primary_rate": 0.002789400278940028,
+          "marginal_rate_ci95": [
+            0.0003379880084406627,
+            0.010039627384260787
+          ],
+          "uniform_probability": 0.0020743980040927312,
+          "uniform_expected_hits": 1.4873433689344884,
+          "full_history_hits": 3,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "ticket5+",
+          "primary_hits": 2,
+          "primary_rows": 717,
+          "primary_rate": 0.002789400278940028,
+          "marginal_rate_ci95": [
+            0.0003379880084406627,
+            0.010039627384260787
+          ],
+          "uniform_probability": 0.0020743980040927312,
+          "uniform_expected_hits": 1.4873433689344884,
+          "full_history_hits": 4,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "ticket5+",
+          "primary_hits": 2,
+          "primary_rows": 717,
+          "primary_rate": 0.002789400278940028,
+          "marginal_rate_ci95": [
+            0.0003379880084406627,
+            0.010039627384260787
+          ],
+          "uniform_probability": 0.0020743980040927312,
+          "uniform_expected_hits": 1.4873433689344884,
+          "full_history_hits": 4,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "ticket5+",
+          "primary_hits": 2,
+          "primary_rows": 717,
+          "primary_rate": 0.002789400278940028,
+          "marginal_rate_ci95": [
+            0.0003379880084406627,
+            0.010039627384260787
+          ],
+          "uniform_probability": 0.0020743980040927312,
+          "uniform_expected_hits": 1.4873433689344884,
+          "full_history_hits": 3,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "frequency",
+          "endpoint": "pool6+",
+          "primary_hits": 1,
+          "primary_rows": 717,
+          "primary_rate": 0.001394700139470014,
+          "marginal_rate_ci95": [
+            3.53101269095576e-05,
+            0.007746043529336739
+          ],
+          "uniform_probability": 0.0005726619972688428,
+          "uniform_expected_hits": 0.4105986520417603,
+          "full_history_hits": 2,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "pool6+",
+          "primary_hits": 0,
+          "primary_rows": 717,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0051316684586491185
+          ],
+          "uniform_probability": 0.0005726619972688428,
+          "uniform_expected_hits": 0.4105986520417603,
+          "full_history_hits": 1,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "pool6+",
+          "primary_hits": 0,
+          "primary_rows": 717,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0051316684586491185
+          ],
+          "uniform_probability": 0.0005726619972688428,
+          "uniform_expected_hits": 0.4105986520417603,
+          "full_history_hits": 1,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "pool6+",
+          "primary_hits": 1,
+          "primary_rows": 717,
+          "primary_rate": 0.001394700139470014,
+          "marginal_rate_ci95": [
+            3.53101269095576e-05,
+            0.007746043529336739
+          ],
+          "uniform_probability": 0.0005726619972688428,
+          "uniform_expected_hits": 0.4105986520417603,
+          "full_history_hits": 2,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "frequency",
+          "endpoint": "ticket6+",
+          "primary_hits": 0,
+          "primary_rows": 717,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0051316684586491185
+          ],
+          "uniform_probability": 8.009258703060738e-06,
+          "uniform_expected_hits": 0.005742638490094549,
+          "full_history_hits": 0,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "ticket6+",
+          "primary_hits": 0,
+          "primary_rows": 717,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0051316684586491185
+          ],
+          "uniform_probability": 8.009258703060738e-06,
+          "uniform_expected_hits": 0.005742638490094549,
+          "full_history_hits": 0,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "ticket6+",
+          "primary_hits": 0,
+          "primary_rows": 717,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0051316684586491185
+          ],
+          "uniform_probability": 8.009258703060738e-06,
+          "uniform_expected_hits": 0.005742638490094549,
+          "full_history_hits": 0,
+          "full_history_rows": 2348
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "ticket6+",
+          "primary_hits": 0,
+          "primary_rows": 717,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0051316684586491185
+          ],
+          "uniform_probability": 8.009258703060738e-06,
+          "uniform_expected_hits": 0.005742638490094549,
+          "full_history_hits": 0,
+          "full_history_rows": 2348
+        }
+      ],
+      "artifact_sha256": "5437199af1ca9775898f4f1b9d3266d68ae200cc4a921951f995e23f6951b496"
+    },
+    {
+      "game": {
+        "key": "joker",
+        "label": "joker",
+        "universe": 45,
+        "draw_n": 5,
+        "pick": 5,
+        "pool_n": 15,
+        "code": 12,
+        "variants": 118
+      },
+      "candidates": [
+        "frequency",
+        "model_topk",
+        "lr_tail",
+        "gated_lr_tail"
+      ],
+      "history_rows": 2201,
+      "target_rows": 1951,
+      "eligible_days": 1888,
+      "forecast_seconds": 4.2067373079962636,
+      "elapsed_seconds": 5.896032154000295,
+      "final_after_last_day_posterior": [
+        0.9999999614772569,
+        2.0485587057273075e-11,
+        3.8502257559418955e-08
+      ],
+      "final_after_last_day_log_alt_bf": -14.874792423129323,
+      "signature": {
+        "protocol_sha256": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+        "history_sha256": "b4b61d4bfcebb55471728fdc9dbef4ca61935a0146f7669feabcccce4796eca3",
+        "scheme_sha256": "276455311d26e2c8b2680378d974c83e5b71fc59afbfb7d42992f116ebb42c75",
+        "code_sha256": {
+          "scripts/analysis/lr_tail_2026_11_05.py": "536ddff1d5e1504084ba40f7d73766fa35187a15bd759964b9ed7828b6212ab7",
+          "scripts/analysis/lr_tail_2026_11_05_protocol.json": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+          "scripts/analysis/lr_tail_objective_2026_11_05.py": "a6ecb085eab4df18ff75acfef8db522edaf2be603a094a5e95d560c9e26eb70e",
+          "scripts/analysis/lr_pool_study_2026_11_04.py": "d5a32dc8ed625086662338f038ce65ca79686e296fed2103aafb41f2047ec790",
+          "scripts/analysis/hit_evidence_2026_11_04.py": "3e66114d61576dbcf3e5c7201510ec6e86cc02d661da5bd146000b9479a06f3f",
+          "covering/lr_schemes.py": "a2f14945c48da80dec896b62cfb203fcd957ba5a114c2b7169bb4cf9b41dd34b",
+          "covering/probability.py": "eabc719974799f45c24037806dacb803e5c8e9744f0e71b64f7ae886be01c468",
+          "loto_enterprise/benchmark/methods.py": "d4a49ebbaf62d62bb323d7f11ec1d94e1463aab99b62821ef330a4f50e8539cd",
+          "loto_enterprise/benchmark/methods_common.py": "377f2bb045505880053d3e3850d164636bac78538db11b800797eb257aa31bad",
+          "loto_enterprise/benchmark/methods_experimental.py": "9eca15ed1f5d187603a57733dc314f5d097bc6a937287ed7e4d983bf8caa4b64",
+          "loto_enterprise/benchmark/methods_learning.py": "77b81d44369b6da8bf2738066d829a821f41e9485a2fd75e2a964e6ac10757d9",
+          "loto_enterprise/benchmark/methods_recency.py": "ae6982efd67aab652bf58ccc5215d34f4699e0938f939b9f9ca7a9f61b73be67",
+          "loto_enterprise/benchmark/methods_relational.py": "8658aef92230e62857d6a3a275f8096104de63ac8783f15672d9028e2258839b",
+          "loto_enterprise/benchmark/methods_wave2.py": "18447182e76861ac02ca157a3d8f8ca4018c91dd4389ce6bee637df1b3f85aa2",
+          "loto_enterprise/core/ranking.py": "7e03961e6f77080588f9b8cb94d7193b6caddc35548e300fb50e6536e2d1d408",
+          "loto_enterprise/core/pool_selection.py": "0debb708ceffe9f2d7c22e167a0ef233ede960e33b28c286645f86953553be38",
+          "loto_enterprise/core/history.py": "cab1093aeb71cf691700f3e090ce066c89fdd5d102f35842ca83889853dd69b2",
+          "loto_enterprise/core/draw_validation.py": "479dff63ec38885a1a7117dadd003c2779488d1aa276af78279af98804dbd89b"
+        }
+      },
+      "uniform_ticket_odds": {
+        "3": 0.19797521442444868,
+        "4": 0.015791166670349882,
+        "5": 9.658205914587084e-05
+      },
+      "diagnostics": {
+        "primary_rows": 591,
+        "primary_start": "2021-03-25",
+        "primary_end": "2026-11-01",
+        "gate_open_rows": 0,
+        "primary_gate_open_rows": 0,
+        "maximum_prior_log_alt_bf": -1.2122010415516407,
+        "minimum_prior_uniform_posterior": 0.9679978140881272,
+        "rows_with_accepted_swap": 354,
+        "maximum_proposals_per_day": 38,
+        "mean_relative_model_p5_gain": 0.0001997669450005188,
+        "first_forecast_posterior": [
+          0.9849538221938243,
+          0.005539929718255009,
+          0.009506248087920714
+        ],
+        "last_forecast_posterior": [
+          0.9999999596966105,
+          1.992149531360642e-11,
+          4.0283468058054455e-08
+        ],
+        "primary_start_posterior": [
+          0.9999998198481734,
+          5.335789652768397e-11,
+          1.8009846871544535e-07
+        ],
+        "tail_vs_topk_pool5+": {
+          "tail_only": 1,
+          "topk_only": 0
+        },
+        "tail_vs_topk_ticket5+": {
+          "tail_only": 0,
+          "topk_only": 0
+        }
+      },
+      "outcomes": [
+        {
+          "candidate": "frequency",
+          "endpoint": "pool5+",
+          "primary_hits": 1,
+          "primary_rows": 591,
+          "primary_rate": 0.001692047377326565,
+          "marginal_rate_ci95": [
+            4.283801302559048e-05,
+            0.009391102442607394
+          ],
+          "uniform_probability": 0.0024579315560597464,
+          "uniform_expected_hits": 1.4526375496313102,
+          "full_history_hits": 4,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "pool5+",
+          "primary_hits": 1,
+          "primary_rows": 591,
+          "primary_rate": 0.001692047377326565,
+          "marginal_rate_ci95": [
+            4.283801302559048e-05,
+            0.009391102442607394
+          ],
+          "uniform_probability": 0.0024579315560597464,
+          "uniform_expected_hits": 1.4526375496313102,
+          "full_history_hits": 3,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "pool5+",
+          "primary_hits": 2,
+          "primary_rows": 591,
+          "primary_rate": 0.00338409475465313,
+          "marginal_rate_ci95": [
+            0.0004100926415691975,
+            0.012170598055168963
+          ],
+          "uniform_probability": 0.0024579315560597464,
+          "uniform_expected_hits": 1.4526375496313102,
+          "full_history_hits": 4,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "pool5+",
+          "primary_hits": 1,
+          "primary_rows": 591,
+          "primary_rate": 0.001692047377326565,
+          "marginal_rate_ci95": [
+            4.283801302559048e-05,
+            0.009391102442607394
+          ],
+          "uniform_probability": 0.0024579315560597464,
+          "uniform_expected_hits": 1.4526375496313102,
+          "full_history_hits": 4,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "frequency",
+          "endpoint": "ticket5+",
+          "primary_hits": 0,
+          "primary_rows": 591,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0062223194953043865
+          ],
+          "uniform_probability": 9.658205914587084e-05,
+          "uniform_expected_hits": 0.05707999695520966,
+          "full_history_hits": 0,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "ticket5+",
+          "primary_hits": 0,
+          "primary_rows": 591,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0062223194953043865
+          ],
+          "uniform_probability": 9.658205914587084e-05,
+          "uniform_expected_hits": 0.05707999695520966,
+          "full_history_hits": 0,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "ticket5+",
+          "primary_hits": 0,
+          "primary_rows": 591,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0062223194953043865
+          ],
+          "uniform_probability": 9.658205914587084e-05,
+          "uniform_expected_hits": 0.05707999695520966,
+          "full_history_hits": 0,
+          "full_history_rows": 1951
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "ticket5+",
+          "primary_hits": 0,
+          "primary_rows": 591,
+          "primary_rate": 0.0,
+          "marginal_rate_ci95": [
+            0.0,
+            0.0062223194953043865
+          ],
+          "uniform_probability": 9.658205914587084e-05,
+          "uniform_expected_hits": 0.05707999695520966,
+          "full_history_hits": 0,
+          "full_history_rows": 1951
+        }
+      ],
+      "artifact_sha256": "f9499de57db2927d0343c952de9c33177436a2536587a4b70a7116db9bc239d0"
+    },
+    {
+      "game": {
+        "key": "loto_5_40",
+        "label": "5/40",
+        "universe": 40,
+        "draw_n": 6,
+        "pick": 5,
+        "pool_n": 19,
+        "code": 48,
+        "variants": 930
+      },
+      "candidates": [
+        "frequency",
+        "model_topk",
+        "lr_tail",
+        "gated_lr_tail"
+      ],
+      "history_rows": 1749,
+      "target_rows": 1499,
+      "eligible_days": 1480,
+      "forecast_seconds": 8.365475235003487,
+      "elapsed_seconds": 9.798497419000341,
+      "final_after_last_day_posterior": [
+        0.9999997583393369,
+        1.1403433607104488e-08,
+        2.3025722949207387e-07
+      ],
+      "final_after_last_day_log_alt_bf": -13.038506494419739,
+      "signature": {
+        "protocol_sha256": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+        "history_sha256": "c89e1603f055a8ee4216accd954b33e9860308fad75b4d7c0ad406baac1e2fb8",
+        "scheme_sha256": "960b95fba77c802c9a2994a499701d7fa5bfa2249c832ff86e8d6f4dbe7c8de4",
+        "code_sha256": {
+          "scripts/analysis/lr_tail_2026_11_05.py": "536ddff1d5e1504084ba40f7d73766fa35187a15bd759964b9ed7828b6212ab7",
+          "scripts/analysis/lr_tail_2026_11_05_protocol.json": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+          "scripts/analysis/lr_tail_objective_2026_11_05.py": "a6ecb085eab4df18ff75acfef8db522edaf2be603a094a5e95d560c9e26eb70e",
+          "scripts/analysis/lr_pool_study_2026_11_04.py": "d5a32dc8ed625086662338f038ce65ca79686e296fed2103aafb41f2047ec790",
+          "scripts/analysis/hit_evidence_2026_11_04.py": "3e66114d61576dbcf3e5c7201510ec6e86cc02d661da5bd146000b9479a06f3f",
+          "covering/lr_schemes.py": "a2f14945c48da80dec896b62cfb203fcd957ba5a114c2b7169bb4cf9b41dd34b",
+          "covering/probability.py": "eabc719974799f45c24037806dacb803e5c8e9744f0e71b64f7ae886be01c468",
+          "loto_enterprise/benchmark/methods.py": "d4a49ebbaf62d62bb323d7f11ec1d94e1463aab99b62821ef330a4f50e8539cd",
+          "loto_enterprise/benchmark/methods_common.py": "377f2bb045505880053d3e3850d164636bac78538db11b800797eb257aa31bad",
+          "loto_enterprise/benchmark/methods_experimental.py": "9eca15ed1f5d187603a57733dc314f5d097bc6a937287ed7e4d983bf8caa4b64",
+          "loto_enterprise/benchmark/methods_learning.py": "77b81d44369b6da8bf2738066d829a821f41e9485a2fd75e2a964e6ac10757d9",
+          "loto_enterprise/benchmark/methods_recency.py": "ae6982efd67aab652bf58ccc5215d34f4699e0938f939b9f9ca7a9f61b73be67",
+          "loto_enterprise/benchmark/methods_relational.py": "8658aef92230e62857d6a3a275f8096104de63ac8783f15672d9028e2258839b",
+          "loto_enterprise/benchmark/methods_wave2.py": "18447182e76861ac02ca157a3d8f8ca4018c91dd4389ce6bee637df1b3f85aa2",
+          "loto_enterprise/core/ranking.py": "7e03961e6f77080588f9b8cb94d7193b6caddc35548e300fb50e6536e2d1d408",
+          "loto_enterprise/core/pool_selection.py": "0debb708ceffe9f2d7c22e167a0ef233ede960e33b28c286645f86953553be38",
+          "loto_enterprise/core/history.py": "cab1093aeb71cf691700f3e090ce066c89fdd5d102f35842ca83889853dd69b2",
+          "loto_enterprise/core/draw_validation.py": "479dff63ec38885a1a7117dadd003c2779488d1aa276af78279af98804dbd89b"
+        }
+      },
+      "uniform_ticket_odds": {
+        "3": 0.6185031185031185,
+        "4": 0.28274428274428276,
+        "5": 0.008199552936395042
+      },
+      "diagnostics": {
+        "primary_rows": 463,
+        "primary_start": "2022-03-13",
+        "primary_end": "2026-11-01",
+        "gate_open_rows": 0,
+        "primary_gate_open_rows": 0,
+        "maximum_prior_log_alt_bf": -2.567136667939767,
+        "minimum_prior_uniform_posterior": 0.9915437834228867,
+        "rows_with_accepted_swap": 30,
+        "maximum_proposals_per_day": 24,
+        "mean_relative_model_p5_gain": 6.117901978152925e-06,
+        "first_forecast_posterior": [
+          0.9958161426920965,
+          0.0016843675257239407,
+          0.002499489782179557
+        ],
+        "last_forecast_posterior": [
+          0.9999997611334179,
+          1.0249340519439612e-08,
+          2.286172415833023e-07
+        ],
+        "primary_start_posterior": [
+          0.9999900427826487,
+          3.5773079902782816e-07,
+          9.599486552236888e-06
+        ],
+        "tail_vs_topk_pool5+": {
+          "tail_only": 0,
+          "topk_only": 0
+        },
+        "tail_vs_topk_ticket5+": {
+          "tail_only": 0,
+          "topk_only": 0
+        },
+        "tail_vs_topk_pool6+": {
+          "tail_only": 0,
+          "topk_only": 0
+        }
+      },
+      "outcomes": [
+        {
+          "candidate": "frequency",
+          "endpoint": "pool5+",
+          "primary_hits": 36,
+          "primary_rows": 463,
+          "primary_rate": 0.07775377969762419,
+          "marginal_rate_ci95": [
+            0.055049639371765935,
+            0.10602078187520851
+          ],
+          "uniform_probability": 0.07068607068607069,
+          "uniform_expected_hits": 32.727650727650726,
+          "full_history_hits": 124,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "pool5+",
+          "primary_hits": 26,
+          "primary_rows": 463,
+          "primary_rate": 0.056155507559395246,
+          "marginal_rate_ci95": [
+            0.03700685725825967,
+            0.08120089696462217
+          ],
+          "uniform_probability": 0.07068607068607069,
+          "uniform_expected_hits": 32.727650727650726,
+          "full_history_hits": 101,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "pool5+",
+          "primary_hits": 26,
+          "primary_rows": 463,
+          "primary_rate": 0.056155507559395246,
+          "marginal_rate_ci95": [
+            0.03700685725825967,
+            0.08120089696462217
+          ],
+          "uniform_probability": 0.07068607068607069,
+          "uniform_expected_hits": 32.727650727650726,
+          "full_history_hits": 102,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "pool5+",
+          "primary_hits": 36,
+          "primary_rows": 463,
+          "primary_rate": 0.07775377969762419,
+          "marginal_rate_ci95": [
+            0.055049639371765935,
+            0.10602078187520851
+          ],
+          "uniform_probability": 0.07068607068607069,
+          "uniform_expected_hits": 32.727650727650726,
+          "full_history_hits": 124,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "frequency",
+          "endpoint": "ticket5+",
+          "primary_hits": 7,
+          "primary_rows": 463,
+          "primary_rate": 0.01511879049676026,
+          "marginal_rate_ci95": [
+            0.006099580287779133,
+            0.030901261386683653
+          ],
+          "uniform_probability": 0.008199552936395042,
+          "uniform_expected_hits": 3.7963930095509046,
+          "full_history_hits": 19,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "ticket5+",
+          "primary_hits": 4,
+          "primary_rows": 463,
+          "primary_rate": 0.008639308855291577,
+          "marginal_rate_ci95": [
+            0.002358793877800964,
+            0.021971345671085236
+          ],
+          "uniform_probability": 0.008199552936395042,
+          "uniform_expected_hits": 3.7963930095509046,
+          "full_history_hits": 14,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "ticket5+",
+          "primary_hits": 4,
+          "primary_rows": 463,
+          "primary_rate": 0.008639308855291577,
+          "marginal_rate_ci95": [
+            0.002358793877800964,
+            0.021971345671085236
+          ],
+          "uniform_probability": 0.008199552936395042,
+          "uniform_expected_hits": 3.7963930095509046,
+          "full_history_hits": 14,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "ticket5+",
+          "primary_hits": 7,
+          "primary_rows": 463,
+          "primary_rate": 0.01511879049676026,
+          "marginal_rate_ci95": [
+            0.006099580287779133,
+            0.030901261386683653
+          ],
+          "uniform_probability": 0.008199552936395042,
+          "uniform_expected_hits": 3.7963930095509046,
+          "full_history_hits": 19,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "frequency",
+          "endpoint": "pool6+",
+          "primary_hits": 2,
+          "primary_rows": 463,
+          "primary_rate": 0.004319654427645789,
+          "marginal_rate_ci95": [
+            0.0005235589632805439,
+            0.015516283222543597
+          ],
+          "uniform_probability": 0.007068607068607069,
+          "uniform_expected_hits": 3.272765072765073,
+          "full_history_hits": 7,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "model_topk",
+          "endpoint": "pool6+",
+          "primary_hits": 1,
+          "primary_rows": 463,
+          "primary_rate": 0.0021598272138228943,
+          "marginal_rate_ci95": [
+            5.4680595640542055e-05,
+            0.01197454424808248
+          ],
+          "uniform_probability": 0.007068607068607069,
+          "uniform_expected_hits": 3.272765072765073,
+          "full_history_hits": 5,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "lr_tail",
+          "endpoint": "pool6+",
+          "primary_hits": 1,
+          "primary_rows": 463,
+          "primary_rate": 0.0021598272138228943,
+          "marginal_rate_ci95": [
+            5.4680595640542055e-05,
+            0.01197454424808248
+          ],
+          "uniform_probability": 0.007068607068607069,
+          "uniform_expected_hits": 3.272765072765073,
+          "full_history_hits": 5,
+          "full_history_rows": 1499
+        },
+        {
+          "candidate": "gated_lr_tail",
+          "endpoint": "pool6+",
+          "primary_hits": 2,
+          "primary_rows": 463,
+          "primary_rate": 0.004319654427645789,
+          "marginal_rate_ci95": [
+            0.0005235589632805439,
+            0.015516283222543597
+          ],
+          "uniform_probability": 0.007068607068607069,
+          "uniform_expected_hits": 3.272765072765073,
+          "full_history_hits": 7,
+          "full_history_rows": 1499
+        }
+      ],
+      "artifact_sha256": "183756d88bf4b7a4d23302140eeaad0a4fcedd7f252dab8763656dded12192dd"
+    }
+  ],
+  "primary_comparisons": [
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 6,
+      "baseline_only": 7,
+      "p_one_sided": 0.70947265625,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.3795971347474414,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 7,
+      "baseline_only": 7,
+      "p_one_sided": 0.604736328125,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.2582623397481119,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.2582623397481119,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 2,
+      "baseline_only": 2,
+      "p_one_sided": 0.6875,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.43809963578996725,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 2,
+      "baseline_only": 2,
+      "p_one_sided": 0.6875,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.43809963578996725,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.43809963578996725,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "pool6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 1,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "pool6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 1,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.33682492849408513,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "ticket6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "model_topk",
+      "endpoint": "ticket6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "ticket6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "lr_tail",
+      "endpoint": "ticket6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_6_49",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "model_topk",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "model_topk",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.7664655609582101,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 1,
+      "baseline_only": 0,
+      "p_one_sided": 0.5,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.4263887802231698,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.7664655609582101,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "model_topk",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "model_topk",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "joker",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "model_topk",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 9,
+      "baseline_only": 19,
+      "p_one_sided": 0.9821509309113026,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "model_topk",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.9086689530768899,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 9,
+      "baseline_only": 19,
+      "p_one_sided": 0.9821509309113026,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.9086689530768899,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.3008376523984545,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "model_topk",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 1,
+      "baseline_only": 4,
+      "p_one_sided": 0.96875,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "model_topk",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.5264483204878759,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 1,
+      "baseline_only": 4,
+      "p_one_sided": 0.96875,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.5264483204878759,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "gated_lr_tail",
+      "endpoint": "ticket5+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.08970775106772161,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "model_topk",
+      "endpoint": "pool6+",
+      "comparator": "frequency",
+      "candidate_only": 1,
+      "baseline_only": 2,
+      "p_one_sided": 0.875,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "model_topk",
+      "endpoint": "pool6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.9625364499238618,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "frequency",
+      "candidate_only": 1,
+      "baseline_only": 2,
+      "p_one_sided": 0.875,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.9625364499238618,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "frequency",
+      "candidate_only": 0,
+      "baseline_only": 0,
+      "p_one_sided": 1.0,
+      "p_holm_all_primary": 1.0
+    },
+    {
+      "game": "loto_5_40",
+      "candidate": "gated_lr_tail",
+      "endpoint": "pool6+",
+      "comparator": "uniform_exact",
+      "p_one_sided": 0.8390542042583283,
+      "p_holm_all_primary": 1.0
+    }
+  ],
+  "holm_family_size": 54,
+  "significant_primary_comparisons": 0,
+  "wall_seconds": 24.61906904699981
+}

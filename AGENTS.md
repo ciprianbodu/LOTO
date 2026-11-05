@@ -92,6 +92,34 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Obiectiv exact 5+/6+ pe scheme LR — 2026-11-05
+
+- Cercetare offline in `scripts/analysis/lr_tail_2026_11_05.py`: doua modele
+  regularizate ale extragerii complete (global si EWMA256), amestec cu uniform,
+  normalizare exacta prin polinoame simetrice elementare si actualizare numai
+  dupa ziua completa. Protocol fixat inaintea rezultatelor noi, pooluri/costuri
+  16/112, 15/118 si 19/930, consecutive 2.
+- `lr_tail_objective_2026_11_05.py` calculeaza exact P5+/P6 pentru randurile
+  oficiale, inclusiv suprapunerile Cod48. Cel mult 48 de schimburi locale,
+  mapare numerica oficiala; orice castig este numai sub modelul ipotetic.
+  Cod59 atinge deja limita uniforma la 5+, iar P6 este fixata de cele 112
+  variante distincte. Alegerea altor etichete nu imbunatateste sansele uniforme.
+- 5798 tinte, ultimele 30% dintre zile drept fereastra principala, 54 de
+  comparatii: zero rezultate Holm semnificative. LR5+ fata de frequency:
+  2 vs 2 / 0 vs 0 / 4 vs 7; LR6 la 6/49: zero pentru toate regulile.
+  Poarta BF60 nu se deschide niciodata. Productia, registry-ul, deciziile si
+  schemele raman neschimbate; nu se promoveaza un candidat din arhive reutilizate.
+- Comparatiile pe perechi sunt diagnostice exploratorii: conditionarea pe
+  numarul discordantelor cere ipoteze suplimentare pentru reguli adaptive.
+  Limita BF presupune regula fixata anterior fluxului; o confirmare viitoare
+  cere flux nou de evidenta, nu reutilizarea BF acumulat retrospectiv.
+- Raport si toate rezultatele: `scripts/analysis/lr_tail_2026-11-05.md` si
+  `lr_tail_2026_11_05_results.json`; 53 de teste specifice pentru calculul exact,
+  excluderea zilei-tinta, poarta si constrangeri.
+- Suita completa: 6840 passed, 16 skipped, zero esecuri, Python 3.14.8;
+  cele 53 de teste specifice si studiul integral au fost repetate pe runnerul
+  final dupa completarile de raportare si verificare a amprentelor.
+
 ### Eliminarea variantelor simple separate — 2026-11-05
 
 - La cererea utilizatorului au fost eliminate controalele, generatorul si
