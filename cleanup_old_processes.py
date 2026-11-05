@@ -298,13 +298,16 @@ def kill_pid_tree(
     pornește oricum de la `{pid}`, iar `_kill_pid` eșuează silențios pe el.
 
     Plasă de siguranță INCONDIȚIONATĂ (nu doar responsabilitatea apelantului):
-    procesul curent și toți strămoșii lui (`_keep_pids()`) sunt scoși din
-    țintă — un `pid` stale reciclat de Windows către chiar acest proces sau un
-    părinte al lui nu trebuie să poată omorî propriul apelant.
+    procesul curent, strămoșii lui (`_keep_pids()`) și PID-urile de sistem sunt
+    protejați. O asemenea rădăcină este refuzată înainte de extindere, pentru
+    a nu omorî nici copiii apelantului sau alte ramuri ale strămoșilor lui.
 
     Returnează PID-urile pe care a încercat efectiv să le omoare (sau le-ar
     omorî, în `dry_run`), copiii întâi.
     """
+    keep = _keep_pids() | _SYSTEM_PIDS
+    if pid in keep:
+        return []
     procs = _snapshot()
     if expected_create_time is not None:
         root = next((p for p in procs if p.pid == pid), None)
@@ -313,7 +316,7 @@ def kill_pid_tree(
         # Fără momentul pornirii nu putem confirma niciun descendent și nici
         # relația lui de filiație față de părintele din snapshot.
         procs = [p for p in procs if p.create_time is not None]
-    targets = expand_descendants({pid}, procs) - _keep_pids()
+    targets = expand_descendants({pid}, procs) - keep
     ordered = _order_deepest_first(targets, procs)
     created = {p.pid: p.create_time for p in procs}
     acted: list[int] = []

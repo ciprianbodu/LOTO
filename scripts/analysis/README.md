@@ -1,5 +1,11 @@
 # Analiză de tipare — „se poate reduce baza de numere?"
 
+**Optimizare LR și eliminarea variantelor simple, 05.11.2026:** [implementare și verificări](lr_optimization_2026-11-05.md).
+Gruparea Cod 48 folosește indici binari; rezultatele exacte rămân identice.
+Generatorul separat „Bilet complet”, controalele și reluarea lui au fost eliminate.
+Rapoartele vechi despre această funcție sunt arhivă; scripturile care o importau
+au fost retrase odată cu implementarea.
+
 **Ecran 2 4+/5+, 01.11.2026:** [29 de ansambluri dinamice + semnale cross-game](hit5plus_screen2_2026-11-01.md).
 5 familii (FTL la 5+, cross-game, voturi, stacking, Kalman), 12 celule, nul pe
 100 de istorii, Holm + replicare externă. Nimic promovat: rata pool-ului la
@@ -65,7 +71,7 @@ Când baza garanției e completă înainte de a umple biletele, pragul-țintă n
 mai mișcă; recoacerea pe toate variantele, cu acoperirea 100% ținută, ridică
 pragul următor: câștig în 39 din 67 de configurații cu pârghie, maxim +6,92%,
 nicio scădere la vreun prag, 0 la 5/40.
-Reproducere: `python scripts/analysis/bench_full_cover_anneal.py`.
+Raport arhivat; funcția și scriptul au fost retrase la 05.11.2026.
 
 **Mai multe hituri pe bilete la același cost, 11.10.2026:** [recoacerea pe șansa exactă](anneal_hits_2026-10-11.md).
 155 de configurații: bilete schimbate în 98, câștig la țintă în 83, maxim 2,76%,

@@ -20,7 +20,6 @@ import worker
 from loto_engine import LotoEngine
 from loto_enterprise.core import backtesting as bt
 from loto_enterprise.core import walk_forward_adapter as wf
-from loto_enterprise.core.full_ticket import build_full_ticket
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.ranking import limit_consecutive_run, longest_consecutive_run
 from ui_shared import decode_queue_result
@@ -114,8 +113,7 @@ def test_selector_on_replaces_and_records_ranks():
 
 
 def test_every_pool_member_stays_in_the_audited_ranking():
-    """`full_ticket` citește clasamentul din audit; un membru sub rangul 25
-    trebuie să apară și el, altfel tăierea Joker cade pe „clasament lipsă"."""
+    """Auditul păstrează toți membrii poolului, inclusiv după rangul 25."""
     rng = random.Random(9)
     for _ in range(200):
         scores = {n: rng.random() for n in range(1, 50)}
@@ -631,27 +629,6 @@ def test_wf_history_names_the_limit_it_used():
     # Fără limită la generare: istoricul nu pretinde regula, ci spune că lipsește.
     assert "Fără 3 numere consecutive" not in ui_off.text()
     assert "Fără limită de consecutive." in ui_off.text()
-
-
-# --- biletul complet respectă limita rezultatului ------------------------------
-_RANKING = {5: 9.0, 6: 8.0, 36: 7.0, 25: 6.0, 23: 5.0, 12: 4.0, 4: 3.5, 9: 3.0, 2: 2.0}
-
-
-def _ticket_data(**audit_extra):
-    audit = {"timesfm_predictions": dict(_RANKING), **audit_extra}
-    return {"hard_core": [5, 6, 12, 23, 25, 36], "guarantee": 3, "audit": audit}
-
-
-def test_ticket_extension_skips_the_number_that_would_form_a_triple():
-    limit = {"requested": 2, "applied": 2, "relaxed": False, "removed": [], "added": []}
-    t = build_full_ticket("6/49", _ticket_data(consecutive_limit=limit))
-    assert t["pool"] == [5, 6, 9, 12, 23, 25, 36]
-    assert "am adăugat 9" in t["note"] and "am sărit 4" in t["note"]
-
-
-def test_ticket_from_a_result_without_the_limit_keeps_the_old_behaviour():
-    t = build_full_ticket("6/49", _ticket_data())
-    assert t["pool"] == [4, 5, 6, 12, 23, 25, 36]
 
 
 # --- E2E: sidebar → coadă → worker → rezultat decodat → opțiuni WF -------------

@@ -280,12 +280,12 @@ def _retroactive_step_stateless(
     )
 
 
-# Cheile de audit pe care le citește `full_ticket.build_full_ticket`.
+# Auditul pasului păstrat împreună cu pool-ul istoric.
 _TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base")
 
 
 def _ticket_context(engine, audit, actual) -> dict:
-    """Ce îi trebuie lui „Bilet complet” ca să refacă biletele pasului.
+    """Datele pasului pentru istoricul pool-ului, schemele LR și premii.
 
     Pool-ul, clasamentul din audit, numărul Joker și extragerea țintă. {} =
     context indisponibil la acest pas (nu se recalculează); None rămâne
@@ -458,7 +458,7 @@ class RetroactivePrediction:
     game_key: str | None = None
     country: str | None = None
     bench_method: str | None = None
-    # Contextul „Bilet complet” al pasului (`_ticket_context`); None = necunoscut.
+    # Contextul pool-ului istoric (`_ticket_context`); None = necunoscut.
     ticket_context: dict | None = None
     # Compact WF keeps only the first best variant, with its real wheel size.
     variant_count: int | None = None

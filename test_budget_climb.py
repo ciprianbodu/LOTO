@@ -127,15 +127,6 @@ def test_a_small_budget_equal_to_the_design_is_complete(game, guarantee):
         assert (wheel, cov) == uncapped and cov == 100.0 and len(wheel) <= budget
 
 
-def test_physical_tickets_keep_their_base():
-    """Fără `max_num` (Bilet complet), bugetul nu trece prin rafinări."""
-    pick, draw, _ = GAMES["6/49"]
-    size = complete_design_size(16, pick, 3)
-    wheel, _ = generate_wheel("hitcover", POOL, pick, 3, size, None, None, draw)
-    assert wheel == generate_wheel("hitcover", POOL, pick, 3, size, None, None, draw)[0]
-    assert len(wheel) == size
-
-
 def test_the_result_is_deterministic_and_reused_across_scores():
     pick, draw, max_num = GAMES["6/49"]
     first, _ = generate_wheel("hitcover", POOL, pick, 4, 100, scores_for(POOL), None, draw, max_num)

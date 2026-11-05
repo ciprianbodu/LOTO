@@ -67,7 +67,7 @@ def _badges(numbers, stats: dict | None = None):
 # --------------------------------------------------------------------------- #
 # Randare detaliată rezultate (audit, pipeline stages, cost variante)
 # --------------------------------------------------------------------------- #
-# Lei/variantă simplă. Taxa pe biletul fizic nu intră aici: depinde de câte
+# Lei/variantă a sistemului. Taxa pe biletul fizic nu intră aici: depinde de câte
 # variante sunt depuse împreună pe același bilet, deci nu poate fi dedusă din
 # lista de variante generată de aplicație.
 PRICES = {"6/49": 8.0, "5/40": 5.0, "joker": 7.0}
@@ -235,8 +235,8 @@ def _render_cost(game: str, data: dict) -> None:
     # variantă, NU produsul cartezian variante × jokeri. În plus nucleul Urnei 2 e
     # single-pick (`sorted_j[:1]` / `_get_hard_core_joker(pool_size=1)`, aliniat
     # bench), deci lista are oricum 1 element. Concluzie: nr. BILETE = nr. VARIANTE,
-    # pe toate cele patru formule (scheme oficiale, sistem complet, bilete simple,
-    # wheel) → toate se citesc pe ACEEAȘI bază.
+    # pe toate formulele (scheme oficiale, sistem complet, wheel) → toate
+    # se citesc pe ACEEAȘI bază.
     _jk_txt = " · 1 nr. joker/bilet" if gk == "joker" else ""
 
     # „Sistem complet" = TOATE combinațiile C(pool, draw_n) de la agenție (fără garanție
@@ -295,7 +295,6 @@ def _render_cost(game: str, data: dict) -> None:
 
     variants = data.get("variants") or []
     if variants:
-        n_simple = min(_simple_variants_count(), len(variants))
         # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
         # schemele oficiale de mai sus; fallback pe cea cerută din setări.
         _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
@@ -320,15 +319,9 @@ def _render_cost(game: str, data: dict) -> None:
             else "garanția configurată"
         )
         ui.markdown(
-            f"🎟️ **Top {n_simple} bilete simple** ({n_simple} var.{_jk_txt}) ≈ "
-            f"{_thousands(n_simple * price)} Lei în variante "
-            f"| **Wheel-ul nostru** ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
+            f"**Wheel-ul nostru** ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
             f"{_thousands(len(variants) * price)} Lei în variante."
         ).classes("text-caption")
-        if n_simple < len(variants):
-            ui.label(
-                f"Primele {n_simple} variante sunt doar un subset; garanția afișată se referă la întregul wheel."
-            ).classes("text-caption text-grey")
         for line in _wheel_probability_lines(game, data):
             ui.label(line).classes("text-caption")
 
@@ -579,14 +572,12 @@ def _lr_quality_lines(s, odds: dict, price: float) -> list[str]:
         if gain >= 0.01:
             lines.append(
                 f"La același cost, aplicația prinde mai des decât {s.label}: cu plafonul "
-                f"{s.size} și garanția {g}, {'; '.join(diff)}. Variantele aplicației se "
-                "joacă la agenție ca variante simple."
+                f"{s.size} și garanția {g}, {'; '.join(diff)}."
             )
         else:
             lines.append(
                 f"Cu plafonul {s.size} și garanția {g}, aplicația prinde abia mai des decât "
-                f"{s.label}: {'; '.join(diff)}. Sub 1% în plus nu merită {variants} "
-                "simple în locul codului."
+                f"{s.label}: {'; '.join(diff)}. Diferența este sub 1%."
             )
         lost = _lr_lost_guarantee(
             scheme_guarantees(s), app_same_size_guarantees(s).get(g) or {}, s.n
@@ -1138,7 +1129,7 @@ def _build_report() -> str:
             f"{indent}Pool efectiv: {eff}"
             + (f" (cerut {req})" if req and req != eff else "")
             + f" | Garanție: {_g_used}{_wc_txt}{_g_diff_txt}"
-            + f" | Variante simple: {len(d.get('variants') or [])}"
+            + f" | Variante în sistem: {len(d.get('variants') or [])}"
             + f" | Extrageri: {d.get('total_draws')}"
         )
         cov = (d.get("context") or {}).get("coverage_pct")
@@ -1265,20 +1256,6 @@ def _build_report() -> str:
                 au, indent=2, ensure_ascii=False, default=str
             ).splitlines():
                 out.append(f"{indent}{line}")
-        vs = d.get("variants") or []
-        out.append(f"{indent}--- Variante simple ({len(vs)}) ---")
-        # La Joker ultimul element al variantei e NUMĂRUL DE JOKER, nu un al 6-lea
-        # număr din urnă (engine-ul îl atașează ciclic în `generate_predictions`).
-        # Îl separăm cu „+", ca în UI — altfel raportul îl arăta ca număr obișnuit,
-        # deseori duplicând vizual o valoare deja prezentă în variantă.
-        _is_jk = bool(d.get("hard_core_joker"))
-        for i, v in enumerate(vs, 1):
-            if _is_jk and len(v) == 6:
-                nums = ", ".join(str(int(x)) for x in v[:5]) + f"  + joker {int(v[-1])}"
-            else:
-                nums = ", ".join(str(int(x)) for x in v)
-            out.append(f"{indent}  V{i}: " + nums)
-
     for fn, outs in rb:
         out.append(f"\n{'#' * 72}\nFIȘIER: {fn}\n{'#' * 72}")
         for g, raw_data in _ordered_game_items(outs):
@@ -1343,221 +1320,6 @@ def _show_report() -> None:
             "readonly autogrow filled"
         )
         ui.button("Închide", on_click=dlg.close)
-    dlg.open()
-
-
-# Copierea rulează în browser, chiar în click. Safari și iOS scriu în clipboard
-# numai cât durează gestul utilizatorului; un `ui.run_javascript` trimis de server
-# după click ajunge prea târziu și e refuzat. Serverul primește doar rezultatul,
-# pentru mesaj. `navigator.clipboard` există doar pe pagini sigure
-# (localhost/HTTPS); pe adresa de rețea (http://192.168...) se folosește
-# `execCommand("copy")`, cu textarea pusă în dialog: capcana de focus a
-# dialogului Quasar ar anula o selecție făcută în afara lui.
-_COPY_JS = """(e) => {
-  const text = __TEXT__;
-  const host = (e && e.target && e.target.closest && e.target.closest(".q-card")) || document.body;
-  const viaTextarea = () => {
-    const box = document.createElement("textarea");
-    box.value = text;
-    box.setAttribute("readonly", "");
-    box.style.position = "fixed";
-    box.style.opacity = "0";
-    host.appendChild(box);
-    box.select();
-    box.setSelectionRange(0, text.length);
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch (err) {}
-    box.remove();
-    return ok;
-  };
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(() => emit(true), () => emit(viaTextarea()));
-  } else {
-    emit(viaTextarea());
-  }
-}"""
-
-
-def _copy_js(text: str) -> str:
-    return _COPY_JS.replace("__TEXT__", json.dumps(text))
-
-
-def _copy_feedback(e) -> None:
-    if e.args is True:
-        ui.notify("📋 Numerele au fost copiate.", type="positive")
-    else:
-        ui.notify(
-            "Browserul nu a permis copierea; selectați numerele din fereastră.",
-            type="warning",
-        )
-
-
-def _full_ticket_summary(t: dict, game: str) -> str:
-    """Linia de sub variante: câte, acoperirea garanției și costul."""
-
-    n = len(t["variants"])
-    _lot = _LOT.lottery_by_id(str(game))
-    if _lot is not None and not _lot.is_romanian:
-        cost_txt = (
-            "tarif necunoscut"
-            if _lot.price is None
-            else f"≈ {n * _lot.price:.2f} {_lot.currency}"
-        )
-    else:
-        cost_txt = f"≈ {n * PRICES.get(game, 0.0):.0f} Lei"
-    slip = "biletului" if t["tickets"] == 1 else "biletelor"
-    head = f"{n}/{count(t['requested'], 'variante')} ({t['tickets']} × {t['per_ticket']})"
-    text = (
-        f"{head} · "
-        f"acoperire garanție {t['guarantee']} pe cele {count(len(t['pool']), 'numere')} "
-        f"ale {slip}: {t['coverage']:.2f}%"
-    )
-    upper = t.get("upper_coverage")
-    if upper and t.get("refined"):
-        # Garanția era completă înainte de umplere; variantele au fost apoi
-        # rearanjate toate, cu acoperirea păstrată, pentru grupele următoare.
-        level, pct = upper
-        text += (
-            f" · garanția e completă cu toate cele {n}, rearanjate pentru "
-            f"grupele de {level}: acoperite {pct:.2f}%"
-        )
-    elif upper:
-        level, pct = upper
-        text += (
-            f" · garanția e completă cu {count(t['guarantee_variants'], 'variante', 'variantă')}; "
-            f"cu toate cele {n}, grupele de {level} sunt acoperite {pct:.2f}%"
-        )
-    return text + f" · {cost_txt}"
-
-
-def _pct(p: float) -> str:
-    value = 100.0 * float(p)
-    return f"{value:.2f}%" if value >= 1 else f"{value:.3g}%"
-
-
-def _full_ticket_chances(t: dict, is_joker: bool) -> list[str]:
-    """Șansa exactă (extragere uniformă) ca cel puțin o variantă afișată să prindă."""
-    ch = t.get("chances") or {}
-    ts = ch.get("thresholds") or []
-    if not ts:
-        return []
-    urn = " (Urna 1)" if is_joker else ""
-
-    def fmt(values) -> str:
-        return " · ".join(f"{k}+ {_pct(values[k])}" for k in ts)
-
-    return [f"Șansa exactă ca cel puțin o variantă să prindă{urn}: {fmt(ch['shown'])}."]
-
-
-def _simple_variants_count() -> int:
-    """Variantele simple afișate (setarea din sidebar), 1..500; câmp gol -> 10."""
-    try:
-        n = int(round(float(SETTINGS.get("simple_variants_val"))))
-    except (TypeError, ValueError, OverflowError):
-        return 10
-    return max(1, min(500, n))
-
-
-# Un singur calcul „Bilet complet” odată: un al doilea clic cât rulează primul
-# ar porni încă o recoacere rece pe aceleași geometrii.
-_FULL_TICKET_RUN: dict = {"busy": False}
-
-
-async def _show_full_ticket() -> None:
-    """Bilete complete per joc (1-10 bilete × 3/4/2 variante) din pool-ul afișat.
-
-    Biletele se calculează într-un fir (`run.io_bound`), nu pe bucla NiceGUI: la
-    pool 16 primul clic costă ~14 s pe trei jocuri, iar un handler sincron oprea
-    temporizatoarele, progresul WF și celelalte taburi cât dura."""
-    from nicegui import run
-
-    from loto_enterprise.core import full_ticket as _ft
-    from loto_enterprise.core.full_ticket import clamp_tickets
-    from loto_enterprise.core.lotteries import display_name
-
-    res = STATE.get("results")
-    if not isinstance(res, tuple) or len(res) != 2:
-        ui.notify("Generează întâi un rezultat; biletul se face din pool-ul lui.")
-        return
-    if _FULL_TICKET_RUN["busy"]:
-        ui.notify("⏳ Biletele se calculează deja.")
-        return
-    rb, _ = res
-    tickets = clamp_tickets(SETTINGS.get("full_ticket_count_val"))
-    items = []
-    for _fn, outs in rb:
-        for g, raw in _ordered_game_items(outs):
-            _data = _primary_pool_data(raw)
-            _spec = _game_spec_for(g, _data)
-            # România: eticheta de dinainte; străin: id-ul din registru.
-            game = _game_label_for(str(g)) if _spec.is_romanian else _spec.game_id
-            items.append((game, _data, _spec))
-    _FULL_TICKET_RUN["busy"] = True
-    wait = ui.notification("⏳ Calculez biletele…", spinner=True, timeout=None)
-    try:
-        built = await run.io_bound(
-            lambda: [_ft.build_full_ticket(game, d, tickets) for game, d, _s in items]
-        )
-    finally:
-        _FULL_TICKET_RUN["busy"] = False
-        wait.dismiss()
-    if built is None:  # aplicația se oprește
-        return
-    copy_lines: list[str] = []
-    with ui.dialog() as dlg, ui.card().classes("w-11/12 max-w-2xl"):
-        title = "un bilet fizic" if tickets == 1 else f"{tickets} bilete fizice"
-        ui.label(f"🎟️ Bilet complet ({title} pe joc)").classes("text-bold")
-        ui.label(
-            "Variantele se aleg din pool-ul afișat, potrivit automat după "
-            "clasamentul metodei când e prea mic sau prea mare pentru bilete. "
-            "Acoperirea e cea a acestor variante, nu a wheel-ului complet; "
-            "nu e o șansă de câștig."
-        ).classes("text-caption")
-        # Nu ui.scroll_area: NiceGUI îi fixează înălțimea la 16rem (256px).
-        with ui.column().classes("w-full no-wrap gap-1").style(
-            "max-height:65vh; overflow-y:auto"
-        ):
-            for (game, _data, _spec), t in zip(items, built):
-                lottery = display_name(game)  # = _game_title(g)
-                ui.separator()
-                ui.label(lottery).classes("text-bold")
-                if _training_only_note(_spec):
-                    ui.label(f"ℹ️ {_training_only_note(_spec)}").classes(
-                        "text-caption text-warning"
-                    )
-                if t.get("error"):
-                    ui.label(f"⚠️ {t['error']}").classes("text-warning")
-                    continue
-                if t.get("note"):
-                    ui.label(f"ℹ️ {t['note']}").classes("text-caption text-info")
-                if copy_lines:
-                    copy_lines.append("")
-                copy_lines.append(lottery)
-                for i, v in enumerate(t["variants"], 1):
-                    if tickets > 1 and (i - 1) % t["per_ticket"] == 0:
-                        slip = f"Biletul {(i - 1) // t['per_ticket'] + 1} · {lottery}"
-                        ui.label(slip).classes("text-caption text-bold q-mt-xs")
-                        copy_lines.append(slip)
-                    if t["joker"] is not None:
-                        txt = ", ".join(str(n) for n in v[:-1]) + f" +{v[-1]}"
-                    else:
-                        txt = ", ".join(str(n) for n in v)
-                    ui.label(f"V{i}: {txt}").classes("font-mono")
-                    copy_lines.append(f"V{i}: {txt}")
-                ui.label(_full_ticket_summary(t, game)).classes("text-caption")
-                for line in _full_ticket_chances(
-                    t, t["joker"] is not None or game == "joker"
-                ):
-                    ui.label(line).classes("text-caption")
-        copy_text = "\n".join(copy_lines)
-        with ui.row().classes("w-full justify-end gap-2"):
-            copy_btn = ui.button("📋 Copiază numerele").props(
-                "color=primary no-caps"
-            )
-            copy_btn.on("click", _copy_feedback, js_handler=_copy_js(copy_text))
-            if not copy_text:
-                copy_btn.disable()
-            ui.button("Închide", on_click=dlg.close).props("no-caps")
     dlg.open()
 
 
@@ -1735,9 +1497,7 @@ def _large_pool_route_note(game: str, data: dict) -> str | None:
     )
 
 
-def _render_pool_body(
-    fname: str, game: str, data: dict, *, skey_suffix: str = ""
-) -> None:
+def _render_pool_body(fname: str, game: str, data: dict) -> None:
     """Randează pool-ul unic (badges, p10/p90, audit, cost, variante, stages).
 
     Walk-forward-ul NU se randează aici: statisticile lui apar o singură dată, în
@@ -1789,7 +1549,7 @@ def _render_pool_body(
             f"Garanție: {_g_used}{_wc_txt}"
             + (f" (cerută: {_g_req})" if _g_diff else "")
         )
-        ui.label(f"Variante simple: {len(variants)}")
+        ui.label(f"Variante în sistem: {len(variants)}")
         _rp = (data.get("audit") or {}).get("recent_penalty") or {}
         if int(_rp.get("draws") or 0) > 0:
             _pen = _rp.get("penalized") or {}
@@ -2018,37 +1778,6 @@ def _render_pool_body(
         _render_adaptive(audit)
 
     _render_cost(game, data)
-
-    if variants:
-        is_jk = "joker" in game.lower()
-        skey = f"{fname}_{game}{skey_suffix}"
-        show_all = STATE["show_all"].get(skey, False)
-        with ui.expansion(f"Variante simple ({len(variants)})", value=False).classes(
-            "w-full"
-        ):
-            n_show = _simple_variants_count()
-            shown = variants if show_all else variants[:n_show]
-            for i, v in enumerate(shown, 1):
-                if is_jk and len(v) == 6:
-                    nums = ", ".join(str(int(x)) for x in v[:5]) + f"  +{int(v[-1])}"
-                else:
-                    nums = ", ".join(str(int(x)) for x in v)
-                ui.html(
-                    render_html_safe(
-                        t"<span style='color:#6b7280;font-weight:600'>V{i:>3}:</span> "
-                        t"<span style='color:#e5e7eb'>{nums}</span>"
-                    )
-                ).classes("font-mono text-sm")
-            if len(variants) > n_show:
-
-                def _toggle(k=skey):
-                    STATE["show_all"][k] = not STATE["show_all"].get(k, False)
-                    results_panel.refresh()
-
-                ui.button(
-                    "🔼 Ascunde" if show_all else f"🔽 Arată toate ({len(variants)})",
-                    on_click=_toggle,
-                ).props("flat dense")
 
     if audit:
         _render_stages(audit)

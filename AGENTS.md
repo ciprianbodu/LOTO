@@ -92,6 +92,43 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Eliminarea variantelor simple separate — 2026-11-05
+
+- La cererea utilizatorului au fost eliminate controalele, generatorul si
+  reluarea „Bilet complet”, lista de variante simple din rezultate/raport,
+  numarul configurabil, butoanele „Arata toate”/„Ascunde” si starea aferenta.
+- Poolurile, desfasurarile oficiale LR, costurile, acoperirea, istoricul
+  variantelor din scheme si calculul premiilor raman disponibile. Variantele
+  interne ale unui sistem sunt necesare acestor calcule si nu sunt sterse
+  din payload-uri. Contextul poolurilor istorice si cache-urile raman compatibile.
+- Testele functiei eliminate au fost retrase; verificarile independente ale
+  covering-ului si ale contextului/cache-ului WF au fost pastrate.
+- Verificarea completa pe Linux a cerut fixarea CRLF in `.gitattributes`
+  pentru cele 271 de designuri semnate astfel de manifest; cele sase exceptii
+  LF raman. Blocurile si manifestul nu se schimba. `kill_pid_tree` refuza
+  radacinile protejate inainte de a selecta descendentii, pentru a nu opri
+  procesele auxiliare ale propriului apelant.
+
+### Gruparea variantelor LR mari — 2026-11-05
+
+- Pentru schemele cu cel putin 256 de variante si cel mult sase numere
+  nimerite in pool, `scheme_prize_groups` partitioneaza indicii variantelor
+  prin masti binare pe pozitii. Indicii se memoreaza pe instanta schemei;
+  fiecare apel construieste cel mult 64 de grupe. Schemele mai mici si
+  intersectiile mai mari pastreaza parcurgerea liniara.
+- Reprezentantii raman primele variante in ordinea oficiala, cu aceleasi
+  multiplicitati si aceleasi numere nimerite. Premiile, costul, maparea
+  terminalului, poolurile 16/15/19 si deciziile de productie sunt neschimbate;
+  nu este necesara invalidarea cache-urilor.
+- Importul canonizeaza numerele din fiecare varianta inainte de verificarea
+  duplicatelor: o copie cu numerele permutate nu mai poate umfla numarul
+  variantelor si premiile. Ordinea variantelor distincte se pastreaza.
+- Masuratori si validare: `scripts/analysis/lr_optimization_2026-11-05.md`.
+- Validare finala pe Python 3.14.8: 6787 teste trecute, 16 omise, zero esecuri,
+  toate cele 204 fisiere incluse in trei copii izolate. Paritate exhaustiva
+  pe 63633 de intersectii LR, 119 comparatii ale recoacerii; UI HTTP 200 si
+  flux real configurare → coada → worker → rezultat pe poolurile 16/15/19.
+
 ### Schemele LR pe pool 16 / 15 / 19 — 2026-11-04
 
 - La cererea utilizatorului, optimizarea si studiul separat urmaresc 6/49
@@ -2384,7 +2421,7 @@ limita de validitate din §5).
 
 - Pool-ul se alege pe joc: un camp pentru Loto 6/49 (6..49, implicit 16), unul
   pentru Loto 5/40 (6..40, implicit 19) si unul pentru Joker (6..45, implicit
-  12); `ui_runtime._pool_size_for` e sursa unica. La pornirea procesului,
+  15); `ui_runtime._pool_size_for` e sursa unica. La pornirea procesului,
   cele trei campuri revin la valorile implicite. Jocurile altor tari folosesc campul comun
   `pool_size_val` (6..16). Maximul vine din `Lottery.max_pool`, comun cu worker-ul.
 - Sub 1024 px, Quasar scoate sertarul din ecran; butonul plutitor „☰”
@@ -2408,74 +2445,19 @@ limita de validitate din §5).
   top-1 fata de 5%), din 2026-10-08. Pe rezerva `frequency` sau dupa o
   decizie mutata, ratingul lipseste, cu motivul. Rata si Wilson vin din
   `rationale` (fractii cu 3 zecimale), deci in procente au o zecimala.
-- Lista de variante simple din rezultate arata `simple_variants_val` variante
-  (campul „Variante simple afisate in rezultate”, 1..500, implicit 10); costul
-  „Top N bilete simple” urmeaza acelasi numar. „Arata toate” ramane.
-- Butonul „🎟️ Bilet complet" din sidebar face 1-10 bilete fizice per joc
-  (campul „Bilete", `full_ticket_count_val`, implicit 1) din pool-ul
-  rezultatului afisat: pe bilet 3 variante la 6/49, 4 la 5/40, 2 la Joker (cu
-  numarul Joker pe fiecare). Variantele vin din wheel-ul cu buget
-  (`core/full_ticket.py`, `generate_wheel` cu `max_variants`), iar acoperirea
-  afisata e a acestor variante, nu a wheel-ului complet. Cand garantia e
-  completa inainte de a umple biletele, locurile ramase acopera grupe mai mari
-  din acelasi pool (g+1, apoi pana la sistemul complet); rezumatul de sub
-  variante spune cu cate variante s-a completat garantia. Fiecare bloc si
-  fiecare bilet poarta tara si jocul (`core/lotteries.display_name`, ex.
-  „România · Loto 6/49"), si in textul copiat; la fel titlurile rezultatelor,
-  ale raportului, ale istoricului de hituri si ale mailului (`_game_title`). Nu trimite job si nu
-  schimba rezultatul afisat. Pool-ul biletului se potriveste automat pe
-  clasamentul metodei (`audit["timesfm_predictions"]`, deci cu restrangerea
-  bazei si penalizarea recenta deja aplicate): prea mic pentru variantele
-  distincte cerute (6/49 cu pool 6: 7 numere la un bilet, 9 la zece) -> se
-  adauga urmatoarele numere din clasament, cu aceeasi verificare de completare
-  ca `limit_consecutive_run` (pool-ul afisat ramane intreg; limita creste numai
-  daca altfel s-ar pierde un numar din el; pe o baza ingusta se ia tot ce are
-  clasamentul); mai mare decat locurile de pe bilete
-  (Joker: 10 numere pe bilet) -> raman cele mai bine clasate numere. Clasamentul este ORDINEA cheilor din audit, scrisa de
-  `rank_by_score` pe scorurile exacte; valorile sunt rotunjite la 6 zecimale si
-  nu se reordoneaza (doua scoruri apropiate devin egale, iar tie-break-ul ar
-  alege alt numar decat metoda). Fereastra spune ce s-a adaugat sau ce a ramas
-  afara, iar acoperirea numeste pe cate numere ale biletului e calculata.
-  Extinderea respecta limita de consecutive a rezultatului
-  (`audit.consecutive_limit.applied`) si spune ce numar a sarit; un rezultat
-  fara limita ramane pe regula veche. Cand garantia nu e completa in buget,
-  variantele trec prin recoacerea pe sansa exacta (§7), certificata fara
-  scadere la vreun prag afisat. Cand garantia e completa inainte de a umple
-  biletele (baza mai mica decat bugetul; pool 8..12 cu 2..10 bilete), toate
-  variantele trec prin a doua forma a recoacerii
-  (`improve_full_cover_variants`, 2026-10-12): P(garantie) e deja rata
-  pool-ului si nu se poate misca, deci se urmareste pragul urmator, cu
-  acoperirea 100% tinuta in cautare si certificata la iesire; garantia o
-  asigura apoi toate variantele impreuna (`guarantee_variants` = toate,
-  `refined`), iar rezumatul spune „garantia e completa cu toate cele N,
-  rearanjate pentru grupele de g+1”. Masurat pe pool canonic
-  (`scripts/analysis/full_cover_anneal_2026-10-12.md`): castig la g+1 in 39
-  din 67 de configuratii cu parghie, maxim +6,92% relativ (6/49 g4 pool 10,
-  10 bilete, 5+), 0 la 5/40 g4; 0,5-1,3 s pe geometrie; fara bump de cache.
-  Din 2026-10-16, al doilea candidat e designul cautat o data pe geometrie
-  (pozitii canonice, `full_ticket._canonical_full_cover`), pus pe clasament si
-  certificat fata de variantele pasului; ramane cel mai bun la g+1. Garantia
-  egala cu biletul ia biletele unei garantii mai mici (§7). Valorile rotunjite
-  egale din audit se departajeaza in ordinea cheilor (`_pool_scores`), ca
-  pozitiile din design sa urmeze clasamentul. Butonul calculeaza in afara
-  buclei NiceGUI (`run.io_bound`, notificare „⏳ Calculez biletele…”).
-  „📋 Copiaza numerele" copiaza in browser, chiar in click: Safari/iOS scriu in
-  clipboard numai in timpul gestului, nu dupa un drum pana la server.
-- „Bilet complet” ia variantele numai din pool. Bifa „🎯 Variante dispersate
-  pe bilet” a fost scoasa la 2026-10-10, la cererea utilizatorului: variantele
-  dispersate ieseau din pool (6/49, 2 bilete: 36 de numere, ultimele doua
-  variante din numere nealese de metoda), iar avantajul lor la 3+ (11,14% fata
-  de 10,05% la 6 variante, extrageri uniforme) nu se vede pe 778 de extrageri
-  WF (diferenta asteptata 8-9 extrageri, abaterea standard 11). Cheia
-  `full_ticket_spread_val` din `.ui_state.json` nu se mai citeste si dispare
-  la urmatoarea salvare. Dialogul afiseaza, pentru pragurile cu premiu, sansa
-  EXACTA ca cel putin o varianta sa castige (`ticket_hit_probabilities`).
+- Variantele simple separate au fost eliminate la 2026-11-05: nu mai exista
+  campul de numar afisat, lista Top-N, butoanele de extindere, „Bilet complet”,
+  dialogul lui sau reluarea lui in istoric. Modulele `full_ticket`,
+  `ticket_replay` si `covering.spread` au fost eliminate. Cheile lor vechi din
+  `.ui_state.json` sunt ignorate si dispar la urmatoarea salvare.
+  Rezultatele si raportul pastreaza poolul, schemele LR, costul si acoperirea
+  sistemului; numai schemele LR au desfasurarea vizibila pe numerele poolului.
 - Organizare pe file (tab-uri), 2026-10-31, la cererea utilizatorului: in
   „📊 Analiză & Clasament” fiecare joc are propria fila (`ui_hits._render_game_analysis`
   intr-un `ui.tab_panel`; un singur joc ramane fara bara de file), iar in „📜 Istoric hits"
   sumarul +4/+5 ramane sus, nepliat, iar tabelele detaliate sunt pe cate o fila:
   „🗓️ Pool", „🎟️ Variante 4+ și 5+" (expansion-ul cu premii, nemodificat),
-  „🎟️ Bilet complet" (cand e cerut) si „📋 Schemă LR" (numai Romania).
+  „📋 Schemă LR" (numai Romania).
 - „📜 Istoric hits”, tabelul „🗓️ POOL” (extragerile cu cel putin 3 in pool):
   langa data si hiturile fiecarei extrageri, „Extragerea” si „Pool-ul de
   atunci”, din `ticket_context` al pasului (§8): pool-ul jucat la acel pas,
@@ -2495,29 +2477,6 @@ limita de validitate din §5).
   aleasa pe aceste extrageri (`ui_results._method_from_bench`). La Joker,
   panoul arata si numarul din Urna 2 (nimerit la N din M extrageri, fata de
   5%), care aparea pana atunci numai in raport.
-- „📜 Istoric hits” are sub tabelul principal „Bilet complet” pe ACELEASI
-  extrageri WF (`ticket_replay.replay_full_tickets`,
-  `ui_hits._render_full_ticket_replay`): la fiecare pas, biletele pe care le-ar
-  fi dat butonul in ziua aceea, din `ticket_context` (§8), cu numarul de
-  bilete din sidebar si garantia rezultatului afisat; Joker numai Urna 1;
-  la 5/40 intersectia e cu toate cele sase numere extrase. Un pas cu mai
-  putine variante decat biletele cerute (pool din fallback-ul de frecventa,
-  fara clasament de extins) se numara indisponibil. Pool-ul si
-  referinta aleatoare a tabelului principal folosesc marimea jucata la pasi
-  (`_wf_pool_size`), nu pe cea ceruta. Coloana 🎲 = P exacta (enumerare, extragere
-  uniforma) ca cel putin o varianta sa atinga 3+/4+/5+, calculata pe
-  biletele celei mai recente extrageri; nu e rata observata si nu depinde
-  de etichetele numerelor. Calculul ruleaza in fundal (pana la 4 procese,
-  `with_chances=False`, jurnalul greedy pe WARNING), memorat pe lista WF
-  afisata; un temporizator de 1 s umple sau reface numai acel bloc (si cand
-  se schimba „Bilete”), fara refresh-ul panoului, si nu repune in coada
-  reluarea aflata in calcul (`_REPLAY_THREAD["current"]`). Pasii fara context sunt
-  numarati separat. Copiii ProcessPoolExecutor sunt `__mp_main__`:
-  `app_nicegui.py` porneste UI-ul numai din `__main__` (`reload=False`).
-  Profilul exact se refoloseste pe pozitii intre pasi (`_wheel_masks` pe
-  ordinea data, 2026-10-16): pe pool 16, ~0,11 s pe pas dupa primul (2-5 s),
-  la 1 sau 10 bilete; pe pool 8..14 cu garantia completa inainte de umplere,
-  ~1 s pe pas (cautarea pasului ramane, §7). Masurat pe CPU, un proces.
 - Schemele reduse LR (`covering/lr_schemes.py`, 2026-10-17): pentru pool-ul
   rezultatului, `_lr_schemes_for` alege codurile cu tot atatea numere (numai
   Romania). Panoul de cost (`_render_cost`) si raportul (`_lr_scheme_lines`) dau:
@@ -2544,7 +2503,7 @@ limita de validitate din §5).
   sau martorul offline) si unde nu se stie (cu marginea, care nu e mereu atinsa);
   apoi ce da aplicatia la acelasi cost (`app_same_size`, garantii 2..bilet: cel
   putin la fel la fiecare prag si mai des la unul, sau la fel cu mai putine
-  variante). Variantele simple se recomanda numai de la 1% castig relativ, iar
+  variante). Comparatia se afiseaza numai de la 1% castig relativ, iar
   garantia sigura pierduta se spune (`_lr_lost_guarantee`). Doua valori care ar
   iesi la fel primesc cifre in plus (`_lr_pct_pair`). Motorul adopta schema
   certificat la plafonul egal cu marimea ei (§7); cheia WF o semneaza (`lr`, §8).
@@ -2676,7 +2635,7 @@ sufixul `:wheel=<metoda>` (implicit `auto`) pentru orice metoda.
 Swap-uri de profil (2026-10-02, `covering/profile_swap.improve_hit_profile`):
 dupa orice metoda in afara de `greedy` explicit — cover clasic fara plafon (orice
 garantie), lotto design „t daca p", buget (inclusiv >64, unde hitcover ramane
-greedy) — si pe locurile ramase ale „Bilet complet" (baza `n_base` inghetata),
+greedy) —
 se incearca schimbarea unui bilet cu oricare alt bloc din pool. Se accepta numai
 daca profilul EXACT `wheel_hit_profile` nu scade la NICIUN prag si NICIO marime
 a intersectiei si creste strict la 3+/4+/5+ posibile. Dominanta pastreaza singura
@@ -2691,7 +2650,7 @@ identic cu cautarea dinainte (`test_profile_swap.py` pastreaza cautarea de
 referinta si o compara). Pool 16, plafon 10, Linux: garantia egala cu biletul
 1,4 s la pick 6 si 1,3 s la pick 5 (inainte 9,4 s si 5,5 s), garantia 4 ~0,5 s,
 generarea completa a wheel-ului. Castiguri masurate
-in `scripts/analysis/hit_opt_report_2026-10-02.md` (`bench_hit_profile.py`);
+in `scripts/analysis/hit_opt_report_2026-10-02.md` (raport arhivat);
 cele mai mari la lotto designs, mici la coverele clasice. Fara afirmatie
 predictiva: probabilitatea de hit a POOL-ului nu se schimba.
 
@@ -2702,13 +2661,10 @@ prag de hituri si NICIO marime a intersectiei pool-extragere; cere un castig
 strict la 3+/4+. `covering.probability.wheel_hit_profile` compara numaratori
 intregi. Limite: pool <=16, pick <=6, garantie < pick, 1..64 variante,
 acoperire initiala incompleta; in afara lor ramane greedy. La cererea
-utilizatorului din 2026-10-01, este alegerea AUTOMATA la buget pozitiv, inclusiv
-pentru baza din „Bilet complet”. Nu necesita o comanda PowerShell sau o setare
-noua. Fara plafon ramane La Jolla; conditia > garantie ramane lotto design.
-`covering.dispatch.resolve_wheel_method` este comun motorului, biletelor fizice
-si semnaturii WF. `LOTO_WHEEL_METHOD` ramane override optional; `greedy` reface
-constructia anterioara. Baza cu garantie completa si completarea pe grupe mai
-mari a biletelor fizice raman identice. Worker v8 invalideaza payload-urile vechi,
+utilizatorului din 2026-10-01, este alegerea AUTOMATA la buget pozitiv.
+Nu necesita o comanda PowerShell sau o setare noua. Fara plafon ramane La Jolla; conditia > garantie ramane lotto design.
+`covering.dispatch.resolve_wheel_method` este comun motorului si semnaturii WF. `LOTO_WHEEL_METHOD` ramane override optional; `greedy` reface
+constructia anterioara. Worker v8 invalideaza payload-urile vechi,
 inclusiv cheile fara config. Nu afirma avantaj predictiv sau optimalitate.
 Raport: `scripts/analysis/audit_application_report_2026-10-01.md`.
 
@@ -2716,8 +2672,7 @@ Bugetul automat in motor (2026-10-08). Pana atunci un buget egal cu designul
 complet dadea sub 100% sau bilete in plus (6/49 pool 16, garantie 3: buget 45
 -> 99,46%, buget 50 -> 47 de bilete), iar peste 64 de bilete hitcover cadea pe
 greedy si un bilet in plus putea scadea sansele (5/40 pool 16, garantie 4: 64
-bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, pe care il da numai motorul
-(„Bilet complet” ramane neschimbat), doua ramuri pe alegerea automata:
+bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, doua ramuri pe alegerea automata:
 - bugetul cel putin cat designul complet validat
   (`covering.designs.complete_design_size`) ia exact biletele fara plafon
   (`dispatch.budget_buys_complete_design`): garantie 100%, cel mult atatea
@@ -2765,7 +2720,7 @@ bilete 4+ 4,46%, 65 bilete 3,67%). Cu `max_num`, pe care il da numai motorul
 
 Recoacerea pe sansa exacta (2026-10-11, `covering/anneal_hits.py`): dupa
 hitcover si schimburile de profil, la 1..64 de bilete pe calea motorului
-(`max_num` dat) si pe „Bilet complet” cand garantia nu e completa in buget,
+(`max_num` dat),
 cu alegerea automata (`greedy` explicit ramane referinta). Muta cate un numar
 al unui bilet, accepta si pierderi mici cu temperatura in scadere, obiectiv
 P exacta (extragere uniforma de `draw_n` din `max_num`) cu garantia intai si
@@ -2779,18 +2734,8 @@ scade; altfel biletele raman. Spre deosebire de etapele anterioare, certifica
 pe probabilitatile geometriei jocului, nu pe numaratori la fiecare marime a
 intersectiei: o numaratoare la 1-2 hituri poate scadea. Masurare:
 `scripts/analysis/bench_anneal_hits.py`, raport `anneal_hits_2026-10-11.md`.
-A doua forma, `improve_full_cover_variants` (2026-10-12), numai pentru „Bilet
-complet” cu garantia completa inainte de umplere: aceeasi bucla (`_search`),
-cu pragul principal g+1, mutarile care scad acoperirea garantiei respinse pe
-loc si cel mai bun design CERTIFICAT tinut minte (nu cel cu obiectivul
-penalizat maxim); seed propriu (`anneal-hits-cover`), memorare separata
-(`_anneal_full_cover`). Calea motorului si cea a biletului cu garantia
-incompleta (`_anneal`) dau bit cu bit rezultatul de dinainte. Masurare:
-`scripts/analysis/bench_full_cover_anneal.py`, raport
-`full_cover_anneal_2026-10-12.md`.
-
 Etapele din 2026-10-16 (raport `scripts/analysis/audit_hits_2026-10-16.md`),
-toate cu `max_num` (motorul; „Bilet complet” numai unde e spus) si certificate
+toate cu `max_num` si certificate
 cu `anneal_hits._certify`:
 - fara plafon, dupa La Jolla si schimburile de profil, coverul complet rafinat
   pentru pragul g+1 (`covering/refined_covers.py`,
@@ -2803,11 +2748,11 @@ cu `anneal_hits._certify`:
 - garantia egala cu biletul, cu plafon (`covering/guarantee_portfolio.py`):
   candidatii garantiilor 3..g-1, construiti o data pe geometrie pe pozitii
   canonice; ramane cel mai bun certificat pe ordinea garantie, apoi pragurile
-  mai mici. Si pe „Bilet complet”;
+  mai mici;
 - la final, biletele motorului ies in ordinea sumei scorurilor
   (`generate_wheel` in jurul lui `_generate_wheel`): etapele care inlocuiesc
-  wheel-ul isi intorc candidatul in ordinea proprie, iar UI-ul arata primele N.
-  Fara `max_num` (biletul fizic) ordinea ramane, cu baza garantiei in fata.
+  wheel-ul isi intorc candidatul in ordinea proprie; sortarea finala pastreaza
+  contractul rezultatelor generate.
 Schemele reduse LR ca variante ale motorului (2026-10-20,
 `covering.lr_schemes.improve_with_lr_scheme`, ultima etapa hitcover cu `max_num`,
 pool de cel mult 19 numere din 2026-10-22, `lr_schemes.MAX_POOL`; la 5/40 pe 17
@@ -2818,11 +2763,11 @@ Joker si invers), schema se pune pe pozitiile clasamentului si intra numai
 certificata (`anneal_hits._certify`). Pe toate garantiile 3..bilet o adopta, pe
 pool-uri de cel mult 16, in 8 configuratii (tabelul din raport), iar din
 2026-10-22 si la 5/40 pe 17 numere: Cod 45 la plafonul 488; Cod 59 e egal cu wheel-ul motorului (amandoua
-optime la fiecare prag). „Bilet complet” (fara `max_num`) nu trece prin etapa.
+optime la fiecare prag).
 Garantia egala cu biletul (`covering/guarantee_portfolio.py`): candidatul unei
 garantii mai mici care e coverul ei complet, cu mai putine bilete decat
 plafonul, se completeaza pana la plafon cu biletele distincte ale wheel-ului
-livrat, in ordinea lor, apoi se certifica (`_padded`); si pe „Bilet complet”.
+livrat, in ordinea lor, apoi se certifica (`_padded`).
 Raport: `scripts/analysis/lr_optimality_2026-10-20.md`.
 
 Loto 5/40 pe 17-19 numere (2026-10-22): fara plafon, garantia 4 ia designurile
@@ -2838,19 +2783,6 @@ Granita bugetului complet, 6/49 pool 16 g4: plafonul 151 ia sectiunea H
 (100%, 4+ 7,960002%, 5+ 0,251434%). Garantia 100% are prioritate; 5+ scade cu
 5,5% relativ. La pool 15: 5+ 0,202477% la 116, 0,197543% la 117. Pe biletul de
 5 (5/40, Joker) fenomenul nu apare.
-
-Variante dispersate (2026-10-05, `covering/spread.py`, scoase din aplicatie la
-2026-10-10, §6; raman pentru studiul `ticket_geometry_2026-10-05.py`): cautare locala
-determinista pe probabilitatea EXACTA ca doua variante sa castige impreuna
-(`pair_joint_probability`; pondere 1 la tinta, 1e-3 la pragurile mai mari,
-1e-9 la cele mai mici). Prefera numerele mai bine clasate la egalitate si
-respecta `max_run` per varianta. Plafonul `B x P(o varianta >= t)` este atins
-exact cand doua variante au cel mult `2t - extrase - 1` numere comune (6/49 si
-5/40 4+: 1; Joker 3+: 0). `ticket_hit_probabilities` enumereaza toate
-extragerile (max_num <= 64). Pe extrageri uniforme, dispersia domina la
-fiecare prag cea mai buna configuratie de productie masurata (pool 6..16,
-garantie 2..4) la acelasi numar de variante. Aplicatia foloseste din modul
-numai `ticket_hit_probabilities` (sansele din „Bilet complet” si coloana 🎲).
 
 Experimentul reproductibil `scripts/analysis/bench_budget_cover.py` compara
 greedy, La Jolla, bilete aleatoare si maxcover: pool identic dupa frequency
@@ -2937,8 +2869,8 @@ castigul depinde de geometrie, scoruri si hardware.
 - Joker: `joker_hit` = numarul din urna 2 de pe bilete a iesit la acea extragere
   (`None` = alt joc sau cache vechi). Sumarul WF il afiseaza fata de aleator 5%.
 - `wheel_coverage=None` inseamna necunoscut, nu 100%.
-- `ticket_context` (aditiv, fara bump) = pool-ul pasului, auditul citit de
-  „Bilet complet” (`timesfm_predictions`, `consecutive_limit`,
+- `ticket_context` (nume serializat pastrat pentru compatibilitate) = pool-ul
+  pasului, auditul (`timesfm_predictions`, `consecutive_limit`,
   `restrict_base`), numarul Joker si extragerea tinta; acelasi obiect pe toate
   intrarile unei extrageri. None = intrare dintr-un cache scris inainte de
   camp; {} = context indisponibil la pas. Un cache, complet sau partial, cu

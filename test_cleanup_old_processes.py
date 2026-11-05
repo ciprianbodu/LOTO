@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from cleanup_old_processes import (
     ProcView,
     cmdline_script_names,
@@ -272,6 +274,8 @@ def test_kills_spawned_worker_without_touching_this_pytest(tmp_path):
 def test_kill_pid_tree_kills_the_whole_tree(tmp_path):
     """cancel_all() are un singur PID cunoscut (bench_all_methods.py); tree-kill-ul
     trebuie să ajungă și la copiii lui ProcessPoolExecutor, nu doar la părinte."""
+    import psutil
+
     child_script = tmp_path / "child.py"
     child_script.write_text("import time; time.sleep(60)\n", encoding="utf-8")
     parent_script = tmp_path / "parent.py"
@@ -288,13 +292,25 @@ def test_kill_pid_tree_kills_the_whole_tree(tmp_path):
         stderr=subprocess.DEVNULL,
         text=True,
     )
+    child = None
+
+    def child_is_live():
+        try:
+            return (
+                child is not None
+                and child.is_running()
+                and child.status() != psutil.STATUS_ZOMBIE
+            )
+        except psutil.NoSuchProcess:
+            return False
+
     try:
         child_pid_line = parent.stdout.readline().strip()
         assert child_pid_line, "copilul nu și-a raportat PID-ul"
         child_pid = int(child_pid_line)
-        import psutil
-
-        assert psutil.pid_exists(child_pid)
+        child = psutil.Process(child_pid)
+        assert child.ppid() == parent.pid
+        assert child_is_live()
 
         acted = kill_pid_tree(parent.pid)
 
@@ -302,17 +318,19 @@ def test_kill_pid_tree_kills_the_whole_tree(tmp_path):
         assert child_pid in acted
         parent.wait(timeout=5)
         deadline = time.time() + 5
-        while psutil.pid_exists(child_pid) and time.time() < deadline:
+        while child_is_live() and time.time() < deadline:
             time.sleep(0.05)
-        assert not psutil.pid_exists(child_pid), "copilul a rămas orfan în viață"
+        # Linux PID 1 can leave an adopted, terminated child as a zombie.
+        # A zombie is dead; a sleeping/running orphan must still fail here.
+        assert not child_is_live(), "copilul a rămas orfan în viață"
         assert Path(__file__).exists()  # pytest n-a fost omorât
     finally:
         if parent.poll() is None:
             parent.kill()
             parent.wait(timeout=5)
         try:
-            if psutil.pid_exists(child_pid):
-                psutil.Process(child_pid).kill()
+            if child_is_live():
+                child.kill()  # The captured Process also guards against PID reuse.
         except Exception:  # noqa: BLE001
             pass
 
@@ -339,13 +357,59 @@ def test_kill_pid_tree_dry_run_reports_without_killing(tmp_path):
         proc.wait(timeout=5)
 
 
-def test_kill_pid_tree_never_kills_the_caller_or_its_ancestors():
-    """Plasa de siguranta e NECONDITIONATA (nu doar responsabilitatea apelantului):
-    un PID stale reciclat de Windows catre chiar procesul apelant nu trebuie sa
-    poata omori pytest-ul insusi (cazul care a motivat fixul din cancel_all)."""
-    acted = kill_pid_tree(os.getpid())
+@pytest.mark.parametrize("root", [111, 100, 0, 4])
+@pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize("expected_create_time", [None, 1.0])
+def test_protected_root_cannot_target_its_children(
+    monkeypatch, root, dry_run, expected_create_time
+):
+    """Self/ancestor/system roots must not expand into otherwise unprotected children.
+
+    Every PID and kill is simulated: this regression must never target pytest
+    or an actual ancestor, even when run against the broken implementation.
+    """
+    import cleanup_old_processes as cleanup
+
+    graph = [
+        ProcView(0, create_time=1.0),
+        ProcView(4, parent_pid=0, create_time=1.0),
+        ProcView(100, parent_pid=4, create_time=1.0),
+        ProcView(111, parent_pid=100, create_time=1.0),
+        ProcView(112, parent_pid=100, create_time=1.0),
+        ProcView(222, parent_pid=111, create_time=1.0),
+        ProcView(333, parent_pid=222, create_time=1.0),
+    ]
+    killed = []
+    monkeypatch.setattr(cleanup, "_keep_pids", lambda: {0, 100, 111})
+    monkeypatch.setattr(cleanup, "_snapshot", lambda: graph)
+    monkeypatch.setattr(
+        cleanup, "_kill_pid", lambda pid, **kw: killed.append(pid) or True
+    )
+    acted = kill_pid_tree(
+        root, dry_run=dry_run, expected_create_time=expected_create_time
+    )
     assert acted == []
-    assert Path(__file__).exists()  # pytest tot in viata
+    assert killed == []
+
+
+def test_unprotected_child_tree_still_excludes_the_fake_ancestors(monkeypatch):
+    import cleanup_old_processes as cleanup
+
+    graph = [
+        ProcView(100),
+        ProcView(111, parent_pid=100),
+        ProcView(112, parent_pid=100),
+        ProcView(222, parent_pid=111),
+        ProcView(333, parent_pid=222),
+    ]
+    killed = []
+    monkeypatch.setattr(cleanup, "_keep_pids", lambda: {0, 100, 111})
+    monkeypatch.setattr(cleanup, "_snapshot", lambda: graph)
+    monkeypatch.setattr(
+        cleanup, "_kill_pid", lambda pid, **kw: killed.append(pid) or True
+    )
+    assert kill_pid_tree(222) == [333, 222]
+    assert killed == [333, 222]
 
 
 def test_kill_pid_tree_excludes_ancestors_even_via_a_child_target(tmp_path):

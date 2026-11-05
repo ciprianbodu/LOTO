@@ -187,12 +187,9 @@ def test_ui_maps_match_the_registry():
     assert set(ui_results.LR_SCHEMES) <= {g.game_id for g in RO_GAMES}
 
 
-def test_full_ticket_and_update_csv_tables_match_the_registry():
+def test_update_csv_tables_match_the_registry():
     import update_csv
-    from loto_enterprise.core.full_ticket import PICK, TICKET_VARIANTS
 
-    assert TICKET_VARIANTS == {g.game_id: g.per_ticket for g in RO_GAMES}
-    assert PICK == {g.game_id: g.pick_n for g in RO_GAMES}
     assert set(L.LOTTERIES) == {g.game_id for g in RO_GAMES}
     assert len(update_csv.GAME_CONFIGS) == len(RO_GAMES)
     by_csv = {cfg["csv_name"]: cfg for cfg in update_csv.GAME_CONFIGS.values()}

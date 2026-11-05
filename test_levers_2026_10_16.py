@@ -101,24 +101,6 @@ def test_more_tickets_no_longer_lower_the_chances_at_guarantee_six():
     assert all(pb[t] >= pa[t] for t in range(3, 7))
 
 
-def test_physical_ticket_at_guarantee_equal_to_pick_uses_the_lower_guarantee():
-    import covering.guarantee_portfolio as gp
-    from loto_enterprise.core.full_ticket import build_full_ticket
-
-    data = {"hard_core": POOL, "guarantee": 6, "audit": {"timesfm_predictions": SCORES}}
-    after = build_full_ticket("6/49", data, 10, with_chances=False)
-    real = gp.improve_with_lower_guarantees
-    gp.improve_with_lower_guarantees = lambda *a, **k: (a[1], {"applied": False})
-    try:
-        before = build_full_ticket("6/49", data, 10, with_chances=False)
-    finally:
-        gp.improve_with_lower_guarantees = real
-    p0 = _p([v[:6] for v in before["variants"]], 6, 49)
-    p1 = _p([v[:6] for v in after["variants"]], 6, 49)
-    assert len(after["variants"]) == len(before["variants"]) == 30
-    assert _dominates(p1, p0, 6) and p1[3] > p0[3] * 1.05  # 24,10% -> 27,00%
-
-
 def test_guarantee_portfolio_walk_forward_key():
     assert "|sa1|lg2:" in wf._wheel_sig(16, "6/49", 6, None, 30)
     assert "|sa1|lg2:" in wf._wheel_sig(16, "5/40", 6, None, 30)  # garanția tăiată la 5

@@ -1,10 +1,9 @@
-"""Automatic budget optimization reaches both pipeline and physical tickets."""
+"""Automatic budget optimization preserves the pipeline guarantees."""
 
 import pytest
 
 from covering.probability import wheel_hit_profile, wheel_hit_probabilities
 from loto_engine import LotoEngine
-from loto_enterprise.core.full_ticket import build_full_ticket
 from loto_enterprise.core import walk_forward_adapter as wf
 from wheeling_methods import generate_wheel
 
@@ -73,70 +72,3 @@ def test_uncapped_and_conditional_generation_keep_their_designs(monkeypatch):
     assert lotto_coverage_pct([t[:6] for t in lines], engine.hard_core, 3, 4) >= old_cov
     assert wf._wheel_sig(16, "6/49", 3, 4, 10).startswith("lotto|")
     assert "|lc1:" in wf._wheel_sig(16, "6/49", 3, 4, 10)
-
-
-@pytest.mark.parametrize("game,pick", [("6/49", 6), ("5/40", 5), ("joker", 5)])
-def test_physical_tickets_automatically_preserve_all_thresholds(game, pick, monkeypatch):
-    pool = list(range(1, 17))
-    scores = {n: float((n * 17) % 23) for n in pool}
-    data = {
-        "hard_core": pool, "guarantee": 4, "hard_core_joker": [7],
-        "audit": {"timesfm_predictions": scores},
-    }
-    max_num, draw_n = {"6/49": (49, 6), "5/40": (40, 6), "joker": (45, 5)}[game]
-    monkeypatch.setenv("LOTO_WHEEL_METHOD", "greedy")
-    base = build_full_ticket(game, data, 10)
-    monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
-    actual = build_full_ticket(game, data, 10)
-    base_v = [v[:pick] for v in base["variants"]]
-    actual_v = [v[:pick] for v in actual["variants"]]
-    assert len(actual_v) == len(base_v)
-    # Din 2026-10-11 biletele fizice trec și prin recoacerea pe șansa exactă,
-    # certificată pe geometria jocului: niciun prag afișat (3+ și mai sus) nu
-    # scade față de greedy, iar acoperirea garanției nu scade.
-    a = wheel_hit_probabilities(pool, base_v, draw_n, max_num)["ticket"]
-    b = wheel_hit_probabilities(pool, actual_v, draw_n, max_num)["ticket"]
-    for t in range(3, min(pick, draw_n) + 1):
-        assert b[t] >= a[t] - 1e-15
-    assert actual["error"] is None
-    assert actual["pool"] == base["pool"] == pool
-    assert actual["requested"] == base["requested"] == len(actual["variants"])
-    assert actual["coverage"] >= base["coverage"]
-    assert actual["guarantee_variants"] == base["guarantee_variants"]
-    assert len(set(map(tuple, actual["variants"]))) == len(actual["variants"])
-    if game == "6/49":
-        assert b[3] > a[3]
-        assert b[4] > a[4]
-    if game == "joker":
-        assert all(v[-1] == 7 for v in actual["variants"])
-
-
-def test_completed_physical_base_and_extra_groups_dominate_greedy(monkeypatch):
-    """Garanția completă înainte de umplere: construcția de referință (greedy)
-    și cea automată dau aceleași bilete până la rearanjarea din 2026-10-12;
-    aceea ține garanția la 100% și nu scade șansa la niciun prag."""
-    import covering.anneal_hits as ah
-
-    pool = list(range(1, 10))
-    data = {
-        "hard_core": pool, "guarantee": 3,
-        "audit": {"timesfm_predictions": {n: float(26 - n) for n in range(1, 26)}},
-    }
-    monkeypatch.setenv("LOTO_WHEEL_METHOD", "greedy")
-    base = build_full_ticket("6/49", data, 10)
-    monkeypatch.delenv("LOTO_WHEEL_METHOD", raising=False)
-    monkeypatch.setattr(ah, "improve_full_cover_variants", lambda *a, **k: (a[1], {"applied": False}))
-    unrefined = build_full_ticket("6/49", data, 10)
-    assert unrefined == base
-    assert base["coverage"] == 100.0 and not base["refined"]
-    assert base["guarantee_variants"] < len(base["variants"]) == 30
-    assert base["upper_coverage"][0] == 4
-    monkeypatch.undo()
-    actual = build_full_ticket("6/49", data, 10)
-    assert actual["coverage"] == 100.0 and actual["refined"]
-    assert actual["guarantee_variants"] == len(actual["variants"]) == 30
-    assert actual["upper_coverage"][0] == 4
-    a = wheel_hit_probabilities(pool, [v[:6] for v in base["variants"]], 6, 49)["ticket"]
-    b = wheel_hit_probabilities(pool, [v[:6] for v in actual["variants"]], 6, 49)["ticket"]
-    assert all(b[t] >= a[t] - 1e-15 for t in (3, 4, 5, 6))
-    assert abs(b[3] - a[3]) < 1e-15 and any(b[t] > a[t] for t in (4, 5))
