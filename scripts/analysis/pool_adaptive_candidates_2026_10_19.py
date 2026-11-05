@@ -61,7 +61,7 @@ mask marked true. Inputs are not changed. Complexity counts direct formula
 components (one BOCPD model; two for Markov+interaction or two score parents for
 calibration), excluding the common flat guard. None is a production promotion.
 
-Verify: python -m pytest -q TESTE/test_pool_adaptive_candidates_2026_10_19.py
+Verify: python -m pytest -q test_pool_adaptive_candidates_2026_10_19.py
 """
 
 from __future__ import annotations

@@ -49,7 +49,7 @@ Their covariance/variance sums are integers, so relabelling balls cannot perturb
 the projection coefficient via floating-point reduction order. No residual
 variance normalization amplifies small disagreements.
 
-Verify: python -m pytest -q TESTE/test_pool_combinations_2026_10_19.py
+Verify: python -m pytest -q test_pool_combinations_2026_10_19.py
 """
 
 from __future__ import annotations
