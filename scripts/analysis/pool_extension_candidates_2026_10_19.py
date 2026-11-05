@@ -59,7 +59,7 @@ not mutated. The runner alone applies top-K, consecutive constraints, selection
 and inference; no candidate is promoted by this module. Complexity counts one
 BOCPD model, two components for Markov+interaction, or two calibration parents.
 
-Verify: python -m pytest -q test_pool_extension_candidates_2026_10_19.py
+Verify: python -m pytest -q TESTE/test_pool_extension_candidates_2026_10_19.py
 """
 
 from __future__ import annotations

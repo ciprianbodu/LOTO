@@ -1,7 +1,7 @@
 """Read-only verification of completed, disjoint pytest JUnit batches.
 
 Does not run or collect tests. Requires the runner's completed summary.json
-and every batchN.xml. Checks every root test module is assigned exactly once,
+and every batchN.xml. Checks every test module is assigned exactly once,
 every collecting module appears in its JUnit file, identities never overlap,
 and JUnit counters agree with the actual testcase elements. Two existing
 utility files without pytest test functions are explicitly reported separately.
@@ -24,14 +24,17 @@ NON_COLLECTING = {
 
 def verify(directory, source):
     summary = json.loads((directory / "summary.json").read_text(encoding="utf-8"))
-    expected = set(summary["files"])
-    current = {p.name for p in source.glob("test_*.py")}
+    # Accept both the current TESTE package and archived pre-move checkouts.
+    test_root = source / "TESTE" if (source / "TESTE").is_dir() else source
+    expected = {Path(name).name for name in summary["files"]}
+    current = {p.name for p in test_root.glob("test_*.py")}
+    batches = [[Path(name).name for name in batch] for batch in summary["batches"]]
     assert len(summary["files"]) == len(expected), "Duplicate source module names"
     assert expected == current, {
         "missing_from_run": sorted(current - expected),
         "missing_from_source": sorted(expected - current),
     }
-    assignments = Counter(name for batch in summary["batches"] for name in batch)
+    assignments = Counter(name for batch in batches for name in batch)
     assert set(assignments) == expected and all(n == 1 for n in assignments.values())
     assert len(summary["exit_codes"]) == len(summary["batches"])
     assert all(code == 0 for code in summary["exit_codes"]), summary["exit_codes"]
@@ -40,7 +43,7 @@ def verify(directory, source):
     seen_non_collecting = set()
     totals = Counter()
     reports = []
-    for batch_number, names in enumerate(summary["batches"]):
+    for batch_number, names in enumerate(batches):
         root = ET.parse(directory / f"batch{batch_number}.xml").getroot()
         cases = list(root.iter("testcase"))
         counts = Counter(tests=len(cases), passed=0, failed=0, errors=0, skipped=0)
@@ -52,7 +55,7 @@ def verify(directory, source):
             identity = (classname, name)
             assert identity not in identities, (batch_number, "duplicate testcase", identity)
             identities.add(identity)
-            module = classname.split(".", 1)[0] + ".py"
+            module = classname.removeprefix("TESTE.").split(".", 1)[0] + ".py"
             assert module in names, (batch_number, "unassigned testcase", identity)
             modules.add(module)
             failed = case.find("failure") is not None
@@ -64,7 +67,7 @@ def verify(directory, source):
         unobserved = set(names) - modules
         assert unobserved <= NON_COLLECTING.keys(), (batch_number, "unobserved modules", sorted(unobserved))
         for filename in unobserved:
-            tree = ast.parse((source / filename).read_text(encoding='utf-8'))
+            tree = ast.parse((test_root / filename).read_text(encoding='utf-8'))
             assert not any(
                 isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith('test_')
                 or isinstance(node, ast.ClassDef) and node.name.startswith('Test')
