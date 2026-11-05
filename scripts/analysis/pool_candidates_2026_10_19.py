@@ -53,7 +53,7 @@ iterator of (name, family, scores[T,49]) for the experiment driver's bank API.
 These arrays are prequential: output at t depends on expert/frequency rows at t
 and only outcomes from strictly earlier groups. Inputs are never mutated.
 
-Verify: python -m pytest -q TESTE/test_pool_candidates_2026_10_19.py
+Verify: python -m pytest -q test_pool_candidates_2026_10_19.py
 """
 
 from __future__ import annotations

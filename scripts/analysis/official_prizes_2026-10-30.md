@@ -19,7 +19,7 @@ Arhiva oficiala lunara, accesata prin filtrul POST `select-year` / `select-month
 
 GET ignora filtrul lunar. Linkul din tabel deschide pagina oficiala; tooltipul
 arata data si luna care trebuie selectata pentru verificarea in arhiva.
-Fixturele reduse din `TESTE/testdata/official_prizes` pastreaza numai selectorii
+Fixturele reduse din `testdata/official_prizes` pastreaza numai selectorii
 si tabelele numerice, cu URL-ul si parametrii cererii in `sources.json`.
 
 Regulile provin din [FAQ oficial](https://www.loto.ro/?page_id=1070),

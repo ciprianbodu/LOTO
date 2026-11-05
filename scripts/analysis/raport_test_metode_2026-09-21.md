@@ -82,7 +82,7 @@ validare pe date viitoare neatinse. Nu justifică o selecție nouă pe clasament
 ## Reproducere și fișiere
 
 ```powershell
-python -m pytest TESTE/test_method_contracts.py TESTE/test_method_window_audit.py -q
+python -m pytest test_method_contracts.py test_method_window_audit.py -q
 python scripts/analysis/audit_method_windows.py --window-size 60 --windows 3
 ```
 

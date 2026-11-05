@@ -68,7 +68,7 @@ sunt acoperirea raportată și hiturile pe bilete din walk-forward.
 ## Reproducere
 
 ```
-python -m pytest -q TESTE/test_large_pool_refine.py TESTE/test_large_pool_wheels.py TESTE/test_large_pool_views_wf.py
+python -m pytest -q test_large_pool_refine.py test_large_pool_wheels.py test_large_pool_views_wf.py
 python -m pytest -q   # suita completă
 ```
 

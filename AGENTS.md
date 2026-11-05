@@ -92,22 +92,6 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
-### Testele grupate in TESTE — 2026-11-05
-
-- Cele 206 module de teste sunt in `TESTE/`, impreuna cu `conftest.py`,
-  `testdata/`, `test_demo.csv` si `test_wheel_golden.json`. Testele noi se adauga
-  aici; importurile intre teste folosesc pachetul `TESTE`.
-- `pyproject.toml` configureaza `testpaths = ["TESTE"]` si importurile din
-  radacina proiectului. Comanda completa ramane `python -m pytest -q`;
-  un test individual se indica prin `TESTE/test_nume.py`.
-- Se poate porni pytest si din `TESTE`: fixturele si verificarile de sursa
-  folosesc radacina ca director de lucru pe durata colectarii/rularii, apoi
-  directorul initial este restabilit. Datele istorice si scripturile de
-  cercetare raman in locatiile lor.
-- Verificatorul loturilor JUnit accepta atat pachetul `TESTE`, cat si copiile
-  arhivate cu teste in radacina. Comenzile de reproducere folosesc caile noi;
-  rapoartele JSON cu amprente istorice nu sunt rescrise.
-
 ### Obiectiv exact 5+/6+ pe scheme LR — 2026-11-05
 
 - Cercetare offline in `scripts/analysis/lr_tail_2026_11_05.py`: doua modele
@@ -2882,7 +2866,7 @@ poate depasi acest maxim, iar egalitatile pastreaza primul candidat. Sistemul
 complet cu buget materializeaza numai variantele cerute. Completarea numerelor
 lipsa actualizeaza incremental frecventele dupa fiecare schimbare de bilet.
 Ordinea biletelor si acoperirea raman identice cu baseline-ul `67effec`,
-verificate prin cele 54 de cazuri din `TESTE/test_wheel_golden.json` (scoruri absente,
+verificate prin cele 54 de cazuri din `test_wheel_golden.json` (scoruri absente,
 egale si variate, pool-uri mici/mari, buget liber/1/7). Nu necesita bump de
 cache: rezultatul serializat si semantica raman aceleasi.
 
@@ -3093,7 +3077,7 @@ submit -> worker -> rezultat. Nu considera simplul import suficient.
 
 ### Pentru wheeling
 
-- ruleaza `TESTE/test_wheeling.py` si `TESTE/test_covering_designs.py`;
+- ruleaza `test_wheeling.py` si `test_covering_designs.py`;
 - valideaza toate fisierele din `covering_designs/` la 100%;
 - verifica geometria cu si fara `max_variants`;
 - compara acoperirea inainte de numarul de bilete.
