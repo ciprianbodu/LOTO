@@ -18,5 +18,5 @@ Reproducere în copie izolată:
 
 ```powershell
 python scripts/analysis/hit_evidence_2026_11_04.py
-python -m pytest test_hit_evidence_2026_11_04.py -q
+python -m pytest TESTE/test_hit_evidence_2026_11_04.py -q
 ```

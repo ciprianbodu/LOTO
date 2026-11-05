@@ -4,3 +4,7 @@ target-version = "py314"
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["TESTE"]
+pythonpath = ["."]

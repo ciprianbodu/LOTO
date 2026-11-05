@@ -130,5 +130,5 @@ Nelivrat.
 
 ```
 python scripts/analysis/gen_budget_designs_pick5.py
-python -m pytest -q test_audit_2026_10_22.py test_budget_designs.py
+python -m pytest -q TESTE/test_audit_2026_10_22.py TESTE/test_budget_designs.py
 ```

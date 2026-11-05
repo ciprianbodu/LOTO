@@ -106,7 +106,7 @@ git show 5b5624050e8c66625b032b12c3fb4f6c646d9379:covering/large_pool.py |
     Set-Content -LiteralPath $old -Encoding utf8
 python scripts/analysis/bench_large_pool_certified.py --baseline-source $old `
     --output scripts/analysis/large_pool_certified_2026-11-04.json --repeats 3
-python -m pytest -q test_large_pool_refine_exact.py test_large_pool_refine.py
+python -m pytest -q TESTE/test_large_pool_refine_exact.py TESTE/test_large_pool_refine.py
 ```
 
 Experimentul nu încarcă istorice, nu schimbă decizia benchmarkului și nu

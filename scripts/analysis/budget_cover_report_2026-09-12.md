@@ -80,7 +80,7 @@ Domeniu: pool ≤16, bilet ≤6, buget 1..64, țintă mai mică decât biletul. 
 
 ```bash
 python scripts/analysis/bench_budget_cover.py --output rezultat_cover.json
-python -m pytest -q test_budget_cover.py
+python -m pytest -q TESTE/test_budget_cover.py
 ```
 
 Activare experimentală pe Windows, după actualizare, în aceeași fereastră Command Prompt:
