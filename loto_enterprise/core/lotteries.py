@@ -445,8 +445,7 @@ GAMES: tuple[Lottery, ...] = (
 GAMES_BY_ID: dict[str, Lottery] = {lot.game_id: lot for lot in GAMES}
 
 # Compatibilitate: jocurile românești sub eticheta lor internă („6/49”,
-# „5/40”, „joker”), aceeași cu `ui_runtime._game_label_for` și cu cheile
-# biletului fizic (`full_ticket.TICKET_VARIANTS`).
+# „5/40”, „joker”), aceeași cu `ui_runtime._game_label_for`.
 LOTTERIES: dict[str, Lottery] = {lot.game_id: lot for lot in GAMES if lot.is_romanian}
 
 

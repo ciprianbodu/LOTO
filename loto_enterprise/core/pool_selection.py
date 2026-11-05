@@ -104,10 +104,9 @@ def select_pool_from_scores(
         # mobilă rămâne egalitate, dar scorurile mici distincte (factorul 0 al
         # penalizării recente) nu se mai contopesc într-un fals „nivel unic".
         n_unique = len({float(f"{s:.12g}") for s in valid.values()})
-        # Ordinea cheilor e clasamentul exact; `full_ticket` o citeste ca atare,
-        # fiindca rotunjirea poate egala doua scoruri apropiate. Cu limita de
-        # consecutive, un membru al pool-ului poate sta sub rangul 25: lista
-        # merge atunci pana la el, ca `full_ticket` sa-l gaseasca.
+        # Ordinea cheilor păstrează clasamentul exact în audit: rotunjirea
+        # poate egala două scoruri apropiate. Cu limita de consecutive,
+        # lista include și membrii pool-ului aflați sub rangul 25.
         rank = {n: i + 1 for i, n in enumerate(ranked_all)}
         depth = max(25, max((rank[n] for n in pool), default=0))
         audit["timesfm_predictions"] = {

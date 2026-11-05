@@ -204,10 +204,9 @@ def generate_wheel(
     """`_generate_wheel`; pe calea motorului (`max_num` și scoruri date) biletele
     ies în ordinea sumei scorurilor, ca după La Jolla: etapele care înlocuiesc
     wheel-ul (designul cu buget, recoacerea, coverul rafinat, swap-urile) își
-    întorc candidatul în ordinea proprie, iar UI-ul afișează primele N variante
-    și costul „Top N bilete simple”. Mulțimea biletelor, acoperirea și hiturile
-    nu se schimbă. Biletele fizice (fără `max_num`) își păstrează ordinea: baza
-    garanției stă în primele variante."""
+    întorc candidatul în ordinea proprie. Mulțimea biletelor, acoperirea și
+    hiturile nu se schimbă. Fără `max_num` se păstrează ordinea constructorului:
+    baza garanției stă în primele variante."""
     wheel, cov = _generate_wheel(
         method, pool, pick, guarantee, max_variants, scores, condition, draw_n, max_num
     )

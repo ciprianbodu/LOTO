@@ -2,7 +2,7 @@
 
 La cererea utilizatorului (2026-10-31): în „Istoric hits” nu mai sunt amestecate
 toate tabelele într-o singură coloană — sumarul +4/+5 rămâne sus, iar tabelele
-detaliate (Pool, Variante 4+ și 5+, Bilet complet, Schemă LR) sunt pe câte o filă.
+detaliate (Pool, Variante 4+ și 5+, Schemă LR) sunt pe câte o filă.
 La nivelul „📊 Analiză & Clasament”, fiecare joc are propria filă, nu toate
 clasamentele și istoricele stivuite.
 """
@@ -86,25 +86,10 @@ def test_hits_history_tables_are_on_tabs_and_summary_stays_first():
         n["kind"] == "expansion" and "Variante WF" in n["args"][0]
         for n in _descendants(var_panel)
     )
-    # Fără full_ticket nu apare fila „bilet”.
+    # Rămân pool-ul, variantele WF și schemele LR, fără „Bilet complet”.
     assert not [n for n in nodes if n["kind"] == "tab_panel" and n["args"][0] == "bilet"]
-
-
-def test_full_ticket_adds_its_own_tab(monkeypatch):
-    monkeypatch.setattr(ui_hits, "_render_full_ticket_replay", lambda *a, **k: None)
-    with capture_ui() as ui:
-        ui_hits._render_hits_4plus(
-            _entries(),
-            "6/49",
-            {"pool_size": 16},
-            pool_n=16,
-            full_ticket={"game": "6/49", "guarantee": 4},
-        )
-    tab_names = [
-        t["args"][0] for n in ui.walk() if n["kind"] == "tabs" for t in n["children"] if t["kind"] == "tab"
-    ]
-    assert tab_names == ["pool", "var", "bilet", "lr"]
-    assert _panel(ui, "bilet") is not None
+    assert "Bilet complet" not in ui.text()
+    assert _panel(ui, "lr") is not None
 
 
 def _menu_bundle(*games):

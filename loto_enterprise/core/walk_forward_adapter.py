@@ -161,7 +161,7 @@ class WalkForwardResult:
     wheel_coverage: float | None = None
     # Joker: numarul din urna 2 a iesit la aceasta extragere (None = alt joc/necunoscut).
     joker_hit: bool | None = None
-    # Contextul „Bilet complet” al pasului (backtesting._ticket_context), acelasi
+    # Contextul pool-ului istoric (backtesting._ticket_context), acelasi
     # obiect pe toate intrarile extragerii. None = intrare scrisa inainte de camp.
     ticket_context: dict | None = None
     # None = legacy complete flat; integer = number of wheel variants evaluated.
@@ -835,7 +835,7 @@ def expand_predictions_to_flat(
 
 
 def steps_without_ticket_context(flat) -> set[int]:
-    """Extragerile ale caror intrari nu au contextul „Bilet complet” (cache vechi)."""
+    """Extragerile ale caror intrari nu au contextul pool-ului istoric (cache vechi)."""
     return {
         int(getattr(r, "draw_index", -1))
         for r in flat or ()
@@ -1214,7 +1214,7 @@ def run_honest_walk_forward(
             # acoperirile parțiale sunt cozi RECENTE ale aceleiași ferestre, dar pot
             # avea găuri diferite (pași crăpați/timeout), deci „cel mai lung îl
             # conține pe cel mai scurt" NU e garantat.
-            # Pașii fără contextul „Bilet complet” (cache scris înaintea câmpului)
+            # Pașii fără contextul pool-ului istoric (cache scris înaintea câmpului)
             # se refac pe aceeași cale; până atunci intrările lor vechi rămân.
             if cached.get("partial", False) and not cache_only:
                 logger.info(
@@ -1225,7 +1225,7 @@ def run_honest_walk_forward(
             if missing_ctx and not cache_only:
                 logger.info(
                     "[WALK-FWD] %s pool=%s: %d extrageri din cache fără contextul "
-                    "„Bilet complet” → le refac; intrările vechi rămân până atunci.",
+                    "pool-ului istoric → le refac; intrările vechi rămân până atunci.",
                     game_type,
                     pool_size,
                     len(missing_ctx),

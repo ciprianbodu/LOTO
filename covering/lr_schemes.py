@@ -43,6 +43,10 @@ _FILE = re.compile(r"^LR_(649|540|joker)_cod(\d+)\.txt$")
 # (`covering.probability`) merge până la 20 de numere; numai 5/40 are scheme peste
 # 16, iar 6/49 și Joker se joacă cu cel mult 16 numere (2026-10-22).
 MAX_POOL = 19
+# Splitting at most 64 groups beats a scan for the larger official schemes.
+# Small schemes and non-draw-sized intersections retain the linear path.
+_BITSET_MIN_VARIANTS = 256
+_BITSET_MAX_HITS = 6
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,20 @@ class LRScheme:
         """
         masks = tuple(sum(1 << (p - 1) for p in v) for v in self.variants)
         return masks, max((m.bit_count() for m in masks), default=0)
+
+    @cached_property
+    def _position_memberships(self) -> tuple[int, ...]:
+        """For each pool position, the bitset of official rows containing it.
+
+        Immutable and local to this instance, just like ``_position_data``.
+        The hit mask only contains positions inside the pool, so other bits
+        from a manually constructed nonstandard scheme remain irrelevant.
+        """
+        masks = self._position_data[0]
+        return tuple(
+            sum(1 << index for index, mask in enumerate(masks) if mask & (1 << p))
+            for p in range(self.n)
+        )
 
     @property
     def label(self) -> str:
@@ -88,7 +106,9 @@ def _parse(path: Path, game: str, code: int) -> LRScheme:
             if m:
                 header[m.group(1)] = int(m.group(2))
             continue
-        rows.append(tuple(int(x) for x in line.split()))
+        # A ticket is a set of positions: reordered copies are duplicates too.
+        # Canonicalize within each row, preserving the official row order.
+        rows.append(tuple(sorted(int(x) for x in line.split())))
     n = header.get("numere")
     if n is None or header.get("variante") != len(rows):
         raise ValueError("antet fără numere sau cu alt număr de variante")
@@ -105,7 +125,7 @@ def _parse(path: Path, game: str, code: int) -> LRScheme:
         raise ValueError("variante repetate")
     if {p for r in rows for p in r} != set(range(1, n + 1)):
         raise ValueError("poziție nejucată")
-    return LRScheme(game, code, n, tuple(tuple(sorted(r)) for r in rows))
+    return LRScheme(game, code, n, tuple(rows))
 
 
 @lru_cache(maxsize=4)
@@ -275,15 +295,46 @@ def scheme_prize_groups(scheme: LRScheme, pool, drawn, *, joker=None) -> dict:
     case if those partial counters must retain their original row-order value.
     """
     nums, hit_mask = _pool_hit_mask(scheme, pool, drawn)
-    grouped = {}
-    for index, mask in enumerate(_position_masks(scheme)):
-        signature = mask & hit_mask
-        if signature in grouped:
-            grouped[signature][1] += 1
-        else:
-            grouped[signature] = [index, 1]
+    if (
+        scheme.size >= _BITSET_MIN_VARIANTS
+        and hit_mask.bit_count() <= _BITSET_MAX_HITS
+    ):
+        # Partition row indices by membership of each hit position. Rows in
+        # one partition have the same complete intersection with the draw.
+        # At most six positions produce at most 64 nonempty partitions.
+        memberships = scheme._position_memberships
+        partitions = [(1 << scheme.size) - 1]
+        remaining = hit_mask
+        while remaining:
+            bit = remaining & -remaining
+            included = memberships[bit.bit_length() - 1]
+            following = []
+            for partition in partitions:
+                matched = partition & included
+                missed = partition ^ matched
+                if matched:
+                    following.append(matched)
+                if missed:
+                    following.append(missed)
+            partitions = following
+            remaining ^= bit
+        # A group's least row index is its original representative; sorting
+        # these indices restores first-occurrence order from the linear scan.
+        grouped = sorted(
+            ((part & -part).bit_length() - 1, part.bit_count())
+            for part in partitions
+        )
+    else:
+        by_signature = {}
+        for index, mask in enumerate(_position_masks(scheme)):
+            signature = mask & hit_mask
+            if signature in by_signature:
+                by_signature[signature][1] += 1
+            else:
+                by_signature[signature] = [index, 1]
+        grouped = by_signature.values()
     groups = []
-    for index, count in grouped.values():
+    for index, count in grouped:
         variant = [nums[p - 1] for p in scheme.variants[index]]
         if scheme.game == "joker":
             variant.append(joker)

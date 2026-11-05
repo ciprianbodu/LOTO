@@ -27,7 +27,6 @@ from loto_engine import LotoEngine
 from loto_enterprise.core import backtesting as bt
 from loto_enterprise.core import lotteries as L
 from loto_enterprise.core import walk_forward_adapter as wf
-from loto_enterprise.core.full_ticket import build_full_ticket
 from ui_shared import decode_queue_result
 
 CODES = {17: 46, 18: 47, 19: 48}
@@ -217,20 +216,6 @@ def test_base_interval_memo_holds_every_game_and_pool():
 
 
 # --------------------------------------------------------------------------- #
-# Bilet complet
-# --------------------------------------------------------------------------- #
-def test_full_ticket_on_19_numbers_uses_the_16_best_ranked():
-    pool = list(range(3, 22))
-    ranking = {n: float(100 - i) for i, n in enumerate(sorted(pool, key=lambda n: -n))}
-    data = {"hard_core": pool, "guarantee": 4, "audit": {"timesfm_predictions": ranking}}
-    t = build_full_ticket("5/40", data, 2)
-    assert not t.get("error")
-    assert t["pool"] == list(range(6, 22))  # cele mai bine clasate 16 (scor = numărul)
-    assert "cele mai bine clasate 16 din 19" in t["note"] and "3, 4, 5" in t["note"]
-    assert len(t["variants"]) == 8
-
-
-# --------------------------------------------------------------------------- #
 # Cap-coadă: sidebar → coadă → worker → rezultat → panou, WF, Istoric hits
 # --------------------------------------------------------------------------- #
 def _linear(monkeypatch):
@@ -361,28 +346,3 @@ def test_foreign_interval_table_uses_the_shared_pool_field(monkeypatch):
         app._render_base_interval_tables.func()
     titles = [str(n["args"][0]) for n in ui.walk() if n["kind"] == "expansion"]
     assert titles and all("pool 9," in t for t in titles), titles
-
-
-def test_replay_cache_keeps_displayed_lists_over_the_row_cap(monkeypatch):
-    import ui_hits
-
-    shown = [object()] * 900_000
-    shown_too = [object()] * 900_000
-    old = [object()] * 900_000
-    older = [object()] * 900_000
-    monkeypatch.setitem(ui_hits.STATE, "retro", {"a": shown, "b": shown_too})
-    monkeypatch.setattr(ui_hits, "_REPLAY_DONE", {})
-    monkeypatch.setattr(ui_hits, "_REPLAY_PENDING", {})
-    monkeypatch.setattr(
-        "loto_enterprise.core.ticket_replay.replay_full_tickets", lambda *a, **k: {"best": {}}
-    )
-    keys = []
-    for flat in (older, shown, old, shown_too):
-        key = (id(flat), len(flat), "5/40", 1, 4)
-        keys.append(key)
-        ui_hits._REPLAY_PENDING[key] = (flat, "5/40", 1, 4)
-        ui_hits._replay_loop()
-    # Cele afișate rămân (2 × 900 de mii, peste plafon, dar în memorie oricum).
-    # Dintre cele neafișate (1,8 milioane, peste 1,5), iese cea mai veche.
-    assert keys[1] in ui_hits._REPLAY_DONE and keys[3] in ui_hits._REPLAY_DONE
-    assert keys[0] not in ui_hits._REPLAY_DONE and keys[2] in ui_hits._REPLAY_DONE

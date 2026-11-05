@@ -9,7 +9,6 @@ import ui_results
 from loto_enterprise.core import method_selector as selector
 from loto_enterprise.core import walk_forward_adapter as wf
 from loto_enterprise.core.backtesting import LotoBacktester
-from loto_enterprise.core.full_ticket import _ticket_pool
 from scripts.analysis.audit_output import capture_ui
 
 
@@ -173,14 +172,3 @@ def test_large_route_is_explicitly_constructive_without_lr_or_minimum_claim():
     assert "fără cod LR" in note
     assert "nu este demonstrat minim" in note
     assert ui_results._large_pool_route_note("6/49", {"hard_core": list(range(1, 17))}) is None
-
-
-@pytest.mark.parametrize("scores", [None, {n: 1 / n for n in range(1, 26)}])
-def test_full_ticket_remains_bounded_even_with_missing_ranking_tail(scores):
-    kept, note = _ticket_pool(list(range(1, 50)), scores, 30, 6, 0, 10)
-    assert len(kept) == 16
-    assert "cel mult 16" in note
-    if scores:
-        assert kept == list(range(1, 17))
-    else:
-        assert "determinist" in note

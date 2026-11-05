@@ -19,7 +19,6 @@ import pytest
 
 import app_nicegui as app
 from loto_enterprise.core import lotteries as L
-from loto_enterprise.core.full_ticket import build_full_ticket
 from test_country_worker import queue  # noqa: F401  (fixture)
 
 ROOT = Path(__file__).resolve().parent
@@ -193,22 +192,6 @@ def test_bench_texts_name_the_country(ui_state, tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Bilet complet
-# --------------------------------------------------------------------------- #
-
-
-def test_full_ticket_uses_the_registry_layout():
-    data = {"hard_core": list(range(1, 11)), "guarantee": 3, "audit": {}}
-    t = build_full_ticket("de_lotto", data, 1)
-    assert t["error"] is None and t["per_ticket"] == 12 and len(t["variants"]) == 12
-    assert all(len(v) == 6 for v in t["variants"])
-    em = build_full_ticket("eu_euromillions", data, 1)
-    assert em["error"] == "bilet nemodelat: EuroMillions · EuroMillions"
-    # România: comportamentul de dinainte.
-    assert build_full_ticket("6/49", data, 1)["per_ticket"] == 3
-
-
-# --------------------------------------------------------------------------- #
 # E2E: UI → coadă → worker → decodare → etichete UI (joc 6/45)
 # --------------------------------------------------------------------------- #
 
@@ -241,8 +224,6 @@ def test_foreign_6_45_task_end_to_end(ui_state, queue):  # noqa: F811
     assert (opts["country"], opts["game_key"]) == ("AT", "at_lotto")
     assert not app._echo_mismatch("at_lotto", data)
     assert app._echo_mismatch("at_lotto", {k: v for k, v in data.items() if k != "game_id"})
-    t = build_full_ticket("at_lotto", data, 1)
-    assert t["error"] is None and t["per_ticket"] == 12
 
 
 def test_mail_names_method_and_rating_for_the_pool(monkeypatch):

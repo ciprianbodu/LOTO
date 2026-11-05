@@ -1,11 +1,7 @@
-"""Reluarea „Bilet complet” pe pașii WF: profilul exact se refolosește între pași.
+"""Profilurile exacte ale wheel-urilor se refolosesc după reetichetarea poolului.
 
-Profilul unui wheel (`wheel_hit_profile`) nu depinde de etichete. La pool 16,
-pașii WF dau aceleași geometrii în pozițiile clasamentului (candidații
-poziționali ai hitcover, biletele recoacerii), dar cu alte numere. Măștile pe
-etichete sortate le făceau diferite la fiecare pas, iar `_hit_counts`
-(~0,3 s în Python la 16 numere) se recalcula de 6-8 ori pe pas; reluarea din
-„📜 Istoric hits” ajungea la 16-20 de minute pe configurația pool 16.
+Ordinea pozițională păstrează aceeași cheie pentru geometrii identice, inclusiv
+între pașii walk-forward care aleg alte numere.
 """
 
 from covering.probability import _hit_counts, wheel_hit_probabilities, wheel_hit_profile

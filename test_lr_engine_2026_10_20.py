@@ -93,8 +93,8 @@ def test_the_stage_needs_the_same_number_of_variants():
     assert not audit["applied"] and audit["reason"] == "no scheme of this size"
 
 
-def test_physical_tickets_do_not_take_the_stage():
-    """„Bilet complet” (fără `max_num`) rămâne pe construcția de dinainte."""
+def test_wheel_without_universe_does_not_take_the_lr_stage():
+    """Fără univers, wheel-ul păstrează construcția necertificată pe joc."""
     s = _scheme("joker", 15)
     pool = list(range(1, 12))
     scores = {p: float(12 - p) for p in pool}
@@ -191,7 +191,7 @@ def test_panel_points_to_the_app_where_it_beats_the_joker_code():
     better = next(line for line in lines if line.startswith("La același cost"))
     assert "aplicația prinde mai des decât Cod 34: cu plafonul 9 și garanția 5" in better
     assert "3+ 4.094% față de 3.940%" in better
-    assert "Variantele aplicației se joacă la agenție ca variante simple." in better
+    assert "variante simple" not in better
     # Ce pierde jucătorul: 4 sigur pe o variantă când ies 5 dintre cele 9.
     assert (
         "Codul dă însă sigur 4 pe o variantă când ies 5 dintre cele 9 numere jucate; "
@@ -245,8 +245,7 @@ def test_a_gain_under_one_percent_is_not_advice():
     lines = _panel_lines("5/40", 12)
     assert (
         "Cu plafonul 113 și garanția 4, aplicația prinde abia mai des decât Cod 26: "
-        "5 0.102% față de 0.101%. Sub 1% în plus nu merită 113 variante simple în "
-        "locul codului."
+        "5 0.102% față de 0.101%. Diferența este sub 1%."
     ) in lines
     assert not any(line.startswith("La același cost") for line in lines)
 

@@ -4428,35 +4428,6 @@ def main_page() -> None:
             "🚀 Generează (metoda din decizia bench)",
             on_click=lambda: submit_generation(pure=False),
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
-        _sv = _bind_save(
-            ui.number(
-                "Variante simple afișate în rezultate", min=1, max=500, step=1,
-                precision=0, format="%.0f",
-            ).classes("w-full"),
-            "simple_variants_val",
-        )
-        _sv.on_value_change(lambda: results_panel.refresh())
-        with ui.row().classes("w-full items-center no-wrap gap-2"):
-            _bind_save(
-                ui.number(
-                    "Bilete", min=1, max=10, step=1, precision=0, format="%.0f"
-                ).classes("w-20"),
-                "full_ticket_count_val",
-            ).tooltip("Câte bilete fizice complete pe joc (1-10)")
-            if _cc == _LOT.RO:
-                _ft_label = "🎟️ Bilet complet (pe bilet: 6/49 3 · 5/40 4 · Joker 2 variante)"
-            else:
-                _ft_label = "🎟️ Bilet complet (pe bilet: " + " · ".join(
-                    f"{g.name} {g.per_ticket} variante"
-                    if g.per_ticket
-                    else f"{g.name} bilet nemodelat"
-                    for g in _LOT.games_for_country(_cc)
-                ) + ")"
-            ui.button(
-                _ft_label,
-                on_click=lambda: _show_full_ticket(),
-            ).props("color=positive no-caps").classes("grow").style(_BTN_STYLE)
-
         ui.separator()
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
             "color=orange no-caps"
@@ -4852,8 +4823,8 @@ _sync_ui_namespace()
 app.on_startup(_startup)
 
 # Copiii ProcessPoolExecutor (spawn, Windows) sunt `__mp_main__`. Nu porni
-# UI-ul acolo: reluarea „Bilet complet” din Istoric hits pornește procese din
-# acest interpretor. `reload=False` — nu e reloaderul NiceGUI.
+# UI-ul acolo: validarea walk-forward poate porni procese din acest
+# interpretor. `reload=False` — nu e reloaderul NiceGUI.
 if __name__ == "__main__":
     _port = int(os.environ.get("LOTO_UI_PORT", "8000"))
     # show=False: browserul e deschis de START_8000.bat (mai fiabil pe Windows).

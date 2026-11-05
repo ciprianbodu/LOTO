@@ -5,10 +5,9 @@ from itertools import combinations
 import pytest
 
 import covering.dispatch as dispatch
-from covering.common import _coverage_pct, _sorted_pool, lotto_coverage_pct
+from covering.common import _coverage_pct, lotto_coverage_pct
 from covering.probability import wheel_hit_probabilities, wheel_hit_profile
 from covering.profile_swap import improve_hit_profile
-from loto_enterprise.core.full_ticket import _fill_variants
 
 
 def _dominates(new, old):
@@ -95,82 +94,6 @@ def test_out_of_bounds_returns_input():
     wheel = [[1, 2, 3, 4, 5, 6]]
     out, audit = improve_hit_profile(pool, wheel, 6)
     assert out == wheel and not audit["applied"]
-
-
-def test_full_ticket_fill_keeps_base_and_dominates(monkeypatch):
-    import covering.profile_swap as ps
-
-    pool = _sorted_pool(list(range(1, 10)), None)
-    real = ps.improve_hit_profile
-    monkeypatch.setattr(ps, "improve_hit_profile", _identity)
-    before, n0 = _fill_variants(pool, 6, 3, 30, None)
-    monkeypatch.setattr(ps, "improve_hit_profile", real)
-    after, n1 = _fill_variants(pool, 6, 3, 30, None)
-    assert n0 == n1 and after[:n1] == before[:n0]
-    assert len({tuple(t) for t in after}) == len(before)
-    assert _dominates(wheel_hit_profile(pool, after), wheel_hit_profile(pool, before))
-
-
-@pytest.mark.parametrize(
-    "pool_size,guarantee,tickets", [(8, 3, 3), (9, 3, 10), (9, 4, 10)]
-)
-def test_540_full_ticket_refines_six_draws_preserving_base(
-    pool_size, guarantee, tickets
-):
-    from loto_enterprise.core.full_ticket import build_full_ticket
-
-    import covering.anneal_hits as ah
-
-    pool = list(range(1, pool_size + 1))
-    # Default draw_n preserves the prior released construction (pick=5).
-    before, n_base = _fill_variants(pool, 5, guarantee, 4 * tickets, None)
-    data = {"hard_core": pool, "guarantee": guarantee}
-    # Până la rearanjarea pe toate variantele (2026-10-12): baza rămâne prefix.
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(ah, "improve_full_cover_variants", lambda *a, **k: (a[1], {"applied": False}))
-        frozen = build_full_ticket("5/40", data, tickets)
-    after = frozen["variants"]
-    old_profile = wheel_hit_profile(pool, before)
-    new_profile = wheel_hit_profile(pool, after)
-    assert frozen["guarantee_variants"] == n_base < len(after)
-    assert after[:n_base] == before[:n_base]
-    assert len(after) == len(before) == len({tuple(v) for v in after})
-    assert _dominates(new_profile, old_profile)
-    # Five hits with five drawn numbers is invariant at the same distinct
-    # ticket count; only the sixth drawn number unlocks this strict gain.
-    assert new_profile[5][5] == old_profile[5][5]
-    assert new_profile[6][5] > old_profile[6][5]
-    assert wheel_hit_probabilities(pool, after, 6, 40)["ticket"][5] > (
-        wheel_hit_probabilities(pool, before, 6, 40)["ticket"][5]
-    )
-    # Apoi toate variantele pot fi rearanjate: garanția rămâne 100% (o asigură
-    # toate împreună), iar șansa nu scade la niciun prag față de biletul de mai sus.
-    result = build_full_ticket("5/40", data, tickets)
-    final = result["variants"]
-    assert len(final) == len(after) == len({tuple(v) for v in final})
-    assert result["coverage"] == 100.0
-    p_frozen = wheel_hit_probabilities(pool, after, 6, 40)["ticket"]
-    p_final = wheel_hit_probabilities(pool, final, 6, 40)["ticket"]
-    assert all(p_final[t] >= p_frozen[t] - 1e-15 for t in (3, 4, 5))
-    if result["refined"]:
-        assert result["guarantee_variants"] == len(final)
-        assert any(p_final[t] > p_frozen[t] for t in (3, 4, 5))
-    else:
-        assert final == after and result["guarantee_variants"] == n_base
-
-
-def test_540_full_ticket_keeps_base_without_filler_slots():
-    from loto_enterprise.core.full_ticket import build_full_ticket
-
-    pool = list(range(1, 11))
-    before, n_base = _fill_variants(pool, 5, 4, 8, None)
-    # Replacing the base search's draw_n=5 by 6 follows a different local
-    # optimum and lowers 3+/4+ here. Keep the delivered base immutable.
-    result = build_full_ticket(
-        "5/40", {"hard_core": pool, "guarantee": 4}, tickets=2
-    )
-    assert n_base == 8 == result["guarantee_variants"]
-    assert result["variants"] == before
 
 
 # --------------------------------------------------------------------------- #

@@ -1,0 +1,1197 @@
+{
+  "date": "2026-11-05",
+  "baseline_commit": "778c92c1e3581aff72cd2132362db8fc03b3f9a2",
+  "python": "3.14.8 (main, Oct 14 2026, 01:04:34) [Clang 23.1.3 ]",
+  "full_suite": {
+    "files": 204,
+    "counts": {
+      "passed": 6787,
+      "skipped": 16
+    },
+    "distinct_cases": 6803,
+    "duplicates": [],
+    "skip_reasons": {
+      "filtru pe axa valorilor: dependent de etichetă prin construcție": 2,
+      "cmd.exe ca proces ne-Python real": 1,
+      "Windows PATH model": 3,
+      "CMD launcher / Windows PATH": 9,
+      "git deduce singur numele si emailul pe acest calculator": 1
+    },
+    "parts": [
+      {
+        "part": 1,
+        "counts": {
+          "passed": 2037,
+          "skipped": 2
+        },
+        "seconds": 312.39614030100006,
+        "exit_code": 0
+      },
+      {
+        "part": 2,
+        "counts": {
+          "passed": 2636,
+          "skipped": 14
+        },
+        "seconds": 314.7337114270001,
+        "exit_code": 0
+      },
+      {
+        "part": 3,
+        "counts": {
+          "passed": 2114
+        },
+        "seconds": 300.67643838000026,
+        "exit_code": 0
+      }
+    ],
+    "source_drift": [
+      "AGENTS.md",
+      "scripts/analysis/lr_optimization_2026-11-05.md"
+    ]
+  },
+  "lr_exhaustive_parity": {
+    "baseline_commit": "778c92c",
+    "python": "3.14.8 (main, Oct 14 2026, 01:04:34) [Clang 23.1.3 ]",
+    "baseline_source_sha256": "ea5e253eb2635327b4dc9707f82ca72fb40e4ed7469964b3e82103a9965591b0",
+    "current_source_sha256": "a2f14945c48da80dec896b62cfb203fcd957ba5a114c2b7169bb4cf9b41dd34b",
+    "scope": "Every pool intersection of size 0..draw_n, full compact result equality including representative rows, group order and multiplicities; arbitrary numeric relabeling plus edge fixtures.",
+    "cases": [
+      {
+        "game": "6/49",
+        "pool": 16,
+        "code": 59,
+        "variants": 112,
+        "subsets": 14893,
+        "subsets_by_hits": {
+          "0": 1,
+          "1": 16,
+          "2": 120,
+          "3": 560,
+          "4": 1820,
+          "5": 4368,
+          "6": 8008
+        },
+        "seconds": 1.1353137490000336,
+        "identical_outputs": true
+      },
+      {
+        "game": "joker",
+        "pool": 15,
+        "code": 12,
+        "variants": 118,
+        "subsets": 4944,
+        "subsets_by_hits": {
+          "0": 1,
+          "1": 15,
+          "2": 105,
+          "3": 455,
+          "4": 1365,
+          "5": 3003
+        },
+        "seconds": 0.3128175119995831,
+        "identical_outputs": true
+      },
+      {
+        "game": "5/40",
+        "pool": 19,
+        "code": 48,
+        "variants": 930,
+        "subsets": 43796,
+        "subsets_by_hits": {
+          "0": 1,
+          "1": 19,
+          "2": 171,
+          "3": 969,
+          "4": 3876,
+          "5": 11628,
+          "6": 27132
+        },
+        "seconds": 9.316339063999749,
+        "identical_outputs": true
+      }
+    ],
+    "total_subsets": 63633,
+    "edge_cases": 59,
+    "edge_cases_identical": true,
+    "total_seconds": 10.795697361000293
+  },
+  "annealing_cleanup_parity": {
+    "baseline_source_sha256": "0e0834c3ba28dbae647786cc258661e13e0c3f77b32968a7b93492670394df3c",
+    "current_source_sha256": "0c0a6cdafd84642eed77a50b721d86969c44f23bd1239300700249c8f0e6e548",
+    "cases": [
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 28,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 28,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 28,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 1,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 3,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "guarantee": 6,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 21,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 21,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 21,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 1,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 3,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "guarantee": 5,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 21,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 21,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 21,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 12,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 1,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 3,
+        "tickets": 64,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 1,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 3,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 9,
+        "same": true
+      },
+      {
+        "pool": 16,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "guarantee": 5,
+        "tickets": 64,
+        "same": true
+      }
+    ],
+    "bounded_search_moves": 256,
+    "edge_fixtures": 8,
+    "full_budget_cases": [
+      {
+        "pool": 8,
+        "pick": 6,
+        "draw_n": 6,
+        "maximum": 49,
+        "tickets": 3,
+        "moves": 20000,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 6,
+        "maximum": 40,
+        "tickets": 3,
+        "moves": 20000,
+        "same": true
+      },
+      {
+        "pool": 7,
+        "pick": 5,
+        "draw_n": 5,
+        "maximum": 45,
+        "tickets": 3,
+        "moves": 20000,
+        "same": true
+      }
+    ],
+    "seconds": 5.748035673000004,
+    "total_cases": 119,
+    "all_identical": true
+  },
+  "ui_worker_smoke": {
+    "python": "3.14.8 (main, Oct 14 2026, 01:04:34) [Clang 23.1.3 ]",
+    "success": true,
+    "source_sha256": {
+      "app_nicegui.py": "de11fe1230dc87b60b68eee4032d9a281bb74c6043ea30d5f81b048f04203a5e",
+      "ui_runtime.py": "88146d5a3f18b7379d0149162946b197f0e1bea4491099e9a8039f29eb75d8b9",
+      "ui_results.py": "3f133113069cd9818d6d099896a6349dc471ecf18c6337ff9831818f2e92c13c",
+      "ui_hits.py": "f307fb0db6bc2bf082c3ad919d079074d5caf81c705cd755bbf695839d4c3078",
+      "covering/lr_schemes.py": "a2f14945c48da80dec896b62cfb203fcd957ba5a114c2b7169bb4cf9b41dd34b"
+    },
+    "worker": {
+      "job_id": 1,
+      "status": "COMPLETED",
+      "seconds": 2.429411613999946,
+      "dataset_count": 3,
+      "games": [
+        {
+          "game": "6/49",
+          "pool": 16,
+          "generated_variants": 152,
+          "official_lr_code_rendered": 59,
+          "rendered_nodes": 64
+        },
+        {
+          "game": "joker",
+          "pool": 15,
+          "generated_variants": 294,
+          "official_lr_code_rendered": 12,
+          "rendered_nodes": 70
+        },
+        {
+          "game": "5/40",
+          "pool": 19,
+          "generated_variants": 930,
+          "official_lr_code_rendered": 48,
+          "rendered_nodes": 72
+        }
+      ]
+    },
+    "report": {
+      "official_lr_codes_present": [
+        59,
+        48,
+        12
+      ],
+      "simple_variant_list_absent": true
+    },
+    "http": {
+      "status": 200,
+      "port": 18080,
+      "html_bytes": 227868,
+      "pool_controls": [
+        "Pool Loto 6/49",
+        "Pool Loto 5/40",
+        "Pool Joker (Urna 1)"
+      ],
+      "removed_controls_absent": true,
+      "recovered_result_lr_codes": [
+        59,
+        48,
+        12
+      ]
+    },
+    "ui_process_stopped": true
+  },
+  "design_integrity": "All 277 existing manifest hashes match; 271 CRLF designs and six LF exceptions. No tracked numerical design/history/decision changes."
+}

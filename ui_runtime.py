@@ -331,8 +331,6 @@ UI_PERSIST_KEYS = [
         if not g.is_romanian
         for bound in ("min", "max")
     ),
-    "full_ticket_count_val",
-    "simple_variants_val",
     "shutdown_on_complete",
     "sim_depth_val",
     "autopilot_after_bench",
@@ -382,10 +380,6 @@ DEFAULTS = {
     # oprite fiindcă ar schimba pool-ul fără nicio acțiune. Tot compoziție, FĂRĂ
     # avantaj statistic demonstrat (hipergeometric, ca mai sus); bifa o oprește.
     "max_consecutive_run_enabled_val": True,
-    # Bilete fizice cerute de „🎟️ Bilet complet”, 1-10 (full_ticket.clamp_tickets).
-    "full_ticket_count_val": 1,
-    # Câte variante simple arată lista din rezultate (implicit 10, ca înainte).
-    "simple_variants_val": 10,
     "lookback_val": 0,
     "shutdown_on_complete": False,
     "sim_depth_val": 40,
@@ -446,7 +440,6 @@ STATE: dict = {
     "wf_progress": 0.0,  # fracție 0..1 progres walk-forward (bară)
     "wf_start": None,  # timestamp pornire WF (ETA în UI)
     "pure_bench": False,
-    "show_all": {},  # {f"{fname}_{game}": bool} — toggle wheel complet
     "bench_was_running": False,
     "bench_cancelled": False,  # True după Anulează → _tick NU mai pornește Auto-Pilot
     "_log_cache": None,  # conținut loguri pre-citit în thread (ne-blocant pt UI)

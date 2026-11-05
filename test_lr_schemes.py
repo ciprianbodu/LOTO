@@ -116,6 +116,35 @@ def test_a_broken_file_is_skipped_alone(tmp_path, caplog):
     assert "codul apare de două ori" in caplog.text
 
 
+def test_reordered_duplicate_tickets_are_rejected_without_hiding_other_schemes(
+    tmp_path, caplog
+):
+    (tmp_path / "LR_649_cod48.txt").write_text(
+        (lr.LR_DIR / "LR_649_cod48.txt").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "LR_649_cod999.txt").write_text(
+        "# numere: 7\n# variante: 3\n"
+        "1 2 3 4 5 6\n6 5 4 3 2 1\n1 2 3 4 5 7\n",
+        encoding="utf-8",
+    )
+    loaded = lr._load(str(tmp_path))
+    assert [(s.game, s.code) for s in loaded] == [("6/49", 48)]
+    assert "LR_649_cod999.txt" in caplog.text
+    assert "variante repetate" in caplog.text
+
+
+def test_unsorted_distinct_tickets_keep_the_official_row_order(tmp_path):
+    path = tmp_path / "LR_649_cod999.txt"
+    path.write_text(
+        "# numere: 7\n# variante: 2\n"
+        "7 5 4 3 2 1\n6 5 4 3 2 1\n",
+        encoding="utf-8",
+    )
+    scheme = lr._parse(path, "6/49", 999)
+    assert scheme.variants == ((1, 2, 3, 4, 5, 7), (1, 2, 3, 4, 5, 6))
+
+
 def test_an_unreadable_file_is_not_reported_as_a_missing_code(monkeypatch, tmp_path):
     for f in lr.LR_DIR.iterdir():
         (tmp_path / f.name).write_bytes(f.read_bytes())

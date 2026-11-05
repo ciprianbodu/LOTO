@@ -71,16 +71,3 @@ def test_no_four_plus_hit_has_an_explicit_empty_message():
     assert "Pool-ul n-a prins ≥4 în istoricul walk-forward." in ui.text()
     summary = next(n for n in ui.walk() if n["kind"] == "table")
     assert all(r["pool"] == "0 (0.00%)" for r in summary["kwargs"]["rows"])
-
-
-def test_full_ticket_replay_also_shows_only_four_plus_and_keeps_all_draws():
-    rows, n = ui_hits._full_ticket_replay_rows(
-        {
-            "best": {i: {"hits": h} for i, h in enumerate((3, 4, 5))},
-            "uniform": {3: 0.3, 4: 0.1, 5: 0.01},
-        },
-        1,
-    )
-    assert n == 3
-    assert [r["prag"] for r in rows] == ["+4", "+5"]
-    assert [r["seen"] for r in rows] == ["2 (66.67%)", "1 (33.33%)"]

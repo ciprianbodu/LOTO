@@ -16,15 +16,6 @@ din pool rămân jucate, P(cel puțin t pe un bilet) nu scade la NICIUN prag de
 la 3 la ``draw_n`` și crește strict la cel puțin unul, iar acoperirea clasică
 a garanției nu scade. Altfel biletele de plecare rămân neschimbate.
 
-A doua formă, ``improve_full_cover_variants`` (2026-10-12), e pentru „Bilet
-complet” când garanția e deja completă înainte de a umple biletele: acolo
-P(cel puțin ``guarantee``) e la maximul hipergeometric al pool-ului și nu se
-mai poate mișca, deci căutarea urmărește pragul următor (g+1), pe TOATE
-variantele, iar o mutare care ar strica acoperirea 100% e respinsă pe loc.
-Se ține minte cel mai bun design care trece certificarea, nu cel mai bun
-obiectiv. După ea, garanția e asigurată de toate variantele împreună, nu de
-primele ``n_base``.
-
 Numai geometrie: pozițiile din pool urmează ordinea canonică a scorurilor;
 niciun istoric, nicio valoare de scor și nicio afirmație predictivă nu intră
 în căutare. Determinist: buget fix de mutări, generator seedat din geometrie,
@@ -69,13 +60,6 @@ def _weights(thresholds: list[int], primary: int) -> dict[int, float]:
     return out
 
 
-def _lex_greater(a: tuple[float, ...], b: tuple[float, ...], tol: float = 1e-15) -> bool:
-    for x, y in zip(a, b):
-        if abs(x - y) > tol:
-            return x > y
-    return False
-
-
 def _search(
     v: int,
     pick: int,
@@ -83,32 +67,16 @@ def _search(
     max_num: int,
     guarantee: int,
     start: tuple[int, ...],
-    *,
-    primary: int | None = None,
-    hard_coverage: bool = False,
-    certified_best: bool = False,
-    seed_tag: str = "anneal-hits",
 ) -> tuple[tuple[int, ...], int, int]:
-    """(bilete găsite ca măști pe poziții, mutări acceptate, mutări încercate).
-
-    ``primary`` e pragul urmărit întâi (implicit garanția). Cu ``hard_coverage``
-    o mutare care scade acoperirea garanției sub cea de plecare e respinsă pe
-    loc. Cu ``certified_best`` se întoarce cel mai bun design vizitat care nu
-    scade la niciun prag și nici la acoperire (ordinea: pragul principal, apoi
-    cele mai mari, apoi cele mai mici), nu cel cu obiectivul penalizat maxim.
-    """
+    """(bilete găsite ca măști pe poziții, mutări acceptate, mutări încercate)."""
     masks, sizes, weights, _member = _subsets(v, draw_n, max_num)
     masks = masks.astype(np.int64)
     prob = weights.astype(np.float64) / comb(max_num, draw_n)
     top = min(pick, draw_n)
     thresholds = list(range(MIN_THRESHOLD, top + 1))
-    if primary is None:
-        primary = int(guarantee)
+    primary = int(guarantee)
     primary = min(max(int(primary), MIN_THRESHOLD), top)
     w = _weights(thresholds, primary)
-    order = [primary] + [t for t in thresholds if t > primary] + [
-        t for t in sorted(thresholds, reverse=True) if t < primary
-    ]
     guarantee_rows = np.flatnonzero(sizes == guarantee)
 
     def column(ticket: int) -> np.ndarray:
@@ -135,14 +103,13 @@ def _search(
     base_p, base_cov = measure(H.max(axis=0))
     cur_f = objective(base_p, base_cov, base_p, base_cov)
     best_f, best_masks = cur_f, tuple(current)
-    best_key = tuple(base_p[t] for t in order)
     played = [sum((m >> p) & 1 for m in current) for p in range(v)]
     present = set(current)
     moves = _move_budget(len(masks), len(current))
     t0 = max(0.05 * base_p[primary], 1e-7)
     t1 = t0 / 1000.0
     seed = hashlib.sha256(
-        f"{seed_tag}|{v}|{pick}|{draw_n}|{max_num}|{guarantee}|{start}".encode()
+        f"anneal-hits|{v}|{pick}|{draw_n}|{max_num}|{guarantee}|{start}".encode()
     ).digest()
     rng = np.random.default_rng(int.from_bytes(seed[:8], "little"))
     accepted = 0
@@ -162,9 +129,6 @@ def _search(
             continue
         H[i] = column(moved)
         p, cov = measure(H.max(axis=0))
-        if hard_coverage and cov < base_cov:
-            H[i] = column(mask)
-            continue
         f = objective(p, cov, base_p, base_cov)
         delta = f - cur_f
         if delta >= 0.0 or rng.random() < float(np.exp(delta / temp)):
@@ -175,12 +139,7 @@ def _search(
             played[y] += 1
             cur_f = f
             accepted += 1
-            if certified_best:
-                if cov >= base_cov and all(p[t] >= base_p[t] - 1e-15 for t in thresholds):
-                    key = tuple(p[t] for t in order)
-                    if _lex_greater(key, best_key):
-                        best_key, best_masks = key, tuple(current)
-            elif cur_f > best_f + 1e-15:
+            if cur_f > best_f + 1e-15:
                 best_f, best_masks = cur_f, tuple(current)
         else:
             H[i] = column(mask)
@@ -196,33 +155,8 @@ def _anneal(
     guarantee: int,
     start: tuple[int, ...],
 ) -> tuple[tuple[int, ...], int, int]:
-    """Calea motorului și a biletului fizic cu garanția incompletă (ținta întâi)."""
+    """Calea motorului cu plafon de variante (ținta întâi)."""
     return _search(v, pick, draw_n, max_num, guarantee, start)
-
-
-@lru_cache(maxsize=64)
-def _anneal_full_cover(
-    v: int,
-    pick: int,
-    draw_n: int,
-    max_num: int,
-    guarantee: int,
-    start: tuple[int, ...],
-) -> tuple[tuple[int, ...], int, int]:
-    """Biletul fizic cu garanția completă: pragul următor întâi, acoperirea
-    ținută la cea de plecare, cel mai bun design certificat."""
-    return _search(
-        v,
-        pick,
-        draw_n,
-        max_num,
-        guarantee,
-        start,
-        primary=int(guarantee) + 1,
-        hard_coverage=True,
-        certified_best=True,
-        seed_tag="anneal-hits-cover",
-    )
 
 
 def _check_input(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
@@ -252,7 +186,7 @@ def _check_input(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int)
 
 def _certify(pool, tickets, candidate, guarantee: int, draw_n: int, max_num: int):
     """(motiv, câștig pe prag, acoperirea garanției după): motivul e gol la
-    certificare reușită. Aceeași regulă pentru ambele forme ale etapei."""
+    certificare reușită."""
     pick = len(tickets[0])
     if len({tuple(t) for t in candidate}) != len(tickets):
         return "duplicate tickets", {}, None
@@ -306,25 +240,3 @@ def improve_ticket_chances(ordered_pool, wheel, guarantee: int, draw_n: int, max
     """
     audit = {"applied": False, "reason": "", "moves": 0, "accepted": 0, "gain": {}}
     return _apply(_anneal, ordered_pool, wheel, guarantee, draw_n, max_num, audit)
-
-
-def improve_full_cover_variants(ordered_pool, wheel, guarantee: int, draw_n: int, max_num: int):
-    """„Bilet complet” cu garanția completă: ``(variante, audit)``.
-
-    Se aplică numai când biletele de plecare acoperă 100% garanția și există un
-    prag peste ea (``guarantee`` sub bilet și sub numerele extrase); altfel
-    motivul spune de ce. Certificarea e cea comună, iar acoperirea completă nu
-    poate scădea (căutarea respinge mutările care o strică).
-    """
-    audit = {"applied": False, "reason": "", "moves": 0, "accepted": 0, "gain": {}}
-    pool, tickets, pick, why = _check_input(ordered_pool, wheel, guarantee, draw_n, max_num)
-    if why:
-        audit["reason"] = why
-        return wheel, audit
-    if int(guarantee) >= min(pick, int(draw_n)):
-        audit["reason"] = "no threshold above the guarantee"
-        return wheel, audit
-    if wheel_hit_profile(pool, tickets)[int(guarantee)][int(guarantee)] < comb(len(pool), int(guarantee)):
-        audit["reason"] = "guarantee incomplete"
-        return wheel, audit
-    return _apply(_anneal_full_cover, ordered_pool, wheel, guarantee, draw_n, max_num, audit)

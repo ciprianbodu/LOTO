@@ -67,13 +67,7 @@ def _is_experimental_interval(name: str) -> bool:
 
 
 def _rate_pct(value) -> str | None:
-    """Procent cu două zecimale, aceeași precizie pentru Wilson și pentru brut.
-
-    Numele diferă de `ui_results._pct`: `_sync_ui_namespace` copiază numele
-    private în toate modulele UI, iar ultimul definit le înlocuia pe celelalte.
-    Sub numele comun, șansele exacte din „Bilet complet” pierdeau zecimalele
-    (5+ la 5/40, 0,00365%, apărea „0.00%”).
-    """
+    """Procent cu două zecimale, aceeași precizie pentru Wilson și pentru brut."""
     if value is None or pd.isna(value):
         return None
     return f"{float(value) * 100:.2f}%"

@@ -47,17 +47,6 @@ def test_ui_modules_do_not_define_one_private_name_two_ways():
     assert clashes == []
 
 
-def test_full_ticket_chances_keep_small_percentages_after_namespace_sync():
-    assert ui_results._pct is not ui_bench._rate_pct
-    t = {
-        "variants": [[1, 2, 3, 4, 5]],
-        "chances": {"thresholds": [4, 5], "shown": {4: 0.003131, 5: 0.0000365}},
-    }
-    line = ui_results._full_ticket_chances(t, is_joker=False)[0]
-    assert "4+ 0.313%" in line
-    assert "5+ 0.00365%" in line
-
-
 def _wf_entries(coverage: float, n: int = 3):
     return [
         SimpleNamespace(
@@ -433,37 +422,6 @@ def test_pooled_rate_does_not_depend_on_the_order_of_folds_rows():
 
 
 # --------------------------------------------------------------------------- #
-# Istoric hits: reluarea „Bilet complet” se calculează o singură dată
-# --------------------------------------------------------------------------- #
-def test_full_ticket_replay_is_computed_once_per_request(monkeypatch):
-    import time
-
-    import loto_enterprise.core.ticket_replay as tr
-
-    calls: list[str] = []
-
-    def slow_replay(flat, game, tickets, guarantee, workers=1):
-        calls.append(game)
-        time.sleep(0.2)
-        return {"best": {}, "uniform": None, "n_draws": 0, "missing": 0, "errors": {}}
-
-    monkeypatch.setattr(tr, "replay_full_tickets", slow_replay)
-    monkeypatch.setattr(ui_hits, "_REPLAY_DONE", {})
-    monkeypatch.setattr(ui_hits, "_REPLAY_PENDING", {})
-    monkeypatch.setattr(ui_hits, "_REPLAY_THREAD", {"running": False, "current": None})
-    flats = {g: [object()] for g in ("6/49", "joker", "5/40")}
-    filled: set[str] = set()
-    deadline = time.monotonic() + 10
-    while len(filled) < 3 and time.monotonic() < deadline:
-        for g, flat in flats.items():  # temporizatorul de 1 s al fiecărui bloc
-            if g not in filled and ui_hits._full_ticket_replay(flat, g, 3, 3) is not None:
-                filled.add(g)
-        time.sleep(0.05)
-    assert filled == set(flats)
-    assert sorted(calls) == sorted(flats)
-
-
-# --------------------------------------------------------------------------- #
 # Walk-forward: decizia rescrisă în timpul rulării nu ajunge în cache
 # --------------------------------------------------------------------------- #
 def test_walk_forward_does_not_cache_steps_scored_by_two_decisions(monkeypatch, tmp_path):
@@ -585,21 +543,6 @@ def test_design_signature_follows_content_not_checkout_location(monkeypatch, tmp
     assert designs.covering_design_source_signature(12, 6, 4) == here
     (second / name).write_text((second / name).read_text(encoding="utf-8") + "1 2 3 4 5 6\n", encoding="utf-8")
     assert designs.covering_design_source_signature(12, 6, 4) != here
-
-
-def test_replay_skips_a_step_whose_ticket_has_fewer_variants_than_requested():
-    from loto_enterprise.core.ticket_replay import replay_step
-
-    # Pas din fallback-ul de frecvență: fără clasament, pool-ul de 6 nu se extinde.
-    context = {
-        "hard_core": [3, 9, 17, 25, 33, 41],
-        "hard_core_joker": [],
-        "audit": {"consecutive_limit": {"requested": 2, "applied": 2}},
-        "actual": [3, 9, 17, 20, 30, 44],
-    }
-    assert replay_step("6/49", context, 1, 3) == {
-        "error": "mai puține variante decât biletele cerute"
-    }
 
 
 def test_istoric_hits_uses_the_pool_size_actually_played():
