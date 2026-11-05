@@ -1,0 +1,50 @@
+{
+  "python": "3.14.8",
+  "powershell": "7.5.2",
+  "source_head": "d8a6f113d838e60e84980b99448ccb66be3c233a",
+  "test_files": 206,
+  "full_suite": {
+    "passed": 6840,
+    "skipped": 16,
+    "failed": 0,
+    "errors": 0
+  },
+  "unique_test_identities": 6856,
+  "duplicate_full_suite_identities": [],
+  "full_suite_max_seconds": 338.92,
+  "final_focused_tests": {
+    "passed": 53
+  },
+  "focused_new_identities": 0,
+  "source_changed_after_full_snapshot": [
+    "AGENTS.md",
+    "scripts/analysis/lr_tail_2026-11-05.md",
+    "scripts/analysis/lr_tail_2026_11_05.py"
+  ],
+  "python_changed_after_full_snapshot": [
+    "scripts/analysis/lr_tail_2026_11_05.py"
+  ],
+  "source_changed_after_focused_snapshot": [],
+  "protected_tracked_sources_changed": [],
+  "final_runner_sha256": "536ddff1d5e1504084ba40f7d73766fa35187a15bd759964b9ed7828b6212ab7",
+  "skip_reasons": {
+    "filtru pe axa valorilor: dependent de etichetă prin construcție": 2,
+    "cmd.exe ca proces ne-Python real": 1,
+    "Windows PATH model": 3,
+    "CMD launcher / Windows PATH": 9,
+    "git deduce singur numele si emailul pe acest calculator": 1
+  },
+  "runner_changes_after_full_suite_snapshot": [
+    "Record statistical assumptions and package versions in results",
+    "Reject code or history changes during evaluation",
+    "Default CLI to one worker; model, protocol and comparison family unchanged"
+  ],
+  "final_study_replayed_rows": 5798,
+  "final_source_sha256": {
+    "scripts/analysis/lr_tail_2026_11_05.py": "536ddff1d5e1504084ba40f7d73766fa35187a15bd759964b9ed7828b6212ab7",
+    "scripts/analysis/lr_tail_objective_2026_11_05.py": "a6ecb085eab4df18ff75acfef8db522edaf2be603a094a5e95d560c9e26eb70e",
+    "scripts/analysis/lr_tail_2026_11_05_protocol.json": "e3041345a9f1847610e20cba9d22a3d934880ea8b8f3f9e6d53752f91ad9ff83",
+    "test_lr_tail_2026_11_05.py": "4b80879fb2062796f85726743a537320b42d190367144a88527f9095502c0837",
+    "test_lr_tail_objective_2026_11_05.py": "789b223ba467d8d1dd6516c9ecfcd33194dc04a5f69ce0f51c55b62f8cfa696d"
+  }
+}

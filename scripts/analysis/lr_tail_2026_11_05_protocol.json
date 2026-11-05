@@ -1,0 +1,61 @@
+{
+  "study_id": "lr_tail_2026_11_05_v1",
+  "status": "frozen before executing the new study; exploratory reused archives, not a fresh holdout",
+  "scope": "offline research only; no production scorer, decision, default, history, official row or cost changes",
+  "games": [
+    {"key": "loto_6_49", "label": "6/49", "universe": 49, "draw_n": 6, "pick": 6, "pool_n": 16, "code": 59, "variants": 112},
+    {"key": "joker", "label": "joker", "universe": 45, "draw_n": 5, "pick": 5, "pool_n": 15, "code": 12, "variants": 118},
+    {"key": "loto_5_40", "label": "5/40", "universe": 40, "draw_n": 6, "pick": 5, "pool_n": 19, "code": 48, "variants": 930}
+  ],
+  "warmup_rows": 250,
+  "max_consecutive_run": 2,
+  "day_policy": "all rows of one normalized date use the same strictly earlier forecast and pool; counts and evidence update only after that complete day",
+  "weighted_draw_model": "P(D|past)=product(w[n] for n in D)/e_draw_n(w[1..universe]); unordered distinct-number draws",
+  "predictors": {
+    "names": ["uniform", "global_shrunk", "ewma_shrunk"],
+    "initial_model_prior": [0.9, 0.05, 0.05],
+    "pseudo_draws": 250,
+    "per_number_prior": "alpha=250*draw_n/universe",
+    "weight": "(counts+alpha)/(effective_draws*draw_n/universe+alpha)",
+    "ewma_half_life_completed_days": 256,
+    "ewma_update": "once per observed complete day: counts=2^(-1/256)*counts+day_number_counts; effective_draws=2^(-1/256)*effective_draws+day_rows",
+    "evidence": "prequential exact likelihood from the first complete archive day, with forecasts frozen within days; log-space expert likelihood ratios against uniform",
+    "mixture": "posterior model probabilities proportional to initial priors times the prequential expert likelihoods",
+    "ranking": "posterior mixture of weights normalized to mean1; subtract the uniform constant and divide by nonuniform posterior mass for numerical stability, an equivalent ranking",
+    "objective_comparison": "conditional nonuniform posterior mixture of exact official-scheme P5+/P6; the uniform component is pool-invariant so cancels exactly"
+  },
+  "candidates": ["frequency", "model_topk", "lr_tail", "gated_lr_tail"],
+  "baseline": "registered frequency scorer through call_method and canonical select_pool_from_scores; no replacement or hidden fallback",
+  "model_topk": "canonical selection of mixture scores, fixed pool_n and max_consecutive_run2",
+  "lr_tail": {
+    "start": "model_topk",
+    "passes": 2,
+    "weakest_members": 6,
+    "best_outsiders": 4,
+    "proposal_bound": 48,
+    "proposal_rule": "at each pass replace each of six weakest current members with each of four highest ranked outsiders; keep distinct valid pools satisfying maxrun2; ranking frozen for the day",
+    "terminal_mapping": "official positional rows applied to ascending numeric pool; never remap positions",
+    "acceptance": "neither exact model endpoint decreases beyond relative tolerance1e-12 and at least one increases beyond tolerance; P6 applies only to six-number rows",
+    "choice": "among acceptable proposals choose maximum P5+, then P6, then lexicographically largest ascending pool; stop when no acceptable proposal",
+    "relative_tolerance": 1e-12
+  },
+  "gated_lr_tail": {
+    "gate": "equal-weight mixture of the two nonuniform experts' prequential likelihood ratios versus uniform, based only on completed prior days",
+    "threshold": 60,
+    "open": "lr_tail",
+    "closed": "frequency",
+    "interpretation": "under conditional independent uniform draws this nonnegative e-process gives anytime false opening <=1/60 per game, <=5% union bound across3 games; opening supports nonuniform predictive-distribution evidence, not proof of5+/6+ lift"
+  },
+  "primary_window": "last30% of eligible distinct draw dates, split at floor(0.70*eligible_days); every row of a date stays together",
+  "diagnostic_window": "all rows with strictly earlier training cutoff>=250; counts only, no extra significance tests",
+  "endpoints": "pool5+ for all games; pool6 for6/49 and5/40; official best-ticket5+ for all games; official best-ticket6 only6/49. Joker refers to urn1, no Joker-ball/category inference.5/40 uses all6 extracted numbers, no first5/category inference.",
+  "comparisons": {
+    "primary": "each of model_topk, lr_tail and gated_lr_tail versus frequency using one-sided exact paired discordant-event binomial test; versus exact uniform pool/scheme odds using one-sided binomial test",
+    "multiplicity": "one Holm family containing every primary candidate/game/endpoint/comparator test (54 expected); marginal95% Clopper-Pearson intervals are not selection-adjusted",
+    "tail_vs_topk": "descriptive paired wins/losses only, no additional p-value or selection",
+    "selection": "report all fixed candidates; no posthoc winner, model, parameter or cost selection"
+  },
+  "integrity": "SHA256 fingerprints of frozen protocol, input CSV bytes, actual official rows and runner/objective/scorer/core code; write isolated NPZ and JSON artifacts; SHA256 is integrity fingerprinting, not a digital signature",
+  "failure_policy": "invalid input, scheme, scores, geometry, nonfinite probabilities or violated constraints fail the study; no silent omission or alternate scorer",
+  "promotion": "none; reused historical outcomes are exploratory, any claimed advantage requires prospective or independent external confirmation"
+}
