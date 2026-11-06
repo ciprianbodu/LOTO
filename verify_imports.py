@@ -11,7 +11,7 @@ iar acesta e in intregime OBLIGATORIU: dupa inlocuirea setului de metode
 Exit codes:
   0   = toate REQUIRED OK
   20  = cel putin un pachet REQUIRED lipsa (toate din SCHEMA sunt REQUIRED)
-  21  = Python < 3.14
+  21  = Python < 3.15 sau versiune pre-release
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def main() -> int:
         print("Solutie: ruleaza ACTUALIZARI.bat apoi reincearca START_8000.bat.")
         return 20
 
-    py_ok, py_msg = check_python_version()
+    py_ok, py_msg = check_python_version(strict=True)
     print(f"Python: {sys.version.split()[0]} — {py_msg}")
     if not py_ok:
         print(f"[EROARE] {py_msg}")

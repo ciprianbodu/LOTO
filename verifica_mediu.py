@@ -193,7 +193,7 @@ def _is_in_venv() -> bool:
 def main():
     from ui_shared import check_python_version
 
-    py_ok, py_msg = check_python_version()
+    py_ok, py_msg = check_python_version(strict=True)
     print(f"Python: {sys.version.split()[0]} — {py_msg}")
     if not py_ok:
         print(f"\n[EROARE] {py_msg}")

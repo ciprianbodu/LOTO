@@ -51,7 +51,7 @@ set VENV_DIR=D:\_BUILD\_LOTO\.venv
 set VENV_PY=%VENV_DIR%\Scripts\python.exe
 set SITE_PACKAGES=%VENV_DIR%\Lib\site-packages
 set "REQ_SNAPSHOT=D:\_BUILD\_LOTO\requirements_before_upgrade.txt"
-set "PY314_EXE="
+set "PY315_EXE="
 
 echo ============================================================
 echo   ACTUALIZARE MEDIU LOTO ENTERPRISE
@@ -71,12 +71,12 @@ for /d %%D in (".venv_ALF-LUPTATORI_backup" ".venv_backup" ".venv_ALF-LUPTATORI"
     )
 )
 
-REM Asigura ULTIMUL patch stabil Python 3.14.x inainte de a crea/compara venv-ul.
+REM Asigura ULTIMUL patch stabil Python 3.15.x inainte de a crea/compara venv-ul.
 REM Detectia online vine de pe python.org; winget face upgrade-ul cand e disponibil,
 REM iar fallback-ul descarca dinamic installer-ul acelei versiuni (fara patch hardcodat).
-call :ensure_latest_python314
+call :ensure_latest_python315
 if "%SYS_VER%"=="" (
-    echo [EROARE] Python 3.14 nu poate fi instalat/detectat. Oprire.
+    echo [EROARE] Python 3.15 nu poate fi instalat/detectat. Oprire.
     pause
     exit /b 1
 )
@@ -84,9 +84,9 @@ if "%SYS_VER%"=="" (
 if not exist "%VENV_PY%" (
     echo [INFO] Venv lipsa la %VENV_DIR% — il creez cu Python %SYS_VER%...
     if not exist "D:\_BUILD\_LOTO" mkdir "D:\_BUILD\_LOTO"
-    "%PY314_EXE%" -m venv "%VENV_DIR%"
+    "%PY315_EXE%" -m venv "%VENV_DIR%"
     if errorlevel 1 (
-        echo [EROARE] Creare venv esuata cu %PY314_EXE%.
+        echo [EROARE] Creare venv esuata cu %PY315_EXE%.
         pause
         exit /b 1
     )
@@ -95,12 +95,15 @@ if not exist "%VENV_PY%" (
 
 REM ============================================================
 REM [-1/4] Detectie Python: daca patch-ul de sistem (actualizat mai sus la
-REM ultimul 3.14.x disponibil) difera de venv, recream venv-ul automat.
+REM ultimul 3.15.x disponibil) difera de venv, recream venv-ul automat.
 REM ============================================================
 echo [-1/4] Detectie versiune Python venv vs sistem...
+set "VENV_VER="
 for /f "tokens=2 delims= " %%V in ('"%VENV_PY%" --version 2^>^&1') do set VENV_VER=%%V
-call :detect_python314
-if "%SYS_VER%"=="" goto :skip_python_upgrade
+call :detect_python315
+if "%SYS_VER%"=="" goto :fatal_setup
+"%PY315_EXE%" -c "import sys, venv, ensurepip; sys.exit(not (sys.version_info[:2] == (3, 15) and sys.version_info.releaselevel == 'final'))"
+if errorlevel 1 goto :fatal_setup
 echo   Venv:    %VENV_VER%
 echo   Sistem:  %SYS_VER%
 
@@ -131,14 +134,14 @@ echo   Sterg venv vechi: %VENV_DIR%
 rmdir /s /q "%VENV_DIR%"
 if exist "%VENV_DIR%" (
     echo   [EROARE] Nu pot sterge venv-ul vechi - procese active inca? Abandonez upgrade.
-    goto :skip_python_upgrade
+    goto :fatal_setup
 )
 
-REM Creez venv nou cu cea mai noua 3.14.x
-"%PY314_EXE%" -m venv "%VENV_DIR%"
+REM Creez venv nou cu cea mai noua 3.15.x
+"%PY315_EXE%" -m venv "%VENV_DIR%"
 if errorlevel 1 (
     echo   [EROARE] Creare venv nou esuata. Ruleaza din nou ACTUALIZARI.bat.
-    goto :skip_python_upgrade
+    goto :fatal_setup
 )
 "%VENV_PY%" --version
 
@@ -153,6 +156,11 @@ echo        Snapshot vechi pastrat ca referinta: %REQ_SNAPSHOT%.
 echo/
 
 :skip_python_upgrade
+"%VENV_PY%" -c "import sys; sys.exit(not (sys.version_info[:2] == (3, 15) and sys.version_info.releaselevel == 'final'))"
+if errorlevel 1 (
+    echo   [EROARE] Venv-ul nu foloseste Python 3.15 stabil. Actualizarea se opreste.
+    goto :fatal_setup
+)
 
 REM ============================================================
 REM [0/4] Kill procese venv + cleanup
@@ -189,6 +197,8 @@ if not exist "requirements_base.txt" (
     echo   [EROARE] requirements_base.txt lipseste.
     goto :fatal_setup
 )
+REM PyYAML foloseste implementarea Python; extensia optionala LibYAML nu cere compilator.
+set "PYYAML_FORCE_LIBYAML=0"
 "%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed -r requirements_base.txt
 if errorlevel 1 (
     echo   [EROARE] Instalarea dependentelor obligatorii a esuat.
@@ -265,7 +275,7 @@ call :CleanGhosts
 echo/
 
 echo ------------------------------------------------------------
-echo  Python: ACTUALIZARI.bat instaleaza/migreaza automat la ultimul 3.14.x stabil
+echo  Python: ACTUALIZARI.bat instaleaza/migreaza automat la ultimul 3.15.x stabil
 echo    prin winget sau installer python.org. Daca instalarea auto esueaza, ia-l de la
 echo    https://www.python.org/downloads/  - bifeaza Add to PATH - si reruleaza.
 echo/
@@ -339,10 +349,11 @@ if errorlevel 1 (
 goto :eof
 
 
-:ensure_latest_python314
+:ensure_latest_python315
 REM ============================================================
-REM Instaleaza/actualizeaza AUTOMAT la ultimul patch stabil Python 3.14.x.
-REM  1. python.org/ftp este sursa versiunii curente (fara patch hardcodat).
+REM Instaleaza/actualizeaza AUTOMAT la ultimul patch stabil Python 3.15.x.
+REM  1. python.org/ftp + installer-ul final existent stabilesc patch-ul curent.
+REM     Directoarele numai cu alpha/beta/rc nu sunt versiuni stabile.
 REM  2. winget instaleaza/actualizeaza pachetul cand este disponibil.
 REM  3. Daca winget lipseste sau nu gestioneaza instalarea existenta, descarcam
 REM     dinamic installer-ul oficial al versiunii detectate.
@@ -350,12 +361,12 @@ REM Offline: pastreaza runtime-ul existent; o instalare noua necesita retea.
 REM La final seteaza SYS_VER pentru fluxul principal.
 REM ============================================================
 echo/
-call :detect_python314
+call :detect_python315
 set "PY_LATEST="
-set "PY_VER_FILE=%TEMP%\loto-python-3.14-latest.version"
+set "PY_VER_FILE=%TEMP%\loto-python-3.15-%RANDOM%-%RANDOM%.version"
 del "%PY_VER_FILE%" >nul 2>&1
 
-echo   [PYTHON] Verific ultimul patch stabil 3.14.x pe python.org...
+echo   [PYTHON] Verific ultimul patch stabil 3.15.x pe python.org...
 REM Fiecare segment de mai jos e un string dublu-cotat AUTONOM (se deschide
 REM si se inchide pe acelasi rand) - caret-ul NU e caracter de escape in
 REM interiorul ghilimelelor, deci un "^|" acolo ajunge LITERAL "^|" la
@@ -363,17 +374,19 @@ REM PowerShell (eroare de parsare, silentioasa din cauza >nul 2>&1) - pipe-urile
 REM raman simple "|", fara caret, exact fiindca sunt deja protejate de ghilimele.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
-  "$r=Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/' -UseBasicParsing;" ^
-  "$v=[regex]::Matches($r.Content,'3\.14\.\d+/') | ForEach-Object {$_.Value.TrimEnd('/')} | Sort-Object {[version]$_} -Descending -Unique | Select-Object -First 1;" ^
-  "if(-not $v){throw 'Nu am gasit nicio versiune 3.14.x'};" ^
+  "$r=Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/' -UseBasicParsing -TimeoutSec 30;" ^
+  "$versions=[regex]::Matches($r.Content,'(?:[^0-9.]|^)(3\.15\.\d+)/') | ForEach-Object {$_.Groups[1].Value} | Sort-Object {[version]$_} -Descending -Unique;" ^
+  "$v=$null; foreach($candidate in $versions){try{Invoke-WebRequest -Uri ('https://www.python.org/ftp/python/'+$candidate+'/python-'+$candidate+'-amd64.exe') -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null; $v=$candidate; break}catch{}};" ^
+  "if(-not $v){throw 'Nu am gasit un installer stabil 3.15.x'};" ^
   "Set-Content -LiteralPath '%PY_VER_FILE%' -Value $v -NoNewline -Encoding ascii" >nul 2>&1
 if exist "%PY_VER_FILE%" set /p PY_LATEST=<"%PY_VER_FILE%"
 del "%PY_VER_FILE%" >nul 2>&1
 
 if not "!PY_LATEST!"=="" (
     echo   [PYTHON] Sistem: !SYS_VER! ^| online: !PY_LATEST!
-    if "!SYS_VER!"=="!PY_LATEST!" (
-        echo   [OK] Python !SYS_VER! este deja ultimul 3.14.x stabil.
+    call :python315_current_enough
+    if not errorlevel 1 (
+        echo   [OK] Python !SYS_VER! este cel putin patch-ul stabil publicat.
         goto :eof
     )
 ) else (
@@ -387,13 +400,13 @@ timeout /t 2 /nobreak >nul
 where winget >nul 2>&1
 if errorlevel 1 goto :ep_download_latest
 if "!SYS_VER!"=="" (
-    echo   [PYTHON] winget install Python.Python.3.14...
-    winget install -e --id Python.Python.3.14 --source winget --silent --accept-package-agreements --accept-source-agreements
+    echo   [PYTHON] winget install Python.Python.3.15...
+    winget install -e --id Python.Python.3.15 --source winget --silent --accept-package-agreements --accept-source-agreements
 ) else (
-    echo   [PYTHON] winget upgrade Python.Python.3.14...
-    winget upgrade -e --id Python.Python.3.14 --source winget --silent --accept-package-agreements --accept-source-agreements
+    echo   [PYTHON] winget upgrade Python.Python.3.15...
+    winget upgrade -e --id Python.Python.3.15 --source winget --silent --accept-package-agreements --accept-source-agreements
 )
-call :detect_python314
+call :detect_python315
 if "!PY_LATEST!"=="" (
     if not "!SYS_VER!"=="" (
         echo   [OK] Python disponibil dupa winget: !SYS_VER!
@@ -401,7 +414,8 @@ if "!PY_LATEST!"=="" (
     )
     goto :ep_download_latest
 )
-if "!SYS_VER!"=="!PY_LATEST!" (
+call :python315_current_enough
+if not errorlevel 1 (
     echo   [OK] Python actualizat prin winget: !SYS_VER!
     goto :eof
 )
@@ -412,11 +426,11 @@ if "!PY_LATEST!"=="" (
         echo   [ATENTIE] Raman pe Python !SYS_VER! - versiunea online nu poate fi verificata.
         goto :eof
     )
-    echo   [EROARE] Fara winget si fara versiune online; Python 3.14 nu poate fi instalat.
+    echo   [EROARE] Fara winget si fara versiune online; Python 3.15 nu poate fi instalat.
     goto :eof
 )
 set "PY_URL=https://www.python.org/ftp/python/!PY_LATEST!/python-!PY_LATEST!-amd64.exe"
-set "PY_EXE=%TEMP%\python-!PY_LATEST!-amd64.exe"
+set "PY_EXE=%TEMP%\loto-python-!PY_LATEST!-%RANDOM%-%RANDOM%-amd64.exe"
 echo   [PYTHON] Descarc installer-ul oficial !PY_LATEST!...
 del "!PY_EXE!" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri '!PY_URL!' -OutFile '!PY_EXE!' -UseBasicParsing } catch { exit 1 }"
@@ -445,9 +459,9 @@ if not "!PY_INSTALL_RC!"=="0" if not "!PY_INSTALL_RC!"=="3010" (
 )
 
 :ep_verify_latest
-call :detect_python314
+call :detect_python315
 if "!SYS_VER!"=="" (
-    echo   [EROARE] Python 3.14 este indisponibil dupa instalare.
+    echo   [EROARE] Python 3.15 este indisponibil dupa instalare.
 ) else if not "!SYS_VER!"=="!PY_LATEST!" (
     echo   [ATENTIE] Python detectat !SYS_VER!, dar online este !PY_LATEST!.
     echo              Inchide/redeschide terminalul si reruleaza ACTUALIZARI.bat.
@@ -458,11 +472,17 @@ goto :eof
 
 
 
-:detect_python314
-set "PY314_EXE="
+:detect_python315
+set "PY315_EXE="
 set "SYS_VER="
-for /f "tokens=1,2 delims=|" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\find_python314.ps1" 2^>nul') do (
-    set "PY314_EXE=%%P"
+for /f "tokens=1,2 delims=|" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\find_python315.ps1" 2^>nul') do (
+    set "PY315_EXE=%%P"
     set "SYS_VER=%%Q"
 )
 goto :eof
+
+
+:python315_current_enough
+REM Nu retrogradeaza un patch stabil instalat daca sursa online ramane in urma.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "if ('%SYS_VER%' -and '%PY_LATEST%' -and [version]'%SYS_VER%' -ge [version]'%PY_LATEST%') { exit 0 }; exit 1"
+exit /b %ERRORLEVEL%

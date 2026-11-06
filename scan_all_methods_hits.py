@@ -6,7 +6,7 @@ ca Re-Bench-ul din UI — orientativ pentru triaj rapid, nu echivalent cu un
 Re-Bench complet. Scrie bench_results/scan_all_hits.json + tipărește top-ul.
 
 Usage:
-    py -3.14 scan_all_methods_hits.py [--workers N] [--pools 10,16]
+    py -3.15 scan_all_methods_hits.py [--workers N] [--pools 10,16]
 """
 
 from __future__ import annotations

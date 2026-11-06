@@ -1,6 +1,6 @@
 # =============================================================================
 # requirements_base.txt — TOATE dependențele aplicației (exclusiv CPU).
-# Python țintă: ultimul 3.14.x stabil (py -3.14, venv D:\_BUILD\_LOTO\.venv).
+# Python țintă: ultimul 3.15.x stabil (py -3.15, venv D:\_BUILD\_LOTO\.venv).
 # Instalate de ACTUALIZARI.bat. Suportul GPU/neural (torch / TimesFM / Chronos /
 # NeuralForecast / foundation models) a fost ELIMINAT complet din aplicație.
 # =============================================================================
@@ -18,7 +18,8 @@ psutil
 # Acesta ESTE și stack-ul de scoring: după înlocuirea întregului set de metode
 # (14.09.2026), cele 52 de intrări din registry se sprijină exclusiv pe numpy
 # și scipy (scipy.signal.lfilter, scipy.sparse.csr_matrix, scipy.spatial.cKDTree).
-pandas>=2.2,<3
+# Seria 3 oferă binarele CPython 3.15; seria 2 nu are wheels cp315.
+pandas>=3,<4
 numpy
 scipy
 # numba: ELIMINAT. `loto_engine` importa `jit` fara sa-l foloseasca nicaieri
