@@ -49,23 +49,6 @@ REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
 >> "%LOGFILE%" echo Computer: %COMPUTERNAME%
 >> "%LOGFILE%" echo/
 
-REM ===== Auto-update CSV extrageri, best-effort =====
-REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC fara sa
-REM blocheze pornirea. Exit 0 mereu, chiar si la eroare de retea. Un joc
-REM neactualizat (refuz, CSV deschis in Excel, eroare de retea) apare in consola.
-if exist "%VENV_DIR%\Scripts\python.exe" (
-    "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%update_csv.py" > "%LOGFILE%.update.tmp" 2>&1
-    type "%LOGFILE%.update.tmp" >> "%LOGFILE%"
-    findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp" >nul 2>&1 && echo [WARN] update_csv.py nu a actualizat un joc - motivul e in %LOGFILE%
-    del "%LOGFILE%.update.tmp" >nul 2>&1
-)
-
-REM ===== Auto-commit + push extrageri noi din _ISTORIC, best-effort =====
-REM Vizibil in consola, nu doar in startup_8000.log. Push STRICT pe origin/main.
-REM git push origin HEAD pe alta ramura era pierdut la urmatorul reset.
-REM Detectia Git este centralizata in helper, inclusiv cand lipseste din PATH.
-call :push_istoric
-
 REM ===== Verify phase (silent, logat in fundal) =====
 call :verify_phase >> "%LOGFILE%" 2>&1
 set "VERIFY_RC=%ERRORLEVEL%"
@@ -83,6 +66,23 @@ if not "%VERIFY_RC%"=="0" (
     cmd /k
     exit /b %VERIFY_RC%
 )
+
+REM ===== Auto-update CSV extrageri, best-effort =====
+REM Detecteaza extrageri noi pe loto49.ro si le adauga in _ISTORIC fara sa
+REM blocheze pornirea. Exit 0 mereu, chiar si la eroare de retea. Un joc
+REM neactualizat (refuz, CSV deschis in Excel, eroare de retea) apare in consola.
+if exist "%VENV_DIR%\Scripts\python.exe" (
+    "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%update_csv.py" > "%LOGFILE%.update.tmp" 2>&1
+    type "%LOGFILE%.update.tmp" >> "%LOGFILE%"
+    findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp" >nul 2>&1 && echo [WARN] update_csv.py nu a actualizat un joc - motivul e in %LOGFILE%
+    del "%LOGFILE%.update.tmp" >nul 2>&1
+)
+
+REM ===== Auto-commit + push extrageri noi din _ISTORIC, best-effort =====
+REM Vizibil in consola, nu doar in startup_8000.log. Push STRICT pe origin/main.
+REM git push origin HEAD pe alta ramura era pierdut la urmatorul reset.
+REM Detectia Git este centralizata in helper, inclusiv cand lipseste din PATH.
+call :push_istoric
 
 REM ===== Launch phase (live, fara redirectare) =====
 call :launch_phase
@@ -111,6 +111,15 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
     echo [EROARE] Mediul aplicației lipseste: %VENV_DIR%
     echo Solutie: ruleaza ACTUALIZARI.bat, apoi reincearca START_8000.bat.
     endlocal & exit /b 10
+)
+
+echo/
+echo --- Verificare Python 3.15 stabil ---
+"%VENV_DIR%\Scripts\python.exe" -c "import sys; sys.exit(not (sys.version_info[:2] == (3, 15) and sys.version_info.releaselevel == 'final'))" >nul 2>&1
+if errorlevel 1 (
+    echo [EROARE] Mediul trebuie migrat la Python 3.15 stabil.
+    echo Solutie: ruleaza ACTUALIZARI.bat, apoi reincearca START_8000.bat.
+    endlocal & exit /b 11
 )
 
 echo/

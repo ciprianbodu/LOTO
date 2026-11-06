@@ -22,7 +22,7 @@ from pathlib import Path
 # Directoare din radacina proiectului, fara niciun cititor in codul curent.
 OBSOLETE_DIRS = (
     "venv_timesfm",  # stack TimesFM/GPU eliminat (AGENTS §10)
-    ".venv311",  # venv Python 3.11, inlocuit de D:\_BUILD\_LOTO\.venv (3.14)
+    ".venv311",  # venv Python 3.11, inlocuit de D:\_BUILD\_LOTO\.venv (3.15)
     "lightning_logs",  # loguri PyTorch Lightning (NeuralForecast eliminat)
     ".numba_cache",  # cache numba, dependinta eliminata
     ".loto_cache",  # cache vechi, niciun cititor

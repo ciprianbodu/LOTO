@@ -23,7 +23,7 @@ Snapshot verificat la 2026-09-15:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py` + `ui_runtime.py` / `ui_results.py` / `ui_bench.py` / `ui_hits.py`, port 8000;
-- runtime tinta: ultimul Python 3.14.x stabil;
+- runtime tinta: ultimul Python 3.15.x stabil;
 - venv: `D:\_BUILD\_LOTO\.venv`, in afara OneDrive;
 - runtime scris frecvent: `D:\_BUILD\_LOTO` (`.wf_cache`, `loto.log`,
   `bench_full.log`, `startup_8000.log`), cu override prin `LOTO_RUNTIME_DIR` si
@@ -91,6 +91,35 @@ Nu copia aceste numere in cod. Renumara inainte de a le cita:
 python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METHODS))"
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
+
+### Runtime Python 3.15 stabil — 2026-11-06
+
+- Tinta curenta este ultimul Python 3.15.x stabil; validarea a folosit
+  CPython 3.15.2. `ACTUALIZARI.bat` determina online patch-ul final din seria
+  3.15 prin existenta installerului final; la instalare verifica semnatura si
+  nu retrogradeaza un patch stabil instalat mai nou. Detectorul alege numeric
+  cel mai nou candidat stabil 3.15; versiunile alpha/beta/rc si alte serii sunt respinse.
+- Venv-ul se recreeaza la schimbarea versiunii, cu snapshotul extern al
+  pachetelor vechi. O eroare de recreare opreste actualizarea. START verifica
+  mediul inainte de update_csv/PushHistory; UI si worker cer release stabil.
+  Portile din lansatoare raman active inclusiv cu `PYTHONOPTIMIZE`/`-OO`.
+- `pandas>=3,<4` inlocuieste limita 2.x, fara wheels cp315. Instalarea CPU a
+  fost verificata cu pandas 3.1.1, NumPy 2.5.4, SciPy 1.18.1 si NiceGUI 4.0.0.
+  Updaterul dezactiveaza extensia optionala LibYAML, evitand compilatorul C.
+  Arhiva requirements_snapshot si numele modulului compatibil py314_io raman.
+- Cele 13 istorice / 47438 randuri pastreaza validarea, cronologia, hashurile
+  si roundtrip-ul JSON fata de pandas 2.3.3. Pickle/Zstd vechi este citibil.
+  Nu se modifica scorerii, schemele, tintele 5/6 sau formatele cache.
+- Validare cumulata Linux pe 3.15.2: 6840 teste trecute, 16 omise, toate cele
+  206 fisiere / 6856 identitati pastrate. Cele zece adaptari locale acopera
+  contractul 5/6 anterior si asteptarile 3.14 devenite 3.15; niciun test nu
+  intra in commit. Probele PowerShell si portile BAT trec; installerul nu a
+  fost executat pe Windows. Cele 63 dependinte Windows sunt rezolvate,
+  inclusiv wheelul PyYAML pur construit si verificat separat.
+- UI HTTP 200, configurare -> coada -> worker pe pooluri 16/15/19 si K7;
+  WF cu doua procese reale, paritate serial/paralel si serializare verificate.
+  Pandas 3.1.1 emite doar avertismentul de depreciere viitoare convert_dates.
+  Aplicatia statiei nu a fost repornita; migrarea se face cu ACTUALIZARI.bat.
 
 ### Tinta principala 5+ in pool si afisarea sistemului — 2026-11-06
 
@@ -3044,7 +3073,7 @@ Instalarea canonica este:
 
 1. `ACTUALIZARI.bat` - instaleaza/actualizeaza Git for Windows prin winget,
    sincronizeaza `main` din copia temporara, instaleaza/actualizeaza Python
-   3.14, recreeaza venv-ul daca patch-ul difera si instaleaza
+   3.15 stabil, recreeaza venv-ul daca versiunea difera si instaleaza
    `requirements_base.txt`; dupa `update_csv.py` ruleaza `update_externe.py`
    (in acelasi log, inainte de auto-commit-ul `_ISTORIC`): cate o sursa per joc
    strain din registru (sursele in `_ISTORIC/externe/README.md`), timeout 15 s,
@@ -3066,14 +3095,13 @@ Instalarea canonica este:
 `requirements_snapshot.txt` este arhiva si nu se instaleaza. Stack-ul este CPU;
 nu adauga Torch, CUDA, TimesFM, NeuralForecast sau Streamlit.
 
-Pe statia curenta, auditul din 2026-09-01 a eliminat dependenta de shim-ul
-Chocolatey ramas spre `C:\Python314\python.exe`. Python 3.14.7 este instalat in
-`%LOCALAPPDATA%\Programs\Python\Python314`, iar venv-ul proiectului este functional.
-`ACTUALIZARI.bat` detecteaza executabilul real chiar daca launcherul `py` lipseste.
-Verificarea canonica este:
+Auditul din 2026-09-01 a eliminat dependenta de shim-ul Chocolatey ramas spre
+`C:\Python314\python.exe`. Pentru tinta curenta, `ACTUALIZARI.bat` detecteaza
+executabilul real Python 3.15 chiar daca launcherul `py` lipseste si alege cel
+mai nou patch stabil dintre candidatii instalati. Verificarea canonica este:
 
 ```powershell
-%LOCALAPPDATA%\Programs\Python\Python314\python.exe --version
+py -3.15 --version
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe --version
 D:\_BUILD\_LOTO\.venv\Scripts\python.exe -m pip check
 ```
@@ -3130,7 +3158,7 @@ submit -> worker -> rezultat. Nu considera simplul import suficient.
   erori fatale la pip/import si snapshot extern arhivei versionate.
 - [x] Porneste UI + worker si executa un job E2E pe fiecare tip de joc (verificat 2026-11-01, runtime izolat, Python 3.14.10: UI HTTP 200 pe port liber; 3 joburi pipeline câte unul per joc RO, toate COMPLETED cu payload decodat via `decode_queue_result` — 6/49 pool 16 → 152 variante, 5/40 pool 19 → 930, Joker pool 15 → 294, toate acoperire 100.0%; raport salvat în scratchpad-ul sesiunii, `e2e_p0_2026-11-01.json`).
 
-Criteriu de iesire: Python 3.14 si venv functionale, toate importurile obligatorii
+Criteriu de iesire: Python 3.15 si venv functionale, toate importurile obligatorii
 verzi, pytest verde, UI HTTP 200 si payload worker decodat corect.
 
 ### P0 - recalibrare dupa Urna 2 top-1
@@ -3209,7 +3237,7 @@ reproductibila, iar UI nu confunda pool-hit cu ticket-hit.
 
 ### P2 - reproductibilitate si operare
 
-- [ ] Adauga CI Windows pe Python 3.14 cu pytest si smoke test NiceGUI.
+- [ ] Adauga CI Windows pe Python 3.15 cu pytest si smoke test NiceGUI.
 - [x] Muta cache-ul WF in `D:\_BUILD\_LOTO` si adauga override prin env,
   cu migrare si inventariere a cache-urilor vechi.
 - [ ] Adauga o comanda unica de diagnostic pentru versiuni, metode, curare,
@@ -3294,7 +3322,7 @@ O schimbare este gata numai cand:
 
 1. contractele de date, ranking si queue raman coerente;
 2. cache-urile relevante au fost invalidate;
-3. testele specifice si suita completa trec pe Python 3.14;
+3. testele specifice si suita completa trec pe Python 3.15;
 4. UI si worker au fost verificate cand schimbarea le atinge;
 5. acoperirea a fost recalculata cand se schimba biletele;
 6. documentatia descrie starea curenta, nu istoricul incidentului;

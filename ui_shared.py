@@ -46,22 +46,22 @@ if not logger.handlers:
     except OSError:
         pass  # ex. directorul de runtime nu există încă la primul import
 
-# Versiune Python țintă (ALF-LUPTATORI). ACTUALIZARI.bat / START_8000.bat folosesc py -3.14.
-PYTHON_MIN = (3, 14)
+# Versiune Python țintă. ACTUALIZARI.bat / START_8000.bat folosesc py -3.15.
+PYTHON_MIN = (3, 15)
 
 
 def check_python_version(*, strict: bool = False) -> tuple[bool, str]:
-    """Verifică Python 3.14+; patch-ul curent este gestionat de ACTUALIZARI.bat.
+    """Verifică Python 3.15+; patch-ul curent este gestionat de ACTUALIZARI.bat.
 
     Nu hardcodăm patch-ul aici: updater-ul interoghează python.org și instalează
-    ultimul 3.14.x stabil. `strict=True` respinge doar build-urile pre-release.
+    ultimul 3.15.x stabil. `strict=True` respinge build-urile pre-release.
     """
     vi = sys.version_info
     if vi < PYTHON_MIN:
         return False, (
             f"Python {vi.major}.{vi.minor}.{vi.micro} detectat — necesar "
             f">= {PYTHON_MIN[0]}.{PYTHON_MIN[1]}. "
-            "Ruleaza ACTUALIZARI.bat pentru ultimul Python 3.14.x stabil."
+            "Ruleaza ACTUALIZARI.bat pentru ultimul Python 3.15.x stabil."
         )
     if strict and vi.releaselevel != "final":
         return False, (
@@ -70,11 +70,11 @@ def check_python_version(*, strict: bool = False) -> tuple[bool, str]:
         )
     return True, (
         f"Python {vi.major}.{vi.minor}.{vi.micro} OK "
-        "(ACTUALIZARI.bat menține ultimul patch stabil 3.14.x)"
+        "(ACTUALIZARI.bat menține ultimul patch stabil 3.15.x)"
     )
 
 
-def require_python_version(*, strict: bool = False) -> None:
+def require_python_version(*, strict: bool = True) -> None:
     ok, msg = check_python_version(strict=strict)
     if not ok:
         raise RuntimeError(msg)
@@ -279,16 +279,16 @@ def clear_logs() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Decode / encode rezultat job (pickle+zstd+b64 pe 3.14; fallback pickle+b64)
+# Decode / encode rezultat job (pickle+zstd+b64; fallback pickle+b64)
 # --------------------------------------------------------------------------- #
 ENCODING_PICKLE_B64 = "pickle+b64"
 ENCODING_PICKLE_ZSTD_B64 = "pickle+zstd+b64"
 
 
 def pack_queue_result(payload: object) -> str:
-    """Serializează rezultatul jobului, preferând zstd din Python 3.14.
+    """Serializează rezultatul jobului, preferând zstd din biblioteca standard.
 
-    Worker-ul și UI-ul rulează normal pe 3.14, dar o defecțiune a modulului
+    Worker-ul și UI-ul rulează normal pe 3.15, dar o defecțiune a modulului
     opțional de compresie nu trebuie să transforme un job calculat corect într-un
     rezultat imposibil de citit. Formatul legacy ``pickle+b64`` rămâne acceptat
     de decoder tocmai pentru această cale de continuitate.
@@ -505,7 +505,7 @@ def is_worker_running() -> bool:
             # Numai un interpretor Python poate fi workerul: un editor sau un
             # shell deschis pe worker.py are aceeași cale în argv și bloca
             # repornirea workerului mort (audit 2026-10-22b). Prefix, nu listă
-            # fixă: pe Linux numele e și „python3.14”. Fără nume: regula veche.
+            # fixă: pe Linux numele e și „python3.15”. Fără nume: regula veche.
             name = str(proc.info.get("name") or "").lower()
             if name and not name.startswith("python"):
                 continue
