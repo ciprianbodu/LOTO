@@ -21,6 +21,9 @@ import importlib
 import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version as dist_version
+from pathlib import Path
+
+REQUIREMENTS_FILE = Path(__file__).resolve().with_name("requirements_base.txt")
 
 # Consola Windows e cp1252 by default -> diacriticele (ă, ț) arunca UnicodeEncodeError.
 for _stream in (sys.stdout, sys.stderr):
@@ -29,7 +32,7 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-# Librarii standard care pot fi actualizate automat in siguranta.
+# Librarii standard actualizabile in limitele versiunilor validate din requirements.
 # Am exclus intentionat pandas / numpy / scipy (Python C-extensions; wheel-uri
 # specifice per versiune de Python — upgrade nesigur poate cere build din sursa).
 SAFE_UPGRADE_PACKAGES = [
@@ -73,7 +76,9 @@ def upgrade_pip():
 def check_and_upgrade(packages):
     print("\n--- Verificare + Actualizare Librarii Standard ---")
     try:
-        # --prefer-binary: NU build din sursa (evita FAIL pe pandas/numpy fara wheel)
+        # Stack-ul numeric cere wheel-uri; restul prefera wheel-uri, dar poate
+        # folosi surse cand inca nu exista un wheel pentru Python-ul curent.
+        # Calea absoluta pastreaza contractul si cand scriptul ruleaza din alt CWD.
         # --upgrade-strategy only-if-needed: nu cascadeaza upgrade-uri pe deps
         cmd = [
             sys.executable,
@@ -82,10 +87,13 @@ def check_and_upgrade(packages):
             "install",
             "--upgrade",
             "--prefer-binary",
+            "--only-binary=numpy,scipy,pandas",
             "--upgrade-strategy",
             "only-if-needed",
+            "--constraint",
+            str(REQUIREMENTS_FILE),
         ] + packages
-        print(f"Comanda: pip install --upgrade --prefer-binary {' '.join(packages)}")
+        print(f"Comanda: {subprocess.list2cmdline(cmd)}")
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         print("-> [OK] Librariile standard sunt actualizate si compatibile.")
     except subprocess.CalledProcessError as e:

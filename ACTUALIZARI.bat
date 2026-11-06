@@ -199,7 +199,7 @@ if not exist "requirements_base.txt" (
 )
 REM PyYAML foloseste implementarea Python; extensia optionala LibYAML nu cere compilator.
 set "PYYAML_FORCE_LIBYAML=0"
-"%VENV_PY%" -m pip install --prefer-binary --upgrade-strategy only-if-needed -r requirements_base.txt
+"%VENV_PY%" -m pip install --upgrade --prefer-binary --only-binary=numpy,scipy,pandas --upgrade-strategy only-if-needed -r requirements_base.txt
 if errorlevel 1 (
     echo   [EROARE] Instalarea dependentelor obligatorii a esuat.
     goto :fatal_setup
@@ -225,6 +225,14 @@ if errorlevel 1 (
 "%VENV_PY%" "%PROJECT_DIR%verifica_mediu.py"
 if errorlevel 1 (
     echo   [EROARE] Verificarea mediului a esuat.
+    goto :fatal_setup
+)
+echo/
+
+echo   Verificare finala a dependentelor instalate...
+"%VENV_PY%" -m pip check
+if errorlevel 1 (
+    echo   [EROARE] Dependente lipsa sau incompatibile dupa actualizare.
     goto :fatal_setup
 )
 echo/

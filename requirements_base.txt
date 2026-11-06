@@ -1,33 +1,34 @@
 # =============================================================================
 # requirements_base.txt — TOATE dependențele aplicației (exclusiv CPU).
 # Python țintă: ultimul 3.15.x stabil (py -3.15, venv D:\_BUILD\_LOTO\.venv).
+# Versiunile directe sunt fixate pentru actualizări controlate.
 # Instalate de ACTUALIZARI.bat. Suportul GPU/neural (torch / TimesFM / Chronos /
 # NeuralForecast / foundation models) a fost ELIMINAT complet din aplicație.
 # =============================================================================
 
 # UI + utilitare
-nicegui                  # UI principal (app_nicegui.py)
+nicegui==4.0.0            # UI principal (app_nicegui.py)
 # streamlit: ELIMINAT. Era pentru „UI legacy (app.py)" — un fișier care nu
 # există în repo și nu apare nici în istoricul git.
 # requests: ELIMINAT (15.09.2026). Zero consumatori — niciun `import requests`
 # in .py, .bat sau scripts/; ramasese din suportul de retea scos odata cu
 # TimesFM/foundation models.
-psutil
+psutil==7.2.2
 
 # Tabular / numeric (C-extensions; nu se update-eaza fara grija).
 # Acesta ESTE și stack-ul de scoring: după înlocuirea întregului set de metode
 # (14.09.2026), cele 52 de intrări din registry se sprijină exclusiv pe numpy
 # și scipy (scipy.signal.lfilter, scipy.sparse.csr_matrix, scipy.spatial.cKDTree).
 # Seria 3 oferă binarele CPython 3.15; seria 2 nu are wheels cp315.
-pandas>=3,<4
-numpy
-scipy
+pandas==3.1.1
+numpy==2.5.4
+scipy==1.18.1
 # numba: ELIMINAT. `loto_engine` importa `jit` fara sa-l foloseasca nicaieri
 # (un singur `jit` in tot fisierul: importul insusi) — costa ~424 ms per
 # proces la import si aducea numba+llvmlite ca dependinta HARD, degeaba.
 
 # Benchmark / lab utilitare
-rich
+rich==15.0.0
 
 # scikit-learn / statsmodels / statsforecast / hmmlearn / xgboost / lightgbm /
 # catboost: ELIMINATE (14.09.2026). Descriau setul vechi de ~183 de metode,
@@ -37,4 +38,4 @@ rich
 # nu există niciun `import matplotlib` și niciun grafic generat.
 
 # Teste unitare (test_decision.py, test_method_selector.py)
-pytest
+pytest==9.2.0

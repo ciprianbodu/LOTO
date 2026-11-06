@@ -92,6 +92,25 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Dependențe CPU fixate — 2026-11-06
+
+- `requirements_base.txt` fixează NiceGUI 4.0.0, psutil 7.2.2, pandas 3.1.1,
+  NumPy 2.5.4, SciPy 1.18.1, rich 15.0.0 și pytest 9.2.0.
+- `ACTUALIZARI.bat` actualizează efectiv pachetele declarate (`--upgrade`),
+  cere wheel-uri pentru NumPy/SciPy/pandas și rulează `pip check` după toate
+  instalările, înainte de istorice și cache-uri. Se păstrează setarea existentă
+  `PYYAML_FORCE_LIBYAML=0` pentru instalarea fără compilator a PyYAML.
+- Upgrade-ul separat din `verifica_mediu.py` respectă aceleași versiuni printr-o
+  cale absolută de constraints; numericele rămân în afara listei sale automate.
+  Verificările noi și adaptările testelor rămân locale, fără a intra în commit.
+- Validare cumulată pe Python 3.15.2: 6842 teste trecute, 16 omise, zero
+  eșecuri rămase. Auditul verifică 13 istorice, 848 comparații de scoruri,
+  26 de fluxuri, worker pentru 13 jocuri și UI HTTP 200; fișierele de producție
+  rămân intacte. `pip check` și cele șase importuri obligatorii trec.
+- Patchul local `TESTE/dependency-update-2026-11-06.patch` păstrează adaptările
+  testelor la 3.15 și implicitul 5+, cele două verificări noi ale updaterului
+  și izolarea țintei globale/env între teste, fără a modifica ținta la intrare.
+
 ### Runtime Python 3.15 stabil — 2026-11-06
 
 - Tinta curenta este ultimul Python 3.15.x stabil; validarea a folosit
