@@ -6,7 +6,7 @@ Selection rules (in priority order):
        sim_depth windows must show lift > 0 on the SAME T+ target used to
        choose the winner, at the same (game, pool, window). Using mean hits
        here would allow extra 2-hit draws to qualify a method that loses to
-       random exactly on the requested 3+/4+ event.
+       random exactly on the requested T+ event.
     2. Among qualifying methods, sort by the POOLED WILSON LOWER BOUND of the
        T+ rate first; mean lift vs random is only the SECOND key and window
        consistency the third (`qualifying.sort` — vezi `pooled_wilson_distinct`
@@ -214,13 +214,12 @@ SAFE_FALLBACK_SCORER = "frequency"
 DEFAULT_SIM_DEPTH_PCT = 40  # identic cu default-ul din method_selector
 
 # Pragul de hituri pe care bench-ul ALEGE metoda câștigătoare (rata extragerilor cu
-# ≥ acest număr de numere ghicite). Implicit 3 (rată mai densă → selecție mai stabilă).
+# ≥ acest număr de numere ghicite ÎN POOL). UI/CLI aleg implicit 5; API-ul
+# programatic păstrează 3 când apelantul nu transmite nicio țintă.
 # NU schimbă șansele — loteria e aleatoare; doar pe ce metrică se alege câștigătorul.
-# Reversibil: schimbă aici, sau setează LOTO_BENCH_TARGET=4.
-# Pentru jocurile de pool sunt acceptate doar 3 sau 4; Urna 2 suprascrie local
-# ținta la top-1 și consumă `rate_1plus_k1`. Orice altă valoare globală făcea
-# `_resolve_rate_col` să cadă TĂCUT pe 4+ (doar WARNING în log) — decizia se lua
-# pe altă țintă decât cea cerută.
+# Reversibil: LOTO_BENCH_TARGET acceptă 3, 4, 5 sau 6. Joker Urna 1 se oprește
+# la 5, iar Urna 2 consumă `rate_1plus_k1`. 5/40 permite 6 în pool, nu pe bilet.
+# Țintele 5/6 cer coloanele lor măsurate; nu sunt reconstruite din 3/4 sau medii.
 # `clamp_bench_hit_target` e importat din `hit_target` (stdlib) — re-exportat aici.
 
 BENCH_HIT_TARGET = clamp_bench_hit_target(os.environ.get("LOTO_BENCH_TARGET", "3"))
@@ -583,7 +582,7 @@ def _perf_signature_frame(
         for c in sub_real.columns
         if c.startswith(f"rate_{target}plus_k") and sub_real[c].notna().any()
     ]
-    if not rate_cols:  # folds.csv vechi (doar 4+) — vezi _resolve_rate_col
+    if not rate_cols and target in (3, 4):  # compatibilitate pentru țintele vechi
         rate_cols = [
             c
             for c in sub_real.columns
@@ -826,8 +825,7 @@ def decide_optimal_config_for_pool(
         draw_n, base_pool = _known_geometry
     else:
         base_pool = int(pick_n or draw_n)
-    # Ținta per joc: 5/40 rămâne pe 4+ (3 numere nu aduc premiu), oricare ar fi
-    # ținta globală; celelalte jocuri de pool urmează ținta globală 3/4.
+    # Ținta este în pool: 5/40 are minimum 4, Joker maximum 5, Urna 2 top-1.
     target = 1 if int(draw_n) == 1 else game_hit_target(game_key, BENCH_HIT_TARGET)
     target_label = "top-1 (1/1)" if target == 1 else f"{target}+"
     rate_target_col = f"rate_{target}plus_k{pool_size}"
@@ -887,8 +885,8 @@ def decide_optimal_config_for_pool(
     except Exception as exc:  # noqa: BLE001
         logger.debug("[decision] per_game neaplicat: %s", exc)
 
-    # Coloane candidate pt rata țintei, în ordine de preferință; sare peste coloane
-    # all-NaN (cache vechi fără 3+) și cade pe 4+ → niciodată NaN în decizie.
+    # Coloane candidate pt rata țintei, în ordine de preferință. Compatibilitatea
+    # 3/4 păstrează fallback-ul vechi; 5/6 cer rata EXACTĂ, măsurată la acest K.
     # Coloana FĂRĂ `_kN` reprezintă EXCLUSIV pool-ul de bază (K=draw_n), deci
     # este validă doar când decidem chiar acea geometrie. Folosită la k12, de
     # exemplu, ar puncta toate metodele pe k5/k6 și ar produce un câștigător
@@ -899,7 +897,7 @@ def decide_optimal_config_for_pool(
     # Pentru 3+/4+ păstrăm fallback-ul compatibil cu folds vechi. Pentru top-1
     # nu există o metrică echivalentă în cache vechi: cădem explicit pe frequency
     # cu low_confidence, nu pretindem că rate_4plus=0 e dovadă.
-    if target != 1:
+    if target in (3, 4):
         _candidate_cols.append(f"rate_4plus_k{pool_size}")
         if int(pool_size) == int(base_pool):
             _candidate_cols.append("rate_4plus")
@@ -1147,7 +1145,7 @@ def decide_optimal_config_for_pool(
         if consistency < CONSISTENCY_THRESHOLD:
             continue
         w_lift = _weighted_mean_lift(real_m, real_random, gate_col, baseline_rate)
-        # Rata țintei: +3/+4 pentru pool-uri, top-1 pentru Urna 2.
+        # Rata țintei: T+ pentru pool-uri, top-1 pentru Urna 2.
         # `target_conf` (Wilson) decide, rata brută e doar pentru afișare.
         r4 = _rate_target_mean(real_m)
         r4_conf = _rate_target_confidence(real_m)
@@ -1266,6 +1264,7 @@ def decide_optimal_config_for_pool(
                 "ranked_methods": [],
                 "consistency_threshold": CONSISTENCY_THRESHOLD,
                 "low_confidence": True,
+                "fallback": True,
                 "ensemble_dropped_redundant": [],
                 "baseline_rate": baseline_rate,
                 "baseline_source": baseline_source,
@@ -1289,7 +1288,7 @@ def decide_optimal_config_for_pool(
         # singur membru (nu combinăm metode neconfirmate statistic).
         ensemble = _build_ensemble_weights([(scorer, 1.0)])
     else:
-        # Sortăm întâi după limita Wilson a ratei țintei (+3/+4 sau top-1)
+        # Sortăm întâi după limita Wilson a ratei țintei (T+ sau top-1)
         # (robustă la evenimente rare/zgomot — nu doar rata brută), apoi după
         # lift mediu, apoi consistență. Metoda care prinde T+ cel mai des ȘI cu
         # dovezi suficiente câștigă, nu cea cu 1 eveniment norocos.
@@ -1557,10 +1556,22 @@ def _decision_games_meta(games: dict) -> dict[str, dict]:
             # K=15/18/20 cerut de user pentru testare 4+ hits stable).
             pool_range = list(range(pick_n, pick_n + 15))  # pick_n .. pick_n+14
         _mx = gd.get("max_num") or KNOWN_GAME_MAX_NUM.get(gk)
+        lr_pools: list[int] = []
+        lr_game = {
+            "loto_6_49": "6/49", "loto_5_40": "5/40", "joker_urna1": "joker"
+        }.get(gk)
+        if lr_game is not None:
+            from covering.lr_schemes import lr_schemes
+
+            lr_pools = sorted(
+                {s.n for s in lr_schemes(lr_game) if s.n >= 7 and s.n in pool_range}
+            )
         games_meta[gk] = {
             "draw_n": draw_n,
             "pick_n": pick_n,
             "pool_range": pool_range,
+            "priority_pool_sizes": [k for k in pool_range if k >= 7],
+            "lr_pool_sizes": lr_pools,
             "max_num": int(_mx) if _mx else None,
         }
     return games_meta
@@ -1569,17 +1580,26 @@ def _decision_games_meta(games: dict) -> dict[str, dict]:
 def attach_auto_pilot_matrix(cfg: dict, folds_csv_path: str) -> dict:
     """Construiește matricea Auto-Pilot ÎN MEMORIE și o pune în `cfg`, fără scriere.
 
-    `_meta.bench_hit_target` = ținta globală cu care s-a construit (3 sau 4).
+    `_meta.bench_hit_target` = ținta globală cu care s-a construit (3..6).
     Bench-ul scrie apoi câștigătorii, matricea și semnăturile într-o singură
     scriere: un fișier fără `auto_pilot_per_pool` juca vechii câștigători după
     `avg_hits`, fără poarta față de random."""
     games = cfg.get("games", {})
-    matrix = build_auto_pilot_matrix(folds_csv_path, _decision_games_meta(games))
+    games_meta = _decision_games_meta(games)
+    matrix = build_auto_pilot_matrix(folds_csv_path, games_meta)
     for gk in games:
         games[gk]["auto_pilot_per_pool"] = matrix.get(gk, {})
+        games[gk]["priority_pool_sizes"] = games_meta[gk]["priority_pool_sizes"]
+        games[gk]["lr_pool_sizes"] = games_meta[gk]["lr_pool_sizes"]
     if not isinstance(cfg.get("_meta"), dict):
         cfg["_meta"] = {}
     cfg["_meta"]["bench_hit_target"] = int(BENCH_HIT_TARGET)
+    cfg["_meta"]["optimization_focus"] = {
+        "metric": "pool_hits",
+        "hit_target": int(BENCH_HIT_TARGET),
+        "priority_pool_min": 7,
+        "secondary_metric": "rate_6plus",
+    }
     return matrix
 
 
@@ -1587,7 +1607,7 @@ def decision_target_mismatch(cfg: dict, target) -> dict[str, int]:
     """{joc: ținta deciziei} pentru jocurile decise pe altă țintă decât `target`.
 
     Ținta așteptată a fiecărui joc e cea pe care ar folosi-o decizia acum
-    (`game_hit_target`: 5/40 rămâne 4+ cu orice selector); Urna 2 (top-1) nu
+    (`game_hit_target`: 5/40 minimum 4, Joker maximum 5); Urna 2 (top-1) nu
     depinde de selector. Celula fără `hit_target` (decizie veche) folosește
     `_meta.bench_hit_target`; fără niciuna, nu există reper. Un bench din linia
     de comandă pe altă țintă, o schimbare de țintă refuzată (folds incomplet)
@@ -1648,13 +1668,35 @@ def update_best_methods_with_auto_pilot(
     with file_lock(bm_path):
         cfg = json.loads(bm_path.read_text(encoding="utf-8"))
         if require_complete:
-            missing = missing_decision_folds(cfg, pd.read_csv(folds_csv_path))
+            folds = pd.read_csv(folds_csv_path)
+            missing = missing_decision_folds(cfg, folds)
             if missing:
                 g, m, pct = missing[0]
                 raise IncompleteFoldsError(
                     f"{folds_csv_path} nu acoperă Re-Bench-ul deciziei: lipsesc "
                     f"{len(missing)} folduri (ex. {g}/{m}/{pct}%)"
                 )
+            # Un folds vechi poate avea toate metodele/ferestrele și totuși
+            # niciun eveniment 5+/6+ măsurat. Nu rescriem decizia pe altă rată
+            # și nu interpretăm coloana absentă ca zero succese.
+            for gk, meta in _decision_games_meta(cfg.get("games", {})).items():
+                target = game_hit_target(gk, BENCH_HIT_TARGET)
+                if target < 5:
+                    continue
+                real = folds[folds["game"] == gk]
+                if "is_random" in real.columns:
+                    real = real[real["is_random"] == False]  # noqa: E712
+                if "failed" in real.columns:
+                    real = real[real["failed"] != True]  # noqa: E712
+                for k in meta["pool_range"]:
+                    column = f"rate_{target}plus_k{k}"
+                    if column not in real or not pd.to_numeric(
+                        real[column], errors="coerce"
+                    ).notna().any():
+                        raise IncompleteFoldsError(
+                            f"{folds_csv_path} nu conține rata {target}+ măsurată "
+                            f"pentru {gk}/k{k}; este necesar Re-Bench"
+                        )
 
         matrix = attach_auto_pilot_matrix(cfg, folds_csv_path)
 

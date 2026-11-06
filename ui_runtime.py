@@ -294,20 +294,21 @@ def _active_max_consecutive_run() -> int:
 
 
 def _clamped_bench_target(value=None) -> int:
-    raw = SETTINGS.get("bench_hit_target", 3) if value is None else value
+    raw = SETTINGS.get("bench_hit_target", 5) if value is None else value
     try:
         from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
 
-        return clamp_bench_hit_target(raw)
+        return clamp_bench_hit_target(raw, default=5)
     except Exception:  # noqa: BLE001
         try:
             n = int(raw)
         except (TypeError, ValueError):
-            n = 3
-        return n if n in (3, 4) else 3
+            n = 5
+        return n if n in (3, 4, 5, 6) else 5
 
 
 UI_PERSIST_KEYS = [
+    "bench_target_revision",
     "pool_size_val",
     *_POOL_KEYS.values(),
     "guarantee_val",
@@ -389,7 +390,8 @@ DEFAULTS = {
     # cu WF paralel (~80% CPU) validarea completă la 30% depth durează minute, nu ore.
     # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
     "wf_budget_min": 90,
-    "bench_hit_target": 3,
+    "bench_hit_target": 5,
+    "bench_target_revision": 1,
 }
 
 # --------------------------------------------------------------------------- #
@@ -468,6 +470,8 @@ GK_MATRIX = {  # etichetă afișată → cheia jocului din bench (best_methods.j
 
 
 def _load_settings() -> None:
+    data = {}
+    migrated_target = False
     if UI_STATE_FILE.exists():
         try:
             data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
@@ -476,6 +480,12 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
+    # La prima pornire a noii politici, vechiul selector 3/4 trece pe 5+.
+    # Revizia se salveaza: o alegere explicita ulterioara 3/4/6 ramane persistenta.
+    if isinstance(data, dict) and data and data.get("bench_target_revision") != 1:
+        SETTINGS["bench_hit_target"] = 5
+        SETTINGS["bench_target_revision"] = 1
+        migrated_target = "bench_hit_target" in data
     # Câmpul comun rămâne 6..16 pentru jocurile altor țări.
     try:
         SETTINGS["pool_size_val"] = max(
@@ -500,6 +510,15 @@ def _load_settings() -> None:
         os.environ["LOTO_BENCH_TARGET"] = str(target)
     except Exception as exc:
         logger.warning("init bench_hit_target check: %s", exc)
+    if migrated_target:
+        # Migrarea modifica numai tinta; nu rescrie poolurile ori alte valori
+        # salvate folosind normalizarile temporare ale sesiunii.
+        updated = dict(data)
+        updated.update(bench_hit_target=5, bench_target_revision=1)
+        try:
+            atomic_write_json(UI_STATE_FILE, updated)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("save bench target migration: %s", exc)
 
 
 def _legacy_finalized_job_id() -> int | None:

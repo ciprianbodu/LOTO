@@ -213,6 +213,76 @@ def _render_stages(audit: dict) -> None:
             prev = pool_set
 
 
+def _generated_system_identity(game: str, data: dict) -> tuple[str, str]:
+    """Name the actual block set; a matching size or guarantee is not evidence."""
+    variants = data.get("variants") or []
+    if not variants:
+        return "empty", "Fără variante generate"
+    spec = _game_spec_for(game, data)
+    pick = spec.pick_n
+    fallback = ("wheel", "Wheel generat")
+    try:
+        raw_pool = data.get("hard_core") or []
+        pool = tuple(sorted(int(n) for n in raw_pool))
+        pool_set = set(pool)
+        if (
+            len(pool_set) != len(pool)
+            or any(isinstance(n, bool) or int(n) != n for n in raw_pool)
+            or not all(1 <= n <= spec.max_n for n in pool)
+            or len(pool) < pick
+        ):
+            return fallback
+        full_size = math.comb(len(pool), pick)
+        schemes = [s for s in _lr_schemes_for(game, data) if s.size == len(variants)]
+        if len(variants) != full_size and not schemes:
+            return fallback
+        is_joker = spec.geometry == "joker"
+        width = pick + int(is_joker)
+        blocks = set()
+        balls = set()
+        for variant in variants:
+            if len(variant) != width or any(
+                isinstance(n, bool) or int(n) != n for n in variant
+            ):
+                return fallback
+            main = tuple(sorted(int(n) for n in variant[:pick]))
+            if len(set(main)) != pick or not set(main).issubset(pool_set):
+                return fallback
+            blocks.add(main)
+            if is_joker:
+                ball = int(variant[-1])
+                if not 1 <= ball <= 20:
+                    return fallback
+                balls.add(ball)
+        if len(blocks) != len(variants) or (is_joker and len(balls) != 1):
+            return fallback
+        urn = " (Urna 1, același număr Joker pe toate variantele)" if is_joker else ""
+        if len(blocks) == full_size:
+            return "complete", f"Sistem complet C({len(pool)},{pick}){urn}"
+        from covering.lr_schemes import scheme_tickets
+
+        for scheme in schemes:
+            if blocks == {tuple(v) for v in scheme_tickets(scheme, pool)}:
+                return "lr", f"Schemă redusă LR · {scheme.label}{urn}"
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+    return fallback
+
+
+def _generated_system_summary(game: str, data: dict) -> str:
+    """Actual generated system and its own cost, shared by UI and report."""
+    kind, label = _generated_system_identity(game, data)
+    if kind == "empty":
+        return label
+    spec = _game_spec_for(game, data)
+    size = len(data.get("variants") or [])
+    cost = (
+        f"≈ {_thousands(size * spec.price, 2)} {spec.currency} în variante"
+        if spec.price is not None else "tarif necunoscut"
+    )
+    return f"Sistem generat: {label} · {count(size, 'variante', 'variantă')} · {cost}."
+
+
 def _render_cost(game: str, data: dict) -> None:
     spec = _game_spec_for(game, data)
     if not spec.is_romanian:
@@ -239,9 +309,43 @@ def _render_cost(game: str, data: dict) -> None:
     # se citesc pe ACEEAȘI bază.
     _jk_txt = " · 1 nr. joker/bilet" if gk == "joker" else ""
 
-    # „Sistem complet" = TOATE combinațiile C(pool, draw_n) de la agenție (fără garanție
-    # de acoperire — e exhaustiv). NU confunda cu „wheel-ul nostru" de mai jos, care e
-    # un cover la garanția cerută; minimalitatea nu este demonstrată în general.
+    variants = data.get("variants") or []
+    if variants:
+        # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
+        # schemele oficiale de referință; fallback pe cea cerută din setări.
+        _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
+        if _g_used is None:
+            _g_used = data.get("guarantee")
+        _wc_top = (data.get("audit") or {}).get("wheel_condition_used") or data.get(
+            "wheel_condition"
+        )
+        try:
+            _wc_top_txt = (
+                f" dacă {int(_wc_top)}"
+                if _wc_top is not None
+                and _g_used is not None
+                and int(_wc_top) != int(_g_used)
+                else ""
+            )
+        except (TypeError, ValueError):
+            _wc_top_txt = ""
+        _g_txt = (
+            f"garanție {_g_used}{_wc_top_txt}"
+            if _g_used is not None
+            else "garanția configurată"
+        )
+        ui.markdown(
+            f"**{_generated_system_summary(game, data)}** {_g_txt.capitalize()}."
+        ).classes("text-caption")
+        for line in _wheel_probability_lines(game, data):
+            ui.label(line).classes("text-caption")
+
+        ui.label(
+            f"Estimare la tariful standard {price:g} lei/variantă; tragerile speciale pot avea alt tarif. Taxa fizică pe bilet nu este inclusă."
+        ).classes("text-caption text-grey")
+
+    # Referința completă conține toate combinațiile, indiferent dacă acestea
+    # coincid cu sistemul generat identificat din variantele efective.
     _full_lbl = (
         f"Sistem complet C({pool_used},{draw_n}) = {full_vars} var.{_jk_txt} "
         f"≈ {_thousands(full_cost)} Lei în variante"
@@ -253,10 +357,15 @@ def _render_cost(game: str, data: dict) -> None:
             for s in schemes
         ]
         ui.markdown(
-            f"💡 **Scheme reduse oficiale la agenție** ({schemes[0].n} nr.): "
+            f"💡 **Scheme LR disponibile separat pe același pool** ({schemes[0].n} nr.): "
             + " sau ".join(parts)
             + f"\n\n*({_full_lbl} — toate combinațiile, exhaustiv)*"
         ).classes("text-info")
+        ui.label(
+            "Codurile de mai jos sunt desfășurări LR de referință. Istoricul LR le "
+            "reconstituie pe poolurile de atunci. Fiecare cost și procent de mai jos "
+            "se referă la codul numit; valorile sistemului generat sunt afișate mai sus."
+        ).classes("text-caption")
         for line in _lr_scheme_lines(game, data):
             ui.label(line).classes("text-caption")
         _render_lr_layouts(game, data, schemes)
@@ -293,42 +402,6 @@ def _render_cost(game: str, data: dict) -> None:
             # mărimea cerută).
             ui.markdown(f"💡 **Cost la agenție:** {_none}").classes("text-info")
 
-    variants = data.get("variants") or []
-    if variants:
-        # Garanția EFECTIV folosită la wheel (audit) — cea care face diferența față de
-        # schemele oficiale de mai sus; fallback pe cea cerută din setări.
-        _g_used = (data.get("audit") or {}).get("wheel_guarantee_used")
-        if _g_used is None:
-            _g_used = data.get("guarantee")
-        _wc_top = (data.get("audit") or {}).get("wheel_condition_used") or data.get(
-            "wheel_condition"
-        )
-        try:
-            _wc_top_txt = (
-                f" dacă {int(_wc_top)}"
-                if _wc_top is not None
-                and _g_used is not None
-                and int(_wc_top) != int(_g_used)
-                else ""
-            )
-        except (TypeError, ValueError):
-            _wc_top_txt = ""
-        _g_txt = (
-            f"garanție {_g_used}{_wc_top_txt}"
-            if _g_used is not None
-            else "garanția configurată"
-        )
-        ui.markdown(
-            f"**Wheel-ul nostru** ({_g_txt}): {len(variants)} var.{_jk_txt} ≈ "
-            f"{_thousands(len(variants) * price)} Lei în variante."
-        ).classes("text-caption")
-        for line in _wheel_probability_lines(game, data):
-            ui.label(line).classes("text-caption")
-
-        ui.label(
-            f"Estimare la tariful standard {price:g} lei/variantă; tragerile speciale pot avea alt tarif. Taxa fizică pe bilet nu este inclusă."
-        ).classes("text-caption text-grey")
-
 
 def _render_cost_foreign(game: str, data: dict, spec) -> None:
     """Costul unui joc din altă țară: tarif și monedă din registru; fără scheme
@@ -341,7 +414,7 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
         ui.markdown(
             f"💡 **{spec.display}: tarif necunoscut** — costul nu se afișează. "
             f"Sistem complet C({pool_used},{pick}) = {full_vars} var.; "
-            f"wheel-ul nostru: {len(variants)} var."
+            f"{_generated_system_summary(game, data)}"
         ).classes("text-info")
     else:
         cur = spec.currency
@@ -349,8 +422,7 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
             f"💡 **Cost {spec.display}:** sistem complet C({pool_used},{pick}) = "
             f"{full_vars} var. ≈ {_thousands(full_vars * spec.price, 2)} {cur} în variante"
             + (
-                f" | **Wheel-ul nostru:** {len(variants)} var. ≈ "
-                f"{_thousands(len(variants) * spec.price, 2)} {cur} în variante"
+                f" | **{_generated_system_summary(game, data)}**"
                 if variants
                 else ""
             )
@@ -421,6 +493,12 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
     except (ValueError, TypeError):
         ours = None
     lines = []
+    generated_kind, generated_label = _generated_system_identity(game, data)
+    comparison = (
+        f"wheel-ul nostru ({len(variants)} var.)"
+        if generated_kind == "wheel"
+        else f"sistemul generat ({generated_label}, {len(variants)} var.)"
+    )
     for s in schemes:
         odds = scheme_odds(s)
         lines.append(
@@ -456,7 +534,7 @@ def _lr_scheme_lines(game: str, data: dict) -> list[str]:
                 else "tot atâtea variante"
             )
             lines.append(
-                f"{s.label} față de wheel-ul nostru ({len(variants)} var.): {cost}; "
+                f"{s.label} față de {comparison}: {cost}; "
                 + ("; ".join(diff) if diff else "aceleași șanse la fiecare prag")
                 + "."
             )
@@ -649,7 +727,7 @@ def _render_lr_layouts(game: str, data: dict, schemes) -> None:
             f"V{i:>3}: " + ", ".join(map(str, t)) + tail for i, t in enumerate(tickets, 1)
         )
         with ui.expansion(
-            f"📋 {s.label} pe pool-ul de azi ({count(s.size, 'variante', 'variantă')})",
+            f"📋 Referință LR: {s.label} pe pool-ul de azi ({count(s.size, 'variante', 'variantă')})",
             value=False,
         ).classes("w-full"):
             if joker:
@@ -690,7 +768,7 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
             return ["Șanse teoretice indisponibile: pool sau variante invalide."]
         total = math.comb(max_num, draw_n)
         rates = []
-        for target in (3, 4, 5):
+        for target in range(3, draw_n + 1):
             if target <= draw_n:
                 favorable = sum(
                     math.comb(len(pool_set), hits)
@@ -699,12 +777,17 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
                     if 0 <= draw_n - hits <= max_num - len(pool_set)
                 )
                 rates.append(f"{target}+ numere în pool: {100 * favorable / total:.3f}%")
-        return [
+        lines = [
             "Șanse teoretice ale pool-ului la o extragere uniformă: " + " · ".join(rates),
             f"Șansa comună pe variante nu este calculată exact pentru pool-uri "
             f"de peste {MAX_EXACT_POOL} numere; procentele de mai sus privesc numai "
             "pool-ul, nu garantează un premiu pe biletele generate.",
         ]
+        if draw_n >= 6 and pick < 6:
+            lines.append(
+                f"6 numere pe o variantă: 0% (imposibil: varianta are {pick} numere)."
+            )
+        return lines
     try:
         # Joker fără numărul Urnei 2 (coloana lipsă sau invalidă): 5 numere.
         if any(len(v) not in {pick, pick + int(is_joker)} for v in variants):
@@ -715,7 +798,8 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     except (ValueError, TypeError):
         return ["Șanse teoretice indisponibile: pool sau variante invalide."]
     lines = [
-        "Șanse teoretice la o extragere uniformă, pentru toate variantele generate:",
+        f"Șanse teoretice la o extragere uniformă pentru sistemul generat "
+        f"({_generated_system_identity(game, data)[1]}):",
         " · ".join(
             f"{t}+ numere: în pool {100 * odds['pool'][t]:.3f}%; "
             f"pe cel puțin o variantă {100 * odds['ticket'][t]:.3f}%"
@@ -723,15 +807,28 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
             if t <= draw_n
         ),
     ]
+    if draw_n >= 6:
+        six_ticket = (
+            _five_plus_pct(odds["ticket"][6])
+            if pick >= 6
+            else f"0% (imposibil: varianta are {pick} numere)"
+        )
+        lines.append(
+            f"6+ numere: în pool {_five_plus_pct(odds['pool'][6])}; "
+            f"pe cel puțin o variantă {six_ticket}"
+        )
     if max_num == 40:
         lines.append(
             "5/40: hiturile se numără pe toate cele 6 numere extrase (varianta are 5); "
-            "3 numere nu aduc premiu, de aceea ținta bench-ului la 5/40 este 4+. "
+            "3 numere nu aduc premiu. "
             "Categoria I (5 din primele 5 extrase) nu este modelată separat."
         )
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
-    lines.append("Acoperirea 100% este o garanție condiționată de numerele prinse în pool, nu șansa de câștig.")
+    lines.append(
+        "Acoperirea afișată aparține sistemului generat; 100% înseamnă garanție "
+        "condiționată de numerele prinse în pool, nu șansa de câștig."
+    )
     _g = (data.get("audit") or {}).get("wheel_guarantee_used")
     gap = _guarantee_gap_line(data.get("guarantee") if _g is None else _g, pick, draw_n)
     if gap:
@@ -1132,15 +1229,16 @@ def _build_report() -> str:
             + f" | Variante în sistem: {len(d.get('variants') or [])}"
             + f" | Extrageri: {d.get('total_draws')}"
         )
+        out.append(f"{indent}{_generated_system_summary(game, d)}")
         cov = (d.get("context") or {}).get("coverage_pct")
         out.append(
-            f"{indent}Acoperire garanție (wheel generat): "
+            f"{indent}Acoperire garanție (sistem generat): "
             + (f"{float(cov):.2f}%" if cov is not None else "necunoscută")
         )
         out.extend(f"{indent}{line}" for line in _wheel_probability_lines(game, d))
         if route_note := _large_pool_route_note(game, d):
             out.append(f"{indent}{route_note}")
-        out.extend(f"{indent}Schemă LR: {line}" for line in _lr_scheme_lines(game, d))
+        out.extend(f"{indent}Referință LR separată: {line}" for line in _lr_scheme_lines(game, d))
         # Metoda și nota ei de încredere, ca în panou (Urna 2 cu nota ei).
         _bw = (d.get("audit") or {}).get("bench_winner") or {}
         for _key, _info in _bw.items():
@@ -1489,6 +1587,8 @@ def _large_pool_route_note(game: str, data: dict) -> str | None:
     route = (data.get("audit") or {}).get("large_pool") or {}
     if pool_n <= 19 and not route:
         return None
+    if _generated_system_identity(game, data)[0] == "complete":
+        return None
     return (
         f"Pool de {pool_n} numere: variantele formează un cover constructiv "
         "generat de aplicație, fără cod LR pentru această mărime. Numărul "
@@ -1520,6 +1620,9 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
     if route_note := _large_pool_route_note(game, data):
         ui.label(route_note).classes("text-caption text-warning")
 
+    ui.label(f"Sistem generat: {_generated_system_identity(game, data)[1]}").classes(
+        "text-bold"
+    )
     with ui.row().classes("gap-6 items-center"):
         ui.label(
             f"Pool efectiv: {eff}" + (f" (cerut {req})" if req and req != eff else "")
@@ -1597,7 +1700,7 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
             if float(_cov) >= 100.0:
                 ui.html(
                     render_html_safe(
-                        t"<b style='color:#22c55e'>✅ Acoperire garanție: 100%</b>"
+                        t"<b style='color:#22c55e'>✅ Acoperire garanție (sistem generat): 100%</b>"
                     )
                 )
             else:
@@ -1617,7 +1720,7 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
                     )
                 ui.html(
                     render_html_safe(
-                        t"<b style='color:#ef4444'>⚠️ Acoperire garanție: {float(_cov):.2f}%</b> "
+                        t"<b style='color:#ef4444'>⚠️ Acoperire garanție (sistem generat): {float(_cov):.2f}%</b> "
                         t"<span style='opacity:.7'>({reason})</span>"
                     )
                 )
@@ -1626,7 +1729,7 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
             # trebuie să pară acoperit complet doar fiindcă rândul lipsește.
             ui.html(
                 render_html_safe(
-                    t"<b style='color:#f59e0b'>⚠️ Acoperire garanție: necunoscută</b> "
+                    t"<b style='color:#f59e0b'>⚠️ Acoperire garanție (sistem generat): necunoscută</b> "
                     t"<span style='opacity:.7'>(rezultat fără măsurătoare; regenerează)</span>"
                 )
             )

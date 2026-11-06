@@ -153,7 +153,7 @@ def _read_config(cfg_path: Path) -> dict:
 
 def _is_urna2_key(game_key) -> bool:
     """Cheia unei a doua urne single-pick (Joker românesc sau un Joker străin
-    din registru): contract top-1, nu 3+/4+."""
+    din registru): contract top-1, separat de ținta pool-ului principal."""
     if game_key == "joker_urna2":
         return True
     try:
@@ -342,6 +342,53 @@ def _auto_pilot_entry(g: dict, pool_size: int | None) -> dict:
     return entry if isinstance(entry, dict) else {}
 
 
+def _tail_target_fallback(game_key: str, entry: dict) -> dict | None:
+    """Refuză o decizie veche când fluxul cere explicit 5+/6+ în pool.
+
+    Regula se verifică la citire, nu la încărcarea JSON-ului: ținta se poate
+    schimba în UI fără ca fișierul sau mtime-ul lui să se schimbe. Toate căile
+    de scoring folosesc aceeași gardă; pentru țintele vechi 3/4 nu schimbă nimic.
+    """
+    from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
+    from loto_enterprise.benchmark.hit_target import game_hit_target
+
+    if int(BENCH_HIT_TARGET) < 5 or _is_urna2_key(game_key):
+        return None
+    target = game_hit_target(game_key, BENCH_HIT_TARGET)
+    try:
+        stored = int(entry.get("hit_target"))
+    except (TypeError, ValueError, OverflowError):
+        stored = None
+    if stored == target:
+        return None
+    previous = f"{stored}+" if stored is not None else "țintă nemăsurată"
+    return {
+        "scorer": "frequency",
+        "ensemble": [{"method": "frequency", "weight": 1.0}],
+        "sim_depth_pct": 40,
+        "use_blacklist": False,
+        "avg_hits": 0.0,
+        "rationale": (
+            f"FALLBACK frequency: decizia salvată are {previous}; "
+            f"este necesar Re-Bench pentru {target}+ în pool. "
+            "Avantajul predictiv nu este demonstrat."
+        ),
+        "pool_substituted": None,
+        "rate_col_used": None,
+        "rate_col_mismatch": True,
+        "target_mismatch": {"requested": target, "stored": stored},
+        "hit_target": target,
+        "target_label": f"{target}+",
+        "low_confidence": True,
+        "fallback": True,
+        "ensemble_dropped_redundant": [],
+        "rate_data_missing": [],
+        "tiebreak_dependent": [],
+        "incomplete_methods": [],
+        "multiplicity": None,
+    }
+
+
 def rejected_decision_scorer(
     game_key: str, pool_size: int | None, config_path: str | None = None
 ) -> str | None:
@@ -394,6 +441,9 @@ def get_winner_name(
     """
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
+    ap = _auto_pilot_entry(g, pool_size)
+    if _tail_target_fallback(game_key, ap) is not None:
+        return "frequency"
     # Înainte de primul Re-Bench compatibil, Urna 2 nu are încă o decizie
     # stocată. Frequency rămâne fallback deterministic, fără warning recurent.
     if not g and _is_urna2_key(game_key):
@@ -406,7 +456,6 @@ def get_winner_name(
         return _sanitize_production_name(name, context="winner", game_key=game_key)
 
     if pool_size is not None:
-        ap = _auto_pilot_entry(g, pool_size)
         # Scorer + ensemble din aceeași sanitizare — altfel un scorer mort +
         # ensemble viu făcea get_winner_name→frequency dar engine→membru.
         if ap:
@@ -483,6 +532,8 @@ def should_use_blacklist(
     g = cfg.get("games", {}).get(game_key, {})
     # v4: auto_pilot decision (consistent cu UI)
     entry = _auto_pilot_entry(g, pool_size)
+    if _tail_target_fallback(game_key, entry) is not None:
+        return False
     if "use_blacklist" in entry:
         return bool(entry["use_blacklist"])
     # v3 fallback
@@ -545,7 +596,7 @@ def get_ensemble_for_game(
     max_methods: int | None = None,
 ) -> list[tuple[str, Callable, float]]:
     """Return [(method_name, scorer_fn, weight), ...] — pondere ∝ limita Wilson
-    a ratei țintei din decizie (+3/+4, iar Urna 2 top-1).
+    a ratei țintei din decizie (T+, iar Urna 2 top-1).
 
     Ideea blend-ului e reducerea varianței: diferența dintre metode e majoritar
     zgomot, deci combinarea mai multor metode calificate ar limita influența
@@ -596,6 +647,8 @@ def get_ensemble_for_game(
     cfg = _load_config(config_path)
     g = cfg.get("games", {}).get(game_key, {})
     entry: dict = _auto_pilot_entry(g, pool_size) if pool_size is not None else {}
+    if _tail_target_fallback(game_key, entry) is not None:
+        return _single_fallback()
 
     raw_list = entry.get("ensemble") if isinstance(entry, dict) else None
     if not raw_list:
@@ -1254,6 +1307,11 @@ def recommend_optimal_config(
                 # și raportul să o poată spune. Alegerea de scorer NU se schimbă.
                 pool_substituted = {"requested": int(pool_size), "used": int(nearest)}
 
+    target_fallback = _tail_target_fallback(game_key, entry)
+    if target_fallback is not None:
+        target_fallback["pool_substituted"] = pool_substituted
+        return target_fallback
+
     if entry and "scorer" in entry:
         scorer, clean_ens, salvaged = _sanitize_ap_production(entry, game_key)
         if not scorer:
@@ -1284,7 +1342,7 @@ def recommend_optimal_config(
                 hit_target = int(entry.get("hit_target", 3))
             except (TypeError, ValueError):
                 hit_target = 3
-            if hit_target not in (3, 4):
+            if hit_target not in (3, 4, 5, 6):
                 hit_target = 3
             target_label = str(entry.get("target_label") or f"{hit_target}+")
         return {
@@ -1301,7 +1359,7 @@ def recommend_optimal_config(
             "target_label": target_label,
             "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
             "ensemble_dropped_redundant": entry.get("ensemble_dropped_redundant") or [],
-            "fallback": salvaged,
+            "fallback": bool(entry.get("fallback", False)) or salvaged,
             # Aditive (decision.py) — metode excluse cu motiv, vizibile UI-ului
             # in loc sa dispara tacut intre best_methods.json si audit_output.py.
             "rate_data_missing": entry.get("rate_data_missing") or [],

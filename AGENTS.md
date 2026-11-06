@@ -92,6 +92,35 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Tinta principala 5+ in pool si afisarea sistemului — 2026-11-06
+
+- La cererea utilizatorului, UI si CLI pornesc cu tinta principala 5+ in pool;
+  selectorul accepta 3/4/5/6. La prima incarcare se migreaza setarea veche 3/4
+  la 5, cu revizie persistata; alegerile ulterioare explicite raman salvate.
+  Helperii programatici vechi pastreaza implicitul 3 pentru compatibilitate.
+- Benchmarkul masoara efectiv `rate_5plus_kN` si `rate_6plus_kN` pentru toate
+  dimensiunile existente. Prioritatea de raportare/decizie este K>=7, separat
+  pentru fiecare K; Urna 2 ramane top-1. Joker principal are maximum 5, iar
+  5/40 poate avea 6 numai in pool, deoarece varianta are cinci numere.
+- Metadata distinge `priority_pool_sizes` de `lr_pool_sizes`: catalogul actual
+  are 6/49 K9/10/11/12/16, Joker K7..13 si15, 5/40 K7..19. Se pastreaza si
+  dimensiunile mici de referinta, precum si poolurile implicite 16/15/19.
+- Cache bench v24: un cache fara masuratorile 5/6 se recalculeaza. Tinta 5/6
+  nu cade pe metrica 4. Pana la Re-Bench, o decizie veche 3/4 foloseste explicit
+  frequency, cu nepotrivirea tintei in recomandare si audit. Cheile worker cu
+  tinta >=5 au sufix `tail1`; cele legacy 3/4 raman compatibile.
+- UI si raportul identifica sistemul generat din variantele reale: complet,
+  wheel sau LR exact. Costul, probabilitatile si acoperirea lui apar separat
+  de referinta LR si de reconstituirea istorica. Numarul variantelor si
+  generarea nu se schimba prin aceasta clarificare de afisare.
+- Nota intervalului experimental arata motivul excluderii din clasamentul
+  curent; permisiunea generala de productie nu inseamna calificare in acel bench.
+- Testele noi si adaptarile testelor la contractul 5/6 se pastreaza LOCAL,
+  in afara commiturilor/main, la cererea expresa a utilizatorului. Nu muta
+  din nou testele in Git; preferinta locala TESTE nu schimba structura urmarita.
+  Rulare si probe de integrare in copii izolate, fara rescrierea deciziilor,
+  istoricelor sau rezultatelor benchmarkului de productie dintr-un run redus.
+
 ### Obiectiv exact 5+/6+ pe scheme LR — 2026-11-05
 
 - Cercetare offline in `scripts/analysis/lr_tail_2026_11_05.py`: doua modele
